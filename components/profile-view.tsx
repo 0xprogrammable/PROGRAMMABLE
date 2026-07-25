@@ -18,7 +18,7 @@ function shortenAddress(address: string) {
 }
 
 export function ProfileView() {
-  const { wallet, openWallet } = useWallet();
+  const { wallet, authenticated, openWallet } = useWallet();
   const localDraft = useLocalDraft();
 
   return (
@@ -42,12 +42,16 @@ export function ProfileView() {
               <h2>
                 {wallet
                   ? shortenAddress(wallet.account)
-                  : "Connect to load your profile"}
+                  : authenticated
+                    ? "Finish wallet setup"
+                    : "Connect to load your profile"}
               </h2>
               <span>
                 {wallet
                   ? "Ethereum activity for this address"
-                  : "Your wallet identifies tokens, positions and claims"}
+                  : authenticated
+                    ? "Add an Ethereum wallet to continue"
+                    : "Your wallet identifies tokens, positions and claims"}
               </span>
             </div>
           </div>
@@ -56,7 +60,11 @@ export function ProfileView() {
             type="button"
             onClick={openWallet}
           >
-            {wallet ? "Wallet settings" : "Connect wallet"}
+            {wallet
+              ? "Wallet settings"
+              : authenticated
+                ? "Add wallet"
+                : "Connect wallet"}
             <ArrowRight aria-hidden="true" size={16} />
           </button>
         </section>

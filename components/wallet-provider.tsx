@@ -1,6 +1,14 @@
 "use client";
 
 import {
+  PrivyProvider,
+  usePrivy,
+  useWallets,
+  type ConnectedWallet,
+  type PrivyClientConfig,
+} from "@privy-io/react-auth";
+import { Check, Copy, LogOut, Network, Wallet, X } from "lucide-react";
+import {
   createContext,
   useCallback,
   useContext,
@@ -9,32 +17,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Check, ChevronRight, Copy, LogOut, Wallet, X } from "lucide-react";
-
-export type Eip1193Provider = {
-  request: (args: {
-    method: string;
-    params?: unknown[] | Record<string, unknown>;
-  }) => Promise<unknown>;
-  on?: (event: string, listener: (...args: unknown[]) => void) => void;
-  removeListener?: (
-    event: string,
-    listener: (...args: unknown[]) => void,
-  ) => void;
-  isMetaMask?: boolean;
-  isPhantom?: boolean;
-};
-
-type ProviderInfo = {
-  uuid: string;
-  name: string;
-  rdns: string;
-};
-
-type ProviderDetail = {
-  info: ProviderInfo;
-  provider: Eip1193Provider;
-};
+import { mainnet } from "viem/chains";
 
 type WalletState = {
   account: `0x${string}`;
@@ -44,89 +27,388 @@ type WalletState = {
 
 type WalletContextValue = {
   wallet: WalletState | null;
-  providers: ProviderDetail[];
+  authenticated: boolean;
   connecting: boolean;
   openWallet: () => void;
   disconnect: () => void;
 };
 
-declare global {
-  interface Window {
-    ethereum?: Eip1193Provider;
-  }
-
-  interface WindowEventMap {
-    "eip6963:announceProvider": CustomEvent<ProviderDetail>;
-  }
-}
-
 const WalletContext = createContext<WalletContextValue | null>(null);
+
+const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
+const privyClientId = process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID?.trim();
+
+const privyConfig = {
+  loginMethods: ["wallet", "email"],
+  appearance: {
+    theme: "#0b0b0f",
+    accentColor: "#ff5ca8",
+    landingHeader: "Connect to Launcher",
+    loginMessage: "Use a wallet or email to continue",
+    showWalletLoginFirst: true,
+    walletChainType: "ethereum-only",
+    walletList: [
+      "metamask",
+      "phantom",
+      "coinbase_wallet",
+      "rainbow",
+      "uniswap",
+      "detected_ethereum_wallets",
+      "wallet_connect",
+    ],
+  },
+  embeddedWallets: {
+    ethereum: {
+      createOnLogin: "users-without-wallets",
+    },
+  },
+  supportedChains: [mainnet],
+  defaultChain: mainnet,
+} satisfies PrivyClientConfig;
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-function getFallbackName(provider: Eip1193Provider) {
-  if (provider.isPhantom) return "Phantom";
-  if (provider.isMetaMask) return "MetaMask";
-  return "Browser wallet";
+function normalizeChainId(chainId: string) {
+  if (chainId.startsWith("eip155:")) {
+    const decimalId = Number(chainId.slice("eip155:".length));
+    return Number.isSafeInteger(decimalId) ? `0x${decimalId.toString(16)}` : chainId;
+  }
+
+  return chainId.toLowerCase();
+}
+
+function getWalletLabel(wallet: ConnectedWallet) {
+  if (wallet.walletClientType === "privy") return "Privy wallet";
+  return wallet.meta.name || "Ethereum wallet";
+}
+
+function isEthereumAddress(address: string): address is `0x${string}` {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [providers, setProviders] = useState<ProviderDetail[]>([]);
-  const [wallet, setWallet] = useState<WalletState | null>(null);
+  if (!privyAppId) {
+    return <UnconfiguredWalletProvider>{children}</UnconfiguredWalletProvider>;
+  }
+
+  return (
+    <PrivyProvider
+      appId={privyAppId}
+      clientId={privyClientId}
+      config={privyConfig}
+    >
+      <PrivyWalletBridge>{children}</PrivyWalletBridge>
+    </PrivyProvider>
+  );
+}
+
+function PrivyWalletBridge({ children }: { children: ReactNode }) {
+  const {
+    authenticated,
+    linkWallet,
+    login,
+    logout,
+    ready,
+    user,
+  } = usePrivy();
+  const { ready: walletsReady, wallets } = useWallets();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [connectingId, setConnectingId] = useState<string | null>(null);
-  const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [switchingNetwork, setSwitchingNetwork] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    const registerProvider = (event: CustomEvent<ProviderDetail>) => {
-      const detail = event.detail;
-      setProviders((current) => {
-        const exists = current.some(
-          (item) =>
-            item.info.uuid === detail.info.uuid ||
-            (item.info.rdns === detail.info.rdns &&
-              item.provider === detail.provider),
-        );
-        return exists ? current : [...current, detail];
-      });
+  const connectedWallet = useMemo(() => {
+    const primaryAddress = user?.wallet?.address.toLowerCase();
+    return (
+      wallets.find(
+        (candidate) =>
+          primaryAddress && candidate.address.toLowerCase() === primaryAddress,
+      ) ??
+      wallets.find((candidate) => candidate.linked) ??
+      wallets[0]
+    );
+  }, [user?.wallet?.address, wallets]);
+
+  const wallet = useMemo<WalletState | null>(() => {
+    if (
+      !authenticated ||
+      !connectedWallet ||
+      !isEthereumAddress(connectedWallet.address)
+    ) {
+      return null;
+    }
+
+    return {
+      account: connectedWallet.address,
+      chainId: normalizeChainId(connectedWallet.chainId),
+      providerName: getWalletLabel(connectedWallet),
     };
+  }, [authenticated, connectedWallet]);
 
-    window.addEventListener("eip6963:announceProvider", registerProvider);
-    window.dispatchEvent(new Event("eip6963:requestProvider"));
+  const openWallet = useCallback(() => {
+    setError("");
 
-    const fallbackTimer = window.setTimeout(() => {
-      if (!window.ethereum) return;
-      const fallback = window.ethereum;
-      setProviders((current) => {
-        if (current.some((item) => item.provider === fallback)) return current;
-        return [
-          ...current,
-          {
-            info: {
-              uuid: "window.ethereum",
-              name: getFallbackName(fallback),
-              rdns: "injected.wallet",
-            },
-            provider: fallback,
-          },
-        ];
+    if (!ready) return;
+
+    if (!authenticated) {
+      login({
+        loginMethods: ["wallet", "email"],
+        walletChainType: "ethereum-only",
       });
-    }, 250);
+      return;
+    }
 
-    return () => {
-      window.clearTimeout(fallbackTimer);
-      window.removeEventListener("eip6963:announceProvider", registerProvider);
-    };
-  }, []);
+    setDialogOpen(true);
+  }, [authenticated, login, ready]);
 
+  const disconnect = useCallback(() => {
+    setDialogOpen(false);
+    void logout();
+  }, [logout]);
+
+  const copyAddress = useCallback(async () => {
+    if (!wallet) return;
+
+    try {
+      await navigator.clipboard.writeText(wallet.account);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError("The address could not be copied");
+    }
+  }, [wallet]);
+
+  const switchToEthereum = useCallback(async () => {
+    if (!connectedWallet) return;
+
+    setSwitchingNetwork(true);
+    setError("");
+
+    try {
+      await connectedWallet.switchChain(mainnet.id);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The network could not be changed",
+      );
+    } finally {
+      setSwitchingNetwork(false);
+    }
+  }, [connectedWallet]);
+
+  const addWallet = useCallback(() => {
+    setDialogOpen(false);
+    linkWallet({
+      description: "Add an Ethereum wallet to Launcher",
+      walletChainType: "ethereum-only",
+    });
+  }, [linkWallet]);
+
+  const value = useMemo<WalletContextValue>(
+    () => ({
+      wallet,
+      authenticated,
+      connecting: !ready || (authenticated && !walletsReady),
+      openWallet,
+      disconnect,
+    }),
+    [
+      authenticated,
+      disconnect,
+      openWallet,
+      ready,
+      wallet,
+      walletsReady,
+    ],
+  );
+
+  return (
+    <WalletContext.Provider value={value}>
+      {children}
+      {dialogOpen ? (
+        <WalletDialog
+          wallet={wallet}
+          copied={copied}
+          error={error}
+          switchingNetwork={switchingNetwork}
+          onAddWallet={addWallet}
+          onClose={() => setDialogOpen(false)}
+          onCopyAddress={copyAddress}
+          onLogout={disconnect}
+          onSwitchNetwork={switchToEthereum}
+        />
+      ) : null}
+    </WalletContext.Provider>
+  );
+}
+
+function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const value = useMemo<WalletContextValue>(
+    () => ({
+      wallet: null,
+      authenticated: false,
+      connecting: false,
+      openWallet: () => setDialogOpen(true),
+      disconnect: () => undefined,
+    }),
+    [],
+  );
+
+  return (
+    <WalletContext.Provider value={value}>
+      {children}
+      {dialogOpen ? (
+        <DialogFrame
+          eyebrow="Wallet"
+          title="Wallet sign-in is unavailable"
+          onClose={() => setDialogOpen(false)}
+        >
+          <p className="dialog-copy">
+            Launcher uses Privy for wallet access. Please try again shortly
+          </p>
+          <button
+            className="primary-button dialog-full-button"
+            type="button"
+            onClick={() => setDialogOpen(false)}
+          >
+            Close
+          </button>
+        </DialogFrame>
+      ) : null}
+    </WalletContext.Provider>
+  );
+}
+
+function WalletDialog({
+  wallet,
+  copied,
+  error,
+  switchingNetwork,
+  onAddWallet,
+  onClose,
+  onCopyAddress,
+  onLogout,
+  onSwitchNetwork,
+}: {
+  wallet: WalletState | null;
+  copied: boolean;
+  error: string;
+  switchingNetwork: boolean;
+  onAddWallet: () => void;
+  onClose: () => void;
+  onCopyAddress: () => void;
+  onLogout: () => void;
+  onSwitchNetwork: () => void;
+}) {
+  return (
+    <DialogFrame
+      eyebrow="Wallet"
+      title={wallet ? "Connected account" : "Complete wallet setup"}
+      onClose={onClose}
+    >
+      {wallet ? (
+        <div className="connected-wallet">
+          <div className="wallet-account-row">
+            <span className="wallet-mark" aria-hidden="true">
+              <Wallet size={19} />
+            </span>
+            <div>
+              <strong>{wallet.providerName}</strong>
+              <span>{shortenAddress(wallet.account)}</span>
+            </div>
+          </div>
+
+          {wallet.chainId !== "0x1" ? (
+            <div className="wallet-network-warning">
+              <p className="inline-notice warning-notice">
+                Launcher uses Ethereum for launches and liquidity
+              </p>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={switchingNetwork}
+                onClick={onSwitchNetwork}
+              >
+                <Network aria-hidden="true" size={16} />
+                {switchingNetwork ? "Switching" : "Switch to Ethereum"}
+              </button>
+            </div>
+          ) : null}
+
+          {error ? (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="dialog-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={onCopyAddress}
+            >
+              {copied ? (
+                <Check aria-hidden="true" size={16} />
+              ) : (
+                <Copy aria-hidden="true" size={16} />
+              )}
+              {copied ? "Copied" : "Copy address"}
+            </button>
+            <button
+              className="text-button danger-text"
+              type="button"
+              onClick={onLogout}
+            >
+              <LogOut aria-hidden="true" size={16} />
+              Log out
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="dialog-copy">
+            Add an Ethereum wallet before launching or managing a token
+          </p>
+          <button
+            className="primary-button dialog-full-button"
+            type="button"
+            onClick={onAddWallet}
+          >
+            <Wallet aria-hidden="true" size={16} />
+            Add wallet
+          </button>
+          <button
+            className="text-button dialog-logout-button"
+            type="button"
+            onClick={onLogout}
+          >
+            Log out
+          </button>
+        </>
+      )}
+    </DialogFrame>
+  );
+}
+
+function DialogFrame({
+  eyebrow,
+  title,
+  onClose,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
   useEffect(() => {
-    if (!dialogOpen) return;
-
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDialogOpen(false);
+      if (event.key === "Escape") onClose();
     };
 
     const previousOverflow = document.body.style.overflow;
@@ -137,224 +419,39 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [dialogOpen]);
-
-  const connect = useCallback(async (detail: ProviderDetail) => {
-    setConnectingId(detail.info.uuid);
-    setError("");
-
-    try {
-      const accounts = (await detail.provider.request({
-        method: "eth_requestAccounts",
-      })) as string[];
-      const chainId = (await detail.provider.request({
-        method: "eth_chainId",
-      })) as string;
-      const account = accounts[0];
-
-      if (!account?.startsWith("0x")) {
-        throw new Error("The wallet did not return an Ethereum account");
-      }
-
-      setWallet({
-        account: account as `0x${string}`,
-        chainId,
-        providerName: detail.info.name,
-      });
-      setDialogOpen(false);
-
-      const handleAccounts = (...args: unknown[]) => {
-        const nextAccounts = args[0] as string[];
-        const nextAccount = nextAccounts?.[0];
-        if (!nextAccount) {
-          setWallet(null);
-          return;
-        }
-        setWallet((current) =>
-          current
-            ? { ...current, account: nextAccount as `0x${string}` }
-            : current,
-        );
-      };
-
-      const handleChain = (...args: unknown[]) => {
-        const nextChain = args[0] as string;
-        setWallet((current) =>
-          current ? { ...current, chainId: nextChain } : current,
-        );
-      };
-
-      detail.provider.on?.("accountsChanged", handleAccounts);
-      detail.provider.on?.("chainChanged", handleChain);
-    } catch (caught) {
-      const message =
-        caught instanceof Error
-          ? caught.message
-          : "The wallet request could not be completed";
-      setError(message);
-    } finally {
-      setConnectingId(null);
-    }
-  }, []);
-
-  const copyAddress = useCallback(async () => {
-    if (!wallet) return;
-    await navigator.clipboard.writeText(wallet.account);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  }, [wallet]);
-
-  const value = useMemo<WalletContextValue>(
-    () => ({
-      wallet,
-      providers,
-      connecting: connectingId !== null,
-      openWallet: () => {
-        setError("");
-        setDialogOpen(true);
-      },
-      disconnect: () => {
-        setWallet(null);
-        setDialogOpen(false);
-      },
-    }),
-    [connectingId, providers, wallet],
-  );
+  }, [onClose]);
 
   return (
-    <WalletContext.Provider value={value}>
-      {children}
-      {dialogOpen ? (
-        <div
-          className="dialog-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setDialogOpen(false);
-          }}
-        >
-          <section
-            className="wallet-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="wallet-dialog-title"
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="wallet-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wallet-dialog-title"
+      >
+        <div className="dialog-heading">
+          <div>
+            <p className="eyebrow">{eyebrow}</p>
+            <h2 id="wallet-dialog-title">{title}</h2>
+          </div>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Close wallet dialog"
+            onClick={onClose}
           >
-            <div className="dialog-heading">
-              <div>
-                <p className="eyebrow">Wallet</p>
-                <h2 id="wallet-dialog-title">
-                  {wallet ? "Connected account" : "Connect an Ethereum wallet"}
-                </h2>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                aria-label="Close wallet dialog"
-                onClick={() => setDialogOpen(false)}
-              >
-                <X aria-hidden="true" size={18} />
-              </button>
-            </div>
-
-            {wallet ? (
-              <div className="connected-wallet">
-                <div className="wallet-account-row">
-                  <span className="wallet-mark" aria-hidden="true">
-                    <Wallet size={19} />
-                  </span>
-                  <div>
-                    <strong>{wallet.providerName}</strong>
-                    <span>{shortenAddress(wallet.account)}</span>
-                  </div>
-                </div>
-
-                {wallet.chainId !== "0x1" ? (
-                  <p className="inline-notice warning-notice">
-                    Launcher uses Ethereum · Change networks in your wallet
-                    before continuing
-                  </p>
-                ) : null}
-
-                <div className="dialog-actions">
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={copyAddress}
-                  >
-                    {copied ? (
-                      <Check aria-hidden="true" size={16} />
-                    ) : (
-                      <Copy aria-hidden="true" size={16} />
-                    )}
-                    {copied ? "Copied" : "Copy address"}
-                  </button>
-                  <button
-                    className="text-button danger-text"
-                    type="button"
-                    onClick={() => {
-                      setWallet(null);
-                      setDialogOpen(false);
-                    }}
-                  >
-                    <LogOut aria-hidden="true" size={16} />
-                    Disconnect
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <p className="dialog-copy">
-                  Choose an installed wallet · Launcher only requests your
-                  public account
-                </p>
-                <div className="wallet-list">
-                  {providers.length > 0 ? (
-                    providers.map((detail) => (
-                      <button
-                        className="wallet-option"
-                        type="button"
-                        key={detail.info.uuid}
-                        disabled={connectingId !== null}
-                        onClick={() => connect(detail)}
-                      >
-                        <span className="wallet-mark" aria-hidden="true">
-                          <Wallet size={19} />
-                        </span>
-                        <span>
-                          <strong>{detail.info.name}</strong>
-                          <small>Injected browser wallet</small>
-                        </span>
-                        <span className="wallet-option-end">
-                          {connectingId === detail.info.uuid
-                            ? "Waiting"
-                            : "Connect"}
-                          <ChevronRight aria-hidden="true" size={16} />
-                        </span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="wallet-empty">
-                      <Wallet aria-hidden="true" size={21} />
-                      <p>
-                        No compatible wallet detected · Open MetaMask or Phantom
-                        and refresh
-                      </p>
-                    </div>
-                  )}
-                </div>
-                {error ? (
-                  <p className="form-error" role="alert">
-                    {error}
-                  </p>
-                ) : null}
-                <p className="dialog-footnote">
-                  Connecting never sends a transaction
-                </p>
-              </>
-            )}
-          </section>
+            <X aria-hidden="true" size={18} />
+          </button>
         </div>
-      ) : null}
-    </WalletContext.Provider>
+        {children}
+      </section>
+    </div>
   );
 }
 
@@ -367,16 +464,25 @@ export function useWallet() {
 }
 
 export function WalletButton({ compact = false }: { compact?: boolean }) {
-  const { wallet, openWallet } = useWallet();
+  const { wallet, authenticated, connecting, openWallet } = useWallet();
+
+  const label = connecting
+    ? "Loading"
+    : wallet
+      ? shortenAddress(wallet.account)
+      : authenticated
+        ? "Set up wallet"
+        : "Connect wallet";
 
   return (
     <button
       className={compact ? "wallet-button wallet-button-compact" : "wallet-button"}
       type="button"
+      disabled={connecting}
       onClick={openWallet}
     >
       <Wallet aria-hidden="true" size={16} />
-      <span>{wallet ? shortenAddress(wallet.account) : "Connect wallet"}</span>
+      <span>{label}</span>
     </button>
   );
 }
