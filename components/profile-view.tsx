@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   CircleDollarSign,
+  Coins,
   FileText,
   Layers3,
   Wallet,
@@ -22,127 +23,147 @@ export function ProfileView() {
 
   return (
     <div className="profile-page page-width">
-      <header className="page-heading">
-        <p className="eyebrow">Profile</p>
-        <h1>Your markets in one place</h1>
-        <p>
-          Track launches, liquidity positions and claims for one wallet
-        </p>
+      <header className="profile-heading">
+        <div>
+          <p className="eyebrow">Profile</p>
+          <h1>Your tokens</h1>
+        </div>
+        <p>Launches, liquidity and claims in one place</p>
       </header>
 
-      {!wallet ? (
-        <section className="profile-connect">
-          <span className="profile-connect-icon" aria-hidden="true">
-            <Wallet size={24} strokeWidth={1.6} />
-          </span>
-          <h2>Connect your wallet</h2>
-          <p>
-            Your wallet identifies the markets and positions shown here
-          </p>
-          <button className="primary-button" type="button" onClick={openWallet}>
-            Connect wallet
+      <div className="profile-dashboard">
+        <section className="profile-account-card">
+          <div className="profile-account-copy">
+            <span className="profile-connect-icon" aria-hidden="true">
+              <Wallet size={22} strokeWidth={1.7} />
+            </span>
+            <div>
+              <p>{wallet ? `Connected with ${wallet.providerName}` : "Wallet"}</p>
+              <h2>
+                {wallet
+                  ? shortenAddress(wallet.account)
+                  : "Connect to load your profile"}
+              </h2>
+              <span>
+                {wallet
+                  ? "Ethereum activity for this address"
+                  : "Your wallet identifies tokens, positions and claims"}
+              </span>
+            </div>
+          </div>
+          <button
+            className={wallet ? "secondary-button" : "primary-button"}
+            type="button"
+            onClick={openWallet}
+          >
+            {wallet ? "Wallet settings" : "Connect wallet"}
             <ArrowRight aria-hidden="true" size={16} />
           </button>
         </section>
-      ) : (
-        <>
-          <section className="profile-account">
-            <div>
-              <span className="wallet-mark" aria-hidden="true">
-                <Wallet size={19} />
-              </span>
-              <div>
-                <p>Connected with {wallet.providerName}</p>
-                <h2>{shortenAddress(wallet.account)}</h2>
-              </div>
-            </div>
-            <p>
-              Launcher activity for this address appears below
-            </p>
-          </section>
 
-          {localDraft ? (
-            <section className="profile-section">
-              <div className="profile-section-heading">
-                <div>
-                  <p className="eyebrow">Saved launch</p>
-                  <h2>Continue where you stopped</h2>
-                </div>
-                <Link className="text-link" href="/launch">
-                  Open launch
-                  <ArrowRight aria-hidden="true" size={15} />
-                </Link>
+        <div className="profile-stat-grid">
+          <ProfileStat
+            icon={Coins}
+            label="Tokens"
+            value={wallet ? "0" : "—"}
+            detail={wallet ? "Launched with this wallet" : "Connect to view"}
+          />
+          <ProfileStat
+            icon={Layers3}
+            label="Positions"
+            value={wallet ? "0" : "—"}
+            detail={wallet ? "Active liquidity positions" : "Connect to view"}
+          />
+          <ProfileStat
+            icon={CircleDollarSign}
+            label="Claimable"
+            value={wallet ? "0 ETH" : "—"}
+            detail={wallet ? "Available from verified fees" : "Connect to view"}
+          />
+        </div>
+
+        <div className="profile-lower-grid">
+          <section className="profile-panel">
+            <div className="profile-panel-heading">
+              <div>
+                <p className="eyebrow">Saved token</p>
+                <h2>{localDraft ? "Continue your launch" : "No saved token"}</h2>
               </div>
-              <div className="draft-row">
-                <span className="section-row-icon" aria-hidden="true">
-                  <FileText size={18} />
+              <FileText aria-hidden="true" size={18} />
+            </div>
+
+            {localDraft ? (
+              <div className="saved-token-row">
+                <span className="token-monogram token-tone-rose" aria-hidden="true">
+                  {getDraftAssetLabel(localDraft).slice(0, 2).toUpperCase()}
                 </span>
                 <div>
                   <strong>{getDraftAssetLabel(localDraft)}</strong>
                   <span>
                     {localDraft.liquidityMode === "auction"
-                      ? "Auction-funded liquidity"
-                      : "Direct v4 pool"}
+                      ? "Auction funded"
+                      : "Direct liquidity"}
                   </span>
                 </div>
-                <small>
-                  {new Intl.DateTimeFormat("en", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  }).format(new Date(localDraft.updatedAt))}
-                </small>
+                <Link className="text-link" href="/launch">
+                  Open
+                  <ArrowRight aria-hidden="true" size={14} />
+                </Link>
               </div>
-            </section>
-          ) : null}
+            ) : (
+              <div className="profile-panel-empty">
+                <p>Saved launch details appear here</p>
+                <Link className="text-link" href="/launch">
+                  Launch a token
+                  <ArrowRight aria-hidden="true" size={14} />
+                </Link>
+              </div>
+            )}
+          </section>
 
-          <div className="profile-grid">
-            <EmptyProfileSection
-              icon={Layers3}
-              eyebrow="Launches"
-              title="No launches yet"
-              copy="Markets launched with this address will appear here"
-            />
-            <EmptyProfileSection
-              icon={CircleDollarSign}
-              eyebrow="Positions"
-              title="No positions yet"
-              copy="Liquidity positions created through Launcher will appear here"
-            />
-            <EmptyProfileSection
-              icon={Wallet}
-              eyebrow="Claims"
-              title="Nothing to claim"
-              copy="Verified fees and distributions will appear here"
-            />
-          </div>
-        </>
-      )}
+          <section className="profile-panel">
+            <div className="profile-panel-heading">
+              <div>
+                <p className="eyebrow">Activity</p>
+                <h2>No activity yet</h2>
+              </div>
+              <Layers3 aria-hidden="true" size={18} />
+            </div>
+            <div className="profile-panel-empty">
+              <p>Launches, position changes and claims appear here</p>
+              {!wallet ? (
+                <button className="text-button" type="button" onClick={openWallet}>
+                  Connect wallet
+                  <ArrowRight aria-hidden="true" size={14} />
+                </button>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
 
-function EmptyProfileSection({
+function ProfileStat({
   icon: Icon,
-  eyebrow,
-  title,
-  copy,
+  label,
+  value,
+  detail,
 }: {
   icon: typeof Wallet;
-  eyebrow: string;
-  title: string;
-  copy: string;
+  label: string;
+  value: string;
+  detail: string;
 }) {
   return (
-    <section className="profile-empty-section">
-      <div className="profile-empty-heading">
-        <p className="eyebrow">{eyebrow}</p>
-        <Icon aria-hidden="true" size={18} strokeWidth={1.7} />
-      </div>
+    <section className="profile-stat">
       <div>
-        <h2>{title}</h2>
-        <p>{copy}</p>
+        <span>{label}</span>
+        <Icon aria-hidden="true" size={17} strokeWidth={1.7} />
       </div>
+      <strong>{value}</strong>
+      <p>{detail}</p>
     </section>
   );
 }

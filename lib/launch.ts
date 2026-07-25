@@ -32,7 +32,7 @@ export const behaviorDefinitions: BehaviorDefinition[] = [
     id: "fixed-fee",
     name: "Fixed swap fee",
     description:
-      "The pool uses one fee rate that does not change with market conditions",
+      "The pool uses one fee rate that does not change with activity",
     tier: "standard",
   },
   {
@@ -60,7 +60,7 @@ export const behaviorDefinitions: BehaviorDefinition[] = [
     id: "dynamic-fee",
     name: "Dynamic fees",
     description:
-      "Let the swap fee follow a bounded rule based on observable market conditions",
+      "Let the swap fee follow a bounded rule based on pool activity",
     tier: "review",
   },
   {
@@ -200,7 +200,7 @@ export function buildLaunchSummary(draft: LaunchDraft) {
 
   const behaviorText =
     selected.length === 0
-      ? "Base market rules"
+      ? "Standard token rules"
       : selected.length === 1
         ? selected[0].name
         : `${selected
@@ -230,7 +230,7 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
         ? `Auction-funded v4 liquidity (${draft.auctionSalePercent || "unset"}% of supply offered; ${draft.auctionLiquidityPercent || "unset"}% of proceeds for pool funding)`
         : `Direct v4 pool (${draft.directEthAmount || "unset"} ETH and ${draft.directTokenAmount || "unset"} tokens)`
     }`,
-    `Market behavior: ${
+    `Token behavior: ${
       selected.length > 0
         ? selected.map((behavior) => behavior.name).join(", ")
         : "Base configuration"
@@ -238,7 +238,7 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     `Pool fee: ${
       draft.selectedBehaviors.includes("fixed-fee")
         ? `${draft.lpFeePercent || "unset"}%`
-        : "Defined by the selected market rule"
+        : "Defined by the selected behavior"
     }`,
     `Launcher fee: ${(PLATFORM_FEE_BPS / 100).toFixed(2)}% of eligible swaps`,
     "",

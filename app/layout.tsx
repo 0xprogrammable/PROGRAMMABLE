@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s · Launcher",
   },
   description:
-    "Create tokens and markets on Uniswap v4",
+    "Launch tokens with Uniswap v4 behavior",
 };
 
 export default function RootLayout({
@@ -31,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-scroll-behavior="smooth">
       <body
         className={`${instrumentSans.variable} ${plexMono.variable}`}
       >

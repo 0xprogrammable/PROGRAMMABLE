@@ -17,7 +17,6 @@ import {
   Copy,
   Droplets,
   FileCheck2,
-  Info,
   LoaderCircle,
   LockKeyhole,
   Search,
@@ -35,6 +34,7 @@ import {
   PLATFORM_FEE_BPS,
   type AssetMode,
   type BehaviorId,
+  type BehaviorTier,
   type LaunchDraft,
   type LiquidityMode,
 } from "@/lib/launch";
@@ -54,8 +54,8 @@ type TokenResult = {
 
 const steps = [
   { number: 1, label: "Token" },
-  { number: 2, label: "Market" },
-  { number: 3, label: "Confirm" },
+  { number: 2, label: "Liquidity" },
+  { number: 3, label: "Review" },
 ];
 
 const assetOptions: {
@@ -97,7 +97,7 @@ const liquidityOptions: {
     id: "direct",
     name: "Direct v4 pool",
     description:
-      "Open the market with liquidity supplied by the creator",
+      "Open trading with liquidity supplied by the creator",
     detail:
       "Set the token and ETH amounts used to initialize the pool",
     icon: Droplets,
@@ -129,10 +129,8 @@ export function LaunchBuilder() {
       <div className="launch-page page-width">
         <header className="page-heading">
           <p className="eyebrow">Launch</p>
-          <h1>Create a market</h1>
-          <p>
-            Choose the token, how liquidity starts and what the market can do
-          </p>
+          <h1>Launch a token</h1>
+          <p>Set the token, liquidity and Uniswap v4 behavior</p>
         </header>
         <div className="launch-loading" aria-label="Loading launch" />
       </div>
@@ -284,58 +282,59 @@ function LaunchBuilderForm({
     const saved = { ...draft, updatedAt: new Date().toISOString() };
     saveLocalDraft(saved);
     setDraft(saved);
-    setNotice("Launch saved in this browser");
+    setNotice("Token saved in this browser");
   }
 
   async function copyPlan() {
     await navigator.clipboard.writeText(buildPlainTextPlan(draft));
-    setNotice("Launch summary copied");
+    setNotice("Token summary copied");
   }
 
   return (
     <div className="launch-page page-width">
-      <header className="page-heading launch-page-heading">
+      <header className="launch-page-heading">
         <div>
           <p className="eyebrow">Launch</p>
-          <h1>Create a market</h1>
-          <p>
-            Choose the token, how liquidity starts and what the market can do
-          </p>
+          <h1>Launch a token</h1>
         </div>
+        <p>Set the token, liquidity and Uniswap v4 behavior</p>
       </header>
 
-      <ol className="step-navigation" aria-label="Launch steps">
-        {steps.map((item) => (
-          <li
-            key={item.number}
-            className={
-              step === item.number
-                ? "current"
-                : step > item.number
-                  ? "complete"
-                  : undefined
-            }
-          >
-            <button
-              type="button"
-              onClick={() => {
-                if (item.number <= step) {
-                  setFormError("");
-                  setStep(item.number);
-                }
-              }}
-              disabled={item.number > step}
-              aria-current={step === item.number ? "step" : undefined}
+      <section className="launch-workspace">
+        <ol className="step-navigation" aria-label="Launch steps">
+          {steps.map((item) => (
+            <li
+              key={item.number}
+              className={
+                step === item.number
+                  ? "current"
+                  : step > item.number
+                    ? "complete"
+                    : undefined
+              }
             >
-              <span>{step > item.number ? <Check size={14} /> : item.number}</span>
-              {item.label}
-            </button>
-          </li>
-        ))}
-      </ol>
+              <button
+                type="button"
+                onClick={() => {
+                  if (item.number <= step) {
+                    setFormError("");
+                    setStep(item.number);
+                  }
+                }}
+                disabled={item.number > step}
+                aria-current={step === item.number ? "step" : undefined}
+              >
+                <span>
+                  {step > item.number ? <Check size={14} /> : item.number}
+                </span>
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ol>
 
-      <div className={step === 2 ? "launch-layout wide-layout" : "launch-layout"}>
-        <section className="launch-form-panel">
+        <div className="launch-layout">
+          <div className="launch-form-panel">
           {step === 1 ? (
             <AssetStep
               draft={draft}
@@ -348,7 +347,7 @@ function LaunchBuilderForm({
           ) : null}
 
           {step === 2 ? (
-            <MarketStep
+            <LiquidityStep
               draft={draft}
               setDraft={setDraft}
               onToggleBehavior={toggleBehavior}
@@ -362,6 +361,10 @@ function LaunchBuilderForm({
               selectedDefinitions={selectedDefinitions}
               onSave={saveDraft}
               onCopy={copyPlan}
+              onBack={() => {
+                setFormError("");
+                setStep(2);
+              }}
             />
           ) : null}
 
@@ -397,48 +400,10 @@ function LaunchBuilderForm({
                 <ArrowRight aria-hidden="true" size={16} />
               </button>
             </div>
-          ) : (
-            <div className="form-navigation">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => {
-                  setFormError("");
-                  setStep(2);
-                }}
-              >
-                <ArrowLeft aria-hidden="true" size={16} />
-                Back
-              </button>
-            </div>
-          )}
-        </section>
-
-        {step === 2 ? (
-          <aside className="plan-aside">
-            <p className="eyebrow">Launch summary</p>
-            <p className="plan-sentence">{summary}</p>
-            <dl className="plan-facts">
-              <div>
-                <dt>Launcher fee</dt>
-                <dd>{(PLATFORM_FEE_BPS / 100).toFixed(2)}%</dd>
-              </div>
-              <div>
-                <dt>Hook structure</dt>
-                <dd>One composed hook</dd>
-              </div>
-              <div>
-                <dt>Advanced behavior</dt>
-                <dd>{hasReviewBehavior(draft) ? "Review required" : "None"}</dd>
-              </div>
-            </dl>
-            <p className="aside-note">
-              Selected behaviors form one market contract · They are not
-              separate hooks on the same pool
-            </p>
-          </aside>
-        ) : null}
-      </div>
+          ) : null}
+          </div>
+        </div>
+      </section>
 
       <div className="toast-region" aria-live="polite" aria-atomic="true">
         {notice ? (
@@ -470,11 +435,10 @@ function AssetStep({
   return (
     <div className="form-section">
       <div className="form-section-heading">
-        <span>01</span>
         <div>
-          <h2>Choose the token</h2>
+          <h2>Token</h2>
           <p>
-            Create a new token or use a contract that already exists on Ethereum
+            Create a fixed-supply token or use one already on Ethereum
           </p>
         </div>
       </div>
@@ -641,7 +605,7 @@ function AssetStep({
   );
 }
 
-function MarketStep({
+function LiquidityStep({
   draft,
   setDraft,
   onToggleBehavior,
@@ -650,190 +614,218 @@ function MarketStep({
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onToggleBehavior: (id: BehaviorId) => void;
 }) {
-  const standard = behaviorDefinitions.filter(
-    (behavior) => behavior.tier === "standard",
+  const [activeTier, setActiveTier] = useState<BehaviorTier>("standard");
+  const visibleBehaviors = behaviorDefinitions.filter(
+    (behavior) => behavior.tier === activeTier,
   );
-  const review = behaviorDefinitions.filter(
-    (behavior) => behavior.tier === "review",
-  );
-  const custom = behaviorDefinitions.find(
-    (behavior) => behavior.id === "custom-hook",
-  );
+  const behaviorTiers: { id: BehaviorTier; label: string }[] = [
+    { id: "standard", label: "Standard" },
+    { id: "review", label: "Advanced" },
+    { id: "custom", label: "Custom" },
+  ];
 
   return (
-    <div className="form-section market-form-section">
+    <div className="form-section rules-form-section">
       <div className="form-section-heading">
-        <span>02</span>
         <div>
-          <h2>Set the market rules</h2>
-          <p>
-            Choose how liquidity starts and add only the behavior the market needs
-          </p>
+          <h2>Liquidity and behavior</h2>
+          <p>Choose how trading starts and what the token can do</p>
         </div>
       </div>
 
-      <fieldset className="field-block">
-        <legend>Liquidity path</legend>
-        <div className="liquidity-options">
-          {liquidityOptions.map((option) => {
-            const Icon = option.icon;
-            const selected = draft.liquidityMode === option.id;
-            return (
-              <button
-                key={option.id}
-                className={`liquidity-option ${selected ? "selected" : ""}`}
-                type="button"
-                aria-pressed={selected}
-                onClick={() =>
-                  updateDraft(setDraft, { liquidityMode: option.id })
-                }
-              >
-                <span className="liquidity-icon" aria-hidden="true">
-                  <Icon size={20} strokeWidth={1.7} />
-                </span>
-                <span>
-                  <strong>{option.name}</strong>
-                  <small>{option.description}</small>
-                  <em>{option.detail}</em>
-                </span>
-                <span className="choice-indicator" aria-hidden="true">
-                  {selected ? <Check size={14} /> : null}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
-
-      {draft.liquidityMode === "auction" ? (
-        <div className="field-block">
-          <div className="block-heading">
-            <div>
-              <h3>Auction allocation</h3>
-              <p>
-                Set how much supply enters the sale and how much of the proceeds
-                funds the opening pool
-              </p>
+      <div className="rules-layout">
+        <div className="rules-column">
+          <fieldset className="rule-card liquidity-rule-card">
+            <legend>Liquidity</legend>
+            <div className="liquidity-options">
+              {liquidityOptions.map((option) => {
+                const Icon = option.icon;
+                const selected = draft.liquidityMode === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    className={`liquidity-option ${selected ? "selected" : ""}`}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() =>
+                      updateDraft(setDraft, { liquidityMode: option.id })
+                    }
+                  >
+                    <span className="liquidity-icon" aria-hidden="true">
+                      <Icon size={18} strokeWidth={1.7} />
+                    </span>
+                    <span>
+                      <strong>{option.name}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                    <span className="choice-indicator" aria-hidden="true">
+                      {selected ? <Check size={14} /> : null}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-          </div>
-          <div className="two-column-fields">
-            <label className="field">
-              <span>Supply offered</span>
-              <div className="input-suffix">
-                <input
-                  value={draft.auctionSalePercent}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    updateDraft(setDraft, {
-                      auctionSalePercent: event.target.value,
-                    })
-                  }
-                />
-                <span>%</span>
+          </fieldset>
+
+          {draft.liquidityMode === "auction" ? (
+            <div className="rule-card allocation-rule-card">
+              <div className="rule-card-heading">
+                <h3>Auction allocation</h3>
+                <span>No creator ETH</span>
               </div>
-            </label>
-            <label className="field">
-              <span>Proceeds for pool funding</span>
-              <div className="input-suffix">
-                <input
-                  value={draft.auctionLiquidityPercent}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    updateDraft(setDraft, {
-                      auctionLiquidityPercent: event.target.value,
-                    })
-                  }
-                />
-                <span>%</span>
-              </div>
-            </label>
-          </div>
-          <p className="inline-notice">
-            <Info aria-hidden="true" size={16} />
-            No creator ETH deposit · Pool funding depends on the amount raised
-          </p>
-        </div>
-      ) : (
-        <div className="field-block">
-          <div className="block-heading">
-            <div>
-              <h3>Opening liquidity</h3>
-              <p>
-                Enter the token and ETH amounts used to open the pool
-              </p>
-            </div>
-          </div>
-          <div className="two-column-fields">
-            <label className="field">
-              <span>ETH amount</span>
-              <input
-                value={draft.directEthAmount}
-                inputMode="decimal"
-                placeholder="5"
-                onChange={(event) =>
-                  updateDraft(setDraft, {
-                    directEthAmount: event.target.value,
-                  })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Token amount</span>
-              <input
-                value={draft.directTokenAmount}
-                inputMode="decimal"
-                placeholder="100000000"
-                onChange={(event) =>
-                  updateDraft(setDraft, {
-                    directTokenAmount: event.target.value,
-                  })
-                }
-              />
-            </label>
-          </div>
-        </div>
-      )}
-
-      <div className="field-block behavior-block">
-        <div className="block-heading">
-          <div>
-            <h3>Market behavior</h3>
-            <p>
-              Start with standard rules or add behavior that requires contract review
-            </p>
-          </div>
-        </div>
-
-        <BehaviorList
-          title="Standard"
-          behaviors={standard}
-          selected={draft.selectedBehaviors}
-          onToggle={onToggleBehavior}
-        />
-        <BehaviorList
-          title="Advanced"
-          behaviors={review}
-          selected={draft.selectedBehaviors}
-          onToggle={onToggleBehavior}
-        />
-
-        {custom ? (
-          <div className="behavior-group custom-behavior-group">
-            <p className="behavior-group-title">Custom</p>
-            <BehaviorRow
-              behavior={custom}
-              selected={draft.selectedBehaviors.includes(custom.id)}
-              onToggle={onToggleBehavior}
-            />
-            {draft.selectedBehaviors.includes("custom-hook") ? (
-              <div className="custom-hook-fields">
-                <p className="inline-notice warning-notice">
-                  <Code2 aria-hidden="true" size={16} />
-                  A custom hook replaces the standard composition · Fee routing
-                  and pool compatibility stay inside that hook
-                </p>
+              <div className="two-column-fields">
                 <label className="field">
-                  <span>Source repository or verified source</span>
+                  <span>Supply offered</span>
+                  <div className="input-suffix">
+                    <input
+                      value={draft.auctionSalePercent}
+                      inputMode="decimal"
+                      onChange={(event) =>
+                        updateDraft(setDraft, {
+                          auctionSalePercent: event.target.value,
+                        })
+                      }
+                    />
+                    <span>%</span>
+                  </div>
+                </label>
+                <label className="field">
+                  <span>Proceeds to pool</span>
+                  <div className="input-suffix">
+                    <input
+                      value={draft.auctionLiquidityPercent}
+                      inputMode="decimal"
+                      onChange={(event) =>
+                        updateDraft(setDraft, {
+                          auctionLiquidityPercent: event.target.value,
+                        })
+                      }
+                    />
+                    <span>%</span>
+                  </div>
+                </label>
+              </div>
+              <p className="rule-note">
+                Bids set the opening price and fund the first pool
+              </p>
+            </div>
+          ) : (
+            <div className="rule-card allocation-rule-card">
+              <div className="rule-card-heading">
+                <h3>Opening liquidity</h3>
+                <span>Creator supplied</span>
+              </div>
+              <div className="two-column-fields">
+                <label className="field">
+                  <span>ETH amount</span>
+                  <input
+                    value={draft.directEthAmount}
+                    inputMode="decimal"
+                    placeholder="5"
+                    onChange={(event) =>
+                      updateDraft(setDraft, {
+                        directEthAmount: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Token amount</span>
+                  <input
+                    value={draft.directTokenAmount}
+                    inputMode="decimal"
+                    placeholder="100000000"
+                    onChange={(event) =>
+                      updateDraft(setDraft, {
+                        directTokenAmount: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {draft.selectedBehaviors.includes("fixed-fee") ? (
+            <div className="rule-card fee-rule-card">
+              <div>
+                <h3>Pool fee</h3>
+                <p>Separate from the 0.10% Launcher fee</p>
+              </div>
+              <label className="field short-field">
+                <span className="sr-only">Swap fee</span>
+                <div className="input-suffix">
+                  <input
+                    value={draft.lpFeePercent}
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updateDraft(setDraft, {
+                        lpFeePercent: event.target.value,
+                      })
+                    }
+                  />
+                  <span>%</span>
+                </div>
+              </label>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rule-card behavior-picker">
+          <div className="behavior-picker-heading">
+            <div>
+              <h3>Token behavior</h3>
+              <p>Add only what this token needs</p>
+            </div>
+            <div
+              className="behavior-tabs"
+              role="tablist"
+              aria-label="Behavior type"
+            >
+              {behaviorTiers.map((tier) => {
+                const selectedCount = behaviorDefinitions.filter(
+                  (behavior) =>
+                    behavior.tier === tier.id &&
+                    draft.selectedBehaviors.includes(behavior.id),
+                ).length;
+                return (
+                  <button
+                    key={tier.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTier === tier.id}
+                    className={activeTier === tier.id ? "active" : undefined}
+                    onClick={() => setActiveTier(tier.id)}
+                  >
+                    {tier.label}
+                    {selectedCount > 0 ? <span>{selectedCount}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="behavior-grid" role="tabpanel">
+            {visibleBehaviors.map((behavior) => (
+              <BehaviorRow
+                key={behavior.id}
+                behavior={behavior}
+                selected={draft.selectedBehaviors.includes(behavior.id)}
+                onToggle={onToggleBehavior}
+              />
+            ))}
+          </div>
+
+          {activeTier === "custom" &&
+          draft.selectedBehaviors.includes("custom-hook") ? (
+            <div className="custom-hook-fields">
+              <p className="inline-notice warning-notice">
+                <Code2 aria-hidden="true" size={16} />
+                One custom hook replaces the standard behavior set
+              </p>
+              <div className="two-column-fields">
+                <label className="field">
+                  <span>Source repository</span>
                   <input
                     value={draft.customHookSource}
                     placeholder="https://github.com/…"
@@ -846,7 +838,7 @@ function MarketStep({
                   />
                 </label>
                 <label className="field">
-                  <span>Deployed hook address, if available</span>
+                  <span>Hook address</span>
                   <input
                     className="mono-input"
                     value={draft.customHookAddress}
@@ -860,65 +852,9 @@ function MarketStep({
                   />
                 </label>
               </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-
-      {draft.selectedBehaviors.includes("fixed-fee") ? (
-        <div className="field-block compact-block">
-          <div className="block-heading">
-            <div>
-              <h3>Pool fee</h3>
-              <p>
-                The liquidity-provider fee stays separate from the Launcher fee
-              </p>
             </div>
-          </div>
-          <label className="field short-field">
-            <span>Swap fee</span>
-            <div className="input-suffix">
-              <input
-                value={draft.lpFeePercent}
-                inputMode="decimal"
-                onChange={(event) =>
-                  updateDraft(setDraft, {
-                    lpFeePercent: event.target.value,
-                  })
-                }
-              />
-              <span>%</span>
-            </div>
-          </label>
+          ) : null}
         </div>
-      ) : null}
-    </div>
-  );
-}
-
-function BehaviorList({
-  title,
-  behaviors,
-  selected,
-  onToggle,
-}: {
-  title: string;
-  behaviors: typeof behaviorDefinitions;
-  selected: BehaviorId[];
-  onToggle: (id: BehaviorId) => void;
-}) {
-  return (
-    <div className="behavior-group">
-      <p className="behavior-group-title">{title}</p>
-      <div className="behavior-list">
-        {behaviors.map((behavior) => (
-          <BehaviorRow
-            key={behavior.id}
-            behavior={behavior}
-            selected={selected.includes(behavior.id)}
-            onToggle={onToggle}
-          />
-        ))}
       </div>
     </div>
   );
@@ -960,12 +896,14 @@ function ReviewStep({
   selectedDefinitions,
   onSave,
   onCopy,
+  onBack,
 }: {
   draft: LaunchDraft;
   summary: string;
   selectedDefinitions: ReturnType<typeof findBehavior>[];
   onSave: () => void;
   onCopy: () => void;
+  onBack: () => void;
 }) {
   const assetName =
     draft.assetMode === "existing"
@@ -975,17 +913,14 @@ function ReviewStep({
   return (
     <div className="form-section review-section">
       <div className="form-section-heading">
-        <span>03</span>
         <div>
-          <h2>Confirm the launch</h2>
-          <p>
-            Check the token, liquidity path, market rules and fees in one place
-          </p>
+          <h2>Review the token</h2>
+          <p>Check the token, liquidity, behavior and fees in one place</p>
         </div>
       </div>
 
       <div className="review-statement">
-        <p className="eyebrow">Launch summary</p>
+        <p className="eyebrow">Token summary</p>
         <p>{summary}</p>
       </div>
 
@@ -1046,7 +981,7 @@ function ReviewStep({
             <span>
               {draft.selectedBehaviors.includes("fixed-fee")
                 ? `${draft.lpFeePercent}% pool fee`
-                : "Pool fee follows the selected market rule"}
+                : "Pool fee follows the selected behavior"}
             </span>
           </dd>
         </div>
@@ -1082,8 +1017,12 @@ function ReviewStep({
       </div>
 
       <div className="review-actions">
+        <button className="secondary-button" type="button" onClick={onBack}>
+          <ArrowLeft aria-hidden="true" size={16} />
+          Back
+        </button>
         <button className="primary-button" type="button" onClick={onSave}>
-          Save launch
+          Save token
           <Check aria-hidden="true" size={16} />
         </button>
         <button className="secondary-button" type="button" onClick={onCopy}>

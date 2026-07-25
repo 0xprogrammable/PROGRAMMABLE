@@ -4,7 +4,7 @@ import { ProfileView } from "@/components/profile-view";
 export const metadata: Metadata = {
   title: "Profile",
   description:
-    "View Launcher markets, positions, and claims for one wallet",
+    "View Launcher tokens, positions and claims for one wallet",
 };
 
 export default function ProfilePage() {

@@ -22,9 +22,13 @@ describe("launch plan", () => {
   });
 
   it("marks a copied setup as ready for contract review", () => {
-    expect(buildPlainTextPlan(createEmptyDraft())).toContain(
+    const setup = buildPlainTextPlan(createEmptyDraft());
+
+    expect(setup).toContain(
       "Status: Ready for contract review",
     );
+    expect(setup).toContain("Token behavior");
+    expect(setup).not.toContain("Market");
   });
 
   it("keeps behavior descriptions free of trailing punctuation", () => {
