@@ -46,3 +46,13 @@ ETHEREUM_RPC_URL=https://your-mainnet-rpc.example
 ```
 
 The App ID and optional App Client ID are public browser configuration. No private key or Privy App Secret belongs in this application.
+
+## Contract spike
+
+The `contracts/` workspace contains the first verified Uniswap v4 launch path: a deterministic, non-upgradeable hook with a fixed 0.10% platform fee and an immutable recipient. It reuses the official UERC20Factory, LiquidityLauncher, Continuous Clearing Auction, LBPStrategy, PoolManager and PositionManager.
+
+```bash
+npm run contracts:verify
+```
+
+The suite covers all four swap modes, fuzzing, stateful invariants, the full auction-to-v4 migration, fee collection in ERC-20 and native ETH, and a pinned Ethereum deployment snapshot. This remains a protocol spike; the open mainnet gates are documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).

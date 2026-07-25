@@ -29,5 +29,12 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "work"]
+  "exclude": [
+    "node_modules",
+    "work",
+    "contracts/lib",
+    "contracts/out",
+    "contracts/cache",
+    "contracts/broadcast"
+  ]
 }

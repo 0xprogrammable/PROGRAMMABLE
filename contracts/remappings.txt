@@ -1,0 +1,16 @@
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@openzeppelin/uniswap-hooks/=lib/openzeppelin-uniswap-hooks/
+@solady/=lib/solady/
+@uniswap/blocknumberish/=lib/blocknumberish/
+@uniswap/liquidity-launcher/=lib/liquidity-launcher/
+@uniswap/uerc20-factory/=lib/uerc20-factory/
+@uniswap/v4-core/=lib/v4-core/
+@uniswap/v4-periphery/=lib/v4-periphery/
+blocknumberish/=lib/blocknumberish/
+continuous-clearing-auction/=lib/continuous-clearing-auction/src/
+forge-std/=lib/forge-std/src/
+liquidity-launcher/=lib/liquidity-launcher/
+permit2/=lib/permit2/
+solady/=lib/solady/src/
+solmate/=lib/solmate/
+v4-periphery/=lib/v4-periphery/

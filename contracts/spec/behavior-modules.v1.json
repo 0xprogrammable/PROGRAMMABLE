@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "launcher.behavior-modules.v1",
+  "modules": [
+    {
+      "id": "SYS-01",
+      "name": "Verified launch boundary",
+      "status": "enabled",
+      "compatibilityId": "launcher.v1.uerc20-cca-lbp",
+      "parameterBounds": {
+        "tokenSupply": {
+          "minimum": "1",
+          "maximum": "uint256"
+        },
+        "lpFeePips": {
+          "fixed": 3000
+        },
+        "tickSpacing": {
+          "fixed": 60
+        }
+      },
+      "callbackMask": [
+        "beforeInitialize"
+      ],
+      "authorityModel": "Only the immutable LBPStrategy address may initialize the one bound pool.",
+      "humanSummary": "Creates a fixed-supply token through the official factory, sells it through the official auction path, then initializes one precommitted Uniswap v4 pool.",
+      "invariants": [
+        "The token cannot mint again.",
+        "Only the configured launch strategy can initialize the pool.",
+        "The hook cannot be reused for a different pool configuration.",
+        "Creation and transfer into the launch path must be atomic."
+      ]
+    },
+    {
+      "id": "M-01",
+      "name": "Fixed platform fee",
+      "status": "enabled",
+      "compatibilityId": "launcher.v1.fixed-fee-10bp",
+      "parameterBounds": {
+        "hookFeePips": {
+          "fixed": 1000,
+          "denominator": 1000000
+        }
+      },
+      "callbackMask": [
+        "afterSwap",
+        "afterSwapReturnDelta"
+      ],
+      "authorityModel": "No admin. Anyone may trigger collection, but funds can only reach the immutable fee recipient.",
+      "humanSummary": "Charges 0.10% of the absolute unspecified amount of each completed swap and accumulates it as PoolManager claims.",
+      "invariants": [
+        "The fee rate cannot change.",
+        "The payout address cannot change.",
+        "No caller can redirect accrued fees.",
+        "The hook does not alter the specified swap amount before execution."
+      ]
+    },
+    {
+      "id": "M-02",
+      "name": "Dynamic LP fee",
+      "status": "future",
+      "compatibilityId": "unassigned",
+      "parameterBounds": {},
+      "callbackMask": [],
+      "authorityModel": "Not defined.",
+      "humanSummary": "Reserved for a separately audited hook family.",
+      "invariants": [
+        "Must not be presented as compatible with Verified Standard V1."
+      ]
+    },
+    {
+      "id": "M-03",
+      "name": "Oracle-aware behavior",
+      "status": "future",
+      "compatibilityId": "unassigned",
+      "parameterBounds": {},
+      "callbackMask": [],
+      "authorityModel": "Not defined.",
+      "humanSummary": "Reserved for a separately audited hook family with explicit oracle failure handling.",
+      "invariants": [
+        "Must not be presented as compatible with Verified Standard V1."
+      ]
+    },
+    {
+      "id": "M-04",
+      "name": "External custom hook",
+      "status": "future-unverified",
+      "compatibilityId": "launcher.unverified.external-hook",
+      "parameterBounds": {},
+      "callbackMask": [],
+      "authorityModel": "Defined by the external hook author.",
+      "humanSummary": "A future permissionless path that must be isolated from verified launches and clearly expose its risk.",
+      "invariants": [
+        "Must never inherit the verified badge.",
+        "Must display bytecode, permissions, source verification, audit status and mutable authorities.",
+        "Must not be able to impersonate a Launcher-owned hook family."
+      ]
+    }
+  ]
+}

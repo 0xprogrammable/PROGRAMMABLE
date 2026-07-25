@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "standardId": "launcher.verified-standard.v1",
+  "status": "protocol-spike",
+  "network": {
+    "chainId": 1,
+    "settlement": "ethereum-mainnet",
+    "deploymentPolicy": "fork-and-sepolia-before-mainnet"
+  },
+  "token": {
+    "implementation": "Uniswap UERC20Factory v2.0",
+    "supply": "fixed",
+    "minting": "single-mint-at-creation",
+    "transferTax": false,
+    "rebase": false,
+    "upgradeable": false
+  },
+  "launch": {
+    "implementation": "Uniswap LiquidityLauncher v3 with Continuous Clearing Auction and LBPStrategy v3.1",
+    "atomicCreationAndDistribution": true,
+    "directPoolLaunch": false
+  },
+  "pool": {
+    "protocol": "Uniswap v4",
+    "lpFeePips": 3000,
+    "tickSpacing": 60,
+    "dynamicLpFee": false,
+    "initialPosition": "full-range",
+    "oneCertifiedHookPerPool": true
+  },
+  "platformFee": {
+    "feePips": 1000,
+    "denominator": 1000000,
+    "percentage": "0.10%",
+    "basis": "absolute-unspecified-swap-amount",
+    "recipient": "immutable-per-hook",
+    "collection": "permissionless-trigger-fixed-recipient"
+  },
+  "hook": {
+    "implementation": "PlatformFeeHookV1",
+    "upgradeable": false,
+    "admin": false,
+    "pause": false,
+    "mutableParameters": false,
+    "boundToOnePool": true,
+    "callbackMask": [
+      "beforeInitialize",
+      "afterSwap",
+      "afterSwapReturnDelta"
+    ]
+  },
+  "excludedFromV1": [
+    "arbitrary-user-solidity",
+    "arbitrary-third-party-hooks",
+    "custom-bonding-curves",
+    "dynamic-fees",
+    "transfer-tax-tokens",
+    "rebasing-tokens",
+    "proxy-hooks",
+    "regulated-rwa-claims",
+    "securities-representations"
+  ],
+  "productionApproved": false
+}
