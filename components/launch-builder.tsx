@@ -53,35 +53,27 @@ type TokenResult = {
 };
 
 const steps = [
-  { number: 1, label: "Asset" },
+  { number: 1, label: "Token" },
   { number: 2, label: "Market" },
-  { number: 3, label: "Review" },
+  { number: 3, label: "Confirm" },
 ];
 
 const assetOptions: {
   id: AssetMode;
   name: string;
   description: string;
-  disabled?: boolean;
 }[] = [
   {
     id: "new",
     name: "Create a token",
     description:
-      "Prepare a fixed-supply ERC-20 without transfer taxes, rebases, or sell restrictions.",
+      "Create a fixed-supply ERC-20 without transfer taxes, rebases or sell restrictions",
   },
   {
     id: "existing",
     name: "Use an existing token",
     description:
-      "Read standard metadata from a contract that is already deployed on Ethereum.",
-  },
-  {
-    id: "issuer",
-    name: "Issuer-backed asset",
-    description:
-      "Connect an asset supplied by a regulated or otherwise responsible issuer.",
-    disabled: true,
+      "Use a token contract that is already deployed on Ethereum",
   },
 ];
 
@@ -96,18 +88,18 @@ const liquidityOptions: {
     id: "auction",
     name: "Auction-funded liquidity",
     description:
-      "Let demand establish the opening price and fund the first pool.",
+      "Let demand establish the opening price and fund the first pool",
     detail:
-      "The creator does not contribute ETH. A defined share of auction proceeds and reserved tokens seeds a v4 pool after the sale.",
+      "No creator ETH deposit · Auction proceeds and reserved tokens seed the pool",
     icon: CircleDollarSign,
   },
   {
     id: "direct",
     name: "Direct v4 pool",
     description:
-      "Open the market with liquidity supplied by the creator.",
+      "Open the market with liquidity supplied by the creator",
     detail:
-      "The creator defines the initial token and ETH amounts used to initialize the pool.",
+      "Set the token and ETH amounts used to initialize the pool",
     icon: Droplets,
   },
 ];
@@ -137,31 +129,25 @@ export function LaunchBuilder() {
       <div className="launch-page page-width">
         <header className="page-heading">
           <p className="eyebrow">Launch</p>
-          <h1>Define a launch plan.</h1>
+          <h1>Create a market</h1>
           <p>
-            Start with the asset. Then choose how liquidity forms and what the
-            market is allowed to do.
+            Choose the token, how liquidity starts and what the market can do
           </p>
         </header>
-        <div className="launch-loading" aria-label="Loading launch draft" />
+        <div className="launch-loading" aria-label="Loading launch" />
       </div>
     );
   }
 
   return (
-    <LaunchBuilderForm
-      initialDraft={localDraft ?? createEmptyDraft()}
-      restored={Boolean(localDraft)}
-    />
+    <LaunchBuilderForm initialDraft={localDraft ?? createEmptyDraft()} />
   );
 }
 
 function LaunchBuilderForm({
   initialDraft,
-  restored,
 }: {
   initialDraft: LaunchDraft;
-  restored: boolean;
 }) {
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
   const [step, setStep] = useState(1);
@@ -188,54 +174,50 @@ function LaunchBuilderForm({
 
   function validateAsset() {
     if (draft.assetMode === "new") {
-      if (!draft.tokenName.trim()) return "Enter a token name.";
-      if (!draft.tokenSymbol.trim()) return "Enter a token symbol.";
+      if (!draft.tokenName.trim()) return "Enter a token name";
+      if (!draft.tokenSymbol.trim()) return "Enter a token symbol";
       if (!isPositiveNumber(draft.tokenSupply)) {
-        return "Enter a token supply greater than zero.";
+        return "Enter a token supply greater than zero";
       }
       return "";
     }
 
-    if (draft.assetMode === "existing") {
-      if (!tokenResult || tokenResult.address !== draft.tokenAddress) {
-        return "Read the token contract before continuing.";
-      }
-      if (!tokenResult.metadataComplete) {
-        return "This contract does not expose complete standard ERC-20 metadata.";
-      }
-      return "";
+    if (!tokenResult || tokenResult.address !== draft.tokenAddress) {
+      return "Read the token contract before continuing";
     }
-
-    return "Issuer-backed assets require a separate issuer integration.";
+    if (!tokenResult.metadataComplete) {
+      return "This contract does not expose complete standard ERC-20 metadata";
+    }
+    return "";
   }
 
   function validateMarket() {
     if (draft.liquidityMode === "auction") {
       if (!percentageIsValid(draft.auctionSalePercent)) {
-        return "Enter a sale allocation between 0 and 100 percent.";
+        return "Enter a sale allocation between 0 and 100 percent";
       }
       if (!percentageIsValid(draft.auctionLiquidityPercent)) {
-        return "Enter a pool-funding share between 0 and 100 percent.";
+        return "Enter a pool-funding share between 0 and 100 percent";
       }
     } else if (
       !isPositiveNumber(draft.directEthAmount) ||
       !isPositiveNumber(draft.directTokenAmount)
     ) {
-      return "Enter both ETH and token liquidity amounts.";
+      return "Enter both ETH and token liquidity amounts";
     }
 
     if (
       draft.selectedBehaviors.includes("fixed-fee") &&
       !percentageIsValid(draft.lpFeePercent)
     ) {
-      return "Enter a pool fee between 0 and 100 percent.";
+      return "Enter a pool fee between 0 and 100 percent";
     }
 
     if (
       draft.selectedBehaviors.includes("custom-hook") &&
       !draft.customHookSource.trim()
     ) {
-      return "Add a source repository or verified source link for the custom hook.";
+      return "Add a source repository or verified source link for the custom hook";
     }
 
     return "";
@@ -267,7 +249,7 @@ function LaunchBuilderForm({
 
       if (!response.ok || "error" in body) {
         throw new Error(
-          "error" in body ? body.error : "The token could not be read.",
+          "error" in body ? body.error : "The token could not be read",
         );
       }
 
@@ -282,7 +264,7 @@ function LaunchBuilderForm({
       setTokenError(
         caught instanceof Error
           ? caught.message
-          : "The token could not be read.",
+          : "The token could not be read",
       );
     } finally {
       setTokenLoading(false);
@@ -302,12 +284,12 @@ function LaunchBuilderForm({
     const saved = { ...draft, updatedAt: new Date().toISOString() };
     saveLocalDraft(saved);
     setDraft(saved);
-    setNotice("Draft saved in this browser.");
+    setNotice("Launch saved in this browser");
   }
 
   async function copyPlan() {
     await navigator.clipboard.writeText(buildPlainTextPlan(draft));
-    setNotice("Launch plan copied.");
+    setNotice("Launch summary copied");
   }
 
   return (
@@ -315,18 +297,11 @@ function LaunchBuilderForm({
       <header className="page-heading launch-page-heading">
         <div>
           <p className="eyebrow">Launch</p>
-          <h1>Define a launch plan.</h1>
+          <h1>Create a market</h1>
           <p>
-            Start with the asset. Then choose how liquidity forms and what the
-            market is allowed to do.
+            Choose the token, how liquidity starts and what the market can do
           </p>
         </div>
-        {restored ? (
-          <p className="restored-note">
-            <Check aria-hidden="true" size={15} />
-            Local draft restored
-          </p>
-        ) : null}
       </header>
 
       <ol className="step-navigation" aria-label="Launch steps">
@@ -441,12 +416,12 @@ function LaunchBuilderForm({
 
         {step === 2 ? (
           <aside className="plan-aside">
-            <p className="eyebrow">Current plan</p>
+            <p className="eyebrow">Launch summary</p>
             <p className="plan-sentence">{summary}</p>
             <dl className="plan-facts">
               <div>
                 <dt>Launcher fee</dt>
-                <dd>{(PLATFORM_FEE_BPS / 100).toFixed(2)}% planned</dd>
+                <dd>{(PLATFORM_FEE_BPS / 100).toFixed(2)}%</dd>
               </div>
               <div>
                 <dt>Hook structure</dt>
@@ -458,8 +433,8 @@ function LaunchBuilderForm({
               </div>
             </dl>
             <p className="aside-note">
-              Selected behaviors form one market contract. They are not
-              independent hooks attached to the same pool.
+              Selected behaviors form one market contract · They are not
+              separate hooks on the same pool
             </p>
           </aside>
         ) : null}
@@ -497,10 +472,9 @@ function AssetStep({
       <div className="form-section-heading">
         <span>01</span>
         <div>
-          <h2>Choose the asset.</h2>
+          <h2>Choose the token</h2>
           <p>
-            Create a simple token or prepare a market for an existing Ethereum
-            contract.
+            Create a new token or use a contract that already exists on Ethereum
           </p>
         </div>
       </div>
@@ -513,7 +487,6 @@ function AssetStep({
               key={option.id}
               className={`choice-row ${selected ? "selected" : ""}`}
               type="button"
-              disabled={option.disabled}
               aria-pressed={selected}
               onClick={() => {
                 updateDraft(setDraft, { assetMode: option.id });
@@ -526,9 +499,6 @@ function AssetStep({
                 <strong>{option.name}</strong>
                 <small>{option.description}</small>
               </span>
-              {option.disabled ? (
-                <span className="choice-state">Requires issuer integration</span>
-              ) : null}
             </button>
           );
         })}
@@ -576,7 +546,7 @@ function AssetStep({
               }
             />
             <small>
-              The standard path does not include minting after deployment.
+              Fixed supply with no minting after deployment
             </small>
           </label>
           <label className="field">
@@ -585,7 +555,7 @@ function AssetStep({
               value={draft.tokenDescription}
               maxLength={280}
               rows={4}
-              placeholder="State what the asset represents and how it should be understood."
+              placeholder="Describe what the token represents"
               onChange={(event) =>
                 updateDraft(setDraft, {
                   tokenDescription: event.target.value,
@@ -660,8 +630,8 @@ function AssetStep({
                 </div>
               </dl>
               <p>
-                This reads contract code and standard metadata on Ethereum. It
-                is not a security review or scanner approval.
+                Metadata read directly from Ethereum · Contract review happens
+                before launch
               </p>
             </div>
           ) : null}
@@ -695,10 +665,9 @@ function MarketStep({
       <div className="form-section-heading">
         <span>02</span>
         <div>
-          <h2>Shape the market.</h2>
+          <h2>Set the market rules</h2>
           <p>
-            Choose how the first liquidity forms, then add only the behavior
-            the market needs.
+            Choose how liquidity starts and add only the behavior the market needs
           </p>
         </div>
       </div>
@@ -742,8 +711,8 @@ function MarketStep({
             <div>
               <h3>Auction allocation</h3>
               <p>
-                These values are planning inputs. Final parameters require
-                simulation against the selected sale design.
+                Set how much supply enters the sale and how much of the proceeds
+                funds the opening pool
               </p>
             </div>
           </div>
@@ -781,8 +750,7 @@ function MarketStep({
           </div>
           <p className="inline-notice">
             <Info aria-hidden="true" size={16} />
-            No creator ETH is required by this path, but the pool can only be
-            funded if the auction raises enough ETH.
+            No creator ETH deposit · Pool funding depends on the amount raised
           </p>
         </div>
       ) : (
@@ -791,8 +759,7 @@ function MarketStep({
             <div>
               <h3>Opening liquidity</h3>
               <p>
-                Enter the amounts the creator plans to supply when the pool is
-                initialized.
+                Enter the token and ETH amounts used to open the pool
               </p>
             </div>
           </div>
@@ -832,20 +799,19 @@ function MarketStep({
           <div>
             <h3>Market behavior</h3>
             <p>
-              Standard choices stay narrow. More powerful behavior requires a
-              separate contract review.
+              Start with standard rules or add behavior that requires contract review
             </p>
           </div>
         </div>
 
         <BehaviorList
-          title="Standard plan"
+          title="Standard"
           behaviors={standard}
           selected={draft.selectedBehaviors}
           onToggle={onToggleBehavior}
         />
         <BehaviorList
-          title="Dedicated review"
+          title="Advanced"
           behaviors={review}
           selected={draft.selectedBehaviors}
           onToggle={onToggleBehavior}
@@ -853,7 +819,7 @@ function MarketStep({
 
         {custom ? (
           <div className="behavior-group custom-behavior-group">
-            <p className="behavior-group-title">Custom review</p>
+            <p className="behavior-group-title">Custom</p>
             <BehaviorRow
               behavior={custom}
               selected={draft.selectedBehaviors.includes(custom.id)}
@@ -863,9 +829,8 @@ function MarketStep({
               <div className="custom-hook-fields">
                 <p className="inline-notice warning-notice">
                   <Code2 aria-hidden="true" size={16} />
-                  A custom hook replaces the curated composition. Fee routing
-                  and pool compatibility must be implemented and reviewed
-                  inside that hook.
+                  A custom hook replaces the standard composition · Fee routing
+                  and pool compatibility stay inside that hook
                 </p>
                 <label className="field">
                   <span>Source repository or verified source</span>
@@ -906,8 +871,7 @@ function MarketStep({
             <div>
               <h3>Pool fee</h3>
               <p>
-                This is the planned liquidity-provider fee, separate from the
-                Launcher fee.
+                The liquidity-provider fee stays separate from the Launcher fee
               </p>
             </div>
           </div>
@@ -1013,16 +977,15 @@ function ReviewStep({
       <div className="form-section-heading">
         <span>03</span>
         <div>
-          <h2>Review the plan.</h2>
+          <h2>Confirm the launch</h2>
           <p>
-            This is the human-readable product brief for the contracts and
-            review work that follows.
+            Check the token, liquidity path, market rules and fees in one place
           </p>
         </div>
       </div>
 
       <div className="review-statement">
-        <p className="eyebrow">Launch sentence</p>
+        <p className="eyebrow">Launch summary</p>
         <p>{summary}</p>
       </div>
 
@@ -1052,8 +1015,8 @@ function ReviewStep({
             </strong>
             <span>
               {draft.liquidityMode === "auction"
-                ? `${draft.auctionSalePercent}% of supply offered; ${draft.auctionLiquidityPercent}% of proceeds planned for pool funding`
-                : `${draft.directEthAmount} ETH and ${draft.directTokenAmount} tokens planned`}
+                ? `${draft.auctionSalePercent}% of supply offered · ${draft.auctionLiquidityPercent}% of proceeds for pool funding`
+                : `${draft.directEthAmount} ETH · ${draft.directTokenAmount} tokens`}
             </span>
           </dd>
         </div>
@@ -1069,13 +1032,13 @@ function ReviewStep({
             </strong>
             <span>
               {hasReviewBehavior(draft)
-                ? "A dedicated contract review is required."
-                : "Only standard-plan behavior is selected."}
+                ? "Contract review required"
+                : "Standard behavior selected"}
             </span>
           </dd>
         </div>
         <div>
-          <dt>Planned fees</dt>
+          <dt>Fees</dt>
           <dd>
             <strong>
               {(PLATFORM_FEE_BPS / 100).toFixed(2)}% Launcher fee
@@ -1083,7 +1046,7 @@ function ReviewStep({
             <span>
               {draft.selectedBehaviors.includes("fixed-fee")
                 ? `${draft.lpFeePercent}% pool fee`
-                : "The pool fee follows the selected market rule."}
+                : "Pool fee follows the selected market rule"}
             </span>
           </dd>
         </div>
@@ -1092,10 +1055,9 @@ function ReviewStep({
       <div className="review-gates">
         <div className="block-heading">
           <div>
-            <h3>Required before deployment</h3>
+            <h3>Launch checks</h3>
             <p>
-              These are release gates, not claims that the launch has already
-              passed.
+              Every deployment passes these checks before it appears in Explore
             </p>
           </div>
         </div>
@@ -1110,7 +1072,7 @@ function ReviewStep({
           </li>
           <li>
             <LockKeyhole aria-hidden="true" size={18} />
-            Ownership, fee recipient, and liquidity controls disclosed
+            Ownership, fee recipient and liquidity controls confirmed
           </li>
           <li>
             <CheckCircle2 aria-hidden="true" size={18} />
@@ -1119,25 +1081,14 @@ function ReviewStep({
         </ul>
       </div>
 
-      <div className="deployment-boundary">
-        <LockKeyhole aria-hidden="true" size={19} />
-        <div>
-          <strong>Deployment is not enabled in this build.</strong>
-          <p>
-            Saving or copying this plan does not create a token, open a pool, or
-            ask a wallet to sign.
-          </p>
-        </div>
-      </div>
-
       <div className="review-actions">
         <button className="primary-button" type="button" onClick={onSave}>
-          Save draft
+          Save launch
           <Check aria-hidden="true" size={16} />
         </button>
         <button className="secondary-button" type="button" onClick={onCopy}>
           <Copy aria-hidden="true" size={16} />
-          Copy launch plan
+          Copy summary
         </button>
       </div>
     </div>

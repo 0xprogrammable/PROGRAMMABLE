@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s · Launcher",
   },
   description:
-    "A focused interface for planning tokens and markets on Uniswap v4.",
+    "Create tokens and markets on Uniswap v4",
 };
 
 export default function RootLayout({

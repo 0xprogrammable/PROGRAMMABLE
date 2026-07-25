@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  behaviorDefinitions,
   buildLaunchSummary,
   buildPlainTextPlan,
   createEmptyDraft,
@@ -16,13 +17,22 @@ describe("launch plan", () => {
     expect(buildLaunchSummary(draft)).toContain(
       "Bids establish the opening price",
     );
-    expect(buildLaunchSummary(draft)).toContain("seeds a Uniswap v4 pool");
+    expect(buildLaunchSummary(draft)).toContain("Uniswap v4 pool");
+    expect(buildLaunchSummary(draft)).not.toContain(".");
   });
 
-  it("states that a copied plan is not a deployment", () => {
+  it("marks a copied setup as ready for contract review", () => {
     expect(buildPlainTextPlan(createEmptyDraft())).toContain(
-      "It does not deploy a contract or create a market.",
+      "Status: Ready for contract review",
     );
+  });
+
+  it("keeps behavior descriptions free of trailing punctuation", () => {
+    expect(
+      behaviorDefinitions.every(
+        ({ description }) => !/[.!?]$/.test(description),
+      ),
+    ).toBe(true);
   });
 
   it("keeps fixed and dynamic fees mutually exclusive", () => {

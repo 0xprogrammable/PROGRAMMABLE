@@ -153,7 +153,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const account = accounts[0];
 
       if (!account?.startsWith("0x")) {
-        throw new Error("The wallet did not return an Ethereum account.");
+        throw new Error("The wallet did not return an Ethereum account");
       }
 
       setWallet({
@@ -190,7 +190,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const message =
         caught instanceof Error
           ? caught.message
-          : "The wallet request could not be completed.";
+          : "The wallet request could not be completed";
       setError(message);
     } finally {
       setConnectingId(null);
@@ -269,8 +269,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
                 {wallet.chainId !== "0x1" ? (
                   <p className="inline-notice warning-notice">
-                    This launch plan targets Ethereum. Change networks in your
-                    wallet before a transaction is prepared.
+                    Launcher uses Ethereum · Change networks in your wallet
+                    before continuing
                   </p>
                 ) : null}
 
@@ -303,8 +303,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             ) : (
               <>
                 <p className="dialog-copy">
-                  Choose an installed wallet. Launcher only requests your
-                  public account at this stage.
+                  Choose an installed wallet · Launcher only requests your
+                  public account
                 </p>
                 <div className="wallet-list">
                   {providers.length > 0 ? (
@@ -335,8 +335,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                     <div className="wallet-empty">
                       <Wallet aria-hidden="true" size={21} />
                       <p>
-                        No compatible browser wallet was detected. Open or
-                        install MetaMask or Phantom, then refresh this page.
+                        No compatible wallet detected · Open MetaMask or Phantom
+                        and refresh
                       </p>
                     </div>
                   )}
@@ -347,7 +347,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                   </p>
                 ) : null}
                 <p className="dialog-footnote">
-                  No transaction is prepared or signed by connecting.
+                  Connecting never sends a transaction
                 </p>
               </>
             )}
@@ -361,7 +361,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 export function useWallet() {
   const context = useContext(WalletContext);
   if (!context) {
-    throw new Error("useWallet must be used inside WalletProvider.");
+    throw new Error("useWallet must be used inside WalletProvider");
   }
   return context;
 }

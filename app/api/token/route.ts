@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
   if (!input) {
     return NextResponse.json(
-      { error: "Enter an Ethereum token address." },
+      { error: "Enter an Ethereum token address" },
       { status: 400 },
     );
   }
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     address = getAddress(input);
   } catch {
     return NextResponse.json(
-      { error: "Enter a valid Ethereum address." },
+      { error: "Enter a valid Ethereum address" },
       { status: 400 },
     );
   }
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
   const bytecode = valueFromResult(bytecodeResult);
   if (!bytecode || bytecode === "0x") {
     return NextResponse.json(
-      { error: "No contract code was found at this address on Ethereum." },
+      { error: "No contract code was found at this address on Ethereum" },
       { status: 404 },
     );
   }

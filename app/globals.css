@@ -17,6 +17,7 @@
   --warning-wash: rgba(228, 173, 115, 0.08);
   --danger: #ff8c82;
   --success: #8fd9b5;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --header-height: 72px;
   --page-width: 1180px;
   --shadow-dialog: 0 28px 90px rgba(0, 0, 0, 0.52);
@@ -190,7 +191,8 @@ textarea {
   padding: 0 14px;
   transition:
     background-color 140ms ease,
-    border-color 140ms ease;
+    border-color 140ms ease,
+    transform 140ms var(--ease-out);
 }
 
 .wallet-button:hover {
@@ -218,7 +220,7 @@ textarea {
     background-color 140ms ease,
     border-color 140ms ease,
     color 140ms ease,
-    transform 140ms ease;
+    transform 140ms var(--ease-out);
 }
 
 .primary-button {
@@ -251,7 +253,7 @@ textarea {
 .primary-button:active,
 .secondary-button:active,
 .wallet-button:active {
-  transform: translateY(1px);
+  transform: scale(0.98);
 }
 
 .primary-button:disabled,
@@ -344,12 +346,6 @@ textarea {
   font-weight: 580;
   justify-content: space-between;
   padding: 17px 19px;
-}
-
-.sentence-index {
-  color: var(--accent);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
 }
 
 .sentence-lines {
@@ -554,15 +550,6 @@ textarea {
   display: flex;
   justify-content: space-between;
   max-width: none;
-}
-
-.restored-note {
-  align-items: center;
-  color: var(--muted);
-  display: flex;
-  font-size: 13px;
-  gap: 7px;
-  margin-bottom: 4px;
 }
 
 .step-navigation {
@@ -771,7 +758,6 @@ textarea {
   margin-top: 3px;
 }
 
-.choice-state,
 .behavior-tier {
   color: var(--dim);
   font-size: 10px;
@@ -1360,34 +1346,6 @@ fieldset.field-block {
   color: var(--dim);
 }
 
-.deployment-boundary {
-  align-items: flex-start;
-  background: var(--warning-wash);
-  border: 1px solid rgba(228, 173, 115, 0.21);
-  border-radius: 11px;
-  color: var(--warning);
-  display: flex;
-  gap: 12px;
-  margin-top: 26px;
-  padding: 16px;
-}
-
-.deployment-boundary > svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-}
-
-.deployment-boundary strong {
-  font-size: 13px;
-}
-
-.deployment-boundary p {
-  color: #c3a98e;
-  font-size: 12px;
-  line-height: 1.5;
-  margin-top: 4px;
-}
-
 .review-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1871,10 +1829,6 @@ fieldset.field-block {
     flex-direction: column;
   }
 
-  .restored-note {
-    margin-top: 16px;
-  }
-
   .step-navigation {
     margin-top: 44px;
   }
@@ -2033,10 +1987,6 @@ fieldset.field-block {
     grid-template-columns: auto 1fr;
     min-height: 0;
     padding: 16px;
-  }
-
-  .choice-state {
-    grid-column: 2;
   }
 
   .two-column-fields,

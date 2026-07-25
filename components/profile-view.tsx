@@ -24,10 +24,9 @@ export function ProfileView() {
     <div className="profile-page page-width">
       <header className="page-heading">
         <p className="eyebrow">Profile</p>
-        <h1>Your launches and positions.</h1>
+        <h1>Your markets in one place</h1>
         <p>
-          Review records associated with the connected address and manage
-          claims when the onchain registry is connected.
+          Track launches, liquidity positions and claims for one wallet
         </p>
       </header>
 
@@ -36,10 +35,9 @@ export function ProfileView() {
           <span className="profile-connect-icon" aria-hidden="true">
             <Wallet size={24} strokeWidth={1.6} />
           </span>
-          <h2>Connect a wallet to view this profile.</h2>
+          <h2>Connect your wallet</h2>
           <p>
-            Launcher reads the public address you choose. Connecting does not
-            prepare a transaction.
+            Your wallet identifies the markets and positions shown here
           </p>
           <button className="primary-button" type="button" onClick={openWallet}>
             Connect wallet
@@ -59,8 +57,7 @@ export function ProfileView() {
               </div>
             </div>
             <p>
-              This build has no deployed launch registry, so it cannot show
-              onchain Launcher records yet.
+              Launcher activity for this address appears below
             </p>
           </section>
 
@@ -68,11 +65,11 @@ export function ProfileView() {
             <section className="profile-section">
               <div className="profile-section-heading">
                 <div>
-                  <p className="eyebrow">Local draft</p>
-                  <h2>Saved in this browser</h2>
+                  <p className="eyebrow">Saved launch</p>
+                  <h2>Continue where you stopped</h2>
                 </div>
                 <Link className="text-link" href="/launch">
-                  Open draft
+                  Open launch
                   <ArrowRight aria-hidden="true" size={15} />
                 </Link>
               </div>
@@ -103,20 +100,20 @@ export function ProfileView() {
             <EmptyProfileSection
               icon={Layers3}
               eyebrow="Launches"
-              title="No Launcher launches"
-              copy="No verified launch record is associated with this address."
+              title="No launches yet"
+              copy="Markets launched with this address will appear here"
             />
             <EmptyProfileSection
               icon={CircleDollarSign}
               eyebrow="Positions"
-              title="No managed positions"
-              copy="Liquidity positions created through Launcher will be grouped here."
+              title="No positions yet"
+              copy="Liquidity positions created through Launcher will appear here"
             />
             <EmptyProfileSection
               icon={Wallet}
               eyebrow="Claims"
-              title="No claims available"
-              copy="Claimable fees or distributions will appear only after their source is verified."
+              title="Nothing to claim"
+              copy="Verified fees and distributions will appear here"
             />
           </div>
         </>

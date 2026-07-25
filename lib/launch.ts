@@ -1,7 +1,7 @@
 export const PLATFORM_FEE_BPS = 10;
 export const LAUNCH_DRAFT_STORAGE_KEY = "launcher.launch-draft.v1";
 
-export type AssetMode = "new" | "existing" | "issuer";
+export type AssetMode = "new" | "existing";
 export type LiquidityMode = "auction" | "direct";
 export type BehaviorTier = "standard" | "review" | "custom";
 
@@ -32,91 +32,91 @@ export const behaviorDefinitions: BehaviorDefinition[] = [
     id: "fixed-fee",
     name: "Fixed swap fee",
     description:
-      "The pool uses one fee rate that does not change with market conditions.",
+      "The pool uses one fee rate that does not change with market conditions",
     tier: "standard",
   },
   {
     id: "fee-split",
     name: "Fee split",
     description:
-      "A defined share of swap fees is routed between the liquidity position and named recipients.",
+      "Route a defined share of swap fees between liquidity and named recipients",
     tier: "standard",
   },
   {
     id: "timed-opening",
     name: "Timed opening",
     description:
-      "Trading opens for everyone at the same stated time, without address-specific sell rules.",
+      "Open trading for everyone at the same stated time without address-specific sell rules",
     tier: "standard",
   },
   {
     id: "nft-membership",
     name: "NFT membership",
     description:
-      "NFT ownership can change fees or unlock a separate benefit, but it never removes a holder's ability to sell.",
+      "Use NFT ownership for fee benefits without removing a holder's ability to sell",
     tier: "standard",
   },
   {
     id: "dynamic-fee",
     name: "Dynamic fees",
     description:
-      "The swap fee follows a bounded rule based on observable market conditions.",
+      "Let the swap fee follow a bounded rule based on observable market conditions",
     tier: "review",
   },
   {
     id: "buyback",
     name: "Automated buyback",
     description:
-      "A defined share of collected fees can buy the launched token under explicit limits.",
+      "Use a defined share of collected fees to buy the launched token within explicit limits",
     tier: "review",
   },
   {
     id: "holder-rewards",
     name: "Holder rewards",
     description:
-      "A defined share of swap fees can fund claims without adding a transfer tax to the token.",
+      "Fund holder claims from swap fees without adding a transfer tax",
     tier: "review",
   },
   {
     id: "oracle-guard",
     name: "Oracle guard",
     description:
-      "Swaps can be checked against an external price reference and bounded deviation rules.",
+      "Check swaps against an external price reference and bounded deviation rules",
     tier: "review",
   },
   {
     id: "anti-sandwich",
     name: "Anti-sandwich execution",
     description:
-      "The market can use delayed or reordered settlement to reduce common sandwich patterns.",
+      "Use delayed or reordered settlement to reduce common sandwich patterns",
     tier: "review",
   },
   {
     id: "limit-orders",
     name: "Limit orders",
     description:
-      "Liquidity can represent orders that execute when the market reaches a stated price.",
+      "Represent orders as liquidity that executes at a stated price",
     tier: "review",
   },
   {
     id: "productive-liquidity",
     name: "Productive liquidity",
     description:
-      "Idle pool assets can enter a separate yield strategy with explicit withdrawal and loss assumptions.",
+      "Put idle pool assets into a separate strategy with explicit withdrawal and loss rules",
     tier: "review",
   },
   {
     id: "custom-curve",
     name: "Custom pricing curve",
     description:
-      "The market can replace concentrated-liquidity pricing with a reviewed accounting model.",
+      "Replace concentrated-liquidity pricing with a reviewed accounting model",
     tier: "review",
   },
   {
     id: "custom-hook",
     name: "Custom hook",
     description:
-      "A project can submit one complete hook implementation for compatibility and security review.",
+      "Submit one complete hook implementation for compatibility and security review",
     tier: "custom",
   },
 ];
@@ -174,18 +174,14 @@ export function findBehavior(id: BehaviorId) {
 }
 
 export function getBehaviorTierLabel(tier: BehaviorTier) {
-  if (tier === "standard") return "Standard plan";
-  if (tier === "review") return "Dedicated review";
-  return "Custom review";
+  if (tier === "standard") return "Standard";
+  if (tier === "review") return "Review required";
+  return "Custom";
 }
 
 export function getDraftAssetLabel(draft: LaunchDraft) {
   if (draft.assetMode === "existing") {
     return draft.existingTokenSymbol.trim() || "the existing token";
-  }
-
-  if (draft.assetMode === "issuer") {
-    return "an issuer-backed asset";
   }
 
   return draft.tokenSymbol.trim() || draft.tokenName.trim() || "the new token";
@@ -195,8 +191,8 @@ export function buildLaunchSummary(draft: LaunchDraft) {
   const asset = getDraftAssetLabel(draft);
   const liquidity =
     draft.liquidityMode === "auction"
-      ? "Bids establish the opening price, then a defined share of the proceeds and reserved tokens seeds a Uniswap v4 pool."
-      : "The creator supplies the token and ETH liquidity used to initialize a Uniswap v4 pool.";
+      ? "Bids establish the opening price and fund the first Uniswap v4 pool"
+      : "Creator-supplied token and ETH liquidity opens the Uniswap v4 pool";
 
   const selected = draft.selectedBehaviors
     .map(findBehavior)
@@ -204,15 +200,15 @@ export function buildLaunchSummary(draft: LaunchDraft) {
 
   const behaviorText =
     selected.length === 0
-      ? "The pool uses the base launch configuration."
+      ? "Base market rules"
       : selected.length === 1
-        ? `${selected[0].name} defines the market behavior.`
+        ? selected[0].name
         : `${selected
             .slice(0, -1)
             .map((behavior) => behavior.name)
-            .join(", ")} and ${selected.at(-1)?.name} define the market behavior.`;
+            .join(", ")} and ${selected.at(-1)?.name}`;
 
-  return `${asset} is prepared for Ethereum. ${liquidity} ${behaviorText}`;
+  return `${asset} on Ethereum · ${liquidity} · ${behaviorText}`;
 }
 
 export function buildPlainTextPlan(draft: LaunchDraft) {
@@ -221,36 +217,34 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     .filter((behavior): behavior is BehaviorDefinition => Boolean(behavior));
 
   return [
-    "Launcher draft",
+    "Launcher setup",
     "",
     `Asset: ${getDraftAssetLabel(draft)}`,
     `Asset path: ${
       draft.assetMode === "new"
         ? "New fixed-supply ERC-20"
-        : draft.assetMode === "existing"
-          ? `Existing Ethereum token (${draft.tokenAddress || "address not set"})`
-          : "Issuer-backed asset integration"
+        : `Existing Ethereum token (${draft.tokenAddress || "address not set"})`
     }`,
     `Liquidity path: ${
       draft.liquidityMode === "auction"
-        ? `Auction-funded v4 liquidity (${draft.auctionSalePercent || "unset"}% of supply offered; ${draft.auctionLiquidityPercent || "unset"}% of proceeds planned for pool funding)`
-        : `Direct v4 pool (${draft.directEthAmount || "unset"} ETH and ${draft.directTokenAmount || "unset"} tokens planned)`
+        ? `Auction-funded v4 liquidity (${draft.auctionSalePercent || "unset"}% of supply offered; ${draft.auctionLiquidityPercent || "unset"}% of proceeds for pool funding)`
+        : `Direct v4 pool (${draft.directEthAmount || "unset"} ETH and ${draft.directTokenAmount || "unset"} tokens)`
     }`,
     `Market behavior: ${
       selected.length > 0
         ? selected.map((behavior) => behavior.name).join(", ")
         : "Base configuration"
     }`,
-    `Planned pool fee: ${
+    `Pool fee: ${
       draft.selectedBehaviors.includes("fixed-fee")
         ? `${draft.lpFeePercent || "unset"}%`
         : "Defined by the selected market rule"
     }`,
-    `Planned Launcher fee: ${(PLATFORM_FEE_BPS / 100).toFixed(2)}% of eligible swaps`,
+    `Launcher fee: ${(PLATFORM_FEE_BPS / 100).toFixed(2)}% of eligible swaps`,
     "",
     buildLaunchSummary(draft),
     "",
-    "This is a local launch plan. It does not deploy a contract or create a market.",
+    "Status: Ready for contract review",
   ].join("\n");
 }
 
