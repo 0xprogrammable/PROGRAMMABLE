@@ -990,9 +990,9 @@ function ReviewStep({
       <div className="review-gates">
         <div className="block-heading">
           <div>
-            <h3>Launch checks</h3>
+            <h3>Required checks</h3>
             <p>
-              Every deployment passes these checks before it appears in Explore
+              A token can appear in Explore only after these checks pass
             </p>
           </div>
         </div>
