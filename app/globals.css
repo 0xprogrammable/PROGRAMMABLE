@@ -1613,89 +1613,20 @@ fieldset.field-block {
   margin-top: 18px;
 }
 
-.wallet-list {
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  margin-top: 18px;
-  overflow: hidden;
+.connected-wallet {
+  margin-top: 24px;
 }
 
-.wallet-option {
-  align-items: center;
-  background: var(--surface-raised);
-  border-bottom: 1px solid var(--border);
-  color: var(--text);
-  cursor: pointer;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: auto 1fr auto;
-  min-height: 69px;
-  padding: 13px;
-  text-align: left;
+.dialog-full-button {
+  justify-content: center;
+  margin-top: 18px;
   width: 100%;
 }
 
-.wallet-option:last-child {
-  border-bottom: 0;
-}
-
-.wallet-option:hover {
-  background: var(--surface-soft);
-}
-
-.wallet-option:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-
-.wallet-option > span:nth-child(2) {
+.dialog-logout-button {
   display: flex;
-  flex-direction: column;
-}
-
-.wallet-option strong {
-  font-size: 14px;
-}
-
-.wallet-option small {
-  color: var(--muted);
-  font-size: 11px;
-  margin-top: 2px;
-}
-
-.wallet-option-end {
-  align-items: center;
-  color: var(--muted);
-  display: flex;
-  font-size: 11px;
-  gap: 4px;
-}
-
-.wallet-empty {
-  align-items: flex-start;
-  background: var(--surface-raised);
-  color: var(--muted);
-  display: flex;
-  font-size: 13px;
-  gap: 12px;
-  line-height: 1.5;
-  padding: 18px;
-}
-
-.wallet-empty svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-}
-
-.dialog-footnote {
-  color: var(--dim);
-  font-size: 11px;
-  margin-top: 15px;
-  text-align: center;
-}
-
-.connected-wallet {
-  margin-top: 24px;
+  justify-content: center;
+  margin: 12px auto 0;
 }
 
 .wallet-account-row {
@@ -1718,6 +1649,20 @@ fieldset.field-block {
   font-family: var(--font-plex-mono), monospace;
   font-size: 11px;
   margin-top: 3px;
+}
+
+.wallet-network-warning {
+  margin-top: 20px;
+}
+
+.wallet-network-warning .inline-notice {
+  margin-top: 0;
+}
+
+.wallet-network-warning .secondary-button {
+  justify-content: center;
+  margin-top: 10px;
+  width: 100%;
 }
 
 .dialog-actions {

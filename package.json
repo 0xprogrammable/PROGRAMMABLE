@@ -12,11 +12,12 @@
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
+    "@privy-io/react-auth": "3.35.2",
     "lucide-react": "1.26.0",
     "next": "16.2.11",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "viem": "2.55.8"
+    "viem": "2.55.5"
   },
   "devDependencies": {
     "@types/node": "26.1.1",
@@ -28,7 +29,11 @@
     "vitest": "4.1.10"
   },
   "overrides": {
+    "axios": "1.18.1",
     "postcss": "8.5.23",
-    "sharp": "0.35.3"
+    "sharp": "0.35.3",
+    "viem": {
+      "ws": "8.21.1"
+    }
   }
 }

@@ -1,15 +1,15 @@
 # Launcher
 
-Launcher is a focused interface for planning markets on Uniswap v4. It keeps the public product simple while making the launch path, market behavior, and review requirements explicit.
+Launcher is a focused interface for launching tokens on Uniswap v4. It keeps the public product simple while making the launch path, token behavior, and review requirements explicit.
 
 ## What this version includes
 
-- An Explore view reserved for markets created through Launcher.
+- An Explore view reserved for tokens created through Launcher.
 - A guided launch planner for a new token or an existing Ethereum ERC-20.
 - Auction-funded and direct-liquidity launch paths.
 - A curated behavior library for v4 hook concepts.
 - Read-only ERC-20 metadata inspection on Ethereum mainnet.
-- Browser-wallet discovery through EIP-6963, including installed MetaMask and Phantom providers.
+- Privy-managed sign-in with MetaMask, Phantom, WalletConnect, and an embedded Ethereum wallet for users without one.
 - Local launch drafts and an address-specific Profile view.
 
 ## Deliberate boundary
@@ -37,10 +37,12 @@ The verification command runs ESLint, TypeScript, unit tests, and the production
 
 ## Configuration
 
-Copy `.env.example` to `.env.local` to use a dedicated read-only Ethereum RPC:
+Create a Privy project, allow the production and local domains, and enable wallet and email login. Then copy `.env.example` to `.env.local`:
 
 ```text
+NEXT_PUBLIC_PRIVY_APP_ID=your-privy-app-id
+NEXT_PUBLIC_PRIVY_CLIENT_ID=your-optional-privy-client-id
 ETHEREUM_RPC_URL=https://your-mainnet-rpc.example
 ```
 
-No private key belongs in this application.
+The App ID and optional App Client ID are public browser configuration. No private key or Privy App Secret belongs in this application.
