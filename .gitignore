@@ -20,6 +20,12 @@
 /work/
 *.tsbuildinfo
 
+# Foundry contract dependencies and build artifacts
+/contracts/lib/
+/contracts/out/
+/contracts/cache/
+/contracts/broadcast/
+
 # system
 .DS_Store
 *.pem

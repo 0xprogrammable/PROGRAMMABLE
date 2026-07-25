@@ -1,0 +1,40 @@
+[profile.default]
+src = "src"
+test = "test"
+script = "script"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1_000
+bytecode_hash = "none"
+cbor_metadata = false
+ffi = false
+fs_permissions = [
+  { access = "read", path = "./dependencies" },
+  { access = "read", path = "./spec" },
+  { access = "read", path = "./out" }
+]
+
+[profile.default.fuzz]
+runs = 1_000
+max_test_rejects = 65_536
+
+[profile.default.invariant]
+runs = 256
+depth = 64
+fail_on_revert = false
+
+[profile.ci]
+fuzz = { runs = 10_000, max_test_rejects = 65_536 }
+invariant = { runs = 1_000, depth = 128, fail_on_revert = false }
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"
+wrap_comments = true
