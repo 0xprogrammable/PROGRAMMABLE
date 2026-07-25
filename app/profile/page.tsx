@@ -4,7 +4,7 @@ import { ProfileView } from "@/components/profile-view";
 export const metadata: Metadata = {
   title: "Profile",
   description:
-    "Review Launcher launches, liquidity positions, and claims for a connected address.",
+    "View Launcher markets, positions, and claims for one wallet",
 };
 
 export default function ProfilePage() {

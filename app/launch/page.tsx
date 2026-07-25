@@ -4,7 +4,7 @@ import { LaunchBuilder } from "@/components/launch-builder";
 export const metadata: Metadata = {
   title: "Launch",
   description:
-    "Define an asset, a liquidity path, and market behavior for Uniswap v4.",
+    "Create an asset and define its Uniswap v4 market",
 };
 
 export default function LaunchPage() {

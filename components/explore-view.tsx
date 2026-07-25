@@ -7,28 +7,26 @@ export function ExploreView({ markets }: { markets: LauncherMarket[] }) {
     <>
       <section className="explore-hero page-width">
         <div className="hero-copy">
-          <p className="eyebrow">Uniswap v4 launch planning</p>
-          <h1>A clearer way to shape an onchain market.</h1>
+          <p className="eyebrow">Markets on Uniswap v4</p>
+          <h1>Build the token and the market together</h1>
           <p className="hero-lede">
-            Define the asset, liquidity path, and market behavior in one launch
-            plan. The interface stays simple; every added behavior stays
-            explicit.
+            Choose the asset, how liquidity starts, and what the market can do
+            in one clear flow
           </p>
           <div className="hero-actions">
             <Link className="primary-button" href="/launch">
-              Build a launch
+              Create a market
               <ArrowRight aria-hidden="true" size={17} />
             </Link>
             <a className="text-link" href="#markets">
-              Explore markets
+              Browse markets
             </a>
           </div>
         </div>
 
-        <div className="launch-sentence" aria-label="Default launch plan">
+        <div className="launch-sentence" aria-label="Launch configuration">
           <div className="sentence-heading">
-            <span>Default launch plan</span>
-            <span className="sentence-index">01</span>
+            <span>Launch configuration</span>
           </div>
           <div className="sentence-lines">
             <p>
@@ -45,12 +43,11 @@ export function ExploreView({ markets }: { markets: LauncherMarket[] }) {
             </p>
             <p>
               <span>Behavior</span>
-              Chosen before deployment
+              Defined for each market
             </p>
           </div>
           <p className="sentence-note">
-            A launch plan is not a token deployment. Contracts remain outside
-            this build until review is complete.
+            Every verified market appears in Explore with its launch record
           </p>
         </div>
       </section>
@@ -59,7 +56,7 @@ export function ExploreView({ markets }: { markets: LauncherMarket[] }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Explore</p>
-            <h2>Markets launched here.</h2>
+            <h2>Markets launched on Launcher</h2>
           </div>
           {markets.length > 0 ? (
             <label className="market-search">
@@ -76,14 +73,14 @@ export function ExploreView({ markets }: { markets: LauncherMarket[] }) {
               <Layers3 size={24} strokeWidth={1.6} />
             </div>
             <div>
-              <h3>No markets have been launched through Launcher yet.</h3>
+              <h3>The first market starts here</h3>
               <p>
-                Markets will appear here after their deployment and launch
-                record have been verified.
+                Verified markets appear in Explore as soon as their launch
+                record is complete
               </p>
             </div>
             <Link className="secondary-button" href="/launch">
-              Build a launch
+              Create a market
               <ArrowRight aria-hidden="true" size={16} />
             </Link>
           </div>

@@ -43,7 +43,14 @@ export function useLocalDraft() {
     try {
       const parsed = JSON.parse(stored) as Partial<LaunchDraft>;
       if (parsed.version !== 1) return null;
-      return { ...createEmptyDraft(), ...parsed };
+      const assetMode: LaunchDraft["assetMode"] =
+        parsed.assetMode === "existing" ? "existing" : "new";
+      const draft: LaunchDraft = {
+        ...createEmptyDraft(),
+        ...parsed,
+        assetMode,
+      };
+      return draft;
     } catch {
       return null;
     }
