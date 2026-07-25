@@ -1,6 +1,6 @@
 import { ExploreView } from "@/components/explore-view";
-import { launcherMarkets } from "@/lib/markets";
+import { launcherTokens } from "@/lib/tokens";
 
 export default function ExplorePage() {
-  return <ExploreView markets={launcherMarkets} />;
+  return <ExploreView tokens={launcherTokens} />;
 }
