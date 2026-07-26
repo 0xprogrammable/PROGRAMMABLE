@@ -40,21 +40,21 @@ export const behaviorDefinitions: BehaviorDefinition[] = [
     name: "Fee split",
     description:
       "Route a defined share of swap fees between liquidity and named recipients",
-    tier: "standard",
+    tier: "review",
   },
   {
     id: "timed-opening",
     name: "Timed opening",
     description:
       "Open trading for everyone at the same stated time without sell rules tied to individual addresses",
-    tier: "standard",
+    tier: "review",
   },
   {
     id: "nft-membership",
     name: "NFT membership",
     description:
       "Use NFT ownership for fee benefits without removing a holder's ability to sell",
-    tier: "standard",
+    tier: "review",
   },
   {
     id: "dynamic-fee",
@@ -223,7 +223,7 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     `Asset path: ${
       draft.assetMode === "new"
         ? "New fixed supply ERC-20"
-        : `Existing Ethereum token (${draft.tokenAddress || "address not set"})`
+        : `Existing fixed supply Uniswap UERC20 (${draft.tokenAddress || "address not set"})`
     }`,
     `Liquidity path: ${
       draft.liquidityMode === "auction"

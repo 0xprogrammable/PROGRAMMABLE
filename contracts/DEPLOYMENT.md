@@ -41,7 +41,7 @@ cast wallet address --account launcher-sepolia
 
 ## Simulate, then broadcast
 
-Use a reliable Sepolia RPC. The latest read-only simulation on 2026-07-26 estimated 8,977,280 gas and approximately 0.01756022828985984 Sepolia ETH at 1.956074478 gwei. Funding the test wallet with 0.03 Sepolia ETH provides a rehearsal margin; simulate again before broadcast because gas prices change.
+Use a reliable Sepolia RPC. The latest read-only simulation on 2026-07-26 estimated 10,041,638 gas and approximately 0.025241416086645184 Sepolia ETH at 2.513675168 gwei. Funding the test wallet with 0.04 Sepolia ETH provides a rehearsal margin; simulate again before broadcast because gas prices change.
 
 ```sh
 export SEPOLIA_RPC_URL=https://your-sepolia-rpc.example
@@ -63,13 +63,13 @@ forge script script/DeploySepoliaInfrastructureV1.s.sol:DeploySepoliaInfrastruct
   --slow
 ```
 
-The infrastructure transaction sequence predicts:
+The infrastructure transaction sequence still predicts:
 
 - `PlatformFeeHookFactoryV1`: `0x291a9ff1059d225d02B1659430804486404dB507`
 - `LockedPositionFeeForwarderFactoryV1`: `0xaE3C324B742a7576863A546120c4280b7c9E8448`
 - `DirectLiquidityLauncherV1`: `0x5fc6aDd062329742EFefA9c4b11C355AAe02Fa1E`
 
-These are deterministic nonce-derived predictions, not deployed addresses. The broadcast deploys the two factories and the direct-liquidity entry point. A token, hook, auction or pool is not created by this infrastructure step.
+These are deterministic nonce-derived predictions, not deployed addresses. The broadcast deploys the two factories and the direct-liquidity contract, which contains the new-token and existing-UERC20 entry points. A token, hook, auction or pool is not created by this infrastructure step.
 
 ## Evidence required after broadcast
 
@@ -79,6 +79,7 @@ These are deterministic nonce-derived predictions, not deployed addresses. The b
 - Deployment-wallet nonce and balance deltas
 - A full Sepolia auction launch, bid, graduation, v4 migration and both fee-collection paths
 - A full Sepolia direct launch, bidirectional swaps and both fee-collection paths
+- A full Sepolia existing-UERC20 launch proving factory origin and creator authorization, followed by bidirectional swaps and both fee-collection paths
 - Browser transaction simulation bound to the same machine-readable specification
 
 Do not reuse a failed or uncertain broadcast command until its nonce and receipt state have been checked.

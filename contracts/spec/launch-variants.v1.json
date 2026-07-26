@@ -80,8 +80,8 @@
     {
       "id": "direct-existing-token-locked-v1",
       "displayName": "Existing token pool",
-      "status": "planned",
-      "asset": "reviewed-existing-erc20",
+      "status": "protocol-tested",
+      "asset": "existing-fixed-supply-uerc20",
       "opening": "creator-supplied-initial-price",
       "liquidity": "creator-supplied-native-eth-and-token",
       "poolBehavior": [
@@ -90,13 +90,24 @@
       ],
       "positionCustody": "locked-position-fees-forwarder",
       "requiredChecks": [
-        "bytecode-and-source-verification",
-        "supply-authority-review",
-        "transfer-behavior-simulation",
-        "bidirectional-swap-simulation",
-        "proxy-and-admin-disclosure"
+        "configured-uerc20-factory-create2-provenance",
+        "factory-recorded-creator-authorization",
+        "exact-token-pull",
+        "bidirectional-swap-tests"
       ],
-      "humanSummary": "A reviewed Ethereum token opens a new locked v4 pool without receiving a Launcher verified-token badge."
+      "implementation": [
+        "DirectLiquidityLauncherV1.launchExistingUERC20",
+        "Uniswap UERC20Factory v2.0",
+        "PlatformFeeHookV1",
+        "LockedPositionFeeForwarderFactoryV1",
+        "Uniswap PositionManager"
+      ],
+      "evidence": [
+        "ExistingUERC20LiquidityLauncherV1.t.sol",
+        "PlatformFeeHookV1.t.sol",
+        "PlatformFeeHookInvariant.t.sol"
+      ],
+      "humanSummary": "The recorded creator of an existing fixed-supply token from the official Uniswap factory supplies the opening price and locked v4 liquidity."
     },
     {
       "id": "auction-fee-split-v1",
@@ -149,6 +160,26 @@
       ],
       "positionCustody": "explicit-per-launch",
       "humanSummary": "External hooks remain outside the verified boundary and must expose permissions, source, authorities and audit status."
+    },
+    {
+      "id": "external-existing-token-v1",
+      "displayName": "External token pool",
+      "status": "research",
+      "asset": "external-existing-erc20",
+      "opening": "creator-supplied-initial-price",
+      "liquidity": "defined-by-reviewed-composition",
+      "poolBehavior": [
+        "external-token-behavior"
+      ],
+      "positionCustody": "explicit-per-launch",
+      "requiredChecks": [
+        "bytecode-and-source-verification",
+        "supply-authority-review",
+        "transfer-behavior-simulation",
+        "bidirectional-swap-simulation",
+        "proxy-and-admin-disclosure"
+      ],
+      "humanSummary": "Arbitrary existing ERC-20s remain outside the verified boundary until their mutable authorities and transfer behavior can be disclosed and simulated."
     }
   ]
 }

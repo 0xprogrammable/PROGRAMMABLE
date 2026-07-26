@@ -12,11 +12,13 @@ The indexer must ingest:
 - `LockedPositionFeeForwarderDeployed`
 - `DirectTokenLaunched`
 - `DirectLiquidityConfigured`
+- `ExistingUERC20Launched`
+- `ExistingUERC20LiquidityConfigured`
 - `PlatformFeesCollected`
 - Uniswap `FeesForwarded`
 - the official auction, graduation, pool-initialization and position-mint events used by the auction variant
 
-Direct launch records are accepted only when both direct events appear in the same successful receipt and their token, launch hash, budgets and actual liquidity agree.
+New-token and existing-token direct launch records are accepted only when the matching event pair appears in the same successful receipt and its token, launch hash, budgets and actual liquidity agree. Existing-token records must also reproduce their committed UERC20 factory provenance.
 
 ## Required reconciliation
 

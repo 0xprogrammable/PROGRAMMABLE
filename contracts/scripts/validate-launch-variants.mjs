@@ -13,10 +13,17 @@ async function readJson(directory, file) {
   return JSON.parse(await readFile(new URL(file, directory), "utf8"));
 }
 
-const [catalog, directStandard, auctionStandard, behaviorCatalog, deployment] =
-  await Promise.all([
+const [
+  catalog,
+  directStandard,
+  existingUerc20Standard,
+  auctionStandard,
+  behaviorCatalog,
+  deployment,
+] = await Promise.all([
     readJson(specificationDirectory, "launch-variants.v1.json"),
     readJson(specificationDirectory, "direct-standard-v1.json"),
+    readJson(specificationDirectory, "existing-uerc20-standard-v1.json"),
     readJson(specificationDirectory, "verified-standard-v1.json"),
     readJson(specificationDirectory, "behavior-modules.v1.json"),
     readJson(configurationDirectory, "deployment-inputs.v1.json"),
@@ -64,6 +71,7 @@ for (const variant of catalog.variants) {
 for (const requiredId of [
   "auction-fixed-fee-locked-v1",
   "direct-fixed-fee-locked-v1",
+  "direct-existing-token-locked-v1",
 ]) {
   assert(
     protocolTestedIds.has(requiredId),
@@ -80,6 +88,10 @@ assert(
   "Auction standard must not claim production approval",
 );
 assert(
+  existingUerc20Standard.productionApproved === false,
+  "Existing UERC20 standard must not claim production approval",
+);
+assert(
   directStandard.platformFee.percentage ===
     deployment.platform.platformFeePercentage,
   "Direct standard fee differs from deployment configuration",
@@ -88,6 +100,11 @@ assert(
   auctionStandard.platformFee.percentage ===
     deployment.platform.platformFeePercentage,
   "Auction standard fee differs from deployment configuration",
+);
+assert(
+  existingUerc20Standard.platformFee.percentage ===
+    deployment.platform.platformFeePercentage,
+  "Existing UERC20 standard fee differs from deployment configuration",
 );
 
 const configuredTreasury = deployment.platform.treasury.toLowerCase();
@@ -102,6 +119,11 @@ assert(
 assert(
   auctionStandard.platformFee.treasury.toLowerCase() === configuredTreasury,
   "Auction standard treasury differs from deployment configuration",
+);
+assert(
+  existingUerc20Standard.platformFee.treasury.toLowerCase() ===
+    configuredTreasury,
+  "Existing UERC20 standard treasury differs from deployment configuration",
 );
 
 const behaviorIds = new Set();
@@ -124,6 +146,7 @@ for (const behavior of behaviorCatalog.modules) {
 assert(
   behaviorIds.has("SYS-01") &&
     behaviorIds.has("SYS-02") &&
+    behaviorIds.has("SYS-03") &&
     behaviorIds.has("M-01") &&
     behaviorIds.has("C-01"),
   "A required V1 behavior module is missing",

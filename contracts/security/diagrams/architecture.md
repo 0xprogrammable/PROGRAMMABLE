@@ -28,6 +28,8 @@ flowchart LR
     DirectLauncher --> PositionFactory
     DirectLauncher -->|authorized pool initialization| PoolManager
     DirectLauncher -->|mint full-range LP NFT| PositionManager
+    Creator -->|existing UERC20 launch| DirectLauncher
+    TokenFactory -->|CREATE2 provenance| DirectLauncher
 
     HookFactory -->|CREATE2, exact callback flags| Hook
     PositionFactory -->|CREATE2, fixed lock policy| Forwarder
@@ -45,6 +47,7 @@ flowchart TD
     PoolCallback[Hook callbacks] -->|only| PoolManager
     AuctionInitialization[Auction pool initialization] -->|only| LBPStrategy
     DirectInitialization[Direct pool initialization] -->|only| DirectLiquidityLauncherV1
+    ExistingTokenLaunch[Existing token launch] -->|only| FactoryRecordedCreator[Factory recorded creator]
     FeeRate[Platform fee rate] -->|fixed in bytecode| TenBp[0.10%]
     PoolConfig[Pool configuration] -->|fixed in bytecode| PoolId[One PoolId]
     PlatformCollection[Platform fee collection] -->|any address| Treasury[Immutable platform treasury]

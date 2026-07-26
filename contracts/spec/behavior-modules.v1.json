@@ -118,6 +118,44 @@
       ]
     },
     {
+      "id": "SYS-03",
+      "name": "Existing UERC20 liquidity boundary",
+      "status": "protocol-tested",
+      "compatibilityId": "launcher.v1.existing-uerc20-direct-full-range",
+      "parameterBounds": {
+        "tokenOrigin": {
+          "fixed": "configured-uniswap-uerc20-factory"
+        },
+        "nativeLiquidityBudget": {
+          "minimum": "1",
+          "maximum": "uint128"
+        },
+        "tokenLiquidityBudget": {
+          "minimum": "1",
+          "maximum": "uint128"
+        },
+        "lpFeePips": {
+          "fixed": 3000
+        },
+        "tickSpacing": {
+          "fixed": 60
+        }
+      },
+      "callbackMask": [
+        "beforeInitialize"
+      ],
+      "authorityModel": "Only the creator recorded in the existing UERC20 may call the launcher, and only the immutable launcher may initialize the bound pool.",
+      "humanSummary": "Verifies an existing fixed-supply token against the configured Uniswap factory before atomically opening a locked full-range v4 position.",
+      "invariants": [
+        "The token address must be reproducible through the configured UERC20Factory from its immutable identity fields.",
+        "The caller must equal the creator recorded by the UERC20 at its original deployment.",
+        "The launcher must receive the exact approved token amount before opening the pool.",
+        "Arbitrary ERC-20s, proxy tokens, transfer-tax tokens and tokens with new mint authority are excluded.",
+        "The position is minted directly to the deterministic locked fee forwarder.",
+        "The launch contract retains no token balance after a successful launch."
+      ]
+    },
+    {
       "id": "M-02",
       "name": "Dynamic LP fee",
       "status": "future",
