@@ -688,6 +688,12 @@ textarea {
   transform: scale(0.99);
 }
 
+.launch-type-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+}
+
 .launch-type-icon {
   align-items: center;
   background: var(--surface-soft);
@@ -1750,6 +1756,71 @@ textarea {
 
   .icon-button:hover {
     color: var(--text);
+  }
+}
+
+@media (min-width: 801px) and (max-height: 800px) {
+  .launch-page {
+    padding-bottom: 0;
+    padding-top: 18px;
+  }
+
+  .launch-workspace {
+    height: calc(100vh - 183px);
+    margin-top: 18px;
+    min-height: 0;
+  }
+
+  .form-section {
+    padding: 19px 26px;
+  }
+
+  .form-section-heading {
+    padding-bottom: 16px;
+  }
+
+  .form-section-heading .step-kicker,
+  .form-section-heading p:last-child,
+  .token-readout > p {
+    display: none;
+  }
+
+  .form-section-heading h2 {
+    margin-top: 0;
+  }
+
+  .choice-list {
+    margin-top: 16px;
+  }
+
+  .choice-row {
+    min-height: 64px;
+    padding: 10px 14px;
+  }
+
+  .field-group {
+    margin-top: 16px;
+    padding-top: 14px;
+  }
+
+  .token-readout {
+    margin-top: 10px;
+    padding: 12px;
+  }
+
+  .token-readout dl {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 10px;
+  }
+
+  .token-readout > p {
+    margin-top: 8px;
+  }
+
+  .form-navigation {
+    min-height: 60px;
+    padding-bottom: 8px;
+    padding-top: 8px;
   }
 }
 

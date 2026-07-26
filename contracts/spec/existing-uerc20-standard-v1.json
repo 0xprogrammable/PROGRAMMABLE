@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "standardId": "launcher.existing-uerc20-standard.v1",
+  "status": "protocol-tested-not-deployed",
+  "network": {
+    "productionChainId": 1,
+    "rehearsalChainId": 11155111
+  },
+  "token": {
+    "implementation": "Uniswap UERC20Factory v2.0",
+    "origin": "existing-token-from-configured-factory",
+    "supply": "fixed-at-original-creation",
+    "decimals": "factory-defined",
+    "transferTax": false,
+    "rebase": false,
+    "upgradeable": false,
+    "launchAuthority": "factory-recorded-token-creator"
+  },
+  "launch": {
+    "implementation": "DirectLiquidityLauncherV1.launchExistingUERC20",
+    "atomic": true,
+    "currency0": "native-eth",
+    "currency1": "existing-uerc20",
+    "initialPrice": "token-creator-supplied-sqrt-price-x96",
+    "liquidityBudgets": "uint128-bounded",
+    "tokenPull": "exact-balance-delta-required",
+    "unusedLiquidityBudgetRecipient": "factory-recorded-token-creator"
+  },
+  "pool": {
+    "protocol": "Uniswap v4",
+    "lpFeePips": 3000,
+    "tickSpacing": 60,
+    "initialPosition": "full-range",
+    "positionCustody": {
+      "implementation": "Uniswap PositionFeesForwarder",
+      "operator": "0x0000000000000000000000000000000000000000",
+      "timelockBlockNumber": "uint256.max",
+      "liquidityRemoval": false,
+      "positionTransfer": false,
+      "lpFeeRecipient": "factory-recorded-token-creator",
+      "feeCollection": "permissionless-trigger-fixed-recipient"
+    }
+  },
+  "platformFee": {
+    "implementation": "PlatformFeeHookV1",
+    "percentage": "0.10%",
+    "feePips": 1000,
+    "recipient": "immutable-per-hook",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+  },
+  "provenance": {
+    "factory": "configured-Uniswap-UERC20Factory",
+    "proof": "reconstructed-create2-address-from-immutable-token-identity",
+    "creatorAuthorization": "token.creator-equals-transaction-sender",
+    "hookFactory": "PlatformFeeHookFactoryV1",
+    "positionRecipientFactory": "LockedPositionFeeForwarderFactoryV1",
+    "predeployedFactoryArtifacts": "reuse-recorded-matching-only",
+    "launchRecord": "ExistingUERC20Launched-and-ExistingUERC20LiquidityConfigured-events",
+    "configurationCommitment": "launchHashOf-token"
+  },
+  "excluded": [
+    "arbitrary-erc20",
+    "proxy-token",
+    "mutable-transfer-tax",
+    "rebase-token",
+    "token-with-new-mint-authority"
+  ],
+  "productionApproved": false
+}

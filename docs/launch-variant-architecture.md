@@ -22,7 +22,13 @@ The official Uniswap LiquidityLauncher creates a fixed-supply UERC20. A Continuo
 
 The two CREATE2 factories are permissionless. If another account deploys the exact matching hook or position recipient first, the direct launcher verifies and reuses the factory-recorded immutable configuration. It rejects any unrecognized deployment. A visible mempool transaction therefore cannot be blocked merely by predeploying its public configuration.
 
-Both variants use the same `PlatformFeeHookV1`. It has no owner, proxy, pause control or mutable fee. The platform recipient and 0.10% fee are immutable for each hook.
+### Existing token pool
+
+`DirectLiquidityLauncherV1.launchExistingUERC20` accepts only an existing token whose address can be reconstructed through the configured Uniswap UERC20Factory from its immutable name, symbol, decimals, creator and graffiti fields. The caller must be that recorded creator. The method pulls the exact token budget, initializes the bound pool and mints the locked full-range position atomically.
+
+This is not a generic ERC-20 importer. Arbitrary tokens, proxies, new mint authority, transfer taxes and mutable transfer behavior remain in a separate research lane.
+
+All three variants use the same `PlatformFeeHookV1`. It has no owner, proxy, pause control or mutable fee. The platform recipient and 0.10% fee are immutable for each hook.
 
 ## Status language
 
@@ -40,4 +46,4 @@ New variants should normally add one reviewed module or one compatible compositi
 
 Custom hooks stay in a separate unverified lane. Their callback flags, runtime bytecode, source verification, mutable authorities, external calls, return-delta accounting and audit status must be visible before a user can sign anything.
 
-`npm run contracts:variants` validates unique IDs, status semantics, required axes, implementation evidence, invariants, fees and treasury consistency across the catalog and both standards.
+`npm run contracts:variants` validates unique IDs, status semantics, required axes, implementation evidence, invariants, fees and treasury consistency across the catalog and all three protocol-tested standards.

@@ -12,6 +12,8 @@ Initial LP NFTs are assigned to the official Uniswap `PositionFeesForwarder`, de
 
 The direct launcher trusts six immutable dependencies fixed at its deployment. Its constructor checks that every dependency has code, that PositionManager points to the selected PoolManager and that the forwarder factory points to the selected PositionManager. The Sepolia deployment script additionally checks the runtime-code hashes of the official Uniswap dependencies.
 
+The existing-token entry point accepts only a UERC20 whose CREATE2 address can be reconstructed through that configured token factory. It also requires the caller to equal the creator recorded in the token at deployment. This proves the selected factory origin and fixed UERC20 implementation; it does not admit arbitrary ERC-20 contracts.
+
 ## Core properties
 
 | ID | Property | Evidence |
@@ -37,13 +39,17 @@ The direct launcher trusts six immutable dependencies fixed at its deployment. I
 | FLOW-05 | Actual native and token liquidity never exceed the caller’s budgets; unused budgets and the remaining fixed supply return to the caller. | `testFuzz_launchAccountingNeverExceedsCreatorBudgets` |
 | FLOW-06 | A matching hook or forwarder predeployed through Launcher’s permissionless factory cannot block the launch; unrecognized code is rejected. | `_deployOrReuseHook`; `_deployOrReusePositionRecipient`; mempool-griefing regression test |
 | FLOW-07 | A successful direct launch leaves no launched-token balance or transaction-supplied native ETH in the launcher. | direct unit and fuzz accounting assertions |
+| FLOW-08 | An existing token is accepted only when its address is reproduced by the configured UERC20Factory from its immutable identity fields. | `test_rejectsTokenFromDifferentFactory`; successful existing-token launch assertions |
+| FLOW-09 | Only the creator recorded by an existing UERC20 may open its Launcher pool. | `test_rejectsCallerWhoIsNotFactoryRecordedCreator` |
+| FLOW-10 | Existing-token liquidity is pulled exactly, stays within both caller budgets and leaves no token balance in the launcher. | `testFuzz_existingLaunchAccountingNeverExceedsCreatorBudgets`; invalid-input and balance assertions |
 | REENT-01 | The complete direct launch is protected against reentrant entry while it composes external contracts. | OpenZeppelin `ReentrancyGuardTransient`; direct integration suite |
 | PRICE-01 | The initialized pool price is exactly the creator-supplied valid v4 square-root price. | returned-tick validation; `test_launchesFixedSupplyTokenIntoLockedV4Position` |
-| PROV-01 | Every direct launch records a chain- and contract-bound commitment to its infrastructure, budgets, actual liquidity, price and hook configuration. | `launchHashOf`; `DirectTokenLaunched`; `DirectLiquidityConfigured` |
+| PROV-01 | Every new-token direct launch records a chain- and contract-bound commitment to its infrastructure, budgets, actual liquidity, price and hook configuration. | `launchHashOf`; `DirectTokenLaunched`; `DirectLiquidityConfigured` |
+| PROV-02 | Every existing-token launch additionally commits to its configured factory, recorded creator, identity fields and original fixed supply. | `ExistingUERC20Launched`; `ExistingUERC20LiquidityConfigured`; provenance-hash construction |
 
 ## Fuzz and invariant scope
 
-The fee reference test covers exact-input and exact-output swaps in both directions over 1,000 generated cases per default run. The direct accounting property covers 64 generated native/token budget pairs locally and 256 in the CI profile. The invariant handler performs 16,384 state-changing calls per property across swaps and permissionless collections. It checks immutable configuration, callback permissions and payout isolation.
+The fee reference test covers exact-input and exact-output swaps in both directions over 1,000 generated cases per default run. Each of the new-token and existing-token direct accounting properties covers 64 generated native/token budget pairs locally and 256 in the CI profile. The invariant handler performs 16,384 state-changing calls per property across swaps and permissionless collections. It checks immutable configuration, callback permissions and payout isolation.
 
 The current fuzz range is intentionally below pathological `int128` boundaries. Boundary behavior in upstream v4 and `BaseHookFee` remains part of the external dependency review.
 
@@ -57,9 +63,10 @@ The current fuzz range is intentionally below pathological `int128` boundaries. 
 - A wrong pool configuration reverts before initialization or fee collection.
 - A direct callback from any address other than PoolManager reverts.
 - Zero budgets, a token budget above total supply, a budget above `uint128` and an invalid initial price revert before token creation.
+- An existing token from another factory, a caller other than its factory-recorded creator, a duplicate existing-token launch or a non-exact token pull reverts the complete transaction.
 - A failed native or ERC-20 payout reverts the whole collection. Accrued ERC-6909 claims remain in the hook.
 - Amounts below the fee’s integer precision may round to zero. This is expected and does not accumulate fractional dust.
 
 ## Out of scope
 
-The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich protection or profitable price discovery. Oracle-based hooks, dynamic fees, arbitrary third-party hooks, regulated assets, frontend transaction construction, indexer correctness and production signer custody remain out of scope.
+The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich protection or profitable price discovery. Arbitrary existing ERC-20s, oracle-based hooks, dynamic fees, arbitrary third-party hooks, regulated assets, frontend transaction construction, indexer correctness and production signer custody remain out of scope.

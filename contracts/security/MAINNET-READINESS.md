@@ -1,14 +1,15 @@
 # Mainnet readiness gate
 
-Current state: blocked by design. The auction and direct variants are green locally and on pinned read-only Ethereum and Sepolia forks, but they are not audited or deployed.
+Current state: blocked by design. The auction, new-token direct and existing-UERC20 direct variants are green locally and on pinned read-only Ethereum and Sepolia forks, but they are not audited or deployed.
 
 ## Required before Sepolia
 
-- Fund `0x2Bb333d48DFAF1596D9036671d2E43168994249E` with Sepolia ETH. The latest 2026-07-26 dry run estimated 0.01756022828985984 Sepolia ETH; 0.03 provides a rehearsal margin, subject to a fresh estimate
+- Fund `0x2Bb333d48DFAF1596D9036671d2E43168994249E` with Sepolia ETH. The latest 2026-07-26 dry run estimated 0.025241416086645184 Sepolia ETH; 0.04 provides a rehearsal margin, subject to a fresh estimate
 - Sign the rehearsal from that address through a local Foundry keystore or hardware wallet; never place its private key in this repository
 - Rehearse the three-contract infrastructure deployment and verify its source and runtime bytecode
 - Fix the production CCA schedule and rehearse the exact factory, salt and protocol-fee-controller path
 - Rehearse the direct launch, bidirectional swaps and separate platform/creator fee collection
+- Rehearse the existing-UERC20 launch with factory provenance, recorded-creator authorization, bidirectional swaps and separate platform/creator fee collection
 - Add frontend calldata generation and simulation against the same machine-readable spec
 - Publish source and dependency pins with the deployment artifacts
 
@@ -16,7 +17,7 @@ The platform treasury is fixed to `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. 
 
 ## Required before mainnet
 
-- Complete Sepolia auction and direct launches, migration where applicable, swaps, fee collection and failure-recovery rehearsals
+- Complete Sepolia auction, new-token direct and existing-UERC20 direct launches, migration where applicable, swaps, fee collection and failure-recovery rehearsals
 - Commission an independent audit and resolve every accepted finding
 - Run `npm run contracts:official-deployments` against Uniswap’s current registry, then recheck runtime bytecode
 - Verify the factories, direct launcher and every launched hook source on the block explorer

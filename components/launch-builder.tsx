@@ -42,6 +42,7 @@ import {
   saveLocalDraft,
   useLocalDraft,
 } from "@/components/local-draft";
+import { useWallet } from "@/components/wallet-provider";
 
 type TokenResult = {
   address: `0x${string}`;
@@ -50,6 +51,9 @@ type TokenResult = {
   decimals: number | null;
   totalSupply: string | null;
   metadataComplete: boolean;
+  factoryVerified: boolean;
+  recordedCreator: `0x${string}` | null;
+  factoryAddress: `0x${string}`;
 };
 
 const steps = [
@@ -72,9 +76,9 @@ const assetOptions: {
   },
   {
     id: "existing",
-    name: "Use an existing token",
+    name: "Use an existing Uniswap token",
     description:
-      "Use a token contract that is already deployed on Ethereum",
+      "Open a pool for a fixed supply token created through Uniswap UERC20Factory",
   },
 ];
 
@@ -122,6 +126,10 @@ function updateDraft(
   setDraft((current) => ({ ...current, ...patch }));
 }
 
+function shortenAddress(address: string) {
+  return `${address.slice(0, 8)}…${address.slice(-6)}`;
+}
+
 export function LaunchBuilder() {
   const localDraft = useLocalDraft();
 
@@ -148,6 +156,7 @@ function LaunchBuilderForm({
 }: {
   initialDraft: LaunchDraft;
 }) {
+  const { wallet } = useWallet();
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
   const [step, setStep] = useState(1);
   const [formError, setFormError] = useState("");
@@ -187,10 +196,29 @@ function LaunchBuilderForm({
     if (!tokenResult.metadataComplete) {
       return "This contract does not expose complete standard ERC-20 metadata";
     }
+    if (!tokenResult.factoryVerified || !tokenResult.recordedCreator) {
+      return "This launch path only accepts tokens created through the configured Uniswap UERC20Factory";
+    }
+    if (!wallet) {
+      return "Connect the token creator wallet before continuing";
+    }
+    if (
+      wallet.account.toLowerCase() !==
+      tokenResult.recordedCreator.toLowerCase()
+    ) {
+      return "Connect the creator address recorded by the token contract";
+    }
     return "";
   }
 
   function validateMarket() {
+    if (
+      draft.assetMode === "existing" &&
+      draft.liquidityMode !== "direct"
+    ) {
+      return "Existing Uniswap tokens use direct liquidity";
+    }
+
     if (draft.liquidityMode === "auction") {
       if (!percentageIsValid(draft.auctionSalePercent)) {
         return "Enter a sale allocation between 0 and 100 percent";
@@ -443,6 +471,8 @@ function LaunchTypeStep({
         {liquidityOptions.map((option) => {
           const Icon = option.icon;
           const selected = draft.liquidityMode === option.id;
+          const unavailable =
+            draft.assetMode === "existing" && option.id === "auction";
 
           return (
             <button
@@ -450,6 +480,7 @@ function LaunchTypeStep({
               className={`launch-type-option ${selected ? "selected" : ""}`}
               type="button"
               aria-pressed={selected}
+              disabled={unavailable}
               onClick={() =>
                 updateDraft(setDraft, { liquidityMode: option.id })
               }
@@ -501,7 +532,7 @@ function AssetStep({
           <p className="step-kicker">Step 2</p>
           <h2>Token</h2>
           <p>
-            Create a fixed supply token or use one already on Ethereum
+            Create a fixed supply token or use one from Uniswap UERC20Factory
           </p>
         </div>
       </div>
@@ -516,7 +547,12 @@ function AssetStep({
               type="button"
               aria-pressed={selected}
               onClick={() => {
-                updateDraft(setDraft, { assetMode: option.id });
+                updateDraft(setDraft, {
+                  assetMode: option.id,
+                  ...(option.id === "existing"
+                    ? { liquidityMode: "direct" as const }
+                    : {}),
+                });
               }}
             >
               <span className="choice-indicator" aria-hidden="true">
@@ -655,9 +691,27 @@ function AssetStep({
                   <dt>Total supply</dt>
                   <dd>{tokenResult.totalSupply ?? "Unavailable"}</dd>
                 </div>
+                <div>
+                  <dt>Factory origin</dt>
+                  <dd>
+                    {tokenResult.factoryVerified
+                      ? "Uniswap UERC20Factory"
+                      : "Not supported"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Recorded creator</dt>
+                  <dd>
+                    {tokenResult.recordedCreator
+                      ? shortenAddress(tokenResult.recordedCreator)
+                      : "Unavailable"}
+                  </dd>
+                </div>
               </dl>
               <p>
-                Ethereum metadata is read before contract review
+                {tokenResult.factoryVerified
+                  ? "Factory provenance is verified before launch"
+                  : "This token remains outside the verified launch path"}
               </p>
             </div>
           ) : null}

@@ -53,4 +53,25 @@ describe("launch plan", () => {
       normalizeBehaviorSelection(["fixed-fee", "fee-split"], "custom-hook"),
     ).toEqual(["custom-hook"]);
   });
+
+  it("identifies the existing asset path as a factory-created Uniswap token", () => {
+    const setup = buildPlainTextPlan({
+      ...createEmptyDraft(),
+      assetMode: "existing",
+      tokenAddress: "0x0000000000000000000000000000000000000001",
+      existingTokenSymbol: "UNI4",
+      liquidityMode: "direct",
+    });
+
+    expect(setup).toContain("Existing fixed supply Uniswap UERC20");
+    expect(setup).toContain("Direct v4 pool");
+  });
+
+  it("does not present untested behavior modules as standard", () => {
+    expect(
+      behaviorDefinitions
+        .filter(({ tier }) => tier === "standard")
+        .map(({ id }) => id),
+    ).toEqual(["fixed-fee"]);
+  });
 });

@@ -1,14 +1,15 @@
 # Launcher protocol spike
 
-This directory contains Launcher’s first two protocol-tested Uniswap v4 launch paths. It is a protocol workspace, not a production deployment.
+This directory contains Launcher’s first three protocol-tested Uniswap v4 launch paths. It is a protocol workspace, not a production deployment.
 
-The implementation deliberately reuses Uniswap’s UERC20Factory, LiquidityLauncher, Continuous Clearing Auction, LBPStrategy, PositionManager and v4 core contracts. Launcher’s own surface is limited to a fixed platform-fee hook, deterministic factories and a direct atomic launch entry point.
+The implementation deliberately reuses Uniswap’s UERC20Factory, LiquidityLauncher, Continuous Clearing Auction, LBPStrategy, PositionManager and v4 core contracts. Launcher’s own surface is limited to a fixed platform-fee hook, deterministic factories and two direct atomic launch entry points.
 
 ## Protocol-tested variants
 
 - Auction launch: the official auction establishes the first price and its proceeds seed the v4 position
 - Direct v4 pool: the creator selects the opening price and supplies the initial ETH/token liquidity
-- Fixed-supply, 18-decimal UERC20 token
+- Existing token pool: the configured Uniswap factory proves an existing UERC20’s origin and its recorded creator supplies direct liquidity
+- New tokens use a fixed supply and 18 decimals; existing UERC20s retain their original fixed supply and decimals
 - One non-upgradeable hook per pool
 - Static 0.30% LP fee
 - Fixed 0.10% Launcher fee on the absolute unspecified swap amount
@@ -18,7 +19,7 @@ The implementation deliberately reuses Uniswap’s UERC20Factory, LiquidityLaunc
 - Permissionless LP-fee collection to the immutable launch creator
 - No owner, proxy, pause or mutable fee
 
-The authoritative machine-readable specifications are in [`spec/launch-variants.v1.json`](spec/launch-variants.v1.json), [`spec/verified-standard-v1.json`](spec/verified-standard-v1.json), [`spec/direct-standard-v1.json`](spec/direct-standard-v1.json) and [`spec/behavior-modules.v1.json`](spec/behavior-modules.v1.json).
+The authoritative machine-readable specifications are in [`spec/launch-variants.v1.json`](spec/launch-variants.v1.json), [`spec/verified-standard-v1.json`](spec/verified-standard-v1.json), [`spec/direct-standard-v1.json`](spec/direct-standard-v1.json), [`spec/existing-uerc20-standard-v1.json`](spec/existing-uerc20-standard-v1.json) and [`spec/behavior-modules.v1.json`](spec/behavior-modules.v1.json).
 
 ## Local setup
 
@@ -48,7 +49,7 @@ The public treasury, test deployment wallet and LP custody policy are recorded i
 npm run contracts:sepolia:validate
 ```
 
-`script/DeploySepoliaInfrastructureV1.s.sol` deploys Launcher’s two permissionless factories and `DirectLiquidityLauncherV1`. It refuses the wrong chain, wrong broadcaster or changed official dependency bytecode. It does not read a private key; broadcasting must use a local Foundry account or hardware wallet.
+`script/DeploySepoliaInfrastructureV1.s.sol` deploys Launcher’s two permissionless factories and `DirectLiquidityLauncherV1`. The launcher exposes separate atomic methods for a new fixed-supply token and for a provenance-verified existing UERC20. The script refuses the wrong chain, wrong broadcaster or changed official dependency bytecode. It does not read a private key; broadcasting must use a local Foundry account or hardware wallet.
 
 ## Evidence boundary
 
