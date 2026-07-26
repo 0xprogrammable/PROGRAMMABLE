@@ -53,9 +53,10 @@ type TokenResult = {
 };
 
 const steps = [
-  { number: 1, label: "Token" },
-  { number: 2, label: "Liquidity" },
-  { number: 3, label: "Review" },
+  { number: 1, label: "Launch type" },
+  { number: 2, label: "Token" },
+  { number: 3, label: "Pool" },
+  { number: 4, label: "Review" },
 ];
 
 const assetOptions: {
@@ -67,7 +68,7 @@ const assetOptions: {
     id: "new",
     name: "Create a token",
     description:
-      "Create a fixed-supply ERC-20 without transfer taxes, rebases or sell restrictions",
+      "Create a fixed supply ERC-20 without transfer taxes, rebases or sell restrictions",
   },
   {
     id: "existing",
@@ -86,11 +87,11 @@ const liquidityOptions: {
 }[] = [
   {
     id: "auction",
-    name: "Auction-funded liquidity",
+    name: "Auction launch",
     description:
       "Let demand establish the opening price and fund the first pool",
     detail:
-      "No creator ETH deposit · Auction proceeds and reserved tokens seed the pool",
+      "Auction proceeds and reserved tokens seed the pool without a creator ETH deposit",
     icon: CircleDollarSign,
   },
   {
@@ -129,8 +130,8 @@ export function LaunchBuilder() {
       <div className="launch-page page-width">
         <header className="page-heading">
           <p className="eyebrow">Launch</p>
-          <h1>Launch a token</h1>
-          <p>Set the token, liquidity and Uniswap v4 behavior</p>
+          <h1>Create a token</h1>
+          <p>Choose the launch, token and Uniswap v4 pool behavior</p>
         </header>
         <div className="launch-loading" aria-label="Loading launch" />
       </div>
@@ -223,7 +224,7 @@ function LaunchBuilderForm({
 
   function continueTo(nextStep: number) {
     const error =
-      step === 1 ? validateAsset() : step === 2 ? validateMarket() : "";
+      step === 2 ? validateAsset() : step === 3 ? validateMarket() : "";
     if (error) {
       setFormError(error);
       return;
@@ -295,9 +296,9 @@ function LaunchBuilderForm({
       <header className="launch-page-heading">
         <div>
           <p className="eyebrow">Launch</p>
-          <h1>Launch a token</h1>
+          <h1>Create a token</h1>
         </div>
-        <p>Set the token, liquidity and Uniswap v4 behavior</p>
+        <p>Choose the launch, token and Uniswap v4 pool behavior</p>
       </header>
 
       <section className="launch-workspace">
@@ -336,6 +337,10 @@ function LaunchBuilderForm({
         <div className="launch-layout">
           <div className="launch-form-panel">
           {step === 1 ? (
+            <LaunchTypeStep draft={draft} setDraft={setDraft} />
+          ) : null}
+
+          {step === 2 ? (
             <AssetStep
               draft={draft}
               setDraft={setDraft}
@@ -346,15 +351,15 @@ function LaunchBuilderForm({
             />
           ) : null}
 
-          {step === 2 ? (
-            <LiquidityStep
+          {step === 3 ? (
+            <PoolStep
               draft={draft}
               setDraft={setDraft}
               onToggleBehavior={toggleBehavior}
             />
           ) : null}
 
-          {step === 3 ? (
+          {step === 4 ? (
             <ReviewStep
               draft={draft}
               summary={summary}
@@ -363,7 +368,7 @@ function LaunchBuilderForm({
               onCopy={copyPlan}
               onBack={() => {
                 setFormError("");
-                setStep(2);
+                setStep(3);
               }}
             />
           ) : null}
@@ -374,7 +379,7 @@ function LaunchBuilderForm({
             </p>
           ) : null}
 
-          {step < 3 ? (
+          {step < 4 ? (
             <div className="form-navigation">
               {step > 1 ? (
                 <button
@@ -417,6 +422,63 @@ function LaunchBuilderForm({
   );
 }
 
+function LaunchTypeStep({
+  draft,
+  setDraft,
+}: {
+  draft: LaunchDraft;
+  setDraft: Dispatch<SetStateAction<LaunchDraft>>;
+}) {
+  return (
+    <div className="form-section launch-type-section">
+      <div className="form-section-heading">
+        <div>
+          <p className="step-kicker">Step 1</p>
+          <h2>Choose how trading starts</h2>
+          <p>The launch type sets the opening price and first liquidity</p>
+        </div>
+      </div>
+
+      <div className="launch-type-grid">
+        {liquidityOptions.map((option) => {
+          const Icon = option.icon;
+          const selected = draft.liquidityMode === option.id;
+
+          return (
+            <button
+              key={option.id}
+              className={`launch-type-option ${selected ? "selected" : ""}`}
+              type="button"
+              aria-pressed={selected}
+              onClick={() =>
+                updateDraft(setDraft, { liquidityMode: option.id })
+              }
+            >
+              <span className="launch-type-icon" aria-hidden="true">
+                <Icon size={20} strokeWidth={1.7} />
+              </span>
+              <span className="launch-type-copy">
+                <strong>{option.name}</strong>
+                <small>{option.description}</small>
+                <em>{option.detail}</em>
+              </span>
+              <span className="choice-indicator" aria-hidden="true">
+                {selected ? <Check size={14} /> : null}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="launch-type-note">
+        <span>Every path opens a Uniswap v4 pool</span>
+        <span>Initial liquidity stays locked</span>
+        <span>LP fees go to the creator</span>
+      </div>
+    </div>
+  );
+}
+
 function AssetStep({
   draft,
   setDraft,
@@ -436,9 +498,10 @@ function AssetStep({
     <div className="form-section">
       <div className="form-section-heading">
         <div>
+          <p className="step-kicker">Step 2</p>
           <h2>Token</h2>
           <p>
-            Create a fixed-supply token or use one already on Ethereum
+            Create a fixed supply token or use one already on Ethereum
           </p>
         </div>
       </div>
@@ -594,8 +657,7 @@ function AssetStep({
                 </div>
               </dl>
               <p>
-                Metadata read directly from Ethereum · Contract review happens
-                before launch
+                Ethereum metadata is read before contract review
               </p>
             </div>
           ) : null}
@@ -605,7 +667,7 @@ function AssetStep({
   );
 }
 
-function LiquidityStep({
+function PoolStep({
   draft,
   setDraft,
   onToggleBehavior,
@@ -628,45 +690,14 @@ function LiquidityStep({
     <div className="form-section rules-form-section">
       <div className="form-section-heading">
         <div>
-          <h2>Liquidity and behavior</h2>
-          <p>Choose how trading starts and what the token can do</p>
+          <p className="step-kicker">Step 3</p>
+          <h2>Configure the pool</h2>
+          <p>Set liquidity details and choose how the v4 pool behaves</p>
         </div>
       </div>
 
       <div className="rules-layout">
         <div className="rules-column">
-          <fieldset className="rule-card liquidity-rule-card">
-            <legend>Liquidity</legend>
-            <div className="liquidity-options">
-              {liquidityOptions.map((option) => {
-                const Icon = option.icon;
-                const selected = draft.liquidityMode === option.id;
-                return (
-                  <button
-                    key={option.id}
-                    className={`liquidity-option ${selected ? "selected" : ""}`}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() =>
-                      updateDraft(setDraft, { liquidityMode: option.id })
-                    }
-                  >
-                    <span className="liquidity-icon" aria-hidden="true">
-                      <Icon size={18} strokeWidth={1.7} />
-                    </span>
-                    <span>
-                      <strong>{option.name}</strong>
-                      <small>{option.description}</small>
-                    </span>
-                    <span className="choice-indicator" aria-hidden="true">
-                      {selected ? <Check size={14} /> : null}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
-
           {draft.liquidityMode === "auction" ? (
             <div className="rule-card allocation-rule-card">
               <div className="rule-card-heading">
@@ -914,6 +945,7 @@ function ReviewStep({
     <div className="form-section review-section">
       <div className="form-section-heading">
         <div>
+          <p className="step-kicker">Step 4</p>
           <h2>Review the token</h2>
           <p>Check the token, liquidity, behavior and fees in one place</p>
         </div>
@@ -934,7 +966,7 @@ function ReviewStep({
                 ? `${draft.tokenSupply} fixed supply`
                 : `${draft.tokenAddress}${
                     draft.existingTokenSupply
-                      ? ` · ${draft.existingTokenSupply} total supply`
+                      ? `, ${draft.existingTokenSupply} total supply`
                       : ""
                   }`}
             </span>
@@ -945,13 +977,13 @@ function ReviewStep({
           <dd>
             <strong>
               {draft.liquidityMode === "auction"
-                ? "Auction-funded"
+                ? "Auction launch"
                 : "Direct v4 pool"}
             </strong>
             <span>
               {draft.liquidityMode === "auction"
-                ? `${draft.auctionSalePercent}% of supply offered · ${draft.auctionLiquidityPercent}% of proceeds for pool funding · LP permanently locked`
-                : `${draft.directEthAmount} ETH · ${draft.directTokenAmount} tokens · LP permanently locked`}
+                ? `${draft.auctionSalePercent}% of supply offered, ${draft.auctionLiquidityPercent}% of proceeds for pool funding, LP permanently locked`
+                : `${draft.directEthAmount} ETH, ${draft.directTokenAmount} tokens, LP permanently locked`}
             </span>
           </dd>
         </div>
@@ -980,8 +1012,8 @@ function ReviewStep({
             </strong>
             <span>
               {draft.selectedBehaviors.includes("fixed-fee")
-                ? `${draft.lpFeePercent}% pool fee · LP fees to creator`
-                : "Pool fee follows the selected behavior · LP fees to creator"}
+                ? `${draft.lpFeePercent}% pool fee, LP fees to creator`
+                : "Pool fee follows the selected behavior, LP fees to creator"}
             </span>
           </dd>
         </div>

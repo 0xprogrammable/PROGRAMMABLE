@@ -15,41 +15,56 @@ export type LauncherToken = {
  */
 export const launcherTokens: LauncherToken[] = [];
 
-export const sampleTokens = [
+export type PreviewToken = {
+  id: string;
+  name: string;
+  symbol: string;
+  launchType: "Auction" | "Direct";
+  liquidity: string;
+  behavior: string;
+  categories: string[];
+  tone: "rose" | "violet" | "mint" | "amber";
+};
+
+export const previewTokens: PreviewToken[] = [
   {
-    id: "sample-pulse",
+    id: "preview-pulse",
     name: "Pulse",
     symbol: "PULSE",
-    price: "$0.084",
-    change: "+38.4%",
+    launchType: "Auction",
+    liquidity: "Auction funded",
     behavior: "Dynamic fees",
+    categories: ["auction", "fees"],
     tone: "rose",
   },
   {
-    id: "sample-atlas",
+    id: "preview-atlas",
     name: "Atlas",
     symbol: "ATLAS",
-    price: "$1.28",
-    change: "+21.7%",
+    launchType: "Direct",
+    liquidity: "Creator supplied",
     behavior: "Fee split",
+    categories: ["direct", "fees"],
     tone: "violet",
   },
   {
-    id: "sample-bloom",
+    id: "preview-bloom",
     name: "Bloom",
     symbol: "BLOOM",
-    price: "$0.42",
-    change: "+14.2%",
+    launchType: "Auction",
+    liquidity: "Auction funded",
     behavior: "NFT membership",
+    categories: ["auction", "access"],
     tone: "mint",
   },
   {
-    id: "sample-relay",
+    id: "preview-relay",
     name: "Relay",
     symbol: "RELAY",
-    price: "$2.06",
-    change: "+8.6%",
-    behavior: "Auction funded",
+    launchType: "Direct",
+    liquidity: "Creator supplied",
+    behavior: "Oracle guard",
+    categories: ["direct", "custom"],
     tone: "amber",
   },
 ] as const;

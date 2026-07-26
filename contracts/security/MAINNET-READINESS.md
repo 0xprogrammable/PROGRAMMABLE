@@ -16,7 +16,7 @@ The platform treasury is fixed to `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. 
 
 - Complete Sepolia launch, migration, swap, fee collection and failure-recovery rehearsals
 - Commission an independent audit and resolve every accepted finding
-- Recheck current official Uniswap deployment addresses and runtime bytecode
+- Run `npm run contracts:official-deployments` against Uniswap’s current registry, then recheck runtime bytecode
 - Verify the factory and hook source code on the block explorer
 - Confirm the exact 10-bp fee disclosure in the launch confirmation and token detail view
 - Document treasury custody, monitoring, incident response and upgrade-by-new-version policy

@@ -46,7 +46,7 @@ export const behaviorDefinitions: BehaviorDefinition[] = [
     id: "timed-opening",
     name: "Timed opening",
     description:
-      "Open trading for everyone at the same stated time without address-specific sell rules",
+      "Open trading for everyone at the same stated time without sell rules tied to individual addresses",
     tier: "standard",
   },
   {
@@ -86,7 +86,7 @@ export const behaviorDefinitions: BehaviorDefinition[] = [
   },
   {
     id: "anti-sandwich",
-    name: "Anti-sandwich execution",
+    name: "Sandwich protection",
     description:
       "Use delayed or reordered settlement to reduce common sandwich patterns",
     tier: "review",
@@ -109,7 +109,7 @@ export const behaviorDefinitions: BehaviorDefinition[] = [
     id: "custom-curve",
     name: "Custom pricing curve",
     description:
-      "Replace concentrated-liquidity pricing with a reviewed accounting model",
+      "Replace concentrated liquidity pricing with a reviewed accounting model",
     tier: "review",
   },
   {
@@ -192,7 +192,7 @@ export function buildLaunchSummary(draft: LaunchDraft) {
   const liquidity =
     draft.liquidityMode === "auction"
       ? "Bids establish the opening price and fund the first Uniswap v4 pool"
-      : "Creator-supplied token and ETH liquidity opens the Uniswap v4 pool";
+      : "Creator supplied token and ETH liquidity opens the first Uniswap v4 pool";
 
   const selected = draft.selectedBehaviors
     .map(findBehavior)
@@ -208,7 +208,7 @@ export function buildLaunchSummary(draft: LaunchDraft) {
             .map((behavior) => behavior.name)
             .join(", ")} and ${selected.at(-1)?.name}`;
 
-  return `${asset} on Ethereum · ${liquidity} · ${behaviorText}`;
+  return `${asset} launches on Ethereum; ${liquidity}; pool behavior: ${behaviorText}`;
 }
 
 export function buildPlainTextPlan(draft: LaunchDraft) {
@@ -222,12 +222,12 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     `Asset: ${getDraftAssetLabel(draft)}`,
     `Asset path: ${
       draft.assetMode === "new"
-        ? "New fixed-supply ERC-20"
+        ? "New fixed supply ERC-20"
         : `Existing Ethereum token (${draft.tokenAddress || "address not set"})`
     }`,
     `Liquidity path: ${
       draft.liquidityMode === "auction"
-        ? `Auction-funded v4 liquidity (${draft.auctionSalePercent || "unset"}% of supply offered; ${draft.auctionLiquidityPercent || "unset"}% of proceeds for pool funding)`
+        ? `Auction funded v4 liquidity (${draft.auctionSalePercent || "unset"}% of supply offered; ${draft.auctionLiquidityPercent || "unset"}% of proceeds for pool funding)`
         : `Direct v4 pool (${draft.directEthAmount || "unset"} ETH and ${draft.directTokenAmount || "unset"} tokens)`
     }`,
     `Token behavior: ${

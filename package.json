@@ -16,6 +16,7 @@
     "contracts:build": "cd contracts && forge build",
     "contracts:test": "cd contracts && forge test",
     "contracts:slither": "cd contracts && slither . --filter-paths 'lib|test|script' --exclude-dependencies",
+    "contracts:official-deployments": "node contracts/scripts/verify-official-deployments.mjs",
     "contracts:verify": "npm run contracts:bootstrap && npm run contracts:fmt && npm run contracts:lint && npm run contracts:build && npm run contracts:test",
     "contracts:sepolia:validate": "cd contracts && forge test --match-path test/EthereumSepoliaDeploymentSnapshot.t.sol && forge test --match-path test/DeploySepoliaInfrastructureV1.t.sol"
   },

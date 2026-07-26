@@ -30,6 +30,14 @@ forge test
 
 Every dependency is checked out at an exact commit. The bootstrap script stops if an existing checkout does not match its pin.
 
+The checked-in Ethereum and Sepolia snapshots can be compared with Uniswap’s current machine-readable deployment registry:
+
+```sh
+npm run contracts:official-deployments
+```
+
+The command fails when a required contract is missing, deprecated, points to a different address, lacks an official source link or comes from a newer dataset than the checked-in snapshot. Run it immediately before every rehearsal or broadcast.
+
 ## Sepolia preflight
 
 The public treasury, test deployment wallet and LP custody policy are recorded in [`config/deployment-inputs.v1.json`](config/deployment-inputs.v1.json). The read-only Sepolia dependency snapshot can be checked with:

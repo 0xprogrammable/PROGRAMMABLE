@@ -26,11 +26,22 @@
     },
     "stateView": {
       "address": "0xE1Dd9c3fA50EDB962E442f60DfBc432e24537E4C",
+      "sourceRef": "v4-core@1.0.0",
       "runtimeCodeHash": "0xaaed3db8eb8ebde8014ce4c8a3938496687f4c6374e17a7d735288f6c65ceb9e"
+    },
+    "v4Quoter": {
+      "address": "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227",
+      "sourceRef": "v4-core@1.0.0",
+      "runtimeCodeHash": "0xf481a751ac453d40c46d12360b85b05472028c1b113ab63749d69a5f8b0e47d1"
     },
     "permit2": {
       "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
       "runtimeCodeHash": "0x96d9f5c3f0fb0423426b7f970186235b7347027f4e5c19c40c412b7d97fc3751"
+    },
+    "universalRouter": {
+      "address": "0x470FFC67b1feEEC31D16C46AC7545C98716a194c",
+      "sourceRef": "universal-router@2.0.0",
+      "runtimeCodeHash": "0x14b733fce7cfcca643ef884ed59d2cb2d23b3fead8692613dcee311d65555caf"
     },
     "continuousClearingAuctionFactory": {
       "address": "0x000000001F26a0044BaA66024e7b6599c61963F8",
@@ -46,6 +57,11 @@
       "address": "0x96641d91e223c766F45b19d09494F5925C3cE000",
       "version": "3.1",
       "runtimeCodeHash": "0x273ab7765154c688e0105fed1d25c6861efd2f11ad0be5806d7592cfd723341c"
+    },
+    "tokenSplitter": {
+      "address": "0x8B7DCeb5639DB986FCf86606C74e6300C40FE3cd",
+      "version": "3.0",
+      "runtimeCodeHash": "0x3373016823b274303947e411171478087acc3d1e844c649bc9b84e69de685d62"
     },
     "uerc20Factory": {
       "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
