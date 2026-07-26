@@ -14,7 +14,7 @@ The catalog in `contracts/spec/launch-variants.v1.json` records the combinations
 
 ### Auction launch
 
-The official Uniswap LiquidityLauncher creates a fixed-supply UERC20. A Continuous Clearing Auction establishes the opening price. LBPStrategy migrates the auction proceeds and reserved tokens into the bound v4 pool. The initial LP position is permanently locked while its fees remain claimable by the launch creator.
+The official Uniswap LiquidityLauncher creates a fixed-supply UERC20. The standard composition auctions half the supply over four hours and reserves the other half for liquidity. A Continuous Clearing Auction establishes the opening price. LBPStrategy allocates all auction proceeds and the reserved tokens to the bound full-range v4 pool. The initial LP position is permanently locked while its fees remain claimable by the launch creator. Any tokens left after the auction and pool setup are recoverable by that creator. Launcher verifies that the pinned CCA factory has no protocol fee controller before preparing the transaction.
 
 ### Direct v4 pool
 

@@ -135,6 +135,11 @@ export type LaunchDraft = {
   liquidityMode: LiquidityMode;
   auctionSalePercent: string;
   auctionLiquidityPercent: string;
+  auctionFloorValuationEth: string;
+  auctionStartBlock: string;
+  auctionEndBlock: string;
+  auctionClaimBlock: string;
+  auctionMigrationBlock: string;
   directEthAmount: string;
   directTokenAmount: string;
   directTokensPerEth: string;
@@ -159,8 +164,13 @@ export function createEmptyDraft(): LaunchDraft {
     existingTokenSymbol: "",
     existingTokenSupply: "",
     liquidityMode: "auction",
-    auctionSalePercent: "20",
-    auctionLiquidityPercent: "80",
+    auctionSalePercent: "50",
+    auctionLiquidityPercent: "100",
+    auctionFloorValuationEth: "10",
+    auctionStartBlock: "",
+    auctionEndBlock: "",
+    auctionClaimBlock: "",
+    auctionMigrationBlock: "",
     directEthAmount: "",
     directTokenAmount: "",
     directTokensPerEth: "",
@@ -231,7 +241,7 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     }`,
     `Liquidity path: ${
       draft.liquidityMode === "auction"
-        ? `Auction funded v4 liquidity (${draft.auctionSalePercent || "unset"}% of supply offered; ${draft.auctionLiquidityPercent || "unset"}% of proceeds for pool funding)`
+        ? `Four-hour auction funded v4 liquidity (${draft.auctionSalePercent || "unset"}% auctioned; 50% reserved for LP; all auction proceeds allocated to pool funding; ${draft.auctionFloorValuationEth || "unset"} ETH minimum valuation)`
         : `Direct v4 pool (${draft.directEthAmount || "unset"} ETH and ${draft.directTokenAmount || "unset"} tokens at ${draft.directTokensPerEth || "unset"} tokens per ETH)`
     }`,
     `Token behavior: ${
@@ -246,6 +256,11 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     }`,
     `Launcher fee: ${(PLATFORM_FEE_BPS / 100).toFixed(2)}% of eligible swaps`,
     "Initial LP: permanently locked; LP fees go to the launch creator",
+    ...(draft.liquidityMode === "auction"
+      ? [
+          "Auction recovery: any tokens left after the auction and pool setup return to the launch creator",
+        ]
+      : []),
     "",
     buildLaunchSummary(draft),
     "",

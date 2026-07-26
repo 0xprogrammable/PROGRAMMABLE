@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createPublicClient,
+  encodeFunctionData,
   getAddress,
   http,
   isAddress,
   isHex,
   keccak256,
+  parseAbi,
   type Address,
   type Hex,
 } from "viem";
 import { mainnet } from "viem/chains";
+import {
+  getRegisteredInitializer,
+  isV4PoolInitialized,
+  LBP_STRATEGY_ABI,
+  predictAuctionAddress,
+  predictTokenAddress,
+} from "@uniswap/liquidity-launcher-sdk";
 
 import appDeployments from "@/contracts/config/app-deployments.v1.json";
 import deploymentInputs from "@/contracts/config/deployment-inputs.v1.json";
@@ -22,8 +31,8 @@ import {
   encodeNewDirectLaunch,
   encodeTokenApproval,
   LaunchInputError,
+  lockedPositionFeeForwarderFactoryAbi,
   mineStandardHookSalt,
-  parseDecimalAmount,
   platformFeeHookFactoryAbi,
   standardErc20Abi,
   type LaunchPreflightCheck,
@@ -31,6 +40,16 @@ import {
   type PreparedLaunchTransaction,
   uerc20FactoryAbi,
 } from "@/lib/launch-transaction";
+import {
+  buildStandardAuctionEconomics,
+  buildStandardAuctionPlan,
+  buildStandardAuctionTokenPredictionParams,
+  derivePositionForwarderSalt,
+  getOfficialEthereumAuctionAddresses,
+  isSameOfficialAuctionStack,
+  resolveStandardAuctionSchedule,
+  type StandardAuctionAddresses,
+} from "@/lib/auction-transaction";
 import {
   behaviorDefinitions,
   createEmptyDraft,
@@ -43,7 +62,17 @@ export const runtime = "nodejs";
 
 const ZERO_ADDRESS =
   "0x0000000000000000000000000000000000000000" as Address;
+const ZERO_HASH =
+  "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex;
 const MAX_REQUEST_BYTES = 50_000;
+const auctionStackConfigurationAbi = parseAbi([
+  "function poolManager() view returns (address)",
+  "function positionManager() view returns (address)",
+  "function initializerFactory() view returns (address)",
+]);
+const ccaFactoryConfigurationAbi = parseAbi([
+  "function protocolFeeController() view returns (address)",
+]);
 const knownBehaviors = new Set(
   behaviorDefinitions.map(({ id }) => id),
 );
@@ -65,10 +94,27 @@ const officialPoolManager = getAddress(
 const officialPositionManager = getAddress(
   mainnetDeployments.contracts.positionManager.address,
 );
+const officialStateView = getAddress(
+  mainnetDeployments.contracts.stateView.address,
+);
 const officialTokenFactory = getAddress(
   mainnetDeployments.contracts.uerc20Factory.address,
 );
+const officialLiquidityLauncher = getAddress(
+  mainnetDeployments.contracts.liquidityLauncher.address,
+);
+const officialLbpStrategy = getAddress(
+  mainnetDeployments.contracts.lbpStrategy.address,
+);
+const officialCcaFactory = getAddress(
+  mainnetDeployments.contracts.continuousClearingAuctionFactory.address,
+);
 const platformTreasury = getAddress(deploymentInputs.platform.treasury);
+const officialAuctionAddresses: StandardAuctionAddresses = {
+  liquidityLauncher: officialLiquidityLauncher,
+  lbpStrategy: officialLbpStrategy,
+  uerc20Factory: officialTokenFactory,
+};
 
 type ExistingTokenState = {
   address: Address;
@@ -136,6 +182,11 @@ function parseDraft(input: unknown): LaunchDraft {
     "existingTokenSupply",
     "auctionSalePercent",
     "auctionLiquidityPercent",
+    "auctionFloorValuationEth",
+    "auctionStartBlock",
+    "auctionEndBlock",
+    "auctionClaimBlock",
+    "auctionMigrationBlock",
     "directEthAmount",
     "directTokenAmount",
     "directTokensPerEth",
@@ -187,36 +238,6 @@ function validateLaunchSalt(value: string): asserts value is Hex {
   if (!isHex(value, { strict: true }) || value.length !== 66) {
     throw new LaunchInputError(
       "Create a fresh launch identifier before checking the transaction",
-    );
-  }
-}
-
-function validateAuctionDraft(draft: LaunchDraft) {
-  if (draft.assetMode !== "new") {
-    throw new LaunchInputError(
-      "Existing Uniswap tokens use direct liquidity",
-    );
-  }
-  if (!draft.tokenName.trim()) {
-    throw new LaunchInputError("Enter a token name");
-  }
-  if (!draft.tokenSymbol.trim()) {
-    throw new LaunchInputError("Enter a token symbol");
-  }
-  parseDecimalAmount(draft.tokenSupply, 18, "a token supply");
-  const sale = parseDecimalAmount(
-    draft.auctionSalePercent,
-    2,
-    "a sale allocation",
-  );
-  const liquidity = parseDecimalAmount(
-    draft.auctionLiquidityPercent,
-    2,
-    "a pool-funding share",
-  );
-  if (sale > 10_000n || liquidity > 10_000n) {
-    throw new LaunchInputError(
-      "Auction percentages cannot exceed 100%",
     );
   }
 }
@@ -456,6 +477,582 @@ async function assertProductionInfrastructure(
   }
 }
 
+async function assertAuctionProductionInfrastructure(
+  hookFactory: Address,
+  positionForwarderFactory: Address,
+  codeHashes: {
+    platformFeeHookFactory: Hex;
+    lockedPositionFeeForwarderFactory: Hex;
+  },
+) {
+  const sdkAddresses = getOfficialEthereumAuctionAddresses();
+  if (
+    !sdkAddresses ||
+    !isSameOfficialAuctionStack(
+      sdkAddresses,
+      officialAuctionAddresses,
+    )
+  ) {
+    throw new Error(
+      "The installed Uniswap SDK does not match the pinned Ethereum deployment snapshot",
+    );
+  }
+
+  await Promise.all([
+    assertRuntimeCodeHash(
+      officialPoolManager,
+      mainnetDeployments.contracts.poolManager.runtimeCodeHash as Hex,
+      "Uniswap PoolManager",
+    ),
+    assertRuntimeCodeHash(
+      officialPositionManager,
+      mainnetDeployments.contracts.positionManager.runtimeCodeHash as Hex,
+      "Uniswap PositionManager",
+    ),
+    assertRuntimeCodeHash(
+      officialStateView,
+      mainnetDeployments.contracts.stateView.runtimeCodeHash as Hex,
+      "Uniswap StateView",
+    ),
+    assertRuntimeCodeHash(
+      officialTokenFactory,
+      mainnetDeployments.contracts.uerc20Factory.runtimeCodeHash as Hex,
+      "Uniswap UERC20Factory",
+    ),
+    assertRuntimeCodeHash(
+      officialLiquidityLauncher,
+      mainnetDeployments.contracts.liquidityLauncher
+        .runtimeCodeHash as Hex,
+      "Uniswap LiquidityLauncher",
+    ),
+    assertRuntimeCodeHash(
+      officialLbpStrategy,
+      mainnetDeployments.contracts.lbpStrategy.runtimeCodeHash as Hex,
+      "Uniswap LBPStrategy",
+    ),
+    assertRuntimeCodeHash(
+      officialCcaFactory,
+      mainnetDeployments.contracts.continuousClearingAuctionFactory
+        .runtimeCodeHash as Hex,
+      "Uniswap Continuous Clearing Auction factory",
+    ),
+    assertRuntimeCodeHash(
+      hookFactory,
+      codeHashes.platformFeeHookFactory,
+      "Platform fee hook factory",
+    ),
+    assertRuntimeCodeHash(
+      positionForwarderFactory,
+      codeHashes.lockedPositionFeeForwarderFactory,
+      "Locked position factory",
+    ),
+  ]);
+
+  const [
+    configuredPoolManager,
+    configuredStrategyPositionManager,
+    initializerFactory,
+    protocolFeeController,
+    configuredPositionManager,
+  ] =
+    await Promise.all([
+      client.readContract({
+        address: officialLbpStrategy,
+        abi: auctionStackConfigurationAbi,
+        functionName: "poolManager",
+      }),
+      client.readContract({
+        address: officialLbpStrategy,
+        abi: auctionStackConfigurationAbi,
+        functionName: "positionManager",
+      }),
+      client.readContract({
+        address: officialLbpStrategy,
+        abi: LBP_STRATEGY_ABI,
+        functionName: "initializerFactory",
+      }),
+      client.readContract({
+        address: officialCcaFactory,
+        abi: ccaFactoryConfigurationAbi,
+        functionName: "protocolFeeController",
+      }),
+      client.readContract({
+        address: positionForwarderFactory,
+        abi: lockedPositionFeeForwarderFactoryAbi,
+        functionName: "positionManager",
+      }),
+    ]);
+
+  if (
+    configuredPoolManager.toLowerCase() !==
+    officialPoolManager.toLowerCase()
+  ) {
+    throw new Error(
+      "The official LBPStrategy does not point to the pinned PoolManager",
+    );
+  }
+  if (
+    configuredStrategyPositionManager.toLowerCase() !==
+    officialPositionManager.toLowerCase()
+  ) {
+    throw new Error(
+      "The official LBPStrategy does not point to the pinned PositionManager",
+    );
+  }
+  if (
+    initializerFactory.toLowerCase() !==
+    officialCcaFactory.toLowerCase()
+  ) {
+    throw new Error(
+      "The official LBPStrategy does not point to the pinned auction factory",
+    );
+  }
+  if (protocolFeeController !== ZERO_ADDRESS) {
+    throw new Error(
+      "The pinned auction factory no longer guarantees that all auction proceeds reach the pool",
+    );
+  }
+  if (
+    configuredPositionManager.toLowerCase() !==
+    officialPositionManager.toLowerCase()
+  ) {
+    throw new Error(
+      "The locked position factory does not point to the official PositionManager",
+    );
+  }
+}
+
+async function isFactoryDeployment(
+  factory: Address,
+  abi:
+    | typeof platformFeeHookFactoryAbi
+    | typeof lockedPositionFeeForwarderFactoryAbi,
+  target: Address,
+) {
+  const code = await client.getCode({ address: target });
+  if (!code || code === "0x") return false;
+
+  const configurationHash = await client.readContract({
+    address: factory,
+    abi,
+    functionName: "configurationHashOf",
+    args: [target],
+  });
+  if (configurationHash === ZERO_HASH) {
+    throw new Error(
+      "A contract exists at the deterministic setup address without matching factory provenance",
+    );
+  }
+  return true;
+}
+
+async function prepareAuctionLaunch(
+  account: Address,
+  draft: LaunchDraft,
+  connectedWalletCheck: LaunchPreflightCheck,
+  production: ProductionDeployment,
+) {
+  validateLaunchSalt(draft.launchSalt);
+
+  const validationSchedule = resolveStandardAuctionSchedule(draft, 0n);
+  const validationDraft = {
+    ...draft,
+    ...(validationSchedule.draftPatch ?? {}),
+  };
+  buildStandardAuctionEconomics(validationDraft);
+
+  const tokenCheck: LaunchPreflightCheck = {
+    id: "token",
+    label: "Token setup",
+    status: "pass",
+    detail:
+      "Fixed supply, 50/50 allocation and minimum valuation are valid",
+  };
+
+  if (production.status !== "ready") {
+    return response({
+      status: "blocked",
+      mode: "auction",
+      title: "Mainnet launch contracts are not enabled",
+      detail: production.blocker,
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Launcher contracts",
+          status: "blocked",
+          detail:
+            "Awaiting verified mainnet deployment and independent review",
+        },
+        {
+          id: "simulation",
+          label: "Simulation",
+          status: "pending",
+          detail: "Runs only against the verified deployment",
+        },
+      ],
+    });
+  }
+
+  if (connectedWalletCheck.status !== "pass") {
+    return response({
+      status: "blocked",
+      mode: "auction",
+      title: "Switch the wallet to Ethereum",
+      detail:
+        "The auction and its setup transactions are fixed to Ethereum mainnet",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Launcher contracts",
+          status: "pending",
+          detail: "Verification continues after the network is corrected",
+        },
+        {
+          id: "simulation",
+          label: "Simulation",
+          status: "pending",
+          detail: "Waiting for the wallet network",
+        },
+      ],
+    });
+  }
+
+  const {
+    platformFeeHookFactory,
+    lockedPositionFeeForwarderFactory,
+    runtimeCodeHashes,
+  } = production;
+  if (
+    !platformFeeHookFactory ||
+    !lockedPositionFeeForwarderFactory ||
+    !runtimeCodeHashes.platformFeeHookFactory ||
+    !runtimeCodeHashes.lockedPositionFeeForwarderFactory
+  ) {
+    throw new Error("The production auction manifest is incomplete");
+  }
+
+  const hookFactory = getAddress(platformFeeHookFactory);
+  const positionForwarderFactory = getAddress(
+    lockedPositionFeeForwarderFactory,
+  );
+  await assertAuctionProductionInfrastructure(
+    hookFactory,
+    positionForwarderFactory,
+    {
+      platformFeeHookFactory:
+        runtimeCodeHashes.platformFeeHookFactory as Hex,
+      lockedPositionFeeForwarderFactory:
+        runtimeCodeHashes.lockedPositionFeeForwarderFactory as Hex,
+    },
+  );
+
+  const currentBlock = await client.getBlockNumber();
+  const scheduleResolution = resolveStandardAuctionSchedule(
+    draft,
+    currentBlock,
+  );
+  if (scheduleResolution.draftPatch) {
+    return response({
+      status: "blocked",
+      mode: "auction",
+      title: "Auction timing prepared",
+      detail:
+        "The exact four-hour block window has been saved. Run the check once more to prepare the first setup transaction",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Launcher contracts",
+          status: "pass",
+          detail:
+            "Official addresses and Launcher factory bytecode match",
+        },
+        {
+          id: "simulation",
+          label: "Simulation",
+          status: "pending",
+          detail: "Runs after the fixed block window is saved",
+        },
+      ],
+      draftPatch: scheduleResolution.draftPatch,
+    });
+  }
+
+  const economics = buildStandardAuctionEconomics(draft);
+  const predictedToken = getAddress(
+    await predictTokenAddress(
+      client,
+      buildStandardAuctionTokenPredictionParams(
+        draft,
+        account,
+        officialAuctionAddresses,
+      ),
+    ),
+  );
+  const tokenCode = await client.getCode({ address: predictedToken });
+  if (tokenCode && tokenCode !== "0x") {
+    throw new LaunchInputError(
+      "A token with this name and symbol already exists for the connected creator",
+    );
+  }
+
+  const positionSalt = derivePositionForwarderSalt(
+    account,
+    predictedToken,
+    draft.launchSalt,
+  );
+  const positionRecipient = getAddress(
+    await client.readContract({
+      address: positionForwarderFactory,
+      abi: lockedPositionFeeForwarderFactoryAbi,
+      functionName: "predict",
+      args: [positionSalt, account],
+    }),
+  );
+
+  const initCodeHash = await client.readContract({
+    address: hookFactory,
+    abi: platformFeeHookFactoryAbi,
+    functionName: "initCodeHash",
+    args: [
+      officialPoolManager,
+      officialLbpStrategy,
+      platformTreasury,
+      ZERO_ADDRESS,
+      predictedToken,
+    ],
+  });
+  const minedHook = mineStandardHookSalt(
+    hookFactory,
+    initCodeHash,
+  );
+
+  const auctionDetails = {
+    startBlock: economics.schedule.startBlock.toString(),
+    endBlock: economics.schedule.endBlock.toString(),
+    minimumRaiseWei:
+      economics.requiredCurrencyRaised.toString(),
+  };
+
+  if (
+    !(await isFactoryDeployment(
+      positionForwarderFactory,
+      lockedPositionFeeForwarderFactoryAbi,
+      positionRecipient,
+    ))
+  ) {
+    const lockSetupBase = {
+      kind: "lock-setup" as const,
+      chainId: 1 as const,
+      to: positionForwarderFactory,
+      data: encodeFunctionData({
+        abi: lockedPositionFeeForwarderFactoryAbi,
+        functionName: "deploy",
+        args: [positionSalt, account],
+      }),
+      value: "0",
+    };
+    const gasLimit = await estimatePreparedTransaction(
+      account,
+      lockSetupBase,
+    );
+    return response({
+      status: "setup-required",
+      mode: "auction",
+      title: "Create the permanent LP lock",
+      detail:
+        "This deterministic contract will hold the initial position and forward LP fees to the creator",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Launcher contracts",
+          status: "pass",
+          detail:
+            "Official addresses and Launcher factory bytecode match",
+        },
+        {
+          id: "simulation",
+          label: "Simulation",
+          status: "pass",
+          detail: "The exact LP lock deployment succeeds in a read-only call",
+        },
+      ],
+      transaction: {
+        ...lockSetupBase,
+        gasLimit: gasLimit.toString(),
+      },
+      predictedToken,
+      predictedHook: minedHook.address,
+      positionRecipient,
+      auctionDetails,
+      planHash: buildPlanHash(account, lockSetupBase),
+    });
+  }
+
+  if (
+    !(await isFactoryDeployment(
+      hookFactory,
+      platformFeeHookFactoryAbi,
+      minedHook.address,
+    ))
+  ) {
+    const hookSetupBase = {
+      kind: "hook-setup" as const,
+      chainId: 1 as const,
+      to: hookFactory,
+      data: encodeFunctionData({
+        abi: platformFeeHookFactoryAbi,
+        functionName: "deploy",
+        args: [
+          minedHook.salt,
+          officialPoolManager,
+          officialLbpStrategy,
+          platformTreasury,
+          ZERO_ADDRESS,
+          predictedToken,
+        ],
+      }),
+      value: "0",
+    };
+    const gasLimit = await estimatePreparedTransaction(
+      account,
+      hookSetupBase,
+    );
+    return response({
+      status: "setup-required",
+      mode: "auction",
+      title: "Create the Launcher fee hook",
+      detail:
+        "This deterministic hook binds the token, the official LBPStrategy and the fixed 0.10% Launcher fee",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Permanent LP lock",
+          status: "pass",
+          detail: "Factory provenance and immutable fee recipient match",
+        },
+        {
+          id: "simulation",
+          label: "Simulation",
+          status: "pass",
+          detail: "The exact hook deployment succeeds in a read-only call",
+        },
+      ],
+      transaction: {
+        ...hookSetupBase,
+        gasLimit: gasLimit.toString(),
+      },
+      predictedToken,
+      predictedHook: minedHook.address,
+      positionRecipient,
+      auctionDetails,
+      planHash: buildPlanHash(account, hookSetupBase),
+    });
+  }
+
+  const plan = buildStandardAuctionPlan({
+    draft,
+    account,
+    predictedToken,
+    hook: minedHook.address,
+    positionRecipient,
+    addresses: officialAuctionAddresses,
+  });
+  const [registeredInitializer, poolInitialized] = await Promise.all([
+    getRegisteredInitializer(client, {
+      lbpStrategy: officialLbpStrategy,
+      poolId: plan.poolId,
+    }),
+    isV4PoolInitialized(client, {
+      stateView: officialStateView,
+      poolId: plan.poolId,
+    }),
+  ]);
+  if (registeredInitializer !== ZERO_ADDRESS) {
+    throw new LaunchInputError(
+      "This token's Launcher v4 pool is already reserved by an auction",
+    );
+  }
+  if (poolInitialized) {
+    throw new LaunchInputError(
+      "This token's Launcher v4 pool is already initialized",
+    );
+  }
+
+  const predictedAuction = getAddress(
+    await predictAuctionAddress(client, {
+      strategy: officialLbpStrategy,
+      token: predictedToken,
+      auctionSupply: plan.auctionSupply,
+      auctionParams: plan.auctionParametersData,
+      initializerSalt: plan.initializerSalt,
+    }),
+  );
+  const auctionCode = await client.getCode({
+    address: predictedAuction,
+  });
+  if (auctionCode && auctionCode !== "0x") {
+    throw new LaunchInputError(
+      "The deterministic auction address is already in use",
+    );
+  }
+
+  const launchBase = {
+    kind: "launch" as const,
+    chainId: 1 as const,
+    to: plan.transaction.to,
+    data: plan.transaction.data,
+    value: plan.transaction.value.toString(),
+  };
+  const gasLimit = await estimatePreparedTransaction(
+    account,
+    launchBase,
+  );
+  return response({
+    status: "ready",
+    mode: "auction",
+    title: "Ready for wallet review",
+    detail:
+      "The exact official LiquidityLauncher call succeeded in a read-only Ethereum simulation",
+    checks: [
+      tokenCheck,
+      connectedWalletCheck,
+      {
+        id: "contracts",
+        label: "Launcher composition",
+        status: "pass",
+        detail:
+          "Official auction stack, fixed fee hook and permanent LP lock match",
+      },
+      {
+        id: "simulation",
+        label: "Simulation",
+        status: "pass",
+        detail: "The exact atomic token and auction launch succeeds",
+      },
+    ],
+    transaction: {
+      ...launchBase,
+      gasLimit: gasLimit.toString(),
+    },
+    predictedToken,
+    predictedHook: minedHook.address,
+    predictedAuction,
+    positionRecipient,
+    auctionDetails,
+    planHash: buildPlanHash(account, launchBase),
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
@@ -484,37 +1081,16 @@ export async function POST(request: NextRequest) {
       account,
       record.walletChainId,
     );
+    const production =
+      appDeployments.production as ProductionDeployment;
 
     if (draft.liquidityMode === "auction") {
-      validateAuctionDraft(draft);
-      return response({
-        status: "blocked",
-        mode: "auction",
-        title: "Auction details still need to be set",
-        detail:
-          "Choose the auction block schedule, floor price and raise target before preparing the official LiquidityLauncher transaction",
-        checks: [
-          {
-            id: "token",
-            label: "Token setup",
-            status: "pass",
-            detail: "Fixed supply token details are complete",
-          },
-          connectedWalletCheck,
-          {
-            id: "contracts",
-            label: "Auction setup",
-            status: "blocked",
-            detail: "Schedule, floor price and raise target are not configured",
-          },
-          {
-            id: "simulation",
-            label: "Simulation",
-            status: "pending",
-            detail: "Runs after the complete auction setup is encoded",
-          },
-        ],
-      });
+      return prepareAuctionLaunch(
+        account,
+        draft,
+        connectedWalletCheck,
+        production,
+      );
     }
 
     validateLaunchSalt(draft.launchSalt);
@@ -542,8 +1118,6 @@ export async function POST(request: NextRequest) {
           : "Factory provenance and creator address are verified",
     };
 
-    const production =
-      appDeployments.production as ProductionDeployment;
     if (production.status !== "ready") {
       return response({
         status: "blocked",

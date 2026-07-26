@@ -39,8 +39,17 @@ export const directLiquidityLauncherAbi = parseAbi([
 ]);
 
 export const platformFeeHookFactoryAbi = parseAbi([
+  "function deploy(bytes32 salt,address poolManager,address authorized,address feeRecipient,address currency0,address currency1) returns (address hook)",
+  "function predict(bytes32 salt,address poolManager,address authorized,address feeRecipient,address currency0,address currency1) view returns (address)",
   "function initCodeHash(address poolManager,address authorized,address feeRecipient,address currency0,address currency1) pure returns (bytes32)",
   "function configurationHashOf(address hook) view returns (bytes32)",
+]);
+
+export const lockedPositionFeeForwarderFactoryAbi = parseAbi([
+  "function deploy(bytes32 salt,address feeRecipient) returns (address forwarder)",
+  "function predict(bytes32 salt,address feeRecipient) view returns (address)",
+  "function configurationHashOf(address forwarder) view returns (bytes32)",
+  "function positionManager() view returns (address)",
 ]);
 
 export const standardErc20Abi = parseAbi([
@@ -74,7 +83,7 @@ export type LaunchPreflightCheck = {
 };
 
 export type PreparedLaunchTransaction = {
-  kind: "approval" | "launch";
+  kind: "approval" | "lock-setup" | "hook-setup" | "launch";
   chainId: 1;
   to: Address;
   data: Hex;
@@ -83,7 +92,7 @@ export type PreparedLaunchTransaction = {
 };
 
 export type LaunchPreflightResponse = {
-  status: "blocked" | "approval-required" | "ready";
+  status: "blocked" | "approval-required" | "setup-required" | "ready";
   mode: LaunchDraft["liquidityMode"];
   title: string;
   detail: string;
@@ -91,6 +100,14 @@ export type LaunchPreflightResponse = {
   transaction?: PreparedLaunchTransaction;
   predictedToken?: Address;
   predictedHook?: Address;
+  predictedAuction?: Address;
+  positionRecipient?: Address;
+  draftPatch?: Partial<LaunchDraft>;
+  auctionDetails?: {
+    startBlock: string;
+    endBlock: string;
+    minimumRaiseWei: string;
+  };
   planHash?: Hex;
 };
 

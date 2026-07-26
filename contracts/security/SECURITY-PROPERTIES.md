@@ -14,6 +14,8 @@ The direct launcher trusts six immutable dependencies fixed at its deployment. I
 
 The existing-token entry point accepts only a UERC20 whose CREATE2 address can be reconstructed through that configured token factory. It also requires the caller to equal the creator recorded in the token at deployment. This proves the selected factory origin and fixed UERC20 implementation; it does not admit arbitrary ERC-20 contracts.
 
+The standard auction path calls the official LiquidityLauncher directly from the creator wallet. Launcher’s server derives the token, auction, pool, hook and position-recipient addresses from the pinned SDK and deployment snapshot. It enables the promise that all auction proceeds fund the pool only when the CCA factory’s immutable protocol fee controller is the zero address.
+
 ## Core properties
 
 | ID | Property | Evidence |
@@ -42,6 +44,11 @@ The existing-token entry point accepts only a UERC20 whose CREATE2 address can b
 | FLOW-08 | An existing token is accepted only when its address is reproduced by the configured UERC20Factory from its immutable identity fields. | `test_rejectsTokenFromDifferentFactory`; successful existing-token launch assertions |
 | FLOW-09 | Only the creator recorded by an existing UERC20 may open its Launcher pool. | `test_rejectsCallerWhoIsNotFactoryRecordedCreator` |
 | FLOW-10 | Existing-token liquidity is pulled exactly, stays within both caller budgets and leaves no token balance in the launcher. | `testFuzz_existingLaunchAccountingNeverExceedsCreatorBudgets`; invalid-input and balance assertions |
+| AUCTION-01 | The standard auction fixes a four-hour, 1,200-block window with 50% of supply auctioned and 50% reserved for LP. | `auction-transaction.test.ts`; `test_realAuctionBidsFinalizeAndMigrateIntoBoundV4Pool` |
+| AUCTION-02 | All settled auction proceeds reach LBPStrategy because the pinned CCA factory has no protocol fee controller. | `test_officialAuctionStackMatchesLauncherPolicy`; live preflight configuration read |
+| AUCTION-03 | The minimum valuation is converted with integer Q96 math, snapped to the official CCA tick boundary and bounded by the CCA supply, price and `uint128` limits. | `buildStandardAuctionEconomics`; exact fixture and policy-drift tests |
+| AUCTION-04 | The official SDK resolves exactly one atomic LiquidityLauncher multicall that creates the token and distributes the complete supply to LBPStrategy. | exact calldata decoding in `auction-transaction.test.ts` |
+| AUCTION-05 | The auction cannot be prepared unless the official LBPStrategy points to the pinned PoolManager, PositionManager and CCA factory. | Mainnet snapshot test; live preflight configuration reads |
 | REENT-01 | The complete direct launch is protected against reentrant entry while it composes external contracts. | OpenZeppelin `ReentrancyGuardTransient`; direct integration suite |
 | PRICE-01 | The initialized pool price is exactly the creator-supplied valid v4 square-root price. | returned-tick validation; `test_launchesFixedSupplyTokenIntoLockedV4Position` |
 | PROV-01 | Every new-token direct launch records a chain- and contract-bound commitment to its infrastructure, budgets, actual liquidity, price and hook configuration. | `launchHashOf`; `DirectTokenLaunched`; `DirectLiquidityConfigured` |
@@ -69,7 +76,9 @@ The current fuzz range is intentionally below pathological `int128` boundaries. 
 - An existing token from another factory, a caller other than its factory-recorded creator, a duplicate existing-token launch or a non-exact token pull reverts the complete transaction.
 - A failed native or ERC-20 payout reverts the whole collection. Accrued ERC-6909 claims remain in the hook.
 - Amounts below the fee’s integer precision may round to zero. This is expected and does not accumulate fractional dust.
+- A stale auction schedule is replaced before transaction preparation; the wallet never receives calldata with fewer than 20 preparation blocks remaining.
+- A nonzero CCA protocol fee controller, mismatched official strategy dependency, occupied auction address or initialized pool blocks auction preparation.
 
 ## Out of scope
 
-The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich protection or profitable price discovery. Arbitrary existing ERC-20s, oracle-based hooks, dynamic fees, arbitrary third-party hooks, regulated assets, auction transaction construction, indexer correctness and production signer custody remain out of scope. The frontend direct-launch path is implemented locally but still lacks live deployment and signed-rehearsal evidence.
+The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich protection or profitable price discovery. Arbitrary existing ERC-20s, oracle-based hooks, dynamic fees, arbitrary third-party hooks, regulated assets, indexer correctness and production signer custody remain out of scope. The frontend auction and direct paths are implemented locally but still lack deployed Launcher infrastructure, signed rehearsal evidence and an independent audit.

@@ -6,7 +6,7 @@ The implementation deliberately reuses Uniswap’s UERC20Factory, LiquidityLaunc
 
 ## Protocol-tested variants
 
-- Auction launch: the official auction establishes the first price and its proceeds seed the v4 position
+- Auction launch: 50% of supply is sold through the official four-hour CCA, 50% is reserved for the v4 position and all auction proceeds fund the locked full-range LP while the pinned factory has no protocol fee controller
 - Direct v4 pool: the creator selects the opening price and supplies the initial ETH/token liquidity
 - Existing token pool: the configured Uniswap factory proves an existing UERC20’s origin and its recorded creator supplies direct liquidity
 - New tokens use a fixed supply and 18 decimals; existing UERC20s retain their original fixed supply and decimals
@@ -50,6 +50,8 @@ npm run contracts:sepolia:validate
 ```
 
 `script/DeploySepoliaInfrastructureV1.s.sol` deploys Launcher’s two permissionless factories and `DirectLiquidityLauncherV1`. The launcher exposes separate atomic methods for a new fixed-supply token and for a provenance-verified existing UERC20. The script refuses the wrong chain, wrong broadcaster or changed official dependency bytecode. It does not read a private key; broadcasting must use a local Foundry account or hardware wallet.
+
+The web auction path calls Uniswap’s official LiquidityLauncher directly. Launcher’s factories deploy the deterministic permanent LP recipient and fixed platform-fee hook first. The final wallet transaction then atomically creates the UERC20 and registers the complete CCA/LBP migration composition.
 
 ## Evidence boundary
 
