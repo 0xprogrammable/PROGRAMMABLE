@@ -28,6 +28,9 @@ describe("launch plan", () => {
       "Status: Ready for contract review",
     );
     expect(setup).toContain("Token behavior");
+    expect(setup).toContain(
+      "Initial LP: permanently locked; LP fees go to the launch creator",
+    );
     expect(setup).not.toContain("Market");
   });
 

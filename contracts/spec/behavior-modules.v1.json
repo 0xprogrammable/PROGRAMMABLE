@@ -56,6 +56,30 @@
       ]
     },
     {
+      "id": "C-01",
+      "name": "Locked initial liquidity",
+      "status": "enabled",
+      "compatibilityId": "launcher.v1.max-timelock-fee-forwarder",
+      "parameterBounds": {
+        "operator": {
+          "fixed": "0x0000000000000000000000000000000000000000"
+        },
+        "timelockBlockNumber": {
+          "fixed": "uint256.max"
+        }
+      },
+      "callbackMask": [],
+      "authorityModel": "The official Uniswap position forwarder owns the LP NFT. No creator, platform administrator or operator can transfer it or remove initial liquidity.",
+      "humanSummary": "Locks the initial LP position while allowing anyone to forward accrued LP fees to the immutable launch creator.",
+      "invariants": [
+        "The position recipient is deployed by Launcher’s deterministic forwarder factory.",
+        "The transfer operator is the zero address.",
+        "The approval timelock is the maximum uint256 block.",
+        "Collecting fees uses a zero-liquidity decrease and cannot reduce principal.",
+        "LP fees go to the launch creator while Launcher hook fees go only to the platform treasury."
+      ]
+    },
+    {
       "id": "M-02",
       "name": "Dynamic LP fee",
       "status": "future",

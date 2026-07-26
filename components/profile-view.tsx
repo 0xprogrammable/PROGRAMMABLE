@@ -80,7 +80,7 @@ export function ProfileView() {
             icon={Layers3}
             label="Positions"
             value={wallet ? "0" : "—"}
-            detail={wallet ? "Active liquidity positions" : "Connect to view"}
+            detail={wallet ? "Locked liquidity positions" : "Connect to view"}
           />
           <ProfileStat
             icon={CircleDollarSign}

@@ -950,8 +950,8 @@ function ReviewStep({
             </strong>
             <span>
               {draft.liquidityMode === "auction"
-                ? `${draft.auctionSalePercent}% of supply offered · ${draft.auctionLiquidityPercent}% of proceeds for pool funding`
-                : `${draft.directEthAmount} ETH · ${draft.directTokenAmount} tokens`}
+                ? `${draft.auctionSalePercent}% of supply offered · ${draft.auctionLiquidityPercent}% of proceeds for pool funding · LP permanently locked`
+                : `${draft.directEthAmount} ETH · ${draft.directTokenAmount} tokens · LP permanently locked`}
             </span>
           </dd>
         </div>
@@ -980,8 +980,8 @@ function ReviewStep({
             </strong>
             <span>
               {draft.selectedBehaviors.includes("fixed-fee")
-                ? `${draft.lpFeePercent}% pool fee`
-                : "Pool fee follows the selected behavior"}
+                ? `${draft.lpFeePercent}% pool fee · LP fees to creator`
+                : "Pool fee follows the selected behavior · LP fees to creator"}
             </span>
           </dd>
         </div>

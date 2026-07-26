@@ -26,7 +26,17 @@
     "tickSpacing": 60,
     "dynamicLpFee": false,
     "initialPosition": "full-range",
-    "oneCertifiedHookPerPool": true
+    "oneCertifiedHookPerPool": true,
+    "positionCustody": {
+      "implementation": "Uniswap PositionFeesForwarder",
+      "factory": "LockedPositionFeeForwarderFactoryV1",
+      "operator": "0x0000000000000000000000000000000000000000",
+      "timelockBlockNumber": "uint256.max",
+      "liquidityRemoval": false,
+      "positionTransfer": false,
+      "lpFeeRecipient": "launch-creator",
+      "feeCollection": "permissionless-trigger-fixed-recipient"
+    }
   },
   "platformFee": {
     "feePips": 1000,
@@ -34,6 +44,7 @@
     "percentage": "0.10%",
     "basis": "absolute-unspecified-swap-amount",
     "recipient": "immutable-per-hook",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
     "collection": "permissionless-trigger-fixed-recipient"
   },
   "hook": {

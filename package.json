@@ -12,11 +12,12 @@
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "contracts:bootstrap": "cd contracts && ./scripts/bootstrap-deps.sh",
     "contracts:fmt": "cd contracts && forge fmt --check",
-    "contracts:lint": "cd contracts && forge lint src",
+    "contracts:lint": "cd contracts && forge lint src script",
     "contracts:build": "cd contracts && forge build",
     "contracts:test": "cd contracts && forge test",
-    "contracts:slither": "cd contracts && slither . --filter-paths 'lib|test' --exclude-dependencies",
-    "contracts:verify": "npm run contracts:bootstrap && npm run contracts:fmt && npm run contracts:lint && npm run contracts:build && npm run contracts:test"
+    "contracts:slither": "cd contracts && slither . --filter-paths 'lib|test|script' --exclude-dependencies",
+    "contracts:verify": "npm run contracts:bootstrap && npm run contracts:fmt && npm run contracts:lint && npm run contracts:build && npm run contracts:test",
+    "contracts:sepolia:validate": "cd contracts && forge test --match-path test/EthereumSepoliaDeploymentSnapshot.t.sol && forge test --match-path test/DeploySepoliaInfrastructureV1.t.sol"
   },
   "dependencies": {
     "@privy-io/react-auth": "3.35.2",

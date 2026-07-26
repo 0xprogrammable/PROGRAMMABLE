@@ -10,6 +10,9 @@ import { LiquidityLauncher } from "@uniswap/liquidity-launcher/src/LiquidityLaun
 import { IDistributor } from "@uniswap/liquidity-launcher/src/interfaces/IDistributor.sol";
 import { IDistributorFactory } from "@uniswap/liquidity-launcher/src/interfaces/IDistributorFactory.sol";
 import {
+    ITimelockedPositionRecipient
+} from "@uniswap/liquidity-launcher/src/interfaces/ITimelockedPositionRecipient.sol";
+import {
     ILBPInitializer,
     ILBP_INITIALIZER_INTERFACE_ID,
     LBPInitializationParams
@@ -20,6 +23,7 @@ import {
     PoolParameters
 } from "@uniswap/liquidity-launcher/src/libraries/MigratorParams.sol";
 import { LBPStrategy } from "@uniswap/liquidity-launcher/src/strategies/lbp/LBPStrategy.sol";
+import { PositionFeesForwarder } from "@uniswap/liquidity-launcher/src/periphery/PositionFeesForwarder.sol";
 import { Distribution } from "@uniswap/liquidity-launcher/src/types/Distribution.sol";
 import { PositionDefinition } from "@uniswap/liquidity-launcher/src/types/PositionPlannerTypes.sol";
 import { UERC20Factory } from "@uniswap/uerc20-factory/src/factories/UERC20Factory.sol";
@@ -43,6 +47,7 @@ import { Deployers } from "@uniswap/v4-core/test/utils/Deployers.sol";
 
 import { PlatformFeeHookFactoryV1 } from "../src/PlatformFeeHookFactoryV1.sol";
 import { PlatformFeeHookV1 } from "../src/PlatformFeeHookV1.sol";
+import { LockedPositionFeeForwarderFactoryV1 } from "../src/LockedPositionFeeForwarderFactoryV1.sol";
 
 contract LaunchPathInitializerMock is ILBPInitializer {
     using SafeERC20 for IERC20;
@@ -160,9 +165,12 @@ contract LaunchPathInitializerMock is ILBPInitializer {
         PlatformFeeHookFactoryV1 internal hookFactory;
         PlatformFeeHookV1 internal hook;
         IPositionManager internal positionManager;
+        LockedPositionFeeForwarderFactoryV1 internal positionForwarderFactory;
+        PositionFeesForwarder internal positionForwarder;
 
         address internal tokenAddress;
         address internal feeRecipient;
+        address internal lpFeeRecipient;
         address internal tokensRecipient;
         address internal positionRecipient;
 
@@ -183,8 +191,12 @@ contract LaunchPathInitializerMock is ILBPInitializer {
             hookFactory = new PlatformFeeHookFactoryV1();
 
             feeRecipient = makeAddr("platformFeeRecipient");
+            lpFeeRecipient = makeAddr("launchCreator");
             tokensRecipient = makeAddr("unsoldTokensRecipient");
-            positionRecipient = makeAddr("positionRecipient");
+
+            positionForwarderFactory = new LockedPositionFeeForwarderFactoryV1(positionManager);
+            positionForwarder = positionForwarderFactory.deploy(keccak256("verified-launch-position"), lpFeeRecipient);
+            positionRecipient = address(positionForwarder);
 
             bytes memory strategyConstructorArgs = abi.encode(positionManager, manager, initializerFactory);
             (address strategyAddress, bytes32 strategySalt) = HookMiner.find(
@@ -240,6 +252,10 @@ contract LaunchPathInitializerMock is ILBPInitializer {
             assertEq(stored.poolParameters.tickSpacing, hook.TICK_SPACING());
             assertEq(stored.reservedTokenAmountForLP, LP_RESERVE);
             assertEq(stored.positionRecipient, positionRecipient);
+            assertEq(positionForwarder.operator(), address(0));
+            assertEq(positionForwarder.timelockBlockNumber(), type(uint256).max);
+            assertEq(positionForwarder.feeRecipient(), lpFeeRecipient);
+            assertTrue(positionForwarderFactory.isFactoryForwarder(positionRecipient));
             assertEq(hook.authorized(), address(strategy));
             assertEq(strategy.registeredPoolIds(expectedKey.toId()), address(initializer));
             assertEq(hook.poolId(), PoolId.unwrap(expectedKey.toId()));
@@ -259,7 +275,44 @@ contract LaunchPathInitializerMock is ILBPInitializer {
             assertGt(sqrtPriceX96, 0, "pool not initialized");
             assertEq(strategy.registeredPoolIds(expectedKey.toId()), address(0));
             assertGt(IERC721(address(positionManager)).balanceOf(positionRecipient), 0, "position not minted");
+            uint256 positionTokenId = positionManager.nextTokenId() - 1;
+            assertEq(IERC721(address(positionManager)).ownerOf(positionTokenId), positionRecipient);
 
+            _assertPositionLocked(positionTokenId);
+            _executeBidirectionalSwapsAndCollectPlatformFees(initializer, expectedKey);
+            _collectAndAssertLpFees(positionTokenId);
+        }
+
+        function test_nonAtomicCreationLeavesNoReusableTokenAddress() public {
+            UERC20Metadata memory metadata;
+            launcher.createToken(
+                address(tokenFactory),
+                "Verified Launch Token",
+                "VLT",
+                18,
+                TOTAL_SUPPLY,
+                address(launcher),
+                abi.encode(metadata)
+            );
+
+            assertEq(IERC20(tokenAddress).balanceOf(address(launcher)), TOTAL_SUPPLY);
+
+            vm.expectRevert();
+            launcher.createToken(
+                address(tokenFactory),
+                "Verified Launch Token",
+                "VLT",
+                18,
+                TOTAL_SUPPLY,
+                address(launcher),
+                abi.encode(metadata)
+            );
+        }
+
+        function _executeBidirectionalSwapsAndCollectPlatformFees(
+            LaunchPathInitializerMock initializer,
+            PoolKey memory expectedKey
+        ) private {
             PoolSwapTest router = new PoolSwapTest(manager);
             PoolSwapTest.TestSettings memory settings =
                 PoolSwapTest.TestSettings({ takeClaims: false, settleUsingBurn: false });
@@ -313,30 +366,28 @@ contract LaunchPathInitializerMock is ILBPInitializer {
             assertEq(manager.balanceOf(address(hook), nativeCurrency.toId()), 0);
         }
 
-        function test_nonAtomicCreationLeavesNoReusableTokenAddress() public {
-            UERC20Metadata memory metadata;
-            launcher.createToken(
-                address(tokenFactory),
-                "Verified Launch Token",
-                "VLT",
-                18,
-                TOTAL_SUPPLY,
-                address(launcher),
-                abi.encode(metadata)
-            );
+        function _assertPositionLocked(uint256 positionTokenId) private {
+            vm.expectRevert(ITimelockedPositionRecipient.Timelocked.selector);
+            positionForwarder.approveOperator();
 
-            assertEq(IERC20(tokenAddress).balanceOf(address(launcher)), TOTAL_SUPPLY);
-
+            vm.prank(lpFeeRecipient);
             vm.expectRevert();
-            launcher.createToken(
-                address(tokenFactory),
-                "Verified Launch Token",
-                "VLT",
-                18,
-                TOTAL_SUPPLY,
-                address(launcher),
-                abi.encode(metadata)
-            );
+            IERC721(address(positionManager)).transferFrom(positionRecipient, lpFeeRecipient, positionTokenId);
+        }
+
+        function _collectAndAssertLpFees(uint256 positionTokenId) private {
+            Currency launchedToken = Currency.wrap(tokenAddress);
+            uint128 liquidityBeforeCollection = positionManager.getPositionLiquidity(positionTokenId);
+            uint256 creatorTokenBalanceBefore = launchedToken.balanceOf(lpFeeRecipient);
+            uint256 creatorNativeBalanceBefore = lpFeeRecipient.balance;
+
+            vm.prank(makeAddr("permissionlessLpFeeCollector"));
+            positionForwarder.collectFees(positionTokenId);
+
+            assertEq(positionManager.getPositionLiquidity(positionTokenId), liquidityBeforeCollection);
+            assertGt(launchedToken.balanceOf(lpFeeRecipient), creatorTokenBalanceBefore);
+            assertGt(lpFeeRecipient.balance, creatorNativeBalanceBefore);
+            assertEq(IERC721(address(positionManager)).ownerOf(positionTokenId), positionRecipient);
         }
 
         function _executeLaunch() private {

@@ -1,15 +1,16 @@
 # Mainnet readiness gate
 
-Current state: blocked by design. The protocol spike is green locally and on a read-only Ethereum fork, but it is not audited or deployed.
+Current state: blocked by design. The protocol spike is green locally and on pinned read-only Ethereum and Sepolia forks, but it is not audited or deployed.
 
 ## Required before Sepolia
 
-- Choose the real fee-recipient treasury
-- Choose the LP-position recipient and locking or forwarding policy
+- Fund `0x2Bb333d48DFAF1596D9036671d2E43168994249E` with Sepolia ETH. The 2026-07-26 dry run estimated about 0.0097 Sepolia ETH; 0.02 provides a rehearsal margin, subject to a fresh estimate
+- Sign the rehearsal from that address through a local Foundry keystore or hardware wallet; never place its private key in this repository
 - Fix the production CCA schedule and rehearse the exact factory, salt and protocol-fee-controller path
-- Add deployment scripts with chain-ID and bytecode-hash guards
 - Add frontend calldata generation and simulation against the same machine-readable spec
 - Publish source and dependency pins with the deployment artifacts
+
+The platform treasury is fixed to `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The LP policy is also fixed: the official Uniswap `PositionFeesForwarder`, zero operator, maximum `uint256` timelock and launch creator as immutable LP-fee recipient. The Sepolia deployment script now fails closed on chain ID, broadcaster and eight official runtime-code hashes.
 
 ## Required before mainnet
 
@@ -23,9 +24,8 @@ Current state: blocked by design. The protocol spike is green locally and on a r
 
 ## Owner inputs still missing
 
-- Treasury address
-- Deployment signer or Safe policy
-- LP ownership and lock policy
+- Explicit confirmation that the supplied EOA is the final immutable mainnet treasury, or a replacement Safe address
+- Production deployment signer or Safe policy
 - Final brand and production domain
 
-No private key or placeholder treasury is embedded in the repository.
+No private key is embedded in the repository. The public treasury and test-wallet addresses are recorded in `config/deployment-inputs.v1.json`.

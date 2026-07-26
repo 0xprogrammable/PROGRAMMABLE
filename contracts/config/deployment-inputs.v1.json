@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "status": "confirmed-user-input",
+  "network": {
+    "productionChainId": 1,
+    "rehearsalChainId": 11155111
+  },
+  "platform": {
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "platformFeePercentage": "0.10%",
+    "platformFeeRecipientPolicy": "immutable-per-hook"
+  },
+  "deployment": {
+    "testWallet": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "productionSignerPolicy": null,
+    "privateKeysStoredInRepository": false
+  },
+  "liquidityPosition": {
+    "implementation": "Uniswap PositionFeesForwarder",
+    "implementationSource": "@uniswap/liquidity-launcher/src/periphery/PositionFeesForwarder.sol",
+    "operator": "0x0000000000000000000000000000000000000000",
+    "timelockBlockNumber": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "feeRecipientPolicy": "launch-creator",
+    "creatorOwnsFeeRights": true,
+    "creatorCanTransferPosition": false,
+    "creatorCanRemoveInitialLiquidity": false,
+    "feeCollection": "permissionless-trigger-fixed-creator-recipient"
+  }
+}
