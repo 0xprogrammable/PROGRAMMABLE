@@ -4,7 +4,7 @@ Current state: blocked by design. The protocol spike is green locally and on pin
 
 ## Required before Sepolia
 
-- Fund `0x2Bb333d48DFAF1596D9036671d2E43168994249E` with Sepolia ETH. The 2026-07-26 dry run estimated about 0.0097 Sepolia ETH; 0.02 provides a rehearsal margin, subject to a fresh estimate
+- Fund `0x2Bb333d48DFAF1596D9036671d2E43168994249E` with Sepolia ETH. The latest 2026-07-26 dry run estimated about 0.0102 Sepolia ETH; 0.02 provides a rehearsal margin, subject to a fresh estimate
 - Sign the rehearsal from that address through a local Foundry keystore or hardware wallet; never place its private key in this repository
 - Fix the production CCA schedule and rehearse the exact factory, salt and protocol-fee-controller path
 - Add frontend calldata generation and simulation against the same machine-readable spec
