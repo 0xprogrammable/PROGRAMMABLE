@@ -1060,6 +1060,53 @@ textarea {
   margin-top: 14px;
 }
 
+.auction-valuation-field {
+  margin-top: 14px;
+}
+
+.auction-policy {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 14px 0 0;
+  overflow: hidden;
+}
+
+.auction-policy > div {
+  background: var(--surface-soft);
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.auction-policy > div:first-child {
+  border-radius: 11px 0 0;
+}
+
+.auction-policy > div:nth-child(2) {
+  border-radius: 0 11px 0 0;
+}
+
+.auction-policy > div:nth-last-child(2) {
+  border-radius: 0 0 0 11px;
+}
+
+.auction-policy > div:last-child {
+  border-radius: 0 0 11px;
+}
+
+.auction-policy dt {
+  color: var(--dim);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.auction-policy dd {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 590;
+  margin: 3px 0 0;
+}
+
 .opening-rate-field {
   margin-top: 12px;
 }
@@ -1375,6 +1422,11 @@ textarea {
 
 .preflight-result-ready {
   border-color: rgba(95, 210, 160, 0.28);
+}
+
+.preflight-result-setup-required,
+.preflight-result-approval-required {
+  border-color: rgba(255, 92, 168, 0.28);
 }
 
 .preflight-result-blocked {

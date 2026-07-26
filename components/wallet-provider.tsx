@@ -39,7 +39,7 @@ type WalletContextValue = {
     data: Hex;
     value: string;
     gasLimit: string;
-    kind: "approval" | "launch";
+    kind: "approval" | "lock-setup" | "hook-setup" | "launch";
   }) => Promise<Hex>;
 };
 
@@ -225,7 +225,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       data: Hex;
       value: string;
       gasLimit: string;
-      kind: "approval" | "launch";
+      kind: "approval" | "lock-setup" | "hook-setup" | "launch";
     }) => {
       if (!connectedWallet || !wallet) {
         throw new Error("Connect an Ethereum wallet before continuing");
@@ -248,14 +248,26 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
             description:
               transaction.kind === "approval"
                 ? "Approve the exact token amount reserved for liquidity"
+                : transaction.kind === "lock-setup"
+                  ? "Create the permanent LP lock for this token"
+                  : transaction.kind === "hook-setup"
+                    ? "Create the fixed Launcher fee hook for this token"
                 : "Create the token and open its locked Uniswap v4 position",
             buttonText:
               transaction.kind === "approval"
                 ? "Approve token"
+                : transaction.kind === "lock-setup"
+                  ? "Create LP lock"
+                  : transaction.kind === "hook-setup"
+                    ? "Create fee hook"
                 : "Launch token",
             successHeader:
               transaction.kind === "approval"
                 ? "Approval submitted"
+                : transaction.kind === "lock-setup"
+                  ? "LP lock submitted"
+                  : transaction.kind === "hook-setup"
+                    ? "Fee hook submitted"
                 : "Launch submitted",
           },
         },

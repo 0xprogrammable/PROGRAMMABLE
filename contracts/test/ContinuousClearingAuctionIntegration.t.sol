@@ -16,10 +16,12 @@ import {
     PoolParameters
 } from "@uniswap/liquidity-launcher/src/libraries/MigratorParams.sol";
 import { LBPStrategy } from "@uniswap/liquidity-launcher/src/strategies/lbp/LBPStrategy.sol";
+import { PositionFeesForwarder } from "@uniswap/liquidity-launcher/src/periphery/PositionFeesForwarder.sol";
 import { Distribution } from "@uniswap/liquidity-launcher/src/types/Distribution.sol";
 import { PositionDefinition } from "@uniswap/liquidity-launcher/src/types/PositionPlannerTypes.sol";
 import { UERC20Factory } from "@uniswap/uerc20-factory/src/factories/UERC20Factory.sol";
 import { UERC20Metadata } from "@uniswap/uerc20-factory/src/libraries/UERC20MetadataLibrary.sol";
+import { PoolManager } from "@uniswap/v4-core/src/PoolManager.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
@@ -39,6 +41,7 @@ import { IAllowanceTransfer } from "permit2/src/interfaces/IAllowanceTransfer.so
 
 import { PlatformFeeHookFactoryV1 } from "../src/PlatformFeeHookFactoryV1.sol";
 import { PlatformFeeHookV1 } from "../src/PlatformFeeHookV1.sol";
+import { LockedPositionFeeForwarderFactoryV1 } from "../src/LockedPositionFeeForwarderFactoryV1.sol";
 
 contract ContinuousClearingAuctionFactoryHarness is IDistributorFactory {
     ContinuousClearingAuctionFactory public immutable factory;
@@ -72,13 +75,14 @@ contract ContinuousClearingAuctionIntegrationTest is Test {
     address internal constant CANONICAL_POSITION_MANAGER = 0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e;
 
     uint128 internal constant TOTAL_SUPPLY = 1_000_000_000 ether;
-    uint128 internal constant LP_RESERVE = 200_000_000 ether;
+    uint128 internal constant LP_RESERVE = 500_000_000 ether;
     uint64 internal constant START_BLOCK = 101;
-    uint64 internal constant END_BLOCK = 103;
-    uint64 internal constant MIGRATION_BLOCK = 104;
-    uint256 internal constant FLOOR_PRICE_X96 = 1 << 96;
-    uint256 internal constant AUCTION_TICK_SPACING_X96 = 1 << 90;
-    uint128 internal constant BID_AMOUNT = 10 ether;
+    uint64 internal constant END_BLOCK = 1301;
+    uint64 internal constant MIGRATION_BLOCK = 1302;
+    uint256 internal constant FLOOR_PRICE_X96 = 792_281_625_142_643_375_900;
+    uint256 internal constant AUCTION_TICK_SPACING_X96 = 7_922_816_251_426_433_759;
+    uint128 internal constant REQUIRED_CURRENCY_RAISED = 4_999_999_999_999_999_999;
+    uint128 internal constant BID_AMOUNT = 6 ether;
 
     IPoolManager internal manager;
     IPositionManager internal positionManager;
@@ -88,6 +92,8 @@ contract ContinuousClearingAuctionIntegrationTest is Test {
     LBPStrategy internal strategy;
     PlatformFeeHookFactoryV1 internal hookFactory;
     PlatformFeeHookV1 internal hook;
+    LockedPositionFeeForwarderFactoryV1 internal positionForwarderFactory;
+    PositionFeesForwarder internal positionForwarder;
 
     address internal tokenAddress;
     address internal feeRecipient;
@@ -113,7 +119,9 @@ contract ContinuousClearingAuctionIntegrationTest is Test {
 
         feeRecipient = makeAddr("ccaFeeRecipient");
         tokensRecipient = makeAddr("ccaUnsoldTokensRecipient");
-        positionRecipient = makeAddr("ccaPositionRecipient");
+        positionForwarderFactory = new LockedPositionFeeForwarderFactoryV1(positionManager);
+        positionForwarder = positionForwarderFactory.deploy(keccak256("cca-standard-position"), tokensRecipient);
+        positionRecipient = address(positionForwarder);
         migrationRecipient = makeAddr("ccaMigrationRecipient");
 
         bytes memory strategyArgs = abi.encode(positionManager, manager, auctionFactory);
@@ -148,6 +156,9 @@ contract ContinuousClearingAuctionIntegrationTest is Test {
         assertEq(auction.fundsRecipient(), address(strategy));
         assertEq(auction.tokensRecipient(), tokensRecipient);
         assertEq(IERC20(tokenAddress).balanceOf(address(auction)), TOTAL_SUPPLY - LP_RESERVE);
+        assertEq(positionForwarder.operator(), address(0));
+        assertEq(positionForwarder.timelockBlockNumber(), type(uint256).max);
+        assertEq(positionForwarder.feeRecipient(), tokensRecipient);
 
         address bidder = makeAddr("ccaBidder");
         vm.deal(bidder, BID_AMOUNT);
@@ -163,7 +174,8 @@ contract ContinuousClearingAuctionIntegrationTest is Test {
 
         LBPInitializationParams memory result = auction.lbpInitializationParams();
         assertGt(result.tokensSold, 0);
-        assertEq(result.currencyRaised, BID_AMOUNT);
+        assertGe(result.currencyRaised, REQUIRED_CURRENCY_RAISED);
+        assertLe(result.currencyRaised, BID_AMOUNT);
         assertGe(result.initialPriceX96, FLOOR_PRICE_X96);
 
         vm.roll(MIGRATION_BLOCK);
@@ -179,7 +191,10 @@ contract ContinuousClearingAuctionIntegrationTest is Test {
     function _launch() private {
         LiquidityAllocationBracket[] memory brackets = new LiquidityAllocationBracket[](1);
         brackets[0] = LiquidityAllocationBracket({ lowerThreshold: 0, rate: 10_000_000 });
-        PositionDefinition[] memory positions = new PositionDefinition[](0);
+        PositionDefinition[] memory positions = new PositionDefinition[](1);
+        positions[0] = PositionDefinition({
+            offsetLower: -887_272, offsetUpper: 887_272, weight: 10_000_000, overridePositionRecipient: address(0)
+        });
 
         AuctionParameters memory auctionParameters = AuctionParameters({
             currency: address(0),
@@ -191,8 +206,8 @@ contract ContinuousClearingAuctionIntegrationTest is Test {
             tickSpacing: AUCTION_TICK_SPACING_X96,
             validationHook: address(0),
             floorPrice: FLOOR_PRICE_X96,
-            requiredCurrencyRaised: 1 ether,
-            auctionStepsData: abi.encodePacked(uint24(5_000_000), uint40(2))
+            requiredCurrencyRaised: REQUIRED_CURRENCY_RAISED,
+            auctionStepsData: hex"000f17000000009700135000000000760014e8000000006d001657000000006600174000000000620017fc000000005f0018c5000000005c001951000000005a0019e50000000058001a310000000057001acf0000000055001b2000000000542dc6b90000000001"
         });
 
         MigratorParameters memory parameters = MigratorParameters({

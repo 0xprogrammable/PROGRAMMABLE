@@ -48,7 +48,9 @@
         "ContinuousClearingAuctionIntegration.t.sol",
         "OfficialLaunchPathIntegration.t.sol",
         "PlatformFeeHookV1.t.sol",
-        "PlatformFeeHookInvariant.t.sol"
+        "PlatformFeeHookInvariant.t.sol",
+        "tests/auction-transaction.test.ts",
+        "app/api/launch/preflight/route.ts"
       ],
       "humanSummary": "Bids establish the opening price and the auction proceeds seed a locked Uniswap v4 position."
     },

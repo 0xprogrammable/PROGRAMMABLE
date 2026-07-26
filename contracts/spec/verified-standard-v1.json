@@ -18,7 +18,25 @@
   "launch": {
     "implementation": "Uniswap LiquidityLauncher v3 with Continuous Clearing Auction and LBPStrategy v3.1",
     "atomicCreationAndDistribution": true,
-    "directPoolLaunch": false
+    "directPoolLaunch": false,
+    "frontendTransactionPath": "implemented-fail-closed-until-verified-deployment",
+    "auctionPolicy": {
+      "auctionSupplyPercent": 50,
+      "reservedForLpPercent": 50,
+      "auctionProceedsToLpPercent": 100,
+      "ccaProtocolFeeController": "0x0000000000000000000000000000000000000000",
+      "durationBlocks": 1200,
+      "startDelayBlocks": 100,
+      "claimDelayBlocks": 0,
+      "migrationDelayBlocks": 1,
+      "emissionSteps": 12,
+      "finalBlockSupplyPercent": 30,
+      "convexityAlpha": 1.2,
+      "floorInput": "minimum-fully-diluted-valuation-in-native-eth",
+      "graduation": "auction-supply-clears-at-snapped-floor-price",
+      "unsoldTokenRecipient": "launch-creator",
+      "migrationDustRecipient": "launch-creator"
+    }
   },
   "pool": {
     "protocol": "Uniswap v4",

@@ -7,6 +7,11 @@
       "commit": "e4660afe4f820f4a39181c7ea1f9bce6c423499f"
     },
     {
+      "name": "Uniswap Liquidity Launcher SDK 1.0.1",
+      "repository": "https://github.com/Uniswap/sdks.git",
+      "commit": "57f126ee4ae5d435938569ad22c489e4a0262ca2"
+    },
+    {
       "name": "Uniswap Continuous Clearing Auction",
       "repository": "https://github.com/Uniswap/continuous-clearing-auction.git",
       "commit": "6c9e559e63a7a141a4fe4bd5aa0f47fee1354b58"

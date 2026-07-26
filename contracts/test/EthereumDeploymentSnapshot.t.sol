@@ -3,6 +3,16 @@ pragma solidity 0.8.26;
 
 import { Test } from "forge-std/Test.sol";
 
+interface ILBPStrategyConfiguration {
+    function poolManager() external view returns (address);
+    function positionManager() external view returns (address);
+    function initializerFactory() external view returns (address);
+}
+
+interface IContinuousClearingAuctionFactoryConfiguration {
+    function protocolFeeController() external view returns (address);
+}
+
 contract EthereumDeploymentSnapshotTest is Test {
     uint256 internal constant SNAPSHOT_BLOCK = 25_612_664;
 
@@ -42,6 +52,18 @@ contract EthereumDeploymentSnapshotTest is Test {
         assertEq(CCA_FACTORY.codehash, 0xa1d2a90564f4f63580b25de42efaff92505c254b00fc666f65ab38126cce5cfa, "CCAFactory");
         assertEq(
             UERC20_FACTORY.codehash, 0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb, "UERC20Factory"
+        );
+    }
+
+    function test_officialAuctionStackMatchesLauncherPolicy() public view {
+        ILBPStrategyConfiguration strategy = ILBPStrategyConfiguration(LBP_STRATEGY);
+        assertEq(strategy.poolManager(), POOL_MANAGER, "LBP PoolManager");
+        assertEq(strategy.positionManager(), POSITION_MANAGER, "LBP PositionManager");
+        assertEq(strategy.initializerFactory(), CCA_FACTORY, "LBP initializer factory");
+        assertEq(
+            IContinuousClearingAuctionFactoryConfiguration(CCA_FACTORY).protocolFeeController(),
+            address(0),
+            "CCA protocol fee controller"
         );
     }
 }

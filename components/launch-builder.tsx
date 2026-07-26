@@ -183,6 +183,12 @@ function LaunchBuilderForm({
   const { wallet, openWallet, sendTransaction } = useWallet();
   const [draft, setDraft] = useState<LaunchDraft>(() => ({
     ...initialDraft,
+    ...(initialDraft.liquidityMode === "auction"
+      ? {
+          auctionSalePercent: "50",
+          auctionLiquidityPercent: "100",
+        }
+      : {}),
     lpFeePercent: initialDraft.selectedBehaviors.includes("fixed-fee")
       ? "0.30"
       : initialDraft.lpFeePercent,
@@ -283,11 +289,8 @@ function LaunchBuilderForm({
     }
 
     if (draft.liquidityMode === "auction") {
-      if (!percentageIsValid(draft.auctionSalePercent)) {
-        return "Enter a sale allocation between 0 and 100 percent";
-      }
-      if (!percentageIsValid(draft.auctionLiquidityPercent)) {
-        return "Enter a pool-funding share between 0 and 100 percent";
+      if (!isPositiveNumber(draft.auctionFloorValuationEth)) {
+        return "Enter a minimum valuation greater than zero";
       }
     } else if (
       !isPositiveNumber(draft.directEthAmount) ||
@@ -419,7 +422,6 @@ function LaunchBuilderForm({
 
     let checkedDraft = draft;
     if (
-      draft.liquidityMode === "direct" &&
       !/^0x[a-fA-F0-9]{64}$/.test(draft.launchSalt)
     ) {
       checkedDraft = {
@@ -431,7 +433,7 @@ function LaunchBuilderForm({
       saveLocalDraft(checkedDraft);
     }
 
-    const checkKey = getLaunchCheckKey(
+    let checkKey = getLaunchCheckKey(
       checkedDraft,
       wallet.account,
       wallet.chainId,
@@ -441,7 +443,23 @@ function LaunchBuilderForm({
     setTransactionState(null);
 
     try {
-      const result = await requestLaunchCheck(checkedDraft);
+      let result = await requestLaunchCheck(checkedDraft);
+      if (result.draftPatch) {
+        checkedDraft = {
+          ...checkedDraft,
+          ...result.draftPatch,
+          updatedAt: new Date().toISOString(),
+        };
+        setDraft(checkedDraft);
+        saveLocalDraft(checkedDraft);
+        checkKey = getLaunchCheckKey(
+          checkedDraft,
+          wallet.account,
+          wallet.chainId,
+        );
+        setPreflightLoadingKey(checkKey);
+        result = await requestLaunchCheck(checkedDraft);
+      }
       setPreflightState({ key: checkKey, result });
     } catch (caught) {
       setPreflightState(null);
@@ -466,6 +484,26 @@ function LaunchBuilderForm({
     setPreflightErrorState(null);
     try {
       const refreshed = await requestLaunchCheck(draft);
+      if (refreshed.draftPatch) {
+        const patchedDraft = {
+          ...draft,
+          ...refreshed.draftPatch,
+          updatedAt: new Date().toISOString(),
+        };
+        const patchedKey = getLaunchCheckKey(
+          patchedDraft,
+          wallet.account,
+          wallet.chainId,
+        );
+        setDraft(patchedDraft);
+        saveLocalDraft(patchedDraft);
+        setPreflightState({
+          key: patchedKey,
+          result: refreshed,
+        });
+        setNotice("Auction timing updated");
+        return;
+      }
       setPreflightState({
         key: launchCheckKey,
         result: refreshed,
@@ -483,6 +521,10 @@ function LaunchBuilderForm({
       setNotice(
         refreshed.transaction.kind === "approval"
           ? "Approval submitted"
+          : refreshed.transaction.kind === "lock-setup"
+            ? "LP lock submitted"
+            : refreshed.transaction.kind === "hook-setup"
+              ? "Fee hook submitted"
           : "Launch submitted",
       );
     } catch (caught) {
@@ -669,7 +711,19 @@ function LaunchTypeStep({
               aria-pressed={selected}
               disabled={unavailable}
               onClick={() =>
-                updateDraft(setDraft, { liquidityMode: option.id })
+                updateDraft(setDraft, {
+                  liquidityMode: option.id,
+                  ...(option.id === "auction"
+                    ? {
+                        auctionSalePercent: "50",
+                        auctionLiquidityPercent: "100",
+                        auctionStartBlock: "",
+                        auctionEndBlock: "",
+                        auctionClaimBlock: "",
+                        auctionMigrationBlock: "",
+                      }
+                    : {}),
+                })
               }
             >
               <span className="launch-type-icon" aria-hidden="true">
@@ -940,45 +994,51 @@ function PoolStep({
       <div className="rules-layout">
         <div className="rules-column">
           {draft.liquidityMode === "auction" ? (
-            <div className="rule-card allocation-rule-card">
+            <div className="rule-card allocation-rule-card auction-rule-card">
               <div className="rule-card-heading">
-                <h3>Auction allocation</h3>
+                <h3>Standard auction</h3>
                 <span>No creator ETH</span>
               </div>
-              <div className="two-column-fields">
-                <label className="field">
-                  <span>Supply offered</span>
-                  <div className="input-suffix">
-                    <input
-                      value={draft.auctionSalePercent}
-                      inputMode="decimal"
-                      onChange={(event) =>
-                        updateDraft(setDraft, {
-                          auctionSalePercent: event.target.value,
-                        })
-                      }
-                    />
-                    <span>%</span>
-                  </div>
-                </label>
-                <label className="field">
-                  <span>Proceeds to pool</span>
-                  <div className="input-suffix">
-                    <input
-                      value={draft.auctionLiquidityPercent}
-                      inputMode="decimal"
-                      onChange={(event) =>
-                        updateDraft(setDraft, {
-                          auctionLiquidityPercent: event.target.value,
-                        })
-                      }
-                    />
-                    <span>%</span>
-                  </div>
-                </label>
-              </div>
+              <label className="field auction-valuation-field">
+                <span>Minimum valuation</span>
+                <div className="input-suffix">
+                  <input
+                    value={draft.auctionFloorValuationEth}
+                    inputMode="decimal"
+                    placeholder="10"
+                    onChange={(event) =>
+                      updateDraft(setDraft, {
+                        auctionFloorValuationEth: event.target.value,
+                        auctionStartBlock: "",
+                        auctionEndBlock: "",
+                        auctionClaimBlock: "",
+                        auctionMigrationBlock: "",
+                      })
+                    }
+                  />
+                  <span>ETH</span>
+                </div>
+              </label>
+              <dl className="auction-policy">
+                <div>
+                  <dt>Auction</dt>
+                  <dd>50% supply</dd>
+                </div>
+                <div>
+                  <dt>LP reserve</dt>
+                  <dd>50% supply</dd>
+                </div>
+                <div>
+                  <dt>Pool funding</dt>
+                  <dd>All proceeds</dd>
+                </div>
+                <div>
+                  <dt>Duration</dt>
+                  <dd>4 hours</dd>
+                </div>
+              </dl>
               <p className="rule-note">
-                Bids set the opening price and fund the first pool
+                Any tokens left after the auction and pool setup return to the creator
               </p>
             </div>
           ) : (
@@ -1236,6 +1296,22 @@ function ReviewStep({
     preparedTransaction?.kind === "launch";
   const submitPrepared =
     Boolean(preparedTransaction) && !transactionHash;
+  const preparedLabel =
+    preparedTransaction?.kind === "approval"
+      ? "Approve token"
+      : preparedTransaction?.kind === "lock-setup"
+        ? "Create LP lock"
+        : preparedTransaction?.kind === "hook-setup"
+          ? "Create fee hook"
+          : "Launch token";
+  const submittedLabel =
+    preparedTransaction?.kind === "approval"
+      ? "Approval submitted"
+      : preparedTransaction?.kind === "lock-setup"
+        ? "LP lock submitted"
+        : preparedTransaction?.kind === "hook-setup"
+          ? "Fee hook submitted"
+          : "Launch submitted";
   const primaryLabel = preflightLoading
     ? "Checking"
     : transactionSending
@@ -1243,11 +1319,11 @@ function ReviewStep({
       : launchSubmitted
         ? "Launch submitted"
         : transactionHash
-          ? "Check approval"
+          ? preparedTransaction?.kind === "approval"
+            ? "Check approval"
+            : "Continue setup"
           : submitPrepared
-            ? preparedTransaction?.kind === "approval"
-              ? "Approve token"
-              : "Launch token"
+            ? preparedLabel
             : walletConnected
               ? preflight
                 ? "Check again"
@@ -1295,7 +1371,7 @@ function ReviewStep({
             </strong>
             <span>
               {draft.liquidityMode === "auction"
-                ? `${draft.auctionSalePercent}% of supply offered, ${draft.auctionLiquidityPercent}% of proceeds for pool funding, LP permanently locked`
+                ? `${draft.auctionSalePercent}% auctioned, 50% reserved for liquidity, all auction proceeds allocated to the pool, ${draft.auctionFloorValuationEth} ETH minimum valuation`
                 : `${draft.directEthAmount} ETH and ${draft.directTokenAmount} tokens at ${draft.directTokensPerEth} tokens per ETH, LP permanently locked`}
             </span>
           </dd>
@@ -1380,9 +1456,7 @@ function ReviewStep({
           target="_blank"
           rel="noreferrer"
         >
-          {preparedTransaction?.kind === "approval"
-            ? "Approval submitted"
-            : "Launch submitted"}
+          {submittedLabel}
           <span>{shortenAddress(transactionHash)}</span>
         </a>
       ) : null}

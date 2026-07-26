@@ -5,6 +5,7 @@ flowchart LR
     Creator[Launch creator]
     OfficialLauncher[Uniswap LiquidityLauncher]
     Auction[Continuous Clearing Auction]
+    AuctionFeeController[CCA protocol fee controller: zero]
     Strategy[Uniswap LBPStrategy]
     DirectLauncher[DirectLiquidityLauncherV1]
     TokenFactory[Uniswap UERC20Factory]
@@ -19,6 +20,7 @@ flowchart LR
     Creator -->|auction composition| OfficialLauncher
     OfficialLauncher --> TokenFactory
     OfficialLauncher --> Auction
+    AuctionFeeController --> Auction
     Auction --> Strategy
     Strategy -->|authorized pool initialization| PoolManager
 
@@ -49,6 +51,7 @@ flowchart TD
     DirectInitialization[Direct pool initialization] -->|only| DirectLiquidityLauncherV1
     ExistingTokenLaunch[Existing token launch] -->|only| FactoryRecordedCreator[Factory recorded creator]
     FeeRate[Platform fee rate] -->|fixed in bytecode| TenBp[0.10%]
+    AuctionProceeds[Auction proceeds] -->|zero CCA protocol fee controller| PoolFunding[100% to pool funding]
     PoolConfig[Pool configuration] -->|fixed in bytecode| PoolId[One PoolId]
     PlatformCollection[Platform fee collection] -->|any address| Treasury[Immutable platform treasury]
     LPCollection[LP fee collection] -->|any address| Creator[Immutable launch creator]
