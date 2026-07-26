@@ -20,14 +20,16 @@ const [
   auctionStandard,
   behaviorCatalog,
   deployment,
+  appDeployments,
 ] = await Promise.all([
     readJson(specificationDirectory, "launch-variants.v1.json"),
     readJson(specificationDirectory, "direct-standard-v1.json"),
     readJson(specificationDirectory, "existing-uerc20-standard-v1.json"),
     readJson(specificationDirectory, "verified-standard-v1.json"),
-    readJson(specificationDirectory, "behavior-modules.v1.json"),
-    readJson(configurationDirectory, "deployment-inputs.v1.json"),
-  ]);
+  readJson(specificationDirectory, "behavior-modules.v1.json"),
+  readJson(configurationDirectory, "deployment-inputs.v1.json"),
+  readJson(configurationDirectory, "app-deployments.v1.json"),
+]);
 
 assert(catalog.schemaVersion === 1, "Unsupported launch catalog schema");
 assert(Array.isArray(catalog.variants), "Launch variants are missing");
@@ -150,6 +152,54 @@ assert(
     behaviorIds.has("M-01") &&
     behaviorIds.has("C-01"),
   "A required V1 behavior module is missing",
+);
+
+assert(
+  appDeployments.schemaVersion === 1,
+  "Unsupported app deployment schema",
+);
+assert(
+  appDeployments.production.chainId ===
+    deployment.network.productionChainId,
+  "App production chain differs from deployment inputs",
+);
+assert(
+  appDeployments.rehearsal.chainId ===
+    deployment.network.rehearsalChainId,
+  "App rehearsal chain differs from deployment inputs",
+);
+
+for (const [environment, manifest] of Object.entries({
+  production: appDeployments.production,
+  rehearsal: appDeployments.rehearsal,
+})) {
+  const ready = manifest.status === "ready";
+  for (const field of [
+    "platformFeeHookFactory",
+    "lockedPositionFeeForwarderFactory",
+    "directLiquidityLauncher",
+  ]) {
+    assert(
+      ready
+        ? /^0x[a-fA-F0-9]{40}$/.test(manifest[field])
+        : manifest[field] === null ||
+            /^0x[a-fA-F0-9]{40}$/.test(manifest[field]),
+      `${environment}.${field} is invalid`,
+    );
+    assert(
+      ready
+        ? /^0x[a-fA-F0-9]{64}$/.test(
+            manifest.runtimeCodeHashes[field],
+          )
+        : manifest.runtimeCodeHashes[field] === null,
+      `${environment}.${field} code hash does not match status`,
+    );
+  }
+}
+
+assert(
+  appDeployments.production.status === "not-deployed",
+  "Mainnet transaction preparation must remain disabled until a verified deployment is recorded",
 );
 
 console.log(

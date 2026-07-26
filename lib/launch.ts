@@ -137,10 +137,12 @@ export type LaunchDraft = {
   auctionLiquidityPercent: string;
   directEthAmount: string;
   directTokenAmount: string;
+  directTokensPerEth: string;
   selectedBehaviors: BehaviorId[];
   lpFeePercent: string;
   customHookAddress: string;
   customHookSource: string;
+  launchSalt: string;
   updatedAt: string;
 };
 
@@ -161,10 +163,12 @@ export function createEmptyDraft(): LaunchDraft {
     auctionLiquidityPercent: "80",
     directEthAmount: "",
     directTokenAmount: "",
+    directTokensPerEth: "",
     selectedBehaviors: ["fixed-fee"],
     lpFeePercent: "0.30",
     customHookAddress: "",
     customHookSource: "",
+    launchSalt: "",
     updatedAt: new Date(0).toISOString(),
   };
 }
@@ -228,7 +232,7 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     `Liquidity path: ${
       draft.liquidityMode === "auction"
         ? `Auction funded v4 liquidity (${draft.auctionSalePercent || "unset"}% of supply offered; ${draft.auctionLiquidityPercent || "unset"}% of proceeds for pool funding)`
-        : `Direct v4 pool (${draft.directEthAmount || "unset"} ETH and ${draft.directTokenAmount || "unset"} tokens)`
+        : `Direct v4 pool (${draft.directEthAmount || "unset"} ETH and ${draft.directTokenAmount || "unset"} tokens at ${draft.directTokensPerEth || "unset"} tokens per ETH)`
     }`,
     `Token behavior: ${
       selected.length > 0

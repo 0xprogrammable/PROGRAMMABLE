@@ -10,11 +10,17 @@ Launcher is a focused interface for launching tokens on Uniswap v4. It keeps the
 - A curated behavior library for v4 hook concepts.
 - Read-only ERC-20 metadata inspection on Ethereum mainnet.
 - Privy-managed sign-in with MetaMask, Phantom, WalletConnect, and an embedded Ethereum wallet for users without one.
+- Exact integer-only opening-price calculation for the protocol-tested direct launch.
+- A server-built transaction preflight that verifies chain, runtime bytecode, immutable contract settings, token provenance, balance, allowance, gas and the complete `eth_call` before opening the wallet.
 - Local launch drafts and an address-specific Profile view.
 
 ## Deliberate boundary
 
-This version does not deploy contracts or ask a wallet to sign a transaction. Contract deployment stays disabled until the launch factory, hook compositions, fee routing, simulation gates, and production recipient are reviewed and connected. A saved launch plan is a local draft, not an onchain asset.
+The application can prepare a transaction only from its own fixed contract ABI and machine-readable deployment manifest. It never accepts a transaction target or calldata from the browser. Mainnet preparation currently fails closed because the production manifest is deliberately marked `not-deployed`. Once a reviewed deployment is recorded with exact runtime-code hashes, the same preflight can return either an exact token approval or a simulated launch call for explicit wallet review.
+
+Auction transactions remain disabled until the block schedule, floor price, raise target, auction steps and migration composition are part of the launch form. A saved launch plan is a local draft, not an onchain asset.
+
+The complete browser-to-wallet trust boundary is documented in [`docs/frontend-transaction-preflight.md`](docs/frontend-transaction-preflight.md).
 
 No interface can guarantee how every third-party scanner will classify a new v4 pool. The standard existing-token path therefore accepts only tokens whose CREATE2 origin can be reproduced through the configured Uniswap UERC20Factory and whose recorded creator is connected. Transfer taxes, blacklists, rebases, sell restrictions, mutable supply controls, opaque proxies, and arbitrary ERC-20 contracts remain outside that path.
 
@@ -59,4 +65,4 @@ npm run contracts:official-deployments
 npm run contracts:sepolia:validate
 ```
 
-The suite covers all four swap modes, new-token and existing-token budget fuzzing, UERC20 factory provenance, creator authorization, stateful invariants, the full auction-to-v4 migration, locked direct liquidity, fee collection in ERC-20 and native ETH, factory front-running regression and pinned Ethereum deployment snapshots. The deployment check also compares 24 required Mainnet and Sepolia records with Uniswap’s current machine-readable registry, including each active address and official source-code link. None of the three variants is audited or deployed; the open mainnet gates are documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).
+The suite covers all four swap modes, new-token and existing-token budget fuzzing, UERC20 factory provenance, creator authorization, stateful invariants, the full auction-to-v4 migration, locked direct liquidity, fee collection in ERC-20 and native ETH, factory front-running regression, exact frontend price math, hook-address mining and pinned Ethereum deployment snapshots. The deployment check also compares 24 required Mainnet and Sepolia records with Uniswap’s current machine-readable registry, including each active address and official source-code link. None of the three variants is audited or deployed; the open mainnet gates are documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).

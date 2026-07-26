@@ -3,6 +3,7 @@
 import {
   PrivyProvider,
   usePrivy,
+  useSendTransaction as usePrivySendTransaction,
   useWallets,
   type ConnectedWallet,
   type PrivyClientConfig,
@@ -19,6 +20,7 @@ import {
   type ReactNode,
 } from "react";
 import { mainnet } from "viem/chains";
+import type { Address, Hex } from "viem";
 
 type WalletState = {
   account: `0x${string}`;
@@ -32,6 +34,13 @@ type WalletContextValue = {
   connecting: boolean;
   openWallet: () => void;
   disconnect: () => void;
+  sendTransaction: (transaction: {
+    to: Address;
+    data: Hex;
+    value: string;
+    gasLimit: string;
+    kind: "approval" | "launch";
+  }) => Promise<Hex>;
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -114,6 +123,8 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     ready,
     user,
   } = usePrivy();
+  const { sendTransaction: sendPrivyTransaction } =
+    usePrivySendTransaction();
   const { ready: walletsReady, wallets } = useWallets();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -208,6 +219,56 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     });
   }, [linkWallet]);
 
+  const sendTransaction = useCallback(
+    async (transaction: {
+      to: Address;
+      data: Hex;
+      value: string;
+      gasLimit: string;
+      kind: "approval" | "launch";
+    }) => {
+      if (!connectedWallet || !wallet) {
+        throw new Error("Connect an Ethereum wallet before continuing");
+      }
+      if (wallet.chainId !== "0x1") {
+        await connectedWallet.switchChain(mainnet.id);
+      }
+
+      const result = await sendPrivyTransaction(
+        {
+          to: transaction.to,
+          data: transaction.data,
+          value: BigInt(transaction.value),
+          gasLimit: BigInt(transaction.gasLimit),
+          chainId: mainnet.id,
+        },
+        {
+          address: wallet.account,
+          uiOptions: {
+            description:
+              transaction.kind === "approval"
+                ? "Approve the exact token amount reserved for liquidity"
+                : "Create the token and open its locked Uniswap v4 position",
+            buttonText:
+              transaction.kind === "approval"
+                ? "Approve token"
+                : "Launch token",
+            successHeader:
+              transaction.kind === "approval"
+                ? "Approval submitted"
+                : "Launch submitted",
+          },
+        },
+      );
+      return result.hash;
+    },
+    [
+      connectedWallet,
+      sendPrivyTransaction,
+      wallet,
+    ],
+  );
+
   const value = useMemo<WalletContextValue>(
     () => ({
       wallet,
@@ -215,12 +276,14 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       connecting: !ready || (authenticated && !walletsReady),
       openWallet,
       disconnect,
+      sendTransaction,
     }),
     [
       authenticated,
       disconnect,
       openWallet,
       ready,
+      sendTransaction,
       wallet,
       walletsReady,
     ],
@@ -256,6 +319,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       connecting: false,
       openWallet: () => setDialogOpen(true),
       disconnect: () => undefined,
+      sendTransaction: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
     }),
     [],
   );
