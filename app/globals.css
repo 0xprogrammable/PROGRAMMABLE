@@ -1129,6 +1129,14 @@ textarea {
   padding-top: 12px;
 }
 
+.dynamic-fee-rule-card small {
+  color: var(--dim);
+  display: block;
+  font-size: 10px;
+  line-height: 1.35;
+  margin-top: 5px;
+}
+
 .fixed-fee-value {
   background: var(--surface-soft);
   border: 1px solid var(--border);
@@ -1229,11 +1237,93 @@ textarea {
   padding: 10px 11px;
 }
 
+.behavior-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 .behavior-tier {
   color: var(--dim);
   font-size: 9px;
   text-align: right;
   text-transform: uppercase;
+}
+
+.behavior-pagination {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  color: var(--dim);
+  display: flex;
+  font-size: 10px;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.behavior-pagination > div {
+  display: flex;
+  gap: 4px;
+}
+
+.behavior-pagination button {
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 10px;
+  min-height: 30px;
+  padding: 0 9px;
+}
+
+.behavior-pagination button:disabled {
+  color: var(--dim);
+  cursor: default;
+  opacity: 0.45;
+}
+
+@media (min-width: 1180px) {
+  .rules-form-section {
+    padding-bottom: 14px;
+    padding-top: 14px;
+  }
+
+  .rules-form-section .form-section-heading {
+    padding-bottom: 12px;
+  }
+
+  .rules-form-section .rules-layout {
+    margin-top: 12px;
+  }
+
+  .rules-form-section .behavior-picker {
+    padding: 8px 10px;
+  }
+
+  .behavior-grid-review {
+    gap: 6px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 10px;
+  }
+
+  .behavior-grid-review .behavior-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 68px;
+    padding: 7px 9px;
+  }
+
+  .behavior-grid-review .behavior-copy small {
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    overflow: hidden;
+  }
+
+  .behavior-grid-review .behavior-tier {
+    display: none;
+  }
+
+  .behavior-picker .behavior-pagination {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
 }
 
 .custom-hook-fields {

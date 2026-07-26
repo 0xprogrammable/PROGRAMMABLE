@@ -47,6 +47,7 @@ export const STANDARD_AUCTION_START_DELAY_BLOCKS = 100n;
 export const STANDARD_AUCTION_DURATION_BLOCKS = 1_200n;
 export const STANDARD_AUCTION_MIN_PREP_BLOCKS = 20n;
 export const STANDARD_AUCTION_LP_FEE = 3_000;
+export const UNISWAP_V4_DYNAMIC_FEE_FLAG = 8_388_608;
 export const STANDARD_AUCTION_POOL_TICK_SPACING = 60;
 export const STANDARD_AUCTION_TOKEN_DECIMALS = 18;
 export const STANDARD_AUCTION_STEP_COUNT = 12;
@@ -96,6 +97,7 @@ export type StandardAuctionPlan = {
   floorPriceX96: bigint;
   auctionTickSpacing: bigint;
   requiredCurrencyRaised: bigint;
+  poolFee: number;
   schedule: StandardAuctionSchedule;
   steps: AuctionStepInput[];
   auctionParameters: AuctionParameters;
@@ -295,7 +297,9 @@ export function validateStandardAuctionDraft(draft: LaunchDraft) {
   }
   if (
     draft.selectedBehaviors.length !== 1 ||
-    draft.selectedBehaviors[0] !== "fixed-fee"
+    !["fixed-fee", "dynamic-fee"].includes(
+      draft.selectedBehaviors[0],
+    )
   ) {
     throw new LaunchInputError(
       "This behavior needs contract review before an auction can be prepared",
@@ -311,7 +315,9 @@ export function validateStandardAuctionDraft(draft: LaunchDraft) {
     10_000n,
     "the proceeds allocated to liquidity",
   );
-  parseCanonicalPercentage(draft.lpFeePercent, 30n, "the pool fee");
+  if (draft.selectedBehaviors[0] === "fixed-fee") {
+    parseCanonicalPercentage(draft.lpFeePercent, 30n, "the pool fee");
+  }
 
   if (!draft.tokenName.trim()) {
     throw new LaunchInputError("Enter a token name");
@@ -328,6 +334,13 @@ export function validateStandardAuctionDraft(draft: LaunchDraft) {
   if (draft.tokenDescription.trim().length > 1_000) {
     throw new LaunchInputError("The token description is too long");
   }
+}
+
+export function getStandardAuctionPoolFee(draft: LaunchDraft) {
+  validateStandardAuctionDraft(draft);
+  return draft.selectedBehaviors[0] === "dynamic-fee"
+    ? UNISWAP_V4_DYNAMIC_FEE_FLAG
+    : STANDARD_AUCTION_LP_FEE;
 }
 
 function callSdk<T>(callback: () => T): T {
@@ -485,6 +498,7 @@ export function buildStandardAuctionPlan({
   }
 
   const economics = buildStandardAuctionEconomics(draft);
+  const poolFee = getStandardAuctionPoolFee(draft);
   const {
     totalSupply,
     auctionSupply,
@@ -533,7 +547,7 @@ export function buildStandardAuctionPlan({
     recipient: account,
     positionRecipient,
     poolParameters: {
-      fee: STANDARD_AUCTION_LP_FEE,
+      fee: poolFee,
       tickSpacing: STANDARD_AUCTION_POOL_TICK_SPACING,
       hook,
     },
@@ -599,6 +613,7 @@ export function buildStandardAuctionPlan({
     floorPriceX96,
     auctionTickSpacing,
     requiredCurrencyRaised: graduationAmount,
+    poolFee,
     schedule,
     steps,
     auctionParameters,
@@ -609,7 +624,7 @@ export function buildStandardAuctionPlan({
     poolId: computeLbpPoolId(
       ZERO_ADDRESS,
       predictedToken,
-      STANDARD_AUCTION_LP_FEE,
+      poolFee,
       STANDARD_AUCTION_POOL_TICK_SPACING,
       hook,
     ),

@@ -306,6 +306,12 @@ function LaunchBuilderForm({
     ) {
       return "Enter a pool fee between 0 and 100 percent";
     }
+    if (
+      draft.selectedBehaviors.includes("dynamic-fee") &&
+      draft.liquidityMode !== "auction"
+    ) {
+      return "Bounded dynamic fees are available with an auction launch";
+    }
 
     if (
       draft.selectedBehaviors.includes("custom-hook") &&
@@ -722,7 +728,12 @@ function LaunchTypeStep({
                         auctionClaimBlock: "",
                         auctionMigrationBlock: "",
                       }
-                    : {}),
+                    : draft.selectedBehaviors.includes("dynamic-fee")
+                      ? {
+                          selectedBehaviors: ["fixed-fee"] as BehaviorId[],
+                          lpFeePercent: "0.30",
+                        }
+                      : {}),
                 })
               }
             >
@@ -972,8 +983,18 @@ function PoolStep({
   onToggleBehavior: (id: BehaviorId) => void;
 }) {
   const [activeTier, setActiveTier] = useState<BehaviorTier>("standard");
+  const [behaviorPage, setBehaviorPage] = useState(0);
   const visibleBehaviors = behaviorDefinitions.filter(
     (behavior) => behavior.tier === activeTier,
+  );
+  const behaviorPageSize = activeTier === "review" ? 6 : visibleBehaviors.length;
+  const behaviorPageCount = Math.max(
+    1,
+    Math.ceil(visibleBehaviors.length / behaviorPageSize),
+  );
+  const pagedBehaviors = visibleBehaviors.slice(
+    behaviorPage * behaviorPageSize,
+    (behaviorPage + 1) * behaviorPageSize,
   );
   const behaviorTiers: { id: BehaviorTier; label: string }[] = [
     { id: "standard", label: "Standard" },
@@ -1106,6 +1127,22 @@ function PoolStep({
               <strong className="fixed-fee-value">0.30%</strong>
             </div>
           ) : null}
+
+          {draft.selectedBehaviors.includes("dynamic-fee") ? (
+            <div className="rule-card fee-rule-card dynamic-fee-rule-card">
+              <div>
+                <h3>Bounded pool fee</h3>
+                <p>
+                  Rises with recent onchain price movement and updates at most
+                  once per block
+                </p>
+                <small>
+                  It changes the fee only and does not claim to prevent MEV
+                </small>
+              </div>
+              <strong className="fixed-fee-value">0.30–1.00%</strong>
+            </div>
+          ) : null}
         </div>
 
         <div className="rule-card behavior-picker">
@@ -1132,7 +1169,10 @@ function PoolStep({
                     role="tab"
                     aria-selected={activeTier === tier.id}
                     className={activeTier === tier.id ? "active" : undefined}
-                    onClick={() => setActiveTier(tier.id)}
+                    onClick={() => {
+                      setActiveTier(tier.id);
+                      setBehaviorPage(0);
+                    }}
                   >
                     {tier.label}
                     {selectedCount > 0 ? <span>{selectedCount}</span> : null}
@@ -1142,16 +1182,53 @@ function PoolStep({
             </div>
           </div>
 
-          <div className="behavior-grid" role="tabpanel">
-            {visibleBehaviors.map((behavior) => (
+          <div
+            className={`behavior-grid behavior-grid-${activeTier}`}
+            role="tabpanel"
+          >
+            {pagedBehaviors.map((behavior) => (
               <BehaviorRow
                 key={behavior.id}
                 behavior={behavior}
                 selected={draft.selectedBehaviors.includes(behavior.id)}
+                disabled={
+                  behavior.id === "dynamic-fee" &&
+                  draft.liquidityMode !== "auction"
+                }
                 onToggle={onToggleBehavior}
               />
             ))}
           </div>
+
+          {behaviorPageCount > 1 ? (
+            <div className="behavior-pagination" aria-label="Behavior pages">
+              <span>
+                {behaviorPage + 1} of {behaviorPageCount}
+              </span>
+              <div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setBehaviorPage((current) => Math.max(0, current - 1))
+                  }
+                  disabled={behaviorPage === 0}
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setBehaviorPage((current) =>
+                      Math.min(behaviorPageCount - 1, current + 1),
+                    )
+                  }
+                  disabled={behaviorPage === behaviorPageCount - 1}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {activeTier === "custom" &&
           draft.selectedBehaviors.includes("custom-hook") ? (
@@ -1200,10 +1277,12 @@ function PoolStep({
 function BehaviorRow({
   behavior,
   selected,
+  disabled,
   onToggle,
 }: {
   behavior: (typeof behaviorDefinitions)[number];
   selected: boolean;
+  disabled: boolean;
   onToggle: (id: BehaviorId) => void;
 }) {
   return (
@@ -1211,6 +1290,7 @@ function BehaviorRow({
       className={`behavior-row ${selected ? "selected" : ""}`}
       type="button"
       aria-pressed={selected}
+      disabled={disabled}
       onClick={() => onToggle(behavior.id)}
     >
       <span className="choice-indicator" aria-hidden="true">
@@ -1218,10 +1298,16 @@ function BehaviorRow({
       </span>
       <span className="behavior-copy">
         <strong>{behavior.name}</strong>
-        <small>{behavior.description}</small>
+        <small>
+          {disabled
+            ? `Auction only. ${behavior.description}`
+            : behavior.description}
+        </small>
       </span>
       <span className="behavior-tier">
-        {getBehaviorTierLabel(behavior.tier)}
+        {disabled
+          ? "Auction only"
+          : getBehaviorTierLabel(behavior.tier)}
       </span>
     </button>
   );
@@ -1402,6 +1488,8 @@ function ReviewStep({
             <span>
               {draft.selectedBehaviors.includes("fixed-fee")
                 ? `${draft.lpFeePercent}% pool fee, LP fees to creator`
+                : draft.selectedBehaviors.includes("dynamic-fee")
+                  ? "0.30–1.00% bounded pool fee, LP fees to creator"
                 : "Pool fee follows the selected behavior, LP fees to creator"}
             </span>
           </dd>

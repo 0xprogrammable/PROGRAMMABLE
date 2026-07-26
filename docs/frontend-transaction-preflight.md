@@ -40,15 +40,16 @@ The existing-token path accepts only a token whose address can be reconstructed 
 
 ## Auction flow
 
-1. Fix the standard policy at 50% auction supply, 50% LP reserve, 100% proceeds allocation, a 0.30% LP fee and a full-range position
+1. Fix the allocation policy at 50% auction supply, 50% LP reserve, 100% proceeds allocation and a full-range position
 2. Save a schedule beginning 100 Ethereum blocks after preparation, running for 1,200 blocks, becoming claimable at the end block and migratable one block later
 3. Convert the minimum valuation in ETH to raw currency per raw token in Q96, snap it to the official CCA tick boundary and derive the currency required to clear the auction half at that floor
 4. Derive the official 12-step convex emission curve with 30% of supply emitted in the final block
 5. Match the installed Liquidity Launcher SDK addresses to the pinned official deployment snapshot and verify current runtime bytecode
-6. Predict the UERC20 from the connected creator, then derive the permanent position recipient and exact v4 hook address
-7. Prepare and simulate the deterministic LP-lock deployment if it does not exist
-8. Prepare and simulate the deterministic fixed-fee hook deployment if it does not exist
-9. Build the official LiquidityLauncher multicall that atomically creates the token and distributes the full supply to LBPStrategy
-10. Check that the destination pool is neither initialized nor reserved, predict the CCA address and simulate the exact atomic launch
+6. Select either the fixed 0.30% hook or the separately tested 0.30–1.00% bounded dynamic hook, then verify that family’s factory bytecode
+7. Predict the UERC20 from the connected creator, then derive the permanent position recipient and exact v4 hook address with that family’s callback mask
+8. Prepare and simulate the deterministic LP-lock deployment if it does not exist
+9. Prepare and simulate the deterministic hook deployment if it does not exist
+10. Build the official LiquidityLauncher multicall that atomically creates the token and distributes the full supply to LBPStrategy
+11. Check that the destination pool is neither initialized nor reserved, predict the CCA address and simulate the exact atomic launch
 
 The browser repeats preflight before every setup or launch signature. If the saved schedule is too close to starting, the server replaces it with a fresh canonical window before any wallet prompt opens.

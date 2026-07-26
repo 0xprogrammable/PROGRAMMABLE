@@ -17,6 +17,7 @@ import {
   STANDARD_AUCTION_LP_FEE,
   STANDARD_AUCTION_POOL_TICK_SPACING,
   STANDARD_AUCTION_START_DELAY_BLOCKS,
+  UNISWAP_V4_DYNAMIC_FEE_FLAG,
 } from "../lib/auction-transaction";
 import { createEmptyDraft } from "../lib/launch";
 
@@ -177,6 +178,28 @@ describe("standard auction calldata", () => {
       configData: plan.configData,
     });
     expect(distributeCall.args?.[2]).toBe(launchSalt);
+  });
+
+  it("uses the v4 dynamic fee flag for the bounded fee behavior", () => {
+    const addresses = getOfficialEthereumAuctionAddresses()!;
+    const plan = buildStandardAuctionPlan({
+      draft: {
+        ...auctionDraft(),
+        selectedBehaviors: ["dynamic-fee"],
+      },
+      account,
+      predictedToken,
+      hook,
+      positionRecipient,
+      addresses,
+    });
+
+    expect(plan.poolFee).toBe(UNISWAP_V4_DYNAMIC_FEE_FLAG);
+    expect(plan.migratorParameters.poolParameters).toEqual({
+      fee: UNISWAP_V4_DYNAMIC_FEE_FLAG,
+      tickSpacing: STANDARD_AUCTION_POOL_TICK_SPACING,
+      hook,
+    });
   });
 
   it("derives a deterministic, launch-specific LP lock salt", () => {

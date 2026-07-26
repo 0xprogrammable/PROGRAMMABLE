@@ -1,13 +1,14 @@
 # Mainnet readiness gate
 
-Current state: blocked by design. The auction, new-token direct and existing-UERC20 direct variants are green locally and on pinned read-only Ethereum and Sepolia forks, but they are not audited or deployed.
+Current state: blocked by design. The fixed-fee auction, bounded dynamic-fee auction, new-token direct and existing-UERC20 direct variants are green locally and on pinned read-only Ethereum and Sepolia forks, but they are not audited or deployed.
 
 ## Required before Sepolia
 
-- Fund `0x2Bb333d48DFAF1596D9036671d2E43168994249E` with Sepolia ETH. The latest 2026-07-26 dry run estimated 0.025241416086645184 Sepolia ETH; 0.04 provides a rehearsal margin, subject to a fresh estimate
+- Fund `0x2Bb333d48DFAF1596D9036671d2E43168994249E` with Sepolia ETH. The latest 2026-07-26 dry run estimated 0.028910040635761992 Sepolia ETH; 0.04 provides a rehearsal margin at that gas price, subject to a fresh estimate
 - Sign the rehearsal from that address through a local Foundry keystore or hardware wallet; never place its private key in this repository
-- Rehearse the three-contract infrastructure deployment and verify its source and runtime bytecode
+- Rehearse the four-contract infrastructure deployment and verify its source and runtime bytecode
 - Rehearse the fixed four-hour CCA schedule, 50/50 token allocation, minimum-valuation floor, exact factory, salt and protocol-fee-controller path
+- Rehearse the bounded dynamic-fee auction, migration, cross-block fee update and fixed 1.00% ceiling
 - Rehearse the direct launch, bidirectional swaps and separate platform/creator fee collection
 - Rehearse the existing-UERC20 launch with factory provenance, recorded-creator authorization, bidirectional swaps and separate platform/creator fee collection
 - Rehearse the frontend-generated direct approval and launch calldata against the deployed Sepolia contracts and bind the evidence to the exact commit
@@ -18,7 +19,7 @@ The platform treasury is fixed to `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. 
 
 ## Required before mainnet
 
-- Complete Sepolia auction, new-token direct and existing-UERC20 direct launches, migration where applicable, swaps, fee collection and failure-recovery rehearsals
+- Complete Sepolia fixed-fee auction, bounded dynamic-fee auction, new-token direct and existing-UERC20 direct launches, migration where applicable, swaps, fee collection and failure-recovery rehearsals
 - Commission an independent audit and resolve every accepted finding
 - Run `npm run contracts:official-deployments` against Uniswap’s current registry, then recheck runtime bytecode
 - Verify the factories, direct launcher and every launched hook source on the block explorer
@@ -38,6 +39,6 @@ No private key is embedded in the repository. The public treasury and test-walle
 
 ## Frontend transaction gate
 
-The direct and auction preflights are implemented but intentionally disabled by `config/app-deployments.v1.json`. Direct launch validates integer-only amount and price math, reconstructs existing-UERC20 provenance and prepares the exact approval or atomic launch. Auction launch derives the canonical CCA economics and schedule, predicts the official token and auction, prepares deterministic lock and hook setup, checks pool availability and builds the atomic LiquidityLauncher multicall. Both paths verify official and Launcher runtime bytecode, run the exact `eth_call`, estimate gas and return a fixed transaction for explicit Privy wallet review. The route does not accept a target address or calldata from the browser.
+The direct and auction preflights are implemented but intentionally disabled by `config/app-deployments.v1.json`. Direct launch validates integer-only amount and price math, reconstructs existing-UERC20 provenance and prepares the exact approval or atomic launch. Auction launch derives the canonical CCA economics and schedule, selects the fixed-fee or bounded dynamic-fee hook family, predicts the official token and auction, prepares deterministic lock and hook setup, checks pool availability and builds the atomic LiquidityLauncher multicall. Both paths verify official and Launcher runtime bytecode, run the exact `eth_call`, estimate gas and return a fixed transaction for explicit Privy wallet review. The route does not accept a target address or calldata from the browser.
 
 This is implementation evidence, not deployment evidence. No production transaction can be prepared while the mainnet manifest remains `not-deployed`.

@@ -1,12 +1,12 @@
 # Security properties
 
-This document defines the properties expected from `PlatformFeeHookV1`, `PlatformFeeHookFactoryV1`, `LockedPositionFeeForwarderFactoryV1` and `DirectLiquidityLauncherV1`. It is a testable engineering specification, not an audit certificate.
+This document defines the properties expected from `PlatformFeeHookV1`, `BoundedDynamicFeeHookV1`, their permissionless factories, `LockedPositionFeeForwarderFactoryV1` and `DirectLiquidityLauncherV1`. It is a testable engineering specification, not an audit certificate.
 
 ## Trust boundary
 
-The hook trusts the immutable Uniswap v4 `PoolManager` supplied at deployment. It accepts pool initialization only when the `PoolManager` reports the immutable LBP strategy as the sender. It accepts swap callbacks only from that `PoolManager` and only for its precomputed `PoolId`.
+Each hook trusts the immutable Uniswap v4 `PoolManager` supplied at deployment. It accepts pool initialization only when the `PoolManager` reports its immutable launcher or LBP strategy as the sender. It accepts swap callbacks only from that `PoolManager` and only for its precomputed `PoolId`.
 
-The hook has no owner, proxy, pause function or mutable parameter. The factory is permissionless and has no administrator. A factory deployment proves provenance, not production approval.
+Neither hook has an owner, proxy, pause function or mutable parameter. The bounded dynamic hook stores only its latest reference block, reference tick and installed LP fee. Its fee formula and bounds remain fixed in bytecode. Both factories are permissionless and have no administrator. A factory deployment proves provenance, not production approval.
 
 Initial LP NFTs are assigned to the official Uniswap `PositionFeesForwarder`, deployed through Launcher’s deterministic factory. The forwarder has the zero address as operator and `type(uint256).max` as its approval block. Its immutable fee recipient is the launch creator. This gives the creator the LP fee economics without a practical position-transfer or liquidity-removal path.
 
@@ -28,6 +28,11 @@ The standard auction path calls the official LiquidityLauncher directly from the
 | FEE-03 | Anyone may trigger redemption, but no caller can redirect proceeds. | immutable `feeRecipient`; `test_anyoneCanCollectButCannotRedirectFees` |
 | FEE-04 | Both ERC-20 and native-currency claims redeem to the same immutable recipient. | full migration and post-migration swap integration test |
 | FLAGS-01 | The hook address has exactly `beforeInitialize`, `afterSwap` and `afterSwapReturnDelta`. | factory mask validation; `test_permissions_areExact`; invariant suite |
+| DFEE-01 | The bounded dynamic LP fee is always between 3,000 and 10,000 pips, or 0.30% and 1.00%. | `feeForTickMovement`; unit fuzz test; dynamic invariant suite |
+| DFEE-02 | The first swap in a later block updates the fee from absolute reference-tick movement; further swaps in that block cannot update it again. | `referenceBlock`; prior-block and same-block unit tests; dynamic invariant handler |
+| DFEE-03 | PoolManager’s installed dynamic LP fee always equals the hook’s recorded current fee. | `invariant_dynamicLpFeeIsAlwaysInstalledAndBounded` |
+| DFEE-04 | The dynamic rule has no admin or external oracle and cannot alter the separate immutable 0.10% platform fee destination. | immutable constants and recipient; migration integration; collection tests |
+| FLAGS-02 | The dynamic hook address has exactly `beforeInitialize`, `afterInitialize`, `beforeSwap`, `afterSwap` and `afterSwapReturnDelta`. | dynamic factory mask validation; permission unit test; invariant suite |
 | FACTORY-01 | The factory deploys only a correctly mined CREATE2 address and records its configuration hash. | `deploy`; `test_factoryRejectsUnminedSalt`; provenance assertions |
 | LOCK-01 | Every verified initial LP position is minted to a forwarder deployed by Launcher’s deterministic factory. | `test_deploysOfficialForwarderWithFixedLockPolicy`; migration integration assertions |
 | LOCK-02 | The forwarder has no operator and cannot approve a transfer before the maximum `uint256` block. | fixed factory constructor arguments; `test_revertsBeforeMaximumTimelockBlock`; migration integration assertions |
@@ -49,6 +54,7 @@ The standard auction path calls the official LiquidityLauncher directly from the
 | AUCTION-03 | The minimum valuation is converted with integer Q96 math, snapped to the official CCA tick boundary and bounded by the CCA supply, price and `uint128` limits. | `buildStandardAuctionEconomics`; exact fixture and policy-drift tests |
 | AUCTION-04 | The official SDK resolves exactly one atomic LiquidityLauncher multicall that creates the token and distributes the complete supply to LBPStrategy. | exact calldata decoding in `auction-transaction.test.ts` |
 | AUCTION-05 | The auction cannot be prepared unless the official LBPStrategy points to the pinned PoolManager, PositionManager and CCA factory. | Mainnet snapshot test; live preflight configuration reads |
+| AUCTION-06 | The official LBP strategy can register, migrate and trade a pool using the v4 dynamic-fee flag and Launcher’s bounded hook. | `test_officialAuctionMigrationInstallsAndUpdatesBoundedDynamicFee` |
 | REENT-01 | The complete direct launch is protected against reentrant entry while it composes external contracts. | OpenZeppelin `ReentrancyGuardTransient`; direct integration suite |
 | PRICE-01 | The initialized pool price is exactly the creator-supplied valid v4 square-root price. | returned-tick validation; `test_launchesFixedSupplyTokenIntoLockedV4Position` |
 | PROV-01 | Every new-token direct launch records a chain- and contract-bound commitment to its infrastructure, budgets, actual liquidity, price and hook configuration. | `launchHashOf`; `DirectTokenLaunched`; `DirectLiquidityConfigured` |
@@ -59,7 +65,7 @@ The standard auction path calls the official LiquidityLauncher directly from the
 
 ## Fuzz and invariant scope
 
-The fee reference test covers exact-input and exact-output swaps in both directions over 1,000 generated cases per default run. Each of the new-token and existing-token direct accounting properties covers 64 generated native/token budget pairs locally and 256 in the CI profile. The invariant handler performs 16,384 state-changing calls per property across swaps and permissionless collections. It checks immutable configuration, callback permissions and payout isolation.
+The fixed-fee reference test covers exact-input and exact-output swaps in both directions over 1,000 generated cases per default run. The dynamic fee rule is fuzzed across its input range. Each of the new-token and existing-token direct accounting properties covers 64 generated native/token budget pairs locally and 256 in the CI profile. Each hook invariant handler performs 16,384 state-changing calls per property. The dynamic handler includes swaps, explicit block advances and permissionless collections while checking fee bounds, PoolManager state, immutable configuration, callback permissions and payout isolation.
 
 The current fuzz range is intentionally below pathological `int128` boundaries. Boundary behavior in upstream v4 and `BaseHookFee` remains part of the external dependency review.
 
@@ -78,7 +84,9 @@ The current fuzz range is intentionally below pathological `int128` boundaries. 
 - Amounts below the fee’s integer precision may round to zero. This is expected and does not accumulate fractional dust.
 - A stale auction schedule is replaced before transaction preparation; the wallet never receives calldata with fewer than 20 preparation blocks remaining.
 - A nonzero CCA protocol fee controller, mismatched official strategy dependency, occupied auction address or initialized pool blocks auction preparation.
+- A dynamic hook never accepts a static-fee PoolKey. An incorrect callback mask or unrecognized factory deployment blocks setup.
+- Pool-tick movement can change the dynamic LP fee only on the first successful swap in a later block and never beyond the fixed 1.00% ceiling.
 
 ## Out of scope
 
-The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich protection or profitable price discovery. Arbitrary existing ERC-20s, oracle-based hooks, dynamic fees, arbitrary third-party hooks, regulated assets, indexer correctness and production signer custody remain out of scope. The frontend auction and direct paths are implemented locally but still lack deployed Launcher infrastructure, signed rehearsal evidence and an independent audit.
+The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich protection or profitable price discovery. The bounded dynamic rule is not an oracle: a trader can move the pool tick and influence the fee selected in a later block, subject to the fixed ceiling. Unbounded or externally administered dynamic fees, arbitrary existing ERC-20s, oracle-based hooks, arbitrary third-party hooks, regulated assets, indexer correctness and production signer custody remain out of scope. The frontend auction and direct paths are implemented locally but still lack deployed Launcher infrastructure, signed rehearsal evidence and an independent audit.

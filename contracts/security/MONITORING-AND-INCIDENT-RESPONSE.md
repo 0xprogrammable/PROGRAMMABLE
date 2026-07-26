@@ -9,6 +9,8 @@ This document defines the minimum production monitoring boundary. It is not evid
 The indexer must ingest:
 
 - `PlatformFeeHookDeployed`
+- `BoundedDynamicFeeHookDeployed`
+- `DynamicLpFeeUpdated`
 - `LockedPositionFeeForwarderDeployed`
 - `DirectTokenLaunched`
 - `DirectLiquidityConfigured`
@@ -27,7 +29,7 @@ For every accepted token, the indexer must verify at the receipt block:
 1. The transaction succeeded on chain 1 or the explicitly selected rehearsal chain.
 2. The launcher, factories, PoolManager, PositionManager and UERC20Factory match the version registry.
 3. Runtime bytecode and factory configuration commitments match the release.
-4. The hook callback mask, PoolId, initializer, treasury, 0.10% fee, 0.30% LP fee and tick spacing match the selected standard; auction records also require the pinned zero protocol fee controller.
+4. The hook callback mask, PoolId, initializer, treasury, 0.10% fee and tick spacing match the selected standard. Fixed-fee records require the 0.30% LP fee. Dynamic records require the v4 dynamic-fee flag, a current fee between 0.30% and 1.00% and the matching reference event. Auction records also require the pinned zero protocol fee controller.
 5. The LP NFT owner is the factory-recorded forwarder.
 6. The forwarder has the zero operator, maximum timelock and launch creator as fee recipient.
 7. Token supply, creator balance and position liquidity reconcile with the launch record.
