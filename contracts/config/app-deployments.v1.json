@@ -17,17 +17,35 @@
   },
   "rehearsal": {
     "chainId": 11155111,
-    "status": "predicted-not-deployed",
+    "status": "ready",
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
     "platformFeeHookFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
     "boundedDynamicFeeHookFactory": "0x51d702731db281EE223904A4663E05BfCA26C775",
     "lockedPositionFeeForwarderFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
     "directLiquidityLauncher": "0x5fc6aDd062329742EFefA9c4b11C355AAe02Fa1E",
     "runtimeCodeHashes": {
-      "platformFeeHookFactory": null,
-      "boundedDynamicFeeHookFactory": null,
-      "lockedPositionFeeForwarderFactory": null,
-      "directLiquidityLauncher": null
+      "platformFeeHookFactory": "0x7792dba76c190e746dc7fbf7f8a8f690f7cf5ce6fab448c858069b1852974306",
+      "boundedDynamicFeeHookFactory": "0xe6bbbdba0194caba268f5546db2574dc416b3c74331bd44f33d04d4b2251ffbc",
+      "lockedPositionFeeForwarderFactory": "0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc",
+      "directLiquidityLauncher": "0x41fa4dbe9709e93f601e0406a3a9d61826144ca56e16f748e063f850fc0af48b"
     },
-    "blocker": "Predicted addresses are not deployments and have no onchain bytecode"
+    "deploymentTransactions": {
+      "platformFeeHookFactory": "0x7874d856fecd2616b9b125ee7ed85f876c93596adbc9189f8420f0b97abbca6c",
+      "lockedPositionFeeForwarderFactory": "0x4969ca925b82c881c978f1d88722af61eea04f1294da55c45e5e7392e294faf6",
+      "directLiquidityLauncher": "0xc61ca9972391717c454e6bdf9cbbf4bfb5aa1987cf0f29542f6523e9ed6cdd8d",
+      "boundedDynamicFeeHookFactory": "0x8188cfa559981c4e03f55a99e19c7f87c5917e4e6a981c1793e5ba7a09e69d97"
+    },
+    "deploymentBlocks": {
+      "platformFeeHookFactory": 11353879,
+      "lockedPositionFeeForwarderFactory": 11353893,
+      "directLiquidityLauncher": 11353896,
+      "boundedDynamicFeeHookFactory": 11353915
+    },
+    "sourceVerification": {
+      "status": "verified",
+      "explorer": "https://eth-sepolia.blockscout.com",
+      "checkedAt": "2026-07-26"
+    },
+    "blocker": "Infrastructure is ready for rehearsal; complete every launch, swap, fee-collection and failure-recovery path before considering mainnet"
   }
 }

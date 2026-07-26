@@ -18,7 +18,11 @@ Launcher is a focused interface for launching tokens on Uniswap v4. It keeps the
 
 ## Deliberate boundary
 
-The application can prepare a transaction only from fixed contract ABIs, the official Liquidity Launcher SDK and a machine-readable deployment manifest. It never accepts a transaction target or calldata from the browser. Mainnet preparation currently fails closed because the production manifest is deliberately marked `not-deployed`. Once the three Launcher factories and direct launcher have been reviewed, deployed and recorded with exact runtime-code hashes, the preflight can return exact setup, approval or launch transactions for explicit wallet review.
+The application can prepare a transaction only from fixed contract ABIs, the official Liquidity Launcher SDK and a
+machine-readable deployment manifest. It never accepts a transaction target or calldata from the browser. The three
+Launcher factories and direct launcher are deployed, source-verified and recorded with exact runtime-code hashes on
+Sepolia. Mainnet preparation still fails closed because the production manifest is deliberately marked `not-deployed`;
+it cannot return production transactions until separately reviewed mainnet deployments are recorded.
 
 The auction encoder is implemented locally. It derives a server-owned block schedule, converts the minimum fully diluted valuation to the CCA Q96 floor, derives the graduation threshold and convex emission steps, predicts the token and auction addresses, checks pool availability, and builds one atomic official token-and-auction launch. The permanent LP lock and selected immutable hook are deterministic setup transactions that must exist before that atomic launch. A saved launch plan is still a local draft, not an onchain asset.
 
@@ -67,4 +71,11 @@ npm run contracts:official-deployments
 npm run contracts:sepolia:validate
 ```
 
-The suite covers all four fixed-fee swap modes, bounded dynamic-fee transitions, new-token and existing-token budget fuzzing, UERC20 factory provenance, creator authorization, stateful invariants, the full auction-to-v4 migration, locked direct liquidity, fee collection in ERC-20 and native ETH, factory front-running regression, exact direct and auction calldata, CCA price and emission math, hook-address mining and pinned Ethereum deployment snapshots. The deployment check also compares 24 required Mainnet and Sepolia records with Uniswap’s current machine-readable registry, including each active address and official source-code link. None of the four variants is audited or deployed; the open mainnet gates are documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).
+The suite covers all four fixed-fee swap modes, bounded dynamic-fee transitions, new-token and existing-token budget
+fuzzing, UERC20 factory provenance, creator authorization, stateful invariants, the full auction-to-v4 migration,
+locked direct liquidity, fee collection in ERC-20 and native ETH, factory front-running regression, exact direct and
+auction calldata, CCA price and emission math, hook-address mining and pinned Ethereum deployment snapshots. The
+deployment check also compares 24 required Mainnet and Sepolia records with Uniswap’s current machine-readable registry,
+including each active address and official source-code link. The infrastructure is live on Sepolia, but none of the four
+launch variants has completed its full signed lifecycle rehearsal or an independent audit. The open mainnet gates are
+documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).

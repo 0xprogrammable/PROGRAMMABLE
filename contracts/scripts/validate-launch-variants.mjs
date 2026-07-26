@@ -219,6 +219,43 @@ assert(
   appDeployments.production.status === "not-deployed",
   "Mainnet transaction preparation must remain disabled until a verified deployment is recorded",
 );
+assert(
+  appDeployments.rehearsal.status === "ready",
+  "Sepolia rehearsal must reference the verified infrastructure deployment",
+);
+assert(
+  appDeployments.rehearsal.deployer.toLowerCase() ===
+    deployment.deployment.testWallet.toLowerCase(),
+  "Sepolia deployer differs from the confirmed test wallet",
+);
+for (const field of [
+  "platformFeeHookFactory",
+  "boundedDynamicFeeHookFactory",
+  "lockedPositionFeeForwarderFactory",
+  "directLiquidityLauncher",
+]) {
+  assert(
+    /^0x[a-fA-F0-9]{64}$/.test(
+      appDeployments.rehearsal.deploymentTransactions[field],
+    ),
+    `rehearsal.${field} deployment transaction is invalid`,
+  );
+  assert(
+    Number.isSafeInteger(
+      appDeployments.rehearsal.deploymentBlocks[field],
+    ) && appDeployments.rehearsal.deploymentBlocks[field] > 0,
+    `rehearsal.${field} deployment block is invalid`,
+  );
+}
+assert(
+  appDeployments.rehearsal.sourceVerification.status === "verified",
+  "Sepolia source verification is not recorded",
+);
+assert(
+  appDeployments.rehearsal.sourceVerification.explorer ===
+    "https://eth-sepolia.blockscout.com",
+  "Sepolia source verification uses an unexpected explorer",
+);
 
 console.log(
   `Validated ${catalog.variants.length} launch variants, ${protocolTestedIds.size} protocol-tested variants and ${behaviorIds.size} behavior modules`,
