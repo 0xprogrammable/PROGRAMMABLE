@@ -8,6 +8,7 @@ import {
   type SetStateAction,
 } from "react";
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -16,12 +17,14 @@ import {
   Code2,
   Copy,
   Droplets,
-  FileCheck2,
   LoaderCircle,
-  LockKeyhole,
+  Minus,
   Search,
-  ShieldCheck,
 } from "lucide-react";
+import type {
+  LaunchPreflightCheck,
+  LaunchPreflightResponse,
+} from "@/lib/launch-transaction";
 import {
   behaviorDefinitions,
   buildLaunchSummary,
@@ -110,12 +113,17 @@ const liquidityOptions: {
 ];
 
 function isPositiveNumber(value: string) {
-  const parsed = Number(value);
+  const normalized = value.trim();
+  if (!/^(0|[1-9]\d*)(?:\.\d+)?$/.test(normalized)) {
+    return false;
+  }
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed > 0;
 }
 
 function percentageIsValid(value: string) {
-  const parsed = Number(value);
+  if (!isPositiveNumber(value)) return false;
+  const parsed = Number(value.trim());
   return Number.isFinite(parsed) && parsed > 0 && parsed <= 100;
 }
 
@@ -128,6 +136,22 @@ function updateDraft(
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
+}
+
+function createLaunchSalt() {
+  const bytes = new Uint8Array(32);
+  window.crypto.getRandomValues(bytes);
+  return `0x${Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("")}`;
+}
+
+function getLaunchCheckKey(
+  draft: LaunchDraft,
+  account?: string,
+  chainId?: string,
+) {
+  return JSON.stringify([draft, account ?? "", chainId ?? ""]);
 }
 
 export function LaunchBuilder() {
@@ -156,14 +180,33 @@ function LaunchBuilderForm({
 }: {
   initialDraft: LaunchDraft;
 }) {
-  const { wallet } = useWallet();
-  const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
+  const { wallet, openWallet, sendTransaction } = useWallet();
+  const [draft, setDraft] = useState<LaunchDraft>(() => ({
+    ...initialDraft,
+    lpFeePercent: initialDraft.selectedBehaviors.includes("fixed-fee")
+      ? "0.30"
+      : initialDraft.lpFeePercent,
+  }));
   const [step, setStep] = useState(1);
   const [formError, setFormError] = useState("");
   const [tokenResult, setTokenResult] = useState<TokenResult | null>(null);
   const [tokenLoading, setTokenLoading] = useState(false);
   const [tokenError, setTokenError] = useState("");
   const [notice, setNotice] = useState("");
+  const [preflightState, setPreflightState] = useState<{
+    key: string;
+    result: LaunchPreflightResponse;
+  } | null>(null);
+  const [preflightLoadingKey, setPreflightLoadingKey] = useState("");
+  const [preflightErrorState, setPreflightErrorState] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
+  const [transactionSendingKey, setTransactionSendingKey] = useState("");
+  const [transactionState, setTransactionState] = useState<{
+    key: string;
+    hash: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!notice) return;
@@ -172,6 +215,26 @@ function LaunchBuilderForm({
   }, [notice]);
 
   const summary = useMemo(() => buildLaunchSummary(draft), [draft]);
+  const launchCheckKey = useMemo(
+    () =>
+      getLaunchCheckKey(draft, wallet?.account, wallet?.chainId),
+    [draft, wallet?.account, wallet?.chainId],
+  );
+  const preflight =
+    preflightState?.key === launchCheckKey
+      ? preflightState.result
+      : null;
+  const preflightLoading = preflightLoadingKey === launchCheckKey;
+  const preflightError =
+    preflightErrorState?.key === launchCheckKey
+      ? preflightErrorState.message
+      : "";
+  const transactionSending =
+    transactionSendingKey === launchCheckKey;
+  const transactionHash =
+    transactionState?.key === launchCheckKey
+      ? transactionState.hash
+      : "";
   const selectedDefinitions = useMemo(
     () =>
       draft.selectedBehaviors
@@ -228,9 +291,10 @@ function LaunchBuilderForm({
       }
     } else if (
       !isPositiveNumber(draft.directEthAmount) ||
-      !isPositiveNumber(draft.directTokenAmount)
+      !isPositiveNumber(draft.directTokenAmount) ||
+      !isPositiveNumber(draft.directTokensPerEth)
     ) {
-      return "Enter both ETH and token liquidity amounts";
+      return "Enter the ETH amount, token amount and opening rate";
     }
 
     if (
@@ -304,6 +368,7 @@ function LaunchBuilderForm({
         draft.selectedBehaviors,
         id,
       ),
+      ...(id === "fixed-fee" ? { lpFeePercent: "0.30" } : {}),
     });
   }
 
@@ -317,6 +382,120 @@ function LaunchBuilderForm({
   async function copyPlan() {
     await navigator.clipboard.writeText(buildPlainTextPlan(draft));
     setNotice("Token summary copied");
+  }
+
+  async function requestLaunchCheck(checkedDraft: LaunchDraft) {
+    if (!wallet) {
+      throw new Error("Connect an Ethereum wallet before continuing");
+    }
+
+    const response = await fetch("/api/launch/preflight", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        account: wallet.account,
+        walletChainId: wallet.chainId,
+        draft: checkedDraft,
+      }),
+    });
+    const body = (await response.json()) as
+      | LaunchPreflightResponse
+      | { error: string };
+    if (!response.ok || "error" in body) {
+      throw new Error(
+        "error" in body
+          ? body.error
+          : "The launch could not be checked",
+      );
+    }
+    return body;
+  }
+
+  async function checkLaunch() {
+    if (!wallet) {
+      openWallet();
+      return;
+    }
+
+    let checkedDraft = draft;
+    if (
+      draft.liquidityMode === "direct" &&
+      !/^0x[a-fA-F0-9]{64}$/.test(draft.launchSalt)
+    ) {
+      checkedDraft = {
+        ...draft,
+        launchSalt: createLaunchSalt(),
+        updatedAt: new Date().toISOString(),
+      };
+      setDraft(checkedDraft);
+      saveLocalDraft(checkedDraft);
+    }
+
+    const checkKey = getLaunchCheckKey(
+      checkedDraft,
+      wallet.account,
+      wallet.chainId,
+    );
+    setPreflightLoadingKey(checkKey);
+    setPreflightErrorState(null);
+    setTransactionState(null);
+
+    try {
+      const result = await requestLaunchCheck(checkedDraft);
+      setPreflightState({ key: checkKey, result });
+    } catch (caught) {
+      setPreflightState(null);
+      setPreflightErrorState({
+        key: checkKey,
+        message:
+          caught instanceof Error
+            ? caught.message
+            : "The launch could not be checked",
+      });
+    } finally {
+      setPreflightLoadingKey("");
+    }
+  }
+
+  async function submitPreparedTransaction() {
+    if (!wallet || !preflight?.transaction || !preflight.planHash) {
+      return;
+    }
+
+    setTransactionSendingKey(launchCheckKey);
+    setPreflightErrorState(null);
+    try {
+      const refreshed = await requestLaunchCheck(draft);
+      setPreflightState({
+        key: launchCheckKey,
+        result: refreshed,
+      });
+      if (
+        !refreshed.transaction ||
+        refreshed.planHash !== preflight.planHash
+      ) {
+        setNotice("Launch check updated");
+        return;
+      }
+
+      const hash = await sendTransaction(refreshed.transaction);
+      setTransactionState({ key: launchCheckKey, hash });
+      setNotice(
+        refreshed.transaction.kind === "approval"
+          ? "Approval submitted"
+          : "Launch submitted",
+      );
+    } catch (caught) {
+      setPreflightErrorState({
+        key: launchCheckKey,
+        message:
+          caught instanceof Error
+            ? caught.message
+            : "The final launch check or wallet request did not complete",
+      });
+    } finally {
+      setTransactionSendingKey("");
+    }
   }
 
   return (
@@ -392,6 +571,14 @@ function LaunchBuilderForm({
               draft={draft}
               summary={summary}
               selectedDefinitions={selectedDefinitions}
+              walletConnected={Boolean(wallet)}
+              preflight={preflight}
+              preflightLoading={preflightLoading}
+              preflightError={preflightError}
+              transactionSending={transactionSending}
+              transactionHash={transactionHash}
+              onCheck={checkLaunch}
+              onSubmit={submitPreparedTransaction}
               onSave={saveDraft}
               onCopy={copyPlan}
               onBack={() => {
@@ -828,6 +1015,25 @@ function PoolStep({
                   />
                 </label>
               </div>
+              <label className="field opening-rate-field">
+                <span>Opening rate</span>
+                <div className="input-suffix">
+                  <input
+                    value={draft.directTokensPerEth}
+                    inputMode="decimal"
+                    placeholder="50000"
+                    onChange={(event) =>
+                      updateDraft(setDraft, {
+                        directTokensPerEth: event.target.value,
+                      })
+                    }
+                  />
+                  <span>tokens per ETH</span>
+                </div>
+              </label>
+              <p className="rule-note">
+                The opening rate sets the initial Uniswap v4 price
+              </p>
             </div>
           )}
 
@@ -837,21 +1043,7 @@ function PoolStep({
                 <h3>Pool fee</h3>
                 <p>Separate from the 0.10% Launcher fee</p>
               </div>
-              <label className="field short-field">
-                <span className="sr-only">Swap fee</span>
-                <div className="input-suffix">
-                  <input
-                    value={draft.lpFeePercent}
-                    inputMode="decimal"
-                    onChange={(event) =>
-                      updateDraft(setDraft, {
-                        lpFeePercent: event.target.value,
-                      })
-                    }
-                  />
-                  <span>%</span>
-                </div>
-              </label>
+              <strong className="fixed-fee-value">0.30%</strong>
             </div>
           ) : null}
         </div>
@@ -979,6 +1171,14 @@ function ReviewStep({
   draft,
   summary,
   selectedDefinitions,
+  walletConnected,
+  preflight,
+  preflightLoading,
+  preflightError,
+  transactionSending,
+  transactionHash,
+  onCheck,
+  onSubmit,
   onSave,
   onCopy,
   onBack,
@@ -986,6 +1186,14 @@ function ReviewStep({
   draft: LaunchDraft;
   summary: string;
   selectedDefinitions: ReturnType<typeof findBehavior>[];
+  walletConnected: boolean;
+  preflight: LaunchPreflightResponse | null;
+  preflightLoading: boolean;
+  preflightError: string;
+  transactionSending: boolean;
+  transactionHash: string;
+  onCheck: () => void;
+  onSubmit: () => void;
   onSave: () => void;
   onCopy: () => void;
   onBack: () => void;
@@ -994,6 +1202,57 @@ function ReviewStep({
     draft.assetMode === "existing"
       ? draft.existingTokenSymbol || "Existing token"
       : draft.tokenName || "New token";
+  const checks: LaunchPreflightCheck[] = preflight?.checks ?? [
+    {
+      id: "token",
+      label: "Token setup",
+      status: "pending",
+      detail: "Validated from the final token and pool settings",
+    },
+    {
+      id: "wallet",
+      label: "Wallet",
+      status: walletConnected ? "pending" : "blocked",
+      detail: walletConnected
+        ? "Connected account and network are checked next"
+        : "Connect the creator wallet to continue",
+    },
+    {
+      id: "contracts",
+      label: "Launcher contracts",
+      status: "pending",
+      detail: "Addresses, bytecode and immutable settings are checked next",
+    },
+    {
+      id: "simulation",
+      label: "Simulation",
+      status: "pending",
+      detail: "The exact transaction is simulated before wallet review",
+    },
+  ];
+  const preparedTransaction = preflight?.transaction;
+  const launchSubmitted =
+    Boolean(transactionHash) &&
+    preparedTransaction?.kind === "launch";
+  const submitPrepared =
+    Boolean(preparedTransaction) && !transactionHash;
+  const primaryLabel = preflightLoading
+    ? "Checking"
+    : transactionSending
+      ? "Opening wallet"
+      : launchSubmitted
+        ? "Launch submitted"
+        : transactionHash
+          ? "Check approval"
+          : submitPrepared
+            ? preparedTransaction?.kind === "approval"
+              ? "Approve token"
+              : "Launch token"
+            : walletConnected
+              ? preflight
+                ? "Check again"
+                : "Check launch"
+              : "Connect wallet";
 
   return (
     <div className="form-section review-section">
@@ -1037,7 +1296,7 @@ function ReviewStep({
             <span>
               {draft.liquidityMode === "auction"
                 ? `${draft.auctionSalePercent}% of supply offered, ${draft.auctionLiquidityPercent}% of proceeds for pool funding, LP permanently locked`
-                : `${draft.directEthAmount} ETH, ${draft.directTokenAmount} tokens, LP permanently locked`}
+                : `${draft.directEthAmount} ETH and ${draft.directTokenAmount} tokens at ${draft.directTokensPerEth} tokens per ETH, LP permanently locked`}
             </span>
           </dd>
         </div>
@@ -1077,39 +1336,84 @@ function ReviewStep({
         <div className="block-heading">
           <div>
             <h3>Required checks</h3>
-            <p>
-              A token can appear in Explore only after these checks pass
-            </p>
+            <p>The wallet opens only after the exact call passes these checks</p>
           </div>
         </div>
         <ul>
-          <li>
-            <ShieldCheck aria-hidden="true" size={18} />
-            Token and hook source review
-          </li>
-          <li>
-            <FileCheck2 aria-hidden="true" size={18} />
-            Bidirectional buy and sell simulation
-          </li>
-          <li>
-            <LockKeyhole aria-hidden="true" size={18} />
-            Ownership, fee recipient and liquidity controls confirmed
-          </li>
-          <li>
-            <CheckCircle2 aria-hidden="true" size={18} />
-            Deployment and launch record verified on Ethereum
-          </li>
+          {checks.map((check) => (
+            <li
+              key={check.id}
+              className={`review-check review-check-${check.status}`}
+            >
+              <ReviewCheckIcon status={check.status} />
+              <span>
+                <strong>{check.label}</strong>
+                <small>{check.detail}</small>
+              </span>
+            </li>
+          ))}
         </ul>
       </div>
+
+      {preflight ? (
+        <div
+          className={`preflight-result preflight-result-${preflight.status}`}
+          role="status"
+        >
+          <div>
+            <strong>{preflight.title}</strong>
+            <span>{preflight.detail}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {preflightError ? (
+        <p className="form-error preflight-error" role="alert">
+          {preflightError}
+        </p>
+      ) : null}
+
+      {transactionHash ? (
+        <a
+          className="transaction-link"
+          href={`https://etherscan.io/tx/${transactionHash}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {preparedTransaction?.kind === "approval"
+            ? "Approval submitted"
+            : "Launch submitted"}
+          <span>{shortenAddress(transactionHash)}</span>
+        </a>
+      ) : null}
 
       <div className="review-actions">
         <button className="secondary-button" type="button" onClick={onBack}>
           <ArrowLeft aria-hidden="true" size={16} />
           Back
         </button>
-        <button className="primary-button" type="button" onClick={onSave}>
-          Save token
+        <button
+          className="primary-button"
+          type="button"
+          disabled={
+            preflightLoading ||
+            transactionSending ||
+            launchSubmitted
+          }
+          onClick={submitPrepared ? onSubmit : onCheck}
+        >
+          {preflightLoading || transactionSending ? (
+            <LoaderCircle
+              className="spinning-icon"
+              aria-hidden="true"
+              size={16}
+            />
+          ) : null}
+          {primaryLabel}
+        </button>
+        <button className="secondary-button" type="button" onClick={onSave}>
           <Check aria-hidden="true" size={16} />
+          Save token
         </button>
         <button className="secondary-button" type="button" onClick={onCopy}>
           <Copy aria-hidden="true" size={16} />
@@ -1118,4 +1422,18 @@ function ReviewStep({
       </div>
     </div>
   );
+}
+
+function ReviewCheckIcon({
+  status,
+}: {
+  status: LaunchPreflightCheck["status"];
+}) {
+  if (status === "pass") {
+    return <CheckCircle2 aria-hidden="true" size={18} />;
+  }
+  if (status === "blocked") {
+    return <AlertCircle aria-hidden="true" size={18} />;
+  }
+  return <Minus aria-hidden="true" size={18} />;
 }

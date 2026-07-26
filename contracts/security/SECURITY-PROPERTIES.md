@@ -46,6 +46,9 @@ The existing-token entry point accepts only a UERC20 whose CREATE2 address can b
 | PRICE-01 | The initialized pool price is exactly the creator-supplied valid v4 square-root price. | returned-tick validation; `test_launchesFixedSupplyTokenIntoLockedV4Position` |
 | PROV-01 | Every new-token direct launch records a chain- and contract-bound commitment to its infrastructure, budgets, actual liquidity, price and hook configuration. | `launchHashOf`; `DirectTokenLaunched`; `DirectLiquidityConfigured` |
 | PROV-02 | Every existing-token launch additionally commits to its configured factory, recorded creator, identity fields and original fixed supply. | `ExistingUERC20Launched`; `ExistingUERC20LiquidityConfigured`; provenance-hash construction |
+| UI-01 | Human token amounts and the opening rate are converted without JavaScript floating point arithmetic. | `launch-transaction.test.ts`; integer decimal parser and square-root price tests |
+| UI-02 | The browser cannot choose the transaction target or calldata; the server derives both from the fixed ABI and deployment manifest. | `/api/launch/preflight`; typed transaction response |
+| UI-03 | A wallet prompt is unavailable until runtime bytecode, launcher immutables, balances, allowance and the exact call have passed the configured preflight. | fail-closed deployment manifest; preflight route; Review state machine |
 
 ## Fuzz and invariant scope
 
@@ -69,4 +72,4 @@ The current fuzz range is intentionally below pathological `int128` boundaries. 
 
 ## Out of scope
 
-The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich protection or profitable price discovery. Arbitrary existing ERC-20s, oracle-based hooks, dynamic fees, arbitrary third-party hooks, regulated assets, frontend transaction construction, indexer correctness and production signer custody remain out of scope.
+The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich protection or profitable price discovery. Arbitrary existing ERC-20s, oracle-based hooks, dynamic fees, arbitrary third-party hooks, regulated assets, auction transaction construction, indexer correctness and production signer custody remain out of scope. The frontend direct-launch path is implemented locally but still lacks live deployment and signed-rehearsal evidence.

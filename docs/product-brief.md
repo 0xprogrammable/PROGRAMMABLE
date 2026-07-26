@@ -30,13 +30,15 @@ Every verified launch sends its initial v4 position to a deterministic instance 
 
 ## Contract boundary
 
-The website can describe and save launch plans before contracts are connected. Mainnet deployment must remain unavailable until:
+The website can describe and save launch plans before contracts are connected. For the tested direct path it also derives the raw v4 price, mines the exact hook-address flags and builds the approval or launch call on the server. Every wallet prompt is gated by current-chain bytecode checks and a read-only simulation. The production deployment manifest remains disabled until:
 
 1. The factory and allowed hook compositions have been implemented and independently reviewed.
 2. The permanent platform fee recipient has been supplied.
-3. Token and pool simulations pass bidirectional buy and sell checks.
+3. A signed Sepolia rehearsal proves the browser-generated approval and launch calls against the deployed contracts.
 4. Source verification, ownership disclosure, and launch-record indexing are working.
 5. Each advanced behavior has an explicit risk model and audit status.
+
+The auction form remains a planning surface until it captures the complete block schedule, floor price, raise target, auction steps and LiquidityLauncher migration data. Supply and proceeds percentages alone are not enough to prepare a safe auction transaction.
 
 ## Visual direction
 

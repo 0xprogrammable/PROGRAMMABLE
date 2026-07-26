@@ -1060,6 +1060,14 @@ textarea {
   margin-top: 14px;
 }
 
+.opening-rate-field {
+  margin-top: 12px;
+}
+
+.opening-rate-field .input-suffix > span {
+  white-space: nowrap;
+}
+
 .rule-note,
 .fee-rule-card > div:first-child p,
 .behavior-picker-heading > div:first-child p {
@@ -1074,10 +1082,15 @@ textarea {
   padding-top: 12px;
 }
 
-.fee-rule-card .short-field {
+.fixed-fee-value {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
   flex: none;
-  margin: 0;
-  width: 100px;
+  font-size: 13px;
+  font-weight: 620;
+  padding: 10px 12px;
 }
 
 .input-suffix {
@@ -1199,13 +1212,13 @@ textarea {
 
 .review-statement {
   border-bottom: 1px solid var(--border);
-  padding: 20px 0;
+  padding: 14px 0;
 }
 
 .review-statement > p:last-child {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.5;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .review-details {
@@ -1220,7 +1233,7 @@ textarea {
   gap: 12px;
   grid-template-columns: 72px 1fr;
   min-width: 0;
-  padding: 15px 14px 15px 0;
+  padding: 12px 14px 12px 0;
 }
 
 .review-details > div:nth-child(odd) {
@@ -1258,7 +1271,7 @@ textarea {
 }
 
 .review-gates {
-  margin-top: 20px;
+  margin-top: 14px;
 }
 
 .block-heading h3 {
@@ -1276,19 +1289,18 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   list-style: none;
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   padding: 0;
 }
 
 .review-gates li {
-  align-items: center;
+  align-items: flex-start;
   border-top: 1px solid var(--border);
   color: var(--text-soft);
   display: flex;
-  font-size: 12px;
   gap: 9px;
-  min-height: 48px;
-  padding-right: 12px;
+  min-height: 52px;
+  padding: 8px 12px 8px 0;
 }
 
 .review-gates li:nth-child(odd) {
@@ -1300,8 +1312,100 @@ textarea {
 }
 
 .review-gates li svg {
-  color: var(--success);
   flex: none;
+  margin-top: 1px;
+}
+
+.review-check > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.review-check strong {
+  font-size: 12px;
+  font-weight: 610;
+}
+
+.review-check small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.review-check-pass svg {
+  color: var(--success);
+}
+
+.review-check-blocked svg {
+  color: var(--warning);
+}
+
+.review-check-pending svg {
+  color: var(--dim);
+}
+
+.preflight-result {
+  align-items: flex-start;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  margin-top: 14px;
+  padding: 12px 14px;
+}
+
+.preflight-result > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.preflight-result strong {
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.preflight-result span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  margin-top: 3px;
+}
+
+.preflight-result-ready {
+  border-color: rgba(95, 210, 160, 0.28);
+}
+
+.preflight-result-blocked {
+  border-color: rgba(255, 196, 110, 0.24);
+}
+
+.preflight-error {
+  margin-top: 12px;
+}
+
+.transaction-link {
+  align-items: center;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  margin-top: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.transaction-link span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.spinning-icon {
+  animation: spin 800ms linear infinite;
 }
 
 .review-actions {
@@ -1309,8 +1413,12 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 20px;
-  padding-top: 18px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.review-section .form-section-heading {
+  padding-bottom: 14px;
 }
 
 .toast-region {
@@ -1815,6 +1923,39 @@ textarea {
 
   .token-readout > p {
     margin-top: 8px;
+  }
+
+  .review-section {
+    padding-bottom: 12px;
+    padding-top: 12px;
+  }
+
+  .review-section .form-section-heading {
+    padding-bottom: 10px;
+  }
+
+  .review-section .review-statement {
+    padding: 10px 0;
+  }
+
+  .review-section .review-details > div {
+    padding-bottom: 8px;
+    padding-top: 8px;
+  }
+
+  .review-section .review-gates {
+    margin-top: 10px;
+  }
+
+  .review-section .review-gates li {
+    min-height: 46px;
+    padding-bottom: 6px;
+    padding-top: 6px;
+  }
+
+  .review-section .review-actions {
+    margin-top: 10px;
+    padding-top: 10px;
   }
 
   .form-navigation {
