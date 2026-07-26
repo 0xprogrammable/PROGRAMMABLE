@@ -20,7 +20,8 @@
     "contracts:official-deployments": "node contracts/scripts/verify-official-deployments.mjs",
     "contracts:variants": "node contracts/scripts/validate-launch-variants.mjs",
     "contracts:verify": "npm run contracts:bootstrap && npm run contracts:variants && npm run contracts:fmt && npm run contracts:lint && npm run contracts:build && npm run contracts:test",
-    "contracts:sepolia:validate": "cd contracts && forge test --match-path test/EthereumSepoliaDeploymentSnapshot.t.sol && forge test --match-path test/DeploySepoliaInfrastructureV1.t.sol"
+    "contracts:sepolia:validate": "cd contracts && forge test --match-path test/EthereumSepoliaDeploymentSnapshot.t.sol && forge test --match-path test/DeploySepoliaInfrastructureV1.t.sol",
+    "contracts:sepolia:metamask": "node scripts/serve-sepolia-metamask-deployer.mjs"
   },
   "dependencies": {
     "@privy-io/react-auth": "3.35.2",

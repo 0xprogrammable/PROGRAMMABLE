@@ -11,7 +11,7 @@ No deployment has been broadcast. The current target is an Ethereum Sepolia rehe
 - Approval block: `type(uint256).max`
 - LP fee recipient: immutable launch creator
 
-The Sepolia deployment wallet and Ethereum treasury were EOAs when rechecked on 2026-07-26. The Sepolia wallet had zero balance and nonce zero. The four predicted Sepolia infrastructure addresses had no code. Recheck immediately before any transaction.
+The Sepolia deployment wallet and Ethereum treasury were EOAs when rechecked on 2026-07-26. Google Cloud funded the Sepolia wallet with `0.05 Sepolia ETH` in successful transaction `0x1ef3f04c455cd98197b3900cc233638fc97127eeab8683e0bfdc4d9d5174d122` at block `11,353,700`. Its nonce remained zero and the four predicted infrastructure addresses had no code. Recheck immediately before any transaction.
 
 ## Read-only verification
 
@@ -41,7 +41,7 @@ cast wallet address --account launcher-sepolia
 
 ## Simulate, then broadcast
 
-Use a reliable Sepolia RPC. The latest read-only simulation on 2026-07-26 estimated 13,751,167 gas and approximately 0.028910040635761992 Sepolia ETH at 2.102369976 gwei. Funding the test wallet with 0.04 Sepolia ETH provides a rehearsal margin at that estimate; simulate again before broadcast because gas prices change.
+Use a reliable Sepolia RPC. The latest read-only simulation on 2026-07-26 estimated 13,771,674 gas and approximately 0.030015162664449732 Sepolia ETH at 2.179485418 gwei. The wallet's current `0.05 Sepolia ETH` balance provides a rehearsal margin at that estimate; simulate again before broadcast because gas prices change.
 
 ```sh
 export SEPOLIA_RPC_URL=https://your-sepolia-rpc.example
@@ -62,6 +62,14 @@ forge script script/DeploySepoliaInfrastructureV1.s.sol:DeploySepoliaInfrastruct
   --broadcast \
   --slow
 ```
+
+If the test wallet exists only in MetaMask, serve the local deployment panel after the same dry run:
+
+```sh
+npm run contracts:sepolia:metamask
+```
+
+Open `http://127.0.0.1:4173` in the Chrome profile that contains MetaMask. The panel reads the exact four CREATE transactions from Foundry's ignored `dry-run/run-latest.json`, rejects every account except the configured test wallet, enforces Sepolia and checks the pending nonce, predicted address, gas estimate, receipt status and runtime bytecode before continuing. It never reads or stores a password, recovery phrase or private key. Each contract still requires an explicit MetaMask confirmation.
 
 The infrastructure transaction sequence still predicts:
 

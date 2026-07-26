@@ -4,7 +4,8 @@ Current state: blocked by design. The fixed-fee auction, bounded dynamic-fee auc
 
 ## Required before Sepolia
 
-- Fund `0x2Bb333d48DFAF1596D9036671d2E43168994249E` with Sepolia ETH. The latest 2026-07-26 dry run estimated 0.028910040635761992 Sepolia ETH; 0.04 provides a rehearsal margin at that gas price, subject to a fresh estimate
+Funding is complete. The configured wallet received `0.05 Sepolia ETH` from Google Cloud in successful transaction `0x1ef3f04c455cd98197b3900cc233638fc97127eeab8683e0bfdc4d9d5174d122`. Its nonce remains zero. The latest dry run estimates `0.030015162664449732 Sepolia ETH`, subject to a fresh estimate immediately before signing.
+
 - Sign the rehearsal from that address through a local Foundry keystore or hardware wallet; never place its private key in this repository
 - Rehearse the four-contract infrastructure deployment and verify its source and runtime bytecode
 - Rehearse the fixed four-hour CCA schedule, 50/50 token allocation, minimum-valuation floor, exact factory, salt and protocol-fee-controller path
