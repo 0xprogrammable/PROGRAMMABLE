@@ -16,7 +16,7 @@ contract EthereumDeploymentSnapshotTest is Test {
     address internal constant UERC20_FACTORY = 0x000000e200088D55C39a11F609E5F667729ad49b;
 
     function setUp() public {
-        string memory rpc = vm.envOr("ETHEREUM_RPC_URL", string("https://ethereum-rpc.publicnode.com"));
+        string memory rpc = vm.envOr("ETHEREUM_RPC_URL", string("https://eth.drpc.org"));
         vm.createSelectFork(rpc, SNAPSHOT_BLOCK);
     }
 
