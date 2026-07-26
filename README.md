@@ -48,14 +48,15 @@ SEPOLIA_RPC_URL=https://your-sepolia-rpc.example
 
 The App ID and optional App Client ID are public browser configuration. No private key or Privy App Secret belongs in this application.
 
-## Contract spike
+## Contract workspace
 
-The `contracts/` workspace contains the first verified Uniswap v4 launch path: a deterministic, non-upgradeable hook with a fixed 0.10% platform fee and an immutable recipient. It reuses the official UERC20Factory, LiquidityLauncher, Continuous Clearing Auction, LBPStrategy, PoolManager, PositionManager and PositionFeesForwarder. Initial LP positions use a zero operator and maximum-block timelock; LP fees remain claimable to the immutable launch creator.
+The `contracts/` workspace contains two protocol-tested Uniswap v4 launch paths. Auction launch reuses the official UERC20Factory, LiquidityLauncher, Continuous Clearing Auction and LBPStrategy. Direct v4 pool creates the fixed-supply token, bound hook, pool and locked full-range position atomically with creator-supplied liquidity. Both use a deterministic, non-upgradeable hook with a fixed 0.10% platform fee and immutable recipient. Initial LP positions use Uniswap’s PositionFeesForwarder with a zero operator and maximum-block timelock; LP fees remain claimable to the immutable launch creator.
 
 ```bash
 npm run contracts:verify
+npm run contracts:variants
 npm run contracts:official-deployments
 npm run contracts:sepolia:validate
 ```
 
-The suite covers all four swap modes, fuzzing, stateful invariants, the full auction-to-v4 migration, fee collection in ERC-20 and native ETH, and pinned Ethereum deployment snapshots. The deployment check also compares 24 required Mainnet and Sepolia records with Uniswap’s current machine-readable registry, including each active address and official source-code link. This remains a protocol spike; the open mainnet gates are documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).
+The suite covers all four swap modes, direct budget fuzzing, stateful invariants, the full auction-to-v4 migration, locked direct liquidity, fee collection in ERC-20 and native ETH, factory front-running regression and pinned Ethereum deployment snapshots. The deployment check also compares 24 required Mainnet and Sepolia records with Uniswap’s current machine-readable registry, including each active address and official source-code link. Neither variant is audited or deployed; the open mainnet gates are documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).

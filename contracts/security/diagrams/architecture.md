@@ -2,27 +2,40 @@
 
 ```mermaid
 flowchart LR
-    User[Launcher user]
-    Launcher[Official LiquidityLauncher]
-    TokenFactory[Official UERC20Factory]
-    Auction[CCA initializer]
-    Strategy[Official LBPStrategy]
-    Factory[PlatformFeeHookFactoryV1]
+    Creator[Launch creator]
+    OfficialLauncher[Uniswap LiquidityLauncher]
+    Auction[Continuous Clearing Auction]
+    Strategy[Uniswap LBPStrategy]
+    DirectLauncher[DirectLiquidityLauncherV1]
+    TokenFactory[Uniswap UERC20Factory]
+    HookFactory[PlatformFeeHookFactoryV1]
+    PositionFactory[LockedPositionFeeForwarderFactoryV1]
     Hook[PlatformFeeHookV1]
     PoolManager[Uniswap v4 PoolManager]
     PositionManager[Uniswap v4 PositionManager]
-    Treasury[Immutable fee recipient]
+    Forwarder[Uniswap PositionFeesForwarder]
+    Treasury[Immutable platform treasury]
 
-    User -->|atomic multicall| Launcher
-    Launcher -->|create fixed supply| TokenFactory
-    Launcher -->|distribute full supply| Strategy
-    Strategy -->|auction allocation| Auction
-    Factory -->|CREATE2 with exact flags| Hook
-    Strategy -->|authorized initialization| PoolManager
+    Creator -->|auction composition| OfficialLauncher
+    OfficialLauncher --> TokenFactory
+    OfficialLauncher --> Auction
+    Auction --> Strategy
+    Strategy -->|authorized pool initialization| PoolManager
+
+    Creator -->|direct atomic launch| DirectLauncher
+    DirectLauncher --> TokenFactory
+    DirectLauncher --> HookFactory
+    DirectLauncher --> PositionFactory
+    DirectLauncher -->|authorized pool initialization| PoolManager
+    DirectLauncher -->|mint full-range LP NFT| PositionManager
+
+    HookFactory -->|CREATE2, exact callback flags| Hook
+    PositionFactory -->|CREATE2, fixed lock policy| Forwarder
+    PositionManager -->|LP NFT owner| Forwarder
     Hook <-->|beforeInitialize and afterSwap| PoolManager
-    Strategy -->|mint LP position| PositionManager
     PoolManager -->|ERC-6909 fee claims| Hook
     Hook -->|permissionless trigger, fixed payout| Treasury
+    Forwarder -->|permissionless trigger, fixed payout| Creator
 ```
 
 ## Authority map
@@ -30,10 +43,14 @@ flowchart LR
 ```mermaid
 flowchart TD
     PoolCallback[Hook callbacks] -->|only| PoolManager
-    PoolInitialization[Pool initialization] -->|only| LBPStrategy
+    AuctionInitialization[Auction pool initialization] -->|only| LBPStrategy
+    DirectInitialization[Direct pool initialization] -->|only| DirectLiquidityLauncherV1
     FeeRate[Platform fee rate] -->|fixed in bytecode| TenBp[0.10%]
     PoolConfig[Pool configuration] -->|fixed in bytecode| PoolId[One PoolId]
-    FeeCollection[Collection trigger] -->|any address| Redeem[Redeem two bound currencies]
-    Redeem -->|only destination| Treasury[Immutable fee recipient]
+    PlatformCollection[Platform fee collection] -->|any address| Treasury[Immutable platform treasury]
+    LPCollection[LP fee collection] -->|any address| Creator[Immutable launch creator]
+    PositionControl[Position transfer or liquidity removal] --> Locked[No operator and uint256 max timelock]
     Admin[Admin powers] --> None[None]
 ```
+
+The generated Slither inheritance graph is stored in `inheritance-graph.dot`. Slither’s function and state-authorization views are summarized in `function-surface.md` and `state-authorization.md`.

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "standardId": "launcher.direct-standard.v1",
+  "status": "protocol-tested-not-deployed",
+  "network": {
+    "productionChainId": 1,
+    "rehearsalChainId": 11155111
+  },
+  "token": {
+    "implementation": "Uniswap UERC20Factory v2.0",
+    "decimals": 18,
+    "supply": "fixed",
+    "minting": "single-mint-at-creation",
+    "transferTax": false,
+    "rebase": false,
+    "upgradeable": false,
+    "remainingSupplyRecipient": "launch-creator"
+  },
+  "launch": {
+    "implementation": "DirectLiquidityLauncherV1",
+    "atomic": true,
+    "currency0": "native-eth",
+    "currency1": "launched-token",
+    "initialPrice": "creator-supplied-sqrt-price-x96",
+    "liquidityBudgets": "uint128-bounded",
+    "unusedLiquidityBudgetRecipient": "launch-creator"
+  },
+  "pool": {
+    "protocol": "Uniswap v4",
+    "lpFeePips": 3000,
+    "tickSpacing": 60,
+    "initialPosition": "full-range",
+    "positionCustody": {
+      "implementation": "Uniswap PositionFeesForwarder",
+      "operator": "0x0000000000000000000000000000000000000000",
+      "timelockBlockNumber": "uint256.max",
+      "liquidityRemoval": false,
+      "positionTransfer": false,
+      "lpFeeRecipient": "launch-creator",
+      "feeCollection": "permissionless-trigger-fixed-recipient"
+    }
+  },
+  "platformFee": {
+    "implementation": "PlatformFeeHookV1",
+    "percentage": "0.10%",
+    "feePips": 1000,
+    "recipient": "immutable-per-hook",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+  },
+  "provenance": {
+    "hookFactory": "PlatformFeeHookFactoryV1",
+    "positionRecipientFactory": "LockedPositionFeeForwarderFactoryV1",
+    "predeployedFactoryArtifacts": "reuse-recorded-matching-only",
+    "launchRecord": "DirectTokenLaunched-and-DirectLiquidityConfigured-events",
+    "configurationCommitment": "launchHashOf-token"
+  },
+  "productionApproved": false
+}

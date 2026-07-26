@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "launcher.launch-variants.v1",
+  "statusDefinitions": {
+    "protocol-tested": "Implemented and covered by local, fork, fuzz or invariant tests. Not audited or deployed.",
+    "planned": "Product and security boundary defined. Contract implementation is not complete.",
+    "research": "Prior art and invariants still need to be established."
+  },
+  "compositionAxes": [
+    "asset",
+    "opening",
+    "liquidity",
+    "poolBehavior",
+    "positionCustody"
+  ],
+  "verifiedBoundary": {
+    "tokenSupply": "fixed",
+    "transferTax": false,
+    "rebase": false,
+    "sellRestrictions": false,
+    "upgradeableToken": false,
+    "positionCustody": "permanently-locked-official-position-fees-forwarder",
+    "platformFeePercentage": "0.10%",
+    "platformFeeRecipient": "immutable-per-hook",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+  },
+  "variants": [
+    {
+      "id": "auction-fixed-fee-locked-v1",
+      "displayName": "Auction launch",
+      "status": "protocol-tested",
+      "asset": "new-fixed-supply-uerc20",
+      "opening": "continuous-clearing-auction",
+      "liquidity": "auction-proceeds-and-reserved-tokens",
+      "poolBehavior": [
+        "fixed-lp-fee-30bp",
+        "fixed-platform-fee-10bp"
+      ],
+      "positionCustody": "locked-position-fees-forwarder",
+      "implementation": [
+        "Uniswap LiquidityLauncher v3.0",
+        "Uniswap ContinuousClearingAuctionFactory v2.1",
+        "Uniswap LBPStrategy v3.1",
+        "PlatformFeeHookV1",
+        "LockedPositionFeeForwarderFactoryV1"
+      ],
+      "evidence": [
+        "ContinuousClearingAuctionIntegration.t.sol",
+        "OfficialLaunchPathIntegration.t.sol",
+        "PlatformFeeHookV1.t.sol",
+        "PlatformFeeHookInvariant.t.sol"
+      ],
+      "humanSummary": "Bids establish the opening price and the auction proceeds seed a locked Uniswap v4 position."
+    },
+    {
+      "id": "direct-fixed-fee-locked-v1",
+      "displayName": "Direct v4 pool",
+      "status": "protocol-tested",
+      "asset": "new-fixed-supply-uerc20",
+      "opening": "creator-supplied-initial-price",
+      "liquidity": "creator-supplied-native-eth-and-token",
+      "poolBehavior": [
+        "fixed-lp-fee-30bp",
+        "fixed-platform-fee-10bp"
+      ],
+      "positionCustody": "locked-position-fees-forwarder",
+      "implementation": [
+        "DirectLiquidityLauncherV1",
+        "PlatformFeeHookV1",
+        "LockedPositionFeeForwarderFactoryV1",
+        "Uniswap PositionManager"
+      ],
+      "evidence": [
+        "DirectLiquidityLauncherV1.t.sol",
+        "PlatformFeeHookV1.t.sol",
+        "PlatformFeeHookInvariant.t.sol"
+      ],
+      "humanSummary": "The creator sets the opening price and supplies the token and ETH used for a locked Uniswap v4 position."
+    },
+    {
+      "id": "direct-existing-token-locked-v1",
+      "displayName": "Existing token pool",
+      "status": "planned",
+      "asset": "reviewed-existing-erc20",
+      "opening": "creator-supplied-initial-price",
+      "liquidity": "creator-supplied-native-eth-and-token",
+      "poolBehavior": [
+        "fixed-lp-fee-30bp",
+        "fixed-platform-fee-10bp"
+      ],
+      "positionCustody": "locked-position-fees-forwarder",
+      "requiredChecks": [
+        "bytecode-and-source-verification",
+        "supply-authority-review",
+        "transfer-behavior-simulation",
+        "bidirectional-swap-simulation",
+        "proxy-and-admin-disclosure"
+      ],
+      "humanSummary": "A reviewed Ethereum token opens a new locked v4 pool without receiving a Launcher verified-token badge."
+    },
+    {
+      "id": "auction-fee-split-v1",
+      "displayName": "Auction with fee split",
+      "status": "planned",
+      "asset": "new-fixed-supply-uerc20",
+      "opening": "continuous-clearing-auction",
+      "liquidity": "auction-proceeds-and-reserved-tokens",
+      "poolBehavior": [
+        "immutable-fee-split"
+      ],
+      "positionCustody": "locked-position-fees-forwarder",
+      "humanSummary": "A fixed recipient list divides hook fees according to immutable launch-time weights."
+    },
+    {
+      "id": "auction-timed-opening-v1",
+      "displayName": "Timed auction opening",
+      "status": "planned",
+      "asset": "new-fixed-supply-uerc20",
+      "opening": "continuous-clearing-auction",
+      "liquidity": "auction-proceeds-and-reserved-tokens",
+      "poolBehavior": [
+        "public-time-gated-opening"
+      ],
+      "positionCustody": "locked-position-fees-forwarder",
+      "humanSummary": "Swaps open for every address at one immutable timestamp after the auction migration."
+    },
+    {
+      "id": "dynamic-fee-bounded-v1",
+      "displayName": "Bounded dynamic fees",
+      "status": "research",
+      "asset": "new-fixed-supply-uerc20",
+      "opening": "auction-or-direct",
+      "liquidity": "locked-v4-position",
+      "poolBehavior": [
+        "bounded-dynamic-lp-fee"
+      ],
+      "positionCustody": "locked-position-fees-forwarder",
+      "humanSummary": "The LP fee follows a bounded public rule that requires a separate hook family and audit."
+    },
+    {
+      "id": "external-custom-hook-v1",
+      "displayName": "Custom hook",
+      "status": "research",
+      "asset": "new-or-reviewed-existing-token",
+      "opening": "auction-or-direct",
+      "liquidity": "defined-by-reviewed-composition",
+      "poolBehavior": [
+        "external-hook"
+      ],
+      "positionCustody": "explicit-per-launch",
+      "humanSummary": "External hooks remain outside the verified boundary and must expose permissions, source, authorities and audit status."
+    }
+  ]
+}
