@@ -56,6 +56,44 @@
       ]
     },
     {
+      "id": "SYS-02",
+      "name": "Direct liquidity boundary",
+      "status": "protocol-tested",
+      "compatibilityId": "launcher.v1.uerc20-direct-full-range",
+      "parameterBounds": {
+        "tokenDecimals": {
+          "fixed": 18
+        },
+        "nativeLiquidityBudget": {
+          "minimum": "1",
+          "maximum": "uint128"
+        },
+        "tokenLiquidityBudget": {
+          "minimum": "1",
+          "maximum": "uint128"
+        },
+        "lpFeePips": {
+          "fixed": 3000
+        },
+        "tickSpacing": {
+          "fixed": 60
+        }
+      },
+      "callbackMask": [
+        "beforeInitialize"
+      ],
+      "authorityModel": "Only the immutable DirectLiquidityLauncherV1 address may initialize the one bound pool.",
+      "humanSummary": "Creates a fixed-supply token and atomically opens one full-range Uniswap v4 position using creator-supplied ETH and tokens.",
+      "invariants": [
+        "Token creation, hook deployment, pool initialization and position minting are atomic.",
+        "Only the configured direct launcher can initialize the pool.",
+        "The position is minted directly to the deterministic locked fee forwarder.",
+        "Matching factory-recorded CREATE2 artifacts can be reused, while unrecognized deployments are rejected.",
+        "Unused liquidity budgets and remaining token supply return to the launch creator.",
+        "The launch contract retains no token balance after a successful launch."
+      ]
+    },
+    {
       "id": "C-01",
       "name": "Locked initial liquidity",
       "status": "enabled",

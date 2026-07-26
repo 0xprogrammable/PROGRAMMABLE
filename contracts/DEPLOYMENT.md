@@ -11,16 +11,19 @@ No deployment has been broadcast. The current target is an Ethereum Sepolia rehe
 - Approval block: `type(uint256).max`
 - LP fee recipient: immutable launch creator
 
-The deployment wallet and treasury were EOAs with zero balance and nonce zero on Ethereum and Sepolia when checked on 2026-07-26. Recheck immediately before any transaction.
+The Sepolia deployment wallet and Ethereum treasury were EOAs with zero balance and nonce zero when rechecked on 2026-07-26. The three predicted Sepolia infrastructure addresses had no code. Recheck immediately before any transaction.
 
 ## Read-only verification
 
 ```sh
 npm run contracts:verify
+npm run contracts:variants
+npm run contracts:official-deployments
+npm run contracts:slither
 npm run contracts:sepolia:validate
 ```
 
-The Sepolia checks pin eight official runtime-code hashes. The deployment script fails if the selected chain, broadcaster or any pinned bytecode differs.
+The Sepolia checks pin eight official runtime-code hashes. The deployment script fails if the selected chain, broadcaster or any pinned bytecode differs. The variant validator also fails if catalog status, evidence, fee or treasury fields drift across the machine-readable specifications.
 
 ## Local signing
 
@@ -38,7 +41,7 @@ cast wallet address --account launcher-sepolia
 
 ## Simulate, then broadcast
 
-Use a reliable Sepolia RPC. The latest read-only simulation on 2026-07-26 estimated 4,659,901 gas and approximately 0.0102 Sepolia ETH at 2.1853 gwei. Funding the test wallet with 0.02 Sepolia ETH provides a reasonable rehearsal margin; simulate again before broadcast because gas prices change.
+Use a reliable Sepolia RPC. The latest read-only simulation on 2026-07-26 estimated 8,977,280 gas and approximately 0.01756022828985984 Sepolia ETH at 1.956074478 gwei. Funding the test wallet with 0.03 Sepolia ETH provides a rehearsal margin; simulate again before broadcast because gas prices change.
 
 ```sh
 export SEPOLIA_RPC_URL=https://your-sepolia-rpc.example
@@ -60,15 +63,22 @@ forge script script/DeploySepoliaInfrastructureV1.s.sol:DeploySepoliaInfrastruct
   --slow
 ```
 
-The broadcast deploys only `PlatformFeeHookFactoryV1` and `LockedPositionFeeForwarderFactoryV1`. A token, hook, auction or pool is not created by this infrastructure step.
+The infrastructure transaction sequence predicts:
+
+- `PlatformFeeHookFactoryV1`: `0x291a9ff1059d225d02B1659430804486404dB507`
+- `LockedPositionFeeForwarderFactoryV1`: `0xaE3C324B742a7576863A546120c4280b7c9E8448`
+- `DirectLiquidityLauncherV1`: `0x5fc6aDd062329742EFefA9c4b11C355AAe02Fa1E`
+
+These are deterministic nonce-derived predictions, not deployed addresses. The broadcast deploys the two factories and the direct-liquidity entry point. A token, hook, auction or pool is not created by this infrastructure step.
 
 ## Evidence required after broadcast
 
 - Successful receipts and final contract addresses
-- Source verification for both factories
+- Source verification for both factories and the direct launcher
 - Runtime bytecode matched to the exact Git commit
 - Deployment-wallet nonce and balance deltas
-- A full Sepolia token launch, bid, graduation, v4 migration and both fee-collection paths
+- A full Sepolia auction launch, bid, graduation, v4 migration and both fee-collection paths
+- A full Sepolia direct launch, bidirectional swaps and both fee-collection paths
 - Browser transaction simulation bound to the same machine-readable specification
 
 Do not reuse a failed or uncertain broadcast command until its nonce and receipt state have been checked.

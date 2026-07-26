@@ -3,18 +3,22 @@ pragma solidity 0.8.26;
 
 import { Script } from "forge-std/Script.sol";
 
+import { UERC20Factory } from "@uniswap/uerc20-factory/src/factories/UERC20Factory.sol";
+import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 
+import { DirectLiquidityLauncherV1 } from "../src/DirectLiquidityLauncherV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "../src/LockedPositionFeeForwarderFactoryV1.sol";
 import { PlatformFeeHookFactoryV1 } from "../src/PlatformFeeHookFactoryV1.sol";
 
 /// @title DeploySepoliaInfrastructureV1
-/// @notice Deploys only Launcher-owned permissionless factories after validating the complete official dependency set.
+/// @notice Deploys Launcher’s permissionless factories and direct-liquidity entrypoint after validating dependencies.
 /// @dev Use a configured Foundry account or hardware wallet. No private key is read by this script.
 contract DeploySepoliaInfrastructureV1 is Script {
     uint256 internal constant SEPOLIA_CHAIN_ID = 11_155_111;
 
     address internal constant TEST_DEPLOYMENT_WALLET = 0x2Bb333d48DFAF1596D9036671d2E43168994249E;
+    address internal constant PLATFORM_TREASURY = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address internal constant POOL_MANAGER = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address internal constant POSITION_MANAGER = 0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4;
     address internal constant STATE_VIEW = 0xE1Dd9c3fA50EDB962E442f60DfBc432e24537E4C;
@@ -46,7 +50,8 @@ contract DeploySepoliaInfrastructureV1 is Script {
         external
         returns (
             PlatformFeeHookFactoryV1 platformFeeHookFactory,
-            LockedPositionFeeForwarderFactoryV1 lockedPositionFeeForwarderFactory
+            LockedPositionFeeForwarderFactoryV1 lockedPositionFeeForwarderFactory,
+            DirectLiquidityLauncherV1 directLiquidityLauncher
         )
     {
         validateDependencies();
@@ -59,6 +64,14 @@ contract DeploySepoliaInfrastructureV1 is Script {
         vm.startBroadcast(broadcaster);
         platformFeeHookFactory = new PlatformFeeHookFactoryV1();
         lockedPositionFeeForwarderFactory = new LockedPositionFeeForwarderFactoryV1(IPositionManager(POSITION_MANAGER));
+        directLiquidityLauncher = new DirectLiquidityLauncherV1(
+            IPoolManager(POOL_MANAGER),
+            IPositionManager(POSITION_MANAGER),
+            UERC20Factory(UERC20_FACTORY),
+            platformFeeHookFactory,
+            lockedPositionFeeForwarderFactory,
+            PLATFORM_TREASURY
+        );
         vm.stopBroadcast();
     }
 
