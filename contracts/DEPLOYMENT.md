@@ -38,7 +38,7 @@ cast wallet address --account launcher-sepolia
 
 ## Simulate, then broadcast
 
-Use a reliable Sepolia RPC. The read-only simulation on 2026-07-26 estimated 4,659,901 gas and approximately 0.0097 Sepolia ETH at the then-current gas price. Funding the test wallet with 0.02 Sepolia ETH provides a reasonable rehearsal margin; simulate again before broadcast because gas prices change.
+Use a reliable Sepolia RPC. The latest read-only simulation on 2026-07-26 estimated 4,659,901 gas and approximately 0.0102 Sepolia ETH at 2.1853 gwei. Funding the test wallet with 0.02 Sepolia ETH provides a reasonable rehearsal margin; simulate again before broadcast because gas prices change.
 
 ```sh
 export SEPOLIA_RPC_URL=https://your-sepolia-rpc.example
