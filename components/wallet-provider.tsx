@@ -14,6 +14,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -406,20 +407,60 @@ function DialogFrame({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+
   useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div
@@ -430,6 +471,7 @@ function DialogFrame({
       }}
     >
       <section
+        ref={dialogRef}
         className="wallet-dialog"
         role="dialog"
         aria-modal="true"
@@ -441,6 +483,7 @@ function DialogFrame({
             <h2 id="wallet-dialog-title">{title}</h2>
           </div>
           <button
+            ref={closeButtonRef}
             className="icon-button"
             type="button"
             aria-label="Close wallet dialog"
@@ -467,12 +510,16 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   const { wallet, authenticated, connecting, openWallet } = useWallet();
 
   const label = connecting
-    ? "Loading"
+    ? compact
+      ? "Connect"
+      : "Connect wallet"
     : wallet
       ? shortenAddress(wallet.account)
       : authenticated
         ? "Set up wallet"
-        : "Connect wallet";
+        : compact
+          ? "Connect"
+          : "Connect wallet";
 
   return (
     <button

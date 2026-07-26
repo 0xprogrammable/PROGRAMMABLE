@@ -54,7 +54,8 @@ The `contracts/` workspace contains the first verified Uniswap v4 launch path: a
 
 ```bash
 npm run contracts:verify
+npm run contracts:official-deployments
 npm run contracts:sepolia:validate
 ```
 
-The suite covers all four swap modes, fuzzing, stateful invariants, the full auction-to-v4 migration, fee collection in ERC-20 and native ETH, and a pinned Ethereum deployment snapshot. This remains a protocol spike; the open mainnet gates are documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).
+The suite covers all four swap modes, fuzzing, stateful invariants, the full auction-to-v4 migration, fee collection in ERC-20 and native ETH, and pinned Ethereum deployment snapshots. The deployment check also compares 24 required Mainnet and Sepolia records with Uniswap’s current machine-readable registry, including each active address and official source-code link. This remains a protocol spike; the open mainnet gates are documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).
