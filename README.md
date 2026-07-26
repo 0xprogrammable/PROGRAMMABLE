@@ -43,16 +43,18 @@ Create a Privy project, allow the production and local domains, and enable walle
 NEXT_PUBLIC_PRIVY_APP_ID=your-privy-app-id
 NEXT_PUBLIC_PRIVY_CLIENT_ID=your-optional-privy-client-id
 ETHEREUM_RPC_URL=https://your-mainnet-rpc.example
+SEPOLIA_RPC_URL=https://your-sepolia-rpc.example
 ```
 
 The App ID and optional App Client ID are public browser configuration. No private key or Privy App Secret belongs in this application.
 
 ## Contract spike
 
-The `contracts/` workspace contains the first verified Uniswap v4 launch path: a deterministic, non-upgradeable hook with a fixed 0.10% platform fee and an immutable recipient. It reuses the official UERC20Factory, LiquidityLauncher, Continuous Clearing Auction, LBPStrategy, PoolManager and PositionManager.
+The `contracts/` workspace contains the first verified Uniswap v4 launch path: a deterministic, non-upgradeable hook with a fixed 0.10% platform fee and an immutable recipient. It reuses the official UERC20Factory, LiquidityLauncher, Continuous Clearing Auction, LBPStrategy, PoolManager, PositionManager and PositionFeesForwarder. Initial LP positions use a zero operator and maximum-block timelock; LP fees remain claimable to the immutable launch creator.
 
 ```bash
 npm run contracts:verify
+npm run contracts:sepolia:validate
 ```
 
 The suite covers all four swap modes, fuzzing, stateful invariants, the full auction-to-v4 migration, fee collection in ERC-20 and native ETH, and a pinned Ethereum deployment snapshot. This remains a protocol spike; the open mainnet gates are documented in [`contracts/security/MAINNET-READINESS.md`](contracts/security/MAINNET-READINESS.md).

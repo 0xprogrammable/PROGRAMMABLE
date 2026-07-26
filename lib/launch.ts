@@ -241,6 +241,7 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
         : "Defined by the selected behavior"
     }`,
     `Launcher fee: ${(PLATFORM_FEE_BPS / 100).toFixed(2)}% of eligible swaps`,
+    "Initial LP: permanently locked; LP fees go to the launch creator",
     "",
     buildLaunchSummary(draft),
     "",

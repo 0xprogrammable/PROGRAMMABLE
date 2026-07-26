@@ -1,12 +1,14 @@
 # Security properties
 
-This document defines the properties expected from `PlatformFeeHookV1` and `PlatformFeeHookFactoryV1`. It is a testable engineering specification, not an audit certificate.
+This document defines the properties expected from `PlatformFeeHookV1`, `PlatformFeeHookFactoryV1` and `LockedPositionFeeForwarderFactoryV1`. It is a testable engineering specification, not an audit certificate.
 
 ## Trust boundary
 
 The hook trusts the immutable Uniswap v4 `PoolManager` supplied at deployment. It accepts pool initialization only when the `PoolManager` reports the immutable LBP strategy as the sender. It accepts swap callbacks only from that `PoolManager` and only for its precomputed `PoolId`.
 
 The hook has no owner, proxy, pause function or mutable parameter. The factory is permissionless and has no administrator. A factory deployment proves provenance, not production approval.
+
+Initial LP NFTs are assigned to the official Uniswap `PositionFeesForwarder`, deployed through Launcher’s deterministic factory. The forwarder has the zero address as operator and `type(uint256).max` as its approval block. Its immutable fee recipient is the launch creator. This gives the creator the LP fee economics without a practical position-transfer or liquidity-removal path.
 
 ## Core properties
 
@@ -21,6 +23,10 @@ The hook has no owner, proxy, pause function or mutable parameter. The factory i
 | FEE-04 | Both ERC-20 and native-currency claims redeem to the same immutable recipient. | full migration and post-migration swap integration test |
 | FLAGS-01 | The hook address has exactly `beforeInitialize`, `afterSwap` and `afterSwapReturnDelta`. | factory mask validation; `test_permissions_areExact`; invariant suite |
 | FACTORY-01 | The factory deploys only a correctly mined CREATE2 address and records its configuration hash. | `deploy`; `test_factoryRejectsUnminedSalt`; provenance assertions |
+| LOCK-01 | Every verified initial LP position is minted to a forwarder deployed by Launcher’s deterministic factory. | `test_deploysOfficialForwarderWithFixedLockPolicy`; migration integration assertions |
+| LOCK-02 | The forwarder has no operator and cannot approve a transfer before the maximum `uint256` block. | fixed factory constructor arguments; `test_revertsBeforeMaximumTimelockBlock`; migration integration assertions |
+| LOCK-03 | Permissionless LP fee collection forwards both currencies to the immutable creator without reducing liquidity. | official `PositionFeesForwarder`; bidirectional integration swaps and before/after liquidity assertion |
+| LOCK-04 | Platform hook fees and creator LP fees remain separate and cannot redirect one another. | separate immutable recipients; integration balance assertions |
 | IMM-01 | Authorities, pool configuration and fee parameters cannot change after construction. | immutable bytecode fields; empty hook storage layout; invariant suite |
 | FLOW-01 | Token creation and distribution can execute atomically through the official launcher and UERC20 factory. | `test_atomicOfficialTokenCreationAndStrategyRegistration` |
 | FLOW-02 | The official LBP strategy can migrate into the bound pool, mint a position and enable fee-bearing swaps. | `test_migrationInitializesBoundPoolAndCollectsFeeAfterSwap` |
@@ -35,6 +41,8 @@ The current fuzz range is intentionally below pathological `int128` boundaries. 
 ## Failure behavior
 
 - An incorrect hook salt reverts before deployment.
+- A duplicate position-forwarder salt and recipient pair reverts before deployment.
+- A zero, sentinel or non-contract PositionManager configuration reverts.
 - A wrong pool configuration reverts before initialization or fee collection.
 - A direct callback from any address other than PoolManager reverts.
 - A failed native or ERC-20 payout reverts the whole collection. Accrued ERC-6909 claims remain in the hook.
@@ -42,4 +50,4 @@ The current fuzz range is intentionally below pathological `int128` boundaries. 
 
 ## Out of scope
 
-The properties do not certify the Continuous Clearing Auction implementation beyond the tested happy path. Oracle-based hooks, dynamic fees, arbitrary third-party hooks, regulated assets, frontend transaction construction and operational custody remain out of scope.
+The properties do not certify the Continuous Clearing Auction implementation beyond the tested happy path. Oracle-based hooks, dynamic fees, arbitrary third-party hooks, regulated assets, frontend transaction construction and production signer custody remain out of scope.

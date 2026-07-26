@@ -24,6 +24,10 @@ Bids establish an opening price. A configured share of the raised ETH and reserv
 
 The creator supplies the token and ETH liquidity used to initialize a v4 pool. This path is appropriate when a team already has its opening price and liquidity budget.
 
+### Liquidity custody
+
+Every verified launch sends its initial v4 position to a deterministic instance of Uniswap's official `PositionFeesForwarder`. Launcher fixes the operator to the zero address and the timelock to the maximum `uint256` block. The creator receives LP fees but cannot transfer the position or remove the initial liquidity. The separate 0.10% Launcher hook fee goes only to the platform treasury.
+
 ## Contract boundary
 
 The website can describe and save launch plans before contracts are connected. Mainnet deployment must remain unavailable until:
