@@ -89,4 +89,11 @@ The current fuzz range is intentionally below pathological `int128` boundaries. 
 
 ## Out of scope
 
-The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich protection or profitable price discovery. The bounded dynamic rule is not an oracle: a trader can move the pool tick and influence the fee selected in a later block, subject to the fixed ceiling. Unbounded or externally administered dynamic fees, arbitrary existing ERC-20s, oracle-based hooks, arbitrary third-party hooks, regulated assets, indexer correctness and production signer custody remain out of scope. The frontend auction and direct paths are implemented locally but still lack deployed Launcher infrastructure, signed rehearsal evidence and an independent audit.
+The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not
+provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich
+protection or profitable price discovery. The bounded dynamic rule is not an oracle: a trader can move the pool tick
+and influence the fee selected in a later block, subject to the fixed ceiling. Unbounded or externally administered
+dynamic fees, arbitrary existing ERC-20s, oracle-based hooks, arbitrary third-party hooks, regulated assets, indexer
+correctness and production signer custody remain out of scope. The Launcher infrastructure is deployed and
+source-verified on Sepolia, but the frontend paths still lack complete signed launch, swap and fee-collection rehearsals
+and an independent audit.

@@ -403,6 +403,11 @@ function renderHtml(transactions) {
           setNotice(error?.message ?? String(error), "error");
         } finally {
           busy = false;
+          if (account) {
+            deployButton.disabled =
+              state.every((entry) => entry.done) ||
+              state.some((entry) => entry.failed);
+          }
         }
       }
 
@@ -419,6 +424,7 @@ function renderHtml(transactions) {
         busy = true;
         deployButton.disabled = true;
         refreshButton.disabled = true;
+        let failureMessage;
 
         try {
           await ensureSepolia();
@@ -498,13 +504,15 @@ function renderHtml(transactions) {
           setNotice(transaction.name + " confirmed at the expected address.", "success");
           await refreshState();
         } catch (error) {
-          setNotice(error?.message ?? String(error), "error");
+          failureMessage = error?.message ?? String(error);
+          setNotice(failureMessage, "error");
         } finally {
           busy = false;
           refreshButton.disabled = !account;
           if (account) await refreshState().catch((error) => {
             setNotice(error?.message ?? String(error), "error");
           });
+          if (failureMessage) setNotice(failureMessage, "error");
         }
       }
 

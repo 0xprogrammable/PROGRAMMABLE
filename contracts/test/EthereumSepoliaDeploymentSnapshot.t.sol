@@ -3,8 +3,13 @@ pragma solidity 0.8.26;
 
 import { Test } from "forge-std/Test.sol";
 
+import { DirectLiquidityLauncherV1 } from "../src/DirectLiquidityLauncherV1.sol";
+import { BoundedDynamicFeeHookFactoryV1 } from "../src/BoundedDynamicFeeHookFactoryV1.sol";
+import { LockedPositionFeeForwarderFactoryV1 } from "../src/LockedPositionFeeForwarderFactoryV1.sol";
+import { PlatformFeeHookFactoryV1 } from "../src/PlatformFeeHookFactoryV1.sol";
+
 contract EthereumSepoliaDeploymentSnapshotTest is Test {
-    uint256 internal constant SNAPSHOT_BLOCK = 11_350_986;
+    uint256 internal constant SNAPSHOT_BLOCK = 11_353_915;
 
     address internal constant POOL_MANAGER = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address internal constant POSITION_MANAGER = 0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4;
@@ -14,6 +19,12 @@ contract EthereumSepoliaDeploymentSnapshotTest is Test {
     address internal constant LBP_STRATEGY = 0x96641d91e223c766F45b19d09494F5925C3cE000;
     address internal constant CCA_FACTORY = 0x000000001F26a0044BaA66024e7b6599c61963F8;
     address internal constant UERC20_FACTORY = 0x000000e200088D55C39a11F609E5F667729ad49b;
+    address internal constant PLATFORM_TREASURY = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
+
+    address internal constant PLATFORM_FEE_HOOK_FACTORY = 0x291a9ff1059d225d02B1659430804486404dB507;
+    address internal constant LOCKED_POSITION_FACTORY = 0xaE3C324B742a7576863A546120c4280b7c9E8448;
+    address internal constant DIRECT_LIQUIDITY_LAUNCHER = 0x5fc6aDd062329742EFefA9c4b11C355AAe02Fa1E;
+    address internal constant BOUNDED_DYNAMIC_FEE_FACTORY = 0x51d702731db281EE223904A4663E05BfCA26C775;
 
     function setUp() public {
         string memory rpc = vm.envOr("SEPOLIA_RPC_URL", string("https://sepolia.drpc.org"));
@@ -43,5 +54,47 @@ contract EthereumSepoliaDeploymentSnapshotTest is Test {
         assertEq(
             UERC20_FACTORY.codehash, 0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb, "UERC20Factory"
         );
+    }
+
+    function test_launcherRuntimeAndConfigurationMatchPinnedDeployment() public view {
+        assertEq(
+            PLATFORM_FEE_HOOK_FACTORY.codehash,
+            0x7792dba76c190e746dc7fbf7f8a8f690f7cf5ce6fab448c858069b1852974306,
+            "PlatformFeeHookFactoryV1"
+        );
+        assertEq(
+            LOCKED_POSITION_FACTORY.codehash,
+            0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc,
+            "LockedPositionFeeForwarderFactoryV1"
+        );
+        assertEq(
+            DIRECT_LIQUIDITY_LAUNCHER.codehash,
+            0x41fa4dbe9709e93f601e0406a3a9d61826144ca56e16f748e063f850fc0af48b,
+            "DirectLiquidityLauncherV1"
+        );
+        assertEq(
+            BOUNDED_DYNAMIC_FEE_FACTORY.codehash,
+            0xe6bbbdba0194caba268f5546db2574dc416b3c74331bd44f33d04d4b2251ffbc,
+            "BoundedDynamicFeeHookFactoryV1"
+        );
+
+        LockedPositionFeeForwarderFactoryV1 positionFactory =
+            LockedPositionFeeForwarderFactoryV1(LOCKED_POSITION_FACTORY);
+        DirectLiquidityLauncherV1 directLauncher = DirectLiquidityLauncherV1(payable(DIRECT_LIQUIDITY_LAUNCHER));
+
+        assertEq(address(positionFactory.positionManager()), POSITION_MANAGER);
+        assertEq(positionFactory.OPERATOR(), address(0));
+        assertEq(positionFactory.TIMELOCK_BLOCK(), type(uint256).max);
+        assertEq(address(directLauncher.poolManager()), POOL_MANAGER);
+        assertEq(address(directLauncher.positionManager()), POSITION_MANAGER);
+        assertEq(address(directLauncher.tokenFactory()), UERC20_FACTORY);
+        assertEq(address(directLauncher.hookFactory()), PLATFORM_FEE_HOOK_FACTORY);
+        assertEq(address(directLauncher.positionForwarderFactory()), LOCKED_POSITION_FACTORY);
+        assertEq(directLauncher.platformFeeRecipient(), PLATFORM_TREASURY);
+        assertEq(directLauncher.TOKEN_DECIMALS(), 18);
+        assertEq(PlatformFeeHookFactoryV1(PLATFORM_FEE_HOOK_FACTORY).ALL_HOOK_MASK(), (1 << 14) - 1);
+        assertEq(PlatformFeeHookFactoryV1(PLATFORM_FEE_HOOK_FACTORY).REQUIRED_HOOK_FLAGS(), 8260);
+        assertEq(BoundedDynamicFeeHookFactoryV1(BOUNDED_DYNAMIC_FEE_FACTORY).ALL_HOOK_MASK(), (1 << 14) - 1);
+        assertEq(BoundedDynamicFeeHookFactoryV1(BOUNDED_DYNAMIC_FEE_FACTORY).REQUIRED_HOOK_FLAGS(), 12_484);
     }
 }

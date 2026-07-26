@@ -56,6 +56,9 @@ The web auction path calls Uniswap’s official LiquidityLauncher directly. Laun
 
 ## Evidence boundary
 
-Passing local and fork tests does not make these contracts audited or production-ready. Before mainnet, the contracts still require independent review, a signed and reproducible deployment rehearsal on Sepolia, verified bytecode, production signer controls and a final check against current official Uniswap deployments.
+Passing local, fork and Sepolia infrastructure checks does not make these contracts audited or production-ready. The
+four infrastructure contracts are deployed and source-verified on Sepolia; before mainnet, the launch families still
+require complete launch, swap, fee-collection and recovery rehearsals, independent review, production signer controls
+and a final check against current official Uniswap deployments.
 
 The current security evidence and blockers are recorded in [`security/REVIEW-2026-07-26.md`](security/REVIEW-2026-07-26.md), with testable properties in [`security/SECURITY-PROPERTIES.md`](security/SECURITY-PROPERTIES.md), a monitoring specification in [`security/MONITORING-AND-INCIDENT-RESPONSE.md`](security/MONITORING-AND-INCIDENT-RESPONSE.md) and a nine-category maturity assessment in [`security/MATURITY-2026-07-26.md`](security/MATURITY-2026-07-26.md).
