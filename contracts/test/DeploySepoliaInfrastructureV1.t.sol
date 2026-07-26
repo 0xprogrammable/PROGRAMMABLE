@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import { Test } from "forge-std/Test.sol";
 
 import { DirectLiquidityLauncherV1 } from "../src/DirectLiquidityLauncherV1.sol";
+import { BoundedDynamicFeeHookFactoryV1 } from "../src/BoundedDynamicFeeHookFactoryV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "../src/LockedPositionFeeForwarderFactoryV1.sol";
 import { PlatformFeeHookFactoryV1 } from "../src/PlatformFeeHookFactoryV1.sol";
 import { DeploySepoliaInfrastructureV1 } from "../script/DeploySepoliaInfrastructureV1.s.sol";
@@ -33,12 +34,14 @@ contract DeploySepoliaInfrastructureV1Test is Test {
         (
             PlatformFeeHookFactoryV1 hookFactory,
             LockedPositionFeeForwarderFactoryV1 positionFactory,
-            DirectLiquidityLauncherV1 directLauncher
+            DirectLiquidityLauncherV1 directLauncher,
+            BoundedDynamicFeeHookFactoryV1 dynamicHookFactory
         ) = deployment.run();
 
         assertGt(address(hookFactory).code.length, 0);
         assertGt(address(positionFactory).code.length, 0);
         assertGt(address(directLauncher).code.length, 0);
+        assertGt(address(dynamicHookFactory).code.length, 0);
         assertEq(address(positionFactory.positionManager()), POSITION_MANAGER);
         assertEq(address(directLauncher.poolManager()), POOL_MANAGER);
         assertEq(address(directLauncher.positionManager()), POSITION_MANAGER);

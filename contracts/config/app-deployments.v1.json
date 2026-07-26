@@ -4,10 +4,12 @@
     "chainId": 1,
     "status": "not-deployed",
     "platformFeeHookFactory": null,
+    "boundedDynamicFeeHookFactory": null,
     "lockedPositionFeeForwarderFactory": null,
     "directLiquidityLauncher": null,
     "runtimeCodeHashes": {
       "platformFeeHookFactory": null,
+      "boundedDynamicFeeHookFactory": null,
       "lockedPositionFeeForwarderFactory": null,
       "directLiquidityLauncher": null
     },
@@ -17,10 +19,12 @@
     "chainId": 11155111,
     "status": "predicted-not-deployed",
     "platformFeeHookFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
+    "boundedDynamicFeeHookFactory": "0x51d702731db281EE223904A4663E05BfCA26C775",
     "lockedPositionFeeForwarderFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
     "directLiquidityLauncher": "0x5fc6aDd062329742EFefA9c4b11C355AAe02Fa1E",
     "runtimeCodeHashes": {
       "platformFeeHookFactory": null,
+      "boundedDynamicFeeHookFactory": null,
       "lockedPositionFeeForwarderFactory": null,
       "directLiquidityLauncher": null
     },

@@ -58,9 +58,9 @@ export const behaviorDefinitions: BehaviorDefinition[] = [
   },
   {
     id: "dynamic-fee",
-    name: "Dynamic fees",
+    name: "Bounded dynamic fee",
     description:
-      "Let the swap fee follow a bounded rule based on pool activity",
+      "Raise the pool fee from 0.30% to at most 1.00% after recent pool price movement",
     tier: "review",
   },
   {
@@ -252,6 +252,8 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     `Pool fee: ${
       draft.selectedBehaviors.includes("fixed-fee")
         ? `${draft.lpFeePercent || "unset"}%`
+        : draft.selectedBehaviors.includes("dynamic-fee")
+          ? "0.30% base, 1.00% maximum, updated at most once per block"
         : "Defined by the selected behavior"
     }`,
     `Launcher fee: ${(PLATFORM_FEE_BPS / 100).toFixed(2)}% of eligible swaps`,

@@ -8,10 +8,12 @@ import {
 
 import {
   buildDirectLaunchAmounts,
+  BOUNDED_DYNAMIC_HOOK_FLAGS,
   directLiquidityLauncherAbi,
   encodeNewDirectLaunch,
   HOOK_FLAG_MASK,
   integerSquareRoot,
+  mineBoundedDynamicFeeHookSalt,
   mineStandardHookSalt,
   parseDecimalAmount,
   STANDARD_HOOK_FLAGS,
@@ -125,6 +127,16 @@ describe("direct launch calldata", () => {
     expect(recomputed).toBe(mined.address);
     expect(BigInt(mined.address) & HOOK_FLAG_MASK).toBe(
       STANDARD_HOOK_FLAGS,
+    );
+  });
+
+  it("mines the exact bounded dynamic fee callback mask", () => {
+    const factory = "0x1111111111111111111111111111111111111111";
+    const initCodeHash = keccak256(toHex("bounded dynamic hook fixture"));
+    const mined = mineBoundedDynamicFeeHookSalt(factory, initCodeHash);
+
+    expect(BigInt(mined.address) & HOOK_FLAG_MASK).toBe(
+      BOUNDED_DYNAMIC_HOOK_FLAGS,
     );
   });
 });

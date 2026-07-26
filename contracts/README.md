@@ -1,25 +1,26 @@
 # Launcher protocol spike
 
-This directory contains Launcher’s first three protocol-tested Uniswap v4 launch paths. It is a protocol workspace, not a production deployment.
+This directory contains Launcher’s first four protocol-tested Uniswap v4 launch paths. It is a protocol workspace, not a production deployment.
 
-The implementation deliberately reuses Uniswap’s UERC20Factory, LiquidityLauncher, Continuous Clearing Auction, LBPStrategy, PositionManager and v4 core contracts. Launcher’s own surface is limited to a fixed platform-fee hook, deterministic factories and two direct atomic launch entry points.
+The implementation deliberately reuses Uniswap’s UERC20Factory, LiquidityLauncher, Continuous Clearing Auction, LBPStrategy, PositionManager and v4 core contracts. Launcher’s own surface is limited to two immutable hook families, deterministic factories and two direct atomic launch entry points.
 
 ## Protocol-tested variants
 
 - Auction launch: 50% of supply is sold through the official four-hour CCA, 50% is reserved for the v4 position and all auction proceeds fund the locked full-range LP while the pinned factory has no protocol fee controller
 - Direct v4 pool: the creator selects the opening price and supplies the initial ETH/token liquidity
 - Existing token pool: the configured Uniswap factory proves an existing UERC20’s origin and its recorded creator supplies direct liquidity
+- Bounded dynamic fee auction: the official auction path migrates into a pool whose LP fee follows a fixed 0.30–1.00% tick-movement rule
 - New tokens use a fixed supply and 18 decimals; existing UERC20s retain their original fixed supply and decimals
 - One non-upgradeable hook per pool
-- Static 0.30% LP fee
+- Fixed 0.30% LP fee or the separately tested bounded 0.30–1.00% rule
 - Fixed 0.10% Launcher fee on the absolute unspecified swap amount
 - Immutable pool, initializer and fee recipient
 - Initial LP NFT held by Uniswap's official `PositionFeesForwarder`
 - Zero transfer operator and maximum-block timelock
 - Permissionless LP-fee collection to the immutable launch creator
-- No owner, proxy, pause or mutable fee
+- No owner, proxy, pause or admin-set fee
 
-The authoritative machine-readable specifications are in [`spec/launch-variants.v1.json`](spec/launch-variants.v1.json), [`spec/verified-standard-v1.json`](spec/verified-standard-v1.json), [`spec/direct-standard-v1.json`](spec/direct-standard-v1.json), [`spec/existing-uerc20-standard-v1.json`](spec/existing-uerc20-standard-v1.json) and [`spec/behavior-modules.v1.json`](spec/behavior-modules.v1.json).
+The authoritative machine-readable specifications are in [`spec/launch-variants.v1.json`](spec/launch-variants.v1.json), [`spec/verified-standard-v1.json`](spec/verified-standard-v1.json), [`spec/bounded-dynamic-fee-v1.json`](spec/bounded-dynamic-fee-v1.json), [`spec/direct-standard-v1.json`](spec/direct-standard-v1.json), [`spec/existing-uerc20-standard-v1.json`](spec/existing-uerc20-standard-v1.json) and [`spec/behavior-modules.v1.json`](spec/behavior-modules.v1.json).
 
 ## Local setup
 
@@ -49,9 +50,9 @@ The public treasury, test deployment wallet and LP custody policy are recorded i
 npm run contracts:sepolia:validate
 ```
 
-`script/DeploySepoliaInfrastructureV1.s.sol` deploys Launcher’s two permissionless factories and `DirectLiquidityLauncherV1`. The launcher exposes separate atomic methods for a new fixed-supply token and for a provenance-verified existing UERC20. The script refuses the wrong chain, wrong broadcaster or changed official dependency bytecode. It does not read a private key; broadcasting must use a local Foundry account or hardware wallet.
+`script/DeploySepoliaInfrastructureV1.s.sol` deploys Launcher’s three permissionless factories and `DirectLiquidityLauncherV1`. The launcher exposes separate atomic methods for a new fixed-supply token and for a provenance-verified existing UERC20. The script refuses the wrong chain, wrong broadcaster or changed official dependency bytecode. It does not read a private key; broadcasting must use a local Foundry account or hardware wallet.
 
-The web auction path calls Uniswap’s official LiquidityLauncher directly. Launcher’s factories deploy the deterministic permanent LP recipient and fixed platform-fee hook first. The final wallet transaction then atomically creates the UERC20 and registers the complete CCA/LBP migration composition.
+The web auction path calls Uniswap’s official LiquidityLauncher directly. Launcher’s factories deploy the deterministic permanent LP recipient and either the fixed-fee or bounded dynamic-fee hook first. The final wallet transaction then atomically creates the UERC20 and registers the complete CCA/LBP migration composition.
 
 ## Evidence boundary
 

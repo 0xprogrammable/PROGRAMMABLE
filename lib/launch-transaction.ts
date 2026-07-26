@@ -18,6 +18,12 @@ export const MAX_SQRT_PRICE =
   1_461_446_703_485_210_103_287_273_052_203_988_822_378_723_970_342n;
 export const HOOK_FLAG_MASK = (1n << 14n) - 1n;
 export const STANDARD_HOOK_FLAGS = (1n << 13n) | (1n << 6n) | (1n << 2n);
+export const BOUNDED_DYNAMIC_HOOK_FLAGS =
+  (1n << 13n) |
+  (1n << 12n) |
+  (1n << 7n) |
+  (1n << 6n) |
+  (1n << 2n);
 export const MAX_HOOK_SALT_ATTEMPTS = 160_444;
 
 const UINT128_MAX = (1n << 128n) - 1n;
@@ -44,6 +50,8 @@ export const platformFeeHookFactoryAbi = parseAbi([
   "function initCodeHash(address poolManager,address authorized,address feeRecipient,address currency0,address currency1) pure returns (bytes32)",
   "function configurationHashOf(address hook) view returns (bytes32)",
 ]);
+export const boundedDynamicFeeHookFactoryAbi =
+  platformFeeHookFactoryAbi;
 
 export const lockedPositionFeeForwarderFactoryAbi = parseAbi([
   "function deploy(bytes32 salt,address feeRecipient) returns (address forwarder)",
@@ -310,9 +318,10 @@ export function buildDirectLaunchAmounts(
   };
 }
 
-export function mineStandardHookSalt(
+function mineHookSalt(
   factory: Address,
   initCodeHash: Hex,
+  requiredFlags: bigint,
 ) {
   for (let attempt = 0; attempt < MAX_HOOK_SALT_ATTEMPTS; attempt += 1) {
     const salt = toHex(BigInt(attempt), { size: 32 });
@@ -321,12 +330,34 @@ export function mineStandardHookSalt(
       salt,
       bytecodeHash: initCodeHash,
     });
-    if ((BigInt(address) & HOOK_FLAG_MASK) === STANDARD_HOOK_FLAGS) {
+    if ((BigInt(address) & HOOK_FLAG_MASK) === requiredFlags) {
       return { address, salt, attempt };
     }
   }
   throw new LaunchInputError(
     "No valid v4 hook address was found within the audited search limit",
+  );
+}
+
+export function mineStandardHookSalt(
+  factory: Address,
+  initCodeHash: Hex,
+) {
+  return mineHookSalt(
+    factory,
+    initCodeHash,
+    STANDARD_HOOK_FLAGS,
+  );
+}
+
+export function mineBoundedDynamicFeeHookSalt(
+  factory: Address,
+  initCodeHash: Hex,
+) {
+  return mineHookSalt(
+    factory,
+    initCodeHash,
+    BOUNDED_DYNAMIC_HOOK_FLAGS,
   );
 }
 

@@ -140,15 +140,31 @@
     {
       "id": "dynamic-fee-bounded-v1",
       "displayName": "Bounded dynamic fees",
-      "status": "research",
+      "status": "protocol-tested",
       "asset": "new-fixed-supply-uerc20",
-      "opening": "auction-or-direct",
-      "liquidity": "locked-v4-position",
+      "opening": "continuous-clearing-auction",
+      "liquidity": "auction-proceeds-and-reserved-tokens",
       "poolBehavior": [
-        "bounded-dynamic-lp-fee"
+        "bounded-dynamic-lp-fee-30-to-100bp",
+        "fixed-platform-fee-10bp"
       ],
       "positionCustody": "locked-position-fees-forwarder",
-      "humanSummary": "The LP fee follows a bounded public rule that requires a separate hook family and audit."
+      "implementation": [
+        "Uniswap LiquidityLauncher v3.0",
+        "Uniswap ContinuousClearingAuctionFactory v2.1",
+        "Uniswap LBPStrategy v3.1",
+        "BoundedDynamicFeeHookV1",
+        "BoundedDynamicFeeHookFactoryV1",
+        "LockedPositionFeeForwarderFactoryV1"
+      ],
+      "evidence": [
+        "BoundedDynamicFeeHookV1.t.sol",
+        "BoundedDynamicFeeHookInvariant.t.sol",
+        "DynamicFeeAuctionLaunchPathIntegration.t.sol",
+        "tests/auction-transaction.test.ts",
+        "app/api/launch/preflight/route.ts"
+      ],
+      "humanSummary": "The auction funds a locked v4 position whose LP fee rises from 0.30% to at most 1.00% under one immutable onchain rule."
     },
     {
       "id": "external-custom-hook-v1",

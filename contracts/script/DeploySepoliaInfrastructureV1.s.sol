@@ -8,6 +8,7 @@ import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 
 import { DirectLiquidityLauncherV1 } from "../src/DirectLiquidityLauncherV1.sol";
+import { BoundedDynamicFeeHookFactoryV1 } from "../src/BoundedDynamicFeeHookFactoryV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "../src/LockedPositionFeeForwarderFactoryV1.sol";
 import { PlatformFeeHookFactoryV1 } from "../src/PlatformFeeHookFactoryV1.sol";
 
@@ -51,7 +52,8 @@ contract DeploySepoliaInfrastructureV1 is Script {
         returns (
             PlatformFeeHookFactoryV1 platformFeeHookFactory,
             LockedPositionFeeForwarderFactoryV1 lockedPositionFeeForwarderFactory,
-            DirectLiquidityLauncherV1 directLiquidityLauncher
+            DirectLiquidityLauncherV1 directLiquidityLauncher,
+            BoundedDynamicFeeHookFactoryV1 boundedDynamicFeeHookFactory
         )
     {
         validateDependencies();
@@ -72,6 +74,7 @@ contract DeploySepoliaInfrastructureV1 is Script {
             lockedPositionFeeForwarderFactory,
             PLATFORM_TREASURY
         );
+        boundedDynamicFeeHookFactory = new BoundedDynamicFeeHookFactoryV1();
         vm.stopBroadcast();
     }
 

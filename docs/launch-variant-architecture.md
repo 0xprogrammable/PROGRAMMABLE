@@ -28,7 +28,13 @@ The two CREATE2 factories are permissionless. If another account deploys the exa
 
 This is not a generic ERC-20 importer. Arbitrary tokens, proxies, new mint authority, transfer taxes and mutable transfer behavior remain in a separate research lane.
 
-All three variants use the same `PlatformFeeHookV1`. It has no owner, proxy, pause control or mutable fee. The platform recipient and 0.10% fee are immutable for each hook.
+### Auction with bounded dynamic fees
+
+This path keeps the same official auction, fixed-supply token and locked full-range position. It replaces the fixed-fee hook with `BoundedDynamicFeeHookV1`. The LP fee begins at 0.30%, adds 0.001% for each tick of observed movement and never exceeds 1.00%. The first swap in a new block updates the fee from movement since the previous reference block. Further swaps in that block use the same installed fee.
+
+The rule uses the pool tick, not an external fair-value oracle. A trader can move that tick and influence a later block’s fee. The fixed 1.00% ceiling bounds that influence but does not make the hook MEV protection.
+
+The fixed-fee variants use `PlatformFeeHookV1`. The dynamic variant uses its separate immutable factory and hook family. Neither family has an owner, proxy or pause control. Both bind the 0.10% Launcher fee to the immutable platform recipient.
 
 ## Status language
 
@@ -46,4 +52,4 @@ New variants should normally add one reviewed module or one compatible compositi
 
 Custom hooks stay in a separate unverified lane. Their callback flags, runtime bytecode, source verification, mutable authorities, external calls, return-delta accounting and audit status must be visible before a user can sign anything.
 
-`npm run contracts:variants` validates unique IDs, status semantics, required axes, implementation evidence, invariants, fees and treasury consistency across the catalog and all three protocol-tested standards.
+`npm run contracts:variants` validates unique IDs, status semantics, required axes, implementation evidence, invariants, fees and treasury consistency across the catalog and all four protocol-tested standards.

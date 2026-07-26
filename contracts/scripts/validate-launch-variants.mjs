@@ -18,6 +18,7 @@ const [
   directStandard,
   existingUerc20Standard,
   auctionStandard,
+  dynamicFeeStandard,
   behaviorCatalog,
   deployment,
   appDeployments,
@@ -26,6 +27,7 @@ const [
     readJson(specificationDirectory, "direct-standard-v1.json"),
     readJson(specificationDirectory, "existing-uerc20-standard-v1.json"),
     readJson(specificationDirectory, "verified-standard-v1.json"),
+    readJson(specificationDirectory, "bounded-dynamic-fee-v1.json"),
   readJson(specificationDirectory, "behavior-modules.v1.json"),
   readJson(configurationDirectory, "deployment-inputs.v1.json"),
   readJson(configurationDirectory, "app-deployments.v1.json"),
@@ -74,6 +76,7 @@ for (const requiredId of [
   "auction-fixed-fee-locked-v1",
   "direct-fixed-fee-locked-v1",
   "direct-existing-token-locked-v1",
+  "dynamic-fee-bounded-v1",
 ]) {
   assert(
     protocolTestedIds.has(requiredId),
@@ -94,6 +97,10 @@ assert(
   "Existing UERC20 standard must not claim production approval",
 );
 assert(
+  dynamicFeeStandard.productionApproved === false,
+  "Bounded dynamic fee standard must not claim production approval",
+);
+assert(
   directStandard.platformFee.percentage ===
     deployment.platform.platformFeePercentage,
   "Direct standard fee differs from deployment configuration",
@@ -107,6 +114,11 @@ assert(
   existingUerc20Standard.platformFee.percentage ===
     deployment.platform.platformFeePercentage,
   "Existing UERC20 standard fee differs from deployment configuration",
+);
+assert(
+  dynamicFeeStandard.platformFee.percentage ===
+    deployment.platform.platformFeePercentage,
+  "Bounded dynamic fee standard differs from deployment configuration",
 );
 
 const configuredTreasury = deployment.platform.treasury.toLowerCase();
@@ -126,6 +138,11 @@ assert(
   existingUerc20Standard.platformFee.treasury.toLowerCase() ===
     configuredTreasury,
   "Existing UERC20 standard treasury differs from deployment configuration",
+);
+assert(
+  dynamicFeeStandard.platformFee.treasury.toLowerCase() ===
+    configuredTreasury,
+  "Bounded dynamic fee treasury differs from deployment configuration",
 );
 
 const behaviorIds = new Set();
@@ -176,6 +193,7 @@ for (const [environment, manifest] of Object.entries({
   const ready = manifest.status === "ready";
   for (const field of [
     "platformFeeHookFactory",
+    "boundedDynamicFeeHookFactory",
     "lockedPositionFeeForwarderFactory",
     "directLiquidityLauncher",
   ]) {

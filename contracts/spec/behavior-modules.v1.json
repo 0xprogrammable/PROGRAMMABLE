@@ -157,15 +157,39 @@
     },
     {
       "id": "M-02",
-      "name": "Dynamic LP fee",
-      "status": "future",
-      "compatibilityId": "unassigned",
-      "parameterBounds": {},
-      "callbackMask": [],
-      "authorityModel": "Not defined.",
-      "humanSummary": "Reserved for a separately audited hook family.",
+      "name": "Bounded dynamic LP fee",
+      "status": "protocol-tested",
+      "compatibilityId": "launcher.v1.bounded-dynamic-fee-30-to-100bp",
+      "parameterBounds": {
+        "baseLpFeePips": {
+          "fixed": 3000
+        },
+        "maximumLpFeePips": {
+          "fixed": 10000
+        },
+        "feePipsPerTick": {
+          "fixed": 10
+        },
+        "tickSpacing": {
+          "fixed": 60
+        }
+      },
+      "callbackMask": [
+        "beforeInitialize",
+        "afterInitialize",
+        "beforeSwap",
+        "afterSwap",
+        "afterSwapReturnDelta"
+      ],
+      "authorityModel": "No admin. The official LBPStrategy is the immutable initializer, the fee rule is fixed in bytecode and anyone may forward platform fees only to the immutable treasury.",
+      "humanSummary": "Sets the LP fee between 0.30% and 1.00% from the pool's observed tick movement and updates it at most once per block.",
       "invariants": [
-        "Must not be presented as compatible with Verified Standard V1."
+        "The LP fee never falls below 0.30% or rises above 1.00%.",
+        "Same-block swaps cannot repeatedly change the installed LP fee.",
+        "The hook accepts one precommitted pool and one immutable initializer.",
+        "The separate 0.10% Launcher fee and its treasury cannot change.",
+        "The behavior must not be presented as an oracle or MEV-protection guarantee.",
+        "The module is a separate standard and must not impersonate Verified Standard V1."
       ]
     },
     {

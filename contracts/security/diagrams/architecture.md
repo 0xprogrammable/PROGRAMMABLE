@@ -10,8 +10,10 @@ flowchart LR
     DirectLauncher[DirectLiquidityLauncherV1]
     TokenFactory[Uniswap UERC20Factory]
     HookFactory[PlatformFeeHookFactoryV1]
+    DynamicHookFactory[BoundedDynamicFeeHookFactoryV1]
     PositionFactory[LockedPositionFeeForwarderFactoryV1]
     Hook[PlatformFeeHookV1]
+    DynamicHook[BoundedDynamicFeeHookV1]
     PoolManager[Uniswap v4 PoolManager]
     PositionManager[Uniswap v4 PositionManager]
     Forwarder[Uniswap PositionFeesForwarder]
@@ -34,11 +36,14 @@ flowchart LR
     TokenFactory -->|CREATE2 provenance| DirectLauncher
 
     HookFactory -->|CREATE2, exact callback flags| Hook
+    DynamicHookFactory -->|CREATE2, exact callback flags| DynamicHook
     PositionFactory -->|CREATE2, fixed lock policy| Forwarder
     PositionManager -->|LP NFT owner| Forwarder
     Hook <-->|beforeInitialize and afterSwap| PoolManager
+    DynamicHook <-->|initialize, beforeSwap and afterSwap| PoolManager
     PoolManager -->|ERC-6909 fee claims| Hook
     Hook -->|permissionless trigger, fixed payout| Treasury
+    DynamicHook -->|permissionless trigger, fixed payout| Treasury
     Forwarder -->|permissionless trigger, fixed payout| Creator
 ```
 
@@ -51,6 +56,7 @@ flowchart TD
     DirectInitialization[Direct pool initialization] -->|only| DirectLiquidityLauncherV1
     ExistingTokenLaunch[Existing token launch] -->|only| FactoryRecordedCreator[Factory recorded creator]
     FeeRate[Platform fee rate] -->|fixed in bytecode| TenBp[0.10%]
+    DynamicRate[Dynamic LP fee] -->|fixed rule and bounds| Bounded[0.30% to 1.00%]
     AuctionProceeds[Auction proceeds] -->|zero CCA protocol fee controller| PoolFunding[100% to pool funding]
     PoolConfig[Pool configuration] -->|fixed in bytecode| PoolId[One PoolId]
     PlatformCollection[Platform fee collection] -->|any address| Treasury[Immutable platform treasury]

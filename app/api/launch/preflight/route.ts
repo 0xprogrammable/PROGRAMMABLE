@@ -26,12 +26,14 @@ import mainnetDeployments from "@/contracts/dependencies/ethereum-mainnet.json";
 import {
   buildDirectLaunchAmounts,
   buildPlanHash,
+  boundedDynamicFeeHookFactoryAbi,
   directLiquidityLauncherAbi,
   encodeExistingDirectLaunch,
   encodeNewDirectLaunch,
   encodeTokenApproval,
   LaunchInputError,
   lockedPositionFeeForwarderFactoryAbi,
+  mineBoundedDynamicFeeHookSalt,
   mineStandardHookSalt,
   platformFeeHookFactoryAbi,
   standardErc20Abi,
@@ -130,10 +132,12 @@ type ProductionDeployment = {
   chainId: 1;
   status: "not-deployed" | "ready";
   platformFeeHookFactory: string | null;
+  boundedDynamicFeeHookFactory: string | null;
   lockedPositionFeeForwarderFactory: string | null;
   directLiquidityLauncher: string | null;
   runtimeCodeHashes: {
     platformFeeHookFactory: string | null;
+    boundedDynamicFeeHookFactory: string | null;
     lockedPositionFeeForwarderFactory: string | null;
     directLiquidityLauncher: string | null;
   };
@@ -481,9 +485,10 @@ async function assertAuctionProductionInfrastructure(
   hookFactory: Address,
   positionForwarderFactory: Address,
   codeHashes: {
-    platformFeeHookFactory: Hex;
+    hookFactory: Hex;
     lockedPositionFeeForwarderFactory: Hex;
   },
+  hookFactoryLabel: string,
 ) {
   const sdkAddresses = getOfficialEthereumAuctionAddresses();
   if (
@@ -538,8 +543,8 @@ async function assertAuctionProductionInfrastructure(
     ),
     assertRuntimeCodeHash(
       hookFactory,
-      codeHashes.platformFeeHookFactory,
-      "Platform fee hook factory",
+      codeHashes.hookFactory,
+      hookFactoryLabel,
     ),
     assertRuntimeCodeHash(
       positionForwarderFactory,
@@ -660,6 +665,8 @@ async function prepareAuctionLaunch(
     ...(validationSchedule.draftPatch ?? {}),
   };
   buildStandardAuctionEconomics(validationDraft);
+  const usesDynamicFee =
+    validationDraft.selectedBehaviors[0] === "dynamic-fee";
 
   const tokenCheck: LaunchPreflightCheck = {
     id: "token",
@@ -723,19 +730,29 @@ async function prepareAuctionLaunch(
 
   const {
     platformFeeHookFactory,
+    boundedDynamicFeeHookFactory,
     lockedPositionFeeForwarderFactory,
     runtimeCodeHashes,
   } = production;
+  const selectedHookFactory = usesDynamicFee
+    ? boundedDynamicFeeHookFactory
+    : platformFeeHookFactory;
+  const selectedHookFactoryCodeHash = usesDynamicFee
+    ? runtimeCodeHashes.boundedDynamicFeeHookFactory
+    : runtimeCodeHashes.platformFeeHookFactory;
   if (
-    !platformFeeHookFactory ||
+    !selectedHookFactory ||
     !lockedPositionFeeForwarderFactory ||
-    !runtimeCodeHashes.platformFeeHookFactory ||
+    !selectedHookFactoryCodeHash ||
     !runtimeCodeHashes.lockedPositionFeeForwarderFactory
   ) {
     throw new Error("The production auction manifest is incomplete");
   }
 
-  const hookFactory = getAddress(platformFeeHookFactory);
+  const hookFactory = getAddress(selectedHookFactory);
+  const hookFactoryAbi = usesDynamicFee
+    ? boundedDynamicFeeHookFactoryAbi
+    : platformFeeHookFactoryAbi;
   const positionForwarderFactory = getAddress(
     lockedPositionFeeForwarderFactory,
   );
@@ -743,11 +760,13 @@ async function prepareAuctionLaunch(
     hookFactory,
     positionForwarderFactory,
     {
-      platformFeeHookFactory:
-        runtimeCodeHashes.platformFeeHookFactory as Hex,
+      hookFactory: selectedHookFactoryCodeHash as Hex,
       lockedPositionFeeForwarderFactory:
         runtimeCodeHashes.lockedPositionFeeForwarderFactory as Hex,
     },
+    usesDynamicFee
+      ? "Bounded dynamic fee hook factory"
+      : "Platform fee hook factory",
   );
 
   const currentBlock = await client.getBlockNumber();
@@ -817,7 +836,7 @@ async function prepareAuctionLaunch(
 
   const initCodeHash = await client.readContract({
     address: hookFactory,
-    abi: platformFeeHookFactoryAbi,
+    abi: hookFactoryAbi,
     functionName: "initCodeHash",
     args: [
       officialPoolManager,
@@ -827,10 +846,9 @@ async function prepareAuctionLaunch(
       predictedToken,
     ],
   });
-  const minedHook = mineStandardHookSalt(
-    hookFactory,
-    initCodeHash,
-  );
+  const minedHook = usesDynamicFee
+    ? mineBoundedDynamicFeeHookSalt(hookFactory, initCodeHash)
+    : mineStandardHookSalt(hookFactory, initCodeHash);
 
   const auctionDetails = {
     startBlock: economics.schedule.startBlock.toString(),
@@ -899,7 +917,7 @@ async function prepareAuctionLaunch(
   if (
     !(await isFactoryDeployment(
       hookFactory,
-      platformFeeHookFactoryAbi,
+      hookFactoryAbi,
       minedHook.address,
     ))
   ) {
@@ -908,7 +926,7 @@ async function prepareAuctionLaunch(
       chainId: 1 as const,
       to: hookFactory,
       data: encodeFunctionData({
-        abi: platformFeeHookFactoryAbi,
+        abi: hookFactoryAbi,
         functionName: "deploy",
         args: [
           minedHook.salt,
@@ -930,7 +948,9 @@ async function prepareAuctionLaunch(
       mode: "auction",
       title: "Create the Launcher fee hook",
       detail:
-        "This deterministic hook binds the token, the official LBPStrategy and the fixed 0.10% Launcher fee",
+        usesDynamicFee
+          ? "This deterministic hook binds the token, the official LBPStrategy, the bounded pool fee rule and the fixed 0.10% Launcher fee"
+          : "This deterministic hook binds the token, the official LBPStrategy and the fixed 0.10% Launcher fee",
       checks: [
         tokenCheck,
         connectedWalletCheck,
@@ -1031,7 +1051,9 @@ async function prepareAuctionLaunch(
         label: "Launcher composition",
         status: "pass",
         detail:
-          "Official auction stack, fixed fee hook and permanent LP lock match",
+          usesDynamicFee
+            ? "Official auction stack, bounded dynamic fee hook and permanent LP lock match"
+            : "Official auction stack, fixed fee hook and permanent LP lock match",
       },
       {
         id: "simulation",

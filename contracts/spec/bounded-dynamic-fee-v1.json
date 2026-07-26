@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "standardId": "launcher.bounded-dynamic-fee.v1",
+  "status": "protocol-tested-not-deployed",
+  "network": {
+    "productionChainId": 1,
+    "rehearsalChainId": 11155111
+  },
+  "launch": {
+    "asset": "new-fixed-supply-uerc20",
+    "opening": "continuous-clearing-auction",
+    "liquidity": "auction-proceeds-and-reserved-tokens",
+    "positionCustody": "permanently-locked-official-position-fees-forwarder"
+  },
+  "pool": {
+    "protocol": "Uniswap v4",
+    "feeField": "dynamic-fee-flag",
+    "tickSpacing": 60,
+    "initialPosition": "full-range"
+  },
+  "dynamicLpFee": {
+    "implementation": "BoundedDynamicFeeHookV1",
+    "baseFeePips": 3000,
+    "maximumFeePips": 10000,
+    "feePipsPerTick": 10,
+    "denominator": 1000000,
+    "basePercentage": "0.30%",
+    "maximumPercentage": "1.00%",
+    "reference": "pool-tick-before-first-swap-of-a-new-block",
+    "updateFrequency": "at-most-once-per-block",
+    "sameBlockBehavior": "installed-fee-remains-unchanged",
+    "rule": "min(maximumFeePips, baseFeePips + absoluteTickMovement * feePipsPerTick)",
+    "externalOracle": false
+  },
+  "platformFee": {
+    "implementation": "BoundedDynamicFeeHookV1",
+    "feePips": 1000,
+    "percentage": "0.10%",
+    "basis": "absolute-unspecified-swap-amount",
+    "recipient": "immutable-per-hook",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "collection": "permissionless-trigger-fixed-recipient"
+  },
+  "hook": {
+    "factory": "BoundedDynamicFeeHookFactoryV1",
+    "upgradeable": false,
+    "admin": false,
+    "pause": false,
+    "mutableParameters": false,
+    "boundToOnePool": true,
+    "authorizedInitializer": "immutable-official-lbp-strategy",
+    "callbackMask": [
+      "beforeInitialize",
+      "afterInitialize",
+      "beforeSwap",
+      "afterSwap",
+      "afterSwapReturnDelta"
+    ]
+  },
+  "knownEconomicLimits": [
+    "The rule observes the pool tick and is not an external fair-value oracle.",
+    "A trader can move the pool tick and influence the fee selected on the first swap of a later block.",
+    "The one-percent maximum bounds that influence but does not remove it.",
+    "The hook is not a claim of MEV protection, price protection or loss prevention."
+  ],
+  "evidence": [
+    "BoundedDynamicFeeHookV1.t.sol",
+    "BoundedDynamicFeeHookInvariant.t.sol",
+    "DynamicFeeAuctionLaunchPathIntegration.t.sol",
+    "tests/auction-transaction.test.ts",
+    "app/api/launch/preflight/route.ts"
+  ],
+  "productionApproved": false
+}
