@@ -1,99 +1,87 @@
-# Security properties
+# Meme Launch V1 security properties
 
-This document defines the properties expected from `PlatformFeeHookV1`, `BoundedDynamicFeeHookV1`, their permissionless factories, `LockedPositionFeeForwarderFactoryV1` and `DirectLiquidityLauncherV1`. It is a testable engineering specification, not an audit certificate.
+This document defines testable properties for `MemeLaunchV1`, `EthCreatorFeeHookV1`,
+`EthCreatorFeeHookFactoryV1` and the permanent-position factory. It is an engineering specification, not an audit
+certificate.
 
 ## Trust boundary
 
-Each hook trusts the immutable Uniswap v4 `PoolManager` supplied at deployment. It accepts pool initialization only when the `PoolManager` reports its immutable launcher or LBP strategy as the sender. It accepts swap callbacks only from that `PoolManager` and only for its precomputed `PoolId`.
+The release trusts the immutable official Uniswap v4 PoolManager, PositionManager and UERC20Factory selected at
+deployment. The hook and the launcher's initial-buy unlock callback accept calls only from their PoolManager. Each pool is registered before initialization and only
+the token’s recorded creator may register it. For Launcher-created UERC20s, that recorded creator is `MemeLaunchV1`, so
+registration and initialization remain atomic.
 
-Neither hook has an owner, proxy, pause function or mutable parameter. The bounded dynamic hook stores only its latest reference block, reference tick and installed LP fee. Its fee formula and bounds remain fixed in bytecode. Both factories are permissionless and have no administrator. A factory deployment proves provenance, not production approval.
+The launcher, hook and factories have no owner, proxy, upgrade, pause or arbitrary-call entry point. The hook is shared
+across pools and stores an immutable creator and total fee for each registered `poolId`.
 
-Initial LP NFTs are assigned to the official Uniswap `PositionFeesForwarder`, deployed through Launcher’s deterministic factory. The forwarder has the zero address as operator and `type(uint256).max` as its approval block. Its immutable fee recipient is the launch creator. This gives the creator the LP fee economics without a practical position-transfer or liquidity-removal path.
-
-The direct launcher trusts six immutable dependencies fixed at its deployment. Its constructor checks that every dependency has code, that PositionManager points to the selected PoolManager and that the forwarder factory points to the selected PositionManager. The Sepolia deployment script additionally checks the runtime-code hashes of the official Uniswap dependencies.
-
-The existing-token entry point accepts only a UERC20 whose CREATE2 address can be reconstructed through that configured token factory. It also requires the caller to equal the creator recorded in the token at deployment. This proves the selected factory origin and fixed UERC20 implementation; it does not admit arbitrary ERC-20 contracts.
-
-The standard auction path calls the official LiquidityLauncher directly from the creator wallet. Launcher’s server derives the token, auction, pool, hook and position-recipient addresses from the pinned SDK and deployment snapshot. It enables the promise that all auction proceeds fund the pool only when the CCA factory’s immutable protocol fee controller is the zero address.
+The initial position belongs to an official Uniswap `PositionFeesForwarder` deployed with the zero operator and
+`type(uint256).max` timelock. The complete position cannot practically be approved, transferred or reduced. Token
+rounding dust is sent to the same permanent recipient.
 
 ## Core properties
 
 | ID | Property | Evidence |
 | --- | --- | --- |
-| AUTH-01 | Only the configured PoolManager can invoke hook callbacks and `unlockCallback`. | `BaseHook.onlyPoolManager`; `test_onlyPoolManagerCanCallUnlockCallback` |
-| AUTH-02 | Only the immutable launch strategy may initialize the pool. | `_beforeInitialize`; `test_revertsWhenUnauthorizedAddressInitializes` |
-| POOL-01 | A hook accepts exactly one currency pair, LP fee, tick spacing and hook address. | immutable `poolId`; `test_revertsWhenInitializerUsesDifferentPoolConfiguration` |
-| FEE-01 | The platform fee is fixed at 1,000 pips out of 1,000,000, or 0.10%. | `PLATFORM_FEE_PIPS`; four directional unit tests; fuzz reference test |
-| FEE-02 | Fees are charged on the absolute unspecified swap amount and rounded down. | OpenZeppelin `BaseHookFee`; `testFuzz_swapFeeMatchesReference` |
-| FEE-03 | Anyone may trigger redemption, but no caller can redirect proceeds. | immutable `feeRecipient`; `test_anyoneCanCollectButCannotRedirectFees` |
-| FEE-04 | Both ERC-20 and native-currency claims redeem to the same immutable recipient. | full migration and post-migration swap integration test |
-| FLAGS-01 | The hook address has exactly `beforeInitialize`, `afterSwap` and `afterSwapReturnDelta`. | factory mask validation; `test_permissions_areExact`; invariant suite |
-| DFEE-01 | The bounded dynamic LP fee is always between 3,000 and 10,000 pips, or 0.30% and 1.00%. | `feeForTickMovement`; unit fuzz test; dynamic invariant suite |
-| DFEE-02 | The first swap in a later block updates the fee from absolute reference-tick movement; further swaps in that block cannot update it again. | `referenceBlock`; prior-block and same-block unit tests; dynamic invariant handler |
-| DFEE-03 | PoolManager’s installed dynamic LP fee always equals the hook’s recorded current fee. | `invariant_dynamicLpFeeIsAlwaysInstalledAndBounded` |
-| DFEE-04 | The dynamic rule has no admin or external oracle and cannot alter the separate immutable 0.10% platform fee destination. | immutable constants and recipient; migration integration; collection tests |
-| FLAGS-02 | The dynamic hook address has exactly `beforeInitialize`, `afterInitialize`, `beforeSwap`, `afterSwap` and `afterSwapReturnDelta`. | dynamic factory mask validation; permission unit test; invariant suite |
-| FACTORY-01 | The factory deploys only a correctly mined CREATE2 address and records its configuration hash. | `deploy`; `test_factoryRejectsUnminedSalt`; provenance assertions |
-| LOCK-01 | Every verified initial LP position is minted to a forwarder deployed by Launcher’s deterministic factory. | `test_deploysOfficialForwarderWithFixedLockPolicy`; migration integration assertions |
-| LOCK-02 | The forwarder has no operator and cannot approve a transfer before the maximum `uint256` block. | fixed factory constructor arguments; `test_revertsBeforeMaximumTimelockBlock`; migration integration assertions |
-| LOCK-03 | Permissionless LP fee collection forwards both currencies to the immutable creator without reducing liquidity. | official `PositionFeesForwarder`; bidirectional integration swaps and before/after liquidity assertion |
-| LOCK-04 | Platform hook fees and creator LP fees remain separate and cannot redirect one another. | separate immutable recipients; integration balance assertions |
-| IMM-01 | Authorities, pool configuration and fee parameters cannot change after construction. | immutable bytecode fields; empty hook storage layout; invariant suite |
-| FLOW-01 | Token creation and distribution can execute atomically through the official launcher and UERC20 factory. | `test_atomicOfficialTokenCreationAndStrategyRegistration` |
-| FLOW-02 | The official LBP strategy can migrate into the bound pool, mint a position and enable fee-bearing swaps. | `test_migrationInitializesBoundPoolAndCollectsFeeAfterSwap` |
-| FLOW-03 | The official CCA factory and auction can accept a bid, finalize, graduate and migrate through LBPStrategy into the bound pool. | `test_realAuctionBidsFinalizeAndMigrateIntoBoundV4Pool` |
-| FLOW-04 | A direct launch creates the token, hook, locked recipient, pool and full-range LP position atomically. | `test_launchesFixedSupplyTokenIntoLockedV4Position`; invalid-salt rollback test |
-| FLOW-05 | Actual native and token liquidity never exceed the caller’s budgets; unused budgets and the remaining fixed supply return to the caller. | `testFuzz_launchAccountingNeverExceedsCreatorBudgets` |
-| FLOW-06 | A matching hook or forwarder predeployed through Launcher’s permissionless factory cannot block the launch; unrecognized code is rejected. | `_deployOrReuseHook`; `_deployOrReusePositionRecipient`; mempool-griefing regression test |
-| FLOW-07 | A successful direct launch leaves no launched-token balance or transaction-supplied native ETH in the launcher. | direct unit and fuzz accounting assertions |
-| FLOW-08 | An existing token is accepted only when its address is reproduced by the configured UERC20Factory from its immutable identity fields. | `test_rejectsTokenFromDifferentFactory`; successful existing-token launch assertions |
-| FLOW-09 | Only the creator recorded by an existing UERC20 may open its Launcher pool. | `test_rejectsCallerWhoIsNotFactoryRecordedCreator` |
-| FLOW-10 | Existing-token liquidity is pulled exactly, stays within both caller budgets and leaves no token balance in the launcher. | `testFuzz_existingLaunchAccountingNeverExceedsCreatorBudgets`; invalid-input and balance assertions |
-| AUCTION-01 | The standard auction fixes a four-hour, 1,200-block window with 50% of supply auctioned and 50% reserved for LP. | `auction-transaction.test.ts`; `test_realAuctionBidsFinalizeAndMigrateIntoBoundV4Pool` |
-| AUCTION-02 | All settled auction proceeds reach LBPStrategy because the pinned CCA factory has no protocol fee controller. | `test_officialAuctionStackMatchesLauncherPolicy`; live preflight configuration read |
-| AUCTION-03 | The minimum valuation is converted with integer Q96 math, snapped to the official CCA tick boundary and bounded by the CCA supply, price and `uint128` limits. | `buildStandardAuctionEconomics`; exact fixture and policy-drift tests |
-| AUCTION-04 | The official SDK resolves exactly one atomic LiquidityLauncher multicall that creates the token and distributes the complete supply to LBPStrategy. | exact calldata decoding in `auction-transaction.test.ts` |
-| AUCTION-05 | The auction cannot be prepared unless the official LBPStrategy points to the pinned PoolManager, PositionManager and CCA factory. | Mainnet snapshot test; live preflight configuration reads |
-| AUCTION-06 | The official LBP strategy can register, migrate and trade a pool using the v4 dynamic-fee flag and Launcher’s bounded hook. | `test_officialAuctionMigrationInstallsAndUpdatesBoundedDynamicFee` |
-| REENT-01 | The complete direct launch is protected against reentrant entry while it composes external contracts. | OpenZeppelin `ReentrancyGuardTransient`; direct integration suite |
-| PRICE-01 | The initialized pool price is exactly the creator-supplied valid v4 square-root price. | returned-tick validation; `test_launchesFixedSupplyTokenIntoLockedV4Position` |
-| PROV-01 | Every new-token direct launch records a chain- and contract-bound commitment to its infrastructure, budgets, actual liquidity, price and hook configuration. | `launchHashOf`; `DirectTokenLaunched`; `DirectLiquidityConfigured` |
-| PROV-02 | Every existing-token launch additionally commits to its configured factory, recorded creator, identity fields and original fixed supply. | `ExistingUERC20Launched`; `ExistingUERC20LiquidityConfigured`; provenance-hash construction |
-| UI-01 | Human token amounts and the opening rate are converted without JavaScript floating point arithmetic. | `launch-transaction.test.ts`; integer decimal parser and square-root price tests |
-| UI-02 | The browser cannot choose the transaction target or calldata; the server derives both from the fixed ABI and deployment manifest. | `/api/launch/preflight`; typed transaction response |
-| UI-03 | A wallet prompt is unavailable until runtime bytecode, launcher immutables, balances, allowance and the exact call have passed the configured preflight. | fail-closed deployment manifest; preflight route; Review state machine |
+| AUTH-01 | Only the configured PoolManager can invoke hook callbacks or `unlockCallback`. | `BaseHook.onlyPoolManager`; callback test |
+| AUTH-02 | Only the registrar stored for a pool may initialize it. | `_beforeInitialize`; registration and initialization tests |
+| REG-01 | Registration requires native ETH as currency0, a nonzero token as currency1, this hook, LP fee 0 and tick spacing 200. | `_validatePoolShape`; configuration tests |
+| REG-02 | The caller must equal `token.creator()`; each `poolId` can be registered once. | creator-bound and duplicate-registration tests |
+| REG-03 | An official Explore record requires the paired Meme Launch events, not a shared-hook registration alone. | event schema and monitoring specification |
+| FEE-01 | The selected total is exactly 100–1000 basis points in steps of 100. | launch and registration validation; all-step tests |
+| FEE-02 | Launcher receives exactly 10 basis points from the selected total; the creator receives the remainder. | quote fuzz tests and 1% split fixture |
+| FEE-03 | No separate Launcher fee is added on top of the selected total. | gross and exact-output conservation properties |
+| FEE-04 | All four exact-input and exact-output swap quadrants accrue only native ETH claims. | directional integration tests |
+| FEE-05 | Gross-input math rounds down; exact-output math grosses up once and preserves the requested net native amount. | quote fuzz tests and tiny-amount fixtures |
+| FEE-06 | A native-specified partial fill reverts before any fee state can persist. | tight-price-limit and liquidity-exhaustion tests |
+| FEE-07 | Internal creator plus Launcher accounting never exceeds native claims held by the hook. | stateful invariant suite |
+| CLAIM-01 | Anyone may trigger a standard claim, but it pays only the recorded creator or immutable treasury. | permissionless-claim test |
+| CLAIM-02 | Only the recorded recipient may redirect its own payout; a zero destination is rejected. | rejecting-wallet recovery and unauthorized redirect tests |
+| CLAIM-03 | Claims use checks-effects-interactions under `ReentrancyGuardTransient`; a failed payout restores accounting. | recovery test and transaction rollback |
+| FLAGS-01 | The hook address exposes exactly beforeInitialize, beforeSwap, afterSwap and both swap return-delta flags. | factory mask 8396; unit and invariant tests |
+| LOCK-01 | The initial NFT is minted to a factory-recorded PositionFeesForwarder with zero operator and maximum timelock. | Meme launch integration test |
+| LOCK-02 | Token liquidity plus locked rounding dust always equals the complete fixed supply. | launch accounting assertion |
+| FLOW-01 | Token creation, registration, initialization, position minting, the creator's selected Dev Buy and launch recording are atomic. | `nonReentrant` launch and rollback tests |
+| FLOW-02 | The launch requires at least 0.0006 ETH for the creator's Dev Buy, no creator liquidity deposit and no protocol launch fee. A value below the minimum reverts before token creation. | minimum-value rollback, balance and integration assertions |
+| FLOW-03 | The launcher and PositionManager retain no launched-token balance after success. | custody assertions |
+| FLOW-04 | A matching predeployed permanent recipient is reused only after factory and immutable-configuration checks. | predeployment regression test |
+| FLOW-05 | The initial-buy PoolManager delta must consume the complete creator-selected amount, produce a positive token amount, settle to zero and transfer those tokens directly to the creator. | callback authorization, delta and custody assertions |
+| PROV-01 | A successful launch records a chain-, contract-, pool-, position- and economics-bound hash. | `launchHashOf` and paired launch events |
+| UI-01 | The server encodes the selected total directly as `totalSwapFeeBps`, validates a Dev Buy of at least 0.0006 ETH and binds the exact selected value into the prepared transaction and plan hash. | Vitest calldata and prepared-transaction fixtures |
+| UI-02 | No wallet request exists until deployment, codehash, immutable and exact-call simulation gates pass. | fail-closed manifest and preflight route |
+| FORK-01 | The prepared deployment stack can launch against the pinned official Sepolia contracts. | `DeploySepoliaMemeInfrastructureV1.t.sol` |
 
-## Fuzz and invariant scope
+## Stateful and fuzz scope
 
-The fixed-fee reference test covers exact-input and exact-output swaps in both directions over 1,000 generated cases per default run. The dynamic fee rule is fuzzed across its input range. Each of the new-token and existing-token direct accounting properties covers 64 generated native/token budget pairs locally and 256 in the CI profile. Each hook invariant handler performs 16,384 state-changing calls per property. The dynamic handler includes swaps, explicit block advances and permissionless collections while checking fee bounds, PoolManager state, immutable configuration, callback permissions and payout isolation.
+The hook invariant handler exercises buy and sell swaps in all four exact-input and exact-output modes, plus both claim
+paths. Each local invariant property runs 256 sequences at depth 64, or 16,384 state-changing calls. It checks immutable
+configuration, exact callback permissions, native-claim solvency, internal accounting equality and absence of loose ETH
+or token balances.
 
-The current fuzz range is intentionally below pathological `int128` boundaries. Boundary behavior in upstream v4 and `BaseHookFee` remains part of the external dependency review.
+Fee quote properties fuzz gross and net values across every allowed whole-percent selection. Integration tests cover
+tiny-wei rounding, alternative-pool bypass, tight price limits, exhausted liquidity, rejecting recipient contracts and
+the full one-sided launch composition.
 
-## Failure behavior
+## Expected failure behavior
 
-- An incorrect hook salt reverts before deployment.
-- A duplicate position-forwarder salt and recipient pair reverts before deployment.
-- A matching hook or position forwarder that was deployed first through Launcher’s factory is reused after its provenance and immutable configuration are checked.
-- A zero, sentinel or non-contract PositionManager configuration reverts.
-- A mismatched PoolManager/PositionManager/factory dependency set reverts in the direct launcher constructor.
-- A wrong pool configuration reverts before initialization or fee collection.
-- A direct callback from any address other than PoolManager reverts.
-- Zero budgets, a token budget above total supply, a budget above `uint128` and an invalid initial price revert before token creation.
-- An existing token from another factory, a caller other than its factory-recorded creator, a duplicate existing-token launch or a non-exact token pull reverts the complete transaction.
-- A failed native or ERC-20 payout reverts the whole collection. Accrued ERC-6909 claims remain in the hook.
-- Amounts below the fee’s integer precision may round to zero. This is expected and does not accumulate fractional dust.
-- A stale auction schedule is replaced before transaction preparation; the wallet never receives calldata with fewer than 20 preparation blocks remaining.
-- A nonzero CCA protocol fee controller, mismatched official strategy dependency, occupied auction address or initialized pool blocks auction preparation.
-- A dynamic hook never accepts a static-fee PoolKey. An incorrect callback mask or unrecognized factory deployment blocks setup.
-- Pool-tick movement can change the dynamic LP fee only on the first successful swap in a later block and never beyond the fixed 1.00% ceiling.
+- Empty identity fields or an invalid total fee revert before token creation
+- An occupied deterministic token address reverts
+- A malformed token creator interface or unauthorized registrar reverts
+- A mismatched PoolManager, PositionManager, hook or position factory reverts at deployment
+- An incorrect callback address salt reverts in the factory
+- An unregistered or incorrectly shaped pool cannot initialize or swap through this hook
+- A native-specified partial fill reverts the complete swap
+- A failed ETH payout reverts and preserves the accrued claim
+- Amounts below integer precision may round either share to zero
+- An alternative pool does not accrue this hook’s fee
 
 ## Out of scope
 
-The properties do not certify the Continuous Clearing Auction implementation beyond the tested path. They do not
-provide formal verification of upstream contracts or guarantee market value, scanner classification, sandwich
-protection or profitable price discovery. The bounded dynamic rule is not an oracle: a trader can move the pool tick
-and influence the fee selected in a later block, subject to the fixed ceiling. Unbounded or externally administered
-dynamic fees, arbitrary existing ERC-20s, oracle-based hooks, arbitrary third-party hooks, regulated assets, indexer
-correctness and production signer custody remain out of scope. The Launcher infrastructure is deployed and
-source-verified on Sepolia, but the frontend paths still lack complete signed launch, swap and fee-collection rehearsals
-and an independent audit.
+These properties do not guarantee market value, price stability, scanner labels, profitable trading, legal status,
+router support, protocol-fee policy, indexer correctness or the safety of upstream contracts outside the pinned release.
+The ERC-20 remains freely transferable, so anyone may create a pool without this hook. High selected fees may trigger
+third-party warnings. Production router evidence, a signed testnet lifecycle, a frozen passing release and the other
+internal gates in `MAINNET-READINESS.md` remain mandatory before mainnet. No external smart-contract audit is planned,
+so the release must remain explicitly described as unaudited.
+
+The older auction, direct-liquidity and dynamic-fee properties remain covered by their own regression tests. They do not
+expand the public Meme Launch security claim.

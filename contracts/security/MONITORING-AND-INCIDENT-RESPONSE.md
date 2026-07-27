@@ -1,70 +1,74 @@
-# Monitoring and incident response specification
+# Meme Launch monitoring and incident response
 
 Status: specified, not implemented
 
-This document defines the minimum production monitoring boundary. It is not evidence that an indexer, alert or response rotation is live.
+This is the minimum production operating boundary. It is not evidence that an indexer, alert or response rotation is
+live.
 
 ## Canonical event set
 
 The indexer must ingest:
 
-- `PlatformFeeHookDeployed`
-- `BoundedDynamicFeeHookDeployed`
-- `DynamicLpFeeUpdated`
+- `EthCreatorFeeHookDeployed`
 - `LockedPositionFeeForwarderDeployed`
-- `DirectTokenLaunched`
-- `DirectLiquidityConfigured`
-- `ExistingUERC20Launched`
-- `ExistingUERC20LiquidityConfigured`
-- `PlatformFeesCollected`
-- Uniswap `FeesForwarded`
-- the official auction, graduation, pool-initialization and position-mint events used by the auction variant
+- `PoolRegistered`
+- `MemeTokenLaunched`
+- `MemeLiquidityConfigured`
+- `NativeSwapFeesAccrued`
+- `CreatorFeesClaimed`
+- `LauncherFeesClaimed`
+- the corresponding PoolManager initialization and PositionManager NFT ownership events
 
-New-token and existing-token direct launch records are accepted only when the matching event pair appears in the same successful receipt and its token, launch hash, budgets and actual liquidity agree. Existing-token records must also reproduce their committed UERC20 factory provenance.
+A token is accepted only when `MemeTokenLaunched` and `MemeLiquidityConfigured` come from the verified launcher in the
+same successful receipt and agree on token, pool, position, fee and launch hash. `PoolRegistered` alone is never an
+official launch.
 
 ## Required reconciliation
 
-For every accepted token, the indexer must verify at the receipt block:
+At the receipt block, verify:
 
-1. The transaction succeeded on chain 1 or the explicitly selected rehearsal chain.
-2. The launcher, factories, PoolManager, PositionManager and UERC20Factory match the version registry.
-3. Runtime bytecode and factory configuration commitments match the release.
-4. The hook callback mask, PoolId, initializer, treasury, 0.10% fee and tick spacing match the selected standard. Fixed-fee records require the 0.30% LP fee. Dynamic records require the v4 dynamic-fee flag, a current fee between 0.30% and 1.00% and the matching reference event. Auction records also require the pinned zero protocol fee controller.
-5. The LP NFT owner is the factory-recorded forwarder.
-6. The forwarder has the zero operator, maximum timelock and launch creator as fee recipient.
-7. Token supply, creator balance and position liquidity reconcile with the launch record.
-8. No duplicate token or conflicting launch hash exists.
+1. The chain and launcher version match the release registry
+2. Launcher, hook, factories, PoolManager, PositionManager and UERC20Factory runtime hashes match
+3. Launcher and hook immutable dependencies point to the registered addresses
+4. The hook is factory-recorded and its address mask is exactly 8396
+5. The PoolKey is native ETH and token, LP fee 0, tick spacing 200 and the registered shared hook
+6. The initialized tick is 204200
+7. Total swap fee is 100–1000 basis points in steps of 100 and Launcher’s share is 10 basis points within that total
+8. Token supply is 1,000,000,000 at 18 decimals and the creator received no allocation
+9. Position liquidity plus locked rounding dust reconciles to the complete supply
+10. The position owner is the factory-recorded forwarder with zero operator, maximum timelock and creator fee recipient
+11. Hook native claims cover creator plus Launcher internal accounting
+12. No duplicate token, conflicting launch hash or conflicting canonical pool exists
 
-Events remain provisional until the indexer has handled reorgs and reached the configured confirmation policy. Explore must never show a provisional record as final.
+Alternative pools may exist. They must never be merged into canonical Launcher volume or fee accounting.
+
+Events stay provisional until the indexer handles reorgs and reaches the configured confirmation policy. Explore must not
+show provisional records as final.
 
 ## Alerts
 
 | Severity | Trigger | Required response |
 | --- | --- | --- |
-| Critical | Unknown launcher/factory code, mismatched treasury, transferable LP position, conflicting launch record or balance reconciliation failure | Stop new transaction construction, hide affected verification status, preserve evidence and begin incident procedure |
-| High | Dependency registry drift, source verification failure, event gap, RPC disagreement or fee payout mismatch | Disable the affected variant and investigate before the next launch |
-| Medium | Collection backlog, stale metadata, delayed indexing or abnormal revert rate | Investigate during the operating window; do not alter onchain status |
-| Informational | Normal deployment, launch, fee collection or finalized reorg-safe update | Record for audit history |
+| Critical | Unknown launcher or factory bytecode, mismatched treasury, transferable initial position, conflicting launch record or accounting insolvency | Stop new transaction construction, remove unsupported verification labels, preserve evidence and begin incident response |
+| High | Dependency drift, router incompatibility, source-verification failure, event gap, RPC disagreement, protocol-fee change or payout mismatch | Disable the affected release and investigate before another launch |
+| Medium | Claim backlog, stale metadata, delayed indexing, abnormal revert rate or repeated partial-fill rejection | Investigate during the operating window without changing onchain history |
+| Informational | Normal deployment, launch, swap accrual, claim or finalized reorg-safe update | Record for audit history |
 
 ## Incident procedure
 
-1. Freeze new launch transaction construction in the interface. The immutable contracts cannot be paused.
-2. Record chain, block, transaction, receipt, logs, code hashes, balances and RPC responses before retrying anything.
+1. Stop returning new launch transactions from the server. The immutable contracts cannot be paused.
+2. Record chain, block, transaction, receipt, logs, runtime hashes, claims, balances and RPC responses before retrying.
 3. Reconcile through a second independent Ethereum RPC.
-4. Classify whether the issue is interface, indexer, RPC, deployment configuration, upstream protocol or immutable contract behavior.
-5. Remove only unsupported verification labels. Never rewrite or conceal an onchain launch record.
-6. If funds or an external account may be at risk, escalate to the designated treasury and deployment-signing owners. No key rotation or fund movement is automatic.
-7. Publish a factual incident note and recovery criteria before re-enabling the affected variant.
-8. Add a regression test and update the machine-readable compatibility version before any replacement deployment.
+4. Classify the issue as interface, indexer, wallet/router, RPC, deployment configuration, upstream protocol or immutable
+   contract behavior.
+5. Remove only unsupported verification labels. Never rewrite or conceal an onchain launch.
+6. Escalate any fund or key risk to the named treasury and deployment-signing owners. No key rotation or fund movement is
+   automatic.
+7. Publish a factual incident note and recovery criteria before re-enabling the release.
+8. Add a regression test and issue a new version if immutable behavior must change.
 
 ## Ownership still required
 
-Before mainnet, the project owner must assign:
-
-- primary and backup incident responders
-- treasury and deployment-signing contacts
-- RPC and indexer operators
-- public communication authority
-- alert delivery channels and acknowledgement deadlines
-
-The response process must be rehearsed on Sepolia. Until the indexer, alerts, ownership and rehearsal evidence exist, production monitoring remains an open gate.
+Before mainnet, assign primary and backup responders, treasury and signer contacts, RPC and indexer operators, public
+communication authority, alert channels and acknowledgement targets. Rehearse the process on Sepolia. Until those pieces
+exist, monitoring remains an open mainnet gate.

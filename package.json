@@ -4,11 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:sepolia": "PROGRAMMABLE_ONCHAIN_NETWORK=rehearsal NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK=rehearsal next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "brand:favicons": "node scripts/generate-programmable-favicons.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "contracts:bootstrap": "cd contracts && ./scripts/bootstrap-deps.sh",
@@ -20,12 +22,16 @@
     "contracts:official-deployments": "node contracts/scripts/verify-official-deployments.mjs",
     "contracts:variants": "node contracts/scripts/validate-launch-variants.mjs",
     "contracts:verify": "npm run contracts:bootstrap && npm run contracts:variants && npm run contracts:fmt && npm run contracts:lint && npm run contracts:build && npm run contracts:test",
-    "contracts:sepolia:validate": "cd contracts && forge test --match-path test/EthereumSepoliaDeploymentSnapshot.t.sol && forge test --match-path test/DeploySepoliaInfrastructureV1.t.sol",
-    "contracts:sepolia:metamask": "node scripts/serve-sepolia-metamask-deployer.mjs"
+    "contracts:sepolia:validate": "cd contracts && forge test --match-path test/EthereumSepoliaDeploymentSnapshot.t.sol && forge test --match-path test/DeploySepoliaInfrastructureV1.t.sol && forge test --match-path test/DeploySepoliaMemeInfrastructureV1.t.sol",
+    "contracts:sepolia:metamask": "node scripts/serve-sepolia-metamask-deployer.mjs",
+    "contracts:sepolia:launch-test": "node scripts/serve-sepolia-meme-launch.mjs",
+    "contracts:sepolia:lifecycle:verify": "node contracts/scripts/verify-sepolia-meme-lifecycle.mjs"
   },
   "dependencies": {
     "@privy-io/react-auth": "3.35.2",
-    "@uniswap/liquidity-launcher-sdk": "1.0.1",
+    "@uniswap/sdk-core": "7.19.0",
+    "@uniswap/universal-router-sdk": "5.11.1",
+    "@uniswap/v4-sdk": "2.3.1",
     "lucide-react": "1.26.0",
     "next": "16.2.11",
     "react": "19.2.8",

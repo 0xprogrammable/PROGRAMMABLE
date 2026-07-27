@@ -3,39 +3,59 @@
   "production": {
     "chainId": 1,
     "status": "not-deployed",
+    "memeLaunchStatus": "not-deployed",
+    "ethCreatorFeeHookFactory": null,
+    "ethCreatorFeeHook": null,
+    "memeLaunch": null,
     "platformFeeHookFactory": null,
     "boundedDynamicFeeHookFactory": null,
     "lockedPositionFeeForwarderFactory": null,
     "directLiquidityLauncher": null,
     "runtimeCodeHashes": {
+      "ethCreatorFeeHookFactory": null,
+      "ethCreatorFeeHook": null,
+      "memeLaunch": null,
       "platformFeeHookFactory": null,
       "boundedDynamicFeeHookFactory": null,
       "lockedPositionFeeForwarderFactory": null,
       "directLiquidityLauncher": null
     },
-    "blocker": "Deploy, verify and independently review the Launcher contracts before enabling mainnet transaction preparation"
+    "blocker": "Fund the approved deployer after a fresh gas review, freeze the exact release, complete production indexing and monitoring, then obtain explicit owner approval for the final gas ceiling and four-transaction broadcast"
   },
   "rehearsal": {
     "chainId": 11155111,
     "status": "ready",
+    "memeLaunchStatus": "ready",
     "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "ethCreatorFeeHookFactory": "0x630B8a1392601AE1d989323CC8051e8A17A0e5BF",
+    "ethCreatorFeeHook": "0x13c34016c74bc43F4CBa97EDb48cC36b4bb620cc",
+    "memeLaunch": "0x341edf9399C8c5dF361aec2939C4a17c2163a245",
     "platformFeeHookFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
     "boundedDynamicFeeHookFactory": "0x51d702731db281EE223904A4663E05BfCA26C775",
     "lockedPositionFeeForwarderFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
     "directLiquidityLauncher": "0x5fc6aDd062329742EFefA9c4b11C355AAe02Fa1E",
     "runtimeCodeHashes": {
+      "ethCreatorFeeHookFactory": "0x3014de1f275dc60ae289f7a3a8ab038fdf76929aff19e0efdb19138e4ce8e0d5",
+      "ethCreatorFeeHook": "0x0e0dd0bc1b007e979c0a93412afd282fcbe88b270dc2f26edb94310c334fbf06",
+      "memeLaunch": "0x6e1fa1f21df7712433695c1ac584ed4c89b09ed11732cf62058dfc486639e3c2",
       "platformFeeHookFactory": "0x7792dba76c190e746dc7fbf7f8a8f690f7cf5ce6fab448c858069b1852974306",
       "boundedDynamicFeeHookFactory": "0xe6bbbdba0194caba268f5546db2574dc416b3c74331bd44f33d04d4b2251ffbc",
       "lockedPositionFeeForwarderFactory": "0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc",
       "directLiquidityLauncher": "0x41fa4dbe9709e93f601e0406a3a9d61826144ca56e16f748e063f850fc0af48b"
     },
     "deploymentTransactions": {
+      "ethCreatorFeeHookFactory": "0x8ba4fdad29a826c0f0d6a95a026782636f323350890d06a6d7a3270d087e6ac7",
+      "ethCreatorFeeHook": "0xc8a66a556bf9c02925e97be2c4060144ad562f0a6b9194abcede8ea0562a647c",
+      "memeLaunch": "0xd60a15364988b9be48108baf68ba754b7ffd02b2986b6efeef06a7f9b41c3892",
       "platformFeeHookFactory": "0x7874d856fecd2616b9b125ee7ed85f876c93596adbc9189f8420f0b97abbca6c",
       "lockedPositionFeeForwarderFactory": "0x4969ca925b82c881c978f1d88722af61eea04f1294da55c45e5e7392e294faf6",
       "directLiquidityLauncher": "0xc61ca9972391717c454e6bdf9cbbf4bfb5aa1987cf0f29542f6523e9ed6cdd8d",
       "boundedDynamicFeeHookFactory": "0x8188cfa559981c4e03f55a99e19c7f87c5917e4e6a981c1793e5ba7a09e69d97"
     },
     "deploymentBlocks": {
+      "ethCreatorFeeHookFactory": 11359187,
+      "ethCreatorFeeHook": 11359192,
+      "memeLaunch": 11359203,
       "platformFeeHookFactory": 11353879,
       "lockedPositionFeeForwarderFactory": 11353893,
       "directLiquidityLauncher": 11353896,
@@ -43,9 +63,104 @@
     },
     "sourceVerification": {
       "status": "verified",
+      "releaseEvidenceStatus": "current-initial-buy-release",
       "explorer": "https://eth-sepolia.blockscout.com",
-      "checkedAt": "2026-07-26"
+      "checkedAt": "2026-07-27",
+      "memeLaunchV1Contracts": {
+        "ethCreatorFeeHookFactory": "verified",
+        "ethCreatorFeeHook": "verified",
+        "memeLaunch": "verified",
+        "launchedUerc20": "verified"
+      },
+      "launchedUerc20Source": {
+        "repository": "https://github.com/Uniswap/uerc20-factory",
+        "sourceRef": "v2.0.0"
+      }
     },
-    "blocker": "Infrastructure is ready for rehearsal; complete every launch, swap, fee-collection and failure-recovery path before considering mainnet"
+    "historicalLifecycleEvidence": {
+      "status": "historical-invalid-metadata-abi",
+      "releaseEligible": false,
+      "invalidReasonCode": "uerc20-v2-extra-data-encoded-as-legacy-uint256",
+      "invalidatedAt": "2026-07-27",
+      "checkedAt": "2026-07-27",
+      "verifier": "retained-manifest-evidence",
+      "independentRpcCount": 2,
+      "token": "0xc335321D60E583ba617B43918Eb7e38768AA638a",
+      "poolId": "0xe5173e4560219a4e3bec0f0c07f9e187cc56811ce0c57b85c2d9c6ae6a6561ab",
+      "launchHash": "0x925f0577c5bc3164654110cca428fe75390ab98591ec4bfd570d03758ded2df0",
+      "positionRecipient": "0x595300dC132A510c245253Ede7a6A68eBcEfE2a3",
+      "positionTokenId": "37828",
+      "initialTick": 204200,
+      "finalTick": 204199,
+      "positionLiquidity": "36819258015569838458222",
+      "finalCreatorTokenBalance": "30000000000000000000000",
+      "creatorFeesClaimedWei": "1424961423422",
+      "launcherFeesClaimedWei": "158329047046",
+      "transactions": {
+        "launch": "0x671a14eddb8aa3edd0e64520d3fc4e92619482e6ba8398902d9cda9c8108d89d",
+        "buy": "0x69022803b446b66fca73895f6555bd70c373b4e1f781d0b076a00331c3f5fadf",
+        "permit2Approval": "0xc24efd1d9cae6ff9fd51ec346406ad3ef9f8fb9cbfb41d95701b838ed79f3033",
+        "sell": "0xe21be96eeea4028fe0d0c9e5c9021a10ca0d8b28194b4169518a681c79406979",
+        "creatorClaim": "0xa528f2c30bbc158464bc08dd95a67c2092c7153d82cb46fbb6b0c68b07b7eb68",
+        "launcherClaim": "0xc3e1a946bb5c2e04257c3ca4d9831dd088d405d0049b9498ab6998786c547e0e"
+      },
+      "blocks": {
+        "launch": 11357532,
+        "buy": 11357602,
+        "permit2Approval": 11357610,
+        "sell": 11357612,
+        "creatorClaim": 11357616,
+        "launcherClaim": 11357619
+      }
+    },
+    "lifecycleEvidence": {
+      "status": "verified-current-release",
+      "releaseEligible": true,
+      "checkedAt": "2026-07-27",
+      "verifier": "contracts/scripts/verify-sepolia-meme-lifecycle.mjs",
+      "independentRpcCount": 2,
+      "requiredMetadataAbi": "UERC20Metadata(string description,string website,string image,bytes extraData)",
+      "requiredExtraData": "nonempty",
+      "minimumInitialBuyWei": "600000000000000",
+      "token": "0x4D0fa6fb9eD708f5e71c53E77B261d8FBC8A018B",
+      "poolId": "0x2305fce75dcc9b5107ef00ae76d9be0aa1c30829350452ae43599ff7c5da9c7d",
+      "launchHash": "0xa9cd82a134a69275d0b5a9cc274da11dcfe0e0c2a4a7a2609a864adf84d1cb51",
+      "positionRecipient": "0x646118eE77c9a5509d074a8F2fd94c16b024F070",
+      "positionTokenId": "37832",
+      "initialTick": 204200,
+      "finalTick": 204199,
+      "positionLiquidity": "36819258015569838458222",
+      "initialBuyNativeWei": "600000000000000",
+      "initialBuyTokenAmount": "437971781612384114831424",
+      "sellTokenAmount": "407971781612384114831424",
+      "sellGrossNativeWei": "553329047046898",
+      "sellNetNativeWei": "547795756576430",
+      "finalCreatorTokenBalance": "30000000000000000000000",
+      "creatorFeesClaimedWei": "10379961423422",
+      "launcherFeesClaimedWei": "1153329047046",
+      "treasuryBalanceDeltaWei": "1153329047046",
+      "metadata": {
+        "description": "Programmable atomic Dev Buy lifecycle fixture on Sepolia",
+        "website": "https://programmable.family",
+        "image": "",
+        "extraData": "0x7b2276223a312c2278223a22307850726f6772616d6d61626c65227d",
+        "decodedExtraData": "{\"v\":1,\"x\":\"0xProgrammable\"}"
+      },
+      "transactions": {
+        "launch": "0xc608fb203c71525d4890f0849375340268cd878b3225013675b811d141b52b22",
+        "permit2Approval": "0x0d20141c3181d30ea8b3d121892681c6c7c99cbb5bd19824010d9d4be9ad8090",
+        "sell": "0xb850ccee7c279e2ffcd1610df91866a83b613c671a0d77de5a00f83973baa2a3",
+        "creatorClaim": "0xd0e027714c80d140200f14802c8530a294a99b7f3fe1a0c353198ea066843972",
+        "launcherClaim": "0x8a2c773af3c2eeeefc56059ede1a2d3069e9a16ba1da15ff73a76831e4da6b8f"
+      },
+      "blocks": {
+        "launch": 11359239,
+        "permit2Approval": 11359247,
+        "sell": 11359251,
+        "creatorClaim": 11359256,
+        "launcherClaim": 11359261
+      }
+    },
+    "blocker": null
   }
 }

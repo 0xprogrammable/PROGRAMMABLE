@@ -54,7 +54,7 @@
     {
       "name": "Uniswap UERC20 Factory",
       "repository": "https://github.com/Uniswap/uerc20-factory.git",
-      "commit": "46290a5447844016516b4b4530013da01b6ff801"
+      "commit": "6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68"
     },
     {
       "name": "BlockNumberish",

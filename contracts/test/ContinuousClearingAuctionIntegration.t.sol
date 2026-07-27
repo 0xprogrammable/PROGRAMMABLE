@@ -230,7 +230,7 @@ contract ContinuousClearingAuctionIntegrationTest is Test {
             configData: abi.encode(parameters, abi.encode(auctionParameters))
         });
         UERC20Metadata memory metadata =
-            UERC20Metadata({ description: "CCA integration fixture.", website: "", image: "", xProofTweetId: 0 });
+            UERC20Metadata({ description: "CCA integration fixture.", website: "", image: "", extraData: bytes("") });
 
         bytes[] memory calls = new bytes[](2);
         calls[0] = abi.encodeWithSelector(

@@ -3,8 +3,7 @@
   "catalogId": "launcher.launch-variants.v1",
   "statusDefinitions": {
     "protocol-tested": "Implemented and covered by local, fork, fuzz or invariant tests. Not audited or deployed.",
-    "planned": "Product and security boundary defined. Contract implementation is not complete.",
-    "research": "Prior art and invariants still need to be established."
+    "archived": "Retained as historical prototype or research. No work is scheduled and the product is not public."
   },
   "compositionAxes": [
     "asset",
@@ -13,6 +12,11 @@
     "poolBehavior",
     "positionCustody"
   ],
+  "publicCatalog": {
+    "activeVariantId": "meme-eth-fee-locked-v1",
+    "displayName": "Classic",
+    "otherVariantsVisible": false
+  },
   "verifiedBoundary": {
     "tokenSupply": "fixed",
     "transferTax": false,
@@ -20,15 +24,54 @@
     "sellRestrictions": false,
     "upgradeableToken": false,
     "positionCustody": "permanently-locked-official-position-fees-forwarder",
-    "platformFeePercentage": "0.10%",
+    "selectedTotalSwapFee": "integer-1-to-10-percent",
+    "platformFeePercentagePoints": "0.10%",
+    "platformFeeAddedOnTop": false,
+    "creatorFeeRule": "selected-total-minus-0.10-percentage-points",
+    "creatorLiquidityDeposit": "zero",
+    "minimumCreatorInitialBuyWei": "600000000000000",
+    "creatorInitialBuyPolicy": "creator-selected-atomic-market-buy-at-or-above-minimum",
     "platformFeeRecipient": "immutable-per-hook",
     "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
   },
   "variants": [
     {
+      "id": "meme-eth-fee-locked-v1",
+      "displayName": "Classic",
+      "status": "protocol-tested",
+      "asset": "new-fixed-supply-uerc20",
+      "opening": "one-sided-v4-range-order",
+      "liquidity": "complete-token-supply-no-creator-liquidity-deposit",
+      "poolBehavior": [
+        "atomic-creator-selected-dev-buy-minimum-600000000000000-wei",
+        "selectable-total-eth-swap-fee-100-to-1000bp",
+        "fixed-launcher-share-10bp-deducted-from-total"
+      ],
+      "positionCustody": "permanently-locked-official-position-fees-forwarder",
+      "implementation": [
+        "Uniswap UERC20Factory v2.0",
+        "Uniswap PositionManager",
+        "MemeLaunchV1",
+        "EthCreatorFeeHookV1",
+        "EthCreatorFeeHookFactoryV1",
+        "LockedPositionFeeForwarderFactoryV1"
+      ],
+      "evidence": [
+        "EthCreatorFeeHookV1.t.sol",
+        "EthCreatorFeeHookInvariant.t.sol",
+        "MemeLaunchV1.t.sol",
+        "ClassicMemeLaunchSecurityRegression.t.sol",
+        "MainnetMemeLifecycleFork.t.sol",
+        "DeploySepoliaMemeInfrastructureV1.t.sol",
+        "tests/launch-transaction.test.ts",
+        "app/api/launch/preflight/route.ts"
+      ],
+      "humanSummary": "The complete fixed token supply enters a permanently locked one-sided v4 position at a 1.355657760817103798 ETH starting FDV. The creator supplies no liquidity, selects an atomic Dev Buy of at least 0.0006 ETH and receives the purchased tokens. The selected 1-10% total ETH swap fee includes Launcher's fixed 0.10 percentage-point share."
+    },
+    {
       "id": "auction-fixed-fee-locked-v1",
       "displayName": "Auction launch",
-      "status": "protocol-tested",
+      "status": "archived",
       "asset": "new-fixed-supply-uerc20",
       "opening": "continuous-clearing-auction",
       "liquidity": "auction-proceeds-and-reserved-tokens",
@@ -57,7 +100,7 @@
     {
       "id": "direct-fixed-fee-locked-v1",
       "displayName": "Direct v4 pool",
-      "status": "protocol-tested",
+      "status": "archived",
       "asset": "new-fixed-supply-uerc20",
       "opening": "creator-supplied-initial-price",
       "liquidity": "creator-supplied-native-eth-and-token",
@@ -82,7 +125,7 @@
     {
       "id": "direct-existing-token-locked-v1",
       "displayName": "Existing token pool",
-      "status": "protocol-tested",
+      "status": "archived",
       "asset": "existing-fixed-supply-uerc20",
       "opening": "creator-supplied-initial-price",
       "liquidity": "creator-supplied-native-eth-and-token",
@@ -114,7 +157,7 @@
     {
       "id": "auction-fee-split-v1",
       "displayName": "Auction with fee split",
-      "status": "planned",
+      "status": "archived",
       "asset": "new-fixed-supply-uerc20",
       "opening": "continuous-clearing-auction",
       "liquidity": "auction-proceeds-and-reserved-tokens",
@@ -127,7 +170,7 @@
     {
       "id": "auction-timed-opening-v1",
       "displayName": "Timed auction opening",
-      "status": "planned",
+      "status": "archived",
       "asset": "new-fixed-supply-uerc20",
       "opening": "continuous-clearing-auction",
       "liquidity": "auction-proceeds-and-reserved-tokens",
@@ -140,7 +183,7 @@
     {
       "id": "dynamic-fee-bounded-v1",
       "displayName": "Bounded dynamic fees",
-      "status": "protocol-tested",
+      "status": "archived",
       "asset": "new-fixed-supply-uerc20",
       "opening": "continuous-clearing-auction",
       "liquidity": "auction-proceeds-and-reserved-tokens",
@@ -169,7 +212,7 @@
     {
       "id": "external-custom-hook-v1",
       "displayName": "Custom hook",
-      "status": "research",
+      "status": "archived",
       "asset": "new-or-reviewed-existing-token",
       "opening": "auction-or-direct",
       "liquidity": "defined-by-reviewed-composition",
@@ -182,7 +225,7 @@
     {
       "id": "external-existing-token-v1",
       "displayName": "External token pool",
-      "status": "research",
+      "status": "archived",
       "asset": "external-existing-erc20",
       "opening": "creator-supplied-initial-price",
       "liquidity": "defined-by-reviewed-composition",

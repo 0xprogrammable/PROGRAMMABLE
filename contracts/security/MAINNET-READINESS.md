@@ -1,61 +1,69 @@
-# Mainnet readiness gate
+# Classic mainnet readiness
 
-Current state: blocked by design. The fixed-fee auction, bounded dynamic-fee auction, new-token direct and
-existing-UERC20 direct variants are green locally and on pinned Ethereum and Sepolia forks. The four-contract Sepolia
-infrastructure is deployed and source-verified, but no complete launch rehearsal or independent audit has been
-completed.
+Current state: **Mainnet blocked by design; Sepolia rehearsal verified**.
 
-## Completed Sepolia infrastructure
+| Environment | Manifest state | Release meaning |
+| --- | --- | --- |
+| Ethereum mainnet | `not-deployed` | No launch or trade transaction can be prepared |
+| Ethereum Sepolia | `ready` | Current atomic Dev Buy release and lifecycle are independently reconciled |
 
-- The configured wallet received `0.05 Sepolia ETH` from Google Cloud in transaction
-  `0x1ef3f04c455cd98197b3900cc233638fc97127eeab8683e0bfdc4d9d5174d122`
-- The four deployments succeeded at the nonce-derived addresses recorded in `config/app-deployments.v1.json`
-- All four runtime-code hashes and immutable dependency getters match the deployment specification
-- Blockscout serves verified Solidity source compiled with Solidity 0.8.26, Cancun and 1,000 optimizer runs
-- The deployment manifest records every receipt, block, runtime-code hash, dependency pin and explorer verification
-- The post-deployment wallet nonce is four and the remaining balance is `0.023250300786254092 Sepolia ETH`
+There has been no external smart-contract audit or public contest.
 
-## Still required on Sepolia
+## Implemented engineering
 
-- Rehearse the fixed four-hour CCA schedule, 50/50 token allocation, minimum-valuation floor, exact factory, salt and protocol-fee-controller path
-- Rehearse the bounded dynamic-fee auction, migration, cross-block fee update and fixed 1.00% ceiling
-- Rehearse the direct launch, bidirectional swaps and separate platform/creator fee collection
-- Rehearse the existing-UERC20 launch with factory provenance, recorded-creator authorization, bidirectional swaps and separate platform/creator fee collection
-- Rehearse the frontend-generated direct approval and launch calldata against the deployed Sepolia contracts and bind the evidence to the exact commit
-- Rehearse the frontend-generated auction lock setup, hook setup and atomic LiquidityLauncher calldata against deployed Sepolia contracts and bind the evidence to the exact commit
+- One public composition: Classic
+- Official UERC20Factory v2.0.0 dependency pinned to commit `6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68`
+- Exact UERC20 metadata tuple `(string description,string website,string image,bytes extraData)`
+- Payable atomic launch with one creator-selected Dev Buy of at least 0.0006 ETH, no creator liquidity deposit and no protocol launch fee
+- Fixed one-billion-token supply and no creator or Programmable allocation at issuance; initial-buy tokens go directly to the creator
+- Complete token supply in one permanently locked, one-sided v4 position
+- Opening tick 204200 and starting FDV of `1.355657760817103798 ETH`
+- Total hook fee restricted to whole 1–10% steps
+- Fixed 0.10 percentage-point Programmable share deducted from the selected total
+- Native ETH accrual across exact-input and exact-output swap directions
+- Native-specified partial fills revert
+- Permissionless fixed-recipient claims and recipient-authorized recovery claims
+- Canonical-pool isolation and alternative-pool bypass tested and documented
+- Stateful accounting invariants and security regression tests
+- Server-owned launch ABI, deployment selection, calldata construction and simulation
+- Direct exact-input trading path using V4Quoter, Universal Router v2.0 and Permit2
+- Confirmation-delayed event and StateView read model for Explore and Profile
+- Official deployment registry and pinned runtime snapshot validation
 
-The platform treasury is fixed to `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The LP policy is also fixed: the official Uniswap `PositionFeesForwarder`, zero operator, maximum `uint256` timelock and launch creator as immutable LP-fee recipient. The standard auction is enabled only while the pinned CCA factory’s protocol fee controller is the zero address, which is what allows all auction proceeds to fund the pool. The Sepolia deployment script fails closed on chain ID, broadcaster and eight official runtime-code hashes.
+These are repository-level implementation and test properties. They are not Mainnet deployment evidence or third-party assurance.
 
-## Required before mainnet
+## Sepolia evidence
 
-- Complete Sepolia fixed-fee auction, bounded dynamic-fee auction, new-token direct and existing-UERC20 direct launches, migration where applicable, swaps, fee collection and failure-recovery rehearsals
-- Commission an independent audit and resolve every accepted finding
-- Run `npm run contracts:official-deployments` against Uniswap’s current registry, then recheck runtime bytecode
-- Verify the factories, direct launcher and every launched hook source on the block explorer
-- Confirm the exact 10-bp fee disclosure in the launch confirmation and token detail view
-- Replace `not-deployed` in `config/app-deployments.v1.json` only after recording the verified mainnet addresses and runtime-code hashes
-- Bind production preflight requests to a verified Privy session and enforce provider-level rate limits before enabling the CPU-bound hook search
-- Implement and rehearse the specified monitoring and incident-response process; document treasury custody and upgrade-by-new-version policy
-- Obtain legal review for platform operation and prohibit unsupported securities or RWA claims
+The current Classic launcher, hook and hook factory are source-verified on Sepolia. Its signed lifecycle launched an official UERC20 v2 token with nonempty dynamic `bytes extraData` and a 0.0006 ETH atomic creator buy, authorized the official Universal Router through Permit2, sold, and claimed both creator and Programmable native ETH fees.
 
-## Owner inputs still missing
+Two independent RPCs reconcile all five receipts, runtime hashes, token provenance, fee math, balance deltas, canonical pool state and permanent position custody. Four Blockscout records confirm source verification. The current Sepolia manifest is `ready`.
 
-- Explicit confirmation that the supplied EOA is the final immutable mainnet treasury, or a replacement Safe address
-- Production deployment signer or Safe policy
-- Final brand and production domain
+The older lifecycle that used the legacy fourth metadata field remains separately marked `historical-invalid-metadata-abi` with `releaseEligible: false`. Its addresses and receipts are retained in [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for historical traceability and cannot enable transaction preparation.
 
-No private key is embedded in the repository. The public treasury and test-wallet addresses are recorded in `config/deployment-inputs.v1.json`.
+## Required before Mainnet
 
-## Frontend transaction gate
+1. Freeze the exact release commit and preserve passing unit, fuzz, invariant, fork, static-analysis and remote CI evidence
+2. Rerun the proven V4Quoter, Universal Router and Permit2 lifecycle after that exact release commit is frozen
+3. Rehearse the public buy and sell flow against the ready deployment on an allowed production wallet origin
+4. Productionize event and StateView reads with durable indexing, reconciliation, confirmation policy and availability controls
+5. Add live alerts, named incident owners and a rehearsed response process
+6. Fund the owner-approved deployer only after reviewing a fresh gas ceiling
+7. Recheck the approved deployer nonce and balance, official deployment records, dependency runtime bytecode and predicted-address vacancy immediately before signing
+8. Bind the frozen source commitment to the machine-readable Mainnet evidence, run a fresh read-only simulation and review all four zero-value transactions
+9. Obtain explicit approval for the exact gas ceiling and broadcast, then source-verify the deployment and run a low-value monitored canary before enabling public preparation
+10. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
+11. Resolve or explicitly accept the 2026-07-27 `npm audit --omit=dev` result: 23 production dependency entries in the Uniswap SDK graph, comprising 15 low, 6 moderate and 2 high severities. A forced breaking version change must not be applied without compatibility review
 
-The production direct and auction preflights remain intentionally disabled because the mainnet entry in
-`config/app-deployments.v1.json` is `not-deployed`. The same manifest now records the verified Sepolia infrastructure as
-the rehearsal target. Direct launch validates integer-only amount and price math, reconstructs existing-UERC20
-provenance and prepares the exact approval or atomic launch. Auction launch derives the canonical CCA economics and
-schedule, selects the fixed-fee or bounded dynamic-fee hook family, predicts the official token and auction, prepares
-deterministic lock and hook setup, checks pool availability and builds the atomic LiquidityLauncher multicall. Both
-paths verify official and Launcher runtime bytecode, run the exact `eth_call`, estimate gas and return a fixed
-transaction for explicit Privy wallet review. The route does not accept a target address or calldata from the browser.
+## Owner decisions
 
-The Sepolia manifest and receipts are deployment evidence, not end-to-end launch evidence. No production transaction
-can be prepared while the mainnet manifest remains `not-deployed`.
+- Final funding amount and maximum Mainnet fee ceiling
+- Explicit approval for the reviewed four-transaction broadcast and later public enablement
+- Incident-response and public-communication owners
+
+## Frontend gate
+
+The public form always normalizes to Classic. The server accepts no target address or calldata from the browser. It verifies the deployment manifest, runtime code, factory provenance, immutable dependencies, treasury, hook mask, fee constants, the 0.0006 ETH minimum Dev Buy, predicted token address and exact selected call value before simulation.
+
+Launch and trading preparation remain disabled while Mainnet is `not-deployed`. Sepolia preparation is enabled only when the application is explicitly configured for the verified rehearsal environment; it never silently replaces the production manifest.
+
+The absence of an external audit leaves additional residual smart-contract risk. Product and release copy must not describe the system or any launched token as audited, safe, unruggable, scam proof or guaranteed compatible with third-party scanners.

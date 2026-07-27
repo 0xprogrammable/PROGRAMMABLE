@@ -10,6 +10,8 @@
   "token": {
     "implementation": "Uniswap UERC20Factory v2.0",
     "supply": "fixed",
+    "wholeTokenSupply": "1000000000",
+    "decimals": 18,
     "minting": "single-mint-at-creation",
     "transferTax": false,
     "rebase": false,
@@ -88,6 +90,12 @@
     "proxy-hooks",
     "regulated-rwa-claims",
     "securities-representations"
+  ],
+  "publicInputs": [
+    "token-name",
+    "token-symbol",
+    "token-description",
+    "minimum-fully-diluted-valuation-in-native-eth"
   ],
   "productionApproved": false
 }
