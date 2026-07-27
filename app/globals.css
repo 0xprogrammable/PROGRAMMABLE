@@ -3885,7 +3885,7 @@ textarea {
     height: auto;
     min-height: calc(100svh - var(--header-height) - 68px);
     overflow: visible;
-    padding-bottom: 38px;
+    padding-bottom: 37px;
   }
 
   .token-detail-page {
