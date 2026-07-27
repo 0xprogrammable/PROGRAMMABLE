@@ -36,6 +36,10 @@ export const V2_DEPLOYMENT_NETWORKS = {
       "https://sepolia.drpc.org",
       "https://ethereum-sepolia-rpc.publicnode.com",
     ],
+    feePolicy: {
+      maxFeePerGasWei: 10_000_000_000n,
+      maxPriorityFeePerGasWei: 2_000_000_000n,
+    },
     dependencies: {
       poolManager: {
         address: "0xe03a1074c86cfedd5c142c4f04f1a1536e203543",
@@ -70,6 +74,10 @@ export const V2_DEPLOYMENT_NETWORKS = {
       "https://ethereum-rpc.publicnode.com",
       "https://eth.drpc.org",
     ],
+    feePolicy: {
+      maxFeePerGasWei: 500_000_000n,
+      maxPriorityFeePerGasWei: 100_000_000n,
+    },
     dependencies: {
       poolManager: {
         address: "0x000000000004444c5dc75cb358380d2e3de08a90",
@@ -389,6 +397,9 @@ export async function loadDeploymentPlan() {
       ],
     },
   ];
+  const maximumDeploymentGas = transactions
+    .map((transaction) => BigInt(transaction.foundryGasLimit))
+    .reduce((total, gasLimit) => total + gasLimit, 0n);
 
   return {
     network: network.name,
@@ -401,6 +412,15 @@ export async function loadDeploymentPlan() {
     endingNonce: startingNonce + transactions.length,
     hookSalt,
     transactions,
+    feePolicy: {
+      maxFeePerGasWei: network.feePolicy.maxFeePerGasWei.toString(),
+      maxPriorityFeePerGasWei:
+        network.feePolicy.maxPriorityFeePerGasWei.toString(),
+      maximumDeploymentGas: maximumDeploymentGas.toString(),
+      maximumDeploymentCostWei: (
+        maximumDeploymentGas * network.feePolicy.maxFeePerGasWei
+      ).toString(),
+    },
   };
 }
 
@@ -505,7 +525,7 @@ export async function readVerifiedState(plan) {
   ) {
     throw new Error(`Independent ${network.name} RPCs disagree`);
   }
-  return {
+  const verifiedState = {
     ...reference,
     balance:
       "0x" +
@@ -514,6 +534,49 @@ export async function readVerifiedState(plan) {
         .reduce((lowest, current) => (current < lowest ? current : lowest))
         .toString(16),
   };
+  assertDeploymentSequenceState(plan, verifiedState);
+  return verifiedState;
+}
+
+export function assertDeploymentSequenceState(plan, state) {
+  const confirmedNonce = Number(BigInt(state.confirmedNonce));
+  const pendingNonce = Number(BigInt(state.pendingNonce));
+  if (
+    confirmedNonce < plan.startingNonce ||
+    confirmedNonce > plan.endingNonce
+  ) {
+    throw new Error("Confirmed nonce is outside the reviewed deployment sequence");
+  }
+  if (pendingNonce < confirmedNonce || pendingNonce > plan.endingNonce) {
+    throw new Error("Pending nonce is outside the reviewed deployment sequence");
+  }
+  if (state.deployments.length !== plan.transactions.length) {
+    throw new Error("Deployment state does not match the reviewed transaction count");
+  }
+
+  const confirmedCount = confirmedNonce - plan.startingNonce;
+  state.deployments.forEach((deployment, index) => {
+    if (index < confirmedCount && !deployment.verified) {
+      throw new Error(
+        "A reviewed nonce confirmed without the expected deployment",
+      );
+    }
+    if (index >= confirmedCount && deployment.verified) {
+      throw new Error("Expected code exists before its reviewed nonce");
+    }
+  });
+
+  const remainingMaximumCost = plan.transactions
+    .slice(confirmedCount)
+    .map(
+      (transaction) =>
+        BigInt(transaction.foundryGasLimit) *
+        BigInt(plan.feePolicy.maxFeePerGasWei),
+    )
+    .reduce((total, cost) => total + cost, 0n);
+  if (BigInt(state.balance) < remainingMaximumCost) {
+    throw new Error("Wallet balance is below the reviewed deployment ceiling");
+  }
 }
 
 function renderHtml(plan) {
@@ -583,7 +646,7 @@ function renderHtml(plan) {
       <p class="notice" id="notice">Connect the configured deployment wallet to begin.</p>
       <ol id="transactions"></ol>
     </section>
-    <p class="warning">MetaMask remains the final approval boundary. Confirm only the displayed ${plan.network} transaction from the configured wallet with zero ETH value. This page stops on any nonce, bytecode, address, dependency or RPC mismatch.</p>
+    <p class="warning">MetaMask remains the final approval boundary. Confirm only the displayed ${plan.network} transaction from the configured wallet with zero ETH value and a maximum fee no higher than ${plan.feePolicy.maxFeePerGasWei} wei per gas. This page stops on any nonce, bytecode, address, dependency, gas-limit or RPC mismatch.</p>
   </main>
   <script id="data" type="application/json">${configuration}</script>
   <script>
@@ -776,7 +839,10 @@ function renderHtml(plan) {
         const estimate = BigInt(await request("eth_estimateGas", [requestData]));
         const foundryLimit = BigInt(transaction.foundryGasLimit);
         const padded = (estimate * 120n + 99n) / 100n;
-        requestData.gas = "0x" + (foundryLimit > padded ? foundryLimit : padded).toString(16);
+        if (padded > foundryLimit) throw new Error("Live gas estimate exceeds the reviewed gas limit");
+        requestData.gas = "0x" + foundryLimit.toString(16);
+        requestData.maxFeePerGas = "0x" + BigInt(config.feePolicy.maxFeePerGasWei).toString(16);
+        requestData.maxPriorityFeePerGas = "0x" + BigInt(config.feePolicy.maxPriorityFeePerGasWei).toString(16);
         notice("Review " + transaction.label + " in MetaMask. ETH value must be zero.");
         const hash = await request("eth_sendTransaction", [requestData]);
         rows[readyIndex] = { status: "Pending" }; readyIndex = null; render();
@@ -827,6 +893,7 @@ async function main() {
             startingNonce: plan.startingNonce,
             endingNonce: plan.endingNonce,
             hookSalt: plan.hookSalt,
+            feePolicy: plan.feePolicy,
             transactions: plan.transactions.map((transaction) => ({
               name: transaction.name,
               address: transaction.address,
