@@ -4,7 +4,7 @@
 
 | Environment | Manifest state | Transaction preparation |
 | --- | --- | --- |
-| Ethereum mainnet V2 | `lifecycle-pending` | Disabled pending a monitored canary |
+| Ethereum mainnet V2 | `lifecycle-pending` | Disabled pending durable production operations |
 | Ethereum Sepolia V2 | `ready` | Enabled when the app runs with the rehearsal network configuration |
 
 The exact current Classic release is deployed and source-verified on Sepolia. Its signed lifecycle atomically launched
@@ -12,8 +12,9 @@ an official UERC20 v2 token with a 0.0006 ETH creator Dev Buy, sold through the 
 authorization, and claimed both creator and Programmable fees. Two independent RPCs reconcile the complete evidence.
 
 There has been no external smart-contract audit or public contest. Sepolia evidence is not production approval.
-Mainnet V2 is deployed and source-matched. Public preparation remains blocked on production indexing and monitoring,
-a fresh provider-backed wallet rehearsal and a separately approved monitored canary lifecycle.
+Mainnet V2 is deployed, source-matched and backed by a complete independently reconciled canary lifecycle. Public
+preparation remains blocked on durable production indexing, authenticated RPC operations, continuous monitoring and a
+fresh provider-backed wallet rehearsal.
 
 ## Release metadata requirement
 
@@ -95,23 +96,29 @@ The three transactions used `0.002365070934812467 ETH` in gas, below the separat
 `0.006566708 ETH` maximum. No contract deployment transferred ETH. The exact evidence is recorded in
 `contracts/deployments/mainnet-classic-v2.json`. The separate canary is not covered by the deployment approval.
 
-## Prepared Mainnet V2 canary
+## Verified Mainnet V2 canary
 
 The canary fixture uses `Test` / `TEST`, the existing Programmable fallback image, `This is a test.`, Forbes as its
 website, Elon Musk's X profile, a 1.00% total hook swap fee and a 0.0006 ETH atomic Dev Buy. The predicted token is
 `0x05204a4ce651452892A620950BDc2ADeDBF63b0a`.
 
-Two independent RPCs returned launch estimates of 3,546,663 and 3,537,771 gas at wallet nonce 10. The handoff allows a
-maximum 0.5 gwei gas price and reviewed limits for launch, a separate 0.0001 ETH buy, the possible token approval,
-Permit2 router approval, sell and both claims. The seven-step lifecycle was reproduced on a temporary Mainnet fork.
-Its complete conservative maximum outflow is exactly `0.003415 ETH`, including both buys and excluding ETH returned by
-the sell. This is an approval ceiling, not an estimate of the likely final cost.
+The owner approved the exact `0.003415 ETH` conservative gross-debit ceiling. The final lifecycle used
+`0.001819029240075952 ETH` gross, including the 0.0006 ETH atomic Dev Buy and separate 0.0001 ETH buy, after accounting
+for gas and before ETH returned by the sell.
 
-No canary transaction has been approved or submitted. The preflight and empty receipt ledger are recorded in
-`contracts/release/mainnet-classic-v2-canary-preflight.json` and
-`contracts/release/mainnet-classic-v2-canary-evidence.json`. The local runner records each independently confirmed
-receipt with the exact server-reviewed calldata hash, and `contracts/scripts/verify-mainnet-meme-lifecycle.mjs` refuses
-release evidence unless both RPCs reconcile every input, receipt, event, balance delta and the complete lifecycle.
+| Lifecycle step | Transaction | Block | Verified result |
+| --- | --- | ---: | --- |
+| Atomic launch and Dev Buy | [`0x44a4…5d4c`](https://etherscan.io/tx/0x44a480caaac8b937e7ccc31e45e13bd725253e231fcc12f7795bc5358a0a5d4c) | 25,624,511 | Created TEST, initialized the canonical v4 pool and bought `437971781612384114831424` token units atomically |
+| Separate buy | [`0xbd41…5b48`](https://etherscan.io/tx/0xbd416570fc9de744a53919a6c7e7ea9f849fe3f5e510a13376e6967c68145b48) | 25,624,526 | Official Universal Router bought `72958001464168541353717` token units |
+| Permit2 authorization | [`0xbca8…10f3`](https://etherscan.io/tx/0xbca8b6d1e8eb3e8728680c879d213c412b042e7455a9edbc2d721c7f780e10f3) | 25,624,545 | Time-bounded official Universal Router authorization |
+| Sell | [`0x4b46…35c1`](https://etherscan.io/tx/0x4b461cccf14876cd9ecf05fcf0f295a6337079ceb3a3f4fb5b6fdddc6ada35c1) | 25,624,553 | Sold `480929783076552656185141` token units and retained exactly 30,000 TEST |
+| Creator claim | [`0x16ba…4aff`](https://etherscan.io/tx/0x16ba90a64df8ddc12b7be0ac8a0a664daf5008ad237ea7d3958a857f73624aff) | 25,624,575 | Paid `12170961423422` wei to the immutable creator |
+| Programmable claim | [`0x32a5…5fbe`](https://etherscan.io/tx/0x32a5de5591fb4c988b46c0d0a07095df1419634d10a158b3b6a36377bbe55fbe) | 25,624,580 | Paid `1352329047046` wei to the immutable treasury |
+
+The independent verifier reached `verified-current-release` with two agreeing RPCs and 16 confirmations. It reconciled
+every reviewed calldata hash, receipt, event, balance delta, fee split, the canonical pool, position NFT `351734`,
+nonzero locked liquidity and the final 30,000 TEST balance. The exact evidence is recorded in
+`contracts/release/mainnet-classic-v2-canary-evidence.json`.
 
 ## Historical pre-initial-buy Sepolia deployment
 
