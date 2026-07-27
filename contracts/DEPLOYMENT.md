@@ -79,6 +79,24 @@ The 1.00% swap fee remained inclusive: 0.90 percentage points accrued to the cre
 Programmable. After both claims, the hook reported zero creator fees, zero launcher fees, zero native claims and zero
 direct ETH balance.
 
+## Current Mainnet V2 preflight
+
+The read-only simulation at repository commit `f3f99c452ced7b90864f8f4b6e172c8a12ea445e` used the current confirmed and
+pending deployer nonce `7`. Two independent RPCs agreed on the nonce, the `0.016860325627722211 ETH` balance, official
+dependency runtime hashes and vacant predicted addresses.
+
+| Step | Nonce | Predicted address | Reviewed gas limit |
+| --- | ---: | --- | ---: |
+| `EthCreatorFeeHookFactoryV2` | 7 | `0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67` | 4,047,374 |
+| `EthCreatorFeeHookV2` | 8 | `0x025a386eAa79f6067d29848FD05ccC71bEAb20CC` | 3,553,314 |
+| `MemeLaunchV1` | 9 | `0xD240D06f8586eB799f20056054e5b527405E6bAd` | 5,532,728 |
+
+Foundry estimated `0.002096161040827056 ETH` at `0.159605166 gwei`. The wallet handoff is capped at `0.5 gwei` with
+an aggregate worst-case deployment ceiling of `0.006566708 ETH`. It fails closed if the nonce, dependency code,
+predicted-address vacancy, balance, live gas estimate or reviewed gas ceiling changes. No Mainnet V2 transaction has
+been approved, signed or submitted. Any unrelated transaction from the deployer invalidates these addresses and
+requires a fresh simulation.
+
 ## Historical pre-initial-buy Sepolia deployment
 
 | Contract | Address | Transaction | Block | Runtime code hash |
