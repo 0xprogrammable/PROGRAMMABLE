@@ -386,13 +386,11 @@ assert(
   "Mainnet Classic V1 must remain launch-disabled until the current lifecycle is verified",
 );
 assert(
-  appDeployments.rehearsal.releaseVersion === "classic-v1" &&
-    appDeployments.rehearsal.status === "ready",
-  "Sepolia infrastructure is not marked ready",
-);
-assert(
-  appDeployments.rehearsal.memeLaunchStatus === "ready",
-  "Sepolia Classic is not enabled after the verified current lifecycle",
+  appDeployments.rehearsal.releaseVersion === "classic-v2" &&
+    appDeployments.rehearsal.status === "ready" &&
+    appDeployments.rehearsal.memeLaunchStatus ===
+      "ready",
+  "Sepolia Classic V2 must remain bound to the verified Test2 lifecycle",
 );
 assert(
   appDeployments.rehearsal.deployer.toLowerCase() ===
@@ -438,16 +436,18 @@ for (const field of [
 }
 assert(
   appDeployments.rehearsal.sourceVerification.status === "verified",
-  "Current Sepolia source verification is not recorded",
+  "Current Sepolia V2 source verification is not recorded",
 );
 assert(
   appDeployments.rehearsal.sourceVerification.releaseEvidenceStatus ===
-    "current-initial-buy-release",
-  "Sepolia source verification is not bound to the atomic Dev Buy release",
+    "current-classic-v2-lifecycle",
+  "Sepolia source verification is not bound to the Classic V2 lifecycle",
 );
 assert(
   appDeployments.rehearsal.sourceVerification.explorer ===
-    "https://eth-sepolia.blockscout.com",
+    "https://repo.sourcify.dev" &&
+    appDeployments.rehearsal.sourceVerification.secondaryExplorer ===
+      "https://eth-sepolia.blockscout.com",
   "Sepolia source verification uses an unexpected explorer",
 );
 for (const field of [
@@ -464,7 +464,7 @@ for (const field of [
 assert(
   appDeployments.rehearsal.sourceVerification.memeLaunchV1Contracts
     .launchedUerc20 === "verified",
-  "Sepolia UERC20 source verification is not recorded",
+  "The Test2 UERC20 source verification is not recorded",
 );
 
 const historicalLifecycleEvidence =
@@ -513,68 +513,81 @@ assert(
   "Historical Sepolia lifecycle state evidence is incomplete",
 );
 
+const historicalV1Deployment =
+  appDeployments.rehearsal.historicalV1Deployment;
+assert(
+  historicalV1Deployment?.releaseVersion === "classic-v1" &&
+    historicalV1Deployment.status ===
+      "historical-current-initial-buy-release" &&
+    historicalV1Deployment.ethCreatorFeeHookFactory ===
+      "0x630B8a1392601AE1d989323CC8051e8A17A0e5BF" &&
+    historicalV1Deployment.ethCreatorFeeHook ===
+      "0x13c34016c74bc43F4CBa97EDb48cC36b4bb620cc" &&
+    historicalV1Deployment.memeLaunch ===
+      "0x341edf9399C8c5dF361aec2939C4a17c2163a245",
+  "The verified Sepolia Classic V1 deployment must remain historical evidence",
+);
+
+const historicalV1LifecycleEvidence =
+  appDeployments.rehearsal.historicalV1LifecycleEvidence;
+assert(
+  historicalV1LifecycleEvidence?.status ===
+      "historical-classic-v1-verified" &&
+    historicalV1LifecycleEvidence.releaseEligible === false &&
+    historicalV1LifecycleEvidence.token ===
+    "0x4D0fa6fb9eD708f5e71c53E77B261d8FBC8A018B" &&
+    historicalV1LifecycleEvidence.poolId ===
+      "0x2305fce75dcc9b5107ef00ae76d9be0aa1c30829350452ae43599ff7c5da9c7d" &&
+    historicalV1LifecycleEvidence.launchHash ===
+      "0xa9cd82a134a69275d0b5a9cc274da11dcfe0e0c2a4a7a2609a864adf84d1cb51" &&
+    historicalV1LifecycleEvidence.transactions.launch ===
+      "0xc608fb203c71525d4890f0849375340268cd878b3225013675b811d141b52b22" &&
+    historicalV1LifecycleEvidence.transactions.launcherClaim ===
+      "0x8a2c773af3c2eeeefc56059ede1a2d3069e9a16ba1da15ff73a76831e4da6b8f",
+  "The verified Sepolia Classic V1 lifecycle must remain historical evidence",
+);
+
 const currentLifecycleEvidence =
   appDeployments.rehearsal.lifecycleEvidence;
 assert(
-  currentLifecycleEvidence?.status ===
-      "verified-current-release" &&
+  currentLifecycleEvidence?.status === "verified-current-release" &&
     currentLifecycleEvidence.releaseEligible === true &&
+    currentLifecycleEvidence.requiredRelease === "classic-v2" &&
+    currentLifecycleEvidence.sourceVerificationStatus ===
+      "deployment-and-source-verified" &&
     currentLifecycleEvidence.independentRpcCount >= 2 &&
+    currentLifecycleEvidence.minimumInitialBuyWei ===
+      "600000000000000" &&
     currentLifecycleEvidence.requiredMetadataAbi ===
       "UERC20Metadata(string description,string website,string image,bytes extraData)" &&
     currentLifecycleEvidence.requiredExtraData === "nonempty",
-  "The current atomic Dev Buy Sepolia lifecycle is not release eligible",
+  "The current Sepolia Classic V2 lifecycle evidence is incoherent",
 );
-
-const expectedCurrentLifecycleTransactions = {
-  launch:
-    "0xc608fb203c71525d4890f0849375340268cd878b3225013675b811d141b52b22",
-  permit2Approval:
-    "0x0d20141c3181d30ea8b3d121892681c6c7c99cbb5bd19824010d9d4be9ad8090",
-  sell: "0xb850ccee7c279e2ffcd1610df91866a83b613c671a0d77de5a00f83973baa2a3",
-  creatorClaim:
-    "0xd0e027714c80d140200f14802c8530a294a99b7f3fe1a0c353198ea066843972",
-  launcherClaim:
-    "0x8a2c773af3c2eeeefc56059ede1a2d3069e9a16ba1da15ff73a76831e4da6b8f",
-};
-const expectedCurrentLifecycleBlocks = {
-  launch: 11359239,
-  permit2Approval: 11359247,
-  sell: 11359251,
-  creatorClaim: 11359256,
-  launcherClaim: 11359261,
-};
-for (const field of Object.keys(expectedCurrentLifecycleTransactions)) {
-  assert(
-    currentLifecycleEvidence.transactions[field] ===
-      expectedCurrentLifecycleTransactions[field],
-    `Current Sepolia lifecycle ${field} transaction changed`,
-  );
-  assert(
-    currentLifecycleEvidence.blocks[field] ===
-      expectedCurrentLifecycleBlocks[field],
-    `Current Sepolia lifecycle ${field} block changed`,
-  );
-}
 assert(
   appDeployments.rehearsal.ethCreatorFeeHookFactory ===
-    "0x630B8a1392601AE1d989323CC8051e8A17A0e5BF" &&
+    "0xb974A9EF7B75650428389b63fa6C4906450ABcE0" &&
     appDeployments.rehearsal.ethCreatorFeeHook ===
-      "0x13c34016c74bc43F4CBa97EDb48cC36b4bb620cc" &&
+      "0x0c9De2721F537C311e05ad3671A17136C14a20Cc" &&
     appDeployments.rehearsal.memeLaunch ===
-      "0x341edf9399C8c5dF361aec2939C4a17c2163a245" &&
+      "0x6Ae84F188468722d8b5970Bc3924C9C31b75FF4e" &&
+    appDeployments.rehearsal.runtimeCodeHashes.ethCreatorFeeHookFactory ===
+      "0x8dd7205952dba3efad6f58a4b0193171c4ed825145319c908bc47dab1911c128" &&
+    appDeployments.rehearsal.runtimeCodeHashes.ethCreatorFeeHook ===
+      "0xa1094bdd6c3bd1ba4d17d8f321f0e52a95a6247fae287aae90b008a7eacb05b7" &&
     appDeployments.rehearsal.runtimeCodeHashes.memeLaunch ===
-      "0x6e1fa1f21df7712433695c1ac584ed4c89b09ed11732cf62058dfc486639e3c2",
-  "Current Sepolia deployment addresses or runtime hash changed",
+      "0xf9977ba3a5c859d34beff333d129ae135190423a20e2a6ec5cb19588ff552e5f",
+  "Current Sepolia Classic V2 addresses or runtime hashes changed",
 );
 assert(
   currentLifecycleEvidence.token ===
-    "0x4D0fa6fb9eD708f5e71c53E77B261d8FBC8A018B" &&
+    "0x6f71A3CDa868d613552f8230790274BbEBB5d771" &&
     currentLifecycleEvidence.poolId ===
-      "0x2305fce75dcc9b5107ef00ae76d9be0aa1c30829350452ae43599ff7c5da9c7d" &&
+      "0x541eca58f02c9bee85cf4edbbc2ecfd8cbd6691c275b232f2f9b9c77ef8f82a6" &&
     currentLifecycleEvidence.launchHash ===
-      "0xa9cd82a134a69275d0b5a9cc274da11dcfe0e0c2a4a7a2609a864adf84d1cb51" &&
-    currentLifecycleEvidence.positionTokenId === "37832" &&
+      "0x3d33fc925bdb72a7f4b4e3e71495dcd82575271f07361ef2db40b43f54b97fcc" &&
+    currentLifecycleEvidence.positionRecipient ===
+      "0xbdb2d2F49771Ec34d37DF9fADCBad058e96Db8DC" &&
+    currentLifecycleEvidence.positionTokenId === "37835" &&
     currentLifecycleEvidence.initialTick === 204200 &&
     currentLifecycleEvidence.finalTick === 204199 &&
     currentLifecycleEvidence.positionLiquidity ===
@@ -585,24 +598,31 @@ assert(
       "10379961423422" &&
     currentLifecycleEvidence.launcherFeesClaimedWei ===
       "1153329047046" &&
-    currentLifecycleEvidence.initialBuyNativeWei ===
-      "600000000000000" &&
-    currentLifecycleEvidence.initialBuyTokenAmount ===
-      "437971781612384114831424" &&
     currentLifecycleEvidence.treasuryBalanceDeltaWei ===
       currentLifecycleEvidence.launcherFeesClaimedWei,
-  "Current Sepolia lifecycle state evidence changed",
+  "Current Sepolia Classic V2 lifecycle state changed",
 );
 assert(
-  currentLifecycleEvidence.metadata.extraData ===
-    "0x7b2276223a312c2278223a22307850726f6772616d6d61626c65227d" &&
-    currentLifecycleEvidence.metadata.decodedExtraData ===
-      '{"v":1,"x":"0xProgrammable"}',
-  "Current Sepolia lifecycle did not preserve nonempty UERC20 v2 metadata bytes",
+  currentLifecycleEvidence.transactions.launch ===
+    "0xd15b074027a3516ce6ee65fab94df3a2ebbc5170ec7669f6420052a60b82c141" &&
+    currentLifecycleEvidence.transactions.permit2Approval ===
+      "0x32eff8ce7751eb811dcc94259c3867dd0d4e76c7617e9e6e1b62970bf73a9f41" &&
+    currentLifecycleEvidence.transactions.sell ===
+      "0x258278cb5662ab9d10966c9c48fe1849cff9e8162d73170f85471add0e7ff4d5" &&
+    currentLifecycleEvidence.transactions.creatorClaim ===
+      "0x0f3aebde7e6bff6b41e19b3e26d3705c637a0f99b6de07fc5e4644e7c1e2ed71" &&
+    currentLifecycleEvidence.transactions.launcherClaim ===
+      "0x57a58b6dd721d87430e51ad894da48d24bb0dc261bed8019e0fdf4f27b14a428" &&
+    currentLifecycleEvidence.blocks.launch === 11361308 &&
+    currentLifecycleEvidence.blocks.permit2Approval === 11361309 &&
+    currentLifecycleEvidence.blocks.sell === 11361331 &&
+    currentLifecycleEvidence.blocks.creatorClaim === 11361333 &&
+    currentLifecycleEvidence.blocks.launcherClaim === 11361341,
+  "Current Sepolia Classic V2 lifecycle receipts changed",
 );
 assert(
   appDeployments.rehearsal.blocker === null,
-  "Verified Sepolia Classic must not retain a release blocker",
+  "Verified Sepolia Classic V2 must not retain the Test2 blocker",
 );
 
 console.log(

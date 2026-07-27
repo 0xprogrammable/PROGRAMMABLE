@@ -50,20 +50,19 @@ The ERC-20 remains freely transferable. Its fee applies only in the canonical Cl
 
 Classic V1 infrastructure is deployed and source-matched on Ethereum mainnet, and one V1 Test launch exists. That is not
 the public release: its lifecycle record remains incomplete and production launch/trade preparation stays disabled.
-Classic V2, which adds machine-readable symmetric fee disclosure events and getters, is fully simulated but not yet
-deployed on either network.
 
-The prior Ethereum Sepolia V1 release is deployed, source-verified and backed by a signed atomic Dev Buy lifecycle
-reconciled across two independent RPCs. It remains historical V1 evidence; it cannot replace the required V2 Test2
-lifecycle. Start the app with `npm run dev:sepolia` only for the recorded V1 rehearsal deployment.
+Classic V2, which adds machine-readable symmetric fee disclosure events and getters, is deployed and source-verified on
+Ethereum Sepolia. Its signed Test2 lifecycle atomically launched the official UERC20 v2 token, sold through the official
+Universal Router, claimed both fee shares and reconciled the permanent position and recipient balances through two
+independent RPCs. Start the app with `npm run dev:sepolia` for this current V2 rehearsal deployment. Earlier Sepolia V1
+lifecycles remain historical evidence only.
 
 There has been no external smart-contract audit or public security contest. Nothing in this repository is a promise that a token is safe, immune to abuse or accepted by third-party scanners.
 
 Provider-backed Privy login, session recovery and disconnect must be rehearsed on an allowed production origin before launch. If Privy does not initialize, the interface now surfaces that failure instead of leaving the wallet button disabled indefinitely.
 
-Mainnet V2 still requires a frozen passing release, a signed V2 Test2 lifecycle on Sepolia, durable production indexing
-and operated monitoring, fresh provider-backed wallet rehearsal, a final read-only preflight and explicit approval for
-the three-transaction broadcast and monitored canary.
+Mainnet V2 still requires durable production indexing and operated monitoring, fresh provider-backed wallet rehearsal,
+a final read-only preflight and explicit approval for the three-transaction broadcast and monitored canary.
 
 ## Local development
 

@@ -1,6 +1,7 @@
 # Programmable contracts
 
-This workspace contains the Classic release candidate. Nothing in this directory is an audit certificate or an Ethereum mainnet deployment.
+This workspace contains the Classic release candidate. Nothing in this directory is an audit certificate or a
+public-enabled Ethereum mainnet release.
 
 ## Classic composition
 
@@ -8,7 +9,7 @@ This workspace contains the Classic release candidate. Nothing in this directory
 official Uniswap UERC20Factory v2.0.0
 → MemeLaunchV1
 → native ETH and token v4 pool
-→ shared EthCreatorFeeHookV1
+→ shared EthCreatorFeeHookV2
 → complete token supply in one one-sided position
 → official PositionFeesForwarder with permanent custody
 ```
@@ -87,7 +88,8 @@ Tests cover the four exact-input and exact-output swap quadrants, inclusive fee 
 
 ## Deployment truth
 
-Ethereum mainnet is `not-deployed`.
+The current Classic V2 Ethereum mainnet release is `not-deployed`. Historical V1 infrastructure exists on mainnet but
+does not enable production transaction preparation.
 
 The current Ethereum Sepolia deployment is source-verified and its signed atomic Dev Buy, sell and native fee-claim lifecycle is reconciled across two independent RPCs. The release manifest marks Sepolia Classic `ready`; `npm run contracts:sepolia:lifecycle:verify` rechecks the exact deployment, token, pool, position custody, fee split, claims and balance deltas.
 
