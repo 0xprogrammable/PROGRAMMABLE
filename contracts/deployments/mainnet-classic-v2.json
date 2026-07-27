@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "status": "deployment-and-source-verified",
+  "chainId": 1,
+  "checkedAt": "2026-07-27T12:32:38.276Z",
+  "releaseCommit": "d0bec0a681b6ba4a25b42a4fe9d29ed2d3a783d2",
+  "startingNonce": 7,
+  "deploymentBlock": 25624128,
+  "sourceCommitment": "0x6bf2c70c5ab2a64a62f2c27e6be859e3428f2c35e6e2db5255b569b9f9eb1287",
+  "hookSalt": "0x00000000000000000000000000000000000000000000000000000000000003e2",
+  "addresses": {
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "hookFactory": "0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67",
+    "feeHook": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+    "memeLauncher": "0xD240D06f8586eB799f20056054e5b527405E6bAd",
+    "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
+  },
+  "transactions": {
+    "hookFactory": {
+      "transactionHash": "0xed9c5627991c6f84334415737e6a0937c614c2630a80cbf0eba8f07621d4c417",
+      "blockNumber": 25624128,
+      "blockHash": "0x6825d837d117e6b549b545141caad532c6d73c5d24ffe76869ca02361280a412",
+      "gasUsed": "3113365",
+      "effectiveGasPriceWei": "242003883",
+      "gasCostWei": "753446419196295"
+    },
+    "feeHook": {
+      "transactionHash": "0xf1d91138194f59b9067c6563ee1127e0527a87e90bb311b71d7eccb797822b7c",
+      "blockNumber": 25624130,
+      "blockHash": "0xa2f4212a3354f3012391127df8fb8dd018615b91c3b849f8f40118509d5a0486",
+      "gasUsed": "2429617",
+      "effectiveGasPriceWei": "231096001",
+      "gasCostWei": "561474772661617"
+    },
+    "memeLauncher": {
+      "transactionHash": "0x86a6f1b3992ed8ad6d450970b78e94b29f298afd048a6a0cfa0cf253e9e98fdc",
+      "blockNumber": 25624131,
+      "blockHash": "0x6bc17e2e1548684a8620bd7c157595361a184457a7c8d7ec1723bb62250b439a",
+      "gasUsed": "4255945",
+      "effectiveGasPriceWei": "246748899",
+      "gasCostWei": "1050149742954555"
+    }
+  },
+  "totalGasCostWei": "2365070934812467",
+  "runtimeCodeHashes": {
+    "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2",
+    "hookFactory": "0x8dd7205952dba3efad6f58a4b0193171c4ed825145319c908bc47dab1911c128",
+    "feeHook": "0x274e29fb8d19f0607533ac7582827db0236ab546bb393d52049229b2ffe74381",
+    "memeLauncher": "0xd229555c79c61874549a1991c43df172104e1db3087ba8fca8804675b7440d36"
+  },
+  "sourceVerification": {
+    "provider": "Sourcify",
+    "status": "match",
+    "contracts": {
+      "hookFactory": {
+        "status": "match",
+        "verificationJob": "1dd8f2df-ab5a-48d5-a37e-e186d9cda058"
+      },
+      "feeHook": {
+        "status": "match",
+        "verificationJob": "9cf5768c-cee7-48d3-9ab1-62e2e893171e"
+      },
+      "memeLauncher": {
+        "status": "match",
+        "verificationJob": "5cb7ad2d-acb5-4984-8c97-838b33af855f"
+      }
+    },
+    "etherscan": {
+      "hookFactory": "pending",
+      "feeHook": "exact-match",
+      "memeLauncher": "exact-match",
+      "checkedAt": "2026-07-27T12:43:00.000Z"
+    }
+  },
+  "verification": {
+    "independentRpcCount": 2,
+    "verifier": "contracts/scripts/verify-v2-deployment.mjs",
+    "status": "deployment-and-source-verified"
+  },
+  "lifecycleEvidence": {
+    "status": "verified-current-release",
+    "releaseEligible": true,
+    "checkedAt": "2026-07-27T13:58:53.637Z",
+    "independentRpcCount": 2,
+    "verifier": "contracts/scripts/verify-mainnet-meme-lifecycle.mjs",
+    "minimumInitialBuyWei": "600000000000000",
+    "token": "0x05204A4Ce651452892A620950BDc2ADeDBF63B0A",
+    "poolId": "0xb12253d75eb143edcb6aab74f543802c6fa72998e092bc7bd1acf27a42adc2ea",
+    "positionRecipient": "0x9020EeF40E36546Bf34f15070A8d9BCA2eBF4BB8",
+    "positionTokenId": "351734",
+    "positionLiquidity": "36819258015569838458222",
+    "creatorFeesClaimedWei": "12170961423422",
+    "launcherFeesClaimedWei": "1352329047046",
+    "treasuryBalanceDeltaWei": "1352329047046",
+    "transactions": {
+      "launch": "0x44a480caaac8b937e7ccc31e45e13bd725253e231fcc12f7795bc5358a0a5d4c",
+      "buy": "0xbd416570fc9de744a53919a6c7e7ea9f849fe3f5e510a13376e6967c68145b48",
+      "permit2Approval": "0xbca8b6d1e8eb3e8728680c879d213c412b042e7455a9edbc2d721c7f780e10f3",
+      "sell": "0x4b461cccf14876cd9ecf05fcf0f295a6337079ceb3a3f4fb5b6fdddc6ada35c1",
+      "creatorClaim": "0x16ba90a64df8ddc12b7be0ac8a0a664daf5008ad237ea7d3958a857f73624aff",
+      "launcherClaim": "0x32a5de5591fb4c988b46c0d0a07095df1419634d10a158b3b6a36377bbe55fbe"
+    },
+    "blocks": {
+      "launch": 25624511,
+      "buy": 25624526,
+      "permit2Approval": 25624545,
+      "sell": 25624553,
+      "creatorClaim": 25624575,
+      "launcherClaim": 25624580
+    }
+  }
+}

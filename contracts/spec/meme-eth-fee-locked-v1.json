@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "standardId": "launcher.meme-eth-fee-locked.v1",
+  "status": "protocol-tested-not-deployed",
+  "network": {
+    "productionChainId": 1,
+    "rehearsalChainId": 11155111
+  },
+  "token": {
+    "implementation": "Uniswap UERC20Factory v2.0",
+    "wholeTokenSupply": "1000000000",
+    "decimals": 18,
+    "minting": "single-mint-at-creation",
+    "creatorTokenAllocation": "0",
+    "transferTax": false,
+    "rebase": false,
+    "blacklist": false,
+    "upgradeable": false
+  },
+  "metadata": {
+    "officialTuple": "(string description,string website,string image,bytes extraData)",
+    "limitsUtf8Bytes": {
+      "name": 48,
+      "symbol": 12,
+      "description": 280,
+      "website": 2048,
+      "image": 2048,
+      "extraData": 1200
+    },
+    "frontendUrlPolicy": "optional-bounded-https",
+    "contractPolicy": "utf8-byte-limits-only"
+  },
+  "launch": {
+    "implementation": "MemeLaunchV1",
+    "atomic": true,
+    "payable": true,
+    "launcherFeeAtCreation": "0",
+    "creatorLiquidityDeposit": "0",
+    "creatorCost": "creator-selected-dev-buy-at-or-above-0.0006-eth-plus-network-gas",
+    "minimumInitialCreatorBuyWei": "600000000000000",
+    "initialCreatorBuyPolicy": "creator-selected-atomic-market-buy-at-or-above-minimum",
+    "initialBuyRecipient": "launch-creator"
+  },
+  "pool": {
+    "protocol": "Uniswap v4",
+    "currency0": "native-eth",
+    "currency1": "launched-token",
+    "initialTick": 204200,
+    "tickSpacing": 200,
+    "lpFeePips": 0,
+    "positionRange": {
+      "tickLower": -887200,
+      "tickUpper": 204200,
+      "initialAsset": "complete-token-supply",
+      "initialNativeEth": "0"
+    },
+    "activation": "the-atomic-creator-selected-dev-buy-moves-the-initial-tick-into-the-one-sided-position-range",
+    "startingValuation": {
+      "measure": "fully-diluted-value",
+      "formula": "wholeTokenSupply / (1.0001 ^ initialTick)",
+      "tokenPerNativeEth": "737649301.24935363765121319054734745",
+      "nativeEthPerToken": "0.000000001355657760817103798665643770852332",
+      "startingFdvNativeEth": "1.355657760817103798665643770852332",
+      "usdDisplay": "informational-current-eth-usd-only"
+    },
+    "positionCustody": {
+      "implementation": "Uniswap PositionFeesForwarder",
+      "factory": "LockedPositionFeeForwarderFactoryV1",
+      "operator": "0x0000000000000000000000000000000000000000",
+      "timelockBlockNumber": "uint256.max",
+      "liquidityRemoval": false,
+      "positionTransfer": false,
+      "roundingDustRecipient": "permanently-locked-position-recipient"
+    }
+  },
+  "swapFee": {
+    "implementation": "EthCreatorFeeHookV1",
+    "denominator": 10000,
+    "selectedTotalFeeBps": {
+      "minimum": 100,
+      "maximum": 1000,
+      "step": 100
+    },
+    "launcherShareBps": 10,
+    "creatorShareRule": "selectedTotalFeeBps-minus-10",
+    "launcherShareIsAddedOnTop": false,
+    "collectionCurrency": "native-eth",
+    "creatorRecipient": "immutable-launch-creator",
+    "launcherRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "claimTrigger": "permissionless-fixed-recipient",
+    "recipientRecovery": "recorded-recipient-only-redirect"
+  },
+  "hook": {
+    "factory": "EthCreatorFeeHookFactoryV1",
+    "sharedAcrossRegisteredPools": true,
+    "upgradeable": false,
+    "admin": false,
+    "pause": false,
+    "mutableFeeAfterRegistration": false,
+    "callbackMaskDecimal": 8396,
+    "callbackMask": [
+      "beforeInitialize",
+      "beforeSwap",
+      "afterSwap",
+      "beforeSwapReturnDelta",
+      "afterSwapReturnDelta"
+    ]
+  },
+  "knownLimits": [
+    "The fee applies only to swaps routed through the canonical Launcher pool.",
+    "A separate pool for the same token can bypass this hook.",
+    "High selected fees can reduce trading demand and trigger third-party warnings.",
+    "Return-delta hook routing requires production router compatibility evidence."
+  ],
+  "evidence": [
+    "EthCreatorFeeHookV1.t.sol",
+    "EthCreatorFeeHookInvariant.t.sol",
+    "MemeLaunchV1.t.sol",
+    "security/ClassicMemeLaunchSecurityRegression.t.sol",
+    "MainnetMemeLifecycleFork.t.sol",
+    "DeploySepoliaMemeInfrastructureV1.t.sol",
+    "tests/launch-transaction.test.ts",
+    "app/api/launch/preflight/route.ts"
+  ],
+  "productionApproved": false
+}

@@ -69,7 +69,7 @@ jobs:
           pipx install slither-analyzer==0.11.5
 
       - name: Verify contracts
-        run: npm run contracts:verify
+        run: npm run contracts:verify:ci
 
       - name: Check official Uniswap deployments
         run: npm run contracts:official-deployments

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "status": "canary-preflight-passed-approval-pending",
+  "chainId": 1,
+  "checkedAt": "2026-07-27T13:02:49.000Z",
+  "releaseCommit": "d0bec0a681b6ba4a25b42a4fe9d29ed2d3a783d2",
+  "account": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+  "launcher": "0xD240D06f8586eB799f20056054e5b527405E6bAd",
+  "feeHook": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+  "predictedToken": "0x05204a4ce651452892A620950BDc2ADeDBF63b0a",
+  "confirmedNonce": 10,
+  "pendingNonce": 10,
+  "independentRpcCount": 2,
+  "tokenCode": "0x",
+  "launchEstimatedGas": [
+    "3546663",
+    "3537771"
+  ],
+  "launchPaddedGasLimit": "4255996",
+  "reviewedGasLimits": {
+    "launch": "4500000",
+    "buy": "250000",
+    "tokenApproval": "100000",
+    "routerApproval": "80000",
+    "sell": "250000",
+    "creatorClaim": "100000",
+    "launcherClaim": "150000"
+  },
+  "maxGasPriceWei": "500000000",
+  "initialBuyWei": "600000000000000",
+  "separateBuyWei": "100000000000000",
+  "maximumLifecycleOutflowWei": "3415000000000000",
+  "broadcastApproved": false,
+  "transactionsSubmitted": 0
+}

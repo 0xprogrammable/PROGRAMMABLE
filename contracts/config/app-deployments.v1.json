@@ -2,40 +2,166 @@
   "schemaVersion": 1,
   "production": {
     "chainId": 1,
-    "status": "not-deployed",
+    "releaseVersion": "classic-v2",
+    "status": "ready",
+    "memeLaunchStatus": "lifecycle-pending",
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "ethCreatorFeeHookFactory": "0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67",
+    "ethCreatorFeeHook": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+    "memeLaunch": "0xD240D06f8586eB799f20056054e5b527405E6bAd",
     "platformFeeHookFactory": null,
     "boundedDynamicFeeHookFactory": null,
-    "lockedPositionFeeForwarderFactory": null,
+    "lockedPositionFeeForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
     "directLiquidityLauncher": null,
     "runtimeCodeHashes": {
+      "ethCreatorFeeHookFactory": "0x8dd7205952dba3efad6f58a4b0193171c4ed825145319c908bc47dab1911c128",
+      "ethCreatorFeeHook": "0x274e29fb8d19f0607533ac7582827db0236ab546bb393d52049229b2ffe74381",
+      "memeLaunch": "0xd229555c79c61874549a1991c43df172104e1db3087ba8fca8804675b7440d36",
       "platformFeeHookFactory": null,
       "boundedDynamicFeeHookFactory": null,
-      "lockedPositionFeeForwarderFactory": null,
+      "lockedPositionFeeForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2",
       "directLiquidityLauncher": null
     },
-    "blocker": "Deploy, verify and independently review the Launcher contracts before enabling mainnet transaction preparation"
+    "deploymentTransactions": {
+      "ethCreatorFeeHookFactory": "0xed9c5627991c6f84334415737e6a0937c614c2630a80cbf0eba8f07621d4c417",
+      "ethCreatorFeeHook": "0xf1d91138194f59b9067c6563ee1127e0527a87e90bb311b71d7eccb797822b7c",
+      "memeLaunch": "0x86a6f1b3992ed8ad6d450970b78e94b29f298afd048a6a0cfa0cf253e9e98fdc",
+      "lockedPositionFeeForwarderFactory": "0x23077b93bd1bb68d827b26179d7db98bc7f34c1a1ba8c277d35f93e5e2a473e4"
+    },
+    "deploymentBlocks": {
+      "ethCreatorFeeHookFactory": 25624128,
+      "ethCreatorFeeHook": 25624130,
+      "memeLaunch": 25624131,
+      "lockedPositionFeeForwarderFactory": 25622031
+    },
+    "sourceVerification": {
+      "status": "verified",
+      "provider": "Sourcify",
+      "checkedAt": "2026-07-27",
+      "contracts": {
+        "ethCreatorFeeHookFactory": "match",
+        "ethCreatorFeeHook": "match",
+        "memeLaunch": "match",
+        "lockedPositionFeeForwarderFactory": "match"
+      },
+      "etherscanContracts": {
+        "ethCreatorFeeHookFactory": "pending",
+        "ethCreatorFeeHook": "exact-match",
+        "memeLaunch": "exact-match"
+      }
+    },
+    "lifecycleEvidence": {
+      "status": "verified-current-release",
+      "releaseEligible": true,
+      "checkedAt": "2026-07-27",
+      "verifier": "contracts/scripts/verify-mainnet-meme-lifecycle.mjs",
+      "independentRpcCount": 2,
+      "requiredRelease": "classic-v2",
+      "sourceVerificationStatus": "deployment-and-source-verified",
+      "requiredMetadataAbi": "UERC20Metadata(string description,string website,string image,bytes extraData)",
+      "requiredExtraData": "nonempty",
+      "minimumInitialBuyWei": "600000000000000",
+      "token": "0x05204A4Ce651452892A620950BDc2ADeDBF63B0A",
+      "poolId": "0xb12253d75eb143edcb6aab74f543802c6fa72998e092bc7bd1acf27a42adc2ea",
+      "launchHash": "0x60c643f4a406f70be6e15ea6482620df0d1a5b88d0b34432ab8b8123113de608",
+      "positionRecipient": "0x9020EeF40E36546Bf34f15070A8d9BCA2eBF4BB8",
+      "positionTokenId": "351734",
+      "initialTick": 204200,
+      "finalTick": 204199,
+      "positionLiquidity": "36819258015569838458222",
+      "initialBuyNativeWei": "600000000000000",
+      "initialBuyTokenAmount": "437971781612384114831424",
+      "separateBuyNativeWei": "100000000000000",
+      "separateBuyTokenAmount": "72958001464168541353717",
+      "sellTokenAmount": "480929783076552656185141",
+      "sellGrossNativeWei": "652329047046898",
+      "finalCreatorTokenBalance": "30000000000000000000000",
+      "creatorFeesClaimedWei": "12170961423422",
+      "launcherFeesClaimedWei": "1352329047046",
+      "treasuryBalanceDeltaWei": "1352329047046",
+      "metadata": {
+        "description": "This is a test.",
+        "website": "https://www.forbes.com/",
+        "image": "https://programmable.family/brand/programmable-token-fallback-01-dawn.webp",
+        "extraData": "0x7b2276223a312c2278223a2268747470733a2f2f782e636f6d2f656c6f6e6d75736b227d",
+        "decodedExtraData": "{\"v\":1,\"x\":\"https://x.com/elonmusk\"}"
+      },
+      "transactions": {
+        "launch": "0x44a480caaac8b937e7ccc31e45e13bd725253e231fcc12f7795bc5358a0a5d4c",
+        "buy": "0xbd416570fc9de744a53919a6c7e7ea9f849fe3f5e510a13376e6967c68145b48",
+        "permit2Approval": "0xbca8b6d1e8eb3e8728680c879d213c412b042e7455a9edbc2d721c7f780e10f3",
+        "sell": "0x4b461cccf14876cd9ecf05fcf0f295a6337079ceb3a3f4fb5b6fdddc6ada35c1",
+        "creatorClaim": "0x16ba90a64df8ddc12b7be0ac8a0a664daf5008ad237ea7d3958a857f73624aff",
+        "launcherClaim": "0x32a5de5591fb4c988b46c0d0a07095df1419634d10a158b3b6a36377bbe55fbe"
+      },
+      "blocks": {
+        "launch": 25624511,
+        "buy": 25624526,
+        "permit2Approval": 25624545,
+        "sell": 25624553,
+        "creatorClaim": 25624575,
+        "launcherClaim": 25624580
+      }
+    },
+    "historicalV1Deployment": {
+      "releaseVersion": "classic-v1",
+      "status": "historical-mainnet-v1",
+      "ethCreatorFeeHookFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
+      "ethCreatorFeeHook": "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc",
+      "memeLaunch": "0x51d702731db281EE223904A4663E05BfCA26C775",
+      "runtimeCodeHashes": {
+        "ethCreatorFeeHookFactory": "0x3014de1f275dc60ae289f7a3a8ab038fdf76929aff19e0efdb19138e4ce8e0d5",
+        "ethCreatorFeeHook": "0x60fd96af952730792036d43d806046675817a5a2de609d87c06203a8d6037650",
+        "memeLaunch": "0xa459ee6574d8bbd40ddcf9737dc5d1063adb3abbc11d9f367350c7f2a3cf738b"
+      },
+      "deploymentTransactions": {
+        "ethCreatorFeeHookFactory": "0xd97d115f5e37c57ebc0b3dcbd0de4102b4adcfb722094c98706bb90e6250d64e",
+        "ethCreatorFeeHook": "0x124076f940e897dfeea6f6a355c4eaf864efb8faae345d51636d73a1ba3c1dc0",
+        "memeLaunch": "0x4d55e0ccfcbb9f450ab57b3460ac5a0950226c92fcaae4ec6ba6da7a888a30ae"
+      },
+      "deploymentBlocks": {
+        "ethCreatorFeeHookFactory": 25622038,
+        "ethCreatorFeeHook": 25622043,
+        "memeLaunch": 25622048
+      }
+    },
+    "blocker": "Durable production monitoring and authenticated RPC operations are not provisioned"
   },
   "rehearsal": {
     "chainId": 11155111,
+    "releaseVersion": "classic-v2",
     "status": "ready",
+    "memeLaunchStatus": "ready",
     "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "ethCreatorFeeHookFactory": "0xb974A9EF7B75650428389b63fa6C4906450ABcE0",
+    "ethCreatorFeeHook": "0x0c9De2721F537C311e05ad3671A17136C14a20Cc",
+    "memeLaunch": "0x6Ae84F188468722d8b5970Bc3924C9C31b75FF4e",
     "platformFeeHookFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
     "boundedDynamicFeeHookFactory": "0x51d702731db281EE223904A4663E05BfCA26C775",
     "lockedPositionFeeForwarderFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
     "directLiquidityLauncher": "0x5fc6aDd062329742EFefA9c4b11C355AAe02Fa1E",
     "runtimeCodeHashes": {
+      "ethCreatorFeeHookFactory": "0x8dd7205952dba3efad6f58a4b0193171c4ed825145319c908bc47dab1911c128",
+      "ethCreatorFeeHook": "0xa1094bdd6c3bd1ba4d17d8f321f0e52a95a6247fae287aae90b008a7eacb05b7",
+      "memeLaunch": "0xf9977ba3a5c859d34beff333d129ae135190423a20e2a6ec5cb19588ff552e5f",
       "platformFeeHookFactory": "0x7792dba76c190e746dc7fbf7f8a8f690f7cf5ce6fab448c858069b1852974306",
       "boundedDynamicFeeHookFactory": "0xe6bbbdba0194caba268f5546db2574dc416b3c74331bd44f33d04d4b2251ffbc",
       "lockedPositionFeeForwarderFactory": "0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc",
       "directLiquidityLauncher": "0x41fa4dbe9709e93f601e0406a3a9d61826144ca56e16f748e063f850fc0af48b"
     },
     "deploymentTransactions": {
+      "ethCreatorFeeHookFactory": "0xa0fdae1b611d48dd6dba051fe9705b53b4fb75aa3fe3a09561d648f6671ed4d0",
+      "ethCreatorFeeHook": "0x9c9616ee385ca8d8fb18f554de90737936d4369631d9afa6e284c5025a2e5f1b",
+      "memeLaunch": "0x2e473ffcec73d531a2b3bdb50549fea2f1453d7d74053e1985dfbaef1c54b624",
       "platformFeeHookFactory": "0x7874d856fecd2616b9b125ee7ed85f876c93596adbc9189f8420f0b97abbca6c",
       "lockedPositionFeeForwarderFactory": "0x4969ca925b82c881c978f1d88722af61eea04f1294da55c45e5e7392e294faf6",
       "directLiquidityLauncher": "0xc61ca9972391717c454e6bdf9cbbf4bfb5aa1987cf0f29542f6523e9ed6cdd8d",
       "boundedDynamicFeeHookFactory": "0x8188cfa559981c4e03f55a99e19c7f87c5917e4e6a981c1793e5ba7a09e69d97"
     },
     "deploymentBlocks": {
+      "ethCreatorFeeHookFactory": 11361267,
+      "ethCreatorFeeHook": 11361269,
+      "memeLaunch": 11361270,
       "platformFeeHookFactory": 11353879,
       "lockedPositionFeeForwarderFactory": 11353893,
       "directLiquidityLauncher": 11353896,
@@ -43,9 +169,179 @@
     },
     "sourceVerification": {
       "status": "verified",
-      "explorer": "https://eth-sepolia.blockscout.com",
-      "checkedAt": "2026-07-26"
+      "releaseEvidenceStatus": "current-classic-v2-lifecycle",
+      "explorer": "https://repo.sourcify.dev",
+      "secondaryExplorer": "https://eth-sepolia.blockscout.com",
+      "checkedAt": "2026-07-27",
+      "memeLaunchV1Contracts": {
+        "ethCreatorFeeHookFactory": "verified",
+        "ethCreatorFeeHook": "verified",
+        "memeLaunch": "verified",
+        "launchedUerc20": "verified"
+      },
+      "launchedUerc20Source": {
+        "repository": "https://github.com/Uniswap/uerc20-factory",
+        "sourceRef": "v2.0.0",
+        "address": "0x6f71A3CDa868d613552f8230790274BbEBB5d771",
+        "sourcifyVerificationJob": "61e6f83b-b080-495a-98cb-ed256f26ea32"
+      }
     },
-    "blocker": "Infrastructure is ready for rehearsal; complete every launch, swap, fee-collection and failure-recovery path before considering mainnet"
+    "historicalLifecycleEvidence": {
+      "status": "historical-invalid-metadata-abi",
+      "releaseEligible": false,
+      "invalidReasonCode": "uerc20-v2-extra-data-encoded-as-legacy-uint256",
+      "invalidatedAt": "2026-07-27",
+      "checkedAt": "2026-07-27",
+      "verifier": "retained-manifest-evidence",
+      "independentRpcCount": 2,
+      "token": "0xc335321D60E583ba617B43918Eb7e38768AA638a",
+      "poolId": "0xe5173e4560219a4e3bec0f0c07f9e187cc56811ce0c57b85c2d9c6ae6a6561ab",
+      "launchHash": "0x925f0577c5bc3164654110cca428fe75390ab98591ec4bfd570d03758ded2df0",
+      "positionRecipient": "0x595300dC132A510c245253Ede7a6A68eBcEfE2a3",
+      "positionTokenId": "37828",
+      "initialTick": 204200,
+      "finalTick": 204199,
+      "positionLiquidity": "36819258015569838458222",
+      "finalCreatorTokenBalance": "30000000000000000000000",
+      "creatorFeesClaimedWei": "1424961423422",
+      "launcherFeesClaimedWei": "158329047046",
+      "transactions": {
+        "launch": "0x671a14eddb8aa3edd0e64520d3fc4e92619482e6ba8398902d9cda9c8108d89d",
+        "buy": "0x69022803b446b66fca73895f6555bd70c373b4e1f781d0b076a00331c3f5fadf",
+        "permit2Approval": "0xc24efd1d9cae6ff9fd51ec346406ad3ef9f8fb9cbfb41d95701b838ed79f3033",
+        "sell": "0xe21be96eeea4028fe0d0c9e5c9021a10ca0d8b28194b4169518a681c79406979",
+        "creatorClaim": "0xa528f2c30bbc158464bc08dd95a67c2092c7153d82cb46fbb6b0c68b07b7eb68",
+        "launcherClaim": "0xc3e1a946bb5c2e04257c3ca4d9831dd088d405d0049b9498ab6998786c547e0e"
+      },
+      "blocks": {
+        "launch": 11357532,
+        "buy": 11357602,
+        "permit2Approval": 11357610,
+        "sell": 11357612,
+        "creatorClaim": 11357616,
+        "launcherClaim": 11357619
+      }
+    },
+    "historicalV1Deployment": {
+      "releaseVersion": "classic-v1",
+      "status": "historical-current-initial-buy-release",
+      "ethCreatorFeeHookFactory": "0x630B8a1392601AE1d989323CC8051e8A17A0e5BF",
+      "ethCreatorFeeHook": "0x13c34016c74bc43F4CBa97EDb48cC36b4bb620cc",
+      "memeLaunch": "0x341edf9399C8c5dF361aec2939C4a17c2163a245",
+      "runtimeCodeHashes": {
+        "ethCreatorFeeHookFactory": "0x3014de1f275dc60ae289f7a3a8ab038fdf76929aff19e0efdb19138e4ce8e0d5",
+        "ethCreatorFeeHook": "0x0e0dd0bc1b007e979c0a93412afd282fcbe88b270dc2f26edb94310c334fbf06",
+        "memeLaunch": "0x6e1fa1f21df7712433695c1ac584ed4c89b09ed11732cf62058dfc486639e3c2"
+      },
+      "deploymentTransactions": {
+        "ethCreatorFeeHookFactory": "0x8ba4fdad29a826c0f0d6a95a026782636f323350890d06a6d7a3270d087e6ac7",
+        "ethCreatorFeeHook": "0xc8a66a556bf9c02925e97be2c4060144ad562f0a6b9194abcede8ea0562a647c",
+        "memeLaunch": "0xd60a15364988b9be48108baf68ba754b7ffd02b2986b6efeef06a7f9b41c3892"
+      },
+      "deploymentBlocks": {
+        "ethCreatorFeeHookFactory": 11359187,
+        "ethCreatorFeeHook": 11359192,
+        "memeLaunch": 11359203
+      }
+    },
+    "historicalV1LifecycleEvidence": {
+      "status": "historical-classic-v1-verified",
+      "releaseEligible": false,
+      "checkedAt": "2026-07-27",
+      "verifier": "contracts/scripts/verify-sepolia-meme-lifecycle.mjs",
+      "independentRpcCount": 2,
+      "requiredMetadataAbi": "UERC20Metadata(string description,string website,string image,bytes extraData)",
+      "requiredExtraData": "nonempty",
+      "minimumInitialBuyWei": "600000000000000",
+      "token": "0x4D0fa6fb9eD708f5e71c53E77B261d8FBC8A018B",
+      "poolId": "0x2305fce75dcc9b5107ef00ae76d9be0aa1c30829350452ae43599ff7c5da9c7d",
+      "launchHash": "0xa9cd82a134a69275d0b5a9cc274da11dcfe0e0c2a4a7a2609a864adf84d1cb51",
+      "positionRecipient": "0x646118eE77c9a5509d074a8F2fd94c16b024F070",
+      "positionTokenId": "37832",
+      "initialTick": 204200,
+      "finalTick": 204199,
+      "positionLiquidity": "36819258015569838458222",
+      "initialBuyNativeWei": "600000000000000",
+      "initialBuyTokenAmount": "437971781612384114831424",
+      "sellTokenAmount": "407971781612384114831424",
+      "sellGrossNativeWei": "553329047046898",
+      "sellNetNativeWei": "547795756576430",
+      "finalCreatorTokenBalance": "30000000000000000000000",
+      "creatorFeesClaimedWei": "10379961423422",
+      "launcherFeesClaimedWei": "1153329047046",
+      "treasuryBalanceDeltaWei": "1153329047046",
+      "metadata": {
+        "description": "Programmable atomic Dev Buy lifecycle fixture on Sepolia",
+        "website": "https://programmable.family",
+        "image": "",
+        "extraData": "0x7b2276223a312c2278223a22307850726f6772616d6d61626c65227d",
+        "decodedExtraData": "{\"v\":1,\"x\":\"0xProgrammable\"}"
+      },
+      "transactions": {
+        "launch": "0xc608fb203c71525d4890f0849375340268cd878b3225013675b811d141b52b22",
+        "permit2Approval": "0x0d20141c3181d30ea8b3d121892681c6c7c99cbb5bd19824010d9d4be9ad8090",
+        "sell": "0xb850ccee7c279e2ffcd1610df91866a83b613c671a0d77de5a00f83973baa2a3",
+        "creatorClaim": "0xd0e027714c80d140200f14802c8530a294a99b7f3fe1a0c353198ea066843972",
+        "launcherClaim": "0x8a2c773af3c2eeeefc56059ede1a2d3069e9a16ba1da15ff73a76831e4da6b8f"
+      },
+      "blocks": {
+        "launch": 11359239,
+        "permit2Approval": 11359247,
+        "sell": 11359251,
+        "creatorClaim": 11359256,
+        "launcherClaim": 11359261
+      }
+    },
+    "lifecycleEvidence": {
+      "status": "verified-current-release",
+      "releaseEligible": true,
+      "checkedAt": "2026-07-27",
+      "verifier": "contracts/scripts/verify-sepolia-meme-lifecycle.mjs",
+      "independentRpcCount": 2,
+      "requiredRelease": "classic-v2",
+      "sourceVerificationStatus": "deployment-and-source-verified",
+      "requiredMetadataAbi": "UERC20Metadata(string description,string website,string image,bytes extraData)",
+      "requiredExtraData": "nonempty",
+      "minimumInitialBuyWei": "600000000000000",
+      "token": "0x6f71A3CDa868d613552f8230790274BbEBB5d771",
+      "poolId": "0x541eca58f02c9bee85cf4edbbc2ecfd8cbd6691c275b232f2f9b9c77ef8f82a6",
+      "launchHash": "0x3d33fc925bdb72a7f4b4e3e71495dcd82575271f07361ef2db40b43f54b97fcc",
+      "positionRecipient": "0xbdb2d2F49771Ec34d37DF9fADCBad058e96Db8DC",
+      "positionTokenId": "37835",
+      "initialTick": 204200,
+      "finalTick": 204199,
+      "positionLiquidity": "36819258015569838458222",
+      "initialBuyNativeWei": "600000000000000",
+      "initialBuyTokenAmount": "437971781612384114831424",
+      "sellTokenAmount": "407971781612384114831424",
+      "sellGrossNativeWei": "553329047046898",
+      "sellNetNativeWei": "547795756576430",
+      "finalCreatorTokenBalance": "30000000000000000000000",
+      "creatorFeesClaimedWei": "10379961423422",
+      "launcherFeesClaimedWei": "1153329047046",
+      "treasuryBalanceDeltaWei": "1153329047046",
+      "metadata": {
+        "description": "This is a test.",
+        "website": "https://www.forbes.com/",
+        "image": "https://programmable.family/brand/programmable-token-fallback-01-dawn.webp",
+        "extraData": "0x7b2276223a312c2278223a2268747470733a2f2f782e636f6d2f656c6f6e6d75736b227d",
+        "decodedExtraData": "{\"v\":1,\"x\":\"https://x.com/elonmusk\"}"
+      },
+      "transactions": {
+        "launch": "0xd15b074027a3516ce6ee65fab94df3a2ebbc5170ec7669f6420052a60b82c141",
+        "permit2Approval": "0x32eff8ce7751eb811dcc94259c3867dd0d4e76c7617e9e6e1b62970bf73a9f41",
+        "sell": "0x258278cb5662ab9d10966c9c48fe1849cff9e8162d73170f85471add0e7ff4d5",
+        "creatorClaim": "0x0f3aebde7e6bff6b41e19b3e26d3705c637a0f99b6de07fc5e4644e7c1e2ed71",
+        "launcherClaim": "0x57a58b6dd721d87430e51ad894da48d24bb0dc261bed8019e0fdf4f27b14a428"
+      },
+      "blocks": {
+        "launch": 11361308,
+        "permit2Approval": 11361309,
+        "sell": 11361331,
+        "creatorClaim": 11361333,
+        "launcherClaim": 11361341
+      }
+    },
+    "blocker": null
   }
 }

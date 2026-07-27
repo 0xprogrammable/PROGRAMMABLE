@@ -1,77 +1,141 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+
 import {
-  behaviorDefinitions,
   buildLaunchSummary,
   buildPlainTextPlan,
   createEmptyDraft,
-  normalizeBehaviorSelection,
+  getDraftAssetLabel,
+  getInitialBuyEthLabel,
+  getMemeFeeBreakdown,
+  MEME_INITIAL_TICK,
+  MEME_MIN_INITIAL_BUY_ETH,
+  MEME_MIN_INITIAL_BUY_WEI,
+  MEME_STARTING_FDV_ETH,
+  MEME_STARTING_FDV_ETH_LABEL,
+  MEME_TOKEN_SUPPLY_WHOLE,
+  parseInitialBuyWei,
+  parseTotalSwapFeeBps,
 } from "../lib/launch";
 
-describe("launch plan", () => {
-  it("describes auction-funded liquidity without promising creator liquidity", () => {
+describe("Classic launch plan", () => {
+  it("keeps the internal contract label out of user-facing preflight copy", () => {
+    const preflightSource = readFileSync(
+      new URL("../app/api/launch/preflight/route.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(preflightSource).not.toContain('"Meme Launch"');
+    expect(preflightSource).not.toContain("The Meme Launch");
+  });
+
+  it("starts every new draft on the single supported launch path", () => {
+    const draft = createEmptyDraft();
+
+    expect(draft.assetMode).toBe("new");
+    expect(draft.liquidityMode).toBe("meme");
+    expect(draft.tokenSupply).toBe("1000000000");
+    expect(draft.selectedBehaviors).toEqual(["fixed-fee"]);
+    expect(draft.lpFeePercent).toBe("0");
+    expect(draft.initialBuyEth).toBe(MEME_MIN_INITIAL_BUY_ETH);
+  });
+
+  it("accepts a creator-selected Dev Buy at or above the minimum", () => {
+    expect(parseInitialBuyWei("0.0006")).toBe(
+      MEME_MIN_INITIAL_BUY_WEI,
+    );
+    expect(parseInitialBuyWei("0.002")).toBe(
+      2_000_000_000_000_000n,
+    );
+    expect(parseInitialBuyWei("0.000599999999999999")).toBeNull();
+    expect(parseInitialBuyWei("1e-3")).toBeNull();
+    expect(parseInitialBuyWei("1.")).toBeNull();
+    expect(
+      getInitialBuyEthLabel({
+        ...createEmptyDraft(),
+        initialBuyEth: "0.002",
+      }),
+    ).toBe("0.002 ETH");
+  });
+
+  it("copies the selected Dev Buy into the launch summary", () => {
+    const setup = buildPlainTextPlan({
+      ...createEmptyDraft(),
+      initialBuyEth: "0.002",
+    });
+
+    expect(setup).toContain("Creator initial buy: 0.002 ETH");
+  });
+
+  it("describes the one-sided locked launch without a liquidity deposit", () => {
     const draft = {
       ...createEmptyDraft(),
+      tokenName: "Clear",
       tokenSymbol: "CLEAR",
     };
 
+    expect(getDraftAssetLabel(draft)).toBe("CLEAR");
+    expect(buildLaunchSummary(draft)).toContain("complete supply");
+    expect(buildLaunchSummary(draft)).toContain("1.36 ETH starting FDV");
     expect(buildLaunchSummary(draft)).toContain(
-      "Bids establish the opening price",
+      "one-sided Uniswap v4 position",
     );
-    expect(buildLaunchSummary(draft)).toContain("Uniswap v4 pool");
-    expect(buildLaunchSummary(draft)).not.toContain(".");
+    expect(buildLaunchSummary(draft)).not.toMatch(/[.!?]$/);
   });
 
-  it("marks a copied setup as ready for contract review", () => {
+  it("keeps the copied setup honest about mainnet availability", () => {
     const setup = buildPlainTextPlan(createEmptyDraft());
 
     expect(setup).toContain(
-      "Status: Ready for contract review",
+      "Status: Mainnet launch preparation remains disabled during final canary verification",
     );
-    expect(setup).toContain("Token behavior");
     expect(setup).toContain(
-      "Initial LP: permanently locked; LP fees go to the launch creator",
+      "Launch cost: no launch fee or liquidity deposit; the creator pays the initial buy and network gas",
     );
-    expect(setup).not.toContain("Market");
+    expect(setup).toContain("Creator initial buy: 0.0006 ETH");
+    expect(setup).toContain(
+      "Programmable share: 0.10% in native ETH, deducted from the selected total",
+    );
+    expect(setup).toContain("Uniswap LP fee: 0.00%");
+    expect(setup).toContain(
+      `Starting FDV: ${MEME_STARTING_FDV_ETH_LABEL}`,
+    );
+    expect(setup).not.toContain("Auction");
+    expect(setup).not.toContain("Direct v4 pool");
   });
 
-  it("keeps behavior descriptions free of trailing punctuation", () => {
+  it("derives the starting FDV from the fixed supply and initial tick", () => {
+    expect(MEME_STARTING_FDV_ETH).toBe(1.3556577608171038);
     expect(
-      behaviorDefinitions.every(
-        ({ description }) => !/[.!?]$/.test(description),
-      ),
-    ).toBe(true);
+      MEME_TOKEN_SUPPLY_WHOLE / 1.0001 ** MEME_INITIAL_TICK,
+    ).toBeCloseTo(MEME_STARTING_FDV_ETH, 9);
+    expect(MEME_STARTING_FDV_ETH_LABEL).toBe("1.36 ETH");
   });
 
-  it("keeps fixed and dynamic fees mutually exclusive", () => {
-    expect(normalizeBehaviorSelection(["fixed-fee"], "dynamic-fee")).toEqual([
-      "dynamic-fee",
-    ]);
-  });
-
-  it("treats a submitted custom hook as one complete implementation", () => {
-    expect(
-      normalizeBehaviorSelection(["fixed-fee", "fee-split"], "custom-hook"),
-    ).toEqual(["custom-hook"]);
-  });
-
-  it("identifies the existing asset path as a factory-created Uniswap token", () => {
-    const setup = buildPlainTextPlan({
+  it("deducts the fixed Programmable share from the selected total", () => {
+    const onePercent = getMemeFeeBreakdown(createEmptyDraft());
+    const tenPercent = getMemeFeeBreakdown({
       ...createEmptyDraft(),
-      assetMode: "existing",
-      tokenAddress: "0x0000000000000000000000000000000000000001",
-      existingTokenSymbol: "UNI4",
-      liquidityMode: "direct",
+      totalSwapFeePercent: "10",
     });
 
-    expect(setup).toContain("Existing fixed supply Uniswap UERC20");
-    expect(setup).toContain("Direct v4 pool");
+    expect(onePercent).toEqual({
+      totalSwapFeeBps: 100,
+      creatorFeeBps: 90,
+      launcherFeeBps: 10,
+    });
+    expect(tenPercent).toEqual({
+      totalSwapFeeBps: 1_000,
+      creatorFeeBps: 990,
+      launcherFeeBps: 10,
+    });
   });
 
-  it("does not present untested behavior modules as standard", () => {
-    expect(
-      behaviorDefinitions
-        .filter(({ tier }) => tier === "standard")
-        .map(({ id }) => id),
-    ).toEqual(["fixed-fee"]);
+  it("accepts only whole percentage choices from one through ten", () => {
+    expect(parseTotalSwapFeeBps("1")).toBe(100);
+    expect(parseTotalSwapFeeBps("10")).toBe(1_000);
+    expect(parseTotalSwapFeeBps("0")).toBeNull();
+    expect(parseTotalSwapFeeBps("1.1")).toBeNull();
+    expect(parseTotalSwapFeeBps("11")).toBeNull();
   });
 });

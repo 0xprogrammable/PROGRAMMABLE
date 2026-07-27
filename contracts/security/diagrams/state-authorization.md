@@ -1,45 +1,38 @@
-# State and authorization
-
-Generated from:
-
-```sh
-slither . --print vars-and-auth --filter-paths 'lib|test|script' --exclude-dependencies
-```
+# Meme Launch V1 state and authorization
 
 ```mermaid
 flowchart TD
-    Constructor[Constructor]
-    Immutables[Six immutable dependencies and recipients]
-    NewLaunch[Permissionless new token launch]
-    ExistingLaunch[Existing token launch by recorded creator]
-    LaunchHash[Append-only launchHashOf token]
-    HookFactory[Permissionless hook factory]
-    DynamicHookFactory[Permissionless dynamic hook factory]
-    HookRecord[Append-only hook configurationHashOf]
-    PositionFactory[Permissionless position factory]
-    PositionRecord[Append-only forwarder configurationHashOf]
-    Hook[PlatformFeeHookV1]
-    DynamicHook[BoundedDynamicFeeHookV1]
-    NoStorage[No mutable hook storage]
-    BoundedState[Reference block, reference tick and bounded current fee]
+    Launch["MemeLaunchV1.launch"]
+    LaunchHash["launchHashOf[token]"]
+    HookFactory["Permissionless hook factory deployment"]
+    HookRecord["configurationHashOf[hook]"]
+    PositionFactory["Permissionless position factory deployment"]
+    PositionRecord["configurationHashOf[forwarder]"]
+    PoolRegistration["registerPool"]
+    PoolConfig["Immutable creator, registrar and total fee per pool"]
+    SwapCallbacks["PoolManager swap callbacks"]
+    FeeAccounting["Creator, Launcher and total native accounting"]
+    StandardClaim["Permissionless fixed-recipient claim"]
+    RedirectClaim["Recipient-authorized redirected claim"]
 
-    Constructor --> Immutables
-    NewLaunch --> LaunchHash
-    ExistingLaunch --> LaunchHash
+    Launch --> LaunchHash
     HookFactory --> HookRecord
-    DynamicHookFactory --> HookRecord
     PositionFactory --> PositionRecord
-    Hook --> NoStorage
-    DynamicHook --> BoundedState
+    Launch --> PoolRegistration
+    PoolRegistration --> PoolConfig
+    SwapCallbacks --> FeeAccounting
+    StandardClaim --> FeeAccounting
+    RedirectClaim --> FeeAccounting
 ```
 
 | Contract | Mutable state | Who can write | Effect |
 | --- | --- | --- | --- |
-| `DirectLiquidityLauncherV1` | `launchHashOf[token]` | Any valid new-token caller, or the creator recorded by a provenance-verified existing UERC20 | Records the immutable launch commitment for the selected token |
-| `PlatformFeeHookFactoryV1` | `configurationHashOf[hook]` | Any caller completing a valid CREATE2 deployment | Records factory provenance |
-| `BoundedDynamicFeeHookFactoryV1` | `configurationHashOf[hook]` | Any caller completing a valid CREATE2 deployment | Records factory provenance |
-| `LockedPositionFeeForwarderFactoryV1` | `configurationHashOf[forwarder]` | Any caller completing a valid CREATE2 deployment | Records factory provenance |
-| `PlatformFeeHookV1` | None | Nobody | Fee, pool, initializer and recipient stay immutable |
-| `BoundedDynamicFeeHookV1` | `referenceBlock`, `referenceTick`, `currentLpFee` | Only PoolManager during initialization or the first successful swap in a later block | Advances the immutable bounded fee rule; authorities, rule and payout stay immutable |
+| `MemeLaunchV1` | `launchHashOf[token]` | Any caller completing a valid atomic launch | Records the immutable launch commitment |
+| `EthCreatorFeeHookFactoryV1` | `configurationHashOf[hook]` | Any caller completing a valid CREATE2 deployment | Records factory provenance |
+| `LockedPositionFeeForwarderFactoryV1` | `configurationHashOf[forwarder]` | Any caller completing a valid CREATE2 deployment | Records permanent-recipient provenance |
+| `EthCreatorFeeHookV1` | per-pool creator, registrar, fee and creator accrual; global Launcher and total accrual | Registrar once during launch; PoolManager during swaps; claim functions during redemption | Fixes pool economics and accounts native fees |
 
-There is no role assignment or revocation state because there are no privileged functions. Factory provenance alone is not a verified launch: indexers must also require the matching new-token, existing-token or complete official auction launch record.
+There is no role assignment or revocation state. The only payout discretion is a recovery method: the recorded creator or
+treasury may redirect its own accrued claim when direct ETH reception fails. No third party can change that destination.
+
+Factory provenance alone is insufficient for Explore. Indexers must also require the paired verified Meme Launch events.

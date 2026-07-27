@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "status": "deployment-source-and-lifecycle-verified",
+  "chainId": 11155111,
+  "checkedAt": "2026-07-27T11:22:02.731Z",
+  "releaseCommit": "65a80d088bb752e40bea9ce3feab313ce2d9fe76",
+  "startingNonce": 31,
+  "addresses": {
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "hookFactory": "0xb974A9EF7B75650428389b63fa6C4906450ABcE0",
+    "feeHook": "0x0c9De2721F537C311e05ad3671A17136C14a20Cc",
+    "memeLauncher": "0x6Ae84F188468722d8b5970Bc3924C9C31b75FF4e",
+    "positionForwarderFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448"
+  },
+  "transactions": {
+    "hookFactory": {
+      "transactionHash": "0xa0fdae1b611d48dd6dba051fe9705b53b4fb75aa3fe3a09561d648f6671ed4d0",
+      "blockNumber": 11361267,
+      "blockHash": "0x879d384707c0463c0af11788febcaddc2249016e29ae67d746d302dd8b91afe9",
+      "gasUsed": "3113365",
+      "effectiveGasPriceWei": "2594164756"
+    },
+    "feeHook": {
+      "transactionHash": "0x9c9616ee385ca8d8fb18f554de90737936d4369631d9afa6e284c5025a2e5f1b",
+      "blockNumber": 11361269,
+      "blockHash": "0xb7c1617b0443c48262ec492b19a1ae87e00d4d74c83724c775e793e6e3e9bb44",
+      "gasUsed": "2429677",
+      "effectiveGasPriceWei": "2575369738"
+    },
+    "memeLauncher": {
+      "transactionHash": "0x2e473ffcec73d531a2b3bdb50549fea2f1453d7d74053e1985dfbaef1c54b624",
+      "blockNumber": 11361270,
+      "blockHash": "0x55cd13594baab333c41ef77d994b3b7921d17a639cbf46a2584f98ddd0f61d66",
+      "gasUsed": "4256005",
+      "effectiveGasPriceWei": "2560173805"
+    }
+  },
+  "runtimeCodeHashes": {
+    "hookFactory": "0x8dd7205952dba3efad6f58a4b0193171c4ed825145319c908bc47dab1911c128",
+    "feeHook": "0xa1094bdd6c3bd1ba4d17d8f321f0e52a95a6247fae287aae90b008a7eacb05b7",
+    "memeLauncher": "0xf9977ba3a5c859d34beff333d129ae135190423a20e2a6ec5cb19588ff552e5f"
+  },
+  "sourceVerification": {
+    "hookFactory": {
+      "sourcify": "match",
+      "blockscout": "verified"
+    },
+    "feeHook": {
+      "sourcify": "match",
+      "blockscout": "verified"
+    },
+    "memeLauncher": {
+      "sourcify": "match",
+      "blockscout": "verified"
+    },
+    "test2Uerc20": {
+      "address": "0x6f71A3CDa868d613552f8230790274BbEBB5d771",
+      "sourcify": "match",
+      "blockscout": "verified",
+      "verificationJob": "61e6f83b-b080-495a-98cb-ed256f26ea32"
+    }
+  },
+  "lifecycleEvidence": {
+    "status": "verified-current-release",
+    "verifiedRpcCount": 2,
+    "verifiedSourceCount": 4,
+    "verifier": "contracts/scripts/verify-sepolia-meme-lifecycle.mjs",
+    "token": "0x6f71A3CDa868d613552f8230790274BbEBB5d771",
+    "poolId": "0x541eca58f02c9bee85cf4edbbc2ecfd8cbd6691c275b232f2f9b9c77ef8f82a6",
+    "positionRecipient": "0xbdb2d2F49771Ec34d37DF9fADCBad058e96Db8DC",
+    "positionTokenId": "37835",
+    "initialBuyNativeWei": "600000000000000",
+    "initialBuyTokenAmount": "437971781612384114831424",
+    "sellTokenAmount": "407971781612384114831424",
+    "sellGrossNativeWei": "553329047046898",
+    "sellNetNativeWei": "547795756576430",
+    "creatorFeesClaimedWei": "10379961423422",
+    "launcherFeesClaimedWei": "1153329047046",
+    "treasuryBalanceDeltaWei": "1153329047046",
+    "finalCreatorTokenBalance": "30000000000000000000000",
+    "finalTick": 204199,
+    "positionLiquidity": "36819258015569838458222",
+    "transactions": {
+      "launch": "0xd15b074027a3516ce6ee65fab94df3a2ebbc5170ec7669f6420052a60b82c141",
+      "permit2Approval": "0x32eff8ce7751eb811dcc94259c3867dd0d4e76c7617e9e6e1b62970bf73a9f41",
+      "sell": "0x258278cb5662ab9d10966c9c48fe1849cff9e8162d73170f85471add0e7ff4d5",
+      "creatorClaim": "0x0f3aebde7e6bff6b41e19b3e26d3705c637a0f99b6de07fc5e4644e7c1e2ed71",
+      "launcherClaim": "0x57a58b6dd721d87430e51ad894da48d24bb0dc261bed8019e0fdf4f27b14a428"
+    },
+    "blocks": {
+      "launch": 11361308,
+      "permit2Approval": 11361309,
+      "sell": 11361331,
+      "creatorClaim": 11361333,
+      "launcherClaim": 11361341
+    }
+  }
+}

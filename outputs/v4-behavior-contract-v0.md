@@ -1,5 +1,7 @@
 # V4 Behavior Contract v0
 
+> Archived concept catalog. The current public product exposes only Meme Launch. See `docs/product-brief.md` and `docs/launch-variant-architecture.md` for the active boundary.
+
 ## No-Code-Regelwerk für programmierbare Uniswap-v4-Märkte
 
 **Stand:** 25. Juli 2026
