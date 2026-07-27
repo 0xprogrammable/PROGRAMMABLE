@@ -23,8 +23,16 @@
     "contracts:variants": "node contracts/scripts/validate-launch-variants.mjs",
     "contracts:verify": "npm run contracts:bootstrap && npm run contracts:variants && npm run contracts:fmt && npm run contracts:lint && npm run contracts:build && npm run contracts:test",
     "contracts:sepolia:validate": "cd contracts && forge test --match-path test/EthereumSepoliaDeploymentSnapshot.t.sol && forge test --match-path test/DeploySepoliaInfrastructureV1.t.sol && forge test --match-path test/DeploySepoliaMemeInfrastructureV1.t.sol",
-    "contracts:sepolia:metamask": "node scripts/serve-sepolia-metamask-deployer.mjs",
+    "contracts:mainnet:metamask": "node scripts/serve-mainnet-metamask-deployer.mjs",
+    "contracts:v2:sepolia:check": "node scripts/serve-v2-metamask-deployer.mjs --check",
+    "contracts:v2:sepolia:metamask": "node scripts/serve-v2-metamask-deployer.mjs",
+    "contracts:v2:mainnet:check": "PROGRAMMABLE_DEPLOY_NETWORK=mainnet node scripts/serve-v2-metamask-deployer.mjs --check",
+    "contracts:v2:mainnet:metamask": "PROGRAMMABLE_DEPLOY_NETWORK=mainnet node scripts/serve-v2-metamask-deployer.mjs",
+    "contracts:v2:verify-deployment": "node contracts/scripts/verify-v2-deployment.mjs",
+    "contracts:token-list:schema": "node scripts/validate-token-list-schema.mjs",
+    "contracts:mainnet:canary": "MEME_LAUNCH_NETWORK=mainnet node scripts/serve-sepolia-meme-launch.mjs",
     "contracts:sepolia:launch-test": "node scripts/serve-sepolia-meme-launch.mjs",
+    "contracts:v2:sepolia:test2": "MEME_LAUNCH_FIXTURE_JSON=contracts/release/test2-classic-v2.json node scripts/serve-sepolia-meme-launch.mjs",
     "contracts:sepolia:lifecycle:verify": "node contracts/scripts/verify-sepolia-meme-lifecycle.mjs"
   },
   "dependencies": {
@@ -42,12 +50,17 @@
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "eslint": "9.39.5",
     "eslint-config-next": "16.2.11",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   },
   "overrides": {
+    "@uniswap/universal-router-sdk": {
+      "@openzeppelin/contracts@4.7.0": "4.9.6"
+    },
     "adm-zip": "0.6.0",
     "axios": "1.18.1",
     "cookie": "0.7.2",

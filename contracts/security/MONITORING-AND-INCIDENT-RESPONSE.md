@@ -1,9 +1,11 @@
 # Meme Launch monitoring and incident response
 
-Status: specified, not implemented
+Status: implementation available, not yet operated
 
 This is the minimum production operating boundary. It is not evidence that an indexer, alert or response rotation is
-live.
+live. The read-only watcher in `contracts/scripts/monitor-meme-v1.mjs` persists a reorg-aware cursor, reconciles two
+independent RPCs and validates V2 fee disclosures. Mainnet readiness still requires named owners, a durable runtime,
+alert delivery and a Sepolia rehearsal using the exact V2 deployment.
 
 ## Canonical event set
 
@@ -12,8 +14,11 @@ The indexer must ingest:
 - `EthCreatorFeeHookDeployed`
 - `LockedPositionFeeForwarderDeployed`
 - `PoolRegistered`
+- `PoolFeeDisclosure`
 - `MemeTokenLaunched`
 - `MemeLiquidityConfigured`
+- `HookFee`
+- `HookSwap`
 - `NativeSwapFeesAccrued`
 - `CreatorFeesClaimed`
 - `LauncherFeesClaimed`

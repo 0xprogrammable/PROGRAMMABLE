@@ -77,7 +77,11 @@ const hookAbi = parseAbi([
   "function totalNativeFeesAccrued() view returns (uint256)",
   "function launcherFeesAccrued() view returns (uint256)",
   "function poolFeeConfig(bytes32 poolId) view returns (address creator,address registrar,uint16 totalSwapFeeBps,bool registered,uint256 creatorFeesAccrued)",
+  "function feeDisclosure(bytes32 poolId) view returns (uint16 buySwapFeeBps,uint16 sellSwapFeeBps,uint16 creatorFeeBps,uint16 launcherFeeBps,uint16 transferTaxBps,uint24 lpFeePips)",
   "event PoolRegistered(bytes32 indexed poolId,address indexed token,address indexed creator,address registrar,uint16 totalSwapFeeBps)",
+  "event PoolFeeDisclosure(bytes32 indexed poolId,address indexed token,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,uint16 launcherFeeBps,uint16 transferTaxBps,uint24 lpFeePips)",
+  "event HookFee(bytes32 indexed poolId,address indexed sender,uint128 feeAmount0,uint128 feeAmount1)",
+  "event HookSwap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint24 swapFee)",
   "event NativeSwapFeesAccrued(bytes32 indexed poolId,address indexed swapSender,uint256 grossNativeAmount,uint256 creatorFee,uint256 launcherFee)",
   "event CreatorFeesClaimed(bytes32 indexed poolId,address indexed creator,address indexed recipient,address caller,uint256 amount)",
   "event LauncherFeesClaimed(address indexed treasury,address indexed recipient,address indexed caller,uint256 amount)",
@@ -428,6 +432,7 @@ async function readLaunchState(client, deployment, launch, blockNumber) {
   const [
     recordedLaunchHash,
     feeConfiguration,
+    feeDisclosure,
     positionOwner,
     positionLiquidity,
     forwarderConfigurationHash,
@@ -446,6 +451,9 @@ async function readLaunchState(client, deployment, launch, blockNumber) {
       launch.token,
     ]),
     read(deployment.addresses.feeHook, hookAbi, "poolFeeConfig", [
+      launch.poolId,
+    ]),
+    read(deployment.addresses.feeHook, hookAbi, "feeDisclosure", [
       launch.poolId,
     ]),
     read(OFFICIAL.positionManager.address, positionManagerAbi, "ownerOf", [
@@ -484,6 +492,7 @@ async function readLaunchState(client, deployment, launch, blockNumber) {
   return {
     recordedLaunchHash,
     feeConfiguration,
+    feeDisclosure,
     positionOwner,
     positionLiquidity,
     forwarderConfigurationHash,
@@ -510,6 +519,23 @@ function validateLaunchState(deployment, launch, state) {
     feeBps === launch.totalSwapFeeBps,
     "Pool fee differs from launch event",
   );
+  const [
+    buySwapFeeBps,
+    sellSwapFeeBps,
+    creatorFeeBps,
+    launcherFeeBps,
+    transferTaxBps,
+    lpFeePips,
+  ] = state.feeDisclosure;
+  assert(buySwapFeeBps === feeBps, "Buy hook fee disclosure mismatch");
+  assert(sellSwapFeeBps === feeBps, "Sell hook fee disclosure mismatch");
+  assert(
+    creatorFeeBps + launcherFeeBps === feeBps,
+    "Disclosed fee split does not reconcile",
+  );
+  assert(launcherFeeBps === 10, "Launcher fee disclosure changed");
+  assert(transferTaxBps === 0, "Transfer tax disclosure changed");
+  assert(lpFeePips === 0, "LP fee disclosure changed");
   sameHex(state.positionOwner, launch.positionRecipient, "position owner");
   assert(state.positionLiquidity > 0n, "Locked position has zero liquidity");
   assert(
@@ -768,6 +794,28 @@ function validateLaunchEventSet(events, deployment) {
       registration.args.totalSwapFeeBps === args.totalSwapFeeBps,
       "Registered fee differs from launch",
     );
+    const disclosure = events.find(
+      (candidate) =>
+        candidate.eventName === "PoolFeeDisclosure" &&
+        candidate.transactionHash === event.transactionHash &&
+        candidate.args.poolId.toLowerCase() === args.poolId.toLowerCase(),
+    );
+    assert(disclosure, "Launch is missing PoolFeeDisclosure");
+    sameHex(disclosure.args.token, args.token, "disclosed token");
+    assert(
+      disclosure.args.buySwapFeeBps === args.totalSwapFeeBps &&
+        disclosure.args.sellSwapFeeBps === args.totalSwapFeeBps,
+      "Disclosed buy or sell fee differs from launch",
+    );
+    assert(
+      disclosure.args.launcherFeeBps === 10,
+      "Disclosed Launcher fee changed",
+    );
+    assert(
+      disclosure.args.transferTaxBps === 0,
+      "Disclosed transfer tax changed",
+    );
+    assert(disclosure.args.lpFeePips === 0, "Disclosed LP fee changed");
 
     return {
       blockNumber: event.blockNumber,
@@ -797,6 +845,46 @@ async function processEvents(logs, deployment, clients, state, blockNumber) {
 
   for (const event of events) {
     if (event.eventName === "NativeSwapFeesAccrued") {
+      const totalFee = event.args.creatorFee + event.args.launcherFee;
+      const hookFee = events.find(
+        (candidate) =>
+          candidate.eventName === "HookFee" &&
+          candidate.transactionHash === event.transactionHash &&
+          candidate.args.poolId.toLowerCase() ===
+            event.args.poolId.toLowerCase() &&
+          candidate.args.sender.toLowerCase() ===
+            event.args.swapSender.toLowerCase(),
+      );
+      const hookSwap = events.find(
+        (candidate) =>
+          candidate.eventName === "HookSwap" &&
+          candidate.transactionHash === event.transactionHash &&
+          candidate.args.id.toLowerCase() ===
+            event.args.poolId.toLowerCase() &&
+          candidate.args.sender.toLowerCase() ===
+            event.args.swapSender.toLowerCase(),
+      );
+      assert(hookFee, "Native fee accrual is missing HookFee");
+      assert(hookSwap, "Native fee accrual is missing HookSwap");
+      assert(
+        hookFee.args.feeAmount0 === totalFee &&
+          hookFee.args.feeAmount1 === 0n,
+        "HookFee does not reconcile with native accrual",
+      );
+      assert(
+        hookSwap.args.amount0 === -totalFee &&
+          hookSwap.args.amount1 === 0n,
+        "HookSwap delta does not reconcile with native accrual",
+      );
+      const trackedLaunch = Object.values(state.launches).find(
+        (launch) =>
+          launch.poolId.toLowerCase() === event.args.poolId.toLowerCase(),
+      );
+      assert(trackedLaunch, "Fee accrual belongs to an unknown launch pool");
+      assert(
+        hookSwap.args.swapFee === trackedLaunch.totalSwapFeeBps * 100,
+        "HookSwap fee pips differ from launch disclosure",
+      );
       emit("native_swap_fees_accrued", "info", {
         blockNumber: event.blockNumber,
         transactionHash: event.transactionHash,
@@ -805,6 +893,25 @@ async function processEvents(logs, deployment, clients, state, blockNumber) {
         grossNativeAmount: event.args.grossNativeAmount,
         creatorFee: event.args.creatorFee,
         launcherFee: event.args.launcherFee,
+      });
+    } else if (event.eventName === "HookFee") {
+      emit("hook_fee", "info", {
+        blockNumber: event.blockNumber,
+        transactionHash: event.transactionHash,
+        poolId: event.args.poolId,
+        sender: event.args.sender,
+        feeAmount0: event.args.feeAmount0,
+        feeAmount1: event.args.feeAmount1,
+      });
+    } else if (event.eventName === "HookSwap") {
+      emit("hook_swap", "info", {
+        blockNumber: event.blockNumber,
+        transactionHash: event.transactionHash,
+        poolId: event.args.id,
+        sender: event.args.sender,
+        amount0: event.args.amount0,
+        amount1: event.args.amount1,
+        swapFee: event.args.swapFee,
       });
     } else if (event.eventName === "CreatorFeesClaimed") {
       emit("creator_fees_claimed", "info", {

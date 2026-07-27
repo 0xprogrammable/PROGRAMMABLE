@@ -1,5 +1,9 @@
 # Ethereum v4 Launchpad
 
+> Archived research from 25 July 2026. Use `uniswap-official-stack-analysis-2026-07-26.md` for the current product decision, official deployment inventory and release state. This document contains broader concepts and an outdated deployment status.
+>
+> Fee update from 26 July 2026: the active Meme Launch product treats the selected 1–10% token fee as the complete hook fee. Launcher receives 0.10 percentage points from that total and the creator receives the remainder. The 0.10% share is not added on top.
+
 ## Research, Produktarchitektur und Mainnet-Masterplan
 
 **Stand:** 25. Juli 2026

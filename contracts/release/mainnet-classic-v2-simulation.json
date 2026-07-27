@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "status": "simulation-only",
+  "chainId": 1,
+  "checkedAt": "2026-07-27",
+  "snapshotBlock": 25622262,
+  "broadcast": false,
+  "transactionsSubmitted": 0,
+  "broadcaster": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+  "reviewedStartingNonce": 6,
+  "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  "reusedPositionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
+  "predictedAddresses": {
+    "hookFactory": "0xbF90Abd6e816b545Ab9DDed77d1E694381C1911F",
+    "feeHook": "0x0b60f1aB3ccE13d69a8E2E08d8473e02B3eAe0cc",
+    "memeLauncher": "0x29FDd542599Bcb242d7d969103371D7B76Ac9bF2"
+  },
+  "hookSalt": "0x000000000000000000000000000000000000000000000000000000000000007f",
+  "sourceCommitment": "0x6bf2c70c5ab2a64a62f2c27e6be859e3428f2c35e6e2db5255b569b9f9eb1287",
+  "simulation": {
+    "status": "passed",
+    "transactionCount": 3,
+    "estimatedGasUsed": "12935993",
+    "estimatedGasPriceWei": "118247708",
+    "estimatedRequiredWei": "1529651522954044"
+  },
+  "releaseBoundary": {
+    "sepoliaV2LifecycleRequired": true,
+    "explorerSourceVerificationRequired": true,
+    "hooklistSubmissionRequired": true,
+    "routingAllowlistSeparate": true,
+    "scannerDisplayGuaranteed": false
+  }
+}

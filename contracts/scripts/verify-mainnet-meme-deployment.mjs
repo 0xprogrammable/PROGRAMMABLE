@@ -445,8 +445,19 @@ function computeSourceCommitment(artifacts) {
         { type: "uint256" },
         { type: "int256" },
         { type: "uint256" },
+        { type: "bytes32" },
+        { type: "uint256" },
       ],
-      [10n, 0n, 200n, 1_000_000_000n * 10n ** 18n],
+      [
+        10n,
+        0n,
+        200n,
+        1_000_000_000n * 10n ** 18n,
+        keccak256(
+          stringToHex("creator-selected-atomic-dev-buy-at-or-above-minimum"),
+        ),
+        600_000_000_000_000n,
+      ],
     ),
   );
   return keccak256(
@@ -825,12 +836,30 @@ async function readConfiguration(client, evidence) {
 }
 
 async function checkSourcify(address) {
-  const url = `https://repo.sourcify.dev/contracts/full_match/1/${address}/metadata.json`;
+  const url = `https://sourcify.dev/server/v2/contract/1/${address}`;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    return { fullMatch: response.ok, url };
+    const payload = response.ok ? await response.json() : null;
+    const fullMatch =
+      response.ok &&
+      payload?.creationMatch === "match" &&
+      payload?.runtimeMatch === "match";
+    return {
+      checked: true,
+      fullMatch,
+      match: payload?.match,
+      creationMatch: payload?.creationMatch,
+      runtimeMatch: payload?.runtimeMatch,
+      verifiedAt: payload?.verifiedAt,
+      url,
+    };
   } catch (error) {
-    return { fullMatch: false, url, error: error.message };
+    return {
+      checked: true,
+      fullMatch: false,
+      url,
+      error: error.message,
+    };
   }
 }
 

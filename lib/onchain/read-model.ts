@@ -1,0 +1,701 @@
+import {
+  createPublicClient,
+  formatUnits,
+  getAddress,
+  http,
+  keccak256,
+  type Address,
+  type Hex,
+  type PublicClient,
+} from "viem";
+import { mainnet, sepolia } from "viem/chains";
+
+import type { LauncherToken } from "../tokens";
+
+import {
+  creatorFeeHookReadAbi,
+  creatorFeesClaimedEvent,
+  memeCreatorInitialBuyEvent,
+  memeLiquidityConfiguredEvent,
+  memeTokenLaunchedEvent,
+  nativeSwapFeesAccruedEvent,
+  stateViewReadAbi,
+  uerc20ReadAbi,
+} from "./abis";
+import { getOnchainDeployment } from "./config";
+import { pairVerifiedLaunchEvents } from "./events";
+import {
+  marketCapNativeWadFromSqrtPriceX96,
+  nativePriceWadFromSqrtPriceX96,
+} from "./math";
+import {
+  buildTokenLinks,
+  sanitizeImageUrl,
+} from "./metadata";
+import type {
+  ExploreReadModel,
+  CreatorClaimEventRecord,
+  FeeVolume,
+  InitialBuyEventRecord,
+  LaunchEventRecord,
+  LiquidityEventRecord,
+  OnchainDeployment,
+  ReadyOnchainDeployment,
+  VerifiedLaunchRecord,
+} from "./types";
+
+const ZERO_FEE_VOLUME: FeeVolume = {
+  grossNativeAmount: 0n,
+  creatorFees: 0n,
+  launcherFees: 0n,
+  swapCount: 0,
+};
+
+type FeeDisclosure = readonly [
+  buySwapFeeBps: number,
+  sellSwapFeeBps: number,
+  creatorFeeBps: number,
+  launcherFeeBps: number,
+  transferTaxBps: number,
+  lpFeePips: number,
+];
+
+async function readFeeDisclosure(
+  client: PublicClient,
+  config: ReadyOnchainDeployment,
+  poolId: Hex,
+  registeredFeeBps: number,
+  snapshotBlock: bigint,
+): Promise<FeeDisclosure> {
+  if (config.releaseVersion === "classic-v2") {
+    return client.readContract({
+      address: config.feeHook,
+      abi: creatorFeeHookReadAbi,
+      functionName: "feeDisclosure",
+      args: [poolId],
+      blockNumber: snapshotBlock,
+    });
+  }
+
+  const [launcherFeeBps, lpFeePips] = await Promise.all([
+    client.readContract({
+      address: config.feeHook,
+      abi: creatorFeeHookReadAbi,
+      functionName: "LAUNCHER_FEE_BPS",
+      blockNumber: snapshotBlock,
+    }),
+    client.readContract({
+      address: config.feeHook,
+      abi: creatorFeeHookReadAbi,
+      functionName: "LP_FEE_PIPS",
+      blockNumber: snapshotBlock,
+    }),
+  ]);
+  if (launcherFeeBps > registeredFeeBps) {
+    throw new Error("V1 launcher fee exceeds the registered pool fee");
+  }
+
+  return [
+    registeredFeeBps,
+    registeredFeeBps,
+    registeredFeeBps - launcherFeeBps,
+    launcherFeeBps,
+    0,
+    lpFeePips,
+  ] as const;
+}
+
+function createOnchainClient(config: OnchainDeployment): PublicClient {
+  return createPublicClient({
+    chain: config.chainId === 1 ? mainnet : sepolia,
+    batch: { multicall: true },
+    transport: http(config.rpcUrl, {
+      retryCount: 2,
+      timeout: 12_000,
+    }),
+  });
+}
+
+function minimum(first: bigint, second: bigint) {
+  return first < second ? first : second;
+}
+
+async function assertRuntimeCode(
+  client: PublicClient,
+  address: Address,
+  expectedHash: Hex,
+  blockNumber: bigint,
+  label: string,
+) {
+  const code = await client.getCode({ address, blockNumber });
+  if (!code || code === "0x" || keccak256(code) !== expectedHash) {
+    throw new Error(`${label} runtime code does not match the manifest`);
+  }
+}
+
+type IndexedEvents = {
+  launches: LaunchEventRecord[];
+  liquidities: LiquidityEventRecord[];
+  initialBuys: InitialBuyEventRecord[];
+  volumes: Map<string, FeeVolume>;
+  creatorClaims: CreatorClaimEventRecord[];
+};
+
+async function indexVerifiedEvents(
+  client: PublicClient,
+  config: ReadyOnchainDeployment,
+  toBlock: bigint,
+): Promise<IndexedEvents> {
+  const launches: LaunchEventRecord[] = [];
+  const liquidities: LiquidityEventRecord[] = [];
+  const initialBuys: InitialBuyEventRecord[] = [];
+  const volumes = new Map<string, FeeVolume>();
+  const creatorClaims: CreatorClaimEventRecord[] = [];
+
+  for (
+    let fromBlock = config.deploymentBlock;
+    fromBlock <= toBlock;
+    fromBlock += config.logBlockRange
+  ) {
+    const rangeEnd = minimum(
+      toBlock,
+      fromBlock + config.logBlockRange - 1n,
+    );
+    const [
+      launchLogs,
+      liquidityLogs,
+      initialBuyLogs,
+      feeLogs,
+      claimLogs,
+    ] =
+      await Promise.all([
+      client.getLogs({
+        address: config.launcher,
+        event: memeTokenLaunchedEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      }),
+      client.getLogs({
+        address: config.launcher,
+        event: memeLiquidityConfiguredEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      }),
+      client.getLogs({
+        address: config.launcher,
+        event: memeCreatorInitialBuyEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      }),
+      client.getLogs({
+        address: config.feeHook,
+        event: nativeSwapFeesAccruedEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      }),
+      client.getLogs({
+        address: config.feeHook,
+        event: creatorFeesClaimedEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      }),
+    ]);
+
+    for (const log of launchLogs) {
+      if (log.removed || log.blockNumber === null) continue;
+      launches.push({
+        creator: getAddress(log.args.creator),
+        token: getAddress(log.args.token),
+        poolId: log.args.poolId,
+        feeHook: getAddress(log.args.feeHook),
+        positionRecipient: getAddress(log.args.positionRecipient),
+        positionTokenId: log.args.positionTokenId,
+        totalSwapFeeBps: log.args.totalSwapFeeBps,
+        launchHash: log.args.launchHash,
+        blockNumber: log.blockNumber,
+        transactionHash: log.transactionHash,
+        transactionIndex: log.transactionIndex,
+        logIndex: log.logIndex,
+      });
+    }
+
+    for (const log of liquidityLogs) {
+      if (log.removed || log.blockNumber === null) continue;
+      liquidities.push({
+        token: getAddress(log.args.token),
+        totalSupply: log.args.totalSupply,
+        tokenLiquidityAmount: log.args.tokenLiquidityAmount,
+        lockedTokenDust: log.args.lockedTokenDust,
+        initialTick: log.args.initialTick,
+        tickLower: log.args.tickLower,
+        tickUpper: log.args.tickUpper,
+        lpFeePips: log.args.lpFeePips,
+        launchHash: log.args.launchHash,
+        blockNumber: log.blockNumber,
+        transactionHash: log.transactionHash,
+        transactionIndex: log.transactionIndex,
+        logIndex: log.logIndex,
+      });
+    }
+
+    for (const log of initialBuyLogs) {
+      if (log.removed || log.blockNumber === null) continue;
+      initialBuys.push({
+        creator: getAddress(log.args.creator),
+        token: getAddress(log.args.token),
+        poolId: log.args.poolId,
+        nativeAmount: log.args.nativeAmount,
+        tokenAmount: log.args.tokenAmount,
+        launchHash: log.args.launchHash,
+        blockNumber: log.blockNumber,
+        transactionHash: log.transactionHash,
+        transactionIndex: log.transactionIndex,
+        logIndex: log.logIndex,
+      });
+    }
+
+    for (const log of feeLogs) {
+      if (log.removed) continue;
+      const poolKey = log.args.poolId.toLowerCase();
+      const current = volumes.get(poolKey) ?? ZERO_FEE_VOLUME;
+      volumes.set(poolKey, {
+        grossNativeAmount:
+          current.grossNativeAmount + log.args.grossNativeAmount,
+        creatorFees: current.creatorFees + log.args.creatorFee,
+        launcherFees: current.launcherFees + log.args.launcherFee,
+        swapCount: current.swapCount + 1,
+      });
+    }
+
+    for (const log of claimLogs) {
+      if (log.removed || log.blockNumber === null) continue;
+      creatorClaims.push({
+        poolId: log.args.poolId,
+        creator: getAddress(log.args.creator),
+        recipient: getAddress(log.args.recipient),
+        caller: getAddress(log.args.caller),
+        amount: log.args.amount,
+        blockNumber: log.blockNumber,
+        transactionHash: log.transactionHash,
+        transactionIndex: log.transactionIndex,
+        logIndex: log.logIndex,
+      });
+    }
+  }
+
+  return {
+    launches,
+    liquidities,
+    initialBuys,
+    volumes,
+    creatorClaims,
+  };
+}
+
+async function hydrateVerifiedToken(
+  client: PublicClient,
+  config: ReadyOnchainDeployment,
+  launch: VerifiedLaunchRecord,
+  volume: FeeVolume,
+  blockTimestamp: bigint,
+  snapshotBlock: bigint,
+): Promise<LauncherToken> {
+  const [
+    name,
+    symbol,
+    decimals,
+    totalSupply,
+    recordedCreator,
+    slot0,
+    activeLiquidity,
+    feeConfig,
+    metadata,
+  ] = await Promise.all([
+    client.readContract({
+      address: launch.token,
+      abi: uerc20ReadAbi,
+      functionName: "name",
+      blockNumber: snapshotBlock,
+    }),
+    client.readContract({
+      address: launch.token,
+      abi: uerc20ReadAbi,
+      functionName: "symbol",
+      blockNumber: snapshotBlock,
+    }),
+    client.readContract({
+      address: launch.token,
+      abi: uerc20ReadAbi,
+      functionName: "decimals",
+      blockNumber: snapshotBlock,
+    }),
+    client.readContract({
+      address: launch.token,
+      abi: uerc20ReadAbi,
+      functionName: "totalSupply",
+      blockNumber: snapshotBlock,
+    }),
+    client.readContract({
+      address: launch.token,
+      abi: uerc20ReadAbi,
+      functionName: "creator",
+      blockNumber: snapshotBlock,
+    }),
+    client.readContract({
+      address: config.stateView,
+      abi: stateViewReadAbi,
+      functionName: "getSlot0",
+      args: [launch.poolId],
+      blockNumber: snapshotBlock,
+    }),
+    client.readContract({
+      address: config.stateView,
+      abi: stateViewReadAbi,
+      functionName: "getLiquidity",
+      args: [launch.poolId],
+      blockNumber: snapshotBlock,
+    }),
+    client.readContract({
+      address: config.feeHook,
+      abi: creatorFeeHookReadAbi,
+      functionName: "poolFeeConfig",
+      args: [launch.poolId],
+      blockNumber: snapshotBlock,
+    }),
+    client
+      .readContract({
+        address: launch.token,
+        abi: uerc20ReadAbi,
+        functionName: "metadata",
+        blockNumber: snapshotBlock,
+      })
+      .catch(() => null),
+  ]);
+
+  const [sqrtPriceX96, currentTick, protocolFeePips, lpFeePips] =
+    slot0;
+  const [
+    poolCreator,
+    registrar,
+    registeredFeeBps,
+    registered,
+    creatorFeesAccrued,
+  ] = feeConfig;
+  const feeDisclosure = await readFeeDisclosure(
+    client,
+    config,
+    launch.poolId,
+    registeredFeeBps,
+    snapshotBlock,
+  );
+  const [
+    buyHookFeeBps,
+    sellHookFeeBps,
+    creatorFeeBps,
+    launcherFeeBps,
+    transferTaxBps,
+    disclosedLpFeePips,
+  ] = feeDisclosure;
+
+  if (
+    getAddress(recordedCreator) !== config.launcher ||
+    totalSupply !== launch.liquidity.totalSupply ||
+    !registered ||
+    getAddress(poolCreator) !== launch.creator ||
+    getAddress(registrar) !== config.launcher ||
+    registeredFeeBps !== launch.totalSwapFeeBps ||
+    buyHookFeeBps !== registeredFeeBps ||
+    sellHookFeeBps !== registeredFeeBps ||
+    creatorFeeBps + launcherFeeBps !== registeredFeeBps ||
+    transferTaxBps !== 0 ||
+    disclosedLpFeePips !== lpFeePips ||
+    lpFeePips !== launch.liquidity.lpFeePips
+  ) {
+    throw new Error(
+      `Launch provenance mismatch for ${launch.token}`,
+    );
+  }
+
+  const tokenPriceEthWei = nativePriceWadFromSqrtPriceX96(
+    sqrtPriceX96,
+    decimals,
+  );
+  const marketCapEthWei = marketCapNativeWadFromSqrtPriceX96(
+    totalSupply,
+    sqrtPriceX96,
+  );
+  const description = metadata?.[0]?.trim() || undefined;
+  const website = metadata?.[1] ?? "";
+  const image = metadata?.[2] ?? "";
+  const extraData = metadata?.[3] ?? "0x";
+
+  return {
+    id: `${config.chainId}:${launch.token.toLowerCase()}`,
+    name,
+    symbol,
+    description,
+    imageUrl: sanitizeImageUrl(image) ?? undefined,
+    links: buildTokenLinks(website, extraData),
+    tokenAddress: launch.token,
+    hookAddress: launch.feeHook,
+    poolId: launch.poolId,
+    creatorAddress: launch.creator,
+    positionRecipient: launch.positionRecipient,
+    positionTokenId: launch.positionTokenId.toString(),
+    launchHash: launch.launchHash,
+    launchBlockNumber: launch.blockNumber.toString(),
+    launchTransactionHash: launch.transactionHash,
+    launchTransactionIndex: launch.transactionIndex,
+    launchLogIndex: launch.logIndex,
+    launchedAt: new Date(Number(blockTimestamp) * 1_000).toISOString(),
+    totalSupply: formatUnits(totalSupply, decimals),
+    totalSupplyRaw: totalSupply.toString(),
+    tokenDecimals: decimals,
+    tokenLiquidityAmountRaw:
+      launch.liquidity.tokenLiquidityAmount.toString(),
+    lockedTokenDustRaw: launch.liquidity.lockedTokenDust.toString(),
+    tokenPriceEth: formatUnits(tokenPriceEthWei, 18),
+    tokenPriceEthWei: tokenPriceEthWei.toString(),
+    marketCapEth: formatUnits(marketCapEthWei, 18),
+    marketCapEthWei: marketCapEthWei.toString(),
+    grossVolumeEth: formatUnits(volume.grossNativeAmount, 18),
+    grossVolumeWei: volume.grossNativeAmount.toString(),
+    creatorFeesGeneratedEth: formatUnits(volume.creatorFees, 18),
+    creatorFeesGeneratedWei: volume.creatorFees.toString(),
+    launcherFeesGeneratedEth: formatUnits(volume.launcherFees, 18),
+    launcherFeesGeneratedWei: volume.launcherFees.toString(),
+    creatorFeesAccruedEth: formatUnits(creatorFeesAccrued, 18),
+    creatorFeesAccruedWei: creatorFeesAccrued.toString(),
+    swapCount: volume.swapCount,
+    currentTick,
+    initialTick: launch.liquidity.initialTick,
+    tickLower: launch.liquidity.tickLower,
+    tickUpper: launch.liquidity.tickUpper,
+    activeLiquidity: activeLiquidity.toString(),
+    protocolFeePips,
+    lpFeePips,
+    buyHookFeeBps,
+    sellHookFeeBps,
+    creatorFeeBps,
+    launcherFeeBps,
+    transferTaxBps,
+    totalSwapFeeBps: launch.totalSwapFeeBps,
+    liquidityPath: "meme",
+    metadataExtraData: extraData,
+  };
+}
+
+async function readReadyModel(
+  config: ReadyOnchainDeployment,
+): Promise<ExploreReadModel> {
+  const client = createOnchainClient(config);
+  const [chainId, head] = await Promise.all([
+    client.getChainId(),
+    client.getBlockNumber(),
+  ]);
+  if (chainId !== config.chainId) {
+    throw new Error("RPC chain does not match the deployment manifest");
+  }
+
+  const toBlock =
+    head > config.confirmations ? head - config.confirmations : 0n;
+  const snapshotBlock = await client.getBlock({
+    blockNumber: toBlock,
+  });
+  if (!snapshotBlock.hash) {
+    throw new Error("Confirmed snapshot block has no hash");
+  }
+
+  if (toBlock < config.deploymentBlock) {
+    return {
+      status: "ready",
+      tokens: [],
+      snapshot: {
+        chainId: config.chainId,
+        blockNumber: toBlock.toString(),
+        blockHash: snapshotBlock.hash,
+        confirmations: Number(config.confirmations),
+      },
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    };
+  }
+
+  await Promise.all([
+    assertRuntimeCode(
+      client,
+      config.launcher,
+      config.launcherRuntimeCodeHash,
+      toBlock,
+      "Launcher",
+    ),
+    assertRuntimeCode(
+      client,
+      config.feeHook,
+      config.feeHookRuntimeCodeHash,
+      toBlock,
+      "Creator fee hook",
+    ),
+    assertRuntimeCode(
+      client,
+      config.stateView,
+      config.stateViewRuntimeCodeHash,
+      toBlock,
+      "Uniswap StateView",
+    ),
+  ]);
+
+  const [
+    { launches, liquidities, initialBuys, volumes, creatorClaims },
+    launcherFeesAccrued,
+  ] =
+    await Promise.all([
+      indexVerifiedEvents(client, config, toBlock),
+      client.readContract({
+        address: config.feeHook,
+        abi: creatorFeeHookReadAbi,
+        functionName: "launcherFeesAccrued",
+        blockNumber: toBlock,
+      }),
+    ]);
+  const verified = pairVerifiedLaunchEvents(
+    config.chainId,
+    config.launcher,
+    config.feeHook,
+    launches,
+    liquidities,
+    initialBuys,
+  );
+  const launchByPool = new Map(
+    verified.map((launch) => [launch.poolId.toLowerCase(), launch]),
+  );
+  const verifiedClaims = creatorClaims.filter((claim) => {
+    const launch = launchByPool.get(claim.poolId.toLowerCase());
+    return (
+      launch !== undefined &&
+      claim.creator.toLowerCase() === launch.creator.toLowerCase()
+    );
+  });
+
+  const blockNumbers = [
+    ...new Set(
+      [
+        ...verified.map((launch) => launch.blockNumber),
+        ...verifiedClaims.map((claim) => claim.blockNumber),
+      ].map(String),
+    ),
+  ].map(BigInt);
+  const blockTimestamps = new Map<string, bigint>();
+  await Promise.all(
+    blockNumbers.map(async (blockNumber) => {
+      const block = await client.getBlock({ blockNumber });
+      blockTimestamps.set(blockNumber.toString(), block.timestamp);
+    }),
+  );
+
+  const tokens = await Promise.all(
+    verified.map((launch) =>
+      hydrateVerifiedToken(
+        client,
+        config,
+        launch,
+        volumes.get(launch.poolId.toLowerCase()) ?? ZERO_FEE_VOLUME,
+        blockTimestamps.get(launch.blockNumber.toString()) ?? 0n,
+        toBlock,
+      ),
+    ),
+  );
+  const serializedClaims = verifiedClaims
+    .map((claim) => {
+      const launch = launchByPool.get(claim.poolId.toLowerCase());
+      if (!launch) return null;
+      return {
+        poolId: claim.poolId,
+        tokenAddress: launch.token,
+        creatorAddress: claim.creator,
+        recipientAddress: claim.recipient,
+        callerAddress: claim.caller,
+        amountWei: claim.amount.toString(),
+        amountEth: formatUnits(claim.amount, 18),
+        blockNumber: claim.blockNumber.toString(),
+        transactionHash: claim.transactionHash,
+        transactionIndex: claim.transactionIndex,
+        logIndex: claim.logIndex,
+        claimedAt: new Date(
+          Number(
+            blockTimestamps.get(claim.blockNumber.toString()) ?? 0n,
+          ) * 1_000,
+        ).toISOString(),
+      };
+    })
+    .filter((claim) => claim !== null);
+
+  return {
+    status: "ready",
+    tokens,
+    snapshot: {
+      chainId: config.chainId,
+      blockNumber: toBlock.toString(),
+      blockHash: snapshotBlock.hash,
+      confirmations: Number(config.confirmations),
+    },
+    creatorClaims: serializedClaims,
+    launcherFeesAccruedWei: launcherFeesAccrued.toString(),
+    launcherFeesAccruedEth: formatUnits(launcherFeesAccrued, 18),
+  };
+}
+
+let cachedRead:
+  | {
+      key: string;
+      expiresAt: number;
+      value: Promise<ExploreReadModel>;
+    }
+  | undefined;
+
+export async function readExploreModel(
+  config: OnchainDeployment = getOnchainDeployment(),
+): Promise<ExploreReadModel> {
+  if (config.status === "not-deployed") {
+    return {
+      status: "not-deployed",
+      tokens: [],
+      snapshot: null,
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    };
+  }
+
+  const cacheTtlMs = 15_000;
+  const cacheKey = [
+    config.chainId,
+    config.launcher,
+    config.deploymentBlock,
+    config.confirmations,
+  ].join(":");
+  if (
+    cachedRead &&
+    cachedRead.key === cacheKey &&
+    cachedRead.expiresAt > Date.now()
+  ) {
+    return cachedRead.value;
+  }
+
+  const value = readReadyModel(config).catch((error) => {
+    if (cachedRead?.value === value) cachedRead = undefined;
+    throw error;
+  });
+  cachedRead = {
+    key: cacheKey,
+    expiresAt: Date.now() + cacheTtlMs,
+    value,
+  };
+  return value;
+}

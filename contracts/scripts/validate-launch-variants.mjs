@@ -23,7 +23,6 @@ const [
   behaviorCatalog,
   deployment,
   appDeployments,
-  mainnetPreflight,
 ] = await Promise.all([
   readJson(specificationDirectory, "launch-variants.v1.json"),
   readJson(specificationDirectory, "meme-eth-fee-locked-v1.json"),
@@ -34,7 +33,6 @@ const [
   readJson(specificationDirectory, "behavior-modules.v1.json"),
   readJson(configurationDirectory, "deployment-inputs.v1.json"),
   readJson(configurationDirectory, "app-deployments.v1.json"),
-  readJson(configurationDirectory, "mainnet-meme-preflight.v1.json"),
 ]);
 
 assert(catalog.schemaVersion === 1, "Unsupported launch catalog schema");
@@ -195,125 +193,6 @@ assert(
 );
 
 assert(
-  mainnetPreflight.schemaVersion === 1 &&
-    mainnetPreflight.status === "simulation-only" &&
-    mainnetPreflight.chainId === 1 &&
-    mainnetPreflight.releaseEligible === false &&
-    mainnetPreflight.deployed === false &&
-    mainnetPreflight.broadcastApproved === false,
-  "Mainnet preflight must remain non-deployed and non-release-eligible",
-);
-assert(
-  mainnetPreflight.independentWalletStateRpcCount >= 2 &&
-    mainnetPreflight.independentDependencyCodeRpcCount >= 2 &&
-    Number.isSafeInteger(mainnetPreflight.snapshotBlock) &&
-    mainnetPreflight.snapshotBlock > 0,
-  "Mainnet preflight lacks independent RPC evidence",
-);
-assert(
-  mainnetPreflight.deployer.address.toLowerCase() ===
-    deployment.deployment.productionSigner.toLowerCase() &&
-    mainnetPreflight.deployer.ownerApproved === true &&
-    mainnetPreflight.deployer.accountType === "eoa" &&
-    mainnetPreflight.deployer.latestNonce === 0 &&
-    mainnetPreflight.deployer.pendingNonce === 0 &&
-    mainnetPreflight.deployer.balanceWei === "0" &&
-    mainnetPreflight.deployer.code === "0x" &&
-    mainnetPreflight.deployer.fundingReady === false,
-  "Mainnet preflight deployer state is inconsistent",
-);
-assert(
-  mainnetPreflight.treasury.address.toLowerCase() ===
-    deployment.platform.treasury.toLowerCase() &&
-    mainnetPreflight.treasury.ownerApproved === true &&
-    mainnetPreflight.treasury.immutableInRelease === true,
-  "Mainnet preflight treasury differs from the owner-approved treasury",
-);
-
-const mainnetSimulation = mainnetPreflight.simulation;
-assert(
-  mainnetSimulation.startingNonce ===
-    mainnetPreflight.deployer.latestNonce &&
-    mainnetSimulation.transactionCount === 4 &&
-    mainnetSimulation.allTransactionsZeroValue === true &&
-    /^0x[a-fA-F0-9]{64}$/.test(
-      mainnetSimulation.sourceCommitment,
-    ) &&
-    mainnetSimulation.sourceCommitment ===
-      "0x34dba63453f487b6bd3365da526326a0c3f8c7f6c7c1d96756f1dc993623cea3" &&
-    mainnetSimulation.minimumInitialBuyWei ===
-      memeStandard.launch.minimumInitialCreatorBuyWei &&
-    /^0x[a-fA-F0-9]{64}$/.test(mainnetSimulation.hookSalt) &&
-    mainnetSimulation.requiredHookFlags === "8396" &&
-    mainnetSimulation.predictedAddressesVacant === true,
-  "Mainnet simulation identity or hook permissions are incomplete",
-);
-const mainnetPredictedAddresses = Object.values(
-  mainnetSimulation.predictedAddresses,
-);
-assert(
-  mainnetPredictedAddresses.length === 4 &&
-    new Set(
-      mainnetPredictedAddresses.map((address) =>
-        address.toLowerCase(),
-      ),
-    ).size === 4 &&
-    mainnetPredictedAddresses.every((address) =>
-      /^0x[a-fA-F0-9]{40}$/.test(address),
-    ),
-  "Mainnet predicted deployment addresses are invalid",
-);
-assert(
-  Array.isArray(mainnetSimulation.transactions) &&
-    mainnetSimulation.transactions.length === 4,
-  "Mainnet simulation must contain exactly four transactions",
-);
-let mainnetGasLimit = 0n;
-for (const [index, transaction] of
-  mainnetSimulation.transactions.entries()) {
-  assert(
-    transaction.nonce === index &&
-      transaction.valueWei === "0" &&
-      /^\d+$/.test(transaction.gasLimit) &&
-      BigInt(transaction.gasLimit) > 0n &&
-      /^0x[a-fA-F0-9]{64}$/.test(transaction.inputHash) &&
-      transaction.deployedAddress.toLowerCase() ===
-        mainnetPredictedAddresses[index].toLowerCase(),
-    `Mainnet simulation transaction ${index} is invalid`,
-  );
-  mainnetGasLimit += BigInt(transaction.gasLimit);
-}
-assert(
-  mainnetGasLimit === BigInt(mainnetSimulation.totalGasLimit) &&
-    BigInt(mainnetSimulation.estimatedGasPriceWei) > 0n &&
-    BigInt(mainnetSimulation.estimatedRequiredWei) > 0n &&
-    mainnetSimulation.transactions[2].to.toLowerCase() ===
-      mainnetSimulation.predictedAddresses.hookFactory.toLowerCase() &&
-    mainnetSimulation.transactions
-      .filter((_, index) => index !== 2)
-      .every((transaction) => transaction.to === null),
-  "Mainnet simulation gas or transaction targets do not reconcile",
-);
-assert(
-  mainnetSimulation.transactions[3].inputHash ===
-    "0x5cd8feacfaed787484100d58668d904cfbf2016a46402d9dc155d37d180f68cd" &&
-    mainnetSimulation.transactions[3].gasLimit === "5532728",
-  "Mainnet launcher transaction does not match the creator-selected Dev Buy release",
-);
-assert(
-  mainnetPreflight.officialDependencyRuntimeHashes.status ===
-    "verified" &&
-    Object.entries(
-      mainnetPreflight.officialDependencyRuntimeHashes,
-    )
-      .filter(([field]) => field !== "status")
-      .every(([, hash]) => /^0x[a-fA-F0-9]{64}$/.test(hash)) &&
-    Array.isArray(mainnetPreflight.blockers) &&
-    mainnetPreflight.blockers.length > 0,
-  "Mainnet dependency or blocker evidence is incomplete",
-);
-
-assert(
   directStandard.productionApproved === false,
   "Direct standard must not claim production approval",
 );
@@ -429,28 +308,30 @@ for (const [environment, manifest] of Object.entries({
   rehearsal: appDeployments.rehearsal,
 })) {
   assert(
+    ["classic-v1", "classic-v2"].includes(manifest.releaseVersion),
+    `${environment}.releaseVersion is invalid`,
+  );
+  assert(
     ["not-deployed", "ready", "requires-redeploy"].includes(
       manifest.status,
     ),
     `${environment}.status is invalid`,
   );
-  const hasRecordedDeployment =
-    manifest.status === "ready" ||
-    manifest.status === "requires-redeploy";
   for (const field of [
     "platformFeeHookFactory",
     "boundedDynamicFeeHookFactory",
     "lockedPositionFeeForwarderFactory",
     "directLiquidityLauncher",
   ]) {
+    const hasOptionalDeployment = manifest[field] !== null;
     assert(
-      hasRecordedDeployment
+      hasOptionalDeployment
         ? /^0x[a-fA-F0-9]{40}$/.test(manifest[field])
         : manifest[field] === null,
       `${environment}.${field} is invalid`,
     );
     assert(
-      hasRecordedDeployment
+      hasOptionalDeployment
         ? /^0x[a-fA-F0-9]{64}$/.test(
             manifest.runtimeCodeHashes[field],
           )
@@ -495,15 +376,18 @@ for (const [environment, manifest] of Object.entries({
 }
 
 assert(
-  appDeployments.production.status === "not-deployed",
-  "Mainnet transaction preparation must remain disabled until a verified deployment is recorded",
+  appDeployments.production.status === "ready",
+  "The verified Mainnet V1 infrastructure must remain recorded",
 );
 assert(
-  appDeployments.production.memeLaunchStatus === "not-deployed",
-  "Classic mainnet transaction preparation must remain disabled until its verified deployment is recorded",
+  appDeployments.production.releaseVersion === "classic-v1" &&
+    appDeployments.production.memeLaunchStatus ===
+      "lifecycle-pending",
+  "Mainnet Classic V1 must remain launch-disabled until the current lifecycle is verified",
 );
 assert(
-  appDeployments.rehearsal.status === "ready",
+  appDeployments.rehearsal.releaseVersion === "classic-v1" &&
+    appDeployments.rehearsal.status === "ready",
   "Sepolia infrastructure is not marked ready",
 );
 assert(

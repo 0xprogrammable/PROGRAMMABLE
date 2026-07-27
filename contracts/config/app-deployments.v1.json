@@ -2,28 +2,59 @@
   "schemaVersion": 1,
   "production": {
     "chainId": 1,
-    "status": "not-deployed",
-    "memeLaunchStatus": "not-deployed",
-    "ethCreatorFeeHookFactory": null,
-    "ethCreatorFeeHook": null,
-    "memeLaunch": null,
+    "releaseVersion": "classic-v1",
+    "status": "ready",
+    "memeLaunchStatus": "lifecycle-pending",
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "ethCreatorFeeHookFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
+    "ethCreatorFeeHook": "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc",
+    "memeLaunch": "0x51d702731db281EE223904A4663E05BfCA26C775",
     "platformFeeHookFactory": null,
     "boundedDynamicFeeHookFactory": null,
-    "lockedPositionFeeForwarderFactory": null,
+    "lockedPositionFeeForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
     "directLiquidityLauncher": null,
     "runtimeCodeHashes": {
-      "ethCreatorFeeHookFactory": null,
-      "ethCreatorFeeHook": null,
-      "memeLaunch": null,
+      "ethCreatorFeeHookFactory": "0x3014de1f275dc60ae289f7a3a8ab038fdf76929aff19e0efdb19138e4ce8e0d5",
+      "ethCreatorFeeHook": "0x60fd96af952730792036d43d806046675817a5a2de609d87c06203a8d6037650",
+      "memeLaunch": "0xa459ee6574d8bbd40ddcf9737dc5d1063adb3abbc11d9f367350c7f2a3cf738b",
       "platformFeeHookFactory": null,
       "boundedDynamicFeeHookFactory": null,
-      "lockedPositionFeeForwarderFactory": null,
+      "lockedPositionFeeForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2",
       "directLiquidityLauncher": null
     },
-    "blocker": "Fund the approved deployer after a fresh gas review, freeze the exact release, complete production indexing and monitoring, then obtain explicit owner approval for the final gas ceiling and four-transaction broadcast"
+    "deploymentTransactions": {
+      "ethCreatorFeeHookFactory": "0xd97d115f5e37c57ebc0b3dcbd0de4102b4adcfb722094c98706bb90e6250d64e",
+      "ethCreatorFeeHook": "0x124076f940e897dfeea6f6a355c4eaf864efb8faae345d51636d73a1ba3c1dc0",
+      "memeLaunch": "0x4d55e0ccfcbb9f450ab57b3460ac5a0950226c92fcaae4ec6ba6da7a888a30ae",
+      "lockedPositionFeeForwarderFactory": "0x23077b93bd1bb68d827b26179d7db98bc7f34c1a1ba8c277d35f93e5e2a473e4"
+    },
+    "deploymentBlocks": {
+      "ethCreatorFeeHookFactory": 25622038,
+      "ethCreatorFeeHook": 25622043,
+      "memeLaunch": 25622048,
+      "lockedPositionFeeForwarderFactory": 25622031
+    },
+    "sourceVerification": {
+      "status": "verified",
+      "provider": "Sourcify",
+      "checkedAt": "2026-07-27",
+      "contracts": {
+        "ethCreatorFeeHookFactory": "match",
+        "ethCreatorFeeHook": "match",
+        "memeLaunch": "match",
+        "lockedPositionFeeForwarderFactory": "match"
+      }
+    },
+    "lifecycleEvidence": {
+      "status": "pending-current-release",
+      "releaseEligible": false,
+      "minimumInitialBuyWei": "600000000000000"
+    },
+    "blocker": "Mainnet canary lifecycle verification is pending"
   },
   "rehearsal": {
     "chainId": 11155111,
+    "releaseVersion": "classic-v1",
     "status": "ready",
     "memeLaunchStatus": "ready",
     "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
