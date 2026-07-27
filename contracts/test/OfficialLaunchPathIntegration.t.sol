@@ -399,7 +399,7 @@ contract LaunchPathInitializerMock is ILBPInitializer {
                 description: "Integration fixture for the verified Launcher path.",
                 website: "",
                 image: "",
-                xProofTweetId: 0
+                extraData: bytes("")
             });
 
             bytes[] memory calls = new bytes[](2);

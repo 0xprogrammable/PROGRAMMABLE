@@ -1,53 +1,44 @@
-# Function surface
-
-Generated from:
-
-```sh
-slither . --print function-summary --filter-paths 'lib|test|script' --exclude-dependencies
-```
+# Meme Launch V1 function surface
 
 ```mermaid
 flowchart LR
-    Caller[Permissionless caller]
-    RecordedCreator[Factory recorded token creator]
-    PredictToken[predictTokenAddress]
-    PredictPosition[predictPositionRecipient]
-    PredictExistingPosition[predictExistingPositionRecipient]
-    Launch[launch payable and nonReentrant]
-    LaunchExisting[launchExistingUERC20 payable and nonReentrant]
-    Validate[_validateLaunch]
-    ValidateExisting[_validateExistingUERC20]
-    PullExisting[_pullTokenExactly]
-    ReuseHook[_deployOrReuseHook]
-    ReuseForwarder[_deployOrReusePositionRecipient]
-    CreateToken[_createToken]
-    Mint[_mintLockedPosition]
-    Record[_recordLaunch]
-    RecordExisting[_recordExistingLaunch]
+    Caller["Any creator"]
+    PredictToken["predictTokenAddress"]
+    PredictPosition["predictPositionRecipient"]
+    Launch["launch, payable Dev Buy >= 0.0006 ETH and nonReentrant"]
+    Validate["_validateLaunch"]
+    DeployRecipient["_deployOrReusePositionRecipient"]
+    CreateToken["_createToken"]
+    Register["feeHook.registerPool"]
+    Initialize["PoolManager.initialize"]
+    Mint["PositionManager.modifyLiquidities"]
+    InitialBuy["PoolManager.unlock and swap"]
+    Record["_recordLaunch"]
 
     Caller --> PredictToken
     Caller --> PredictPosition
-    Caller --> PredictExistingPosition
     Caller --> Launch
-    RecordedCreator --> LaunchExisting
     Launch --> Validate
-    Launch --> ReuseHook
-    Launch --> ReuseForwarder
+    Launch --> DeployRecipient
     Launch --> CreateToken
+    Launch --> Register
+    Launch --> Initialize
     Launch --> Mint
+    Launch --> InitialBuy
     Launch --> Record
-    LaunchExisting --> ValidateExisting
-    LaunchExisting --> PullExisting
-    LaunchExisting --> ReuseHook
-    LaunchExisting --> ReuseForwarder
-    LaunchExisting --> Mint
-    LaunchExisting --> RecordExisting
 ```
 
-`DirectLiquidityLauncherV1` has five explicit external entry points. The three prediction methods are read-only. `launch` and `launchExistingUERC20` are the two state-changing entry points and both use OpenZeppelin’s transient reentrancy guard. They write only the token-to-launch-hash record after all external composition calls succeed.
+`MemeLaunchV1` has two read-only prediction methods, one read-only PoolKey method and one state-changing launch method.
+The launch accepts a creator-selected Dev Buy of at least 0.0006 ETH and is protected by OpenZeppelin’s transient
+reentrancy guard. Its `unlockCallback` is PoolManager-gated, settles the exact selected native delta and sends the
+purchased tokens directly to the creator. It writes only the token launch hash
+after every external composition call succeeds.
 
-Slither reported a maximum cyclomatic complexity of 4; no Launcher function reached the review threshold of 11. The direct paths have no owner, administrator, arbitrary-call entry point, delegatecall or upgrade entry point.
+`EthCreatorFeeHookV1` exposes registration, fee quotes and claims. Registration is creator-bound. Standard claims are
+permissionless with fixed recipients. Redirected claims require the recorded recipient. Hook callbacks and the unlock
+callback are PoolManager-gated.
 
-The contract makes scoped calls only to its immutable PoolManager, PositionManager, UERC20Factory and Launcher factories. The deployment script pins the official dependency bytecode before deploying the contract.
+`EthCreatorFeeHookFactoryV1.deploy` is permissionless but succeeds only for a CREATE2 address with the exact callback
+mask. The permanent-position factory is likewise permissionless and fixes the zero operator and maximum timelock.
 
-`BoundedDynamicFeeHookV1` adds no administrative entry point. Its public state-changing surface is permissionless fee forwarding to the immutable treasury; pool initialization and swap updates are callback-gated by `BaseHook.onlyPoolManager`. `feeForTickMovement` and `poolKey` are read-only. `BoundedDynamicFeeHookFactoryV1.deploy` is permissionless and accepts only a CREATE2 address with the exact callback mask.
+The public contract surface has no owner, upgrade, pause, delegatecall or arbitrary external-call entry point.

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "status": "simulation-only",
+  "chainId": 1,
+  "checkedAt": "2026-07-27",
+  "releaseEligible": false,
+  "deployed": false,
+  "broadcastApproved": false,
+  "independentWalletStateRpcCount": 2,
+  "independentDependencyCodeRpcCount": 2,
+  "snapshotBlock": 25621557,
+  "deployer": {
+    "address": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "ownerApproved": true,
+    "accountType": "eoa",
+    "latestNonce": 0,
+    "pendingNonce": 0,
+    "balanceWei": "0",
+    "code": "0x",
+    "fundingReady": false
+  },
+  "treasury": {
+    "address": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "ownerApproved": true,
+    "immutableInRelease": true
+  },
+  "simulation": {
+    "script": "contracts/script/DeployMainnetMemeInfrastructureV1.s.sol",
+    "startingNonce": 0,
+    "transactionCount": 4,
+    "allTransactionsZeroValue": true,
+    "sourceCommitment": "0x34dba63453f487b6bd3365da526326a0c3f8c7f6c7c1d96756f1dc993623cea3",
+    "minimumInitialBuyWei": "600000000000000",
+    "hookSalt": "0x000000000000000000000000000000000000000000000000000000000000e1a3",
+    "requiredHookFlags": "8396",
+    "predictedAddressesVacant": true,
+    "totalGasLimit": "13970669",
+    "estimatedGasPriceWei": "82771242",
+    "estimatedRequiredWei": "1156369624700898",
+    "predictedAddresses": {
+      "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
+      "hookFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
+      "feeHook": "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc",
+      "memeLauncher": "0x51d702731db281EE223904A4663E05BfCA26C775"
+    },
+    "transactions": [
+      {
+        "nonce": 0,
+        "kind": "create",
+        "label": "positionForwarderFactory",
+        "to": null,
+        "deployedAddress": "0x291a9ff1059d225d02B1659430804486404dB507",
+        "valueWei": "0",
+        "gasLimit": "1460088",
+        "inputHash": "0x89cb54539d29d133369969d5e7de786a0b53d74de739fe3681c5f73432ce2487"
+      },
+      {
+        "nonce": 1,
+        "kind": "create",
+        "label": "hookFactory",
+        "to": null,
+        "deployedAddress": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
+        "valueWei": "0",
+        "gasLimit": "3833758",
+        "inputHash": "0xd6973bf2aae7f3461d6d627b893bedb93cc1df601f5a3f8246d0ff0067ea3762"
+      },
+      {
+        "nonce": 2,
+        "kind": "call",
+        "label": "feeHook",
+        "to": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
+        "deployedAddress": "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc",
+        "valueWei": "0",
+        "gasLimit": "3144095",
+        "inputHash": "0xf71e1f979b4204d99acaec66b974350eb04c695f29257c4a757a9bad59960797"
+      },
+      {
+        "nonce": 3,
+        "kind": "create",
+        "label": "memeLauncher",
+        "to": null,
+        "deployedAddress": "0x51d702731db281EE223904A4663E05BfCA26C775",
+        "valueWei": "0",
+        "gasLimit": "5532728",
+        "inputHash": "0x5cd8feacfaed787484100d58668d904cfbf2016a46402d9dc155d37d180f68cd"
+      }
+    ]
+  },
+  "officialDependencyRuntimeHashes": {
+    "status": "verified",
+    "poolManager": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+    "positionManager": "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b",
+    "stateView": "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878",
+    "v4Quoter": "0x06de58fa119c5deaa7a667fb92d3894e25d9160e62fb82c8d86d43b47eefe441",
+    "uerc20Factory": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb",
+    "permit2": "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131",
+    "universalRouter": "0x41ccd905c8e4de29ce9536ff49233b79e3085a0987d490664e703ee1e7b1dc49"
+  },
+  "blockers": [
+    "The approved deployer has zero ETH",
+    "The working tree is not frozen to a release commit",
+    "Production RPC and monitoring infrastructure is not provisioned",
+    "The final gas ceiling and four-transaction broadcast require explicit owner approval"
+  ]
+}

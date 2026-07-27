@@ -198,7 +198,7 @@ contract DynamicFeeAuctionLaunchPathIntegrationTest is Deployers {
             description: "Integration fixture for the bounded dynamic fee auction path.",
             website: "",
             image: "",
-            xProofTweetId: 0
+            extraData: bytes("")
         });
 
         bytes[] memory calls = new bytes[](2);
