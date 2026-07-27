@@ -96,7 +96,8 @@ enabled and fails closed on runtime, lifecycle, RPC or simulation drift.
 - [x] Verify that the allowed production origin restores an existing Privy wallet session and opens account management
 - [x] Complete a fresh provider-backed disconnect and reconnect rehearsal on `programmable.family`
 - [x] Confirm the current Privy free plan supports the release's wallet and email login without a paid WhatsApp-login upgrade
-- [ ] Complete the final transaction-review rehearsal after public preparation is explicitly enabled
+- [x] Complete the final exact Mainnet preflight after public preparation is enabled; the live production call, minimum Dev Buy and runtime checks simulate successfully
+- [ ] Reach the final MetaMask review modal after reconnecting the approved wallet; the current controlled-browser attempt stops when the MetaMask background session disconnects, before any signature or broadcast
 - [x] Confirm that the launch review and release notes describe the contracts as unaudited
 
 ### 5. Release on mainnet

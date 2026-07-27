@@ -22,7 +22,7 @@ Classic is for a creator who can define a token and fee but should not need to w
 
 Classic creates a new one-billion-supply token through the official Uniswap UERC20Factory. The complete supply enters a one-sided Uniswap v4 position in the same atomic transaction. The position NFT and rounding dust are sent to an official `PositionFeesForwarder` configured with the zero operator and maximum-block timelock.
 
-The creator deposits no ETH, receives no token allocation and pays no protocol launch fee. The wallet pays Ethereum gas.
+The creator provides no liquidity and receives no issuance allocation. The launch includes a creator-selected Dev Buy of at least 0.0006 ETH; the purchased tokens go directly to the creator. There is no protocol launch fee, and the wallet separately pays Ethereum gas.
 
 ### Creator inputs
 
@@ -97,28 +97,18 @@ Trading preparation remains disabled while no deployment is ready.
 
 The read model starts at the verified launcher deployment block and uses a confirmation-delayed snapshot. It pairs `MemeTokenLaunched` with `MemeLiquidityConfigured`, rejects unpaired or foreign events, and accepts `NativeSwapFeesAccrued` only for canonical pool IDs. Token metadata comes from the launched UERC20. Price and active liquidity come from the official StateView at the same snapshot block.
 
-This is a read-through model, not a production-grade persistent indexer. Production availability, reconciliation and reorg handling remain release gates.
+Production replays confirmed chain data through two authenticated RPC providers and requires agreement on the snapshot block, runtime code, canonical events, fee accounting and hydrated token state. The integrity-checked private snapshot is persisted in Vercel Blob and refreshed every five minutes. The public health endpoint fails on RPC disagreement or a stale snapshot. Full replay is reorg-safe at the current event volume; incremental checkpoints are required before replay approaches the function-duration budget.
 
 ## Release status
 
-- Ethereum mainnet: `not-deployed`
-- Sepolia rehearsal: `requires-redeploy` after the mandatory initial-buy source change
+- Ethereum mainnet: Classic V2 `ready`
+- Sepolia rehearsal: Classic V2 `ready`
 - External contract audit: none
 - Public launch products: Classic only
 
-The source-verified Sepolia launcher, hook and hook factory and their signed lifecycle predate the mandatory initial buy.
-Two independent RPCs reconcile that historical release, but Sepolia is now `requires-redeploy` and transaction
-preparation remains disabled. The still older lifecycle with the legacy fourth metadata field remains separately marked
-historical and cannot enable transaction preparation either.
+Mainnet Classic V2 is deployed, source-matched and backed by a signed canary lifecycle covering launch, atomic Dev Buy, a separate Universal Router buy, Permit2 authorization, sell and both native ETH fee claims. Two independent RPCs reconcile the receipts, immutable configuration, runtime hashes, canonical position, balances and fee split. Public launch and trading preparation are enabled and fail closed on manifest drift, runtime drift, RPC disagreement, an unhealthy operations snapshot or an exact-call simulation failure.
 
-Before Mainnet can be enabled, the exact current release needs:
-
-1. A frozen commit with passing unit, fuzz, invariant, fork, static-analysis and remote CI evidence
-2. A provider-backed wallet and public buy and sell rehearsal against the ready Sepolia deployment after that commit is frozen
-3. Production indexing, reconciliation, monitoring and incident procedures
-4. A funded owner-approved deployer and reviewed maximum fee ceiling
-5. Fresh Mainnet state checks and an exact read-only four-transaction simulation
-6. Explicit broadcast approval, verified Mainnet source and a monitored canary
+Sepolia Classic V2 is source-verified and backed by the signed Test2 lifecycle using the current UERC20 v2 dynamic-bytes metadata ABI. Earlier V1 and invalid-metadata lifecycles remain historical and cannot enable preparation.
 
 There has been no external smart-contract audit or public contest. Product copy may describe exact mechanics, but it must not describe the system or a launched token as audited, safe, unruggable, scam proof or compatible with every scanner.
 

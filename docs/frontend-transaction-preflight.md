@@ -6,7 +6,7 @@ The browser never chooses a contract address or supplies arbitrary calldata. It 
 
 1. Require a token name, symbol and description within the fixed limits
 2. Require one total swap fee from 1% through 10% in whole percentage points
-3. Fix the supply at 1,000,000,000 tokens and the launch value at zero
+3. Fix the supply at 1,000,000,000 tokens and require a creator-selected Dev Buy of at least 0.0006 ETH
 4. Validate optional website, image, X and Telegram values as bounded HTTPS URLs
 5. Encode official UERC20 v2.0.0 metadata as `(string description,string website,string image,bytes extraData)`
 6. Encode no social links as `0x`, or versioned UTF-8 JSON `{v:1,x?,telegram?}` as `extraData`
@@ -49,19 +49,19 @@ For each exact-input trade, the server:
 
 A buy sends native ETH as the router call value. A sell returns, when needed, a token approval to pinned Permit2 and then a Permit2 allowance for the pinned Universal Router before returning the swap transaction.
 
-These builders define the direct trading path. They do not make trading live while the deployment gate is closed.
+These builders define the direct trading path. They remain fail closed whenever the selected deployment gate is not ready.
 
 ## Deployment gate
 
 `contracts/config/app-deployments.v1.json` is the release switch.
 
-- Mainnet is `not-deployed`
-- Sepolia is `ready` for an explicitly configured rehearsal build
+- Mainnet Classic V2 is `ready`
+- Sepolia Classic V2 is `ready` for an explicitly configured rehearsal build
 
-The current Sepolia record contains exact addresses, deployment blocks and runtime code hashes for the source-verified
-atomic Dev Buy release. Its five signed lifecycle transactions are reconciled across two independent RPCs. The app
-uses this record only when both server and client select the `rehearsal` environment; production continues to fail
-closed against the undeployed Mainnet manifest. Older lifecycles remain separately historical and not release eligible.
+The Mainnet record contains exact addresses, deployment blocks, runtime hashes, source-verification state and the
+two-RPC-reconciled canary lifecycle for the current Classic V2 release. The Sepolia record contains the equivalent
+source-verified atomic Dev Buy release and signed Test2 lifecycle. The app uses Sepolia only when both server and client
+select the `rehearsal` environment. Older lifecycles remain separately historical and are not release eligible.
 
 ## Read model
 
@@ -75,4 +75,7 @@ Explore and Profile read through the verified release manifest:
 6. Read pool price and active liquidity from the official StateView at that same block
 7. Verify runtime code hashes for the launcher, hook and StateView
 
-The model is confirmation-delayed and read-through. A durable production indexer, reconciliation and availability work remain Mainnet gates.
+Production persists an integrity-checked private snapshot after full confirmed replay and agreement between two
+authenticated RPC providers. The five-minute refresh is reorg-aware and fails health checks on RPC disagreement or a
+snapshot older than fifteen minutes. Incremental checkpoints remain a scale requirement before full replay approaches
+the function-duration budget.
