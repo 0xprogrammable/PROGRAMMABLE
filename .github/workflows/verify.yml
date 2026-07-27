@@ -42,8 +42,6 @@ jobs:
     name: Contracts
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      ETHEREUM_RPC_URL: https://ethereum-rpc.publicnode.com
 
     steps:
       - name: Check out repository
@@ -71,7 +69,7 @@ jobs:
           pipx install slither-analyzer==0.11.5
 
       - name: Verify contracts
-        run: npm run contracts:verify
+        run: npm run contracts:verify:ci
 
       - name: Check official Uniswap deployments
         run: npm run contracts:official-deployments
