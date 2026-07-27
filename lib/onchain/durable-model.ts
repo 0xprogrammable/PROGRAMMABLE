@@ -103,7 +103,10 @@ export async function readDurableExploreModel(
   deployment: ReadyOnchainDeployment,
   maxAgeMs = DEFAULT_MAX_AGE_MS,
 ): Promise<DurableExploreRead> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  const blobToken =
+    process.env.OPS_BLOB_READ_WRITE_TOKEN ??
+    process.env.BLOB_READ_WRITE_TOKEN;
+  if (!blobToken) {
     return {
       status: "unavailable",
       reason: "not-configured",
@@ -115,6 +118,7 @@ export async function readDurableExploreModel(
     const { get } = await import("@vercel/blob");
     const result = await get(DURABLE_INDEX_PATH, {
       access: "private",
+      token: blobToken,
       useCache: false,
     });
     if (!result || result.statusCode !== 200 || !result.stream) {
@@ -145,7 +149,10 @@ export async function writeDurableExploreModel(
   if (model.status !== "ready") {
     throw new Error("Only a verified ready model can be persisted");
   }
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  const blobToken =
+    process.env.OPS_BLOB_READ_WRITE_TOKEN ??
+    process.env.BLOB_READ_WRITE_TOKEN;
+  if (!blobToken) {
     throw new Error("Persistent index storage is not configured");
   }
 
@@ -187,6 +194,7 @@ export async function writeDurableExploreModel(
     addRandomSuffix: false,
     allowOverwrite: true,
     cacheControlMaxAge: 60,
+    token: blobToken,
   });
   return {
     updated: true,
@@ -194,4 +202,3 @@ export async function writeDurableExploreModel(
     tokenCount: model.tokens.length,
   };
 }
-

@@ -973,10 +973,10 @@ export function TokenDetailView({ address }: { address: string }) {
   const message =
     activeState.phase === "loading"
       ? "Loading token"
-      : activeState.phase === "not-found"
+          : activeState.phase === "not-found"
           ? "This token was not launched through Programmable"
           : activeState.phase === "not-deployed"
-            ? "Token launches are not available yet"
+            ? "No verified launch data is available"
             : activeState.message;
 
   return (

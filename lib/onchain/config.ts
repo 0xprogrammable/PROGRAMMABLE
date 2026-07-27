@@ -214,3 +214,20 @@ export function getOperationalOnchainDeployment(
   }
   return deployment;
 }
+
+export function getPublicOnchainDeployment(
+  environment = selectedDeploymentEnvironment(),
+): OnchainDeployment {
+  try {
+    return getOperationalOnchainDeployment(environment);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message ===
+        "Production operations require two distinct authenticated RPC URLs"
+    ) {
+      return getOnchainDeployment(environment);
+    }
+    throw error;
+  }
+}

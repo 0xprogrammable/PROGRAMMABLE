@@ -1,6 +1,6 @@
 # Classic mainnet readiness
 
-Current state: **Sepolia V2 verified; Mainnet V2 monitored; public release blocked by owner gates**.
+Current state: **Sepolia V2 verified; Mainnet V2 monitored; public release blocked by two operational gates**.
 
 | Environment | Manifest state | Release meaning |
 | --- | --- | --- |
@@ -59,9 +59,9 @@ The older lifecycle that used the legacy fourth metadata field remains separatel
     has zero critical, high or moderate findings; 19 low-severity `ethers` v5/`elliptic` findings remain without a
     compatible upstream fix
 
-## Owner decisions
+## Remaining owner decisions
 
-- Privy billing approval and later public enablement
+- Privy billing approval
 - Incident-response and public-communication owners
 
 ## Frontend gate
@@ -70,7 +70,8 @@ The public form always normalizes to Classic. The server accepts no target addre
 
 Launch and trading preparation remain disabled while the selected release lacks current lifecycle evidence. Sepolia V2
 preparation is enabled only when the application is explicitly configured for that verified rehearsal environment.
-Mainnet V2 lifecycle evidence and production operations are current, but the production manifest deliberately remains
-fail-closed pending named incident ownership, Privy production billing approval and final owner release approval.
+Mainnet V2 lifecycle evidence and production operations are current. The owner approved the Classic release on July 27,
+2026, but transaction preparation deliberately remains fail-closed pending named incident ownership and Privy
+production billing approval.
 
 The absence of an external audit leaves additional residual smart-contract risk. Product and release copy must not describe the system or any launched token as audited, safe, unruggable, scam proof or guaranteed compatible with third-party scanners.

@@ -487,8 +487,8 @@ assert(
 );
 assert(
   appDeployments.production.blocker ===
-    "Public launch remains disabled pending named incident ownership, Privy production billing approval and final owner release approval",
-  "Verified Mainnet Classic V2 must retain the remaining owner-release blocker",
+    "Public launch remains disabled pending named incident ownership and Privy production billing approval",
+  "Verified Mainnet Classic V2 must retain the remaining operational blockers",
 );
 const historicalMainnetV1Deployment =
   appDeployments.production.historicalV1Deployment;

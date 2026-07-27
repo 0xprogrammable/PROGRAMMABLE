@@ -473,7 +473,7 @@ export function ExploreView() {
     if (state.payload.status === "not-deployed") {
       return (
         <div className="token-empty">
-          <p>Token launches are not available yet</p>
+          <p>No verified tokens yet</p>
         </div>
       );
     }

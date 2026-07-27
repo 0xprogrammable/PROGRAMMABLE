@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   buildUniswapTokenList,
-  getOnchainDeployment,
+  getPublicOnchainDeployment,
   readExploreModel,
 } from "../../../../../lib/onchain";
 
@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const deployment = getOnchainDeployment();
+    const deployment = getPublicOnchainDeployment();
     const model = await readExploreModel(deployment);
     if (model.tokens.length === 0) {
       return NextResponse.json(

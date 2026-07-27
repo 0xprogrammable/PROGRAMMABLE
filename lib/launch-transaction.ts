@@ -15,12 +15,17 @@ import {
   type LaunchDraft,
 } from "./launch";
 import {
+  characterLength,
+  hasUnsafeDisplayCharacters,
   MAX_METADATA_URL_BYTES,
   MAX_SOCIAL_EXTRA_DATA_BYTES,
   MAX_SOCIAL_URL_BYTES,
   MAX_TOKEN_DESCRIPTION_BYTES,
   MAX_TOKEN_NAME_BYTES,
+  MAX_TOKEN_NAME_CHARACTERS,
   MAX_TOKEN_SYMBOL_BYTES,
+  MAX_TOKEN_SYMBOL_CHARACTERS,
+  isValidTokenSymbol,
   utf8ByteLength,
 } from "./metadata-policy";
 import type { PreparedTransaction } from "./prepared-transaction";
@@ -32,7 +37,10 @@ export {
   MAX_SOCIAL_URL_BYTES,
   MAX_TOKEN_DESCRIPTION_BYTES,
   MAX_TOKEN_NAME_BYTES,
+  MAX_TOKEN_NAME_CHARACTERS,
   MAX_TOKEN_SYMBOL_BYTES,
+  MAX_TOKEN_SYMBOL_CHARACTERS,
+  characterLength,
   utf8ByteLength,
 } from "./metadata-policy";
 
@@ -102,18 +110,25 @@ export class LaunchInputError extends Error {
   }
 }
 
-function validateOptionalHttpsUrl(
+function addHttpsProtocol(value: string) {
+  if (/^http:\/\//i.test(value)) {
+    return `https://${value.slice("http://".length)}`;
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return value;
+  return `https://${value}`;
+}
+
+export function normalizeOptionalHttpsUrl(
   value: string,
   label: string,
   maximumBytes: number,
 ) {
-  const normalized = value.trim();
-  if (!normalized) return "";
+  const input = value.trim();
+  if (!input) return "";
+  const normalized = addHttpsProtocol(input);
 
   if (utf8ByteLength(normalized) > maximumBytes) {
-    throw new LaunchInputError(
-      `Keep ${label} within ${maximumBytes} bytes`,
-    );
+    throw new LaunchInputError(`Shorten ${label}`);
   }
 
   let parsed: URL;
@@ -133,14 +148,23 @@ function validateOptionalHttpsUrl(
   return normalized;
 }
 
-function validateOptionalSocialUrl(
+export function normalizeOptionalSocialUrl(
   value: string,
   label: string,
   maximumBytes: number,
   kind: "x" | "telegram",
 ) {
-  const normalized = validateOptionalHttpsUrl(
-    value,
+  const input = value.trim();
+  if (!input) return "";
+  const handle = input.startsWith("@") ? input.slice(1) : input;
+  const expanded =
+    kind === "x" && /^[A-Za-z0-9_]{1,15}$/.test(handle)
+      ? `https://x.com/${handle}`
+      : kind === "telegram" && /^[A-Za-z0-9_]{5,32}$/.test(handle)
+        ? `https://t.me/${handle}`
+        : input;
+  const normalized = normalizeOptionalHttpsUrl(
+    expanded,
     label,
     maximumBytes,
   );
@@ -170,23 +194,23 @@ function validateOptionalSocialUrl(
 
 function getValidatedMetadata(draft: LaunchDraft) {
   return {
-    website: validateOptionalHttpsUrl(
+    website: normalizeOptionalHttpsUrl(
       draft.tokenWebsite,
       "the website",
       MAX_METADATA_URL_BYTES,
     ),
-    image: validateOptionalHttpsUrl(
+    image: normalizeOptionalHttpsUrl(
       draft.tokenImage,
       "the token image URL",
       MAX_METADATA_URL_BYTES,
     ),
-    x: validateOptionalSocialUrl(
+    x: normalizeOptionalSocialUrl(
       draft.tokenX,
       "the X link",
       MAX_SOCIAL_URL_BYTES,
       "x",
     ),
-    telegram: validateOptionalSocialUrl(
+    telegram: normalizeOptionalSocialUrl(
       draft.tokenTelegram,
       "the Telegram link",
       MAX_SOCIAL_URL_BYTES,
@@ -231,23 +255,39 @@ export function validateMemeLaunchDraft(draft: LaunchDraft) {
   if (!draft.tokenSymbol.trim()) {
     throw new LaunchInputError("Enter a token symbol");
   }
-  if (utf8ByteLength(draft.tokenName.trim()) > MAX_TOKEN_NAME_BYTES) {
+  const tokenName = draft.tokenName.trim();
+  const tokenSymbol = draft.tokenSymbol.trim();
+  if (characterLength(tokenName) > MAX_TOKEN_NAME_CHARACTERS) {
     throw new LaunchInputError(
-      `Keep the token name within ${MAX_TOKEN_NAME_BYTES} UTF-8 bytes`,
+      `Keep the token name within ${MAX_TOKEN_NAME_CHARACTERS} characters`,
     );
   }
-  if (utf8ByteLength(draft.tokenSymbol.trim()) > MAX_TOKEN_SYMBOL_BYTES) {
+  if (utf8ByteLength(tokenName) > MAX_TOKEN_NAME_BYTES) {
+    throw new LaunchInputError("Shorten the token name");
+  }
+  if (hasUnsafeDisplayCharacters(tokenName)) {
     throw new LaunchInputError(
-      `Keep the token symbol within ${MAX_TOKEN_SYMBOL_BYTES} UTF-8 bytes`,
+      "Remove line breaks or invisible characters from the token name",
+    );
+  }
+  if (characterLength(tokenSymbol) > MAX_TOKEN_SYMBOL_CHARACTERS) {
+    throw new LaunchInputError(
+      `Keep the token symbol within ${MAX_TOKEN_SYMBOL_CHARACTERS} characters`,
+    );
+  }
+  if (utf8ByteLength(tokenSymbol) > MAX_TOKEN_SYMBOL_BYTES) {
+    throw new LaunchInputError("Shorten the token symbol");
+  }
+  if (!isValidTokenSymbol(tokenSymbol)) {
+    throw new LaunchInputError(
+      "Use only uppercase letters and numbers in the token symbol",
     );
   }
   if (
     utf8ByteLength(draft.tokenDescription.trim()) >
     MAX_TOKEN_DESCRIPTION_BYTES
   ) {
-    throw new LaunchInputError(
-      `Keep the token description within ${MAX_TOKEN_DESCRIPTION_BYTES} UTF-8 bytes`,
-    );
+    throw new LaunchInputError("Shorten the token description");
   }
 
   getValidatedMetadata(draft);

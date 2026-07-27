@@ -93,19 +93,34 @@ textarea {
 }
 
 .scramble-text {
-  display: inline-block;
+  display: inline;
   max-width: 100%;
-  position: relative;
   vertical-align: baseline;
 }
 
-.scramble-text-measure {
+.scramble-text-flow {
+  display: inline;
+}
+
+.scramble-space {
+  white-space: pre;
+}
+
+.scramble-word {
+  display: inline-block;
+  position: relative;
+  white-space: nowrap;
+}
+
+.scramble-word-measure {
   visibility: hidden;
 }
 
-.scramble-text-layer {
+.scramble-word-layer {
   inset: 0;
+  overflow: hidden;
   position: absolute;
+  white-space: nowrap;
 }
 
 .sr-only {
@@ -1040,7 +1055,7 @@ textarea {
 .launch-workspace {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
   height: min(650px, calc(100svh - 214px));
   margin: 18px auto 0;
   max-width: 940px;
@@ -1049,36 +1064,45 @@ textarea {
 }
 
 .step-navigation {
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  align-self: center;
   display: grid;
   flex: none;
-  gap: 3px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   list-style: none;
   margin: 0;
-  overflow: hidden;
-  padding: 4px;
+  max-width: 620px;
+  padding: 0;
+  width: 100%;
 }
 
 .step-navigation li {
   min-width: 0;
+  position: relative;
+}
+
+.step-navigation li:not(:last-child)::after {
+  background: var(--border);
+  content: "";
+  height: 1px;
+  left: calc(50% + 22px);
+  position: absolute;
+  right: calc(-50% + 22px);
+  top: 14px;
 }
 
 .step-navigation button {
   align-items: center;
   background: transparent;
-  border-radius: 14px;
   color: var(--dim);
   cursor: default;
   display: flex;
-  font-size: 14px;
-  font-weight: 560;
-  gap: 9px;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 590;
+  gap: 6px;
   justify-content: center;
-  min-height: 50px;
-  padding: 0 12px;
+  min-height: 48px;
+  padding: 0 8px;
   text-align: center;
   width: 100%;
 }
@@ -1089,19 +1113,21 @@ textarea {
 
 .step-navigation button > span {
   align-items: center;
-  border: 1px solid var(--border);
+  background: #f8f5f7;
+  border: 1px solid var(--border-strong);
   border-radius: 50%;
   display: inline-flex;
   flex: none;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
-  height: 24px;
+  font-size: 9px;
+  height: 28px;
   justify-content: center;
-  width: 24px;
+  position: relative;
+  width: 28px;
+  z-index: 1;
 }
 
 .step-navigation li.current button {
-  background: rgba(252, 240, 248, 0.94);
   color: var(--text);
 }
 
@@ -1119,6 +1145,10 @@ textarea {
   background: var(--accent-wash);
   border-color: rgba(232, 121, 190, 0.3);
   color: var(--accent-strong);
+}
+
+.step-navigation li.complete::after {
+  background: rgba(232, 121, 190, 0.38);
 }
 
 .launch-layout {
@@ -1148,9 +1178,9 @@ textarea {
 }
 
 .form-section-heading {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 22px;
-  text-align: center;
+  margin: 0 auto;
+  max-width: 760px;
+  text-align: left;
 }
 
 .form-section-heading h2 {
@@ -1158,7 +1188,6 @@ textarea {
   font-weight: 570;
   letter-spacing: -0.02em;
   line-height: 1.1;
-  margin-top: 7px;
 }
 
 .form-section-heading p:last-child {
@@ -1529,13 +1558,132 @@ textarea {
 }
 
 .standard-token-fields {
-  margin: 24px auto 0;
+  margin: 20px auto 0;
   max-width: 760px;
 }
 
 .standard-token-fields .field textarea {
   min-height: 96px;
   resize: none;
+}
+
+.token-project-details {
+  margin-top: 20px;
+  padding-top: 18px;
+}
+
+.token-project-grid {
+  align-items: start;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 190px minmax(0, 1fr);
+  margin-top: 12px;
+}
+
+.token-image-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.token-image-field > span {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 580;
+  margin-bottom: 8px;
+}
+
+.token-image-upload {
+  align-items: stretch;
+  aspect-ratio: 1;
+  background: var(--surface-raised);
+  border: 1px dashed var(--border-strong);
+  border-radius: 17px;
+  display: flex;
+  justify-content: stretch;
+  overflow: hidden;
+  padding: 0;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 140ms var(--ease-out);
+  width: 100%;
+}
+
+.token-image-upload:active {
+  transform: scale(0.985);
+}
+
+.token-image-upload.has-image {
+  border-style: solid;
+}
+
+.token-image-placeholder {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  padding: 18px;
+}
+
+.token-image-placeholder strong {
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 620;
+  margin-top: 9px;
+}
+
+.token-image-placeholder small {
+  color: var(--dim);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.token-image-preview {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  display: block;
+  flex: 1;
+}
+
+.token-image-meta {
+  color: var(--dim);
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  gap: 6px;
+  line-height: 1.4;
+  margin-top: 7px;
+}
+
+.token-image-meta > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.token-image-meta button {
+  align-items: center;
+  background: transparent;
+  color: var(--text-soft);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 590;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.token-link-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.token-link-fields .field {
+  margin-top: 0;
 }
 
 .standard-policy-strip,
@@ -3260,7 +3408,8 @@ textarea {
 
   .launch-type-option:hover,
   .choice-row:hover,
-  .behavior-row:hover {
+  .behavior-row:hover,
+  .token-image-upload:hover {
     border-color: var(--border-strong);
   }
 
@@ -3792,10 +3941,9 @@ textarea {
   }
 
   .step-navigation {
-    border-radius: 18px;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding: 5px;
+    padding: 0;
   }
 
   .step-navigation button {
@@ -3803,14 +3951,14 @@ textarea {
     font-size: 10px;
     gap: 4px;
     justify-content: center;
-    min-height: 64px;
+    min-height: 54px;
     padding: 5px 2px;
     text-align: center;
   }
 
   .step-navigation button > span {
-    height: 23px;
-    width: 23px;
+    height: 26px;
+    width: 26px;
   }
 
   .launch-layout {
@@ -4057,6 +4205,19 @@ textarea {
 
   .two-column-fields {
     grid-template-columns: 1fr;
+  }
+
+  .token-project-grid {
+    gap: 18px;
+    grid-template-columns: 1fr;
+  }
+
+  .token-image-upload {
+    max-width: 180px;
+  }
+
+  .token-image-meta {
+    max-width: 240px;
   }
 
   .meme-fee-card {

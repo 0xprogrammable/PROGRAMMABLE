@@ -7,9 +7,11 @@ import {
   MAX_METADATA_URL_BYTES,
   MAX_SOCIAL_URL_BYTES,
   MAX_TOKEN_DESCRIPTION_BYTES,
-  MAX_TOKEN_NAME_BYTES,
-  MAX_TOKEN_SYMBOL_BYTES,
+  MAX_TOKEN_NAME_CHARACTERS,
+  MAX_TOKEN_SYMBOL_CHARACTERS,
   memeLaunchAbi,
+  normalizeOptionalHttpsUrl,
+  normalizeOptionalSocialUrl,
   validateMemeLaunchDraft,
 } from "../lib/launch-transaction";
 import { createEmptyDraft } from "../lib/launch";
@@ -116,12 +118,19 @@ describe("Classic launch calldata", () => {
     );
   });
 
-  it("rejects non-HTTPS and oversized metadata URLs", () => {
+  it("upgrades ordinary links and rejects unsupported or oversized URLs", () => {
     const draft = classicDraft();
 
+    expect(
+      normalizeOptionalHttpsUrl(
+        "http://example.com",
+        "the website",
+        MAX_METADATA_URL_BYTES,
+      ),
+    ).toBe("https://example.com");
     expect(() =>
       encodeMemeLaunch(
-        { ...draft, tokenWebsite: "http://example.com" },
+        { ...draft, tokenWebsite: "ftp://example.com" },
         draft.launchSalt as `0x${string}`,
       ),
     ).toThrow("complete HTTPS URL");
@@ -133,7 +142,7 @@ describe("Classic launch calldata", () => {
         },
         draft.launchSalt as `0x${string}`,
       ),
-    ).toThrow(`${MAX_METADATA_URL_BYTES} bytes`);
+    ).toThrow("Shorten the token image URL");
   });
 
   it("rejects social links that Explore would discard", () => {
@@ -171,7 +180,7 @@ describe("Classic launch calldata", () => {
         },
         draft.launchSalt as `0x${string}`,
       ),
-    ).toThrow(`${MAX_SOCIAL_URL_BYTES} bytes`);
+    ).toThrow("Shorten the X link");
   });
 
   it("rejects obsolete supply settings and invalid fee choices", () => {
@@ -214,13 +223,13 @@ describe("Classic launch calldata", () => {
     ).toBe(100);
   });
 
-  it("enforces the contract limits as UTF-8 bytes", () => {
+  it("keeps names and tickers within clean display limits", () => {
     const draft = classicDraft();
     expect(
       validateMemeLaunchDraft({
         ...draft,
-        tokenName: "n".repeat(MAX_TOKEN_NAME_BYTES),
-        tokenSymbol: "S".repeat(MAX_TOKEN_SYMBOL_BYTES),
+        tokenName: "n".repeat(MAX_TOKEN_NAME_CHARACTERS),
+        tokenSymbol: "S".repeat(MAX_TOKEN_SYMBOL_CHARACTERS),
         tokenDescription: "d".repeat(MAX_TOKEN_DESCRIPTION_BYTES),
       }),
     ).toBe(100);
@@ -228,15 +237,21 @@ describe("Classic launch calldata", () => {
     expect(() =>
       validateMemeLaunchDraft({
         ...draft,
-        tokenName: "é".repeat(MAX_TOKEN_NAME_BYTES / 2 + 1),
+        tokenName: "n".repeat(MAX_TOKEN_NAME_CHARACTERS + 1),
       }),
-    ).toThrow(`${MAX_TOKEN_NAME_BYTES} UTF-8 bytes`);
+    ).toThrow(`${MAX_TOKEN_NAME_CHARACTERS} characters`);
     expect(() =>
       validateMemeLaunchDraft({
         ...draft,
-        tokenSymbol: "🌷".repeat(MAX_TOKEN_SYMBOL_BYTES / 4 + 1),
+        tokenSymbol: "S".repeat(MAX_TOKEN_SYMBOL_CHARACTERS + 1),
       }),
-    ).toThrow(`${MAX_TOKEN_SYMBOL_BYTES} UTF-8 bytes`);
+    ).toThrow(`${MAX_TOKEN_SYMBOL_CHARACTERS} characters`);
+    expect(() =>
+      validateMemeLaunchDraft({
+        ...draft,
+        tokenSymbol: "FLOW-ER",
+      }),
+    ).toThrow("uppercase letters and numbers");
     expect(() =>
       validateMemeLaunchDraft({
         ...draft,
@@ -244,6 +259,40 @@ describe("Classic launch calldata", () => {
           MAX_TOKEN_DESCRIPTION_BYTES / 4 + 1,
         ),
       }),
-    ).toThrow(`${MAX_TOKEN_DESCRIPTION_BYTES} UTF-8 bytes`);
+    ).toThrow("Shorten the token description");
+  });
+
+  it("normalizes domains, handles and social post links", () => {
+    expect(
+      normalizeOptionalHttpsUrl(
+        "programmable.family",
+        "the website",
+        MAX_METADATA_URL_BYTES,
+      ),
+    ).toBe("https://programmable.family");
+    expect(
+      normalizeOptionalSocialUrl(
+        "@0xProgrammable",
+        "the X link",
+        MAX_SOCIAL_URL_BYTES,
+        "x",
+      ),
+    ).toBe("https://x.com/0xProgrammable");
+    expect(
+      normalizeOptionalSocialUrl(
+        "x.com/0xProgrammable/status/123",
+        "the X link",
+        MAX_SOCIAL_URL_BYTES,
+        "x",
+      ),
+    ).toBe("https://x.com/0xProgrammable/status/123");
+    expect(
+      normalizeOptionalSocialUrl(
+        "programmable_chat",
+        "the Telegram link",
+        MAX_SOCIAL_URL_BYTES,
+        "telegram",
+      ),
+    ).toBe("https://t.me/programmable_chat");
   });
 });

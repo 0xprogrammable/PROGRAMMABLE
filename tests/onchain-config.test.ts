@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getOnchainDeployment,
   getOperationalOnchainDeployment,
+  getPublicOnchainDeployment,
 } from "../lib/onchain/config";
 
 describe("onchain deployment manifest boundary", () => {
@@ -74,6 +75,15 @@ describe("onchain deployment manifest boundary", () => {
       getOperationalOnchainDeployment("production"),
     ).toThrow(
       "Production operations require two distinct authenticated RPC URLs",
+    );
+  });
+
+  it("keeps public reads fail-closed when the dual-RPC environment is absent", () => {
+    vi.stubEnv("ETHEREUM_RPC_URL", "");
+    vi.stubEnv("ETHEREUM_RPC_URL_B", "");
+
+    expect(getPublicOnchainDeployment("production").status).toBe(
+      "not-deployed",
     );
   });
 

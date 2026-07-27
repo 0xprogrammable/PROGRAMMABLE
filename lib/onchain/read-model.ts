@@ -22,7 +22,7 @@ import {
   stateViewReadAbi,
   uerc20ReadAbi,
 } from "./abis";
-import { getOnchainDeployment } from "./config";
+import { getPublicOnchainDeployment } from "./config";
 import { pairVerifiedLaunchEvents } from "./events";
 import {
   marketCapNativeWadFromSqrtPriceX96,
@@ -761,7 +761,7 @@ function emptyReadModel(): ExploreReadModel {
 }
 
 export async function readLiveExploreModel(
-  config: OnchainDeployment = getOnchainDeployment(),
+  config: OnchainDeployment = getPublicOnchainDeployment(),
 ): Promise<ExploreReadModel> {
   return config.status === "ready"
     ? readReadyModel(config)
@@ -769,7 +769,7 @@ export async function readLiveExploreModel(
 }
 
 export async function readExploreModel(
-  config: OnchainDeployment = getOnchainDeployment(),
+  config: OnchainDeployment = getPublicOnchainDeployment(),
 ): Promise<ExploreReadModel> {
   if (config.status === "not-deployed") {
     return emptyReadModel();
