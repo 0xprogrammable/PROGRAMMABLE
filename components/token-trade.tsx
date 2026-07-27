@@ -401,6 +401,7 @@ export function TokenTrade({
               aria-pressed={side === option}
               onClick={() => {
                 setSide(option);
+                setAmount("");
                 setError("");
                 setMessage("");
                 setMaxHint("");
