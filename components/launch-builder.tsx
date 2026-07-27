@@ -4,7 +4,6 @@ import Image from "next/image";
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -12,14 +11,10 @@ import {
   type SetStateAction,
 } from "react";
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Check,
-  CheckCircle2,
-  Copy,
   ImagePlus,
-  Minus,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -41,30 +36,19 @@ import {
   normalizeOptionalSocialUrl,
   utf8ByteLength,
   validateMemeLaunchDraft,
-  type LaunchPreflightCheck,
   type LaunchPreflightResponse,
 } from "@/lib/launch-transaction";
 import {
-  buildLaunchSummary,
-  buildPlainTextPlan,
   createEmptyDraft,
-  getInitialBuyEthLabel,
   getMemeFeeBreakdown,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
-  MEME_STARTING_FDV_ETH_LABEL,
   parseInitialBuyWei,
   parseTotalSwapFeeBps,
   PLATFORM_FEE_BPS,
   type LaunchDraft,
 } from "@/lib/launch";
 import { prepareTokenImage } from "@/lib/token-image";
-
-const steps = [
-  { number: 1, label: "Token details" },
-  { number: 2, label: "Fees" },
-  { number: 3, label: "Review" },
-];
 
 type TokenImageState = {
   status: "idle" | "preparing" | "waiting" | "uploading" | "ready" | "error";
@@ -117,14 +101,6 @@ function createLaunchSalt() {
   return `0x${Array.from(bytes, (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("")}`;
-}
-
-function getLaunchCheckKey(
-  draft: LaunchDraft,
-  account?: string,
-  chainId?: string,
-) {
-  return JSON.stringify([draft, account ?? "", chainId ?? ""]);
 }
 
 export function LaunchBuilder() {
@@ -215,26 +191,14 @@ function LaunchBuilderForm({
 }) {
   const { wallet, openWallet, sendTransaction } = useWallet();
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
-  const [step, setStep] = useState(1);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
-  const [preflightState, setPreflightState] = useState<{
-    key: string;
-    result: LaunchPreflightResponse;
-  } | null>(null);
-  const [preflightLoadingKey, setPreflightLoadingKey] = useState("");
-  const [preflightErrorState, setPreflightErrorState] = useState<{
-    key: string;
-    message: string;
-  } | null>(null);
-  const [transactionSendingKey, setTransactionSendingKey] = useState("");
-  const [transactionState, setTransactionState] = useState<{
-    key: string;
-    hash: string;
-  } | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const [transactionHash, setTransactionHash] = useState("");
   const [tokenImageState, setTokenImageState] =
     useState<TokenImageState>(emptyTokenImageState);
   const currentLaunchContext = useRef({ draft, wallet });
+  const draftVersion = useRef(0);
 
   useEffect(() => {
     currentLaunchContext.current = { draft, wallet };
@@ -246,23 +210,7 @@ function LaunchBuilderForm({
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const summary = useMemo(() => buildLaunchSummary(draft), [draft]);
-  const launchCheckKey = useMemo(
-    () => getLaunchCheckKey(draft, wallet?.account, wallet?.chainId),
-    [draft, wallet?.account, wallet?.chainId],
-  );
-  const preflight =
-    preflightState?.key === launchCheckKey ? preflightState.result : null;
-  const preflightLoading = preflightLoadingKey === launchCheckKey;
-  const preflightError =
-    preflightErrorState?.key === launchCheckKey
-      ? preflightErrorState.message
-      : "";
-  const transactionSending = transactionSendingKey === launchCheckKey;
-  const transactionHash =
-    transactionState?.key === launchCheckKey ? transactionState.hash : "";
-
-  function validateToken() {
+  function validateLaunch() {
     if (
       tokenImageState.status === "preparing" ||
       tokenImageState.status === "waiting" ||
@@ -274,67 +222,31 @@ function LaunchBuilderForm({
       return tokenImageState.message || "Choose the token image again";
     }
     try {
-      validateMemeLaunchDraft({
-        ...draft,
-        totalSwapFeePercent: "1",
-        initialBuyEth: MEME_MIN_INITIAL_BUY_ETH,
-      });
+      validateMemeLaunchDraft(draft);
       return "";
     } catch (caught) {
       return caught instanceof Error
         ? caught.message
-        : "Check the token details and project links";
+        : "Check the token details and try again";
     }
   }
 
-  function validateFee() {
-    if (parseTotalSwapFeeBps(draft.totalSwapFeePercent) === null) {
-      return "Choose a total swap fee from 1% to 10%";
-    }
-    if (parseInitialBuyWei(draft.initialBuyEth) === null) {
-      return `Enter a Dev Buy of at least ${MEME_MIN_INITIAL_BUY_ETH_LABEL}`;
-    }
-    return "";
-  }
-
-  function continueTo(nextStep: number) {
-    const error =
-      step === 1 ? validateToken() : step === 2 ? validateFee() : "";
-    if (error) {
-      setFormError(error);
-      return;
-    }
+  function markDraftEdited() {
+    draftVersion.current += 1;
     setFormError("");
-    setStep(nextStep);
-    window.scrollTo({ top: 0 });
+    setTransactionHash("");
   }
 
-  function saveDraft() {
-    const saved = {
-      ...normalizeStandardDraft(draft),
-      updatedAt: new Date().toISOString(),
-    };
-    saveLocalDraft(saved);
-    setDraft(saved);
-    setNotice("Token saved");
-  }
-
-  async function copyPlan() {
-    await navigator.clipboard.writeText(buildPlainTextPlan(draft));
-    setNotice("Token summary copied");
-  }
-
-  async function requestLaunchCheck(checkedDraft: LaunchDraft) {
-    if (!wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
-    }
-
+  async function requestLaunchCheck(
+    checkedDraft: LaunchDraft,
+    connectedWallet: NonNullable<typeof wallet>,
+  ) {
     const response = await fetch("/api/launch/preflight", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        account: wallet.account,
-        walletChainId: wallet.chainId,
+        account: connectedWallet.account,
+        walletChainId: connectedWallet.chainId,
         draft: checkedDraft,
       }),
     });
@@ -349,12 +261,65 @@ function LaunchBuilderForm({
     return body;
   }
 
-  async function checkLaunch() {
+  function persistLaunchDraft(
+    nextDraft: LaunchDraft,
+    connectedWallet = currentLaunchContext.current.wallet,
+  ) {
+    saveLocalDraft(nextDraft);
+    setDraft(nextDraft);
+    currentLaunchContext.current = {
+      draft: nextDraft,
+      wallet: connectedWallet,
+    };
+  }
+
+  async function prepareLaunch(
+    initialLaunchDraft: LaunchDraft,
+    connectedWallet: NonNullable<typeof wallet>,
+  ) {
+    let checkedDraft = initialLaunchDraft;
+    let result = await requestLaunchCheck(checkedDraft, connectedWallet);
+
+    if (result.draftPatch) {
+      checkedDraft = {
+        ...checkedDraft,
+        ...result.draftPatch,
+        updatedAt: new Date().toISOString(),
+      };
+      persistLaunchDraft(checkedDraft, connectedWallet);
+      result = await requestLaunchCheck(checkedDraft, connectedWallet);
+    }
+
+    if (
+      result.status !== "ready" ||
+      !result.transaction ||
+      !result.planHash
+    ) {
+      throw new Error(result.detail || "The launch could not be prepared");
+    }
+
+    return {
+      checkedDraft,
+      planHash: result.planHash,
+    };
+  }
+
+  async function launchToken() {
+    if (launching || transactionHash) return;
+
+    const validationError = validateLaunch();
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
     if (!wallet) {
       openWallet();
       return;
     }
 
+    const launchWallet = { ...wallet };
+    const launchDraftVersion = draftVersion.current;
     let checkedDraft = normalizeStandardDraft(draft);
     if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
       checkedDraft = {
@@ -362,122 +327,58 @@ function LaunchBuilderForm({
         launchSalt: createLaunchSalt(),
         updatedAt: new Date().toISOString(),
       };
-      setDraft(checkedDraft);
-      saveLocalDraft(checkedDraft);
     }
-
-    let checkKey = getLaunchCheckKey(
-      checkedDraft,
-      wallet.account,
-      wallet.chainId,
-    );
-    setPreflightLoadingKey(checkKey);
-    setPreflightErrorState(null);
-    setTransactionState(null);
+    persistLaunchDraft(checkedDraft, launchWallet);
+    setFormError("");
+    setLaunching(true);
+    setTransactionHash("");
 
     try {
-      let result = await requestLaunchCheck(checkedDraft);
-      if (result.draftPatch) {
-        checkedDraft = {
-          ...checkedDraft,
-          ...result.draftPatch,
-          updatedAt: new Date().toISOString(),
-        };
-        setDraft(checkedDraft);
-        saveLocalDraft(checkedDraft);
-        checkKey = getLaunchCheckKey(
-          checkedDraft,
-          wallet.account,
-          wallet.chainId,
-        );
-        setPreflightLoadingKey(checkKey);
-        result = await requestLaunchCheck(checkedDraft);
-      }
-      setPreflightState({ key: checkKey, result });
-    } catch (caught) {
-      setPreflightState(null);
-      setPreflightErrorState({
-        key: checkKey,
-        message:
-          caught instanceof Error
-            ? caught.message
-            : "The launch could not be checked",
-      });
-    } finally {
-      setPreflightLoadingKey("");
-    }
-  }
+      const prepared = await prepareLaunch(checkedDraft, launchWallet);
+      checkedDraft = prepared.checkedDraft;
 
-  async function submitPreparedTransaction() {
-    if (!wallet || !preflight?.transaction || !preflight.planHash) {
-      return;
-    }
-
-    setTransactionSendingKey(launchCheckKey);
-    setPreflightErrorState(null);
-    try {
-      const refreshed = await requestLaunchCheck(draft);
-      if (refreshed.draftPatch) {
-        const patchedDraft = {
-          ...draft,
-          ...refreshed.draftPatch,
-          updatedAt: new Date().toISOString(),
-        };
-        const patchedKey = getLaunchCheckKey(
-          patchedDraft,
-          wallet.account,
-          wallet.chainId,
-        );
-        setDraft(patchedDraft);
-        saveLocalDraft(patchedDraft);
-        setPreflightState({ key: patchedKey, result: refreshed });
-        setNotice("Launch details updated");
-        return;
-      }
+      const refreshed = await requestLaunchCheck(checkedDraft, launchWallet);
       if (
+        refreshed.draftPatch ||
+        refreshed.status !== "ready" ||
         !refreshed.transaction ||
-        refreshed.planHash !== preflight.planHash
+        !refreshed.planHash ||
+        refreshed.planHash.toLowerCase() !==
+          prepared.planHash.toLowerCase()
       ) {
-        setPreflightState({ key: launchCheckKey, result: refreshed });
-        setNotice("Launch check updated");
-        return;
+        throw new Error("The launch changed while it was being prepared. Try again");
       }
 
       const latest = currentLaunchContext.current;
       if (
+        draftVersion.current !== launchDraftVersion ||
         !latest.wallet ||
-        getLaunchCheckKey(
-          latest.draft,
-          latest.wallet.account,
-          latest.wallet.chainId,
-        ) !== launchCheckKey
+        latest.wallet.account.toLowerCase() !==
+          launchWallet.account.toLowerCase() ||
+        latest.wallet.chainId.toLowerCase() !==
+          launchWallet.chainId.toLowerCase()
       ) {
-        throw new Error(
-          "The token setup or connected wallet changed. Check the launch again",
-        );
+        throw new Error("The token or connected wallet changed. Try again");
       }
+
       const validatedTransaction =
         validatePreparedClassicLaunchTransaction({
           transaction: refreshed.transaction,
-          draft: latest.draft,
-          account: latest.wallet.account,
+          draft: checkedDraft,
+          account: launchWallet.account,
           planHash: refreshed.planHash,
         });
-      setPreflightState({ key: launchCheckKey, result: refreshed });
       const hash = await sendTransaction(validatedTransaction);
-      setTransactionState({ key: launchCheckKey, hash });
+      setTransactionHash(hash);
       setNotice("Launch submitted");
     } catch (caught) {
-      setPreflightState(null);
-      setPreflightErrorState({
-        key: launchCheckKey,
-        message:
-          caught instanceof Error
-            ? caught.message
-            : "The final launch check or wallet request did not complete",
-      });
+      setFormError(
+        caught instanceof Error
+          ? caught.message
+          : "The launch did not complete. Try again",
+      );
     } finally {
-      setTransactionSendingKey("");
+      setLaunching(false);
     }
   }
 
@@ -495,119 +396,68 @@ function LaunchBuilderForm({
         <div className="launch-page-title">
           <p className="eyebrow">Classic</p>
           <h1>Set up your token</h1>
-          <p>Name the token, choose the fee and review the transaction</p>
         </div>
       </header>
 
-      <section className="launch-workspace">
-        <ol className="step-navigation" aria-label="Launch steps">
-          {steps.map((item) => (
-            <li
-              key={item.number}
-              className={
-                step === item.number
-                  ? "current"
-                  : step > item.number
-                    ? "complete"
-                    : undefined
-              }
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (item.number <= step) {
-                    setFormError("");
-                    setStep(item.number);
-                  }
-                }}
-                disabled={item.number > step}
-                aria-current={step === item.number ? "step" : undefined}
-              >
-                <span>
-                  {step > item.number ? (
-                    <Check size={14} />
-                  ) : (
-                    String(item.number).padStart(2, "0")
-                  )}
-                </span>
-                {item.label}
-              </button>
-            </li>
-          ))}
-        </ol>
+      <form
+        className="classic-launch-sheet"
+        aria-busy={launching}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void launchToken();
+        }}
+      >
+        <div className="classic-launch-content">
+          <TokenStep
+            draft={draft}
+            setDraft={setDraft}
+            onEdit={markDraftEdited}
+            onImageStateChange={setTokenImageState}
+          />
+          <FeeStep
+            draft={draft}
+            setDraft={setDraft}
+            onEdit={markDraftEdited}
+          />
+        </div>
 
-        <div className="launch-layout">
-          <div className="launch-form-panel">
-            {step === 1 ? (
-              <TokenStep
-                draft={draft}
-                setDraft={setDraft}
-                onEdit={() => setFormError("")}
-                onImageStateChange={setTokenImageState}
-              />
-            ) : null}
-
-            {step === 2 ? (
-              <FeeStep draft={draft} setDraft={setDraft} />
-            ) : null}
-
-            {step === 3 ? (
-              <ReviewStep
-                draft={draft}
-                summary={summary}
-                walletConnected={Boolean(wallet)}
-                preflight={preflight}
-                preflightLoading={preflightLoading}
-                preflightError={preflightError}
-                transactionSending={transactionSending}
-                transactionHash={transactionHash}
-                onCheck={checkLaunch}
-                onSubmit={submitPreparedTransaction}
-                onSave={saveDraft}
-                onCopy={copyPlan}
-                onBack={() => {
-                  setFormError("");
-                  setStep(2);
-                }}
-              />
-            ) : null}
-
+        <footer className="classic-launch-footer">
+          <div className="classic-launch-status">
             {formError ? (
-              <p className="form-error form-error-block" role="alert">
+              <p className="form-error" role="alert">
                 {formError}
               </p>
-            ) : null}
-
-            {step < 3 ? (
-              <div className="form-navigation">
-                {step > 1 ? (
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => {
-                      setFormError("");
-                      setStep(step - 1);
-                    }}
-                  >
-                    <ArrowLeft aria-hidden="true" size={16} />
-                    Back
-                  </button>
-                ) : (
-                  <span />
-                )}
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => continueTo(step + 1)}
-                >
-                  Continue
-                  <ArrowRight aria-hidden="true" size={16} />
-                </button>
-              </div>
-            ) : null}
+            ) : transactionHash ? (
+              <a
+                className="transaction-link"
+                href={`https://etherscan.io/tx/${transactionHash}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Launch submitted
+                <span>{shortenAddress(transactionHash)}</span>
+              </a>
+            ) : (
+              <p>
+                1B fixed supply <span>·</span> Uniswap v4 <span>·</span>{" "}
+                Locked liquidity
+              </p>
+            )}
           </div>
-        </div>
-      </section>
+          <button
+            className="primary-button classic-launch-button"
+            type="submit"
+            disabled={launching || Boolean(transactionHash)}
+            style={{ animation: "none", transform: "none", transition: "none" }}
+          >
+            {launching
+              ? "Preparing launch"
+              : transactionHash
+                ? "Launch submitted"
+                : "Launch token"}
+          </button>
+        </footer>
+      </form>
 
       <div className="toast-region" aria-live="polite" aria-atomic="true">
         {notice ? (
@@ -807,234 +657,223 @@ function TokenStep({
     utf8ByteLength(draft.tokenDescription);
 
   return (
-    <div className="form-section standard-token-section">
-      <div className="form-section-heading">
+    <section className="classic-token-section">
+      <div className="classic-section-heading">
         <h2>Token details</h2>
       </div>
 
-      <div className="standard-token-fields">
-        <div className="two-column-fields">
-          <label className="field">
-            <span>Token name</span>
-            <input
-              value={draft.tokenName}
-              maxLength={MAX_TOKEN_NAME_CHARACTERS}
-              placeholder="Token name"
-              autoComplete="off"
+      <div className="classic-token-grid">
+        <div className="token-image-field">
+          <span>Token image</span>
+          <input
+            ref={imageInputRef}
+            hidden
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={selectTokenImage}
+          />
+          <button
+            className={`token-image-upload${imagePreview ? " has-image" : ""}`}
+            type="button"
+            aria-label={
+              imagePreview ? "Change token image" : "Choose token image"
+            }
+            onClick={() => imageInputRef.current?.click()}
+          >
+            {imagePreview ? (
+              <span
+                className="token-image-preview"
+                role="img"
+                aria-label="Token image preview"
+                style={{ backgroundImage: `url("${imagePreview}")` }}
+              />
+            ) : (
+              <span className="token-image-placeholder">
+                <ImagePlus aria-hidden="true" size={21} />
+                <strong>Choose image</strong>
+                <small>Square preview</small>
+              </span>
+            )}
+          </button>
+          <div className="token-image-meta">
+            <span
+              className={
+                imageState.status === "error" ? "form-error" : undefined
+              }
+              role={imageState.status === "error" ? "alert" : undefined}
+            >
+              {imageState.message || "JPG, PNG or WebP"}
+            </span>
+            <div>
+              {(imageState.status === "error" ||
+                imageState.status === "waiting") &&
+              pendingImage &&
+              wallet ? (
+                <button
+                  type="button"
+                  onClick={() => void uploadTokenImage(pendingImage)}
+                >
+                  <RotateCcw aria-hidden="true" size={13} />
+                  Try again
+                </button>
+              ) : null}
+              {imagePreview || draft.tokenImage ? (
+                <button type="button" onClick={removeTokenImage}>
+                  <Trash2 aria-hidden="true" size={13} />
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="classic-token-main">
+          <div className="two-column-fields">
+            <label className="field">
+              <span>Token name</span>
+              <input
+                value={draft.tokenName}
+                maxLength={MAX_TOKEN_NAME_CHARACTERS}
+                placeholder="Token name"
+                autoComplete="off"
+                onChange={(event) => {
+                  const value = event.target.value.replace(/[\r\n]/g, "");
+                  if (utf8ByteLength(value) <= MAX_TOKEN_NAME_BYTES) {
+                    updateTokenDraft({ tokenName: value });
+                  }
+                }}
+              />
+              <small>
+                {characterLength(draft.tokenName)}/{MAX_TOKEN_NAME_CHARACTERS}
+              </small>
+            </label>
+            <label className="field">
+              <span>Ticker</span>
+              <input
+                value={draft.tokenSymbol}
+                maxLength={MAX_TOKEN_SYMBOL_CHARACTERS}
+                placeholder="TOKEN"
+                spellCheck={false}
+                autoComplete="off"
+                onChange={(event) =>
+                  updateTokenDraft({
+                    tokenSymbol: event.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9]/g, ""),
+                  })
+                }
+              />
+              <small>
+                {characterLength(draft.tokenSymbol)}/
+                {MAX_TOKEN_SYMBOL_CHARACTERS}
+              </small>
+            </label>
+          </div>
+
+          <label className="field classic-description-field">
+            <span>Description (optional)</span>
+            <textarea
+              value={draft.tokenDescription}
+              maxLength={MAX_TOKEN_DESCRIPTION_BYTES}
+              rows={2}
+              placeholder="Describe what the token represents"
               onChange={(event) => {
-                const value = event.target.value.replace(/[\r\n]/g, "");
-                if (utf8ByteLength(value) <= MAX_TOKEN_NAME_BYTES) {
-                  updateTokenDraft({ tokenName: value });
+                if (
+                  utf8ByteLength(event.target.value) <=
+                  MAX_TOKEN_DESCRIPTION_BYTES
+                ) {
+                  updateTokenDraft({
+                    tokenDescription: event.target.value,
+                  });
                 }
               }}
             />
-            <small>
-              {characterLength(draft.tokenName)}/{MAX_TOKEN_NAME_CHARACTERS}
-            </small>
+            <small>{descriptionRemaining} left</small>
           </label>
-          <label className="field">
-            <span>Ticker</span>
-            <input
-              value={draft.tokenSymbol}
-              maxLength={MAX_TOKEN_SYMBOL_CHARACTERS}
-              placeholder="TOKEN"
-              spellCheck={false}
-              autoComplete="off"
-              onChange={(event) =>
-                updateTokenDraft({
-                  tokenSymbol: event.target.value
-                    .toUpperCase()
-                    .replace(/[^A-Z0-9]/g, ""),
-                })
-              }
-            />
-            <small>
-              {characterLength(draft.tokenSymbol)}/
-              {MAX_TOKEN_SYMBOL_CHARACTERS}
-            </small>
-          </label>
-        </div>
-
-        <label className="field">
-          <span>Description (optional)</span>
-          <textarea
-            value={draft.tokenDescription}
-            maxLength={MAX_TOKEN_DESCRIPTION_BYTES}
-            rows={3}
-            placeholder="Describe what the token represents"
-            onChange={(event) => {
-              if (
-                utf8ByteLength(event.target.value) <=
-                MAX_TOKEN_DESCRIPTION_BYTES
-              ) {
-                updateTokenDraft({
-                  tokenDescription: event.target.value,
-                });
-              }
-            }}
-          />
-          <small>{descriptionRemaining} left</small>
-        </label>
-
-        <div className="field-group token-project-details">
-          <div className="block-heading">
-            <h3>Project links</h3>
-          </div>
-
-          <div className="token-project-grid">
-            <div className="token-image-field">
-              <span>Token image</span>
-              <input
-                ref={imageInputRef}
-                hidden
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={selectTokenImage}
-              />
-              <button
-                className={`token-image-upload${
-                  imagePreview ? " has-image" : ""
-                }`}
-                type="button"
-                aria-label={
-                  imagePreview ? "Change token image" : "Choose token image"
-                }
-                onClick={() => imageInputRef.current?.click()}
-              >
-                {imagePreview ? (
-                  <span
-                    className="token-image-preview"
-                    role="img"
-                    aria-label="Token image preview"
-                    style={{ backgroundImage: `url("${imagePreview}")` }}
-                  />
-                ) : (
-                  <span className="token-image-placeholder">
-                    <ImagePlus aria-hidden="true" size={23} />
-                    <strong>Choose image</strong>
-                    <small>Square preview</small>
-                  </span>
-                )}
-              </button>
-              <div className="token-image-meta">
-                <span
-                  className={
-                    imageState.status === "error" ? "form-error" : undefined
-                  }
-                  role={
-                    imageState.status === "error" ? "alert" : undefined
-                  }
-                >
-                  {imageState.message ||
-                    "JPG, PNG or WebP. Cropped to a square."}
-                </span>
-                <div>
-                  {(imageState.status === "error" ||
-                    imageState.status === "waiting") &&
-                  pendingImage &&
-                  wallet ? (
-                    <button
-                      type="button"
-                      onClick={() => void uploadTokenImage(pendingImage)}
-                    >
-                      <RotateCcw aria-hidden="true" size={13} />
-                      Try again
-                    </button>
-                  ) : null}
-                  {imagePreview || draft.tokenImage ? (
-                    <button type="button" onClick={removeTokenImage}>
-                      <Trash2 aria-hidden="true" size={13} />
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="token-link-fields">
-              <label className="field">
-                <span>Website</span>
-                <input
-                  type="text"
-                  inputMode="url"
-                  value={draft.tokenWebsite}
-                  maxLength={MAX_METADATA_URL_BYTES}
-                  placeholder="project.com"
-                  spellCheck={false}
-                  autoComplete="url"
-                  onBlur={normalizeWebsite}
-                  onChange={(event) =>
-                    updateTokenDraft({ tokenWebsite: event.target.value })
-                  }
-                />
-              </label>
-
-              <label className="field">
-                <span>X link</span>
-                <input
-                  type="text"
-                  inputMode="url"
-                  value={draft.tokenX}
-                  maxLength={MAX_SOCIAL_URL_BYTES}
-                  placeholder="@project or x.com/project/status/…"
-                  spellCheck={false}
-                  autoComplete="off"
-                  onBlur={() => normalizeSocial("x")}
-                  onChange={(event) =>
-                    updateTokenDraft({ tokenX: event.target.value })
-                  }
-                />
-              </label>
-
-              <label className="field">
-                <span>Telegram</span>
-                <input
-                  type="text"
-                  inputMode="url"
-                  value={draft.tokenTelegram}
-                  maxLength={MAX_SOCIAL_URL_BYTES}
-                  placeholder="@project or t.me/project"
-                  spellCheck={false}
-                  autoComplete="off"
-                  onBlur={() => normalizeSocial("telegram")}
-                  onChange={(event) =>
-                    updateTokenDraft({ tokenTelegram: event.target.value })
-                  }
-                />
-              </label>
-            </div>
-          </div>
         </div>
       </div>
-    </div>
+
+      <div className="classic-link-fields">
+        <label className="field">
+          <span>Website (optional)</span>
+          <input
+            type="text"
+            inputMode="url"
+            value={draft.tokenWebsite}
+            maxLength={MAX_METADATA_URL_BYTES}
+            placeholder="project.com"
+            spellCheck={false}
+            autoComplete="url"
+            onBlur={normalizeWebsite}
+            onChange={(event) =>
+              updateTokenDraft({ tokenWebsite: event.target.value })
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>X link (optional)</span>
+          <input
+            type="text"
+            inputMode="url"
+            value={draft.tokenX}
+            maxLength={MAX_SOCIAL_URL_BYTES}
+            placeholder="@project or x.com/project/status/…"
+            spellCheck={false}
+            autoComplete="off"
+            onBlur={() => normalizeSocial("x")}
+            onChange={(event) =>
+              updateTokenDraft({ tokenX: event.target.value })
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>Telegram (optional)</span>
+          <input
+            type="text"
+            inputMode="url"
+            value={draft.tokenTelegram}
+            maxLength={MAX_SOCIAL_URL_BYTES}
+            placeholder="@project or t.me/project"
+            spellCheck={false}
+            autoComplete="off"
+            onBlur={() => normalizeSocial("telegram")}
+            onChange={(event) =>
+              updateTokenDraft({ tokenTelegram: event.target.value })
+            }
+          />
+        </label>
+      </div>
+    </section>
   );
 }
 
 function FeeStep({
   draft,
   setDraft,
+  onEdit,
 }: {
   draft: LaunchDraft;
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
+  onEdit: () => void;
 }) {
   const feeBreakdown = getMemeFeeBreakdown(draft);
   const totalSwapFeeBps = feeBreakdown?.totalSwapFeeBps ?? 100;
   const creatorFeeBps = feeBreakdown?.creatorFeeBps ?? 90;
 
   return (
-    <div className="form-section meme-fee-section">
-      <div className="form-section-heading">
-        <h2>Choose the swap fee</h2>
+    <section className="classic-fee-section">
+      <div className="classic-section-heading classic-fee-heading">
+        <h2>Swap fee</h2>
+        <p>
+          Creator receives {(creatorFeeBps / 100).toFixed(2)}%
+          <span>·</span>
+          Programmable receives {(PLATFORM_FEE_BPS / 100).toFixed(2)}%
+        </p>
       </div>
 
-      <div className="meme-fee-card">
-        <div className="meme-fee-card-heading">
-          <div>
-            <strong>Total swap fee</strong>
-            <p>Fixed when the token launches</p>
-          </div>
-          <span>{(totalSwapFeeBps / 100).toFixed(2)}%</span>
-        </div>
+      <div className="classic-fee-layout">
         <div className="meme-fee-options" role="radiogroup" aria-label="Total swap fee">
           {Array.from({ length: 10 }, (_, index) => index + 1).map((percent) => {
             const selected = draft.totalSwapFeePercent === String(percent);
@@ -1046,11 +885,12 @@ function FeeStep({
                 aria-checked={selected}
                 tabIndex={selected ? 0 : -1}
                 className={selected ? "selected" : undefined}
-                onClick={() =>
+                onClick={() => {
+                  onEdit();
                   updateDraft(setDraft, {
                     totalSwapFeePercent: String(percent),
-                  })
-                }
+                  });
+                }}
                 onKeyDown={(event) => {
                   if (
                     event.key !== "ArrowLeft" &&
@@ -1073,6 +913,7 @@ function FeeStep({
                       : event.key === "End"
                         ? 10
                         : ((percent - 1 + direction + 10) % 10) + 1;
+                  onEdit();
                   updateDraft(setDraft, {
                     totalSwapFeePercent: String(next),
                   });
@@ -1088,16 +929,12 @@ function FeeStep({
             );
           })}
         </div>
-        <p className="meme-fee-note">
-          Programmable receives 0.10 percentage points from this total. Nothing
-          is added on top
-        </p>
+
         <label className="meme-dev-buy" htmlFor="classic-dev-buy">
           <span>
             <strong>Dev Buy</strong>
             <small>
-              Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}. Larger buys move the
-              opening price
+              Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}
             </small>
           </span>
           <span className="meme-dev-buy-input">
@@ -1109,34 +946,17 @@ function FeeStep({
               placeholder={MEME_MIN_INITIAL_BUY_ETH}
               spellCheck={false}
               autoComplete="off"
-              onChange={(event) =>
+              onChange={(event) => {
+                onEdit();
                 updateDraft(setDraft, {
                   initialBuyEth: event.target.value,
-                })
-              }
+                });
+              }}
             />
             <span>ETH</span>
           </span>
         </label>
       </div>
-
-      <dl className="meme-fee-breakdown">
-        <div>
-          <dt>Total paid</dt>
-          <dd>{(totalSwapFeeBps / 100).toFixed(2)}%</dd>
-          <span>Applied in the Programmable pool</span>
-        </div>
-        <div>
-          <dt>Creator receives</dt>
-          <dd>{(creatorFeeBps / 100).toFixed(2)}%</dd>
-          <span>Paid as claimable ETH</span>
-        </div>
-        <div>
-          <dt>Programmable receives</dt>
-          <dd>{(PLATFORM_FEE_BPS / 100).toFixed(2)}%</dd>
-          <span>Taken from the total above</span>
-        </div>
-      </dl>
 
       {totalSwapFeeBps >= 500 ? (
         <p className="meme-fee-warning">
@@ -1144,233 +964,6 @@ function FeeStep({
           wallets or market data tools
         </p>
       ) : null}
-    </div>
+    </section>
   );
-}
-
-function ReviewStep({
-  draft,
-  summary,
-  walletConnected,
-  preflight,
-  preflightLoading,
-  preflightError,
-  transactionSending,
-  transactionHash,
-  onCheck,
-  onSubmit,
-  onSave,
-  onCopy,
-  onBack,
-}: {
-  draft: LaunchDraft;
-  summary: string;
-  walletConnected: boolean;
-  preflight: LaunchPreflightResponse | null;
-  preflightLoading: boolean;
-  preflightError: string;
-  transactionSending: boolean;
-  transactionHash: string;
-  onCheck: () => void;
-  onSubmit: () => void;
-  onSave: () => void;
-  onCopy: () => void;
-  onBack: () => void;
-}) {
-  const feeBreakdown = getMemeFeeBreakdown(draft);
-  const totalSwapFeeBps = feeBreakdown?.totalSwapFeeBps ?? 100;
-  const creatorFeeBps = feeBreakdown?.creatorFeeBps ?? 90;
-  const checks: LaunchPreflightCheck[] = preflight?.checks ?? [
-    {
-      id: "token",
-      label: "Token setup",
-      status: "pending",
-      detail: "Validated from the final token and fee settings",
-    },
-    {
-      id: "wallet",
-      label: "Wallet",
-      status: walletConnected ? "pending" : "blocked",
-      detail: walletConnected
-        ? "Connected account and network are checked next"
-        : "Connect the creator wallet to continue",
-    },
-    {
-      id: "contracts",
-      label: "Launch contracts",
-      status: "pending",
-      detail: "The launch contracts are verified before the wallet opens",
-    },
-    {
-      id: "simulation",
-      label: "Simulation",
-      status: "pending",
-      detail: "The exact transaction is tested before wallet review",
-    },
-  ];
-  const preparedTransaction = preflight?.transaction;
-  const launchSubmitted = Boolean(transactionHash);
-  const submitPrepared = Boolean(preparedTransaction) && !transactionHash;
-  const primaryLabel = preflightLoading
-    ? "Checking"
-    : transactionSending
-      ? "Opening wallet"
-      : launchSubmitted
-        ? "Launch submitted"
-        : submitPrepared
-          ? "Launch token"
-          : walletConnected
-            ? preflight
-              ? "Check again"
-              : "Check launch"
-            : "Connect wallet";
-
-  return (
-    <div className="form-section review-section standard-review-section">
-      <div className="form-section-heading">
-        <h2>Review the launch</h2>
-      </div>
-
-      <div className="review-statement">
-        <p className="eyebrow">Summary</p>
-        <p>{summary}</p>
-      </div>
-
-      <dl className="review-details standard-review-details">
-        <div>
-          <dt>Token</dt>
-          <dd>
-            <strong>
-              {draft.tokenName} {draft.tokenSymbol ? `(${draft.tokenSymbol})` : ""}
-            </strong>
-            <span>1,000,000,000 fixed supply with 18 decimals</span>
-          </dd>
-        </div>
-        <div>
-          <dt>Launch cost</dt>
-          <dd>
-            <strong>No launch fee or liquidity deposit</strong>
-            <span>
-              {getInitialBuyEthLabel(draft)} buys the creator’s first tokens.
-              Network gas is separate
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt>Liquidity</dt>
-          <dd>
-            <strong>The complete supply seeds the pool</strong>
-            <span>
-              One-sided Uniswap v4 liquidity starts at{" "}
-              {MEME_STARTING_FDV_ETH_LABEL} FDV and remains permanently locked
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt>Fees</dt>
-          <dd>
-            <strong>{(totalSwapFeeBps / 100).toFixed(2)}% total swap fee</strong>
-            <span>
-              {(creatorFeeBps / 100).toFixed(2)}% to the creator and {" "}
-              {(PLATFORM_FEE_BPS / 100).toFixed(2)}% to Programmable in ETH
-            </span>
-          </dd>
-        </div>
-      </dl>
-
-      <div className="review-gates">
-        <div className="block-heading">
-          <div>
-            <h3>Required checks</h3>
-            <p>
-              Exact call checks run before wallet review. The contracts have
-              not been independently audited
-            </p>
-          </div>
-        </div>
-        <ul>
-          {checks.map((check) => (
-            <li
-              key={check.id}
-              className={`review-check review-check-${check.status}`}
-            >
-              <ReviewCheckIcon status={check.status} />
-              <span>
-                <strong>{check.label}</strong>
-                <small>{check.detail}</small>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {preflight ? (
-        <div
-          className={`preflight-result preflight-result-${preflight.status}`}
-          role="status"
-        >
-          <div>
-            <strong>{preflight.title}</strong>
-            <span>{preflight.detail}</span>
-          </div>
-        </div>
-      ) : null}
-
-      {preflightError ? (
-        <p className="form-error preflight-error" role="alert">
-          {preflightError}
-        </p>
-      ) : null}
-
-      {transactionHash ? (
-        <a
-          className="transaction-link"
-          href={`https://etherscan.io/tx/${transactionHash}`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Launch submitted
-          <span>{shortenAddress(transactionHash)}</span>
-        </a>
-      ) : null}
-
-      <div className="review-actions">
-        <button className="secondary-button" type="button" onClick={onBack}>
-          <ArrowLeft aria-hidden="true" size={16} />
-          Back
-        </button>
-        <button
-          className="primary-button"
-          type="button"
-          disabled={preflightLoading || transactionSending || launchSubmitted}
-          style={{ animation: "none", transform: "none", transition: "none" }}
-          onClick={submitPrepared ? onSubmit : onCheck}
-        >
-          {primaryLabel}
-        </button>
-        <button className="secondary-button" type="button" onClick={onSave}>
-          <Check aria-hidden="true" size={16} />
-          Save token
-        </button>
-        <button className="secondary-button" type="button" onClick={onCopy}>
-          <Copy aria-hidden="true" size={16} />
-          Copy summary
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ReviewCheckIcon({
-  status,
-}: {
-  status: LaunchPreflightCheck["status"];
-}) {
-  if (status === "pass") {
-    return <CheckCircle2 aria-hidden="true" size={18} />;
-  }
-  if (status === "blocked") {
-    return <AlertCircle aria-hidden="true" size={18} />;
-  }
-  return <Minus aria-hidden="true" size={18} />;
 }

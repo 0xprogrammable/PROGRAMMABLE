@@ -4527,3 +4527,297 @@ textarea {
     animation-delay: 0ms;
   }
 }
+
+/* Classic launch is intentionally one calm sheet. The safety preflight runs
+   behind the single launch action instead of becoming a visible wizard. */
+.classic-launch-sheet {
+  background: rgba(251, 250, 251, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  margin: 14px auto 0;
+  max-width: 1040px;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.classic-launch-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 20px 30px 16px;
+}
+
+.classic-section-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.classic-section-heading h2 {
+  font-size: 20px;
+  font-weight: 590;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.classic-token-grid {
+  align-items: start;
+  display: grid;
+  gap: 22px;
+  grid-template-columns: 150px minmax(0, 1fr);
+  margin-top: 14px;
+}
+
+.classic-token-section .token-image-field > span {
+  margin-bottom: 6px;
+}
+
+.classic-token-section .token-image-upload {
+  border-radius: 15px;
+  width: 150px;
+}
+
+.classic-token-section .token-image-meta {
+  line-height: 1.25;
+  margin-top: 5px;
+}
+
+.classic-token-main {
+  min-width: 0;
+}
+
+.classic-token-main .field,
+.classic-link-fields .field {
+  margin-top: 0;
+}
+
+.classic-description-field {
+  margin-top: 12px !important;
+}
+
+.classic-description-field textarea {
+  min-height: 68px;
+  resize: none;
+}
+
+.classic-token-main .field > small {
+  display: none;
+}
+
+.classic-link-fields {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-left: 172px;
+  margin-top: 12px;
+}
+
+.classic-fee-section {
+  border-top: 1px solid var(--border);
+  margin-top: 15px;
+  padding-top: 14px;
+}
+
+.classic-fee-heading p {
+  color: var(--muted);
+  display: flex;
+  font-size: 11px;
+  gap: 7px;
+}
+
+.classic-fee-heading p span {
+  color: var(--border-strong);
+}
+
+.classic-fee-layout {
+  align-items: end;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 246px;
+  margin-top: 10px;
+}
+
+.classic-fee-layout .meme-fee-options {
+  gap: 5px;
+  margin-top: 0;
+}
+
+.classic-fee-layout .meme-fee-options button {
+  border-radius: 11px;
+  min-height: 44px;
+}
+
+.classic-fee-layout .meme-dev-buy {
+  align-items: end;
+  border: 0;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: 1fr;
+  margin: 0;
+  padding: 0;
+}
+
+.classic-fee-layout .meme-dev-buy small {
+  margin-top: 1px;
+}
+
+.classic-fee-layout .meme-dev-buy-input {
+  width: 100%;
+}
+
+.classic-fee-section .meme-fee-warning {
+  margin-top: 8px;
+}
+
+.classic-launch-footer {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: grid;
+  flex: none;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 72px;
+  padding: 11px 30px;
+}
+
+.classic-launch-status {
+  min-width: 0;
+}
+
+.classic-launch-status > p:not(.form-error) {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.classic-launch-status > p span {
+  color: var(--border-strong);
+  margin: 0 4px;
+}
+
+.classic-launch-status .form-error {
+  line-height: 1.35;
+  max-width: 640px;
+}
+
+.classic-launch-status .transaction-link {
+  margin: 0;
+  width: fit-content;
+}
+
+.classic-launch-button {
+  min-width: 170px;
+}
+
+@media (min-width: 1021px) {
+  .launch-page:has(.classic-launch-sheet) {
+    display: flex;
+    flex-direction: column;
+    height: calc(100svh - var(--header-height));
+    overflow: hidden;
+  }
+
+  .launch-page:has(.classic-launch-sheet) .launch-page-heading {
+    flex: none;
+    min-height: 76px;
+  }
+
+  .classic-launch-sheet {
+    flex: 1;
+    margin-bottom: 18px;
+  }
+}
+
+@media (max-width: 1020px) {
+  .classic-launch-sheet {
+    margin-top: 18px;
+  }
+
+  .classic-launch-content {
+    overflow: visible;
+    padding: 24px;
+  }
+
+  .classic-fee-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .classic-fee-layout .meme-fee-options {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .classic-fee-layout .meme-dev-buy {
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) 246px;
+  }
+}
+
+@media (max-width: 680px) {
+  .classic-launch-content {
+    padding: 20px;
+  }
+
+  .classic-token-grid {
+    grid-template-columns: 126px minmax(0, 1fr);
+  }
+
+  .classic-token-section .token-image-upload {
+    width: 126px;
+  }
+
+  .classic-link-fields {
+    grid-template-columns: 1fr;
+    margin-left: 0;
+  }
+
+  .classic-fee-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .classic-fee-layout .meme-dev-buy {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .classic-launch-footer {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    padding: 14px 20px 20px;
+  }
+
+  .classic-launch-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .launch-page:has(.classic-launch-sheet) {
+    padding-top: 18px;
+  }
+
+  .launch-page:has(.classic-launch-sheet) .launch-page-heading h1 {
+    font-size: 38px;
+  }
+
+  .classic-launch-sheet {
+    border-radius: 20px;
+  }
+
+  .classic-token-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .classic-token-section .token-image-upload {
+    max-width: none;
+    width: 132px;
+  }
+
+  .classic-token-main .two-column-fields {
+    grid-template-columns: 1fr;
+  }
+}
