@@ -2940,6 +2940,7 @@ textarea {
   color: var(--muted);
   display: flex;
   font-size: 10px;
+  gap: 12px;
   justify-content: space-between;
   line-height: 1.35;
   margin-top: 7px;
