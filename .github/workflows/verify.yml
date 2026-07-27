@@ -42,6 +42,8 @@ jobs:
     name: Contracts
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      ETHEREUM_RPC_URL: https://ethereum-rpc.publicnode.com
 
     steps:
       - name: Check out repository
