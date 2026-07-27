@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-const glyphs = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789✿❀";
+const narrowGlyphs = "Iil1tfrj";
+const regularGlyphs = "ABCDEFGHKNOPQRSTUVXYZ023456789";
+const wideGlyphs = "MWmw✿❀";
 
 function getSeed(text: string) {
   let seed = 0;
@@ -17,6 +19,11 @@ function getScrambledText(text: string, revealed: number, frame: number) {
 
   return Array.from(text, (character, index) => {
     if (character === " " || index < revealed) return character;
+    const glyphs = /[Iil1tfrj]/u.test(character)
+      ? narrowGlyphs
+      : /[MWmw]/u.test(character)
+        ? wideGlyphs
+        : regularGlyphs;
     return glyphs[(seed + index * 11 + frame * 7) % glyphs.length];
   }).join("");
 }
@@ -104,8 +111,19 @@ export function ScrambleText({
             </span>
           ) : (
             <span className="scramble-word" key={segment.key}>
-              <span className="scramble-word-measure">{segment.text}</span>
-              <span className="scramble-word-layer">{segment.display}</span>
+              {Array.from(segment.text, (character, characterIndex) => (
+                <span
+                  className="scramble-character"
+                  key={`${segment.key}:${characterIndex}`}
+                >
+                  <span className="scramble-character-measure">
+                    {character}
+                  </span>
+                  <span className="scramble-character-layer">
+                    {Array.from(segment.display)[characterIndex] ?? character}
+                  </span>
+                </span>
+              ))}
             </span>
           ),
         )}

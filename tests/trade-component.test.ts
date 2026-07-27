@@ -4,6 +4,7 @@ import { getAddress } from "viem";
 import {
   DEFAULT_TRADE_SLIPPAGE_BPS,
   buildTokenTradeApiRequest,
+  calculatePriceImpactPercent,
 } from "../components/token-trade";
 
 const OWNER = getAddress("0x5555555555555555555555555555555555555555");
@@ -92,5 +93,26 @@ describe("TokenTrade request construction", () => {
         nowSeconds: 1_000,
       }),
     ).toThrow("Slippage");
+  });
+
+  it("derives a reviewable price impact from the onchain spot price", () => {
+    expect(
+      calculatePriceImpactPercent({
+        side: "buy",
+        amountIn: "1000000000000000000",
+        amountOut: "900000000000000000000",
+        tokenDecimals: 18,
+        tokenPriceEth: "0.001",
+      }),
+    ).toBeCloseTo(11.1111, 3);
+    expect(
+      calculatePriceImpactPercent({
+        side: "sell",
+        amountIn: "1000000000000000000000",
+        amountOut: "900000000000000000",
+        tokenDecimals: 18,
+        tokenPriceEth: "0.001",
+      }),
+    ).toBeCloseTo(10, 3);
   });
 });

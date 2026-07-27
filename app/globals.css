@@ -108,18 +108,23 @@ textarea {
 
 .scramble-word {
   display: inline-block;
-  position: relative;
   white-space: nowrap;
 }
 
-.scramble-word-measure {
+.scramble-character {
+  display: inline-block;
+  position: relative;
+}
+
+.scramble-character-measure {
   visibility: hidden;
 }
 
-.scramble-word-layer {
-  inset: 0;
-  overflow: hidden;
+.scramble-character-layer {
+  left: 50%;
   position: absolute;
+  top: 0;
+  transform: translateX(-50%);
   white-space: nowrap;
 }
 
@@ -206,15 +211,15 @@ textarea {
   align-items: center;
   display: inline-flex;
   flex: none;
-  font-size: 15px;
-  font-weight: 650;
-  gap: 10px;
+  justify-content: center;
   min-height: 44px;
+  width: 44px;
 }
 
 .header-brand {
   align-items: center;
   display: flex;
+  gap: 2px;
   grid-column: 1;
   justify-self: start;
   min-width: 0;
@@ -323,6 +328,14 @@ textarea {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   font-size: 14px;
+}
+
+.wallet-button-avatar {
+  border-radius: 50%;
+  flex: none;
+  height: 24px;
+  object-fit: cover;
+  width: 24px;
 }
 
 .wallet-button-chevron {
@@ -440,34 +453,88 @@ textarea {
   max-width: 100%;
 }
 
-.token-sort {
+.token-filter {
+  flex: none;
+  position: relative;
+  z-index: 10;
+}
+
+.token-filter summary {
   align-items: center;
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(218, 208, 216, 0.86);
   border-radius: 14px;
-  display: flex;
-  flex: none;
-  padding: 3px;
-}
-
-.token-sort button {
-  background: transparent;
-  border-radius: 10px;
-  color: var(--muted);
+  color: var(--text-soft);
   cursor: default;
-  font-size: 12px;
-  font-weight: 590;
-  min-height: 38px;
-  padding: 0 12px;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+  height: 46px;
+  list-style: none;
+  padding: 0 13px;
   transition:
     background-color 150ms ease,
-    color 150ms ease,
-    box-shadow 150ms ease;
+    border-color 150ms ease,
+    color 150ms ease;
 }
 
-.token-sort button.active {
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 1px 5px rgba(52, 31, 47, 0.08);
+.token-filter summary::-webkit-details-marker {
+  display: none;
+}
+
+.token-filter[open] summary {
+  background: var(--surface-raised);
+  border-color: rgba(158, 69, 127, 0.42);
+  color: var(--text);
+}
+
+.token-filter-chevron {
+  color: var(--dim);
+  transition: transform 160ms var(--ease-out);
+}
+
+.token-filter[open] .token-filter-chevron {
+  transform: rotate(180deg);
+}
+
+.token-filter-menu {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(218, 208, 216, 0.94);
+  border-radius: 15px;
+  box-shadow: 0 18px 48px rgba(66, 39, 57, 0.16);
+  display: grid;
+  gap: 2px;
+  left: 0;
+  min-width: 220px;
+  padding: 5px;
+  position: absolute;
+  top: calc(100% + 8px);
+  transform-origin: top left;
+}
+
+.token-filter-menu button {
+  align-items: center;
+  background: transparent;
+  border-radius: 10px;
+  color: var(--text-soft);
+  cursor: default;
+  display: flex;
+  font-size: 13px;
+  font-weight: 570;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 0 11px;
+  text-align: left;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+  width: 100%;
+}
+
+.token-filter-menu button.active {
+  background: var(--accent-soft);
   color: var(--text);
 }
 
@@ -2846,6 +2913,46 @@ textarea {
   font-size: 11px;
 }
 
+.trade-review .form-section > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.trade-review-details {
+  margin: 0;
+}
+
+.trade-review-details > div {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 11px 0;
+}
+
+.trade-review-details dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.trade-review-details dd {
+  font-size: 12px;
+  font-weight: 590;
+  margin: 0;
+  text-align: right;
+}
+
+.token-detail-trade .trade-review-actions {
+  gap: 8px;
+}
+
+.token-detail-trade .trade-review-actions > button {
+  flex: 1;
+}
+
 .token-detail-prepared {
   display: flex;
   flex-direction: column;
@@ -3754,24 +3861,23 @@ textarea {
   .token-toolbar {
     display: grid;
     gap: 10px;
-    grid-template-columns: 1fr;
-    width: 100%;
-  }
-
-  .token-sort {
-    display: grid;
-    grid-template-columns: 0.85fr 0.85fr 1.7fr;
+    grid-template-columns: minmax(0, 1fr) auto;
     width: 100%;
   }
 
   .token-search {
+    grid-column: 1 / -1;
     grid-row: 1;
     min-width: 0;
     width: 100%;
   }
 
+  .token-filter {
+    justify-self: start;
+  }
+
   .token-pagination {
-    justify-self: center;
+    justify-self: end;
   }
 
   .explore-page {
@@ -4084,10 +4190,6 @@ textarea {
     width: calc(100% - 28px);
   }
 
-  .wordmark {
-    gap: 8px;
-  }
-
   .wallet-button-compact {
     max-width: 148px;
     padding: 0 12px;
@@ -4366,10 +4468,6 @@ textarea {
 
   .header-brand {
     gap: 0;
-  }
-
-  .wordmark > span {
-    display: none;
   }
 
   .launch-model-page {

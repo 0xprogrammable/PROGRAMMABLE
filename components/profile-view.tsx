@@ -513,8 +513,36 @@ export function ProfileView({
               role="tab"
               aria-selected={activeTab === tab.id}
               aria-controls="profile-panel"
+              tabIndex={activeTab === tab.id ? 0 : -1}
               className={activeTab === tab.id ? "active" : undefined}
               onClick={() => setActiveTab(tab.id)}
+              onKeyDown={(event) => {
+                if (
+                  event.key !== "ArrowLeft" &&
+                  event.key !== "ArrowRight" &&
+                  event.key !== "Home" &&
+                  event.key !== "End"
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                const current = profileTabs.findIndex(
+                  (candidate) => candidate.id === tab.id,
+                );
+                const next =
+                  event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? profileTabs.length - 1
+                      : (current +
+                          (event.key === "ArrowRight" ? 1 : -1) +
+                          profileTabs.length) %
+                        profileTabs.length;
+                setActiveTab(profileTabs[next].id);
+                document
+                  .getElementById(`profile-tab-${profileTabs[next].id}`)
+                  ?.focus();
+              }}
             >
               {tab.label}
             </button>

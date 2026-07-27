@@ -80,6 +80,7 @@ function validateEnvelope(
     payload.model.status !== "ready" ||
     payload.model.snapshot?.chainId !== deployment.chainId ||
     typeof payload.model.snapshot?.blockNumber !== "string" ||
+    typeof payload.model.snapshot?.blockHash !== "string" ||
     !Array.isArray(payload.model.tokens) ||
     !Array.isArray(payload.model.creatorClaims)
   ) {
@@ -97,6 +98,19 @@ function validateEnvelope(
     };
   }
   return { status: "ready", envelope, ageMs };
+}
+
+export function shouldReplaceDurableSnapshot(
+  current: { blockNumber: string; blockHash: Hex },
+  incoming: { blockNumber: string; blockHash: Hex },
+) {
+  const currentBlock = BigInt(current.blockNumber);
+  const incomingBlock = BigInt(incoming.blockNumber);
+  return (
+    incomingBlock > currentBlock ||
+    (incomingBlock === currentBlock &&
+      incoming.blockHash.toLowerCase() !== current.blockHash.toLowerCase())
+  );
 }
 
 export async function readDurableExploreModel(
@@ -162,8 +176,10 @@ export async function writeDurableExploreModel(
   );
   if (
     existing.status === "ready" &&
-    BigInt(existing.envelope.payload.model.snapshot.blockNumber) >=
-      BigInt(model.snapshot.blockNumber)
+    !shouldReplaceDurableSnapshot(
+      existing.envelope.payload.model.snapshot,
+      model.snapshot,
+    )
   ) {
     return {
       updated: false,

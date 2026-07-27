@@ -19,6 +19,7 @@ import {
 } from "viem";
 
 import {
+  PreparedTradeReview,
   TokenTrade,
   type PreparedTokenTrade,
 } from "@/components/token-trade";
@@ -55,6 +56,12 @@ type TokenMetric = {
 
 type TradeFlow =
   | { phase: "form" }
+  | {
+      phase: "review";
+      prepared: PreparedTokenTrade;
+      submitting: boolean;
+      error?: string;
+    }
   | {
       phase: "submitted";
       submitted: PreparedTokenTrade;
@@ -223,6 +230,25 @@ function formatEth(value: string | undefined, mode: "amount" | "price") {
   return `${formatted} ETH`;
 }
 
+function formatUsd(valueWad: string | undefined, mode: "amount" | "price") {
+  if (!valueWad || !/^\d+$/.test(valueWad)) return null;
+  const value = Number(formatUnits(BigInt(valueWad), 18));
+  if (!Number.isFinite(value) || value < 0) return null;
+  if (value === 0) return "$0";
+  if (mode === "price" && value < 0.01) {
+    return `$${new Intl.NumberFormat("en-US", {
+      maximumSignificantDigits: 6,
+    }).format(value)}`;
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: value >= 1_000 ? "compact" : "standard",
+    maximumFractionDigits: value >= 1_000 ? 2 : 2,
+  }).format(value);
+}
+
 function formatTokenAmount(value: string | undefined, symbol: string) {
   if (!value || !/^\d+(?:\.\d+)?$/.test(value)) return null;
   const parsed = Number(value);
@@ -363,16 +389,22 @@ function TokenDetailContent({
 
   const metrics = useMemo(() => {
     const values: Array<TokenMetric | null> = [
-      token.tokenPriceEth
+      token.tokenPriceUsdWad !== undefined || token.tokenPriceEth
         ? {
             label: "Price",
-            value: formatEth(token.tokenPriceEth, "price") ?? "",
+            value:
+              formatUsd(token.tokenPriceUsdWad, "price") ??
+              formatEth(token.tokenPriceEth, "price") ??
+              "",
           }
         : null,
-      token.marketCapEth
+      token.fdvUsdWad !== undefined || token.marketCapEth
         ? {
-            label: "Market cap",
-            value: formatEth(token.marketCapEth, "amount") ?? "",
+            label: "FDV",
+            value:
+              formatUsd(token.fdvUsdWad, "amount") ??
+              formatEth(token.marketCapEth, "amount") ??
+              "",
           }
         : null,
       token.grossVolumeEth
@@ -593,7 +625,11 @@ function TokenDetailContent({
       const next = tradeFlow.next;
       const submittedKind = tradeFlow.submitted.transaction.kind;
       if (next && next.transaction.kind !== submittedKind) {
-        await submitPreparedTrade(next);
+        setTradeFlow({
+          phase: "review",
+          prepared: next,
+          submitting: false,
+        });
         return;
       }
 
@@ -799,9 +835,43 @@ function TokenDetailContent({
                 poolId={token.poolId}
                 symbol={token.symbol}
                 tokenDecimals={tokenDecimals}
+                tokenPriceEth={token.tokenPriceEth}
+                totalSwapFeeBps={token.totalSwapFeeBps}
                 onPrepared={submitPreparedTrade}
               />
             </>
+          ) : tradeFlow.phase === "review" ? (
+            <PreparedTradeReview
+              prepared={tradeFlow.prepared}
+              symbol={token.symbol}
+              tokenDecimals={tokenDecimals}
+              tokenPriceEth={token.tokenPriceEth}
+              totalSwapFeeBps={token.totalSwapFeeBps}
+              pending={tradeFlow.submitting}
+              error={tradeFlow.error}
+              onBack={() => setTradeFlow({ phase: "form" })}
+              onConfirm={async () => {
+                const prepared = tradeFlow.prepared;
+                setTradeFlow({
+                  phase: "review",
+                  prepared,
+                  submitting: true,
+                });
+                try {
+                  await submitPreparedTrade(prepared);
+                } catch (error) {
+                  setTradeFlow({
+                    phase: "review",
+                    prepared,
+                    submitting: false,
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "The transaction could not be submitted",
+                  });
+                }
+              }}
+            />
           ) : (
             <div className="token-detail-prepared" role="status">
               <strong>

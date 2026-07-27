@@ -4,11 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
   Globe2,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   useDeferredValue,
@@ -39,7 +41,11 @@ type TokenCard = {
   tone: TokenTone;
 };
 
-type TokenSort = "newest" | "oldest" | "market-cap";
+type TokenSort =
+  | "newest"
+  | "oldest"
+  | "market-cap"
+  | "market-cap-asc";
 
 type ExplorePayload = {
   status: "ready" | "not-deployed";
@@ -82,6 +88,7 @@ const sortOptions: { id: TokenSort; label: string }[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
   { id: "market-cap", label: "Highest market cap" },
+  { id: "market-cap-asc", label: "Lowest market cap" },
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -221,14 +228,17 @@ function getFallbackTokenImage(address: string) {
   return fallbackTokenImages[index];
 }
 
-function formatMarketCap(token: LauncherToken) {
-  if (typeof token.marketCapUsd === "number" && token.marketCapUsd > 0) {
-    return `${new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      notation: "compact",
-      maximumFractionDigits: token.marketCapUsd >= 1_000_000 ? 2 : 0,
-    }).format(token.marketCapUsd)} MC`;
+function formatFdv(token: LauncherToken) {
+  if (token.fdvUsdWad && /^\d+$/.test(token.fdvUsdWad)) {
+    const value = Number(BigInt(token.fdvUsdWad)) / 1e18;
+    if (Number.isFinite(value) && value > 0) {
+      return `${new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        notation: "compact",
+        maximumFractionDigits: value >= 1_000_000 ? 2 : 0,
+      }).format(value)} FDV`;
+    }
   }
 
   if (!token.marketCapEth) return undefined;
@@ -242,7 +252,7 @@ function formatMarketCap(token: LauncherToken) {
           notation: value >= 1_000 ? "compact" : "standard",
           maximumFractionDigits: value >= 100 ? 1 : 4,
         }).format(value);
-  return `${formatted} ETH MC`;
+  return `${formatted} ETH FDV`;
 }
 
 function getPaginationItems(
@@ -290,7 +300,7 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     usesFallbackImage: !token.imageUrl?.trim(),
     links: token.links ?? [],
     tokenAddress: token.tokenAddress,
-    marketCapLabel: formatMarketCap(token),
+    marketCapLabel: formatFdv(token),
     tone: tokenTones[index % tokenTones.length],
   }));
 }
@@ -361,9 +371,11 @@ export function ExploreView() {
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedAddress, setCopiedAddress] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
   const copyResetTimer = useRef<number | null>(null);
-  const requestKey = `${deferredQuery}\u0000${sort}\u0000${currentPage}\u0000${retryKey}`;
+  const filterRef = useRef<HTMLDetailsElement>(null);
+  const requestKey = `${deferredQuery}\u0000${sort}\u0000${currentPage}\u0000${retryKey}\u0000${refreshKey}`;
 
   useEffect(
     () => () => {
@@ -373,6 +385,42 @@ export function ExploreView() {
     },
     [],
   );
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        setRefreshKey((value) => value + 1);
+      }
+    }, 15_000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    function closeFilter(event: PointerEvent | KeyboardEvent) {
+      const filter = filterRef.current;
+      if (!filter?.open) return;
+      if (event instanceof KeyboardEvent && event.key === "Escape") {
+        filter.removeAttribute("open");
+        filter.querySelector("summary")?.focus();
+        return;
+      }
+      if (
+        event instanceof PointerEvent &&
+        event.target instanceof Node &&
+        !filter.contains(event.target)
+      ) {
+        filter.removeAttribute("open");
+      }
+    }
+
+    document.addEventListener("pointerdown", closeFilter);
+    document.addEventListener("keydown", closeFilter);
+    return () => {
+      document.removeEventListener("pointerdown", closeFilter);
+      document.removeEventListener("keydown", closeFilter);
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -645,26 +693,37 @@ export function ExploreView() {
               />
             </label>
 
-            <div
-              className="token-sort"
-              role="group"
-              aria-label="Sort tokens"
-            >
-              {sortOptions.map((option) => (
-                <button
-                  key={option.id}
-                  className={sort === option.id ? "active" : undefined}
-                  type="button"
-                  aria-pressed={sort === option.id}
-                  onClick={() => {
-                    setSort(option.id);
-                    setCurrentPage(1);
-                  }}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <details className="token-filter" ref={filterRef}>
+              <summary>
+                <SlidersHorizontal aria-hidden="true" size={16} />
+                <span>Filter</span>
+                <ChevronDown
+                  className="token-filter-chevron"
+                  aria-hidden="true"
+                  size={15}
+                />
+              </summary>
+              <div className="token-filter-menu" role="group" aria-label="Sort tokens">
+                {sortOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    className={sort === option.id ? "active" : undefined}
+                    type="button"
+                    aria-pressed={sort === option.id}
+                    onClick={() => {
+                      setSort(option.id);
+                      setCurrentPage(1);
+                      filterRef.current?.removeAttribute("open");
+                    }}
+                  >
+                    <span>{option.label}</span>
+                    {sort === option.id ? (
+                      <Check aria-hidden="true" size={15} />
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </details>
 
             <nav className="token-pagination" aria-label="Token pages">
               <button

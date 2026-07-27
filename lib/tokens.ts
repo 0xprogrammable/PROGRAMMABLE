@@ -39,9 +39,10 @@ export type LauncherToken = {
   lockedTokenDustRaw?: string;
   tokenPriceEth?: string;
   tokenPriceEthWei?: string;
+  tokenPriceUsdWad?: string;
   marketCapEth?: string;
   marketCapEthWei?: string;
-  marketCapUsd?: number;
+  fdvUsdWad?: string;
   grossVolumeEth?: string;
   grossVolumeWei?: string;
   creatorFeesGeneratedEth?: string;

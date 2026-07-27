@@ -72,10 +72,20 @@ describe("Explore query", () => {
         (entry) => entry.symbol,
       ),
     ).toEqual(["XYZ", "ABC", "ABC"]);
+    expect(
+      filterAndSortTokens(tokens, "", "market-cap-asc").map(
+        (entry) => entry.tokenAddress,
+      ),
+    ).toEqual([
+      tokens[1].tokenAddress,
+      tokens[0].tokenAddress,
+      tokens[2].tokenAddress,
+    ]);
   });
 
   it("supports the public sort aliases and bounded pagination", () => {
     expect(parseExploreSort("highest-market-cap")).toBe("market-cap");
+    expect(parseExploreSort("lowest-market-cap")).toBe("market-cap-asc");
     const model: ExploreReadModel = {
       status: "ready",
       tokens,
@@ -98,5 +108,13 @@ describe("Explore query", () => {
     expect(page.total).toBe(3);
     expect(page.totalPages).toBe(2);
     expect(page.tokens).toHaveLength(1);
+  });
+
+  it("keeps a missing valuation last instead of treating it as zero", () => {
+    const missing = { ...tokens[0], id: "missing", marketCapEthWei: undefined };
+    expect(
+      filterAndSortTokens([missing, ...tokens], "", "market-cap-asc").at(-1)
+        ?.id,
+    ).toBe("missing");
   });
 });

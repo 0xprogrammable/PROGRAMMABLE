@@ -30,6 +30,11 @@ export {
   paginateExplore,
   parseExploreSort,
 } from "./query";
+export {
+  ETH_USD_FEED_ADDRESS,
+  enrichTokenWithUsd,
+  usdValueFromWei,
+} from "./usd";
 export type {
   ExplorePage,
   ExploreReadModel,

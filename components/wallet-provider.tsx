@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   PrivyProvider,
   useLinkAccount,
@@ -32,6 +33,7 @@ import {
 import { mainnet, sepolia } from "viem/chains";
 import type { Hex } from "viem";
 
+import { parseLocalProfile } from "@/lib/profile/local-profile";
 import {
   buildPrivyTransactionRequest,
   getPreparedTransactionReview,
@@ -47,6 +49,7 @@ type WalletState = {
 type WalletContextValue = {
   wallet: WalletState | null;
   username: string;
+  avatarDataUrl: string;
   authenticated: boolean;
   hasSession: boolean;
   connecting: boolean;
@@ -117,19 +120,19 @@ export function getWalletLoginErrorMessage(errorCode: string) {
   return "Unable to connect wallet. Try again.";
 }
 
-function readProfileName(account?: string) {
+function readProfileValue(account?: string) {
   if (!account || typeof window === "undefined") return "";
 
   try {
-    return readUsernameFromProfileValue(
-      window.localStorage.getItem(getWalletProfileStorageKey(account)),
+    return (
+      window.localStorage.getItem(getWalletProfileStorageKey(account)) ?? ""
     );
   } catch {
     return "";
   }
 }
 
-function subscribeToProfileNames(listener: () => void) {
+function subscribeToProfiles(listener: () => void) {
   const onStorage = (event: StorageEvent) => {
     if (event.key?.startsWith(`${profileStoragePrefix}:`)) listener();
   };
@@ -168,7 +171,7 @@ function emitProfileChange(account: string) {
   );
 }
 
-function getEmptyProfileName() {
+function getEmptyProfileValue() {
   return "";
 }
 
@@ -306,11 +309,17 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     wallets.length,
   );
 
-  const username = useSyncExternalStore(
-    subscribeToProfileNames,
-    () => readProfileName(wallet?.account),
-    getEmptyProfileName,
+  const profileValue = useSyncExternalStore(
+    subscribeToProfiles,
+    () => readProfileValue(wallet?.account),
+    getEmptyProfileValue,
   );
+  const localProfile = useMemo(
+    () => parseLocalProfile(profileValue),
+    [profileValue],
+  );
+  const username = localProfile.username;
+  const avatarDataUrl = localProfile.avatarDataUrl;
 
   useEffect(() => {
     if (sessionReady) return;
@@ -494,6 +503,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     () => ({
       wallet,
       username,
+      avatarDataUrl,
       authenticated,
       hasSession,
       connecting: !sessionReady && !providerTimedOut,
@@ -506,6 +516,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     }),
     [
       authenticated,
+      avatarDataUrl,
       disconnect,
       disconnecting,
       getAccessToken,
@@ -551,6 +562,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
     () => ({
       wallet: null,
       username: "",
+      avatarDataUrl: "",
       authenticated: false,
       hasSession: false,
       connecting: false,
@@ -843,6 +855,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   const {
     wallet,
     username,
+    avatarDataUrl,
     authenticated,
     hasSession,
     connecting,
@@ -879,7 +892,18 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       }
       onClick={openWallet}
     >
-      <Wallet aria-hidden="true" size={16} />
+      {avatarDataUrl ? (
+        <Image
+          className="wallet-button-avatar"
+          src={avatarDataUrl}
+          alt=""
+          width={24}
+          height={24}
+          unoptimized
+        />
+      ) : (
+        <Wallet aria-hidden="true" size={16} />
+      )}
       <span>{label}</span>
       {wallet ? (
         <ChevronDown

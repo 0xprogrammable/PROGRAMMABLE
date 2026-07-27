@@ -2,6 +2,7 @@
 
 import {
   createPublicClient,
+  decodeAbiParameters,
   decodeFunctionData,
   decodeEventLog,
   encodeAbiParameters,
@@ -283,6 +284,7 @@ async function loadConfiguration(evidencePath) {
     fixture,
     addresses,
     poolId,
+    poolKey,
     creatorSalt,
   };
 }
@@ -492,7 +494,7 @@ async function readTransactions(client, configuration) {
 }
 
 async function validateTransactionInputs(client, configuration, transactions) {
-  const { fixture, addresses, creatorSalt, poolId } = configuration;
+  const { fixture, addresses, creatorSalt, poolId, poolKey } = configuration;
   const expectedLaunchInput = encodeFunctionData({
     abi: launcherAbi,
     functionName: "launch",
@@ -564,8 +566,89 @@ async function validateTransactionInputs(client, configuration, transactions) {
       `${action} Universal Router selector changed`,
     );
     assert(
-      swap.args[0] !== "0x" && swap.args[1].length > 0,
-      `${action} Universal Router plan is empty`,
+      swap.args[0] === "0x10" && swap.args[1].length === 1,
+      `${action} must contain exactly one canonical V4 swap command`,
+    );
+    const [actions, params] = decodeAbiParameters(
+      [{ type: "bytes" }, { type: "bytes[]" }],
+      swap.args[1][0],
+    );
+    assert(
+      actions === "0x060c0f" && params.length === 3,
+      `${action} V4 action sequence changed`,
+    );
+    const [swapParams] = decodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            {
+              name: "poolKey",
+              type: "tuple",
+              components: [
+                { name: "currency0", type: "address" },
+                { name: "currency1", type: "address" },
+                { name: "fee", type: "uint24" },
+                { name: "tickSpacing", type: "int24" },
+                { name: "hooks", type: "address" },
+              ],
+            },
+            { name: "zeroForOne", type: "bool" },
+            { name: "amountIn", type: "uint128" },
+            { name: "amountOutMinimum", type: "uint128" },
+            { name: "hookData", type: "bytes" },
+          ],
+        },
+      ],
+      params[0],
+    );
+    const [settleCurrency, settleAmount] = decodeAbiParameters(
+      [{ type: "address" }, { type: "uint256" }],
+      params[1],
+    );
+    const [takeCurrency, takeMinimum] = decodeAbiParameters(
+      [{ type: "address" }, { type: "uint256" }],
+      params[2],
+    );
+    sameHex(swapParams.poolKey.currency0, poolKey.currency0, `${action}.currency0`);
+    sameHex(swapParams.poolKey.currency1, poolKey.currency1, `${action}.currency1`);
+    sameHex(swapParams.poolKey.hooks, poolKey.hooks, `${action}.hooks`);
+    assert(
+      swapParams.poolKey.fee === poolKey.fee &&
+        swapParams.poolKey.tickSpacing === poolKey.tickSpacing,
+      `${action} PoolKey fee or tick spacing changed`,
+    );
+    const isBuy = action === "buy";
+    const preSellBalance = isBuy
+      ? 0n
+      : await client.readContract({
+          address: addresses.token,
+          abi: tokenAbi,
+          functionName: "balanceOf",
+          args: [addresses.account],
+          blockNumber: transactions.sell.receipt.blockNumber - 1n,
+        });
+    const expectedInput = isBuy
+      ? SEPARATE_BUY_WEI
+      : preSellBalance - FINAL_TOKEN_BALANCE;
+    const inputCurrency = isBuy ? poolKey.currency0 : poolKey.currency1;
+    const outputCurrency = isBuy ? poolKey.currency1 : poolKey.currency0;
+    assert(
+      swapParams.zeroForOne === isBuy &&
+        swapParams.amountIn === expectedInput,
+      `${action} direction or exact input changed`,
+    );
+    assert(
+      swapParams.amountOutMinimum > 0n &&
+        swapParams.hookData === "0x",
+      `${action} minimum output or hook data changed`,
+    );
+    sameHex(settleCurrency, inputCurrency, `${action}.settleCurrency`);
+    sameHex(takeCurrency, outputCurrency, `${action}.takeCurrency`);
+    assert(
+      settleAmount === expectedInput &&
+        takeMinimum === swapParams.amountOutMinimum,
+      `${action} settlement bounds changed`,
     );
     const swapBlock = await client.getBlock({
       blockNumber: transactions[action].receipt.blockNumber,

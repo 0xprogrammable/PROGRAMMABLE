@@ -191,8 +191,8 @@ function LaunchModelPicker({ onChoose }: { onChoose: () => void }) {
               A fixed-supply token with locked liquidity and creator fees paid in ETH
             </span>
             <span className="launch-model-details">
+              <span>Uniswap v4</span>
               <span>No liquidity deposit</span>
-              <span>{MEME_MIN_INITIAL_BUY_ETH_LABEL} minimum Dev Buy</span>
               <span>1–10% swap fee</span>
             </span>
             <span className="launch-model-action">
@@ -1044,12 +1044,44 @@ function FeeStep({
                 type="button"
                 role="radio"
                 aria-checked={selected}
+                tabIndex={selected ? 0 : -1}
                 className={selected ? "selected" : undefined}
                 onClick={() =>
                   updateDraft(setDraft, {
                     totalSwapFeePercent: String(percent),
                   })
                 }
+                onKeyDown={(event) => {
+                  if (
+                    event.key !== "ArrowLeft" &&
+                    event.key !== "ArrowRight" &&
+                    event.key !== "ArrowUp" &&
+                    event.key !== "ArrowDown" &&
+                    event.key !== "Home" &&
+                    event.key !== "End"
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  const direction =
+                    event.key === "ArrowLeft" || event.key === "ArrowUp"
+                      ? -1
+                      : 1;
+                  const next =
+                    event.key === "Home"
+                      ? 1
+                      : event.key === "End"
+                        ? 10
+                        : ((percent - 1 + direction + 10) % 10) + 1;
+                  updateDraft(setDraft, {
+                    totalSwapFeePercent: String(next),
+                  });
+                  (
+                    event.currentTarget.parentElement?.querySelector(
+                      `button:nth-child(${next})`,
+                    ) as HTMLButtonElement | null
+                  )?.focus();
+                }}
               >
                 {percent}%
               </button>

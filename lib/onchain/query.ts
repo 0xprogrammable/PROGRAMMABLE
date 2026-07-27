@@ -14,6 +14,9 @@ export function parseExploreSort(value: string | null): ExploreSort {
   if (value === "market-cap" || value === "highest-market-cap") {
     return "market-cap";
   }
+  if (value === "market-cap-asc" || value === "lowest-market-cap") {
+    return "market-cap-asc";
+  }
   return "newest";
 }
 
@@ -39,6 +42,11 @@ function compareLaunchOrder(
   return first.tokenAddress.localeCompare(second.tokenAddress);
 }
 
+function marketCap(token: LauncherToken) {
+  const value = token.marketCapEthWei;
+  return value && /^\d+$/.test(value) ? BigInt(value) : null;
+}
+
 export function filterAndSortTokens(
   tokens: LauncherToken[],
   query: string,
@@ -58,10 +66,20 @@ export function filterAndSortTokens(
     : [...tokens];
 
   return filtered.sort((first, second) => {
-    if (sort === "market-cap") {
-      const firstCap = BigInt(first.marketCapEthWei ?? "0");
-      const secondCap = BigInt(second.marketCapEthWei ?? "0");
-      if (firstCap !== secondCap) return firstCap > secondCap ? -1 : 1;
+    if (sort === "market-cap" || sort === "market-cap-asc") {
+      const firstCap = marketCap(first);
+      const secondCap = marketCap(second);
+      if (firstCap === null || secondCap === null) {
+        if (firstCap === null && secondCap !== null) return 1;
+        if (firstCap !== null && secondCap === null) return -1;
+        return compareLaunchOrder(second, first);
+      }
+      if (firstCap !== secondCap) {
+        if (sort === "market-cap") {
+          return firstCap > secondCap ? -1 : 1;
+        }
+        return firstCap < secondCap ? -1 : 1;
+      }
       return compareLaunchOrder(second, first);
     }
     const comparison = compareLaunchOrder(first, second);

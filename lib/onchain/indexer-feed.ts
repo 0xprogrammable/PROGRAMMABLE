@@ -176,10 +176,17 @@ export function buildUniswapTokenList(
         ...(token.imageUrl ? { logoURI: token.imageUrl } : {}),
         extensions: {
           programmable: {
+            description: token.description ?? null,
+            imageUrl: token.imageUrl ?? null,
+            links: serialized.links,
             hook: token.hookAddress,
             model: "v4-custom-accounting",
+            poolId: token.poolId,
             positionRecipient: token.positionRecipient ?? null,
             positionTokenId: token.positionTokenId ?? null,
+            tokenLiquidityAmountRaw:
+              token.tokenLiquidityAmountRaw ?? null,
+            lockedTokenDustRaw: token.lockedTokenDustRaw ?? null,
             buyFeeBps: serialized.fees.buyHookFeeBps,
             sellFeeBps: serialized.fees.sellHookFeeBps,
             creatorFeeBps: serialized.fees.creatorFeeBps,
