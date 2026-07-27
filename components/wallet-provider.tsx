@@ -80,10 +80,9 @@ const appNetworkName = appChain.id === sepolia.id ? "Sepolia" : "Ethereum";
 export function getWalletSessionAction(
   ready: boolean,
   authenticated: boolean,
-  connectedWalletCount: number,
 ) {
   if (!ready) return "wait" as const;
-  if (authenticated || connectedWalletCount > 0) return "manage" as const;
+  if (authenticated) return "manage" as const;
   return "login" as const;
 }
 
@@ -255,6 +254,15 @@ export function selectConnectedWallet<T extends WalletCandidate>(
   );
 }
 
+export function selectAuthenticatedWallet<T extends WalletCandidate>(
+  authenticated: boolean,
+  wallets: readonly T[],
+  primaryAddress?: string,
+) {
+  if (!authenticated) return undefined;
+  return selectConnectedWallet(wallets, primaryAddress);
+}
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   if (!privyAppId) {
     return <UnconfiguredWalletProvider>{children}</UnconfiguredWalletProvider>;
@@ -279,11 +287,13 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [sessionSuppressed, setSessionSuppressed] = useState(false);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
   const [error, setError] = useState("");
   const [providerTimedOut, setProviderTimedOut] = useState(false);
   const { login } = useLogin({
     onComplete: () => {
+      setSessionSuppressed(false);
       setError("");
       setDialogOpen(false);
     },
@@ -309,9 +319,16 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     },
   });
 
-  const connectedWallet = useMemo(() => {
-    return selectConnectedWallet(wallets, user?.wallet?.address);
-  }, [user?.wallet?.address, wallets]);
+  const activeAuthenticated = authenticated && !sessionSuppressed;
+  const connectedWallet = useMemo(
+    () =>
+      selectAuthenticatedWallet(
+        activeAuthenticated,
+        wallets,
+        user?.wallet?.address,
+      ),
+    [activeAuthenticated, user?.wallet?.address, wallets],
+  );
 
   const wallet = useMemo<WalletState | null>(() => {
     if (
@@ -327,11 +344,10 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     };
   }, [connectedWallet]);
   const sessionReady = ready && walletsReady;
-  const hasSession = authenticated || wallets.length > 0;
+  const hasSession = activeAuthenticated;
   const sessionAction = getWalletSessionAction(
     sessionReady,
-    authenticated,
-    wallets.length,
+    activeAuthenticated,
   );
 
   const profileValue = useSyncExternalStore(
@@ -388,6 +404,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   );
 
   const startLogin = useCallback(() => {
+    setSessionSuppressed(false);
     setError("");
     setDialogOpen(false);
 
@@ -426,13 +443,14 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   }, [providerTimedOut, sessionAction, startLogin]);
 
   const disconnect = useCallback(async () => {
+    setSessionSuppressed(true);
     setDisconnecting(true);
     setError("");
 
     try {
-      const operations = wallets.map(async (candidate) => {
-        candidate.disconnect();
-      });
+      const operations = wallets.map((candidate) =>
+        Promise.resolve().then(() => candidate.disconnect()),
+      );
       if (authenticated) {
         operations.push(Promise.resolve().then(logout));
       }
@@ -446,6 +464,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     } catch {
       setError("Unable to disconnect wallet. Try again.");
     } finally {
+      setDialogOpen(false);
       setDisconnecting(false);
     }
   }, [authenticated, logout, wallets]);
@@ -529,7 +548,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       wallet,
       username,
       avatarDataUrl,
-      authenticated,
+      authenticated: activeAuthenticated,
       hasSession,
       connecting: !sessionReady && !providerTimedOut,
       disconnecting,
@@ -540,7 +559,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       sendTransaction,
     }),
     [
-      authenticated,
+      activeAuthenticated,
       avatarDataUrl,
       disconnect,
       disconnecting,
@@ -562,7 +581,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       {dialogOpen ? (
         <WalletDialog
           wallet={wallet}
-          authenticated={authenticated}
+          authenticated={activeAuthenticated}
           hasSession={hasSession}
           copied={copied}
           disconnecting={disconnecting}

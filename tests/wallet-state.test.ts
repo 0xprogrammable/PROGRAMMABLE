@@ -5,8 +5,17 @@ type WalletProviderContract = {
   getWalletSessionAction: (
     ready: boolean,
     authenticated: boolean,
-    connectedWalletCount: number,
   ) => "wait" | "login" | "manage";
+  selectAuthenticatedWallet: <T extends {
+    address: string;
+    connectedAt: number;
+    linked: boolean;
+    walletClientType: string;
+  }>(
+    authenticated: boolean,
+    wallets: readonly T[],
+    primaryAddress?: string,
+  ) => T | undefined;
   getWalletProfileStorageKey: (account: string) => string;
   readUsernameFromProfileValue: (value: string | null) => string;
   getWalletLoginErrorMessage: (errorCode: string) => string;
@@ -24,16 +33,16 @@ type WalletProviderContract = {
 const subject = walletProvider as unknown as WalletProviderContract;
 
 describe("wallet recovery state", () => {
-  it("opens account management for an external wallet session even before Privy authentication completes", () => {
+  it("does not treat a detected browser wallet as an authenticated app session", () => {
     expect(subject.getWalletSessionAction).toBeTypeOf("function");
-    expect(subject.getWalletSessionAction(true, false, 1)).toBe("manage");
+    expect(subject.getWalletSessionAction(true, false)).toBe("login");
   });
 
   it("opens login only when Privy is ready and no recoverable session exists", () => {
     expect(subject.getWalletSessionAction).toBeTypeOf("function");
-    expect(subject.getWalletSessionAction(false, false, 0)).toBe("wait");
-    expect(subject.getWalletSessionAction(true, false, 0)).toBe("login");
-    expect(subject.getWalletSessionAction(true, true, 0)).toBe("manage");
+    expect(subject.getWalletSessionAction(false, false)).toBe("wait");
+    expect(subject.getWalletSessionAction(true, false)).toBe("login");
+    expect(subject.getWalletSessionAction(true, true)).toBe("manage");
   });
 
   it("uses the lowercase wallet-scoped profile key", () => {
@@ -71,7 +80,7 @@ describe("wallet recovery state", () => {
     expect(subject.getWalletLoginErrorMessage("exited_link_flow")).toBe("");
   });
 
-  it("keeps a connected external wallet launch-ready before Privy authentication settles", () => {
+  it("only exposes a connected wallet to the app after authentication", () => {
     const externalWallet = {
       address: "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
       connectedAt: 20,
@@ -85,8 +94,17 @@ describe("wallet recovery state", () => {
       walletClientType: "privy",
     };
 
+    expect(subject.selectAuthenticatedWallet).toBeTypeOf("function");
     expect(
-      subject.selectConnectedWallet(
+      subject.selectAuthenticatedWallet(
+        false,
+        [embeddedWallet, externalWallet],
+        embeddedWallet.address,
+      ),
+    ).toBeUndefined();
+    expect(
+      subject.selectAuthenticatedWallet(
+        true,
         [embeddedWallet, externalWallet],
         embeddedWallet.address,
       ),

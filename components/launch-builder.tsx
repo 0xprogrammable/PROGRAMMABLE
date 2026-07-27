@@ -55,6 +55,8 @@ type TokenImageState = {
   message: string;
 };
 
+type LaunchPhase = "idle" | "preparing" | "confirming";
+
 const emptyTokenImageState: TokenImageState = {
   status: "idle",
   message: "",
@@ -193,12 +195,13 @@ function LaunchBuilderForm({
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
-  const [launching, setLaunching] = useState(false);
+  const [launchPhase, setLaunchPhase] = useState<LaunchPhase>("idle");
   const [transactionHash, setTransactionHash] = useState("");
   const [tokenImageState, setTokenImageState] =
     useState<TokenImageState>(emptyTokenImageState);
   const currentLaunchContext = useRef({ draft, wallet });
   const draftVersion = useRef(0);
+  const launching = launchPhase !== "idle";
 
   useEffect(() => {
     currentLaunchContext.current = { draft, wallet };
@@ -241,24 +244,37 @@ function LaunchBuilderForm({
     checkedDraft: LaunchDraft,
     connectedWallet: NonNullable<typeof wallet>,
   ) {
-    const response = await fetch("/api/launch/preflight", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        account: connectedWallet.account,
-        walletChainId: connectedWallet.chainId,
-        draft: checkedDraft,
-      }),
-    });
-    const body = (await response.json()) as
-      | LaunchPreflightResponse
-      | { error: string };
-    if (!response.ok || "error" in body) {
-      throw new Error(
-        "error" in body ? body.error : "The launch could not be checked",
-      );
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+
+    try {
+      const response = await fetch("/api/launch/preflight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account: connectedWallet.account,
+          walletChainId: connectedWallet.chainId,
+          draft: checkedDraft,
+        }),
+        signal: controller.signal,
+      });
+      const body = (await response.json()) as
+        | LaunchPreflightResponse
+        | { error: string };
+      if (!response.ok || "error" in body) {
+        throw new Error(
+          "error" in body ? body.error : "The launch could not be checked",
+        );
+      }
+      return body;
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        throw new Error("The launch check timed out. Try again");
+      }
+      throw caught;
+    } finally {
+      window.clearTimeout(timeout);
     }
-    return body;
   }
 
   function persistLaunchDraft(
@@ -301,20 +317,21 @@ function LaunchBuilderForm({
     return {
       checkedDraft,
       planHash: result.planHash,
+      transaction: result.transaction,
     };
   }
 
   async function launchToken() {
     if (launching || transactionHash) return;
 
-    const validationError = validateLaunch();
-    if (validationError) {
-      setFormError(validationError);
+    if (!wallet) {
+      openWallet();
       return;
     }
 
-    if (!wallet) {
-      openWallet();
+    const validationError = validateLaunch();
+    if (validationError) {
+      setFormError(validationError);
       return;
     }
 
@@ -330,24 +347,12 @@ function LaunchBuilderForm({
     }
     persistLaunchDraft(checkedDraft, launchWallet);
     setFormError("");
-    setLaunching(true);
+    setLaunchPhase("preparing");
     setTransactionHash("");
 
     try {
       const prepared = await prepareLaunch(checkedDraft, launchWallet);
       checkedDraft = prepared.checkedDraft;
-
-      const refreshed = await requestLaunchCheck(checkedDraft, launchWallet);
-      if (
-        refreshed.draftPatch ||
-        refreshed.status !== "ready" ||
-        !refreshed.transaction ||
-        !refreshed.planHash ||
-        refreshed.planHash.toLowerCase() !==
-          prepared.planHash.toLowerCase()
-      ) {
-        throw new Error("The launch changed while it was being prepared. Try again");
-      }
 
       const latest = currentLaunchContext.current;
       if (
@@ -363,11 +368,12 @@ function LaunchBuilderForm({
 
       const validatedTransaction =
         validatePreparedClassicLaunchTransaction({
-          transaction: refreshed.transaction,
+          transaction: prepared.transaction,
           draft: checkedDraft,
           account: launchWallet.account,
-          planHash: refreshed.planHash,
+          planHash: prepared.planHash,
         });
+      setLaunchPhase("confirming");
       const hash = await sendTransaction(validatedTransaction);
       setTransactionHash(hash);
       setNotice("Launch submitted");
@@ -378,7 +384,7 @@ function LaunchBuilderForm({
           : "The launch did not complete. Try again",
       );
     } finally {
-      setLaunching(false);
+      setLaunchPhase("idle");
     }
   }
 
@@ -450,11 +456,15 @@ function LaunchBuilderForm({
             disabled={launching || Boolean(transactionHash)}
             style={{ animation: "none", transform: "none", transition: "none" }}
           >
-            {launching
+            {launchPhase === "preparing"
               ? "Preparing launch"
+              : launchPhase === "confirming"
+                ? "Confirm in wallet"
               : transactionHash
                 ? "Launch submitted"
-                : "Launch token"}
+                : wallet
+                  ? "Launch token"
+                  : "Connect wallet"}
           </button>
         </footer>
       </form>
@@ -861,6 +871,8 @@ function FeeStep({
   const feeBreakdown = getMemeFeeBreakdown(draft);
   const totalSwapFeeBps = feeBreakdown?.totalSwapFeeBps ?? 100;
   const creatorFeeBps = feeBreakdown?.creatorFeeBps ?? 90;
+  const selectedFeePercent = totalSwapFeeBps / 100;
+  const feeProgress = ((selectedFeePercent - 1) / 9) * 100;
 
   return (
     <section className="classic-fee-section">
@@ -874,60 +886,37 @@ function FeeStep({
       </div>
 
       <div className="classic-fee-layout">
-        <div className="meme-fee-options" role="radiogroup" aria-label="Total swap fee">
-          {Array.from({ length: 10 }, (_, index) => index + 1).map((percent) => {
-            const selected = draft.totalSwapFeePercent === String(percent);
-            return (
-              <button
-                key={percent}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                tabIndex={selected ? 0 : -1}
-                className={selected ? "selected" : undefined}
-                onClick={() => {
+        <div className="classic-fee-slider">
+          <div className="classic-fee-slider-row">
+            <div className="classic-fee-slider-control">
+              <span className="classic-fee-slider-track" aria-hidden="true">
+                <span style={{ width: `${feeProgress}%` }} />
+              </span>
+              <input
+                id="classic-swap-fee"
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                value={selectedFeePercent}
+                aria-label="Total swap fee"
+                aria-valuetext={`${selectedFeePercent}% total swap fee`}
+                onInput={(event) => {
                   onEdit();
                   updateDraft(setDraft, {
-                    totalSwapFeePercent: String(percent),
+                    totalSwapFeePercent: event.currentTarget.value,
                   });
                 }}
-                onKeyDown={(event) => {
-                  if (
-                    event.key !== "ArrowLeft" &&
-                    event.key !== "ArrowRight" &&
-                    event.key !== "ArrowUp" &&
-                    event.key !== "ArrowDown" &&
-                    event.key !== "Home" &&
-                    event.key !== "End"
-                  ) {
-                    return;
-                  }
-                  event.preventDefault();
-                  const direction =
-                    event.key === "ArrowLeft" || event.key === "ArrowUp"
-                      ? -1
-                      : 1;
-                  const next =
-                    event.key === "Home"
-                      ? 1
-                      : event.key === "End"
-                        ? 10
-                        : ((percent - 1 + direction + 10) % 10) + 1;
-                  onEdit();
-                  updateDraft(setDraft, {
-                    totalSwapFeePercent: String(next),
-                  });
-                  (
-                    event.currentTarget.parentElement?.querySelector(
-                      `button:nth-child(${next})`,
-                    ) as HTMLButtonElement | null
-                  )?.focus();
-                }}
-              >
-                {percent}%
-              </button>
-            );
-          })}
+              />
+            </div>
+            <output htmlFor="classic-swap-fee">
+              {selectedFeePercent}%
+            </output>
+          </div>
+          <div className="classic-fee-slider-limits" aria-hidden="true">
+            <span>1%</span>
+            <span>10%</span>
+          </div>
         </div>
 
         <label className="meme-dev-buy" htmlFor="classic-dev-buy">
