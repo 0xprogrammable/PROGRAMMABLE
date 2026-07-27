@@ -18,6 +18,8 @@
 # test and tooling
 /coverage
 /work/
+/tmp/
+/outputs/qa/
 *.tsbuildinfo
 
 # Foundry contract dependencies and build artifacts

@@ -1,11 +1,11 @@
 # Classic mainnet readiness
 
-Current state: **Mainnet blocked by design; Sepolia rehearsal verified**.
+Current state: **V1 infrastructure exists; V2 public release blocked by design**.
 
 | Environment | Manifest state | Release meaning |
 | --- | --- | --- |
-| Ethereum mainnet | `not-deployed` | No launch or trade transaction can be prepared |
-| Ethereum Sepolia | `ready` | Current atomic Dev Buy release and lifecycle are independently reconciled |
+| Ethereum mainnet | V1 deployed, V2 planned | V1 Test evidence is incomplete; public preparation remains disabled |
+| Ethereum Sepolia | V1 ready, V2 planned | V1 lifecycle is historical evidence; V2 Test2 is still required |
 
 There has been no external smart-contract audit or public contest.
 
@@ -30,13 +30,18 @@ There has been no external smart-contract audit or public contest.
 - Confirmation-delayed event and StateView read model for Explore and Profile
 - Official deployment registry and pinned runtime snapshot validation
 
-These are repository-level implementation and test properties. They are not Mainnet deployment evidence or third-party assurance.
+These are repository-level implementation and test properties. The deployed V1 addresses are not V2 release evidence
+or third-party assurance.
 
 ## Sepolia evidence
 
-The current Classic launcher, hook and hook factory are source-verified on Sepolia. Its signed lifecycle launched an official UERC20 v2 token with nonempty dynamic `bytes extraData` and a 0.0006 ETH atomic creator buy, authorized the official Universal Router through Permit2, sold, and claimed both creator and Programmable native ETH fees.
+The recorded V1 Classic launcher, hook and hook factory are source-verified on Sepolia. Its signed lifecycle launched an
+official UERC20 v2 token with nonempty dynamic `bytes extraData` and a 0.0006 ETH atomic creator buy, authorized the
+official Universal Router through Permit2, sold, and claimed both creator and Programmable native ETH fees.
 
-Two independent RPCs reconcile all five receipts, runtime hashes, token provenance, fee math, balance deltas, canonical pool state and permanent position custody. Four Blockscout records confirm source verification. The current Sepolia manifest is `ready`.
+Two independent RPCs reconcile all five receipts, runtime hashes, token provenance, fee math, balance deltas, canonical
+pool state and permanent position custody. Four Blockscout records confirm source verification. The V1 Sepolia manifest
+is `ready`, but V2 still needs a new Test2 lifecycle because V1 cannot emit the V2 disclosure events.
 
 The older lifecycle that used the legacy fourth metadata field remains separately marked `historical-invalid-metadata-abi` with `releaseEligible: false`. Its addresses and receipts are retained in [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for historical traceability and cannot enable transaction preparation.
 
@@ -49,21 +54,25 @@ The older lifecycle that used the legacy fourth metadata field remains separatel
 5. Add live alerts, named incident owners and a rehearsed response process
 6. Fund the owner-approved deployer only after reviewing a fresh gas ceiling
 7. Recheck the approved deployer nonce and balance, official deployment records, dependency runtime bytecode and predicted-address vacancy immediately before signing
-8. Bind the frozen source commitment to the machine-readable Mainnet evidence, run a fresh read-only simulation and review all four zero-value transactions
+8. Bind the frozen source commitment to the machine-readable Mainnet evidence, run a fresh read-only simulation and review all three zero-value transactions
 9. Obtain explicit approval for the exact gas ceiling and broadcast, then source-verify the deployment and run a low-value monitored canary before enabling public preparation
 10. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
-11. Resolve or explicitly accept the 2026-07-27 `npm audit --omit=dev` result: 23 production dependency entries in the Uniswap SDK graph, comprising 15 low, 6 moderate and 2 high severities. A forced breaking version change must not be applied without compatibility review
+11. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production audit
+    has zero critical, high or moderate findings; 19 low-severity `ethers` v5/`elliptic` findings remain without a
+    compatible upstream fix
 
 ## Owner decisions
 
 - Final funding amount and maximum Mainnet fee ceiling
-- Explicit approval for the reviewed four-transaction broadcast and later public enablement
+- Explicit approval for the reviewed three-transaction V2 broadcast and later public enablement
 - Incident-response and public-communication owners
 
 ## Frontend gate
 
 The public form always normalizes to Classic. The server accepts no target address or calldata from the browser. It verifies the deployment manifest, runtime code, factory provenance, immutable dependencies, treasury, hook mask, fee constants, the 0.0006 ETH minimum Dev Buy, predicted token address and exact selected call value before simulation.
 
-Launch and trading preparation remain disabled while Mainnet is `not-deployed`. Sepolia preparation is enabled only when the application is explicitly configured for the verified rehearsal environment; it never silently replaces the production manifest.
+Launch and trading preparation remain disabled while the selected release lacks current lifecycle evidence. Sepolia V1
+preparation is enabled only when the application is explicitly configured for that verified rehearsal environment; the
+Test2 fixture refuses to run until the manifest explicitly identifies the deployed `classic-v2` release.
 
 The absence of an external audit leaves additional residual smart-contract risk. Product and release copy must not describe the system or any launched token as audited, safe, unruggable, scam proof or guaranteed compatible with third-party scanners.
