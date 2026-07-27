@@ -8,6 +8,7 @@ import {
   getDraftAssetLabel,
   getInitialBuyEthLabel,
   getMemeFeeBreakdown,
+  maximumClassicDevBuyWei,
   MEME_INITIAL_TICK,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_WEI,
@@ -56,6 +57,23 @@ describe("Classic launch plan", () => {
         initialBuyEth: "0.002",
       }),
     ).toBe("0.002 ETH");
+  });
+
+  it("keeps a 50 percent network-fee buffer when Max is selected", () => {
+    expect(
+      maximumClassicDevBuyWei({
+        nativeBalanceWei: 10_000n,
+        gasLimit: 1_000n,
+        gasPriceWei: 2n,
+      }),
+    ).toBe(7_000n);
+    expect(
+      maximumClassicDevBuyWei({
+        nativeBalanceWei: 3_000n,
+        gasLimit: 1_000n,
+        gasPriceWei: 2n,
+      }),
+    ).toBe(0n);
   });
 
   it("copies the selected Dev Buy into the launch summary", () => {

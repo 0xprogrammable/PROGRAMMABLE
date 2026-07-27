@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   PrivyProvider,
   useLinkAccount,
@@ -54,6 +55,11 @@ export type WalletTradeBalances = {
   gasPriceWei: bigint;
 };
 
+export type WalletNativeBalance = {
+  nativeBalanceWei: bigint;
+  gasPriceWei: bigint;
+};
+
 type WalletContextValue = {
   wallet: WalletState | null;
   username: string;
@@ -66,12 +72,9 @@ type WalletContextValue = {
   disconnect: () => Promise<void>;
   getAccessToken: () => Promise<string | null>;
   setUsername: (username: string) => void;
-  sendTransaction: (
-    transaction: PreparedTransaction,
-  ) => Promise<Hex>;
-  readTradeBalances: (
-    token: `0x${string}`,
-  ) => Promise<WalletTradeBalances>;
+  sendTransaction: (transaction: PreparedTransaction) => Promise<Hex>;
+  readNativeBalance: () => Promise<WalletNativeBalance>;
+  readTradeBalances: (token: `0x${string}`) => Promise<WalletTradeBalances>;
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -88,10 +91,7 @@ const appChain =
 const appChainHex = `0x${appChain.id.toString(16)}`;
 const appNetworkName = appChain.id === sepolia.id ? "Sepolia" : "Ethereum";
 
-export function getWalletSessionAction(
-  ready: boolean,
-  authenticated: boolean,
-) {
+export function getWalletSessionAction(ready: boolean, authenticated: boolean) {
   if (!ready) return "wait" as const;
   if (authenticated) return "manage" as const;
   return "login" as const;
@@ -120,10 +120,7 @@ export function readUsernameFromProfileValue(value: string | null) {
 }
 
 export function getWalletLoginErrorMessage(errorCode: string) {
-  if (
-    errorCode === "exited_auth_flow" ||
-    errorCode === "exited_link_flow"
-  ) {
+  if (errorCode === "exited_auth_flow" || errorCode === "exited_link_flow") {
     return "";
   }
 
@@ -151,9 +148,7 @@ export function getWalletTransactionErrorMessage(error: unknown) {
   if (
     code === 4900 ||
     code === 4901 ||
-    /disconnected|lost connection|background|postmessage failed/i.test(
-      message,
-    )
+    /disconnected|lost connection|background|postmessage failed/i.test(message)
   ) {
     return "Wallet connection was interrupted. Reload the page and try again";
   }
@@ -252,7 +247,9 @@ function shortenAddress(address: string) {
 function normalizeChainId(chainId: string) {
   if (chainId.startsWith("eip155:")) {
     const decimalId = Number(chainId.slice("eip155:".length));
-    return Number.isSafeInteger(decimalId) ? `0x${decimalId.toString(16)}` : chainId;
+    return Number.isSafeInteger(decimalId)
+      ? `0x${decimalId.toString(16)}`
+      : chainId;
   }
 
   return chainId.toLowerCase();
@@ -263,10 +260,7 @@ function isEthereumAddress(address: string): address is `0x${string}` {
 }
 
 function parseRpcQuantity(value: unknown, label: string) {
-  if (
-    typeof value !== "string" ||
-    !/^0x[0-9a-fA-F]+$/.test(value)
-  ) {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]+$/.test(value)) {
     throw new Error(`The wallet returned an invalid ${label}`);
   }
 
@@ -334,8 +328,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
 function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const { authenticated, getAccessToken, logout, ready, user } = usePrivy();
-  const { sendTransaction: sendPrivyTransaction } =
-    usePrivySendTransaction();
+  const { sendTransaction: sendPrivyTransaction } = usePrivySendTransaction();
   const { ready: walletsReady, wallets } = useWallets();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -384,10 +377,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   );
 
   const wallet = useMemo<WalletState | null>(() => {
-    if (
-      !connectedWallet ||
-      !isEthereumAddress(connectedWallet.address)
-    ) {
+    if (!connectedWallet || !isEthereumAddress(connectedWallet.address)) {
       return null;
     }
 
@@ -604,30 +594,19 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
           typeof providerChainId !== "string" ||
           normalizeChainId(providerChainId) !== appChainHex
         ) {
-          throw new Error(
-            `The wallet is not connected to ${appNetworkName}`,
-          );
+          throw new Error(`The wallet is not connected to ${appNetworkName}`);
         }
 
         const hash = await provider.request({
           method: "eth_sendTransaction",
-          params: [
-            buildEip1193TransactionRequest(
-              prepared,
-              wallet.account,
-            ),
-          ],
+          params: [buildEip1193TransactionRequest(prepared, wallet.account)],
         });
         return parseSubmittedTransactionHash(hash);
       } catch (caught) {
         throw new Error(getWalletTransactionErrorMessage(caught));
       }
     },
-    [
-      connectedWallet,
-      sendPrivyTransaction,
-      wallet,
-    ],
+    [connectedWallet, sendPrivyTransaction, wallet],
   );
 
   const readTradeBalances = useCallback(
@@ -673,19 +652,45 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       ]);
 
       return {
-        nativeBalanceWei: parseRpcQuantity(
-          nativeBalance,
-          "ETH balance",
-        ),
-        tokenBalanceRaw: parseRpcQuantity(
-          tokenBalance,
-          "token balance",
-        ),
+        nativeBalanceWei: parseRpcQuantity(nativeBalance, "ETH balance"),
+        tokenBalanceRaw: parseRpcQuantity(tokenBalance, "token balance"),
         gasPriceWei: parseRpcQuantity(gasPrice, "gas price"),
       };
     },
     [connectedWallet, wallet],
   );
+
+  const readNativeBalance = useCallback(async () => {
+    if (!connectedWallet || !wallet) {
+      throw new Error("Connect an Ethereum wallet before continuing");
+    }
+
+    const provider = await connectedWallet.getEthereumProvider();
+    const providerChainId = await provider.request({
+      method: "eth_chainId",
+    });
+    if (
+      typeof providerChainId !== "string" ||
+      normalizeChainId(providerChainId) !== appChainHex
+    ) {
+      throw new Error(`Switch your wallet to ${appNetworkName}`);
+    }
+
+    const [nativeBalance, gasPrice] = await Promise.all([
+      provider.request({
+        method: "eth_getBalance",
+        params: [wallet.account, "latest"],
+      }),
+      provider.request({
+        method: "eth_gasPrice",
+      }),
+    ]);
+
+    return {
+      nativeBalanceWei: parseRpcQuantity(nativeBalance, "ETH balance"),
+      gasPriceWei: parseRpcQuantity(gasPrice, "gas price"),
+    };
+  }, [connectedWallet, wallet]);
 
   const value = useMemo<WalletContextValue>(
     () => ({
@@ -701,6 +706,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       getAccessToken,
       setUsername,
       sendTransaction,
+      readNativeBalance,
       readTradeBalances,
     }),
     [
@@ -712,6 +718,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       hasSession,
       openWallet,
       providerTimedOut,
+      readNativeBalance,
       readTradeBalances,
       sendTransaction,
       sessionReady,
@@ -762,6 +769,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       getAccessToken: async () => null,
       setUsername: () => undefined,
       sendTransaction: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      readNativeBalance: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       readTradeBalances: async () => {
@@ -834,11 +844,7 @@ function WalletDialog({
         : "Finish wallet connection";
 
   return (
-    <DialogFrame
-      eyebrow="Wallet"
-      title={title}
-      onClose={onClose}
-    >
+    <DialogFrame eyebrow="Wallet" title={title} onClose={onClose}>
       {wallet ? (
         <div className="connected-wallet">
           <div className="wallet-account-row">
@@ -857,9 +863,7 @@ function WalletDialog({
                 onClick={onSwitchNetwork}
               >
                 <Network aria-hidden="true" size={16} />
-                {switchingNetwork
-                  ? "Switching"
-                  : `Switch to ${appNetworkName}`}
+                {switchingNetwork ? "Switching" : `Switch to ${appNetworkName}`}
               </button>
             </div>
           ) : null}
@@ -1053,37 +1057,75 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     hasSession,
     connecting,
     disconnecting,
+    disconnect,
     openWallet,
   } = useWallet();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuCopied, setMenuCopied] = useState(false);
+  const [menuError, setMenuError] = useState("");
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const closeOnOutsidePress = (event: MouseEvent) => {
+      if (
+        event.target instanceof Node &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        setMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", closeOnOutsidePress);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsidePress);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
 
   const label = disconnecting
     ? "Disconnecting"
     : connecting
-    ? compact
-      ? "Connect"
-      : "Connect wallet"
-    : wallet
-      ? username || shortenAddress(wallet.account)
-      : authenticated
-        ? "Set up wallet"
-        : hasSession
-          ? "Reconnect"
-        : compact
-          ? "Connect"
-          : "Connect wallet";
+      ? compact
+        ? "Connect"
+        : "Connect wallet"
+      : wallet
+        ? username || shortenAddress(wallet.account)
+        : authenticated
+          ? "Set up wallet"
+          : hasSession
+            ? "Reconnect"
+            : compact
+              ? "Connect"
+              : "Connect wallet";
 
-  return (
+  const button = (
     <button
-      className={compact ? "wallet-button wallet-button-compact" : "wallet-button"}
+      className={
+        compact ? "wallet-button wallet-button-compact" : "wallet-button"
+      }
       type="button"
       disabled={connecting || disconnecting}
-      aria-haspopup="dialog"
+      aria-haspopup={wallet ? "menu" : "dialog"}
+      aria-expanded={wallet ? menuOpen : undefined}
       aria-label={
         wallet
           ? `Manage wallet ${username || shortenAddress(wallet.account)}`
           : label
       }
-      onClick={openWallet}
+      onClick={() => {
+        if (wallet) {
+          setMenuError("");
+          setMenuOpen((current) => !current);
+        } else {
+          openWallet();
+        }
+      }}
     >
       {avatarDataUrl ? (
         <Image
@@ -1106,5 +1148,56 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         />
       ) : null}
     </button>
+  );
+
+  if (!wallet) return button;
+
+  return (
+    <div className="wallet-menu-root" ref={menuRef}>
+      {button}
+      {menuOpen ? (
+        <div className="wallet-menu" role="menu" aria-label="Wallet">
+          <div className="wallet-menu-account">
+            <strong>{username || shortenAddress(wallet.account)}</strong>
+            <span>{shortenAddress(wallet.account)}</span>
+          </div>
+          <Link
+            href="/profile"
+            role="menuitem"
+            onClick={() => setMenuOpen(false)}
+          >
+            Profile
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(wallet.account);
+                setMenuCopied(true);
+                window.setTimeout(() => setMenuCopied(false), 1500);
+              } catch {
+                setMenuError("Could not copy address");
+              }
+            }}
+          >
+            {menuCopied ? "Address copied" : "Copy address"}
+          </button>
+          <button
+            className="wallet-menu-disconnect"
+            type="button"
+            role="menuitem"
+            disabled={disconnecting}
+            onClick={() => {
+              setMenuOpen(false);
+              void disconnect();
+            }}
+          >
+            {disconnecting ? "Disconnecting" : "Disconnect"}
+          </button>
+          {menuError ? <p role="alert">{menuError}</p> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

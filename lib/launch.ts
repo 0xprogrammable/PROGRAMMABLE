@@ -6,6 +6,7 @@ export const CLASSIC_TOTAL_SWAP_FEE_BPS = 100;
 export const LAUNCH_DRAFT_STORAGE_KEY = "launcher.launch-draft.v1";
 export const MEME_TOKEN_SUPPLY_WHOLE = 1_000_000_000;
 export const MEME_INITIAL_TICK = 204_200;
+export const CLASSIC_DEV_BUY_GAS_BUFFER_BPS = 15_000n;
 export const MEME_STARTING_FDV_ETH = 1.3556577608171038;
 export const MEME_STARTING_FDV_ETH_LABEL =
   `${MEME_STARTING_FDV_ETH.toFixed(2)} ETH`;
@@ -132,6 +133,30 @@ export function parseInitialBuyWei(value: string | null | undefined) {
 export function getInitialBuyEthLabel(draft: LaunchDraft) {
   const normalized = draft.initialBuyEth.trim();
   return `${normalized || MEME_MIN_INITIAL_BUY_ETH} ETH`;
+}
+
+export function maximumClassicDevBuyWei(input: {
+  nativeBalanceWei: bigint;
+  gasLimit: bigint;
+  gasPriceWei: bigint;
+}) {
+  if (
+    input.nativeBalanceWei < 0n ||
+    input.gasLimit <= 0n ||
+    input.gasPriceWei <= 0n
+  ) {
+    throw new Error("The wallet balance or network gas data is invalid");
+  }
+
+  const gasReserve =
+    (input.gasLimit *
+      input.gasPriceWei *
+      CLASSIC_DEV_BUY_GAS_BUFFER_BPS +
+      9_999n) /
+    10_000n;
+  return input.nativeBalanceWei > gasReserve
+    ? input.nativeBalanceWei - gasReserve
+    : 0n;
 }
 
 export function getMemeFeeBreakdown(draft: LaunchDraft) {
