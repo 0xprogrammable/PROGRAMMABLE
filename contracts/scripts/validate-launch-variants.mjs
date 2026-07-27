@@ -487,8 +487,8 @@ assert(
 );
 assert(
   appDeployments.production.blocker ===
-    "Durable production monitoring and authenticated RPC operations are not provisioned",
-  "Verified Mainnet Classic V2 must retain the remaining production operations blocker",
+    "Public launch remains disabled pending named incident ownership, Privy production billing approval and final owner release approval",
+  "Verified Mainnet Classic V2 must retain the remaining owner-release blocker",
 );
 const historicalMainnetV1Deployment =
   appDeployments.production.historicalV1Deployment;

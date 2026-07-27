@@ -1,11 +1,21 @@
 # Meme Launch monitoring and incident response
 
-Status: implementation available, not yet operated
+Status: Mainnet monitor and durable read snapshot operating
 
-This is the minimum production operating boundary. It is not evidence that an indexer, alert or response rotation is
-live. The read-only watcher in `contracts/scripts/monitor-meme-v1.mjs` persists a reorg-aware cursor, reconciles two
-independent RPCs and validates V2 fee disclosures. Mainnet readiness still requires named owners, a durable runtime,
-alert delivery and a Sepolia rehearsal using the exact V2 deployment.
+The read-only watcher in `contracts/scripts/monitor-meme-v1.mjs` runs every five minutes in GitHub Actions, persists a
+reorg-aware cursor, reconciles two independent authenticated RPCs and validates V2 fee disclosures. Every run preserves
+its log and cursor as an artifact. A failure opens or updates the repository incident issue; a later healthy run records
+recovery and closes it.
+
+The Vercel index job independently performs a confirmation-delayed full replay, requires both RPCs to agree on the
+snapshot block, runtime code, canonical events, fee accounting and hydrated token state, then writes an
+integrity-checked private Vercel Blob snapshot. `/api/ops/health` returns unhealthy when that snapshot is missing or
+older than fifteen minutes or when the RPCs disagree.
+
+The first remote monitor run completed successfully on merge commit
+`59cacae735ae4157fdfec4363392ffc5839c4917`. The production deployment then passed an authenticated index refresh,
+an unauthenticated 401 check, the public health check and an automatic Vercel Cron refresh on 2026-07-27. These are
+operating proofs for the configured services, not a guarantee of future availability.
 
 ## Canonical event set
 
@@ -74,6 +84,6 @@ show provisional records as final.
 
 ## Ownership still required
 
-Before mainnet, assign primary and backup responders, treasury and signer contacts, RPC and indexer operators, public
-communication authority, alert channels and acknowledgement targets. Rehearse the process on Sepolia. Until those pieces
-exist, monitoring remains an open mainnet gate.
+Before public launch preparation is enabled, assign primary and backup responders, treasury and signer contacts, RPC and
+indexer operators, public communication authority, alert channels and acknowledgement targets. Rehearse the response
+with those owners. Until then, monitoring is live but incident ownership remains an open release gate.
