@@ -684,9 +684,9 @@ textarea {
   display: grid;
   flex: none;
   gap: 10px;
-  grid-auto-rows: clamp(180px, 25svh, 210px);
+  grid-auto-rows: clamp(196px, 27svh, 224px);
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(2, clamp(180px, 25svh, 210px));
+  grid-template-rows: repeat(2, clamp(196px, 27svh, 224px));
   margin: 10px auto 0;
   max-width: 1080px;
   min-height: 0;
@@ -701,7 +701,7 @@ textarea {
   border: 1px solid rgba(222, 213, 220, 0.88);
   border-radius: 14px;
   display: grid;
-  grid-template-rows: minmax(64px, 1fr) 110px;
+  grid-template-rows: minmax(86px, 1fr) 110px;
   min-width: 0;
   overflow: hidden;
   transition:
@@ -790,7 +790,8 @@ textarea {
 }
 
 .token-card-image {
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .token-card-mark {
@@ -4298,7 +4299,7 @@ textarea {
 
   .token-card {
     display: grid;
-    grid-template-rows: 112px 132px;
+    grid-template-rows: 136px 132px;
   }
 
   .token-card-art {
