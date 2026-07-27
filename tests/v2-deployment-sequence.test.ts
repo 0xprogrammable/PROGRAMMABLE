@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 // The production helper is intentionally a directly executable Node module.
 // @ts-expect-error JavaScript deployment tool has no separate declaration file.
-import { assertDeploymentSequenceState } from "../scripts/serve-v2-metamask-deployer.mjs";
+import * as deploymentSequence from "../scripts/serve-v2-metamask-deployer.mjs";
+
+const {
+  assertCompletedDeploymentState,
+  assertDeploymentSequenceState,
+} = deploymentSequence;
 
 const plan = {
   startingNonce: 7,
@@ -73,5 +78,43 @@ describe("V2 deployment sequence boundary", () => {
     expect(() => assertDeploymentSequenceState(plan, insufficient)).toThrow(
       "below the reviewed deployment ceiling",
     );
+  });
+});
+
+describe("completed V2 deployment verification", () => {
+  it("accepts the reviewed deployment after later wallet transactions", () => {
+    expect(() =>
+      assertCompletedDeploymentState(
+        plan,
+        state(14, 14, [true, true, true]),
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects an incomplete deployment", () => {
+    expect(() =>
+      assertCompletedDeploymentState(
+        plan,
+        state(10, 10, [true, false, true]),
+      ),
+    ).toThrow("not independently verified");
+  });
+
+  it("rejects a completed-state check before the reviewed sequence ends", () => {
+    expect(() =>
+      assertCompletedDeploymentState(
+        plan,
+        state(9, 9, [true, true, true]),
+      ),
+    ).toThrow("not confirmed");
+  });
+
+  it("rejects an impossible pending nonce", () => {
+    expect(() =>
+      assertCompletedDeploymentState(
+        plan,
+        state(12, 11, [true, true, true]),
+      ),
+    ).toThrow("below the confirmed nonce");
   });
 });

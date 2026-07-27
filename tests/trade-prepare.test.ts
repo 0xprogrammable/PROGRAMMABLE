@@ -215,7 +215,7 @@ describe("Classic trade request boundary", () => {
     ).toThrow("Slippage");
   });
 
-  it("pins the active routers and enables only the verified Sepolia release", () => {
+  it("pins the active routers and enables both verified releases", () => {
     expect(
       getPinnedOfficialTradeStack(1).universalRouter,
     ).toBe(
@@ -233,9 +233,12 @@ describe("Classic trade request boundary", () => {
       ),
       hook: REHEARSAL_HOOK,
     });
-    expect(() => resolveClassicTradeDeployment(1)).toThrow(
-      "not deployed",
-    );
+    expect(resolveClassicTradeDeployment(1)).toMatchObject({
+      chainId: 1,
+      hook: getAddress(
+        "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+      ),
+    });
     expect(resolveClassicTradeDeployment(11155111)).toMatchObject({
       chainId: 11155111,
       hook: getAddress(

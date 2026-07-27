@@ -25,7 +25,7 @@ import {
 
 const ACCOUNT = "0x2222222222222222222222222222222222222222";
 const OTHER_ACCOUNT = "0x3333333333333333333333333333333333333333";
-const LAUNCHER = "0x1111111111111111111111111111111111111111";
+const LAUNCHER = "0xD240D06f8586eB799f20056054e5b527405E6bAd";
 const OTHER_LAUNCHER =
   "0x4444444444444444444444444444444444444444";
 const SALT =
@@ -111,17 +111,17 @@ describe("Classic production deployment gate", () => {
 });
 
 describe("prepared Classic launch boundary", () => {
-  it("uses the canonical production manifest by default", () => {
+  it("accepts the exact canonical production manifest by default", () => {
     const currentDraft = draft();
     const prepared = preparedLaunch(currentDraft);
 
-    expect(() =>
+    expect(
       validatePreparedClassicLaunchTransaction({
         ...prepared,
         draft: currentDraft,
         account: ACCOUNT,
       }),
-    ).toThrow("not enabled");
+    ).toEqual(prepared.transaction);
   });
 
   it("accepts the exact current draft, account, manifest target and gas range", () => {

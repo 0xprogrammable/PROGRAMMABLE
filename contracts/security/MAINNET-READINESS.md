@@ -1,10 +1,10 @@
 # Classic mainnet readiness
 
-Current state: **Sepolia V2 verified; Mainnet V2 monitored; public release blocked by Privy production billing**.
+Current state: **Sepolia V2 verified; Mainnet V2 monitored; Classic transaction preparation enabled**.
 
 | Environment | Manifest state | Release meaning |
 | --- | --- | --- |
-| Ethereum mainnet | V2 deployed, lifecycle pending | Source and deployment evidence are current; public preparation remains disabled |
+| Ethereum mainnet | V2 ready | Source, deployment and lifecycle evidence are current; transaction preparation is enabled |
 | Ethereum Sepolia | V2 ready | Test2 lifecycle and source evidence are current; V1 lifecycles are historical |
 
 There has been no external smart-contract audit or public contest.
@@ -47,12 +47,11 @@ is `ready`; the earlier V1 deployment and lifecycle remain historical because V1
 
 The older lifecycle that used the legacy fourth metadata field remains separately marked `historical-invalid-metadata-abi` with `releaseEligible: false`. Its addresses and receipts are retained in [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for historical traceability and cannot enable transaction preparation.
 
-## Required before public launch
+## Production operating requirements
 
-1. Approve Privy billing details and possible MAU overage before upgrading the app from Development
-2. Keep the two-RPC monitor and durable index healthy before enabling public preparation
-3. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
-4. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production dependency audit
+1. Keep the two-RPC monitor and durable index healthy
+2. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
+3. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production dependency audit
     has zero critical, high or moderate findings; 19 low-severity `ethers` v5/`elliptic` findings remain without a
     compatible upstream fix
 
@@ -70,10 +69,6 @@ at the current event volume.
 public-communication authority. No backup responder is assigned. The owner explicitly accepted that concentration risk;
 the monitor must keep new launch construction disabled whenever the sole operator is unavailable or an alert is open.
 
-## Remaining owner decision
-
-- Privy production billing approval
-
 ## Frontend gate
 
 The public form always normalizes to Classic. The server accepts no target address or calldata from the browser. It verifies the deployment manifest, runtime code, factory provenance, immutable dependencies, treasury, hook mask, fee constants, the 0.0006 ETH minimum Dev Buy, predicted token address and exact selected call value before simulation.
@@ -81,7 +76,7 @@ The public form always normalizes to Classic. The server accepts no target addre
 Launch and trading preparation remain disabled while the selected release lacks current lifecycle evidence. Sepolia V2
 preparation is enabled only when the application is explicitly configured for that verified rehearsal environment.
 Mainnet V2 lifecycle evidence and production operations are current. The owner approved the Classic release and
-single-operator incident model on July 27, 2026, but transaction preparation deliberately remains fail-closed pending
-Privy production billing approval.
+single-operator incident model on July 27, 2026. Transaction preparation fails closed on stale lifecycle evidence,
+runtime drift, RPC disagreement, simulation failure or an unhealthy deployment record.
 
 The absence of an external audit leaves additional residual smart-contract risk. Product and release copy must not describe the system or any launched token as audited, safe, unruggable, scam proof or guaranteed compatible with third-party scanners.

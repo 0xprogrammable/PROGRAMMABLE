@@ -4,7 +4,7 @@
 
 | Environment | Manifest state | Transaction preparation |
 | --- | --- | --- |
-| Ethereum mainnet V2 | `lifecycle-pending` | Disabled pending durable production operations |
+| Ethereum mainnet V2 | `ready` | Enabled with fail-closed runtime and simulation checks |
 | Ethereum Sepolia V2 | `ready` | Enabled when the app runs with the rehearsal network configuration |
 
 The exact current Classic release is deployed and source-verified on Sepolia. Its signed lifecycle atomically launched
@@ -13,8 +13,8 @@ authorization, and claimed both creator and Programmable fees. Two independent R
 
 There has been no external smart-contract audit or public contest. Sepolia evidence is not production approval.
 Mainnet V2 is deployed, source-matched and backed by a complete independently reconciled canary lifecycle. Public
-preparation remains blocked on durable production indexing, authenticated RPC operations, continuous monitoring and a
-fresh provider-backed wallet rehearsal.
+preparation is enabled while durable production indexing, authenticated RPC operations and continuous monitoring remain
+healthy.
 
 ## Release metadata requirement
 

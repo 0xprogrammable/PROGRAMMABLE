@@ -83,12 +83,10 @@ describe("Classic launch plan", () => {
     expect(buildLaunchSummary(draft)).not.toMatch(/[.!?]$/);
   });
 
-  it("keeps the copied setup honest about mainnet availability", () => {
+  it("keeps the copied setup focused on the launch configuration", () => {
     const setup = buildPlainTextPlan(createEmptyDraft());
 
-    expect(setup).toContain(
-      "Status: Mainnet launch preparation remains disabled during final canary verification",
-    );
+    expect(setup).not.toContain("Status:");
     expect(setup).toContain(
       "Launch cost: no launch fee or liquidity deposit; the creator pays the initial buy and network gas",
     );

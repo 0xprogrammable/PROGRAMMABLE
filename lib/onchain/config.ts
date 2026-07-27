@@ -226,7 +226,16 @@ export function getPublicOnchainDeployment(
       error.message ===
         "Production operations require two distinct authenticated RPC URLs"
     ) {
-      return getOnchainDeployment(environment);
+      const deployment = getOnchainDeployment(environment);
+      return {
+        ...deployment,
+        status: "not-deployed",
+        launcher: null,
+        feeHook: null,
+        launcherRuntimeCodeHash: null,
+        feeHookRuntimeCodeHash: null,
+        deploymentBlock: null,
+      };
     }
     throw error;
   }

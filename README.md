@@ -67,13 +67,13 @@ lifecycles remain historical evidence only.
 There has been no external smart-contract audit or public security contest. Nothing in this repository is a promise that a token is safe, immune to abuse or accepted by third-party scanners.
 
 Provider-backed Privy session recovery, disconnect and reconnect pass on `programmable.family`. The active Privy web
-client allows the production domain and the Vercel production alias. The Privy app remains in Development because
-upgrading even its free tier requires payment information and accepts possible billing above 500 monthly active users.
+client allows the production domain and the Vercel production alias. Wallet and email login use the current free plan;
+WhatsApp login and a paid Privy plan are not required by this release.
 
 The owner approved the Classic release and the single-operator incident model on July 27, 2026. `hazarxyz` is the
 named incident owner, deployment signer contact, indexer operator and public-communication authority. There is no
-backup responder by explicit owner choice. Mainnet launch and trade preparation remains fail-closed pending Privy
-production billing approval.
+backup responder by explicit owner choice. Mainnet launch and trade preparation remains fail-closed on any
+runtime, manifest, simulation or monitoring failure.
 
 ## Local development
 

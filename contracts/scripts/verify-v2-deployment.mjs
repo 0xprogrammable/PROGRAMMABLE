@@ -5,7 +5,7 @@ import { getAddress, keccak256 } from "viem";
 import {
   V2_DEPLOYMENT_NETWORKS,
   loadDeploymentPlan,
-  readVerifiedState,
+  readVerifiedCompletedState,
 } from "../../scripts/serve-v2-metamask-deployer.mjs";
 
 const selectedNetwork =
@@ -215,15 +215,7 @@ async function main() {
     ),
   );
   const plan = await loadDeploymentPlan();
-  const state = await readVerifiedState(plan);
-  assert(
-    Number(BigInt(state.confirmedNonce)) >= plan.endingNonce,
-    "The complete V2 deployment is not confirmed",
-  );
-  assert(
-    state.deployments.every((deployment) => deployment.verified),
-    "The complete V2 stack is not independently verified",
-  );
+  await readVerifiedCompletedState(plan);
 
   const providerReceipts = await Promise.all(
     network.rpcEndpoints.map(async (endpoint) =>
