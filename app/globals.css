@@ -499,25 +499,21 @@ textarea {
 
 .explore-token-address {
   align-items: center;
-  background: rgba(255, 255, 255, 0.54);
-  border: 1px solid rgba(218, 208, 216, 0.66);
-  border-radius: 999px;
+  background: transparent;
+  border: 0;
   color: var(--muted);
   display: inline-flex;
-  gap: 6px;
+  gap: 7px;
   margin-top: 11px;
-  max-width: min(100%, 390px);
-  min-height: 28px;
-  padding: 3px 9px 3px 11px;
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    color 150ms ease;
+  max-width: min(100%, 430px);
+  min-height: 30px;
+  padding: 3px 0;
+  transition: color 150ms ease;
 }
 
 .explore-token-address code {
   font-family: var(--font-plex-mono), monospace;
-  font-size: 9px;
+  font-size: 10.5px;
   line-height: 1;
   min-width: 0;
   overflow: hidden;
@@ -686,13 +682,13 @@ textarea {
 
 .token-card-grid {
   display: grid;
-  flex: 1;
+  flex: none;
   gap: 10px;
-  grid-auto-rows: minmax(0, 1fr);
+  grid-auto-rows: clamp(180px, 25svh, 210px);
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, clamp(180px, 25svh, 210px));
   margin: 10px auto 0;
-  max-width: 1180px;
+  max-width: 1080px;
   min-height: 0;
   overflow: hidden;
   width: 100%;
@@ -705,7 +701,7 @@ textarea {
   border: 1px solid rgba(222, 213, 220, 0.88);
   border-radius: 14px;
   display: grid;
-  grid-template-rows: minmax(82px, 1fr) auto;
+  grid-template-rows: minmax(64px, 1fr) 110px;
   min-width: 0;
   overflow: hidden;
   transition:
@@ -818,8 +814,10 @@ textarea {
 .token-card-body {
   display: flex;
   flex-direction: column;
+  height: 110px;
   min-height: 0;
-  padding: 7px 11px 5px;
+  overflow: hidden;
+  padding: 7px 10px 5px;
 }
 
 .token-card-heading {
@@ -837,7 +835,7 @@ textarea {
 }
 
 .token-card-heading h3 {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 620;
   letter-spacing: -0.012em;
 }
@@ -845,14 +843,14 @@ textarea {
 .token-card-title > span {
   color: var(--accent-strong);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 500;
 }
 
 .token-card-market-cap {
   color: var(--text-soft);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -875,7 +873,7 @@ textarea {
 .token-address code {
   flex: 0 1 auto;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 9px;
+  font-size: 8.5px;
   line-height: 1;
   min-width: 0;
   overflow: hidden;
@@ -891,19 +889,19 @@ textarea {
 .token-card-description {
   color: var(--text-soft);
   display: -webkit-box;
-  font-size: 11.5px;
+  font-size: 11px;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   line-height: 1.35;
   margin-top: 5px;
-  min-height: 28px;
+  min-height: 15px;
   overflow: hidden;
 }
 
 .token-card-footer {
   border-top: 1px solid var(--border);
-  margin-top: 7px;
-  padding-top: 5px;
+  margin-top: auto;
+  padding-top: 4px;
 }
 
 .token-social-links {
@@ -917,19 +915,19 @@ textarea {
   border-radius: 50%;
   color: var(--text-soft);
   display: inline-flex;
-  height: 30px;
+  height: 26px;
   justify-content: center;
   transition:
     background-color 150ms ease,
     color 150ms ease,
     transform 150ms var(--ease-out);
-  width: 30px;
+  width: 26px;
 }
 
 .token-social-link svg {
   display: block;
-  height: 19px;
-  width: 19px;
+  height: 17px;
+  width: 17px;
 }
 
 .token-social-link-preview {
@@ -3871,9 +3869,7 @@ textarea {
   }
 
   .explore-token-address:hover {
-    background: rgba(255, 255, 255, 0.82);
-    border-color: var(--border-strong);
-    color: var(--text-soft);
+    color: var(--text);
   }
 
   .wallet-button:hover,
@@ -4124,12 +4120,6 @@ textarea {
   }
 }
 
-@media (min-width: 801px) and (min-height: 820px) {
-  .token-card {
-    grid-template-rows: minmax(102px, 1fr) auto;
-  }
-}
-
 @media (max-width: 1020px) {
   .launch-model-grid {
     grid-template-columns: minmax(0, 440px);
@@ -4307,19 +4297,21 @@ textarea {
   }
 
   .token-card {
-    display: block;
+    display: grid;
+    grid-template-rows: 112px 132px;
   }
 
   .token-card-art {
-    height: 164px;
+    height: auto;
   }
 
   .token-card-body {
-    padding: 16px 17px 13px;
+    height: 132px;
+    padding: 12px 14px 8px;
   }
 
   .token-card-heading h3 {
-    font-size: 19px;
+    font-size: 17px;
   }
 
   .token-address {
@@ -4332,7 +4324,7 @@ textarea {
   }
 
   .token-card-description {
-    font-size: 13px;
+    font-size: 12px;
     margin-top: 7px;
   }
 
@@ -4342,13 +4334,13 @@ textarea {
   }
 
   .token-social-link {
-    height: 38px;
-    width: 38px;
+    height: 32px;
+    width: 32px;
   }
 
   .token-social-link svg {
-    height: 20px;
-    width: 20px;
+    height: 19px;
+    width: 19px;
   }
 
   .token-detail-page {
@@ -4606,10 +4598,6 @@ textarea {
 
   .explore-intro h1 {
     font-size: clamp(43px, 14vw, 52px);
-  }
-
-  .token-card-art {
-    height: 164px;
   }
 
   .token-detail-page {
