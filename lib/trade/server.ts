@@ -19,11 +19,13 @@ import {
   buildClassicPermit2ApprovalTransaction,
   buildClassicSwapTransaction,
   buildClassicTokenApprovalTransaction,
+  classicGasReserve,
   classicPermit2Abi,
   classicTokenAbi,
   createClassicPoolKey,
   getClassicPoolId,
   getClassicSellApprovalState,
+  maximumClassicBuyAmount,
   quoteClassicExactInput,
   ClassicTradeInputError,
   type ClassicQuoteClient,
@@ -68,6 +70,8 @@ export type ClassicTradeRequest = {
 
 export type ClassicTradeRuntimeClient = ClassicQuoteClient & {
   getBlock(): Promise<{ timestamp: bigint }>;
+  getBalance(args: { address: Address }): Promise<bigint>;
+  getGasPrice(): Promise<bigint>;
   getCode(args: { address: Address }): Promise<Hex | undefined>;
   estimateGas(args: {
     account: Address;
@@ -411,6 +415,31 @@ async function readSellAllowances(
   };
 }
 
+async function readTokenBalance(
+  client: ClassicTradeRuntimeClient,
+  owner: Address,
+  token: Address,
+) {
+  const data = await requiredCall(
+    client,
+    {
+      to: token,
+      data: encodeFunctionData({
+        abi: classicTokenAbi,
+        functionName: "balanceOf",
+        args: [owner],
+      }),
+      account: owner,
+    },
+    "Token balance",
+  );
+  return decodeFunctionResult({
+    abi: classicTokenAbi,
+    functionName: "balanceOf",
+    data,
+  });
+}
+
 function walletTransaction(transaction: {
   kind: "swap" | "token-to-permit2" | "permit2-to-router";
   chainId: number;
@@ -430,6 +459,8 @@ function walletTransaction(transaction: {
 async function simulatedSwapTransaction(
   client: ClassicTradeRuntimeClient,
   owner: Address,
+  nativeBalance: bigint,
+  side: ClassicTradeSide,
   transaction: {
     kind: "swap";
     chainId: number;
@@ -446,13 +477,40 @@ async function simulatedSwapTransaction(
     value,
   };
   await client.call(request);
-  const estimatedGas = await client.estimateGas(request);
+  const [estimatedGas, gasPrice] = await Promise.all([
+    client.estimateGas(request),
+    client.getGasPrice(),
+  ]);
   if (estimatedGas <= 0n) {
     throw new ClassicTradeUnavailableError(
       "The prepared swap returned an invalid gas estimate",
     );
   }
   const gasLimit = (estimatedGas * 120n + 99n) / 100n;
+  if (gasPrice <= 0n) {
+    throw new ClassicTradeUnavailableError(
+      "The network returned an invalid gas price",
+    );
+  }
+  if (side === "buy") {
+    const maximumAmountIn = maximumClassicBuyAmount({
+      nativeBalance,
+      gasLimit,
+      gasPrice,
+    });
+    if (value > maximumAmountIn) {
+      throw new ClassicTradeInputError(
+        "Enter a smaller ETH amount so the wallet keeps enough ETH for this buy and a later sell",
+      );
+    }
+  } else {
+    const reserve = classicGasReserve({ gasLimit, gasPrice });
+    if (nativeBalance < reserve) {
+      throw new ClassicTradeInputError(
+        "The wallet needs more ETH to pay for the sell transaction",
+      );
+    }
+  }
   return {
     ...walletTransaction(transaction),
     gasLimit: gasLimit.toString(),
@@ -479,6 +537,31 @@ export async function prepareClassicTrade(
     deployment,
     poolKey.currency1,
   );
+  const nativeBalance = await client.getBalance({
+    address: request.owner,
+  });
+  if (nativeBalance < 0n) {
+    throw new ClassicTradeUnavailableError(
+      "The network returned an invalid wallet ETH balance",
+    );
+  }
+  if (request.side === "buy" && request.amountIn > nativeBalance) {
+    throw new ClassicTradeInputError(
+      "The buy amount exceeds the wallet ETH balance",
+    );
+  }
+  if (request.side === "sell") {
+    const tokenBalance = await readTokenBalance(
+      client,
+      request.owner,
+      poolKey.currency1,
+    );
+    if (request.amountIn > tokenBalance) {
+      throw new ClassicTradeInputError(
+        "The sell amount exceeds the wallet token balance",
+      );
+    }
+  }
   const block = await client.getBlock();
   assertClassicDeadline(block.timestamp, request.deadline);
 
@@ -567,6 +650,8 @@ export async function prepareClassicTrade(
       transaction: await simulatedSwapTransaction(
         client,
         request.owner,
+        nativeBalance,
+        request.side,
         buildClassicSwapTransaction({
           deployment,
           poolKey,
@@ -592,6 +677,8 @@ export async function prepareClassicTrade(
     transaction: await simulatedSwapTransaction(
       client,
       request.owner,
+      nativeBalance,
+      request.side,
       buildClassicSwapTransaction({
         deployment,
         poolKey,

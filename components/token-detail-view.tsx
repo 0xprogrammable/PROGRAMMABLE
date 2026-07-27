@@ -249,16 +249,6 @@ function formatUsd(valueWad: string | undefined, mode: "amount" | "price") {
   }).format(value);
 }
 
-function formatTokenAmount(value: string | undefined, symbol: string) {
-  if (!value || !/^\d+(?:\.\d+)?$/.test(value)) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return `${new Intl.NumberFormat("en-US", {
-    notation: parsed >= 1_000_000 ? "compact" : "standard",
-    maximumFractionDigits: 4,
-  }).format(parsed)} ${symbol}`;
-}
-
 function formatSwapFee(value: number | undefined) {
   if (
     typeof value !== "number" ||
@@ -270,16 +260,6 @@ function formatSwapFee(value: number | undefined) {
   return `${new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 2,
   }).format(value / 100)}%`;
-}
-
-function formatLaunchDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(date);
 }
 
 function formatPreparedMinimum(
@@ -362,7 +342,12 @@ function TokenDetailContent({
   token: LauncherToken;
   chainId: number;
 }) {
-  const { wallet, openWallet, sendTransaction } = useWallet();
+  const {
+    wallet,
+    openWallet,
+    readTradeBalances,
+    sendTransaction,
+  } = useWallet();
   const [copied, setCopied] = useState(false);
   const [tradeFlow, setTradeFlow] = useState<TradeFlow>({
     phase: "form",
@@ -400,7 +385,7 @@ function TokenDetailContent({
         : null,
       token.fdvUsdWad !== undefined || token.marketCapEth
         ? {
-            label: "FDV",
+            label: "Market cap",
             value:
               formatUsd(token.fdvUsdWad, "amount") ??
               formatEth(token.marketCapEth, "amount") ??
@@ -413,44 +398,10 @@ function TokenDetailContent({
             value: formatEth(token.grossVolumeEth, "amount") ?? "",
           }
         : null,
-      token.creatorFeesGeneratedEth
-        ? {
-            label: "Creator fees generated",
-            value:
-              formatEth(token.creatorFeesGeneratedEth, "amount") ?? "",
-          }
-        : null,
-      token.creatorFeesAccruedEth
-        ? {
-            label: "Claimable creator fees",
-            value:
-              formatEth(token.creatorFeesAccruedEth, "amount") ?? "",
-          }
-        : null,
-      token.launcherFeesGeneratedEth
-        ? {
-            label: "Programmable fees generated",
-            value:
-              formatEth(token.launcherFeesGeneratedEth, "amount") ?? "",
-          }
-        : null,
       formatSwapFee(token.totalSwapFeeBps)
         ? {
             label: "Swap fee",
             value: formatSwapFee(token.totalSwapFeeBps) ?? "",
-          }
-        : null,
-      typeof token.swapCount === "number" && token.swapCount >= 0
-        ? {
-            label: "Swaps",
-            value: new Intl.NumberFormat("en-US").format(token.swapCount),
-          }
-        : null,
-      formatTokenAmount(token.totalSupply, token.symbol)
-        ? {
-            label: "Total supply",
-            value:
-              formatTokenAmount(token.totalSupply, token.symbol) ?? "",
           }
         : null,
     ];
@@ -461,7 +412,6 @@ function TokenDetailContent({
     );
   }, [token]);
 
-  const launchDate = formatLaunchDate(token.launchedAt);
   const explorerBase =
     chainId === 1
       ? "https://etherscan.io"
@@ -732,82 +682,6 @@ function TokenDetailContent({
 
           <MetricGrid metrics={metrics} />
 
-          <div className="token-detail-records">
-            {token.positionTokenId && token.positionRecipient ? (
-              <section className="token-detail-record">
-                <h2>Liquidity position</h2>
-                <dl>
-                  <div>
-                    <dt>Status</dt>
-                    <dd>Permanently locked</dd>
-                  </div>
-                  <div>
-                    <dt>Position ID</dt>
-                    <dd>{token.positionTokenId}</dd>
-                  </div>
-                  <div>
-                    <dt>Position recipient</dt>
-                    <dd>
-                      <code>{token.positionRecipient}</code>
-                    </dd>
-                  </div>
-                  {typeof token.tickLower === "number" &&
-                  typeof token.tickUpper === "number" ? (
-                    <div>
-                      <dt>Tick range</dt>
-                      <dd>
-                        {token.tickLower} to {token.tickUpper}
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-              </section>
-            ) : null}
-
-            <section className="token-detail-record">
-              <h2>Launch record</h2>
-              <dl>
-                {launchDate ? (
-                  <div>
-                    <dt>Launched</dt>
-                    <dd>{launchDate} UTC</dd>
-                  </div>
-                ) : null}
-                {token.creatorAddress ? (
-                  <div>
-                    <dt>Creator</dt>
-                    <dd>
-                      <code>{token.creatorAddress}</code>
-                    </dd>
-                  </div>
-                ) : null}
-                <div>
-                  <dt>Hook</dt>
-                  <dd>
-                    <code>{token.hookAddress}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Pool</dt>
-                  <dd>
-                    <code>{token.poolId}</code>
-                  </dd>
-                </div>
-              </dl>
-
-              {explorerBase && token.launchTransactionHash ? (
-                <a
-                  className="text-link"
-                  href={`${explorerBase}/tx/${token.launchTransactionHash}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View launch transaction
-                  <ExternalLink aria-hidden="true" size={15} />
-                </a>
-              ) : null}
-            </section>
-          </div>
         </section>
 
         <aside className="token-detail-trade">
@@ -836,7 +710,11 @@ function TokenDetailContent({
                 symbol={token.symbol}
                 tokenDecimals={tokenDecimals}
                 tokenPriceEth={token.tokenPriceEth}
+                tokenPriceUsdWad={token.tokenPriceUsdWad}
                 totalSwapFeeBps={token.totalSwapFeeBps}
+                readBalances={() =>
+                  readTradeBalances(getAddress(token.tokenAddress))
+                }
                 onPrepared={submitPreparedTrade}
               />
             </>
