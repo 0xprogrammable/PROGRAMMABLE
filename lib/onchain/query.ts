@@ -11,6 +11,7 @@ const MAX_PAGE_SIZE = 100;
 const MAINNET_PUBLIC_EXPLORE_START_BLOCK = 25_626_490n;
 
 export function parseExploreSort(value: string | null): ExploreSort {
+  if (value === "newest") return "newest";
   if (value === "oldest") return "oldest";
   if (value === "market-cap" || value === "highest-market-cap") {
     return "market-cap";
@@ -18,7 +19,7 @@ export function parseExploreSort(value: string | null): ExploreSort {
   if (value === "market-cap-asc" || value === "lowest-market-cap") {
     return "market-cap-asc";
   }
-  return "newest";
+  return "market-cap";
 }
 
 function launchOrder(token: LauncherToken) {
@@ -103,7 +104,7 @@ export function paginateExplore(
   } = {},
 ): ExplorePage {
   const query = options.query?.trim() ?? "";
-  const sort = options.sort ?? "newest";
+  const sort = options.sort ?? "market-cap";
   const pageSize = positiveInteger(
     options.pageSize ?? DEFAULT_PAGE_SIZE,
     DEFAULT_PAGE_SIZE,

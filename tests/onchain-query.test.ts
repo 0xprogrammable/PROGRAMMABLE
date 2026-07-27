@@ -84,6 +84,8 @@ describe("Explore query", () => {
   });
 
   it("supports the public sort aliases and bounded pagination", () => {
+    expect(parseExploreSort(null)).toBe("market-cap");
+    expect(parseExploreSort("newest")).toBe("newest");
     expect(parseExploreSort("highest-market-cap")).toBe("market-cap");
     expect(parseExploreSort("lowest-market-cap")).toBe("market-cap-asc");
     const model: ExploreReadModel = {
@@ -108,6 +110,26 @@ describe("Explore query", () => {
     expect(page.total).toBe(3);
     expect(page.totalPages).toBe(2);
     expect(page.tokens).toHaveLength(1);
+  });
+
+  it("uses highest market cap as the default Explore order", () => {
+    const model: ExploreReadModel = {
+      status: "ready",
+      tokens,
+      snapshot: {
+        chainId: 11_155_111,
+        blockNumber: "100",
+        blockHash: `0x${"33".repeat(32)}`,
+        confirmations: 12,
+      },
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    };
+
+    expect(
+      paginateExplore(model).tokens.map((entry) => entry.symbol),
+    ).toEqual(["XYZ", "ABC", "ABC"]);
   });
 
   it("keeps a missing valuation last instead of treating it as zero", () => {
