@@ -92,7 +92,7 @@ describe("Classic launch plan", () => {
     );
     expect(setup).toContain("Creator initial buy: 0.0006 ETH");
     expect(setup).toContain(
-      "Programmable share: 0.10% in native ETH, deducted from the selected total",
+      "Programmable share: 0.10% in native ETH, deducted from the fixed total",
     );
     expect(setup).toContain("Uniswap LP fee: 0.00%");
     expect(setup).toContain(
@@ -110,11 +110,11 @@ describe("Classic launch plan", () => {
     expect(MEME_STARTING_FDV_ETH_LABEL).toBe("1.36 ETH");
   });
 
-  it("deducts the fixed Programmable share from the selected total", () => {
+  it("deducts the fixed Programmable share from the fixed total", () => {
     const onePercent = getMemeFeeBreakdown(createEmptyDraft());
-    const tenPercent = getMemeFeeBreakdown({
+    const changedFee = getMemeFeeBreakdown({
       ...createEmptyDraft(),
-      totalSwapFeePercent: "10",
+      totalSwapFeePercent: "2",
     });
 
     expect(onePercent).toEqual({
@@ -122,18 +122,16 @@ describe("Classic launch plan", () => {
       creatorFeeBps: 90,
       launcherFeeBps: 10,
     });
-    expect(tenPercent).toEqual({
-      totalSwapFeeBps: 1_000,
-      creatorFeeBps: 990,
-      launcherFeeBps: 10,
-    });
+    expect(changedFee).toBeNull();
   });
 
-  it("accepts only whole percentage choices from one through ten", () => {
+  it("accepts only the fixed one percent Classic fee", () => {
     expect(parseTotalSwapFeeBps("1")).toBe(100);
-    expect(parseTotalSwapFeeBps("10")).toBe(1_000);
+    expect(parseTotalSwapFeeBps(" 1 ")).toBe(100);
     expect(parseTotalSwapFeeBps("0")).toBeNull();
     expect(parseTotalSwapFeeBps("1.1")).toBeNull();
+    expect(parseTotalSwapFeeBps("2")).toBeNull();
+    expect(parseTotalSwapFeeBps("10")).toBeNull();
     expect(parseTotalSwapFeeBps("11")).toBeNull();
   });
 });

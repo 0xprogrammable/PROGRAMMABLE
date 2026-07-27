@@ -16,7 +16,7 @@ residual smart-contract risk and must satisfy every internal gate below.
 ## Current state
 
 - [x] Meme Launch V1 contract composition is implemented
-- [x] The creator selects a total 1–10% swap fee and Programmable receives 0.10 percentage points from that total
+- [x] Classic uses a fixed 1.00% total swap fee; Programmable receives 0.10 percentage points from that total
 - [x] The creator supplies no liquidity and pays no launch charge; launch includes a creator-selected Dev Buy of at least 0.0006 ETH plus Ethereum gas
 - [x] The atomic initial buy sends the purchased tokens directly to the creator and any failed settlement reverts the complete launch
 - [x] The complete fixed supply enters one permanently locked, one-sided Uniswap v4 position

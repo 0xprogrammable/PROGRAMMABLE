@@ -42,12 +42,12 @@ import {
   type LaunchPreflightResponse,
 } from "@/lib/launch-transaction";
 import {
+  CLASSIC_TOTAL_SWAP_FEE_BPS,
+  CLASSIC_TOTAL_SWAP_FEE_PERCENT,
   createEmptyDraft,
-  getMemeFeeBreakdown,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
   parseInitialBuyWei,
-  parseTotalSwapFeeBps,
   PLATFORM_FEE_BPS,
   type LaunchDraft,
 } from "@/lib/launch";
@@ -134,10 +134,7 @@ function normalizeStandardDraft(initialDraft: LaunchDraft): LaunchDraft {
     directTokensPerEth: "",
     selectedBehaviors: ["fixed-fee"],
     lpFeePercent: "0",
-    totalSwapFeePercent:
-      parseTotalSwapFeeBps(initialDraft.totalSwapFeePercent) === null
-        ? "1"
-        : initialDraft.totalSwapFeePercent,
+    totalSwapFeePercent: CLASSIC_TOTAL_SWAP_FEE_PERCENT,
     initialBuyEth:
       parseInitialBuyWei(initialDraft.initialBuyEth) === null
         ? MEME_MIN_INITIAL_BUY_ETH
@@ -225,7 +222,7 @@ function LaunchModelPicker({ onChoose }: { onChoose: () => void }) {
             <span className="launch-model-details">
               <span>Uniswap v4</span>
               <span>No liquidity deposit</span>
-              <span>1–10% swap fee</span>
+              <span>1.00% swap fee</span>
             </span>
             <span className="launch-model-action">
               Launch
@@ -1083,11 +1080,9 @@ function FeeStep({
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onEdit: () => void;
 }) {
-  const feeBreakdown = getMemeFeeBreakdown(draft);
-  const totalSwapFeeBps = feeBreakdown?.totalSwapFeeBps ?? 100;
-  const creatorFeeBps = feeBreakdown?.creatorFeeBps ?? 90;
-  const selectedFeePercent = totalSwapFeeBps / 100;
-  const feeProgress = ((selectedFeePercent - 1) / 9) * 100;
+  const creatorFeeBps =
+    CLASSIC_TOTAL_SWAP_FEE_BPS - PLATFORM_FEE_BPS;
+  const selectedFeePercent = Number(CLASSIC_TOTAL_SWAP_FEE_PERCENT);
 
   return (
     <section className="classic-fee-section">
@@ -1105,7 +1100,7 @@ function FeeStep({
           <div className="classic-fee-slider-row">
             <div className="classic-fee-slider-control">
               <span className="classic-fee-slider-track" aria-hidden="true">
-                <span style={{ width: `${feeProgress}%` }} />
+                <span style={{ width: "0%" }} />
               </span>
               <input
                 id="classic-swap-fee"
@@ -1115,22 +1110,17 @@ function FeeStep({
                 step="1"
                 value={selectedFeePercent}
                 aria-label="Total swap fee"
-                aria-valuetext={`${selectedFeePercent}% total swap fee`}
-                onInput={(event) => {
-                  onEdit();
-                  updateDraft(setDraft, {
-                    totalSwapFeePercent: event.currentTarget.value,
-                  });
-                }}
+                aria-valuetext="Fixed 1.00% total swap fee"
+                disabled
               />
             </div>
             <output htmlFor="classic-swap-fee">
-              {selectedFeePercent}%
+              1.00%
             </output>
           </div>
           <div className="classic-fee-slider-limits" aria-hidden="true">
-            <span>1%</span>
-            <span>10%</span>
+            <span>1.00%</span>
+            <span>Fixed</span>
           </div>
         </div>
 
@@ -1161,13 +1151,6 @@ function FeeStep({
           </span>
         </label>
       </div>
-
-      {totalSwapFeeBps >= 500 ? (
-        <p className="meme-fee-warning">
-          High swap fees can reduce trading demand and may trigger warnings in
-          wallets or market data tools
-        </p>
-      ) : null}
     </section>
   );
 }

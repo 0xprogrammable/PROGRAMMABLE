@@ -1,6 +1,8 @@
 import { parseEther } from "viem";
 
 export const PLATFORM_FEE_BPS = 10;
+export const CLASSIC_TOTAL_SWAP_FEE_PERCENT = "1";
+export const CLASSIC_TOTAL_SWAP_FEE_BPS = 100;
 export const LAUNCH_DRAFT_STORAGE_KEY = "launcher.launch-draft.v1";
 export const MEME_TOKEN_SUPPLY_WHOLE = 1_000_000_000;
 export const MEME_INITIAL_TICK = 204_200;
@@ -83,7 +85,7 @@ export function createEmptyDraft(): LaunchDraft {
     directTokensPerEth: "",
     selectedBehaviors: ["fixed-fee"],
     lpFeePercent: "0",
-    totalSwapFeePercent: "1",
+    totalSwapFeePercent: CLASSIC_TOTAL_SWAP_FEE_PERCENT,
     initialBuyEth: MEME_MIN_INITIAL_BUY_ETH,
     customHookAddress: "",
     customHookSource: "",
@@ -104,8 +106,9 @@ export function buildLaunchSummary(draft: LaunchDraft) {
 
 export function parseTotalSwapFeeBps(value: string) {
   const normalized = value.trim();
-  if (!/^(?:[1-9]|10)$/.test(normalized)) return null;
-  return Number(normalized) * 100;
+  return normalized === CLASSIC_TOTAL_SWAP_FEE_PERCENT
+    ? CLASSIC_TOTAL_SWAP_FEE_BPS
+    : null;
 }
 
 export function parseInitialBuyWei(value: string | null | undefined) {
@@ -164,7 +167,7 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     "Uniswap LP fee: 0.00%",
     `Total swap fee: ${fees ? formatBps(fees.totalSwapFeeBps) : "unset"}`,
     `Creator share: ${fees ? formatBps(fees.creatorFeeBps) : "unset"} in native ETH`,
-    `Programmable share: ${formatBps(PLATFORM_FEE_BPS)} in native ETH, deducted from the selected total`,
+    `Programmable share: ${formatBps(PLATFORM_FEE_BPS)} in native ETH, deducted from the fixed total`,
     "Fee scope: the canonical Programmable pool; separate pools can bypass its hook",
     "",
     buildLaunchSummary(draft),

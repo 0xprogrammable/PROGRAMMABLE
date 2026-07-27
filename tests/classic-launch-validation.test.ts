@@ -261,7 +261,6 @@ describe("prepared Classic launch boundary", () => {
 
     const changedDrafts = [
       { ...currentDraft, tokenName: "Different" },
-      { ...currentDraft, totalSwapFeePercent: "2" },
       { ...currentDraft, tokenDescription: "Different metadata" },
       { ...currentDraft, tokenX: "https://x.com/different" },
       {
@@ -283,6 +282,13 @@ describe("prepared Classic launch boundary", () => {
         ),
       ).toThrow("current token setup");
     }
+
+    expect(() =>
+      preparedLaunch({
+        ...currentDraft,
+        totalSwapFeePercent: "2",
+      }),
+    ).toThrow("fixed 1.00%");
   });
 
   it("binds the plan hash to the connected account", () => {
