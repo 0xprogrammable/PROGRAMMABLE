@@ -1,125 +1,22 @@
+import { parseEther } from "viem";
+
 export const PLATFORM_FEE_BPS = 10;
 export const LAUNCH_DRAFT_STORAGE_KEY = "launcher.launch-draft.v1";
+export const MEME_TOKEN_SUPPLY_WHOLE = 1_000_000_000;
+export const MEME_INITIAL_TICK = 204_200;
+export const MEME_STARTING_FDV_ETH = 1.3556577608171038;
+export const MEME_STARTING_FDV_ETH_LABEL =
+  `${MEME_STARTING_FDV_ETH.toFixed(2)} ETH`;
+export const MEME_MIN_INITIAL_BUY_WEI = 600_000_000_000_000n;
+export const MEME_MIN_INITIAL_BUY_ETH = "0.0006";
+export const MEME_MIN_INITIAL_BUY_ETH_LABEL =
+  `${MEME_MIN_INITIAL_BUY_ETH} ETH`;
 
+// AssetMode and the legacy draft fields remain only so an older browser draft can
+// be read safely. The active product always normalizes to a new MemeLaunchV1 token.
 export type AssetMode = "new" | "existing";
-export type LiquidityMode = "auction" | "direct";
-export type BehaviorTier = "standard" | "review" | "custom";
-
-export type BehaviorId =
-  | "fixed-fee"
-  | "fee-split"
-  | "timed-opening"
-  | "nft-membership"
-  | "dynamic-fee"
-  | "buyback"
-  | "holder-rewards"
-  | "oracle-guard"
-  | "anti-sandwich"
-  | "limit-orders"
-  | "productive-liquidity"
-  | "custom-curve"
-  | "custom-hook";
-
-export type BehaviorDefinition = {
-  id: BehaviorId;
-  name: string;
-  description: string;
-  tier: BehaviorTier;
-};
-
-export const behaviorDefinitions: BehaviorDefinition[] = [
-  {
-    id: "fixed-fee",
-    name: "Fixed swap fee",
-    description:
-      "The pool uses one fee rate that does not change with activity",
-    tier: "standard",
-  },
-  {
-    id: "fee-split",
-    name: "Fee split",
-    description:
-      "Route a defined share of swap fees between liquidity and named recipients",
-    tier: "review",
-  },
-  {
-    id: "timed-opening",
-    name: "Timed opening",
-    description:
-      "Open trading for everyone at the same stated time without sell rules tied to individual addresses",
-    tier: "review",
-  },
-  {
-    id: "nft-membership",
-    name: "NFT membership",
-    description:
-      "Use NFT ownership for fee benefits without removing a holder's ability to sell",
-    tier: "review",
-  },
-  {
-    id: "dynamic-fee",
-    name: "Bounded dynamic fee",
-    description:
-      "Raise the pool fee from 0.30% to at most 1.00% after recent pool price movement",
-    tier: "review",
-  },
-  {
-    id: "buyback",
-    name: "Automated buyback",
-    description:
-      "Use a defined share of collected fees to buy the launched token within explicit limits",
-    tier: "review",
-  },
-  {
-    id: "holder-rewards",
-    name: "Holder rewards",
-    description:
-      "Fund holder claims from swap fees without adding a transfer tax",
-    tier: "review",
-  },
-  {
-    id: "oracle-guard",
-    name: "Oracle guard",
-    description:
-      "Check swaps against an external price reference and bounded deviation rules",
-    tier: "review",
-  },
-  {
-    id: "anti-sandwich",
-    name: "Sandwich protection",
-    description:
-      "Use delayed or reordered settlement to reduce common sandwich patterns",
-    tier: "review",
-  },
-  {
-    id: "limit-orders",
-    name: "Limit orders",
-    description:
-      "Represent orders as liquidity that executes at a stated price",
-    tier: "review",
-  },
-  {
-    id: "productive-liquidity",
-    name: "Productive liquidity",
-    description:
-      "Put idle pool assets into a separate strategy with explicit withdrawal and loss rules",
-    tier: "review",
-  },
-  {
-    id: "custom-curve",
-    name: "Custom pricing curve",
-    description:
-      "Replace concentrated liquidity pricing with a reviewed accounting model",
-    tier: "review",
-  },
-  {
-    id: "custom-hook",
-    name: "Custom hook",
-    description:
-      "Submit one complete hook implementation for compatibility and security review",
-    tier: "custom",
-  },
-];
+export type LiquidityMode = "meme";
+export type BehaviorId = "fixed-fee";
 
 export type LaunchDraft = {
   version: 1;
@@ -128,6 +25,10 @@ export type LaunchDraft = {
   tokenSymbol: string;
   tokenSupply: string;
   tokenDescription: string;
+  tokenWebsite: string;
+  tokenImage: string;
+  tokenX: string;
+  tokenTelegram: string;
   tokenAddress: string;
   existingTokenName: string;
   existingTokenSymbol: string;
@@ -145,6 +46,8 @@ export type LaunchDraft = {
   directTokensPerEth: string;
   selectedBehaviors: BehaviorId[];
   lpFeePercent: string;
+  totalSwapFeePercent: string;
+  initialBuyEth: string;
   customHookAddress: string;
   customHookSource: string;
   launchSalt: string;
@@ -159,14 +62,18 @@ export function createEmptyDraft(): LaunchDraft {
     tokenSymbol: "",
     tokenSupply: "1000000000",
     tokenDescription: "",
+    tokenWebsite: "",
+    tokenImage: "",
+    tokenX: "",
+    tokenTelegram: "",
     tokenAddress: "",
     existingTokenName: "",
     existingTokenSymbol: "",
     existingTokenSupply: "",
-    liquidityMode: "auction",
-    auctionSalePercent: "50",
-    auctionLiquidityPercent: "100",
-    auctionFloorValuationEth: "10",
+    liquidityMode: "meme",
+    auctionSalePercent: "",
+    auctionLiquidityPercent: "",
+    auctionFloorValuationEth: "",
     auctionStartBlock: "",
     auctionEndBlock: "",
     auctionClaimBlock: "",
@@ -175,7 +82,9 @@ export function createEmptyDraft(): LaunchDraft {
     directTokenAmount: "",
     directTokensPerEth: "",
     selectedBehaviors: ["fixed-fee"],
-    lpFeePercent: "0.30",
+    lpFeePercent: "0",
+    totalSwapFeePercent: "1",
+    initialBuyEth: MEME_MIN_INITIAL_BUY_ETH,
     customHookAddress: "",
     customHookSource: "",
     launchSalt: "",
@@ -183,121 +92,83 @@ export function createEmptyDraft(): LaunchDraft {
   };
 }
 
-export function findBehavior(id: BehaviorId) {
-  return behaviorDefinitions.find((behavior) => behavior.id === id);
-}
-
-export function getBehaviorTierLabel(tier: BehaviorTier) {
-  if (tier === "standard") return "Standard";
-  if (tier === "review") return "Review required";
-  return "Custom";
-}
-
 export function getDraftAssetLabel(draft: LaunchDraft) {
-  if (draft.assetMode === "existing") {
-    return draft.existingTokenSymbol.trim() || "the existing token";
-  }
-
   return draft.tokenSymbol.trim() || draft.tokenName.trim() || "the new token";
 }
 
 export function buildLaunchSummary(draft: LaunchDraft) {
-  const asset = getDraftAssetLabel(draft);
-  const liquidity =
-    draft.liquidityMode === "auction"
-      ? "Bids establish the opening price and fund the first Uniswap v4 pool"
-      : "Creator supplied token and ETH liquidity opens the first Uniswap v4 pool";
+  const asset =
+    draft.tokenName.trim() || draft.tokenSymbol.trim() || "The token";
+  return `${asset} launches at ${MEME_STARTING_FDV_ETH_LABEL} starting FDV with its complete supply in one permanently locked, one-sided Uniswap v4 position`;
+}
 
-  const selected = draft.selectedBehaviors
-    .map(findBehavior)
-    .filter((behavior): behavior is BehaviorDefinition => Boolean(behavior));
+export function parseTotalSwapFeeBps(value: string) {
+  const normalized = value.trim();
+  if (!/^(?:[1-9]|10)$/.test(normalized)) return null;
+  return Number(normalized) * 100;
+}
 
-  const behaviorText =
-    selected.length === 0
-      ? "Standard token rules"
-      : selected.length === 1
-        ? selected[0].name
-        : `${selected
-            .slice(0, -1)
-            .map((behavior) => behavior.name)
-            .join(", ")} and ${selected.at(-1)?.name}`;
+export function parseInitialBuyWei(value: string | null | undefined) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (
+    normalized.length === 0 ||
+    normalized.length > 40 ||
+    !/^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/.test(normalized)
+  ) {
+    return null;
+  }
 
-  return `${asset} launches on Ethereum; ${liquidity}; pool behavior: ${behaviorText}`;
+  try {
+    const amount = parseEther(normalized);
+    return amount >= MEME_MIN_INITIAL_BUY_WEI ? amount : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getInitialBuyEthLabel(draft: LaunchDraft) {
+  const normalized = draft.initialBuyEth.trim();
+  return `${normalized || MEME_MIN_INITIAL_BUY_ETH} ETH`;
+}
+
+export function getMemeFeeBreakdown(draft: LaunchDraft) {
+  const totalSwapFeeBps = parseTotalSwapFeeBps(
+    draft.totalSwapFeePercent,
+  );
+  if (totalSwapFeeBps === null) return null;
+  return {
+    totalSwapFeeBps,
+    creatorFeeBps: totalSwapFeeBps - PLATFORM_FEE_BPS,
+    launcherFeeBps: PLATFORM_FEE_BPS,
+  };
+}
+
+function formatBps(bps: number) {
+  return `${(bps / 100).toFixed(2)}%`;
 }
 
 export function buildPlainTextPlan(draft: LaunchDraft) {
-  const selected = draft.selectedBehaviors
-    .map(findBehavior)
-    .filter((behavior): behavior is BehaviorDefinition => Boolean(behavior));
-
+  const fees = getMemeFeeBreakdown(draft);
+  const initialBuy = getInitialBuyEthLabel(draft);
   return [
-    "Launcher setup",
+    "Programmable setup",
     "",
-    `Asset: ${getDraftAssetLabel(draft)}`,
-    `Asset path: ${
-      draft.assetMode === "new"
-        ? "New fixed supply ERC-20"
-        : `Existing fixed supply Uniswap UERC20 (${draft.tokenAddress || "address not set"})`
-    }`,
-    `Liquidity path: ${
-      draft.liquidityMode === "auction"
-        ? `Four-hour auction funded v4 liquidity (${draft.auctionSalePercent || "unset"}% auctioned; 50% reserved for LP; all auction proceeds allocated to pool funding; ${draft.auctionFloorValuationEth || "unset"} ETH minimum valuation)`
-        : `Direct v4 pool (${draft.directEthAmount || "unset"} ETH and ${draft.directTokenAmount || "unset"} tokens at ${draft.directTokensPerEth || "unset"} tokens per ETH)`
-    }`,
-    `Token behavior: ${
-      selected.length > 0
-        ? selected.map((behavior) => behavior.name).join(", ")
-        : "Base configuration"
-    }`,
-    `Pool fee: ${
-      draft.selectedBehaviors.includes("fixed-fee")
-        ? `${draft.lpFeePercent || "unset"}%`
-        : draft.selectedBehaviors.includes("dynamic-fee")
-          ? "0.30% base, 1.00% maximum, updated at most once per block"
-        : "Defined by the selected behavior"
-    }`,
-    `Launcher fee: ${(PLATFORM_FEE_BPS / 100).toFixed(2)}% of eligible swaps`,
-    "Initial LP: permanently locked; LP fees go to the launch creator",
-    ...(draft.liquidityMode === "auction"
-      ? [
-          "Auction recovery: any tokens left after the auction and pool setup return to the launch creator",
-        ]
-      : []),
+    `Token: ${getDraftAssetLabel(draft)}`,
+    "Token supply: 1,000,000,000 at 18 decimals",
+    `Creator initial buy: ${initialBuy}; purchased tokens go directly to the creator`,
+    "Launch cost: no launch fee or liquidity deposit; the creator pays the initial buy and network gas",
+    `Starting FDV: ${MEME_STARTING_FDV_ETH_LABEL}; the approximate USD value follows ETH`,
+    "Liquidity: the complete supply enters one one-sided Uniswap v4 position at launch",
+    "Position custody: permanently locked",
+    "Transfer fee: 0.00%",
+    "Uniswap LP fee: 0.00%",
+    `Total swap fee: ${fees ? formatBps(fees.totalSwapFeeBps) : "unset"}`,
+    `Creator share: ${fees ? formatBps(fees.creatorFeeBps) : "unset"} in native ETH`,
+    `Programmable share: ${formatBps(PLATFORM_FEE_BPS)} in native ETH, deducted from the selected total`,
+    "Fee scope: the canonical Programmable pool; separate pools can bypass its hook",
     "",
     buildLaunchSummary(draft),
     "",
-    "Status: Ready for contract review",
+    "Status: Mainnet launch preparation remains disabled during final canary verification",
   ].join("\n");
-}
-
-export function hasReviewBehavior(draft: LaunchDraft) {
-  return draft.selectedBehaviors.some((id) => {
-    const tier = findBehavior(id)?.tier;
-    return tier === "review" || tier === "custom";
-  });
-}
-
-export function normalizeBehaviorSelection(
-  selected: BehaviorId[],
-  next: BehaviorId,
-) {
-  if (next === "custom-hook") {
-    return selected.includes(next) ? [] : [next];
-  }
-
-  const withoutCustom = selected.filter((id) => id !== "custom-hook");
-
-  if (withoutCustom.includes(next)) {
-    return withoutCustom.filter((id) => id !== next);
-  }
-
-  if (next === "fixed-fee") {
-    return [...withoutCustom.filter((id) => id !== "dynamic-fee"), next];
-  }
-
-  if (next === "dynamic-fee") {
-    return [...withoutCustom.filter((id) => id !== "fixed-fee"), next];
-  }
-
-  return [...withoutCustom, next];
 }

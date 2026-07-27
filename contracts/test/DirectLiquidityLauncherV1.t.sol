@@ -355,7 +355,7 @@ contract DirectLiquidityLauncherV1Test is Deployers {
             creatorSalt: CREATOR_SALT,
             hookSalt: hookSalt,
             metadata: UERC20Metadata({
-                description: "Direct liquidity integration fixture", website: "", image: "", xProofTweetId: 0
+                description: "Direct liquidity integration fixture", website: "", image: "", extraData: bytes("")
             })
         });
     }

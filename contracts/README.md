@@ -1,64 +1,103 @@
-# Launcher protocol spike
+# Programmable contracts
 
-This directory contains Launcher’s first four protocol-tested Uniswap v4 launch paths. It is a protocol workspace, not a production deployment.
+This workspace contains the Classic release candidate. Nothing in this directory is an audit certificate or a
+public-enabled Ethereum mainnet release.
 
-The implementation deliberately reuses Uniswap’s UERC20Factory, LiquidityLauncher, Continuous Clearing Auction, LBPStrategy, PositionManager and v4 core contracts. Launcher’s own surface is limited to two immutable hook families, deterministic factories and two direct atomic launch entry points.
+## Classic composition
 
-## Protocol-tested variants
+```text
+official Uniswap UERC20Factory v2.0.0
+→ MemeLaunchV1
+→ native ETH and token v4 pool
+→ shared EthCreatorFeeHookV2
+→ complete token supply in one one-sided position
+→ official PositionFeesForwarder with permanent custody
+```
 
-- Auction launch: 50% of supply is sold through the official four-hour CCA, 50% is reserved for the v4 position and all auction proceeds fund the locked full-range LP while the pinned factory has no protocol fee controller
-- Direct v4 pool: the creator selects the opening price and supplies the initial ETH/token liquidity
-- Existing token pool: the configured Uniswap factory proves an existing UERC20’s origin and its recorded creator supplies direct liquidity
-- Bounded dynamic fee auction: the official auction path migrates into a pool whose LP fee follows a fixed 0.30–1.00% tick-movement rule
-- New tokens use a fixed supply and 18 decimals; existing UERC20s retain their original fixed supply and decimals
-- One non-upgradeable hook per pool
-- Fixed 0.30% LP fee or the separately tested bounded 0.30–1.00% rule
-- Fixed 0.10% Launcher fee on the absolute unspecified swap amount
-- Immutable pool, initializer and fee recipient
-- Initial LP NFT held by Uniswap's official `PositionFeesForwarder`
-- Zero transfer operator and maximum-block timelock
-- Permissionless LP-fee collection to the immutable launch creator
-- No owner, proxy, pause or admin-set fee
+Classic is the only public launch product in this release.
 
-The authoritative machine-readable specifications are in [`spec/launch-variants.v1.json`](spec/launch-variants.v1.json), [`spec/verified-standard-v1.json`](spec/verified-standard-v1.json), [`spec/bounded-dynamic-fee-v1.json`](spec/bounded-dynamic-fee-v1.json), [`spec/direct-standard-v1.json`](spec/direct-standard-v1.json), [`spec/existing-uerc20-standard-v1.json`](spec/existing-uerc20-standard-v1.json) and [`spec/behavior-modules.v1.json`](spec/behavior-modules.v1.json).
+The fixed policy is:
 
-## Local setup
+- 1,000,000,000 tokens with 18 decimals
+- no creator or Programmable token allocation
+- no minting, transfer tax, blacklist, rebase or sell restriction
+- no creator ETH liquidity deposit
+- one creator-selected atomic Dev Buy of at least 0.0006 ETH, with purchased tokens sent directly to the creator
+- no protocol launch fee beyond Ethereum gas
+- 0.00% Uniswap LP fee
+- initial tick 204200 and tick spacing 200
+- starting FDV of `1.355657760817103798 ETH`
+- complete supply placed from the minimum usable tick through the initial tick
+- position NFT and rounding dust held by a forwarder with zero operator and maximum-block timelock
+
+The creator selects a total swap fee from 1% through 10% in whole percentage points. Programmable's fixed 0.10 percentage-point share is deducted from that selection. At 1%, the creator accrues 0.90% and Programmable accrues 0.10%.
+
+Both shares accrue only from the native ETH side of swaps in the canonical pool. Standard claims are permissionless and pay the recorded creator or treasury directly. A recorded recipient that cannot receive ETH may redirect only its own claim.
+
+## Upstream contracts
+
+Classic does not replace Uniswap v4 core. It reuses pinned official PoolManager, PositionManager, StateView, V4Quoter, Universal Router, Permit2 and UERC20Factory deployments. Contract creation and liquidity placement reuse Uniswap's UERC20 factory, PositionPlanner and PositionFeesForwarder. OpenZeppelin supplies the hook base, CREATE2 utility and transient reentrancy guard.
+
+The `uerc20-factory` dependency is pinned to official tag `v2.0.0`, commit `6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68`. The exact metadata struct is:
+
+```solidity
+struct UERC20Metadata {
+    string description;
+    string website;
+    string image;
+    bytes extraData;
+}
+```
+
+The current launch encoder sends versioned UTF-8 JSON for optional X and Telegram links in `extraData`, or `0x` when both are absent.
+
+The exact product specification is [`spec/meme-eth-fee-locked-v1.json`](spec/meme-eth-fee-locked-v1.json).
+
+## Trading and reads
+
+Classic exact-input trades quote the canonical hooked PoolKey through V4Quoter and encode the swap through Universal Router v2.0 with the official v4 SDK. Buys settle native ETH directly. Sells use the pinned Permit2 contract and require token-to-Permit2 and Permit2-to-router approval state before the router transaction.
+
+Explore and Profile pair verified `MemeTokenLaunched` and `MemeLiquidityConfigured` events, accept fee events only for their canonical pool IDs, and read pool state through the official StateView at a confirmation-delayed snapshot block.
+
+Both paths fail closed unless the release manifest is ready and runtime code matches its recorded hashes.
+
+## Verification
 
 ```sh
 ./scripts/bootstrap-deps.sh
 forge fmt --check
+forge lint src script
 forge build
 forge test
+slither . --filter-paths 'lib|test|script' --exclude-dependencies
 ```
 
-Every dependency is checked out at an exact commit. The bootstrap script stops if an existing checkout does not match its pin.
-
-The checked-in Ethereum and Sepolia snapshots can be compared with Uniswap’s current machine-readable deployment registry:
+From the repository root:
 
 ```sh
+npm run verify
+npm run contracts:verify
+npm run contracts:slither
 npm run contracts:official-deployments
-npm run contracts:variants
-```
-
-The checks fail when a required contract is missing, deprecated, points to a different address, lacks an official source link, comes from a newer dataset than the checked-in snapshot or contradicts the launch catalog. Run them immediately before every rehearsal or broadcast.
-
-## Sepolia preflight
-
-The public treasury, test deployment wallet and LP custody policy are recorded in [`config/deployment-inputs.v1.json`](config/deployment-inputs.v1.json). The read-only Sepolia dependency snapshot can be checked with:
-
-```sh
 npm run contracts:sepolia:validate
 ```
 
-`script/DeploySepoliaInfrastructureV1.s.sol` deploys Launcher’s three permissionless factories and `DirectLiquidityLauncherV1`. The launcher exposes separate atomic methods for a new fixed-supply token and for a provenance-verified existing UERC20. The script refuses the wrong chain, wrong broadcaster or changed official dependency bytecode. It does not read a private key; broadcasting must use a local Foundry account or hardware wallet.
+Every dependency is pinned to an exact commit. Deployment checks compare checked-in Ethereum snapshots with Uniswap's official registry and fail when required addresses or runtime code hashes drift.
 
-The web auction path calls Uniswap’s official LiquidityLauncher directly. Launcher’s factories deploy the deterministic permanent LP recipient and either the fixed-fee or bounded dynamic-fee hook first. The final wallet transaction then atomically creates the UERC20 and registers the complete CCA/LBP migration composition.
+Tests cover the four exact-input and exact-output swap quadrants, inclusive fee splitting, tiny-amount rounding, canonical-pool isolation, partial-fill rejection, rejecting-recipient recovery, atomic token and locked-liquidity creation, claims and stateful accounting invariants.
 
-## Evidence boundary
+## Deployment truth
 
-Passing local, fork and Sepolia infrastructure checks does not make these contracts audited or production-ready. The
-four infrastructure contracts are deployed and source-verified on Sepolia; before mainnet, the launch families still
-require complete launch, swap, fee-collection and recovery rehearsals, independent review, production signer controls
-and a final check against current official Uniswap deployments.
+The current Classic V2 Ethereum mainnet infrastructure is deployed and source-matched. Production transaction
+preparation remains disabled because the current Mainnet lifecycle is still pending. Historical V1 infrastructure does
+not enable production transaction preparation.
 
-The current security evidence and blockers are recorded in [`security/REVIEW-2026-07-26.md`](security/REVIEW-2026-07-26.md), with testable properties in [`security/SECURITY-PROPERTIES.md`](security/SECURITY-PROPERTIES.md), a monitoring specification in [`security/MONITORING-AND-INCIDENT-RESPONSE.md`](security/MONITORING-AND-INCIDENT-RESPONSE.md) and a nine-category maturity assessment in [`security/MATURITY-2026-07-26.md`](security/MATURITY-2026-07-26.md).
+The current Ethereum Sepolia deployment is source-verified and its signed atomic Dev Buy, sell and native fee-claim lifecycle is reconciled across two independent RPCs. The release manifest marks Sepolia Classic `ready`; `npm run contracts:sepolia:lifecycle:verify` rechecks the exact deployment, token, pool, position custody, fee split, claims and balance deltas.
+
+The older Sepolia lifecycle with the legacy fourth metadata field remains separately marked `historical-invalid-metadata-abi` and cannot enable transaction preparation.
+
+The detailed evidence and remaining release requirements are in [`DEPLOYMENT.md`](DEPLOYMENT.md) and [`security/MAINNET-READINESS.md`](security/MAINNET-READINESS.md).
+
+There has been no external smart-contract audit or public contest. Public Mainnet availability still requires
+production indexing, operated monitoring, a separately approved controlled canary and its independently reconciled
+lifecycle evidence.

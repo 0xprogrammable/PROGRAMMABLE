@@ -304,7 +304,7 @@ contract ExistingUERC20LiquidityLauncherV1Test is Deployers {
 
     function _metadata() private pure returns (UERC20Metadata memory) {
         return UERC20Metadata({
-            description: "Existing UERC20 integration fixture", website: "", image: "", xProofTweetId: 0
+            description: "Existing UERC20 integration fixture", website: "", image: "", extraData: bytes("")
         });
     }
 }

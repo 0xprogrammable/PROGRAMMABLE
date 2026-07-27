@@ -25,8 +25,11 @@ contract DeploySepoliaInfrastructureV1Test is Test {
         0x7792dba76c190e746dc7fbf7f8a8f690f7cf5ce6fab448c858069b1852974306;
     bytes32 internal constant LOCKED_POSITION_FACTORY_CODEHASH =
         0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc;
-    bytes32 internal constant DIRECT_LIQUIDITY_LAUNCHER_CODEHASH =
+    /// @dev The live Sepolia deployment retains the pre-v2 UERC20 metadata ABI and is verified by the snapshot test.
+    bytes32 internal constant LEGACY_DEPLOYED_DIRECT_LAUNCHER_CODEHASH =
         0x41fa4dbe9709e93f601e0406a3a9d61826144ca56e16f748e063f850fc0af48b;
+    bytes32 internal constant REBUILT_DIRECT_LAUNCHER_CODEHASH =
+        0xdef61428941214e444889012550a9007729109279edb1c5dc9c2f155a5312469;
     bytes32 internal constant BOUNDED_DYNAMIC_FEE_FACTORY_CODEHASH =
         0xe6bbbdba0194caba268f5546db2574dc416b3c74331bd44f33d04d4b2251ffbc;
 
@@ -57,7 +60,11 @@ contract DeploySepoliaInfrastructureV1Test is Test {
         assertEq(address(dynamicHookFactory), BOUNDED_DYNAMIC_FEE_FACTORY);
         assertEq(address(hookFactory).codehash, PLATFORM_FEE_HOOK_FACTORY_CODEHASH);
         assertEq(address(positionFactory).codehash, LOCKED_POSITION_FACTORY_CODEHASH);
-        assertEq(address(directLauncher).codehash, DIRECT_LIQUIDITY_LAUNCHER_CODEHASH);
+        // The runtime contains patched immutables, so Solidity does not expose type(...).runtimeCode.
+        bytes32 rebuiltDirectLauncherCodehash = keccak256(address(directLauncher).code);
+        assertEq(address(directLauncher).codehash, rebuiltDirectLauncherCodehash);
+        assertEq(rebuiltDirectLauncherCodehash, REBUILT_DIRECT_LAUNCHER_CODEHASH);
+        assertTrue(rebuiltDirectLauncherCodehash != LEGACY_DEPLOYED_DIRECT_LAUNCHER_CODEHASH);
         assertEq(address(dynamicHookFactory).codehash, BOUNDED_DYNAMIC_FEE_FACTORY_CODEHASH);
         assertGt(address(hookFactory).code.length, 0);
         assertGt(address(positionFactory).code.length, 0);

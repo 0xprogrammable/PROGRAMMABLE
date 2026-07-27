@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "status": "prepared-mainnet-canary",
+  "requiredRelease": "classic-v2",
+  "chainId": 1,
+  "sequence": 1,
+  "token": {
+    "name": "Test",
+    "symbol": "TEST",
+    "description": "This is a test.",
+    "website": "https://www.forbes.com/",
+    "image": "https://programmable.family/brand/programmable-token-fallback-01-dawn.webp",
+    "extraData": {
+      "v": 1,
+      "x": "https://x.com/elonmusk"
+    }
+  },
+  "launch": {
+    "totalSwapFeeBps": 100,
+    "initialBuyWei": "600000000000000",
+    "creatorSaltSeed": "programmable-mainnet-classic-v2-test-2026-07-27"
+  },
+  "expectedDisclosure": {
+    "buyHookFeeBps": 100,
+    "sellHookFeeBps": 100,
+    "creatorFeeBps": 90,
+    "launcherFeeBps": 10,
+    "transferTaxBps": 0,
+    "lpFeePips": 0
+  }
+}

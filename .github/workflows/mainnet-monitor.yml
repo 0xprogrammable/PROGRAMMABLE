@@ -1,0 +1,138 @@
+name: Mainnet Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: mainnet-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: Verify Mainnet invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Restore canonical monitor cursor
+        id: restore-cursor
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .monitor-state
+          key: mainnet-monitor-${{ github.run_id }}
+          restore-keys: |
+            mainnet-monitor-
+
+      - name: Run read-only invariant monitor
+        id: monitor
+        continue-on-error: true
+        env:
+          MAINNET_RPC_URLS: ${{ secrets.MAINNET_RPC_URL_A }},${{ secrets.MAINNET_RPC_URL_B }}
+          MEME_MONITOR_STATE_FILE: .monitor-state/mainnet-classic-v2.json
+        run: |
+          set -o pipefail
+          npm run contracts:mainnet:monitor:once 2>&1 | tee mainnet-monitor.log
+
+      - name: Save canonical monitor cursor
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .monitor-state
+          key: mainnet-monitor-${{ github.run_id }}
+
+      - name: Preserve monitor evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mainnet-monitor-${{ github.run_id }}
+          path: |
+            mainnet-monitor.log
+            .monitor-state/mainnet-classic-v2.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Open or update incident issue
+        if: steps.monitor.outcome == 'failure'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const title = "Mainnet monitor requires attention";
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const existing = issues.find((issue) => issue.title === title);
+            const body = [
+              "The read-only Mainnet invariant monitor failed.",
+              "",
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              "",
+              "New launch construction must remain disabled until the failure is reconciled through both configured RPCs.",
+            ].join("\n");
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+            }
+
+      - name: Close recovered incident issue
+        if: steps.monitor.outcome == 'success'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const title = "Mainnet monitor requires attention";
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const existing = issues.find((issue) => issue.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `Recovered in ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: "closed",
+              });
+            }
+
+      - name: Fail workflow after evidence and alerting
+        if: steps.monitor.outcome == 'failure'
+        run: exit 1

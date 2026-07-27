@@ -53,7 +53,7 @@ clone_at "permit2" "https://github.com/Uniswap/permit2.git" \
 clone_at "solady" "https://github.com/Vectorized/solady.git" \
   "33b4b98e350bbcba6aa85642957c313e98b5f911"
 clone_at "uerc20-factory" "https://github.com/Uniswap/uerc20-factory.git" \
-  "46290a5447844016516b4b4530013da01b6ff801"
+  "6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68"
 clone_at "blocknumberish" "https://github.com/Uniswap/blocknumberish.git" \
   "38fe20bc0341d5bc2780d41f90dadb70e10f8cea"
 clone_at "solmate" "https://github.com/transmissions11/solmate.git" \

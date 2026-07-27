@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "status": "simulation-only",
+  "chainId": 1,
+  "checkedAt": "2026-07-27",
+  "snapshotBlock": 25623989,
+  "broadcast": false,
+  "broadcastApproved": false,
+  "transactionsSubmitted": 0,
+  "broadcaster": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+  "reviewedStartingNonce": 7,
+  "confirmedNonce": 7,
+  "pendingNonce": 7,
+  "independentRpcCount": 2,
+  "deployerBalanceWei": "16860325627722211",
+  "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  "reusedPositionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
+  "predictedAddresses": {
+    "hookFactory": "0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67",
+    "feeHook": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+    "memeLauncher": "0xD240D06f8586eB799f20056054e5b527405E6bAd"
+  },
+  "hookSalt": "0x00000000000000000000000000000000000000000000000000000000000003e2",
+  "sourceCommitment": "0x6bf2c70c5ab2a64a62f2c27e6be859e3428f2c35e6e2db5255b569b9f9eb1287",
+  "simulation": {
+    "status": "passed",
+    "transactionCount": 3,
+    "estimatedGasUsed": "13133416",
+    "estimatedGasPriceWei": "159605166",
+    "estimatedRequiredWei": "2096161040827056",
+    "reviewedGasLimit": "13133416",
+    "proposedMaxFeePerGasWei": "500000000",
+    "proposedMaxPriorityFeePerGasWei": "100000000",
+    "maximumDeploymentCostWei": "6566708000000000"
+  },
+  "releaseBoundary": {
+    "sepoliaV2LifecycleVerified": true,
+    "explorerSourceVerificationRequired": true,
+    "hooklistSubmissionRequired": true,
+    "routingAllowlistSeparate": true,
+    "scannerDisplayGuaranteed": false
+  }
+}

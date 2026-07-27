@@ -1,55 +1,78 @@
 # Frontend transaction preflight
 
-The launch form does not construct an arbitrary wallet request. It sends the normalized token setup and connected account to a fixed server route. The server owns the chain, contract addresses, ABI and transaction encoding.
+The browser never chooses a contract address or supplies arbitrary calldata. It sends a normalized Classic draft and connected account to `/api/launch/preflight`. The server owns the chain, deployment record, ABI, transaction encoding and simulation.
 
-## Direct launch flow
+## Classic launch
 
-1. Validate the selected behavior against the protocol-tested direct standard
-2. Parse token, ETH and price inputs with integer arithmetic
-3. Verify an existing token against the official UERC20Factory when applicable
-4. Refuse to continue unless the production deployment manifest is marked ready
-5. Match official and Launcher runtime bytecode to the release manifest
-6. Read the launcher’s immutable PoolManager, PositionManager, token factory, hook factory, position factory and treasury
-7. Predict the new token address or reuse the verified existing token address
-8. Read the hook factory’s exact init-code hash and mine an address with only the required v4 callback flags
-9. Check ETH balance, token balance and allowance
-10. Build either an exact token approval or the complete atomic launch call
-11. Run the exact call with `eth_call`, estimate gas and check the maximum required ETH balance
-12. Return the fixed transaction and a hash of its account, type, chain, target, calldata and value
+1. Require a token name, symbol and description within the fixed limits
+2. Require one total swap fee from 1% through 10% in whole percentage points
+3. Fix the supply at 1,000,000,000 tokens and the launch value at zero
+4. Validate optional website, image, X and Telegram values as bounded HTTPS URLs
+5. Encode official UERC20 v2.0.0 metadata as `(string description,string website,string image,bytes extraData)`
+6. Encode no social links as `0x`, or versioned UTF-8 JSON `{v:1,x?,telegram?}` as `extraData`
+7. Refuse preparation unless the selected Classic deployment is marked ready
+8. Verify runtime code hashes for the hook factory, shared hook, position-forwarder factory and launcher
+9. Verify the hook factory recognizes the shared hook
+10. Read the launcher's immutable PoolManager, PositionManager, token factory, hook and position-forwarder factory
+11. Verify the hook's PoolManager, treasury, 10-basis-point platform share, 0 LP fee, tick spacing 200 and callback mask `8396`
+12. Predict the creator-bound UERC20 address and refuse an occupied address
+13. Encode the single payable `MemeLaunchV1.launch` call with the selected Dev Buy, which must be at least 0.0006 ETH
+14. Simulate the exact call, estimate gas and check that the connected account can pay the network cost
+15. Return the fixed transaction and a hash of its account, chain, target, calldata and value
 
-The browser repeats the complete preflight when the user presses the final approval or launch button. Privy opens only when the fresh plan hash matches the plan already shown in Review. A changed allowance, address, calldata, value or contract state updates the Review instead of opening a stale wallet request.
+The browser repeats the preflight when the user presses the final button. Privy opens only when the fresh plan hash matches the plan shown in Review. A changed account, chain, deployment, calldata or simulation result replaces the stale review instead of opening a wallet request.
 
-## Opening price
+## Fee encoding
 
-The public input is tokens per ETH. The server converts it to Uniswap’s raw currency ratio and then to `sqrtPriceX96` without JavaScript `Number` arithmetic:
+The selected number is the complete hook fee. The fixed Programmable share is deducted from it.
 
 ```text
-raw ratio = tokensPerEth × 10^tokenDecimals ÷ 10^18
-sqrtPriceX96 = floor(sqrt(raw ratio × 2^192))
+selected 1%  → totalSwapFeeBps 100  → creator 90 bps  + Programmable 10 bps
+selected 2%  → totalSwapFeeBps 200  → creator 190 bps + Programmable 10 bps
+selected 10% → totalSwapFeeBps 1000 → creator 990 bps + Programmable 10 bps
 ```
 
-The result must remain inside the exact v4 `TickMath` bounds. New Launcher tokens use 18 decimals. Existing UERC20s use the immutable decimals read from Ethereum.
+The launch call sends the creator's selected Dev Buy into the atomic initial market buy. The contract requires at least 0.0006 ETH, and the client requires the prepared transaction value to match the current form exactly. This is not a launch fee or liquidity deposit, and the purchased tokens go directly to the creator. Ethereum gas and any independently enabled Uniswap protocol fee are outside the fee split.
 
-## Existing-token approval
+## Direct trading
 
-The existing-token path accepts only a token whose address can be reconstructed from its immutable UERC20 identity through the configured official factory. The connected account must equal the token’s recorded creator. If allowance is insufficient, the preflight returns an approval for exactly the token liquidity amount, not an unlimited approval. The launch call is prepared only after the allowance is visible onchain.
+The canonical Classic pool key is native ETH, launched token, fee `0`, tick spacing `200` and the verified Classic hook.
+
+For each exact-input trade, the server:
+
+1. Verifies the ready deployment and runtime code for the official PoolManager, V4Quoter, Universal Router, Permit2 and Classic hook
+2. Quotes the canonical PoolKey through `V4Quoter.quoteExactInputSingle`
+3. Applies the selected slippage to produce a nonzero minimum output
+4. Restricts the transaction deadline to between 60 seconds and one hour
+5. Encodes `SWAP_EXACT_IN_SINGLE`, `SETTLE_ALL` and `TAKE_ALL` with the official v4 SDK
+6. Wraps the actions in Universal Router v2.0 `execute`
+
+A buy sends native ETH as the router call value. A sell returns, when needed, a token approval to pinned Permit2 and then a Permit2 allowance for the pinned Universal Router before returning the swap transaction.
+
+These builders define the direct trading path. They do not make trading live while the deployment gate is closed.
 
 ## Deployment gate
 
-`contracts/config/app-deployments.v1.json` is the release switch. Mainnet is currently `not-deployed`, so the route returns no target, calldata or wallet transaction. A ready entry requires all three Launcher addresses and their exact runtime-code hashes. The catalog validator deliberately fails if the current repository claims mainnet readiness.
+`contracts/config/app-deployments.v1.json` is the release switch.
 
-## Auction flow
+- Mainnet is `not-deployed`
+- Sepolia is `ready` for an explicitly configured rehearsal build
 
-1. Fix the allocation policy at 50% auction supply, 50% LP reserve, 100% proceeds allocation and a full-range position
-2. Save a schedule beginning 100 Ethereum blocks after preparation, running for 1,200 blocks, becoming claimable at the end block and migratable one block later
-3. Convert the minimum valuation in ETH to raw currency per raw token in Q96, snap it to the official CCA tick boundary and derive the currency required to clear the auction half at that floor
-4. Derive the official 12-step convex emission curve with 30% of supply emitted in the final block
-5. Match the installed Liquidity Launcher SDK addresses to the pinned official deployment snapshot and verify current runtime bytecode
-6. Select either the fixed 0.30% hook or the separately tested 0.30–1.00% bounded dynamic hook, then verify that family’s factory bytecode
-7. Predict the UERC20 from the connected creator, then derive the permanent position recipient and exact v4 hook address with that family’s callback mask
-8. Prepare and simulate the deterministic LP-lock deployment if it does not exist
-9. Prepare and simulate the deterministic hook deployment if it does not exist
-10. Build the official LiquidityLauncher multicall that atomically creates the token and distributes the full supply to LBPStrategy
-11. Check that the destination pool is neither initialized nor reserved, predict the CCA address and simulate the exact atomic launch
+The current Sepolia record contains exact addresses, deployment blocks and runtime code hashes for the source-verified
+atomic Dev Buy release. Its five signed lifecycle transactions are reconciled across two independent RPCs. The app
+uses this record only when both server and client select the `rehearsal` environment; production continues to fail
+closed against the undeployed Mainnet manifest. Older lifecycles remain separately historical and not release eligible.
 
-The browser repeats preflight before every setup or launch signature. If the saved schedule is too close to starting, the server replaces it with a fresh canonical window before any wallet prompt opens.
+## Read model
+
+Explore and Profile read through the verified release manifest:
+
+1. Scan confirmed logs from the launcher deployment block
+2. Pair `MemeTokenLaunched` and `MemeLiquidityConfigured` from the verified launcher
+3. Reject `PoolRegistered` or any unpaired shared-hook event as launch provenance
+4. Accept `NativeSwapFeesAccrued` only for canonical pool IDs established by those pairs
+5. Read token identity, supply, creator and UERC20 metadata at one snapshot block
+6. Read pool price and active liquidity from the official StateView at that same block
+7. Verify runtime code hashes for the launcher, hook and StateView
+
+The model is confirmation-delayed and read-through. A durable production indexer, reconciliation and availability work remain Mainnet gates.

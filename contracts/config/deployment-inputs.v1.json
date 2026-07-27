@@ -8,11 +8,18 @@
   "platform": {
     "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
     "platformFeePercentage": "0.10%",
-    "platformFeeRecipientPolicy": "immutable-per-hook"
+    "platformFeeRecipientPolicy": "immutable-per-hook",
+    "memeLaunchFeeAtCreation": "0",
+    "memeMinimumInitialCreatorBuyWei": "600000000000000",
+    "memeInitialCreatorBuyPolicy": "creator-selected-atomic-market-buy-at-or-above-minimum",
+    "memeInitialCreatorBuyRecipient": "launch-creator",
+    "memeLauncherShareBps": 10,
+    "memeLauncherSharePolicy": "deducted-from-selected-total-not-added-on-top"
   },
   "deployment": {
     "testWallet": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
-    "productionSignerPolicy": null,
+    "productionSigner": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "productionSignerPolicy": "owner-approved-eoa-manual-wallet-signing-no-key-storage",
     "privateKeysStoredInRepository": false
   },
   "liquidityPosition": {
@@ -24,6 +31,7 @@
     "creatorOwnsFeeRights": true,
     "creatorCanTransferPosition": false,
     "creatorCanRemoveInitialLiquidity": false,
-    "feeCollection": "permissionless-trigger-fixed-creator-recipient"
+    "feeCollection": "permissionless-trigger-fixed-creator-recipient",
+    "failedNativePayoutRecovery": "recorded-recipient-only-redirect"
   }
 }
