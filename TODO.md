@@ -35,9 +35,9 @@ residual smart-contract risk and must satisfy every internal gate below.
 - [ ] Public launch preparation is enabled
 
 Sepolia V2 is `ready` with current Test2 lifecycle evidence. Mainnet V2 is deployed, source-verified and backed by a
-complete independently reconciled canary lifecycle, while its V1 deployment remains historical only. Public
-preparation remains disabled until durable production indexing, authenticated RPC operations and continuous monitoring
-are provisioned.
+complete independently reconciled canary lifecycle, while its V1 deployment remains historical only. Authenticated
+dual-RPC operations, a private durable index snapshot and five-minute monitoring are live. Public preparation remains
+disabled pending named incident ownership, Privy production billing approval and final owner release approval.
 
 ## Remaining work
 
@@ -72,7 +72,8 @@ are provisioned.
 - [x] Populate Profile from verified launches, canonical positions, claimable fees and claim history
 - [x] Bind creator and Programmable claim preparation to the verified hook, pool, account and exact calldata
 - [x] Remove sample token cards and return an honest unavailable or empty state
-- [ ] Add a durable production index with backfill checkpoints, reorg rollback, reconciliation and cache invalidation before public traffic
+- [x] Add a private durable production snapshot with confirmed full backfill, dual-RPC reconciliation, reorg-safe rebuild and cache invalidation
+- [ ] Replace confirmed full replay with incremental checkpoints before indexed event volume approaches the function-duration budget
 - [ ] Add cross-device profile persistence only after an authenticated storage design is reviewed
 
 ### 4. Close the internal mainnet gates
@@ -81,13 +82,16 @@ are provisioned.
 - [x] Resolve all critical, high and moderate production dependency findings with a scoped Universal Router SDK override; retain 19 low `ethers` v5/`elliptic` findings without a compatible upstream fix
 - [x] Rerun the full repository verification suite on the exact release commit and preserve remote CI results
 - [x] Verify the production manifest, official Uniswap dependencies, immutable treasury, hook mask and runtime code hashes
-- [ ] Add live event reconciliation, alerts, named incident owners and a rehearsed response runbook
+- [x] Operate live two-RPC event reconciliation with a durable cursor, evidence artifacts and automatic GitHub incident issues
+- [ ] Name primary and backup incident owners and rehearse the response runbook with them
 - [x] Keep the immutable treasury at the owner-approved supplied EOA for this release
 - [x] Use the owner-approved `0x2Bb…249E` EOA as deployer with manual wallet signing and no stored private key
 - [x] Keep securities, RWA, custody and guaranteed-safety claims outside the product
 - [x] Complete rendered desktop and mobile QA for Explore, the Classic launch flow, Profile and fail-closed token detail states
 - [x] Verify that the allowed production origin restores an existing Privy wallet session and opens account management
-- [ ] Complete a fresh provider-backed login, disconnect, reconnect and transaction-review rehearsal on the exact release
+- [x] Complete a fresh provider-backed disconnect and reconnect rehearsal on `programmable.family`
+- [ ] Upgrade the Privy app from Development after the owner approves billing details and possible MAU overage
+- [ ] Complete the final transaction-review rehearsal after public preparation is explicitly enabled
 - [x] Confirm that the launch review and release notes describe the contracts as unaudited
 
 ### 5. Release on mainnet
@@ -103,8 +107,8 @@ are provisioned.
 - [x] Run one low-value monitored canary launch with buys, sells and both fee claims
 - [ ] Verify the V2 hook factory on Etherscan; hook and launcher are already exact matches
 - [ ] Prepare the Hooklist and routing submissions after the canary creates a real V2 pool
-- [ ] Enable public launch preparation only after the canary and monitoring checks pass
-- [ ] Deploy the exact verified frontend commit and confirm `programmable.family` points only to the production manifest
+- [ ] Enable public launch preparation only after the remaining owner gates pass
+- [x] Deploy the verified operations frontend and confirm `programmable.family` points to its production deployment
 
 ## Not in the current scope
 

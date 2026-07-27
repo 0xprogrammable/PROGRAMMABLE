@@ -42,7 +42,11 @@ Classic trades use the canonical hooked pool only. Exact-input quotes come from 
 
 Explore and Profile use a confirmation-delayed read model. It pairs `MemeTokenLaunched` and `MemeLiquidityConfigured` events from the verified launcher, accepts fee events only for those canonical pool IDs, and reads price and active liquidity from the official StateView at one snapshot block. A shared-hook event by itself is not launch provenance.
 
-The current implementation reads through confirmed chain data and is suitable for development and release rehearsal. Public traffic still requires a durable index with backfill checkpoints, reorg rollback, reconciliation, cache invalidation and rate limits.
+Production operations replay confirmed chain data through two authenticated RPC providers, require both providers to
+agree on the snapshot block, runtime code, canonical events, fee accounting and hydrated token state, then persist an
+integrity-checked private snapshot in Vercel Blob. Vercel refreshes it every five minutes. The public health endpoint
+fails when either RPC disagrees or the snapshot is more than fifteen minutes old. Full replay is reorg-safe at the
+current event volume; it must move to incremental checkpoints before it approaches the function-duration budget.
 
 The ERC-20 remains freely transferable. Its fee applies only in the canonical Classic pool; a separate v3 or v4 pool can trade without the hook.
 
@@ -62,10 +66,12 @@ lifecycles remain historical evidence only.
 
 There has been no external smart-contract audit or public security contest. Nothing in this repository is a promise that a token is safe, immune to abuse or accepted by third-party scanners.
 
-Provider-backed Privy login, session recovery and disconnect must be rehearsed on an allowed production origin before launch. If Privy does not initialize, the interface now surfaces that failure instead of leaving the wallet button disabled indefinitely.
+Provider-backed Privy session recovery, disconnect and reconnect pass on `programmable.family`. The active Privy web
+client allows the production domain and the Vercel production alias. The Privy app remains in Development because
+upgrading even its free tier requires payment information and accepts possible billing above 500 monthly active users.
 
-Mainnet launch and trade preparation remains fail-closed until durable production indexing, authenticated RPC
-operations, continuous monitoring and the remaining provider-backed wallet rehearsal are provisioned.
+Mainnet launch and trade preparation remains fail-closed pending named incident ownership, Privy production billing
+approval and final owner release approval.
 
 ## Local development
 
@@ -82,7 +88,10 @@ Create a Privy project, allow the production and local domains, and enable walle
 NEXT_PUBLIC_PRIVY_APP_ID=your-privy-app-id
 NEXT_PUBLIC_PRIVY_CLIENT_ID=your-optional-privy-client-id
 ETHEREUM_RPC_URL=https://your-mainnet-rpc.example
+ETHEREUM_RPC_URL_B=https://your-independent-mainnet-rpc.example
 SEPOLIA_RPC_URL=https://your-sepolia-rpc.example
+BLOB_READ_WRITE_TOKEN=your-private-blob-token
+CRON_SECRET=your-random-cron-secret
 ```
 
 The Privy identifiers are public browser configuration. No private key or Privy App Secret belongs in this repository.
