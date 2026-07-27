@@ -36,14 +36,11 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function runtimeClient(chainId: number): ClassicTradeRuntimeClient {
+function runtimeClient(
+  chainId: number,
+  endpoint: string,
+): ClassicTradeRuntimeClient {
   const chain = chainId === 1 ? mainnet : sepolia;
-  const endpoint =
-    chainId === 1
-      ? process.env.ETHEREUM_RPC_URL ??
-        "https://ethereum-rpc.publicnode.com"
-      : process.env.SEPOLIA_RPC_URL ??
-        "https://ethereum-sepolia-rpc.publicnode.com";
   const client = createPublicClient({
     chain,
     transport: http(endpoint, {
@@ -77,6 +74,52 @@ function runtimeClient(chainId: number): ClassicTradeRuntimeClient {
   };
 }
 
+function tradeRpcEndpoints(chainId: number) {
+  if (chainId === 1) {
+    const primary =
+      process.env.ETHEREUM_RPC_URL ??
+      "https://ethereum-rpc.publicnode.com";
+    const secondary =
+      process.env.ETHEREUM_RPC_URL_B ??
+      process.env.ETHEREUM_RPC_URL_SECONDARY ??
+      (primary === "https://ethereum-rpc.publicnode.com"
+        ? "https://rpc.mevblocker.io"
+        : "https://ethereum-rpc.publicnode.com");
+    return [primary, secondary] as const;
+  }
+  const primary =
+    process.env.SEPOLIA_RPC_URL ??
+    "https://ethereum-sepolia-rpc.publicnode.com";
+  const secondary =
+    process.env.SEPOLIA_RPC_URL_B ??
+    process.env.SEPOLIA_RPC_URL_SECONDARY ??
+    (primary === "https://ethereum-sepolia-rpc.publicnode.com"
+      ? "https://rpc.sepolia.org"
+      : "https://ethereum-sepolia-rpc.publicnode.com");
+  return [primary, secondary] as const;
+}
+
+function selectConservativeTradeQuote<T extends {
+  quote: { amountOut: string };
+  transaction: { kind: string };
+}>(primary: T, secondary: T) {
+  if (primary.transaction.kind !== secondary.transaction.kind) {
+    throw new ClassicTradeUnavailableError(
+      "Independent RPCs disagree on the required trade step",
+    );
+  }
+  const left = BigInt(primary.quote.amountOut);
+  const right = BigInt(secondary.quote.amountOut);
+  const high = left > right ? left : right;
+  const low = left > right ? right : left;
+  if (low <= 0n || (high - low) * 10_000n > low * 300n) {
+    throw new ClassicTradeUnavailableError(
+      "Independent RPC quotes differ too much",
+    );
+  }
+  return left <= right ? primary : secondary;
+}
+
 export async function POST(request: NextRequest) {
   const contentLength = Number(
     request.headers.get("content-length") ?? "0",
@@ -108,12 +151,18 @@ export async function POST(request: NextRequest) {
       tradeRequest.chainId === 1 ? "production" : "rehearsal",
     );
     const registry = await readExploreModel(registryDeployment);
-    const prepared = await prepareClassicTrade(
-      runtimeClient(tradeRequest.chainId),
-      deployment,
-      tradeRequest,
-      registry,
+    const endpoints = tradeRpcEndpoints(tradeRequest.chainId);
+    const [primary, secondary] = await Promise.all(
+      endpoints.map((endpoint) =>
+        prepareClassicTrade(
+          runtimeClient(tradeRequest.chainId, endpoint),
+          deployment,
+          tradeRequest,
+          registry,
+        ),
+      ),
     );
+    const prepared = selectConservativeTradeQuote(primary, secondary);
     return json(prepared);
   } catch (error) {
     if (error instanceof ClassicTradeInputError) {

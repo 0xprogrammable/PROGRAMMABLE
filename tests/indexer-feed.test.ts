@@ -116,8 +116,15 @@ describe("public indexer fee disclosure", () => {
       logoURI: token.imageUrl,
       extensions: {
         programmable: {
+          description: token.description,
+          imageUrl: token.imageUrl,
+          links: {
+            website: "https://programmable.family/",
+            x: "https://x.com/0xProgrammable",
+          },
           hook: token.hookAddress,
           model: "v4-custom-accounting",
+          poolId: token.poolId,
           positionRecipient: token.positionRecipient,
           positionTokenId: token.positionTokenId,
           buyFeeBps: 100,

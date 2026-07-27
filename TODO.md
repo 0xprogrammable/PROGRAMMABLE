@@ -67,8 +67,10 @@ disabled pending named incident ownership, Privy production billing approval and
 - [x] Accept only `MemeTokenLaunched` events emitted by the deployment selected by the fail-closed manifest
 - [x] Bind every accepted token to its emitted canonical pool ID and matching liquidity event
 - [x] Read token identity, image, description, project links, launch time, price, market cap and volume from canonical launch metadata and confirmed onchain state
-- [x] Support search by name, symbol and contract address, plus newest, oldest and highest-market-cap sorting
+- [x] Support search by name, symbol and contract address, plus newest, oldest, highest-FDV and lowest-FDV sorting in one filter
+- [x] Display snapshot-aligned Chainlink USD price and FDV without fabricating USD volume or v4 TVL
 - [x] Persist creator username and avatar locally per wallet and browser
+- [x] Replace the connected-wallet icon with the saved profile avatar
 - [x] Populate Profile from verified launches, canonical positions, claimable fees and claim history
 - [x] Bind creator and Programmable claim preparation to the verified hook, pool, account and exact calldata
 - [x] Remove sample token cards and return an honest unavailable or empty state
@@ -79,6 +81,9 @@ disabled pending named incident ownership, Privy production billing approval and
 ### 4. Close the internal mainnet gates
 
 - [x] Prove current official V4Quoter, Universal Router and Permit2 compatibility for every supported Classic swap path in the pinned Mainnet lifecycle
+- [x] Decode and independently enforce the nested Universal Router V4 action plan in the final lifecycle verifier
+- [x] Show expected output, minimum received, fee, estimated price impact and deadline before every swap signature
+- [x] Reconcile live quotes and simulations across two independent RPCs and use the conservative valid result
 - [x] Resolve all critical, high and moderate production dependency findings with a scoped Universal Router SDK override; retain 19 low `ethers` v5/`elliptic` findings without a compatible upstream fix
 - [x] Rerun the full repository verification suite on the exact release commit and preserve remote CI results
 - [x] Verify the production manifest, official Uniswap dependencies, immutable treasury, hook mask and runtime code hashes

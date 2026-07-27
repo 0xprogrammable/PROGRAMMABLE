@@ -49,15 +49,21 @@ The older lifecycle that used the legacy fourth metadata field remains separatel
 
 ## Required before public launch
 
-1. Rehearse the final transaction review after public preparation receives explicit owner approval
-2. Move the full-replay index to incremental checkpoints before event volume approaches the function-duration budget
-3. Assign primary and backup incident owners and rehearse the response process with them
-4. Keep the two-RPC monitor and durable index healthy before enabling public preparation
-5. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
-6. Approve Privy billing details and possible MAU overage before upgrading the app from Development
-7. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production audit
+1. Assign primary and backup incident owners and rehearse the response process with them
+2. Approve Privy billing details and possible MAU overage before upgrading the app from Development
+3. Keep the two-RPC monitor and durable index healthy before enabling public preparation
+4. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
+5. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production audit
     has zero critical, high or moderate findings; 19 low-severity `ethers` v5/`elliptic` findings remain without a
     compatible upstream fix
+
+The app now presents the expected output, minimum received, fee, estimated
+price impact and deadline before a swap signature. The final Mainnet verifier
+also decodes the nested Universal Router V4 action plan and rejects additional
+commands, wrong pool keys, wrong direction, a zero minimum output, hook data or
+noncanonical settlement actions. Incremental index checkpoints remain a scale
+gate before full replay approaches the function-duration budget, not a blocker
+at the current event volume.
 
 ## Remaining owner decisions
 

@@ -124,6 +124,13 @@ export type ExploreSnapshot = {
   blockNumber: string;
   blockHash: Hex;
   confirmations: number;
+  ethUsdQuote?: {
+    feedAddress: Address;
+    roundId: string;
+    answer: string;
+    decimals: number;
+    updatedAt: string;
+  };
 };
 
 export type ExploreReadModel =
@@ -144,7 +151,11 @@ export type ExploreReadModel =
       launcherFeesAccruedEth: string;
     };
 
-export type ExploreSort = "newest" | "oldest" | "market-cap";
+export type ExploreSort =
+  | "newest"
+  | "oldest"
+  | "market-cap"
+  | "market-cap-asc";
 
 export type ExplorePage = {
   status: ExploreReadModel["status"];

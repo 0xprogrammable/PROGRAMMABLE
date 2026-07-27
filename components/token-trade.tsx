@@ -5,6 +5,7 @@ import {
   type FormEvent,
 } from "react";
 import {
+  formatUnits,
   getAddress,
   parseUnits,
   type Address,
@@ -94,6 +95,8 @@ export function TokenTrade({
   poolId,
   symbol,
   tokenDecimals = 18,
+  tokenPriceEth,
+  totalSwapFeeBps,
   onPrepared,
 }: {
   chainId: number;
@@ -103,6 +106,8 @@ export function TokenTrade({
   poolId: Hex;
   symbol: string;
   tokenDecimals?: number;
+  tokenPriceEth?: string;
+  totalSwapFeeBps: number;
   onPrepared(prepared: PreparedTokenTrade): void | Promise<void>;
 }) {
   const [side, setSide] = useState<TradeSide>("buy");
@@ -113,6 +118,7 @@ export function TokenTrade({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [review, setReview] = useState<PreparedTokenTrade | null>(null);
 
   async function prepare(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -166,12 +172,7 @@ export function TokenTrade({
         deadline: body.deadline,
       });
 
-      await onPrepared(payload);
-      setMessage(
-        payload.status === "approval-required"
-          ? "Approval submitted"
-          : "Swap submitted",
-      );
+      setReview(payload);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -181,6 +182,48 @@ export function TokenTrade({
     } finally {
       setPending(false);
     }
+  }
+
+  async function confirmReview() {
+    if (!review) return;
+    setPending(true);
+    setError("");
+    try {
+      await onPrepared(review);
+      setReview(null);
+      setMessage(
+        review.status === "approval-required"
+          ? "Approval submitted"
+          : "Swap submitted",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The transaction could not be submitted",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (review) {
+    return (
+      <PreparedTradeReview
+        prepared={review}
+        symbol={symbol}
+        tokenDecimals={tokenDecimals}
+        tokenPriceEth={tokenPriceEth}
+        totalSwapFeeBps={totalSwapFeeBps}
+        pending={pending}
+        error={error}
+        onBack={() => {
+          setReview(null);
+          setError("");
+        }}
+        onConfirm={confirmReview}
+      />
+    );
   }
 
   return (
@@ -277,4 +320,168 @@ export function TokenTrade({
       </div>
     </form>
   );
+}
+
+export function PreparedTradeReview({
+  prepared,
+  symbol,
+  tokenDecimals,
+  tokenPriceEth,
+  totalSwapFeeBps,
+  pending,
+  error,
+  onBack,
+  onConfirm,
+}: {
+  prepared: PreparedTokenTrade;
+  symbol: string;
+  tokenDecimals: number;
+  tokenPriceEth?: string;
+  totalSwapFeeBps: number;
+  pending: boolean;
+  error?: string;
+  onBack(): void;
+  onConfirm(): void | Promise<void>;
+}) {
+  const outputDecimals = prepared.side === "buy" ? tokenDecimals : 18;
+  const outputUnit = prepared.side === "buy" ? symbol : "ETH";
+  const expectedOutput = `${new Intl.NumberFormat("en-US", {
+    maximumSignificantDigits: 7,
+  }).format(Number(formatUnits(BigInt(prepared.quote.amountOut), outputDecimals)))} ${outputUnit}`;
+  const minimumOutput = `${new Intl.NumberFormat("en-US", {
+    maximumSignificantDigits: 7,
+  }).format(Number(formatUnits(BigInt(prepared.quote.amountOutMinimum), outputDecimals)))} ${outputUnit}`;
+  const priceImpact = calculatePriceImpactPercent({
+    side: prepared.side,
+    amountIn: prepared.quote.amountIn,
+    amountOut: prepared.quote.amountOut,
+    tokenDecimals,
+    tokenPriceEth,
+  });
+  const approval =
+    prepared.transaction.kind === "token-to-permit2"
+      ? "Approve the exact token amount for Permit2"
+      : prepared.transaction.kind === "permit2-to-router"
+        ? "Approve the exact token amount for the Uniswap router"
+        : null;
+
+  return (
+    <div
+      className="launch-form-panel trade-review"
+      aria-label={`Review ${prepared.side}`}
+    >
+      <div className="form-section">
+        <div className="form-section-heading">
+          <h2>{approval ? "Review approval" : `Review ${prepared.side}`}</h2>
+        </div>
+        {approval ? <p>{approval}</p> : null}
+        <dl className="trade-review-details">
+          <div>
+            <dt>Expected output</dt>
+            <dd>{expectedOutput}</dd>
+          </div>
+          <div>
+            <dt>Minimum received</dt>
+            <dd>{minimumOutput}</dd>
+          </div>
+          <div>
+            <dt>Swap fee</dt>
+            <dd>{(totalSwapFeeBps / 100).toFixed(2)}%</dd>
+          </div>
+          <div>
+            <dt>Estimated price impact</dt>
+            <dd>
+              {priceImpact === null
+                ? "Unavailable"
+                : `${priceImpact.toFixed(2)}%`}
+            </dd>
+          </div>
+          <div>
+            <dt>Deadline</dt>
+            <dd>
+              {new Date(
+                Number(prepared.quote.deadline) * 1_000,
+              ).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                timeZoneName: "short",
+              })}
+            </dd>
+          </div>
+        </dl>
+      </div>
+      {error ? (
+        <p className="form-error form-error-block" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="form-navigation trade-review-actions">
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={pending}
+          onClick={onBack}
+        >
+          Back
+        </button>
+        <button
+          className="primary-button"
+          type="button"
+          disabled={pending}
+          onClick={() => void onConfirm()}
+        >
+          {pending
+            ? "Opening wallet"
+            : approval
+              ? "Sign approval"
+              : `Confirm ${prepared.side}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function calculatePriceImpactPercent(input: {
+  side: TradeSide;
+  amountIn: string;
+  amountOut: string;
+  tokenDecimals: number;
+  tokenPriceEth?: string;
+}) {
+  if (
+    !input.tokenPriceEth ||
+    !/^\d+(?:\.\d+)?$/.test(input.tokenPriceEth)
+  ) {
+    return null;
+  }
+  const spot = Number(input.tokenPriceEth);
+  const amountIn = Number(
+    formatUnits(
+      BigInt(input.amountIn),
+      input.side === "buy" ? 18 : input.tokenDecimals,
+    ),
+  );
+  const amountOut = Number(
+    formatUnits(
+      BigInt(input.amountOut),
+      input.side === "buy" ? input.tokenDecimals : 18,
+    ),
+  );
+  if (
+    !Number.isFinite(spot) ||
+    !Number.isFinite(amountIn) ||
+    !Number.isFinite(amountOut) ||
+    spot <= 0 ||
+    amountIn <= 0 ||
+    amountOut <= 0
+  ) {
+    return null;
+  }
+  const execution =
+    input.side === "buy" ? amountIn / amountOut : amountOut / amountIn;
+  const impact =
+    input.side === "buy"
+      ? (execution / spot - 1) * 100
+      : (1 - execution / spot) * 100;
+  return Math.max(0, impact);
 }

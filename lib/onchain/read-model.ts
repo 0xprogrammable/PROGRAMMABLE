@@ -32,6 +32,7 @@ import {
   buildTokenLinks,
   sanitizeImageUrl,
 } from "./metadata";
+import { enrichExploreModelWithUsd } from "./usd";
 import type {
   ExploreReadModel,
   CreatorClaimEventRecord,
@@ -763,9 +764,18 @@ function emptyReadModel(): ExploreReadModel {
 export async function readLiveExploreModel(
   config: OnchainDeployment = getPublicOnchainDeployment(),
 ): Promise<ExploreReadModel> {
-  return config.status === "ready"
+  const model = config.status === "ready"
     ? readReadyModel(config)
     : emptyReadModel();
+  const resolvedModel = await model;
+  if (config.status !== "ready") return resolvedModel;
+
+  try {
+    return await enrichExploreModelWithUsd(resolvedModel, config);
+  } catch (error) {
+    console.error("ETH/USD enrichment failed", error);
+    return resolvedModel;
+  }
 }
 
 export async function readExploreModel(
@@ -794,10 +804,22 @@ export async function readExploreModel(
     if (config.environment === "production") {
       const durable = await readDurableExploreModel(config);
       if (durable.status === "ready") {
-        return durable.envelope.payload.model;
+        const model = durable.envelope.payload.model;
+        try {
+          return await enrichExploreModelWithUsd(model, config);
+        } catch (error) {
+          console.error("ETH/USD enrichment failed", error);
+          return model;
+        }
       }
     }
-    return readReadyModel(config);
+    const model = await readReadyModel(config);
+    try {
+      return await enrichExploreModelWithUsd(model, config);
+    } catch (error) {
+      console.error("ETH/USD enrichment failed", error);
+      return model;
+    }
   })().catch((error) => {
     if (cachedRead?.value === value) cachedRead = undefined;
     throw error;

@@ -43,7 +43,6 @@ export function SiteHeader() {
               height={34}
               priority
             />
-            <span>Programmable</span>
           </Link>
           <a
             className="header-x-link"
