@@ -383,7 +383,17 @@ assert(
   appDeployments.production.releaseVersion === "classic-v2" &&
     appDeployments.production.memeLaunchStatus ===
       "lifecycle-pending",
-  "Mainnet Classic V2 must remain launch-disabled until durable production operations are provisioned",
+  "Mainnet Classic V2 must remain launch-disabled until Privy production billing is approved",
+);
+assert(
+  appDeployments.production.incidentOwnership?.operatingModel ===
+      "sole-operator" &&
+    appDeployments.production.incidentOwnership.primary ===
+      "hazarxyz" &&
+    appDeployments.production.incidentOwnership.backup === null &&
+    appDeployments.production.incidentOwnership.approvedAt ===
+      "2026-07-27",
+  "Mainnet Classic V2 incident ownership changed",
 );
 assert(
   appDeployments.production.ethCreatorFeeHookFactory ===
@@ -487,7 +497,7 @@ assert(
 );
 assert(
   appDeployments.production.blocker ===
-    "Public launch remains disabled pending named incident ownership and Privy production billing approval",
+    "Public launch remains disabled pending Privy production billing approval",
   "Verified Mainnet Classic V2 must retain the remaining operational blockers",
 );
 const historicalMainnetV1Deployment =

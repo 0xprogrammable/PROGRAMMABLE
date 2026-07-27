@@ -82,8 +82,12 @@ show provisional records as final.
 7. Publish a factual incident note and recovery criteria before re-enabling the release.
 8. Add a regression test and issue a new version if immutable behavior must change.
 
-## Ownership still required
+## Ownership
 
-Before public launch preparation is enabled, assign primary and backup responders, treasury and signer contacts, RPC and
-indexer operators, public communication authority, alert channels and acknowledgement targets. Rehearse the response
-with those owners. Until then, monitoring is live but incident ownership remains an open release gate.
+The owner selected a single-operator model on 2026-07-27. `hazarxyz` is the primary incident responder, treasury and
+deployment-signer contact, RPC and indexer operator, public-communication authority and acknowledgement target.
+Automatic monitor incidents are assigned to that GitHub account.
+
+No backup responder is assigned by explicit owner choice. That is an accepted operational concentration risk, not a
+redundancy claim. New launch construction must remain fail-closed whenever the sole operator is unavailable or an alert
+has not been reconciled through both configured RPCs.

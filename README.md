@@ -70,8 +70,10 @@ Provider-backed Privy session recovery, disconnect and reconnect pass on `progra
 client allows the production domain and the Vercel production alias. The Privy app remains in Development because
 upgrading even its free tier requires payment information and accepts possible billing above 500 monthly active users.
 
-The owner approved the Classic release on July 27, 2026. Mainnet launch and trade preparation remains fail-closed
-pending named incident ownership and Privy production billing approval.
+The owner approved the Classic release and the single-operator incident model on July 27, 2026. `hazarxyz` is the
+named incident owner, deployment signer contact, indexer operator and public-communication authority. There is no
+backup responder by explicit owner choice. Mainnet launch and trade preparation remains fail-closed pending Privy
+production billing approval.
 
 ## Local development
 

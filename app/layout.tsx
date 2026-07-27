@@ -19,7 +19,7 @@ const plexMono = IBM_Plex_Mono({
 const siteUrl = new URL("https://programmable.family");
 const siteDescription = "Launch tokens that work the way you imagine";
 const socialImageUrl = new URL(
-  "/og/programmable-og-1200x630.png",
+  "/og/programmable-loop-og-1200x630.png",
   siteUrl,
 );
 
@@ -73,7 +73,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         type: "image/png",
-        alt: "Programmable logo beside a watercolor wildflower meadow",
+        alt: "Programmable loop mark in a watercolor wildflower meadow",
       },
     ],
   },
@@ -85,7 +85,7 @@ export const metadata: Metadata = {
     images: [
       {
         url: socialImageUrl,
-        alt: "Programmable logo beside a watercolor wildflower meadow",
+        alt: "Programmable loop mark in a watercolor wildflower meadow",
       },
     ],
   },
