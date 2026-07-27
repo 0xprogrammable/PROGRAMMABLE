@@ -221,7 +221,7 @@ export function ProfileView({
     try {
       writeLocalProfile(window.localStorage, account, nextProfile);
     } catch {
-      setSaveError("This browser could not save the profile");
+      setSaveError("The profile could not be saved");
       return;
     }
 
@@ -396,7 +396,7 @@ export function ProfileView({
           <h1>{displayName}</h1>
           <p>
             {account
-              ? `${shortenAddress(account)} · Saved only in this browser`
+              ? shortenAddress(account)
               : "Connect a wallet to manage your tokens and creator fee claims"}
           </p>
 
@@ -487,7 +487,7 @@ export function ProfileView({
                 >
                   {usernameError ||
                     saveError ||
-                    "3–12 letters or numbers · Stored locally for this wallet"}
+                    "3–12 letters or numbers"}
                 </p>
               </form>
             ) : (
@@ -586,7 +586,6 @@ function ProfileOverview({
               </span>
               <div>
                 <strong>{getDraftAssetLabel(localDraft)}</strong>
-                <span>Saved only in this browser</span>
               </div>
               <Link className="text-link" href="/launch">
                 Open
@@ -594,7 +593,6 @@ function ProfileOverview({
             </div>
           ) : (
             <div className="profile-ledger-empty">
-              <p>A saved launch stays in this browser</p>
               <Link className="text-link" href="/launch">
                 Launch a token
               </Link>

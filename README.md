@@ -70,8 +70,8 @@ Provider-backed Privy session recovery, disconnect and reconnect pass on `progra
 client allows the production domain and the Vercel production alias. The Privy app remains in Development because
 upgrading even its free tier requires payment information and accepts possible billing above 500 monthly active users.
 
-Mainnet launch and trade preparation remains fail-closed pending named incident ownership, Privy production billing
-approval and final owner release approval.
+The owner approved the Classic release on July 27, 2026. Mainnet launch and trade preparation remains fail-closed
+pending named incident ownership and Privy production billing approval.
 
 ## Local development
 
@@ -87,14 +87,17 @@ Create a Privy project, allow the production and local domains, and enable walle
 ```text
 NEXT_PUBLIC_PRIVY_APP_ID=your-privy-app-id
 NEXT_PUBLIC_PRIVY_CLIENT_ID=your-optional-privy-client-id
+PRIVY_APP_SECRET=your-server-side-privy-app-secret
 ETHEREUM_RPC_URL=https://your-mainnet-rpc.example
 ETHEREUM_RPC_URL_B=https://your-independent-mainnet-rpc.example
 SEPOLIA_RPC_URL=https://your-sepolia-rpc.example
-BLOB_READ_WRITE_TOKEN=your-private-blob-token
+OPS_BLOB_READ_WRITE_TOKEN=your-private-index-blob-token
+TOKEN_IMAGE_BLOB_READ_WRITE_TOKEN=your-public-token-image-blob-token
 CRON_SECRET=your-random-cron-secret
 ```
 
-The Privy identifiers are public browser configuration. No private key or Privy App Secret belongs in this repository.
+The Privy App ID and Client ID are public browser configuration. Keep the App Secret and Blob tokens in the deployment
+provider only. No private key or server secret belongs in this repository.
 
 ## Verification
 

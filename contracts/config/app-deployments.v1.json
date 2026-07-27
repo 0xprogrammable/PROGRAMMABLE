@@ -125,7 +125,7 @@
         "memeLaunch": 25622048
       }
     },
-    "blocker": "Public launch remains disabled pending named incident ownership, Privy production billing approval and final owner release approval"
+    "blocker": "Public launch remains disabled pending named incident ownership and Privy production billing approval"
   },
   "rehearsal": {
     "chainId": 11155111,

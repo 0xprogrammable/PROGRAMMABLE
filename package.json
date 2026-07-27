@@ -44,6 +44,7 @@
     "contracts:sepolia:lifecycle:verify": "node contracts/scripts/verify-sepolia-meme-lifecycle.mjs"
   },
   "dependencies": {
+    "@privy-io/node": "^0.27.0",
     "@privy-io/react-auth": "3.35.2",
     "@uniswap/sdk-core": "7.19.0",
     "@uniswap/universal-router-sdk": "5.11.1",

@@ -74,14 +74,41 @@ export function ScrambleText({
     };
   }, [duration, initialText, text]);
 
+  const segments = useMemo(() => {
+    const displayCharacters = Array.from(displayText);
+    let cursor = 0;
+
+    return text.match(/\s+|\S+/gu)?.map((segment, index) => {
+      const length = Array.from(segment).length;
+      const display = displayCharacters
+        .slice(cursor, cursor + length)
+        .join("");
+      cursor += length;
+      return {
+        display,
+        key: `${index}:${segment}`,
+        text: segment,
+        whitespace: /^\s+$/u.test(segment),
+      };
+    }) ?? [];
+  }, [displayText, text]);
+
   return (
     <span className="scramble-text">
       <span className="sr-only">{text}</span>
-      <span className="scramble-text-measure" aria-hidden="true">
-        {text}
-      </span>
-      <span className="scramble-text-layer" aria-hidden="true">
-        {displayText}
+      <span className="scramble-text-flow" aria-hidden="true">
+        {segments.map((segment) =>
+          segment.whitespace ? (
+            <span className="scramble-space" key={segment.key}>
+              {segment.text}
+            </span>
+          ) : (
+            <span className="scramble-word" key={segment.key}>
+              <span className="scramble-word-measure">{segment.text}</span>
+              <span className="scramble-word-layer">{segment.display}</span>
+            </span>
+          ),
+        )}
       </span>
     </span>
   );

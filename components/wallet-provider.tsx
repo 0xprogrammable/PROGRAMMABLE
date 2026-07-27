@@ -53,6 +53,7 @@ type WalletContextValue = {
   disconnecting: boolean;
   openWallet: () => void;
   disconnect: () => Promise<void>;
+  getAccessToken: () => Promise<string | null>;
   setUsername: (username: string) => void;
   sendTransaction: (
     transaction: PreparedTransaction,
@@ -234,7 +235,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 }
 
 function PrivyWalletBridge({ children }: { children: ReactNode }) {
-  const { authenticated, logout, ready, user } = usePrivy();
+  const { authenticated, getAccessToken, logout, ready, user } = usePrivy();
   const { sendTransaction: sendPrivyTransaction } =
     usePrivySendTransaction();
   const { ready: walletsReady, wallets } = useWallets();
@@ -499,6 +500,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       disconnecting,
       openWallet,
       disconnect,
+      getAccessToken,
       setUsername,
       sendTransaction,
     }),
@@ -506,6 +508,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       authenticated,
       disconnect,
       disconnecting,
+      getAccessToken,
       hasSession,
       openWallet,
       providerTimedOut,
@@ -554,6 +557,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       disconnecting: false,
       openWallet: () => setDialogOpen(true),
       disconnect: async () => undefined,
+      getAccessToken: async () => null,
       setUsername: () => undefined,
       sendTransaction: async () => {
         throw new Error("Wallet sign-in is unavailable");

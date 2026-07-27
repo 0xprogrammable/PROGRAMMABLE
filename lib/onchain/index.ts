@@ -1,6 +1,7 @@
 export {
   getOnchainDeployment,
   getOperationalOnchainDeployment,
+  getPublicOnchainDeployment,
 } from "./config";
 export {
   readExploreModel,

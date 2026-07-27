@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   buildIndexerFeed,
-  getOnchainDeployment,
+  getPublicOnchainDeployment,
   readExploreModel,
 } from "../../../../../lib/onchain";
 
@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const deployment = getOnchainDeployment();
+    const deployment = getPublicOnchainDeployment();
     const model = await readExploreModel(deployment);
     const feed = buildIndexerFeed(model, deployment.chainId);
 

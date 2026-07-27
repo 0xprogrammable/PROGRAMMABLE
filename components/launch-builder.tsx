@@ -2,10 +2,12 @@
 
 import Image from "next/image";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -16,7 +18,10 @@ import {
   Check,
   CheckCircle2,
   Copy,
+  ImagePlus,
   Minus,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
 import {
   saveLocalDraft,
@@ -29,7 +34,11 @@ import {
   MAX_SOCIAL_URL_BYTES,
   MAX_TOKEN_DESCRIPTION_BYTES,
   MAX_TOKEN_NAME_BYTES,
-  MAX_TOKEN_SYMBOL_BYTES,
+  MAX_TOKEN_NAME_CHARACTERS,
+  MAX_TOKEN_SYMBOL_CHARACTERS,
+  characterLength,
+  normalizeOptionalHttpsUrl,
+  normalizeOptionalSocialUrl,
   utf8ByteLength,
   validateMemeLaunchDraft,
   type LaunchPreflightCheck,
@@ -49,12 +58,23 @@ import {
   PLATFORM_FEE_BPS,
   type LaunchDraft,
 } from "@/lib/launch";
+import { prepareTokenImage } from "@/lib/token-image";
 
 const steps = [
-  { number: 1, label: "Token" },
-  { number: 2, label: "Fee" },
+  { number: 1, label: "Token details" },
+  { number: 2, label: "Fees" },
   { number: 3, label: "Review" },
 ];
+
+type TokenImageState = {
+  status: "idle" | "preparing" | "waiting" | "uploading" | "ready" | "error";
+  message: string;
+};
+
+const emptyTokenImageState: TokenImageState = {
+  status: "idle",
+  message: "",
+};
 
 function updateDraft(
   setDraft: Dispatch<SetStateAction<LaunchDraft>>,
@@ -212,6 +232,8 @@ function LaunchBuilderForm({
     key: string;
     hash: string;
   } | null>(null);
+  const [tokenImageState, setTokenImageState] =
+    useState<TokenImageState>(emptyTokenImageState);
   const currentLaunchContext = useRef({ draft, wallet });
 
   useEffect(() => {
@@ -241,6 +263,16 @@ function LaunchBuilderForm({
     transactionState?.key === launchCheckKey ? transactionState.hash : "";
 
   function validateToken() {
+    if (
+      tokenImageState.status === "preparing" ||
+      tokenImageState.status === "waiting" ||
+      tokenImageState.status === "uploading"
+    ) {
+      return "Wait for the token image to finish uploading";
+    }
+    if (tokenImageState.status === "error") {
+      return tokenImageState.message || "Choose the token image again";
+    }
     try {
       validateMemeLaunchDraft({
         ...draft,
@@ -284,7 +316,7 @@ function LaunchBuilderForm({
     };
     saveLocalDraft(saved);
     setDraft(saved);
-    setNotice("Token saved in this browser");
+    setNotice("Token saved");
   }
 
   async function copyPlan() {
@@ -492,7 +524,11 @@ function LaunchBuilderForm({
                 aria-current={step === item.number ? "step" : undefined}
               >
                 <span>
-                  {step > item.number ? <Check size={14} /> : item.number}
+                  {step > item.number ? (
+                    <Check size={14} />
+                  ) : (
+                    String(item.number).padStart(2, "0")
+                  )}
                 </span>
                 {item.label}
               </button>
@@ -507,6 +543,7 @@ function LaunchBuilderForm({
                 draft={draft}
                 setDraft={setDraft}
                 onEdit={() => setFormError("")}
+                onImageStateChange={setTokenImageState}
               />
             ) : null}
 
@@ -588,33 +625,191 @@ function TokenStep({
   draft,
   setDraft,
   onEdit,
+  onImageStateChange,
 }: {
   draft: LaunchDraft;
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onEdit: () => void;
+  onImageStateChange: (state: TokenImageState) => void;
 }) {
-  const hasProjectDetails = Boolean(
-    draft.tokenWebsite ||
-      draft.tokenImage ||
-      draft.tokenX ||
-      draft.tokenTelegram,
-  );
-  const [projectDetailsOpen, setProjectDetailsOpen] =
-    useState(hasProjectDetails);
+  const { getAccessToken, openWallet, wallet } = useWallet();
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const previewObjectUrlRef = useRef("");
+  const [imagePreview, setImagePreview] = useState(draft.tokenImage);
+  const [pendingImage, setPendingImage] = useState<Blob | null>(null);
+  const [imageState, setImageState] =
+    useState<TokenImageState>(emptyTokenImageState);
 
-  function updateTokenDraft(patch: Partial<LaunchDraft>) {
-    onEdit();
-    updateDraft(setDraft, patch);
+  const updateTokenDraft = useCallback(
+    (patch: Partial<LaunchDraft>) => {
+      onEdit();
+      updateDraft(setDraft, patch);
+    },
+    [onEdit, setDraft],
+  );
+
+  const updateImageState = useCallback(
+    (state: TokenImageState) => {
+      setImageState(state);
+      onImageStateChange(state);
+    },
+    [onImageStateChange],
+  );
+
+  useEffect(
+    () => () => {
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+      }
+    },
+    [],
+  );
+
+  const uploadTokenImage = useCallback(
+    async (image: Blob) => {
+      updateImageState({
+        status: "uploading",
+        message: "Uploading image",
+      });
+
+      try {
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+          throw new Error("Connect your wallet to upload the image");
+        }
+
+        const form = new FormData();
+        form.append(
+          "file",
+          new File([image], "token-image.webp", {
+            type: "image/webp",
+          }),
+        );
+        const response = await fetch("/api/token-image", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: form,
+        });
+        const body = (await response.json()) as
+          | { url: string }
+          | { error: string };
+        if (!response.ok || !("url" in body)) {
+          throw new Error(
+            "error" in body ? body.error : "The image could not be uploaded",
+          );
+        }
+
+        updateTokenDraft({ tokenImage: body.url });
+        setPendingImage(null);
+        updateImageState({
+          status: "ready",
+          message: "Image ready",
+        });
+      } catch (caught) {
+        updateImageState({
+          status: "error",
+          message:
+            caught instanceof Error
+              ? caught.message
+              : "The image could not be uploaded",
+        });
+      }
+    },
+    [getAccessToken, updateImageState, updateTokenDraft],
+  );
+
+  async function selectTokenImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    updateImageState({
+      status: "preparing",
+      message: "Preparing image",
+    });
+
+    try {
+      const prepared = await prepareTokenImage(file);
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+      }
+      const previewUrl = URL.createObjectURL(prepared);
+      previewObjectUrlRef.current = previewUrl;
+      setImagePreview(previewUrl);
+      setPendingImage(prepared);
+
+      if (!wallet) {
+        updateImageState({
+          status: "waiting",
+          message: "Connect your wallet to finish the upload",
+        });
+        openWallet();
+        return;
+      }
+
+      await uploadTokenImage(prepared);
+    } catch (caught) {
+      updateImageState({
+        status: "error",
+        message:
+          caught instanceof Error
+            ? caught.message
+            : "The image could not be prepared",
+      });
+    }
   }
+
+  function removeTokenImage() {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = "";
+    }
+    setImagePreview("");
+    setPendingImage(null);
+    updateTokenDraft({ tokenImage: "" });
+    updateImageState(emptyTokenImageState);
+  }
+
+  function normalizeWebsite() {
+    try {
+      updateTokenDraft({
+        tokenWebsite: normalizeOptionalHttpsUrl(
+          draft.tokenWebsite,
+          "the website",
+          MAX_METADATA_URL_BYTES,
+        ),
+      });
+    } catch {
+      return;
+    }
+  }
+
+  function normalizeSocial(kind: "x" | "telegram") {
+    const key = kind === "x" ? "tokenX" : "tokenTelegram";
+    try {
+      updateTokenDraft({
+        [key]: normalizeOptionalSocialUrl(
+          draft[key],
+          kind === "x" ? "the X link" : "the Telegram link",
+          MAX_SOCIAL_URL_BYTES,
+          kind,
+        ),
+      });
+    } catch {
+      return;
+    }
+  }
+
+  const descriptionRemaining =
+    MAX_TOKEN_DESCRIPTION_BYTES -
+    utf8ByteLength(draft.tokenDescription);
 
   return (
     <div className="form-section standard-token-section">
       <div className="form-section-heading">
-        <div>
-          <p className="step-kicker">Step 1</p>
-          <h2>Name the token</h2>
-          <p>Add the name, symbol and any project details</p>
-        </div>
+        <h2>Token details</h2>
       </div>
 
       <div className="standard-token-fields">
@@ -623,30 +818,40 @@ function TokenStep({
             <span>Token name</span>
             <input
               value={draft.tokenName}
-              maxLength={MAX_TOKEN_NAME_BYTES}
-              placeholder="Example Token"
+              maxLength={MAX_TOKEN_NAME_CHARACTERS}
+              placeholder="Token name"
               autoComplete="off"
-              onChange={(event) =>
-                updateTokenDraft({ tokenName: event.target.value })
-              }
+              onChange={(event) => {
+                const value = event.target.value.replace(/[\r\n]/g, "");
+                if (utf8ByteLength(value) <= MAX_TOKEN_NAME_BYTES) {
+                  updateTokenDraft({ tokenName: value });
+                }
+              }}
             />
+            <small>
+              {characterLength(draft.tokenName)}/{MAX_TOKEN_NAME_CHARACTERS}
+            </small>
           </label>
           <label className="field">
-            <span>Symbol</span>
+            <span>Ticker</span>
             <input
               value={draft.tokenSymbol}
-              maxLength={MAX_TOKEN_SYMBOL_BYTES}
-              placeholder="EXAMPLE"
+              maxLength={MAX_TOKEN_SYMBOL_CHARACTERS}
+              placeholder="TOKEN"
               spellCheck={false}
               autoComplete="off"
               onChange={(event) =>
                 updateTokenDraft({
                   tokenSymbol: event.target.value
                     .toUpperCase()
-                    .replace(/\s/g, ""),
+                    .replace(/[^A-Z0-9]/g, ""),
                 })
               }
             />
+            <small>
+              {characterLength(draft.tokenSymbol)}/
+              {MAX_TOKEN_SYMBOL_CHARACTERS}
+            </small>
           </label>
         </div>
 
@@ -657,59 +862,107 @@ function TokenStep({
             maxLength={MAX_TOKEN_DESCRIPTION_BYTES}
             rows={3}
             placeholder="Describe what the token represents"
-            onChange={(event) =>
-              updateTokenDraft({
-                tokenDescription: event.target.value,
-              })
-            }
+            onChange={(event) => {
+              if (
+                utf8ByteLength(event.target.value) <=
+                MAX_TOKEN_DESCRIPTION_BYTES
+              ) {
+                updateTokenDraft({
+                  tokenDescription: event.target.value,
+                });
+              }
+            }}
           />
-          <small>
-            {utf8ByteLength(draft.tokenDescription)}/
-            {MAX_TOKEN_DESCRIPTION_BYTES} bytes
-          </small>
+          <small>{descriptionRemaining} left</small>
         </label>
 
-        <div className="field-group">
-          <div
-            className="block-heading"
-            style={{
-              alignItems: "center",
-              display: "flex",
-              gap: 16,
-              justifyContent: "space-between",
-            }}
-          >
-            <div>
-              <h3>Project details</h3>
-              <p>Optional website, image and social links</p>
-            </div>
-            <button
-              className="text-button"
-              type="button"
-              aria-expanded={projectDetailsOpen}
-              aria-controls="classic-project-details"
-              onClick={() => setProjectDetailsOpen((current) => !current)}
-            >
-              {projectDetailsOpen ? "Hide" : "Add details"}
-            </button>
+        <div className="field-group token-project-details">
+          <div className="block-heading">
+            <h3>Project links</h3>
           </div>
 
-          {projectDetailsOpen ? (
-            <div
-              id="classic-project-details"
-              className="two-column-fields"
-              style={{ marginTop: 14 }}
-            >
+          <div className="token-project-grid">
+            <div className="token-image-field">
+              <span>Token image</span>
+              <input
+                ref={imageInputRef}
+                hidden
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={selectTokenImage}
+              />
+              <button
+                className={`token-image-upload${
+                  imagePreview ? " has-image" : ""
+                }`}
+                type="button"
+                aria-label={
+                  imagePreview ? "Change token image" : "Choose token image"
+                }
+                onClick={() => imageInputRef.current?.click()}
+              >
+                {imagePreview ? (
+                  <span
+                    className="token-image-preview"
+                    role="img"
+                    aria-label="Token image preview"
+                    style={{ backgroundImage: `url("${imagePreview}")` }}
+                  />
+                ) : (
+                  <span className="token-image-placeholder">
+                    <ImagePlus aria-hidden="true" size={23} />
+                    <strong>Choose image</strong>
+                    <small>Square preview</small>
+                  </span>
+                )}
+              </button>
+              <div className="token-image-meta">
+                <span
+                  className={
+                    imageState.status === "error" ? "form-error" : undefined
+                  }
+                  role={
+                    imageState.status === "error" ? "alert" : undefined
+                  }
+                >
+                  {imageState.message ||
+                    "JPG, PNG or WebP. Cropped to a square."}
+                </span>
+                <div>
+                  {(imageState.status === "error" ||
+                    imageState.status === "waiting") &&
+                  pendingImage &&
+                  wallet ? (
+                    <button
+                      type="button"
+                      onClick={() => void uploadTokenImage(pendingImage)}
+                    >
+                      <RotateCcw aria-hidden="true" size={13} />
+                      Try again
+                    </button>
+                  ) : null}
+                  {imagePreview || draft.tokenImage ? (
+                    <button type="button" onClick={removeTokenImage}>
+                      <Trash2 aria-hidden="true" size={13} />
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="token-link-fields">
               <label className="field">
                 <span>Website</span>
                 <input
-                  type="url"
+                  type="text"
                   inputMode="url"
                   value={draft.tokenWebsite}
                   maxLength={MAX_METADATA_URL_BYTES}
-                  placeholder="https://example.com"
+                  placeholder="project.com"
                   spellCheck={false}
                   autoComplete="url"
+                  onBlur={normalizeWebsite}
                   onChange={(event) =>
                     updateTokenDraft({ tokenWebsite: event.target.value })
                   }
@@ -717,32 +970,16 @@ function TokenStep({
               </label>
 
               <label className="field">
-                <span>Token image URL</span>
+                <span>X link</span>
                 <input
-                  type="url"
-                  inputMode="url"
-                  value={draft.tokenImage}
-                  maxLength={MAX_METADATA_URL_BYTES}
-                  placeholder="https://example.com/token.png"
-                  spellCheck={false}
-                  autoComplete="off"
-                  onChange={(event) =>
-                    updateTokenDraft({ tokenImage: event.target.value })
-                  }
-                />
-                <small>Direct HTTPS URL to a square image</small>
-              </label>
-
-              <label className="field">
-                <span>X profile</span>
-                <input
-                  type="url"
+                  type="text"
                   inputMode="url"
                   value={draft.tokenX}
                   maxLength={MAX_SOCIAL_URL_BYTES}
-                  placeholder="https://x.com/project"
+                  placeholder="@project or x.com/project/status/…"
                   spellCheck={false}
                   autoComplete="off"
+                  onBlur={() => normalizeSocial("x")}
                   onChange={(event) =>
                     updateTokenDraft({ tokenX: event.target.value })
                   }
@@ -752,20 +989,21 @@ function TokenStep({
               <label className="field">
                 <span>Telegram</span>
                 <input
-                  type="url"
+                  type="text"
                   inputMode="url"
                   value={draft.tokenTelegram}
                   maxLength={MAX_SOCIAL_URL_BYTES}
-                  placeholder="https://t.me/project"
+                  placeholder="@project or t.me/project"
                   spellCheck={false}
                   autoComplete="off"
+                  onBlur={() => normalizeSocial("telegram")}
                   onChange={(event) =>
                     updateTokenDraft({ tokenTelegram: event.target.value })
                   }
                 />
               </label>
             </div>
-          ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -786,11 +1024,7 @@ function FeeStep({
   return (
     <div className="form-section meme-fee-section">
       <div className="form-section-heading">
-        <div>
-          <p className="step-kicker">Step 2</p>
-          <h2>Choose the swap fee</h2>
-          <p>Choose the total fee paid on each swap</p>
-        </div>
+        <h2>Choose the swap fee</h2>
       </div>
 
       <div className="meme-fee-card">
@@ -962,11 +1196,7 @@ function ReviewStep({
   return (
     <div className="form-section review-section standard-review-section">
       <div className="form-section-heading">
-        <div>
-          <p className="step-kicker">Step 3</p>
-          <h2>Review the launch</h2>
-          <p>Confirm the token, fee and launch transaction</p>
-        </div>
+        <h2>Review the launch</h2>
       </div>
 
       <div className="review-statement">
