@@ -383,7 +383,7 @@ assert(
   appDeployments.production.releaseVersion === "classic-v2" &&
     appDeployments.production.memeLaunchStatus ===
       "lifecycle-pending",
-  "Mainnet Classic V2 must remain launch-disabled until the current lifecycle is verified",
+  "Mainnet Classic V2 must remain launch-disabled until durable production operations are provisioned",
 );
 assert(
   appDeployments.production.ethCreatorFeeHookFactory ===
@@ -432,12 +432,63 @@ assert(
 );
 assert(
   appDeployments.production.lifecycleEvidence.status ===
-      "pending-current-release" &&
+      "verified-current-release" &&
     appDeployments.production.lifecycleEvidence.releaseEligible ===
-      false &&
+      true &&
+    appDeployments.production.lifecycleEvidence.requiredRelease ===
+      "classic-v2" &&
+    appDeployments.production.lifecycleEvidence.independentRpcCount >= 2 &&
     appDeployments.production.lifecycleEvidence.minimumInitialBuyWei ===
-      "600000000000000",
+      "600000000000000" &&
+    appDeployments.production.lifecycleEvidence.token ===
+      "0x05204A4Ce651452892A620950BDc2ADeDBF63B0A" &&
+    appDeployments.production.lifecycleEvidence.poolId ===
+      "0xb12253d75eb143edcb6aab74f543802c6fa72998e092bc7bd1acf27a42adc2ea" &&
+    appDeployments.production.lifecycleEvidence.positionRecipient ===
+      "0x9020EeF40E36546Bf34f15070A8d9BCA2eBF4BB8" &&
+    appDeployments.production.lifecycleEvidence.positionTokenId ===
+      "351734" &&
+    appDeployments.production.lifecycleEvidence.positionLiquidity ===
+      "36819258015569838458222" &&
+    appDeployments.production.lifecycleEvidence.finalCreatorTokenBalance ===
+      "30000000000000000000000" &&
+    appDeployments.production.lifecycleEvidence.creatorFeesClaimedWei ===
+      "12170961423422" &&
+    appDeployments.production.lifecycleEvidence.launcherFeesClaimedWei ===
+      "1352329047046" &&
+    appDeployments.production.lifecycleEvidence.treasuryBalanceDeltaWei ===
+      "1352329047046",
   "Mainnet Classic V2 lifecycle gate is incoherent",
+);
+assert(
+  appDeployments.production.lifecycleEvidence.transactions.launch ===
+      "0x44a480caaac8b937e7ccc31e45e13bd725253e231fcc12f7795bc5358a0a5d4c" &&
+    appDeployments.production.lifecycleEvidence.transactions.buy ===
+      "0xbd416570fc9de744a53919a6c7e7ea9f849fe3f5e510a13376e6967c68145b48" &&
+    appDeployments.production.lifecycleEvidence.transactions
+        .permit2Approval ===
+      "0xbca8b6d1e8eb3e8728680c879d213c412b042e7455a9edbc2d721c7f780e10f3" &&
+    appDeployments.production.lifecycleEvidence.transactions.sell ===
+      "0x4b461cccf14876cd9ecf05fcf0f295a6337079ceb3a3f4fb5b6fdddc6ada35c1" &&
+    appDeployments.production.lifecycleEvidence.transactions.creatorClaim ===
+      "0x16ba90a64df8ddc12b7be0ac8a0a664daf5008ad237ea7d3958a857f73624aff" &&
+    appDeployments.production.lifecycleEvidence.transactions.launcherClaim ===
+      "0x32a5de5591fb4c988b46c0d0a07095df1419634d10a158b3b6a36377bbe55fbe" &&
+    appDeployments.production.lifecycleEvidence.blocks.launch === 25624511 &&
+    appDeployments.production.lifecycleEvidence.blocks.buy === 25624526 &&
+    appDeployments.production.lifecycleEvidence.blocks.permit2Approval ===
+      25624545 &&
+    appDeployments.production.lifecycleEvidence.blocks.sell === 25624553 &&
+    appDeployments.production.lifecycleEvidence.blocks.creatorClaim ===
+      25624575 &&
+    appDeployments.production.lifecycleEvidence.blocks.launcherClaim ===
+      25624580,
+  "Mainnet Classic V2 lifecycle receipts changed",
+);
+assert(
+  appDeployments.production.blocker ===
+    "Durable production monitoring and authenticated RPC operations are not provisioned",
+  "Verified Mainnet Classic V2 must retain the remaining production operations blocker",
 );
 const historicalMainnetV1Deployment =
   appDeployments.production.historicalV1Deployment;

@@ -49,8 +49,10 @@ The ERC-20 remains freely transferable. Its fee applies only in the canonical Cl
 ## Release status
 
 Classic V2 infrastructure is deployed and source-matched on Ethereum mainnet. Its three transactions, constructor
-configuration, official dependencies and runtime code hashes reconcile through two independent RPCs. Production
-launch and trade preparation stays disabled until the V2 Mainnet canary and operated monitoring gates pass.
+configuration, official dependencies and runtime code hashes reconcile through two independent RPCs. A signed Mainnet
+canary then completed the atomic Dev Buy, a separate Universal Router buy, Permit2 authorization, sell and both native
+ETH fee claims. The independent lifecycle verifier reconciled all six receipts, the permanent position, final balances
+and the immutable treasury payment through two RPCs.
 
 Classic V2, which adds machine-readable symmetric fee disclosure events and getters, is deployed and source-verified on
 Ethereum Sepolia. Its signed Test2 lifecycle atomically launched the official UERC20 v2 token, sold through the official
@@ -62,8 +64,8 @@ There has been no external smart-contract audit or public security contest. Noth
 
 Provider-backed Privy login, session recovery and disconnect must be rehearsed on an allowed production origin before launch. If Privy does not initialize, the interface now surfaces that failure instead of leaving the wallet button disabled indefinitely.
 
-Mainnet V2 still requires durable production indexing, operated monitoring, a fresh provider-backed wallet rehearsal
-and a separately approved monitored canary.
+Mainnet launch and trade preparation remains fail-closed until durable production indexing, authenticated RPC
+operations, continuous monitoring and the remaining provider-backed wallet rehearsal are provisioned.
 
 ## Local development
 

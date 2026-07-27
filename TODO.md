@@ -34,9 +34,10 @@ residual smart-contract risk and must satisfy every internal gate below.
 - [x] Classic V2 is deployed and source-verified on Ethereum mainnet
 - [ ] Public launch preparation is enabled
 
-Sepolia V2 is `ready` with current Test2 lifecycle evidence. Mainnet V2 is deployed and source-verified, while its V1
-deployment remains historical only. Public preparation remains disabled until the V2 Mainnet canary and monitoring
-gates are complete.
+Sepolia V2 is `ready` with current Test2 lifecycle evidence. Mainnet V2 is deployed, source-verified and backed by a
+complete independently reconciled canary lifecycle, while its V1 deployment remains historical only. Public
+preparation remains disabled until durable production indexing, authenticated RPC operations and continuous monitoring
+are provisioned.
 
 ## Remaining work
 
@@ -98,8 +99,8 @@ gates are complete.
 - [x] Prepare a two-RPC Mainnet canary simulation with fixed per-step gas limits, automatic receipt capture and a fail-closed gas-price ceiling
 - [x] Reproduce all seven canary steps on a temporary Mainnet fork and cover the measured gas bounds in tests
 - [x] Prepare the independent two-RPC lifecycle verifier and prove that it fails closed before any receipt exists
-- [ ] Obtain separate approval for the canary's exact `0.003415 ETH` maximum outflow
-- [ ] Run one low-value monitored canary launch with buys, sells and both fee claims
+- [x] Obtain separate approval for the canary's exact `0.003415 ETH` maximum outflow
+- [x] Run one low-value monitored canary launch with buys, sells and both fee claims
 - [ ] Verify the V2 hook factory on Etherscan; hook and launcher are already exact matches
 - [ ] Prepare the Hooklist and routing submissions after the canary creates a real V2 pool
 - [ ] Enable public launch preparation only after the canary and monitoring checks pass

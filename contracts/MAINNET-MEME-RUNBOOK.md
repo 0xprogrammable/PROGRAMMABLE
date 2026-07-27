@@ -305,9 +305,7 @@ new explicit ceiling approval if complete reviewed-calldata evidence cannot be r
 ## Remaining owner gates and limitations
 
 - provision two reliable production RPCs and durable monitoring
-- explicitly approve the exact `0.003415 ETH` canary ceiling
-- manually review and sign only the prepared seven-step lifecycle
-- obtain independently reconciled receipts and lifecycle evidence
+- preserve the verified canary receipts and independently reconciled lifecycle evidence
 - complete the product and legal review appropriate to public token creation
 
 No external audit is included in this plan. The fork lifecycle, runtime-hash checks, source verification, locked position, immutable configuration, and monitoring materially improve evidence, but they do not prove the contracts vulnerability-free or make every launched token economically or legally safe. The v4 hook uses return-delta accounting, so independent review remains a known residual risk even when every operational gate passes.
