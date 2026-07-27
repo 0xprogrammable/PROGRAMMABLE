@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildEip1193TransactionRequest,
   buildPrivyTransactionRequest,
   getPreparedTransactionReview,
+  parseSubmittedTransactionHash,
   parsePreparedTransaction,
   parsePreparedTransactionForAccount,
 } from "../lib/prepared-transaction";
@@ -173,6 +175,49 @@ describe("prepared transaction boundary", () => {
       gasLimit: 300000n,
       chainId: 1,
     });
+    expect(
+      buildPrivyTransactionRequest({
+        kind: "launch",
+        chainId: 11_155_111,
+        to: TO,
+        data: DATA,
+        value: "12",
+        gasLimit: "300000",
+      }),
+    ).toMatchObject({ chainId: 11_155_111 });
+  });
+
+  it("builds the exact EIP-1193 request used by external wallets", () => {
+    expect(
+      buildEip1193TransactionRequest(
+        {
+          kind: "launch",
+          chainId: 1,
+          to: TO,
+          data: DATA,
+          value: "12",
+          gasLimit: "300000",
+        },
+        FROM,
+      ),
+    ).toEqual({
+      from: FROM,
+      to: TO,
+      data: DATA,
+      value: "0xc",
+      gas: "0x493e0",
+    });
+  });
+
+  it("accepts only a complete transaction hash from the wallet", () => {
+    const hash = `0x${"ab".repeat(32)}`;
+    expect(parseSubmittedTransactionHash(hash)).toBe(hash);
+    expect(() => parseSubmittedTransactionHash("0x1234")).toThrow(
+      "invalid transaction hash",
+    );
+    expect(() => parseSubmittedTransactionHash(undefined)).toThrow(
+      "invalid transaction hash",
+    );
   });
 
   it("binds creator claims to the connected wallet", () => {

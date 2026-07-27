@@ -19,6 +19,7 @@ type WalletProviderContract = {
   getWalletProfileStorageKey: (account: string) => string;
   readUsernameFromProfileValue: (value: string | null) => string;
   getWalletLoginErrorMessage: (errorCode: string) => string;
+  getWalletTransactionErrorMessage: (error: unknown) => string;
   selectConnectedWallet: <T extends {
     address: string;
     connectedAt: number;
@@ -78,6 +79,29 @@ describe("wallet recovery state", () => {
     ).toBe("Unable to connect wallet. Try again.");
     expect(subject.getWalletLoginErrorMessage("exited_auth_flow")).toBe("");
     expect(subject.getWalletLoginErrorMessage("exited_link_flow")).toBe("");
+  });
+
+  it("turns wallet provider failures into useful launch errors", () => {
+    expect(subject.getWalletTransactionErrorMessage).toBeTypeOf("function");
+    expect(
+      subject.getWalletTransactionErrorMessage({
+        code: 4900,
+        message: "MetaMask is disconnected",
+      }),
+    ).toBe(
+      "Wallet connection was interrupted. Reload the page and try again",
+    );
+    expect(
+      subject.getWalletTransactionErrorMessage({
+        code: 4001,
+        message: "User rejected the request",
+      }),
+    ).toBe("Transaction cancelled in wallet");
+    expect(
+      subject.getWalletTransactionErrorMessage(
+        new Error("Wallet request failed"),
+      ),
+    ).toBe("Wallet request failed");
   });
 
   it("only exposes a connected wallet to the app after authentication", () => {
