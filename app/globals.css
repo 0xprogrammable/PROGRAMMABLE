@@ -4641,14 +4641,114 @@ textarea {
   margin-top: 10px;
 }
 
-.classic-fee-layout .meme-fee-options {
-  gap: 5px;
-  margin-top: 0;
+.classic-fee-slider {
+  min-width: 0;
 }
 
-.classic-fee-layout .meme-fee-options button {
-  border-radius: 11px;
+.classic-fee-slider-row {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 52px;
   min-height: 44px;
+}
+
+.classic-fee-slider-control {
+  height: 44px;
+  position: relative;
+}
+
+.classic-fee-slider-track {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  height: 8px;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 18px;
+}
+
+.classic-fee-slider-track > span {
+  background: var(--accent);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.classic-fee-slider input {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  height: 44px;
+  margin: 0;
+  position: relative;
+  width: 100%;
+}
+
+.classic-fee-slider input::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 8px;
+}
+
+.classic-fee-slider input::-webkit-slider-thumb {
+  appearance: none;
+  background: var(--canvas);
+  border: 2px solid var(--accent-strong);
+  border-radius: 50%;
+  box-shadow: 0 1px 5px rgba(76, 39, 66, 0.18);
+  height: 20px;
+  margin-top: -6px;
+  width: 20px;
+}
+
+.classic-fee-slider input::-moz-range-track {
+  background: transparent;
+  height: 8px;
+}
+
+.classic-fee-slider input::-moz-range-thumb {
+  background: var(--canvas);
+  border: 2px solid var(--accent-strong);
+  border-radius: 50%;
+  box-shadow: 0 1px 5px rgba(76, 39, 66, 0.18);
+  height: 17px;
+  width: 17px;
+}
+
+.classic-fee-slider input:focus-visible {
+  outline: none;
+}
+
+.classic-fee-slider input:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 4px rgba(232, 121, 190, 0.18),
+    0 1px 5px rgba(76, 39, 66, 0.18);
+}
+
+.classic-fee-slider input:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 4px rgba(232, 121, 190, 0.18),
+    0 1px 5px rgba(76, 39, 66, 0.18);
+}
+
+.classic-fee-slider output {
+  color: var(--accent-strong);
+  font-size: 18px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  text-align: right;
+}
+
+.classic-fee-slider-limits {
+  color: var(--dim);
+  display: flex;
+  font-size: 10px;
+  justify-content: space-between;
+  line-height: 1;
+  padding-right: 68px;
 }
 
 .classic-fee-layout .meme-dev-buy {
@@ -4726,7 +4826,7 @@ textarea {
   }
 
   .classic-launch-sheet {
-    flex: 1;
+    flex: none;
     margin-bottom: 18px;
   }
 }
@@ -4799,10 +4899,6 @@ textarea {
 
   .classic-fee-layout {
     grid-template-columns: 1fr;
-  }
-
-  .classic-fee-layout .meme-fee-options {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .classic-fee-layout .meme-dev-buy {
