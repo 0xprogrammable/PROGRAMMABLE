@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getOnchainDeployment } from "../lib/onchain/config";
+import {
+  getOnchainDeployment,
+  getOperationalOnchainDeployment,
+} from "../lib/onchain/config";
 
 describe("onchain deployment manifest boundary", () => {
   afterEach(() => {
@@ -32,6 +35,46 @@ describe("onchain deployment manifest boundary", () => {
       launcher: null,
       feeHook: null,
     });
+  });
+
+  it("allows the verified lifecycle only for dual-RPC production operations", () => {
+    vi.stubEnv("ETHEREUM_RPC_URL", "https://rpc-a.example");
+    vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-b.example");
+
+    expect(getOperationalOnchainDeployment("production")).toMatchObject({
+      environment: "production",
+      releaseVersion: "classic-v2",
+      chainId: 1,
+      status: "ready",
+      launcher: "0xD240D06f8586eB799f20056054e5b527405E6bAd",
+      feeHook: "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+      rpcUrlSecondary: "https://rpc-b.example",
+    });
+    expect(getOnchainDeployment("production").status).toBe(
+      "not-deployed",
+    );
+  });
+
+  it("rejects production operations without an independent RPC", () => {
+    vi.stubEnv("ETHEREUM_RPC_URL", "https://rpc-a.example");
+    vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-a.example");
+
+    expect(() =>
+      getOperationalOnchainDeployment("production"),
+    ).toThrow(
+      "Production operations require two distinct authenticated RPC URLs",
+    );
+  });
+
+  it("rejects an implicit public fallback for production operations", () => {
+    vi.stubEnv("ETHEREUM_RPC_URL", "");
+    vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-b.example");
+
+    expect(() =>
+      getOperationalOnchainDeployment("production"),
+    ).toThrow(
+      "Production operations require two distinct authenticated RPC URLs",
+    );
   });
 
   it("rejects zero or sub-policy confirmation overrides", () => {

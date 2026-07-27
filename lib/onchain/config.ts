@@ -23,6 +23,12 @@ type DeploymentEntry = {
   deploymentBlocks?: {
     memeLaunch?: number | null;
   };
+  lifecycleEvidence?: {
+    status?: string;
+    releaseEligible?: boolean;
+    requiredRelease?: string;
+    independentRpcCount?: number;
+  };
 };
 
 type AppDeployments = {
@@ -57,8 +63,17 @@ export function selectedDeploymentEnvironment(
   return value === "rehearsal" ? "rehearsal" : "production";
 }
 
-export function getOnchainDeployment(
-  environment = selectedDeploymentEnvironment(),
+function getDistinctSecondaryRpc(
+  primary: string,
+  secondary: string | undefined,
+) {
+  const normalized = secondary?.trim();
+  return normalized && normalized !== primary ? normalized : null;
+}
+
+function resolveOnchainDeployment(
+  environment: DeploymentEnvironment,
+  allowVerifiedLifecyclePending: boolean,
 ): OnchainDeployment {
   const appDeployments =
     appDeploymentsJson as unknown as AppDeployments;
@@ -82,6 +97,16 @@ export function getOnchainDeployment(
     );
   }
 
+  const rpcUrl =
+    environment === "production"
+      ? process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org"
+      : process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org";
+  const rpcUrlSecondary = getDistinctSecondaryRpc(
+    rpcUrl,
+    environment === "production"
+      ? process.env.ETHEREUM_RPC_URL_B
+      : process.env.SEPOLIA_RPC_URL_B,
+  );
   const common = {
     environment,
     releaseVersion: entry.releaseVersion,
@@ -89,10 +114,8 @@ export function getOnchainDeployment(
     stateView: getAddress(dependencies.contracts.stateView.address),
     stateViewRuntimeCodeHash: dependencies.contracts.stateView
       .runtimeCodeHash as Hex,
-    rpcUrl:
-      environment === "production"
-        ? process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org"
-        : process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org",
+    rpcUrl,
+    rpcUrlSecondary,
     confirmations: positiveBigInt(
       process.env.PROGRAMMABLE_CONFIRMATIONS,
       12n,
@@ -107,7 +130,17 @@ export function getOnchainDeployment(
     ),
   } as const;
 
-  if (entry.status !== "ready" || entry.memeLaunchStatus !== "ready") {
+  const verifiedPendingLifecycle =
+    allowVerifiedLifecyclePending &&
+    entry.memeLaunchStatus === "lifecycle-pending" &&
+    entry.lifecycleEvidence?.status === "verified-current-release" &&
+    entry.lifecycleEvidence.releaseEligible === true &&
+    entry.lifecycleEvidence.requiredRelease === entry.releaseVersion &&
+    (entry.lifecycleEvidence.independentRpcCount ?? 0) >= 2;
+  if (
+    entry.status !== "ready" ||
+    (entry.memeLaunchStatus !== "ready" && !verifiedPendingLifecycle)
+  ) {
     return {
       ...common,
       status: "not-deployed",
@@ -156,4 +189,28 @@ export function getOnchainDeployment(
     feeHookRuntimeCodeHash,
     deploymentBlock,
   };
+}
+
+export function getOnchainDeployment(
+  environment = selectedDeploymentEnvironment(),
+): OnchainDeployment {
+  return resolveOnchainDeployment(environment, false);
+}
+
+export function getOperationalOnchainDeployment(
+  environment = selectedDeploymentEnvironment(),
+): OnchainDeployment {
+  const deployment = resolveOnchainDeployment(environment, true);
+  if (
+    deployment.status === "ready" &&
+    deployment.environment === "production" &&
+    (!process.env.ETHEREUM_RPC_URL?.trim() ||
+      !process.env.ETHEREUM_RPC_URL_B?.trim() ||
+      !deployment.rpcUrlSecondary)
+  ) {
+    throw new Error(
+      "Production operations require two distinct authenticated RPC URLs",
+    );
+  }
+  return deployment;
 }

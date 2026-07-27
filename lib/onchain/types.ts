@@ -12,6 +12,7 @@ type OnchainDeploymentBase = {
   stateView: Address;
   stateViewRuntimeCodeHash: Hex;
   rpcUrl: string;
+  rpcUrlSecondary: string | null;
   confirmations: bigint;
   logBlockRange: bigint;
 };

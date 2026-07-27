@@ -1073,11 +1073,17 @@ async function main() {
   } while (!ONCE);
 }
 
+function redactOperationalError(value) {
+  return String(value ?? "Unknown monitor failure").replace(
+    /https?:\/\/[^\s)"']+/gi,
+    "[redacted-rpc-url]",
+  );
+}
+
 main().catch((error) => {
   if (!error.message?.includes("mismatch")) {
     emit("monitor_stopped", "critical", {
-      message: error.message,
-      stack: error.stack,
+      message: redactOperationalError(error.message),
     });
   }
   process.exitCode = 1;

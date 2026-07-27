@@ -43,6 +43,7 @@ import type {
   ReadyOnchainDeployment,
   VerifiedLaunchRecord,
 } from "./types";
+import { readDurableExploreModel } from "./durable-model";
 
 const ZERO_FEE_VOLUME: FeeVolume = {
   grossNativeAmount: 0n,
@@ -105,11 +106,14 @@ async function readFeeDisclosure(
   ] as const;
 }
 
-function createOnchainClient(config: OnchainDeployment): PublicClient {
+function createOnchainClient(
+  config: OnchainDeployment,
+  rpcUrl = config.rpcUrl,
+): PublicClient {
   return createPublicClient({
     chain: config.chainId === 1 ? mainnet : sepolia,
     batch: { multicall: true },
-    transport: http(config.rpcUrl, {
+    transport: http(rpcUrl, {
       retryCount: 2,
       timeout: 12_000,
     }),
@@ -494,21 +498,47 @@ async function readReadyModel(
   config: ReadyOnchainDeployment,
 ): Promise<ExploreReadModel> {
   const client = createOnchainClient(config);
-  const [chainId, head] = await Promise.all([
-    client.getChainId(),
-    client.getBlockNumber(),
-  ]);
-  if (chainId !== config.chainId) {
+  const clients = [
+    client,
+    ...(config.rpcUrlSecondary
+      ? [createOnchainClient(config, config.rpcUrlSecondary)]
+      : []),
+  ];
+  const chainStates = await Promise.all(
+    clients.map(async (candidate) => ({
+      chainId: await candidate.getChainId(),
+      head: await candidate.getBlockNumber(),
+    })),
+  );
+  if (chainStates.some((state) => state.chainId !== config.chainId)) {
     throw new Error("RPC chain does not match the deployment manifest");
   }
 
+  const head = chainStates.reduce(
+    (lowest, state) => minimum(lowest, state.head),
+    chainStates[0].head,
+  );
   const toBlock =
     head > config.confirmations ? head - config.confirmations : 0n;
-  const snapshotBlock = await client.getBlock({
-    blockNumber: toBlock,
-  });
+  const snapshotBlocks = await Promise.all(
+    clients.map((candidate) =>
+      candidate.getBlock({ blockNumber: toBlock }),
+    ),
+  );
+  const snapshotBlock = snapshotBlocks[0];
   if (!snapshotBlock.hash) {
     throw new Error("Confirmed snapshot block has no hash");
+  }
+  if (
+    snapshotBlocks.some(
+      (block) =>
+        !block.hash ||
+        block.hash.toLowerCase() !== snapshotBlock.hash?.toLowerCase(),
+    )
+  ) {
+    throw new Error(
+      "Independent RPCs disagree on the confirmed snapshot block",
+    );
   }
 
   if (toBlock < config.deploymentBlock) {
@@ -659,18 +689,30 @@ let cachedRead:
     }
   | undefined;
 
+function emptyReadModel(): ExploreReadModel {
+  return {
+    status: "not-deployed",
+    tokens: [],
+    snapshot: null,
+    creatorClaims: [],
+    launcherFeesAccruedWei: "0",
+    launcherFeesAccruedEth: "0",
+  };
+}
+
+export async function readLiveExploreModel(
+  config: OnchainDeployment = getOnchainDeployment(),
+): Promise<ExploreReadModel> {
+  return config.status === "ready"
+    ? readReadyModel(config)
+    : emptyReadModel();
+}
+
 export async function readExploreModel(
   config: OnchainDeployment = getOnchainDeployment(),
 ): Promise<ExploreReadModel> {
   if (config.status === "not-deployed") {
-    return {
-      status: "not-deployed",
-      tokens: [],
-      snapshot: null,
-      creatorClaims: [],
-      launcherFeesAccruedWei: "0",
-      launcherFeesAccruedEth: "0",
-    };
+    return emptyReadModel();
   }
 
   const cacheTtlMs = 15_000;
@@ -688,7 +730,15 @@ export async function readExploreModel(
     return cachedRead.value;
   }
 
-  const value = readReadyModel(config).catch((error) => {
+  const value = (async () => {
+    if (config.environment === "production") {
+      const durable = await readDurableExploreModel(config);
+      if (durable.status === "ready") {
+        return durable.envelope.payload.model;
+      }
+    }
+    return readReadyModel(config);
+  })().catch((error) => {
     if (cachedRead?.value === value) cachedRead = undefined;
     throw error;
   });

@@ -18,6 +18,7 @@ describe("Explore read model deployment boundary", () => {
       stateView: "0x1111111111111111111111111111111111111111",
       stateViewRuntimeCodeHash: `0x${"11".repeat(32)}`,
       rpcUrl: "https://this-must-not-be-called.invalid",
+      rpcUrlSecondary: null,
       confirmations: 12n,
       logBlockRange: 10_000n,
     };
