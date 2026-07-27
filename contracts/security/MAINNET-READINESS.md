@@ -1,6 +1,6 @@
 # Classic mainnet readiness
 
-Current state: **Sepolia V2 verified; Mainnet V2 public release blocked by design**.
+Current state: **Sepolia V2 verified; Mainnet V2 monitored; public release blocked by owner gates**.
 
 | Environment | Manifest state | Release meaning |
 | --- | --- | --- |
@@ -28,10 +28,12 @@ There has been no external smart-contract audit or public contest.
 - Server-owned launch ABI, deployment selection, calldata construction and simulation
 - Direct exact-input trading path using V4Quoter, Universal Router v2.0 and Permit2
 - Confirmation-delayed event and StateView read model for Explore and Profile
+- Private five-minute durable snapshot with full confirmed replay and dual-RPC agreement
+- Scheduled reorg-aware invariant monitor with durable cursor, evidence artifacts and automatic incident issues
 - Official deployment registry and pinned runtime snapshot validation
 
-These are repository-level implementation and test properties. The Mainnet V2 deployment and source matches do not
-replace a monitored Mainnet lifecycle or third-party assurance.
+These include repository-level properties plus current provider-backed operating evidence. They do not replace
+third-party assurance or guarantee future service availability.
 
 ## Sepolia evidence
 
@@ -45,25 +47,21 @@ is `ready`; the earlier V1 deployment and lifecycle remain historical because V1
 
 The older lifecycle that used the legacy fourth metadata field remains separately marked `historical-invalid-metadata-abi` with `releaseEligible: false`. Its addresses and receipts are retained in [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for historical traceability and cannot enable transaction preparation.
 
-## Required before Mainnet
+## Required before public launch
 
-1. Freeze the exact release commit and preserve passing unit, fuzz, invariant, fork, static-analysis and remote CI evidence
-2. Rerun the proven V4Quoter, Universal Router and Permit2 lifecycle after that exact release commit is frozen
-3. Rehearse the public buy and sell flow against the ready deployment on an allowed production wallet origin
-4. Productionize event and StateView reads with durable indexing, reconciliation, confirmation policy and availability controls
-5. Add live alerts, named incident owners and a rehearsed response process
-6. Recheck the approved deployer nonce and balance, official deployment records, runtime bytecode and the predicted
-   canary address immediately before signing
-7. Operate the two-RPC monitor and independently verify one low-value Mainnet lifecycle before enabling public preparation
-8. Obtain separate approval for the exact `0.003415 ETH` canary ceiling before its first transaction
-9. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
-10. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production audit
+1. Rehearse the final transaction review after public preparation receives explicit owner approval
+2. Move the full-replay index to incremental checkpoints before event volume approaches the function-duration budget
+3. Assign primary and backup incident owners and rehearse the response process with them
+4. Keep the two-RPC monitor and durable index healthy before enabling public preparation
+5. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
+6. Approve Privy billing details and possible MAU overage before upgrading the app from Development
+7. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production audit
     has zero critical, high or moderate findings; 19 low-severity `ethers` v5/`elliptic` findings remain without a
     compatible upstream fix
 
 ## Owner decisions
 
-- Exact canary fee ceiling and later public enablement
+- Privy billing approval and later public enablement
 - Incident-response and public-communication owners
 
 ## Frontend gate
@@ -72,6 +70,7 @@ The public form always normalizes to Classic. The server accepts no target addre
 
 Launch and trading preparation remain disabled while the selected release lacks current lifecycle evidence. Sepolia V2
 preparation is enabled only when the application is explicitly configured for that verified rehearsal environment.
-Production remains fail-closed because the selected Mainnet release has no current V2 lifecycle evidence.
+Mainnet V2 lifecycle evidence and production operations are current, but the production manifest deliberately remains
+fail-closed pending named incident ownership, Privy production billing approval and final owner release approval.
 
 The absence of an external audit leaves additional residual smart-contract risk. Product and release copy must not describe the system or any launched token as audited, safe, unruggable, scam proof or guaranteed compatible with third-party scanners.

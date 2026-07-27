@@ -125,7 +125,7 @@
         "memeLaunch": 25622048
       }
     },
-    "blocker": "Durable production monitoring and authenticated RPC operations are not provisioned"
+    "blocker": "Public launch remains disabled pending named incident ownership, Privy production billing approval and final owner release approval"
   },
   "rehearsal": {
     "chainId": 11155111,

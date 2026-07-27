@@ -145,6 +145,22 @@ type IndexedEvents = {
   creatorClaims: CreatorClaimEventRecord[];
 };
 
+function indexedEventsFingerprint(events: IndexedEvents) {
+  return JSON.stringify(
+    {
+      launches: events.launches,
+      liquidities: events.liquidities,
+      initialBuys: events.initialBuys,
+      volumes: [...events.volumes.entries()].sort(([first], [second]) =>
+        first.localeCompare(second),
+      ),
+      creatorClaims: events.creatorClaims,
+    },
+    (_, value) =>
+      typeof value === "bigint" ? value.toString() : value,
+  );
+}
+
 async function indexVerifiedEvents(
   client: PublicClient,
   config: ReadyOnchainDeployment,
@@ -557,43 +573,70 @@ async function readReadyModel(
     };
   }
 
-  await Promise.all([
-    assertRuntimeCode(
-      client,
-      config.launcher,
-      config.launcherRuntimeCodeHash,
-      toBlock,
-      "Launcher",
+  await Promise.all(
+    clients.flatMap((candidate) => [
+      assertRuntimeCode(
+        candidate,
+        config.launcher,
+        config.launcherRuntimeCodeHash,
+        toBlock,
+        "Launcher",
+      ),
+      assertRuntimeCode(
+        candidate,
+        config.feeHook,
+        config.feeHookRuntimeCodeHash,
+        toBlock,
+        "Creator fee hook",
+      ),
+      assertRuntimeCode(
+        candidate,
+        config.stateView,
+        config.stateViewRuntimeCodeHash,
+        toBlock,
+        "Uniswap StateView",
+      ),
+    ]),
+  );
+
+  const [indexedEventSets, launcherFeeValues] = await Promise.all([
+    Promise.all(
+      clients.map((candidate) =>
+        indexVerifiedEvents(candidate, config, toBlock),
+      ),
     ),
-    assertRuntimeCode(
-      client,
-      config.feeHook,
-      config.feeHookRuntimeCodeHash,
-      toBlock,
-      "Creator fee hook",
-    ),
-    assertRuntimeCode(
-      client,
-      config.stateView,
-      config.stateViewRuntimeCodeHash,
-      toBlock,
-      "Uniswap StateView",
+    Promise.all(
+      clients.map((candidate) =>
+        candidate.readContract({
+          address: config.feeHook,
+          abi: creatorFeeHookReadAbi,
+          functionName: "launcherFeesAccrued",
+          blockNumber: toBlock,
+        }),
+      ),
     ),
   ]);
-
-  const [
-    { launches, liquidities, initialBuys, volumes, creatorClaims },
-    launcherFeesAccrued,
-  ] =
-    await Promise.all([
-      indexVerifiedEvents(client, config, toBlock),
-      client.readContract({
-        address: config.feeHook,
-        abi: creatorFeeHookReadAbi,
-        functionName: "launcherFeesAccrued",
-        blockNumber: toBlock,
-      }),
-    ]);
+  const eventFingerprint = indexedEventsFingerprint(indexedEventSets[0]);
+  if (
+    indexedEventSets.some(
+      (events) => indexedEventsFingerprint(events) !== eventFingerprint,
+    ) ||
+    launcherFeeValues.some(
+      (value) => value !== launcherFeeValues[0],
+    )
+  ) {
+    throw new Error(
+      "Independent RPCs disagree on canonical events or fee accounting",
+    );
+  }
+  const {
+    launches,
+    liquidities,
+    initialBuys,
+    volumes,
+    creatorClaims,
+  } = indexedEventSets[0];
+  const launcherFeesAccrued = launcherFeeValues[0];
   const verified = pairVerifiedLaunchEvents(
     config.chainId,
     config.launcher,
@@ -629,18 +672,35 @@ async function readReadyModel(
     }),
   );
 
-  const tokens = await Promise.all(
-    verified.map((launch) =>
-      hydrateVerifiedToken(
-        client,
-        config,
-        launch,
-        volumes.get(launch.poolId.toLowerCase()) ?? ZERO_FEE_VOLUME,
-        blockTimestamps.get(launch.blockNumber.toString()) ?? 0n,
-        toBlock,
+  const tokenSets = await Promise.all(
+    clients.map((candidate) =>
+      Promise.all(
+        verified.map((launch) =>
+          hydrateVerifiedToken(
+            candidate,
+            config,
+            launch,
+            volumes.get(launch.poolId.toLowerCase()) ??
+              ZERO_FEE_VOLUME,
+            blockTimestamps.get(launch.blockNumber.toString()) ?? 0n,
+            toBlock,
+          ),
+        ),
       ),
     ),
   );
+  const tokenFingerprint = JSON.stringify(tokenSets[0]);
+  if (
+    tokenSets.some(
+      (candidateTokens) =>
+        JSON.stringify(candidateTokens) !== tokenFingerprint,
+    )
+  ) {
+    throw new Error(
+      "Independent RPCs disagree on canonical token state",
+    );
+  }
+  const tokens = tokenSets[0];
   const serializedClaims = verifiedClaims
     .map((claim) => {
       const launch = launchByPool.get(claim.poolId.toLowerCase());
