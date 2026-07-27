@@ -4,8 +4,8 @@
 
 | Environment | Manifest state | Transaction preparation |
 | --- | --- | --- |
-| Ethereum mainnet | `not-deployed` | Disabled |
-| Ethereum Sepolia | `ready` | Enabled when the app runs with the rehearsal network configuration |
+| Ethereum mainnet V2 | `not-deployed` | Disabled |
+| Ethereum Sepolia V2 | `ready` | Enabled when the app runs with the rehearsal network configuration |
 
 The exact current Classic release is deployed and source-verified on Sepolia. Its signed lifecycle atomically launched
 an official UERC20 v2 token with a 0.0006 ETH creator Dev Buy, sold through the official Universal Router after Permit2
@@ -29,9 +29,9 @@ struct UERC20Metadata {
 ```
 
 The current encoder uses `0x` when no social links are supplied. Otherwise it encodes versioned UTF-8 JSON
-`{v:1,x?,telegram?}`. The verified lifecycle stored and read back the nonempty bytes value
-`0x7b2276223a312c2278223a22307850726f6772616d6d61626c65227d`, which decodes to
-`{"v":1,"x":"0xProgrammable"}`.
+`{v:1,x?,telegram?}`. The verified Test2 lifecycle stored and read back the nonempty bytes value
+`0x7b2276223a312c2278223a2268747470733a2f2f782e636f6d2f656c6f6e6d75736b227d`, which decodes to
+`{"v":1,"x":"https://x.com/elonmusk"}`.
 
 ## Public configuration
 
@@ -50,9 +50,9 @@ dated operational facts and must be rechecked before another broadcast.
 
 | Contract | Address | Transaction | Block | Runtime code hash |
 | --- | --- | --- | ---: | --- |
-| `EthCreatorFeeHookFactoryV1` | [`0x630B…e5BF`](https://eth-sepolia.blockscout.com/address/0x630B8a1392601AE1d989323CC8051e8A17A0e5BF) | [`0x8ba4…6ac7`](https://eth-sepolia.blockscout.com/tx/0x8ba4fdad29a826c0f0d6a95a026782636f323350890d06a6d7a3270d087e6ac7) | 11,359,187 | `0x3014de1f275dc60ae289f7a3a8ab038fdf76929aff19e0efdb19138e4ce8e0d5` |
-| `EthCreatorFeeHookV1` | [`0x13c3…20cc`](https://eth-sepolia.blockscout.com/address/0x13c34016c74bc43F4CBa97EDb48cC36b4bb620cc) | [`0xc8a6…647c`](https://eth-sepolia.blockscout.com/tx/0xc8a66a556bf9c02925e97be2c4060144ad562f0a6b9194abcede8ea0562a647c) | 11,359,192 | `0x0e0dd0bc1b007e979c0a93412afd282fcbe88b270dc2f26edb94310c334fbf06` |
-| `MemeLaunchV1` | [`0x341e…a245`](https://eth-sepolia.blockscout.com/address/0x341edf9399C8c5dF361aec2939C4a17c2163a245) | [`0xd60a…3892`](https://eth-sepolia.blockscout.com/tx/0xd60a15364988b9be48108baf68ba754b7ffd02b2986b6efeef06a7f9b41c3892) | 11,359,203 | `0x6e1fa1f21df7712433695c1ac584ed4c89b09ed11732cf62058dfc486639e3c2` |
+| `EthCreatorFeeHookFactoryV2` | [`0xb974…bcE0`](https://eth-sepolia.blockscout.com/address/0xb974A9EF7B75650428389b63fa6C4906450ABcE0) | [`0xa0fd…d4d0`](https://eth-sepolia.blockscout.com/tx/0xa0fdae1b611d48dd6dba051fe9705b53b4fb75aa3fe3a09561d648f6671ed4d0) | 11,361,267 | `0x8dd7205952dba3efad6f58a4b0193171c4ed825145319c908bc47dab1911c128` |
+| `EthCreatorFeeHookV2` | [`0x0c9D…20Cc`](https://eth-sepolia.blockscout.com/address/0x0c9De2721F537C311e05ad3671A17136C14a20Cc) | [`0x9c96…f1b`](https://eth-sepolia.blockscout.com/tx/0x9c9616ee385ca8d8fb18f554de90737936d4369631d9afa6e284c5025a2e5f1b) | 11,361,269 | `0xa1094bdd6c3bd1ba4d17d8f321f0e52a95a6247fae287aae90b008a7eacb05b7` |
+| `MemeLaunchV1` | [`0x6Ae8…FF4e`](https://eth-sepolia.blockscout.com/address/0x6Ae84F188468722d8b5970Bc3924C9C31b75FF4e) | [`0x2e47…b624`](https://eth-sepolia.blockscout.com/tx/0x2e473ffcec73d531a2b3bdb50549fea2f1453d7d74053e1985dfbaef1c54b624) | 11,361,270 | `0xf9977ba3a5c859d34beff333d129ae135190423a20e2a6ec5cb19588ff552e5f` |
 
 Blockscout reports the three contracts verified with Solidity `0.8.26`, optimizer enabled for 1,000 runs and Cancun.
 The launcher is bound to the official Sepolia PoolManager, PositionManager and UERC20Factory, the verified permanent
@@ -60,20 +60,20 @@ position factory and the configured treasury.
 
 ## Current verified atomic Dev Buy lifecycle
 
-- Token: [`0x4D0f…018B`](https://eth-sepolia.blockscout.com/address/0x4D0fa6fb9eD708f5e71c53E77B261d8FBC8A018B)
-- Pool ID: `0x2305fce75dcc9b5107ef00ae76d9be0aa1c30829350452ae43599ff7c5da9c7d`
-- Launch hash: `0xa9cd82a134a69275d0b5a9cc274da11dcfe0e0c2a4a7a2609a864adf84d1cb51`
-- Position NFT: `37832`
-- Permanent position recipient: `0x646118eE77c9a5509d074a8F2fd94c16b024F070`
+- Token: [`0x6f71…d771`](https://eth-sepolia.blockscout.com/address/0x6f71A3CDa868d613552f8230790274BbEBB5d771)
+- Pool ID: `0x541eca58f02c9bee85cf4edbbc2ecfd8cbd6691c275b232f2f9b9c77ef8f82a6`
+- Launch hash: `0x3d33fc925bdb72a7f4b4e3e71495dcd82575271f07361ef2db40b43f54b97fcc`
+- Position NFT: `37835`
+- Permanent position recipient: `0xbdb2d2F49771Ec34d37DF9fADCBad058e96Db8DC`
 - Position liquidity: `36819258015569838458222`
 
 | Lifecycle step | Transaction | Block | Verified result |
 | --- | --- | ---: | --- |
-| Atomic launch and Dev Buy | [`0xc608…b22`](https://eth-sepolia.blockscout.com/tx/0xc608fb203c71525d4890f0849375340268cd878b3225013675b811d141b52b22) | 11,359,239 | 0.0006 ETH bought `437971781612384114831424` PDEV units during the same launch transaction |
-| Permit2 approval | [`0x0d20…8090`](https://eth-sepolia.blockscout.com/tx/0x0d20141c3181d30ea8b3d121892681c6c7c99cbb5bd19824010d9d4be9ad8090) | 11,359,247 | Official Universal Router authorization |
-| Sell | [`0xb850…2a3`](https://eth-sepolia.blockscout.com/tx/0xb850ccee7c279e2ffcd1610df91866a83b613c671a0d77de5a00f83973baa2a3) | 11,359,251 | Exact-input sell with exactly 30,000 PDEV retained |
-| Creator claim | [`0xd0e0…3972`](https://eth-sepolia.blockscout.com/tx/0xd0e027714c80d140200f14802c8530a294a99b7f3fe1a0c353198ea066843972) | 11,359,256 | `10,379,961,423,422` wei paid to the immutable creator |
-| Programmable claim | [`0x8a2c…a6b8f`](https://eth-sepolia.blockscout.com/tx/0x8a2c773af3c2eeeefc56059ede1a2d3069e9a16ba1da15ff73a76831e4da6b8f) | 11,359,261 | `1,153,329,047,046` wei paid to the immutable treasury |
+| Atomic launch and Dev Buy | [`0xd15b…c141`](https://eth-sepolia.blockscout.com/tx/0xd15b074027a3516ce6ee65fab94df3a2ebbc5170ec7669f6420052a60b82c141) | 11,361,308 | 0.0006 ETH bought `437971781612384114831424` TEST2 units during the same launch transaction |
+| Permit2 approval | [`0x32ef…9f41`](https://eth-sepolia.blockscout.com/tx/0x32eff8ce7751eb811dcc94259c3867dd0d4e76c7617e9e6e1b62970bf73a9f41) | 11,361,309 | Official Universal Router authorization |
+| Sell | [`0x2582…f4d5`](https://eth-sepolia.blockscout.com/tx/0x258278cb5662ab9d10966c9c48fe1849cff9e8162d73170f85471add0e7ff4d5) | 11,361,331 | Exact-input sell with exactly 30,000 TEST2 retained |
+| Creator claim | [`0x0f3a…ed71`](https://eth-sepolia.blockscout.com/tx/0x0f3aebde7e6bff6b41e19b3e26d3705c637a0f99b6de07fc5e4644e7c1e2ed71) | 11,361,333 | `10,379,961,423,422` wei paid to the immutable creator |
+| Programmable claim | [`0x57a5…a428`](https://eth-sepolia.blockscout.com/tx/0x57a58b6dd721d87430e51ad894da48d24bb0dc261bed8019e0fdf4f27b14a428) | 11,361,341 | `1,153,329,047,046` wei paid to the immutable treasury |
 
 The 1.00% swap fee remained inclusive: 0.90 percentage points accrued to the creator and 0.10 percentage points to
 Programmable. After both claims, the hook reported zero creator fees, zero launcher fees, zero native claims and zero

@@ -24,41 +24,42 @@ residual smart-contract risk and must satisfy every internal gate below.
 - [x] The current official Universal Router buy, sell and claim lifecycle passes against a pinned Mainnet fork
 - [x] The supplied wallet is owner-approved as the Mainnet deployer and a current read-only three-transaction V2 simulation is documented
 - [x] The frontend fails closed while the Meme Launch deployment record is incomplete
-- [x] The exact current Meme Launch V1 release is deployed and source-verified on Sepolia
+- [x] The exact current Classic V2 composition is deployed and source-verified on Sepolia
 - [x] A complete signed Sepolia launch, atomic Dev Buy, sell and fee-claim lifecycle using the official UERC20 v2 metadata ABI is valid release evidence
 - [x] The previous Sepolia addresses and lifecycle are preserved only as `historical-invalid-metadata-abi`
 - [x] The later pre-initial-buy Sepolia release is preserved only as `historical-pre-initial-buy-release`
 - [x] Meme Launch V1 infrastructure is deployed on Ethereum mainnet
-- [ ] Classic V2 is deployed and source-verified on Sepolia
-- [ ] Test2 completes the V2 launch, buy, sell and both-claims lifecycle
+- [x] Classic V2 is deployed and source-verified on Sepolia
+- [x] Test2 completes the V2 launch, buy, sell and both-claims lifecycle
 - [ ] Classic V2 is deployed on Ethereum mainnet
 - [ ] Public launch preparation is enabled
 
-Sepolia V1 is `ready` as historical rehearsal evidence. Mainnet V1 infrastructure and one Test launch exist, but public
-preparation remains disabled. Neither V1 environment can replace the required V2 Test2 lifecycle.
+Sepolia V2 is `ready` with current Test2 lifecycle evidence. Both Sepolia V1 lifecycles remain historical only. Mainnet
+V1 infrastructure and one Test launch exist, but public preparation remains disabled until the V2 mainnet release,
+canary and monitoring gates are complete.
 
 ## Remaining work
 
 ### 1. Deploy the exact V2 release on Sepolia
 
-- [ ] Freeze the release commit
+- [x] Freeze the release commit
 - [x] Rerun the official-address, runtime-hash, test, invariant and Slither gates on the exact initial-buy release
 - [x] Recalculate the three reviewed deployment addresses from the current pending nonce
 - [x] Confirm that the deployment wallet covers the fresh gas estimate plus a safety margin
 - [x] Prepare and independently validate the nonce-pinned three-transaction MetaMask flow
-- [ ] Sign and broadcast `EthCreatorFeeHookFactoryV2`, `EthCreatorFeeHookV2` and `MemeLaunchV1`
-- [ ] Verify source code, receipts, constructor configuration and runtime code hashes
-- [ ] Record the verified V2 deployment and `releaseVersion: classic-v2` in the manifest
+- [x] Sign and broadcast `EthCreatorFeeHookFactoryV2`, `EthCreatorFeeHookV2` and `MemeLaunchV1`
+- [x] Verify source code, receipts, constructor configuration and runtime code hashes
+- [x] Record the verified V2 deployment and `releaseVersion: classic-v2` in the manifest
 
 ### 2. Prove the complete V2 Sepolia lifecycle
 
 - [x] Prepare the exact Test2 fixture with image, website, X link, description, 1% total fee and 0.0006 ETH Dev Buy
-- [ ] Launch Test2 through the reviewed browser transaction builder using the official UERC20 v2 `bytes extraData` ABI
-- [ ] Execute the supported atomic exact-input Dev Buy and Universal Router sell path
-- [ ] Claim creator fees and Programmable fees, then reconcile PoolManager claims and recipient balance changes
+- [x] Launch Test2 through the reviewed browser transaction builder using the official UERC20 v2 `bytes extraData` ABI
+- [x] Execute the supported atomic exact-input Dev Buy and Universal Router sell path
+- [x] Claim creator fees and Programmable fees, then reconcile PoolManager claims and recipient balance changes
 - [ ] If rejecting contract wallets are supported at launch, rehearse the recipient-authorized redirected claim
-- [ ] Reconcile the canonical pool ID, V2 fee disclosure, fixed supply, opening tick, active liquidity, permanent lock and launch record
-- [ ] Preserve transaction hashes, blocks, decoded V2 events and runtime hashes as current release evidence
+- [x] Reconcile the canonical pool ID, V2 fee disclosure, fixed supply, opening tick, active liquidity, permanent lock and launch record
+- [x] Preserve transaction hashes, blocks, decoded V2 events and runtime hashes as current release evidence
 
 ### 3. Product-data foundation
 
@@ -77,7 +78,7 @@ preparation remains disabled. Neither V1 environment can replace the required V2
 
 - [x] Prove current official V4Quoter, Universal Router and Permit2 compatibility for every supported Classic swap path in the pinned Mainnet lifecycle
 - [x] Resolve all critical, high and moderate production dependency findings with a scoped Universal Router SDK override; retain 19 low `ethers` v5/`elliptic` findings without a compatible upstream fix
-- [ ] Rerun the full repository verification suite on the exact release commit and preserve remote CI results
+- [x] Rerun the full repository verification suite on the exact release commit and preserve remote CI results
 - [ ] Verify the production manifest, official Uniswap dependencies, immutable treasury, hook mask and runtime code hashes
 - [ ] Add live event reconciliation, alerts, named incident owners and a rehearsed response runbook
 - [x] Keep the immutable treasury at the owner-approved supplied EOA for this release

@@ -16,12 +16,12 @@ const RPC_ENDPOINTS = [
 const ADDRESSES = {
   account: getAddress("0x2Bb333d48DFAF1596D9036671d2E43168994249E"),
   treasury: getAddress("0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"),
-  hookFactory: getAddress("0x630B8a1392601AE1d989323CC8051e8A17A0e5BF"),
-  hook: getAddress("0x13c34016c74bc43F4CBa97EDb48cC36b4bb620cc"),
-  launcher: getAddress("0x341edf9399C8c5dF361aec2939C4a17c2163a245"),
-  token: getAddress("0x4d0fa6fb9ed708f5e71c53e77b261d8fbc8a018b"),
+  hookFactory: getAddress("0xb974A9EF7B75650428389b63fa6C4906450ABcE0"),
+  hook: getAddress("0x0c9De2721F537C311e05ad3671A17136C14a20Cc"),
+  launcher: getAddress("0x6Ae84F188468722d8b5970Bc3924C9C31b75FF4e"),
+  token: getAddress("0x6f71a3cda868d613552f8230790274bbebb5d771"),
   positionRecipient: getAddress(
-    "0x646118ee77c9a5509d074a8f2fd94c16b024f070",
+    "0xbdb2d2F49771Ec34d37DF9fADCBad058e96Db8DC",
   ),
   poolManager: getAddress("0xE03A1074c86CFeDd5C142C4F04F1a1536e203543"),
   positionManager: getAddress(
@@ -39,63 +39,63 @@ const ADDRESSES = {
 
 const RUNTIME_CODE_HASHES = {
   hookFactory:
-    "0x3014de1f275dc60ae289f7a3a8ab038fdf76929aff19e0efdb19138e4ce8e0d5",
-  hook: "0x0e0dd0bc1b007e979c0a93412afd282fcbe88b270dc2f26edb94310c334fbf06",
+    "0x8dd7205952dba3efad6f58a4b0193171c4ed825145319c908bc47dab1911c128",
+  hook: "0xa1094bdd6c3bd1ba4d17d8f321f0e52a95a6247fae287aae90b008a7eacb05b7",
   launcher:
-    "0x6e1fa1f21df7712433695c1ac584ed4c89b09ed11732cf62058dfc486639e3c2",
+    "0xf9977ba3a5c859d34beff333d129ae135190423a20e2a6ec5cb19588ff552e5f",
   uerc20Factory:
     "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb",
 };
 const SOURCE_VERIFICATION = [
-  [ADDRESSES.hookFactory, "EthCreatorFeeHookFactoryV1", 1_000, "cancun"],
-  [ADDRESSES.hook, "EthCreatorFeeHookV1", 1_000, "cancun"],
+  [ADDRESSES.hookFactory, "EthCreatorFeeHookFactoryV2", 1_000, "cancun"],
+  [ADDRESSES.hook, "EthCreatorFeeHookV2", 1_000, "cancun"],
   [ADDRESSES.launcher, "MemeLaunchV1", 1_000, "cancun"],
   [ADDRESSES.token, "UERC20", 50_000_000, "prague"],
 ];
 
 const TRANSACTIONS = {
   launch: {
-    hash: "0xc608fb203c71525d4890f0849375340268cd878b3225013675b811d141b52b22",
-    blockNumber: 11_359_239n,
-    nonce: 25,
+    hash: "0xd15b074027a3516ce6ee65fab94df3a2ebbc5170ec7669f6420052a60b82c141",
+    blockNumber: 11_361_308n,
+    nonce: 34,
     to: ADDRESSES.launcher,
     value: 600_000_000_000_000n,
   },
   permit2Approval: {
-    hash: "0x0d20141c3181d30ea8b3d121892681c6c7c99cbb5bd19824010d9d4be9ad8090",
-    blockNumber: 11_359_247n,
-    nonce: 26,
+    hash: "0x32eff8ce7751eb811dcc94259c3867dd0d4e76c7617e9e6e1b62970bf73a9f41",
+    blockNumber: 11_361_309n,
+    nonce: 35,
     to: ADDRESSES.permit2,
     value: 0n,
   },
   sell: {
-    hash: "0xb850ccee7c279e2ffcd1610df91866a83b613c671a0d77de5a00f83973baa2a3",
-    blockNumber: 11_359_251n,
-    nonce: 27,
+    hash: "0x258278cb5662ab9d10966c9c48fe1849cff9e8162d73170f85471add0e7ff4d5",
+    blockNumber: 11_361_331n,
+    nonce: 36,
     to: ADDRESSES.universalRouter,
     value: 0n,
   },
   creatorClaim: {
-    hash: "0xd0e027714c80d140200f14802c8530a294a99b7f3fe1a0c353198ea066843972",
-    blockNumber: 11_359_256n,
-    nonce: 28,
+    hash: "0x0f3aebde7e6bff6b41e19b3e26d3705c637a0f99b6de07fc5e4644e7c1e2ed71",
+    blockNumber: 11_361_333n,
+    nonce: 37,
     to: ADDRESSES.hook,
     value: 0n,
   },
   launcherClaim: {
-    hash: "0x8a2c773af3c2eeeefc56059ede1a2d3069e9a16ba1da15ff73a76831e4da6b8f",
-    blockNumber: 11_359_261n,
-    nonce: 29,
+    hash: "0x57a58b6dd721d87430e51ad894da48d24bb0dc261bed8019e0fdf4f27b14a428",
+    blockNumber: 11_361_341n,
+    nonce: 38,
     to: ADDRESSES.hook,
     value: 0n,
   },
 };
 
 const POOL_ID =
-  "0x2305fce75dcc9b5107ef00ae76d9be0aa1c30829350452ae43599ff7c5da9c7d";
+  "0x541eca58f02c9bee85cf4edbbc2ecfd8cbd6691c275b232f2f9b9c77ef8f82a6";
 const LAUNCH_HASH =
-  "0xa9cd82a134a69275d0b5a9cc274da11dcfe0e0c2a4a7a2609a864adf84d1cb51";
-const POSITION_TOKEN_ID = 37_832n;
+  "0x3d33fc925bdb72a7f4b4e3e71495dcd82575271f07361ef2db40b43f54b97fcc";
+const POSITION_TOKEN_ID = 37_835n;
 const TOKEN_SUPPLY = 1_000_000_000n * 10n ** 18n;
 const FINAL_TOKEN_BALANCE = 30_000n * 10n ** 18n;
 const POSITION_TOKEN_AMOUNT = 999_999_999_999_999_999_999_987_736n;
@@ -103,11 +103,12 @@ const LOCKED_TOKEN_DUST = 12_264n;
 const EXPECTED_POSITION_LIQUIDITY = 36_819_258_015_569_838_458_222n;
 const EXPECTED_FINAL_TICK = 204_199;
 const EXPECTED_TOKEN_METADATA = {
-  description: "Programmable atomic Dev Buy lifecycle fixture on Sepolia",
-  website: "https://programmable.family",
-  image: "",
+  description: "This is a test.",
+  website: "https://www.forbes.com/",
+  image:
+    "https://programmable.family/brand/programmable-token-fallback-01-dawn.webp",
   extraData:
-    "0x7b2276223a312c2278223a22307850726f6772616d6d61626c65227d",
+    "0x7b2276223a312c2278223a2268747470733a2f2f782e636f6d2f656c6f6e6d75736b227d",
 };
 const MAX_UINT256 = (1n << 256n) - 1n;
 const MAX_UINT160 = (1n << 160n) - 1n;
@@ -441,8 +442,8 @@ async function readEvidence(client) {
     keccak256(uerc20FactoryCode) === RUNTIME_CODE_HASHES.uerc20Factory,
     "Official UERC20Factory runtime hash changed",
   );
-  assert(tokenName === "Programmable Dev Buy Fixture", "Unexpected token name");
-  assert(tokenSymbol === "PDEV", "Unexpected token symbol");
+  assert(tokenName === "Test2", "Unexpected token name");
+  assert(tokenSymbol === "TEST2", "Unexpected token symbol");
   assert(tokenDecimals === 18, "Unexpected token decimals");
   assert(totalSupply === TOKEN_SUPPLY, "Unexpected token supply");
   assertAddress(tokenCreator, ADDRESSES.launcher, "token.creator");
@@ -524,7 +525,7 @@ async function readEvidence(client) {
   );
   assert(slot0[3] === 0, "Pool LP fee is not zero");
   assert(slot0[1] === EXPECTED_FINAL_TICK, "Final pool tick changed");
-  assert(confirmedNonce >= 30, "Lifecycle transactions are not all confirmed");
+  assert(confirmedNonce >= 39, "Lifecycle transactions are not all confirmed");
 
   const launchEvents = decodeEvents(
     transactions.launch.receipt,

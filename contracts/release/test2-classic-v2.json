@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "blocked-on-v2-sepolia-deployment",
+  "status": "verified-sepolia-lifecycle",
   "requiredRelease": "classic-v2",
   "chainId": 11155111,
   "sequence": 2,

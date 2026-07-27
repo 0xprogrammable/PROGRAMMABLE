@@ -1,11 +1,11 @@
 # Classic mainnet readiness
 
-Current state: **V1 infrastructure exists; V2 public release blocked by design**.
+Current state: **Sepolia V2 verified; Mainnet V2 public release blocked by design**.
 
 | Environment | Manifest state | Release meaning |
 | --- | --- | --- |
 | Ethereum mainnet | V1 deployed, V2 planned | V1 Test evidence is incomplete; public preparation remains disabled |
-| Ethereum Sepolia | V1 ready, V2 planned | V1 lifecycle is historical evidence; V2 Test2 is still required |
+| Ethereum Sepolia | V2 ready | Test2 lifecycle and source evidence are current; V1 lifecycles are historical |
 
 There has been no external smart-contract audit or public contest.
 
@@ -30,18 +30,18 @@ There has been no external smart-contract audit or public contest.
 - Confirmation-delayed event and StateView read model for Explore and Profile
 - Official deployment registry and pinned runtime snapshot validation
 
-These are repository-level implementation and test properties. The deployed V1 addresses are not V2 release evidence
-or third-party assurance.
+These are repository-level implementation and test properties. The deployed Sepolia V2 evidence is not Mainnet
+release evidence or third-party assurance.
 
 ## Sepolia evidence
 
-The recorded V1 Classic launcher, hook and hook factory are source-verified on Sepolia. Its signed lifecycle launched an
+The recorded V2 Classic launcher, hook and hook factory are source-verified on Sepolia. Its signed Test2 lifecycle launched an
 official UERC20 v2 token with nonempty dynamic `bytes extraData` and a 0.0006 ETH atomic creator buy, authorized the
 official Universal Router through Permit2, sold, and claimed both creator and Programmable native ETH fees.
 
 Two independent RPCs reconcile all five receipts, runtime hashes, token provenance, fee math, balance deltas, canonical
-pool state and permanent position custody. Four Blockscout records confirm source verification. The V1 Sepolia manifest
-is `ready`, but V2 still needs a new Test2 lifecycle because V1 cannot emit the V2 disclosure events.
+pool state and permanent position custody. Four Blockscout records confirm source verification. The V2 Sepolia manifest
+is `ready`; the earlier V1 deployment and lifecycle remain historical because V1 cannot emit the V2 disclosure events.
 
 The older lifecycle that used the legacy fourth metadata field remains separately marked `historical-invalid-metadata-abi` with `releaseEligible: false`. Its addresses and receipts are retained in [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for historical traceability and cannot enable transaction preparation.
 
@@ -71,8 +71,8 @@ The older lifecycle that used the legacy fourth metadata field remains separatel
 
 The public form always normalizes to Classic. The server accepts no target address or calldata from the browser. It verifies the deployment manifest, runtime code, factory provenance, immutable dependencies, treasury, hook mask, fee constants, the 0.0006 ETH minimum Dev Buy, predicted token address and exact selected call value before simulation.
 
-Launch and trading preparation remain disabled while the selected release lacks current lifecycle evidence. Sepolia V1
-preparation is enabled only when the application is explicitly configured for that verified rehearsal environment; the
-Test2 fixture refuses to run until the manifest explicitly identifies the deployed `classic-v2` release.
+Launch and trading preparation remain disabled while the selected release lacks current lifecycle evidence. Sepolia V2
+preparation is enabled only when the application is explicitly configured for that verified rehearsal environment.
+Production remains fail-closed because the selected Mainnet release has no current V2 lifecycle evidence.
 
 The absence of an external audit leaves additional residual smart-contract risk. Product and release copy must not describe the system or any launched token as audited, safe, unruggable, scam proof or guaranteed compatible with third-party scanners.

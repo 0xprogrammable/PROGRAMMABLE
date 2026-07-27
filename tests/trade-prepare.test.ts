@@ -239,7 +239,7 @@ describe("Classic trade request boundary", () => {
     expect(resolveClassicTradeDeployment(11155111)).toMatchObject({
       chainId: 11155111,
       hook: getAddress(
-        "0x13c34016c74bc43F4CBa97EDb48cC36b4bb620cc",
+        "0x0c9De2721F537C311e05ad3671A17136C14a20Cc",
       ),
     });
     expect(() => resolveClassicTradeDeployment(8453)).toThrow(

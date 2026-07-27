@@ -7,19 +7,19 @@ describe("onchain deployment manifest boundary", () => {
     vi.unstubAllEnvs();
   });
 
-  it("loads the verified atomic Dev Buy Sepolia deployment", () => {
+  it("exposes only the source-verified Sepolia V2 deployment with complete Test2 lifecycle evidence", () => {
     expect(getOnchainDeployment("rehearsal")).toMatchObject({
       environment: "rehearsal",
-      releaseVersion: "classic-v1",
+      releaseVersion: "classic-v2",
       chainId: 11_155_111,
       status: "ready",
-      launcher: "0x341edf9399C8c5dF361aec2939C4a17c2163a245",
-      feeHook: "0x13c34016c74bc43F4CBa97EDb48cC36b4bb620cc",
+      launcher: "0x6Ae84F188468722d8b5970Bc3924C9C31b75FF4e",
+      feeHook: "0x0c9De2721F537C311e05ad3671A17136C14a20Cc",
       launcherRuntimeCodeHash:
-        "0x6e1fa1f21df7712433695c1ac584ed4c89b09ed11732cf62058dfc486639e3c2",
+        "0xf9977ba3a5c859d34beff333d129ae135190423a20e2a6ec5cb19588ff552e5f",
       feeHookRuntimeCodeHash:
-        "0x0e0dd0bc1b007e979c0a93412afd282fcbe88b270dc2f26edb94310c334fbf06",
-      deploymentBlock: 11_359_203n,
+        "0xa1094bdd6c3bd1ba4d17d8f321f0e52a95a6247fae287aae90b008a7eacb05b7",
+      deploymentBlock: 11_361_270n,
     });
   });
 
