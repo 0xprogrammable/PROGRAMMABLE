@@ -1,5 +1,6 @@
 import {
   getAddress,
+  toHex,
   type Address,
   type Hex,
 } from "viem";
@@ -242,8 +243,36 @@ export function buildPrivyTransactionRequest(input: unknown) {
     ...(transaction.gasLimit === undefined
       ? {}
       : { gasLimit: BigInt(transaction.gasLimit) }),
-    chainId: ETHEREUM_MAINNET_CHAIN_ID,
+    chainId: transaction.chainId,
   };
+}
+
+export function buildEip1193TransactionRequest(
+  input: unknown,
+  account: string,
+) {
+  const transaction = parsePreparedTransactionForAccount(input, account);
+
+  return {
+    from: getAddress(account),
+    to: transaction.to,
+    data: transaction.data,
+    value: toHex(BigInt(transaction.value)),
+    ...(transaction.gasLimit === undefined
+      ? {}
+      : { gas: toHex(BigInt(transaction.gasLimit)) }),
+  };
+}
+
+export function parseSubmittedTransactionHash(value: unknown): Hex {
+  if (
+    typeof value !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(value)
+  ) {
+    throw new Error("The wallet returned an invalid transaction hash");
+  }
+
+  return value as Hex;
 }
 
 export function getPreparedTransactionReview(

@@ -35,8 +35,10 @@ import type { Hex } from "viem";
 
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import {
+  buildEip1193TransactionRequest,
   buildPrivyTransactionRequest,
   getPreparedTransactionReview,
+  parseSubmittedTransactionHash,
   parsePreparedTransactionForAccount,
   type PreparedTransaction,
 } from "../lib/prepared-transaction";
@@ -117,6 +119,37 @@ export function getWalletLoginErrorMessage(errorCode: string) {
   }
 
   return "Unable to connect wallet. Try again.";
+}
+
+export function getWalletTransactionErrorMessage(error: unknown) {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof (error as { message?: unknown }).message === "string"
+        ? (error as { message: string }).message
+        : "";
+
+  if (code === 4001 || /user rejected|user denied/i.test(message)) {
+    return "Transaction cancelled in wallet";
+  }
+  if (
+    code === 4900 ||
+    code === 4901 ||
+    /disconnected|lost connection|background|postmessage failed/i.test(
+      message,
+    )
+  ) {
+    return "Wallet connection was interrupted. Reload the page and try again";
+  }
+
+  return message || "The wallet could not open the transaction";
 }
 
 function readProfileValue(account?: string) {
@@ -518,23 +551,57 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
           `The prepared transaction is not for ${appNetworkName}`,
         );
       }
-      if (wallet.chainId !== appChainHex) {
-        await connectedWallet.switchChain(appChain.id);
-      }
-      const review = getPreparedTransactionReview(prepared.kind);
+      const isEmbeddedWallet =
+        connectedWallet.walletClientType === "privy" ||
+        connectedWallet.walletClientType === "privy-v2";
 
-      const result = await sendPrivyTransaction(
-        buildPrivyTransactionRequest(prepared),
-        {
-          address: wallet.account,
-          uiOptions: {
-            description: review.description,
-            buttonText: review.buttonText,
-            successHeader: review.successHeader,
-          },
-        },
-      );
-      return result.hash;
+      try {
+        if (wallet.chainId !== appChainHex) {
+          await connectedWallet.switchChain(appChain.id);
+        }
+
+        if (isEmbeddedWallet) {
+          const review = getPreparedTransactionReview(prepared.kind);
+          const result = await sendPrivyTransaction(
+            buildPrivyTransactionRequest(prepared),
+            {
+              address: wallet.account,
+              uiOptions: {
+                description: review.description,
+                buttonText: review.buttonText,
+                successHeader: review.successHeader,
+              },
+            },
+          );
+          return parseSubmittedTransactionHash(result.hash);
+        }
+
+        const provider = await connectedWallet.getEthereumProvider();
+        const providerChainId = await provider.request({
+          method: "eth_chainId",
+        });
+        if (
+          typeof providerChainId !== "string" ||
+          normalizeChainId(providerChainId) !== appChainHex
+        ) {
+          throw new Error(
+            `The wallet is not connected to ${appNetworkName}`,
+          );
+        }
+
+        const hash = await provider.request({
+          method: "eth_sendTransaction",
+          params: [
+            buildEip1193TransactionRequest(
+              prepared,
+              wallet.account,
+            ),
+          ],
+        });
+        return parseSubmittedTransactionHash(hash);
+      } catch (caught) {
+        throw new Error(getWalletTransactionErrorMessage(caught));
+      }
     },
     [
       connectedWallet,
