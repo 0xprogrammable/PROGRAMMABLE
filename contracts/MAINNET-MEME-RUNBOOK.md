@@ -264,30 +264,50 @@ Before source publication finishes, `REQUIRE_SOURCE_VERIFICATION=0` may be used 
 Perform a one-shot read-only monitor check:
 
 ```bash
-MAINNET_RPC_URLS="$MAINNET_RPC_URLS" \
-MAINNET_MEME_DEPLOYMENT_JSON=/absolute/path/to/deployment.json \
-node contracts/scripts/monitor-meme-v1.mjs --once
+npm run contracts:mainnet:monitor:once
 ```
 
 Then run the continuous watcher with durable state:
 
 ```bash
 MAINNET_RPC_URLS="$MAINNET_RPC_URLS" \
-MAINNET_MEME_DEPLOYMENT_JSON=/absolute/path/to/deployment.json \
 MEME_MONITOR_STATE_FILE=/var/lib/programmable/meme-v1.json \
-node contracts/scripts/monitor-meme-v1.mjs
+npm run contracts:mainnet:monitor
 ```
 
-Only after the verifier and monitor pass should the app manifest be updated and a small owner-approved canary launch be prepared. A canary is a real, irreversible Mainnet action and requires separate approval and funding.
+Before signing, require both read-only checks:
+
+```bash
+npm run contracts:mainnet:canary:check
+npm run contracts:mainnet:lifecycle:check
+```
+
+The reviewed canary consists of the atomic 0.0006 ETH Dev Buy, a separate 0.0001 ETH buy, an optional token approval,
+the Permit2 router approval, sell, creator claim and Programmable claim. At a hard 0.5 gwei gas-price ceiling, its exact
+conservative gross-debit ceiling is `0.003415 ETH`. The runner binds every nonce to the exact server-reviewed calldata
+hash before signing, then records and independently rechecks that hash with each confirmed receipt. After all steps have
+at least twelve confirmations, run:
+
+```bash
+npm run contracts:mainnet:lifecycle:verify
+npm run contracts:mainnet:monitor:once
+```
+
+Only after the deployment verifier passes should the app manifest record the infrastructure as `lifecycle-pending`.
+Public launch preparation must remain disabled until the separately owner-approved canary lifecycle, independent
+verifier and operated monitor all pass. A canary is a real, irreversible Mainnet action.
+
+If a transaction confirms but its receipt cannot be recorded, stop. The current process halts and a restart refuses to
+continue because the wallet nonce no longer matches the receipt ledger. Do not submit the same step again and do not
+manually mark that run release-eligible. Preserve the hash, investigate the failure and prepare a new canary salt under a
+new explicit ceiling approval if complete reviewed-calldata evidence cannot be recovered.
 
 ## Remaining owner gates and limitations
 
-- fund the approved deployer after selecting the final maximum fee
-- confirm the approved account is available for manual wallet signing
-- explicitly approve the four-transaction broadcast
-- obtain four successful, confirmed receipts and public source matches
 - provision two reliable production RPCs and durable monitoring
-- explicitly approve and fund the canary launch
+- explicitly approve the exact `0.003415 ETH` canary ceiling
+- manually review and sign only the prepared seven-step lifecycle
+- obtain independently reconciled receipts and lifecycle evidence
 - complete the product and legal review appropriate to public token creation
 
 No external audit is included in this plan. The fork lifecycle, runtime-hash checks, source verification, locked position, immutable configuration, and monitoring materially improve evidence, but they do not prove the contracts vulnerability-free or make every launched token economically or legally safe. The v4 hook uses return-delta accounting, so independent review remains a known residual risk even when every operational gate passes.

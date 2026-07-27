@@ -88,8 +88,9 @@ Tests cover the four exact-input and exact-output swap quadrants, inclusive fee 
 
 ## Deployment truth
 
-The current Classic V2 Ethereum mainnet release is `not-deployed`. Historical V1 infrastructure exists on mainnet but
-does not enable production transaction preparation.
+The current Classic V2 Ethereum mainnet infrastructure is deployed and source-matched. Production transaction
+preparation remains disabled because the current Mainnet lifecycle is still pending. Historical V1 infrastructure does
+not enable production transaction preparation.
 
 The current Ethereum Sepolia deployment is source-verified and its signed atomic Dev Buy, sell and native fee-claim lifecycle is reconciled across two independent RPCs. The release manifest marks Sepolia Classic `ready`; `npm run contracts:sepolia:lifecycle:verify` rechecks the exact deployment, token, pool, position custody, fee split, claims and balance deltas.
 
@@ -97,4 +98,6 @@ The older Sepolia lifecycle with the legacy fourth metadata field remains separa
 
 The detailed evidence and remaining release requirements are in [`DEPLOYMENT.md`](DEPLOYMENT.md) and [`security/MAINNET-READINESS.md`](security/MAINNET-READINESS.md).
 
-There has been no external smart-contract audit or public contest. Mainnet requires a frozen passing release, production trading and indexing evidence, monitoring, a funded approved deployer, a fresh simulation, explicit broadcast approval and a controlled canary.
+There has been no external smart-contract audit or public contest. Public Mainnet availability still requires
+production indexing, operated monitoring, a separately approved controlled canary and its independently reconciled
+lifecycle evidence.

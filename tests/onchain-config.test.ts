@@ -23,10 +23,10 @@ describe("onchain deployment manifest boundary", () => {
     });
   });
 
-  it("keeps production undeployed independently of rehearsal evidence", () => {
+  it("keeps source-verified production V2 unavailable until its canary lifecycle passes", () => {
     expect(getOnchainDeployment("production")).toMatchObject({
       environment: "production",
-      releaseVersion: "classic-v1",
+      releaseVersion: "classic-v2",
       chainId: 1,
       status: "not-deployed",
       launcher: null,

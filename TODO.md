@@ -31,12 +31,12 @@ residual smart-contract risk and must satisfy every internal gate below.
 - [x] Meme Launch V1 infrastructure is deployed on Ethereum mainnet
 - [x] Classic V2 is deployed and source-verified on Sepolia
 - [x] Test2 completes the V2 launch, buy, sell and both-claims lifecycle
-- [ ] Classic V2 is deployed on Ethereum mainnet
+- [x] Classic V2 is deployed and source-verified on Ethereum mainnet
 - [ ] Public launch preparation is enabled
 
-Sepolia V2 is `ready` with current Test2 lifecycle evidence. Both Sepolia V1 lifecycles remain historical only. Mainnet
-V1 infrastructure and one Test launch exist, but public preparation remains disabled until the V2 mainnet release,
-canary and monitoring gates are complete.
+Sepolia V2 is `ready` with current Test2 lifecycle evidence. Mainnet V2 is deployed and source-verified, while its V1
+deployment remains historical only. Public preparation remains disabled until the V2 Mainnet canary and monitoring
+gates are complete.
 
 ## Remaining work
 
@@ -79,7 +79,7 @@ canary and monitoring gates are complete.
 - [x] Prove current official V4Quoter, Universal Router and Permit2 compatibility for every supported Classic swap path in the pinned Mainnet lifecycle
 - [x] Resolve all critical, high and moderate production dependency findings with a scoped Universal Router SDK override; retain 19 low `ethers` v5/`elliptic` findings without a compatible upstream fix
 - [x] Rerun the full repository verification suite on the exact release commit and preserve remote CI results
-- [ ] Verify the production manifest, official Uniswap dependencies, immutable treasury, hook mask and runtime code hashes
+- [x] Verify the production manifest, official Uniswap dependencies, immutable treasury, hook mask and runtime code hashes
 - [ ] Add live event reconciliation, alerts, named incident owners and a rehearsed response runbook
 - [x] Keep the immutable treasury at the owner-approved supplied EOA for this release
 - [x] Use the owner-approved `0x2Bb…249E` EOA as deployer with manual wallet signing and no stored private key
@@ -92,10 +92,16 @@ canary and monitoring gates are complete.
 ### 5. Release on mainnet
 
 - [x] Run a fresh read-only mainnet deployment simulation from the approved signer for the exact initial-buy release
-- [ ] Obtain explicit owner approval for the final addresses, gas cost and broadcast
-- [ ] Deploy and source-verify the frozen release
-- [ ] Record receipts, blocks, addresses, constructor values and runtime hashes in the production manifest
+- [x] Obtain explicit owner approval for the final addresses, gas cost and broadcast
+- [x] Deploy and source-verify the frozen release
+- [x] Record receipts, blocks, addresses, constructor values and runtime hashes in the production manifest
+- [x] Prepare a two-RPC Mainnet canary simulation with fixed per-step gas limits, automatic receipt capture and a fail-closed gas-price ceiling
+- [x] Reproduce all seven canary steps on a temporary Mainnet fork and cover the measured gas bounds in tests
+- [x] Prepare the independent two-RPC lifecycle verifier and prove that it fails closed before any receipt exists
+- [ ] Obtain separate approval for the canary's exact `0.003415 ETH` maximum outflow
 - [ ] Run one low-value monitored canary launch with buys, sells and both fee claims
+- [ ] Verify the V2 hook factory on Etherscan; hook and launcher are already exact matches
+- [ ] Prepare the Hooklist and routing submissions after the canary creates a real V2 pool
 - [ ] Enable public launch preparation only after the canary and monitoring checks pass
 - [ ] Deploy the exact verified frontend commit and confirm `programmable.family` points only to the production manifest
 

@@ -4,7 +4,7 @@ Current state: **Sepolia V2 verified; Mainnet V2 public release blocked by desig
 
 | Environment | Manifest state | Release meaning |
 | --- | --- | --- |
-| Ethereum mainnet | V1 deployed, V2 planned | V1 Test evidence is incomplete; public preparation remains disabled |
+| Ethereum mainnet | V2 deployed, lifecycle pending | Source and deployment evidence are current; public preparation remains disabled |
 | Ethereum Sepolia | V2 ready | Test2 lifecycle and source evidence are current; V1 lifecycles are historical |
 
 There has been no external smart-contract audit or public contest.
@@ -30,8 +30,8 @@ There has been no external smart-contract audit or public contest.
 - Confirmation-delayed event and StateView read model for Explore and Profile
 - Official deployment registry and pinned runtime snapshot validation
 
-These are repository-level implementation and test properties. The deployed Sepolia V2 evidence is not Mainnet
-release evidence or third-party assurance.
+These are repository-level implementation and test properties. The Mainnet V2 deployment and source matches do not
+replace a monitored Mainnet lifecycle or third-party assurance.
 
 ## Sepolia evidence
 
@@ -52,19 +52,18 @@ The older lifecycle that used the legacy fourth metadata field remains separatel
 3. Rehearse the public buy and sell flow against the ready deployment on an allowed production wallet origin
 4. Productionize event and StateView reads with durable indexing, reconciliation, confirmation policy and availability controls
 5. Add live alerts, named incident owners and a rehearsed response process
-6. Fund the owner-approved deployer only after reviewing a fresh gas ceiling
-7. Recheck the approved deployer nonce and balance, official deployment records, dependency runtime bytecode and predicted-address vacancy immediately before signing
-8. Bind the frozen source commitment to the machine-readable Mainnet evidence, run a fresh read-only simulation and review all three zero-value transactions
-9. Obtain explicit approval for the exact gas ceiling and broadcast, then source-verify the deployment and run a low-value monitored canary before enabling public preparation
-10. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
-11. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production audit
+6. Recheck the approved deployer nonce and balance, official deployment records, runtime bytecode and the predicted
+   canary address immediately before signing
+7. Operate the two-RPC monitor and independently verify one low-value Mainnet lifecycle before enabling public preparation
+8. Obtain separate approval for the exact `0.003415 ETH` canary ceiling before its first transaction
+9. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
+10. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production audit
     has zero critical, high or moderate findings; 19 low-severity `ethers` v5/`elliptic` findings remain without a
     compatible upstream fix
 
 ## Owner decisions
 
-- Final funding amount and maximum Mainnet fee ceiling
-- Explicit approval for the reviewed three-transaction V2 broadcast and later public enablement
+- Exact canary fee ceiling and later public enablement
 - Incident-response and public-communication owners
 
 ## Frontend gate

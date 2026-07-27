@@ -20,7 +20,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CONTRACTS_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DEFAULT_RPCS = ["https://eth.drpc.org", "https://ethereum-rpc.publicnode.com"];
+const DEFAULT_RPCS = [
+  "https://rpc.mevblocker.io",
+  "https://mainnet.gateway.tenderly.co",
+];
 const MIN_CONFIRMATIONS = Number(process.env.MAINNET_MIN_CONFIRMATIONS ?? 12);
 const REQUIRE_SOURCE_VERIFICATION =
   process.env.REQUIRE_SOURCE_VERIFICATION !== "0";

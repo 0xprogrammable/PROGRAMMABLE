@@ -377,13 +377,81 @@ for (const [environment, manifest] of Object.entries({
 
 assert(
   appDeployments.production.status === "ready",
-  "The verified Mainnet V1 infrastructure must remain recorded",
+  "The verified Mainnet V2 infrastructure must remain recorded",
 );
 assert(
-  appDeployments.production.releaseVersion === "classic-v1" &&
+  appDeployments.production.releaseVersion === "classic-v2" &&
     appDeployments.production.memeLaunchStatus ===
       "lifecycle-pending",
-  "Mainnet Classic V1 must remain launch-disabled until the current lifecycle is verified",
+  "Mainnet Classic V2 must remain launch-disabled until the current lifecycle is verified",
+);
+assert(
+  appDeployments.production.ethCreatorFeeHookFactory ===
+      "0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67" &&
+    appDeployments.production.ethCreatorFeeHook ===
+      "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC" &&
+    appDeployments.production.memeLaunch ===
+      "0xD240D06f8586eB799f20056054e5b527405E6bAd" &&
+    appDeployments.production.runtimeCodeHashes
+        .ethCreatorFeeHookFactory ===
+      "0x8dd7205952dba3efad6f58a4b0193171c4ed825145319c908bc47dab1911c128" &&
+    appDeployments.production.runtimeCodeHashes.ethCreatorFeeHook ===
+      "0x274e29fb8d19f0607533ac7582827db0236ab546bb393d52049229b2ffe74381" &&
+    appDeployments.production.runtimeCodeHashes.memeLaunch ===
+      "0xd229555c79c61874549a1991c43df172104e1db3087ba8fca8804675b7440d36",
+  "Current Mainnet Classic V2 addresses or runtime hashes changed",
+);
+for (const field of [
+  "ethCreatorFeeHookFactory",
+  "ethCreatorFeeHook",
+  "memeLaunch",
+]) {
+  assert(
+    /^0x[a-fA-F0-9]{64}$/.test(
+      appDeployments.production.deploymentTransactions[field],
+    ),
+    `production.${field} deployment transaction is invalid`,
+  );
+  assert(
+    Number.isSafeInteger(
+      appDeployments.production.deploymentBlocks[field],
+    ) && appDeployments.production.deploymentBlocks[field] > 0,
+    `production.${field} deployment block is invalid`,
+  );
+  assert(
+    appDeployments.production.sourceVerification.contracts[field] ===
+      "match",
+    `production.${field} source verification is not recorded`,
+  );
+}
+assert(
+  appDeployments.production.sourceVerification.status === "verified" &&
+    appDeployments.production.sourceVerification.provider ===
+      "Sourcify",
+  "Current Mainnet V2 source verification is not recorded",
+);
+assert(
+  appDeployments.production.lifecycleEvidence.status ===
+      "pending-current-release" &&
+    appDeployments.production.lifecycleEvidence.releaseEligible ===
+      false &&
+    appDeployments.production.lifecycleEvidence.minimumInitialBuyWei ===
+      "600000000000000",
+  "Mainnet Classic V2 lifecycle gate is incoherent",
+);
+const historicalMainnetV1Deployment =
+  appDeployments.production.historicalV1Deployment;
+assert(
+  historicalMainnetV1Deployment?.releaseVersion === "classic-v1" &&
+    historicalMainnetV1Deployment.status ===
+      "historical-mainnet-v1" &&
+    historicalMainnetV1Deployment.ethCreatorFeeHookFactory ===
+      "0xaE3C324B742a7576863A546120c4280b7c9E8448" &&
+    historicalMainnetV1Deployment.ethCreatorFeeHook ===
+      "0x48bB2672c7fd2a12e7fb5D46c441ccD3726520Cc" &&
+    historicalMainnetV1Deployment.memeLaunch ===
+      "0x51d702731db281EE223904A4663E05BfCA26C775",
+  "The verified Mainnet Classic V1 deployment must remain historical evidence",
 );
 assert(
   appDeployments.rehearsal.releaseVersion === "classic-v2" &&
