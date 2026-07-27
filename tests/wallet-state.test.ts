@@ -10,6 +10,15 @@ type WalletProviderContract = {
   getWalletProfileStorageKey: (account: string) => string;
   readUsernameFromProfileValue: (value: string | null) => string;
   getWalletLoginErrorMessage: (errorCode: string) => string;
+  selectConnectedWallet: <T extends {
+    address: string;
+    connectedAt: number;
+    linked: boolean;
+    walletClientType: string;
+  }>(
+    wallets: readonly T[],
+    primaryAddress?: string,
+  ) => T | undefined;
 };
 
 const subject = walletProvider as unknown as WalletProviderContract;
@@ -60,5 +69,44 @@ describe("wallet recovery state", () => {
     ).toBe("Unable to connect wallet. Try again.");
     expect(subject.getWalletLoginErrorMessage("exited_auth_flow")).toBe("");
     expect(subject.getWalletLoginErrorMessage("exited_link_flow")).toBe("");
+  });
+
+  it("keeps a connected external wallet launch-ready before Privy authentication settles", () => {
+    const externalWallet = {
+      address: "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      connectedAt: 20,
+      linked: false,
+      walletClientType: "metamask",
+    };
+    const embeddedWallet = {
+      address: "0xaA5A000000000000000000000000000000005787",
+      connectedAt: 10,
+      linked: true,
+      walletClientType: "privy",
+    };
+
+    expect(
+      subject.selectConnectedWallet(
+        [embeddedWallet, externalWallet],
+        embeddedWallet.address,
+      ),
+    ).toBe(externalWallet);
+  });
+
+  it("uses the most recently connected external wallet when more than one is available", () => {
+    const older = {
+      address: "0x1111111111111111111111111111111111111111",
+      connectedAt: 10,
+      linked: true,
+      walletClientType: "metamask",
+    };
+    const newer = {
+      address: "0x2222222222222222222222222222222222222222",
+      connectedAt: 20,
+      linked: true,
+      walletClientType: "phantom",
+    };
+
+    expect(subject.selectConnectedWallet([older, newer])).toBe(newer);
   });
 });

@@ -221,6 +221,40 @@ function isEthereumAddress(address: string): address is `0x${string}` {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
+type WalletCandidate = {
+  address: string;
+  connectedAt: number;
+  linked: boolean;
+  walletClientType: string;
+};
+
+export function selectConnectedWallet<T extends WalletCandidate>(
+  wallets: readonly T[],
+  primaryAddress?: string,
+) {
+  const validWallets = [...wallets]
+    .filter((candidate) => isEthereumAddress(candidate.address))
+    .sort((left, right) => right.connectedAt - left.connectedAt);
+  const externalWallets = validWallets.filter(
+    (candidate) =>
+      candidate.walletClientType !== "privy" &&
+      candidate.walletClientType !== "privy-v2",
+  );
+  const normalizedPrimaryAddress = primaryAddress?.toLowerCase();
+
+  return (
+    externalWallets.find((candidate) => candidate.linked) ??
+    externalWallets[0] ??
+    validWallets.find(
+      (candidate) =>
+        normalizedPrimaryAddress &&
+        candidate.address.toLowerCase() === normalizedPrimaryAddress,
+    ) ??
+    validWallets.find((candidate) => candidate.linked) ??
+    validWallets[0]
+  );
+}
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   if (!privyAppId) {
     return <UnconfiguredWalletProvider>{children}</UnconfiguredWalletProvider>;
@@ -276,20 +310,11 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   });
 
   const connectedWallet = useMemo(() => {
-    const primaryAddress = user?.wallet?.address.toLowerCase();
-    return (
-      wallets.find(
-        (candidate) =>
-          primaryAddress && candidate.address.toLowerCase() === primaryAddress,
-      ) ??
-      wallets.find((candidate) => candidate.linked) ??
-      wallets[0]
-    );
+    return selectConnectedWallet(wallets, user?.wallet?.address);
   }, [user?.wallet?.address, wallets]);
 
   const wallet = useMemo<WalletState | null>(() => {
     if (
-      !authenticated ||
       !connectedWallet ||
       !isEthereumAddress(connectedWallet.address)
     ) {
@@ -300,7 +325,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       account: connectedWallet.address,
       chainId: normalizeChainId(connectedWallet.chainId),
     };
-  }, [authenticated, connectedWallet]);
+  }, [connectedWallet]);
   const sessionReady = ready && walletsReady;
   const hasSession = authenticated || wallets.length > 0;
   const sessionAction = getWalletSessionAction(
