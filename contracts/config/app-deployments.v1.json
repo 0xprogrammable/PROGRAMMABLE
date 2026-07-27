@@ -5,6 +5,13 @@
     "releaseVersion": "classic-v2",
     "status": "ready",
     "memeLaunchStatus": "lifecycle-pending",
+    "incidentOwnership": {
+      "operatingModel": "sole-operator",
+      "primary": "hazarxyz",
+      "backup": null,
+      "approvedAt": "2026-07-27",
+      "acknowledgedRisk": "No backup incident responder is assigned"
+    },
     "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
     "ethCreatorFeeHookFactory": "0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67",
     "ethCreatorFeeHook": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
@@ -125,7 +132,7 @@
         "memeLaunch": 25622048
       }
     },
-    "blocker": "Public launch remains disabled pending named incident ownership and Privy production billing approval"
+    "blocker": "Public launch remains disabled pending Privy production billing approval"
   },
   "rehearsal": {
     "chainId": 11155111,

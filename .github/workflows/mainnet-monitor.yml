@@ -102,6 +102,7 @@ jobs:
                 repo: context.repo.repo,
                 title,
                 body,
+                assignees: ["hazarxyz"],
               });
             }
 

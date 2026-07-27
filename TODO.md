@@ -37,7 +37,7 @@ residual smart-contract risk and must satisfy every internal gate below.
 Sepolia V2 is `ready` with current Test2 lifecycle evidence. Mainnet V2 is deployed, source-verified and backed by a
 complete independently reconciled canary lifecycle, while its V1 deployment remains historical only. Authenticated
 dual-RPC operations, a private durable index snapshot and five-minute monitoring are live. Public preparation remains
-disabled pending named incident ownership, Privy production billing approval and final owner release approval.
+disabled pending Privy production billing approval.
 
 ## Remaining work
 
@@ -88,7 +88,7 @@ disabled pending named incident ownership, Privy production billing approval and
 - [x] Rerun the full repository verification suite on the exact release commit and preserve remote CI results
 - [x] Verify the production manifest, official Uniswap dependencies, immutable treasury, hook mask and runtime code hashes
 - [x] Operate live two-RPC event reconciliation with a durable cursor, evidence artifacts and automatic GitHub incident issues
-- [ ] Name primary and backup incident owners and rehearse the response runbook with them
+- [x] Record `hazarxyz` as the owner-approved sole incident responder, signer contact, indexer operator and public-communication authority; no backup responder is assigned by explicit owner choice
 - [x] Keep the immutable treasury at the owner-approved supplied EOA for this release
 - [x] Use the owner-approved `0x2Bb…249E` EOA as deployer with manual wallet signing and no stored private key
 - [x] Keep securities, RWA, custody and guaranteed-safety claims outside the product
@@ -112,7 +112,7 @@ disabled pending named incident ownership, Privy production billing approval and
 - [x] Run one low-value monitored canary launch with buys, sells and both fee claims
 - [ ] Verify the V2 hook factory on Etherscan; hook and launcher are already exact matches
 - [ ] Prepare the Hooklist and routing submissions after the canary creates a real V2 pool
-- [ ] Enable public launch preparation only after the remaining owner gates pass
+- [ ] Enable public launch preparation only after Privy production billing is approved and the final transaction-review rehearsal passes
 - [x] Deploy the verified operations frontend and confirm `programmable.family` points to its production deployment
 
 ## Not in the current scope

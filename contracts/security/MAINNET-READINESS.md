@@ -1,6 +1,6 @@
 # Classic mainnet readiness
 
-Current state: **Sepolia V2 verified; Mainnet V2 monitored; public release blocked by two operational gates**.
+Current state: **Sepolia V2 verified; Mainnet V2 monitored; public release blocked by Privy production billing**.
 
 | Environment | Manifest state | Release meaning |
 | --- | --- | --- |
@@ -49,11 +49,10 @@ The older lifecycle that used the legacy fourth metadata field remains separatel
 
 ## Required before public launch
 
-1. Assign primary and backup incident owners and rehearse the response process with them
-2. Approve Privy billing details and possible MAU overage before upgrading the app from Development
-3. Keep the two-RPC monitor and durable index healthy before enabling public preparation
-4. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
-5. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production audit
+1. Approve Privy billing details and possible MAU overage before upgrading the app from Development
+2. Keep the two-RPC monitor and durable index healthy before enabling public preparation
+3. Complete legal review for platform operation and exclude unsupported securities, RWA and custody claims
+4. Keep the scoped OpenZeppelin 4.9.6 Universal Router SDK override covered by tests. The 2026-07-27 production dependency audit
     has zero critical, high or moderate findings; 19 low-severity `ethers` v5/`elliptic` findings remain without a
     compatible upstream fix
 
@@ -65,10 +64,15 @@ noncanonical settlement actions. Incremental index checkpoints remain a scale
 gate before full replay approaches the function-duration budget, not a blocker
 at the current event volume.
 
-## Remaining owner decisions
+## Incident ownership
 
-- Privy billing approval
-- Incident-response and public-communication owners
+`hazarxyz` is the owner-approved sole incident responder, deployment-signer contact, indexer operator and
+public-communication authority. No backup responder is assigned. The owner explicitly accepted that concentration risk;
+the monitor must keep new launch construction disabled whenever the sole operator is unavailable or an alert is open.
+
+## Remaining owner decision
+
+- Privy production billing approval
 
 ## Frontend gate
 
@@ -76,8 +80,8 @@ The public form always normalizes to Classic. The server accepts no target addre
 
 Launch and trading preparation remain disabled while the selected release lacks current lifecycle evidence. Sepolia V2
 preparation is enabled only when the application is explicitly configured for that verified rehearsal environment.
-Mainnet V2 lifecycle evidence and production operations are current. The owner approved the Classic release on July 27,
-2026, but transaction preparation deliberately remains fail-closed pending named incident ownership and Privy
-production billing approval.
+Mainnet V2 lifecycle evidence and production operations are current. The owner approved the Classic release and
+single-operator incident model on July 27, 2026, but transaction preparation deliberately remains fail-closed pending
+Privy production billing approval.
 
 The absence of an external audit leaves additional residual smart-contract risk. Product and release copy must not describe the system or any launched token as audited, safe, unruggable, scam proof or guaranteed compatible with third-party scanners.
