@@ -113,7 +113,7 @@ enabled and fails closed on runtime, lifecycle, RPC or simulation drift.
 - [x] Run one low-value monitored canary launch with buys, sells and both fee claims
 - [x] Verify the V2 hook factory on Etherscan; factory, hook and launcher are exact matches
 - [x] Submit the verified V2 hook through the official Hooklist form as `Uniswap/hooklist#1160`
-- [ ] Submit the prepared Uniswap Labs routing form after the operator accepts its Terms of Service and Privacy Policy
+- [x] Submit the Uniswap Labs routing form with the verified Ethereum hook and canary pool after operator acceptance; the form returned `Submission successful`
 - [x] Enable public launch preparation after the verified Mainnet lifecycle, healthy production operations and owner approval
 - [x] Deploy the verified operations frontend and confirm `programmable.family` points to its production deployment
 
