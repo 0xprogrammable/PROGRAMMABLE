@@ -48,6 +48,12 @@ type WalletState = {
   chainId: string;
 };
 
+export type WalletTradeBalances = {
+  nativeBalanceWei: bigint;
+  tokenBalanceRaw: bigint;
+  gasPriceWei: bigint;
+};
+
 type WalletContextValue = {
   wallet: WalletState | null;
   username: string;
@@ -63,6 +69,9 @@ type WalletContextValue = {
   sendTransaction: (
     transaction: PreparedTransaction,
   ) => Promise<Hex>;
+  readTradeBalances: (
+    token: `0x${string}`,
+  ) => Promise<WalletTradeBalances>;
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -251,6 +260,17 @@ function normalizeChainId(chainId: string) {
 
 function isEthereumAddress(address: string): address is `0x${string}` {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+function parseRpcQuantity(value: unknown, label: string) {
+  if (
+    typeof value !== "string" ||
+    !/^0x[0-9a-fA-F]+$/.test(value)
+  ) {
+    throw new Error(`The wallet returned an invalid ${label}`);
+  }
+
+  return BigInt(value);
 }
 
 type WalletCandidate = {
@@ -610,6 +630,63 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     ],
   );
 
+  const readTradeBalances = useCallback(
+    async (token: `0x${string}`) => {
+      if (!connectedWallet || !wallet) {
+        throw new Error("Connect an Ethereum wallet before continuing");
+      }
+      if (!isEthereumAddress(token)) {
+        throw new Error("The token address is invalid");
+      }
+
+      const provider = await connectedWallet.getEthereumProvider();
+      const providerChainId = await provider.request({
+        method: "eth_chainId",
+      });
+      if (
+        typeof providerChainId !== "string" ||
+        normalizeChainId(providerChainId) !== appChainHex
+      ) {
+        throw new Error(`Switch your wallet to ${appNetworkName}`);
+      }
+
+      const balanceOfData =
+        `0x70a08231${wallet.account.slice(2).padStart(64, "0")}` as Hex;
+      const [nativeBalance, tokenBalance, gasPrice] = await Promise.all([
+        provider.request({
+          method: "eth_getBalance",
+          params: [wallet.account, "latest"],
+        }),
+        provider.request({
+          method: "eth_call",
+          params: [
+            {
+              to: token,
+              data: balanceOfData,
+            },
+            "latest",
+          ],
+        }),
+        provider.request({
+          method: "eth_gasPrice",
+        }),
+      ]);
+
+      return {
+        nativeBalanceWei: parseRpcQuantity(
+          nativeBalance,
+          "ETH balance",
+        ),
+        tokenBalanceRaw: parseRpcQuantity(
+          tokenBalance,
+          "token balance",
+        ),
+        gasPriceWei: parseRpcQuantity(gasPrice, "gas price"),
+      };
+    },
+    [connectedWallet, wallet],
+  );
+
   const value = useMemo<WalletContextValue>(
     () => ({
       wallet,
@@ -624,6 +701,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       getAccessToken,
       setUsername,
       sendTransaction,
+      readTradeBalances,
     }),
     [
       activeAuthenticated,
@@ -634,6 +712,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       hasSession,
       openWallet,
       providerTimedOut,
+      readTradeBalances,
       sendTransaction,
       sessionReady,
       setUsername,
@@ -683,6 +762,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       getAccessToken: async () => null,
       setUsername: () => undefined,
       sendTransaction: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      readTradeBalances: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
     }),

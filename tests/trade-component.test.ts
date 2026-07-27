@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { getAddress } from "viem";
+import { getAddress, parseEther } from "viem";
 
 import {
   DEFAULT_TRADE_SLIPPAGE_BPS,
+  MIN_BUY_GAS_RESERVE_WEI,
   buildTokenTradeApiRequest,
+  calculateBuyMaxWei,
   calculatePriceImpactPercent,
+  calculateTradeUsdValue,
 } from "../components/token-trade";
 
 const OWNER = getAddress("0x5555555555555555555555555555555555555555");
@@ -93,6 +96,46 @@ describe("TokenTrade request construction", () => {
         nowSeconds: 1_000,
       }),
     ).toThrow("Slippage");
+  });
+
+  it("keeps a dynamic network-fee reserve when using the full ETH balance", () => {
+    expect(
+      calculateBuyMaxWei(parseEther("1"), 1_000_000_000n),
+    ).toEqual({
+      amountWei: parseEther("0.997"),
+      reserveWei: MIN_BUY_GAS_RESERVE_WEI,
+    });
+
+    expect(
+      calculateBuyMaxWei(parseEther("1"), 100_000_000_000n),
+    ).toEqual({
+      amountWei: parseEther("0.925"),
+      reserveWei: parseEther("0.075"),
+    });
+    expect(
+      calculateBuyMaxWei(parseEther("0.002"), 1_000_000_000n)
+        .amountWei,
+    ).toBe(0n);
+  });
+
+  it("calculates the approximate USD value for buys and sells", () => {
+    const tokenPriceUsdWad = parseEther("2").toString();
+
+    expect(
+      calculateTradeUsdValue({
+        side: "sell",
+        amount: "12.5",
+        tokenPriceUsdWad,
+      }),
+    ).toBe(25);
+    expect(
+      calculateTradeUsdValue({
+        side: "buy",
+        amount: "0.5",
+        tokenPriceEth: "0.001",
+        tokenPriceUsdWad,
+      }),
+    ).toBe(1_000);
   });
 
   it("derives a reviewable price impact from the onchain spot price", () => {

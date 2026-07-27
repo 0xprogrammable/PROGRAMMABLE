@@ -22,6 +22,7 @@ export const CLASSIC_TICK_SPACING = 200;
 export const CLASSIC_MIN_DEADLINE_SECONDS = 60n;
 export const CLASSIC_MAX_DEADLINE_SECONDS = 3_600n;
 export const CLASSIC_PERMIT2_SAFETY_SECONDS = 600n;
+export const CLASSIC_GAS_PRICE_BUFFER_BPS = 12_500n;
 
 const UINT128_MAX = (1n << 128n) - 1n;
 const UINT48_MAX = (1n << 48n) - 1n;
@@ -37,6 +38,7 @@ export const classicUniversalRouterAbi = parseAbi([
 ]);
 
 export const classicTokenAbi = parseAbi([
+  "function balanceOf(address owner) view returns (uint256)",
   "function allowance(address owner,address spender) view returns (uint256)",
   "function approve(address spender,uint256 amount) returns (bool)",
 ]);
@@ -288,6 +290,55 @@ export function amountOutMinimum(
     );
   }
   return minimum;
+}
+
+export function classicGasReserve(input: {
+  gasLimit: bigint;
+  gasPrice: bigint;
+  transactionCount?: number;
+}) {
+  const { gasLimit, gasPrice, transactionCount = 1 } = input;
+  if (gasLimit <= 0n || gasPrice <= 0n) {
+    throw new ClassicTradeInputError(
+      "The network gas estimate is invalid",
+    );
+  }
+  if (
+    !Number.isSafeInteger(transactionCount) ||
+    transactionCount < 1 ||
+    transactionCount > 2
+  ) {
+    throw new ClassicTradeInputError(
+      "The gas reserve transaction count is invalid",
+    );
+  }
+
+  const singleTransactionReserve =
+    (gasLimit * gasPrice * CLASSIC_GAS_PRICE_BUFFER_BPS +
+      BPS_DENOMINATOR -
+      1n) /
+    BPS_DENOMINATOR;
+  return singleTransactionReserve * BigInt(transactionCount);
+}
+
+export function maximumClassicBuyAmount(input: {
+  nativeBalance: bigint;
+  gasLimit: bigint;
+  gasPrice: bigint;
+}) {
+  if (input.nativeBalance < 0n) {
+    throw new ClassicTradeInputError(
+      "The wallet ETH balance is invalid",
+    );
+  }
+  const reserve = classicGasReserve({
+    gasLimit: input.gasLimit,
+    gasPrice: input.gasPrice,
+    transactionCount: 2,
+  });
+  return input.nativeBalance > reserve
+    ? input.nativeBalance - reserve
+    : 0n;
 }
 
 export function assertClassicDeadline(

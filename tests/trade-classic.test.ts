@@ -17,12 +17,14 @@ import {
   buildClassicPermit2ApprovalTransaction,
   buildClassicSwapTransaction,
   buildClassicTokenApprovalTransaction,
+  classicGasReserve,
   classicPermit2Abi,
   classicQuoterAbi,
   classicTokenAbi,
   classicUniversalRouterAbi,
   createClassicPoolKey,
   getClassicSellApprovalState,
+  maximumClassicBuyAmount,
   quoteClassicExactInput,
   type ClassicTradeDeployment,
 } from "../lib/trade/classic";
@@ -302,6 +304,47 @@ describe("Classic exact-pool quote", () => {
       }),
     ).rejects.toThrow("RPC chain");
     expect(calls).toBe(0);
+  });
+});
+
+describe("Classic wallet gas reserve", () => {
+  it("buffers current gas and preserves one later trade for max buys", () => {
+    expect(
+      classicGasReserve({
+        gasLimit: 100_000n,
+        gasPrice: 2n,
+      }),
+    ).toBe(250_000n);
+    expect(
+      classicGasReserve({
+        gasLimit: 100_000n,
+        gasPrice: 2n,
+        transactionCount: 2,
+      }),
+    ).toBe(500_000n);
+    expect(
+      maximumClassicBuyAmount({
+        nativeBalance: 1_000_000n,
+        gasLimit: 100_000n,
+        gasPrice: 2n,
+      }),
+    ).toBe(500_000n);
+  });
+
+  it("returns zero when the wallet cannot safely fund a max buy", () => {
+    expect(
+      maximumClassicBuyAmount({
+        nativeBalance: 500_000n,
+        gasLimit: 100_000n,
+        gasPrice: 2n,
+      }),
+    ).toBe(0n);
+    expect(() =>
+      classicGasReserve({
+        gasLimit: 0n,
+        gasPrice: 2n,
+      }),
+    ).toThrow("gas estimate");
   });
 });
 

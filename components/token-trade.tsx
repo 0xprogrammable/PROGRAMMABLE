@@ -1,17 +1,21 @@
 "use client";
 
 import {
+  useId,
   useState,
   type FormEvent,
 } from "react";
 import {
+  formatEther,
   formatUnits,
   getAddress,
+  parseEther,
   parseUnits,
   type Address,
   type Hex,
 } from "viem";
 
+import type { WalletTradeBalances } from "./wallet-provider";
 import {
   validatePreparedTradeResponse,
   type PreparedTokenTrade,
@@ -21,6 +25,92 @@ export type { PreparedTokenTrade } from "../lib/trade/client";
 
 type TradeSide = "buy" | "sell";
 export const DEFAULT_TRADE_SLIPPAGE_BPS = 100;
+export const MIN_BUY_GAS_RESERVE_WEI = parseEther("0.003");
+const BUY_GAS_RESERVE_UNITS = 500_000n;
+const BUY_GAS_RESERVE_MULTIPLIER = 150n;
+
+export function calculateBuyMaxWei(
+  nativeBalanceWei: bigint,
+  gasPriceWei: bigint,
+) {
+  if (nativeBalanceWei < 0n || gasPriceWei < 0n) {
+    throw new Error("Wallet balances cannot be negative");
+  }
+
+  const estimatedReserve =
+    (gasPriceWei * BUY_GAS_RESERVE_UNITS *
+      BUY_GAS_RESERVE_MULTIPLIER) /
+    100n;
+  const reserveWei =
+    estimatedReserve > MIN_BUY_GAS_RESERVE_WEI
+      ? estimatedReserve
+      : MIN_BUY_GAS_RESERVE_WEI;
+
+  return {
+    amountWei:
+      nativeBalanceWei > reserveWei
+        ? nativeBalanceWei - reserveWei
+        : 0n,
+    reserveWei,
+  };
+}
+
+export function calculateTradeUsdValue(input: {
+  side: TradeSide;
+  amount: string;
+  tokenPriceEth?: string;
+  tokenPriceUsdWad?: string;
+}) {
+  if (
+    !/^\d+(?:\.\d+)?$/.test(input.amount.trim()) ||
+    !input.tokenPriceUsdWad ||
+    !/^\d+$/.test(input.tokenPriceUsdWad)
+  ) {
+    return null;
+  }
+
+  const amount = Number(input.amount);
+  const tokenUsd = Number(
+    formatUnits(BigInt(input.tokenPriceUsdWad), 18),
+  );
+  if (
+    !Number.isFinite(amount) ||
+    !Number.isFinite(tokenUsd) ||
+    amount < 0 ||
+    tokenUsd < 0
+  ) {
+    return null;
+  }
+
+  if (input.side === "sell") {
+    return amount * tokenUsd;
+  }
+  if (
+    !input.tokenPriceEth ||
+    !/^\d+(?:\.\d+)?$/.test(input.tokenPriceEth)
+  ) {
+    return null;
+  }
+
+  const tokenEth = Number(input.tokenPriceEth);
+  if (!Number.isFinite(tokenEth) || tokenEth <= 0) return null;
+  return amount * (tokenUsd / tokenEth);
+}
+
+function formatApproximateUsd(value: number | null) {
+  if (value === null || !Number.isFinite(value) || value < 0) return "";
+  if (value > 0 && value < 0.01) return "< $0.01";
+  return `≈ ${new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: value >= 1_000 ? "compact" : "standard",
+    maximumFractionDigits: 2,
+  }).format(value)}`;
+}
+
+function formatAmountForInput(value: bigint, decimals: number) {
+  return formatUnits(value, decimals).replace(/(?:\.0+|(\.\d+?)0+)$/, "$1");
+}
 
 export type TokenTradeApiRequest = {
   chainId: number;
@@ -96,7 +186,9 @@ export function TokenTrade({
   symbol,
   tokenDecimals = 18,
   tokenPriceEth,
+  tokenPriceUsdWad,
   totalSwapFeeBps,
+  readBalances,
   onPrepared,
 }: {
   chainId: number;
@@ -107,7 +199,9 @@ export function TokenTrade({
   symbol: string;
   tokenDecimals?: number;
   tokenPriceEth?: string;
+  tokenPriceUsdWad?: string;
   totalSwapFeeBps: number;
+  readBalances(): Promise<WalletTradeBalances>;
   onPrepared(prepared: PreparedTokenTrade): void | Promise<void>;
 }) {
   const [side, setSide] = useState<TradeSide>("buy");
@@ -119,6 +213,65 @@ export function TokenTrade({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [review, setReview] = useState<PreparedTokenTrade | null>(null);
+  const [maxPending, setMaxPending] = useState(false);
+  const [maxHint, setMaxHint] = useState("");
+  const amountInputId = useId();
+  const approximateUsd = formatApproximateUsd(
+    calculateTradeUsdValue({
+      side,
+      amount,
+      tokenPriceEth,
+      tokenPriceUsdWad,
+    }),
+  );
+
+  async function applyMaximumBalance() {
+    setError("");
+    setMessage("");
+    if (!owner) {
+      setError("Connect a wallet to use your balance");
+      return;
+    }
+
+    setMaxPending(true);
+    try {
+      const balances = await readBalances();
+      if (side === "sell") {
+        if (balances.tokenBalanceRaw <= 0n) {
+          throw new Error(`No ${symbol} balance is available`);
+        }
+        setAmount(
+          formatAmountForInput(
+            balances.tokenBalanceRaw,
+            tokenDecimals,
+          ),
+        );
+        setMaxHint(`Full ${symbol} balance`);
+        return;
+      }
+
+      const maximum = calculateBuyMaxWei(
+        balances.nativeBalanceWei,
+        balances.gasPriceWei,
+      );
+      if (maximum.amountWei <= 0n) {
+        throw new Error("Not enough ETH after reserving network fees");
+      }
+      setAmount(formatAmountForInput(maximum.amountWei, 18));
+      setMaxHint(
+        `${formatEther(maximum.reserveWei)} ETH kept for network fees`,
+      );
+    } catch (caught) {
+      setMaxHint("");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Your wallet balance could not be read",
+      );
+    } finally {
+      setMaxPending(false);
+    }
+  }
 
   async function prepare(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -237,10 +390,10 @@ export function TokenTrade({
           <h2>Trade {symbol}</h2>
         </div>
 
-        <div className="choice-list asset-choice-list">
+        <div className="trade-side-control" role="group" aria-label="Trade side">
           {(["buy", "sell"] as const).map((option) => (
             <button
-              className={`choice-row ${
+              className={`trade-side-button ${
                 side === option ? "selected" : ""
               }`}
               key={option}
@@ -250,46 +403,60 @@ export function TokenTrade({
                 setSide(option);
                 setError("");
                 setMessage("");
+                setMaxHint("");
               }}
             >
-              <span className="choice-indicator" aria-hidden="true" />
-              <span className="choice-copy">
-                <strong>
-                  {option === "buy" ? "Buy" : "Sell"}
-                </strong>
-                <small>
-                  {option === "buy"
-                    ? `ETH to ${symbol}`
-                    : `${symbol} to ETH`}
-                </small>
-              </span>
+              {option === "buy" ? "Buy" : "Sell"}
             </button>
           ))}
         </div>
 
         <div className="field-group">
           <div className="two-column-fields">
-            <label className="field">
-              <span>
-                Amount in {side === "buy" ? "ETH" : symbol}
-              </span>
+            <div className="field">
+              <div className="trade-field-label">
+                <label htmlFor={amountInputId}>
+                  Amount in {side === "buy" ? "ETH" : symbol}
+                </label>
+                <button
+                  className="trade-max-button"
+                  type="button"
+                  disabled={maxPending || !owner}
+                  aria-label={`Use maximum ${
+                    side === "buy" ? "ETH" : symbol
+                  } balance`}
+                  onClick={() => void applyMaximumBalance()}
+                >
+                  {maxPending ? "Loading" : "Max"}
+                </button>
+              </div>
               <input
+                id={amountInputId}
                 inputMode="decimal"
                 autoComplete="off"
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setMaxHint("");
+                }}
                 placeholder="0.0"
               />
-            </label>
+              {approximateUsd || maxHint ? (
+                <small className="trade-amount-meta">
+                  <span>{approximateUsd}</span>
+                  <span>{maxHint}</span>
+                </small>
+              ) : null}
+            </div>
 
             <label className="field">
               <span>Maximum slippage %</span>
               <input
-                inputMode="decimal"
+                inputMode="numeric"
                 type="number"
-                min="0.01"
+                min="1"
                 max="10"
-                step="0.01"
+                step="1"
                 value={slippageBps / 100}
                 onChange={(event) =>
                   setSlippageBps(

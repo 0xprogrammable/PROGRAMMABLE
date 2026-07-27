@@ -55,6 +55,9 @@ function runtimeClient(
       const block = await client.getBlock({ blockTag: "latest" });
       return { timestamp: block.timestamp };
     },
+    getBalance: ({ address }: { address: Address }) =>
+      client.getBalance({ address, blockTag: "latest" }),
+    getGasPrice: () => client.getGasPrice(),
     getCode: ({ address }: { address: Address }) =>
       client.getCode({ address }),
     estimateGas: (args: {
@@ -152,7 +155,7 @@ export async function POST(request: NextRequest) {
     );
     const registry = await readExploreModel(registryDeployment);
     const endpoints = tradeRpcEndpoints(tradeRequest.chainId);
-    const [primary, secondary] = await Promise.all(
+    const preparations = await Promise.allSettled(
       endpoints.map((endpoint) =>
         prepareClassicTrade(
           runtimeClient(tradeRequest.chainId, endpoint),
@@ -161,6 +164,27 @@ export async function POST(request: NextRequest) {
           registry,
         ),
       ),
+    );
+    const inputFailure = preparations.find(
+      (
+        result,
+      ): result is PromiseRejectedResult =>
+        result.status === "rejected" &&
+        result.reason instanceof ClassicTradeInputError,
+    );
+    if (inputFailure) {
+      throw inputFailure.reason;
+    }
+    if (preparations.some((result) => result.status === "rejected")) {
+      throw new ClassicTradeUnavailableError(
+        "The trade could not be verified across both independent RPCs",
+      );
+    }
+    const [primary, secondary] = preparations.map(
+      (result) =>
+        (result as PromiseFulfilledResult<
+          Awaited<ReturnType<typeof prepareClassicTrade>>
+        >).value,
     );
     const prepared = selectConservativeTradeQuote(primary, secondary);
     return json(prepared);

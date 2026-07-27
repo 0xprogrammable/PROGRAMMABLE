@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -14,9 +15,11 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  CircleCheck,
   ImagePlus,
   RotateCcw,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   saveLocalDraft,
@@ -57,10 +60,61 @@ type TokenImageState = {
 
 type LaunchPhase = "idle" | "preparing" | "confirming";
 
+export type IndexedLaunch = {
+  address: `0x${string}`;
+  href: string;
+  name: string;
+  symbol: string;
+};
+
 const emptyTokenImageState: TokenImageState = {
   status: "idle",
   message: "",
 };
+
+export function findIndexedLaunch(
+  value: unknown,
+  transactionHash: string,
+): IndexedLaunch | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const tokens = (value as { tokens?: unknown }).tokens;
+  if (!Array.isArray(tokens)) return null;
+
+  for (const token of tokens) {
+    if (!token || typeof token !== "object" || Array.isArray(token)) {
+      continue;
+    }
+    const candidate = token as Record<string, unknown>;
+    if (
+      typeof candidate.launchTransactionHash !== "string" ||
+      candidate.launchTransactionHash.toLowerCase() !==
+        transactionHash.toLowerCase() ||
+      typeof candidate.tokenAddress !== "string" ||
+      !/^0x[a-fA-F0-9]{40}$/.test(candidate.tokenAddress) ||
+      typeof candidate.name !== "string" ||
+      typeof candidate.symbol !== "string"
+    ) {
+      continue;
+    }
+
+    const href =
+      typeof candidate.href === "string" &&
+      candidate.href.startsWith("/token/")
+        ? candidate.href
+        : `/token/${candidate.tokenAddress}`;
+    return {
+      address: candidate.tokenAddress as `0x${string}`,
+      href,
+      name: candidate.name,
+      symbol: candidate.symbol,
+    };
+  }
+
+  return null;
+}
 
 function updateDraft(
   setDraft: Dispatch<SetStateAction<LaunchDraft>>,
@@ -197,6 +251,10 @@ function LaunchBuilderForm({
   const [notice, setNotice] = useState("");
   const [launchPhase, setLaunchPhase] = useState<LaunchPhase>("idle");
   const [transactionHash, setTransactionHash] = useState("");
+  const [submittedAccount, setSubmittedAccount] = useState("");
+  const [indexedLaunch, setIndexedLaunch] =
+    useState<IndexedLaunch | null>(null);
+  const [successOpen, setSuccessOpen] = useState(false);
   const [tokenImageState, setTokenImageState] =
     useState<TokenImageState>(emptyTokenImageState);
   const currentLaunchContext = useRef({ draft, wallet });
@@ -212,6 +270,61 @@ function LaunchBuilderForm({
     const timer = window.setTimeout(() => setNotice(""), 2400);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (!transactionHash || !submittedAccount || indexedLaunch) return;
+
+    const controller = new AbortController();
+    let timer = 0;
+    let attempt = 0;
+
+    const pollForLaunch = async () => {
+      try {
+        const response = await fetch(
+          `/api/explore/profile?account=${encodeURIComponent(
+            submittedAccount,
+          )}&launch=${encodeURIComponent(
+            transactionHash,
+          )}&attempt=${attempt}`,
+          {
+            cache: "no-store",
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          },
+        );
+        const body: unknown = await response.json();
+        if (response.ok) {
+          const launch = findIndexedLaunch(body, transactionHash);
+          if (launch) {
+            setIndexedLaunch(launch);
+            setSuccessOpen(true);
+            setNotice("Token launched");
+            return;
+          }
+        }
+      } catch (caught) {
+        if (
+          caught instanceof DOMException &&
+          caught.name === "AbortError"
+        ) {
+          return;
+        }
+      }
+
+      attempt += 1;
+      timer = window.setTimeout(pollForLaunch, 3_000);
+    };
+
+    void pollForLaunch();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [
+    indexedLaunch,
+    submittedAccount,
+    transactionHash,
+  ]);
 
   function validateLaunch() {
     if (
@@ -238,6 +351,9 @@ function LaunchBuilderForm({
     draftVersion.current += 1;
     setFormError("");
     setTransactionHash("");
+    setSubmittedAccount("");
+    setIndexedLaunch(null);
+    setSuccessOpen(false);
   }
 
   async function requestLaunchCheck(
@@ -375,8 +491,9 @@ function LaunchBuilderForm({
         });
       setLaunchPhase("confirming");
       const hash = await sendTransaction(validatedTransaction);
+      setSubmittedAccount(launchWallet.account);
       setTransactionHash(hash);
-      setNotice("Launch submitted");
+      setNotice("Confirming launch");
     } catch (caught) {
       setFormError(
         caught instanceof Error
@@ -433,14 +550,22 @@ function LaunchBuilderForm({
               <p className="form-error" role="alert">
                 {formError}
               </p>
+            ) : indexedLaunch ? (
+              <p>
+                {indexedLaunch.name} <span>·</span> ${indexedLaunch.symbol}
+              </p>
             ) : transactionHash ? (
               <a
                 className="transaction-link"
-                href={`https://etherscan.io/tx/${transactionHash}`}
+                href={`${
+                  wallet?.chainId === "0xaa36a7"
+                    ? "https://sepolia.etherscan.io"
+                    : "https://etherscan.io"
+                }/tx/${transactionHash}`}
                 target="_blank"
                 rel="noreferrer"
               >
-                Launch submitted
+                Confirming launch
                 <span>{shortenAddress(transactionHash)}</span>
               </a>
             ) : (
@@ -450,24 +575,44 @@ function LaunchBuilderForm({
               </p>
             )}
           </div>
-          <button
-            className="primary-button classic-launch-button"
-            type="submit"
-            disabled={launching || Boolean(transactionHash)}
-            style={{ animation: "none", transform: "none", transition: "none" }}
-          >
-            {launchPhase === "preparing"
-              ? "Preparing launch"
-              : launchPhase === "confirming"
-                ? "Confirm in wallet"
-              : transactionHash
-                ? "Launch submitted"
-                : wallet
-                  ? "Launch token"
-                  : "Connect wallet"}
-          </button>
+          {indexedLaunch ? (
+            <Link
+              className="primary-button classic-launch-button"
+              href={indexedLaunch.href}
+            >
+              View your token
+            </Link>
+          ) : (
+            <button
+              className="primary-button classic-launch-button"
+              type="submit"
+              disabled={launching || Boolean(transactionHash)}
+              style={{
+                animation: "none",
+                transform: "none",
+                transition: "none",
+              }}
+            >
+              {launchPhase === "preparing"
+                ? "Preparing launch"
+                : launchPhase === "confirming"
+                  ? "Confirm in wallet"
+                  : transactionHash
+                    ? "Confirming launch"
+                    : wallet
+                      ? "Launch token"
+                      : "Connect wallet"}
+            </button>
+          )}
         </footer>
       </form>
+
+      {indexedLaunch && successOpen ? (
+        <LaunchSuccessDialog
+          launch={indexedLaunch}
+          onClose={() => setSuccessOpen(false)}
+        />
+      ) : null}
 
       <div className="toast-region" aria-live="polite" aria-atomic="true">
         {notice ? (
@@ -477,6 +622,76 @@ function LaunchBuilderForm({
           </p>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function LaunchSuccessDialog({
+  launch,
+  onClose,
+}: {
+  launch: IndexedLaunch;
+  onClose: () => void;
+}) {
+  const viewLinkRef = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    viewLinkRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="launch-success-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="launch-success-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="launch-success-title"
+      >
+        <button
+          className="icon-button launch-success-close"
+          type="button"
+          aria-label="Close launch confirmation"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" size={18} />
+        </button>
+        <CircleCheck
+          className="launch-success-icon"
+          aria-hidden="true"
+          size={36}
+          strokeWidth={1.6}
+        />
+        <p className="eyebrow">Launch complete</p>
+        <h2 id="launch-success-title">Your token is live</h2>
+        <p>
+          {launch.name} <span>${launch.symbol}</span>
+        </p>
+        <Link
+          ref={viewLinkRef}
+          className="primary-button"
+          href={launch.href}
+        >
+          View your token
+        </Link>
+      </section>
     </div>
   );
 }

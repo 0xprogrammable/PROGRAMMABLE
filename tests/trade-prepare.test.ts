@@ -9,6 +9,7 @@ import {
 } from "viem";
 
 import {
+  classicGasReserve,
   classicPermit2Abi,
   classicQuoterAbi,
   classicTokenAbi,
@@ -99,6 +100,9 @@ function request(overrides: Record<string, unknown> = {}) {
 function runtimeClient(input?: {
   chainId?: number;
   tokenAllowance?: bigint;
+  tokenBalance?: bigint;
+  nativeBalance?: bigint;
+  gasPrice?: bigint;
   permit2Allowance?: bigint;
   permit2Expiration?: number;
   missingCode?: Address;
@@ -113,6 +117,12 @@ function runtimeClient(input?: {
     },
     async getBlock() {
       return { timestamp: 10_000n };
+    },
+    async getBalance() {
+      return input?.nativeBalance ?? 10n ** 18n;
+    },
+    async getGasPrice() {
+      return input?.gasPrice ?? 1n;
     },
     async getCode({ address }) {
       codeChecks.push(address);
@@ -139,6 +149,15 @@ function runtimeClient(input?: {
     },
     async call(args) {
       if (args.to.toLowerCase() === TOKEN.toLowerCase()) {
+        if (args.data.startsWith("0x70a08231")) {
+          return {
+            data: encodeFunctionResult({
+              abi: classicTokenAbi,
+              functionName: "balanceOf",
+              result: input?.tokenBalance ?? 100_000n,
+            }),
+          };
+        }
         return {
           data: encodeFunctionResult({
             abi: classicTokenAbi,
@@ -462,5 +481,75 @@ describe("Classic trade preparation", () => {
         readyRegistry(),
       ),
     ).rejects.toThrow("swap simulation reverted");
+  });
+
+  it("rejects a buy above the wallet ETH balance with an actionable error", async () => {
+    const deployment = rehearsalDeployment();
+
+    await expect(
+      prepareClassicTrade(
+        runtimeClient({ nativeBalance: 999n }).client,
+        deployment,
+        parseClassicTradeRequest(request()),
+        readyRegistry(),
+      ),
+    ).rejects.toThrow("buy amount exceeds the wallet ETH balance");
+  });
+
+  it("keeps enough ETH for the buy gas and one later sell", async () => {
+    const deployment = rehearsalDeployment();
+    const gasLimit = 360_000n;
+    const reserve = classicGasReserve({
+      gasLimit,
+      gasPrice: 1n,
+      transactionCount: 2,
+    });
+
+    await expect(
+      prepareClassicTrade(
+        runtimeClient({ nativeBalance: reserve + 999n }).client,
+        deployment,
+        parseClassicTradeRequest(request()),
+        readyRegistry(),
+      ),
+    ).rejects.toThrow(
+      "keeps enough ETH for this buy and a later sell",
+    );
+  });
+
+  it("rejects a sell above the wallet token balance before approvals", async () => {
+    const deployment = rehearsalDeployment();
+
+    await expect(
+      prepareClassicTrade(
+        runtimeClient({ tokenBalance: 999n }).client,
+        deployment,
+        parseClassicTradeRequest(
+          request({ side: "sell", amountIn: "1000" }),
+        ),
+        readyRegistry(),
+      ),
+    ).rejects.toThrow("sell amount exceeds the wallet token balance");
+  });
+
+  it("requires enough native ETH to submit a ready sell", async () => {
+    const deployment = rehearsalDeployment();
+
+    await expect(
+      prepareClassicTrade(
+        runtimeClient({
+          nativeBalance: 449_999n,
+          tokenBalance: 100_000n,
+          tokenAllowance: 100_000n,
+          permit2Allowance: 100_000n,
+          permit2Expiration: 50_000,
+        }).client,
+        deployment,
+        parseClassicTradeRequest(request({ side: "sell" })),
+        readyRegistry(),
+      ),
+    ).rejects.toThrow(
+      "wallet needs more ETH to pay for the sell transaction",
+    );
   });
 });
