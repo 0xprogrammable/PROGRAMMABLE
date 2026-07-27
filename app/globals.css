@@ -4731,6 +4731,62 @@ textarea {
   }
 }
 
+@media (min-width: 1021px) and (max-height: 740px) {
+  .launch-page:has(.classic-launch-sheet) {
+    padding-top: 12px;
+  }
+
+  .launch-page:has(.classic-launch-sheet) .launch-page-heading {
+    min-height: 52px;
+  }
+
+  .launch-page:has(.classic-launch-sheet) .launch-page-heading h1 {
+    font-size: 38px;
+    margin-top: 3px;
+  }
+
+  .classic-launch-sheet {
+    margin-bottom: 10px;
+    margin-top: 6px;
+  }
+
+  .classic-launch-content {
+    padding-bottom: 10px;
+    padding-top: 14px;
+  }
+
+  .classic-token-grid {
+    margin-top: 8px;
+  }
+
+  .classic-description-field {
+    margin-top: 8px !important;
+  }
+
+  .classic-description-field textarea {
+    min-height: 52px;
+  }
+
+  .classic-link-fields {
+    margin-top: 8px;
+  }
+
+  .classic-fee-section {
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+
+  .classic-fee-layout {
+    margin-top: 7px;
+  }
+
+  .classic-launch-footer {
+    min-height: 64px;
+    padding-bottom: 8px;
+    padding-top: 8px;
+  }
+}
+
 @media (max-width: 1020px) {
   .classic-launch-sheet {
     margin-top: 18px;
