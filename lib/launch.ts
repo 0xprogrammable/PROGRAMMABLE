@@ -169,6 +169,6 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     "",
     buildLaunchSummary(draft),
     "",
-    "Status: Mainnet disabled until the release is deployed",
+    "Status: Mainnet launch preparation remains disabled during final canary verification",
   ].join("\n");
 }

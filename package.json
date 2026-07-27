@@ -33,7 +33,12 @@
     "contracts:v2:mainnet:metamask": "PROGRAMMABLE_DEPLOY_NETWORK=mainnet node scripts/serve-v2-metamask-deployer.mjs",
     "contracts:v2:verify-deployment": "node contracts/scripts/verify-v2-deployment.mjs",
     "contracts:token-list:schema": "node scripts/validate-token-list-schema.mjs",
-    "contracts:mainnet:canary": "MEME_LAUNCH_NETWORK=mainnet node scripts/serve-sepolia-meme-launch.mjs",
+    "contracts:mainnet:canary:check": "MEME_LAUNCH_NETWORK=mainnet MEME_LAUNCH_FIXTURE_JSON=contracts/release/mainnet-test-classic-v2.json node scripts/serve-sepolia-meme-launch.mjs --check",
+    "contracts:mainnet:canary": "MEME_LAUNCH_NETWORK=mainnet MEME_LAUNCH_FIXTURE_JSON=contracts/release/mainnet-test-classic-v2.json node scripts/serve-sepolia-meme-launch.mjs",
+    "contracts:mainnet:monitor:once": "MAINNET_MEME_DEPLOYMENT_JSON=contracts/deployments/mainnet-classic-v2.json node contracts/scripts/monitor-meme-v1.mjs --once",
+    "contracts:mainnet:monitor": "MAINNET_MEME_DEPLOYMENT_JSON=contracts/deployments/mainnet-classic-v2.json node contracts/scripts/monitor-meme-v1.mjs",
+    "contracts:mainnet:lifecycle:check": "node contracts/scripts/verify-mainnet-meme-lifecycle.mjs --check-config",
+    "contracts:mainnet:lifecycle:verify": "node contracts/scripts/verify-mainnet-meme-lifecycle.mjs",
     "contracts:sepolia:launch-test": "node scripts/serve-sepolia-meme-launch.mjs",
     "contracts:v2:sepolia:test2": "MEME_LAUNCH_FIXTURE_JSON=contracts/release/test2-classic-v2.json node scripts/serve-sepolia-meme-launch.mjs",
     "contracts:sepolia:lifecycle:verify": "node contracts/scripts/verify-sepolia-meme-lifecycle.mjs"

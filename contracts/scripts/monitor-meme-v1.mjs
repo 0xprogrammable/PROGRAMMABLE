@@ -18,7 +18,10 @@ import {
 } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-const DEFAULT_RPCS = ["https://eth.drpc.org", "https://ethereum-rpc.publicnode.com"];
+const DEFAULT_RPCS = [
+  "https://rpc.mevblocker.io",
+  "https://mainnet.gateway.tenderly.co",
+];
 const CONFIRMATIONS = Number(process.env.MEME_MONITOR_CONFIRMATIONS ?? 12);
 const POLL_INTERVAL_MS = Number(
   process.env.MEME_MONITOR_POLL_INTERVAL_MS ?? 12_000,

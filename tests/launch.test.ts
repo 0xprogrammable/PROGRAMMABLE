@@ -87,7 +87,7 @@ describe("Classic launch plan", () => {
     const setup = buildPlainTextPlan(createEmptyDraft());
 
     expect(setup).toContain(
-      "Status: Mainnet disabled until the release is deployed",
+      "Status: Mainnet launch preparation remains disabled during final canary verification",
     );
     expect(setup).toContain(
       "Launch cost: no launch fee or liquidity deposit; the creator pays the initial buy and network gas",

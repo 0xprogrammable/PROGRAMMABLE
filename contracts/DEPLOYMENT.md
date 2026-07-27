@@ -4,7 +4,7 @@
 
 | Environment | Manifest state | Transaction preparation |
 | --- | --- | --- |
-| Ethereum mainnet V2 | `not-deployed` | Disabled |
+| Ethereum mainnet V2 | `lifecycle-pending` | Disabled pending a monitored canary |
 | Ethereum Sepolia V2 | `ready` | Enabled when the app runs with the rehearsal network configuration |
 
 The exact current Classic release is deployed and source-verified on Sepolia. Its signed lifecycle atomically launched
@@ -12,8 +12,8 @@ an official UERC20 v2 token with a 0.0006 ETH creator Dev Buy, sold through the 
 authorization, and claimed both creator and Programmable fees. Two independent RPCs reconcile the complete evidence.
 
 There has been no external smart-contract audit or public contest. Sepolia evidence is not production approval.
-Mainnet remains blocked on a frozen passing release, production indexing and monitoring, deployer funding, a fresh
-final simulation and explicit approval for the broadcast.
+Mainnet V2 is deployed and source-matched. Public preparation remains blocked on production indexing and monitoring,
+a fresh provider-backed wallet rehearsal and a separately approved monitored canary lifecycle.
 
 ## Release metadata requirement
 
@@ -79,23 +79,39 @@ The 1.00% swap fee remained inclusive: 0.90 percentage points accrued to the cre
 Programmable. After both claims, the hook reported zero creator fees, zero launcher fees, zero native claims and zero
 direct ETH balance.
 
-## Current Mainnet V2 preflight
+## Current verified Mainnet V2 deployment
 
-The read-only simulation at repository commit `f3f99c452ced7b90864f8f4b6e172c8a12ea445e` used the current confirmed and
-pending deployer nonce `7`. Two independent RPCs agreed on the nonce, the `0.016860325627722211 ETH` balance, official
-dependency runtime hashes and vacant predicted addresses.
+The frozen deployment at repository commit `d0bec0a681b6ba4a25b42a4fe9d29ed2d3a783d2` used nonces 7 through 9.
+Two independent RPCs agree on all three successful receipts, calldata, constructor configuration, official dependency
+runtime hashes and deployed runtime hashes. Sourcify reports a source match for all three contracts.
 
-| Step | Nonce | Predicted address | Reviewed gas limit |
-| --- | ---: | --- | ---: |
-| `EthCreatorFeeHookFactoryV2` | 7 | `0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67` | 4,047,374 |
-| `EthCreatorFeeHookV2` | 8 | `0x025a386eAa79f6067d29848FD05ccC71bEAb20CC` | 3,553,314 |
-| `MemeLaunchV1` | 9 | `0xD240D06f8586eB799f20056054e5b527405E6bAd` | 5,532,728 |
+| Contract | Address | Transaction | Block | Runtime code hash |
+| --- | --- | --- | ---: | --- |
+| `EthCreatorFeeHookFactoryV2` | [`0xD405…fd67`](https://etherscan.io/address/0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67) | [`0xed9c…c417`](https://etherscan.io/tx/0xed9c5627991c6f84334415737e6a0937c614c2630a80cbf0eba8f07621d4c417) | 25,624,128 | `0x8dd7205952dba3efad6f58a4b0193171c4ed825145319c908bc47dab1911c128` |
+| `EthCreatorFeeHookV2` | [`0x025a…20CC`](https://etherscan.io/address/0x025a386eAa79f6067d29848FD05ccC71bEAb20CC) | [`0xf1d9…2b7c`](https://etherscan.io/tx/0xf1d91138194f59b9067c6563ee1127e0527a87e90bb311b71d7eccb797822b7c) | 25,624,130 | `0x274e29fb8d19f0607533ac7582827db0236ab546bb393d52049229b2ffe74381` |
+| `MemeLaunchV1` | [`0xD240…bAd`](https://etherscan.io/address/0xD240D06f8586eB799f20056054e5b527405E6bAd) | [`0x86a6…8fdc`](https://etherscan.io/tx/0x86a6f1b3992ed8ad6d450970b78e94b29f298afd048a6a0cfa0cf253e9e98fdc) | 25,624,131 | `0xd229555c79c61874549a1991c43df172104e1db3087ba8fca8804675b7440d36` |
 
-Foundry estimated `0.002096161040827056 ETH` at `0.159605166 gwei`. The wallet handoff is capped at `0.5 gwei` with
-an aggregate worst-case deployment ceiling of `0.006566708 ETH`. It fails closed if the nonce, dependency code,
-predicted-address vacancy, balance, live gas estimate or reviewed gas ceiling changes. No Mainnet V2 transaction has
-been approved, signed or submitted. Any unrelated transaction from the deployer invalidates these addresses and
-requires a fresh simulation.
+The three transactions used `0.002365070934812467 ETH` in gas, below the separately approved
+`0.006566708 ETH` maximum. No contract deployment transferred ETH. The exact evidence is recorded in
+`contracts/deployments/mainnet-classic-v2.json`. The separate canary is not covered by the deployment approval.
+
+## Prepared Mainnet V2 canary
+
+The canary fixture uses `Test` / `TEST`, the existing Programmable fallback image, `This is a test.`, Forbes as its
+website, Elon Musk's X profile, a 1.00% total hook swap fee and a 0.0006 ETH atomic Dev Buy. The predicted token is
+`0x05204a4ce651452892A620950BDc2ADeDBF63b0a`.
+
+Two independent RPCs returned launch estimates of 3,546,663 and 3,537,771 gas at wallet nonce 10. The handoff allows a
+maximum 0.5 gwei gas price and reviewed limits for launch, a separate 0.0001 ETH buy, the possible token approval,
+Permit2 router approval, sell and both claims. The seven-step lifecycle was reproduced on a temporary Mainnet fork.
+Its complete conservative maximum outflow is exactly `0.003415 ETH`, including both buys and excluding ETH returned by
+the sell. This is an approval ceiling, not an estimate of the likely final cost.
+
+No canary transaction has been approved or submitted. The preflight and empty receipt ledger are recorded in
+`contracts/release/mainnet-classic-v2-canary-preflight.json` and
+`contracts/release/mainnet-classic-v2-canary-evidence.json`. The local runner records each independently confirmed
+receipt with the exact server-reviewed calldata hash, and `contracts/scripts/verify-mainnet-meme-lifecycle.mjs` refuses
+release evidence unless both RPCs reconcile every input, receipt, event, balance delta and the complete lifecycle.
 
 ## Historical pre-initial-buy Sepolia deployment
 

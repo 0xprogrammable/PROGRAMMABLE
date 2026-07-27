@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import {
   createPublicClient,
   encodeAbiParameters,
@@ -12,6 +13,13 @@ import {
   toHex,
 } from "viem";
 import { mainnet, sepolia } from "viem/chains";
+
+import {
+  MAINNET_CANARY_GAS_LIMITS,
+  MAINNET_CANARY_MAX_GAS_PRICE_WEI,
+  maximumMainnetCanaryOutflowWei,
+  shouldPrepareMainnetCanaryBuy,
+} from "./mainnet-canary-policy.mjs";
 
 const appDeployments = JSON.parse(
   await readFile(
@@ -115,12 +123,35 @@ const CREATOR_SALT = keccak256(
 );
 const TOTAL_SWAP_FEE_BPS =
   fixture?.launch?.totalSwapFeeBps ?? 100;
+const CHECK_ONLY = process.argv.includes("--check");
 const RPC_ENDPOINTS = IS_MAINNET
-  ? ["https://ethereum-rpc.publicnode.com", "https://eth.drpc.org"]
+  ? ["https://rpc.mevblocker.io", "https://mainnet.gateway.tenderly.co"]
   : [
       "https://sepolia.drpc.org",
       "https://sepolia.gateway.tenderly.co",
     ];
+const MAINNET_EVIDENCE_PATH = resolve(
+  process.env.MAINNET_CANARY_EVIDENCE_JSON ??
+    "contracts/release/mainnet-classic-v2-canary-evidence.json",
+);
+const EVIDENCE_KEYS = {
+  launch: "launch",
+  buy: "buy",
+  "token-approval": "tokenApproval",
+  "router-approval": "routerApproval",
+  sell: "sell",
+  "creator-claim": "creatorClaim",
+  "launcher-claim": "launcherClaim",
+};
+const REQUIRED_EVIDENCE_KEYS = [
+  "launch",
+  "buy",
+  "routerApproval",
+  "sell",
+  "creatorClaim",
+  "launcherClaim",
+];
+const preparedMainnetActions = new Map();
 
 const launchAbi = parseAbi([
   "function launch((string name,string symbol,uint16 totalSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata) parameters) payable returns ((address token,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,bytes32 poolId,bytes32 launchHash,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount) result)",
@@ -306,7 +337,13 @@ async function buildLifecycleAction() {
     ]);
   const deadline = block.timestamp + 3_600n;
 
-  if (tokenBalance === 0n) {
+  const mainnetEvidence = IS_MAINNET
+    ? JSON.parse(await readFile(MAINNET_EVIDENCE_PATH, "utf8"))
+    : null;
+  if (
+    (IS_MAINNET && shouldPrepareMainnetCanaryBuy(mainnetEvidence)) ||
+    (!IS_MAINNET && tokenBalance === 0n)
+  ) {
     const amountOut = await quoteExactInput(true, BUY_AMOUNT);
     const amountOutMinimum = (amountOut * 95n) / 100n;
     return {
@@ -447,6 +484,32 @@ async function buildLifecycleAction() {
   };
 }
 
+function buildLaunchAction() {
+  return {
+    id: "launch",
+    label: "Launch test token",
+    detail:
+      `Create ${TOKEN_SYMBOL}, initialize its v4 pool, lock the complete supply and execute the 0.0006 ETH Dev Buy atomically.`,
+    transaction: {
+      to: LAUNCHER,
+      data: launchData,
+      value: INITIAL_BUY_AMOUNT.toString(),
+    },
+  };
+}
+
+function rememberPreparedMainnetAction(action, confirmedNonce) {
+  if (!IS_MAINNET || !action.transaction) return;
+  const nonce = Number(BigInt(confirmedNonce));
+  preparedMainnetActions.set(nonce, {
+    actionId: action.id,
+    nonce,
+    to: getAddress(action.transaction.to).toLowerCase(),
+    value: BigInt(action.transaction.value),
+    inputHash: keccak256(action.transaction.data),
+  });
+}
+
 function assertRpcHex(value, label) {
   if (typeof value !== "string" || !/^0x[0-9a-f]*$/i.test(value)) {
     throw new Error(`Invalid ${label} from ${NETWORK_NAME} RPC`);
@@ -525,7 +588,183 @@ async function readVerifiedState() {
   if (reference.launcherCodeHash !== EXPECTED_LAUNCHER_CODE_HASH) {
     throw new Error("MemeLaunchV1 runtime bytecode does not match");
   }
+  if (IS_MAINNET) {
+    const evidence = JSON.parse(
+      await readFile(MAINNET_EVIDENCE_PATH, "utf8"),
+    );
+    const recordedTransactionCount = Object.values(
+      evidence.transactions ?? {},
+    ).filter(Boolean).length;
+    const expectedConfirmedNonce =
+      evidence.startingNonce + recordedTransactionCount;
+    if (
+      Number(BigInt(reference.confirmedNonce)) !== expectedConfirmedNonce
+    ) {
+      throw new Error(
+        "The Mainnet wallet nonce and local receipt ledger do not reconcile",
+      );
+    }
+  }
   return reference;
+}
+
+async function recordMainnetReceipt(payload) {
+  if (!IS_MAINNET || !fixture) {
+    throw new Error("Receipt recording is only available for the Mainnet canary");
+  }
+  const evidenceKey = EVIDENCE_KEYS[payload?.actionId];
+  if (!evidenceKey) {
+    throw new Error("Unknown lifecycle action");
+  }
+  if (
+    typeof payload?.transactionHash !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(payload.transactionHash)
+  ) {
+    throw new Error("Invalid transaction hash");
+  }
+  const expectedAction = {
+    launch: { to: LAUNCHER, value: INITIAL_BUY_AMOUNT },
+    buy: { to: UNIVERSAL_ROUTER, value: BUY_AMOUNT },
+    "token-approval": { to: PREDICTED_TOKEN, value: 0n },
+    "router-approval": { to: PERMIT2, value: 0n },
+    sell: { to: UNIVERSAL_ROUTER, value: 0n },
+    "creator-claim": { to: FEE_HOOK, value: 0n },
+    "launcher-claim": { to: FEE_HOOK, value: 0n },
+  }[payload.actionId];
+  if (!expectedAction) {
+    throw new Error("The lifecycle action has no reviewed transaction");
+  }
+
+  const transactionHash = payload.transactionHash.toLowerCase();
+  const [transaction, receipt] = await Promise.all([
+    publicClient.getTransaction({ hash: transactionHash }),
+    publicClient.getTransactionReceipt({ hash: transactionHash }),
+  ]);
+  const preparedAction = preparedMainnetActions.get(transaction.nonce);
+  if (!preparedAction) {
+    throw new Error(
+      "No server-reviewed calldata exists for this transaction nonce",
+    );
+  }
+  if (
+    preparedAction.actionId !== payload.actionId ||
+    preparedAction.nonce !== transaction.nonce
+  ) {
+    throw new Error("The recorded transaction does not match the reviewed action");
+  }
+  if (receipt.status !== "success") {
+    throw new Error("The recorded transaction did not succeed");
+  }
+  if (
+    transaction.from.toLowerCase() !== EXPECTED_ACCOUNT ||
+    receipt.from.toLowerCase() !== EXPECTED_ACCOUNT
+  ) {
+    throw new Error("The recorded transaction has the wrong sender");
+  }
+  if (
+    !transaction.to ||
+    !receipt.to ||
+    transaction.to.toLowerCase() !== expectedAction.to.toLowerCase() ||
+    receipt.to.toLowerCase() !== expectedAction.to.toLowerCase() ||
+    transaction.to.toLowerCase() !== preparedAction.to
+  ) {
+    throw new Error("The recorded transaction has the wrong target");
+  }
+  if (
+    transaction.value !== expectedAction.value ||
+    transaction.value !== preparedAction.value
+  ) {
+    throw new Error("The recorded transaction has the wrong value");
+  }
+  const inputHash = keccak256(transaction.input);
+  if (inputHash !== preparedAction.inputHash) {
+    throw new Error("The recorded transaction calldata was not reviewed");
+  }
+  const reviewedGasLimit = MAINNET_CANARY_GAS_LIMITS[payload.actionId];
+  if (
+    !reviewedGasLimit ||
+    transaction.gas > reviewedGasLimit ||
+    receipt.gasUsed > reviewedGasLimit
+  ) {
+    throw new Error("The recorded transaction exceeded its reviewed gas limit");
+  }
+  if (receipt.effectiveGasPrice > MAINNET_CANARY_MAX_GAS_PRICE_WEI) {
+    throw new Error("The recorded transaction exceeded the reviewed gas price");
+  }
+
+  const evidence = JSON.parse(await readFile(MAINNET_EVIDENCE_PATH, "utf8"));
+  if (
+    evidence.schemaVersion !== 1 ||
+    evidence.chainId !== 1 ||
+    evidence.predictedToken?.toLowerCase() !== PREDICTED_TOKEN ||
+    evidence.poolId?.toLowerCase() !== POOL_ID.toLowerCase() ||
+    evidence.account?.toLowerCase() !== EXPECTED_ACCOUNT ||
+    evidence.launcher?.toLowerCase() !== LAUNCHER ||
+    evidence.feeHook?.toLowerCase() !== FEE_HOOK
+  ) {
+    throw new Error("The Mainnet canary evidence file does not match this launch");
+  }
+
+  const existing = evidence.transactions?.[evidenceKey];
+  if (
+    existing &&
+    existing.transactionHash?.toLowerCase() !== transactionHash
+  ) {
+    throw new Error(`A different ${payload.actionId} receipt is already recorded`);
+  }
+  const recordedTransactions = Object.values(
+    evidence.transactions ?? {},
+  ).filter(Boolean);
+  if (
+    !existing &&
+    transaction.nonce !== evidence.startingNonce + recordedTransactions.length
+  ) {
+    throw new Error("The recorded transaction nonce is not contiguous");
+  }
+  evidence.transactions[evidenceKey] = {
+    transactionHash,
+    blockNumber: Number(receipt.blockNumber),
+    blockHash: receipt.blockHash,
+    nonce: transaction.nonce,
+    from: transaction.from,
+    to: transaction.to,
+    valueWei: transaction.value.toString(),
+    inputHash,
+    gas: transaction.gas.toString(),
+    gasUsed: receipt.gasUsed.toString(),
+    effectiveGasPriceWei: receipt.effectiveGasPrice.toString(),
+    gasCostWei: (
+      receipt.gasUsed * receipt.effectiveGasPrice
+    ).toString(),
+    recordedAt: new Date().toISOString(),
+  };
+  const recordedKeys = Object.entries(evidence.transactions)
+    .filter(([, value]) => value !== null)
+    .map(([key]) => key);
+  evidence.status = REQUIRED_EVIDENCE_KEYS.every(
+    (key) => evidence.transactions[key],
+  )
+    ? "transactions-recorded"
+    : "lifecycle-in-progress";
+  evidence.recordedTransactionCount = recordedKeys.length;
+  evidence.recordedTransactionKeys = recordedKeys;
+  evidence.verification = {
+    status: "pending",
+    independentRpcCount: 2,
+    checkedAt: null,
+  };
+
+  const temporaryPath = `${MAINNET_EVIDENCE_PATH}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(evidence, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  await rename(temporaryPath, MAINNET_EVIDENCE_PATH);
+  preparedMainnetActions.delete(transaction.nonce);
+  return {
+    status: evidence.status,
+    transactionHash,
+    recordedTransactionCount: recordedKeys.length,
+  };
 }
 
 function renderHtml() {
@@ -535,6 +774,16 @@ function renderHtml() {
     launcher: LAUNCHER,
     predictedToken: PREDICTED_TOKEN,
     launchData,
+    mainnetCanaryGasLimits: IS_MAINNET
+      ? Object.fromEntries(
+          Object.entries(MAINNET_CANARY_GAS_LIMITS).map(
+            ([key, value]) => [key, value.toString()],
+          ),
+        )
+      : null,
+    mainnetCanaryMaxGasPriceWei: IS_MAINNET
+      ? MAINNET_CANARY_MAX_GAS_PRICE_WEI.toString()
+      : null,
   });
 
   return `<!doctype html>
@@ -635,6 +884,7 @@ function renderHtml() {
       let provider;
       let account;
       let busy = false;
+      let halted = false;
       let transactionParameters;
       let preparedAction;
 
@@ -717,7 +967,8 @@ function renderHtml() {
       function updateButtons() {
         connectButton.disabled = busy || Boolean(account);
         refreshButton.disabled = busy || !account;
-        launchButton.disabled = busy || !account || !transactionParameters;
+        launchButton.disabled =
+          busy || halted || !account || !transactionParameters;
       }
 
       async function prepareTransaction() {
@@ -732,20 +983,7 @@ function renderHtml() {
           throw new Error("A transaction is currently pending on ${NETWORK_NAME}");
         }
 
-        const action =
-          state.tokenCode === "0x"
-            ? {
-                id: "launch",
-                label: "Launch test token",
-                detail:
-                  "Create ${TOKEN_SYMBOL}, initialize its v4 pool, lock the complete supply and execute the 0.0006 ETH Dev Buy atomically.",
-                transaction: {
-                  to: configuration.launcher,
-                  data: configuration.launchData,
-                  value: "${INITIAL_BUY_AMOUNT.toString()}",
-                },
-              }
-            : await readLifecycleAction();
+        const action = await readLifecycleAction();
 
         if (!action.transaction) {
           launchButton.textContent = action.label;
@@ -772,7 +1010,23 @@ function renderHtml() {
         const gasLimit = (estimatedGas * 120n + 99n) / 100n;
         const gasPrice =
           (BigInt(quotedGasPriceHex) * 125n + 99n) / 100n;
-        const gasCeiling = gasLimit * gasPrice + value;
+        const reviewedGasLimit = configuration.mainnetCanaryGasLimits
+          ? BigInt(configuration.mainnetCanaryGasLimits[action.id] ?? 0)
+          : gasLimit;
+        const reviewedGasPrice = configuration.mainnetCanaryMaxGasPriceWei
+          ? BigInt(configuration.mainnetCanaryMaxGasPriceWei)
+          : gasPrice;
+        if (gasLimit > reviewedGasLimit) {
+          throw new Error(
+            action.label + " needs more gas than the reviewed limit",
+          );
+        }
+        if (gasPrice > reviewedGasPrice) {
+          throw new Error(
+            "Current ${NETWORK_SHORT_NAME} gas is above the reviewed ceiling",
+          );
+        }
+        const gasCeiling = reviewedGasLimit * reviewedGasPrice + value;
         if (BigInt(state.balance) < gasCeiling) {
           throw new Error(
             "The wallet balance is below the conservative transaction ceiling",
@@ -846,6 +1100,7 @@ function renderHtml() {
       async function executeNextStep() {
         if (busy || !transactionParameters || !preparedAction) return;
         busy = true;
+        let transactionSubmitted = false;
         updateButtons();
         try {
           await prepareTransaction();
@@ -858,6 +1113,7 @@ function renderHtml() {
           const hash = await request("eth_sendTransaction", [
             reviewedTransaction,
           ]);
+          transactionSubmitted = true;
           transactionParameters = undefined;
           preparedAction = undefined;
           setNotice("Waiting for " + reviewedAction.label + " to confirm.");
@@ -873,6 +1129,22 @@ function renderHtml() {
           ) {
             throw new Error("The receipt does not match the reviewed call");
           }
+          if (${IS_MAINNET ? "true" : "false"}) {
+            const recordResponse = await fetch("/record-receipt", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                actionId: reviewedAction.id,
+                transactionHash: hash,
+              }),
+            });
+            const recordResult = await recordResponse.json();
+            if (!recordResponse.ok) {
+              throw new Error(
+                recordResult.error ?? "The confirmed receipt could not be recorded",
+              );
+            }
+          }
           await new Promise((resolve) => setTimeout(resolve, 2500));
           const state = await waitForIndependentState();
           balanceValue.textContent = formatEth(state.balance);
@@ -881,10 +1153,21 @@ function renderHtml() {
             "success",
           );
         } catch (error) {
-          setNotice(error?.message ?? String(error), "error");
+          if (transactionSubmitted) {
+            halted = true;
+            setNotice(
+              (error?.message ?? String(error)) +
+                " Stop here and verify the confirmed transaction before continuing.",
+              "error",
+            );
+          } else {
+            setNotice(error?.message ?? String(error), "error");
+          }
         } finally {
           busy = false;
-          await prepareTransaction().catch(() => {});
+          if (!halted) {
+            await prepareTransaction().catch(() => {});
+          }
           updateButtons();
         }
       }
@@ -902,6 +1185,88 @@ function renderHtml() {
 }
 
 async function main() {
+  if (CHECK_ONLY) {
+    if (!IS_MAINNET || !fixture) {
+      throw new Error(
+        "Canary checks require the explicit Mainnet fixture",
+      );
+    }
+    const state = await readVerifiedState();
+    if (state.confirmedNonce !== state.pendingNonce) {
+      throw new Error("A transaction is currently pending on Ethereum Mainnet");
+    }
+    if (state.tokenCode !== "0x") {
+      throw new Error("The reviewed Mainnet canary token already exists");
+    }
+    const estimates = await Promise.all(
+      RPC_ENDPOINTS.map(async (endpoint) => {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_estimateGas",
+            params: [
+              {
+                from: EXPECTED_ACCOUNT,
+                to: LAUNCHER,
+                data: launchData,
+                value: `0x${INITIAL_BUY_AMOUNT.toString(16)}`,
+                nonce: state.confirmedNonce,
+              },
+            ],
+          }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        const body = await response.json();
+        if (!response.ok || body.error) {
+          throw new Error("Independent Mainnet launch simulation failed");
+        }
+        return BigInt(body.result);
+      }),
+    );
+    const maximumEstimate = estimates.reduce((a, b) =>
+      a > b ? a : b,
+    );
+    const paddedEstimate = (maximumEstimate * 120n + 99n) / 100n;
+    if (paddedEstimate > MAINNET_CANARY_GAS_LIMITS.launch) {
+      throw new Error(
+        "The Mainnet launch estimate exceeds the reviewed gas limit",
+      );
+    }
+    console.log(
+      JSON.stringify(
+        {
+          status: "canary-preflight-passed",
+          chainId: chain.id,
+          account: EXPECTED_ACCOUNT,
+          launcher: LAUNCHER,
+          predictedToken: PREDICTED_TOKEN,
+          confirmedNonce: Number(BigInt(state.confirmedNonce)),
+          independentRpcCount: RPC_ENDPOINTS.length,
+          launchEstimatedGas: estimates.map((value) =>
+            value.toString(),
+          ),
+          launchPaddedGasLimit: paddedEstimate.toString(),
+          reviewedLaunchGasLimit:
+            MAINNET_CANARY_GAS_LIMITS.launch.toString(),
+          maxGasPriceWei:
+            MAINNET_CANARY_MAX_GAS_PRICE_WEI.toString(),
+          initialBuyWei: INITIAL_BUY_AMOUNT.toString(),
+          separateBuyWei: BUY_AMOUNT.toString(),
+          maximumLifecycleOutflowWei:
+            maximumMainnetCanaryOutflowWei(
+              INITIAL_BUY_AMOUNT,
+              BUY_AMOUNT,
+            ).toString(),
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   const html = renderHtml();
   const server = createServer(async (request, response) => {
     const headers = {
@@ -943,10 +1308,14 @@ async function main() {
     if (request.method === "GET" && request.url === "/lifecycle-action") {
       try {
         const state = await readVerifiedState();
-        if (state.tokenCode === "0x") {
-          throw new Error("The test token has not been launched");
+        if (state.confirmedNonce !== state.pendingNonce) {
+          throw new Error(`A transaction is currently pending on ${NETWORK_NAME}`);
         }
-        const action = await buildLifecycleAction();
+        const action =
+          state.tokenCode === "0x"
+            ? buildLaunchAction()
+            : await buildLifecycleAction();
+        rememberPreparedMainnetAction(action, state.confirmedNonce);
         response.writeHead(200, {
           ...headers,
           "content-type": "application/json; charset=utf-8",
@@ -954,6 +1323,31 @@ async function main() {
         response.end(JSON.stringify(action));
       } catch (error) {
         response.writeHead(503, {
+          ...headers,
+          "content-type": "application/json; charset=utf-8",
+        });
+        response.end(JSON.stringify({ error: error?.message ?? String(error) }));
+      }
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/record-receipt") {
+      try {
+        let body = "";
+        for await (const chunk of request) {
+          body += chunk;
+          if (body.length > 16_384) {
+            throw new Error("Receipt payload is too large");
+          }
+        }
+        const result = await recordMainnetReceipt(JSON.parse(body));
+        response.writeHead(200, {
+          ...headers,
+          "content-type": "application/json; charset=utf-8",
+        });
+        response.end(JSON.stringify(result));
+      } catch (error) {
+        response.writeHead(400, {
           ...headers,
           "content-type": "application/json; charset=utf-8",
         });

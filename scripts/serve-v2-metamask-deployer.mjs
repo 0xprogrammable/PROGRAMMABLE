@@ -884,10 +884,19 @@ async function main() {
   const plan = await loadDeploymentPlan();
   const state = await readVerifiedState(plan);
   if (process.argv.includes("--check")) {
+    const verifiedCount = state.deployments.filter(
+      (deployment) => deployment.verified,
+    ).length;
+    const handoffStatus =
+      verifiedCount === plan.transactions.length
+        ? "deployment-complete"
+        : verifiedCount > 0
+          ? "deployment-in-progress"
+          : "ready-for-wallet-handoff";
     console.log(
       JSON.stringify(
         {
-          status: "ready-for-wallet-handoff",
+          status: handoffStatus,
           selectedNetwork: SELECTED_NETWORK,
           plan: {
             startingNonce: plan.startingNonce,

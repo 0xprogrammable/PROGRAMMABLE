@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "status": "awaiting-transactions",
+  "chainId": 1,
+  "deployment": "contracts/deployments/mainnet-classic-v2.json",
+  "fixture": "contracts/release/mainnet-test-classic-v2.json",
+  "account": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+  "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  "launcher": "0xD240D06f8586eB799f20056054e5b527405E6bAd",
+  "feeHook": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
+  "predictedToken": "0x05204a4ce651452892A620950BDc2ADeDBF63b0a",
+  "poolId": "0xb12253d75eb143edcb6aab74f543802c6fa72998e092bc7bd1acf27a42adc2ea",
+  "startingNonce": 10,
+  "transactions": {
+    "launch": null,
+    "buy": null,
+    "tokenApproval": null,
+    "routerApproval": null,
+    "sell": null,
+    "creatorClaim": null,
+    "launcherClaim": null
+  },
+  "verification": {
+    "status": "pending",
+    "independentRpcCount": 2,
+    "checkedAt": null
+  }
+}
