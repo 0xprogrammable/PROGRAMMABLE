@@ -90,7 +90,7 @@ describe("Explore query", () => {
       status: "ready",
       tokens,
       snapshot: {
-        chainId: 1,
+        chainId: 11_155_111,
         blockNumber: "100",
         blockHash: `0x${"11".repeat(32)}`,
         confirmations: 12,
@@ -116,5 +116,48 @@ describe("Explore query", () => {
       filterAndSortTokens([missing, ...tokens], "", "market-cap-asc").at(-1)
         ?.id,
     ).toBe("missing");
+  });
+
+  it("keeps all Mainnet rehearsals out of Explore and shows the next launch", () => {
+    const model: ExploreReadModel = {
+      status: "ready",
+      tokens: [
+        {
+          ...tokens[0],
+          id: "canary",
+          launchBlockNumber: "25624511",
+        },
+        {
+          ...tokens[1],
+          id: "wallet-test",
+          launchBlockNumber: "25626329",
+        },
+        {
+          ...tokens[2],
+          id: "trade-test",
+          launchBlockNumber: "25626489",
+        },
+        {
+          ...tokens[0],
+          id: "first-public-launch",
+          launchBlockNumber: "25626490",
+        },
+      ],
+      snapshot: {
+        chainId: 1,
+        blockNumber: "25626510",
+        blockHash: `0x${"22".repeat(32)}`,
+        confirmations: 12,
+      },
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    };
+
+    const page = paginateExplore(model);
+    expect(page.total).toBe(1);
+    expect(page.tokens.map((entry) => entry.id)).toEqual([
+      "first-public-launch",
+    ]);
   });
 });

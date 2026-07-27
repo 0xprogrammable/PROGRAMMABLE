@@ -474,6 +474,10 @@ export function ExploreView() {
   const paginationItems = getPaginationItems(activePage, pageCount);
   const busy =
     state.phase === "loading" || state.requestKey !== requestKey;
+  const hasPublicTokens =
+    state.phase !== "ready" ||
+    state.payload.total > 0 ||
+    Boolean(deferredQuery);
 
   async function copyAddress(address: string) {
     try {
@@ -546,8 +550,11 @@ export function ExploreView() {
       }
 
       return (
-        <div className="token-empty">
-          <p>No tokens have been launched yet</p>
+        <div className="token-empty token-empty-initial">
+          <div>
+            <h2>No public tokens yet</h2>
+            <p>The first public launch will appear here.</p>
+          </div>
           <Link className="text-button" href="/launch">
             Launch a token
           </Link>
@@ -670,112 +677,114 @@ export function ExploreView() {
         </p>
       </section>
 
-      <section
-        className="token-section"
-        id="tokens"
-        aria-busy={busy}
-      >
-        <div className="token-section-heading">
-          <h2 className="sr-only">Tokens</h2>
-          <div className="token-toolbar">
-            <label className="token-search">
-              <Search aria-hidden="true" size={17} />
-              <span className="sr-only">
-                Search tokens by name, ticker or contract address
-              </span>
-              <input
-                value={query}
-                placeholder="Search tokens"
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-            </label>
-
-            <details className="token-filter" ref={filterRef}>
-              <summary>
-                <SlidersHorizontal aria-hidden="true" size={16} />
-                <span>Filter</span>
-                <ChevronDown
-                  className="token-filter-chevron"
-                  aria-hidden="true"
-                  size={15}
+      <section className="token-section" id="tokens" aria-busy={busy}>
+        {hasPublicTokens ? (
+          <div className="token-section-heading">
+            <h2 className="sr-only">Tokens</h2>
+            <div className="token-toolbar">
+              <label className="token-search">
+                <Search aria-hidden="true" size={17} />
+                <span className="sr-only">
+                  Search tokens by name, ticker or contract address
+                </span>
+                <input
+                  value={query}
+                  placeholder="Search tokens"
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setCurrentPage(1);
+                  }}
                 />
-              </summary>
-              <div className="token-filter-menu" role="group" aria-label="Sort tokens">
-                {sortOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    className={sort === option.id ? "active" : undefined}
-                    type="button"
-                    aria-pressed={sort === option.id}
-                    onClick={() => {
-                      setSort(option.id);
-                      setCurrentPage(1);
-                      filterRef.current?.removeAttribute("open");
-                    }}
-                  >
-                    <span>{option.label}</span>
-                    {sort === option.id ? (
-                      <Check aria-hidden="true" size={15} />
-                    ) : null}
-                  </button>
-                ))}
-              </div>
-            </details>
+              </label>
 
-            <nav className="token-pagination" aria-label="Token pages">
-              <button
-                type="button"
-                aria-label="Previous token page"
-                disabled={activePage === 1 || busy}
-                onClick={() =>
-                  setCurrentPage((page) => Math.max(1, page - 1))
-                }
-              >
-                <ChevronLeft aria-hidden="true" size={16} />
-              </button>
-
-              <div className="token-pagination-pages">
-                {paginationItems.map((item) =>
-                  typeof item === "number" ? (
+              <details className="token-filter" ref={filterRef}>
+                <summary>
+                  <SlidersHorizontal aria-hidden="true" size={16} />
+                  <span>Filter</span>
+                  <ChevronDown
+                    className="token-filter-chevron"
+                    aria-hidden="true"
+                    size={15}
+                  />
+                </summary>
+                <div
+                  className="token-filter-menu"
+                  role="group"
+                  aria-label="Sort tokens"
+                >
+                  {sortOptions.map((option) => (
                     <button
-                      key={item}
-                      className={activePage === item ? "active" : undefined}
+                      key={option.id}
+                      className={sort === option.id ? "active" : undefined}
                       type="button"
-                      aria-label={`Token page ${item}`}
-                      aria-current={activePage === item ? "page" : undefined}
-                      disabled={busy}
-                      onClick={() => setCurrentPage(item)}
+                      aria-pressed={sort === option.id}
+                      onClick={() => {
+                        setSort(option.id);
+                        setCurrentPage(1);
+                        filterRef.current?.removeAttribute("open");
+                      }}
                     >
-                      {item}
+                      <span>{option.label}</span>
+                      {sort === option.id ? (
+                        <Check aria-hidden="true" size={15} />
+                      ) : null}
                     </button>
-                  ) : (
-                    <span key={item} aria-hidden="true">
-                      …
-                    </span>
-                  ),
-                )}
-              </div>
+                  ))}
+                </div>
+              </details>
 
-              <button
-                type="button"
-                aria-label="Next token page"
-                disabled={activePage === pageCount || busy}
-                onClick={() =>
-                  setCurrentPage((page) => Math.min(pageCount, page + 1))
-                }
-              >
-                <ChevronRight aria-hidden="true" size={16} />
-              </button>
+              <nav className="token-pagination" aria-label="Token pages">
+                <button
+                  type="button"
+                  aria-label="Previous token page"
+                  disabled={activePage === 1 || busy}
+                  onClick={() =>
+                    setCurrentPage((page) => Math.max(1, page - 1))
+                  }
+                >
+                  <ChevronLeft aria-hidden="true" size={16} />
+                </button>
 
-              <span className="sr-only" aria-live="polite">
-                Page {activePage} of {pageCount}
-              </span>
-            </nav>
+                <div className="token-pagination-pages">
+                  {paginationItems.map((item) =>
+                    typeof item === "number" ? (
+                      <button
+                        key={item}
+                        className={activePage === item ? "active" : undefined}
+                        type="button"
+                        aria-label={`Token page ${item}`}
+                        aria-current={activePage === item ? "page" : undefined}
+                        disabled={busy}
+                        onClick={() => setCurrentPage(item)}
+                      >
+                        {item}
+                      </button>
+                    ) : (
+                      <span key={item} aria-hidden="true">
+                        …
+                      </span>
+                    ),
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  aria-label="Next token page"
+                  disabled={activePage === pageCount || busy}
+                  onClick={() =>
+                    setCurrentPage((page) => Math.min(pageCount, page + 1))
+                  }
+                >
+                  <ChevronRight aria-hidden="true" size={16} />
+                </button>
+
+                <span className="sr-only" aria-live="polite">
+                  Page {activePage} of {pageCount}
+                </span>
+              </nav>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {state.phase === "ready" && busy ? (
           <span className="sr-only" role="status">

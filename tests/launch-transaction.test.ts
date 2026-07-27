@@ -34,7 +34,7 @@ function classicDraft() {
 }
 
 describe("Classic launch calldata", () => {
-  it("encodes current UERC20 metadata and the selected total fee", () => {
+  it("encodes current UERC20 metadata and the fixed total fee", () => {
     const draft = classicDraft();
     const decoded = decodeFunctionData({
       abi: memeLaunchAbi,
@@ -194,10 +194,10 @@ describe("Classic launch calldata", () => {
     ).toThrow("fixed supply");
     expect(() =>
       encodeMemeLaunch(
-        { ...draft, totalSwapFeePercent: "1.1" },
+        { ...draft, totalSwapFeePercent: "2" },
         draft.launchSalt as `0x${string}`,
       ),
-    ).toThrow("1% to 10%");
+    ).toThrow("fixed 1.00%");
   });
 
   it("requires a Dev Buy at or above the minimum", () => {

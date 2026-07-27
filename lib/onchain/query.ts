@@ -8,6 +8,7 @@ import type {
 
 const DEFAULT_PAGE_SIZE = 6;
 const MAX_PAGE_SIZE = 100;
+const MAINNET_PUBLIC_EXPLORE_START_BLOCK = 25_626_490n;
 
 export function parseExploreSort(value: string | null): ExploreSort {
   if (value === "oldest") return "oldest";
@@ -113,7 +114,18 @@ export function paginateExplore(
     1,
     Number.MAX_SAFE_INTEGER,
   );
-  const sorted = filterAndSortTokens(model.tokens, query, sort);
+  const visibleTokens =
+    model.snapshot?.chainId === 1
+      ? model.tokens.filter((token) => {
+          const launchBlock = token.launchBlockNumber;
+          return (
+            typeof launchBlock === "string" &&
+            /^\d+$/.test(launchBlock) &&
+            BigInt(launchBlock) >= MAINNET_PUBLIC_EXPLORE_START_BLOCK
+          );
+        })
+      : model.tokens;
+  const sorted = filterAndSortTokens(visibleTokens, query, sort);
   const totalPages = Math.ceil(sorted.length / pageSize);
   const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
   const offset = (page - 1) * pageSize;

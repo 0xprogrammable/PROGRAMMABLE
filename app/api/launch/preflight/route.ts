@@ -436,7 +436,7 @@ async function prepareMemeLaunch(
     status: "pass",
     detail: `Fixed supply, locked one-sided liquidity and ${(
       totalSwapFeeBps / 100
-    ).toFixed(2)}% total swap fee are valid`,
+    ).toFixed(2)}% fixed total swap fee are valid`,
   };
 
   if (connectedWalletCheck.status !== "pass") {

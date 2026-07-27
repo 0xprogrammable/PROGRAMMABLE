@@ -44,9 +44,9 @@ These axes document the current fixed composition. They are not a roadmap or pub
 | Tick spacing | 200 |
 | Starting FDV | 1.355657760817103798 ETH |
 | LP fee | 0.00% |
-| Swap fee | Creator selects a 1–10% total in whole percentage points |
-| Launcher share | Fixed 0.10 percentage points, deducted from the selected total |
-| Creator share | Selected total minus 0.10 percentage points |
+| Swap fee | Fixed 1.00% total; 0.90% to the creator and 0.10% to Programmable |
+| Launcher share | Fixed 0.10 percentage points, deducted from the fixed total |
+| Creator share | Fixed 0.90 percentage points |
 | Position | Minimum usable tick through initial tick |
 | Custody | Permanently locked official PositionFeesForwarder |
 | Platform recipient | Immutable Launcher treasury |
@@ -56,7 +56,7 @@ These axes document the current fixed composition. They are not a roadmap or pub
 | Website and image | At most 2048 UTF-8 bytes each |
 | Extra metadata | At most 1200 bytes |
 
-The public creator controls only the identity fields and total swap fee. The initial buy is fixed and cannot be changed or skipped. Supply, pool ordering, price range, fee split, hook, liquidity layout and custody remain fixed by the release.
+The public creator controls the identity fields and Dev Buy amount. The 1.00% total swap fee, supply, pool ordering, price range, fee split, hook, liquidity layout and custody remain fixed by the release.
 
 The pool is initialized before the buy, but the one-sided position begins exactly at its upper tick boundary. The atomic
 creator buy moves the price into the active range and sends the purchased tokens directly to the creator. If any part of
@@ -64,12 +64,12 @@ that buy or its PoolManager settlement fails, the complete launch reverts.
 
 ## Fee accounting
 
-For a selected total fee `T` in basis points:
+Classic fixes the total fee at 100 basis points:
 
 ```text
 launcherFeeBps = 10
-creatorFeeBps = T - 10
-total charged by the hook = T
+creatorFeeBps = 90
+total charged by the hook = 100
 ```
 
 Gross exact-input fees round down to whole wei. Exact-output quotes gross up once so the requested net native amount is preserved, then allocate the fixed Launcher share from that total. The contract rejects partial fills for native-specified swaps rather than charging against the requested amount.
@@ -80,7 +80,7 @@ Fee claims are held as native-currency PoolManager ERC-6909 claims and not as la
 
 - The fee applies only to the canonical pool emitted by MemeLaunchV1
 - Anyone can create an alternative pool because the token has no transfer restrictions
-- High selected fees can reduce demand and trigger third-party warnings
+- The fixed 1.00% hook fee can affect demand and third-party token warnings
 - A shared hook registration event is not proof that a token launched through Launcher
 - Any independently enabled Uniswap protocol fee is outside the Creator and Launcher split
 - Return-delta routing requires compatibility evidence for the production router

@@ -297,7 +297,9 @@ export function validateMemeLaunchDraft(draft: LaunchDraft) {
     draft.totalSwapFeePercent,
   );
   if (totalSwapFeeBps === null) {
-    throw new LaunchInputError("Choose a total swap fee from 1% to 10%");
+    throw new LaunchInputError(
+      "Classic uses a fixed 1.00% total swap fee",
+    );
   }
   if (parseInitialBuyWei(draft.initialBuyEth) === null) {
     throw new LaunchInputError(
