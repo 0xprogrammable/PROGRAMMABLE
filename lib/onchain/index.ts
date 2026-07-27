@@ -1,5 +1,16 @@
-export { getOnchainDeployment } from "./config";
-export { readExploreModel } from "./read-model";
+export {
+  getOnchainDeployment,
+  getOperationalOnchainDeployment,
+} from "./config";
+export {
+  readExploreModel,
+  readLiveExploreModel,
+} from "./read-model";
+export {
+  readDurableExploreModel,
+  writeDurableExploreModel,
+} from "./durable-model";
+export { readIndependentRpcHealth } from "./rpc-health";
 export {
   buildIndexerFeed,
   buildUniswapTokenList,

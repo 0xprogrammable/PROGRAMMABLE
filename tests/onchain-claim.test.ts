@@ -35,6 +35,7 @@ const deployment: OnchainDeployment = {
   stateView: "0x8888888888888888888888888888888888888888",
   stateViewRuntimeCodeHash: `0x${"99".repeat(32)}`,
   rpcUrl: "https://example.invalid",
+  rpcUrlSecondary: null,
   confirmations: 12n,
   logBlockRange: 10_000n,
 };
