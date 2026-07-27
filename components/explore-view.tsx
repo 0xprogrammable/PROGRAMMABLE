@@ -68,6 +68,8 @@ type ExploreState =
 type PaginationItem = number | "start-gap" | "end-gap";
 
 const TOKENS_PER_PAGE = 6;
+const PROGRAMMABLE_TOKEN_ADDRESS =
+  "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
   "/brand/programmable-token-fallback-01-dawn.webp",
   "/brand/programmable-token-fallback-02-moon.webp",
@@ -367,7 +369,7 @@ function TokenSocialLink({
 export function ExploreView() {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim());
-  const [sort, setSort] = useState<TokenSort>("newest");
+  const [sort, setSort] = useState<TokenSort>("market-cap");
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedAddress, setCopiedAddress] = useState("");
   const [retryKey, setRetryKey] = useState(0);
@@ -675,6 +677,28 @@ export function ExploreView() {
             duration={1650}
           />
         </p>
+        <button
+          className="explore-token-address"
+          type="button"
+          aria-label={
+            copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
+              ? "Programmable contract address copied"
+              : "Copy Programmable contract address"
+          }
+          title={
+            copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
+              ? "Copied"
+              : "Copy contract address"
+          }
+          onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
+        >
+          <code>{PROGRAMMABLE_TOKEN_ADDRESS}</code>
+          {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
+            <Check aria-hidden="true" size={13} />
+          ) : (
+            <Copy aria-hidden="true" size={13} />
+          )}
+        </button>
       </section>
 
       <section className="token-section" id="tokens" aria-busy={busy}>
