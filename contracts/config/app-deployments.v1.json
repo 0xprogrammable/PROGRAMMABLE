@@ -4,7 +4,7 @@
     "chainId": 1,
     "releaseVersion": "classic-v2",
     "status": "ready",
-    "memeLaunchStatus": "lifecycle-pending",
+    "memeLaunchStatus": "ready",
     "incidentOwnership": {
       "operatingModel": "sole-operator",
       "primary": "hazarxyz",
@@ -52,7 +52,7 @@
         "lockedPositionFeeForwarderFactory": "match"
       },
       "etherscanContracts": {
-        "ethCreatorFeeHookFactory": "pending",
+        "ethCreatorFeeHookFactory": "exact-match",
         "ethCreatorFeeHook": "exact-match",
         "memeLaunch": "exact-match"
       }
@@ -132,7 +132,7 @@
         "memeLaunch": 25622048
       }
     },
-    "blocker": "Public launch remains disabled pending Privy production billing approval"
+    "blocker": null
   },
   "rehearsal": {
     "chainId": 11155111,

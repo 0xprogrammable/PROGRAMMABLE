@@ -32,12 +32,12 @@ residual smart-contract risk and must satisfy every internal gate below.
 - [x] Classic V2 is deployed and source-verified on Sepolia
 - [x] Test2 completes the V2 launch, buy, sell and both-claims lifecycle
 - [x] Classic V2 is deployed and source-verified on Ethereum mainnet
-- [ ] Public launch preparation is enabled
+- [x] Public launch preparation is enabled
 
 Sepolia V2 is `ready` with current Test2 lifecycle evidence. Mainnet V2 is deployed, source-verified and backed by a
 complete independently reconciled canary lifecycle, while its V1 deployment remains historical only. Authenticated
 dual-RPC operations, a private durable index snapshot and five-minute monitoring are live. Public preparation remains
-disabled pending Privy production billing approval.
+enabled and fails closed on runtime, lifecycle, RPC or simulation drift.
 
 ## Remaining work
 
@@ -95,7 +95,7 @@ disabled pending Privy production billing approval.
 - [x] Complete rendered desktop and mobile QA for Explore, the Classic launch flow, Profile and fail-closed token detail states
 - [x] Verify that the allowed production origin restores an existing Privy wallet session and opens account management
 - [x] Complete a fresh provider-backed disconnect and reconnect rehearsal on `programmable.family`
-- [ ] Upgrade the Privy app from Development after the owner approves billing details and possible MAU overage
+- [x] Confirm the current Privy free plan supports the release's wallet and email login without a paid WhatsApp-login upgrade
 - [ ] Complete the final transaction-review rehearsal after public preparation is explicitly enabled
 - [x] Confirm that the launch review and release notes describe the contracts as unaudited
 
@@ -110,9 +110,10 @@ disabled pending Privy production billing approval.
 - [x] Prepare the independent two-RPC lifecycle verifier and prove that it fails closed before any receipt exists
 - [x] Obtain separate approval for the canary's exact `0.003415 ETH` maximum outflow
 - [x] Run one low-value monitored canary launch with buys, sells and both fee claims
-- [ ] Verify the V2 hook factory on Etherscan; hook and launcher are already exact matches
-- [ ] Prepare the Hooklist and routing submissions after the canary creates a real V2 pool
-- [ ] Enable public launch preparation only after Privy production billing is approved and the final transaction-review rehearsal passes
+- [x] Verify the V2 hook factory on Etherscan; factory, hook and launcher are exact matches
+- [x] Submit the verified V2 hook through the official Hooklist form as `Uniswap/hooklist#1160`
+- [ ] Submit the prepared Uniswap Labs routing form after the operator accepts its Terms of Service and Privacy Policy
+- [x] Enable public launch preparation after the verified Mainnet lifecycle, healthy production operations and owner approval
 - [x] Deploy the verified operations frontend and confirm `programmable.family` points to its production deployment
 
 ## Not in the current scope

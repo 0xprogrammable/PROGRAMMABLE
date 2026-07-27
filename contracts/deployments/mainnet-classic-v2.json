@@ -67,10 +67,10 @@
       }
     },
     "etherscan": {
-      "hookFactory": "pending",
+      "hookFactory": "exact-match",
       "feeHook": "exact-match",
       "memeLauncher": "exact-match",
-      "checkedAt": "2026-07-27T12:43:00.000Z"
+      "checkedAt": "2026-07-27T17:59:01.000Z"
     }
   },
   "verification": {

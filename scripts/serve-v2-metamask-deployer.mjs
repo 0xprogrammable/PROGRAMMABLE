@@ -507,7 +507,7 @@ async function readRpcSnapshot(endpoint, plan) {
   };
 }
 
-export async function readVerifiedState(plan) {
+async function readReconciledState(plan) {
   const snapshots = await Promise.all(
     network.rpcEndpoints.map((endpoint) => readRpcSnapshot(endpoint, plan)),
   );
@@ -534,7 +534,18 @@ export async function readVerifiedState(plan) {
         .reduce((lowest, current) => (current < lowest ? current : lowest))
         .toString(16),
   };
+  return verifiedState;
+}
+
+export async function readVerifiedState(plan) {
+  const verifiedState = await readReconciledState(plan);
   assertDeploymentSequenceState(plan, verifiedState);
+  return verifiedState;
+}
+
+export async function readVerifiedCompletedState(plan) {
+  const verifiedState = await readReconciledState(plan);
+  assertCompletedDeploymentState(plan, verifiedState);
   return verifiedState;
 }
 
@@ -576,6 +587,23 @@ export function assertDeploymentSequenceState(plan, state) {
     .reduce((total, cost) => total + cost, 0n);
   if (BigInt(state.balance) < remainingMaximumCost) {
     throw new Error("Wallet balance is below the reviewed deployment ceiling");
+  }
+}
+
+export function assertCompletedDeploymentState(plan, state) {
+  const confirmedNonce = Number(BigInt(state.confirmedNonce));
+  const pendingNonce = Number(BigInt(state.pendingNonce));
+  if (confirmedNonce < plan.endingNonce) {
+    throw new Error("The complete reviewed deployment is not confirmed");
+  }
+  if (pendingNonce < confirmedNonce) {
+    throw new Error("Pending nonce is below the confirmed nonce");
+  }
+  if (state.deployments.length !== plan.transactions.length) {
+    throw new Error("Deployment state does not match the reviewed transaction count");
+  }
+  if (state.deployments.some((deployment) => !deployment.verified)) {
+    throw new Error("The complete reviewed deployment is not independently verified");
   }
 }
 

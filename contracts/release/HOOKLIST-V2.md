@@ -1,18 +1,20 @@
-# Uniswap Hooklist submission checklist
+# Uniswap Hooklist submission
 
-Submit only after the exact V2 hook address is live on Ethereum, its source is verified on Etherscan and the complete
-canary lifecycle has passed.
+The exact V2 hook is live on Ethereum, Etherscan reports an exact source match and the complete canary lifecycle passed.
+The official submission is [Uniswap/hooklist#1160](https://github.com/Uniswap/hooklist/issues/1160). Its successful
+analysis opened [Uniswap/hooklist#1161](https://github.com/Uniswap/hooklist/pull/1161), which passed the registry's
+validation and automated review and now awaits maintainer approval.
 
-Suggested issue fields:
+Submitted issue fields:
 
 - Chain: Ethereum
-- Hook address: the deployed `EthCreatorFeeHookV2`
+- Hook address: `0x025a386eAa79f6067d29848FD05ccC71bEAb20CC`
 - Name: `Programmable Classic Fee Hook`
-- Description: `A non-upgradeable Uniswap v4 custom-accounting hook that charges the same immutable ETH-denominated fee on buys and sells, splits the selected total between the token creator and Programmable, and exposes zero transfer tax plus explicit fee events.`
-- Deployer: the verified deployment wallet
-- Audit URL: empty unless a real independent audit is completed
+- Description: `A non-upgradeable Uniswap v4 custom-accounting hook for Programmable Classic launches. Each pool selects a 1% to 10% total swap fee. The hook charges the same ETH-denominated fee on buys and sells, allocates a fixed 0.10% of swap volume to Programmable, allocates the remainder to the token creator, exposes explicit onchain fee disclosure, and applies zero ERC-20 transfer tax.`
+- Deployer: `0x2Bb333d48DFAF1596D9036671d2E43168994249E`
+- Audit URL: empty because no independent audit was completed
 
-Expected Hooklist classification:
+The registry generated the following classification:
 
 ```json
 {
@@ -37,10 +39,15 @@ Expected Hooklist classification:
     "upgradeable": false,
     "requiresCustomSwapData": false,
     "vanillaSwap": false,
-    "swapAccess": "none"
+    "swapAccess": "governance"
   }
 }
 ```
 
+The registry uses `governance` because swaps revert for unregistered pools and pool registration is restricted to the
+creator address recorded by the launched token. The generated registry name is the verified contract name,
+`EthCreatorFeeHookV2`.
+
 The official Hooklist is a registry, not an approval, audit or routing allowlist. Uniswap routing support must be requested
-separately and claimed only after confirmation.
+separately and claimed only after confirmation. The routing form is prepared with the verified Ethereum hook and canary
+pool; submission requires the operator to accept Uniswap Labs' Terms of Service and Privacy Policy.

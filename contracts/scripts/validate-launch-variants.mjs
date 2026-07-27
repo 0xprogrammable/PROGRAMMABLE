@@ -382,8 +382,8 @@ assert(
 assert(
   appDeployments.production.releaseVersion === "classic-v2" &&
     appDeployments.production.memeLaunchStatus ===
-      "lifecycle-pending",
-  "Mainnet Classic V2 must remain launch-disabled until Privy production billing is approved",
+      "ready",
+  "Mainnet Classic V2 must remain bound to the release-eligible lifecycle",
 );
 assert(
   appDeployments.production.incidentOwnership?.operatingModel ===
@@ -496,9 +496,8 @@ assert(
   "Mainnet Classic V2 lifecycle receipts changed",
 );
 assert(
-  appDeployments.production.blocker ===
-    "Public launch remains disabled pending Privy production billing approval",
-  "Verified Mainnet Classic V2 must retain the remaining operational blockers",
+  appDeployments.production.blocker === null,
+  "Verified Mainnet Classic V2 must not retain a stale release blocker",
 );
 const historicalMainnetV1Deployment =
   appDeployments.production.historicalV1Deployment;

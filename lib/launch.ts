@@ -168,7 +168,5 @@ export function buildPlainTextPlan(draft: LaunchDraft) {
     "Fee scope: the canonical Programmable pool; separate pools can bypass its hook",
     "",
     buildLaunchSummary(draft),
-    "",
-    "Status: Mainnet launch preparation remains disabled during final canary verification",
   ].join("\n");
 }

@@ -108,12 +108,12 @@
     "status": "verified-current-release",
     "releaseEligible": true,
     "independentRpcCount": 2,
-    "confirmations": 762,
-    "checkedAt": "2026-07-27T16:29:15.157Z",
+    "confirmations": 1137,
+    "checkedAt": "2026-07-27T17:43:55.638Z",
     "summary": {
-      "verificationBlock": "25625342",
+      "verificationBlock": "25625717",
       "latestLifecycleBlock": "25624580",
-      "confirmations": "762",
+      "confirmations": "1137",
       "transactionHashes": {
         "launch": "0x44a480caaac8b937e7ccc31e45e13bd725253e231fcc12f7795bc5358a0a5d4c",
         "buy": "0xbd416570fc9de744a53919a6c7e7ea9f849fe3f5e510a13376e6967c68145b48",

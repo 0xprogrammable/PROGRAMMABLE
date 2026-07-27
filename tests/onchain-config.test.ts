@@ -27,18 +27,18 @@ describe("onchain deployment manifest boundary", () => {
     });
   });
 
-  it("keeps source-verified production V2 unavailable until its canary lifecycle passes", () => {
+  it("exposes production V2 after its verified canary lifecycle passes", () => {
     expect(getOnchainDeployment("production")).toMatchObject({
       environment: "production",
       releaseVersion: "classic-v2",
       chainId: 1,
-      status: "not-deployed",
-      launcher: null,
-      feeHook: null,
+      status: "ready",
+      launcher: "0xD240D06f8586eB799f20056054e5b527405E6bAd",
+      feeHook: "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
     });
   });
 
-  it("allows the verified lifecycle only for dual-RPC production operations", () => {
+  it("requires dual-RPC configuration for production operations", () => {
     vi.stubEnv("ETHEREUM_RPC_URL", "https://rpc-a.example");
     vi.stubEnv("ETHEREUM_RPC_URL_B", "https://rpc-b.example");
 
@@ -51,9 +51,7 @@ describe("onchain deployment manifest boundary", () => {
       feeHook: "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
       rpcUrlSecondary: "https://rpc-b.example",
     });
-    expect(getOnchainDeployment("production").status).toBe(
-      "not-deployed",
-    );
+    expect(getOnchainDeployment("production").status).toBe("ready");
   });
 
   it("rejects production operations without an independent RPC", () => {
