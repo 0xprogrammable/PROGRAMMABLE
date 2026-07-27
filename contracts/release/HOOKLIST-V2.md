@@ -48,6 +48,7 @@ The registry uses `governance` because swaps revert for unregistered pools and p
 creator address recorded by the launched token. The generated registry name is the verified contract name,
 `EthCreatorFeeHookV2`.
 
-The official Hooklist is a registry, not an approval, audit or routing allowlist. Uniswap routing support must be requested
-separately and claimed only after confirmation. The routing form is prepared with the verified Ethereum hook and canary
-pool; submission requires the operator to accept Uniswap Labs' Terms of Service and Privacy Policy.
+The official Hooklist is a registry, not an approval, audit or routing allowlist. The operator separately submitted the
+verified Ethereum hook and canary pool through the Uniswap Labs routing form on 27 July 2026 after accepting its Terms
+of Service and Privacy Policy. The form returned `Submission successful` and stated that the hook is ready for review.
+Routing support must still be claimed only after Uniswap Labs confirms the review outcome.
