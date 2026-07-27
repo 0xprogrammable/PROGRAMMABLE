@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "release": "classic-v2",
+  "chainId": 1,
+  "token": {
+    "standard": "UERC20",
+    "decimals": 18,
+    "fixedSupply": "1000000000000000000000000000",
+    "transferTaxBps": 0
+  },
+  "launch": {
+    "minimumInitialBuyWei": "600000000000000",
+    "initialTick": 204200,
+    "tickSpacing": 200,
+    "lpFeePips": 0
+  },
+  "fees": {
+    "currentInterfaceTotalSwapFeeBps": 100,
+    "currentCreatorFeeBps": 90,
+    "platformFeeBps": 10,
+    "contractMinimumTotalSwapFeeBps": 100,
+    "contractMaximumTotalSwapFeeBps": 1000,
+    "contractTotalSwapFeeStepBps": 100
+  },
+  "positionLock": {
+    "operator": "0x0000000000000000000000000000000000000000",
+    "timelockBlock": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+  }
+}

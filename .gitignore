@@ -1,0 +1,14 @@
+/.forge-snapshots/
+/.idea/
+/.vscode/
+/broadcast/
+/cache/
+/lib/
+/out/
+
+.DS_Store
+.env
+.env.*
+*.key
+*.pem
+*.swp
