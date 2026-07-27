@@ -43,6 +43,9 @@ function profileResponse() {
         launchTransactionHash,
         launchLogIndex: 3,
         launchedAt: "2026-07-26T12:00:00.000Z",
+        imageUrl: "https://programmable.family/token.png",
+        marketCapEthWei: "1200000000000000000",
+        fdvUsdWad: "3600000000000000000000",
         totalSwapFeeBps: 200,
         liquidityPath: "meme",
       },
@@ -159,6 +162,9 @@ describe("profile API client", () => {
         symbol: "PRG",
         launchedAt: "Jul 26, 2026",
         href: `/token/${tokenAddress}`,
+        imageUrl: "https://programmable.family/token.png",
+        marketCapEthWei: "1200000000000000000",
+        fdvUsdWad: "3600000000000000000000",
       },
     ]);
     expect(profile.positions).toEqual([

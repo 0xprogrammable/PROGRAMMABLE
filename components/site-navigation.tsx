@@ -37,10 +37,10 @@ export function SiteHeader() {
           <Link className="wordmark" href="/" aria-label="Programmable home">
             <Image
               className="wordmark-logo"
-              src="/brand/loop/programmable-loop-mark-512.png"
+              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
               alt=""
-              width={34}
-              height={34}
+              width={38}
+              height={38}
               priority
             />
           </Link>
@@ -61,9 +61,7 @@ export function SiteHeader() {
               key={item.href}
               className={isCurrent(pathname, item.href) ? "active" : undefined}
               href={item.href}
-              aria-current={
-                isCurrent(pathname, item.href) ? "page" : undefined
-              }
+              aria-current={isCurrent(pathname, item.href) ? "page" : undefined}
             >
               {item.label}
             </Link>

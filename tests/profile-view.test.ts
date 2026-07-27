@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getAddress } from "viem";
 
-import { groupProfileRewards } from "../components/profile-view";
+import {
+  groupProfileRewards,
+  sortProfileTokensByMarketCap,
+} from "../components/profile-view";
 import type {
   ProfileClaim,
   ProfileToken,
@@ -52,5 +55,17 @@ describe("profile reward grouping", () => {
     expect(grouped).toHaveLength(2);
     expect(grouped[0]).toEqual({ token: tokens[0], claim: undefined });
     expect(grouped[1]).toEqual({ token: tokens[1], claim });
+  });
+
+  it("orders creator tokens by highest market cap without mutating the source", () => {
+    const ranked = tokens.map((token, index) => ({
+      ...token,
+      fdvUsdWad: index === 0 ? "100" : "300",
+    }));
+
+    expect(
+      sortProfileTokensByMarketCap(ranked).map((token) => token.symbol),
+    ).toEqual(["SECOND", "FIRST"]);
+    expect(ranked.map((token) => token.symbol)).toEqual(["FIRST", "SECOND"]);
   });
 });

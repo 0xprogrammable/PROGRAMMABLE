@@ -8,11 +8,7 @@ import {
 } from "viem";
 
 export type ProfileDataStatus =
-  | "unavailable"
-  | "not-deployed"
-  | "loading"
-  | "ready"
-  | "error";
+  "unavailable" | "not-deployed" | "loading" | "ready" | "error";
 
 export type ProfileToken = {
   address: Address;
@@ -20,6 +16,9 @@ export type ProfileToken = {
   symbol: string;
   launchedAt: string;
   href: string;
+  imageUrl?: string;
+  marketCapEthWei?: string;
+  fdvUsdWad?: string;
 };
 
 export type ProfilePosition = {
@@ -165,7 +164,10 @@ function readHex(
   bytes?: number,
 ) {
   const value = readString(record, key, label);
-  if (!isHex(value, { strict: true }) || (bytes && value.length !== bytes * 2 + 2)) {
+  if (
+    !isHex(value, { strict: true }) ||
+    (bytes && value.length !== bytes * 2 + 2)
+  ) {
     throw new ProfileResponseError(`Invalid ${label}`);
   }
 
@@ -185,17 +187,48 @@ function readIntegerString(
   return value;
 }
 
+function readOptionalIntegerString(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = record[key];
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || !/^(0|[1-9]\d*)$/.test(value)) {
+    throw new ProfileResponseError(`Invalid ${label}`);
+  }
+  return value;
+}
+
+function readOptionalHttpsUrl(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = record[key];
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throw new ProfileResponseError(`Invalid ${label}`);
+  }
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") {
+      throw new ProfileResponseError(`Invalid ${label}`);
+    }
+  } catch {
+    throw new ProfileResponseError(`Invalid ${label}`);
+  }
+  return value;
+}
+
 function readSafeInteger(
   record: Record<string, unknown>,
   key: string,
   label: string,
 ) {
   const value = record[key];
-  if (
-    typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
-    value < 0
-  ) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new ProfileResponseError(`Invalid ${label}`);
   }
 
@@ -263,7 +296,10 @@ function formatActivityDate(timestamp: string) {
   }).format(new Date(timestamp));
 }
 
-function parseToken(value: unknown, requestedAccount: Address): ParsedProfileToken {
+function parseToken(
+  value: unknown,
+  requestedAccount: Address,
+): ParsedProfileToken {
   const token = asRecord(value, "profile token");
   const address = readAddress(token, "tokenAddress", "token address");
   const creatorAddress = readAddress(
@@ -277,6 +313,17 @@ function parseToken(value: unknown, requestedAccount: Address): ParsedProfileTok
       "Profile response contains a token for another creator",
     );
   }
+  const imageUrl = readOptionalHttpsUrl(token, "imageUrl", "token image");
+  const marketCapEthWei = readOptionalIntegerString(
+    token,
+    "marketCapEthWei",
+    "token market cap",
+  );
+  const fdvUsdWad = readOptionalIntegerString(
+    token,
+    "fdvUsdWad",
+    "token USD market cap",
+  );
 
   return {
     address,
@@ -284,6 +331,9 @@ function parseToken(value: unknown, requestedAccount: Address): ParsedProfileTok
     symbol: readString(token, "symbol", "token symbol"),
     launchedAt: readTimestamp(token, "launchedAt", "launch timestamp"),
     href: tokenHref(address),
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(marketCapEthWei ? { marketCapEthWei } : {}),
+    ...(fdvUsdWad ? { fdvUsdWad } : {}),
     poolId: readHex(token, "poolId", "pool id", 32),
     hookAddress: readAddress(token, "hookAddress", "token hook address"),
     creatorAddress,
@@ -346,11 +396,7 @@ function parsePool(value: unknown): ParsedProfilePool {
     name: readString(pool, "name", "pool token name"),
     symbol: readString(pool, "symbol", "pool token symbol"),
     poolId: readHex(pool, "poolId", "pool id", 32),
-    totalSwapFeeBps: readSafeInteger(
-      pool,
-      "totalSwapFeeBps",
-      "pool swap fee",
-    ),
+    totalSwapFeeBps: readSafeInteger(pool, "totalSwapFeeBps", "pool swap fee"),
     claimableWei,
     generatedWei,
   };
@@ -376,11 +422,7 @@ function parseClaimEvent(
 
   return {
     poolId: readHex(claim, "poolId", "claim pool id", 32),
-    tokenAddress: readAddress(
-      claim,
-      "tokenAddress",
-      "claim token address",
-    ),
+    tokenAddress: readAddress(claim, "tokenAddress", "claim token address"),
     creatorAddress,
     recipientAddress: readAddress(
       claim,
@@ -389,11 +431,7 @@ function parseClaimEvent(
     ),
     callerAddress: readAddress(claim, "callerAddress", "claim caller address"),
     amountWei,
-    blockNumber: readIntegerString(
-      claim,
-      "blockNumber",
-      "claim block number",
-    ),
+    blockNumber: readIntegerString(claim, "blockNumber", "claim block number"),
     transactionHash: readHex(
       claim,
       "transactionHash",
@@ -450,7 +488,8 @@ export function mapCreatorProfileResponse(
   if (
     new Set(tokens.map((token) => token.poolId.toLowerCase())).size !==
       tokens.length ||
-    new Set(pools.map((pool) => pool.poolId.toLowerCase())).size !== pools.length
+    new Set(pools.map((pool) => pool.poolId.toLowerCase())).size !==
+      pools.length
   ) {
     throw new ProfileResponseError(
       "Profile response contains duplicate verified pools",
@@ -579,12 +618,24 @@ export function mapCreatorProfileResponse(
   readSafeInteger(snapshot, "confirmations", "snapshot confirmations");
 
   const profileTokens: ProfileToken[] = tokens.map(
-    ({ address, name, symbol, launchedAt, href }) => ({
+    ({
+      address,
+      name,
+      symbol,
+      launchedAt,
+      href,
+      imageUrl,
+      marketCapEthWei,
+      fdvUsdWad,
+    }) => ({
       address,
       name,
       symbol,
       launchedAt: formatActivityDate(launchedAt),
       href,
+      ...(imageUrl ? { imageUrl } : {}),
+      ...(marketCapEthWei ? { marketCapEthWei } : {}),
+      ...(fdvUsdWad ? { fdvUsdWad } : {}),
     }),
   );
   const positions: ProfilePosition[] = tokens.map((token) => ({

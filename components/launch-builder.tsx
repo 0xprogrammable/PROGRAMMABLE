@@ -21,10 +21,6 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import {
-  saveLocalDraft,
-  useLocalDraft,
-} from "@/components/local-draft";
 import { useWallet } from "@/components/wallet-provider";
 import { validatePreparedClassicLaunchTransaction } from "@/lib/classic-launch-validation";
 import {
@@ -45,6 +41,7 @@ import {
   CLASSIC_TOTAL_SWAP_FEE_BPS,
   CLASSIC_TOTAL_SWAP_FEE_PERCENT,
   createEmptyDraft,
+  maximumClassicDevBuyWei,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
   parseInitialBuyWei,
@@ -52,6 +49,7 @@ import {
   type LaunchDraft,
 } from "@/lib/launch";
 import { prepareTokenImage } from "@/lib/token-image";
+import { formatEther } from "viem";
 
 type TokenImageState = {
   status: "idle" | "preparing" | "waiting" | "uploading" | "ready" | "error";
@@ -101,8 +99,7 @@ export function findIndexedLaunch(
     }
 
     const href =
-      typeof candidate.href === "string" &&
-      candidate.href.startsWith("/token/")
+      typeof candidate.href === "string" && candidate.href.startsWith("/token/")
         ? candidate.href
         : `/token/${candidate.tokenAddress}`;
     return {
@@ -157,31 +154,15 @@ function createLaunchSalt() {
 }
 
 export function LaunchBuilder() {
-  const localDraft = useLocalDraft();
   const [selectedModel, setSelectedModel] = useState<"classic" | null>(null);
 
   if (!selectedModel) {
     return <LaunchModelPicker onChoose={() => setSelectedModel("classic")} />;
   }
 
-  if (localDraft === undefined) {
-    return (
-      <div className="launch-page page-width">
-        <header className="page-heading">
-          <div>
-            <p className="eyebrow">Classic</p>
-            <h1>Set up your token</h1>
-          </div>
-          <p>Loading your launch settings</p>
-        </header>
-        <div className="launch-loading" aria-label="Loading launch" />
-      </div>
-    );
-  }
-
   return (
     <LaunchBuilderForm
-      initialDraft={normalizeStandardDraft(localDraft ?? createEmptyDraft())}
+      initialDraft={normalizeStandardDraft(createEmptyDraft())}
       onBackToModels={() => setSelectedModel(null)}
     />
   );
@@ -217,7 +198,8 @@ function LaunchModelPicker({ onChoose }: { onChoose: () => void }) {
               <strong>Classic</strong>
             </span>
             <span className="launch-model-description">
-              A fixed-supply token with locked liquidity and creator fees paid in ETH
+              A fixed-supply token with locked liquidity and creator fees paid
+              in ETH
             </span>
             <span className="launch-model-details">
               <span>Uniswap v4</span>
@@ -242,16 +224,19 @@ function LaunchBuilderForm({
   initialDraft: LaunchDraft;
   onBackToModels: () => void;
 }) {
-  const { wallet, openWallet, sendTransaction } = useWallet();
+  const { wallet, openWallet, readNativeBalance, sendTransaction } =
+    useWallet();
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
   const [launchPhase, setLaunchPhase] = useState<LaunchPhase>("idle");
   const [transactionHash, setTransactionHash] = useState("");
   const [submittedAccount, setSubmittedAccount] = useState("");
-  const [indexedLaunch, setIndexedLaunch] =
-    useState<IndexedLaunch | null>(null);
+  const [indexedLaunch, setIndexedLaunch] = useState<IndexedLaunch | null>(
+    null,
+  );
   const [successOpen, setSuccessOpen] = useState(false);
+  const [settingMaxBuy, setSettingMaxBuy] = useState(false);
   const [tokenImageState, setTokenImageState] =
     useState<TokenImageState>(emptyTokenImageState);
   const currentLaunchContext = useRef({ draft, wallet });
@@ -280,9 +265,7 @@ function LaunchBuilderForm({
         const response = await fetch(
           `/api/explore/profile?account=${encodeURIComponent(
             submittedAccount,
-          )}&launch=${encodeURIComponent(
-            transactionHash,
-          )}&attempt=${attempt}`,
+          )}&launch=${encodeURIComponent(transactionHash)}&attempt=${attempt}`,
           {
             cache: "no-store",
             headers: { Accept: "application/json" },
@@ -300,10 +283,7 @@ function LaunchBuilderForm({
           }
         }
       } catch (caught) {
-        if (
-          caught instanceof DOMException &&
-          caught.name === "AbortError"
-        ) {
+        if (caught instanceof DOMException && caught.name === "AbortError") {
           return;
         }
       }
@@ -317,11 +297,7 @@ function LaunchBuilderForm({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [
-    indexedLaunch,
-    submittedAccount,
-    transactionHash,
-  ]);
+  }, [indexedLaunch, submittedAccount, transactionHash]);
 
   function validateLaunch() {
     if (
@@ -372,8 +348,7 @@ function LaunchBuilderForm({
         signal: controller.signal,
       });
       const body = (await response.json()) as
-        | LaunchPreflightResponse
-        | { error: string };
+        LaunchPreflightResponse | { error: string };
       if (!response.ok || "error" in body) {
         throw new Error(
           "error" in body ? body.error : "The launch could not be checked",
@@ -394,12 +369,72 @@ function LaunchBuilderForm({
     nextDraft: LaunchDraft,
     connectedWallet = currentLaunchContext.current.wallet,
   ) {
-    saveLocalDraft(nextDraft);
     setDraft(nextDraft);
     currentLaunchContext.current = {
       draft: nextDraft,
       wallet: connectedWallet,
     };
+  }
+
+  async function setMaximumDevBuy() {
+    if (!wallet || settingMaxBuy || launching) {
+      if (!wallet) openWallet();
+      return;
+    }
+
+    const validationError = validateLaunch();
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    setSettingMaxBuy(true);
+    setFormError("");
+
+    try {
+      let checkedDraft = normalizeStandardDraft(draft);
+      if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
+        checkedDraft = {
+          ...checkedDraft,
+          launchSalt: createLaunchSalt(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      const prepared = await prepareLaunch(checkedDraft, wallet);
+      const balances = await readNativeBalance();
+      const gasLimit = BigInt(prepared.transaction.gasLimit);
+      const maximum = maximumClassicDevBuyWei({
+        nativeBalanceWei: balances.nativeBalanceWei,
+        gasLimit,
+        gasPriceWei: balances.gasPriceWei,
+      });
+      const minimum = parseInitialBuyWei(MEME_MIN_INITIAL_BUY_ETH) ?? 0n;
+
+      if (maximum < minimum) {
+        throw new Error(
+          "This wallet needs more ETH for the minimum Dev Buy and network gas",
+        );
+      }
+
+      markDraftEdited();
+      persistLaunchDraft(
+        {
+          ...prepared.checkedDraft,
+          initialBuyEth: formatEther(maximum),
+          updatedAt: new Date().toISOString(),
+        },
+        wallet,
+      );
+    } catch (caught) {
+      setFormError(
+        caught instanceof Error
+          ? caught.message
+          : "The maximum Dev Buy could not be calculated",
+      );
+    } finally {
+      setSettingMaxBuy(false);
+    }
   }
 
   async function prepareLaunch(
@@ -419,11 +454,7 @@ function LaunchBuilderForm({
       result = await requestLaunchCheck(checkedDraft, connectedWallet);
     }
 
-    if (
-      result.status !== "ready" ||
-      !result.transaction ||
-      !result.planHash
-    ) {
+    if (result.status !== "ready" || !result.transaction || !result.planHash) {
       throw new Error(result.detail || "The launch could not be prepared");
     }
 
@@ -479,13 +510,12 @@ function LaunchBuilderForm({
         throw new Error("The token or connected wallet changed. Try again");
       }
 
-      const validatedTransaction =
-        validatePreparedClassicLaunchTransaction({
-          transaction: prepared.transaction,
-          draft: checkedDraft,
-          account: launchWallet.account,
-          planHash: prepared.planHash,
-        });
+      const validatedTransaction = validatePreparedClassicLaunchTransaction({
+        transaction: prepared.transaction,
+        draft: checkedDraft,
+        account: launchWallet.account,
+        planHash: prepared.planHash,
+      });
       setLaunchPhase("confirming");
       const hash = await sendTransaction(validatedTransaction);
       setSubmittedAccount(launchWallet.account);
@@ -516,6 +546,10 @@ function LaunchBuilderForm({
         <div className="launch-page-title">
           <p className="eyebrow">Classic</p>
           <h1>Set up your token</h1>
+          <p className="launch-model-summary">
+            1B fixed supply <span>·</span> Uniswap v4 <span>·</span> Locked
+            liquidity
+          </p>
         </div>
       </header>
 
@@ -538,6 +572,8 @@ function LaunchBuilderForm({
             draft={draft}
             setDraft={setDraft}
             onEdit={markDraftEdited}
+            settingMaxBuy={settingMaxBuy}
+            onMaximumDevBuy={() => void setMaximumDevBuy()}
           />
         </div>
 
@@ -565,12 +601,7 @@ function LaunchBuilderForm({
                 Confirming launch
                 <span>{shortenAddress(transactionHash)}</span>
               </a>
-            ) : (
-              <p>
-                1B fixed supply <span>·</span> Uniswap v4 <span>·</span>{" "}
-                Locked liquidity
-              </p>
-            )}
+            ) : null}
           </div>
           {indexedLaunch ? (
             <Link
@@ -681,11 +712,7 @@ function LaunchSuccessDialog({
         <p>
           {launch.name} <span>${launch.symbol}</span>
         </p>
-        <Link
-          ref={viewLinkRef}
-          className="primary-button"
-          href={launch.href}
-        >
+        <Link ref={viewLinkRef} className="primary-button" href={launch.href}>
           View your token
         </Link>
       </section>
@@ -765,8 +792,7 @@ function TokenStep({
           body: form,
         });
         const body = (await response.json()) as
-          | { url: string }
-          | { error: string };
+          { url: string } | { error: string };
         if (!response.ok || !("url" in body)) {
           throw new Error(
             "error" in body ? body.error : "The image could not be uploaded",
@@ -875,8 +901,7 @@ function TokenStep({
   }
 
   const descriptionRemaining =
-    MAX_TOKEN_DESCRIPTION_BYTES -
-    utf8ByteLength(draft.tokenDescription);
+    MAX_TOKEN_DESCRIPTION_BYTES - utf8ByteLength(draft.tokenDescription);
 
   return (
     <section className="classic-token-section">
@@ -1075,61 +1100,37 @@ function FeeStep({
   draft,
   setDraft,
   onEdit,
+  settingMaxBuy,
+  onMaximumDevBuy,
 }: {
   draft: LaunchDraft;
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onEdit: () => void;
+  settingMaxBuy: boolean;
+  onMaximumDevBuy: () => void;
 }) {
-  const creatorFeeBps =
-    CLASSIC_TOTAL_SWAP_FEE_BPS - PLATFORM_FEE_BPS;
-  const selectedFeePercent = Number(CLASSIC_TOTAL_SWAP_FEE_PERCENT);
+  const creatorFeeBps = CLASSIC_TOTAL_SWAP_FEE_BPS - PLATFORM_FEE_BPS;
 
   return (
     <section className="classic-fee-section">
       <div className="classic-section-heading classic-fee-heading">
         <h2>Swap fee</h2>
         <p>
-          Creator receives {(creatorFeeBps / 100).toFixed(2)}%
-          <span>·</span>
+          Creator receives {(creatorFeeBps / 100).toFixed(2)}%<span>·</span>
           Programmable receives {(PLATFORM_FEE_BPS / 100).toFixed(2)}%
         </p>
       </div>
 
       <div className="classic-fee-layout">
-        <div className="classic-fee-slider">
-          <div className="classic-fee-slider-row">
-            <div className="classic-fee-slider-control">
-              <span className="classic-fee-slider-track" aria-hidden="true">
-                <span style={{ width: "0%" }} />
-              </span>
-              <input
-                id="classic-swap-fee"
-                type="range"
-                min="1"
-                max="10"
-                step="1"
-                value={selectedFeePercent}
-                aria-label="Total swap fee"
-                aria-valuetext="Fixed 1.00% total swap fee"
-                disabled
-              />
-            </div>
-            <output htmlFor="classic-swap-fee">
-              1.00%
-            </output>
-          </div>
-          <div className="classic-fee-slider-limits" aria-hidden="true">
-            <span>1.00%</span>
-            <span>Fixed</span>
-          </div>
+        <div className="classic-fee-fixed" aria-label="Fixed 1.00% swap fee">
+          <span>Total swap fee</span>
+          <strong>{CLASSIC_TOTAL_SWAP_FEE_PERCENT}.00%</strong>
         </div>
 
         <label className="meme-dev-buy" htmlFor="classic-dev-buy">
           <span>
             <strong>Dev Buy</strong>
-            <small>
-              Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}
-            </small>
+            <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
           </span>
           <span className="meme-dev-buy-input">
             <input
@@ -1147,6 +1148,13 @@ function FeeStep({
                 });
               }}
             />
+            <button
+              type="button"
+              disabled={settingMaxBuy}
+              onClick={onMaximumDevBuy}
+            >
+              {settingMaxBuy ? "Checking" : "Max"}
+            </button>
             <span>ETH</span>
           </span>
         </label>

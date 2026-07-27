@@ -92,9 +92,7 @@ function useWalletLocalProfile(address?: string) {
     if (!address || typeof window === "undefined") return "";
 
     try {
-      return (
-        window.localStorage.getItem(getProfileStorageKey(address)) ?? ""
-      );
+      return window.localStorage.getItem(getProfileStorageKey(address)) ?? "";
     } catch {
       return "";
     }
@@ -112,9 +110,7 @@ function getEmptyProfileSnapshot() {
   return "";
 }
 
-export function ProfileView({
-  onchainData,
-}: ProfileViewProps = {}) {
+export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const { wallet, openWallet, sendTransaction } = useWallet();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const account = wallet?.account;
@@ -254,11 +250,7 @@ export function ProfileView({
     async (claim: ProfileClaim) => {
       const claimAccount = account;
       const chainId = scopedOnchainData.chainId;
-      if (
-        !claimAccount ||
-        scopedOnchainData.status !== "ready" ||
-        !chainId
-      ) {
+      if (!claimAccount || scopedOnchainData.status !== "ready" || !chainId) {
         return;
       }
 
@@ -294,8 +286,7 @@ export function ProfileView({
           chainId,
         });
         if (
-          activeAccountRef.current?.toLowerCase() !==
-          claimAccount.toLowerCase()
+          activeAccountRef.current?.toLowerCase() !== claimAccount.toLowerCase()
         ) {
           throw new Error("The connected wallet changed before submission");
         }
@@ -312,8 +303,7 @@ export function ProfileView({
         const transactionHash = await sendTransaction(prepared.transaction);
 
         if (
-          activeAccountRef.current?.toLowerCase() ===
-          claimAccount.toLowerCase()
+          activeAccountRef.current?.toLowerCase() === claimAccount.toLowerCase()
         ) {
           setClaimState({
             status: "submitted",
@@ -324,8 +314,7 @@ export function ProfileView({
         }
       } catch (caught) {
         if (
-          activeAccountRef.current?.toLowerCase() !==
-          claimAccount.toLowerCase()
+          activeAccountRef.current?.toLowerCase() !== claimAccount.toLowerCase()
         ) {
           return;
         }
@@ -348,9 +337,7 @@ export function ProfileView({
   const displayName = account
     ? savedProfile.username || shortenAddress(account)
     : "Your profile";
-  const avatarImage = editingProfile
-    ? avatarDraft
-    : savedProfile.avatarDataUrl;
+  const avatarImage = editingProfile ? avatarDraft : savedProfile.avatarDataUrl;
   const avatarFallback = account
     ? (savedProfile.username || account.slice(2, 4)).slice(0, 2).toUpperCase()
     : "P";
@@ -375,7 +362,18 @@ export function ProfileView({
         </div>
 
         <div className="profile-hero-copy">
-          <h1>{displayName}</h1>
+          <div className="profile-name-row">
+            <h1>{displayName}</h1>
+            {account && !editingProfile ? (
+              <button
+                className="secondary-button profile-edit-button"
+                type="button"
+                onClick={beginEditingProfile}
+              >
+                Edit
+              </button>
+            ) : null}
+          </div>
           <p>
             {account
               ? shortenAddress(account)
@@ -464,23 +462,15 @@ export function ProfileView({
                 </div>
                 <p
                   id="profile-username-help"
-                  className={usernameError || saveError ? "form-error" : undefined}
+                  className={
+                    usernameError || saveError ? "form-error" : undefined
+                  }
                   role={usernameError || saveError ? "alert" : undefined}
                 >
-                  {usernameError ||
-                    saveError ||
-                    "3–12 letters or numbers"}
+                  {usernameError || saveError || "3–12 letters or numbers"}
                 </p>
               </form>
-            ) : (
-              <button
-                className="secondary-button profile-edit-button"
-                type="button"
-                onClick={beginEditingProfile}
-              >
-                Edit
-              </button>
-            )
+            ) : null
           ) : null}
         </div>
       </section>
@@ -515,6 +505,20 @@ export function groupProfileRewards(
     token,
     claim: claimByToken.get(token.address.toLowerCase()),
   }));
+}
+
+export function sortProfileTokensByMarketCap(tokens: readonly ProfileToken[]) {
+  return [...tokens].sort((first, second) => {
+    const firstCap = first.fdvUsdWad ?? first.marketCapEthWei;
+    const secondCap = second.fdvUsdWad ?? second.marketCapEthWei;
+
+    if (firstCap && secondCap && firstCap !== secondCap) {
+      return BigInt(firstCap) > BigInt(secondCap) ? -1 : 1;
+    }
+    if (firstCap && !secondCap) return -1;
+    if (!firstCap && secondCap) return 1;
+    return first.name.localeCompare(second.name);
+  });
 }
 
 function ProfileAccountWorkspace({
@@ -574,11 +578,15 @@ function ProfileAccountWorkspace({
     );
   }
 
-  const rewards = groupProfileRewards(data.tokens, data.claims);
+  const sortedTokens = sortProfileTokensByMarketCap(data.tokens);
+  const rewards = groupProfileRewards(sortedTokens, data.claims);
 
   return (
     <div className="profile-account-workspace">
-      <section className="profile-account-section" aria-labelledby="profile-tokens-title">
+      <section
+        className="profile-account-section"
+        aria-labelledby="profile-tokens-title"
+      >
         <header className="profile-account-heading">
           <h2 id="profile-tokens-title">Your tokens</h2>
           <span>{data.tokens.length}</span>
@@ -586,11 +594,18 @@ function ProfileAccountWorkspace({
 
         {data.tokens.length ? (
           <div className="profile-account-list">
-            {data.tokens.map((token) => (
+            {sortedTokens.map((token) => (
               <article className="profile-token-item" key={token.address}>
                 <span
-                  className="token-monogram token-tone-rose"
+                  className={`token-monogram token-tone-rose profile-token-art${
+                    token.imageUrl ? " has-image" : ""
+                  }`}
                   aria-hidden="true"
+                  style={
+                    token.imageUrl
+                      ? { backgroundImage: `url("${token.imageUrl}")` }
+                      : undefined
+                  }
                 >
                   {token.symbol.slice(0, 2).toUpperCase()}
                 </span>
@@ -614,7 +629,10 @@ function ProfileAccountWorkspace({
         )}
       </section>
 
-      <section className="profile-account-section" aria-labelledby="profile-rewards-title">
+      <section
+        className="profile-account-section"
+        aria-labelledby="profile-rewards-title"
+      >
         <header className="profile-account-heading">
           <h2 id="profile-rewards-title">Creator rewards</h2>
           <strong>{formatEth(data.claimableEth ?? "0")}</strong>
@@ -681,6 +699,19 @@ function ProfileRewardItem({
 
   return (
     <article className="profile-reward-item">
+      <span
+        className={`token-monogram token-tone-rose profile-token-art${
+          token.imageUrl ? " has-image" : ""
+        }`}
+        aria-hidden="true"
+        style={
+          token.imageUrl
+            ? { backgroundImage: `url("${token.imageUrl}")` }
+            : undefined
+        }
+      >
+        {token.symbol.slice(0, 2).toUpperCase()}
+      </span>
       <div>
         <Link href={token.href}>{token.name}</Link>
         <span>${token.symbol}</span>
