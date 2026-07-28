@@ -1423,9 +1423,7 @@ html[data-theme="dark"] .theme-toggle-sun {
 }
 
 .launch-model-art-classic img {
-  object-position: center bottom;
-  transform: scale(1.42);
-  transform-origin: center bottom;
+  object-position: center;
 }
 
 .launch-model-card-body {
