@@ -50,6 +50,55 @@ export function validateMinedTransactionEnvelope(
   preparedMaximumTotalDebitWei: string;
 };
 
+export function validatePreparedRevalidation(input: {
+  action:
+    | "deploy_keeper_executor"
+    | "launch"
+    | "grow_oracle"
+    | "fee_process_compound";
+  prepared: {
+    action: string;
+    preparedDigest: string;
+    request: {
+      from: string;
+      to?: string | null;
+      nonce: bigint | number | string;
+      value: bigint | number | string;
+      data: string;
+      gas: bigint | number | string;
+      maxFeePerGas: bigint | number | string;
+      maxPriorityFeePerGas: bigint | number | string;
+    };
+    reviewedGasLimit: bigint | number | string;
+    reviewedMaxFeePerGasWei: bigint | number | string;
+    reviewedMaxPriorityFeePerGasWei: bigint | number | string;
+    maximumGasDebitWei: bigint | number | string;
+    maximumTotalDebitWei: bigint | number | string;
+    details: unknown;
+  };
+  state: {
+    confirmedNonce: bigint | number | string;
+    pendingNonce: bigint | number | string;
+    balance: bigint | number | string;
+    baseFeePerGas: bigint | number | string;
+  };
+  base: {
+    to?: string | null;
+    value: bigint | number | string;
+    data: string;
+    details: unknown;
+  };
+  simulations: Array<{
+    resultHash: string;
+    estimatedGas: bigint | number | string;
+  }>;
+}): {
+  action: string;
+  preparedDigest: string;
+  liveEstimatedGas: string;
+  maximumTotalDebitWei: string;
+};
+
 export function decideLifecycleAction(
   state: DeepLifecycleState,
   evidence: DeepLifecycleEvidence,

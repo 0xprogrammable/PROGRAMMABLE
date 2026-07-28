@@ -1077,6 +1077,137 @@ async function dualSimulations(request) {
   return checks;
 }
 
+export function validatePreparedRevalidation({
+  action,
+  prepared,
+  state,
+  base,
+  simulations,
+}) {
+  if (
+    !Object.hasOwn(gasCeilings, action) ||
+    !prepared ||
+    prepared.action !== action ||
+    !prepared.preparedDigest ||
+    !prepared.request
+  ) {
+    throw new Error("Prepared lifecycle action is not exact");
+  }
+  const request = prepared.request;
+  if (BigInt(state.confirmedNonce) !== BigInt(state.pendingNonce)) {
+    throw new Error("Another transaction is pending from the required wallet");
+  }
+  if (BigInt(state.confirmedNonce) !== BigInt(request.nonce)) {
+    throw new Error("Prepared transaction nonce is no longer current");
+  }
+  if (normalizeHex(request.from) !== ACCOUNT) {
+    throw new Error("Prepared transaction signer changed");
+  }
+
+  const expectedTarget = base.to ? normalizeHex(base.to) : null;
+  const preparedTarget =
+    request.to === undefined || request.to === null
+      ? null
+      : normalizeHex(request.to);
+  if (preparedTarget !== expectedTarget) {
+    throw new Error("Prepared transaction target changed");
+  }
+  if (BigInt(request.value) !== BigInt(base.value)) {
+    throw new Error("Prepared transaction ETH value changed");
+  }
+  if (normalizeHex(request.data) !== normalizeHex(base.data)) {
+    throw new Error("Prepared transaction calldata changed");
+  }
+  if (!sameJson(prepared.details, base.details)) {
+    throw new Error("Prepared transaction action details changed");
+  }
+
+  for (const field of [
+    "gas",
+    "maxFeePerGas",
+    "maxPriorityFeePerGas",
+  ]) {
+    if (request[field] === undefined) {
+      throw new Error("Prepared transaction gas envelope is incomplete");
+    }
+  }
+  const gasLimit = BigInt(request.gas);
+  const maxFeePerGas = BigInt(request.maxFeePerGas);
+  const maxPriorityFeePerGas = BigInt(request.maxPriorityFeePerGas);
+  if (gasLimit !== BigInt(prepared.reviewedGasLimit)) {
+    throw new Error("Prepared gas limit differs from its review commitment");
+  }
+  if (maxFeePerGas !== BigInt(prepared.reviewedMaxFeePerGasWei)) {
+    throw new Error("Prepared fee ceiling differs from its review commitment");
+  }
+  if (
+    maxPriorityFeePerGas !==
+    BigInt(prepared.reviewedMaxPriorityFeePerGasWei)
+  ) {
+    throw new Error(
+      "Prepared priority-fee ceiling differs from its review commitment",
+    );
+  }
+  if (
+    gasLimit > gasCeilings[action] ||
+    maxFeePerGas > MAX_FEE_PER_GAS_WEI
+  ) {
+    throw new Error("Prepared transaction exceeds a reviewed ceiling");
+  }
+
+  const maximumGasDebit = gasLimit * maxFeePerGas;
+  const maximumTotalDebit = maximumGasDebit + BigInt(request.value);
+  if (maximumGasDebit !== BigInt(prepared.maximumGasDebitWei)) {
+    throw new Error("Prepared maximum gas debit commitment changed");
+  }
+  if (maximumTotalDebit !== BigInt(prepared.maximumTotalDebitWei)) {
+    throw new Error("Prepared maximum total debit commitment changed");
+  }
+  if (BigInt(state.balance) < maximumTotalDebit) {
+    throw new Error("Wallet balance is below the prepared maximum debit");
+  }
+  if (
+    BigInt(state.baseFeePerGas) + maxPriorityFeePerGas >
+    maxFeePerGas
+  ) {
+    throw new Error("Current base fee exceeds the prepared fee envelope");
+  }
+
+  if (
+    !Array.isArray(simulations) ||
+    simulations.length !== 2 ||
+    simulations[0].resultHash !== simulations[1].resultHash
+  ) {
+    throw new Error("Independent Mainnet simulations disagree");
+  }
+  if (
+    action === "deploy_keeper_executor" &&
+    simulations.some(
+      (simulation) =>
+        simulation.resultHash !== REVIEWED_KEEPER_EXECUTOR_RUNTIME_HASH,
+    )
+  ) {
+    throw new Error(
+      "Independent deployment simulations did not return the reviewed runtime",
+    );
+  }
+  const liveEstimate =
+    BigInt(simulations[0].estimatedGas) >
+    BigInt(simulations[1].estimatedGas)
+      ? BigInt(simulations[0].estimatedGas)
+      : BigInt(simulations[1].estimatedGas);
+  if (liveEstimate > gasLimit) {
+    throw new Error("Fresh gas estimate exceeds the prepared gas limit");
+  }
+
+  return {
+    action,
+    preparedDigest: prepared.preparedDigest,
+    liveEstimatedGas: liveEstimate.toString(),
+    maximumTotalDebitWei: maximumTotalDebit.toString(),
+  };
+}
+
 function actionPostState(state) {
   return {
     blockNumber: decimal(state.blockNumber),
@@ -1106,6 +1237,51 @@ function actionPostState(state) {
     lastCompoundTimestamp: state.lastCompoundTimestamp,
     oracleReady: state.oracleReady,
   };
+}
+
+async function revalidatePrepared(plan, body) {
+  const { action, preparedDigest } = body ?? {};
+  if (!Object.hasOwn(gasCeilings, action)) {
+    throw new Error("Unknown lifecycle action");
+  }
+  const evidence = await readEvidence(plan.planDigest);
+  const prepared = evidence.prepared;
+  if (
+    !prepared ||
+    prepared.action !== action ||
+    prepared.preparedDigest !== preparedDigest
+  ) {
+    throw new Error("Prepared action no longer matches the reviewed request");
+  }
+  if (evidence.transactions[action]) {
+    throw new Error("This lifecycle action is already recorded");
+  }
+
+  const state = await reconcile(plan.token);
+  const executorAddress = resolvedKeeperExecutor(evidence);
+  if (executorAddress) {
+    await Promise.all(
+      RPC_ENDPOINTS.map((endpoint) =>
+        assertKeeperExecutor(endpoint, executorAddress),
+      ),
+    );
+  }
+  const liveAction = executorAddress
+    ? decideLifecycleAction(state, evidence)
+    : "deploy_keeper_executor";
+  if (liveAction !== action) {
+    throw new Error("Live lifecycle action changed after preparation");
+  }
+  validateProgress(evidence, state);
+  const base = await actionRequest(action, plan, state, executorAddress);
+  const simulations = await dualSimulations(prepared.request);
+  return validatePreparedRevalidation({
+    action,
+    prepared,
+    state,
+    base,
+    simulations,
+  });
 }
 
 function validateProgress(evidence, state) {
@@ -1831,8 +2007,9 @@ function renderHtml(plan) {
   async function refresh(){clear();await ensure();inspection=await serverState();if(inspection.status==="complete")notice("Lifecycle complete. Exact final accounting is recorded.","success");else if(inspection.status==="waiting")notice("Waiting for the 30-minute TWAP. Refresh after maturity.");else if(inspection.status==="blocked")notice(inspection.blocker.message,"error");else notice(inspection.prepared.label+" passed both independent Mainnet simulations.");buttons()}
   async function connect(){if(busy)return;busy=true;buttons();try{provider=metamask();if(!provider)throw new Error("MetaMask is not available");if(!(await wallet("eth_accounts")).length)await wallet("eth_requestAccounts");await ensure();await refresh();el.connect.textContent="Connected"}catch(error){account=undefined;inspection=undefined;el.connect.textContent="Connect MetaMask";notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}
   async function prepare(){if(busy)return;busy=true;buttons();try{await ensure();inspection=await serverState();if(inspection.status!=="ready")throw new Error(inspection.status==="waiting"?"TWAP is not mature yet":"No action is ready");locked=inspection.prepared;el.title.textContent="Review · "+locked.label;el.value.textContent=locked.valueEth+" ETH ("+locked.valueWei+" wei)";el.nonce.textContent=String(Number(BigInt(locked.request.nonce)));el.target.textContent=locked.target;el.calldata.textContent=locked.calldataHash;el.estimate.textContent=locked.liveEstimatedGas;el.gas.textContent=locked.gasLimit;el.fee.textContent=locked.maxFeePerGasWei+" wei";el.gasDebit.textContent=locked.maximumGasDebitEth+" ETH";el.totalDebit.textContent=locked.maximumTotalDebitEth+" ETH";el.review.classList.add("open");notice("Review the exact value and maximum debit before opening MetaMask.")}catch(error){clear();notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}
+  async function revalidate(prepared){const response=await fetch("/revalidate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:prepared.action,preparedDigest:prepared.preparedDigest})}),body=await response.json();if(!response.ok)throw new Error(body.error||"Prepared transaction is no longer valid");return body}
   async function record(hash,prepared){for(let attempt=0;attempt<180;attempt+=1){const response=await fetch("/record",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:prepared.action,txHash:hash,preparedDigest:prepared.preparedDigest})}),body=await response.json();if(response.ok&&body.receipt)return body;if(!response.ok&&response.status!==409)throw new Error(body.error||"Could not record transaction");await new Promise(resolve=>setTimeout(resolve,2000))}throw new Error("Transaction is still pending after six minutes")}
-  async function send(){if(busy||!locked||!el.ack.checked)return;busy=true;buttons();const prepared=locked;try{await ensure();const fresh=await serverState();if(fresh.status!=="ready"||fresh.prepared?.preparedDigest!==prepared.preparedDigest)throw new Error("Live state changed. Prepare again");notice("Review "+prepared.label+" in MetaMask.");const hash=await wallet("eth_sendTransaction",[prepared.request]);notice("Submitted through MetaMask. Reconciling the exact receipt on two RPCs.");await record(hash,prepared);clear();await refresh()}catch(error){notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}
+  async function send(){if(busy||!locked||!el.ack.checked)return;busy=true;buttons();const prepared=locked;try{await ensure();await revalidate(prepared);notice("Review "+prepared.label+" in MetaMask.");const hash=await wallet("eth_sendTransaction",[prepared.request]);notice("Submitted through MetaMask. Reconciling the exact receipt on two RPCs.");await record(hash,prepared);clear();await refresh()}catch(error){notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}
   el.connect.addEventListener("click",connect);el.refresh.addEventListener("click",()=>{if(!busy){busy=true;buttons();refresh().catch(error=>notice(error?.message||String(error),"error")).finally(()=>{busy=false;buttons()})}});el.prepare.addEventListener("click",prepare);el.ack.addEventListener("change",buttons);el.send.addEventListener("click",send);el.switch.addEventListener("click",async()=>{try{provider=metamask();if(!provider)throw new Error("MetaMask is not available");await wallet("wallet_switchEthereumChain",[{chainId:"0x1"}]);await connect()}catch(error){notice(error?.message||String(error),"error")}});window.ethereum?.on?.("accountsChanged",()=>location.reload());window.ethereum?.on?.("chainChanged",()=>location.reload());buttons();</script></body></html>`;
 }
 
@@ -1882,6 +2059,14 @@ async function main() {
       }
       if (request.method === "GET" && url.pathname === "/state") {
         json(response, 200, await inspect(plan));
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/revalidate") {
+        json(
+          response,
+          200,
+          await revalidatePrepared(plan, await readJsonBody(request)),
+        );
         return;
       }
       if (request.method === "POST" && url.pathname === "/record") {
