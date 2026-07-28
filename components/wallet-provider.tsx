@@ -49,6 +49,9 @@ type WalletState = {
   chainId: string;
 };
 
+type ColorTheme = "light" | "dark";
+const themeChangeEvent = "programmable:theme-changed";
+
 export type WalletTradeBalances = {
   nativeBalanceWei: bigint;
   tokenBalanceRaw: bigint;
@@ -316,10 +319,54 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }
 
   return (
+    <ConfiguredWalletProvider appId={privyAppId}>
+      {children}
+    </ConfiguredWalletProvider>
+  );
+}
+
+function subscribeToTheme(callback: () => void) {
+  window.addEventListener(themeChangeEvent, callback);
+  return () => window.removeEventListener(themeChangeEvent, callback);
+}
+
+function getThemeSnapshot(): ColorTheme {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function getServerThemeSnapshot(): ColorTheme {
+  return "light";
+}
+
+function ConfiguredWalletProvider({
+  appId,
+  children,
+}: {
+  appId: string;
+  children: ReactNode;
+}) {
+  const theme = useSyncExternalStore(
+    subscribeToTheme,
+    getThemeSnapshot,
+    getServerThemeSnapshot,
+  );
+
+  const themedPrivyConfig = useMemo<PrivyClientConfig>(
+    () => ({
+      ...privyConfig,
+      appearance: {
+        ...privyConfig.appearance,
+        theme,
+      },
+    }),
+    [theme],
+  );
+
+  return (
     <PrivyProvider
-      appId={privyAppId}
+      appId={appId}
       clientId={privyClientId}
-      config={privyConfig}
+      config={themedPrivyConfig}
     >
       <PrivyWalletBridge>{children}</PrivyWalletBridge>
     </PrivyProvider>

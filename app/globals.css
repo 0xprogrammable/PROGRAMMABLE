@@ -15,13 +15,114 @@
   --brand-pink: #ef82b1;
   --accent-ink: #2d1425;
   --accent-wash: rgba(232, 121, 190, 0.12);
+  --accent-soft: rgba(232, 121, 190, 0.1);
   --success: #19764d;
   --warning: #8a5515;
   --danger: #b93635;
   --focus: #9e457f;
+  --body-background: #fdfbf9;
+  --background-overlay-top: rgba(255, 255, 255, 0.62);
+  --background-overlay-middle: rgba(255, 255, 255, 0.8);
+  --background-overlay-bottom: rgba(255, 255, 255, 0.92);
+  --header-background: rgba(255, 255, 255, 0.86);
+  --header-border: rgba(222, 214, 220, 0.64);
+  --header-shadow: rgba(67, 42, 59, 0.025);
+  --glass-70: rgba(255, 255, 255, 0.7);
+  --glass-72: rgba(255, 255, 255, 0.72);
+  --glass-76: rgba(255, 255, 255, 0.76);
+  --glass-82: rgba(255, 255, 255, 0.82);
+  --glass-84: rgba(255, 255, 255, 0.84);
+  --glass-88: rgba(255, 255, 255, 0.88);
+  --glass-90: rgba(255, 255, 255, 0.9);
+  --glass-92: rgba(255, 255, 255, 0.92);
+  --glass-94: rgba(255, 255, 255, 0.94);
+  --glass-96: rgba(255, 255, 255, 0.96);
+  --glass-98: rgba(255, 255, 255, 0.98);
+  --control-border: rgba(218, 208, 216, 0.86);
+  --popover-border: rgba(218, 208, 216, 0.94);
+  --panel-border: rgba(222, 213, 220, 0.9);
+  --panel-border-soft: rgba(222, 213, 220, 0.8);
+  --panel-border-muted: rgba(222, 213, 220, 0.88);
+  --surface-tint: rgba(251, 250, 251, 0.72);
+  --surface-tint-strong: rgba(251, 250, 251, 0.96);
+  --card-shadow: rgba(58, 35, 50, 0.035);
+  --card-shadow-soft: rgba(58, 35, 50, 0.025);
+  --popover-shadow: rgba(47, 22, 40, 0.14);
+  --overlay-shadow: rgba(47, 22, 40, 0.18);
+  --hover-shadow: rgba(49, 30, 43, 0.08);
+  --dialog-backdrop: rgba(32, 20, 28, 0.28);
+  --success-backdrop: rgba(43, 30, 39, 0.18);
+  --warning-background: rgba(255, 247, 236, 0.82);
+  --warning-border: rgba(185, 123, 46, 0.14);
+  --warning-text: #7d551f;
+  --accent-selection: #fff7fd;
+  --step-background: #f8f5f7;
+  --avatar-background: linear-gradient(145deg, #f8dced, #e7dff8);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --header-height: 68px;
   --page-width: 1280px;
+}
+
+html[data-theme="dark"] {
+  --canvas: #09111f;
+  --surface: #111a2a;
+  --surface-raised: #172235;
+  --surface-soft: #1d293d;
+  --border: rgba(223, 228, 240, 0.12);
+  --border-strong: rgba(230, 233, 244, 0.22);
+  --text: #f7f2f6;
+  --text-soft: #d7ced7;
+  --muted: #aaa0aa;
+  --dim: #89828d;
+  --accent: #e879be;
+  --accent-hover: #f19aca;
+  --accent-strong: #f0a1c9;
+  --brand-pink: #ef82b1;
+  --accent-ink: #2d1425;
+  --accent-wash: rgba(232, 121, 190, 0.16);
+  --accent-soft: rgba(232, 121, 190, 0.14);
+  --success: #67c99a;
+  --warning: #e1ad6e;
+  --danger: #f18d91;
+  --focus: #ef82b1;
+  --body-background: #08101d;
+  --background-overlay-top: rgba(7, 14, 27, 0.7);
+  --background-overlay-middle: rgba(8, 16, 30, 0.84);
+  --background-overlay-bottom: rgba(8, 16, 29, 0.95);
+  --header-background: rgba(9, 17, 31, 0.86);
+  --header-border: rgba(222, 226, 239, 0.1);
+  --header-shadow: rgba(0, 0, 0, 0.22);
+  --glass-70: rgba(16, 25, 41, 0.7);
+  --glass-72: rgba(16, 25, 41, 0.72);
+  --glass-76: rgba(17, 27, 44, 0.76);
+  --glass-82: rgba(17, 27, 44, 0.82);
+  --glass-84: rgba(17, 27, 44, 0.84);
+  --glass-88: rgba(18, 29, 47, 0.88);
+  --glass-90: rgba(18, 29, 47, 0.9);
+  --glass-92: rgba(19, 30, 48, 0.92);
+  --glass-94: rgba(19, 30, 48, 0.94);
+  --glass-96: rgba(19, 30, 48, 0.96);
+  --glass-98: rgba(20, 31, 49, 0.98);
+  --control-border: rgba(225, 229, 241, 0.14);
+  --popover-border: rgba(229, 232, 243, 0.18);
+  --panel-border: rgba(228, 231, 242, 0.15);
+  --panel-border-soft: rgba(228, 231, 242, 0.12);
+  --panel-border-muted: rgba(228, 231, 242, 0.14);
+  --surface-tint: rgba(13, 22, 37, 0.72);
+  --surface-tint-strong: rgba(14, 23, 38, 0.96);
+  --card-shadow: rgba(0, 0, 0, 0.22);
+  --card-shadow-soft: rgba(0, 0, 0, 0.16);
+  --popover-shadow: rgba(0, 0, 0, 0.36);
+  --overlay-shadow: rgba(0, 0, 0, 0.42);
+  --hover-shadow: rgba(0, 0, 0, 0.3);
+  --dialog-backdrop: rgba(1, 6, 14, 0.62);
+  --success-backdrop: rgba(1, 6, 14, 0.54);
+  --warning-background: rgba(83, 57, 25, 0.32);
+  --warning-border: rgba(224, 173, 110, 0.18);
+  --warning-text: #e8bb82;
+  --accent-selection: rgba(232, 121, 190, 0.12);
+  --step-background: #1a2639;
+  --avatar-background: linear-gradient(145deg, #3a2943, #252c4a);
 }
 
 * {
@@ -34,8 +135,12 @@ html {
   scroll-padding-top: calc(var(--header-height) + 20px);
 }
 
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 body {
-  background: #fdfbf9;
+  background: var(--body-background);
   color: var(--text);
   cursor: default;
   font-family: var(--font-instrument), Arial, sans-serif;
@@ -45,6 +150,9 @@ body {
   overflow-x: clip;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
 }
 
 button,
@@ -149,17 +257,17 @@ textarea {
   background-image:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.62) 0%,
-      rgba(255, 255, 255, 0.8) 48%,
-      rgba(255, 255, 255, 0.92) 100%
+      var(--background-overlay-top) 0%,
+      var(--background-overlay-middle) 48%,
+      var(--background-overlay-bottom) 100%
     ),
     url("/brand/programmable-floral-background-3000.webp");
   background-image:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.62) 0%,
-      rgba(255, 255, 255, 0.8) 48%,
-      rgba(255, 255, 255, 0.92) 100%
+      var(--background-overlay-top) 0%,
+      var(--background-overlay-middle) 48%,
+      var(--background-overlay-bottom) 100%
     ),
     image-set(
       url("/brand/programmable-floral-background-3000.webp") 1x,
@@ -172,6 +280,7 @@ textarea {
   inset: var(--header-height) 0 0;
   pointer-events: none;
   position: fixed;
+  transition: opacity 180ms ease;
   z-index: -1;
 }
 
@@ -188,12 +297,16 @@ textarea {
 
 .site-header {
   backdrop-filter: blur(24px) saturate(1.08);
-  background: rgba(255, 255, 255, 0.86);
-  border-bottom: 1px solid rgba(222, 214, 220, 0.64);
-  box-shadow: 0 7px 24px rgba(67, 42, 59, 0.025);
+  background: var(--header-background);
+  border-bottom: 1px solid var(--header-border);
+  box-shadow: 0 7px 24px var(--header-shadow);
   height: var(--header-height);
   position: sticky;
   top: 0;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
   z-index: 30;
 }
 
@@ -260,6 +373,71 @@ textarea {
   width: 38px;
 }
 
+.header-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  grid-column: 3;
+  justify-self: end;
+  min-width: 0;
+}
+
+.theme-toggle {
+  align-items: center;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--brand-pink);
+  cursor: default;
+  display: inline-flex;
+  flex: none;
+  height: 46px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 140ms var(--ease-out);
+  width: 46px;
+}
+
+.theme-toggle-icons {
+  display: block;
+  height: 20px;
+  position: relative;
+  width: 20px;
+}
+
+.theme-toggle-icons svg {
+  left: 0;
+  position: absolute;
+  top: 0;
+  transition:
+    opacity 170ms ease,
+    transform 190ms var(--ease-out);
+}
+
+.theme-toggle-moon {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+.theme-toggle-sun {
+  opacity: 0;
+  transform: rotate(-28deg) scale(0.82);
+}
+
+html[data-theme="dark"] .theme-toggle-moon {
+  opacity: 0;
+  transform: rotate(24deg) scale(0.82);
+}
+
+html[data-theme="dark"] .theme-toggle-sun {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
 .desktop-nav {
   align-items: center;
   display: flex;
@@ -304,10 +482,8 @@ textarea {
   width: 18px;
 }
 
-.header-inner > .wallet-button,
-.header-inner > .wallet-menu-root {
-  grid-column: 3;
-  justify-self: end;
+.header-actions > .wallet-button,
+.header-actions > .wallet-menu-root {
   margin-left: 0;
 }
 
@@ -316,10 +492,10 @@ textarea {
 }
 
 .wallet-menu {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--glass-98);
   border: 1px solid var(--border-strong);
   border-radius: 16px;
-  box-shadow: 0 18px 55px rgba(47, 22, 40, 0.14);
+  box-shadow: 0 18px 55px var(--popover-shadow);
   display: grid;
   min-width: 224px;
   padding: 7px;
@@ -432,6 +608,7 @@ textarea {
 }
 
 .wallet-button:active,
+.theme-toggle:active,
 .primary-button:active,
 .secondary-button:active {
   transform: scale(0.98);
@@ -481,8 +658,8 @@ textarea {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: clamp(132px, 15.5svh, 142px);
-  padding: 7px 0 5px;
+  min-height: clamp(212px, 24svh, 232px);
+  padding: 38px 0 8px;
   text-align: center;
 }
 
@@ -494,18 +671,19 @@ textarea {
 }
 
 .explore-brand-logo {
-  height: clamp(64px, 5.7vw, 76px);
+  height: clamp(108px, 8.6vw, 124px);
   object-fit: contain;
-  width: clamp(64px, 5.7vw, 76px);
+  width: clamp(108px, 8.6vw, 124px);
 }
 
 .explore-intro > p {
   color: var(--text-soft);
-  font-size: clamp(15px, 1.4vw, 18px);
-  letter-spacing: -0.018em;
-  line-height: 1.35;
-  margin-top: 8px;
-  max-width: 600px;
+  font-size: clamp(20px, 1.7vw, 24px);
+  font-weight: 510;
+  letter-spacing: -0.022em;
+  line-height: 1.3;
+  margin-top: 9px;
+  max-width: 680px;
   text-wrap: balance;
 }
 
@@ -569,8 +747,8 @@ textarea {
 
 .token-filter summary {
   align-items: center;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(218, 208, 216, 0.86);
+  background: var(--glass-82);
+  border: 1px solid var(--control-border);
   border-radius: 12px;
   color: var(--text-soft);
   cursor: default;
@@ -607,10 +785,10 @@ textarea {
 }
 
 .token-filter-menu {
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(218, 208, 216, 0.94);
+  background: var(--glass-98);
+  border: 1px solid var(--popover-border);
   border-radius: 15px;
-  box-shadow: 0 18px 48px rgba(66, 39, 57, 0.16);
+  box-shadow: 0 18px 48px var(--popover-shadow);
   display: grid;
   gap: 2px;
   left: 0;
@@ -648,8 +826,8 @@ textarea {
 
 .token-search {
   align-items: center;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(218, 208, 216, 0.86);
+  background: var(--glass-88);
+  border: 1px solid var(--control-border);
   border-radius: 12px;
   color: var(--muted);
   display: flex;
@@ -732,12 +910,12 @@ textarea {
 
 .token-card {
   animation: token-card-enter 190ms var(--ease-out) backwards;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(216, 207, 214, 0.9);
+  background: var(--glass-90);
+  border: 1px solid var(--panel-border);
   border-radius: 18px;
   box-shadow:
-    0 1px 0 rgba(58, 35, 50, 0.035),
-    0 8px 22px rgba(58, 35, 50, 0.025);
+    0 1px 0 var(--card-shadow),
+    0 8px 22px var(--card-shadow-soft);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto var(--token-card-body-height);
@@ -830,10 +1008,10 @@ textarea {
 
 .token-card-mark {
   align-items: center;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.92);
+  background: var(--glass-82);
+  border: 1px solid var(--glass-92);
   border-radius: 50%;
-  box-shadow: 0 18px 50px rgba(52, 27, 45, 0.1);
+  box-shadow: 0 18px 50px var(--popover-shadow);
   display: inline-flex;
   font-family: var(--font-plex-mono), monospace;
   font-size: 15px;
@@ -1104,7 +1282,7 @@ textarea {
 
 .token-empty-initial {
   align-self: center;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass-72);
   gap: 28px;
   margin-top: clamp(38px, 8vh, 84px);
   max-width: 560px;
@@ -1123,8 +1301,8 @@ textarea {
 
 .token-pagination {
   align-items: center;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(218, 208, 216, 0.86);
+  background: var(--glass-76);
+  border: 1px solid var(--control-border);
   border-radius: 13px;
   display: flex;
   flex: none;
@@ -1158,8 +1336,8 @@ textarea {
 }
 
 .token-pagination-pages button.active {
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 1px 5px rgba(52, 31, 47, 0.08);
+  background: var(--glass-98);
+  box-shadow: 0 1px 5px var(--card-shadow);
   color: var(--text);
 }
 
@@ -1215,8 +1393,8 @@ textarea {
 
 .launch-model-card {
   backdrop-filter: blur(14px);
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(222, 213, 220, 0.9);
+  background: var(--glass-90);
+  border: 1px solid var(--panel-border);
   border-radius: 22px;
   cursor: default;
   min-width: 0;
@@ -1469,7 +1647,7 @@ textarea {
 
 .step-navigation button > span {
   align-items: center;
-  background: #f8f5f7;
+  background: var(--step-background);
   border: 1px solid var(--border-strong);
   border-radius: 50%;
   display: inline-flex;
@@ -1515,7 +1693,7 @@ textarea {
 }
 
 .launch-form-panel {
-  background: rgba(251, 250, 251, 0.95);
+  background: var(--surface-tint-strong);
   border: 1px solid var(--border);
   border-radius: 22px;
   display: flex;
@@ -1578,7 +1756,7 @@ textarea {
 }
 
 .launch-type-option.selected {
-  background: #fff7fd;
+  background: var(--accent-selection);
   border-color: rgba(232, 121, 190, 0.42);
 }
 
@@ -1692,7 +1870,7 @@ textarea {
 
 .choice-row.selected,
 .behavior-row.selected {
-  background: #fff7fd;
+  background: var(--accent-selection);
   border-color: rgba(232, 121, 190, 0.4);
 }
 
@@ -2954,8 +3132,8 @@ textarea {
 .token-detail-overview,
 .token-detail-trade {
   backdrop-filter: blur(16px);
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(222, 213, 220, 0.9);
+  background: var(--glass-88);
+  border: 1px solid var(--panel-border);
   border-radius: 24px;
 }
 
@@ -2974,7 +3152,7 @@ textarea {
 .token-detail-image {
   aspect-ratio: 1;
   background: var(--surface-soft);
-  border: 1px solid rgba(222, 213, 220, 0.8);
+  border: 1px solid var(--panel-border-soft);
   border-radius: 20px;
   overflow: hidden;
   position: relative;
@@ -3033,14 +3211,14 @@ textarea {
 }
 
 .token-detail-overview > .token-social-links .token-social-link {
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--glass-70);
   border: 1px solid var(--border);
   height: 36px;
   width: 36px;
 }
 
 .token-detail-metrics {
-  background: rgba(251, 250, 251, 0.72);
+  background: var(--surface-tint);
   border: 1px solid var(--border);
   border-radius: 18px;
   display: grid;
@@ -3088,7 +3266,7 @@ textarea {
 }
 
 .token-detail-record {
-  background: rgba(251, 250, 251, 0.72);
+  background: var(--surface-tint);
   border: 1px solid var(--border);
   border-radius: 18px;
   min-width: 0;
@@ -3199,7 +3377,7 @@ textarea {
 
 .trade-side-button.selected {
   background: var(--canvas);
-  box-shadow: 0 1px 4px rgba(76, 39, 66, 0.1);
+  box-shadow: var(--card-shadow);
   color: var(--text);
 }
 
@@ -3344,8 +3522,8 @@ textarea {
 .profile-hero {
   align-items: center;
   backdrop-filter: blur(16px);
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(222, 213, 220, 0.88);
+  background: var(--glass-82);
+  border: 1px solid var(--panel-border-muted);
   border-radius: 24px;
   display: flex;
   gap: 16px;
@@ -3356,8 +3534,8 @@ textarea {
 
 .profile-avatar {
   align-items: center;
-  background: linear-gradient(145deg, #f8dced, #e7dff8);
-  border: 1px solid rgba(255, 255, 255, 0.94);
+  background: var(--avatar-background);
+  border: 1px solid var(--glass-94);
   border-radius: 19px;
   color: var(--accent-strong);
   display: flex;
@@ -3435,7 +3613,7 @@ textarea {
 }
 
 .profile-image-action {
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--glass-82);
   border: 1px solid var(--border);
   border-radius: 11px;
   font-size: 12px;
@@ -3471,7 +3649,7 @@ textarea {
 }
 
 .profile-edit-row input {
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--glass-92);
   border: 1px solid var(--border-strong);
   border-radius: 13px;
   height: 44px;
@@ -3486,7 +3664,7 @@ textarea {
 
 .profile-edit-action {
   align-items: center;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--glass-82);
   border: 1px solid var(--border);
   border-radius: 13px;
   cursor: default;
@@ -3516,8 +3694,8 @@ textarea {
 }
 
 .profile-portfolio {
-  background: rgba(255, 255, 255, 0.84);
-  border: 1px solid rgba(222, 213, 220, 0.9);
+  background: var(--glass-84);
+  border: 1px solid var(--panel-border);
   border-radius: 24px;
   margin-top: 18px;
   min-width: 0;
@@ -3565,9 +3743,9 @@ textarea {
 
 .profile-source-warning {
   align-items: center;
-  background: rgba(255, 247, 236, 0.82);
-  border-bottom: 1px solid rgba(185, 123, 46, 0.14);
-  color: #7d551f;
+  background: var(--warning-background);
+  border-bottom: 1px solid var(--warning-border);
+  color: var(--warning-text);
   display: flex;
   font-size: 12px;
   justify-content: space-between;
@@ -3838,8 +4016,8 @@ textarea {
 
 .profile-account-state {
   align-items: center;
-  background: rgba(255, 255, 255, 0.84);
-  border: 1px solid rgba(222, 213, 220, 0.9);
+  background: var(--glass-84);
+  border: 1px solid var(--panel-border);
   border-radius: 20px;
   display: flex;
   flex-direction: column;
@@ -4038,7 +4216,7 @@ textarea {
 .dialog-backdrop {
   align-items: center;
   backdrop-filter: blur(7px);
-  background: rgba(32, 20, 28, 0.28);
+  background: var(--dialog-backdrop);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -4051,7 +4229,7 @@ textarea {
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 22px;
-  box-shadow: 0 30px 90px rgba(47, 22, 40, 0.18);
+  box-shadow: 0 30px 90px var(--overlay-shadow);
   max-width: 430px;
   padding: 24px;
   width: 100%;
@@ -4205,6 +4383,7 @@ textarea {
   }
 
   .wallet-button:hover,
+  .theme-toggle:hover,
   .secondary-button:hover {
     background: var(--surface-soft);
     border-color: var(--border-strong);
@@ -4222,7 +4401,7 @@ textarea {
   .token-card:hover,
   .launch-model-card:hover {
     border-color: var(--border-strong);
-    box-shadow: 0 14px 34px rgba(49, 30, 43, 0.08);
+    box-shadow: 0 14px 34px var(--hover-shadow);
   }
 
   .token-card:hover {
@@ -4244,7 +4423,7 @@ textarea {
   }
 
   .token-pagination button:not(:disabled):hover {
-    background: #ffffff;
+    background: var(--surface-raised);
     border-color: var(--border-strong);
   }
 
@@ -4262,19 +4441,19 @@ textarea {
 
 @media (min-width: 801px) and (max-height: 800px) {
   .explore-intro {
-    min-height: 0;
-    padding-bottom: 4px;
-    padding-top: 5px;
+    min-height: 164px;
+    padding-bottom: 5px;
+    padding-top: 20px;
   }
 
   .explore-brand-logo {
-    height: clamp(60px, 5.2vw, 66px);
-    width: clamp(60px, 5.2vw, 66px);
+    height: clamp(80px, 6.6vw, 90px);
+    width: clamp(80px, 6.6vw, 90px);
   }
 
   .explore-intro > p {
-    font-size: 14px;
-    margin-top: 4px;
+    font-size: 17px;
+    margin-top: 6px;
   }
 
   .explore-token-address {
@@ -4562,9 +4741,10 @@ textarea {
     grid-column: 1;
   }
 
-  .header-inner > .wallet-button,
-  .header-inner > .wallet-menu-root {
+  .header-actions {
     grid-column: 2;
+    gap: 6px;
+    justify-self: end;
   }
 
   .wallet-button-compact {
@@ -4572,10 +4752,16 @@ textarea {
     min-height: 44px;
   }
 
+  .theme-toggle {
+    border-radius: 13px;
+    height: 44px;
+    width: 44px;
+  }
+
   .mobile-nav {
     align-items: center;
     backdrop-filter: blur(18px);
-    background: rgba(255, 255, 255, 0.96);
+    background: var(--glass-96);
     border-top: 1px solid var(--border);
     bottom: 0;
     display: grid;
@@ -4605,19 +4791,19 @@ textarea {
   }
 
   .explore-intro {
-    min-height: clamp(98px, 13svh, 112px);
-    padding: 8px 0 5px;
+    min-height: clamp(148px, 18svh, 166px);
+    padding: 20px 0 6px;
   }
 
   .explore-brand-logo {
-    height: clamp(46px, 12.5vw, 54px);
-    width: clamp(46px, 12.5vw, 54px);
+    height: clamp(68px, 18vw, 80px);
+    width: clamp(68px, 18vw, 80px);
   }
 
   .explore-intro > p {
-    font-size: 14px;
-    margin-top: 6px;
-    max-width: 360px;
+    font-size: clamp(16px, 4.4vw, 18px);
+    margin-top: 7px;
+    max-width: 380px;
   }
 
   .explore-token-address {
@@ -5082,18 +5268,19 @@ textarea {
   }
 
   .explore-intro {
-    min-height: 82px;
+    min-height: 104px;
     padding-bottom: 3px;
-    padding-top: 4px;
+    padding-top: 8px;
   }
 
-  .explore-intro h1 {
-    font-size: 38px;
+  .explore-brand-logo {
+    height: 54px;
+    width: 54px;
   }
 
   .explore-intro > p {
-    font-size: 12px;
-    margin-top: 3px;
+    font-size: 13px;
+    margin-top: 4px;
   }
 
   .explore-token-address {
@@ -5123,7 +5310,7 @@ textarea {
   }
 
   .wallet-button-compact {
-    max-width: 148px;
+    max-width: 134px;
     padding: 0 12px;
   }
 
@@ -5134,8 +5321,8 @@ textarea {
   }
 
   .explore-brand-logo {
-    height: clamp(46px, 14vw, 54px);
-    width: clamp(46px, 14vw, 54px);
+    height: clamp(68px, 18vw, 78px);
+    width: clamp(68px, 18vw, 78px);
   }
 
   .token-detail-page {
@@ -5471,7 +5658,7 @@ textarea {
 /* Classic launch is intentionally one calm sheet. The safety preflight runs
    behind the single launch action instead of becoming a visible wizard. */
 .classic-launch-sheet {
-  background: rgba(251, 250, 251, 0.96);
+  background: var(--surface-tint-strong);
   border: 1px solid var(--border);
   border-radius: 24px;
   display: flex;
@@ -5583,7 +5770,7 @@ textarea {
 
 .classic-fee-fixed {
   align-items: center;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass-72);
   border: 1px solid var(--border);
   border-radius: 14px;
   display: flex;
@@ -5686,7 +5873,7 @@ textarea {
 .launch-success-backdrop {
   align-items: center;
   backdrop-filter: blur(12px);
-  background: rgba(43, 30, 39, 0.18);
+  background: var(--success-backdrop);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -5696,10 +5883,10 @@ textarea {
 }
 
 .launch-success-dialog {
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(222, 213, 220, 0.94);
+  background: var(--glass-98);
+  border: 1px solid var(--popover-border);
   border-radius: 24px;
-  box-shadow: 0 24px 70px rgba(76, 39, 66, 0.16);
+  box-shadow: var(--overlay-shadow);
   max-width: 420px;
   padding: 34px;
   position: relative;
