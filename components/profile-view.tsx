@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { formatUnits, type Hex } from "viem";
 import {
   useCallback,
   useEffect,
@@ -44,15 +45,16 @@ import {
 
 type ProfileClaimActionState = {
   account: string;
-  status: "preparing" | "wallet" | "submitted" | "error";
+  status: "preparing" | "wallet" | "confirming" | "confirmed" | "error";
   message: string;
-  transactionHash?: `0x${string}`;
+  transactionHash?: Hex;
 };
 
 type ClassicV3ActionState = {
   account: string;
-  status: "preparing" | "wallet" | "submitted" | "error";
+  status: "preparing" | "wallet" | "confirming" | "confirmed" | "error";
   message: string;
+  transactionHash?: Hex;
 };
 
 export type ProfileViewProps = {
@@ -65,9 +67,65 @@ function shortenAddress(address: string) {
 
 function formatEth(value?: string) {
   if (!value?.trim()) return "—";
-  return value.trim().toUpperCase().endsWith("ETH")
-    ? value.trim()
-    : `${value.trim()} ETH`;
+  const normalized = value.trim().replace(/\s*ETH$/i, "");
+  const [whole = "0", fraction = ""] = normalized.split(".");
+  const compactFraction = fraction.replace(/0+$/, "").slice(0, 6);
+  return `${whole}${compactFraction ? `.${compactFraction}` : ""} ETH`;
+}
+
+function formatWei(value: bigint) {
+  return formatEth(formatUnits(value, 18));
+}
+
+function formatMarketCap(token: ProfileToken) {
+  if (token.fdvUsdWad) {
+    const dollars = Number(BigInt(token.fdvUsdWad) / 10n ** 18n);
+    if (Number.isFinite(dollars)) {
+      if (dollars >= 1_000_000_000) {
+        return `$${(dollars / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B MC`;
+      }
+      if (dollars >= 1_000_000) {
+        return `$${(dollars / 1_000_000).toFixed(1).replace(/\.0$/, "")}M MC`;
+      }
+      if (dollars >= 1_000) {
+        return `$${(dollars / 1_000).toFixed(1).replace(/\.0$/, "")}K MC`;
+      }
+      return `$${dollars.toLocaleString("en-US")} MC`;
+    }
+  }
+  if (token.marketCapEthWei) {
+    return `${formatEth(formatUnits(BigInt(token.marketCapEthWei), 18))} MC`;
+  }
+  return null;
+}
+
+async function waitForTransaction(
+  transactionHash: Hex,
+  chainId: number,
+): Promise<"confirmed" | "reverted"> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const response = await fetch(
+      `/api/transaction-status?hash=${encodeURIComponent(
+        transactionHash,
+      )}&chainId=${chainId}`,
+      {
+        method: "GET",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      },
+    );
+    const body = (await response.json()) as {
+      status?: "pending" | "confirmed" | "reverted";
+    };
+    if (!response.ok) {
+      throw new Error("The transaction status could not be checked");
+    }
+    if (body.status === "confirmed" || body.status === "reverted") {
+      return body.status;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+  }
+  throw new Error("The transaction is still pending");
 }
 
 function useWalletLocalProfile(address?: string) {
@@ -162,7 +220,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
     void fetchCreatorProfile(account, controller.signal)
       .then((data) => {
-        if (!controller.signal.aborted) setRemoteOnchainData(data);
+        if (!controller.signal.aborted) {
+          setRemoteOnchainData(data);
+          if (profileRefresh > 0) setClaimActionStates({});
+        }
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
@@ -184,7 +245,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     const controller = new AbortController();
     void fetchClassicV3ProfileRewards(account, controller.signal)
       .then((data) => {
-        if (!controller.signal.aborted) setClassicV3Rewards(data);
+        if (!controller.signal.aborted) {
+          setClassicV3Rewards(data);
+          if (profileRefresh > 0) setClassicV3ActionStates({});
+        }
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
@@ -351,8 +415,26 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           activeAccountRef.current?.toLowerCase() === claimAccount.toLowerCase()
         ) {
           setClaimState({
-            status: "submitted",
-            message: `Transaction submitted ${shortenAddress(transactionHash)}`,
+            status: "confirming",
+            message: "Confirming on Ethereum",
+            transactionHash,
+          });
+          const receiptStatus = await waitForTransaction(
+            transactionHash,
+            chainId,
+          );
+          if (receiptStatus === "reverted") {
+            throw new Error("The claim reverted onchain");
+          }
+          if (
+            activeAccountRef.current?.toLowerCase() !==
+            claimAccount.toLowerCase()
+          ) {
+            return;
+          }
+          setClaimState({
+            status: "confirmed",
+            message: "Claim confirmed",
             transactionHash,
           });
           setProfileRefresh((current) => current + 1);
@@ -424,14 +506,36 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           status: "wallet",
           message: "Review the transaction in your wallet",
         });
-        await sendTransaction(prepared.transaction);
+        const transactionHash = await sendTransaction(prepared.transaction);
         if (
           activeAccountRef.current?.toLowerCase() ===
           actionAccount.toLowerCase()
         ) {
           setActionState({
-            status: "submitted",
-            message: "Transaction submitted",
+            status: "confirming",
+            message: "Confirming on Ethereum",
+            transactionHash,
+          });
+          const receiptStatus = await waitForTransaction(
+            transactionHash,
+            scopedClassicV3Rewards.chainId,
+          );
+          if (receiptStatus === "reverted") {
+            throw new Error("The reward transaction reverted onchain");
+          }
+          if (
+            activeAccountRef.current?.toLowerCase() !==
+            actionAccount.toLowerCase()
+          ) {
+            return;
+          }
+          setActionState({
+            status: "confirmed",
+            message:
+              action === "claim"
+                ? "Claim confirmed"
+                : "Payout address updated",
+            transactionHash,
           });
           setProfileRefresh((current) => current + 1);
         }
@@ -615,6 +719,11 @@ export type ProfileTokenReward = {
   claim?: ProfileClaim;
 };
 
+export type ProfilePortfolioEntry = ProfileTokenReward & {
+  classicReward?: ClassicV3Reward;
+  launchedByWallet: boolean;
+};
+
 export function groupProfileRewards(
   tokens: readonly ProfileToken[],
   claims: readonly ProfileClaim[],
@@ -641,6 +750,82 @@ export function sortProfileTokensByMarketCap(tokens: readonly ProfileToken[]) {
     if (!firstCap && secondCap) return 1;
     return first.name.localeCompare(second.name);
   });
+}
+
+export function buildProfilePortfolio(
+  tokens: readonly ProfileToken[],
+  claims: readonly ProfileClaim[],
+  classicRewards: readonly ClassicV3Reward[],
+) {
+  const entries = new Map<string, ProfilePortfolioEntry>();
+
+  for (const { token, claim } of groupProfileRewards(tokens, claims)) {
+    entries.set(token.address.toLowerCase(), {
+      token,
+      claim,
+      launchedByWallet: true,
+    });
+  }
+
+  for (const claim of claims) {
+    const key = claim.tokenAddress.toLowerCase();
+    if (entries.has(key)) continue;
+    entries.set(key, {
+      token: {
+        address: claim.tokenAddress,
+        name: claim.tokenName,
+        symbol: claim.tokenSymbol,
+        launchedAt: "",
+        href: claim.href,
+        launchModel: "classic",
+      },
+      claim,
+      launchedByWallet: false,
+    });
+  }
+
+  for (const reward of classicRewards) {
+    const key = reward.tokenAddress.toLowerCase();
+    const current = entries.get(key);
+    entries.set(key, {
+      token:
+        current?.token ??
+        ({
+          address: reward.tokenAddress,
+          name: reward.tokenName,
+          symbol: reward.tokenSymbol,
+          launchedAt: "",
+          href: `/token/${reward.tokenAddress}`,
+          launchModel: "classic",
+        } satisfies ProfileToken),
+      claim: current?.claim,
+      classicReward: reward,
+      launchedByWallet: current?.launchedByWallet ?? false,
+    });
+  }
+
+  return [...entries.values()].sort((first, second) => {
+    const ranked = sortProfileTokensByMarketCap([
+      first.token,
+      second.token,
+    ]);
+    if (ranked[0].address === first.token.address) {
+      return ranked[0].address === ranked[1].address ? 0 : -1;
+    }
+    return 1;
+  });
+}
+
+export function profileClaimableWei(
+  entries: readonly ProfilePortfolioEntry[],
+) {
+  return entries.reduce(
+    (total, entry) =>
+      total +
+      BigInt(entry.claim?.claimableWei ?? "0") +
+      BigInt(entry.classicReward?.claimableWei ?? "0"),
+    0n,
+  );
 }
 
 function ProfileAccountWorkspace({
@@ -682,26 +867,26 @@ function ProfileAccountWorkspace({
     );
   }
 
-  if (data.status !== "ready") {
-    const copy =
-      data.status === "loading"
-        ? {
-            title: "Loading your profile",
-            detail: "Reading your tokens and rewards",
-          }
-        : {
-            title: "Your profile could not be loaded",
-            detail:
-              data.status === "error" && data.errorMessage
-                ? data.errorMessage
-                : "Try again in a moment",
-          };
+  const currentReady = data.status === "ready";
+  const classicReady = classicV3Rewards.status === "ready";
+  const loading =
+    data.status === "loading" || classicV3Rewards.status === "loading";
 
+  if (!currentReady && !classicReady) {
     return (
       <section className="profile-account-state" aria-live="polite">
-        <h2>{copy.title}</h2>
-        <p>{copy.detail}</p>
-        {data.status !== "loading" ? (
+        <h2>{loading ? "Loading your profile" : "Your profile could not be loaded"}</h2>
+        <p>
+          {loading
+            ? "Reading your tokens and rewards"
+            : data.status === "error" && data.errorMessage
+              ? data.errorMessage
+              : classicV3Rewards.status === "error" &&
+                  classicV3Rewards.errorMessage
+                ? classicV3Rewards.errorMessage
+                : "Try again in a moment"}
+        </p>
+        {!loading ? (
           <button className="secondary-button" type="button" onClick={onRetry}>
             Try again
           </button>
@@ -710,134 +895,293 @@ function ProfileAccountWorkspace({
     );
   }
 
-  const sortedTokens = sortProfileTokensByMarketCap(data.tokens);
-  const rewards = groupProfileRewards(sortedTokens, data.claims);
+  const entries = buildProfilePortfolio(
+    currentReady ? data.tokens : [],
+    currentReady ? data.claims : [],
+    classicReady ? classicV3Rewards.rewards : [],
+  );
+  const sourceWarning =
+    data.status === "error"
+      ? data.errorMessage || "Some token rewards could not be refreshed"
+      : classicV3Rewards.status === "error"
+        ? classicV3Rewards.errorMessage ||
+          "Some Classic rewards could not be refreshed"
+        : "";
 
   return (
-    <div className="profile-account-workspace">
-      <section
-        className="profile-account-section"
-        aria-labelledby="profile-tokens-title"
-      >
-        <header className="profile-account-heading">
-          <h2 id="profile-tokens-title">Your tokens</h2>
-          <span>{data.tokens.length}</span>
-        </header>
+    <section
+      className="profile-portfolio"
+      aria-labelledby="profile-portfolio-title"
+    >
+      <header className="profile-portfolio-heading">
+        <div>
+          <h2 id="profile-portfolio-title">Tokens &amp; rewards</h2>
+          <span>
+            {entries.length} {entries.length === 1 ? "token" : "tokens"}
+          </span>
+        </div>
+        <div className="profile-portfolio-total">
+          <span>Claimable</span>
+          <strong>{formatWei(profileClaimableWei(entries))}</strong>
+        </div>
+      </header>
 
-        {data.tokens.length ? (
-          <div className="profile-account-list">
-            {sortedTokens.map((token) => (
-              <article className="profile-token-item" key={token.address}>
-                <span
-                  className={`token-monogram token-tone-rose profile-token-art${
-                    token.imageUrl ? " has-image" : ""
-                  }`}
-                  aria-hidden="true"
-                  style={
-                    token.imageUrl
-                      ? { backgroundImage: `url("${token.imageUrl}")` }
-                      : undefined
-                  }
-                >
-                  {token.symbol.slice(0, 2).toUpperCase()}
-                </span>
-                <div>
-                  <strong>{token.name}</strong>
-                  <span>
-                    ${token.symbol} ·{" "}
-                    {token.launchModel === "adaptive" ? "Adaptive" : "Classic"} ·{" "}
-                    {shortenAddress(token.address)}
-                  </span>
-                </div>
-                <Link className="text-link" href={token.href}>
-                  View
-                </Link>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <ProfileSectionEmpty
-            title="No tokens yet"
-            detail="Tokens launched from this wallet will appear here"
-          />
-        )}
-      </section>
-
-      <section
-        className="profile-account-section"
-        aria-labelledby="profile-rewards-title"
-      >
-        <header className="profile-account-heading">
-          <h2 id="profile-rewards-title">Creator rewards</h2>
-          <strong>{formatEth(data.claimableEth ?? "0")}</strong>
-        </header>
-
-        {rewards.length ? (
-          <div className="profile-account-list">
-            {rewards.map(({ token, claim }) => {
-              const state = claim
-                ? claimActionStates[claim.poolId.toLowerCase()]
-                : undefined;
-              const activeState =
-                state?.account.toLowerCase() === account?.toLowerCase()
-                  ? state
-                  : undefined;
-
-              return (
-                <ProfileRewardItem
-                  key={token.address}
-                  token={token}
-                  claim={claim}
-                  state={activeState}
-                  onClaim={onClaim}
-                />
-              );
-            })}
-          </div>
-        ) : (
-          <ProfileSectionEmpty
-            title="No rewards yet"
-            detail="Creator rewards are grouped by token"
-          />
-        )}
-      </section>
-
-      {classicV3Rewards.status === "ready" &&
-      classicV3Rewards.rewards.length ? (
-        <section
-          className="profile-account-section profile-v3-section"
-          aria-labelledby="profile-v3-rewards-title"
-        >
-          <header className="profile-account-heading">
-            <h2 id="profile-v3-rewards-title">Classic rewards</h2>
-            <span>{classicV3Rewards.rewards.length}</span>
-          </header>
-          <div className="profile-v3-list">
-            {classicV3Rewards.rewards.map((reward) => (
-              <ClassicV3RewardItem
-                key={reward.vaultAddress}
-                reward={reward}
-                account={account}
-                actionStates={classicV3ActionStates}
-                onAction={onClassicV3Action}
-              />
-            ))}
-          </div>
-        </section>
+      {sourceWarning ? (
+        <div className="profile-source-warning" role="status">
+          <span>{sourceWarning}</span>
+          <button type="button" onClick={onRetry}>
+            Retry
+          </button>
+        </div>
       ) : null}
-    </div>
+
+      {entries.length ? (
+        <div className="profile-portfolio-list">
+          {entries.map((entry) => (
+            <ProfilePortfolioRow
+              key={entry.token.address}
+              entry={entry}
+              account={account}
+              chainId={
+                currentReady
+                  ? data.chainId
+                  : classicReady
+                    ? classicV3Rewards.chainId
+                    : undefined
+              }
+              claimActionStates={claimActionStates}
+              classicV3ActionStates={classicV3ActionStates}
+              onClaim={onClaim}
+              onClassicV3Action={onClassicV3Action}
+            />
+          ))}
+        </div>
+      ) : (
+        <ProfileSectionEmpty
+          title="No tokens yet"
+          detail="Tokens and creator rewards connected to this wallet will appear here"
+        />
+      )}
+    </section>
   );
 }
 
-function ClassicV3RewardItem({
+function transactionHref(chainId: number | undefined, hash: Hex) {
+  return `${
+    chainId === 11_155_111
+      ? "https://sepolia.etherscan.io"
+      : "https://etherscan.io"
+  }/tx/${hash}`;
+}
+
+function actionPending(
+  state: ProfileClaimActionState | ClassicV3ActionState | undefined,
+) {
+  return (
+    state?.status === "preparing" ||
+    state?.status === "wallet" ||
+    state?.status === "confirming"
+  );
+}
+
+function actionLabel(
+  state: ProfileClaimActionState | ClassicV3ActionState | undefined,
+) {
+  if (state?.status === "preparing") return "Preparing";
+  if (state?.status === "wallet") return "Confirm in wallet";
+  if (state?.status === "confirming") return "Confirming";
+  if (state?.status === "confirmed") return "Confirmed";
+  if (state?.status === "error") return "Try again";
+  return "Claim";
+}
+
+function ProfilePortfolioRow({
+  entry,
+  account,
+  chainId,
+  claimActionStates,
+  classicV3ActionStates,
+  onClaim,
+  onClassicV3Action,
+}: {
+  entry: ProfilePortfolioEntry;
+  account?: string;
+  chainId?: number;
+  claimActionStates: Record<string, ProfileClaimActionState>;
+  classicV3ActionStates: Record<string, ClassicV3ActionState>;
+  onClaim: (claim: ProfileClaim) => void;
+  onClassicV3Action: (
+    reward: ClassicV3Reward,
+    action: "claim" | "update-payout",
+    newPayoutAddress?: string,
+  ) => void;
+}) {
+  const { token, claim, classicReward } = entry;
+  const claimState = claim
+    ? claimActionStates[claim.poolId.toLowerCase()]
+    : undefined;
+  const activeClaimState =
+    claimState?.account.toLowerCase() === account?.toLowerCase()
+      ? claimState
+      : undefined;
+  const classicClaimState = classicReward
+    ? classicV3ActionStates[
+        `${classicReward.vaultAddress.toLowerCase()}:claim`
+      ]
+    : undefined;
+  const activeClassicClaimState =
+    classicClaimState?.account.toLowerCase() === account?.toLowerCase()
+      ? classicClaimState
+      : undefined;
+  const currentClaimable = BigInt(claim?.claimableWei ?? "0");
+  const classicClaimable = BigInt(classicReward?.claimableWei ?? "0");
+  const totalClaimable = currentClaimable + classicClaimable;
+  const marketCap = formatMarketCap(token);
+  const twoClaimSources = currentClaimable > 0n && classicClaimable > 0n;
+
+  return (
+    <article className="profile-portfolio-row">
+      <div className="profile-portfolio-main">
+        <Link className="profile-token-identity" href={token.href}>
+          <span
+            className={`token-monogram token-tone-rose profile-token-art${
+              token.imageUrl ? " has-image" : ""
+            }`}
+            aria-hidden="true"
+            style={
+              token.imageUrl
+                ? { backgroundImage: `url("${token.imageUrl}")` }
+                : undefined
+            }
+          >
+            {token.symbol.slice(0, 2).toUpperCase()}
+          </span>
+          <span>
+            <strong>{token.name}</strong>
+            <small>
+              ${token.symbol} ·{" "}
+              {token.launchModel === "adaptive" ? "Adaptive" : "Classic"} ·{" "}
+              {shortenAddress(token.address)}
+            </small>
+          </span>
+        </Link>
+
+        <div className="profile-token-market">
+          <span>Market cap</span>
+          <strong>{marketCap ?? "—"}</strong>
+        </div>
+
+        <div className="profile-token-rewards">
+          <span>Creator rewards</span>
+          <strong>{formatWei(totalClaimable)}</strong>
+        </div>
+
+        <div className="profile-token-actions">
+          {claim && (currentClaimable > 0n || activeClaimState) ? (
+            <button
+              className="secondary-button profile-claim-button"
+              type="button"
+              aria-label={`${actionLabel(activeClaimState)} ${token.name} position rewards`}
+              disabled={
+                actionPending(activeClaimState) ||
+                activeClaimState?.status === "confirmed" ||
+                currentClaimable === 0n
+              }
+              onClick={() => onClaim(claim)}
+            >
+              {twoClaimSources ? "Claim position" : actionLabel(activeClaimState)}
+            </button>
+          ) : null}
+          {classicReward &&
+          (classicClaimable > 0n || activeClassicClaimState) ? (
+            <button
+              className="secondary-button profile-claim-button"
+              type="button"
+              aria-label={`${actionLabel(activeClassicClaimState)} ${token.name} split rewards`}
+              disabled={
+                actionPending(activeClassicClaimState) ||
+                activeClassicClaimState?.status === "confirmed" ||
+                classicClaimable === 0n
+              }
+              onClick={() => onClassicV3Action(classicReward, "claim")}
+            >
+              {twoClaimSources
+                ? "Claim split"
+                : actionLabel(activeClassicClaimState)}
+            </button>
+          ) : null}
+          {totalClaimable === 0n &&
+          !activeClaimState &&
+          !activeClassicClaimState ? (
+            <span className="profile-reward-empty">Nothing to claim</span>
+          ) : null}
+          <Link className="text-link" href={token.href}>
+            View
+          </Link>
+        </div>
+      </div>
+
+      <ProfileActionState
+        state={activeClaimState}
+        chainId={chainId}
+      />
+      <ProfileActionState
+        state={activeClassicClaimState}
+        chainId={chainId}
+      />
+
+      {classicReward ? (
+        <ClassicRewardSettings
+          key={`${classicReward.vaultAddress}:${classicReward.payoutAddress}`}
+          reward={classicReward}
+          account={account}
+          actionStates={classicV3ActionStates}
+          chainId={chainId}
+          onAction={onClassicV3Action}
+        />
+      ) : null}
+    </article>
+  );
+}
+
+function ProfileActionState({
+  state,
+  chainId,
+}: {
+  state?: ProfileClaimActionState | ClassicV3ActionState;
+  chainId?: number;
+}) {
+  if (!state) return null;
+  return (
+    <p
+      className={state.status === "error" ? "form-error" : "profile-action-state"}
+      role={state.status === "error" ? "alert" : "status"}
+    >
+      {state.message}
+      {state.transactionHash ? (
+        <a
+          href={transactionHref(chainId, state.transactionHash)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          View transaction
+        </a>
+      ) : null}
+    </p>
+  );
+}
+
+function ClassicRewardSettings({
   reward,
   account,
   actionStates,
+  chainId,
   onAction,
 }: {
   reward: ClassicV3Reward;
   account?: string;
   actionStates: Record<string, ClassicV3ActionState>;
+  chainId?: number;
   onAction: (
     reward: ClassicV3Reward,
     action: "claim" | "update-payout",
@@ -848,213 +1192,113 @@ function ClassicV3RewardItem({
   const [payoutDraft, setPayoutDraft] = useState<string>(
     reward.payoutAddress,
   );
-  const claimState =
-    actionStates[`${reward.vaultAddress.toLowerCase()}:claim`];
   const payoutState =
     actionStates[`${reward.vaultAddress.toLowerCase()}:update-payout`];
   const ownsReward =
     Boolean(account) &&
     reward.beneficiary.toLowerCase() === account?.toLowerCase();
-  const claimPending =
-    claimState?.status === "preparing" ||
-    claimState?.status === "wallet" ||
-    claimState?.status === "submitted";
-  const payoutPending =
-    payoutState?.status === "preparing" ||
-    payoutState?.status === "wallet" ||
-    payoutState?.status === "submitted";
+  const payoutPending = actionPending(payoutState);
 
   return (
-    <article className="profile-v3-reward">
-      <header>
-        <div>
-          <strong>{reward.tokenName}</strong>
-          <span>
-            ${reward.tokenSymbol} · {shortenAddress(reward.tokenAddress)}
-          </span>
-        </div>
-        <strong>{formatEth(reward.claimableEth)}</strong>
-      </header>
-
-      <dl className="profile-v3-economics">
-        <div>
-          <dt>Buy fee</dt>
-          <dd>{(reward.buySwapFeeBps / 100).toFixed(2)}%</dd>
-        </div>
-        <div>
-          <dt>Sell fee</dt>
-          <dd>{(reward.sellSwapFeeBps / 100).toFixed(2)}%</dd>
-        </div>
-        <div>
-          <dt>Your share</dt>
-          <dd>{(reward.shareBps / 100).toFixed(2)}%</dd>
-        </div>
-        <div>
-          <dt>Programmable</dt>
-          <dd>0.10%</dd>
-        </div>
-      </dl>
-
-      <details className="profile-v3-split">
-        <summary>Immutable reward split</summary>
-        <div>
-          {reward.beneficiaries.map((item) => (
-            <p key={item.beneficiary}>
-              <span>{shortenAddress(item.beneficiary)}</span>
-              <strong>{(item.shareBps / 100).toFixed(2)}%</strong>
-              <small>to {shortenAddress(item.payoutAddress)}</small>
-            </p>
-          ))}
-        </div>
-      </details>
-
-      <div className="profile-v3-payout">
-        <span>Payout address</span>
-        {editingPayout ? (
+    <details className="profile-reward-settings">
+      <summary>
+        <span>Reward settings</span>
+        <small>{(reward.shareBps / 100).toFixed(2)}% share</small>
+      </summary>
+      <div className="profile-reward-settings-body">
+        <dl className="profile-reward-economics">
           <div>
-            <input
-              value={payoutDraft}
-              spellCheck={false}
-              autoComplete="off"
-              aria-label="New payout address"
-              onChange={(event) => setPayoutDraft(event.target.value)}
-            />
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={!ownsReward || payoutPending}
-              onClick={() =>
-                onAction(reward, "update-payout", payoutDraft.trim())
-              }
-            >
-              {payoutPending ? "Preparing" : "Save"}
-            </button>
-            <button
-              className="text-link"
-              type="button"
-              disabled={payoutPending}
-              onClick={() => {
-                setPayoutDraft(reward.payoutAddress);
-                setEditingPayout(false);
-              }}
-            >
-              Cancel
-            </button>
+            <dt>Buy fee</dt>
+            <dd>{(reward.buySwapFeeBps / 100).toFixed(2)}%</dd>
           </div>
-        ) : (
           <div>
-            <code>{shortenAddress(reward.payoutAddress)}</code>
-            <button
-              className="text-link"
-              type="button"
-              disabled={!ownsReward}
-              onClick={() => setEditingPayout(true)}
-            >
-              Change
-            </button>
+            <dt>Sell fee</dt>
+            <dd>{(reward.sellSwapFeeBps / 100).toFixed(2)}%</dd>
           </div>
-        )}
-        <small>
-          Claim authority stays with {shortenAddress(reward.beneficiary)}
-        </small>
+          <div>
+            <dt>Your share</dt>
+            <dd>{(reward.shareBps / 100).toFixed(2)}%</dd>
+          </div>
+        </dl>
+
+        <div className="profile-v3-payout">
+          <span>Payout address</span>
+          {editingPayout ? (
+            <div>
+              <input
+                value={payoutDraft}
+                spellCheck={false}
+                autoComplete="off"
+                aria-label="New payout address"
+                onChange={(event) => setPayoutDraft(event.target.value)}
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={!ownsReward || payoutPending}
+                onClick={() =>
+                  onAction(reward, "update-payout", payoutDraft.trim())
+                }
+              >
+                {payoutState?.status === "wallet"
+                  ? "Confirm in wallet"
+                  : payoutState?.status === "confirming"
+                    ? "Confirming"
+                    : "Save"}
+              </button>
+              <button
+                className="text-link"
+                type="button"
+                disabled={payoutPending}
+                onClick={() => {
+                  setPayoutDraft(reward.payoutAddress);
+                  setEditingPayout(false);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div>
+              <a
+                href={`${
+                  chainId === 11_155_111
+                    ? "https://sepolia.etherscan.io"
+                    : "https://etherscan.io"
+                }/address/${reward.payoutAddress}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {shortenAddress(reward.payoutAddress)}
+              </a>
+              <button
+                className="text-link"
+                type="button"
+                disabled={!ownsReward}
+                onClick={() => setEditingPayout(true)}
+              >
+                Change
+              </button>
+            </div>
+          )}
+        </div>
+
+        <details className="profile-reward-split">
+          <summary>Fixed split</summary>
+          <div>
+            {reward.beneficiaries.map((item) => (
+              <p key={item.beneficiary}>
+                <span>{shortenAddress(item.beneficiary)}</span>
+                <strong>{(item.shareBps / 100).toFixed(2)}%</strong>
+                <small>to {shortenAddress(item.payoutAddress)}</small>
+              </p>
+            ))}
+          </div>
+        </details>
+
+        <ProfileActionState state={payoutState} chainId={chainId} />
       </div>
-
-      <footer>
-        <Link className="text-link" href={`/token/${reward.tokenAddress}`}>
-          View token
-        </Link>
-        <button
-          className="secondary-button profile-claim-button"
-          type="button"
-          disabled={
-            !ownsReward ||
-            claimPending ||
-            BigInt(reward.claimableWei) === 0n
-          }
-          onClick={() => onAction(reward, "claim")}
-        >
-          {claimPending ? "Preparing" : "Claim"}
-        </button>
-      </footer>
-      {claimState?.status === "error" ||
-      payoutState?.status === "error" ? (
-        <p className="form-error" role="alert">
-          {claimState?.status === "error"
-            ? claimState.message
-            : payoutState?.message}
-        </p>
-      ) : null}
-    </article>
-  );
-}
-
-function ProfileRewardItem({
-  token,
-  claim,
-  state,
-  onClaim,
-}: {
-  token: ProfileToken;
-  claim?: ProfileClaim;
-  state?: ProfileClaimActionState;
-  onClaim: (claim: ProfileClaim) => void;
-}) {
-  const pending =
-    state?.status === "preparing" ||
-    state?.status === "wallet" ||
-    state?.status === "submitted";
-  const buttonLabel =
-    state?.status === "preparing"
-      ? "Preparing"
-      : state?.status === "wallet"
-        ? "Confirm in wallet"
-        : state?.status === "submitted"
-          ? "Submitted"
-          : state?.status === "error"
-            ? "Try again"
-            : "Claim";
-
-  return (
-    <article className="profile-reward-item">
-      <span
-        className={`token-monogram token-tone-rose profile-token-art${
-          token.imageUrl ? " has-image" : ""
-        }`}
-        aria-hidden="true"
-        style={
-          token.imageUrl
-            ? { backgroundImage: `url("${token.imageUrl}")` }
-            : undefined
-        }
-      >
-        {token.symbol.slice(0, 2).toUpperCase()}
-      </span>
-      <div>
-        <Link href={token.href}>{token.name}</Link>
-        <span>
-          ${token.symbol} ·{" "}
-          {token.launchModel === "adaptive" ? "Adaptive" : "Classic"}
-        </span>
-      </div>
-      <strong>{formatEth(claim?.claimableEth ?? "0")}</strong>
-      {claim ? (
-        <button
-          className="secondary-button profile-claim-button"
-          type="button"
-          disabled={pending}
-          onClick={() => onClaim(claim)}
-        >
-          {buttonLabel}
-        </button>
-      ) : (
-        <span className="profile-reward-empty">Nothing to claim</span>
-      )}
-      {state?.status === "error" ? (
-        <p className="form-error" role="alert">
-          {state.message}
-        </p>
-      ) : null}
-    </article>
+    </details>
   );
 }
 

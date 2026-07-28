@@ -3348,28 +3348,28 @@ textarea {
   border: 1px solid rgba(222, 213, 220, 0.88);
   border-radius: 24px;
   display: flex;
-  gap: 20px;
-  min-height: 140px;
+  gap: 16px;
+  min-height: 112px;
   overflow: hidden;
-  padding: 20px 24px;
+  padding: 16px 20px;
 }
 
 .profile-avatar {
   align-items: center;
   background: linear-gradient(145deg, #f8dced, #e7dff8);
   border: 1px solid rgba(255, 255, 255, 0.94);
-  border-radius: 24px;
+  border-radius: 19px;
   color: var(--accent-strong);
   display: flex;
   flex: none;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 21px;
+  font-size: 18px;
   font-weight: 500;
-  height: 80px;
+  height: 64px;
   justify-content: center;
   overflow: hidden;
   position: relative;
-  width: 80px;
+  width: 64px;
 }
 
 .profile-avatar img {
@@ -3389,7 +3389,7 @@ textarea {
 }
 
 .profile-hero-copy h1 {
-  font-size: clamp(34px, 4vw, 48px);
+  font-size: clamp(30px, 3.5vw, 42px);
   font-weight: 560;
   letter-spacing: -0.02em;
   line-height: 1.04;
@@ -3515,132 +3515,305 @@ textarea {
   margin-top: 24px;
 }
 
-.profile-account-workspace {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 18px;
-}
-
-.profile-account-section {
+.profile-portfolio {
   background: rgba(255, 255, 255, 0.84);
   border: 1px solid rgba(222, 213, 220, 0.9);
-  border-radius: 20px;
+  border-radius: 24px;
+  margin-top: 18px;
   min-width: 0;
   overflow: hidden;
 }
 
-.profile-account-heading {
+.profile-portfolio-heading {
   align-items: center;
   border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
-  min-height: 86px;
-  padding: 18px 20px;
+  min-height: 76px;
+  padding: 14px 20px;
 }
 
-.profile-account-heading h2 {
-  font-size: 22px;
+.profile-portfolio-heading > div:first-child {
+  align-items: baseline;
+  display: flex;
+  gap: 9px;
+}
+
+.profile-portfolio-heading h2 {
+  font-size: 21px;
   font-weight: 590;
   letter-spacing: -0.02em;
 }
 
-.profile-account-heading > span {
-  align-items: center;
-  background: var(--surface-soft);
-  border-radius: 999px;
+.profile-portfolio-heading > div:first-child > span,
+.profile-portfolio-total > span {
   color: var(--muted);
-  display: inline-flex;
-  font-size: 12px;
-  height: 30px;
-  justify-content: center;
-  min-width: 30px;
-  padding: 0 9px;
+  font-size: 11px;
 }
 
-.profile-account-heading > strong {
-  font-size: 15px;
-  font-weight: 590;
+.profile-portfolio-total {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
 }
 
-.profile-account-list {
-  padding: 4px 20px;
+.profile-portfolio-total strong {
+  font-size: 16px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
 }
 
-.profile-token-item,
-.profile-reward-item {
+.profile-source-warning {
   align-items: center;
+  background: rgba(255, 247, 236, 0.82);
+  border-bottom: 1px solid rgba(185, 123, 46, 0.14);
+  color: #7d551f;
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 8px 20px;
+}
+
+.profile-source-warning button {
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  min-height: 32px;
+  padding: 0 4px;
+}
+
+.profile-portfolio-list {
+  padding: 0 20px;
+}
+
+.profile-portfolio-row {
   border-bottom: 1px solid var(--border);
+  padding: 13px 0;
+}
+
+.profile-portfolio-row:last-child {
+  border-bottom: 0;
+}
+
+.profile-portfolio-main {
+  align-items: center;
   display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(230px, 1.5fr) minmax(112px, 0.65fr) minmax(
+      130px,
+      0.72fr
+    ) minmax(150px, auto);
+  min-height: 52px;
+}
+
+.profile-token-identity {
+  align-items: center;
+  display: flex;
   gap: 12px;
-  min-height: 76px;
+  min-width: 0;
 }
 
-.profile-token-item {
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.profile-token-identity > span:last-child,
+.profile-token-market,
+.profile-token-rewards {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.profile-reward-item {
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+.profile-token-identity strong {
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.profile-token-identity small {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-token-art {
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  height: 42px;
-  width: 42px;
+  flex: none;
+  height: 44px;
+  width: 44px;
 }
 
 .profile-token-art.has-image {
   color: transparent;
 }
 
-.profile-token-item:last-child,
-.profile-reward-item:last-child {
-  border-bottom: 0;
-}
-
-.profile-token-item > div,
-.profile-reward-item > div {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.profile-token-item strong,
-.profile-reward-item a {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.profile-token-item > div > span,
-.profile-reward-item > div > span {
+.profile-token-market > span,
+.profile-token-rewards > span {
   color: var(--muted);
-  font-size: 11px;
-  margin-top: 3px;
+  font-size: 10px;
 }
 
-.profile-reward-item > strong {
+.profile-token-market strong,
+.profile-token-rewards strong {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 620;
+  margin-top: 2px;
   white-space: nowrap;
 }
 
-.profile-claim-button {
+.profile-token-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.profile-token-actions > .text-link {
+  font-size: 12px;
   min-height: 44px;
+  padding: 0 3px;
+}
+
+.profile-claim-button {
+  min-height: 40px;
   padding: 0 12px;
 }
 
 .profile-reward-empty {
   color: var(--muted);
   font-size: 11px;
-  text-align: right;
+  white-space: nowrap;
 }
 
-.profile-reward-item > .form-error {
+.profile-action-state,
+.profile-portfolio-row > .form-error {
+  align-items: center;
+  display: flex;
+  font-size: 11px;
+  gap: 8px;
+  justify-content: flex-end;
+  margin: 3px 0 0;
+}
+
+.profile-action-state {
+  color: var(--muted);
+}
+
+.profile-action-state a {
+  color: var(--accent-strong);
+  font-weight: 620;
+}
+
+.profile-reward-settings {
+  border-top: 1px solid transparent;
+  margin-top: 2px;
+}
+
+.profile-reward-settings[open] {
+  border-top-color: var(--border);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.profile-reward-settings > summary {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 7px;
+  list-style: none;
+  min-height: 32px;
+}
+
+.profile-reward-settings > summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-reward-settings > summary::after {
+  content: "+";
+  font-size: 14px;
+  line-height: 1;
+}
+
+.profile-reward-settings[open] > summary::after {
+  content: "−";
+}
+
+.profile-reward-settings > summary small {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.profile-reward-settings-body {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(210px, 0.8fr) minmax(260px, 1.2fr) minmax(
+      180px,
+      0.8fr
+    );
+  padding: 6px 0 4px;
+}
+
+.profile-reward-economics {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.profile-reward-economics > div {
+  background: var(--surface-soft);
+  border-radius: 11px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px;
+}
+
+.profile-reward-economics dt {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.profile-reward-economics dd {
+  font-size: 12px;
+  font-weight: 680;
+  margin: 0;
+}
+
+.profile-reward-split {
+  min-width: 0;
+}
+
+.profile-reward-split > summary {
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 620;
+  min-height: 32px;
+}
+
+.profile-reward-split > div {
+  display: grid;
+  gap: 5px;
+  padding-top: 6px;
+}
+
+.profile-reward-split p {
+  display: grid;
+  font-size: 10px;
+  gap: 2px 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0;
+}
+
+.profile-reward-split p small {
+  color: var(--muted);
   grid-column: 1 / -1;
-  margin: -7px 0 10px;
 }
 
 .profile-section-empty {
@@ -4134,8 +4307,8 @@ textarea {
   }
 
   .profile-hero {
-    min-height: 150px;
-    padding: 20px 26px;
+    min-height: 112px;
+    padding: 16px 20px;
   }
 
   .profile-workspace {
@@ -4799,11 +4972,7 @@ textarea {
 
   .profile-hero {
     min-height: 0;
-    padding: 24px;
-  }
-
-  .profile-account-workspace {
-    grid-template-columns: 1fr;
+    padding: 18px 20px;
   }
 
   .profile-tabs {
@@ -5176,7 +5345,7 @@ textarea {
     border-radius: 20px;
     flex-direction: row;
     gap: 16px;
-    padding: 22px 20px;
+    padding: 16px;
   }
 
   .profile-hero.profile-hero-editing {
@@ -5189,13 +5358,13 @@ textarea {
   }
 
   .profile-avatar {
-    border-radius: 19px;
-    height: 76px;
-    width: 76px;
+    border-radius: 18px;
+    height: 60px;
+    width: 60px;
   }
 
   .profile-hero-copy h1 {
-    font-size: 36px;
+    font-size: 32px;
     overflow-wrap: anywhere;
   }
 
@@ -5893,95 +6062,6 @@ textarea {
   line-height: 1.45;
 }
 
-.profile-v3-list {
-  display: grid;
-  gap: 10px;
-}
-
-.profile-v3-reward {
-  display: grid;
-  gap: 13px;
-  padding: 15px;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: var(--surface-raised);
-}
-
-.profile-v3-reward > header,
-.profile-v3-reward > footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.profile-v3-reward > header > div {
-  display: grid;
-  gap: 2px;
-}
-
-.profile-v3-reward > header span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.profile-v3-economics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 7px;
-  margin: 0;
-}
-
-.profile-v3-economics > div {
-  display: grid;
-  gap: 2px;
-  padding: 9px;
-  border-radius: 12px;
-  background: var(--surface-soft);
-}
-
-.profile-v3-economics dt {
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.profile-v3-economics dd {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.profile-v3-split {
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  padding: 10px 0;
-}
-
-.profile-v3-split summary {
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.profile-v3-split > div {
-  display: grid;
-  gap: 7px;
-  padding-top: 10px;
-}
-
-.profile-v3-split p {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 2px 10px;
-  margin: 0;
-  font-size: 12px;
-}
-
-.profile-v3-split p small {
-  grid-column: 1 / -1;
-  color: var(--muted);
-}
-
 .profile-v3-payout {
   display: grid;
   gap: 6px;
@@ -5997,15 +6077,9 @@ textarea {
   min-width: 0;
 }
 
-.profile-v3-payout code {
-  color: var(--text);
-  font: inherit;
+.profile-v3-payout a {
+  color: var(--text-soft);
   font-size: 13px;
-}
-
-.profile-v3-payout small {
-  color: var(--muted);
-  font-size: 11px;
 }
 
 .launch-success-v3 {
@@ -6034,6 +6108,28 @@ textarea {
   font-weight: 700;
 }
 
+@media (max-width: 1000px) {
+  .profile-portfolio-main {
+    gap: 12px;
+    grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.75fr) minmax(
+        145px,
+        auto
+      );
+  }
+
+  .profile-token-market {
+    display: none;
+  }
+
+  .profile-reward-settings-body {
+    grid-template-columns: 1fr 1.2fr;
+  }
+
+  .profile-reward-split {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 720px) {
   .classic-v3-fee-grid,
   .classic-v3-review {
@@ -6052,8 +6148,63 @@ textarea {
     grid-template-columns: minmax(0, 1fr) 92px 40px;
   }
 
-  .profile-v3-economics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .profile-portfolio {
+    border-radius: 20px;
+  }
+
+  .profile-portfolio-heading {
+    min-height: 68px;
+    padding: 12px 16px;
+  }
+
+  .profile-portfolio-heading h2 {
+    font-size: 19px;
+  }
+
+  .profile-portfolio-list {
+    padding: 0 16px;
+  }
+
+  .profile-portfolio-row {
+    padding: 14px 0;
+  }
+
+  .profile-portfolio-main {
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 12px;
+  }
+
+  .profile-token-identity {
+    grid-column: 1 / -1;
+  }
+
+  .profile-token-rewards {
+    grid-column: 1;
+  }
+
+  .profile-token-actions {
+    flex-wrap: wrap;
+    grid-column: 2;
+  }
+
+  .profile-token-actions > .text-link {
+    display: none;
+  }
+
+  .profile-reward-settings-body {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-reward-split {
+    grid-column: auto;
+  }
+
+  .profile-action-state,
+  .profile-portfolio-row > .form-error {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .profile-v3-payout > div {
