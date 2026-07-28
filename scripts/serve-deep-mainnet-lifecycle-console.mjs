@@ -131,7 +131,7 @@ const vaultAbi = parseAbi([
 ]);
 const hookAbi = parseAbi([
   "function stateById(bytes32 poolId) view returns (uint16 index,uint16 cardinality,uint16 cardinalityNext)",
-  "function poolFeeConfig(bytes32 poolId) view returns (address rewardVault,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bool registered,bytes32 rewardConfigurationHash,uint256 creatorFeesAccrued)",
+  "function poolFeeConfig(bytes32 poolId) view returns (address rewardVault,address registrar,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bool registered,uint256 creatorFeesAccrued)",
 ]);
 const guardAbi = parseAbi([
   "function twapWindow() view returns (uint32)",
@@ -263,6 +263,25 @@ export function validateMinedTransactionEnvelope(
 
 function decimal(value) {
   return BigInt(value).toString();
+}
+
+export function normalizeLifecycleFeeConfig(feeConfig, expectedRewardVault) {
+  if (
+    !Array.isArray(feeConfig) ||
+    feeConfig.length !== 6 ||
+    normalizeHex(feeConfig[0]) !== normalizeHex(expectedRewardVault) ||
+    normalizeHex(feeConfig[1]) !== LAUNCHER ||
+    Number(feeConfig[2]) !== BUY_FEE_BPS ||
+    Number(feeConfig[3]) !== SELL_FEE_BPS ||
+    !feeConfig[4]
+  ) {
+    throw new Error("The lifecycle pool fee configuration is not exact");
+  }
+  return {
+    buySwapFeeBps: Number(feeConfig[2]),
+    sellSwapFeeBps: Number(feeConfig[3]),
+    creatorFeesAccrued: decimal(feeConfig[5]),
+  };
 }
 
 function sameJson(left, right) {
@@ -811,14 +830,10 @@ async function endpointState(endpoint, token, blockTag = "latest") {
         [initialPositionTokenId],
       ),
     ]);
-  if (
-    normalizeHex(feeConfig[0]) !== normalizeHex(upstreamVault) ||
-    !feeConfig[3] ||
-    Number(feeConfig[1]) !== BUY_FEE_BPS ||
-    Number(feeConfig[2]) !== SELL_FEE_BPS
-  ) {
-    throw new Error("The lifecycle pool fee configuration is not exact");
-  }
+  const normalizedFeeConfig = normalizeLifecycleFeeConfig(
+    feeConfig,
+    upstreamVault,
+  );
   return {
     ...base,
     poolId: normalizeHex(poolId),
@@ -833,9 +848,9 @@ async function endpointState(endpoint, token, blockTag = "latest") {
     initialPositionLiquidity: decimal(liquidity),
     cardinality: Number(oracleState[1]),
     cardinalityNext: Number(oracleState[2]),
-    creatorFeesAccrued: decimal(feeConfig[5]),
-    buySwapFeeBps: Number(feeConfig[1]),
-    sellSwapFeeBps: Number(feeConfig[2]),
+    creatorFeesAccrued: normalizedFeeConfig.creatorFeesAccrued,
+    buySwapFeeBps: normalizedFeeConfig.buySwapFeeBps,
+    sellSwapFeeBps: normalizedFeeConfig.sellSwapFeeBps,
     oracleReady: Boolean(oracleReady),
     twapWindow: Number(twapWindow),
     automationAction: Number(automationAction),

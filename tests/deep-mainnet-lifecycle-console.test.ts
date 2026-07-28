@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   decideLifecycleAction,
+  normalizeLifecycleFeeConfig,
   oracleBatchRepeatCount,
   predictKeeperExecutorAddress,
   reviewedKeeperExecutorSourceCommitment,
@@ -37,6 +38,40 @@ function evidence(
 }
 
 describe("Deep Full-Range Mainnet lifecycle state machine", () => {
+  it("decodes the deployed six-field fee configuration exactly", () => {
+    expect(
+      normalizeLifecycleFeeConfig(
+        [
+          "0x1111111111111111111111111111111111111111",
+          "0x7aef9a4038fabb1d477bbfd3a106f81b93eb5aeb",
+          1_000n,
+          1_000n,
+          true,
+          2_970_000_000_000_000n,
+        ],
+        "0x1111111111111111111111111111111111111111",
+      ),
+    ).toEqual({
+      buySwapFeeBps: 1_000,
+      sellSwapFeeBps: 1_000,
+      creatorFeesAccrued: "2970000000000000",
+    });
+
+    expect(() =>
+      normalizeLifecycleFeeConfig(
+        [
+          "0x1111111111111111111111111111111111111111",
+          "0x2222222222222222222222222222222222222222",
+          1_000n,
+          1_000n,
+          true,
+          1n,
+        ],
+        "0x1111111111111111111111111111111111111111",
+      ),
+    ).toThrow("fee configuration");
+  });
+
   it("packs the complete 2 to 192 growth into one 12-call repeated-vault batch", () => {
     expect(oracleBatchRepeatCount(2)).toBe(12);
     expect(oracleBatchRepeatCount(18)).toBe(11);
