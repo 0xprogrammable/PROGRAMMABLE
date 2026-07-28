@@ -1,0 +1,52 @@
+name: Contract issue
+description: Report a reproducible, non-security issue in a published launch model.
+title: ""
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not disclose a vulnerability here. Use private vulnerability reporting for security-sensitive findings.
+  - type: dropdown
+    id: release
+    attributes:
+      label: Release
+      options:
+        - Classic V2
+        - Unreleased main branch
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: contract
+    attributes:
+      label: Contract or address
+      placeholder: Contract name, verified address or source path
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: Include the transaction, call parameters and relevant chain state.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest test or sequence that reproduces the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: disclosure
+    attributes:
+      label: Disclosure check
+      options:
+        - label: This report does not expose a security vulnerability.
+          required: true

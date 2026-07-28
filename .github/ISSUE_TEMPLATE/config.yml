@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/0xprogrammable/programmable/security/advisories/new
+    about: Send vulnerabilities privately to the maintainers.

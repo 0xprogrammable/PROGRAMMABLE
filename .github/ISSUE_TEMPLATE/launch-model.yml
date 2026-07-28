@@ -1,0 +1,44 @@
+name: Launch model proposal
+description: Propose a new Uniswap v4 launch model for Programmable.
+title: ""
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Model name
+      placeholder: A short working name
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Explain who needs the model and what they cannot do with an existing model.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Pool behavior
+      description: Describe the behavior that belongs in the hook or supporting contracts.
+    validations:
+      required: true
+  - type: textarea
+    id: permissions
+    attributes:
+      label: Hook permissions and accounting
+      description: List expected callbacks, return deltas, fee paths and external calls.
+    validations:
+      required: true
+  - type: textarea
+    id: upstream
+    attributes:
+      label: Upstream components
+      description: Link relevant Uniswap, OpenZeppelin or other primary sources.
+  - type: textarea
+    id: security
+    attributes:
+      label: Security properties
+      description: State the invariants and failure modes that must be tested.
+    validations:
+      required: true

@@ -1,13 +1,34 @@
-# Programmable
+<p align="center">
+  <img
+    src="assets/programmable-repository-cover.jpg"
+    alt="Programmable mark above a field of watercolor flowers"
+    width="100%"
+  />
+</p>
 
-Programmable publishes open source launch models for Uniswap v4 on Ethereum.
+<h1 align="center">Programmable</h1>
 
-Each release includes its contracts, tests, security assumptions and Ethereum deployment record. Classic is the first
-model available on Programmable.
+<p align="center">Open source launch models for Uniswap v4 on Ethereum.</p>
 
-[Launch a token](https://programmable.family) ·
-[View the V4 token](https://etherscan.io/token/0x7987f03462200b3D8A072E02C89A8A41dCB124EE) ·
-[Follow Programmable](https://x.com/0xProgrammable)
+<p align="center">
+  <a href="https://programmable.family">Launch</a> ·
+  <a href="MODELS.md">Models</a> ·
+  <a href="deployments/ethereum.json">Ethereum deployment</a> ·
+  <a href="SECURITY.md">Security</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/0xprogrammable/programmable/actions/workflows/verify.yml">
+    <img
+      src="https://github.com/0xprogrammable/programmable/actions/workflows/verify.yml/badge.svg"
+      alt="Contract verification status"
+    />
+  </a>
+</p>
+
+Programmable packages Uniswap v4 pool behavior into launch flows that creators can use without writing or deploying
+contracts. Each release includes its exact contract sources, tests, security assumptions and Ethereum deployment
+evidence.
 
 ## Launch models
 
@@ -20,27 +41,38 @@ model available on Programmable.
 | Limit Orders | Onchain orders executed as the pool crosses their price | Research |
 | Yield Reserve | Pool reserves that can use ERC-4626 vaults | Research |
 
-Protected is in development. A model is marked `Available` once its source, tests and deployment record are public.
-See [`MODELS.md`](MODELS.md) for the full catalog.
+A model is marked `Available` once its source, tests, security documentation and deployment record are public. The
+complete catalog is in [`MODELS.md`](MODELS.md).
 
-## Available now
+## Classic
 
-### Classic
+Classic creates the token, initializes its ETH pool, locks the launch position and completes the creator's initial buy
+in one transaction.
 
-One transaction creates the token, opens its Uniswap v4 pool, locks the launch position and completes the creator's
-initial buy. In detail, it:
-
-1. creates a fixed-supply UERC20;
-2. registers and initializes its ETH pool on Uniswap v4;
-3. places the complete supply into a one-sided position;
-4. sends that position to a forwarder with no operator and a maximum timelock; and
-5. executes the creator's initial buy.
+```mermaid
+flowchart LR
+    creator["Creator"] -->|"launch + initial buy"| launcher["Classic launcher"]
+    launcher --> token["Fixed-supply token"]
+    launcher --> pool["Uniswap v4 pool"]
+    launcher --> position["Locked one-sided position"]
+    pool <--> hook["Creator fee hook"]
+    hook -->|"claim ETH"| creator
+    hook -->|"claim ETH"| treasury["Programmable"]
+```
 
 Classic V2 is the current immutable Ethereum release.
 
-The current interface fixes the total swap fee at `1.00%`: `0.90%` accrues to the token creator and `0.10%` accrues
-to Programmable. The deployed hook supports total fees from `1%` to `10%` in one-point increments, but the current
-product does not expose those higher settings. The token has no transfer tax. The Uniswap v4 pool LP fee is zero.
+| Property | Current release |
+| --- | --- |
+| Supply | 1 billion fixed-supply UERC20 |
+| Pair | Native ETH |
+| Launch liquidity | Complete token supply in a locked one-sided position |
+| Swap fee | `1.00%`: `0.90%` creator and `0.10%` Programmable |
+| Token transfer tax | None |
+| Uniswap v4 LP fee | Zero |
+
+The deployed hook accepts total swap fees from `1%` to `10%` in one-point increments. The current interface exposes
+only `1%`.
 
 ## Ethereum deployment
 
@@ -51,10 +83,10 @@ product does not expose those higher settings. The token has no transfer tax. Th
 | Hook factory | [`0xD405…5fd67`](https://etherscan.io/address/0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67#code) |
 | Position forwarder factory | [`0x291a…4dB507`](https://etherscan.io/address/0x291a9ff1059d225d02B1659430804486404dB507#code) |
 
-Machine-readable addresses, transactions and runtime code hashes are in
+Transactions and runtime code hashes are recorded in
 [`deployments/ethereum.json`](deployments/ethereum.json).
 
-## Repository map
+## Repository
 
 ```text
 src/                 Exact sources for the current available deployment
@@ -67,27 +99,27 @@ ARCHITECTURE.md       Architecture of the current available model
 SECURITY.md           Security status, trust model and disclosure
 ```
 
-## Build and test
-
 The dependency script checks out every upstream repository at a fixed commit:
 
 ```bash
 ./scripts/bootstrap-deps.sh
 forge fmt --check
 forge build
-forge test
 FOUNDRY_PROFILE=ci forge test
 ```
 
-The contracts use Solidity `0.8.26`, Cancun opcodes, optimizer runs set to `1,000`, and disabled CBOR metadata. See
-[`foundry.toml`](foundry.toml) for the complete compiler configuration.
+The contracts use Solidity `0.8.26`, Cancun opcodes, optimizer runs set to `1,000`, and disabled CBOR metadata. The
+complete compiler configuration is in [`foundry.toml`](foundry.toml).
 
-## Security status
+## Security
 
-The current Classic deployment has not received an independent smart-contract audit or public security contest. The
-repository includes unit, integration, fuzz, invariant and regression coverage. Every future model will have its own
-permissions, invariants and deployment record. Read [`SECURITY.md`](SECURITY.md) before integrating.
+Classic has unit, integration, fuzz, invariant and regression coverage. It has not received an independent
+smart-contract audit or public security contest. Read [`SECURITY.md`](SECURITY.md) before integrating.
+
+Security vulnerabilities should be reported through
+[GitHub private vulnerability reporting](https://github.com/0xprogrammable/programmable/security/advisories/new).
 
 ## License
 
-[MIT](LICENSE)
+Contract source is available under the [MIT License](LICENSE). The Programmable name, mark and artwork are excluded;
+see [`assets/README.md`](assets/README.md).
