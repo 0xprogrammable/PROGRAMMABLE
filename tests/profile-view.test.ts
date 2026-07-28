@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { getAddress } from "viem";
 
 import {
+  buildProfilePortfolio,
   groupProfileRewards,
+  profileClaimableWei,
   sortProfileTokensByMarketCap,
 } from "../components/profile-view";
+import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
 import type {
   ProfileClaim,
   ProfileToken,
@@ -48,6 +51,34 @@ const claim = {
   href: `/token/${secondAddress}`,
 } satisfies ProfileClaim;
 
+const classicReward = {
+  tokenAddress: secondAddress,
+  tokenName: "Second",
+  tokenSymbol: "SECOND",
+  poolId: `0x${"44".repeat(32)}`,
+  vaultAddress: getAddress(
+    "0x4444444444444444444444444444444444444444",
+  ),
+  beneficiary: firstAddress,
+  payoutAddress: firstAddress,
+  shareBps: 10_000,
+  claimableWei: "2000000000000000",
+  claimableEth: "0.002",
+  claimedWei: "0",
+  claimedEth: "0",
+  buySwapFeeBps: 100,
+  sellSwapFeeBps: 200,
+  platformFeeBps: 10,
+  beneficiaries: [
+    {
+      beneficiary: firstAddress,
+      payoutAddress: firstAddress,
+      shareBps: 10_000,
+    },
+  ],
+  launchTransactionHash: `0x${"55".repeat(32)}`,
+} satisfies ClassicV3Reward;
+
 describe("profile reward grouping", () => {
   it("keeps deployed-token order and attaches each reward to its token", () => {
     const grouped = groupProfileRewards(tokens, [claim]);
@@ -67,5 +98,42 @@ describe("profile reward grouping", () => {
       sortProfileTokensByMarketCap(ranked).map((token) => token.symbol),
     ).toEqual(["SECOND", "FIRST"]);
     expect(ranked.map((token) => token.symbol)).toEqual(["FIRST", "SECOND"]);
+  });
+
+  it("renders one portfolio entry when current and split rewards share a token", () => {
+    const portfolio = buildProfilePortfolio(
+      tokens,
+      [claim],
+      [classicReward],
+    );
+
+    expect(portfolio).toHaveLength(2);
+    const second = portfolio.find(
+      (entry) => entry.token.address === secondAddress,
+    );
+    expect(second).toMatchObject({
+      token: tokens[1],
+      claim,
+      classicReward,
+      launchedByWallet: true,
+    });
+    expect(profileClaimableWei(portfolio)).toBe(
+      3_000_000_000_000_000n,
+    );
+  });
+
+  it("keeps reward-only tokens visible when the launch feed is unavailable", () => {
+    const portfolio = buildProfilePortfolio([], [], [classicReward]);
+
+    expect(portfolio).toHaveLength(1);
+    expect(portfolio[0]).toMatchObject({
+      token: {
+        address: secondAddress,
+        name: "Second",
+        symbol: "SECOND",
+      },
+      launchedByWallet: false,
+      classicReward,
+    });
   });
 });

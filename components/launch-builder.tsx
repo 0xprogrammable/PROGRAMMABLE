@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useWallet } from "@/components/wallet-provider";
 import { AdaptiveCurveEditor } from "@/components/adaptive-curve-editor";
+import adaptiveLayout from "@/components/adaptive-launch-layout.module.css";
 import { validatePreparedAdaptiveLaunchTransaction } from "@/lib/adaptive-launch-validation";
 import { validatePreparedClassicLaunchTransaction } from "@/lib/classic-launch-validation";
 import { validatePreparedClassicV3LaunchTransaction } from "@/lib/classic-v3-launch-validation";
@@ -354,16 +355,16 @@ function LaunchModelPicker({
               </small>
             </span>
             <span className="launch-model-description">
-              Draw an immutable swap-fee curve that follows the token&apos;s
-              ETH-denominated onchain value
+              Set how the swap fee changes as the token&apos;s onchain value
+              grows
             </span>
             <span className="launch-model-details">
               <span>Uniswap v4</span>
-              <span>2–8 curve points</span>
-              <span>1.00%–10.00% total fee</span>
+              <span>2–6 curve points</span>
+              <span>1%–10% total fee</span>
             </span>
             <span className="launch-model-action">
-              {adaptiveLaunchAvailable ? "Launch" : "Open editor"}
+              {adaptiveLaunchAvailable ? "Launch" : "Configure"}
               <ArrowRight aria-hidden="true" size={16} />
             </span>
           </span>
@@ -735,7 +736,11 @@ function LaunchBuilderForm({
   }
 
   return (
-    <div className="launch-page page-width">
+    <div
+      className={`launch-page page-width ${
+        model === "adaptive" ? adaptiveLayout.page : ""
+      }`}
+    >
       <header className="launch-page-heading">
         <button
           className="launch-model-back"
@@ -757,7 +762,7 @@ function LaunchBuilderForm({
           <p className="launch-model-summary">
             1B fixed supply <span>·</span> Uniswap v4 <span>·</span>{" "}
             {model === "adaptive"
-              ? "Immutable fee curve"
+              ? "Fee curve fixed at launch"
               : model === "classic-v3"
                 ? "Directional fees and fixed rewards"
                 : "Locked liquidity"}
@@ -766,14 +771,20 @@ function LaunchBuilderForm({
       </header>
 
       <form
-        className="classic-launch-sheet"
+        className={`classic-launch-sheet ${
+          model === "adaptive" ? adaptiveLayout.sheet : ""
+        }`}
         aria-busy={launching}
         onSubmit={(event) => {
           event.preventDefault();
           void launchToken();
         }}
       >
-        <div className="classic-launch-content">
+        <div
+          className={`classic-launch-content ${
+            model === "adaptive" ? adaptiveLayout.content : ""
+          }`}
+        >
           <TokenStep
             draft={draft}
             setDraft={setDraft}
@@ -808,7 +819,11 @@ function LaunchBuilderForm({
           )}
         </div>
 
-        <footer className="classic-launch-footer">
+        <footer
+          className={`classic-launch-footer ${
+            model === "adaptive" ? adaptiveLayout.footer : ""
+          }`}
+        >
           <div className="classic-launch-status">
             {formError ? (
               <p className="form-error" role="alert">
@@ -1390,7 +1405,7 @@ function AdaptiveFeeStep({
   onMaximumDevBuy: () => void;
 }) {
   return (
-    <section className="classic-fee-section">
+    <section className={adaptiveLayout.feeSection}>
       <AdaptiveCurveEditor
         points={draft.adaptiveCurvePoints}
         onChange={(adaptiveCurvePoints) => {
@@ -1399,39 +1414,37 @@ function AdaptiveFeeStep({
         }}
       />
 
-      <div className="classic-fee-layout">
-        <label className="meme-dev-buy" htmlFor="adaptive-dev-buy">
-          <span>
-            <strong>Dev Buy</strong>
-            <small>Optional</small>
-          </span>
-          <span className="meme-dev-buy-input">
-            <input
-              id="adaptive-dev-buy"
-              inputMode="decimal"
-              value={draft.initialBuyEth}
-              maxLength={40}
-              placeholder="0"
-              spellCheck={false}
-              autoComplete="off"
-              onChange={(event) => {
-                onEdit();
-                updateDraft(setDraft, {
-                  initialBuyEth: event.target.value,
-                });
-              }}
-            />
-            <button
-              type="button"
-              disabled={settingMaxBuy || !adaptiveLaunchAvailable}
-              onClick={onMaximumDevBuy}
-            >
-              {settingMaxBuy ? "Checking" : "Max"}
-            </button>
-            <span>ETH</span>
-          </span>
-        </label>
-      </div>
+      <label className={adaptiveLayout.devBuy} htmlFor="adaptive-dev-buy">
+        <span className={adaptiveLayout.devBuyCopy}>
+          <strong>Dev Buy</strong>
+          <small>Optional first buy</small>
+        </span>
+        <span className={adaptiveLayout.devBuyInput}>
+          <input
+            id="adaptive-dev-buy"
+            inputMode="decimal"
+            value={draft.initialBuyEth}
+            maxLength={40}
+            placeholder="0"
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(event) => {
+              onEdit();
+              updateDraft(setDraft, {
+                initialBuyEth: event.target.value,
+              });
+            }}
+          />
+          <button
+            type="button"
+            disabled={settingMaxBuy || !adaptiveLaunchAvailable}
+            onClick={onMaximumDevBuy}
+          >
+            {settingMaxBuy ? "Checking" : "Max"}
+          </button>
+          <span>ETH</span>
+        </span>
+      </label>
     </section>
   );
 }

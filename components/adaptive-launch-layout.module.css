@@ -1,0 +1,163 @@
+.page {
+  scrollbar-gutter: stable;
+}
+
+.sheet {
+  overflow: clip;
+}
+
+.content {
+  overflow: visible;
+}
+
+.feeSection {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 17px;
+}
+
+.devBuy {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(69, 51, 64, 0.1);
+  border-radius: 15px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  margin: 0;
+  min-height: 66px;
+  padding: 9px 11px 9px 16px;
+}
+
+.devBuyCopy {
+  display: grid;
+  gap: 3px;
+}
+
+.devBuyCopy strong {
+  color: #30282e;
+  font-size: 13px;
+  font-weight: 610;
+}
+
+.devBuyCopy small {
+  color: #7c747b;
+  font-size: 11px;
+}
+
+.devBuyInput {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(69, 51, 64, 0.11);
+  border-radius: 11px;
+  display: flex;
+  min-height: 44px;
+  padding: 3px 8px 3px 12px;
+}
+
+.devBuyInput:focus-within {
+  border-color: rgba(213, 111, 165, 0.62);
+  box-shadow: 0 0 0 3px rgba(213, 111, 165, 0.1);
+}
+
+.devBuyInput input {
+  background: transparent;
+  border: 0;
+  color: #30282e;
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  min-width: 0;
+  outline: 0;
+  padding: 0;
+}
+
+.devBuyInput > button {
+  background: rgba(213, 111, 165, 0.1);
+  border: 0;
+  border-radius: 8px;
+  color: #9d4d77;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  min-height: 36px;
+  padding: 0 10px;
+  transition:
+    background-color 160ms ease,
+    transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.devBuyInput > button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.devBuyInput > span {
+  color: #776f75;
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.footer {
+  background: rgba(251, 250, 251, 0.96);
+}
+
+@media (min-width: 1021px) {
+  :global(.launch-page).page {
+    height: calc(100svh - var(--header-height));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
+  }
+
+  :global(.classic-launch-sheet).sheet {
+    flex: none;
+    margin-bottom: 0;
+  }
+
+  :global(.classic-launch-content).content {
+    flex: none;
+    min-height: auto;
+  }
+}
+
+@media (max-width: 1020px) {
+  .page {
+    min-height: calc(100svh - var(--header-height));
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 640px) {
+  .feeSection {
+    gap: 14px;
+    margin-top: 16px;
+    padding-top: 15px;
+  }
+
+  .devBuy {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    padding: 13px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .devBuyInput > button:not(:disabled):hover {
+    background: rgba(213, 111, 165, 0.17);
+  }
+}
+
+.devBuyInput > button:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .devBuyInput > button {
+    transition-duration: 0.01ms;
+  }
+}
