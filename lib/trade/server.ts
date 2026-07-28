@@ -32,7 +32,12 @@ import {
   type ClassicTradeDeployment,
   type ClassicTradeSide,
 } from "./classic";
+import {
+  getVerifiedDeepRelease,
+  type LaunchModelReleaseManifest,
+} from "../launch-model-gating";
 import type { ExploreReadModel } from "../onchain/types";
+import type { LauncherToken } from "../tokens";
 
 const UINT128_MAX = (1n << 128n) - 1n;
 const REQUEST_FIELDS = new Set([
@@ -46,6 +51,7 @@ const REQUEST_FIELDS = new Set([
 ]);
 
 export type ClassicTradeRelease = ClassicTradeDeployment & {
+  launchModel: "classic" | "deep";
   poolManagerRuntimeCodeHash: Hex;
   v4QuoterRuntimeCodeHash: Hex;
   universalRouterRuntimeCodeHash: Hex;
@@ -55,7 +61,7 @@ export type ClassicTradeRelease = ClassicTradeDeployment & {
 
 type OfficialTradeStack = Omit<
   ClassicTradeRelease,
-  "hook" | "hookRuntimeCodeHash"
+  "launchModel" | "hook" | "hookRuntimeCodeHash"
 >;
 
 export type ClassicTradeRequest = {
@@ -244,10 +250,108 @@ export function resolveClassicTradeDeployment(
 
   const deployment: ClassicTradeRelease = {
     ...official,
+    launchModel: "classic",
     hook: getAddress(app.ethCreatorFeeHook),
     hookRuntimeCodeHash,
   };
   assertClassicTradeDeployment(deployment);
+  return deployment;
+}
+
+function verifiedIndexedToken(
+  model: ExploreReadModel,
+  chainId: number,
+  token: Address,
+): LauncherToken {
+  if (
+    model.status !== "ready" ||
+    model.snapshot.chainId !== chainId
+  ) {
+    throw new ClassicTradeUnavailableError(
+      "The verified Programmable launch registry is unavailable",
+    );
+  }
+  const verified = model.tokens.find(
+    (candidate) =>
+      candidate.tokenAddress.toLowerCase() === token.toLowerCase(),
+  );
+  if (!verified || verified.liquidityPath !== "meme") {
+    throw new ClassicTradeUnavailableError(
+      "This token is not a verified Programmable launch",
+    );
+  }
+  return verified;
+}
+
+export function resolveTradeDeployment(
+  chainId: number,
+  model: ExploreReadModel,
+  token: Address,
+  manifestOverride?: LaunchModelReleaseManifest,
+): ClassicTradeRelease {
+  const verified = verifiedIndexedToken(model, chainId, token);
+  const launchModel = verified.launchModel ?? "classic";
+  if (launchModel === "classic") {
+    const deployment = resolveClassicTradeDeployment(chainId);
+    assertVerifiedTradeToken(model, deployment, token);
+    return deployment;
+  }
+  if (launchModel !== "deep") {
+    throw new ClassicTradeUnavailableError(
+      `Trading is not supported for the verified ${launchModel} launch model`,
+    );
+  }
+
+  const app =
+    manifestOverride ??
+    (chainId === 1
+      ? appDeployments.production
+      : chainId === 11155111
+        ? appDeployments.rehearsal
+        : null);
+  if (!app) {
+    getPinnedOfficialTradeStack(chainId);
+    throw new ClassicTradeUnavailableError(
+      `Deep trading is not configured on chain ${chainId}`,
+    );
+  }
+  const release = getVerifiedDeepRelease(
+    app as LaunchModelReleaseManifest,
+    chainId,
+  );
+  if (!release) {
+    throw new ClassicTradeUnavailableError(
+      `Deep trading is not enabled by an eligible verified release on chain ${chainId}`,
+    );
+  }
+  const hookRuntimeCodeHash = release.runtimeCodeHashes?.feeHook;
+  if (
+    typeof release.feeHook !== "string" ||
+    typeof hookRuntimeCodeHash !== "string" ||
+    !isHex(hookRuntimeCodeHash) ||
+    hookRuntimeCodeHash.length !== 66
+  ) {
+    throw new ClassicTradeUnavailableError(
+      `Deep trading has no pinned hook release on chain ${chainId}`,
+    );
+  }
+
+  let hook: Address;
+  try {
+    hook = getAddress(release.feeHook);
+  } catch {
+    throw new ClassicTradeUnavailableError(
+      `Deep trading has no pinned hook release on chain ${chainId}`,
+    );
+  }
+  const deployment: ClassicTradeRelease = {
+    ...getPinnedOfficialTradeStack(chainId),
+    launchModel: "deep",
+    hook,
+    hookRuntimeCodeHash: hookRuntimeCodeHash as Hex,
+  };
+  assertClassicTradeDeployment(deployment);
+  assertVerifiedTradeToken(model, deployment, token);
   return deployment;
 }
 
@@ -280,7 +384,11 @@ async function assertRuntimeContracts(
       deployment.universalRouterRuntimeCodeHash,
     ],
     ["Permit2", deployment.permit2, deployment.permit2RuntimeCodeHash],
-    ["Classic hook", deployment.hook, deployment.hookRuntimeCodeHash],
+    [
+      deployment.launchModel === "deep" ? "Deep hook" : "Classic hook",
+      deployment.hook,
+      deployment.hookRuntimeCodeHash,
+    ],
   ] as const;
   const code = await Promise.all(
     [...contracts, ["Token", token] as const].map(([, address]) =>
@@ -311,26 +419,20 @@ async function assertRuntimeContracts(
   }
 }
 
-export function assertVerifiedClassicToken(
+export function assertVerifiedTradeToken(
   model: ExploreReadModel,
   deployment: ClassicTradeRelease,
   token: Address,
 ) {
-  if (
-    model.status !== "ready" ||
-    model.snapshot.chainId !== deployment.chainId
-  ) {
-    throw new ClassicTradeUnavailableError(
-      "The verified Programmable launch registry is unavailable",
-    );
-  }
-  const verified = model.tokens.find(
-    (candidate) =>
-      candidate.tokenAddress.toLowerCase() === token.toLowerCase(),
+  const verified = verifiedIndexedToken(
+    model,
+    deployment.chainId,
+    token,
   );
-  if (!verified || verified.liquidityPath !== "meme") {
+  const launchModel = verified.launchModel ?? "classic";
+  if (launchModel !== deployment.launchModel) {
     throw new ClassicTradeUnavailableError(
-      "This token is not a verified Programmable launch",
+      "The token launch model does not match the selected trade release",
     );
   }
   const expectedPoolId = getClassicPoolId(
@@ -348,6 +450,8 @@ export function assertVerifiedClassicToken(
   }
   return verified;
 }
+
+export const assertVerifiedClassicToken = assertVerifiedTradeToken;
 
 async function requiredCall(
   client: ClassicTradeRuntimeClient,
@@ -531,7 +635,7 @@ export async function prepareClassicTrade(
   }
 
   const poolKey = createClassicPoolKey(request.token, deployment);
-  assertVerifiedClassicToken(registry, deployment, poolKey.currency1);
+  assertVerifiedTradeToken(registry, deployment, poolKey.currency1);
   await assertRuntimeContracts(
     client,
     deployment,

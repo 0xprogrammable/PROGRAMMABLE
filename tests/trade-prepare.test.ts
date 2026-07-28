@@ -21,24 +21,25 @@ import {
   parseClassicTradeRequest,
   prepareClassicTrade,
   resolveClassicTradeDeployment,
+  resolveTradeDeployment,
   type ClassicTradeRelease,
   type ClassicTradeRuntimeClient,
 } from "../lib/trade/server";
+import type { LaunchModelReleaseManifest } from "../lib/launch-model-gating";
 import type { ExploreReadModel } from "../lib/onchain/types";
+import appDeployments from "../contracts/config/app-deployments.v1.json";
 
 const OWNER = getAddress("0x5555555555555555555555555555555555555555");
-const TOKEN = getAddress(
-  "0x69AE118837CFe3BE671f59f3D64bCFB8bf1Dc0e9",
-);
-const REHEARSAL_HOOK = getAddress(
-  "0x9F943aCeFc675DDE34F3998069A958Eb726Da0cC",
-);
+const TOKEN = getAddress("0x69AE118837CFe3BE671f59f3D64bCFB8bf1Dc0e9");
+const REHEARSAL_HOOK = getAddress("0x9F943aCeFc675DDE34F3998069A958Eb726Da0cC");
+const DEEP_HOOK = getAddress("0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC");
 const MOCK_RUNTIME_CODE = "0x6000" as Hex;
 const MOCK_RUNTIME_CODE_HASH = keccak256(MOCK_RUNTIME_CODE);
 
 function rehearsalDeployment(): ClassicTradeRelease {
   return {
     ...getPinnedOfficialTradeStack(11155111),
+    launchModel: "classic",
     hook: REHEARSAL_HOOK,
     poolManagerRuntimeCodeHash: MOCK_RUNTIME_CODE_HASH,
     v4QuoterRuntimeCodeHash: MOCK_RUNTIME_CODE_HASH,
@@ -48,16 +49,24 @@ function rehearsalDeployment(): ClassicTradeRelease {
   };
 }
 
+function deepDeployment(): ClassicTradeRelease {
+  return {
+    ...rehearsalDeployment(),
+    launchModel: "deep",
+    hook: DEEP_HOOK,
+  };
+}
+
 function readyRegistry(
   tokenAddress: Address = TOKEN,
   overrides: Partial<ExploreReadModel & { status: "ready" }> = {},
+  deployment: ClassicTradeRelease = rehearsalDeployment(),
 ): ExploreReadModel {
-  const deployment = rehearsalDeployment();
   return {
     status: "ready",
     tokens: [
       {
-        id: `11155111:${tokenAddress}`,
+        id: `${deployment.chainId}:${tokenAddress}`,
         name: "Verified Token",
         symbol: "VER",
         tokenAddress,
@@ -68,11 +77,12 @@ function readyRegistry(
         ),
         launchedAt: "2026-07-27T00:00:00.000Z",
         totalSwapFeeBps: 100,
+        launchModel: deployment.launchModel,
         liquidityPath: "meme",
       },
     ],
     snapshot: {
-      chainId: 11155111,
+      chainId: deployment.chainId,
       blockNumber: "100",
       blockHash: `0x${"aa".repeat(32)}`,
       confirmations: 12,
@@ -82,6 +92,33 @@ function readyRegistry(
     launcherFeesAccruedEth: "0",
     ...overrides,
   };
+}
+
+function eligibleDeepManifest(): LaunchModelReleaseManifest {
+  const manifest = structuredClone(appDeployments.production);
+  manifest.chainId = 11_155_111;
+  Object.assign(manifest.launchModelReleases.deep, {
+    status: "deployment-source-and-lifecycle-verified",
+    releaseEligible: true,
+    feeHook: DEEP_HOOK,
+    lifecycleStatus: "verified-current-release",
+    lifecycleIndependentRpcCount: 2,
+    lifecycleLaunchTransaction: `0x${"22".repeat(32)}`,
+    lifecycleOracleTransaction: `0x${"33".repeat(32)}`,
+    lifecycleFeeProcessCompoundTransaction: `0x${"44".repeat(32)}`,
+    keeperExecutor: "0x1111111111111111111111111111111111111111",
+    keeperExecutorRuntimeCodeHash:
+      "0xd4a6e8f200bd63ab924f5c4cfb1bbcc07c26c7b7b7abaa1f879418d2435f48e6",
+    keeperExecutorSourceCommitment:
+      "0x9072fa857d484b944205a969fda41727fa76d0f9e670916451b308615bb82175",
+    keeperExecutorDeploymentTransaction: `0x${"55".repeat(32)}`,
+    keeperExecutorDeploymentBlock: 25_632_900,
+    keeperExecutorSourceVerificationStatus:
+      "etherscan-and-sourcify-exact-match",
+  });
+  manifest.launchModelReleases.deep.runtimeCodeHashes.feeHook =
+    MOCK_RUNTIME_CODE_HASH;
+  return manifest as LaunchModelReleaseManifest;
 }
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -129,17 +166,13 @@ function runtimeClient(input?: {
       if (input?.missingCode?.toLowerCase() === address.toLowerCase()) {
         return undefined;
       }
-      return input?.mismatchedCode?.toLowerCase() ===
-        address.toLowerCase()
+      return input?.mismatchedCode?.toLowerCase() === address.toLowerCase()
         ? ("0x6001" as Hex)
         : MOCK_RUNTIME_CODE;
     },
     async estimateGas(args) {
       const deployment = rehearsalDeployment();
-      if (
-        args.to.toLowerCase() !==
-        deployment.universalRouter.toLowerCase()
-      ) {
+      if (args.to.toLowerCase() !== deployment.universalRouter.toLowerCase()) {
         throw new Error("Only swap gas estimation is expected");
       }
       if (input?.swapSimulationFailure) {
@@ -168,18 +201,13 @@ function runtimeClient(input?: {
       }
 
       const deployment = rehearsalDeployment();
-      if (
-        args.to.toLowerCase() ===
-        deployment.universalRouter.toLowerCase()
-      ) {
+      if (args.to.toLowerCase() === deployment.universalRouter.toLowerCase()) {
         if (input?.swapSimulationFailure) {
           throw new Error("swap simulation reverted");
         }
         return {};
       }
-      if (
-        args.to.toLowerCase() === deployment.permit2.toLowerCase()
-      ) {
+      if (args.to.toLowerCase() === deployment.permit2.toLowerCase()) {
         return {
           data: encodeFunctionResult({
             abi: classicPermit2Abi,
@@ -206,7 +234,7 @@ function runtimeClient(input?: {
   return { client, codeChecks };
 }
 
-describe("Classic trade request boundary", () => {
+describe("Trade request boundary", () => {
   it("accepts only explicit JSON-safe trade fields", () => {
     expect(parseClassicTradeRequest(request())).toEqual({
       chainId: 11155111,
@@ -219,58 +247,103 @@ describe("Classic trade request boundary", () => {
     });
 
     expect(() =>
-      parseClassicTradeRequest(
-        request({ integratorFeeBps: 10 }),
-      ),
+      parseClassicTradeRequest(request({ integratorFeeBps: 10 })),
     ).toThrow("unsupported field");
-    expect(() =>
-      parseClassicTradeRequest(request({ amountIn: 1000 })),
-    ).toThrow("base-unit integer string");
-    expect(() =>
-      parseClassicTradeRequest(request({ slippageBps: 0 })),
-    ).toThrow("Slippage");
+    expect(() => parseClassicTradeRequest(request({ amountIn: 1000 }))).toThrow(
+      "base-unit integer string",
+    );
+    expect(() => parseClassicTradeRequest(request({ slippageBps: 0 }))).toThrow(
+      "Slippage",
+    );
     expect(() =>
       parseClassicTradeRequest(request({ slippageBps: 1_001 })),
     ).toThrow("Slippage");
   });
 
   it("pins the active routers and enables both verified releases", () => {
-    expect(
-      getPinnedOfficialTradeStack(1).universalRouter,
-    ).toBe(
+    expect(getPinnedOfficialTradeStack(1).universalRouter).toBe(
       getAddress("0xd92A36B0000531EF3063dEd4De20A0783308446C"),
     );
 
     const rehearsal = rehearsalDeployment();
     expect(rehearsal).toMatchObject({
       chainId: 11155111,
-      v4Quoter: getAddress(
-        "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227",
-      ),
-      universalRouter: getAddress(
-        "0x470FFC67b1feEEC31D16C46AC7545C98716a194c",
-      ),
+      v4Quoter: getAddress("0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227"),
+      universalRouter: getAddress("0x470FFC67b1feEEC31D16C46AC7545C98716a194c"),
       hook: REHEARSAL_HOOK,
     });
     expect(resolveClassicTradeDeployment(1)).toMatchObject({
       chainId: 1,
-      hook: getAddress(
-        "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC",
-      ),
+      hook: getAddress("0x025a386eAa79f6067d29848FD05ccC71bEAb20CC"),
     });
     expect(resolveClassicTradeDeployment(11155111)).toMatchObject({
       chainId: 11155111,
-      hook: getAddress(
-        "0x0c9De2721F537C311e05ad3671A17136C14a20Cc",
-      ),
+      hook: getAddress("0x0c9De2721F537C311e05ad3671A17136C14a20Cc"),
     });
-    expect(() => resolveClassicTradeDeployment(8453)).toThrow(
-      "not supported",
-    );
+    expect(() => resolveClassicTradeDeployment(8453)).toThrow("not supported");
+  });
+
+  it("selects the Deep hook only from an eligible indexed Deep release", () => {
+    const deployment = deepDeployment();
+    const registry = readyRegistry(TOKEN, {}, deployment);
+    const eligible = eligibleDeepManifest();
+
+    expect(
+      resolveTradeDeployment(11_155_111, registry, TOKEN, eligible),
+    ).toMatchObject({
+      chainId: 11_155_111,
+      launchModel: "deep",
+      hook: DEEP_HOOK,
+      hookRuntimeCodeHash: MOCK_RUNTIME_CODE_HASH,
+    });
+
+    const ineligible = structuredClone(eligible);
+    if (!ineligible.launchModelReleases?.deep) {
+      throw new Error("Expected a Deep test release");
+    }
+    ineligible.launchModelReleases.deep.releaseEligible = false;
+    expect(() =>
+      resolveTradeDeployment(11_155_111, registry, TOKEN, ineligible),
+    ).toThrow("eligible verified release");
+
+    const productionDeep = {
+      ...getPinnedOfficialTradeStack(1),
+      launchModel: "deep",
+      hook: getAddress(
+        appDeployments.production.launchModelReleases.deep.feeHook,
+      ),
+      hookRuntimeCodeHash: appDeployments.production.launchModelReleases.deep
+        .runtimeCodeHashes.feeHook as Hex,
+    } satisfies ClassicTradeRelease;
+    expect(() =>
+      resolveTradeDeployment(
+        1,
+        readyRegistry(TOKEN, {}, productionDeep),
+        TOKEN,
+      ),
+    ).toThrow("eligible verified release");
+  });
+
+  it("rejects a Deep registry record with the wrong release hook", () => {
+    const deployment = deepDeployment();
+    const registry = readyRegistry(TOKEN, {}, deployment);
+    registry.tokens[0] = {
+      ...registry.tokens[0],
+      hookAddress: REHEARSAL_HOOK,
+    };
+
+    expect(() =>
+      resolveTradeDeployment(
+        11_155_111,
+        registry,
+        TOKEN,
+        eligibleDeepManifest(),
+      ),
+    ).toThrow("verified Programmable pool");
   });
 });
 
-describe("Classic trade preparation", () => {
+describe("Token trade preparation", () => {
   it("quotes a buy and returns an unsigned native ETH swap transaction", async () => {
     const deployment = rehearsalDeployment();
     const { client, codeChecks } = runtimeClient();
@@ -331,9 +404,7 @@ describe("Classic trade preparation", () => {
     const prepared = await prepareClassicTrade(
       client,
       deployment,
-      parseClassicTradeRequest(
-        request({ side: "sell", amountIn: "1000" }),
-      ),
+      parseClassicTradeRequest(request({ side: "sell", amountIn: "1000" })),
       readyRegistry(),
     );
 
@@ -411,6 +482,76 @@ describe("Classic trade preparation", () => {
     });
   });
 
+  it("quotes a Deep buy through the canonical Deep hook", async () => {
+    const deployment = deepDeployment();
+    const { client, codeChecks } = runtimeClient();
+    const prepared = await prepareClassicTrade(
+      client,
+      deployment,
+      parseClassicTradeRequest(request()),
+      readyRegistry(TOKEN, {}, deployment),
+    );
+
+    expect(prepared).toMatchObject({
+      status: "ready",
+      side: "buy",
+      poolKey: {
+        hooks: DEEP_HOOK,
+      },
+      transaction: {
+        kind: "swap",
+        to: deployment.universalRouter,
+        value: "1000",
+      },
+    });
+    expect(codeChecks).toContain(DEEP_HOOK);
+    expect(codeChecks).not.toContain(REHEARSAL_HOOK);
+  });
+
+  it("quotes a Deep sell through the same Permit2 and Router path", async () => {
+    const deployment = deepDeployment();
+    const { client } = runtimeClient({
+      tokenAllowance: 100_000n,
+      permit2Allowance: 100_000n,
+      permit2Expiration: 50_000,
+    });
+    const prepared = await prepareClassicTrade(
+      client,
+      deployment,
+      parseClassicTradeRequest(request({ side: "sell" })),
+      readyRegistry(TOKEN, {}, deployment),
+    );
+
+    expect(prepared).toMatchObject({
+      status: "ready",
+      side: "sell",
+      approvalState: "ready",
+      poolKey: {
+        hooks: DEEP_HOOK,
+      },
+      transaction: {
+        kind: "swap",
+        to: deployment.universalRouter,
+        value: "0",
+      },
+    });
+  });
+
+  it("rejects a mismatched pinned Deep hook runtime", async () => {
+    const deployment = deepDeployment();
+
+    await expect(
+      prepareClassicTrade(
+        runtimeClient({ mismatchedCode: deployment.hook }).client,
+        deployment,
+        parseClassicTradeRequest(request()),
+        readyRegistry(TOKEN, {}, deployment),
+      ),
+    ).rejects.toThrow(
+      "Deep hook runtime code does not match the pinned release",
+    );
+  });
+
   it("rejects a wrong-chain client and missing code at a pinned address", async () => {
     const deployment = rehearsalDeployment();
     await expect(
@@ -424,8 +565,7 @@ describe("Classic trade preparation", () => {
 
     await expect(
       prepareClassicTrade(
-        runtimeClient({ missingCode: deployment.universalRouter })
-          .client,
+        runtimeClient({ missingCode: deployment.universalRouter }).client,
         deployment,
         parseClassicTradeRequest(request()),
         readyRegistry(),
@@ -444,9 +584,7 @@ describe("Classic trade preparation", () => {
       prepareClassicTrade(
         client,
         deployment,
-        parseClassicTradeRequest(
-          request({ token: foreignToken }),
-        ),
+        parseClassicTradeRequest(request({ token: foreignToken })),
         readyRegistry(),
       ),
     ).rejects.toThrow("not a verified Programmable launch");
@@ -512,9 +650,7 @@ describe("Classic trade preparation", () => {
         parseClassicTradeRequest(request()),
         readyRegistry(),
       ),
-    ).rejects.toThrow(
-      "keeps enough ETH for this buy and a later sell",
-    );
+    ).rejects.toThrow("keeps enough ETH for this buy and a later sell");
   });
 
   it("rejects a sell above the wallet token balance before approvals", async () => {
@@ -524,9 +660,7 @@ describe("Classic trade preparation", () => {
       prepareClassicTrade(
         runtimeClient({ tokenBalance: 999n }).client,
         deployment,
-        parseClassicTradeRequest(
-          request({ side: "sell", amountIn: "1000" }),
-        ),
+        parseClassicTradeRequest(request({ side: "sell", amountIn: "1000" })),
         readyRegistry(),
       ),
     ).rejects.toThrow("sell amount exceeds the wallet token balance");
@@ -548,8 +682,6 @@ describe("Classic trade preparation", () => {
         parseClassicTradeRequest(request({ side: "sell" })),
         readyRegistry(),
       ),
-    ).rejects.toThrow(
-      "wallet needs more ETH to pay for the sell transaction",
-    );
+    ).rejects.toThrow("wallet needs more ETH to pay for the sell transaction");
   });
 });

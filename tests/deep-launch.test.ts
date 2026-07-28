@@ -12,9 +12,7 @@ import {
   validatePreparedDeepLaunchTransactionAgainstManifest,
 } from "../lib/deep-launch-validation";
 import { createDeepDraft, type LaunchDraft } from "../lib/launch";
-import {
-  type LaunchModelReleaseManifest,
-} from "../lib/launch-model-gating";
+import { type LaunchModelReleaseManifest } from "../lib/launch-model-gating";
 import { buildPlanHash } from "../lib/launch-transaction";
 
 const account = "0x1111111111111111111111111111111111111111";
@@ -23,6 +21,12 @@ const launcher = "0x3333333333333333333333333333333333333333";
 const salt =
   "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const runtimeHash = `0x${"11".repeat(32)}`;
+const deepSourceCommitment =
+  "0x82f6e2745dfbf54f40eae80df645bc75a7952e0505dd0621437dd233a619acfd";
+const keeperExecutorSourceCommitment =
+  "0x9072fa857d484b944205a969fda41727fa76d0f9e670916451b308615bb82175";
+const keeperExecutorRuntimeCodeHash =
+  "0xd4a6e8f200bd63ab924f5c4cfb1bbcc07c26c7b7b7abaa1f879418d2435f48e6";
 
 function draft(): LaunchDraft {
   return {
@@ -53,7 +57,7 @@ function eligibleManifest(): LaunchModelReleaseManifest {
         internalContractRelease: "liquidity-growth-full-range-v1",
         releaseVersion: "deep-full-range-v1",
         releaseCommit: "a".repeat(40),
-        sourceCommitment: runtimeHash,
+        sourceCommitment: deepSourceCommitment,
         releaseManifest:
           "contracts/deployments/mainnet-deep-full-range-v1.json",
         status: "deployment-source-and-lifecycle-verified",
@@ -63,23 +67,29 @@ function eligibleManifest(): LaunchModelReleaseManifest {
         launcher,
         hookFactory: "0x4444444444444444444444444444444444444444",
         feeHook: "0x5555555555555555555555555555555555555555",
-        feeSplitVaultFactory:
-          "0x6666666666666666666666666666666666666666",
-        rangeSourceFactory:
-          "0x7777777777777777777777777777777777777777",
-        growthVaultFactory:
-          "0x8888888888888888888888888888888888888888",
-        growthVaultImplementation:
-          "0x9999999999999999999999999999999999999999",
+        feeSplitVaultFactory: "0x6666666666666666666666666666666666666666",
+        rangeSourceFactory: "0x7777777777777777777777777777777777777777",
+        growthVaultFactory: "0x8888888888888888888888888888888888888888",
+        growthVaultImplementation: "0x9999999999999999999999999999999999999999",
         automation: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        positionPlanner:
-          "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        positionForwarderFactory:
-          "0xcccccccccccccccccccccccccccccccccccccccc",
+        positionPlanner: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        positionForwarderFactory: "0xcccccccccccccccccccccccccccccccccccccccc",
         startBlock: 123,
         deploymentBlock: 123,
         deploymentTransaction: runtimeHash,
         lifecycleEvidenceHash: runtimeHash,
+        lifecycleStatus: "verified-current-release",
+        lifecycleIndependentRpcCount: 2,
+        lifecycleLaunchTransaction: `0x${"22".repeat(32)}`,
+        lifecycleOracleTransaction: `0x${"33".repeat(32)}`,
+        lifecycleFeeProcessCompoundTransaction: `0x${"44".repeat(32)}`,
+        keeperExecutor: "0xdddddddddddddddddddddddddddddddddddddddd",
+        keeperExecutorRuntimeCodeHash,
+        keeperExecutorSourceCommitment,
+        keeperExecutorDeploymentTransaction: `0x${"55".repeat(32)}`,
+        keeperExecutorDeploymentBlock: 124,
+        keeperExecutorSourceVerificationStatus:
+          "etherscan-and-sourcify-exact-match",
         runtimeCodeHashes: {
           launcher: runtimeHash,
           hookFactory: runtimeHash,
@@ -205,7 +215,8 @@ describe("Deep launch transaction boundary", () => {
       reserve:
         "Unused reserve stays locked in the vault and is not active liquidity.",
       automation:
-        "Automation is not guaranteed. Anyone can trigger eligible work.",
+        "Execution is permissionless and may be delayed. The 30-minute same-pool TWAP is a circuit breaker, not an independent price oracle.",
+      review: "This model has not received an independent external audit.",
     });
   });
 });

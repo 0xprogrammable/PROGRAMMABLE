@@ -1,11 +1,7 @@
-import {
-  encodeFunctionData,
-  getAddress,
-  keccak256,
-  toHex,
-} from "viem";
+import { encodeFunctionData, getAddress, toHex } from "viem";
 
 const HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
+const IDEMPOTENCY_KEY_PATTERN = /^deep-[0-9a-f]{32}$/;
 
 function sameAddress(left, right) {
   return (
@@ -21,7 +17,6 @@ export function createPrivyKeeperWallet({
   signerAddress,
   coordinatorAddress,
   chainId = 1,
-  now = () => Date.now(),
 }) {
   if (!client?.wallets || typeof client.wallets !== "function") {
     throw new Error("Privy client is required");
@@ -33,6 +28,7 @@ export function createPrivyKeeperWallet({
   const coordinator = getAddress(coordinatorAddress);
 
   return Object.freeze({
+    supportsStableIdempotency: true,
     async writeContract({
       address,
       abi,
@@ -42,11 +38,13 @@ export function createPrivyKeeperWallet({
       gas,
       maxFeePerGas,
       maxPriorityFeePerGas,
+      idempotencyKey,
     }) {
       if (
-        functionName !== "performBatch" ||
+        functionName !== "execute" ||
         !sameAddress(address, coordinator) ||
-        !sameAddress(account, signer)
+        !sameAddress(account, signer) ||
+        !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey ?? "")
       ) {
         throw new Error("Keeper transaction is outside the approved scope");
       }
@@ -55,13 +53,10 @@ export function createPrivyKeeperWallet({
         functionName,
         args,
       });
-      const timeBucket = Math.floor(now() / 300_000);
-      const requestKey =
-        `deep-${keccak256(data).slice(2, 34)}-${timeBucket}`;
       const response = await client.wallets().rpc(walletId, {
         method: "eth_sendTransaction",
         caip2: `eip155:${chainId}`,
-        idempotency_key: requestKey,
+        idempotency_key: idempotencyKey,
         params: {
           transaction: {
             from: signer,

@@ -1,10 +1,12 @@
 # Deep FullRange Mainnet release
 
-Status: prepared locally, not deployed.
+Status: deployed on Ethereum Mainnet, disabled pending final lifecycle and keeper verification.
 
-The checked-in release is deliberately disabled. Local builds and fork tests do
-not provide a Mainnet address, receipt, verified runtime or permission to turn
-on the app or keeper.
+The checked-in release is deliberately disabled. Its deployment receipts,
+runtime hashes, immutable configuration and source matches have been recorded.
+The canary launch and oracle-growth transaction are also recorded. The release
+must remain unavailable in the app until real fee processing, full-range
+compounding and the production keeper path are independently verified.
 
 ## Release identity
 
@@ -87,7 +89,7 @@ These results are local evidence. The current manifest remains
 
 ## Mainnet completion gates
 
-After an owner-controlled deployment, the manifest must contain:
+Before activation, the manifest must contain:
 
 - the exact pushed release commit and refreshed deterministic plan;
 - all nine infrastructure addresses, six transaction hashes and successful
@@ -97,7 +99,8 @@ After an owner-controlled deployment, the manifest must contain:
 - decoded and ABI-encoded constructor arguments for every infrastructure
   contract, including internal CREATE deployments;
 - exact-match Etherscan and Sourcify source records;
-- a real canary launch and keeper lifecycle evidence;
+- a real canary launch, oracle-growth transaction, fee-processing transaction
+  and full-range compounding evidence;
 - an evidence hash binding that lifecycle to this release.
 
 Then run:
@@ -112,9 +115,10 @@ hash, block, transaction or release field.
 
 ## App and keeper activation
 
-The production app manifest contains a complete Deep record with null deployment
-fields and `not-deployed` status. Deep cannot pass the API preflight until all
-release fields, runtime hashes, source status and lifecycle evidence match.
+The production app manifest contains the deployed Deep addresses and runtime
+hashes, but keeps `releaseEligible: false`. Deep cannot pass the API preflight
+until every release field, source record and lifecycle artifact matches the
+reviewed release.
 
 The keeper reads the same release manifest before it starts. Both execution
 switches may be true and it will still reject transaction submission unless the

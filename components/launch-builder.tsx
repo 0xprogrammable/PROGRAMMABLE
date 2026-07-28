@@ -22,13 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { useWallet } from "@/components/wallet-provider";
-import { AdaptiveCurveEditor } from "@/components/adaptive-curve-editor";
-import adaptiveLayout from "@/components/adaptive-launch-layout.module.css";
-import {
-  isAdaptiveDeploymentReady,
-  validatePreparedAdaptiveLaunchTransaction,
-  type AdaptiveLaunchManifest,
-} from "@/lib/adaptive-launch-validation";
+import extendedLayout from "@/components/extended-launch-layout.module.css";
 import { validatePreparedClassicLaunchTransaction } from "@/lib/classic-launch-validation";
 import { validatePreparedClassicV3LaunchTransaction } from "@/lib/classic-v3-launch-validation";
 import {
@@ -37,10 +31,7 @@ import {
   validateClassicV3LaunchDraft,
 } from "@/lib/classic-v3";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
-import {
-  deepPresetDisclosure,
-  validateDeepLaunchDraft,
-} from "@/lib/deep-v1";
+import { deepPresetDisclosure, validateDeepLaunchDraft } from "@/lib/deep-v1";
 import { validatePreparedDeepLaunchTransaction } from "@/lib/deep-launch-validation";
 import appDeployments from "@/contracts/config/app-deployments.v1.json";
 import {
@@ -54,14 +45,12 @@ import {
   normalizeOptionalHttpsUrl,
   normalizeOptionalSocialUrl,
   utf8ByteLength,
-  validateAdaptiveLaunchDraft,
   validateMemeLaunchDraft,
   type LaunchPreflightResponse,
 } from "@/lib/launch-transaction";
 import {
   CLASSIC_TOTAL_SWAP_FEE_BPS,
   CLASSIC_TOTAL_SWAP_FEE_PERCENT,
-  createAdaptiveDraft,
   createClassicV3Draft,
   createDeepDraft,
   createEmptyDraft,
@@ -69,7 +58,6 @@ import {
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
   parseInitialBuyWei,
-  parseOptionalInitialBuyWei,
   PLATFORM_FEE_BPS,
   type LaunchDraft,
   type LaunchModel,
@@ -144,7 +132,9 @@ export function findIndexedLaunch(
   return null;
 }
 
-export function findClassicV3IndexedLaunch(value: unknown): IndexedLaunch | null {
+export function findClassicV3IndexedLaunch(
+  value: unknown,
+): IndexedLaunch | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const launch = (value as { launch?: unknown }).launch;
   if (!launch || typeof launch !== "object" || Array.isArray(launch)) {
@@ -196,30 +186,6 @@ function normalizeStandardDraft(initialDraft: LaunchDraft): LaunchDraft {
   };
 }
 
-function normalizeAdaptiveDraft(initialDraft: LaunchDraft): LaunchDraft {
-  const fallback = createAdaptiveDraft();
-  return {
-    ...initialDraft,
-    launchModel: "adaptive",
-    assetMode: "new",
-    tokenSupply: "1000000000",
-    liquidityMode: "meme",
-    selectedBehaviors: [],
-    lpFeePercent: "0",
-    totalSwapFeePercent: "",
-    initialBuyEth:
-      parseOptionalInitialBuyWei(initialDraft.initialBuyEth) === null
-        ? "0"
-        : initialDraft.initialBuyEth.trim(),
-    customHookAddress: "",
-    customHookSource: "",
-    adaptiveCurvePoints:
-      initialDraft.adaptiveCurvePoints.length >= 2
-        ? initialDraft.adaptiveCurvePoints
-        : fallback.adaptiveCurvePoints,
-  };
-}
-
 function normalizeClassicV3Draft(initialDraft: LaunchDraft): LaunchDraft {
   return {
     ...normalizeStandardDraft(initialDraft),
@@ -243,10 +209,6 @@ const launchEnvironment =
     : "production";
 const launchDeployment = appDeployments[launchEnvironment];
 const launchChainId = launchEnvironment === "rehearsal" ? 11_155_111 : 1;
-const adaptiveLaunchAvailable = isAdaptiveDeploymentReady(
-  launchDeployment as unknown as AdaptiveLaunchManifest,
-  launchChainId,
-);
 const classicV3LaunchAvailable =
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
 const deepLaunchAvailable = isFutureLaunchModelManifestEligible(
@@ -291,13 +253,11 @@ export function LaunchBuilder() {
     <LaunchBuilderForm
       model={selectedModel}
       initialDraft={
-        selectedModel === "adaptive"
-          ? createAdaptiveDraft()
-          : selectedModel === "deep"
-            ? createDeepDraft()
+        selectedModel === "deep"
+          ? createDeepDraft()
           : selectedModel === "classic-v3"
             ? createClassicV3Draft()
-          : normalizeStandardDraft(createEmptyDraft())
+            : normalizeStandardDraft(createEmptyDraft())
       }
       onBackToModels={returnToModels}
     />
@@ -315,11 +275,7 @@ export function LaunchModelPicker({
         <h1>Launch a token</h1>
       </header>
 
-      <div
-        className={`launch-model-grid${
-          deepLaunchAvailable ? " launch-model-grid-three" : ""
-        }`}
-      >
+      <div className="launch-model-grid">
         <button
           className="launch-model-card"
           type="button"
@@ -346,8 +302,8 @@ export function LaunchModelPicker({
               <strong>Classic</strong>
             </span>
             <span className="launch-model-description">
-              A straightforward Uniswap v4 token with swap fees fixed at
-              launch. Creator rewards accrue in ETH.
+              A straightforward Uniswap v4 token with swap fees fixed at launch.
+              Creator rewards accrue in ETH.
             </span>
             <span className="launch-model-details">
               <span>Uniswap v4</span>
@@ -368,11 +324,12 @@ export function LaunchModelPicker({
         <button
           className="launch-model-card"
           type="button"
-          onClick={() => onChoose("adaptive")}
+          disabled={!deepLaunchAvailable}
+          onClick={() => onChoose("deep")}
         >
           <span className="launch-model-art" aria-hidden="true">
             <Image
-              src="/brand/programmable-adaptive-launch-art-v2.webp"
+              src="/brand/programmable-deep-liquidity-teaser-v1-1774x887.webp"
               alt=""
               fill
               sizes="(max-width: 800px) 100vw, 420px"
@@ -382,63 +339,26 @@ export function LaunchModelPicker({
 
           <span className="launch-model-card-body">
             <span className="launch-model-card-heading">
-              <strong>Adaptive</strong>
-              <small data-status={adaptiveLaunchAvailable ? "ready" : "pending"}>
-                {adaptiveLaunchAvailable ? "Available" : "In development"}
-              </small>
+              <strong>Deep</strong>
+              {!deepLaunchAvailable ? (
+                <small data-status="pending">Final verification</small>
+              ) : null}
             </span>
             <span className="launch-model-description">
-              Set a market-cap curve that changes the swap fee as the token
-              price moves.
+              Creator fees deepen the original permanently locked pool before
+              creator rewards begin.
             </span>
             <span className="launch-model-details">
-              <span>Uniswap v4</span>
-              <span>Price-based swap fees</span>
-              <span>1%–10% total fee</span>
+              <span>0.05 ETH growth target</span>
+              <span>850M locked launch allocation</span>
+              <span>150M locked reserve</span>
             </span>
             <span className="launch-model-action">
-              {adaptiveLaunchAvailable ? "Launch" : "Configure"}
+              {deepLaunchAvailable ? "Launch" : "Pending"}
               <ArrowRight aria-hidden="true" size={16} />
             </span>
           </span>
         </button>
-
-        {deepLaunchAvailable ? (
-          <button
-            className="launch-model-card"
-            type="button"
-            onClick={() => onChoose("deep")}
-          >
-            <span className="launch-model-art" aria-hidden="true">
-              <Image
-                src="/brand/programmable-deep-liquidity-teaser-v1-1774x887.webp"
-                alt=""
-                fill
-                sizes="(max-width: 800px) 100vw, 420px"
-                unoptimized
-              />
-            </span>
-
-            <span className="launch-model-card-body">
-              <span className="launch-model-card-heading">
-                <strong>Deep</strong>
-              </span>
-              <span className="launch-model-description">
-                Creator fees deepen the original permanently locked pool
-                before creator rewards begin.
-              </span>
-              <span className="launch-model-details">
-                <span>0.05 ETH growth target</span>
-                <span>850M locked launch allocation</span>
-                <span>150M locked reserve</span>
-              </span>
-              <span className="launch-model-action">
-                Launch
-                <ArrowRight aria-hidden="true" size={16} />
-              </span>
-            </span>
-          </button>
-        ) : null}
       </div>
     </div>
   );
@@ -471,8 +391,7 @@ function LaunchBuilderForm({
   const currentLaunchContext = useRef({ draft, wallet });
   const draftVersion = useRef(0);
   const launching = launchPhase !== "idle";
-  const usesExtendedLayout =
-    model === "adaptive" || model === "classic-v3" || model === "deep";
+  const usesExtendedLayout = model === "classic-v3" || model === "deep";
 
   useEffect(() => {
     currentLaunchContext.current = { draft, wallet };
@@ -505,14 +424,11 @@ function LaunchBuilderForm({
           model === "deep"
             ? endpoint.replace("/api/profile/classic-v3", "/api/profile/deep")
             : endpoint;
-        const response = await fetch(
-          resolvedEndpoint,
-          {
-            cache: "no-store",
-            headers: { Accept: "application/json" },
-            signal: controller.signal,
-          },
-        );
+        const response = await fetch(resolvedEndpoint, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
         const body: unknown = await response.json();
         if (response.ok) {
           const launch =
@@ -555,9 +471,7 @@ function LaunchBuilderForm({
       return tokenImageState.message || "Choose the token image again";
     }
     try {
-      if (model === "adaptive") {
-        validateAdaptiveLaunchDraft(draft);
-      } else if (model === "deep") {
+      if (model === "deep") {
         if (!wallet) return "Connect a wallet to verify the reward setup";
         validateDeepLaunchDraft(draft, wallet.account);
       } else if (model === "classic-v3") {
@@ -647,13 +561,11 @@ function LaunchBuilderForm({
 
     try {
       let checkedDraft =
-        model === "adaptive"
-          ? normalizeAdaptiveDraft(draft)
-          : model === "deep"
-            ? normalizeDeepDraft(draft)
+        model === "deep"
+          ? normalizeDeepDraft(draft)
           : model === "classic-v3"
             ? normalizeClassicV3Draft(draft)
-          : normalizeStandardDraft(draft);
+            : normalizeStandardDraft(draft);
       if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
         checkedDraft = {
           ...checkedDraft,
@@ -670,10 +582,7 @@ function LaunchBuilderForm({
         gasLimit,
         gasPriceWei: balances.gasPriceWei,
       });
-      const minimum =
-        model === "adaptive"
-          ? 0n
-          : (parseInitialBuyWei(MEME_MIN_INITIAL_BUY_ETH) ?? 0n);
+      const minimum = parseInitialBuyWei(MEME_MIN_INITIAL_BUY_ETH) ?? 0n;
 
       if (maximum < minimum) {
         throw new Error(
@@ -746,13 +655,11 @@ function LaunchBuilderForm({
     const launchWallet = { ...wallet };
     const launchDraftVersion = draftVersion.current;
     let checkedDraft =
-      model === "adaptive"
-        ? normalizeAdaptiveDraft(draft)
-        : model === "deep"
-          ? normalizeDeepDraft(draft)
+      model === "deep"
+        ? normalizeDeepDraft(draft)
         : model === "classic-v3"
           ? normalizeClassicV3Draft(draft)
-        : normalizeStandardDraft(draft);
+          : normalizeStandardDraft(draft);
     if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
       checkedDraft = {
         ...checkedDraft,
@@ -782,20 +689,13 @@ function LaunchBuilderForm({
       }
 
       const validatedTransaction =
-        model === "adaptive"
-          ? validatePreparedAdaptiveLaunchTransaction({
+        model === "deep"
+          ? validatePreparedDeepLaunchTransaction({
               transaction: prepared.transaction,
               draft: checkedDraft,
               account: launchWallet.account,
               planHash: prepared.planHash,
             })
-          : model === "deep"
-            ? validatePreparedDeepLaunchTransaction({
-                transaction: prepared.transaction,
-                draft: checkedDraft,
-                account: launchWallet.account,
-                planHash: prepared.planHash,
-              })
           : model === "classic-v3"
             ? validatePreparedClassicV3LaunchTransaction({
                 transaction: prepared.transaction,
@@ -803,12 +703,12 @@ function LaunchBuilderForm({
                 account: launchWallet.account,
                 planHash: prepared.planHash,
               })
-          : validatePreparedClassicLaunchTransaction({
-              transaction: prepared.transaction,
-              draft: checkedDraft,
-              account: launchWallet.account,
-              planHash: prepared.planHash,
-            });
+            : validatePreparedClassicLaunchTransaction({
+                transaction: prepared.transaction,
+                draft: checkedDraft,
+                account: launchWallet.account,
+                planHash: prepared.planHash,
+              });
       setLaunchPhase("confirming");
       const hash = await sendTransaction(validatedTransaction);
       setSubmittedAccount(launchWallet.account);
@@ -828,7 +728,7 @@ function LaunchBuilderForm({
   return (
     <div
       className={`launch-page page-width ${
-        usesExtendedLayout ? adaptiveLayout.page : ""
+        usesExtendedLayout ? extendedLayout.page : ""
       }`}
       data-launch-model={model}
     >
@@ -843,10 +743,8 @@ function LaunchBuilderForm({
         </button>
         <div className="launch-page-title">
           <p className="eyebrow">
-            {model === "adaptive"
-              ? "Adaptive"
-              : model === "deep"
-                ? "Deep"
+            {model === "deep"
+              ? "Deep"
               : model === "classic-v3"
                 ? "Classic"
                 : "Classic"}
@@ -857,7 +755,7 @@ function LaunchBuilderForm({
 
       <form
         className={`classic-launch-sheet ${
-          usesExtendedLayout ? adaptiveLayout.sheet : ""
+          usesExtendedLayout ? extendedLayout.sheet : ""
         }`}
         aria-busy={launching}
         onSubmit={(event) => {
@@ -867,7 +765,7 @@ function LaunchBuilderForm({
       >
         <div
           className={`classic-launch-content ${
-            usesExtendedLayout ? adaptiveLayout.content : ""
+            usesExtendedLayout ? extendedLayout.content : ""
           }`}
         >
           <TokenStep
@@ -877,15 +775,7 @@ function LaunchBuilderForm({
             onImageStateChange={setTokenImageState}
           />
           {model === "deep" ? <DeepPresetStep /> : null}
-          {model === "adaptive" ? (
-            <AdaptiveFeeStep
-              draft={draft}
-              setDraft={setDraft}
-              onEdit={markDraftEdited}
-              settingMaxBuy={settingMaxBuy}
-              onMaximumDevBuy={() => void setMaximumDevBuy()}
-            />
-          ) : model === "classic-v3" || model === "deep" ? (
+          {model === "classic-v3" || model === "deep" ? (
             <EnhancedClassicFeeStep
               draft={draft}
               model={model}
@@ -908,7 +798,7 @@ function LaunchBuilderForm({
 
         <footer
           className={`classic-launch-footer ${
-            usesExtendedLayout ? adaptiveLayout.footer : ""
+            usesExtendedLayout ? extendedLayout.footer : ""
           }`}
         >
           <div className="classic-launch-status">
@@ -950,26 +840,23 @@ function LaunchBuilderForm({
               disabled={
                 launching ||
                 Boolean(transactionHash) ||
-                (model === "adaptive" && !adaptiveLaunchAvailable) ||
                 (model === "classic-v3" && !classicV3LaunchAvailable) ||
                 (model === "deep" && !deepLaunchAvailable)
               }
             >
-              {model === "adaptive" && !adaptiveLaunchAvailable
-                ? "Adaptive is not deployed"
-                : model === "deep" && !deepLaunchAvailable
-                  ? "Deep is not deployed"
+              {model === "deep" && !deepLaunchAvailable
+                ? "Deep is being finalized"
                 : model === "classic-v3" && !classicV3LaunchAvailable
                   ? "Classic is not deployed"
-                : launchPhase === "preparing"
-                ? "Preparing launch"
-                : launchPhase === "confirming"
-                  ? "Confirm in wallet"
-                  : transactionHash
-                    ? "Confirming launch"
-                    : wallet
-                      ? "Launch token"
-                      : "Connect wallet"}
+                  : launchPhase === "preparing"
+                    ? "Preparing launch"
+                    : launchPhase === "confirming"
+                      ? "Confirm in wallet"
+                      : transactionHash
+                        ? "Confirming launch"
+                        : wallet
+                          ? "Launch token"
+                          : "Connect wallet"}
             </button>
           )}
         </footer>
@@ -978,9 +865,7 @@ function LaunchBuilderForm({
       {indexedLaunch && successOpen ? (
         <LaunchSuccessDialog
           launch={indexedLaunch}
-          draft={
-            model === "classic-v3" || model === "deep" ? draft : undefined
-          }
+          draft={model === "classic-v3" || model === "deep" ? draft : undefined}
           account={submittedAccount}
           onClose={() => setSuccessOpen(false)}
         />
@@ -1027,8 +912,7 @@ function LaunchSuccessDialog({
     };
   }, [onClose]);
   let classicV3Configuration:
-    | ReturnType<typeof validateClassicV3LaunchDraft>
-    | undefined;
+    ReturnType<typeof validateClassicV3LaunchDraft> | undefined;
   try {
     if (draft && account) {
       classicV3Configuration = validateClassicV3LaunchDraft(
@@ -1483,64 +1367,6 @@ function TokenStep({
   );
 }
 
-function AdaptiveFeeStep({
-  draft,
-  setDraft,
-  onEdit,
-  settingMaxBuy,
-  onMaximumDevBuy,
-}: {
-  draft: LaunchDraft;
-  setDraft: Dispatch<SetStateAction<LaunchDraft>>;
-  onEdit: () => void;
-  settingMaxBuy: boolean;
-  onMaximumDevBuy: () => void;
-}) {
-  return (
-    <section className={adaptiveLayout.feeSection}>
-      <AdaptiveCurveEditor
-        points={draft.adaptiveCurvePoints}
-        onChange={(adaptiveCurvePoints) => {
-          onEdit();
-          updateDraft(setDraft, { adaptiveCurvePoints });
-        }}
-      />
-
-      <label className={adaptiveLayout.devBuy} htmlFor="adaptive-dev-buy">
-        <span className={adaptiveLayout.devBuyCopy}>
-          <strong>Initial Buy</strong>
-          <small>Optional first purchase</small>
-        </span>
-        <span className={adaptiveLayout.devBuyInput}>
-          <input
-            id="adaptive-dev-buy"
-            inputMode="decimal"
-            value={draft.initialBuyEth}
-            maxLength={40}
-            placeholder="0"
-            spellCheck={false}
-            autoComplete="off"
-            onChange={(event) => {
-              onEdit();
-              updateDraft(setDraft, {
-                initialBuyEth: event.target.value,
-              });
-            }}
-          />
-          <button
-            type="button"
-            disabled={settingMaxBuy || !adaptiveLaunchAvailable}
-            onClick={onMaximumDevBuy}
-          >
-            {settingMaxBuy ? "Checking" : "Max"}
-          </button>
-          <span>ETH</span>
-        </span>
-      </label>
-    </section>
-  );
-}
-
 function DeepPresetStep() {
   const disclosure = deepPresetDisclosure();
   return (
@@ -1567,6 +1393,7 @@ function DeepPresetStep() {
       <div className="deep-preset-notes" role="note">
         <p>{disclosure.reserve}</p>
         <p>{disclosure.automation}</p>
+        <p>{disclosure.review}</p>
       </div>
     </section>
   );
@@ -1616,15 +1443,11 @@ function EnhancedClassicFeeStep({
       : draft.rewardDestinationMode === "external"
         ? "The selected wallet owns all creator rewards"
         : "Each recipient owns and claims its share";
-  let disclosure:
-    | ReturnType<typeof buildClassicV3LaunchDisclosure>
-    | undefined;
+  let disclosure: ReturnType<typeof buildClassicV3LaunchDisclosure> | undefined;
   try {
     if (account) {
       disclosure = buildClassicV3LaunchDisclosure(
-        model === "deep"
-          ? { ...draft, launchModel: "classic-v3" }
-          : draft,
+        model === "deep" ? { ...draft, launchModel: "classic-v3" } : draft,
         account,
       );
     }
@@ -1649,15 +1472,10 @@ function EnhancedClassicFeeStep({
                   ? "buySwapFeePercent"
                   : "sellSwapFeePercent";
               const totalFeeBps = Number(draft[key]) * 100;
-              const creatorFeeBps = Math.max(
-                0,
-                totalFeeBps - PLATFORM_FEE_BPS,
-              );
+              const creatorFeeBps = Math.max(0, totalFeeBps - PLATFORM_FEE_BPS);
               return (
                 <label className="classic-v3-fee-control" key={direction}>
-                  <span>
-                    {direction === "buy" ? "Buy fee" : "Sell fee"}
-                  </span>
+                  <span>{direction === "buy" ? "Buy fee" : "Sell fee"}</span>
                   <select
                     aria-label={`${direction === "buy" ? "Buy" : "Sell"} fee`}
                     value={draft[key]}
@@ -1727,9 +1545,7 @@ function EnhancedClassicFeeStep({
               })
             }
           />
-          <small>
-            Only this wallet can claim or change its payout address
-          </small>
+          <small>Only this wallet can claim or change its payout address</small>
         </label>
       ) : null}
 
