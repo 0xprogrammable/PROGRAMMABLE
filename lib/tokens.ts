@@ -62,10 +62,12 @@ export type LauncherToken = {
   buyHookFeeBps?: number;
   sellHookFeeBps?: number;
   creatorFeeBps?: number;
+  buyCreatorFeeBps?: number;
+  sellCreatorFeeBps?: number;
   launcherFeeBps?: number;
   transferTaxBps?: number;
   totalSwapFeeBps: number;
-  launchModel?: "classic" | "adaptive";
+  launchModel?: "classic" | "adaptive" | "deep";
   adaptiveCurveHash?: `0x${string}`;
   adaptiveCurvePoints?: {
     fdvIndex: number;
@@ -73,6 +75,24 @@ export type LauncherToken = {
   }[];
   adaptiveUsesPreSwapTick?: boolean;
   adaptiveSymmetricBuyAndSell?: boolean;
+  growthVaultAddress?: `0x${string}`;
+  oracleGuardAddress?: `0x${string}`;
+  upstreamRewardVaultAddress?: `0x${string}`;
+  growthTargetNativeWei?: string;
+  completionToleranceNativeWei?: string;
+  minimumNativeLiquidityForCompletionWei?: string;
+  tokenReserveRaw?: string;
+  totalNativeAllocatedToGrowthWei?: string;
+  totalNativeAddedToLiquidityWei?: string;
+  pendingGrowthNativeWei?: string;
+  deferredRewardFeesWei?: string;
+  growthTargetReached?: boolean;
+  oracleReady?: boolean;
+  automationAction?: 0 | 1 | 2 | 3;
+  nextCompoundTimestamp?: string;
+  trustedNativeDepthWei?: string;
+  depthCapNativeWei?: string;
+  automationGuaranteed?: false;
   liquidityPath: "meme";
   metadataExtraData?: `0x${string}`;
 };

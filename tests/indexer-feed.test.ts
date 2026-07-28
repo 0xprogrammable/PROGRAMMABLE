@@ -67,6 +67,8 @@ describe("public indexer fee disclosure", () => {
       buyHookFeeBps: 100,
       sellHookFeeBps: 100,
       creatorFeeBps: 90,
+      buyCreatorFeeBps: 90,
+      sellCreatorFeeBps: 90,
       launcherFeeBps: 10,
       transferTaxBps: 0,
       lpFeePips: 0,

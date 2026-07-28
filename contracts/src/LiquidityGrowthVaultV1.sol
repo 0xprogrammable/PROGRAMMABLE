@@ -55,7 +55,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     uint256 public immutable maxCompoundNative;
     uint256 public immutable tokenReserveTarget;
     int24 public immutable activeRangeHalfWidthTicks;
-    uint64 public immutable compoundCooldownBlocks;
+    uint64 public immutable compoundCooldownSeconds;
     uint256 public immutable completionToleranceNative;
     uint256 public immutable minimumNativeLiquidityForCompletion;
     bytes32 public immutable oraclePolicyHash;
@@ -115,7 +115,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     // Zero explicitly represents that no compound has happened yet. Slither otherwise treats the Solidity default as
     // an accidental uninitialized state and, because its IR build fails, also misses the later mutation.
     // slither-disable-next-line constable-states
-    uint64 public lastCompoundBlock = 0;
+    uint64 public lastCompoundTimestamp = 0;
     bool public growthTargetReached;
     uint256 public nativeLiquidityShortfallAtCompletion;
 
@@ -128,7 +128,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     error InsufficientGrowthForLiquidity(uint256 nativeBudget, uint256 tokenBudget);
     error InvalidBeneficiary(address beneficiary);
     error InvalidBeneficiaryCount(uint256 count);
-    error CompoundCooldown(uint256 currentBlock, uint256 nextBlock);
+    error CompoundCooldown(uint256 currentTimestamp, uint256 nextTimestamp);
     error InvalidCompoundLimit(uint256 maxCompoundNative, int24 activeRangeHalfWidthTicks);
     error InvalidConfiguration(address dependency);
     error InvalidGrowthTarget(uint256 growthTargetNative);
@@ -202,7 +202,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 maxCompoundNative;
         uint256 tokenReserveTarget;
         int24 activeRangeHalfWidthTicks;
-        uint64 compoundCooldownBlocks;
+        uint64 compoundCooldownSeconds;
         address[] beneficiaries;
         uint16[] sharesBps;
     }
@@ -226,7 +226,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
                 || configuration.tokenReserveTarget == 0 || configuration.activeRangeHalfWidthTicks <= 0
                 || configuration.activeRangeHalfWidthTicks % feeHook_.TICK_SPACING() != 0
                 || configuration.activeRangeHalfWidthTicks > TickMath.maxUsableTick(feeHook_.TICK_SPACING())
-                || configuration.compoundCooldownBlocks == 0
+                || configuration.compoundCooldownSeconds == 0
         ) {
             revert InvalidCompoundLimit(configuration.maxCompoundNative, configuration.activeRangeHalfWidthTicks);
         }
@@ -271,7 +271,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         maxCompoundNative = configuration.maxCompoundNative;
         tokenReserveTarget = configuration.tokenReserveTarget;
         activeRangeHalfWidthTicks = configuration.activeRangeHalfWidthTicks;
-        compoundCooldownBlocks = configuration.compoundCooldownBlocks;
+        compoundCooldownSeconds = configuration.compoundCooldownSeconds;
         uint256 relativeCompletionTolerance =
             FullMath.mulDiv(configuration.growthTargetNative, COMPLETION_TOLERANCE_BPS, BASIS_POINTS);
         completionToleranceNative = relativeCompletionTolerance < MAX_COMPLETION_TOLERANCE_NATIVE
@@ -300,7 +300,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
                 configuration.maxCompoundNative,
                 configuration.tokenReserveTarget,
                 configuration.activeRangeHalfWidthTicks,
-                configuration.compoundCooldownBlocks,
+                configuration.compoundCooldownSeconds,
                 completionToleranceNative,
                 minimumNativeLiquidityForCompletion
             )
@@ -490,9 +490,11 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     function _compoundOneChunk(address caller) private returns (CompoundResult memory result) {
         uint256 nativePending = pendingGrowthNative;
         if (nativePending == 0) revert NoGrowthFunds();
-        uint256 nextBlock = uint256(lastCompoundBlock) + compoundCooldownBlocks;
-        if (lastCompoundBlock != 0 && block.number < nextBlock) {
-            revert CompoundCooldown(block.number, nextBlock);
+        uint256 nextTimestamp = uint256(lastCompoundTimestamp) + compoundCooldownSeconds;
+        // Timestamp skew is negligible relative to this fixed five-minute cadence and cannot redirect assets.
+        // forge-lint: disable-next-line(block-timestamp)
+        if (lastCompoundTimestamp != 0 && block.timestamp < nextTimestamp) {
+            revert CompoundCooldown(block.timestamp, nextTimestamp);
         }
 
         uint256 nativeBudget = nativePending < maxCompoundNative ? nativePending : maxCompoundNative;
@@ -508,7 +510,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         totalNativeRecycled += result.nativeRecycled;
         totalTokenRecycled += result.tokenRecycled;
         totalLiquidityAdded += result.liquidityAdded;
-        lastCompoundBlock = block.number.toUint64();
+        lastCompoundTimestamp = block.timestamp.toUint64();
         bytes32 rangeId = keccak256(abi.encode(result.tickLower, result.tickUpper));
         if (!_isLockedRange[rangeId]) {
             _isLockedRange[rangeId] = true;
@@ -594,7 +596,9 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     function _compoundIsReady() private view returns (bool) {
         // Zero is the explicit never-compounded sentinel initialized at deployment.
         // slither-disable-next-line incorrect-equality
-        return lastCompoundBlock == 0 || block.number >= uint256(lastCompoundBlock) + compoundCooldownBlocks;
+        // Timestamp skew is negligible relative to this fixed five-minute cadence and cannot redirect assets.
+        // forge-lint: disable-next-line(block-timestamp)
+        return lastCompoundTimestamp == 0 || block.timestamp >= uint256(lastCompoundTimestamp) + compoundCooldownSeconds;
     }
 
     function _requireReserveFunded() private view {

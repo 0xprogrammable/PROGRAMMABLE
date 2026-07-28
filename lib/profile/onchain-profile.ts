@@ -19,7 +19,7 @@ export type ProfileToken = {
   imageUrl?: string;
   marketCapEthWei?: string;
   fdvUsdWad?: string;
-  launchModel?: "classic" | "adaptive";
+  launchModel?: "classic" | "adaptive" | "deep";
 };
 
 export type ProfilePosition = {
@@ -326,7 +326,9 @@ function parseToken(
     "token USD market cap",
   );
   const launchModel =
-    token.launchModel === "adaptive" || token.launchModel === "classic"
+    token.launchModel === "adaptive" ||
+    token.launchModel === "classic" ||
+    token.launchModel === "deep"
       ? token.launchModel
       : undefined;
 

@@ -84,7 +84,7 @@ show provisional records as final.
 
 ## Ownership
 
-The owner selected a single-operator model on 2026-07-27. `hazarxyz` is the primary incident responder, treasury and
+The owner selected a single-operator model on 2026-07-27. `0xProgrammable` is the primary incident responder, treasury and
 deployment-signer contact, RPC and indexer operator, public-communication authority and acknowledgement target.
 Automatic monitor incidents are assigned to that GitHub account.
 

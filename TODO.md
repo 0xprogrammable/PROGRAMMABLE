@@ -1,6 +1,10 @@
-# Programmable release checklist
+# Classic V2 historical release checklist
 
-Scope locked on 2026-07-26.
+This checklist records the Classic V2 release completed on 2026-07-27. It is preserved as historical evidence and
+does not define the current Programmable roadmap. Adaptive and Deep each have separate release gates and remain
+unavailable until their own verified deployment manifests pass.
+
+Scope locked on 2026-07-26 for Classic V2.
 
 ## Fixed scope
 
@@ -88,7 +92,7 @@ enabled and fails closed on runtime, lifecycle, RPC or simulation drift.
 - [x] Rerun the full repository verification suite on the exact release commit and preserve remote CI results
 - [x] Verify the production manifest, official Uniswap dependencies, immutable treasury, hook mask and runtime code hashes
 - [x] Operate live two-RPC event reconciliation with a durable cursor, evidence artifacts and automatic GitHub incident issues
-- [x] Record `hazarxyz` as the owner-approved sole incident responder, signer contact, indexer operator and public-communication authority; no backup responder is assigned by explicit owner choice
+- [x] Record `0xProgrammable` as the owner-approved sole incident responder, signer contact, indexer operator and public-communication authority; no backup responder is assigned by explicit owner choice
 - [x] Keep the immutable treasury at the owner-approved supplied EOA for this release
 - [x] Use the owner-approved `0x2Bb…249E` EOA as deployer with manual wallet signing and no stored private key
 - [x] Keep securities, RWA, custody and guaranteed-safety claims outside the product

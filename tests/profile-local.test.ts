@@ -44,7 +44,7 @@ describe("wallet-scoped local profile", () => {
 
   it("accepts only optional 3 to 12 character ASCII alphanumeric usernames", () => {
     expect(getProfileUsernameError("")).toBe("");
-    expect(getProfileUsernameError("  Kemal36  ")).toBe("");
+    expect(getProfileUsernameError("  Bloom36  ")).toBe("");
     expect(getProfileUsernameError("ab")).toBe(
       "Use 3–12 letters or numbers",
     );
@@ -111,13 +111,13 @@ describe("wallet-scoped local profile", () => {
     const key = getProfileStorageKey(wallet);
 
     writeLocalProfile(storage, wallet, {
-      username: "  Kemal36  ",
+          username: "  Bloom36  ",
       avatarDataUrl: "data:image/webp;base64,AAAA",
     });
 
     expect(JSON.parse(storage.values.get(key) ?? "")).toEqual({
       version: 1,
-      username: "Kemal36",
+      username: "Bloom36",
       avatarDataUrl: "data:image/webp;base64,AAAA",
     });
 

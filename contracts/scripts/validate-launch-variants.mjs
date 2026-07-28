@@ -386,10 +386,10 @@ assert(
   "Mainnet Classic V2 must remain bound to the release-eligible lifecycle",
 );
 assert(
-  appDeployments.production.incidentOwnership?.operatingModel ===
+    appDeployments.production.incidentOwnership?.operatingModel ===
       "sole-operator" &&
     appDeployments.production.incidentOwnership.primary ===
-      "hazarxyz" &&
+      "0xProgrammable" &&
     appDeployments.production.incidentOwnership.backup === null &&
     appDeployments.production.incidentOwnership.approvedAt ===
       "2026-07-27",

@@ -29,7 +29,7 @@ contract LiquidityGrowthRangeSourceOpenZeppelinTest is Deployers {
         oracleHook = _deployOracleHook();
         (observedKey,) = initPool(currency0, currency1, IHooks(address(oracleHook)), 3000, int24(60), SQRT_PRICE_1_1);
 
-        oracleHook.increaseObservationCardinalityNext(2, observedKey.toId());
+        oracleHook.increaseObservationCardinalityNext(192, observedKey.toId());
         ModifyLiquidityParams memory parameters =
             ModifyLiquidityParams({ tickLower: -6000, tickUpper: 6000, liquidityDelta: 1000 ether, salt: 0 });
         modifyLiquidityRouter.modifyLiquidity(observedKey, parameters, ZERO_BYTES);

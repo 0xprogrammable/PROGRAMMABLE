@@ -186,7 +186,7 @@ contract LiquidityGrowthFeeOracleHookV1Test is Deployers {
     }
 
     function test_preSwapObservationTruncatesOneStepAndFeedsRangeSource() public {
-        hook.increaseObservationCardinalityNext(2, PoolId.wrap(poolId));
+        hook.increaseObservationCardinalityNext(192, PoolId.wrap(poolId));
         vm.warp(block.timestamp + 10 minutes);
         _swap(true, -int256(1 ether), 1 ether);
 

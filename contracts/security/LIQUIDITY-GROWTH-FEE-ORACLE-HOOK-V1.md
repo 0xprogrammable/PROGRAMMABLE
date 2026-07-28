@@ -44,9 +44,12 @@ The hook uses the vendored OpenZeppelin/Panoptic `Oracle` library without copyin
 - `beforeSwap` records the pre-swap tick before fee accounting.
 - The recorder writes at most once for one block timestamp.
 - Anyone may pay to increase the next observation cardinality.
+- The canonical launcher pays only for the initial `1 -> 2` stage. Its factory-bound permissionless coordinator grows
+  later capacity in steps of at most 16 and never above the fixed target of 192.
 - `observe` reverts for an unregistered or uninitialized pool.
 - The library reverts when requested history predates the oldest populated observation.
-- `maxAbsTickDelta` is immutable and positive.
+- `maxAbsTickDelta` is immutable and positive. The generic hook factory can deploy other values for isolated testing,
+  but the canonical LiquidityGrowth V1 launcher accepts only 400 ticks.
 
 The truncated cumulative series constrains one recorded tick jump. It is not an independent price oracle and does not
 make a thin market manipulation resistant on its own. The consumer must still enforce observation maturity, a

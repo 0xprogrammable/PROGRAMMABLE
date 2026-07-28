@@ -254,7 +254,8 @@ export function TokenTrade({
   tokenDecimals = 18,
   tokenPriceEth,
   tokenPriceUsdWad,
-  totalSwapFeeBps,
+  buySwapFeeBps,
+  sellSwapFeeBps,
   readBalances,
   onConnect,
   onPrepared,
@@ -268,7 +269,8 @@ export function TokenTrade({
   tokenDecimals?: number;
   tokenPriceEth?: string;
   tokenPriceUsdWad?: string;
-  totalSwapFeeBps: number;
+  buySwapFeeBps: number;
+  sellSwapFeeBps: number;
   readBalances(): Promise<WalletTradeBalances>;
   onConnect(): void;
   onPrepared(prepared: PreparedTokenTrade): void | Promise<void>;
@@ -286,6 +288,8 @@ export function TokenTrade({
   const [balanceState, setBalanceState] =
     useState<WalletTradeBalanceState | null>(null);
   const amountInputId = useId();
+  const activeSwapFeeBps =
+    side === "buy" ? buySwapFeeBps : sellSwapFeeBps;
   const activeBalanceState =
     owner &&
     balanceState?.owner.toLowerCase() === owner.toLowerCase()
@@ -486,7 +490,7 @@ export function TokenTrade({
         symbol={symbol}
         tokenDecimals={tokenDecimals}
         tokenPriceEth={tokenPriceEth}
-        totalSwapFeeBps={totalSwapFeeBps}
+        totalSwapFeeBps={activeSwapFeeBps}
         pending={pending}
         error={error}
         onBack={() => {
@@ -508,7 +512,9 @@ export function TokenTrade({
         <h2>
           {side === "buy" ? "Buy" : "Sell"} ${symbol}
         </h2>
-        <span>{(totalSwapFeeBps / 100).toFixed(2).replace(/\.00$/, "")}% fee</span>
+        <span>
+          {(activeSwapFeeBps / 100).toFixed(2).replace(/\.00$/, "")}% fee
+        </span>
       </header>
 
       <div className={styles.sideControl} role="group" aria-label="Trade side">

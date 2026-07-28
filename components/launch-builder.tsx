@@ -32,11 +32,16 @@ import {
 import { validatePreparedClassicLaunchTransaction } from "@/lib/classic-launch-validation";
 import { validatePreparedClassicV3LaunchTransaction } from "@/lib/classic-v3-launch-validation";
 import {
+  buildClassicV3LaunchDisclosure,
   formatClassicV3Percent,
-  isClassicV3DeploymentReady,
   validateClassicV3LaunchDraft,
-  type ClassicV3DeploymentManifest,
 } from "@/lib/classic-v3";
+import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
+import {
+  deepPresetDisclosure,
+  validateDeepLaunchDraft,
+} from "@/lib/deep-v1";
+import { validatePreparedDeepLaunchTransaction } from "@/lib/deep-launch-validation";
 import appDeployments from "@/contracts/config/app-deployments.v1.json";
 import {
   MAX_METADATA_URL_BYTES,
@@ -58,6 +63,7 @@ import {
   CLASSIC_TOTAL_SWAP_FEE_PERCENT,
   createAdaptiveDraft,
   createClassicV3Draft,
+  createDeepDraft,
   createEmptyDraft,
   maximumClassicDevBuyWei,
   MEME_MIN_INITIAL_BUY_ETH,
@@ -68,6 +74,11 @@ import {
   type LaunchDraft,
   type LaunchModel,
 } from "@/lib/launch";
+import {
+  isFutureLaunchModelManifestEligible,
+  resolveImplementedLaunchModel,
+  type LaunchModelReleaseManifest,
+} from "@/lib/launch-model-gating";
 import { prepareTokenImage } from "@/lib/token-image";
 import { formatEther } from "viem";
 
@@ -219,6 +230,13 @@ function normalizeClassicV3Draft(initialDraft: LaunchDraft): LaunchDraft {
   };
 }
 
+function normalizeDeepDraft(initialDraft: LaunchDraft): LaunchDraft {
+  return {
+    ...normalizeClassicV3Draft(initialDraft),
+    launchModel: "deep",
+  };
+}
+
 const launchEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
     ? "rehearsal"
@@ -229,8 +247,11 @@ const adaptiveLaunchAvailable = isAdaptiveDeploymentReady(
   launchDeployment as unknown as AdaptiveLaunchManifest,
   launchChainId,
 );
-const classicV3LaunchAvailable = isClassicV3DeploymentReady(
-  launchDeployment as unknown as ClassicV3DeploymentManifest,
+const classicV3LaunchAvailable =
+  isConfiguredClassicV3ReleaseReady(launchEnvironment);
+const deepLaunchAvailable = isFutureLaunchModelManifestEligible(
+  "deep",
+  launchDeployment as unknown as LaunchModelReleaseManifest,
   launchChainId,
 );
 
@@ -249,7 +270,10 @@ function createLaunchSalt() {
 export function LaunchBuilder() {
   const [selectedModel, setSelectedModel] = useState<LaunchModel | null>(null);
 
-  function chooseModel(model: LaunchModel) {
+  function chooseModel(candidate: LaunchModel) {
+    const model = resolveImplementedLaunchModel(candidate);
+    if (!model || (model === "deep" && !deepLaunchAvailable)) return;
+
     window.scrollTo({ left: 0, top: 0, behavior: "auto" });
     setSelectedModel(model);
   }
@@ -269,6 +293,8 @@ export function LaunchBuilder() {
       initialDraft={
         selectedModel === "adaptive"
           ? createAdaptiveDraft()
+          : selectedModel === "deep"
+            ? createDeepDraft()
           : selectedModel === "classic-v3"
             ? createClassicV3Draft()
           : normalizeStandardDraft(createEmptyDraft())
@@ -278,7 +304,7 @@ export function LaunchBuilder() {
   );
 }
 
-function LaunchModelPicker({
+export function LaunchModelPicker({
   onChoose,
 }: {
   onChoose: (model: LaunchModel) => void;
@@ -289,7 +315,11 @@ function LaunchModelPicker({
         <h1>Launch a token</h1>
       </header>
 
-      <div className="launch-model-grid">
+      <div
+        className={`launch-model-grid${
+          deepLaunchAvailable ? " launch-model-grid-three" : ""
+        }`}
+      >
         <button
           className="launch-model-card"
           type="button"
@@ -372,6 +402,43 @@ function LaunchModelPicker({
             </span>
           </span>
         </button>
+
+        {deepLaunchAvailable ? (
+          <button
+            className="launch-model-card"
+            type="button"
+            onClick={() => onChoose("deep")}
+          >
+            <span className="launch-model-art" aria-hidden="true">
+              <Image
+                src="/brand/programmable-deep-liquidity-teaser-v1-1774x887.webp"
+                alt=""
+                fill
+                sizes="(max-width: 800px) 100vw, 420px"
+                unoptimized
+              />
+            </span>
+
+            <span className="launch-model-card-body">
+              <span className="launch-model-card-heading">
+                <strong>Deep</strong>
+              </span>
+              <span className="launch-model-description">
+                Creator fees deepen the original permanently locked pool
+                before creator rewards begin.
+              </span>
+              <span className="launch-model-details">
+                <span>0.05 ETH growth target</span>
+                <span>850M locked launch allocation</span>
+                <span>150M locked reserve</span>
+              </span>
+              <span className="launch-model-action">
+                Launch
+                <ArrowRight aria-hidden="true" size={16} />
+              </span>
+            </span>
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -404,7 +471,8 @@ function LaunchBuilderForm({
   const currentLaunchContext = useRef({ draft, wallet });
   const draftVersion = useRef(0);
   const launching = launchPhase !== "idle";
-  const usesExtendedLayout = model === "adaptive" || model === "classic-v3";
+  const usesExtendedLayout =
+    model === "adaptive" || model === "classic-v3" || model === "deep";
 
   useEffect(() => {
     currentLaunchContext.current = { draft, wallet };
@@ -426,15 +494,19 @@ function LaunchBuilderForm({
     const pollForLaunch = async () => {
       try {
         const endpoint =
-          model === "classic-v3"
+          model === "classic-v3" || model === "deep"
             ? `/api/profile/classic-v3?account=${encodeURIComponent(
                 submittedAccount,
               )}&launch=${encodeURIComponent(transactionHash)}`
             : `/api/explore/profile?account=${encodeURIComponent(
                 submittedAccount,
               )}&launch=${encodeURIComponent(transactionHash)}&attempt=${attempt}`;
+        const resolvedEndpoint =
+          model === "deep"
+            ? endpoint.replace("/api/profile/classic-v3", "/api/profile/deep")
+            : endpoint;
         const response = await fetch(
-          endpoint,
+          resolvedEndpoint,
           {
             cache: "no-store",
             headers: { Accept: "application/json" },
@@ -444,7 +516,7 @@ function LaunchBuilderForm({
         const body: unknown = await response.json();
         if (response.ok) {
           const launch =
-            model === "classic-v3"
+            model === "classic-v3" || model === "deep"
               ? findClassicV3IndexedLaunch(body)
               : findIndexedLaunch(body, transactionHash);
           if (launch) {
@@ -485,6 +557,9 @@ function LaunchBuilderForm({
     try {
       if (model === "adaptive") {
         validateAdaptiveLaunchDraft(draft);
+      } else if (model === "deep") {
+        if (!wallet) return "Connect a wallet to verify the reward setup";
+        validateDeepLaunchDraft(draft, wallet.account);
       } else if (model === "classic-v3") {
         if (!wallet) return "Connect a wallet to verify the reward setup";
         validateClassicV3LaunchDraft(draft, wallet.account);
@@ -574,6 +649,8 @@ function LaunchBuilderForm({
       let checkedDraft =
         model === "adaptive"
           ? normalizeAdaptiveDraft(draft)
+          : model === "deep"
+            ? normalizeDeepDraft(draft)
           : model === "classic-v3"
             ? normalizeClassicV3Draft(draft)
           : normalizeStandardDraft(draft);
@@ -671,6 +748,8 @@ function LaunchBuilderForm({
     let checkedDraft =
       model === "adaptive"
         ? normalizeAdaptiveDraft(draft)
+        : model === "deep"
+          ? normalizeDeepDraft(draft)
         : model === "classic-v3"
           ? normalizeClassicV3Draft(draft)
         : normalizeStandardDraft(draft);
@@ -710,6 +789,13 @@ function LaunchBuilderForm({
               account: launchWallet.account,
               planHash: prepared.planHash,
             })
+          : model === "deep"
+            ? validatePreparedDeepLaunchTransaction({
+                transaction: prepared.transaction,
+                draft: checkedDraft,
+                account: launchWallet.account,
+                planHash: prepared.planHash,
+              })
           : model === "classic-v3"
             ? validatePreparedClassicV3LaunchTransaction({
                 transaction: prepared.transaction,
@@ -744,7 +830,7 @@ function LaunchBuilderForm({
       className={`launch-page page-width ${
         usesExtendedLayout ? adaptiveLayout.page : ""
       }`}
-      data-launch-model={model === "adaptive" ? "adaptive" : "classic"}
+      data-launch-model={model}
     >
       <header className="launch-page-heading">
         <button
@@ -759,6 +845,8 @@ function LaunchBuilderForm({
           <p className="eyebrow">
             {model === "adaptive"
               ? "Adaptive"
+              : model === "deep"
+                ? "Deep"
               : model === "classic-v3"
                 ? "Classic"
                 : "Classic"}
@@ -788,6 +876,7 @@ function LaunchBuilderForm({
             onEdit={markDraftEdited}
             onImageStateChange={setTokenImageState}
           />
+          {model === "deep" ? <DeepPresetStep /> : null}
           {model === "adaptive" ? (
             <AdaptiveFeeStep
               draft={draft}
@@ -796,9 +885,11 @@ function LaunchBuilderForm({
               settingMaxBuy={settingMaxBuy}
               onMaximumDevBuy={() => void setMaximumDevBuy()}
             />
-          ) : model === "classic-v3" ? (
+          ) : model === "classic-v3" || model === "deep" ? (
             <EnhancedClassicFeeStep
               draft={draft}
+              model={model}
+              account={wallet?.account}
               setDraft={setDraft}
               onEdit={markDraftEdited}
               settingMaxBuy={settingMaxBuy}
@@ -860,11 +951,14 @@ function LaunchBuilderForm({
                 launching ||
                 Boolean(transactionHash) ||
                 (model === "adaptive" && !adaptiveLaunchAvailable) ||
-                (model === "classic-v3" && !classicV3LaunchAvailable)
+                (model === "classic-v3" && !classicV3LaunchAvailable) ||
+                (model === "deep" && !deepLaunchAvailable)
               }
             >
               {model === "adaptive" && !adaptiveLaunchAvailable
                 ? "Adaptive is not deployed"
+                : model === "deep" && !deepLaunchAvailable
+                  ? "Deep is not deployed"
                 : model === "classic-v3" && !classicV3LaunchAvailable
                   ? "Classic is not deployed"
                 : launchPhase === "preparing"
@@ -884,7 +978,9 @@ function LaunchBuilderForm({
       {indexedLaunch && successOpen ? (
         <LaunchSuccessDialog
           launch={indexedLaunch}
-          draft={model === "classic-v3" ? draft : undefined}
+          draft={
+            model === "classic-v3" || model === "deep" ? draft : undefined
+          }
           account={submittedAccount}
           onClose={() => setSuccessOpen(false)}
         />
@@ -935,7 +1031,12 @@ function LaunchSuccessDialog({
     | undefined;
   try {
     if (draft && account) {
-      classicV3Configuration = validateClassicV3LaunchDraft(draft, account);
+      classicV3Configuration = validateClassicV3LaunchDraft(
+        draft.launchModel === "deep"
+          ? { ...draft, launchModel: "classic-v3" }
+          : draft,
+        account,
+      );
     }
   } catch {
     classicV3Configuration = undefined;
@@ -1440,14 +1541,49 @@ function AdaptiveFeeStep({
   );
 }
 
+function DeepPresetStep() {
+  const disclosure = deepPresetDisclosure();
+  return (
+    <section className="deep-preset" aria-labelledby="deep-preset-title">
+      <div className="classic-section-heading">
+        <h2 id="deep-preset-title">Deep liquidity</h2>
+        <p>Fixed public preset</p>
+      </div>
+      <p className="deep-preset-summary">{disclosure.summary}</p>
+      <dl className="deep-preset-stats">
+        <div>
+          <dt>Growth target</dt>
+          <dd>{disclosure.growthTarget}</dd>
+        </div>
+        <div>
+          <dt>Locked launch allocation</dt>
+          <dd>{disclosure.initialPosition}</dd>
+        </div>
+        <div>
+          <dt>Locked reserve</dt>
+          <dd>{disclosure.lockedReserve}</dd>
+        </div>
+      </dl>
+      <div className="deep-preset-notes" role="note">
+        <p>{disclosure.reserve}</p>
+        <p>{disclosure.automation}</p>
+      </div>
+    </section>
+  );
+}
+
 function EnhancedClassicFeeStep({
   draft,
+  model,
+  account,
   setDraft,
   onEdit,
   settingMaxBuy,
   onMaximumDevBuy,
 }: {
   draft: LaunchDraft;
+  model: "classic-v3" | "deep";
+  account?: string;
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onEdit: () => void;
   settingMaxBuy: boolean;
@@ -1480,6 +1616,21 @@ function EnhancedClassicFeeStep({
       : draft.rewardDestinationMode === "external"
         ? "The selected wallet owns all creator rewards"
         : "Each recipient owns and claims its share";
+  let disclosure:
+    | ReturnType<typeof buildClassicV3LaunchDisclosure>
+    | undefined;
+  try {
+    if (account) {
+      disclosure = buildClassicV3LaunchDisclosure(
+        model === "deep"
+          ? { ...draft, launchModel: "classic-v3" }
+          : draft,
+        account,
+      );
+    }
+  } catch {
+    disclosure = undefined;
+  }
 
   return (
     <section className="classic-v3-settings" aria-labelledby="classic-v3-fees">
@@ -1661,9 +1812,40 @@ function EnhancedClassicFeeStep({
         </div>
       ) : null}
 
-      <p className="classic-v3-disclosure">
-        Fee rates and reward shares cannot change after launch.
-      </p>
+      <div className="classic-v3-disclosure" role="note">
+        <strong>Locked at launch</strong>
+        {disclosure ? (
+          <>
+            <dl>
+              <div>
+                <dt>Buy</dt>
+                <dd>{disclosure.buyFee}</dd>
+              </div>
+              <div>
+                <dt>Sell</dt>
+                <dd>{disclosure.sellFee}</dd>
+              </div>
+            </dl>
+            <ul>
+              {disclosure.rewards.map((reward) => (
+                <li key={reward.beneficiary}>
+                  <span>{shortenAddress(reward.beneficiary)}</span>
+                  <strong>{reward.share}</strong>
+                </li>
+              ))}
+            </ul>
+            <p>
+              Fee rates, beneficiaries and shares cannot change. Each
+              beneficiary alone can claim or update its payout address.
+            </p>
+          </>
+        ) : (
+          <p>
+            Complete the reward setup to review every immutable term before
+            signing.
+          </p>
+        )}
+      </div>
 
       <div className="classic-fee-layout">
         <label className="meme-dev-buy" htmlFor="classic-v3-dev-buy">
@@ -1688,7 +1870,12 @@ function EnhancedClassicFeeStep({
             />
             <button
               type="button"
-              disabled={settingMaxBuy || !classicV3LaunchAvailable}
+              disabled={
+                settingMaxBuy ||
+                (model === "deep"
+                  ? !deepLaunchAvailable
+                  : !classicV3LaunchAvailable)
+              }
               onClick={onMaximumDevBuy}
             >
               {settingMaxBuy ? "Checking" : "Max"}

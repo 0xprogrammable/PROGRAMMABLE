@@ -19,6 +19,7 @@
 /coverage
 /work/
 /tmp/
+/var/
 /outputs/qa/
 /artifacts/
 *.tsbuildinfo

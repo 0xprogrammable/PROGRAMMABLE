@@ -65,7 +65,7 @@ at the current event volume.
 
 ## Incident ownership
 
-`hazarxyz` is the owner-approved sole incident responder, deployment-signer contact, indexer operator and
+`0xProgrammable` is the owner-approved sole incident responder, deployment-signer contact, indexer operator and
 public-communication authority. No backup responder is assigned. The owner explicitly accepted that concentration risk;
 the monitor must keep new launch construction disabled whenever the sole operator is unavailable or an alert is open.
 

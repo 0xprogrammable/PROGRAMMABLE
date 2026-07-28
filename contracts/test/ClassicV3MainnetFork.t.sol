@@ -3,6 +3,10 @@ pragma solidity 0.8.26;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {
+    ITimelockedPositionRecipient
+} from "@uniswap/liquidity-launcher/src/interfaces/ITimelockedPositionRecipient.sol";
+import { PositionFeesForwarder } from "@uniswap/liquidity-launcher/src/periphery/PositionFeesForwarder.sol";
 import { UERC20Factory } from "@uniswap/uerc20-factory/src/factories/UERC20Factory.sol";
 import { UERC20Metadata } from "@uniswap/uerc20-factory/src/libraries/UERC20MetadataLibrary.sol";
 import { UERC20 } from "@uniswap/uerc20-factory/src/tokens/UERC20.sol";
@@ -42,7 +46,7 @@ struct ClassicV3ExactInputSingleParams {
 contract ClassicV3MainnetForkTest is Test {
     using CurrencyLibrary for Currency;
 
-    uint256 internal constant SNAPSHOT_BLOCK = 25_612_664;
+    uint256 internal constant SNAPSHOT_BLOCK = 25_630_967;
     uint256 internal constant BUY_AMOUNT = 0.01 ether;
     uint256 internal constant MIN_INITIAL_BUY_WEI = 0.0006 ether;
     uint8 internal constant SWAP_EXACT_IN_SINGLE = 0x06;
@@ -55,6 +59,21 @@ contract ClassicV3MainnetForkTest is Test {
     address internal constant V4_QUOTER = 0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203;
     address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
     address internal constant UNIVERSAL_ROUTER = 0xd92A36B0000531EF3063dEd4De20A0783308446C;
+    address internal constant UERC20_FACTORY = 0x000000e200088D55C39a11F609E5F667729ad49b;
+    address internal constant POSITION_FORWARDER_FACTORY = 0x291a9ff1059d225d02B1659430804486404dB507;
+
+    bytes32 internal constant POOL_MANAGER_CODE_HASH =
+        0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293;
+    bytes32 internal constant POSITION_MANAGER_CODE_HASH =
+        0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b;
+    bytes32 internal constant V4_QUOTER_CODE_HASH = 0x06de58fa119c5deaa7a667fb92d3894e25d9160e62fb82c8d86d43b47eefe441;
+    bytes32 internal constant PERMIT2_CODE_HASH = 0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131;
+    bytes32 internal constant UNIVERSAL_ROUTER_CODE_HASH =
+        0x41ccd905c8e4de29ce9536ff49233b79e3085a0987d490664e703ee1e7b1dc49;
+    bytes32 internal constant UERC20_FACTORY_CODE_HASH =
+        0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb;
+    bytes32 internal constant POSITION_FORWARDER_FACTORY_CODE_HASH =
+        0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2;
 
     IPoolManager internal poolManager;
     IPositionManager internal positionManager;
@@ -74,6 +93,7 @@ contract ClassicV3MainnetForkTest is Test {
         poolManager = IPoolManager(POOL_MANAGER);
         positionManager = IPositionManager(POSITION_MANAGER);
         treasury = makeAddr("forkTreasury");
+        _assertOfficialDependencyHashes();
 
         FeeSplitVaultFactoryV1 vaultFactory = new FeeSplitVaultFactoryV1();
         EthCreatorFeeHookFactoryV3 hookFactory = new EthCreatorFeeHookFactoryV3();
@@ -87,10 +107,10 @@ contract ClassicV3MainnetForkTest is Test {
         launcher = new MemeLaunchV2(
             poolManager,
             positionManager,
-            new UERC20Factory(),
+            UERC20Factory(UERC20_FACTORY),
             feeHook,
             vaultFactory,
-            new LockedPositionFeeForwarderFactoryV1(positionManager)
+            LockedPositionFeeForwarderFactoryV1(POSITION_FORWARDER_FACTORY)
         );
 
         deployer = makeAddr("forkDeployer");
@@ -110,6 +130,16 @@ contract ClassicV3MainnetForkTest is Test {
         assertEq(IERC20(result.token).balanceOf(deployer), result.initialBuyTokenAmount);
         assertEq(IERC721(POSITION_MANAGER).ownerOf(result.positionTokenId), result.positionRecipient);
         assertEq(result.tokenLiquidityAmount + result.lockedTokenDust, launcher.TOKEN_SUPPLY());
+        LockedPositionFeeForwarderFactoryV1 forwarderFactory =
+            LockedPositionFeeForwarderFactoryV1(POSITION_FORWARDER_FACTORY);
+        PositionFeesForwarder forwarder = PositionFeesForwarder(payable(result.positionRecipient));
+        assertTrue(forwarderFactory.isFactoryForwarder(result.positionRecipient));
+        assertEq(address(forwarder.positionManager()), POSITION_MANAGER);
+        assertEq(forwarder.operator(), address(0));
+        assertEq(forwarder.timelockBlockNumber(), type(uint256).max);
+        assertEq(forwarder.feeRecipient(), deployer);
+        vm.expectRevert(ITimelockedPositionRecipient.Timelocked.selector);
+        forwarder.approveOperator();
 
         uint256 quotedBuy = _quoteExactInput(key, true, BUY_AMOUNT);
         _executeExactInput(trader, key, true, _asUint128(BUY_AMOUNT), _asUint128(quotedBuy * 99 / 100), BUY_AMOUNT);
@@ -148,6 +178,16 @@ contract ClassicV3MainnetForkTest is Test {
         feeHook.claimLauncherFees();
         assertEq(feeHook.totalNativeFeesAccrued(), 0);
         assertEq(poolManager.balanceOf(address(feeHook), Currency.wrap(address(0)).toId()), 0);
+    }
+
+    function _assertOfficialDependencyHashes() private view {
+        assertEq(POOL_MANAGER.codehash, POOL_MANAGER_CODE_HASH);
+        assertEq(POSITION_MANAGER.codehash, POSITION_MANAGER_CODE_HASH);
+        assertEq(V4_QUOTER.codehash, V4_QUOTER_CODE_HASH);
+        assertEq(PERMIT2.codehash, PERMIT2_CODE_HASH);
+        assertEq(UNIVERSAL_ROUTER.codehash, UNIVERSAL_ROUTER_CODE_HASH);
+        assertEq(UERC20_FACTORY.codehash, UERC20_FACTORY_CODE_HASH);
+        assertEq(POSITION_FORWARDER_FACTORY.codehash, POSITION_FORWARDER_FACTORY_CODE_HASH);
     }
 
     function _launch() private returns (MemeLaunchV2.LaunchResult memory result) {

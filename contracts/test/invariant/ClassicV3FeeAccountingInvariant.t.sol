@@ -103,6 +103,46 @@ contract ClassicV3SwapHandler {
     receive() external payable { }
 }
 
+contract ClassicV3BeneficiaryHandler {
+    address internal immutable configurator;
+    address internal immutable primaryPayout;
+    address internal immutable secondaryPayout;
+    FeeSplitVaultV1 internal vault;
+
+    error AlreadyConfigured();
+    error UnauthorizedConfigurator(address caller);
+
+    constructor(address primaryPayout_, address secondaryPayout_) {
+        configurator = msg.sender;
+        primaryPayout = primaryPayout_;
+        secondaryPayout = secondaryPayout_;
+    }
+
+    function configure(FeeSplitVaultV1 vault_) external {
+        if (msg.sender != configurator) revert UnauthorizedConfigurator(msg.sender);
+        if (address(vault) != address(0)) revert AlreadyConfigured();
+        vault = vault_;
+    }
+
+    function claim() external {
+        try vault.claim() { } catch { }
+    }
+
+    function usePrimaryPayout() external {
+        try vault.setPayoutAddress(primaryPayout) { } catch { }
+    }
+
+    function useSecondaryPayout() external {
+        try vault.setPayoutAddress(secondaryPayout) { } catch { }
+    }
+
+    function isAllowedPayout(address payout) external view returns (bool) {
+        return payout == address(this) || payout == primaryPayout || payout == secondaryPayout;
+    }
+
+    receive() external payable { }
+}
+
 contract ClassicV3FeeAccountingInvariantTest is Deployers {
     EthCreatorFeeHookFactoryV3 internal hookFactory;
     FeeSplitVaultFactoryV1 internal vaultFactory;
@@ -110,19 +150,31 @@ contract ClassicV3FeeAccountingInvariantTest is Deployers {
     FeeSplitVaultV1 internal vault;
     ClassicV3InvariantToken internal token;
     ClassicV3SwapHandler internal handler;
+    ClassicV3BeneficiaryHandler internal beneficiaryHandlerA;
+    ClassicV3BeneficiaryHandler internal beneficiaryHandlerB;
     PoolKey internal hookKey;
     bytes32 internal poolId;
 
     address internal beneficiaryA;
     address internal beneficiaryB;
+    address internal primaryPayoutA;
+    address internal secondaryPayoutA;
+    address internal primaryPayoutB;
+    address internal secondaryPayoutB;
     address internal treasury;
 
     function setUp() public {
         deployFreshManagerAndRouters();
         vm.deal(address(this), 1_000_000 ether);
 
-        beneficiaryA = makeAddr("beneficiaryA");
-        beneficiaryB = makeAddr("beneficiaryB");
+        primaryPayoutA = makeAddr("primaryPayoutA");
+        secondaryPayoutA = makeAddr("secondaryPayoutA");
+        primaryPayoutB = makeAddr("primaryPayoutB");
+        secondaryPayoutB = makeAddr("secondaryPayoutB");
+        beneficiaryHandlerA = new ClassicV3BeneficiaryHandler(primaryPayoutA, secondaryPayoutA);
+        beneficiaryHandlerB = new ClassicV3BeneficiaryHandler(primaryPayoutB, secondaryPayoutB);
+        beneficiaryA = address(beneficiaryHandlerA);
+        beneficiaryB = address(beneficiaryHandlerB);
         treasury = makeAddr("treasury");
         vaultFactory = new FeeSplitVaultFactoryV1();
         hookFactory = new EthCreatorFeeHookFactoryV3();
@@ -154,6 +206,8 @@ contract ClassicV3FeeAccountingInvariantTest is Deployers {
         vault = vaultFactory.deploy(
             bytes32("classic-v3-invariant"), IClassicFeeHookV3(address(hook)), poolId, beneficiaries, shares
         );
+        beneficiaryHandlerA.configure(vault);
+        beneficiaryHandlerB.configure(vault);
         hook.registerPool(hookKey, address(vault), 200, 900);
         manager.initialize(hookKey, SQRT_PRICE_1_1);
 
@@ -170,6 +224,13 @@ contract ClassicV3FeeAccountingInvariantTest is Deployers {
         selectors[3] = ClassicV3SwapHandler.sellExactOutput.selector;
         targetSelector(FuzzSelector({ addr: address(handler), selectors: selectors }));
         targetContract(address(handler));
+
+        bytes4[] memory beneficiarySelectors = new bytes4[](3);
+        beneficiarySelectors[0] = ClassicV3BeneficiaryHandler.claim.selector;
+        beneficiarySelectors[1] = ClassicV3BeneficiaryHandler.usePrimaryPayout.selector;
+        beneficiarySelectors[2] = ClassicV3BeneficiaryHandler.useSecondaryPayout.selector;
+        targetSelector(FuzzSelector({ addr: address(beneficiaryHandlerA), selectors: beneficiarySelectors }));
+        targetSelector(FuzzSelector({ addr: address(beneficiaryHandlerB), selectors: beneficiarySelectors }));
     }
 
     function invariant_nativeClaimsExactlyCoverAccruedAccounting() public view {
@@ -215,6 +276,19 @@ contract ClassicV3FeeAccountingInvariantTest is Deployers {
         assertEq(vault.beneficiaryAt(1), beneficiaryB);
         assertEq(vault.shareBpsOf(beneficiaryA), 3333);
         assertEq(vault.shareBpsOf(beneficiaryB), 6667);
+    }
+
+    function invariant_claimAndPayoutAccountingIsConserved() public view {
+        uint256 received = vault.totalCreatorFeesReceived();
+        uint256 claimedA = vault.claimedBy(beneficiaryA);
+        uint256 claimedB = vault.claimedBy(beneficiaryB);
+        uint256 totalClaimed = vault.totalCreatorFeesClaimed();
+
+        assertEq(totalClaimed, claimedA + claimedB);
+        assertEq(received, totalClaimed + vault.claimable(beneficiaryA) + vault.claimable(beneficiaryB));
+        assertEq(address(vault).balance, received - totalClaimed);
+        assertTrue(beneficiaryHandlerA.isAllowedPayout(vault.payoutAddressOf(beneficiaryA)));
+        assertTrue(beneficiaryHandlerB.isAllowedPayout(vault.payoutAddressOf(beneficiaryB)));
     }
 
     function invariant_callbackMaskAndLooseBalancesRemainExact() public view {

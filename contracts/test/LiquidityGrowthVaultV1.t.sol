@@ -108,7 +108,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
 
         hook.registerPool(growthKey, address(vault.upstreamVault()), TOTAL_SWAP_FEE_BPS, TOTAL_SWAP_FEE_BPS);
         manager.initialize(growthKey, SQRT_PRICE_1_1);
-        hook.increaseObservationCardinalityNext(2, PoolId.wrap(poolId));
+        hook.increaseObservationCardinalityNext(192, PoolId.wrap(poolId));
 
         LIQUIDITY_PARAMS =
             ModifyLiquidityParams({ tickLower: -20_000, tickUpper: 20_000, liquidityDelta: 1000 ether, salt: 0 });
@@ -125,7 +125,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
         assertEq(vault.maxCompoundNative(), MAX_COMPOUND);
         assertEq(vault.tokenReserveTarget(), TOKEN_RESERVE);
         assertEq(vault.activeRangeHalfWidthTicks(), RANGE_HALF_WIDTH);
-        assertEq(vault.compoundCooldownBlocks(), COMPOUND_COOLDOWN);
+        assertEq(vault.compoundCooldownSeconds(), COMPOUND_COOLDOWN);
         uint256 expectedTolerance = GROWTH_TARGET / vault.BASIS_POINTS();
         if (expectedTolerance > 0.000_001 ether) {
             expectedTolerance = 0.000_001 ether;
@@ -219,7 +219,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
         vault.process();
 
         _buy(1 ether);
-        vm.roll(block.number + COMPOUND_COOLDOWN);
+        vm.warp(block.timestamp + COMPOUND_COOLDOWN);
         (uint256 creatorFee,) = hook.quoteGrossFees(1 ether, TOTAL_SWAP_FEE_BPS);
         (uint256 received, LiquidityGrowthVaultV1.CompoundResult memory result) = vault.process();
         assertEq(received, creatorFee);
@@ -246,7 +246,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
         _buy(1 ether);
         vault.process();
         _buy(1 ether);
-        vm.roll(block.number + COMPOUND_COOLDOWN);
+        vm.warp(block.timestamp + COMPOUND_COOLDOWN);
         vault.process();
 
         address attacker = makeAddr("attacker");
@@ -284,12 +284,13 @@ contract LiquidityGrowthVaultV1Test is Deployers {
     function test_positionDonationsAreRecycledWithoutBlockingLaterCompounds() public {
         _matureOracle();
         _buy(0.5 ether);
+        vm.warp(block.timestamp + COMPOUND_COOLDOWN);
         (, LiquidityGrowthVaultV1.CompoundResult memory first) = vault.process();
         assertGt(first.liquidityAdded, 0);
 
         donateRouter.donate{ value: 2000 ether }(growthKey, 2000 ether, 0, "");
         _buy(0.5 ether);
-        vm.roll(block.number + COMPOUND_COOLDOWN);
+        vm.warp(block.timestamp + COMPOUND_COOLDOWN);
         (, LiquidityGrowthVaultV1.CompoundResult memory second) = vault.process();
 
         assertGt(second.nativeRecycled, 0);
@@ -410,7 +411,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
             maxCompoundNative: target,
             tokenReserveTarget: TOKEN_RESERVE,
             activeRangeHalfWidthTicks: RANGE_HALF_WIDTH,
-            compoundCooldownBlocks: COMPOUND_COOLDOWN,
+            compoundCooldownSeconds: COMPOUND_COOLDOWN,
             beneficiaries: beneficiaries,
             sharesBps: shares
         });

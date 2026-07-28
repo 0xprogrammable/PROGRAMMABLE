@@ -51,7 +51,7 @@ type DetailState =
       requestKey: string;
     };
 
-type TokenMetric = {
+export type TokenMetric = {
   label: string;
   value: string;
 };
@@ -274,6 +274,69 @@ function formatSwapFee(value: number | undefined) {
   }).format(value / 100)}%`;
 }
 
+export function buildTokenDetailMetrics(token: LauncherToken): TokenMetric[] {
+  const volumeUsd = calculateEthVolumeUsdValue({
+    grossVolumeEth: token.grossVolumeEth,
+    tokenPriceEth: token.tokenPriceEth,
+    tokenPriceUsdWad: token.tokenPriceUsdWad,
+  });
+  const values: Array<TokenMetric | null> = [
+    token.tokenPriceUsdWad !== undefined || token.tokenPriceEth
+      ? {
+          label: "Price",
+          value:
+            formatUsd(token.tokenPriceUsdWad, "price") ??
+            formatEth(token.tokenPriceEth, "price") ??
+            "",
+        }
+      : null,
+    token.fdvUsdWad !== undefined || token.marketCapEth
+      ? {
+          label: "Market cap",
+          value:
+            formatUsd(token.fdvUsdWad, "amount") ??
+            formatEth(token.marketCapEth, "amount") ??
+            "",
+        }
+      : null,
+    token.grossVolumeEth
+      ? {
+          label: "Volume",
+          value:
+            formatUsdAmount(volumeUsd) ??
+            formatEth(token.grossVolumeEth, "amount") ??
+            "",
+        }
+      : null,
+    token.buyHookFeeBps !== undefined &&
+    token.sellHookFeeBps !== undefined &&
+    token.buyHookFeeBps !== token.sellHookFeeBps
+      ? {
+          label: "Buy fee",
+          value: formatSwapFee(token.buyHookFeeBps) ?? "",
+        }
+      : formatSwapFee(token.totalSwapFeeBps)
+        ? {
+            label: "Swap fee",
+            value: formatSwapFee(token.totalSwapFeeBps) ?? "",
+          }
+        : null,
+    token.buyHookFeeBps !== undefined &&
+    token.sellHookFeeBps !== undefined &&
+    token.buyHookFeeBps !== token.sellHookFeeBps
+      ? {
+          label: "Sell fee",
+          value: formatSwapFee(token.sellHookFeeBps) ?? "",
+        }
+      : null,
+  ];
+
+  return values.filter(
+    (metric): metric is TokenMetric =>
+      metric !== null && metric.value.length > 0,
+  );
+}
+
 function formatPreparedMinimum(
   prepared: PreparedTokenTrade,
   symbol: string,
@@ -356,6 +419,57 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
   );
 }
 
+function DeepLiquiditySummary({ token }: { token: LauncherToken }) {
+  const target = BigInt(token.growthTargetNativeWei ?? "0");
+  const added = BigInt(token.totalNativeAddedToLiquidityWei ?? "0");
+  const boundedAdded = added < target ? added : target;
+  const targetReached = token.growthTargetReached === true;
+  const progressBps =
+    targetReached
+      ? 10_000
+      : target === 0n
+        ? 0
+        : Number((boundedAdded * 10_000n) / target);
+  const deferredRewards = BigInt(token.deferredRewardFeesWei ?? "0");
+
+  return (
+    <section className={styles.deepSummary} aria-label="Deep liquidity">
+      <div className={styles.deepSummaryHeading}>
+        <div>
+          <span>Deep liquidity</span>
+          <strong>
+            {formatEth(formatUnits(added, 18), "amount")} added
+          </strong>
+        </div>
+        <span>
+          {targetReached
+            ? "Target reached"
+            : `${(progressBps / 100).toFixed(2)}%`}
+        </span>
+      </div>
+      <div
+        className={styles.deepProgress}
+        role="progressbar"
+        aria-label="Liquidity growth progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progressBps / 100}
+      >
+        <span style={{ width: `${progressBps / 100}%` }} />
+      </div>
+      <p>
+        Creator fees deepen the original permanently locked pool before
+        creator rewards begin. The 150M reserve stays locked, and unused
+        reserve is not active liquidity. Automation is permissionless and not
+        guaranteed.
+        {deferredRewards > 0n
+          ? ` ${formatEth(formatUnits(deferredRewards, 18), "amount")} in creator rewards is deferred until the liquidity target is reached.`
+          : ""}
+      </p>
+    </section>
+  );
+}
+
 function TokenDetailContent({
   token,
   chainId,
@@ -393,53 +507,7 @@ function TokenDetailContent({
     [],
   );
 
-  const metrics = useMemo(() => {
-    const volumeUsd = calculateEthVolumeUsdValue({
-      grossVolumeEth: token.grossVolumeEth,
-      tokenPriceEth: token.tokenPriceEth,
-      tokenPriceUsdWad: token.tokenPriceUsdWad,
-    });
-    const values: Array<TokenMetric | null> = [
-      token.tokenPriceUsdWad !== undefined || token.tokenPriceEth
-        ? {
-            label: "Price",
-            value:
-              formatUsd(token.tokenPriceUsdWad, "price") ??
-              formatEth(token.tokenPriceEth, "price") ??
-              "",
-          }
-        : null,
-      token.fdvUsdWad !== undefined || token.marketCapEth
-        ? {
-            label: "Market cap",
-            value:
-              formatUsd(token.fdvUsdWad, "amount") ??
-              formatEth(token.marketCapEth, "amount") ??
-              "",
-          }
-        : null,
-      token.grossVolumeEth
-        ? {
-            label: "Trading volume",
-            value:
-              formatUsdAmount(volumeUsd) ??
-              formatEth(token.grossVolumeEth, "amount") ??
-              "",
-          }
-        : null,
-      formatSwapFee(token.totalSwapFeeBps)
-        ? {
-            label: "Swap fee",
-            value: formatSwapFee(token.totalSwapFeeBps) ?? "",
-          }
-        : null,
-    ];
-
-    return values.filter(
-      (metric): metric is TokenMetric =>
-        metric !== null && metric.value.length > 0,
-    );
-  }, [token]);
+  const metrics = useMemo(() => buildTokenDetailMetrics(token), [token]);
 
   const explorerBase =
     chainId === 1
@@ -733,6 +801,13 @@ function TokenDetailContent({
           />
 
           <MetricGrid metrics={metrics} />
+
+          {token.launchModel === "deep" &&
+          token.growthTargetNativeWei &&
+          token.totalNativeAddedToLiquidityWei &&
+          token.tokenReserveRaw ? (
+            <DeepLiquiditySummary token={token} />
+          ) : null}
         </section>
 
         <aside className={styles.tradeShell} aria-label={`${token.name} trade`}>
@@ -751,7 +826,12 @@ function TokenDetailContent({
               tokenDecimals={tokenDecimals}
               tokenPriceEth={token.tokenPriceEth}
               tokenPriceUsdWad={token.tokenPriceUsdWad}
-              totalSwapFeeBps={token.totalSwapFeeBps}
+              buySwapFeeBps={
+                token.buyHookFeeBps ?? token.totalSwapFeeBps
+              }
+              sellSwapFeeBps={
+                token.sellHookFeeBps ?? token.totalSwapFeeBps
+              }
               readBalances={readTokenBalances}
               onConnect={openWallet}
               onPrepared={submitPreparedTrade}
@@ -762,7 +842,11 @@ function TokenDetailContent({
               symbol={token.symbol}
               tokenDecimals={tokenDecimals}
               tokenPriceEth={token.tokenPriceEth}
-              totalSwapFeeBps={token.totalSwapFeeBps}
+              totalSwapFeeBps={
+                tradeFlow.prepared.side === "buy"
+                  ? token.buyHookFeeBps ?? token.totalSwapFeeBps
+                  : token.sellHookFeeBps ?? token.totalSwapFeeBps
+              }
               pending={tradeFlow.submitting}
               error={tradeFlow.error}
               onBack={() => setTradeFlow({ phase: "form" })}

@@ -6,6 +6,16 @@ Classic supports independently selected buy and sell fees plus beneficiary-owned
 
 Existing Classic tokens and contracts are not modified.
 
+## Deployment status
+
+The configurable Classic stack described here is implemented and release-gated, but it is not deployed on Ethereum
+mainnet or Sepolia. Both Classic manifests remain `not-deployed`, contain no configurable Classic contract addresses or
+transactions, and have no lifecycle or source-verification record.
+
+The currently deployed mainnet Classic stack is the earlier release recorded in
+`deployments/mainnet-classic-v2.json`. Passing local tests, pinned-fork tests or deterministic deployment simulations
+does not change that live status.
+
 ## Immutable economics
 
 - `buySwapFeeBps` applies to native ETH to token swaps.
@@ -93,7 +103,8 @@ The dedicated tests cover:
 - Reverting payout isolation, no double claim and no cross-vault claim.
 - Fuzzed fee arithmetic and split conservation.
 - Stateful native-claim accounting and immutable-economics invariants.
-- A lifecycle against official Ethereum mainnet PoolManager, PositionManager, Universal Router, Permit2 and Quoter contracts on a pinned fork.
+- A lifecycle against code-hash-pinned Ethereum mainnet PoolManager, PositionManager, Universal Router, Permit2,
+  Quoter, UERC20 factory and the deployed Programmable position-forwarder factory.
 - Regression execution of the existing contract suite.
 
 Slither output is stored in `security/slither-results-classic-v3.json`. The run excluded dependency findings, mixed dependency pragma findings and Slither's false `BaseHook.getHookPermissions` implementation report. The remaining 99 detectors returned zero findings.

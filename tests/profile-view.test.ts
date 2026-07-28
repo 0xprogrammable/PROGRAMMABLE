@@ -5,6 +5,7 @@ import {
   buildProfilePortfolio,
   groupProfileRewards,
   profileClaimableWei,
+  profileRewardsForAccount,
   sortProfileTokensByMarketCap,
 } from "../components/profile-view";
 import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
@@ -18,6 +19,9 @@ const firstAddress = getAddress(
 );
 const secondAddress = getAddress(
   "0x2222222222222222222222222222222222222222",
+);
+const thirdAddress = getAddress(
+  "0x3333333333333333333333333333333333333333",
 );
 
 const tokens: ProfileToken[] = [
@@ -78,6 +82,14 @@ const classicReward = {
   ],
   launchTransactionHash: `0x${"55".repeat(32)}`,
 } satisfies ClassicV3Reward;
+const secondClassicReward = {
+  ...classicReward,
+  poolId: `0x${"66".repeat(32)}`,
+  vaultAddress: thirdAddress,
+  claimableWei: "4000000000000000",
+  claimableEth: "0.004",
+  launchTransactionHash: `0x${"77".repeat(32)}`,
+} satisfies ClassicV3Reward;
 
 describe("profile reward grouping", () => {
   it("keeps deployed-token order and attaches each reward to its token", () => {
@@ -133,7 +145,7 @@ describe("profile reward grouping", () => {
     expect(second).toMatchObject({
       token: tokens[1],
       claim,
-      classicReward,
+      classicRewards: [classicReward],
       launchedByWallet: true,
     });
     expect(profileClaimableWei(portfolio)).toBe(
@@ -152,7 +164,52 @@ describe("profile reward grouping", () => {
         symbol: "SECOND",
       },
       launchedByWallet: false,
-      classicReward,
+      classicRewards: [classicReward],
     });
+  });
+
+  it("groups every beneficiary vault for the same token without losing rewards", () => {
+    const portfolio = buildProfilePortfolio(
+      tokens,
+      [claim],
+      [classicReward, secondClassicReward, secondClassicReward],
+    );
+    const second = portfolio.find(
+      (entry) => entry.token.address === secondAddress,
+    );
+
+    expect(second?.classicRewards).toEqual([
+      classicReward,
+      secondClassicReward,
+    ]);
+    expect(profileClaimableWei(portfolio)).toBe(
+      7_000_000_000_000_000n,
+    );
+  });
+
+  it("scopes claimable split rewards and actions to the connected beneficiary", () => {
+    const otherBeneficiaryReward = {
+      ...secondClassicReward,
+      beneficiary: secondAddress,
+      payoutAddress: secondAddress,
+    } satisfies ClassicV3Reward;
+    const portfolio = buildProfilePortfolio(
+      [],
+      [],
+      [classicReward, otherBeneficiaryReward],
+    );
+
+    expect(profileClaimableWei(portfolio, firstAddress)).toBe(
+      2_000_000_000_000_000n,
+    );
+    expect(profileClaimableWei(portfolio, secondAddress)).toBe(
+      4_000_000_000_000_000n,
+    );
+    expect(
+      profileRewardsForAccount(
+        [classicReward, otherBeneficiaryReward],
+        firstAddress,
+      ),
+    ).toEqual([classicReward]);
   });
 });

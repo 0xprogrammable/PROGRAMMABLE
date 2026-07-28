@@ -16,6 +16,7 @@ contract MockLiquidityGrowthOracleV1 is ILiquidityGrowthOracleV1 {
     int56 public truncatedEnd;
     bool public malformed;
     bool public historyTooShort;
+    uint16 public observationCardinalityNext = 192;
 
     error ObservationHistoryTooShort();
     error UnexpectedPool(bytes32 actual, bytes32 expected);
@@ -44,6 +45,19 @@ contract MockLiquidityGrowthOracleV1 is ILiquidityGrowthOracleV1 {
 
     function setHistoryTooShort(bool historyTooShort_) external {
         historyTooShort = historyTooShort_;
+    }
+
+    function setObservationCardinalityNext(uint16 observationCardinalityNext_) external {
+        observationCardinalityNext = observationCardinalityNext_;
+    }
+
+    function stateById(PoolId)
+        external
+        view
+        override
+        returns (uint16 index, uint16 cardinality, uint16 cardinalityNext)
+    {
+        return (0, 1, observationCardinalityNext);
     }
 
     function observe(uint32[] calldata, PoolId poolId)

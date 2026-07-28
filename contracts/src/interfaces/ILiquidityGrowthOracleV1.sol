@@ -13,6 +13,11 @@ interface ILiquidityGrowthOracleV1 {
     /// @notice Returns the PoolManager whose pools are observed.
     function poolManager() external view returns (IPoolManager);
 
+    /// @notice Returns the current observation ring state for `poolId`.
+    /// @dev `cardinalityNext` is the allocated capacity. A range policy may require a minimum capacity before it
+    ///      accepts any historical quote.
+    function stateById(PoolId poolId) external view returns (uint16 index, uint16 cardinality, uint16 cardinalityNext);
+
     /// @notice Returns normal and per-observation truncated tick cumulatives for `poolId`.
     /// @dev Implementations must revert when the requested lookback predates the oldest populated observation.
     function observe(uint32[] calldata secondsAgos, PoolId poolId)

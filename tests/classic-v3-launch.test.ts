@@ -3,12 +3,14 @@ import { decodeFunctionData, type Address } from "viem";
 
 import appDeployments from "../contracts/config/app-deployments.v1.json";
 import {
+  buildClassicV3LaunchDisclosure,
   classicV3LaunchAbi,
   encodeClassicV3Launch,
   isClassicV3DeploymentReady,
   validateClassicV3LaunchDraft,
   type ClassicV3DeploymentManifest,
 } from "../lib/classic-v3";
+import type { ClassicV3ReleaseManifest } from "../lib/classic-v3-release";
 import {
   MAX_CLASSIC_V3_LAUNCH_GAS_LIMIT,
   validatePreparedClassicV3LaunchTransactionAgainstManifest,
@@ -56,6 +58,41 @@ function readyManifest(): ClassicV3DeploymentManifest {
       lockedPositionFeeForwarderFactory: hash,
     },
     deploymentBlocks: { memeLaunchV2: 123 },
+  };
+}
+
+function readyRelease(): ClassicV3ReleaseManifest {
+  return {
+    schemaVersion: 1,
+    model: "classic",
+    internalContractRelease: "classic-v3",
+    status: "deployment-source-and-lifecycle-verified",
+    chainId: 1,
+    releaseCommit: "a".repeat(40),
+    sourceCommitment: `0x${"22".repeat(32)}`,
+    startingNonce: 12,
+    hookSalt: `0x${"33".repeat(32)}`,
+    addresses: {
+      feeSplitVaultFactory:
+        "0x7777777777777777777777777777777777777777",
+      hookFactory: "0x5555555555555555555555555555555555555555",
+      feeHook: "0x6666666666666666666666666666666666666666",
+      launcher,
+      positionForwarderFactory:
+        "0x8888888888888888888888888888888888888888",
+    },
+    runtimeCodeHashes: {
+      feeSplitVaultFactory: hash,
+      hookFactory: hash,
+      feeHook: hash,
+      launcher: hash,
+      positionForwarderFactory: hash,
+    },
+    sourceVerification: { status: "verified" },
+    lifecycleEvidence: {
+      status: "verified-current-release",
+      releaseEligible: true,
+    },
   };
 }
 
@@ -190,6 +227,31 @@ describe("Classic V3 launch configuration", () => {
     });
   });
 
+  it("discloses exact immutable fees and reward owners before signing", () => {
+    const disclosure = buildClassicV3LaunchDisclosure(
+      {
+        ...draft(),
+        buySwapFeePercent: "3",
+        sellSwapFeePercent: "7",
+        rewardDestinationMode: "split",
+        rewardSplits: [
+          { beneficiary: external, sharePercent: "25" },
+          { beneficiary: third, sharePercent: "75" },
+        ],
+      },
+      account,
+    );
+
+    expect(disclosure).toEqual({
+      buyFee: "3.00% total · 2.90% creator · 0.10% Programmable",
+      sellFee: "7.00% total · 6.90% creator · 0.10% Programmable",
+      rewards: [
+        { beneficiary: external, share: "25.00%" },
+        { beneficiary: third, share: "75.00%" },
+      ],
+    });
+  });
+
   it("binds wallet review to the exact V3 calldata, account and manifest", () => {
     const launchDraft = {
       ...draft(),
@@ -216,6 +278,7 @@ describe("Classic V3 launch configuration", () => {
       validatePreparedClassicV3LaunchTransactionAgainstManifest(
         { transaction, draft: launchDraft, account, planHash },
         readyManifest(),
+        readyRelease(),
       ),
     ).toEqual(transaction);
     expect(() =>
@@ -230,7 +293,21 @@ describe("Classic V3 launch configuration", () => {
           planHash,
         },
         readyManifest(),
+        readyRelease(),
       ),
     ).toThrow("gas limit");
+    expect(() =>
+      validatePreparedClassicV3LaunchTransactionAgainstManifest(
+        { transaction, draft: launchDraft, account, planHash },
+        readyManifest(),
+        {
+          ...readyRelease(),
+          lifecycleEvidence: {
+            status: "verified-current-release",
+            releaseEligible: false,
+          },
+        },
+      ),
+    ).toThrow("not enabled");
   });
 });

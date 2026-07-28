@@ -16,7 +16,7 @@
 }
 
 .layout {
-  align-items: stretch;
+  align-items: start;
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(0, 1.42fr) minmax(350px, 0.72fr);
@@ -35,7 +35,6 @@
   border-radius: 28px;
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-width: 0;
   overflow: hidden;
   padding: 22px;
@@ -67,10 +66,9 @@
 
 .symbol {
   color: var(--accent-strong);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.015em;
 }
 
 .name {
@@ -206,23 +204,81 @@
   overflow-wrap: anywhere;
 }
 
-.tradeShell {
-  align-self: stretch;
-  border-radius: 28px;
+.deepSummary {
+  background: var(--surface-tint);
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px 15px;
+}
+
+.deepSummaryHeading {
+  align-items: end;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.deepSummaryHeading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.deepSummaryHeading span,
+.deepSummary p {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.deepSummaryHeading strong {
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.deepSummaryHeading > span {
+  color: var(--text-soft);
+  font-family: var(--font-plex-mono), monospace;
+}
+
+.deepProgress {
+  background: var(--surface-soft);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.deepProgress > span {
+  background: var(--accent);
+  border-radius: inherit;
+  display: block;
   height: 100%;
+  min-width: 0;
+}
+
+.deepSummary p {
+  line-height: 1.45;
+  margin: 0;
+}
+
+.tradeShell {
+  align-self: start;
+  border-radius: 28px;
   min-width: 0;
   padding: 10px;
   position: sticky;
   top: calc(var(--header-height) + 18px);
+  width: 100%;
 }
 
 .tradeForm,
 .review,
 .submitted {
+  animation: token-panel-enter 180ms var(--ease-out) both;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 420px;
+  min-height: 430px;
   padding: 14px;
 }
 
@@ -230,7 +286,7 @@
   align-items: baseline;
   display: flex;
   justify-content: space-between;
-  padding: 2px 2px 16px;
+  padding: 2px 2px 13px;
 }
 
 .tradeHeader h2,
@@ -265,7 +321,7 @@
   color: var(--muted);
   font-size: 14px;
   font-weight: 620;
-  min-height: 44px;
+  min-height: 40px;
   position: relative;
   z-index: 1;
 }
@@ -301,8 +357,8 @@
   background: var(--surface-tint);
   border: 1px solid var(--border);
   border-radius: 20px;
-  margin-top: 14px;
-  padding: 15px;
+  margin-top: 12px;
+  padding: 14px;
 }
 
 .amountHeader,
@@ -331,16 +387,16 @@
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .amountInput {
   background: transparent;
   border: 0;
   color: var(--text);
-  font-size: clamp(31px, 3.2vw, 40px);
+  font-size: clamp(30px, 3vw, 36px);
   font-weight: 520;
-  height: 52px;
+  height: 46px;
   letter-spacing: -0.035em;
   min-width: 0;
   outline: 0;
@@ -360,7 +416,7 @@
   font-weight: 680;
   max-width: 112px;
   overflow: hidden;
-  padding: 9px 12px;
+  padding: 8px 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -369,8 +425,8 @@
   color: var(--muted);
   font-size: 10px;
   gap: 10px;
-  margin-top: 11px;
-  min-height: 26px;
+  margin-top: 8px;
+  min-height: 24px;
 }
 
 .maxButton {
@@ -397,8 +453,8 @@
 
 .slippageRow {
   border-top: 1px solid var(--border);
-  margin-top: 16px;
-  min-height: 54px;
+  margin-top: 12px;
+  min-height: 48px;
 }
 
 .slippageRow label {
@@ -454,7 +510,7 @@
 
 .tradeFooter {
   margin-top: auto;
-  padding-top: 16px;
+  padding-top: 14px;
 }
 
 .primaryAction,
@@ -465,7 +521,7 @@
   font-size: 14px;
   font-weight: 670;
   justify-content: center;
-  min-height: 50px;
+  min-height: 46px;
   padding: 0 18px;
 }
 
@@ -587,6 +643,18 @@
   width: 100%;
 }
 
+@keyframes token-panel-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 .emptyState {
   align-items: center;
   border-radius: 24px;
@@ -674,14 +742,13 @@
 
   .overview,
   .tradeShell {
-    height: auto;
     position: static;
   }
 
   .tradeForm,
   .review,
   .submitted {
-    min-height: 380px;
+    min-height: 400px;
   }
 }
 
@@ -785,7 +852,7 @@
   }
 
   .symbol {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .name {
@@ -811,5 +878,11 @@
 
   .sideIndicator {
     transition: none;
+  }
+
+  .tradeForm,
+  .review,
+  .submitted {
+    animation: none;
   }
 }

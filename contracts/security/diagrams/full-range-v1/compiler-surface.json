@@ -1,0 +1,1888 @@
+{
+  "schemaVersion": 1,
+  "compilerVersion": "0.8.26",
+  "generationSource": "Solidity compiler AST emitted by `forge build --ast --force`",
+  "contracts": [
+    {
+      "source": "src/LiquidityGrowthFullRangeLaunchV1.sol",
+      "sourceSha256": "5d59e53803a51f91b2782cf07ef7fab6337c3acf014ea162b2541cbba340a196",
+      "contract": "LiquidityGrowthFullRangeLaunchV1",
+      "role": "core",
+      "kind": "contract",
+      "bases": [
+        "IUnlockCallback",
+        "ReentrancyGuardTransient"
+      ],
+      "functions": [
+        {
+          "signature": "constructor(IPoolManager,IPositionManager,UERC20Factory,ILiquidityGrowthFullRangeOracleHookV1,FeeSplitVaultFactoryV1,LiquidityGrowthRangeSourceFactoryV1,LiquidityGrowthFullRangeVaultFactoryV1,LockedPositionFeeForwarderFactoryV1)",
+          "kind": "constructor",
+          "visibility": "public",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": null
+        },
+        {
+          "signature": "launch(LiquidityGrowthFullRangeLaunchV1.LaunchParameters)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "payable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "b4870fa2"
+        },
+        {
+          "signature": "predictTokenAddress(string,string,address,bytes32)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "cf1008fe"
+        },
+        {
+          "signature": "unlockCallback(bytes)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "91dd7346"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "automation",
+          "type": "LiquidityGrowthFullRangeAutomationV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "feeHook",
+          "type": "ILiquidityGrowthFullRangeOracleHookV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "feeSplitVaultFactory",
+          "type": "FeeSplitVaultFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "GROWTH_TARGET_NATIVE",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "growthVaultFactory",
+          "type": "LiquidityGrowthFullRangeVaultFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "growthVaultOf",
+          "type": "mapping(address => address)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "INITIAL_TICK",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "launchHashOf",
+          "type": "mapping(address => bytes32)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "LP_FEE_PIPS",
+          "type": "uint24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_ABS_TICK_DELTA",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_METADATA_URL_BYTES",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_SOCIAL_EXTRA_DATA_BYTES",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_SPOT_TWAP_DEVIATION_TICKS",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_TOKEN_DESCRIPTION_BYTES",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_TOKEN_NAME_BYTES",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_TOKEN_SYMBOL_BYTES",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MIN_INITIAL_BUY_WEI",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "NATIVE",
+          "type": "Currency",
+          "visibility": "private",
+          "mutability": "constant"
+        },
+        {
+          "name": "ORACLE_RANGE_HALF_WIDTH_TICKS",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "poolManager",
+          "type": "IPoolManager",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "positionForwarderFactory",
+          "type": "LockedPositionFeeForwarderFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "positionManager",
+          "type": "IPositionManager",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "positionPlanner",
+          "type": "LiquidityGrowthFullRangePositionPlannerV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "rangeSourceFactory",
+          "type": "LiquidityGrowthRangeSourceFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "TICK_SPACING",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "TOKEN_DECIMALS",
+          "type": "uint8",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "TOKEN_RESERVE_TARGET",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "TOKEN_SUPPLY",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "tokenFactory",
+          "type": "UERC20Factory",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "TWAP_WINDOW",
+          "type": "uint32",
+          "visibility": "public",
+          "mutability": "constant"
+        }
+      ]
+    },
+    {
+      "source": "src/LiquidityGrowthFullRangeAutomationV1.sol",
+      "sourceSha256": "1352a147d72c7891aa9e556c0b841c4dae4ef9a76e4dcc1c44d96e07e312fbb4",
+      "contract": "LiquidityGrowthFullRangeAutomationV1",
+      "role": "core",
+      "kind": "contract",
+      "bases": [
+        "ReentrancyGuardTransient"
+      ],
+      "functions": [
+        {
+          "signature": "assessVault(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "23ac1524"
+        },
+        {
+          "signature": "checkBatch(address[])",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "16952724"
+        },
+        {
+          "signature": "checkVault(address)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "a764a2ba"
+        },
+        {
+          "signature": "constructor(LiquidityGrowthFullRangeVaultFactoryV1,address)",
+          "kind": "constructor",
+          "visibility": "public",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": null
+        },
+        {
+          "signature": "performBatch(address[])",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "cb20fb57"
+        },
+        {
+          "signature": "performVault(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "e94328b7"
+        },
+        {
+          "signature": "registerAndStageOracle(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "5105a071"
+        },
+        {
+          "signature": "registeredVaultAt(uint256)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "2dd3519d"
+        },
+        {
+          "signature": "registeredVaultCount()",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "afa16280"
+        },
+        {
+          "signature": "scan(uint256,uint256)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "c5221bc4"
+        },
+        {
+          "signature": "stageOracle(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "9c15215c"
+        },
+        {
+          "signature": "stageOracleBatch(address[])",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "a774cfba"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "_vaults",
+          "type": "address[]",
+          "visibility": "private",
+          "mutability": "mutable"
+        },
+        {
+          "name": "INITIAL_OBSERVATION_CARDINALITY_NEXT",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "isRegisteredVault",
+          "type": "mapping(address => bool)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "launcher",
+          "type": "address",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "MAX_BATCH_SIZE",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MIN_ORACLE_ACTIVATION_NATIVE",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "OBSERVATION_CARDINALITY_STEP",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "OBSERVATION_CARDINALITY_TARGET",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "vaultFactory",
+          "type": "LiquidityGrowthFullRangeVaultFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        }
+      ]
+    },
+    {
+      "source": "src/LiquidityGrowthFullRangeVaultFactoryV1.sol",
+      "sourceSha256": "06b49f28b391e70796ed0a481b01d29438942d798dba900ee4bfb22aa48bf37f",
+      "contract": "LiquidityGrowthFullRangeVaultFactoryV1",
+      "role": "core",
+      "kind": "contract",
+      "bases": [],
+      "functions": [
+        {
+          "signature": "constructor(LiquidityGrowthFeeOracleHookFactoryV1,FeeSplitVaultFactoryV1,IPositionManager,LockedPositionFeeForwarderFactoryV1,LiquidityGrowthRangeSourceFactoryV1)",
+          "kind": "constructor",
+          "visibility": "public",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": null
+        },
+        {
+          "signature": "deployOrGet(bytes32,ILiquidityGrowthFullRangeOracleHookV1,LiquidityGrowthFullRangeVaultV1.Configuration)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "fb6424ba"
+        },
+        {
+          "signature": "effectiveSalt(bytes32,ILiquidityGrowthFullRangeOracleHookV1,LiquidityGrowthFullRangeVaultV1.Configuration)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "f611d037"
+        },
+        {
+          "signature": "isFactoryVault(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "58c62442"
+        },
+        {
+          "signature": "predict(bytes32,ILiquidityGrowthFullRangeOracleHookV1,LiquidityGrowthFullRangeVaultV1.Configuration)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "77121bdc"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "configurationHashOf",
+          "type": "mapping(address => bytes32)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "feeSplitVaultFactory",
+          "type": "FeeSplitVaultFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "hookFactory",
+          "type": "LiquidityGrowthFeeOracleHookFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "implementation",
+          "type": "address",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "initializationCommitment",
+          "type": "mapping(address => bytes32)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "MAX_ABS_TICK_DELTA",
+          "type": "int24",
+          "visibility": "private",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_BENEFICIARIES",
+          "type": "uint256",
+          "visibility": "private",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_SPOT_TWAP_DEVIATION_TICKS",
+          "type": "int24",
+          "visibility": "private",
+          "mutability": "constant"
+        },
+        {
+          "name": "poolManager",
+          "type": "IPoolManager",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "positionForwarderFactory",
+          "type": "LockedPositionFeeForwarderFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "positionManager",
+          "type": "IPositionManager",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "rangeSourceFactory",
+          "type": "LiquidityGrowthRangeSourceFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "TWAP_WINDOW",
+          "type": "uint32",
+          "visibility": "private",
+          "mutability": "constant"
+        }
+      ]
+    },
+    {
+      "source": "src/LiquidityGrowthFullRangeVaultV1.sol",
+      "sourceSha256": "ec63e2de37d6c1fe1f77f1516222f35004a80f3a267e0a7fdf31fb4a89dee322",
+      "contract": "LiquidityGrowthFullRangeVaultV1",
+      "role": "core",
+      "kind": "contract",
+      "bases": [
+        "IUnlockCallback",
+        "ReentrancyGuardTransient"
+      ],
+      "functions": [
+        {
+          "signature": "beneficiaryAt(uint256)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "cee1c11d"
+        },
+        {
+          "signature": "claimable(address)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "402914f5"
+        },
+        {
+          "signature": "claimRewards()",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "372500ab"
+        },
+        {
+          "signature": "compoundPending()",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "1b338c9f"
+        },
+        {
+          "signature": "constructor(address)",
+          "kind": "constructor",
+          "visibility": "public",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": null
+        },
+        {
+          "signature": "initialize(ILiquidityGrowthFullRangeOracleHookV1,FeeSplitVaultFactoryV1,LiquidityGrowthFullRangeVaultV1.Configuration)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "7400922d"
+        },
+        {
+          "signature": "lockedLiquidity()",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "b4398244"
+        },
+        {
+          "signature": "oracleReady()",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "4dd7fab1"
+        },
+        {
+          "signature": "process()",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "c33fb877"
+        },
+        {
+          "signature": "receive()",
+          "kind": "receive",
+          "visibility": "external",
+          "mutability": "payable",
+          "modifiers": [],
+          "selector": null
+        },
+        {
+          "signature": "setPayoutAddress(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "33ea51a8"
+        },
+        {
+          "signature": "trustedDepthAndCap()",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "1f2afa42"
+        },
+        {
+          "signature": "unlockCallback(bytes)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "91dd7346"
+        },
+        {
+          "signature": "workState()",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "387da07c"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "_beneficiaries",
+          "type": "address[]",
+          "visibility": "private",
+          "mutability": "mutable"
+        },
+        {
+          "name": "_poolKey",
+          "type": "PoolKey",
+          "visibility": "private",
+          "mutability": "mutable"
+        },
+        {
+          "name": "BASIS_POINTS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "beneficiaryCount",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "claimedBy",
+          "type": "mapping(address => uint256)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "COMPLETION_TOLERANCE_BPS",
+          "type": "uint16",
+          "visibility": "private",
+          "mutability": "constant"
+        },
+        {
+          "name": "completionToleranceNative",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "COMPOUND_COOLDOWN_SECONDS",
+          "type": "uint64",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "deferredRewardFees",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "FACTORY",
+          "type": "address",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "feeHook",
+          "type": "ILiquidityGrowthFullRangeOracleHookV1",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "FULL_RANGE_TICK_LOWER",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "FULL_RANGE_TICK_UPPER",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "growthTargetNative",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "growthTargetReached",
+          "type": "bool",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "initialized",
+          "type": "bool",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "initialPositionRecipient",
+          "type": "address",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "initialPositionTokenId",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "lastCompoundTimestamp",
+          "type": "uint64",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "LOCKED_POSITION_SALT",
+          "type": "bytes32",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_ABS_TICK_DELTA",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_COMPLETION_TOLERANCE_NATIVE",
+          "type": "uint256",
+          "visibility": "private",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_COMPOUND_NATIVE",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_SPOT_TWAP_DEVIATION_TICKS",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MIN_COMPOUND_NATIVE",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MIN_KEEPER_PROCESS_NATIVE",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MIN_UTILIZATION_BPS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "minimumNativeLiquidityForCompletion",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "nativeLiquidityShortfallAtCompletion",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "oracleGuard",
+          "type": "LiquidityGrowthRangeSourceV1",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "payoutAddressOf",
+          "type": "mapping(address => address)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "pendingGrowthNative",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "poolId",
+          "type": "bytes32",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "poolManager",
+          "type": "IPoolManager",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "positionManager",
+          "type": "IPositionManager",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "shareBpsOf",
+          "type": "mapping(address => uint16)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "STRESS_TICK",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "token",
+          "type": "address",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "tokenReserveTarget",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalCreatorFeesReceived",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalLiquidityAdded",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalNativeAddedToLiquidity",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalNativeAllocatedToGrowth",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalNativeRecycled",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalRewardFeesClaimed",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalRewardFeesReceived",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalTokenAddedToLiquidity",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalTokenBudgeted",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalTokenRecycled",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "TRUSTED_DEPTH_CAP_BPS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "TWAP_WINDOW",
+          "type": "uint32",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "upstreamVault",
+          "type": "FeeSplitVaultV1",
+          "visibility": "public",
+          "mutability": "mutable"
+        }
+      ]
+    },
+    {
+      "source": "src/LiquidityGrowthFullRangePositionPlannerV1.sol",
+      "sourceSha256": "c6d34039faa265acc34f71d704ce99e389f62408e427a92078770e3664524b88",
+      "contract": "LiquidityGrowthFullRangePositionPlannerV1",
+      "role": "core",
+      "kind": "contract",
+      "bases": [],
+      "functions": [
+        {
+          "signature": "buildOneSidedPlan(PoolKey,address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "ed116629"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "POOL_TOKEN_BUDGET",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "POSITION_WEIGHT",
+          "type": "uint24",
+          "visibility": "private",
+          "mutability": "constant"
+        }
+      ]
+    },
+    {
+      "source": "src/LiquidityGrowthFullRangePolicyV1.sol",
+      "sourceSha256": "e921344482e39a99754dad1e94b11229a86ea8c9a04d83343d01e589f019912a",
+      "contract": "LiquidityGrowthFullRangePolicyV1",
+      "role": "core",
+      "kind": "library",
+      "bases": [],
+      "functions": [],
+      "stateVariables": [
+        {
+          "name": "BASIS_POINTS",
+          "type": "uint16",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "COMPOUND_COOLDOWN_SECONDS",
+          "type": "uint64",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "FULL_RANGE_TICK_LOWER",
+          "type": "int24",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "FULL_RANGE_TICK_UPPER",
+          "type": "int24",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "GROWTH_TARGET_NATIVE",
+          "type": "uint256",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "INITIAL_TICK",
+          "type": "int24",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "LOCKED_POSITION_SALT",
+          "type": "bytes32",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_COMPOUND_NATIVE",
+          "type": "uint256",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "MIN_COMPOUND_NATIVE",
+          "type": "uint256",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "MIN_UTILIZATION_BPS",
+          "type": "uint16",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "REQUIRED_RESERVE_MULTIPLE",
+          "type": "uint16",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "STRESS_TICK",
+          "type": "int24",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "TICK_SPACING",
+          "type": "int24",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "TOKEN_RESERVE_TARGET",
+          "type": "uint256",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "TOKEN_SUPPLY",
+          "type": "uint256",
+          "visibility": "internal",
+          "mutability": "constant"
+        },
+        {
+          "name": "TRUSTED_DEPTH_CAP_BPS",
+          "type": "uint16",
+          "visibility": "internal",
+          "mutability": "constant"
+        }
+      ]
+    },
+    {
+      "source": "src/LiquidityGrowthFeeOracleHookV1.sol",
+      "sourceSha256": "80cc0ec78cb30f021ecef412bbf6820668d8e11ddd25ba3bc4cb6ccc11841fdf",
+      "contract": "LiquidityGrowthFeeOracleHookV1",
+      "role": "support",
+      "kind": "contract",
+      "bases": [
+        "BaseHook",
+        "IUnlockCallback",
+        "ReentrancyGuardTransient",
+        "IHookEvents",
+        "IHookSwapEvents"
+      ],
+      "functions": [
+        {
+          "signature": "claimCreatorFees(bytes32)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "af8d60b5"
+        },
+        {
+          "signature": "claimLauncherFees()",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "64d46b85"
+        },
+        {
+          "signature": "claimLauncherFeesTo(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "6884ef07"
+        },
+        {
+          "signature": "constructor(IPoolManager,address,FeeSplitVaultFactoryV1,int24)",
+          "kind": "constructor",
+          "visibility": "public",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "BaseHook"
+          ],
+          "selector": null
+        },
+        {
+          "signature": "feeDisclosure(bytes32)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "b4b01335"
+        },
+        {
+          "signature": "getHookPermissions()",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "c4e833ce"
+        },
+        {
+          "signature": "increaseObservationCardinalityNext(uint16,PoolId)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "4f413237"
+        },
+        {
+          "signature": "observe(uint32[],PoolId)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "0520d445"
+        },
+        {
+          "signature": "quoteExactOutputFees(uint256,uint16)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "9d2786a5"
+        },
+        {
+          "signature": "quoteGrossFees(uint256,uint16)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "383f307e"
+        },
+        {
+          "signature": "registerPool(PoolKey,address,uint16,uint16)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "5fd07da5"
+        },
+        {
+          "signature": "totalSwapFeeBpsFor(bytes32,bool)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "b6c27662"
+        },
+        {
+          "signature": "unlockCallback(bytes)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "onlyPoolManager"
+          ],
+          "selector": "91dd7346"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "BASIS_POINTS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "feeSplitVaultFactory",
+          "type": "FeeSplitVaultFactoryV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "LAUNCHER_FEE_BPS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "launcherFeeRecipient",
+          "type": "address",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "launcherFeesAccrued",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "LP_FEE_PIPS",
+          "type": "uint24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MAX_TOTAL_SWAP_FEE_BPS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "maxAbsTickDelta",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "MIN_TOTAL_SWAP_FEE_BPS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "NATIVE",
+          "type": "Currency",
+          "visibility": "private",
+          "mutability": "constant"
+        },
+        {
+          "name": "observationsById",
+          "type": "mapping(PoolId => Oracle.Observation[65535])",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "poolFeeConfig",
+          "type": "mapping(bytes32 => LiquidityGrowthFeeOracleHookV1.PoolFeeConfig)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "stateById",
+          "type": "mapping(PoolId => LiquidityGrowthFeeOracleHookV1.ObservationState)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "TICK_SPACING",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "TOTAL_SWAP_FEE_STEP_BPS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "totalNativeFeesAccrued",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "TRANSFER_TAX_BPS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        }
+      ]
+    },
+    {
+      "source": "src/LiquidityGrowthFeeOracleHookFactoryV1.sol",
+      "sourceSha256": "6f59af1269606ce00c7b672fcaf8f96c2b0d856b65929f3f6b6ed92072cd6484",
+      "contract": "LiquidityGrowthFeeOracleHookFactoryV1",
+      "role": "support",
+      "kind": "contract",
+      "bases": [],
+      "functions": [
+        {
+          "signature": "deploy(bytes32,IPoolManager,address,FeeSplitVaultFactoryV1,int24)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "d4191b14"
+        },
+        {
+          "signature": "initCode(IPoolManager,address,FeeSplitVaultFactoryV1,int24)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "5d975956"
+        },
+        {
+          "signature": "initCodeHash(IPoolManager,address,FeeSplitVaultFactoryV1,int24)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "ea3062b6"
+        },
+        {
+          "signature": "isFactoryHook(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "03607b2c"
+        },
+        {
+          "signature": "predict(bytes32,IPoolManager,address,FeeSplitVaultFactoryV1,int24)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "fc16130c"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "ALL_HOOK_MASK",
+          "type": "uint160",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "configurationHashOf",
+          "type": "mapping(address => bytes32)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "REQUIRED_HOOK_FLAGS",
+          "type": "uint160",
+          "visibility": "public",
+          "mutability": "constant"
+        }
+      ]
+    },
+    {
+      "source": "src/LiquidityGrowthRangeSourceV1.sol",
+      "sourceSha256": "d5a0ebc207c603c2a53d5190f1ceff132a0466ddb0783626ff05e361eebba264",
+      "contract": "LiquidityGrowthRangeSourceV1",
+      "role": "support",
+      "kind": "contract",
+      "bases": [],
+      "functions": [
+        {
+          "signature": "arithmeticMeanTick(int56,int56,uint32)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "24cae52b"
+        },
+        {
+          "signature": "constructor(IPoolManager,PoolKey,ILiquidityGrowthOracleV1,uint32,int24,int24)",
+          "kind": "constructor",
+          "visibility": "public",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": null
+        },
+        {
+          "signature": "quoteRange()",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "240016b4"
+        },
+        {
+          "signature": "rangeForTwap(int24)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "873c5e4b"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "MAX_TWAP_WINDOW",
+          "type": "uint32",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "maxSpotTwapDeviationTicks",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "MIN_OBSERVATION_CARDINALITY_NEXT",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "MIN_TWAP_WINDOW",
+          "type": "uint32",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "oracleHook",
+          "type": "ILiquidityGrowthOracleV1",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "poolId",
+          "type": "bytes32",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "poolManager",
+          "type": "IPoolManager",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "rangeHalfWidthTicks",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "tickSpacing",
+          "type": "int24",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "twapWindow",
+          "type": "uint32",
+          "visibility": "public",
+          "mutability": "immutable"
+        }
+      ]
+    },
+    {
+      "source": "src/LiquidityGrowthRangeSourceFactoryV1.sol",
+      "sourceSha256": "4342175ae29965c13c33c2b1c3eb98e9c63cd6c8c716ea2d02be6617fccf11b8",
+      "contract": "LiquidityGrowthRangeSourceFactoryV1",
+      "role": "support",
+      "kind": "contract",
+      "bases": [],
+      "functions": [
+        {
+          "signature": "deploy(bytes32,IPoolManager,PoolKey,ILiquidityGrowthOracleV1,uint32,int24,int24)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "35438750"
+        },
+        {
+          "signature": "deployOrGet(bytes32,IPoolManager,PoolKey,ILiquidityGrowthOracleV1,uint32,int24,int24)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "411f25b5"
+        },
+        {
+          "signature": "initCode(IPoolManager,PoolKey,ILiquidityGrowthOracleV1,uint32,int24,int24)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "dc249b9f"
+        },
+        {
+          "signature": "initCodeHash(IPoolManager,PoolKey,ILiquidityGrowthOracleV1,uint32,int24,int24)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "883df76a"
+        },
+        {
+          "signature": "isFactorySource(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "98955c3d"
+        },
+        {
+          "signature": "predict(bytes32,IPoolManager,PoolKey,ILiquidityGrowthOracleV1,uint32,int24,int24)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "13251835"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "configurationHashOf",
+          "type": "mapping(address => bytes32)",
+          "visibility": "public",
+          "mutability": "mutable"
+        }
+      ]
+    },
+    {
+      "source": "src/FeeSplitVaultV1.sol",
+      "sourceSha256": "05855b8bf6508b919fa8a06f1fdb30ccc9f122be45762cab683723dedaafca0c",
+      "contract": "FeeSplitVaultV1",
+      "role": "support",
+      "kind": "contract",
+      "bases": [
+        "ReentrancyGuardTransient"
+      ],
+      "functions": [
+        {
+          "signature": "beneficiaryAt(uint256)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "cee1c11d"
+        },
+        {
+          "signature": "claim()",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "4e71d92d"
+        },
+        {
+          "signature": "claimable(address)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "402914f5"
+        },
+        {
+          "signature": "constructor(IClassicFeeHookV3,bytes32,address[],uint16[])",
+          "kind": "constructor",
+          "visibility": "public",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": null
+        },
+        {
+          "signature": "receive()",
+          "kind": "receive",
+          "visibility": "external",
+          "mutability": "payable",
+          "modifiers": [],
+          "selector": null
+        },
+        {
+          "signature": "setPayoutAddress(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [
+            "nonReentrant"
+          ],
+          "selector": "33ea51a8"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "_beneficiaries",
+          "type": "address[]",
+          "visibility": "private",
+          "mutability": "mutable"
+        },
+        {
+          "name": "BASIS_POINTS",
+          "type": "uint16",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "beneficiaryCount",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "claimedBy",
+          "type": "mapping(address => uint256)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "configurationHash",
+          "type": "bytes32",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "feeHook",
+          "type": "IClassicFeeHookV3",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "MAX_BENEFICIARIES",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "payoutAddressOf",
+          "type": "mapping(address => address)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "poolId",
+          "type": "bytes32",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "poolManager",
+          "type": "IPoolManager",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "shareBpsOf",
+          "type": "mapping(address => uint16)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalCreatorFeesClaimed",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "totalCreatorFeesReceived",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "mutable"
+        }
+      ]
+    },
+    {
+      "source": "src/FeeSplitVaultFactoryV1.sol",
+      "sourceSha256": "9ecc7528d2b4ce9f1025c2b6302549b418f0dd510a7c1b1abd77d6203e84b99d",
+      "contract": "FeeSplitVaultFactoryV1",
+      "role": "support",
+      "kind": "contract",
+      "bases": [],
+      "functions": [
+        {
+          "signature": "deploy(bytes32,IClassicFeeHookV3,bytes32,address[],uint16[])",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "19e3bddc"
+        },
+        {
+          "signature": "initCode(IClassicFeeHookV3,bytes32,address[],uint16[])",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "02afa9ce"
+        },
+        {
+          "signature": "initCodeHash(IClassicFeeHookV3,bytes32,address[],uint16[])",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "pure",
+          "modifiers": [],
+          "selector": "1f941132"
+        },
+        {
+          "signature": "isFactoryVault(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "58c62442"
+        },
+        {
+          "signature": "predict(bytes32,IClassicFeeHookV3,bytes32,address[],uint16[])",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "b25372cd"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "configurationHashOf",
+          "type": "mapping(address => bytes32)",
+          "visibility": "public",
+          "mutability": "mutable"
+        }
+      ]
+    },
+    {
+      "source": "src/LockedPositionFeeForwarderFactoryV1.sol",
+      "sourceSha256": "93ca0e9f583135c8c86655e68375795c6a5fb2c04da8be41f2f843298e1a8b48",
+      "contract": "LockedPositionFeeForwarderFactoryV1",
+      "role": "support",
+      "kind": "contract",
+      "bases": [],
+      "functions": [
+        {
+          "signature": "constructor(IPositionManager)",
+          "kind": "constructor",
+          "visibility": "public",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": null
+        },
+        {
+          "signature": "deploy(bytes32,address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "nonpayable",
+          "modifiers": [],
+          "selector": "8c1fb931"
+        },
+        {
+          "signature": "initCode(address)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "21b7cd61"
+        },
+        {
+          "signature": "initCodeHash(address)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "75fd9f28"
+        },
+        {
+          "signature": "isFactoryForwarder(address)",
+          "kind": "function",
+          "visibility": "external",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "e917e427"
+        },
+        {
+          "signature": "predict(bytes32,address)",
+          "kind": "function",
+          "visibility": "public",
+          "mutability": "view",
+          "modifiers": [],
+          "selector": "c4b9f746"
+        }
+      ],
+      "stateVariables": [
+        {
+          "name": "configurationHashOf",
+          "type": "mapping(address => bytes32)",
+          "visibility": "public",
+          "mutability": "mutable"
+        },
+        {
+          "name": "OPERATOR",
+          "type": "address",
+          "visibility": "public",
+          "mutability": "constant"
+        },
+        {
+          "name": "positionManager",
+          "type": "IPositionManager",
+          "visibility": "public",
+          "mutability": "immutable"
+        },
+        {
+          "name": "TIMELOCK_BLOCK",
+          "type": "uint256",
+          "visibility": "public",
+          "mutability": "constant"
+        }
+      ]
+    }
+  ]
+}

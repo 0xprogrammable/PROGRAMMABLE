@@ -10,6 +10,7 @@ import {
 } from "viem";
 
 import { feeSplitVaultAbi } from "../classic-v3";
+import { isConfiguredClassicV3ReleaseReady } from "../classic-v3-release";
 import {
   parsePreparedTransaction,
   type PreparedTransaction,
@@ -65,6 +66,23 @@ type FetchLike = (
   input: RequestInfo | URL,
   init?: RequestInit,
 ) => Promise<Pick<Response, "ok" | "status" | "json">>;
+
+function configuredEnvironment() {
+  return process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
+    ? ("rehearsal" as const)
+    : ("production" as const);
+}
+
+function assertClassicV3ReleaseAvailable(expectedChainId?: number) {
+  const environment = configuredEnvironment();
+  const chainId = environment === "rehearsal" ? 11_155_111 : 1;
+  if (
+    (expectedChainId !== undefined && expectedChainId !== chainId) ||
+    !isConfiguredClassicV3ReleaseReady(environment)
+  ) {
+    throw new Error("Classic rewards are not enabled by the verified release");
+  }
+}
 
 function asRecord(value: unknown, label: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -229,6 +247,7 @@ export async function fetchClassicV3ProfileRewards(
   signal?: AbortSignal,
   fetcher: FetchLike = fetch,
 ) {
+  assertClassicV3ReleaseAvailable();
   const response = await fetcher(
     `/api/profile/classic-v3?account=${encodeURIComponent(account)}`,
     {
@@ -329,6 +348,7 @@ export async function prepareClassicV3RewardAction(
   signal?: AbortSignal,
   fetcher: FetchLike = fetch,
 ) {
+  assertClassicV3ReleaseAvailable(input.chainId);
   const response = await fetcher("/api/profile/classic-v3", {
     method: "POST",
     cache: "no-store",
