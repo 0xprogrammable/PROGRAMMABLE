@@ -6,6 +6,7 @@ import {
   predictKeeperExecutorAddress,
   reviewedKeeperExecutorSourceCommitment,
   validateMinedTransactionEnvelope,
+  validatePreparedRevalidation,
 } from "../scripts/serve-deep-mainnet-lifecycle-console.mjs";
 
 function state(overrides: Record<string, unknown> = {}) {
@@ -252,5 +253,124 @@ describe("Deep lifecycle mined transaction envelope", () => {
         "1050",
       ),
     ).toThrow("no priority-fee ceiling");
+  });
+});
+
+describe("Deep lifecycle prepared transaction revalidation", () => {
+  const request = {
+    from: "0x2bb333d48dfaf1596d9036671d2e43168994249e",
+    to: "0x7aef9a4038fabb1d477bbfd3a106f81b93eb5aeb",
+    nonce: "0x2b",
+    value: "0x64",
+    data: "0x1234",
+    gas: "0x186a0",
+    maxFeePerGas: "0x3b9aca00",
+    maxPriorityFeePerGas: "0x5f5e100",
+  };
+  const maximumGasDebit = 100_000n * 1_000_000_000n;
+  const prepared = {
+    action: "launch",
+    preparedDigest: `0x${"11".repeat(32)}`,
+    request,
+    reviewedGasLimit: "100000",
+    reviewedMaxFeePerGasWei: "1000000000",
+    reviewedMaxPriorityFeePerGasWei: "100000000",
+    maximumGasDebitWei: maximumGasDebit.toString(),
+    maximumTotalDebitWei: (maximumGasDebit + 100n).toString(),
+    details: { launch: "exact" },
+    preState: {
+      blockHash: `0x${"22".repeat(32)}`,
+    },
+  };
+  const live = {
+    confirmedNonce: "0x2b",
+    pendingNonce: "0x2b",
+    balance: "0x71afd498d0000",
+    baseFeePerGas: "500000000",
+    blockHash: `0x${"33".repeat(32)}`,
+  };
+  const base = {
+    to: request.to,
+    value: 100n,
+    data: request.data,
+    details: prepared.details,
+  };
+  const simulations = [
+    { resultHash: `0x${"44".repeat(32)}`, estimatedGas: "0x15f90" },
+    { resultHash: `0x${"44".repeat(32)}`, estimatedGas: "0x15f90" },
+  ];
+
+  it("accepts a later block when the exact reviewed request is still safe", () => {
+    const before = structuredClone(prepared);
+    expect(
+      validatePreparedRevalidation({
+        action: "launch",
+        prepared,
+        state: live,
+        base,
+        simulations,
+      }),
+    ).toEqual({
+      action: "launch",
+      preparedDigest: prepared.preparedDigest,
+      liveEstimatedGas: "90000",
+      maximumTotalDebitWei: prepared.maximumTotalDebitWei,
+    });
+    expect(prepared).toEqual(before);
+  });
+
+  it("rejects nonce, action request, gas, balance, and fee invalidation", () => {
+    expect(() =>
+      validatePreparedRevalidation({
+        action: "launch",
+        prepared,
+        state: { ...live, pendingNonce: "0x2c" },
+        base,
+        simulations,
+      }),
+    ).toThrow("pending");
+
+    expect(() =>
+      validatePreparedRevalidation({
+        action: "launch",
+        prepared,
+        state: live,
+        base: { ...base, data: "0xabcd" },
+        simulations,
+      }),
+    ).toThrow("calldata");
+
+    expect(() =>
+      validatePreparedRevalidation({
+        action: "launch",
+        prepared,
+        state: live,
+        base,
+        simulations: simulations.map((simulation) => ({
+          ...simulation,
+          estimatedGas: "0x186a1",
+        })),
+      }),
+    ).toThrow("gas estimate");
+
+    expect(() =>
+      validatePreparedRevalidation({
+        action: "launch",
+        prepared,
+        state: { ...live, balance: "0x1" },
+        base,
+        simulations,
+      }),
+    ).toThrow("balance");
+
+    expect(() =>
+      validatePreparedRevalidation({
+        action: "launch",
+        prepared,
+        state: { ...live, baseFeePerGas: "1000000000" },
+        base,
+        simulations,
+      }),
+    ).toThrow("base fee");
   });
 });
