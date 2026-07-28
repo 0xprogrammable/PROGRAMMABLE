@@ -96,11 +96,19 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     uint256 public totalTokenRecycled;
 
     /// @notice Number of unique immutable tick ranges funded by this vault.
+    // Slither 0.11.5 cannot build IR for _compoundOneChunk and consequently misses this mutation.
+    // slither-disable-next-line constable-states
     uint256 public lockedPositionCount;
 
+    // Slither 0.11.5 cannot build IR for _compoundOneChunk and consequently misses these mutations.
+    // slither-disable-next-line constable-states
     int24 public lastLockedTickLower;
+    // slither-disable-next-line constable-states
     int24 public lastLockedTickUpper;
-    uint64 public lastCompoundBlock;
+    // Zero explicitly represents that no compound has happened yet. Slither otherwise treats the Solidity default as
+    // an accidental uninitialized state and, because its IR build fails, also misses the later mutation.
+    // slither-disable-next-line constable-states
+    uint64 public lastCompoundBlock = 0;
     bool public growthTargetReached;
 
     mapping(bytes32 rangeId => bool known) public isLockedRange;
@@ -266,6 +274,9 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     function process() external nonReentrant returns (uint256 received, CompoundResult memory compoundResult) {
         _requireReserveFunded();
         uint256 balanceBefore = address(this).balance;
+        // The public entry point is transiently guarded and the immutable factory-authenticated upstream vault can
+        // only return ETH through the restricted receive function.
+        // slither-disable-next-line reentrancy-benign,reentrancy-no-eth
         received = upstreamVault.claim();
         uint256 actualReceived = address(this).balance - balanceBefore;
         if (received == 0 || actualReceived == 0) revert EmptyGrowthReceipt();
@@ -273,6 +284,8 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
 
         (uint256 growthAmount, uint256 deferredAmount) = _routeCreatorFees(received);
         if (growthAmount != 0 && _compoundIsReady()) {
+            // The same transient guard remains active across the PoolManager unlock/callback boundary.
+            // slither-disable-next-line reentrancy-no-eth
             compoundResult = _compoundOneChunk(msg.sender);
         }
 
@@ -299,6 +312,8 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
 
     /// @notice Returns permanently locked core-position liquidity for one emitted range.
     function lockedLiquidityAt(int24 tickLower, int24 tickUpper) public view returns (uint128 liquidity) {
+        // Fee-growth snapshots are intentionally irrelevant to this liquidity-only view.
+        // slither-disable-next-line unused-return
         (liquidity,,) = poolManager.getPositionInfo(
             PoolId.wrap(poolId), address(this), tickLower, tickUpper, LOCKED_POSITION_SALT
         );
@@ -380,7 +395,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         if (count == 0 || count > MAX_BENEFICIARIES || sharesBps.length != count) {
             revert InvalidBeneficiaryCount(count);
         }
-        uint256 totalShares;
+        uint256 totalShares = 0;
         for (uint256 index; index < count; index++) {
             address beneficiary = beneficiaries[index];
             uint16 shareBps = sharesBps[index];
@@ -432,6 +447,9 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 nativeBudget = nativePending < maxCompoundNative ? nativePending : maxCompoundNative;
         pendingGrowthNative = nativePending - nativeBudget;
 
+        // Both public callers hold ReentrancyGuardTransient for the complete operation. unlockCallback additionally
+        // authenticates the PoolManager, and all accounting is reverted atomically if unlock does not settle.
+        // slither-disable-next-line reentrancy-benign,reentrancy-no-eth
         result = abi.decode(poolManager.unlock(abi.encode(nativeBudget)), (CompoundResult));
         pendingGrowthNative += result.nativeDust + result.nativeRecycled;
         totalNativeAddedToLiquidity += result.nativeAdded;
@@ -465,6 +483,8 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
 
     function _compoundInsideUnlock(uint256 nativeBudget) private returns (CompoundResult memory result) {
         result.nativeBudget = nativeBudget;
+        // Only the current square-root price is needed for the liquidity calculation.
+        // slither-disable-next-line unused-return
         (uint160 currentSqrtPriceX96,,,) = poolManager.getSlot0(PoolId.wrap(poolId));
         (result.tickLower, result.tickUpper) = _activeGrowthRange();
         result.liquidityAdded = LiquidityAmounts.getLiquidityForAmounts(
@@ -507,11 +527,16 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         _settleCurrency(_poolKey.currency1);
     }
 
+    // Slither 0.11.5 misses this call because it cannot build IR for _compoundInsideUnlock.
+    // slither-disable-next-line dead-code
     function _activeGrowthRange() private view returns (int24 tickLower, int24 tickUpper) {
+        // Only the live tick is needed by this in-development spot-derived range policy.
+        // slither-disable-next-line unused-return
         (, int24 currentTick,,) = poolManager.getSlot0(PoolId.wrap(poolId));
         int24 tickSpacing = _poolKey.tickSpacing;
-        int24 center = currentTick / tickSpacing * tickSpacing;
-        if (currentTick < 0 && currentTick % tickSpacing != 0) center -= tickSpacing;
+        int24 tickRemainder = currentTick % tickSpacing;
+        int24 center = currentTick - tickRemainder;
+        if (tickRemainder < 0) center -= tickSpacing;
         tickLower = center - activeRangeHalfWidthTicks;
         tickUpper = center + activeRangeHalfWidthTicks;
 
@@ -536,6 +561,8 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         if (reserve < tokenReserveTarget) revert ReserveUnderfunded(reserve, tokenReserveTarget);
     }
 
+    // Slither 0.11.5 misses this call because it cannot build IR for _compoundOneChunk.
+    // slither-disable-next-line dead-code
     function _releaseRewardsIfGrowthComplete() private {
         if (growthTargetReached || totalNativeAddedToLiquidity < growthTargetNative) return;
         growthTargetReached = true;
@@ -545,6 +572,8 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         emit GrowthTargetReached(growthTargetNative, totalNativeAddedToLiquidity, released);
     }
 
+    // Slither 0.11.5 misses this call because it cannot build IR for _compoundInsideUnlock.
+    // slither-disable-next-line dead-code
     function _settleCurrency(Currency currency) private {
         int256 delta = poolManager.currencyDelta(address(this), currency);
         if (delta < 0) {
@@ -560,7 +589,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
             return FullMath.mulDiv(totalReceived, shareBpsOf[beneficiary], BASIS_POINTS);
         }
 
-        uint256 allocatedBeforeRemainder;
+        uint256 allocatedBeforeRemainder = 0;
         for (uint256 index; index + 1 < count; index++) {
             address prior = _beneficiaries[index];
             allocatedBeforeRemainder += FullMath.mulDiv(totalReceived, shareBpsOf[prior], BASIS_POINTS);
@@ -568,6 +597,8 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         amount = totalReceived - allocatedBeforeRemainder;
     }
 
+    // Slither 0.11.5 misses this call because it cannot build IR for _settleCurrency.
+    // slither-disable-next-line dead-code
     function _absolute(int256 value) private pure returns (uint256) {
         if (value >= 0) return value.toUint256();
         return (-(value + 1)).toUint256() + 1;
