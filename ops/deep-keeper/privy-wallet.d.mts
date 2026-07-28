@@ -4,7 +4,7 @@ export function createPrivyKeeperWallet(input: {
   signerAddress: string;
   coordinatorAddress: string;
   chainId?: number;
-  now?: () => number;
 }): {
+  supportsStableIdempotency: true;
   writeContract(input: Record<string, unknown>): Promise<`0x${string}`>;
 };

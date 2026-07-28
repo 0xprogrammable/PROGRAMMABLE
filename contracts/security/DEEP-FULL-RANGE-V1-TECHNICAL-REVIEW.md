@@ -1,9 +1,9 @@
 # Deep Full-Range V1 technical review
 
-> **Review status: conditional design acceptance. Deployment status: NO-SHIP.**
+> **Review status: conditional design acceptance. Product activation: NO-SHIP pending complete lifecycle and keeper evidence.**
 
-This note reviews the fixed Full-Range V1 design as it exists in this repository. It is an internal manual review,
-not an external audit and not evidence of a Mainnet deployment.
+This note reviews the fixed Full-Range V1 design deployed on Ethereum Mainnet and recorded in the release manifest.
+It is an internal manual review, not an external audit or proof that the public product is ready for activation.
 
 The fixed full-range position is materially safer than a dynamically centered range under this model's constraints.
 It removes attacker influence over the destination range, remains active across every usable tick and preserves

@@ -291,17 +291,10 @@
     },
     "sourceVerification": {
       "type": "object",
-      "required": [
-        "status",
-        "compiler",
-        "contracts"
-      ],
+      "required": ["status", "compiler", "contracts"],
       "properties": {
         "status": {
-          "enum": [
-            "not-submitted",
-            "verified"
-          ]
+          "enum": ["not-submitted", "verified"]
         },
         "compiler": {
           "$ref": "#/definitions/compiler"
@@ -324,7 +317,6 @@
         "independentRpcCount",
         "canaryToken",
         "launchTransaction",
-        "keeperTransaction",
         "evidenceHash"
       ],
       "properties": {
@@ -353,6 +345,24 @@
         "keeperTransaction": {
           "$ref": "#/definitions/nullableHash"
         },
+        "oracleTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "feeProcessCompoundTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperExecutor": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "keeperExecutorRuntimeCodeHash": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperExecutorDeploymentTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperExecutorDeploymentBlock": {
+          "$ref": "#/definitions/nullableBlock"
+        },
         "evidenceHash": {
           "$ref": "#/definitions/nullableHash"
         }
@@ -380,6 +390,24 @@
               "keeperTransaction": {
                 "type": "null"
               },
+              "oracleTransaction": {
+                "type": "null"
+              },
+              "feeProcessCompoundTransaction": {
+                "type": "null"
+              },
+              "keeperExecutor": {
+                "type": "null"
+              },
+              "keeperExecutorRuntimeCodeHash": {
+                "type": "null"
+              },
+              "keeperExecutorDeploymentTransaction": {
+                "type": "null"
+              },
+              "keeperExecutorDeploymentBlock": {
+                "type": "null"
+              },
               "evidenceHash": {
                 "type": "null"
               }
@@ -395,6 +423,7 @@
             }
           },
           "then": {
+            "required": ["keeperTransaction"],
             "properties": {
               "releaseEligible": {
                 "const": false
@@ -423,6 +452,14 @@
             }
           },
           "then": {
+            "required": [
+              "oracleTransaction",
+              "feeProcessCompoundTransaction",
+              "keeperExecutor",
+              "keeperExecutorRuntimeCodeHash",
+              "keeperExecutorDeploymentTransaction",
+              "keeperExecutorDeploymentBlock"
+            ],
             "properties": {
               "releaseEligible": {
                 "const": true
@@ -433,8 +470,24 @@
               "launchTransaction": {
                 "$ref": "#/definitions/hash"
               },
-              "keeperTransaction": {
+              "oracleTransaction": {
                 "$ref": "#/definitions/hash"
+              },
+              "feeProcessCompoundTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "keeperExecutor": {
+                "$ref": "#/definitions/address"
+              },
+              "keeperExecutorRuntimeCodeHash": {
+                "$ref": "#/definitions/hash"
+              },
+              "keeperExecutorDeploymentTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "keeperExecutorDeploymentBlock": {
+                "type": "integer",
+                "minimum": 1
               },
               "evidenceHash": {
                 "$ref": "#/definitions/hash"
@@ -536,10 +589,7 @@
     },
     "dependency": {
       "type": "object",
-      "required": [
-        "address",
-        "runtimeCodeHash"
-      ],
+      "required": ["address", "runtimeCodeHash"],
       "properties": {
         "address": {
           "$ref": "#/definitions/address"
@@ -710,9 +760,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "positionForwarderFactory"
-          ],
+          "required": ["positionForwarderFactory"],
           "properties": {
             "positionForwarderFactory": {
               "$ref": "#/definitions/hash"

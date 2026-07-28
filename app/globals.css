@@ -1462,6 +1462,14 @@ html[data-theme="dark"] .theme-toggle-sun {
   transform: scale(0.985);
 }
 
+.launch-model-card:disabled {
+  cursor: progress;
+}
+
+.launch-model-card:disabled .launch-model-action {
+  color: var(--muted);
+}
+
 .launch-model-art {
   display: block;
   height: 146px;
@@ -3856,10 +3864,9 @@ html[data-theme="dark"] .theme-toggle-sun {
   align-items: center;
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(230px, 1.5fr) minmax(112px, 0.65fr) minmax(
-      130px,
-      0.72fr
-    ) minmax(150px, auto);
+  grid-template-columns:
+    minmax(230px, 1.5fr) minmax(112px, 0.65fr) minmax(130px, 0.72fr)
+    minmax(150px, auto);
   min-height: 52px;
 }
 
@@ -4476,12 +4483,12 @@ html[data-theme="dark"] .theme-toggle-sun {
   }
 
   .token-card:hover,
-  .launch-model-card:hover {
+  .launch-model-card:not(:disabled):hover {
     border-color: var(--border-strong);
     box-shadow: 0 14px 34px var(--hover-shadow);
   }
 
-  .launch-model-card:hover {
+  .launch-model-card:not(:disabled):hover {
     transform: translateY(-2px);
   }
 

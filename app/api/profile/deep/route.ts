@@ -14,10 +14,7 @@ import {
 import { mainnet, sepolia } from "viem/chains";
 
 import appDeployments from "@/contracts/config/app-deployments.v1.json";
-import {
-  DEEP_GROWTH_TARGET_WEI,
-  DEEP_TOKEN_RESERVE_WHOLE,
-} from "@/lib/launch";
+import { DEEP_GROWTH_TARGET_WEI, DEEP_TOKEN_RESERVE_WHOLE } from "@/lib/launch";
 import {
   deepAutomationReadAbi,
   deepGrowthVaultFactoryReadAbi,
@@ -33,7 +30,23 @@ import {
   type LaunchModelReleaseManifest,
 } from "@/lib/launch-model-gating";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
+import { getOperationalOnchainDeployment } from "@/lib/onchain/config";
+import { readDurableExploreModel } from "@/lib/onchain/durable-model";
 import { sanitizeImageUrl } from "@/lib/onchain/metadata";
+import {
+  authorizeDeepRewardVault,
+  deepCandidatesFromDurableTokens,
+  deepConfirmedTailScanStart,
+  deepFallbackScanStart,
+  paginateDeepCandidates,
+  requireDeepProviderAgreement,
+  resolveDeepProfileRpcUrls,
+  resolveDeepProfileSnapshot,
+  type DeepLaunchCandidate,
+  type DeepProfileSnapshot,
+  validateCanonicalDeepLaunchIdentities,
+  validateDeepCandidates,
+} from "@/lib/profile/deep-profile-server";
 import { encodeDeepRewardAction } from "@/lib/profile/deep-rewards";
 
 export const dynamic = "force-dynamic";
@@ -41,9 +54,7 @@ export const runtime = "nodejs";
 
 const MAX_REQUEST_BYTES = 2_048;
 const LOG_RANGE = 10_000n;
-const CONFIRMATIONS = 12n;
-const DEEP_TOKEN_RESERVE_RAW =
-  BigInt(DEEP_TOKEN_RESERVE_WHOLE) * 10n ** 18n;
+const DEEP_TOKEN_RESERVE_RAW = BigInt(DEEP_TOKEN_RESERVE_WHOLE) * 10n ** 18n;
 
 const environment =
   process.env.PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -53,10 +64,6 @@ const chain = environment === "rehearsal" ? sepolia : mainnet;
 const deployment = appDeployments[
   environment
 ] as unknown as LaunchModelReleaseManifest;
-const rpcUrl =
-  environment === "rehearsal"
-    ? process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org"
-    : process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org";
 
 type VerifiedDeepRelease = DeepLaunchModelRelease & {
   launcher: Address;
@@ -80,19 +87,21 @@ function json(body: unknown, status = 200) {
 }
 
 function release(): VerifiedDeepRelease | null {
-  return (
-    getVerifiedDeepRelease(deployment, chain.id) as
-      | VerifiedDeepRelease
-      | null
-  );
+  return getVerifiedDeepRelease(
+    deployment,
+    chain.id,
+  ) as VerifiedDeepRelease | null;
 }
 
-function createClient() {
-  return createPublicClient({
-    chain,
-    batch: { multicall: true },
-    transport: http(rpcUrl, { retryCount: 1, timeout: 12_000 }),
-  });
+function createClients() {
+  const rpcUrls = resolveDeepProfileRpcUrls(environment);
+  return rpcUrls.map((rpcUrl) =>
+    createPublicClient({
+      chain,
+      batch: { multicall: true },
+      transport: http(rpcUrl, { retryCount: 1, timeout: 12_000 }),
+    }),
+  );
 }
 
 async function assertCodeHash(
@@ -100,8 +109,9 @@ async function assertCodeHash(
   address: Address,
   expectedHash: Hex,
   label: string,
+  snapshotBlock: bigint,
 ) {
-  const code = await client.getCode({ address });
+  const code = await client.getCode({ address, blockNumber: snapshotBlock });
   if (!code || code === "0x" || keccak256(code) !== expectedHash) {
     throw new Error(`${label} does not match the Deep release`);
   }
@@ -114,11 +124,12 @@ function minimum(left: bigint, right: bigint) {
 async function readLaunchLogs(
   client: PublicClient,
   verifiedRelease: VerifiedDeepRelease,
+  fromBlock: bigint,
   toBlock: bigint,
 ) {
   const logs = [];
   for (
-    let rangeStart = BigInt(verifiedRelease.deploymentBlock);
+    let rangeStart = fromBlock;
     rangeStart <= toBlock;
     rangeStart += LOG_RANGE
   ) {
@@ -136,39 +147,260 @@ async function readLaunchLogs(
 }
 
 async function confirmedSnapshot(
-  client: PublicClient,
+  clients: readonly PublicClient[],
   verifiedRelease: VerifiedDeepRelease,
 ) {
-  await Promise.all([
-    assertCodeHash(
-      client,
-      verifiedRelease.launcher,
-      verifiedRelease.runtimeCodeHashes.launcher,
-      "Deep launcher",
+  const snapshot = await resolveDeepProfileSnapshot(clients, chain.id);
+  await Promise.all(
+    clients.flatMap((client) => [
+      assertCodeHash(
+        client,
+        verifiedRelease.launcher,
+        verifiedRelease.runtimeCodeHashes.launcher,
+        "Deep launcher",
+        snapshot.blockNumber,
+      ),
+      assertCodeHash(
+        client,
+        verifiedRelease.feeHook,
+        verifiedRelease.runtimeCodeHashes.feeHook,
+        "Deep hook",
+        snapshot.blockNumber,
+      ),
+      assertCodeHash(
+        client,
+        verifiedRelease.growthVaultFactory,
+        verifiedRelease.runtimeCodeHashes.growthVaultFactory,
+        "Deep growth vault factory",
+        snapshot.blockNumber,
+      ),
+      assertCodeHash(
+        client,
+        verifiedRelease.automation,
+        verifiedRelease.runtimeCodeHashes.automation,
+        "Deep automation",
+        snapshot.blockNumber,
+      ),
+    ]),
+  );
+  return snapshot;
+}
+
+type DeepLaunchLog = Awaited<ReturnType<typeof readLaunchLogs>>[number];
+
+let launchCatalogCache:
+  | {
+      release: Address;
+      expiresAt: number;
+      snapshotBlock: bigint;
+      candidates: DeepLaunchCandidate[];
+    }
+  | undefined;
+
+function launchLogFingerprint(log: DeepLaunchLog) {
+  return {
+    removed: log.removed,
+    blockNumber: log.blockNumber.toString(),
+    blockHash: log.blockHash,
+    transactionHash: log.transactionHash,
+    transactionIndex: log.transactionIndex,
+    logIndex: log.logIndex,
+    args: log.args,
+  };
+}
+
+async function assertCanonicalBlock(
+  clients: readonly PublicClient[],
+  blockNumber: bigint,
+  expectedHash?: Hex,
+) {
+  const blocks = await Promise.all(
+    clients.map((client) => client.getBlock({ blockNumber })),
+  );
+  const block = requireDeepProviderAgreement(
+    `Deep block ${blockNumber}`,
+    blocks.map((item) => ({
+      number: item.number.toString(),
+      hash: item.hash,
+    })),
+  );
+  if (
+    !block.hash ||
+    (expectedHash && block.hash.toLowerCase() !== expectedHash.toLowerCase())
+  ) {
+    throw new Error("The Deep launch catalog is not canonical");
+  }
+  return block.hash;
+}
+
+async function readCanonicalLaunchLog(
+  clients: readonly PublicClient[],
+  verifiedRelease: VerifiedDeepRelease,
+  candidate: DeepLaunchCandidate,
+  snapshot: DeepProfileSnapshot,
+) {
+  if (candidate.blockNumber > snapshot.blockNumber) {
+    throw new Error("The Deep launch is newer than the confirmed snapshot");
+  }
+  const blockHash = await assertCanonicalBlock(clients, candidate.blockNumber);
+  const providerLogs = await Promise.all(
+    clients.map((client) =>
+      client.getLogs({
+        address: verifiedRelease.launcher,
+        event: deepTokenLaunchedEvent,
+        fromBlock: candidate.blockNumber,
+        toBlock: candidate.blockNumber,
+        strict: true,
+      }),
     ),
-    assertCodeHash(
-      client,
-      verifiedRelease.feeHook,
-      verifiedRelease.runtimeCodeHashes.feeHook,
-      "Deep hook",
+  );
+  const matches = providerLogs.map((logs) =>
+    logs.filter(
+      (log) =>
+        !log.removed &&
+        log.blockHash?.toLowerCase() === blockHash.toLowerCase() &&
+        log.transactionHash.toLowerCase() ===
+          candidate.transactionHash.toLowerCase() &&
+        getAddress(log.args.token) === candidate.tokenAddress &&
+        getAddress(log.args.growthVault) === candidate.vaultAddress,
     ),
-    assertCodeHash(
-      client,
-      verifiedRelease.growthVaultFactory,
-      verifiedRelease.runtimeCodeHashes.growthVaultFactory,
-      "Deep growth vault factory",
-    ),
-    assertCodeHash(
-      client,
-      verifiedRelease.automation,
-      verifiedRelease.runtimeCodeHashes.automation,
-      "Deep automation",
-    ),
-  ]);
-  const latestBlock = await client.getBlockNumber();
-  return latestBlock > CONFIRMATIONS
-    ? latestBlock - CONFIRMATIONS
-    : latestBlock;
+  );
+  if (matches.some((logs) => logs.length !== 1)) {
+    throw new Error("The canonical Deep launch event is missing");
+  }
+  requireDeepProviderAgreement(
+    "canonical Deep launch provenance",
+    matches.map((logs) => launchLogFingerprint(logs[0])),
+  );
+  validateCanonicalDeepLaunchIdentities(
+    candidate,
+    snapshot.blockNumber,
+    matches.map((logs) => ({
+      tokenAddress: getAddress(logs[0].args.token),
+      vaultAddress: getAddress(logs[0].args.growthVault),
+      blockNumber: logs[0].blockNumber,
+      blockHash: logs[0].blockHash as Hex,
+      transactionHash: logs[0].transactionHash,
+      removed: logs[0].removed,
+    })),
+  );
+  return matches[0][0];
+}
+
+async function readLaunchCatalog(
+  clients: readonly PublicClient[],
+  verifiedRelease: VerifiedDeepRelease,
+  snapshot: DeepProfileSnapshot,
+) {
+  if (
+    launchCatalogCache &&
+    launchCatalogCache.release === verifiedRelease.launcher &&
+    launchCatalogCache.expiresAt > Date.now() &&
+    launchCatalogCache.snapshotBlock === snapshot.blockNumber
+  ) {
+    return launchCatalogCache.candidates;
+  }
+
+  const operationalDeployment = getOperationalOnchainDeployment(environment);
+  const durable =
+    operationalDeployment.status === "ready"
+      ? await readDurableExploreModel(operationalDeployment)
+      : null;
+  let candidates: DeepLaunchCandidate[];
+  if (durable?.status === "ready") {
+    const durableSnapshot = durable.envelope.payload.model.snapshot;
+    const durableBlock = BigInt(durableSnapshot.blockNumber);
+    if (durableBlock > snapshot.blockNumber) {
+      throw new Error("The durable Deep catalog is ahead of the snapshot");
+    }
+    await assertCanonicalBlock(
+      clients,
+      durableBlock,
+      durableSnapshot.blockHash,
+    );
+    const durableCandidates = deepCandidatesFromDurableTokens(
+      durable.envelope.payload.model.tokens,
+      durableBlock,
+    );
+    const tailStart = deepConfirmedTailScanStart(
+      durableBlock,
+      snapshot.blockNumber,
+    );
+    if (tailStart > snapshot.blockNumber) {
+      candidates = durableCandidates;
+    } else {
+      const providerTailLogs = await Promise.all(
+        clients.map((client) =>
+          readLaunchLogs(
+            client,
+            verifiedRelease,
+            tailStart,
+            snapshot.blockNumber,
+          ),
+        ),
+      );
+      requireDeepProviderAgreement(
+        "confirmed Deep launch tail",
+        providerTailLogs.map((logs) =>
+          logs.filter((log) => !log.removed).map(launchLogFingerprint),
+        ),
+      );
+      candidates = validateDeepCandidates([
+        ...durableCandidates,
+        ...providerTailLogs[0]
+          .filter((log) => !log.removed)
+          .map((log) => ({
+            tokenAddress: getAddress(log.args.token),
+            vaultAddress: getAddress(log.args.growthVault),
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+          })),
+      ]);
+    }
+  } else {
+    const fromBlock = deepFallbackScanStart(
+      BigInt(verifiedRelease.deploymentBlock),
+      snapshot.blockNumber,
+    );
+    if (fromBlock > snapshot.blockNumber) {
+      candidates = [];
+    } else {
+      const providerLogs = await Promise.all(
+        clients.map((client) =>
+          readLaunchLogs(
+            client,
+            verifiedRelease,
+            fromBlock,
+            snapshot.blockNumber,
+          ),
+        ),
+      );
+      requireDeepProviderAgreement(
+        "bounded Deep launch events",
+        providerLogs.map((logs) =>
+          logs.filter((log) => !log.removed).map(launchLogFingerprint),
+        ),
+      );
+      candidates = validateDeepCandidates(
+        providerLogs[0]
+          .filter((log) => !log.removed)
+          .map((log) => ({
+            tokenAddress: getAddress(log.args.token),
+            vaultAddress: getAddress(log.args.growthVault),
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+          })),
+      );
+    }
+  }
+
+  launchCatalogCache = {
+    release: verifiedRelease.launcher,
+    expiresAt: Date.now() + 30_000,
+    snapshotBlock: snapshot.blockNumber,
+    candidates,
+  };
+  return candidates;
 }
 
 async function readBeneficiaries(
@@ -486,11 +718,9 @@ async function hydrateReward(
     snapshotBlock,
   );
   if (
-    beneficiaries.reduce((sum, item) => sum + item.shareBps, 0) !==
-      10_000 ||
+    beneficiaries.reduce((sum, item) => sum + item.shareBps, 0) !== 10_000 ||
     beneficiaries.filter(
-      (item) =>
-        item.beneficiary.toLowerCase() === account.toLowerCase(),
+      (item) => item.beneficiary.toLowerCase() === account.toLowerCase(),
     ).length !== 1
   ) {
     throw new Error("Deep reward split is inconsistent");
@@ -554,43 +784,66 @@ async function readRewards(account: Address) {
       rewards: [],
     };
   }
-  const client = createClient();
-  const snapshotBlock = await confirmedSnapshot(client, verifiedRelease);
-  const logs =
-    BigInt(verifiedRelease.deploymentBlock) <= snapshotBlock
-      ? await readLaunchLogs(client, verifiedRelease, snapshotBlock)
-      : [];
-  const relevant = (
-    await Promise.all(
-      logs.map(async (log) => {
-        if (log.removed) return null;
-        const share = await client.readContract({
-          address: getAddress(log.args.growthVault),
-          abi: deepGrowthVaultReadAbi,
-          functionName: "shareBpsOf",
-          args: [account],
-          blockNumber: snapshotBlock,
-        });
-        return share > 0 ? log : null;
-      }),
-    )
-  ).filter((log) => log !== null);
+  const clients = createClients();
+  const snapshot = await confirmedSnapshot(clients, verifiedRelease);
+  const candidates = await readLaunchCatalog(
+    clients,
+    verifiedRelease,
+    snapshot,
+  );
+  const rewards = [];
+  for (const page of paginateDeepCandidates(candidates)) {
+    const relevant = (
+      await Promise.all(
+        page.map(async (candidate) => {
+          const shares = await Promise.all(
+            clients.map((client) =>
+              client.readContract({
+                address: candidate.vaultAddress,
+                abi: deepGrowthVaultReadAbi,
+                functionName: "shareBpsOf",
+                args: [account],
+                blockNumber: snapshot.blockNumber,
+              }),
+            ),
+          );
+          const share = requireDeepProviderAgreement(
+            "Deep beneficiary share",
+            shares,
+          );
+          return share > 0n ? candidate : null;
+        }),
+      )
+    ).filter((candidate) => candidate !== null);
+    for (const candidate of relevant) {
+      const log = await readCanonicalLaunchLog(
+        clients,
+        verifiedRelease,
+        candidate,
+        snapshot,
+      );
+      const providerRewards = await Promise.all(
+        clients.map((client) =>
+          hydrateReward(
+            client,
+            verifiedRelease,
+            log,
+            account,
+            snapshot.blockNumber,
+          ),
+        ),
+      );
+      rewards.push(
+        requireDeepProviderAgreement("Deep reward accounting", providerRewards),
+      );
+    }
+  }
 
   return {
     status: "ready" as const,
     account,
     chainId: chain.id,
-    rewards: await Promise.all(
-      relevant.map((log) =>
-        hydrateReward(
-          client,
-          verifiedRelease,
-          log,
-          account,
-          snapshotBlock,
-        ),
-      ),
-    ),
+    rewards: rewards.reverse(),
   };
 }
 
@@ -599,40 +852,54 @@ async function readLaunchByTransaction(account: Address, transactionHash: Hex) {
   if (!verifiedRelease) {
     return { status: "not-deployed" as const, launch: null };
   }
-  const client = createClient();
-  const snapshotBlock = await confirmedSnapshot(client, verifiedRelease);
-  const logs =
-    BigInt(verifiedRelease.deploymentBlock) <= snapshotBlock
-      ? await readLaunchLogs(client, verifiedRelease, snapshotBlock)
-      : [];
-  const launch = logs.find(
-    (log) =>
-      !log.removed &&
-      log.args.deployer.toLowerCase() === account.toLowerCase() &&
-      log.transactionHash.toLowerCase() === transactionHash.toLowerCase(),
+  const clients = createClients();
+  const snapshot = await confirmedSnapshot(clients, verifiedRelease);
+  const candidates = await readLaunchCatalog(
+    clients,
+    verifiedRelease,
+    snapshot,
   );
+  const candidate = candidates.find(
+    (item) =>
+      item.transactionHash.toLowerCase() === transactionHash.toLowerCase(),
+  );
+  if (!candidate) return { status: "ready" as const, launch: null };
+  const launch = await readCanonicalLaunchLog(
+    clients,
+    verifiedRelease,
+    candidate,
+    snapshot,
+  );
+  if (getAddress(launch.args.deployer) !== account) {
+    return { status: "ready" as const, launch: null };
+  }
   if (!launch) return { status: "ready" as const, launch: null };
   const tokenAddress = getAddress(launch.args.token);
-  const [name, symbol] = await Promise.all([
-    client.readContract({
-      address: tokenAddress,
-      abi: uerc20ReadAbi,
-      functionName: "name",
-      blockNumber: snapshotBlock,
-    }),
-    client.readContract({
-      address: tokenAddress,
-      abi: uerc20ReadAbi,
-      functionName: "symbol",
-      blockNumber: snapshotBlock,
-    }),
-  ]);
+  const tokenDetails = requireDeepProviderAgreement(
+    "Deep launch token details",
+    await Promise.all(
+      clients.map(async (client) => ({
+        name: await client.readContract({
+          address: tokenAddress,
+          abi: uerc20ReadAbi,
+          functionName: "name",
+          blockNumber: snapshot.blockNumber,
+        }),
+        symbol: await client.readContract({
+          address: tokenAddress,
+          abi: uerc20ReadAbi,
+          functionName: "symbol",
+          blockNumber: snapshot.blockNumber,
+        }),
+      })),
+    ),
+  );
   return {
     status: "ready" as const,
     launch: {
       tokenAddress,
-      name,
-      symbol,
+      name: tokenDetails.name,
+      symbol: tokenDetails.symbol,
       launchTransactionHash: launch.transactionHash,
     },
   };
@@ -704,20 +971,65 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const profile = await readRewards(account);
-    if (profile.status !== "ready") {
+    const verifiedRelease = release();
+    if (!verifiedRelease) {
       return json({ error: "Deep is not deployed yet" }, 409);
     }
-    const reward = profile.rewards.find(
-      (item) =>
-        item.vaultAddress.toLowerCase() === vaultAddress.toLowerCase(),
+    const clients = createClients();
+    const snapshot = await confirmedSnapshot(clients, verifiedRelease);
+    const candidates = await readLaunchCatalog(
+      clients,
+      verifiedRelease,
+      snapshot,
     );
-    if (!reward) {
+    const candidate = candidates.find(
+      (item) => item.vaultAddress.toLowerCase() === vaultAddress.toLowerCase(),
+    );
+    const shares = await Promise.all(
+      clients.map((client) =>
+        client.readContract({
+          address: vaultAddress,
+          abi: deepGrowthVaultReadAbi,
+          functionName: "shareBpsOf",
+          args: [account],
+          blockNumber: snapshot.blockNumber,
+        }),
+      ),
+    );
+    let authorizedCandidate: DeepLaunchCandidate;
+    try {
+      authorizedCandidate = authorizeDeepRewardVault(
+        account,
+        vaultAddress,
+        candidate,
+        shares,
+      );
+    } catch {
       return json(
         { error: "Only this vault's immutable beneficiary can continue" },
         403,
       );
     }
+    const launch = await readCanonicalLaunchLog(
+      clients,
+      verifiedRelease,
+      authorizedCandidate,
+      snapshot,
+    );
+    const reward = requireDeepProviderAgreement(
+      "Deep reward action state",
+      await Promise.all(
+        clients.map((client) =>
+          hydrateReward(
+            client,
+            verifiedRelease,
+            launch,
+            account,
+            snapshot.blockNumber,
+          ),
+        ),
+      ),
+    );
     if (input.action === "claim" && BigInt(reward.claimableWei) === 0n) {
       return json({ error: "There are no rewards to claim" }, 409);
     }
@@ -725,23 +1037,53 @@ export async function POST(request: NextRequest) {
       action: input.action,
       newPayoutAddress,
     });
-    const client = createClient();
-    await client.call({
-      account,
-      to: vaultAddress,
-      data,
-      value: 0n,
-    });
-    const [estimatedGas, gasPrice, balance] = await Promise.all([
-      client.estimateGas({
-        account,
-        to: vaultAddress,
-        data,
-        value: 0n,
-      }),
-      client.getGasPrice(),
-      client.getBalance({ address: account }),
-    ]);
+    const [simulations, estimatedGasValues, gasPrices, balances] =
+      await Promise.all([
+        Promise.all(
+          clients.map((client) =>
+            client.call({
+              account,
+              to: vaultAddress,
+              data,
+              value: 0n,
+              blockNumber: snapshot.blockNumber,
+            }),
+          ),
+        ),
+        Promise.all(
+          clients.map((client) =>
+            client.estimateGas({
+              account,
+              to: vaultAddress,
+              data,
+              value: 0n,
+              blockNumber: snapshot.blockNumber,
+            }),
+          ),
+        ),
+        Promise.all(clients.map((client) => client.getGasPrice())),
+        Promise.all(
+          clients.map((client) =>
+            client.getBalance({
+              address: account,
+              blockNumber: snapshot.blockNumber,
+            }),
+          ),
+        ),
+      ]);
+    requireDeepProviderAgreement(
+      "Deep reward simulation",
+      simulations.map((simulation) => simulation.data ?? "0x"),
+    );
+    const balance = requireDeepProviderAgreement(
+      "Deep beneficiary balance",
+      balances,
+    );
+    const estimatedGas =
+      estimatedGasValues[0] > estimatedGasValues[1]
+        ? estimatedGasValues[0]
+        : estimatedGasValues[1];
+    const gasPrice = gasPrices[0] > gasPrices[1] ? gasPrices[0] : gasPrices[1];
     const gasLimit = (estimatedGas * 120n + 99n) / 100n;
     if (balance < gasLimit * gasPrice) {
       return json(

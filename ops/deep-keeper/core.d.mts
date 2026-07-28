@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+export const DEEP_KEEPER_EXECUTOR_SOURCE_COMMITMENT: string;
+export const PRIVY_IDEMPOTENCY_REPLAY_WINDOW_MS: number;
 export function parseKeeperConfig(
   env?: Record<string, string | undefined>,
 ): any;

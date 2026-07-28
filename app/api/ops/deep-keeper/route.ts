@@ -1,6 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 
-import { BlobNotFoundError, get, put } from "@vercel/blob";
+import {
+  BlobNotFoundError,
+  BlobPreconditionFailedError,
+  get,
+  put,
+} from "@vercel/blob";
 import { PrivyClient } from "@privy-io/node";
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
@@ -16,12 +21,26 @@ import {
 } from "../../../../ops/deep-keeper/core.mjs";
 import { createPrivyKeeperWallet } from "../../../../ops/deep-keeper/privy-wallet.mjs";
 import { evaluateDeepKeeperReleaseGate } from "../../../../ops/deep-keeper/release-gate.mjs";
+import {
+  acquireDeepKeeperLease,
+  releaseDeepKeeperLease,
+} from "../../../../ops/deep-keeper/lease.mjs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export const runtime = "nodejs";
 
-const STATE_PATH = "ops/deep-keeper/state-v2.json";
+const STATE_PATH = "ops/deep-keeper/state-v4.json";
+
+type KeeperReleaseBinding = {
+  lifecycleEvidence: {
+    keeperExecutor?: string | null;
+    keeperExecutorRuntimeCodeHash?: string | null;
+  };
+  keeperPolicy: {
+    coordinatorSourceCommitment?: string | null;
+  };
+};
 
 function isAuthorized(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -30,36 +49,39 @@ function isAuthorized(request: NextRequest) {
   const provided = Buffer.from(authorization.slice(7));
   const expected = Buffer.from(cronSecret);
   return (
-    provided.length === expected.length &&
-    timingSafeEqual(provided, expected)
+    provided.length === expected.length && timingSafeEqual(provided, expected)
   );
 }
 
 function keeperEnvironment() {
   const rpcA = process.env.ETHEREUM_RPC_URL?.trim();
   const rpcB = process.env.ETHEREUM_RPC_URL_B?.trim();
+  const keeperRelease = deepRelease as unknown as KeeperReleaseBinding;
   return {
     ...process.env,
-    DEEP_KEEPER_ENABLED: "true",
-    DEEP_KEEPER_SEND_TRANSACTIONS: "true",
     DEEP_KEEPER_CHAIN_ID: "1",
-    DEEP_KEEPER_COORDINATOR_ADDRESS: deepRelease.addresses.automation,
-    DEEP_KEEPER_COORDINATOR_RUNTIME_HASH:
+    DEEP_KEEPER_AUTOMATION_ADDRESS: deepRelease.addresses.automation,
+    DEEP_KEEPER_AUTOMATION_RUNTIME_HASH:
       deepRelease.runtimeCodeHashes.automation,
+    DEEP_KEEPER_COORDINATOR_ADDRESS:
+      keeperRelease.lifecycleEvidence.keeperExecutor ?? "",
+    DEEP_KEEPER_COORDINATOR_RUNTIME_HASH:
+      keeperRelease.lifecycleEvidence.keeperExecutorRuntimeCodeHash ?? "",
+    DEEP_KEEPER_COORDINATOR_SOURCE_COMMITMENT:
+      keeperRelease.keeperPolicy.coordinatorSourceCommitment ?? "",
     DEEP_KEEPER_RELEASE_MANIFEST:
       "contracts/deployments/mainnet-deep-full-range-v1.json",
     DEEP_KEEPER_RPC_URLS: rpcA && rpcB ? `${rpcA},${rpcB}` : "",
     DEEP_KEEPER_INTERVAL_MS: "300000",
     DEEP_KEEPER_MAX_BATCH_SIZE: "4",
     DEEP_KEEPER_SCAN_LIMIT: "4",
-    DEEP_KEEPER_MAX_GAS: "3000000",
+    DEEP_KEEPER_MAX_GAS: "4500000",
   };
 }
 
 function blobToken() {
   const token =
-    process.env.OPS_BLOB_READ_WRITE_TOKEN ??
-    process.env.BLOB_READ_WRITE_TOKEN;
+    process.env.OPS_BLOB_READ_WRITE_TOKEN ?? process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) throw new Error("Keeper state storage is not configured");
   return token;
 }
@@ -100,6 +122,60 @@ async function writeState(state: unknown) {
   });
 }
 
+function leaseStore() {
+  const token = blobToken();
+  return {
+    async read(path: string) {
+      const result = await get(path, {
+        access: "private",
+        token,
+        useCache: false,
+      });
+      if (!result) return null;
+      if (result.statusCode !== 200 || !result.stream) {
+        throw new Error("Keeper lease could not be read");
+      }
+      return {
+        value: await new Response(result.stream).text(),
+        etag: result.blob.etag,
+      };
+    },
+    async putIfAbsent(path: string, value: string) {
+      try {
+        const result = await put(path, value, {
+          access: "private",
+          contentType: "application/json",
+          addRandomSuffix: false,
+          allowOverwrite: false,
+          cacheControlMaxAge: 0,
+          token,
+        });
+        return { etag: result.etag };
+      } catch (error) {
+        if (error instanceof BlobPreconditionFailedError) return null;
+        throw error;
+      }
+    },
+    async putIfMatch(path: string, value: string, etag: string) {
+      try {
+        const result = await put(path, value, {
+          access: "private",
+          contentType: "application/json",
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          ifMatch: etag,
+          cacheControlMaxAge: 0,
+          token,
+        });
+        return { etag: result.etag };
+      } catch (error) {
+        if (error instanceof BlobPreconditionFailedError) return null;
+        throw error;
+      }
+    },
+  };
+}
+
 export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
     return NextResponse.json(
@@ -108,12 +184,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  let lease: Awaited<ReturnType<typeof acquireDeepKeeperLease>> = null;
+  let leaseStorage: ReturnType<typeof leaseStore> | null = null;
   try {
     const config = parseKeeperConfig(keeperEnvironment());
-    const releaseGate = evaluateDeepKeeperReleaseGate(
-      deepRelease,
-      config,
-    );
+    const releaseGate = evaluateDeepKeeperReleaseGate(deepRelease, config);
     if (!releaseGate.ready) {
       return NextResponse.json(
         {
@@ -121,6 +196,17 @@ export async function GET(request: NextRequest) {
           reasons: releaseGate.reasons,
         },
         { status: 503, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    leaseStorage = leaseStore();
+    lease = await acquireDeepKeeperLease({
+      store: leaseStorage,
+      nowMs: Date.now(),
+    });
+    if (!lease) {
+      return NextResponse.json(
+        { error: "Deep keeper cycle already in progress" },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
       );
     }
     const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
@@ -181,5 +267,22 @@ export async function GET(request: NextRequest) {
       { error: "Deep keeper cycle failed" },
       { status: 503, headers: { "Cache-Control": "no-store" } },
     );
+  } finally {
+    if (lease && leaseStorage) {
+      try {
+        const released = await releaseDeepKeeperLease({
+          store: leaseStorage,
+          lease,
+          nowMs: Date.now(),
+        });
+        if (!released) {
+          console.error("Deep keeper lease release lost ownership");
+        }
+      } catch {
+        // A failed release leaves the lease to expire, which is safer than an
+        // unguarded delete that could remove a successor's ownership record.
+        console.error("Deep keeper lease release failed");
+      }
+    }
   }
 }

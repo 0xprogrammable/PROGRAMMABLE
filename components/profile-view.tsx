@@ -1413,11 +1413,7 @@ function ProfilePortfolioRow({
             <strong>{token.name}</strong>
             <span className={styles.tokenSymbol}>
               ${token.symbol} ·{" "}
-              {token.launchModel === "adaptive"
-                ? "Adaptive"
-                : token.launchModel === "deep"
-                  ? "Deep"
-                  : "Classic"}
+              {token.launchModel === "deep" ? "Deep" : "Classic"}
             </span>
             <span className={styles.tokenAddress}>
               {shortenAddress(token.address)}

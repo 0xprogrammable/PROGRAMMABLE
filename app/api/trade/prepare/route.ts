@@ -16,9 +16,10 @@ import {
 } from "../../../../lib/trade/classic";
 import {
   ClassicTradeUnavailableError,
+  getPinnedOfficialTradeStack,
   parseClassicTradeRequest,
   prepareClassicTrade,
-  resolveClassicTradeDeployment,
+  resolveTradeDeployment,
   type ClassicTradeRuntimeClient,
 } from "../../../../lib/trade/server";
 import { safeServerErrorSummary } from "../../../../lib/server/safe-error";
@@ -148,13 +149,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const tradeRequest = parseClassicTradeRequest(input);
-    const deployment = resolveClassicTradeDeployment(
-      tradeRequest.chainId,
-    );
+    getPinnedOfficialTradeStack(tradeRequest.chainId);
     const registryDeployment = getOnchainDeployment(
       tradeRequest.chainId === 1 ? "production" : "rehearsal",
     );
     const registry = await readExploreModel(registryDeployment);
+    const deployment = resolveTradeDeployment(
+      tradeRequest.chainId,
+      registry,
+      tradeRequest.token,
+    );
     const endpoints = tradeRpcEndpoints(tradeRequest.chainId);
     const preparations = await Promise.allSettled(
       endpoints.map((endpoint) =>

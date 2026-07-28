@@ -38,6 +38,7 @@
     "contracts:deep-full-range:fork-preflight": "node contracts/scripts/verify-deep-full-range-fork-preflight.mjs",
     "contracts:deep-full-range:metamask": "node scripts/serve-deep-full-range-metamask-deployer.mjs",
     "contracts:deep-full-range:canary": "node scripts/serve-deep-mainnet-canary.mjs",
+    "contracts:deep-full-range:lifecycle": "node scripts/serve-deep-mainnet-lifecycle-console.mjs",
     "contracts:v2:verify-deployment": "node contracts/scripts/verify-v2-deployment.mjs",
     "contracts:token-list:schema": "node scripts/validate-token-list-schema.mjs",
     "contracts:mainnet:canary:check": "MEME_LAUNCH_NETWORK=mainnet MEME_LAUNCH_FIXTURE_JSON=contracts/release/mainnet-test-classic-v2.json node scripts/serve-sepolia-meme-launch.mjs --check",

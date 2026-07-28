@@ -5,13 +5,8 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  createPublicClient,
-  createWalletClient,
-  http,
-} from "viem";
+import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
-import { PrivyClient } from "@privy-io/node";
 
 import {
   createInitialState,
@@ -22,7 +17,6 @@ import {
   runKeeperCycle,
   validateState,
 } from "./core.mjs";
-import { createPrivyKeeperWallet } from "./privy-wallet.mjs";
 import { evaluateDeepKeeperReleaseGate } from "./release-gate.mjs";
 
 function serialize(value) {
@@ -106,44 +100,22 @@ function createClients(config) {
       }),
     }),
   );
-  let wallet = null;
-  if (config.enabled && config.privyWalletId) {
-    const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-    const appSecret = process.env.PRIVY_APP_SECRET;
-    if (!appId || !appSecret) {
-      throw new DeepKeeperError(
-        "INVALID_CONFIG",
-        "Privy credentials are required for the configured signing backend",
-      );
-    }
-    wallet = createPrivyKeeperWallet({
-      client: new PrivyClient({ appId, appSecret }),
-      walletId: config.privyWalletId,
-      signerAddress: config.signerAddress,
-      coordinatorAddress: config.coordinatorAddress,
-      chainId: config.chainId,
-    });
-  } else if (config.enabled) {
-    wallet = createWalletClient({
-      account: config.signerAddress,
-      chain: mainnet,
-      transport: http(config.signerRpcUrl, {
-        retryCount: 0,
-        timeout: 30_000,
-      }),
-    });
-  }
-  return { readers, wallet };
+  return { readers, wallet: null };
 }
 
 function healthDocument(runtime, metrics, config) {
   const now = Date.now();
   const staleAfterMs = config.intervalMs * 3;
+  const manualRecoveryRequired =
+    metrics.unknownReceiptPending > 0 ||
+    metrics.staleSubmissionIntent > 0 ||
+    metrics.submissionIntentPolicyBlocked > 0;
   const fresh =
     runtime.lastCycleFinishedAtMs !== 0 &&
     now - runtime.lastCycleFinishedAtMs <= staleAfterMs;
   return {
-    status: fresh && !runtime.inCycle ? "ok" : "degraded",
+    status:
+      fresh && !runtime.inCycle && !manualRecoveryRequired ? "ok" : "degraded",
     enabled: config.enabled,
     chainId: config.chainId,
     coordinator: config.coordinatorAddress,
@@ -159,7 +131,9 @@ function healthDocument(runtime, metrics, config) {
     lastError: runtime.lastError,
     consecutiveFailures: runtime.consecutiveFailures,
     checkpoint: runtime.state?.checkpoint ?? null,
+    submissionIntent: Boolean(runtime.state?.submissionIntent),
     pendingTransaction: runtime.state?.pendingTransaction?.hash ?? null,
+    manualRecoveryRequired,
     releaseReady: runtime.releaseGate.ready,
     releaseVersion: runtime.releaseGate.releaseVersion,
     releaseStartBlock: runtime.releaseGate.startBlock,
@@ -226,6 +200,12 @@ function startHealthServer(runtime, metrics, config) {
 
 async function main() {
   const config = parseKeeperConfig(process.env);
+  if (config.enabled) {
+    throw new DeepKeeperError(
+      "INVALID_CONFIG",
+      "The standalone keeper is simulation-only; live execution is restricted to the leased /api/ops/deep-keeper route",
+    );
+  }
   const releaseGate = await loadReleaseGate(config);
   if (process.argv.includes("--check-config")) {
     process.stdout.write(
@@ -296,8 +276,10 @@ async function main() {
         metrics,
         readers,
         wallet,
-        persistPendingState: (pendingState) =>
-          persistState(config, pendingState),
+        persistPendingState: async (pendingState) => {
+          await persistState(config, pendingState);
+          runtime.state = pendingState;
+        },
         nowMs: runtime.lastCycleStartedAtMs,
       });
       runtime.state = result.state;

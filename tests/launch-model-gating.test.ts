@@ -17,6 +17,12 @@ import {
 const account = "0x1111111111111111111111111111111111111111";
 const launcher = "0x2222222222222222222222222222222222222222";
 const runtimeCodeHash = `0x${"11".repeat(32)}`;
+const deepSourceCommitment =
+  "0x82f6e2745dfbf54f40eae80df645bc75a7952e0505dd0621437dd233a619acfd";
+const keeperExecutorSourceCommitment =
+  "0x9072fa857d484b944205a969fda41727fa76d0f9e670916451b308615bb82175";
+const keeperExecutorRuntimeCodeHash =
+  "0xd4a6e8f200bd63ab924f5c4cfb1bbcc07c26c7b7b7abaa1f879418d2435f48e6";
 
 function eligibleDeepManifest(): LaunchModelReleaseManifest {
   return {
@@ -26,11 +32,10 @@ function eligibleDeepManifest(): LaunchModelReleaseManifest {
       deep: {
         schemaVersion: 1,
         model: "deep",
-        internalContractRelease:
-          "liquidity-growth-full-range-v1",
+        internalContractRelease: "liquidity-growth-full-range-v1",
         releaseVersion: "deep-full-range-v1",
         releaseCommit: "1".repeat(40),
-        sourceCommitment: runtimeCodeHash,
+        sourceCommitment: deepSourceCommitment,
         releaseManifest:
           "contracts/deployments/mainnet-deep-full-range-v1.json",
         status: "deployment-source-and-lifecycle-verified",
@@ -51,6 +56,18 @@ function eligibleDeepManifest(): LaunchModelReleaseManifest {
         deploymentBlock: 1,
         deploymentTransaction: runtimeCodeHash,
         lifecycleEvidenceHash: runtimeCodeHash,
+        lifecycleStatus: "verified-current-release",
+        lifecycleIndependentRpcCount: 2,
+        lifecycleLaunchTransaction: `0x${"22".repeat(32)}`,
+        lifecycleOracleTransaction: `0x${"33".repeat(32)}`,
+        lifecycleFeeProcessCompoundTransaction: `0x${"44".repeat(32)}`,
+        keeperExecutor: launcher,
+        keeperExecutorRuntimeCodeHash,
+        keeperExecutorSourceCommitment,
+        keeperExecutorDeploymentTransaction: `0x${"55".repeat(32)}`,
+        keeperExecutorDeploymentBlock: 2,
+        keeperExecutorSourceVerificationStatus:
+          "etherscan-and-sourcify-exact-match",
         runtimeCodeHashes: {
           launcher: runtimeCodeHash,
           hookFactory: runtimeCodeHash,
@@ -69,14 +86,17 @@ function eligibleDeepManifest(): LaunchModelReleaseManifest {
 }
 
 describe("unreleased launch model gating", () => {
-  it("does not expose Deep or LiquidityGrowth in the launch picker", () => {
+  it("shows Deep as the second model without exposing Adaptive", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
       }),
     );
 
-    expect(html).not.toContain("Deep");
+    expect(html).toContain("<strong>Classic</strong>");
+    expect(html).toContain("<strong>Deep</strong>");
+    expect(html).toContain("Final verification");
+    expect(html).not.toContain("Adaptive");
     expect(html).not.toContain("LiquidityGrowth");
     expect(html).not.toContain("Liquidity Growth");
   });
@@ -84,7 +104,7 @@ describe("unreleased launch model gating", () => {
   it("does not resolve reserved or unknown identifiers as implemented models", () => {
     expect(resolveImplementedLaunchModel("classic")).toBe("classic");
     expect(resolveImplementedLaunchModel("classic-v3")).toBe("classic-v3");
-    expect(resolveImplementedLaunchModel("adaptive")).toBe("adaptive");
+    expect(resolveImplementedLaunchModel("adaptive")).toBeNull();
     expect(resolveImplementedLaunchModel("deep")).toBe("deep");
     expect(resolveImplementedLaunchModel("liquidity-growth")).toBeNull();
     expect(resolveImplementedLaunchModel("unknown")).toBeNull();
@@ -94,23 +114,13 @@ describe("unreleased launch model gating", () => {
 
   it("requires an exact verified release record before Deep can be eligible", () => {
     expect(
-      isFutureLaunchModelManifestEligible(
-        "deep",
-        appDeployments.production,
-        1,
-      ),
+      isFutureLaunchModelManifestEligible("deep", appDeployments.production, 1),
     ).toBe(false);
 
     const manifest = eligibleDeepManifest();
+    expect(isFutureLaunchModelManifestEligible("deep", manifest, 1)).toBe(true);
     expect(
-      isFutureLaunchModelManifestEligible("deep", manifest, 1),
-    ).toBe(true);
-    expect(
-      isFutureLaunchModelManifestEligible(
-        "liquidity-growth",
-        manifest,
-        1,
-      ),
+      isFutureLaunchModelManifestEligible("liquidity-growth", manifest, 1),
     ).toBe(true);
     expect(
       isFutureLaunchModelManifestEligible(
@@ -132,20 +142,37 @@ describe("unreleased launch model gating", () => {
     ).toBe(false);
   });
 
+  it.each([
+    ["sourceCommitment", runtimeCodeHash],
+    ["lifecycleStatus", "launch-and-oracle-verified"],
+    ["lifecycleIndependentRpcCount", 1],
+    ["lifecycleOracleTransaction", null],
+    ["lifecycleFeeProcessCompoundTransaction", `0x${"33".repeat(32)}`],
+    ["keeperExecutorDeploymentTransaction", null],
+    ["keeperExecutorDeploymentBlock", 0],
+    ["keeperExecutorSourceVerificationStatus", "pending"],
+  ])("rejects an otherwise eligible mirror with invalid %s", (field, value) => {
+    const manifest = eligibleDeepManifest();
+    if (!manifest.launchModelReleases?.deep) {
+      throw new Error("Deep fixture missing");
+    }
+    Object.assign(manifest.launchModelReleases.deep, { [field]: value });
+    expect(isFutureLaunchModelManifestEligible("deep", manifest, 1)).toBe(
+      false,
+    );
+  });
+
   it.each(["deep", "liquidity-growth"])(
     "rejects %s before preflight can prepare a transaction",
     async (launchModel) => {
-      const request = new NextRequest(
-        "http://localhost/api/launch/preflight",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            account,
-            walletChainId: "0x1",
-            draft: { launchModel },
-          }),
-        },
-      );
+      const request = new NextRequest("http://localhost/api/launch/preflight", {
+        method: "POST",
+        body: JSON.stringify({
+          account,
+          walletChainId: "0x1",
+          draft: { launchModel },
+        }),
+      });
 
       const result = await POST(request);
       expect(result.status).toBe(400);
@@ -156,23 +183,20 @@ describe("unreleased launch model gating", () => {
   );
 
   it("blocks Classic upgrades before any transaction can be prepared", async () => {
-    const request = new NextRequest(
-      "http://localhost/api/launch/preflight",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          account,
-          walletChainId: "0x1",
-          draft: {
-            ...createClassicV3Draft(),
-            tokenName: "Verified Classic",
-            tokenSymbol: "VC",
-            tokenDescription: "Release-gate test",
-            launchSalt: `0x${"22".repeat(32)}`,
-          },
-        }),
-      },
-    );
+    const request = new NextRequest("http://localhost/api/launch/preflight", {
+      method: "POST",
+      body: JSON.stringify({
+        account,
+        walletChainId: "0x1",
+        draft: {
+          ...createClassicV3Draft(),
+          tokenName: "Verified Classic",
+          tokenSymbol: "VC",
+          tokenDescription: "Release-gate test",
+          launchSalt: `0x${"22".repeat(32)}`,
+        },
+      }),
+    });
 
     const result = await POST(request);
     expect(result.status).toBe(200);

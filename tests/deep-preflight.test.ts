@@ -1,10 +1,6 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
-import {
-  decodeFunctionData,
-  getAddress,
-  type Address,
-} from "viem";
+import { decodeFunctionData, getAddress, type Address } from "viem";
 
 const mocks = vi.hoisted(() => {
   const addresses = {
@@ -15,30 +11,32 @@ const mocks = vi.hoisted(() => {
     launcher: "0x1000000000000000000000000000000000000001",
     hookFactory: "0x1000000000000000000000000000000000000002",
     feeHook: "0x10000000000000000000000000000000000030cc",
-    feeSplitVaultFactory:
-      "0x1000000000000000000000000000000000000004",
+    feeSplitVaultFactory: "0x1000000000000000000000000000000000000004",
     rangeSourceFactory: "0x1000000000000000000000000000000000000005",
     growthVaultFactory: "0x1000000000000000000000000000000000000006",
-    growthVaultImplementation:
-      "0x1000000000000000000000000000000000000007",
+    growthVaultImplementation: "0x1000000000000000000000000000000000000007",
     automation: "0x1000000000000000000000000000000000000008",
     positionPlanner: "0x1000000000000000000000000000000000000009",
-    positionForwarderFactory:
-      "0x100000000000000000000000000000000000000a",
+    positionForwarderFactory: "0x100000000000000000000000000000000000000a",
     predictedToken: "0x2000000000000000000000000000000000000001",
   };
   const runtimeCode = "0x6000";
   const runtimeHash =
     "0x07ad118d6cc8642c86c03827f276d8b791a65e5c99a3845faf186be720a1455d";
+  const deepSourceCommitment =
+    "0x82f6e2745dfbf54f40eae80df645bc75a7952e0505dd0621437dd233a619acfd";
+  const keeperExecutorSourceCommitment =
+    "0x9072fa857d484b944205a969fda41727fa76d0f9e670916451b308615bb82175";
+  const keeperExecutorRuntimeCodeHash =
+    "0xd4a6e8f200bd63ab924f5c4cfb1bbcc07c26c7b7b7abaa1f879418d2435f48e6";
   const release = {
     schemaVersion: 1,
     model: "deep",
     internalContractRelease: "liquidity-growth-full-range-v1",
     releaseVersion: "deep-full-range-v1",
     releaseCommit: "a".repeat(40),
-    sourceCommitment: runtimeHash,
-    releaseManifest:
-      "contracts/deployments/mainnet-deep-full-range-v1.json",
+    sourceCommitment: deepSourceCommitment,
+    releaseManifest: "contracts/deployments/mainnet-deep-full-range-v1.json",
     status: "deployment-source-and-lifecycle-verified",
     releaseEligible: true,
     sourceVerificationStatus: "verified",
@@ -57,6 +55,18 @@ const mocks = vi.hoisted(() => {
     deploymentBlock: 123,
     deploymentTransaction: runtimeHash,
     lifecycleEvidenceHash: runtimeHash,
+    lifecycleStatus: "verified-current-release",
+    lifecycleIndependentRpcCount: 2,
+    lifecycleLaunchTransaction: `0x${"22".repeat(32)}`,
+    lifecycleOracleTransaction: `0x${"33".repeat(32)}`,
+    lifecycleFeeProcessCompoundTransaction: `0x${"44".repeat(32)}`,
+    keeperExecutor: "0x100000000000000000000000000000000000000b",
+    keeperExecutorRuntimeCodeHash,
+    keeperExecutorSourceCommitment,
+    keeperExecutorDeploymentTransaction: `0x${"55".repeat(32)}`,
+    keeperExecutorDeploymentBlock: 124,
+    keeperExecutorSourceVerificationStatus:
+      "etherscan-and-sourcify-exact-match",
     runtimeCodeHashes: {
       launcher: runtimeHash,
       hookFactory: runtimeHash,
@@ -89,13 +99,11 @@ const mocks = vi.hoisted(() => {
         functionName: string;
       }) => {
         const contract = address.toLowerCase();
-        const isLauncher =
-          contract === addresses.launcher.toLowerCase();
+        const isLauncher = contract === addresses.launcher.toLowerCase();
         const isHook = contract === addresses.feeHook.toLowerCase();
         const isGrowthFactory =
           contract === addresses.growthVaultFactory.toLowerCase();
-        const isAutomation =
-          contract === addresses.automation.toLowerCase();
+        const isAutomation = contract === addresses.automation.toLowerCase();
 
         if (functionName === "predictTokenAddress") {
           return [addresses.predictedToken, `0x${"12".repeat(32)}`];

@@ -22,6 +22,12 @@ import {
   stringToHex,
 } from "viem";
 import { mainnet } from "viem/chains";
+import {
+  DEEP_ORACLE_GROWTH_EVENT_COUNT,
+  validateDeepOracleGrowthSequence,
+} from "./deep-oracle-growth-sequence.mjs";
+import { validateDeepLifecycleConfirmationDepth } from "./deep-lifecycle-confirmations.mjs";
+import { deepReleaseSourceTargets } from "./deep-release-source-targets.mjs";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 const contractsRoot = path.join(root, "contracts");
@@ -57,15 +63,35 @@ const offline = process.argv.includes("--offline");
 if (requireLive && offline) {
   throw new Error("--require-live cannot be combined with --offline");
 }
+const explicitRpcUrls = [
+  process.env.ETHEREUM_RPC_URL,
+  process.env.ETHEREUM_RPC_URL_SECONDARY || process.env.ETHEREUM_RPC_URL_B,
+]
+  .filter(Boolean)
+  .map((url) => url.trim());
+if (
+  requireLive &&
+  (explicitRpcUrls.length !== 2 || new Set(explicitRpcUrls).size !== 2)
+) {
+  throw new Error(
+    "--require-live requires two distinct explicit RPCs in ETHEREUM_RPC_URL and ETHEREUM_RPC_URL_SECONDARY (or ETHEREUM_RPC_URL_B)",
+  );
+}
+if (requireLive && !process.env.ETHERSCAN_API_KEY) {
+  throw new Error("--require-live requires ETHERSCAN_API_KEY");
+}
 
 const expectedTreasury = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
-const expectedForwarderFactory =
-  "0x291a9ff1059d225d02B1659430804486404dB507";
+const expectedForwarderFactory = "0x291a9ff1059d225d02B1659430804486404dB507";
 const expectedReleaseManifest =
   "contracts/deployments/mainnet-deep-full-range-v1.json";
-const expectedLifecycleEvidenceHash =
+const expectedLegacyLifecycleEvidenceHash =
   "0x98d978a75cf42c698089765d558bfda5ee6a8bbc4f9377a51a8a1777b08b83eb";
-const expectedLifecycleEvidence = {
+const expectedKeeperExecutorSourceCommitment =
+  "0x9072fa857d484b944205a969fda41727fa76d0f9e670916451b308615bb82175";
+const expectedKeeperExecutorRuntimeCodeHash =
+  "0xd4a6e8f200bd63ab924f5c4cfb1bbcc07c26c7b7b7abaa1f879418d2435f48e6";
+const expectedLegacyLifecycleEvidence = {
   schemaVersion: 1,
   releaseVersion: "deep-full-range-v1",
   releaseCommit: "75d00e2369cd8bc67421859270c0fbf3edc478ff",
@@ -76,8 +102,7 @@ const expectedLifecycleEvidence = {
   feeHook: "0x48dc3009ec1d3298bba31f718a9a29d02fc9b0cc",
   token: "0x3a778578b3a21dd842c29be3d1816b1af37d54f3",
   growthVault: "0x3e311de17c37071504f534bb46d4b5fb59f37549",
-  poolId:
-    "0x9f865e32ce5486b5a72eb5edc290b497a4c40605a303db1e28bc33a37638ab9c",
+  poolId: "0x9f865e32ce5486b5a72eb5edc290b497a4c40605a303db1e28bc33a37638ab9c",
   launchHash:
     "0x2f095043ea96c40ca356b89e5c3e18792fc8820ed8d9c6116b4a44ca85514896",
   launchTransaction:
@@ -109,8 +134,7 @@ const exactGitCommits = {
   "v4-core": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc",
   "v4-periphery": "ad04c9f24a170accf5ea1b2836bbafd514537ca6",
   "openzeppelin-contracts": "21c8312b022f495ebe3621d5daeed20552b43ff9",
-  "openzeppelin-uniswap-hooks":
-    "26dc8e53f812a1ca390d470342adb6cd8c3286ad",
+  "openzeppelin-uniswap-hooks": "26dc8e53f812a1ca390d470342adb6cd8c3286ad",
   "liquidity-launcher": "e4660afe4f820f4a39181c7ea1f9bce6c423499f",
   "uerc20-factory": "6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68",
 };
@@ -226,7 +250,9 @@ const lifecycleLauncherAbi = parseAbi([
 const lifecycleAutomationAbi = parseAbi([
   "function isRegisteredVault(address vault) view returns (bool)",
   "function stageOracle(address vaultAddress) returns (bool grew,uint16 previousCardinalityNext,uint16 newCardinalityNext)",
+  "function stageOracleBatch(address[] candidates) returns (uint256 attempted,uint256 succeeded)",
   "event OracleGrowthStaged(address indexed vault,bytes32 indexed poolId,address indexed executor,uint16 previousCardinalityNext,uint16 newCardinalityNext)",
+  "event WorkPerformed(address indexed vault,uint8 indexed action,address indexed executor)",
 ]);
 const lifecycleHookAbi = parseAbi([
   "function stateById(bytes32 poolId) view returns (uint16 index,uint16 cardinality,uint16 cardinalityNext)",
@@ -234,6 +260,22 @@ const lifecycleHookAbi = parseAbi([
 ]);
 const lifecycleVaultAbi = parseAbi([
   "function poolId() view returns (bytes32)",
+  "function pendingGrowthNative() view returns (uint256)",
+  "function totalCreatorFeesReceived() view returns (uint256)",
+  "function totalNativeAllocatedToGrowth() view returns (uint256)",
+  "function totalNativeAddedToLiquidity() view returns (uint256)",
+  "function totalTokenAddedToLiquidity() view returns (uint256)",
+  "function totalLiquidityAdded() view returns (uint256)",
+  "function lockedLiquidity() view returns (uint128)",
+  "function lastCompoundTimestamp() view returns (uint64)",
+  "function growthTargetReached() view returns (bool)",
+  "event CreatorFeesProcessed(uint256 received,uint256 allocatedToGrowth,uint256 deferredToRewards,uint256 totalAllocatedToGrowth,uint256 growthTarget)",
+  "event LiquidityCompounded(address indexed caller,uint256 nativeBudget,uint256 tokenBudget,uint256 nativeAdded,uint256 tokenAdded,uint256 nativeRecycled,uint256 tokenRecycled,uint128 liquidityAdded,uint256 pendingGrowthNative)",
+]);
+const lifecycleKeeperExecutorAbi = parseAbi([
+  "function automation() view returns (address)",
+  "function execute((address vault,uint8 expectedAction)[] candidates) returns (bytes32 batchHash,uint256 attempted,uint256 succeeded)",
+  "event CandidateResult(bytes32 indexed batchHash,uint256 indexed candidateIndex,address indexed vault,address executor,uint8 expectedAction,uint8 actualAction,uint8 outcome,bytes4 errorSelector,uint256 gasUsed)",
 ]);
 const forwarderFactoryAbi = parseAbi([
   "function positionManager() view returns (address)",
@@ -271,19 +313,422 @@ async function readJson(file) {
   return JSON.parse(await fs.readFile(file, "utf8"));
 }
 
-async function readCanonicalLifecycleEvidence() {
-  const raw = await fs.readFile(lifecycleEvidencePath);
-  let evidence;
+function validUintString(value) {
+  return typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value);
+}
+
+function validAddress(value) {
+  return typeof value === "string" && isAddress(value);
+}
+
+function assertObject(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    fail(`${label} must be an object`);
+  }
+}
+
+function assertExactKeys(value, label, required, optional = []) {
+  assertObject(value, label);
+  for (const key of required) {
+    if (!(key in value)) fail(`${label} is missing ${key}`);
+  }
+  const allowed = new Set([...required, ...optional]);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) fail(`${label} contains unexpected ${key}`);
+  }
+}
+
+function validateLifecycleTransaction(
+  transaction,
+  label,
+  { withFees = false, withOracle = false } = {},
+) {
+  const required = [
+    "transactionHash",
+    "blockNumber",
+    "blockHash",
+    "from",
+    "nonce",
+    "valueWei",
+    "calldataHash",
+  ];
+  if (withFees || withOracle) required.push("events");
+  assertExactKeys(transaction, label, required);
+  if (
+    !validHash(transaction.transactionHash) ||
+    !validBlock(transaction.blockNumber) ||
+    !validHash(transaction.blockHash) ||
+    !validAddress(transaction.from) ||
+    !Number.isSafeInteger(transaction.nonce) ||
+    transaction.nonce < 0 ||
+    !validUintString(transaction.valueWei) ||
+    !validHash(transaction.calldataHash)
+  ) {
+    fail(`${label} is malformed`);
+  }
+}
+
+function validateExecutorDeployment(deployment, evidence) {
+  assertExactKeys(deployment, "Deep keeper-executor deployment", [
+    "transactionHash",
+    "blockNumber",
+    "blockHash",
+    "from",
+    "nonce",
+    "valueWei",
+    "calldataHash",
+    "runtimeCodeHash",
+    "sourceCommitment",
+  ]);
+  if (
+    !validHash(deployment.transactionHash) ||
+    !validBlock(deployment.blockNumber) ||
+    !validHash(deployment.blockHash) ||
+    !sameAddress(deployment.from, evidence.account) ||
+    !Number.isSafeInteger(deployment.nonce) ||
+    deployment.nonce < 0 ||
+    deployment.valueWei !== "0" ||
+    !validHash(deployment.calldataHash) ||
+    deployment.runtimeCodeHash !== evidence.keeperExecutorRuntimeCodeHash ||
+    deployment.runtimeCodeHash !== expectedKeeperExecutorRuntimeCodeHash ||
+    deployment.sourceCommitment !== expectedKeeperExecutorSourceCommitment
+  ) {
+    fail("Deep keeper-executor deployment evidence is malformed");
+  }
+}
+
+function validateRecordedOracleGrowthEvents(evidence) {
+  const oracleEvents = evidence.oracleTransaction.events;
+  assertExactKeys(oracleEvents, "Deep final oracle events", [
+    "oracleGrowthStaged",
+  ]);
+  if (!Array.isArray(oracleEvents.oracleGrowthStaged)) {
+    fail("Deep final oracle growth events must be an array");
+  }
+  for (const [index, event] of oracleEvents.oracleGrowthStaged.entries()) {
+    assertExactKeys(event, `Deep final oracle growth event ${index}`, [
+      "vault",
+      "poolId",
+      "executor",
+      "previousCardinalityNext",
+      "newCardinalityNext",
+    ]);
+  }
   try {
-    evidence = JSON.parse(raw.toString("utf8"));
-  } catch {
-    fail("Deep lifecycle evidence is not valid JSON");
+    validateDeepOracleGrowthSequence({
+      automationEvents: oracleEvents.oracleGrowthStaged,
+      vault: evidence.growthVault,
+      poolId: evidence.poolId,
+      executor: evidence.automation,
+    });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
-  const evidenceHash = keccak256(raw);
-  if (evidenceHash !== expectedLifecycleEvidenceHash) {
-    fail("Deep lifecycle evidence bytes differ from the reviewed artifact");
+}
+
+const lifecycleStateFields = [
+  "oracleCardinalityNext",
+  "pendingGrowthNativeWei",
+  "totalCreatorFeesReceivedWei",
+  "totalNativeAllocatedToGrowthWei",
+  "totalNativeAddedToLiquidityWei",
+  "totalTokenAddedToLiquidity",
+  "totalLiquidityAdded",
+  "lockedLiquidity",
+  "lastCompoundTimestamp",
+  "growthTargetReached",
+];
+
+function validateLifecycleState(state, label) {
+  assertExactKeys(state, label, lifecycleStateFields);
+  if (
+    !Number.isSafeInteger(state.oracleCardinalityNext) ||
+    state.oracleCardinalityNext < 2 ||
+    state.oracleCardinalityNext > 65_535 ||
+    !validUintString(state.pendingGrowthNativeWei) ||
+    !validUintString(state.totalCreatorFeesReceivedWei) ||
+    !validUintString(state.totalNativeAllocatedToGrowthWei) ||
+    !validUintString(state.totalNativeAddedToLiquidityWei) ||
+    !validUintString(state.totalTokenAddedToLiquidity) ||
+    !validUintString(state.totalLiquidityAdded) ||
+    !validUintString(state.lockedLiquidity) ||
+    !Number.isSafeInteger(state.lastCompoundTimestamp) ||
+    state.lastCompoundTimestamp < 0 ||
+    typeof state.growthTargetReached !== "boolean"
+  ) {
+    fail(`${label} is malformed`);
   }
-  const expected = expectedLifecycleEvidence;
+}
+
+function validateFinalLifecycleEvidence(evidence) {
+  assertExactKeys(evidence, "Deep final lifecycle evidence", [
+    "schemaVersion",
+    "releaseVersion",
+    "releaseCommit",
+    "chainId",
+    "account",
+    "launcher",
+    "automation",
+    "feeHook",
+    "token",
+    "growthVault",
+    "keeperExecutor",
+    "keeperExecutorRuntimeCodeHash",
+    "executorDeployment",
+    "poolId",
+    "launchHash",
+    "launch",
+    "oracleTransaction",
+    "feeProcessCompoundTransaction",
+    "preState",
+    "postState",
+  ]);
+  if (
+    evidence.schemaVersion !== 2 ||
+    evidence.releaseVersion !== "deep-full-range-v1" ||
+    !validCommit(evidence.releaseCommit) ||
+    evidence.chainId !== 1 ||
+    !validAddress(evidence.account) ||
+    !validAddress(evidence.launcher) ||
+    !validAddress(evidence.automation) ||
+    !validAddress(evidence.feeHook) ||
+    !validAddress(evidence.token) ||
+    !validAddress(evidence.growthVault) ||
+    !validAddress(evidence.keeperExecutor) ||
+    !validHash(evidence.keeperExecutorRuntimeCodeHash) ||
+    !validHash(evidence.poolId) ||
+    !validHash(evidence.launchHash)
+  ) {
+    fail("Deep final lifecycle evidence identity is malformed");
+  }
+  validateExecutorDeployment(evidence.executorDeployment, evidence);
+  assertExactKeys(evidence.launch, "Deep final launch transaction", [
+    "transactionHash",
+    "blockNumber",
+    "blockHash",
+    "nonce",
+    "valueWei",
+    "calldataHash",
+    "buySwapFeeBps",
+    "sellSwapFeeBps",
+  ]);
+  if (
+    !validHash(evidence.launch.transactionHash) ||
+    !validBlock(evidence.launch.blockNumber) ||
+    !validHash(evidence.launch.blockHash) ||
+    !Number.isSafeInteger(evidence.launch.nonce) ||
+    evidence.launch.nonce < 0 ||
+    !validUintString(evidence.launch.valueWei) ||
+    !validHash(evidence.launch.calldataHash) ||
+    !Number.isSafeInteger(evidence.launch.buySwapFeeBps) ||
+    evidence.launch.buySwapFeeBps < 100 ||
+    evidence.launch.buySwapFeeBps > 1_000 ||
+    evidence.launch.buySwapFeeBps % 100 !== 0 ||
+    !Number.isSafeInteger(evidence.launch.sellSwapFeeBps) ||
+    evidence.launch.sellSwapFeeBps < 100 ||
+    evidence.launch.sellSwapFeeBps > 1_000 ||
+    evidence.launch.sellSwapFeeBps % 100 !== 0
+  ) {
+    fail("Deep final launch transaction evidence is malformed");
+  }
+  validateLifecycleTransaction(
+    evidence.oracleTransaction,
+    "Deep final oracle transaction",
+    { withOracle: true },
+  );
+  validateLifecycleTransaction(
+    evidence.feeProcessCompoundTransaction,
+    "Deep final fee-process/compound transaction",
+    { withFees: true },
+  );
+  if (
+    evidence.oracleTransaction.transactionHash ===
+      evidence.feeProcessCompoundTransaction.transactionHash ||
+    evidence.launch.transactionHash ===
+      evidence.oracleTransaction.transactionHash ||
+    evidence.launch.transactionHash ===
+      evidence.feeProcessCompoundTransaction.transactionHash ||
+    evidence.executorDeployment.transactionHash ===
+      evidence.launch.transactionHash ||
+    evidence.executorDeployment.transactionHash ===
+      evidence.oracleTransaction.transactionHash ||
+    evidence.executorDeployment.transactionHash ===
+      evidence.feeProcessCompoundTransaction.transactionHash
+  ) {
+    fail("Deep final lifecycle transactions must be distinct");
+  }
+  validateRecordedOracleGrowthEvents(evidence);
+
+  const events = evidence.feeProcessCompoundTransaction.events;
+  assertExactKeys(events, "Deep final fee-process/compound events", [
+    "keeperExecutorResult",
+    "processFees",
+    "creatorFeesProcessed",
+    "liquidityCompounded",
+  ]);
+  assertExactKeys(
+    events.keeperExecutorResult,
+    "Deep final keeper-executor result",
+    [
+      "batchHash",
+      "candidateIndex",
+      "vault",
+      "executor",
+      "expectedAction",
+      "actualAction",
+      "outcome",
+      "errorSelector",
+      "gasUsed",
+    ],
+  );
+  const executorResult = events.keeperExecutorResult;
+  const expectedEvidenceBatchHash = keccak256(
+    abiEncode("uint256,address,address,(address,uint8)[]", [
+      1n,
+      evidence.keeperExecutor.toLowerCase(),
+      evidence.feeProcessCompoundTransaction.from.toLowerCase(),
+      [[evidence.growthVault.toLowerCase(), 1]],
+    ]),
+  );
+  if (
+    executorResult.batchHash !== expectedEvidenceBatchHash ||
+    executorResult.candidateIndex !== 0 ||
+    !sameAddress(executorResult.vault, evidence.growthVault) ||
+    !sameAddress(
+      executorResult.executor,
+      evidence.feeProcessCompoundTransaction.from,
+    ) ||
+    executorResult.expectedAction !== 1 ||
+    executorResult.actualAction !== 1 ||
+    executorResult.outcome !== 4 ||
+    executorResult.errorSelector !== "0x00000000" ||
+    !validUintString(executorResult.gasUsed) ||
+    BigInt(executorResult.gasUsed) === 0n
+  ) {
+    fail("Deep final keeper-executor result is malformed");
+  }
+  assertExactKeys(events.processFees, "Deep final ProcessFees event", [
+    "vault",
+    "action",
+    "executor",
+  ]);
+  if (
+    !sameAddress(events.processFees.vault, evidence.growthVault) ||
+    events.processFees.action !== 1 ||
+    !sameAddress(events.processFees.executor, evidence.keeperExecutor)
+  ) {
+    fail("Deep final ProcessFees event is malformed");
+  }
+  assertExactKeys(
+    events.creatorFeesProcessed,
+    "Deep final CreatorFeesProcessed event",
+    [
+      "receivedWei",
+      "allocatedToGrowthWei",
+      "deferredToRewardsWei",
+      "totalAllocatedToGrowthWei",
+      "growthTargetWei",
+    ],
+  );
+  assertExactKeys(
+    events.liquidityCompounded,
+    "Deep final LiquidityCompounded event",
+    [
+      "caller",
+      "nativeBudgetWei",
+      "tokenBudget",
+      "nativeAddedWei",
+      "tokenAdded",
+      "nativeRecycledWei",
+      "tokenRecycled",
+      "liquidityAdded",
+      "pendingGrowthNativeWei",
+    ],
+  );
+  const creator = events.creatorFeesProcessed;
+  const compounded = events.liquidityCompounded;
+  for (const [field, value] of Object.entries(creator)) {
+    if (!validUintString(value)) {
+      fail(`Deep final CreatorFeesProcessed ${field} is malformed`);
+    }
+  }
+  for (const [field, value] of Object.entries(compounded)) {
+    if (field === "caller") {
+      if (!sameAddress(value, evidence.automation)) {
+        fail("Deep final LiquidityCompounded caller is malformed");
+      }
+    } else if (!validUintString(value)) {
+      fail(`Deep final LiquidityCompounded ${field} is malformed`);
+    }
+  }
+  if (
+    BigInt(creator.receivedWei) === 0n ||
+    BigInt(creator.receivedWei) !==
+      BigInt(creator.allocatedToGrowthWei) +
+        BigInt(creator.deferredToRewardsWei) ||
+    BigInt(creator.allocatedToGrowthWei) === 0n ||
+    BigInt(compounded.nativeAddedWei) === 0n ||
+    BigInt(compounded.tokenAdded) === 0n ||
+    BigInt(compounded.liquidityAdded) === 0n
+  ) {
+    fail(
+      "Deep final lifecycle events do not prove fee processing and liquidity growth",
+    );
+  }
+  validateLifecycleState(evidence.preState, "Deep final pre-state");
+  validateLifecycleState(evidence.postState, "Deep final post-state");
+  const pre = evidence.preState;
+  const post = evidence.postState;
+  if (
+    BigInt(post.totalCreatorFeesReceivedWei) -
+      BigInt(pre.totalCreatorFeesReceivedWei) !==
+      BigInt(creator.receivedWei) ||
+    BigInt(post.totalNativeAllocatedToGrowthWei) -
+      BigInt(pre.totalNativeAllocatedToGrowthWei) !==
+      BigInt(creator.allocatedToGrowthWei) ||
+    post.totalNativeAllocatedToGrowthWei !==
+      creator.totalAllocatedToGrowthWei ||
+    BigInt(post.totalNativeAddedToLiquidityWei) -
+      BigInt(pre.totalNativeAddedToLiquidityWei) !==
+      BigInt(compounded.nativeAddedWei) ||
+    BigInt(post.totalTokenAddedToLiquidity) -
+      BigInt(pre.totalTokenAddedToLiquidity) !==
+      BigInt(compounded.tokenAdded) ||
+    BigInt(post.totalLiquidityAdded) - BigInt(pre.totalLiquidityAdded) !==
+      BigInt(compounded.liquidityAdded) ||
+    BigInt(post.lockedLiquidity) - BigInt(pre.lockedLiquidity) !==
+      BigInt(compounded.liquidityAdded) ||
+    post.pendingGrowthNativeWei !== compounded.pendingGrowthNativeWei ||
+    post.lastCompoundTimestamp <= pre.lastCompoundTimestamp
+  ) {
+    fail("Deep final lifecycle evidence state transition is inconsistent");
+  }
+}
+
+function validateLegacyLifecycleEvidence(evidence, evidenceHash) {
+  if (evidenceHash !== expectedLegacyLifecycleEvidenceHash) {
+    fail(
+      "Deep pending lifecycle evidence bytes differ from the reviewed artifact",
+    );
+  }
+  const expected = expectedLegacyLifecycleEvidence;
+  assertExactKeys(evidence, "Deep pending lifecycle evidence", [
+    "schemaVersion",
+    "releaseVersion",
+    "releaseCommit",
+    "chainId",
+    "account",
+    "launcher",
+    "automation",
+    "feeHook",
+    "token",
+    "growthVault",
+    "poolId",
+    "launchHash",
+    "launch",
+    "keeper",
+    "postState",
+  ]);
   if (
     evidence.schemaVersion !== expected.schemaVersion ||
     evidence.releaseVersion !== expected.releaseVersion ||
@@ -299,10 +744,11 @@ async function readCanonicalLifecycleEvidence() {
     evidence.launchHash !== expected.launchHash ||
     evidence.launch?.transactionHash !== expected.launchTransaction ||
     evidence.keeper?.transactionHash !== expected.keeperTransaction ||
-    evidence.postState?.oracleCardinalityNext !==
-      expected.oracleCardinalityNext
+    evidence.postState?.oracleCardinalityNext !== expected.oracleCardinalityNext
   ) {
-    fail("Deep lifecycle evidence differs from the reviewed Mainnet canary");
+    fail(
+      "Deep pending lifecycle evidence differs from the reviewed Mainnet canary",
+    );
   }
   if (
     evidence.launch.blockNumber !== 25_632_994 ||
@@ -322,7 +768,31 @@ async function readCanonicalLifecycleEvidence() {
     evidence.keeper.previousCardinalityNext !== 2 ||
     evidence.keeper.newCardinalityNext !== 18
   ) {
-    fail("Deep lifecycle transaction evidence is malformed");
+    fail("Deep pending lifecycle transaction evidence is malformed");
+  }
+}
+
+async function readCanonicalLifecycleEvidence(release) {
+  const raw = await fs.readFile(lifecycleEvidencePath);
+  let evidence;
+  try {
+    evidence = JSON.parse(raw.toString("utf8"));
+  } catch {
+    fail("Deep lifecycle evidence is not valid JSON");
+  }
+  const evidenceHash = keccak256(raw);
+  if (release.lifecycleEvidence?.status === "launch-and-oracle-verified") {
+    validateLegacyLifecycleEvidence(evidence, evidenceHash);
+  } else if (release.lifecycleEvidence?.status === "verified-current-release") {
+    validateFinalLifecycleEvidence(evidence);
+  } else if (release.lifecycleEvidence?.status !== "not-run") {
+    fail("Deep lifecycle evidence status is unsupported");
+  }
+  if (
+    release.lifecycleEvidence?.status !== "not-run" &&
+    release.lifecycleEvidence?.evidenceHash !== evidenceHash
+  ) {
+    fail("Deep lifecycle evidence hash does not match the release manifest");
   }
   return { evidence, evidenceHash };
 }
@@ -349,20 +819,73 @@ function lifecycleEvent(receipt, address, abi, eventName) {
   return matches[0];
 }
 
-async function verifyLifecycleThroughClient(client, evidence) {
+function finalOracleGrowthEvents(receipt, evidence) {
+  const sequence = [];
+  for (const log of receipt.logs) {
+    const isAutomation = sameAddress(log.address, evidence.automation);
+    const isHook = sameAddress(log.address, evidence.feeHook);
+    if (!isAutomation && !isHook) continue;
+    try {
+      const decoded = decodeEventLog({
+        abi: isAutomation ? lifecycleAutomationAbi : lifecycleHookAbi,
+        data: log.data,
+        topics: log.topics,
+        strict: true,
+      });
+      if (isAutomation && decoded.eventName === "OracleGrowthStaged") {
+        sequence.push({ kind: "automation", args: decoded.args });
+      } else if (
+        isHook &&
+        decoded.eventName === "IncreaseObservationCardinalityNext"
+      ) {
+        sequence.push({ kind: "hook", args: decoded.args });
+      }
+    } catch {
+      // Other events from the same contracts are irrelevant to oracle growth.
+    }
+  }
+  if (sequence.length !== DEEP_ORACLE_GROWTH_EVENT_COUNT * 2) {
+    fail(
+      "Deep final oracle receipt does not contain the complete 12-stage event sequence",
+    );
+  }
+  const automationEvents = [];
+  const hookEvents = [];
+  for (let index = 0; index < DEEP_ORACLE_GROWTH_EVENT_COUNT; index += 1) {
+    const automationEvent = sequence[index * 2];
+    const hookEvent = sequence[index * 2 + 1];
+    if (automationEvent?.kind !== "automation" || hookEvent?.kind !== "hook") {
+      fail(
+        "Deep final oracle receipt does not alternate Automation and hook events",
+      );
+    }
+    automationEvents.push(automationEvent.args);
+    hookEvents.push(hookEvent.args);
+  }
+  try {
+    validateDeepOracleGrowthSequence({
+      automationEvents,
+      hookEvents,
+      vault: evidence.growthVault,
+      poolId: evidence.poolId,
+      executor: evidence.automation,
+    });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+  return { automationEvents, hookEvents };
+}
+
+async function verifyLegacyLifecycleThroughClient(client, evidence) {
   const launchBlock = BigInt(evidence.launch.blockNumber);
   const keeperBlock = BigInt(evidence.keeper.blockNumber);
-  const [
-    launchTransaction,
-    launchReceipt,
-    keeperTransaction,
-    keeperReceipt,
-  ] = await Promise.all([
-    client.getTransaction({ hash: evidence.launch.transactionHash }),
-    client.getTransactionReceipt({ hash: evidence.launch.transactionHash }),
-    client.getTransaction({ hash: evidence.keeper.transactionHash }),
-    client.getTransactionReceipt({ hash: evidence.keeper.transactionHash }),
-  ]);
+  const [launchTransaction, launchReceipt, keeperTransaction, keeperReceipt] =
+    await Promise.all([
+      client.getTransaction({ hash: evidence.launch.transactionHash }),
+      client.getTransactionReceipt({ hash: evidence.launch.transactionHash }),
+      client.getTransaction({ hash: evidence.keeper.transactionHash }),
+      client.getTransactionReceipt({ hash: evidence.keeper.transactionHash }),
+    ]);
 
   if (
     launchTransaction.blockNumber !== launchBlock ||
@@ -418,8 +941,7 @@ async function verifyLifecycleThroughClient(client, evidence) {
     !sameAddress(launchEvent.feeHook, evidence.feeHook) ||
     !sameAddress(launchEvent.growthVault, evidence.growthVault) ||
     Number(launchEvent.buySwapFeeBps) !== evidence.launch.buySwapFeeBps ||
-    Number(launchEvent.sellSwapFeeBps) !==
-      evidence.launch.sellSwapFeeBps ||
+    Number(launchEvent.sellSwapFeeBps) !== evidence.launch.sellSwapFeeBps ||
     launchEvent.launchHash !== evidence.launchHash
   ) {
     fail("Deep canary launch event differs");
@@ -534,20 +1056,578 @@ async function verifyLifecycleThroughClient(client, evidence) {
   }
 }
 
+function lifecycleStateFromValues(values) {
+  return {
+    oracleCardinalityNext: Number(values[0][2]),
+    pendingGrowthNativeWei: values[1].toString(),
+    totalCreatorFeesReceivedWei: values[2].toString(),
+    totalNativeAllocatedToGrowthWei: values[3].toString(),
+    totalNativeAddedToLiquidityWei: values[4].toString(),
+    totalTokenAddedToLiquidity: values[5].toString(),
+    totalLiquidityAdded: values[6].toString(),
+    lockedLiquidity: values[7].toString(),
+    lastCompoundTimestamp: Number(values[8]),
+    growthTargetReached: values[9],
+  };
+}
+
+async function readLifecycleState(client, evidence, blockNumber) {
+  const values = await Promise.all([
+    client.readContract({
+      address: evidence.feeHook,
+      abi: lifecycleHookAbi,
+      functionName: "stateById",
+      args: [evidence.poolId],
+      blockNumber,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "pendingGrowthNative",
+      blockNumber,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "totalCreatorFeesReceived",
+      blockNumber,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "totalNativeAllocatedToGrowth",
+      blockNumber,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "totalNativeAddedToLiquidity",
+      blockNumber,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "totalTokenAddedToLiquidity",
+      blockNumber,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "totalLiquidityAdded",
+      blockNumber,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "lockedLiquidity",
+      blockNumber,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "lastCompoundTimestamp",
+      blockNumber,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "growthTargetReached",
+      blockNumber,
+    }),
+  ]);
+  return lifecycleStateFromValues(values);
+}
+
+function exactLifecycleState(actual, expected, label) {
+  for (const field of lifecycleStateFields) {
+    if (actual[field] !== expected[field]) {
+      fail(`${label} differs at ${field}`);
+    }
+  }
+}
+
+async function verifyFinalLifecycleThroughClient(
+  client,
+  evidence,
+  expectedExecutorRuntimeCodeHash,
+) {
+  const executorDeploymentBlock = BigInt(
+    evidence.executorDeployment.blockNumber,
+  );
+  const launchBlock = BigInt(evidence.launch.blockNumber);
+  const oracleBlock = BigInt(evidence.oracleTransaction.blockNumber);
+  const processBlock = BigInt(
+    evidence.feeProcessCompoundTransaction.blockNumber,
+  );
+  if (!(
+    executorDeploymentBlock < launchBlock &&
+    launchBlock < oracleBlock &&
+    oracleBlock < processBlock
+  )) {
+    fail("Deep final lifecycle transaction order is invalid");
+  }
+
+  const [
+    executorDeploymentTransaction,
+    executorDeploymentReceipt,
+    launchTransaction,
+    launchReceipt,
+    oracleTransaction,
+    oracleReceipt,
+    processTransaction,
+    processReceipt,
+  ] = await Promise.all([
+    client.getTransaction({
+      hash: evidence.executorDeployment.transactionHash,
+    }),
+    client.getTransactionReceipt({
+      hash: evidence.executorDeployment.transactionHash,
+    }),
+    client.getTransaction({ hash: evidence.launch.transactionHash }),
+    client.getTransactionReceipt({ hash: evidence.launch.transactionHash }),
+    client.getTransaction({
+      hash: evidence.oracleTransaction.transactionHash,
+    }),
+    client.getTransactionReceipt({
+      hash: evidence.oracleTransaction.transactionHash,
+    }),
+    client.getTransaction({
+      hash: evidence.feeProcessCompoundTransaction.transactionHash,
+    }),
+    client.getTransactionReceipt({
+      hash: evidence.feeProcessCompoundTransaction.transactionHash,
+    }),
+  ]);
+
+  if (
+    executorDeploymentTransaction.blockNumber !== executorDeploymentBlock ||
+    executorDeploymentTransaction.blockHash !==
+      evidence.executorDeployment.blockHash ||
+    executorDeploymentTransaction.nonce !== evidence.executorDeployment.nonce ||
+    !sameAddress(
+      executorDeploymentTransaction.from,
+      evidence.executorDeployment.from,
+    ) ||
+    executorDeploymentTransaction.to !== null ||
+    executorDeploymentTransaction.value !== 0n ||
+    keccak256(executorDeploymentTransaction.input) !==
+      evidence.executorDeployment.calldataHash ||
+    executorDeploymentReceipt.status !== "success" ||
+    executorDeploymentReceipt.blockNumber !== executorDeploymentBlock ||
+    executorDeploymentReceipt.blockHash !==
+      evidence.executorDeployment.blockHash ||
+    !sameAddress(
+      executorDeploymentReceipt.contractAddress,
+      evidence.keeperExecutor,
+    ) ||
+    executorDeploymentReceipt.logs.some((log) => log.removed)
+  ) {
+    fail("Deep keeper-executor deployment transaction or receipt differs");
+  }
+
+  if (
+    launchTransaction.blockNumber !== launchBlock ||
+    launchTransaction.blockHash !== evidence.launch.blockHash ||
+    launchTransaction.nonce !== evidence.launch.nonce ||
+    !sameAddress(launchTransaction.from, evidence.account) ||
+    !sameAddress(launchTransaction.to, evidence.launcher) ||
+    launchTransaction.value !== BigInt(evidence.launch.valueWei) ||
+    keccak256(launchTransaction.input) !== evidence.launch.calldataHash ||
+    launchReceipt.status !== "success" ||
+    launchReceipt.blockNumber !== launchBlock ||
+    launchReceipt.blockHash !== evidence.launch.blockHash
+  ) {
+    fail("Deep final canary launch transaction or receipt differs");
+  }
+  for (const [label, expected, expectedTarget, transaction, receipt] of [
+    [
+      "oracle",
+      evidence.oracleTransaction,
+      evidence.automation,
+      oracleTransaction,
+      oracleReceipt,
+    ],
+    [
+      "fee-process/compound",
+      evidence.feeProcessCompoundTransaction,
+      evidence.keeperExecutor,
+      processTransaction,
+      processReceipt,
+    ],
+  ]) {
+    if (
+      transaction.blockNumber !== BigInt(expected.blockNumber) ||
+      transaction.blockHash !== expected.blockHash ||
+      transaction.nonce !== expected.nonce ||
+      !sameAddress(transaction.from, expected.from) ||
+      !sameAddress(transaction.to, expectedTarget) ||
+      transaction.value !== BigInt(expected.valueWei) ||
+      keccak256(transaction.input) !== expected.calldataHash ||
+      receipt.status !== "success" ||
+      receipt.blockNumber !== BigInt(expected.blockNumber) ||
+      receipt.blockHash !== expected.blockHash ||
+      receipt.logs.some((log) => log.removed)
+    ) {
+      fail(`Deep final ${label} transaction or receipt differs`);
+    }
+  }
+  if (launchReceipt.logs.some((log) => log.removed)) {
+    fail("Deep final launch receipt contains a removed log");
+  }
+  const expectedOracleInput = encodeFunctionData({
+    abi: lifecycleAutomationAbi,
+    functionName: "stageOracleBatch",
+    args: [
+      Array.from(
+        { length: DEEP_ORACLE_GROWTH_EVENT_COUNT },
+        () => evidence.growthVault,
+      ),
+    ],
+  });
+  const expectedProcessInput = encodeFunctionData({
+    abi: lifecycleKeeperExecutorAbi,
+    functionName: "execute",
+    args: [
+      [
+        {
+          vault: evidence.growthVault,
+          expectedAction: 1,
+        },
+      ],
+    ],
+  });
+  if (oracleTransaction.input !== expectedOracleInput) {
+    fail(
+      "Deep final oracle calldata is not the exact 12-stage repeated-vault batch",
+    );
+  }
+  if (processTransaction.input !== expectedProcessInput) {
+    fail(
+      "Deep final keeper-executor calldata is not the exact ProcessFees candidate",
+    );
+  }
+
+  const launchEvent = lifecycleEvent(
+    launchReceipt,
+    evidence.launcher,
+    lifecycleLauncherAbi,
+    "LiquidityGrowthFullRangeTokenLaunched",
+  );
+  const initialBuyEvent = lifecycleEvent(
+    launchReceipt,
+    evidence.launcher,
+    lifecycleLauncherAbi,
+    "LiquidityGrowthFullRangeCreatorInitialBuy",
+  );
+  if (
+    !sameAddress(launchEvent.deployer, evidence.account) ||
+    !sameAddress(launchEvent.token, evidence.token) ||
+    launchEvent.poolId !== evidence.poolId ||
+    !sameAddress(launchEvent.feeHook, evidence.feeHook) ||
+    !sameAddress(launchEvent.growthVault, evidence.growthVault) ||
+    Number(launchEvent.buySwapFeeBps) !== evidence.launch.buySwapFeeBps ||
+    Number(launchEvent.sellSwapFeeBps) !== evidence.launch.sellSwapFeeBps ||
+    launchEvent.launchHash !== evidence.launchHash ||
+    !sameAddress(initialBuyEvent.deployer, evidence.account) ||
+    !sameAddress(initialBuyEvent.token, evidence.token) ||
+    initialBuyEvent.poolId !== evidence.poolId ||
+    initialBuyEvent.nativeAmount !== BigInt(evidence.launch.valueWei) ||
+    initialBuyEvent.tokenAmount <= 0n ||
+    initialBuyEvent.launchHash !== evidence.launchHash
+  ) {
+    fail("Deep final canary launch events differ");
+  }
+
+  const { automationEvents: oracleGrowthEvents } = finalOracleGrowthEvents(
+    oracleReceipt,
+    evidence,
+  );
+  const recordedOracleGrowthEvents =
+    evidence.oracleTransaction.events.oracleGrowthStaged;
+  for (let index = 0; index < DEEP_ORACLE_GROWTH_EVENT_COUNT; index += 1) {
+    const observed = oracleGrowthEvents[index];
+    const recorded = recordedOracleGrowthEvents[index];
+    if (
+      !sameAddress(observed.vault, recorded.vault) ||
+      observed.poolId !== recorded.poolId ||
+      !sameAddress(observed.executor, recorded.executor) ||
+      Number(observed.previousCardinalityNext) !==
+        recorded.previousCardinalityNext ||
+      Number(observed.newCardinalityNext) !== recorded.newCardinalityNext
+    ) {
+      fail(`Deep final oracle growth event ${index} differs from evidence`);
+    }
+  }
+
+  const workPerformed = lifecycleEvent(
+    processReceipt,
+    evidence.automation,
+    lifecycleAutomationAbi,
+    "WorkPerformed",
+  );
+  const creatorFeesProcessed = lifecycleEvent(
+    processReceipt,
+    evidence.growthVault,
+    lifecycleVaultAbi,
+    "CreatorFeesProcessed",
+  );
+  const liquidityCompounded = lifecycleEvent(
+    processReceipt,
+    evidence.growthVault,
+    lifecycleVaultAbi,
+    "LiquidityCompounded",
+  );
+  const recordedEvents = evidence.feeProcessCompoundTransaction.events;
+  const candidateResult = lifecycleEvent(
+    processReceipt,
+    evidence.keeperExecutor,
+    lifecycleKeeperExecutorAbi,
+    "CandidateResult",
+  );
+  const recordedExecutorResult = recordedEvents.keeperExecutorResult;
+  const expectedBatchHash = keccak256(
+    abiEncode("uint256,address,address,(address,uint8)[]", [
+      1n,
+      evidence.keeperExecutor.toLowerCase(),
+      evidence.feeProcessCompoundTransaction.from.toLowerCase(),
+      [[evidence.growthVault.toLowerCase(), 1]],
+    ]),
+  );
+  if (
+    candidateResult.batchHash !== expectedBatchHash ||
+    candidateResult.batchHash !== recordedExecutorResult.batchHash ||
+    Number(candidateResult.candidateIndex) !==
+      recordedExecutorResult.candidateIndex ||
+    !sameAddress(candidateResult.vault, recordedExecutorResult.vault) ||
+    !sameAddress(candidateResult.executor, recordedExecutorResult.executor) ||
+    Number(candidateResult.expectedAction) !==
+      recordedExecutorResult.expectedAction ||
+    Number(candidateResult.actualAction) !==
+      recordedExecutorResult.actualAction ||
+    Number(candidateResult.outcome) !== recordedExecutorResult.outcome ||
+    candidateResult.errorSelector !== recordedExecutorResult.errorSelector ||
+    candidateResult.gasUsed.toString() !== recordedExecutorResult.gasUsed ||
+    Number(candidateResult.expectedAction) !== 1 ||
+    Number(candidateResult.actualAction) !== 1 ||
+    Number(candidateResult.outcome) !== 4 ||
+    candidateResult.errorSelector !== "0x00000000"
+  ) {
+    fail("Deep final keeper-executor result event differs");
+  }
+  if (
+    !sameAddress(workPerformed.vault, evidence.growthVault) ||
+    Number(workPerformed.action) !== 1 ||
+    !sameAddress(workPerformed.executor, evidence.keeperExecutor) ||
+    !sameAddress(recordedEvents.processFees.vault, workPerformed.vault) ||
+    recordedEvents.processFees.action !== Number(workPerformed.action) ||
+    !sameAddress(recordedEvents.processFees.executor, workPerformed.executor)
+  ) {
+    fail("Deep final ProcessFees event differs");
+  }
+
+  const recordedCreator = recordedEvents.creatorFeesProcessed;
+  if (
+    creatorFeesProcessed.received.toString() !== recordedCreator.receivedWei ||
+    creatorFeesProcessed.allocatedToGrowth.toString() !==
+      recordedCreator.allocatedToGrowthWei ||
+    creatorFeesProcessed.deferredToRewards.toString() !==
+      recordedCreator.deferredToRewardsWei ||
+    creatorFeesProcessed.totalAllocatedToGrowth.toString() !==
+      recordedCreator.totalAllocatedToGrowthWei ||
+    creatorFeesProcessed.growthTarget.toString() !==
+      recordedCreator.growthTargetWei ||
+    creatorFeesProcessed.growthTarget !== 50_000_000_000_000_000n
+  ) {
+    fail("Deep final CreatorFeesProcessed event differs");
+  }
+  const recordedCompound = recordedEvents.liquidityCompounded;
+  if (
+    !sameAddress(liquidityCompounded.caller, recordedCompound.caller) ||
+    liquidityCompounded.nativeBudget.toString() !==
+      recordedCompound.nativeBudgetWei ||
+    liquidityCompounded.tokenBudget.toString() !==
+      recordedCompound.tokenBudget ||
+    liquidityCompounded.nativeAdded.toString() !==
+      recordedCompound.nativeAddedWei ||
+    liquidityCompounded.tokenAdded.toString() !== recordedCompound.tokenAdded ||
+    liquidityCompounded.nativeRecycled.toString() !==
+      recordedCompound.nativeRecycledWei ||
+    liquidityCompounded.tokenRecycled.toString() !==
+      recordedCompound.tokenRecycled ||
+    liquidityCompounded.liquidityAdded.toString() !==
+      recordedCompound.liquidityAdded ||
+    liquidityCompounded.pendingGrowthNative.toString() !==
+      recordedCompound.pendingGrowthNativeWei
+  ) {
+    fail("Deep final LiquidityCompounded event differs");
+  }
+
+  const [preState, postState, processBlockRecord] = await Promise.all([
+    readLifecycleState(client, evidence, processBlock - 1n),
+    readLifecycleState(client, evidence, processBlock),
+    client.getBlock({ blockNumber: processBlock }),
+  ]);
+  exactLifecycleState(preState, evidence.preState, "Deep final pre-state");
+  exactLifecycleState(postState, evidence.postState, "Deep final post-state");
+  if (
+    BigInt(postState.totalCreatorFeesReceivedWei) -
+      BigInt(preState.totalCreatorFeesReceivedWei) !==
+      creatorFeesProcessed.received ||
+    BigInt(postState.totalNativeAllocatedToGrowthWei) -
+      BigInt(preState.totalNativeAllocatedToGrowthWei) !==
+      creatorFeesProcessed.allocatedToGrowth ||
+    BigInt(postState.totalNativeAddedToLiquidityWei) -
+      BigInt(preState.totalNativeAddedToLiquidityWei) !==
+      liquidityCompounded.nativeAdded ||
+    BigInt(postState.totalTokenAddedToLiquidity) -
+      BigInt(preState.totalTokenAddedToLiquidity) !==
+      liquidityCompounded.tokenAdded ||
+    BigInt(postState.totalLiquidityAdded) -
+      BigInt(preState.totalLiquidityAdded) !==
+      liquidityCompounded.liquidityAdded ||
+    BigInt(postState.lockedLiquidity) - BigInt(preState.lockedLiquidity) !==
+      liquidityCompounded.liquidityAdded ||
+    postState.pendingGrowthNativeWei !==
+      liquidityCompounded.pendingGrowthNative.toString() ||
+    postState.lastCompoundTimestamp !== Number(processBlockRecord.timestamp) ||
+    postState.oracleCardinalityNext !== 192
+  ) {
+    fail("Deep final ProcessFees/compound state transition differs");
+  }
+
+  const [
+    recordedVault,
+    recordedLaunchHash,
+    recordedPoolId,
+    registered,
+    tokenCode,
+    vaultCode,
+    keeperExecutorCode,
+    keeperExecutorAutomation,
+  ] = await Promise.all([
+    client.readContract({
+      address: evidence.launcher,
+      abi: lifecycleLauncherAbi,
+      functionName: "growthVaultOf",
+      args: [evidence.token],
+      blockNumber: processBlock,
+    }),
+    client.readContract({
+      address: evidence.launcher,
+      abi: lifecycleLauncherAbi,
+      functionName: "launchHashOf",
+      args: [evidence.token],
+      blockNumber: processBlock,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "poolId",
+      blockNumber: processBlock,
+    }),
+    client.readContract({
+      address: evidence.automation,
+      abi: lifecycleAutomationAbi,
+      functionName: "isRegisteredVault",
+      args: [evidence.growthVault],
+      blockNumber: processBlock,
+    }),
+    client.getCode({ address: evidence.token, blockNumber: processBlock }),
+    client.getCode({
+      address: evidence.growthVault,
+      blockNumber: processBlock,
+    }),
+    client.getCode({
+      address: evidence.keeperExecutor,
+      blockNumber: processBlock,
+    }),
+    client.readContract({
+      address: evidence.keeperExecutor,
+      abi: lifecycleKeeperExecutorAbi,
+      functionName: "automation",
+      blockNumber: processBlock,
+    }),
+  ]);
+  if (
+    !sameAddress(recordedVault, evidence.growthVault) ||
+    recordedLaunchHash !== evidence.launchHash ||
+    recordedPoolId !== evidence.poolId ||
+    registered !== true ||
+    !tokenCode ||
+    tokenCode === "0x" ||
+    !vaultCode ||
+    vaultCode === "0x" ||
+    !keeperExecutorCode ||
+    keeperExecutorCode === "0x" ||
+    keccak256(keeperExecutorCode) !== evidence.keeperExecutorRuntimeCodeHash ||
+    evidence.keeperExecutorRuntimeCodeHash !==
+      expectedExecutorRuntimeCodeHash ||
+    !sameAddress(keeperExecutorAutomation, evidence.automation)
+  ) {
+    fail("Deep final canary identity or code state differs");
+  }
+}
+
 async function verifyCanonicalLifecycleEvidence(
   lifecycle,
   clients,
   release,
+  executorRuntimeCodeHash,
 ) {
   if (clients.length !== 2) {
     fail("Deep lifecycle verification requires two RPC clients");
   }
-  await Promise.all(
-    clients.map((client) =>
-      verifyLifecycleThroughClient(client, lifecycle.evidence),
-    ),
-  );
+  if (release.lifecycleEvidence?.status === "launch-and-oracle-verified") {
+    await Promise.all(
+      clients.map((client) =>
+        verifyLegacyLifecycleThroughClient(client, lifecycle.evidence),
+      ),
+    );
+  } else if (release.lifecycleEvidence?.status === "verified-current-release") {
+    if (!executorRuntimeCodeHash) {
+      fail("Deep final keeper-executor artifact was not verified");
+    }
+    if (
+      lifecycle.evidence.keeperExecutorRuntimeCodeHash !==
+        executorRuntimeCodeHash ||
+      release.lifecycleEvidence.keeperExecutorRuntimeCodeHash !==
+        executorRuntimeCodeHash
+    ) {
+      fail(
+        "Deep final keeper-executor runtime does not match the reviewed artifact",
+      );
+    }
+    const heads = await Promise.all(
+      clients.map((client) => client.getBlockNumber()),
+    );
+    try {
+      validateDeepLifecycleConfirmationDepth({
+        heads,
+        transactionBlocks: [
+          BigInt(lifecycle.evidence.executorDeployment.blockNumber),
+          BigInt(lifecycle.evidence.launch.blockNumber),
+          BigInt(lifecycle.evidence.oracleTransaction.blockNumber),
+          BigInt(lifecycle.evidence.feeProcessCompoundTransaction.blockNumber),
+        ],
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    }
+    await Promise.all(
+      clients.map((client) =>
+        verifyFinalLifecycleThroughClient(
+          client,
+          lifecycle.evidence,
+          executorRuntimeCodeHash,
+        ),
+      ),
+    );
+  } else {
+    return;
+  }
   if (release.status !== "not-deployed") {
+    const finalEvidence =
+      release.lifecycleEvidence.status === "verified-current-release";
     if (
       release.releaseCommit !== lifecycle.evidence.releaseCommit ||
       !sameAddress(release.addresses.launcher, lifecycle.evidence.launcher) ||
@@ -562,8 +1642,23 @@ async function verifyCanonicalLifecycleEvidence(
       ) ||
       release.lifecycleEvidence.launchTransaction !==
         lifecycle.evidence.launch.transactionHash ||
-      release.lifecycleEvidence.keeperTransaction !==
-        lifecycle.evidence.keeper.transactionHash ||
+      (finalEvidence
+        ? release.lifecycleEvidence.oracleTransaction !==
+            lifecycle.evidence.oracleTransaction.transactionHash ||
+          release.lifecycleEvidence.feeProcessCompoundTransaction !==
+            lifecycle.evidence.feeProcessCompoundTransaction.transactionHash ||
+          !sameAddress(
+            release.lifecycleEvidence.keeperExecutor,
+            lifecycle.evidence.keeperExecutor,
+          ) ||
+          release.lifecycleEvidence.keeperExecutorRuntimeCodeHash !==
+            lifecycle.evidence.keeperExecutorRuntimeCodeHash ||
+          release.lifecycleEvidence.keeperExecutorDeploymentTransaction !==
+            lifecycle.evidence.executorDeployment.transactionHash ||
+          release.lifecycleEvidence.keeperExecutorDeploymentBlock !==
+            lifecycle.evidence.executorDeployment.blockNumber
+        : release.lifecycleEvidence.keeperTransaction !==
+          lifecycle.evidence.keeper.transactionHash) ||
       release.lifecycleEvidence.evidenceHash !== lifecycle.evidenceHash
     ) {
       fail("Deep live manifest is not bound to canonical lifecycle evidence");
@@ -627,19 +1722,100 @@ async function verifyArtifacts(release) {
   return artifacts;
 }
 
+async function reviewedKeeperExecutorIdentity(automationAddress) {
+  const artifactPath = path.join(
+    contractsRoot,
+    "out",
+    "DeepKeeperExecutorV1.sol",
+    "DeepKeeperExecutorV1.json",
+  );
+  const artifact = await readJson(artifactPath);
+  const creation = artifact.bytecode?.object;
+  const runtime = artifact.deployedBytecode?.object;
+  const immutableReferences = artifact.deployedBytecode?.immutableReferences;
+  if (
+    typeof creation !== "string" ||
+    creation.length <= 2 ||
+    typeof runtime !== "string" ||
+    runtime.length <= 2
+  ) {
+    fail("Missing DeepKeeperExecutorV1 bytecode; run forge build");
+  }
+  if ((runtime.length - 2) / 2 > 24_576) {
+    fail("DeepKeeperExecutorV1 exceeds the EIP-170 runtime limit");
+  }
+  const references = Object.values(immutableReferences ?? {}).flat();
+  if (
+    references.length === 0 ||
+    references.some(
+      (reference) =>
+        !Number.isSafeInteger(reference.start) ||
+        reference.start < 0 ||
+        reference.length !== 32,
+    )
+  ) {
+    fail("DeepKeeperExecutorV1 immutable references are malformed");
+  }
+  const immutableAutomationWord = automationAddress
+    .toLowerCase()
+    .slice(2)
+    .padStart(64, "0");
+  let patchedRuntime = runtime.slice(2);
+  for (const reference of references) {
+    const start = reference.start * 2;
+    const length = reference.length * 2;
+    patchedRuntime =
+      patchedRuntime.slice(0, start) +
+      immutableAutomationWord +
+      patchedRuntime.slice(start + length);
+  }
+  const runtimeCodeHash = keccak256(`0x${patchedRuntime}`);
+  const gasPolicyCommitment = keccak256(
+    abiEncode("uint256,uint256,uint256,uint256,uint256,uint256,uint256", [
+      8n,
+      150_000n,
+      700_000n,
+      220_000n,
+      450_000n,
+      25_000n,
+      25_000n,
+    ]),
+  );
+  const resultPolicyCommitment = keccak256(
+    stringToHex(
+      "one-result-per-candidate:fresh-assessment:skip-none-or-drift:bounded-per-action-call",
+    ),
+  );
+  const sourceCommitment = keccak256(
+    abiEncode("bytes32,address,bytes32,bytes32,bytes32", [
+      keccak256(creation),
+      automationAddress.toLowerCase(),
+      "0x1b6cc50912806d27908a5e01abf30af392b909116e0d0f7321f828be52400ad8",
+      gasPolicyCommitment,
+      resultPolicyCommitment,
+    ]),
+  );
+  if (
+    sourceCommitment !== expectedKeeperExecutorSourceCommitment ||
+    runtimeCodeHash !== expectedKeeperExecutorRuntimeCodeHash
+  ) {
+    fail(
+      "DeepKeeperExecutorV1 artifact, immutable binding or reviewed policy commitment changed",
+    );
+  }
+  return { runtimeCodeHash, sourceCommitment };
+}
+
 function expectedSourceCommitment(release, artifacts) {
   const factoryBytecodeCommitment = keccak256(
-    abiEncode(
-      "bytes32,bytes32,bytes32,bytes32,bytes32,bytes32",
-      [
-        keccak256(artifacts.feeSplitVaultFactory.creation),
-        keccak256(artifacts.feeSplitVault.creation),
-        keccak256(artifacts.hookFactory.creation),
-        keccak256(artifacts.feeHookTemplate.creation),
-        keccak256(artifacts.rangeSourceFactory.creation),
-        keccak256(artifacts.rangeSource.creation),
-      ],
-    ),
+    abiEncode("bytes32,bytes32,bytes32,bytes32,bytes32,bytes32", [
+      keccak256(artifacts.feeSplitVaultFactory.creation),
+      keccak256(artifacts.feeSplitVault.creation),
+      keccak256(artifacts.hookFactory.creation),
+      keccak256(artifacts.feeHookTemplate.creation),
+      keccak256(artifacts.rangeSourceFactory.creation),
+      keccak256(artifacts.rangeSource.creation),
+    ]),
   );
   const fullRangeBytecodeCommitment = keccak256(
     abiEncode("bytes32,bytes32,bytes32,bytes32,bytes32", [
@@ -694,10 +1870,15 @@ function expectedSourceCommitment(release, artifacts) {
     ),
   );
   const growthPolicyCommitment = keccak256(
-    abiEncode(
-      "uint256,uint256,uint256,uint256,uint256,uint256,uint256",
-      [2_000_000_000_000_000n, 1_800n, 1_800n, 600n, 400n, 25n, 8_500n],
-    ),
+    abiEncode("uint256,uint256,uint256,uint256,uint256,uint256,uint256", [
+      2_000_000_000_000_000n,
+      1_800n,
+      1_800n,
+      600n,
+      400n,
+      25n,
+      8_500n,
+    ]),
   );
   const policyCommitment = keccak256(
     abiEncode("bytes32,bytes32", [
@@ -720,9 +1901,7 @@ function expectedSourceCommitment(release, artifacts) {
   return keccak256(
     abiEncode("bytes32,bytes32,bytes32,bytes32,bytes32", [
       keccak256(
-        stringToHex(
-          "programmable.deep.full-range.infrastructure.v1.ethereum",
-        ),
+        stringToHex("programmable.deep.full-range.infrastructure.v1.ethereum"),
       ),
       bytecodeCommitment,
       dependencyCommitment,
@@ -736,8 +1915,7 @@ function verifyIdentity(release) {
   if (
     release.schemaVersion !== 1 ||
     release.model !== "deep" ||
-    release.internalContractRelease !==
-      "liquidity-growth-full-range-v1" ||
+    release.internalContractRelease !== "liquidity-growth-full-range-v1" ||
     release.releaseVersion !== "deep-full-range-v1" ||
     release.chainId !== 1 ||
     release.transactionCount !== 6 ||
@@ -806,14 +1984,17 @@ function verifyPolicies(release) {
     }
   }
   const keeper = release.keeperPolicy;
+  const finalLifecycle =
+    release.lifecycleEvidence?.status === "verified-current-release";
   if (
     keeper?.confirmations !== 12 ||
     keeper.independentReadRpcCount !== 2 ||
     keeper.intervalMilliseconds !== 300_000 ||
     keeper.defaultMaxBatchSize !== 4 ||
-    keeper.defaultMaxGas !== "3000000" ||
+    keeper.defaultMaxGas !== (finalLifecycle ? "4500000" : "3000000") ||
     keeper.maximumOperationalBatchSize !== 8 ||
-    keeper.extendedBatchMinimumGas !== "6000000" ||
+    keeper.extendedBatchMinimumGas !==
+      (finalLifecycle ? "9000000" : "6000000") ||
     keeper.vaultSubsidyCapWei !== "30000000000000000"
   ) {
     fail("Deep keeper policy differs from the reviewed release envelope");
@@ -830,8 +2011,7 @@ function verifyLocalEvidenceDescriptors(release) {
     preflight.results?.fullRange !== "50/50" ||
     preflight.results?.mainnetFork !== "6/6" ||
     preflight.results?.deterministic !== "391/391" ||
-    preflight.results?.invariants !==
-      "9/9 at 1000 runs x 128 calls" ||
+    preflight.results?.invariants !== "9/9 at 1000 runs x 128 calls" ||
     preflight.slither?.version !== "0.11.5" ||
     preflight.slither?.highOrMediumFindings !== 0 ||
     preflight.slither?.complete !== false
@@ -870,7 +2050,9 @@ async function verifyDependencyProvenance(release, snapshot) {
       !sameAddress(pinned?.address, observed?.address) ||
       pinned?.runtimeCodeHash !== observed?.runtimeCodeHash
     ) {
-      fail(`Deep official dependency ${field} differs from the pinned snapshot`);
+      fail(
+        `Deep official dependency ${field} differs from the pinned snapshot`,
+      );
     }
   }
   const forwarder = release.officialDependencies?.positionForwarderFactory;
@@ -893,7 +2075,9 @@ async function verifyDependencyProvenance(release, snapshot) {
       { encoding: "utf8" },
     ).trim();
     if (observed !== commit) {
-      fail(`Deep dependency checkout ${dependency} is ${observed}, expected ${commit}`);
+      fail(
+        `Deep dependency checkout ${dependency} is ${observed}, expected ${commit}`,
+      );
     }
   }
 }
@@ -967,8 +2151,7 @@ function verifySourceInputs(release) {
     if (contracts?.[field]?.fqcn !== expectedFqcns[artifactField]) {
       fail(`Deep source-verification input ${field} has the wrong FQCN`);
     }
-    const [deploymentKind, constructorTypes] =
-      expectedInputShape[field];
+    const [deploymentKind, constructorTypes] = expectedInputShape[field];
     if (
       contracts[field].deploymentKind !== deploymentKind ||
       JSON.stringify(contracts[field].constructorTypes) !==
@@ -989,6 +2172,27 @@ function verifySourceInputs(release) {
       input.encodedConstructorArguments !== "0x"
     ) {
       fail(`Deep no-argument source input ${field} is invalid`);
+    }
+  }
+  if (release.lifecycleEvidence?.status === "verified-current-release") {
+    const executor = release.sourceVerification?.contracts?.keeperExecutor;
+    const expectedConstructor = abiEncode("address", [
+      release.addresses.automation.toLowerCase(),
+    ]);
+    if (
+      executor?.fqcn !== "src/DeepKeeperExecutorV1.sol:DeepKeeperExecutorV1" ||
+      executor.deploymentKind !== "CREATE" ||
+      JSON.stringify(executor.constructorTypes) !==
+        JSON.stringify(["address"]) ||
+      !Array.isArray(executor.constructorArguments) ||
+      executor.constructorArguments.length !== 1 ||
+      !sameAddress(
+        executor.constructorArguments[0],
+        release.addresses.automation,
+      ) ||
+      executor.encodedConstructorArguments !== expectedConstructor
+    ) {
+      fail("Deep keeper-executor source-verification input is invalid");
     }
   }
 }
@@ -1050,8 +2254,7 @@ function verifyDisabled(release, appRelease) {
   if (
     appRelease?.schemaVersion !== 1 ||
     appRelease.model !== "deep" ||
-    appRelease.internalContractRelease !==
-      "liquidity-growth-full-range-v1" ||
+    appRelease.internalContractRelease !== "liquidity-growth-full-range-v1" ||
     appRelease.releaseVersion !== "deep-full-range-v1" ||
     appRelease.releaseManifest !== expectedReleaseManifest ||
     appRelease.status !== "not-deployed" ||
@@ -1165,7 +2368,10 @@ async function verifyDependencyRuntime(release, clients) {
   for (const [field, dependency] of Object.entries(
     release.officialDependencies,
   )) {
-    if (!isAddress(dependency.address) || !validHash(dependency.runtimeCodeHash)) {
+    if (
+      !isAddress(dependency.address) ||
+      !validHash(dependency.runtimeCodeHash)
+    ) {
       fail(`Deep dependency ${field} is malformed`);
     }
     const codes = await Promise.all(
@@ -1174,7 +2380,11 @@ async function verifyDependencyRuntime(release, clients) {
       ),
     );
     for (const code of codes) {
-      if (!code || code === "0x" || keccak256(code) !== dependency.runtimeCodeHash) {
+      if (
+        !code ||
+        code === "0x" ||
+        keccak256(code) !== dependency.runtimeCodeHash
+      ) {
         fail(`Deep dependency ${field} runtime differs across the release pin`);
       }
     }
@@ -1185,8 +2395,9 @@ async function verifyLiveSources(release) {
   if (!process.env.ETHERSCAN_API_KEY) {
     fail("ETHERSCAN_API_KEY is required for a live Deep release check");
   }
-  for (const field of deployedFields) {
-    const address = getAddress(release.addresses[field].toLowerCase());
+  const sourceTargets = deepReleaseSourceTargets(release, deployedFields);
+  for (const { field, address: rawAddress } of sourceTargets) {
+    const address = getAddress(rawAddress.toLowerCase());
     const source = release.sourceVerification.contracts[field];
     if (
       source?.etherscan?.status !== "exact-match" ||
@@ -1299,10 +2510,12 @@ function verifyConstructorArguments(release) {
         ? value.toLowerCase()
         : value,
     );
-    const encoded = abiEncode(input.constructorTypes.join(","), normalizedValues);
+    const encoded = abiEncode(
+      input.constructorTypes.join(","),
+      normalizedValues,
+    );
     if (
-      JSON.stringify(input.constructorArguments) !==
-        JSON.stringify(values) ||
+      JSON.stringify(input.constructorArguments) !== JSON.stringify(values) ||
       input.encodedConstructorArguments !== encoded
     ) {
       fail(`Deep ${field} constructor verification input is invalid`);
@@ -1314,8 +2527,7 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
   const releaseReady =
     release.status === "deployment-source-and-lifecycle-verified";
   const keeperPending =
-    release.status ===
-    "deployed-source-and-canary-verified-keeper-pending";
+    release.status === "deployed-source-and-canary-verified-keeper-pending";
   if (
     (!releaseReady && !keeperPending) ||
     !validCommit(release.releaseCommit) ||
@@ -1328,7 +2540,9 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
     release.activation?.requiresExactManifestMatch !== true ||
     !Array.isArray(release.blockers)
   ) {
-    fail("Live Deep release lacks required deployment, source or lifecycle state");
+    fail(
+      "Live Deep release lacks required deployment, source or lifecycle state",
+    );
   }
   if (
     releaseReady
@@ -1339,8 +2553,7 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
         release.activation?.keeperStatus !== "ready" ||
         release.blockers.length !== 0
       : release.releaseEligible !== false ||
-        release.lifecycleEvidence?.status !==
-          "launch-and-oracle-verified" ||
+        release.lifecycleEvidence?.status !== "launch-and-oracle-verified" ||
         release.lifecycleEvidence?.releaseEligible !== false ||
         release.activation?.appStatus !== "disabled" ||
         release.activation?.keeperStatus !==
@@ -1400,9 +2613,7 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
   }
   if (
     new Set(
-      externalTransactionFields.map(
-        (field) => release.transactions[field],
-      ),
+      externalTransactionFields.map((field) => release.transactions[field]),
     ).size !== 6
   ) {
     fail("Deep deployment must contain six distinct external transactions");
@@ -1432,8 +2643,7 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
       receipt.blockHash !== evidence.blockHash ||
       !sameAddress(receipt.from, release.addresses.deployer) ||
       !sameAddress(transaction.from, release.addresses.deployer) ||
-      transaction.nonce !==
-        release.startingNonce + nonceOffsets[field] ||
+      transaction.nonce !== release.startingNonce + nonceOffsets[field] ||
       transaction.value !== 0n ||
       evidence.nonce !== transaction.nonce ||
       evidence.valueWei !== "0" ||
@@ -1450,10 +2660,7 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
         : receipt.to !== null ||
           transaction.to !== null ||
           evidence.to !== null ||
-          !sameAddress(
-            receipt.contractAddress,
-            release.addresses[field],
-          )
+          !sameAddress(receipt.contractAddress, release.addresses[field])
     ) {
       fail(`Deep ${field} CREATE/CREATE2 receipt target is invalid`);
     }
@@ -1475,54 +2682,247 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
     ]),
   );
   const values = await Promise.all([
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "poolManager" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "launcherFeeRecipient" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "feeSplitVaultFactory" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "maxAbsTickDelta" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "LAUNCHER_FEE_BPS" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "MIN_TOTAL_SWAP_FEE_BPS" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "MAX_TOTAL_SWAP_FEE_BPS" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "TOTAL_SWAP_FEE_STEP_BPS" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "TRANSFER_TAX_BPS" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "LP_FEE_PIPS" }),
-    read.readContract({ address: addresses.feeHook, abi: hookAbi, functionName: "TICK_SPACING" }),
-    read.readContract({ address: addresses.hookFactory, abi: hookFactoryAbi, functionName: "ALL_HOOK_MASK" }),
-    read.readContract({ address: addresses.hookFactory, abi: hookFactoryAbi, functionName: "REQUIRED_HOOK_FLAGS" }),
-    read.readContract({ address: addresses.hookFactory, abi: hookFactoryAbi, functionName: "isFactoryHook", args: [addresses.feeHook] }),
-    read.readContract({ address: addresses.growthVaultFactory, abi: growthFactoryAbi, functionName: "implementation" }),
-    read.readContract({ address: addresses.growthVaultFactory, abi: growthFactoryAbi, functionName: "hookFactory" }),
-    read.readContract({ address: addresses.growthVaultFactory, abi: growthFactoryAbi, functionName: "feeSplitVaultFactory" }),
-    read.readContract({ address: addresses.growthVaultFactory, abi: growthFactoryAbi, functionName: "positionManager" }),
-    read.readContract({ address: addresses.growthVaultFactory, abi: growthFactoryAbi, functionName: "poolManager" }),
-    read.readContract({ address: addresses.growthVaultFactory, abi: growthFactoryAbi, functionName: "positionForwarderFactory" }),
-    read.readContract({ address: addresses.growthVaultFactory, abi: growthFactoryAbi, functionName: "rangeSourceFactory" }),
-    read.readContract({ address: addresses.growthVaultImplementation, abi: growthImplementationAbi, functionName: "FACTORY" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "poolManager" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "positionManager" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "tokenFactory" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "feeHook" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "feeSplitVaultFactory" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "rangeSourceFactory" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "growthVaultFactory" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "automation" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "positionPlanner" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "positionForwarderFactory" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "TOKEN_SUPPLY" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "TOKEN_RESERVE_TARGET" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "GROWTH_TARGET_NATIVE" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "MIN_INITIAL_BUY_WEI" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "INITIAL_TICK" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "TICK_SPACING" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "LP_FEE_PIPS" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "TWAP_WINDOW" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "MAX_SPOT_TWAP_DEVIATION_TICKS" }),
-    read.readContract({ address: addresses.launcher, abi: launcherAbi, functionName: "MAX_ABS_TICK_DELTA" }),
-    read.readContract({ address: addresses.automation, abi: automationAbi, functionName: "vaultFactory" }),
-    read.readContract({ address: addresses.automation, abi: automationAbi, functionName: "launcher" }),
-    read.readContract({ address: addresses.automation, abi: automationAbi, functionName: "MAX_BATCH_SIZE" }),
-    read.readContract({ address: addresses.automation, abi: automationAbi, functionName: "OBSERVATION_CARDINALITY_TARGET" }),
-    read.readContract({ address: addresses.automation, abi: automationAbi, functionName: "MIN_ORACLE_ACTIVATION_NATIVE" }),
-    read.readContract({ address: addresses.positionForwarderFactory, abi: forwarderFactoryAbi, functionName: "positionManager" }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "poolManager",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "launcherFeeRecipient",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "feeSplitVaultFactory",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "maxAbsTickDelta",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "LAUNCHER_FEE_BPS",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "MIN_TOTAL_SWAP_FEE_BPS",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "MAX_TOTAL_SWAP_FEE_BPS",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "TOTAL_SWAP_FEE_STEP_BPS",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "TRANSFER_TAX_BPS",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "LP_FEE_PIPS",
+    }),
+    read.readContract({
+      address: addresses.feeHook,
+      abi: hookAbi,
+      functionName: "TICK_SPACING",
+    }),
+    read.readContract({
+      address: addresses.hookFactory,
+      abi: hookFactoryAbi,
+      functionName: "ALL_HOOK_MASK",
+    }),
+    read.readContract({
+      address: addresses.hookFactory,
+      abi: hookFactoryAbi,
+      functionName: "REQUIRED_HOOK_FLAGS",
+    }),
+    read.readContract({
+      address: addresses.hookFactory,
+      abi: hookFactoryAbi,
+      functionName: "isFactoryHook",
+      args: [addresses.feeHook],
+    }),
+    read.readContract({
+      address: addresses.growthVaultFactory,
+      abi: growthFactoryAbi,
+      functionName: "implementation",
+    }),
+    read.readContract({
+      address: addresses.growthVaultFactory,
+      abi: growthFactoryAbi,
+      functionName: "hookFactory",
+    }),
+    read.readContract({
+      address: addresses.growthVaultFactory,
+      abi: growthFactoryAbi,
+      functionName: "feeSplitVaultFactory",
+    }),
+    read.readContract({
+      address: addresses.growthVaultFactory,
+      abi: growthFactoryAbi,
+      functionName: "positionManager",
+    }),
+    read.readContract({
+      address: addresses.growthVaultFactory,
+      abi: growthFactoryAbi,
+      functionName: "poolManager",
+    }),
+    read.readContract({
+      address: addresses.growthVaultFactory,
+      abi: growthFactoryAbi,
+      functionName: "positionForwarderFactory",
+    }),
+    read.readContract({
+      address: addresses.growthVaultFactory,
+      abi: growthFactoryAbi,
+      functionName: "rangeSourceFactory",
+    }),
+    read.readContract({
+      address: addresses.growthVaultImplementation,
+      abi: growthImplementationAbi,
+      functionName: "FACTORY",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "poolManager",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "positionManager",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "tokenFactory",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "feeHook",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "feeSplitVaultFactory",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "rangeSourceFactory",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "growthVaultFactory",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "automation",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "positionPlanner",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "positionForwarderFactory",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "TOKEN_SUPPLY",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "TOKEN_RESERVE_TARGET",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "GROWTH_TARGET_NATIVE",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "MIN_INITIAL_BUY_WEI",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "INITIAL_TICK",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "TICK_SPACING",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "LP_FEE_PIPS",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "TWAP_WINDOW",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "MAX_SPOT_TWAP_DEVIATION_TICKS",
+    }),
+    read.readContract({
+      address: addresses.launcher,
+      abi: launcherAbi,
+      functionName: "MAX_ABS_TICK_DELTA",
+    }),
+    read.readContract({
+      address: addresses.automation,
+      abi: automationAbi,
+      functionName: "vaultFactory",
+    }),
+    read.readContract({
+      address: addresses.automation,
+      abi: automationAbi,
+      functionName: "launcher",
+    }),
+    read.readContract({
+      address: addresses.automation,
+      abi: automationAbi,
+      functionName: "MAX_BATCH_SIZE",
+    }),
+    read.readContract({
+      address: addresses.automation,
+      abi: automationAbi,
+      functionName: "OBSERVATION_CARDINALITY_TARGET",
+    }),
+    read.readContract({
+      address: addresses.automation,
+      abi: automationAbi,
+      functionName: "MIN_ORACLE_ACTIVATION_NATIVE",
+    }),
+    read.readContract({
+      address: addresses.positionForwarderFactory,
+      abi: forwarderFactoryAbi,
+      functionName: "positionManager",
+    }),
   ]);
   const addressExpectations = [
     [values[0], dependencies.poolManager],
@@ -1551,7 +2951,9 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
     [values[47], dependencies.positionManager],
   ];
   if (
-    addressExpectations.some(([actual, expected]) => !sameAddress(actual, expected)) ||
+    addressExpectations.some(
+      ([actual, expected]) => !sameAddress(actual, expected),
+    ) ||
     values[3] !== 400 ||
     values[4] !== 10 ||
     values[5] !== 100 ||
@@ -1595,8 +2997,7 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
   if (
     appRelease?.schemaVersion !== 1 ||
     appRelease.model !== "deep" ||
-    appRelease.internalContractRelease !==
-      "liquidity-growth-full-range-v1" ||
+    appRelease.internalContractRelease !== "liquidity-growth-full-range-v1" ||
     appRelease.releaseVersion !== "deep-full-range-v1" ||
     appRelease.releaseCommit !== release.releaseCommit ||
     appRelease.sourceCommitment !== release.sourceCommitment ||
@@ -1608,20 +3009,54 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
     appRelease.startBlock !== release.startBlock ||
     appRelease.deploymentBlock !== release.startBlock ||
     appRelease.deploymentTransaction !== release.transactions.launcher ||
-    appRelease.lifecycleEvidenceHash !==
-      release.lifecycleEvidence.evidenceHash
+    appRelease.lifecycleEvidenceHash !== release.lifecycleEvidence.evidenceHash
   ) {
     fail("Application Deep release status differs from the verified manifest");
   }
   for (const field of fields) {
     if (
       !sameAddress(appRelease[field], release.addresses[field]) ||
-      appRelease.runtimeCodeHashes?.[field] !==
-        release.runtimeCodeHashes[field]
+      appRelease.runtimeCodeHashes?.[field] !== release.runtimeCodeHashes[field]
     ) {
       fail(`Application Deep ${field} differs from the verified manifest`);
     }
   }
+  if (
+    releaseReady &&
+    (appRelease.lifecycleStatus !== release.lifecycleEvidence.status ||
+      appRelease.lifecycleIndependentRpcCount !==
+        release.lifecycleEvidence.independentRpcCount ||
+      appRelease.lifecycleLaunchTransaction !==
+        release.lifecycleEvidence.launchTransaction ||
+      appRelease.lifecycleOracleTransaction !==
+        release.lifecycleEvidence.oracleTransaction ||
+      appRelease.lifecycleFeeProcessCompoundTransaction !==
+        release.lifecycleEvidence.feeProcessCompoundTransaction ||
+      !sameAddress(
+        appRelease.keeperExecutor,
+        release.lifecycleEvidence.keeperExecutor,
+      ) ||
+      appRelease.keeperExecutorRuntimeCodeHash !==
+        release.lifecycleEvidence.keeperExecutorRuntimeCodeHash ||
+      appRelease.keeperExecutorSourceCommitment !==
+        expectedKeeperExecutorSourceCommitment ||
+      appRelease.keeperExecutorDeploymentTransaction !==
+        release.lifecycleEvidence.keeperExecutorDeploymentTransaction ||
+      appRelease.keeperExecutorDeploymentBlock !==
+        release.lifecycleEvidence.keeperExecutorDeploymentBlock ||
+      appRelease.keeperExecutorSourceVerificationStatus !==
+        "etherscan-and-sourcify-exact-match")
+  ) {
+    fail(
+      "Application Deep release is not bound to final executor and lifecycle proof",
+    );
+  }
+  const expectedKeeperCoordinator = releaseReady
+    ? release.lifecycleEvidence.keeperExecutor
+    : release.addresses.automation;
+  const expectedKeeperCoordinatorRuntimeCodeHash = releaseReady
+    ? release.lifecycleEvidence.keeperExecutorRuntimeCodeHash
+    : release.runtimeCodeHashes.automation;
   if (
     release.keeperPolicy.status !==
       (releaseReady
@@ -1629,25 +3064,23 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
         : "deployed-disabled-lifecycle-pending") ||
     release.keeperPolicy.enabled !== false ||
     release.keeperPolicy.transactionSubmission !== false ||
-    !sameAddress(
-      release.keeperPolicy.coordinator,
-      release.addresses.automation,
-    ) ||
+    !sameAddress(release.keeperPolicy.coordinator, expectedKeeperCoordinator) ||
     release.keeperPolicy.coordinatorRuntimeCodeHash !==
-      release.runtimeCodeHashes.automation
+      expectedKeeperCoordinatorRuntimeCodeHash
   ) {
-    fail("Deep keeper activation record is not bound to the verified automation");
+    fail(
+      "Deep keeper activation record is not bound to the verified coordinator",
+    );
   }
   if (
-    !releaseReady &&
-    (!sameAddress(
+    !sameAddress(
       release.keeperPolicy.signerAddress,
       "0x4A7190dA29b6BC41980983e55E0dB35bbaff5fe0",
     ) ||
-      release.keeperPolicy.signingBackend !== "privy-policy-wallet" ||
-      release.keeperPolicy.executionPath !== "/api/ops/deep-keeper")
+    release.keeperPolicy.signingBackend !== "privy-policy-wallet" ||
+    release.keeperPolicy.executionPath !== "/api/ops/deep-keeper"
   ) {
-    fail("Deep pending keeper record is not bound to its policy wallet");
+    fail("Deep keeper record is not bound to its policy wallet");
   }
   await verifyLiveSources(release);
 }
@@ -1656,7 +3089,7 @@ const release = await readJson(releasePath);
 const releaseSchema = await readJson(releaseSchemaPath);
 const appManifest = await readJson(appManifestPath);
 const dependencySnapshot = await readJson(dependencySnapshotPath);
-const lifecycle = await readCanonicalLifecycleEvidence();
+const lifecycle = await readCanonicalLifecycleEvidence(release);
 const appRelease = appManifest.production?.launchModelReleases?.deep;
 
 if (
@@ -1689,15 +3122,35 @@ if (sourceCommitment !== release.sourceCommitment) {
     `Deep source commitment drift: ${sourceCommitment}/${release.sourceCommitment}`,
   );
 }
+let keeperExecutorArtifactHash = null;
+if (release.lifecycleEvidence?.status === "verified-current-release") {
+  const keeperExecutorIdentity = await reviewedKeeperExecutorIdentity(
+    release.addresses.automation,
+  );
+  keeperExecutorArtifactHash = keeperExecutorIdentity.runtimeCodeHash;
+  if (
+    lifecycle.evidence.keeperExecutorRuntimeCodeHash !==
+      keeperExecutorArtifactHash ||
+    release.lifecycleEvidence.keeperExecutorRuntimeCodeHash !==
+      keeperExecutorArtifactHash
+  ) {
+    fail(
+      "Deep final keeper-executor runtime does not match the reviewed artifact",
+    );
+  }
+}
 
 let clients = [];
 if (!offline) {
-  const rpcUrls = unique([
-    process.env.ETHEREUM_RPC_URL,
-    process.env.ETHEREUM_RPC_URL_SECONDARY,
-    "https://eth.drpc.org",
-    "https://ethereum-rpc.publicnode.com",
-  ].filter(Boolean)).slice(0, 2);
+  const rpcUrls = (
+    requireLive
+      ? explicitRpcUrls
+      : unique([
+          ...explicitRpcUrls,
+          "https://eth.drpc.org",
+          "https://rpc.mevblocker.io",
+        ])
+  ).slice(0, 2);
   if (rpcUrls.length !== 2) fail("Deep release verification requires two RPCs");
   clients = rpcUrls.map((rpcUrl) =>
     createPublicClient({
@@ -1705,8 +3158,19 @@ if (!offline) {
       transport: http(rpcUrl, { retryCount: 1, timeout: 15_000 }),
     }),
   );
+  const chainIds = await Promise.all(
+    clients.map((client) => client.getChainId()),
+  );
+  if (chainIds.some((chainId) => chainId !== 1)) {
+    fail("Deep release RPCs must both serve Ethereum Mainnet");
+  }
   await verifyDependencyRuntime(release, clients);
-  await verifyCanonicalLifecycleEvidence(lifecycle, clients, release);
+  await verifyCanonicalLifecycleEvidence(
+    lifecycle,
+    clients,
+    release,
+    keeperExecutorArtifactHash,
+  );
 }
 
 if (release.status === "not-deployed") {
@@ -1716,14 +3180,23 @@ if (release.status === "not-deployed") {
     `Deep FullRange artifacts, source commitment, dependency provenance and disabled app state match${offline ? " (offline)" : " through two RPCs"}; deployment remains disabled.`,
   );
 } else {
-  if (offline) fail("A live Deep release cannot be verified offline");
-  await verifyLiveRelease(release, appRelease, clients, artifacts);
-  if (requireLive && !release.releaseEligible) {
-    fail("Deep FullRange is deployed but its keeper lifecycle is not complete");
+  if (offline) {
+    console.log(
+      release.releaseEligible
+        ? "Deep FullRange promoted release manifest and final lifecycle evidence are structurally valid (offline; no chain or source-provider claims)."
+        : "Deep FullRange pending release manifest and reviewed launch/oracle evidence are structurally valid (offline; no chain or source-provider claims).",
+    );
+  } else {
+    await verifyLiveRelease(release, appRelease, clients, artifacts);
+    if (requireLive && !release.releaseEligible) {
+      fail(
+        "Deep FullRange is deployed but its keeper lifecycle is not complete",
+      );
+    }
+    console.log(
+      release.releaseEligible
+        ? "Deep FullRange receipts, runtime hashes, source verification, lifecycle evidence, app gate and keeper binding match."
+        : "Deep FullRange deployment, exact sources and launch/oracle canary match; the app remains disabled until fee processing and compounding are proven.",
+    );
   }
-  console.log(
-    release.releaseEligible
-      ? "Deep FullRange receipts, runtime hashes, source verification, lifecycle evidence, app gate and keeper binding match."
-      : "Deep FullRange deployment, exact sources and launch/oracle canary match; the app remains disabled until fee processing and compounding are proven.",
-  );
 }
