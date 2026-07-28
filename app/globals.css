@@ -677,11 +677,11 @@ textarea {
 
 .token-card-grid {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   grid-auto-rows: auto;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 18px auto 0;
-  max-width: 1180px;
+  max-width: 1050px;
   width: 100%;
 }
 
@@ -761,41 +761,47 @@ textarea {
   height: 148px;
   min-height: 0;
   overflow: hidden;
-  padding: 14px 16px 10px;
+  padding: 13px 15px 9px;
 }
 
 .token-card-heading {
   align-items: baseline;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  min-width: 0;
 }
 
 .token-card-title {
   align-items: baseline;
   display: flex;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
 }
 
 .token-card-heading h3 {
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 620;
-  letter-spacing: -0.012em;
+  letter-spacing: -0.014em;
+  line-height: 1.2;
 }
 
 .token-card-title > span {
   color: var(--accent-strong);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 500;
+  letter-spacing: -0.015em;
 }
 
 .token-card-market-cap {
   color: var(--text-soft);
+  display: block;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 9.5px;
+  font-size: 11.5px;
   font-weight: 500;
+  line-height: 1.35;
+  margin-top: 0;
+  min-height: 16px;
+  width: fit-content;
   white-space: nowrap;
 }
 
@@ -806,9 +812,9 @@ textarea {
   cursor: default;
   display: inline-flex;
   gap: 5px;
-  margin-top: 4px;
+  margin-top: 3px;
   max-width: 100%;
-  min-height: 20px;
+  min-height: 18px;
   padding: 0;
   text-align: left;
   width: fit-content;
@@ -817,8 +823,8 @@ textarea {
 .token-address code {
   flex: 0 1 auto;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 9px;
-  line-height: 1;
+  font-size: 10.5px;
+  line-height: 1.2;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -833,19 +839,19 @@ textarea {
 .token-card-description {
   color: var(--text-soft);
   display: -webkit-box;
-  font-size: 12px;
+  font-size: 13px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
-  line-height: 1.35;
-  margin-top: 5px;
-  min-height: 15px;
+  line-height: 1.4;
+  margin-top: 3px;
+  min-height: 18px;
   overflow: hidden;
 }
 
 .token-card-footer {
   border-top: 1px solid var(--border);
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: 5px;
 }
 
 .token-social-links {
@@ -4239,6 +4245,7 @@ textarea {
     grid-auto-rows: auto;
     grid-template-rows: none;
     margin-top: 16px;
+    max-width: 344px;
     overflow: visible;
   }
 
@@ -4255,30 +4262,30 @@ textarea {
 
   .token-card-body {
     height: 148px;
-    padding: 14px 16px 10px;
+    padding: 13px 15px 9px;
   }
 
   .token-card-heading h3 {
-    font-size: 17px;
+    font-size: 19px;
   }
 
   .token-address {
-    margin-top: 6px;
-    min-height: 26px;
+    margin-top: 4px;
+    min-height: 20px;
   }
 
   .token-address code {
-    font-size: 10px;
+    font-size: 10.5px;
   }
 
   .token-card-description {
-    font-size: 12px;
-    margin-top: 7px;
+    font-size: 13px;
+    margin-top: 3px;
   }
 
   .token-card-footer {
-    margin-top: 11px;
-    padding-top: 6px;
+    margin-top: auto;
+    padding-top: 5px;
   }
 
   .token-social-link {
