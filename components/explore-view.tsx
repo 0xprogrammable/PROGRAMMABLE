@@ -579,7 +579,7 @@ export function ExploreView() {
                       : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 600px) 92px, (max-width: 800px) 108px, (max-width: 1100px) 122px, 134px"
+                  sizes="(max-width: 600px) 84px, (max-width: 800px) 106px, (max-height: 800px) 138px, 176px"
                   unoptimized={!token.imageUrl.startsWith("/")}
                 />
               </Link>
@@ -592,66 +592,72 @@ export function ExploreView() {
                   </Link>
                 </header>
 
-                <button
-                  className="token-address"
-                  type="button"
-                  aria-label={
-                    copied
-                      ? `${token.name} contract address copied`
-                      : `Copy ${token.name} contract address`
-                  }
-                  title={
-                    copied
-                      ? "Copied"
-                      : `${token.tokenAddress} · Copy contract address`
-                  }
-                  onClick={() => copyAddress(token.tokenAddress)}
-                >
-                  <code>{formatTokenAddress(token.tokenAddress)}</code>
-                  {copied ? (
-                    <Check aria-hidden="true" size={14} />
-                  ) : (
-                    <Copy aria-hidden="true" size={14} />
-                  )}
-                </button>
-
                 {token.description ? (
                   <Link className="token-card-description" href={href}>
                     {token.description}
                   </Link>
-                ) : null}
+                ) : (
+                  <span
+                    className="token-card-description token-card-description-empty"
+                    aria-hidden="true"
+                  />
+                )}
 
-                {token.marketCapLabel || token.links.length > 0 ? (
-                  <div className="token-card-footer">
-                    {token.marketCapLabel ? (
-                      <Link
-                        className="token-card-market-cap"
-                        href={href}
-                        aria-label={`View ${token.name}, ${token.marketCapLabel} market cap`}
-                      >
-                        <strong>{token.marketCapLabel}</strong>
-                        <span>MC</span>
-                      </Link>
+                {token.marketCapLabel ? (
+                  <Link
+                    className="token-card-market-cap"
+                    href={href}
+                    aria-label={`View ${token.name}, ${token.marketCapLabel} market cap`}
+                  >
+                    <strong>{token.marketCapLabel}</strong>
+                    <span>MC</span>
+                  </Link>
+                ) : (
+                  <span
+                    className="token-card-market-cap token-card-market-cap-empty"
+                    aria-hidden="true"
+                  />
+                )}
+
+                <div className="token-card-footer">
+                  <button
+                    className="token-address"
+                    type="button"
+                    aria-label={
+                      copied
+                        ? `${token.name} contract address copied`
+                        : `Copy ${token.name} contract address`
+                    }
+                    title={
+                      copied
+                        ? "Copied"
+                        : `${token.tokenAddress} · Copy contract address`
+                    }
+                    onClick={() => copyAddress(token.tokenAddress)}
+                  >
+                    <code>{formatTokenAddress(token.tokenAddress)}</code>
+                    {copied ? (
+                      <Check aria-hidden="true" size={12} />
                     ) : (
-                      <span />
+                      <Copy aria-hidden="true" size={12} />
                     )}
+                  </button>
 
-                    {token.links.length > 0 ? (
-                      <div
-                        className="token-social-links"
-                        aria-label={`${token.name} links`}
-                      >
-                        {token.links.map((link) => (
-                          <TokenSocialLink
-                            key={`${link.kind}:${link.url}`}
-                            link={link}
-                            tokenName={token.name}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                  {token.links.length > 0 ? (
+                    <div
+                      className="token-social-links"
+                      aria-label={`${token.name} links`}
+                    >
+                      {token.links.map((link) => (
+                        <TokenSocialLink
+                          key={`${link.kind}:${link.url}`}
+                          link={link}
+                          tokenName={token.name}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </article>
           );
