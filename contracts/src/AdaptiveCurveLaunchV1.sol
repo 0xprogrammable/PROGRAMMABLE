@@ -204,6 +204,7 @@ contract AdaptiveCurveLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         _requireContract(address(positionForwarderFactory_));
         if (launcherFeeRecipient_ == address(0)) revert InvalidDependency(launcherFeeRecipient_);
 
+        // slither-disable-next-line too-many-digits
         bytes32 expectedPlannerCodeHash = keccak256(type(AdaptiveCurvePositionPlannerV1).runtimeCode);
         bytes32 actualPlannerCodeHash = address(positionPlanner_).codehash;
         if (actualPlannerCodeHash != expectedPlannerCodeHash) {
