@@ -39,6 +39,7 @@ tests, security documentation and Ethereum deployment record.
 | --- | --- | --- |
 | [Classic](models/classic/README.md) | Fixed supply, locked one-sided liquidity and creator fees paid in ETH | Available |
 | [Adaptive](models/adaptive/README.md) | An immutable swap-fee curve linked to onchain value | In development |
+| [Deep](models/deep/README.md) | Creator fees build locked main-pool liquidity to a fixed target before beneficiary routing begins | In development |
 
 [`MODELS.md`](MODELS.md) contains the full catalog and release requirements.
 

@@ -7,6 +7,7 @@ accounted for.
 | --- | --- | --- |
 | Classic | Available | [Read the Classic documentation](models/classic/README.md) |
 | Adaptive | In development | [Read the Adaptive design](models/adaptive/README.md) |
+| Deep | In development | [Read the Deep design](models/deep/README.md) |
 
 ## Classic
 
@@ -21,6 +22,15 @@ Adaptive introduces an immutable fee curve selected at launch. The displayed swa
 pool moves through published onchain value bands.
 
 [Design and release requirements](models/adaptive/README.md)
+
+## Deep
+
+Deep directs the creator fee share into add-only liquidity for the launch pool until an immutable target is reached.
+After that point, the same share is routed to beneficiaries fixed at launch.
+
+Deep is not deployed and is not available for launch.
+
+[Design and unresolved release gates](models/deep/README.md)
 
 ## Release requirements
 
