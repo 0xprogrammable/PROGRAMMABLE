@@ -25,7 +25,6 @@ import {
   type LauncherToken,
   type TokenLink,
   type TokenLinkKind,
-  type TokenTone,
 } from "@/lib/tokens";
 
 type TokenCard = {
@@ -38,7 +37,6 @@ type TokenCard = {
   links: TokenLink[];
   tokenAddress: `0x${string}`;
   marketCapLabel?: string;
-  tone: TokenTone;
 };
 
 type TokenSort =
@@ -78,14 +76,6 @@ const fallbackTokenImages = [
   "/brand/programmable-token-fallback-05-lavender.webp",
   "/brand/programmable-token-fallback-06-dusk.webp",
 ] as const;
-const tokenTones: TokenTone[] = [
-  "rose",
-  "violet",
-  "mint",
-  "amber",
-  "sky",
-  "peach",
-];
 const sortOptions: { id: TokenSort; label: string }[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
@@ -292,7 +282,7 @@ function getPaginationItems(
 }
 
 function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
-  return tokens.map((token, index) => ({
+  return tokens.map((token) => ({
     id: token.id,
     name: token.name,
     symbol: token.symbol,
@@ -303,7 +293,6 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     links: token.links ?? [],
     tokenAddress: token.tokenAddress,
     marketCapLabel: formatFdv(token),
-    tone: tokenTones[index % tokenTones.length],
   }));
 }
 
@@ -573,7 +562,7 @@ export function ExploreView() {
           return (
             <article className="token-card" key={token.id}>
               <Link
-                className={`token-card-art token-card-art-${token.tone}`}
+                className="token-card-art"
                 href={href}
                 aria-label={`View ${token.name}`}
               >
