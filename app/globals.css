@@ -6406,3 +6406,11 @@ html[data-theme="dark"] .theme-toggle-sun {
     max-width: 858px;
   }
 }
+
+@media (min-width: 1440px) {
+  .launch-model-art-classic img {
+    object-position: center bottom;
+    transform: scale(1.14);
+    transform-origin: center bottom;
+  }
+}
