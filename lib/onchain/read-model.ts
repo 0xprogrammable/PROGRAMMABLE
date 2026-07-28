@@ -823,10 +823,7 @@ export async function readExploreModel(
   }
 
   const value = (async () => {
-    if (
-      config.environment === "production" &&
-      !isDeepExploreReleaseReady(config)
-    ) {
+    if (config.environment === "production") {
       const durable = await readDurableExploreModel(config);
       if (durable.status === "ready") {
         const model = durable.envelope.payload.model;
@@ -837,6 +834,10 @@ export async function readExploreModel(
           return model;
         }
       }
+      console.warn("Durable Explore index unavailable; using live RPCs", {
+        reason: durable.reason,
+        detail: durable.detail,
+      });
     }
     const model = await readReadyRegistryModel(config);
     try {

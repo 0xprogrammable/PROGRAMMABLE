@@ -11,6 +11,7 @@ import {
   http,
 } from "viem";
 import { mainnet } from "viem/chains";
+import { PrivyClient } from "@privy-io/node";
 
 import {
   createInitialState,
@@ -21,6 +22,7 @@ import {
   runKeeperCycle,
   validateState,
 } from "./core.mjs";
+import { createPrivyKeeperWallet } from "./privy-wallet.mjs";
 import { evaluateDeepKeeperReleaseGate } from "./release-gate.mjs";
 
 function serialize(value) {
@@ -104,16 +106,33 @@ function createClients(config) {
       }),
     }),
   );
-  const wallet = config.enabled
-    ? createWalletClient({
-        account: config.signerAddress,
-        chain: mainnet,
-        transport: http(config.signerRpcUrl, {
-          retryCount: 0,
-          timeout: 30_000,
-        }),
-      })
-    : null;
+  let wallet = null;
+  if (config.enabled && config.privyWalletId) {
+    const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    const appSecret = process.env.PRIVY_APP_SECRET;
+    if (!appId || !appSecret) {
+      throw new DeepKeeperError(
+        "INVALID_CONFIG",
+        "Privy credentials are required for the configured signing backend",
+      );
+    }
+    wallet = createPrivyKeeperWallet({
+      client: new PrivyClient({ appId, appSecret }),
+      walletId: config.privyWalletId,
+      signerAddress: config.signerAddress,
+      coordinatorAddress: config.coordinatorAddress,
+      chainId: config.chainId,
+    });
+  } else if (config.enabled) {
+    wallet = createWalletClient({
+      account: config.signerAddress,
+      chain: mainnet,
+      transport: http(config.signerRpcUrl, {
+        retryCount: 0,
+        timeout: 30_000,
+      }),
+    });
+  }
   return { readers, wallet };
 }
 

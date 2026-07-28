@@ -1,6 +1,7 @@
 # Deep keeper
 
-Status: built, disabled and not deployed.
+Status: built with a policy-bound signer, disabled until the Mainnet lifecycle
+gate is complete.
 
 This service pays gas to call the permissionless `LiquidityGrowthAutomationV1`
 coordinator. It cannot select recipients, withdraw liquidity, change a vault or
@@ -12,8 +13,10 @@ contract release gates are closed.
 - Transaction submission requires both `DEEP_KEEPER_ENABLED=true` and
   `DEEP_KEEPER_SEND_TRANSACTIONS=true`. Every other configuration is read and
   simulation only.
-- The process rejects private keys and mnemonics. Execution uses a separate
-  remote signer RPC and a dedicated address holding only bounded gas funds.
+- The process rejects private keys and mnemonics. Execution uses either a
+  separate remote signer RPC or the dedicated Privy policy wallet. The
+  production wallet can only call `performBatch` on the verified Mainnet
+  coordinator and holds only bounded gas funds.
 - Two independent read RPCs must agree on chain ID, confirmed block, coordinator
   bytecode, registry state, ready work and batch simulation.
 - Only a non-empty coordinator batch that simulates every candidate successfully
@@ -59,9 +62,9 @@ dedicated keeper account.
 activation switches are true, the service refuses to start unless that record
 contains the exact release commit, source commitment, successful automation
 receipt and runtime hash, verified source and lifecycle evidence, and a keeper
-policy bound to the configured coordinator. The checked-in manifest is
-intentionally `not-deployed`, so the current service can only report a disabled
-release.
+policy bound to the configured coordinator. The checked-in deployment and
+launch canary are verified, but transaction submission remains disabled until
+the complete fee-processing and compounding lifecycle is proven on Mainnet.
 
 Changing the subsidy cap upward or downward is an operations decision. A lower
 cap takes effect on the next cycle and immediately excludes vaults whose

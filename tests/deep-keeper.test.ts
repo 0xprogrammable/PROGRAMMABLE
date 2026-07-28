@@ -3,9 +3,7 @@ import { keccak256 } from "viem";
 import { readFileSync } from "node:fs";
 
 // The keeper is an executable Node service with a dependency-injected core.
-// @ts-expect-error JavaScript operations module has no separate declaration file.
 import * as deepKeeper from "../ops/deep-keeper/core.mjs";
-// @ts-expect-error JavaScript operations module has no separate declaration file.
 import { evaluateDeepKeeperReleaseGate } from "../ops/deep-keeper/release-gate.mjs";
 
 const {
@@ -225,6 +223,43 @@ describe("Deep keeper configuration", () => {
     ).toThrow("dedicated signer");
   });
 
+  it("accepts one policy-bound Privy wallet instead of a signer RPC", () => {
+    const config = parseKeeperConfig(
+      environment({
+        DEEP_KEEPER_ENABLED: "true",
+        DEEP_KEEPER_SEND_TRANSACTIONS: "true",
+        DEEP_KEEPER_SIGNER_ADDRESS: signer,
+        DEEP_KEEPER_PRIVY_WALLET_ID: "yks0kyukdaidxf043xqxgaki",
+      }),
+    );
+
+    expect(config.signerRpcUrl).toBeNull();
+    expect(config.privyWalletId).toBe(
+      "yks0kyukdaidxf043xqxgaki",
+    );
+  });
+
+  it("rejects ambiguous or malformed signing backends", () => {
+    expect(() =>
+      parseKeeperConfig(
+        environment({
+          DEEP_KEEPER_ENABLED: "true",
+          DEEP_KEEPER_SEND_TRANSACTIONS: "true",
+          DEEP_KEEPER_SIGNER_ADDRESS: signer,
+          DEEP_KEEPER_SIGNER_RPC_URL: "https://signer.example",
+          DEEP_KEEPER_PRIVY_WALLET_ID: "yks0kyukdaidxf043xqxgaki",
+        }),
+      ),
+    ).toThrow("exactly one remote signing backend");
+    expect(() =>
+      parseKeeperConfig(
+        environment({
+          DEEP_KEEPER_PRIVY_WALLET_ID: "not-a-wallet",
+        }),
+      ),
+    ).toThrow("Privy wallet ID");
+  });
+
   it("cannot redirect activation to another release manifest", () => {
     expect(() =>
       parseKeeperConfig(
@@ -250,7 +285,7 @@ describe("Deep keeper configuration", () => {
 });
 
 describe("Deep keeper release gate", () => {
-  it("reports the checked-in undeployed manifest as not ready", () => {
+  it("keeps the deployed release disabled until the keeper lifecycle is complete", () => {
     const config = parseKeeperConfig(environment());
     const gate = evaluateDeepKeeperReleaseGate(
       disabledRelease,
@@ -259,7 +294,11 @@ describe("Deep keeper release gate", () => {
 
     expect(gate.ready).toBe(false);
     expect(gate.reasons).toContain("deployment status");
-    expect(gate.reasons).toContain("automation deployment receipt");
+    expect(gate.reasons).toContain("release eligibility");
+    expect(gate.reasons).toContain("lifecycle evidence");
+    expect(gate.reasons).toContain("keeper activation");
+    expect(gate.reasons).toContain("keeper release policy");
+    expect(gate.reasons).not.toContain("automation deployment receipt");
   });
 
   it("binds activation to exact release, receipt, runtime and keeper policy evidence", () => {
