@@ -1982,16 +1982,14 @@ async function submitIntent(wallet, config, intent) {
 }
 
 function pendingFromSubmissionIntent(intent, hash) {
-  const {
-    idempotencyKey: _idempotencyKey,
-    createdAtMs,
-    maxPriorityFeePerGas: _maxPriorityFeePerGas,
-    ...pending
-  } = intent;
+  const pending = { ...intent };
+  delete pending.idempotencyKey;
+  delete pending.createdAtMs;
+  delete pending.maxPriorityFeePerGas;
   return {
     ...pending,
     hash,
-    submittedAtMs: createdAtMs,
+    submittedAtMs: intent.createdAtMs,
   };
 }
 
