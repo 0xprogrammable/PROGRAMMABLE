@@ -36,7 +36,7 @@ type TokenCard = {
   usesFallbackImage: boolean;
   links: TokenLink[];
   tokenAddress: `0x${string}`;
-  fdvLabel?: string;
+  marketCapLabel?: string;
 };
 
 type TokenSort =
@@ -65,7 +65,7 @@ type ExploreState =
 
 type PaginationItem = number | "start-gap" | "end-gap";
 
-const TOKENS_PER_PAGE = 9;
+const TOKENS_PER_PAGE = 12;
 const PROGRAMMABLE_TOKEN_ADDRESS =
   "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
@@ -220,7 +220,7 @@ function getFallbackTokenImage(address: string) {
   return fallbackTokenImages[index];
 }
 
-function formatFdv(token: LauncherToken) {
+function formatMarketCap(token: LauncherToken) {
   if (token.fdvUsdWad && /^\d+$/.test(token.fdvUsdWad)) {
     const value = Number(BigInt(token.fdvUsdWad)) / 1e18;
     if (Number.isFinite(value) && value > 0) {
@@ -296,7 +296,7 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     usesFallbackImage: !token.imageUrl?.trim(),
     links: token.links ?? [],
     tokenAddress: token.tokenAddress,
-    fdvLabel: formatFdv(token),
+    marketCapLabel: formatMarketCap(token),
   }));
 }
 
@@ -579,7 +579,7 @@ export function ExploreView() {
                       : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 800px) 112px, (max-width: 1100px) 132px, 156px"
+                  sizes="(max-width: 600px) 92px, (max-width: 800px) 108px, (max-width: 1100px) 122px, 134px"
                   unoptimized={!token.imageUrl.startsWith("/")}
                 />
               </Link>
@@ -621,16 +621,16 @@ export function ExploreView() {
                   </Link>
                 ) : null}
 
-                {token.fdvLabel || token.links.length > 0 ? (
+                {token.marketCapLabel || token.links.length > 0 ? (
                   <div className="token-card-footer">
-                    {token.fdvLabel ? (
+                    {token.marketCapLabel ? (
                       <Link
                         className="token-card-market-cap"
                         href={href}
-                        aria-label={`View ${token.name}, ${token.fdvLabel} fully diluted value`}
+                        aria-label={`View ${token.name}, ${token.marketCapLabel} market cap`}
                       >
-                        <strong>{token.fdvLabel}</strong>
-                        <span>FDV</span>
+                        <strong>{token.marketCapLabel}</strong>
+                        <span>MC</span>
                       </Link>
                     ) : (
                       <span />
@@ -752,55 +752,6 @@ export function ExploreView() {
                 </div>
               </details>
 
-              <nav className="token-pagination" aria-label="Token pages">
-                <button
-                  type="button"
-                  aria-label="Previous token page"
-                  disabled={activePage === 1 || busy}
-                  onClick={() =>
-                    setCurrentPage((page) => Math.max(1, page - 1))
-                  }
-                >
-                  <ChevronLeft aria-hidden="true" size={16} />
-                </button>
-
-                <div className="token-pagination-pages">
-                  {paginationItems.map((item) =>
-                    typeof item === "number" ? (
-                      <button
-                        key={item}
-                        className={activePage === item ? "active" : undefined}
-                        type="button"
-                        aria-label={`Token page ${item}`}
-                        aria-current={activePage === item ? "page" : undefined}
-                        disabled={busy}
-                        onClick={() => setCurrentPage(item)}
-                      >
-                        {item}
-                      </button>
-                    ) : (
-                      <span key={item} aria-hidden="true">
-                        …
-                      </span>
-                    ),
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  aria-label="Next token page"
-                  disabled={activePage === pageCount || busy}
-                  onClick={() =>
-                    setCurrentPage((page) => Math.min(pageCount, page + 1))
-                  }
-                >
-                  <ChevronRight aria-hidden="true" size={16} />
-                </button>
-
-                <span className="sr-only" aria-live="polite">
-                  Page {activePage} of {pageCount}
-                </span>
-              </nav>
             </div>
           </div>
         ) : null}
@@ -811,6 +762,62 @@ export function ExploreView() {
           </span>
         ) : null}
         {renderTokenState()}
+        {state.phase === "ready" &&
+        state.payload.status === "ready" &&
+        state.payload.total > 0 &&
+        cards.length > 0 ? (
+          <div className="token-pagination-row">
+            <nav className="token-pagination" aria-label="Token pages">
+              <button
+                type="button"
+                aria-label="Previous token page"
+                disabled={activePage === 1 || busy}
+                onClick={() =>
+                  setCurrentPage((page) => Math.max(1, page - 1))
+                }
+              >
+                <ChevronLeft aria-hidden="true" size={15} />
+              </button>
+
+              <div className="token-pagination-pages">
+                {paginationItems.map((item) =>
+                  typeof item === "number" ? (
+                    <button
+                      key={item}
+                      className={activePage === item ? "active" : undefined}
+                      type="button"
+                      aria-label={`Token page ${item}`}
+                      aria-current={activePage === item ? "page" : undefined}
+                      disabled={busy}
+                      onClick={() => setCurrentPage(item)}
+                    >
+                      {item}
+                    </button>
+                  ) : (
+                    <span key={item} aria-hidden="true">
+                      …
+                    </span>
+                  ),
+                )}
+              </div>
+
+              <button
+                type="button"
+                aria-label="Next token page"
+                disabled={activePage === pageCount || busy}
+                onClick={() =>
+                  setCurrentPage((page) => Math.min(pageCount, page + 1))
+                }
+              >
+                <ChevronRight aria-hidden="true" size={15} />
+              </button>
+
+              <span className="sr-only" aria-live="polite">
+                Page {activePage} of {pageCount}
+              </span>
+            </nav>
+          </div>
+        ) : null}
       </section>
     </div>
   );
