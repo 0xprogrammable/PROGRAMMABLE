@@ -54,7 +54,7 @@ function readParameters(data: Hex) {
     return decoded.args[0];
   } catch {
     throw new Error(
-      "The prepared transaction does not call the Classic V3 launch function",
+      "The prepared transaction does not call the Classic launch function",
     );
   }
 }
@@ -94,7 +94,7 @@ export function validatePreparedClassicV3LaunchTransactionAgainstManifest(
 ): PreparedClassicV3LaunchTransaction {
   const transaction = parsePreparedTransaction(input.transaction);
   if (transaction.kind !== "launch") {
-    throw new Error("The prepared transaction is not a Classic V3 launch");
+    throw new Error("The prepared transaction is not a Classic launch");
   }
   if (
     !isClassicV3DeploymentReady(manifest, manifest.chainId) ||
@@ -102,7 +102,7 @@ export function validatePreparedClassicV3LaunchTransactionAgainstManifest(
     !isAddress(manifest.memeLaunchV2)
   ) {
     throw new Error(
-      "Classic V3 is not enabled by the release manifest",
+      "Classic is not enabled by the release manifest",
     );
   }
   if (transaction.chainId !== manifest.chainId) {

@@ -195,7 +195,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           errorMessage:
             caught instanceof Error
               ? caught.message
-              : "Classic V3 rewards could not be loaded",
+              : "Classic rewards could not be loaded",
         });
       });
     return () => controller.abort();
@@ -809,7 +809,7 @@ function ProfileAccountWorkspace({
           aria-labelledby="profile-v3-rewards-title"
         >
           <header className="profile-account-heading">
-            <h2 id="profile-v3-rewards-title">Classic V3 rewards</h2>
+            <h2 id="profile-v3-rewards-title">Classic rewards</h2>
             <span>{classicV3Rewards.rewards.length}</span>
           </header>
           <div className="profile-v3-list">

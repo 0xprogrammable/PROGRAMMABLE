@@ -55,11 +55,11 @@ These builders define the direct trading path. They remain fail closed whenever 
 
 `contracts/config/app-deployments.v1.json` is the release switch.
 
-- Mainnet Classic V2 is `ready`
-- Sepolia Classic V2 is `ready` for an explicitly configured rehearsal build
+- Mainnet Classic is `ready`
+- Sepolia Classic is `ready` for an explicitly configured rehearsal build
 
 The Mainnet record contains exact addresses, deployment blocks, runtime hashes, source-verification state and the
-two-RPC-reconciled canary lifecycle for the current Classic V2 release. The Sepolia record contains the equivalent
+two-RPC-reconciled canary lifecycle for the current Classic release. The Sepolia record contains the equivalent
 source-verified atomic Dev Buy release and signed Test2 lifecycle. The app uses Sepolia only when both server and client
 select the `rehearsal` environment. Older lifecycles remain separately historical and are not release eligible.
 

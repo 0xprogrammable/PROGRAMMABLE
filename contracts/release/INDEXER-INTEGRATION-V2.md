@@ -1,4 +1,4 @@
-# Programmable Classic V2 integration
+# Programmable Classic integration
 
 Programmable Classic launches a fixed-supply UERC20 into a canonical native ETH/Token Uniswap v4 pool. The token has no
 transfer tax. The pool hook charges the same disclosed custom-accounting fee on buys and sells.

@@ -12,6 +12,7 @@
   --accent: #e879be;
   --accent-hover: #dc68b0;
   --accent-strong: #8f3d72;
+  --brand-pink: #ef82b1;
   --accent-ink: #2d1425;
   --accent-wash: rgba(232, 121, 190, 0.12);
   --success: #19764d;
@@ -233,7 +234,7 @@ textarea {
 .header-social-link {
   align-items: center;
   border-radius: 50%;
-  color: var(--muted);
+  color: var(--brand-pink);
   display: inline-flex;
   flex: none;
   height: 46px;
@@ -534,6 +535,7 @@ textarea {
 .token-section {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   min-height: 0;
 }
 
@@ -3995,7 +3997,7 @@ textarea {
   .wordmark:hover,
   .header-social-link:hover {
     background: var(--surface-soft);
-    color: var(--text);
+    color: var(--accent-hover);
     transform: translateY(-1px);
   }
 
@@ -6036,7 +6038,7 @@ textarea {
 
 @media (min-width: 1120px) {
   .launch-model-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    max-width: 1200px;
+    grid-template-columns: repeat(2, minmax(0, 420px));
+    max-width: 858px;
   }
 }

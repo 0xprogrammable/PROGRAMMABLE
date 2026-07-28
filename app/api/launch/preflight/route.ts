@@ -711,17 +711,17 @@ async function assertClassicV3Infrastructure(
     assertRuntimeCodeHash(
       hookFactory,
       codeHashes.ethCreatorFeeHookFactoryV3,
-      "Classic V3 hook factory",
+      "Classic hook factory",
     ),
     assertRuntimeCodeHash(
       hook,
       codeHashes.ethCreatorFeeHookV3,
-      "Classic V3 hook",
+      "Classic hook",
     ),
     assertRuntimeCodeHash(
       vaultFactory,
       codeHashes.feeSplitVaultFactoryV1,
-      "Classic V3 reward factory",
+      "Classic reward factory",
     ),
     assertRuntimeCodeHash(
       positionForwarderFactory,
@@ -731,7 +731,7 @@ async function assertClassicV3Infrastructure(
     assertRuntimeCodeHash(
       launcher,
       codeHashes.memeLaunchV2,
-      "Classic V3 launcher",
+      "Classic launcher",
     ),
   ]);
 
@@ -873,7 +873,7 @@ async function assertClassicV3Infrastructure(
   for (const [actual, expected, label] of expectedAddresses) {
     if (actual.toLowerCase() !== expected.toLowerCase()) {
       throw new Error(
-        `The Classic V3 ${label} does not match the release manifest`,
+        `The Classic ${label} does not match the release manifest`,
       );
     }
   }
@@ -890,7 +890,7 @@ async function assertClassicV3Infrastructure(
     (BigInt(hook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS
   ) {
     throw new Error(
-      "The Classic V3 economics do not match the release manifest",
+      "The Classic economics do not match the release manifest",
     );
   }
 }
@@ -932,7 +932,7 @@ async function prepareClassicV3Launch(
     return response({
       status: "blocked",
       mode: "classic-v3",
-      title: `Classic V3 is not deployed on ${networkName} yet`,
+      title: `Classic is not deployed on ${networkName} yet`,
       detail:
         "The setup is available for review. Wallet transactions stay disabled until every release address, runtime hash and deployment block is recorded",
       checks: [
@@ -940,9 +940,9 @@ async function prepareClassicV3Launch(
         connectedWalletCheck,
         {
           id: "contracts",
-          label: "Classic V3 contracts",
+          label: "Classic contracts",
           status: "blocked",
-          detail: `No approved ${networkName} Classic V3 deployment is recorded`,
+          detail: `No approved ${networkName} Classic deployment is recorded`,
         },
       ],
     });
@@ -1019,13 +1019,13 @@ async function prepareClassicV3Launch(
     status: "ready",
     mode: "classic-v3",
     title: "Ready for wallet review",
-    detail: `The exact Classic V3 launch succeeded in a read-only ${networkName} simulation`,
+    detail: `The exact Classic launch succeeded in a read-only ${networkName} simulation`,
     checks: [
       tokenCheck,
       connectedWalletCheck,
       {
         id: "contracts",
-        label: "Classic V3 contracts",
+        label: "Classic contracts",
         status: "pass",
         detail:
           "Runtime bytecode, immutable directional fees and reward ownership match",
