@@ -83,7 +83,6 @@ type WalletContextValue = {
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
-const privyClientId = process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID?.trim();
 const profileStoragePrefix = "programmable-profile";
 const profileUpdatedEvent = "programmable:profile-updated";
 const usernamePattern = /^[A-Za-z0-9]{3,12}$/;
@@ -373,7 +372,6 @@ function ConfiguredWalletProvider({
   return (
     <PrivyProvider
       appId={appId}
-      clientId={privyClientId}
       config={themedPrivyConfig}
     >
       <PrivyWalletBridge>{children}</PrivyWalletBridge>
