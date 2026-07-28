@@ -68,7 +68,7 @@ export const memeLaunchAbi = parseAbi([
 export const adaptiveCurveLaunchAbi = parseAbi([
   "function launch(bytes encodedParameters) payable returns ((address token,address feeHook,address positionRecipient,uint256 positionTokenId,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,bytes32 poolId,bytes32 curveHash,bytes32 launchHash) result)",
   "function predictTokenAddress(string name,string symbol,address creator,bytes32 creatorSalt) view returns (address token,bytes32 effectiveGraffiti)",
-  "function predictFeeHook(bytes32 hookSalt) view returns (address)",
+  "function predictFeeHook(address creator,bytes32 creatorSalt,bytes32 hookSaltNonce) view returns (address)",
   "function poolManager() view returns (address)",
   "function positionManager() view returns (address)",
   "function tokenFactory() view returns (address)",
@@ -339,7 +339,7 @@ export function validateMemeLaunchDraft(draft: LaunchDraft) {
 
 export function validateAdaptiveLaunchDraft(
   draft: LaunchDraft,
-  options: { requireHookSalt?: boolean } = {},
+  options: { requireHookSaltNonce?: boolean } = {},
 ) {
   if (draft.launchModel !== "adaptive") {
     throw new LaunchInputError("Choose the Adaptive launch model");
@@ -403,9 +403,9 @@ export function validateAdaptiveLaunchDraft(
     throw new LaunchInputError("Enter a valid optional Dev Buy");
   }
   if (
-    options.requireHookSalt &&
-    (!isHex(draft.hookSalt, { strict: true }) ||
-      draft.hookSalt.length !== 66)
+    options.requireHookSaltNonce &&
+    (!isHex(draft.hookSaltNonce, { strict: true }) ||
+      draft.hookSaltNonce.length !== 66)
   ) {
     throw new LaunchInputError(
       "Prepare a deterministic Adaptive hook address first",
@@ -441,7 +441,7 @@ export function encodeMemeLaunch(
 }
 
 const adaptiveLaunchParameters = parseAbiParameters(
-  "(string name,string symbol,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,(bytes32 hookSalt,int24[] fdvIndexes,uint16[] totalSwapFeeBps) curve) parameters",
+  "(string name,string symbol,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,(bytes32 hookSaltNonce,int24[] fdvIndexes,uint16[] totalSwapFeeBps) curve) parameters",
 );
 
 export function encodeAdaptiveLaunch(
@@ -449,7 +449,7 @@ export function encodeAdaptiveLaunch(
   creatorSalt: Hex,
 ) {
   const points = validateAdaptiveLaunchDraft(draft, {
-    requireHookSalt: true,
+    requireHookSaltNonce: true,
   });
   const metadata = getValidatedMetadata(draft);
   const encodedParameters = encodeAbiParameters(adaptiveLaunchParameters, [
@@ -464,7 +464,7 @@ export function encodeAdaptiveLaunch(
         extraData: encodeMemeMetadataExtraData(draft),
       },
       curve: {
-        hookSalt: draft.hookSalt as Hex,
+        hookSaltNonce: draft.hookSaltNonce as Hex,
         fdvIndexes: points.map((point) => point.fdvIndex),
         totalSwapFeeBps: points.map((point) => point.totalSwapFeeBps),
       },

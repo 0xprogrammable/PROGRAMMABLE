@@ -184,6 +184,25 @@ contract MemeLaunchV2Test is Deployers {
         assertGt(result.initialBuyTokenAmount, 0);
     }
 
+    function test_onlyPoolManagerCanCallInitialBuyUnlockCallback() public {
+        vm.expectRevert(abi.encodeWithSelector(MemeLaunchV2.UnauthorizedUnlockCallback.selector, address(this)));
+        launcher.unlockCallback("");
+    }
+
+    function test_forcedEthCannotBlockFutureLaunchesOrSubsidizeInitialBuy() public {
+        uint256 forcedBalance = 1 wei;
+        // Models native ETH forced in via SELFDESTRUCT without introducing deprecated test bytecode.
+        vm.deal(address(launcher), forcedBalance);
+        assertEq(address(launcher).balance, forcedBalance);
+
+        MemeLaunchV2.LaunchResult memory result =
+            _launch(_parameters(bytes32("forced-eth"), _addresses1(deployer), _shares1(10_000)));
+
+        assertEq(result.initialBuyNativeAmount, MIN_INITIAL_BUY_WEI);
+        assertGt(result.initialBuyTokenAmount, 0);
+        assertEq(address(launcher).balance, forcedBalance);
+    }
+
     function test_reusesMatchingPredeployedRewardVaultInsteadOfAllowingMempoolGriefing() public {
         MemeLaunchV2.LaunchParameters memory parameters =
             _parameters(bytes32("predeployed-vault"), _addresses1(externalBeneficiary), _shares1(10_000));

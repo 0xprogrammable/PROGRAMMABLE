@@ -1,4 +1,6 @@
 .page {
+  overscroll-behavior-y: contain;
+  scroll-padding-bottom: 96px;
   scrollbar-gutter: stable;
 }
 
@@ -102,7 +104,11 @@
 }
 
 .footer {
+  backdrop-filter: blur(16px);
   background: var(--surface-tint-strong);
+  bottom: 0;
+  position: sticky;
+  z-index: 4;
 }
 
 @media (min-width: 1021px) {
@@ -110,8 +116,7 @@
     height: calc(100svh - var(--header-height));
     overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior-y: contain;
-    padding-bottom: max(28px, env(safe-area-inset-bottom));
+    padding-bottom: max(32px, env(safe-area-inset-bottom));
   }
 
   :global(.classic-launch-sheet).sheet {
@@ -128,7 +133,7 @@
 @media (max-width: 1020px) {
   .page {
     min-height: calc(100svh - var(--header-height));
-    padding-bottom: max(28px, env(safe-area-inset-bottom));
+    padding-bottom: max(36px, env(safe-area-inset-bottom));
   }
 }
 

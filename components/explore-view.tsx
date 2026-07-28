@@ -558,7 +558,10 @@ export function ExploreView() {
     }
 
     return (
-      <div className="token-card-grid">
+      <div
+        className="token-card-grid"
+        key={`${activePage}:${sort}:${deferredQuery}`}
+      >
         {cards.map((token) => {
           const copied = copiedAddress === token.tokenAddress;
           const href = `/token/${token.tokenAddress}`;
@@ -581,7 +584,7 @@ export function ExploreView() {
                       : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 600px) 84px, (max-width: 800px) 106px, (max-height: 930px) 190px, 240px"
+                  sizes="168px"
                   unoptimized={!token.imageUrl.startsWith("/")}
                 />
               </span>

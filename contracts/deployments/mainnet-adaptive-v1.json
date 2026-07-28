@@ -1,10 +1,27 @@
 {
   "schemaVersion": 1,
   "model": "adaptive-v1",
+  "releaseVersion": "adaptive-v1",
   "status": "not-deployed",
   "chainId": 1,
-  "sourceCommitment": null,
+  "releaseCommit": null,
+  "sourceCommitment": "0x48344030f1c885860b69232dd6dee1bd05923a0e0044271437d495f7f5c6a1a4",
   "startingNonce": null,
+  "candidatePlan": {
+    "status": "simulation-only-refresh-before-signing",
+    "observedAtBlock": 25631059,
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "startingNonce": 30,
+    "transactionCount": 3,
+    "positionPlanner": "0x1bE523967293E7CFbFFCB64cF1FF5d17DEa9B454",
+    "hookFactory": "0xb974A9EF7B75650428389b63fa6C4906450ABcE0",
+    "launcher": "0xDa30106b22fB611f9dF8F325AE2F8C264e91808D",
+    "sampleHook": "0xbbEF88685f08A8E5F09469E72c06ad5ba56060Cc",
+    "sampleHookSalt": "0x0000000000000000000000000000000000000000000000000000000000003d2f",
+    "hookInitCodeHash": "0x593532f6318bbfff8f76f6980ada3f5e8ec326e96f1e748f86582470a4cbe22c",
+    "allHookMask": "16383",
+    "requiredHookFlags": "8396"
+  },
   "addresses": {
     "deployer": null,
     "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
@@ -14,6 +31,16 @@
     "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
   },
   "transactions": {
+    "positionPlanner": null,
+    "hookFactory": null,
+    "launcher": null
+  },
+  "deploymentBlocks": {
+    "positionPlanner": null,
+    "hookFactory": null,
+    "launcher": null
+  },
+  "deploymentEvidence": {
     "positionPlanner": null,
     "hookFactory": null,
     "launcher": null
@@ -30,16 +57,16 @@
       "codeHash": "0x38882800527154032f4e2a40e83d6134bdc6f0a7d44ac7f78bd1f4af7c485e47"
     },
     "hookFactory": {
-      "bytes": 18162,
-      "codeHash": "0xbde85d07fea38fe3f78e298e184eb05b65d530398d20c8ee6411c6a1bd935722"
+      "bytes": 18249,
+      "codeHash": "0x3d865b9e3a59f198ca14795ec82ee764bc884f1f418c36f3498ffd98655538ef"
     },
     "feeHook": {
-      "bytes": 15571,
-      "codeHash": "0xdee6520081e7fd3413010555e1456729376faddada2217c0d3e8123ff22a135b"
+      "bytes": 15658,
+      "codeHash": "0x9b5a6b5605c7a9b8b44ba86ee6bce48cb7e006f80a10831a89f59f673c6a19d3"
     },
     "launcherTemplate": {
-      "bytes": 19038,
-      "codeHash": "0xf230e1d90a1d53782d30fd6a45d28a4d44bd44a00856b8f0a389c854d08861ca",
+      "bytes": 19388,
+      "codeHash": "0x44313aa7a963e75c1355d28b06a257509739c642780a1d377118731579b074dc",
       "note": "Artifact runtime before constructor immutable references are patched"
     }
   },
@@ -79,8 +106,40 @@
   },
   "sourceVerification": {
     "status": "not-submitted",
-    "positionPlanner": null,
-    "hookFactory": null,
-    "launcher": null
+    "compiler": {
+      "version": "0.8.26",
+      "optimizerEnabled": true,
+      "optimizerRuns": 1000,
+      "evmVersion": "cancun",
+      "bytecodeHash": "none",
+      "cborMetadata": false
+    },
+    "positionPlanner": {
+      "etherscan": null,
+      "sourcify": null
+    },
+    "hookFactory": {
+      "etherscan": null,
+      "sourcify": null
+    },
+    "launcher": {
+      "etherscan": null,
+      "sourcify": null
+    },
+    "canaryFeeHook": {
+      "etherscan": null,
+      "sourcify": null
+    }
+  },
+  "lifecycleEvidence": {
+    "status": "not-run",
+    "releaseEligible": false,
+    "requiredRelease": "adaptive-v1",
+    "independentRpcCount": 2,
+    "evidenceHash": null,
+    "attestation": {
+      "signer": null,
+      "signature": null
+    }
   }
 }

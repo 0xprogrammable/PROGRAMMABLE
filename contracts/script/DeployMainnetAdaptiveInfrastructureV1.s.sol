@@ -227,12 +227,20 @@ contract DeployMainnetAdaptiveInfrastructureV1 is Script {
                 keccak256("one-sided-permanently-locked-official-v4-position")
             )
         );
+        bytes32 securityCommitment = keccak256(
+            abi.encode(
+                keccak256("creator-bound-hook-nonce"),
+                keccak256("forced-native-balance-preserved"),
+                keccak256("creator-initiated-fee-claim")
+            )
+        );
         return keccak256(
             abi.encode(
                 keccak256("programmable.adaptive.infrastructure.v1.ethereum"),
                 bytecodeCommitment,
                 dependencyCommitment,
-                economicsCommitment
+                economicsCommitment,
+                securityCommitment
             )
         );
     }

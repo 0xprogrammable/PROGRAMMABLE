@@ -18,7 +18,7 @@
     "contracts:lint": "cd contracts && forge lint src script",
     "contracts:build": "cd contracts && forge build",
     "contracts:test": "cd contracts && forge test",
-    "contracts:test:deterministic": "cd contracts && forge test --no-match-path 'test/{AdaptiveCurveLaunchMainnetFork.t.sol,AdaptiveCurveMainnetFork.t.sol,ClassicV3MainnetFork.t.sol,DeployMainnetAdaptiveInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV2.t.sol,DeploySepoliaInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV2.t.sol,EthereumDeploymentSnapshot.t.sol,EthereumSepoliaDeploymentSnapshot.t.sol,MainnetMemeLifecycleFork.t.sol}'",
+    "contracts:test:deterministic": "cd contracts && forge test --no-match-path 'test/{AdaptiveCurveLaunchMainnetFork.t.sol,AdaptiveCurveMainnetFork.t.sol,ClassicV3MainnetFork.t.sol,DeployClassicV3InfrastructureV1Mainnet.t.sol,DeployClassicV3InfrastructureV1Sepolia.t.sol,DeployMainnetAdaptiveInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV2.t.sol,DeploySepoliaInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV2.t.sol,EthereumDeploymentSnapshot.t.sol,EthereumSepoliaDeploymentSnapshot.t.sol,MainnetMemeLifecycleFork.t.sol}'",
     "contracts:test:forks": "node contracts/scripts/verify-fork-tests-ci.mjs",
     "contracts:slither": "cd contracts && slither . --filter-paths 'lib|test|script' --exclude-dependencies",
     "contracts:official-deployments": "node contracts/scripts/verify-official-deployments.mjs",

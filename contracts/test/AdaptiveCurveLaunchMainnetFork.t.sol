@@ -9,7 +9,6 @@ import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import { IV4Quoter } from "@uniswap/v4-periphery/src/interfaces/IV4Quoter.sol";
-import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import { Test } from "forge-std/Test.sol";
 
 import { AdaptiveCurveFeeHookFactoryV1 } from "../src/AdaptiveCurveFeeHookFactoryV1.sol";
@@ -93,8 +92,7 @@ contract AdaptiveCurveLaunchMainnetForkTest is Test {
     }
 
     function test_atomicLaunchWorksWithOfficialMainnetDeploymentAndEmptyHookDataTrading() public {
-        bytes32 hookSalt = _mineHookSalt();
-        AdaptiveCurveLaunchV1.LaunchParameters memory parameters = _parameters(hookSalt);
+        AdaptiveCurveLaunchV1.LaunchParameters memory parameters = _parameters();
 
         vm.prank(creator);
         AdaptiveCurveLaunchV1.LaunchResult memory result = launcher.launch(abi.encode(parameters));
@@ -146,6 +144,7 @@ contract AdaptiveCurveLaunchMainnetForkTest is Test {
 
         uint256 claimCreatorBefore = creator.balance;
         uint256 treasuryBefore = launcherTreasury.balance;
+        vm.prank(creator);
         hook.claimCreatorFees(result.poolId);
         hook.claimLauncherFees();
         assertEq(creator.balance, claimCreatorBefore + creatorFees);
@@ -153,11 +152,8 @@ contract AdaptiveCurveLaunchMainnetForkTest is Test {
         assertEq(hook.totalNativeFeesAccrued(), 0);
     }
 
-    function _parameters(bytes32 hookSalt)
-        private
-        view
-        returns (AdaptiveCurveLaunchV1.LaunchParameters memory parameters)
-    {
+    function _parameters() private view returns (AdaptiveCurveLaunchV1.LaunchParameters memory parameters) {
+        bytes32 creatorSalt = keccak256("programmable-adaptive-launch-mainnet-fork-v1");
         int24[] memory indexes = new int24[](4);
         indexes[0] = launcher.MIN_FDV_INDEX();
         indexes[1] = -204_200;
@@ -173,7 +169,7 @@ contract AdaptiveCurveLaunchMainnetForkTest is Test {
         parameters = AdaptiveCurveLaunchV1.LaunchParameters({
             name: "Programmable Adaptive Fork Launch",
             symbol: "PAFL",
-            creatorSalt: keccak256("programmable-adaptive-launch-mainnet-fork-v1"),
+            creatorSalt: creatorSalt,
             metadata: UERC20Metadata({
                 description: "Official mainnet deployment integration fixture",
                 website: "https://programmable.family",
@@ -181,18 +177,19 @@ contract AdaptiveCurveLaunchMainnetForkTest is Test {
                 extraData: ""
             }),
             curve: AdaptiveCurveLaunchV1.CurveConfiguration({
-                hookSalt: hookSalt, fdvIndexes: indexes, totalSwapFeeBps: fees
+                hookSaltNonce: _mineHookSaltNonce(creator, creatorSalt), fdvIndexes: indexes, totalSwapFeeBps: fees
             })
         });
     }
 
-    function _mineHookSalt() private view returns (bytes32 salt) {
-        (, salt) = HookMiner.find(
-            address(hookFactory),
-            hookFactory.REQUIRED_HOOK_FLAGS(),
-            type(AdaptiveCurveFeeHookV1).creationCode,
-            abi.encode(poolManager, launcherTreasury)
-        );
+    function _mineHookSaltNonce(address creator_, bytes32 creatorSalt_) private view returns (bytes32 nonce) {
+        uint160 requiredFlags = hookFactory.REQUIRED_HOOK_FLAGS();
+        uint160 allFlags = hookFactory.ALL_HOOK_MASK();
+        for (uint256 candidate;; ++candidate) {
+            nonce = bytes32(candidate);
+            address predicted = launcher.predictFeeHook(creator_, creatorSalt_, nonce);
+            if ((uint160(predicted) & allFlags) == requiredFlags) return nonce;
+        }
     }
 
     function _quoteExactInput(PoolKey memory key, bool zeroForOne, uint256 amountIn)

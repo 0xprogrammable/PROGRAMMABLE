@@ -16,6 +16,10 @@ export const nativeSwapFeesAccruedEvent = parseAbiItem(
   "event NativeSwapFeesAccrued(bytes32 indexed poolId,address indexed swapSender,uint256 grossNativeAmount,uint256 creatorFee,uint256 launcherFee)",
 );
 
+export const poolManagerSwapEvent = parseAbiItem(
+  "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+);
+
 export const creatorFeesClaimedEvent = parseAbiItem(
   "event CreatorFeesClaimed(bytes32 indexed poolId,address indexed creator,address indexed recipient,address caller,uint256 amount)",
 );

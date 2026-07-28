@@ -17,6 +17,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const DEFAULT_RPCS = [
   "https://rpc.mevblocker.io",
@@ -835,6 +836,157 @@ function validateLaunchEventSet(events, deployment) {
   });
 }
 
+function throwInvariant(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function feeEventIdentity(event) {
+  if (event.eventName === "NativeSwapFeesAccrued") {
+    return {
+      poolId: event.args.poolId,
+      sender: event.args.swapSender,
+    };
+  }
+  if (event.eventName === "HookFee") {
+    return {
+      poolId: event.args.poolId,
+      sender: event.args.sender,
+    };
+  }
+  if (event.eventName === "HookSwap") {
+    return {
+      poolId: event.args.id,
+      sender: event.args.sender,
+    };
+  }
+  return null;
+}
+
+function eventLogIndex(event) {
+  return Number(event.logIndex);
+}
+
+export function reconcileNativeFeeEvents(
+  events,
+  trackedLaunches,
+  invariant = throwInvariant,
+) {
+  const launchByPool = new Map(
+    trackedLaunches.map((launch) => [
+      launch.poolId.toLowerCase(),
+      launch,
+    ]),
+  );
+  const groups = new Map();
+
+  for (const event of events) {
+    const identity = feeEventIdentity(event);
+    if (!identity) continue;
+    const key = [
+      event.transactionHash.toLowerCase(),
+      identity.poolId.toLowerCase(),
+      identity.sender.toLowerCase(),
+    ].join(":");
+    const group = groups.get(key) ?? {
+      transactionHash: event.transactionHash,
+      poolId: identity.poolId,
+      sender: identity.sender,
+      hookFees: [],
+      hookSwaps: [],
+      nativeAccruals: [],
+    };
+    if (event.eventName === "HookFee") group.hookFees.push(event);
+    else if (event.eventName === "HookSwap") group.hookSwaps.push(event);
+    else group.nativeAccruals.push(event);
+    groups.set(key, group);
+  }
+
+  let reconciled = 0;
+  for (const group of groups.values()) {
+    group.hookFees.sort(
+      (left, right) => eventLogIndex(left) - eventLogIndex(right),
+    );
+    group.hookSwaps.sort(
+      (left, right) => eventLogIndex(left) - eventLogIndex(right),
+    );
+    group.nativeAccruals.sort(
+      (left, right) => eventLogIndex(left) - eventLogIndex(right),
+    );
+    const context = {
+      transactionHash: group.transactionHash,
+      poolId: group.poolId,
+      sender: group.sender,
+      hookFeeCount: group.hookFees.length,
+      hookSwapCount: group.hookSwaps.length,
+      nativeAccrualCount: group.nativeAccruals.length,
+    };
+
+    invariant(
+      group.hookFees.length >= group.nativeAccruals.length,
+      "Native fee accrual is missing HookFee",
+      context,
+    );
+    invariant(
+      group.hookFees.length <= group.nativeAccruals.length,
+      "HookFee is missing native fee accrual",
+      context,
+    );
+    invariant(
+      group.hookSwaps.length >= group.nativeAccruals.length,
+      "Native fee accrual is missing HookSwap",
+      context,
+    );
+    invariant(
+      group.hookSwaps.length <= group.nativeAccruals.length,
+      "HookSwap is missing native fee accrual",
+      context,
+    );
+
+    const trackedLaunch = launchByPool.get(group.poolId.toLowerCase());
+    invariant(
+      trackedLaunch,
+      "Fee accrual belongs to an unknown launch pool",
+      context,
+    );
+
+    for (let index = 0; index < group.nativeAccruals.length; index += 1) {
+      const nativeAccrual = group.nativeAccruals[index];
+      const hookFee = group.hookFees[index];
+      const hookSwap = group.hookSwaps[index];
+      const totalFee =
+        nativeAccrual.args.creatorFee + nativeAccrual.args.launcherFee;
+      const occurrenceContext = {
+        ...context,
+        occurrence: index + 1,
+        hookFeeLogIndex: hookFee.logIndex,
+        hookSwapLogIndex: hookSwap.logIndex,
+        nativeAccrualLogIndex: nativeAccrual.logIndex,
+      };
+
+      invariant(
+        hookFee.args.feeAmount0 === totalFee &&
+          hookFee.args.feeAmount1 === 0n,
+        "HookFee does not reconcile with native accrual",
+        occurrenceContext,
+      );
+      invariant(
+        hookSwap.args.amount0 === -totalFee &&
+          hookSwap.args.amount1 === 0n,
+        "HookSwap delta does not reconcile with native accrual",
+        occurrenceContext,
+      );
+      invariant(
+        hookSwap.args.swapFee === trackedLaunch.totalSwapFeeBps * 100,
+        "HookSwap fee pips differ from launch disclosure",
+        occurrenceContext,
+      );
+      reconciled += 1;
+    }
+  }
+
+  return reconciled;
+}
+
 async function processEvents(logs, deployment, clients, state, blockNumber) {
   const events = logs
     .map((log) => decodeLog(log, deployment))
@@ -846,48 +998,10 @@ async function processEvents(logs, deployment, clients, state, blockNumber) {
     emit("meme_token_launched", "info", launch);
   }
 
+  reconcileNativeFeeEvents(events, Object.values(state.launches), assert);
+
   for (const event of events) {
     if (event.eventName === "NativeSwapFeesAccrued") {
-      const totalFee = event.args.creatorFee + event.args.launcherFee;
-      const hookFee = events.find(
-        (candidate) =>
-          candidate.eventName === "HookFee" &&
-          candidate.transactionHash === event.transactionHash &&
-          candidate.args.poolId.toLowerCase() ===
-            event.args.poolId.toLowerCase() &&
-          candidate.args.sender.toLowerCase() ===
-            event.args.swapSender.toLowerCase(),
-      );
-      const hookSwap = events.find(
-        (candidate) =>
-          candidate.eventName === "HookSwap" &&
-          candidate.transactionHash === event.transactionHash &&
-          candidate.args.id.toLowerCase() ===
-            event.args.poolId.toLowerCase() &&
-          candidate.args.sender.toLowerCase() ===
-            event.args.swapSender.toLowerCase(),
-      );
-      assert(hookFee, "Native fee accrual is missing HookFee");
-      assert(hookSwap, "Native fee accrual is missing HookSwap");
-      assert(
-        hookFee.args.feeAmount0 === totalFee &&
-          hookFee.args.feeAmount1 === 0n,
-        "HookFee does not reconcile with native accrual",
-      );
-      assert(
-        hookSwap.args.amount0 === -totalFee &&
-          hookSwap.args.amount1 === 0n,
-        "HookSwap delta does not reconcile with native accrual",
-      );
-      const trackedLaunch = Object.values(state.launches).find(
-        (launch) =>
-          launch.poolId.toLowerCase() === event.args.poolId.toLowerCase(),
-      );
-      assert(trackedLaunch, "Fee accrual belongs to an unknown launch pool");
-      assert(
-        hookSwap.args.swapFee === trackedLaunch.totalSwapFeeBps * 100,
-        "HookSwap fee pips differ from launch disclosure",
-      );
       emit("native_swap_fees_accrued", "info", {
         blockNumber: event.blockNumber,
         transactionHash: event.transactionHash,
@@ -1080,11 +1194,14 @@ function redactOperationalError(value) {
   );
 }
 
-main().catch((error) => {
-  if (!error.message?.includes("mismatch")) {
-    emit("monitor_stopped", "critical", {
-      message: redactOperationalError(error.message),
-    });
-  }
-  process.exitCode = 1;
-});
+const scriptPath = fileURLToPath(import.meta.url);
+if (resolve(process.argv[1] ?? "") === scriptPath) {
+  main().catch((error) => {
+    if (!error.message?.includes("mismatch")) {
+      emit("monitor_stopped", "critical", {
+        message: redactOperationalError(error.message),
+      });
+    }
+    process.exitCode = 1;
+  });
+}

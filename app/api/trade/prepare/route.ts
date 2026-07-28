@@ -21,6 +21,7 @@ import {
   resolveClassicTradeDeployment,
   type ClassicTradeRuntimeClient,
 } from "../../../../lib/trade/server";
+import { safeServerErrorSummary } from "../../../../lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -195,6 +196,10 @@ export async function POST(request: NextRequest) {
     if (error instanceof ClassicTradeUnavailableError) {
       return json({ error: error.message }, 409);
     }
+    console.error(
+      "Classic trade preparation failed",
+      safeServerErrorSummary(error),
+    );
     return json(
       {
         error:

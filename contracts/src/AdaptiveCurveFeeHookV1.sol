@@ -121,6 +121,7 @@ contract AdaptiveCurveFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
     error NoFeesToClaim();
     error PartialFillUnsupported(uint256 expectedNativePoolAmount, uint256 actualNativePoolAmount);
     error PoolNotRegistered(bytes32 poolId);
+    error UnauthorizedFeeClaim(address caller, address expected);
     error UnauthorizedFeeRedirect(address caller, address expected);
     error UnauthorizedInitializer(address caller, address expected);
     error UnexpectedUnlockResult();
@@ -283,10 +284,11 @@ contract AdaptiveCurveFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTra
     }
 
     /// @notice Redeems one pool's accrued creator fees directly to its immutable creator recipient.
-    /// @dev Anyone may trigger the claim but cannot redirect it.
+    /// @dev Only the recorded creator may initiate its payout.
     function claimCreatorFees(bytes32 poolId) external nonReentrant returns (uint256 amount) {
         PoolFeeConfig storage config = poolFeeConfig[poolId];
         if (!config.registered) revert PoolNotRegistered(poolId);
+        if (msg.sender != config.creator) revert UnauthorizedFeeClaim(msg.sender, config.creator);
         return _claimCreatorFees(poolId, config, config.creator);
     }
 

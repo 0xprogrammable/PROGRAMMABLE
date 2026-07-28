@@ -40,6 +40,10 @@ contract AdaptiveCurveFeeRecipient {
         hook.claimCreatorFeesTo(poolId, recipient);
     }
 
+    function claimCreatorFees(AdaptiveCurveFeeHookV1 hook, bytes32 poolId) external {
+        hook.claimCreatorFees(poolId);
+    }
+
     function claimLauncherFeesTo(AdaptiveCurveFeeHookV1 hook, address recipient) external {
         hook.claimLauncherFeesTo(recipient);
     }
@@ -271,7 +275,7 @@ contract AdaptiveCurveFeeHookV1Test is Deployers {
         );
     }
 
-    function test_permissionlessClaimsCannotRedirectFees() public {
+    function test_onlyCreatorCanInitiateCreatorClaimWhileLauncherClaimRemainsPermissionless() public {
         _swap(true, -int256(0.1 ether), 0.1 ether);
         (,,,,,, uint256 creatorFee) = hook.poolFeeConfig(poolId);
         uint256 launcherFee = hook.launcherFeesAccrued();
@@ -279,14 +283,21 @@ contract AdaptiveCurveFeeHookV1Test is Deployers {
         uint256 treasuryBefore = launcherTreasury.balance;
         address caller = makeAddr("claimCaller");
 
-        vm.startPrank(caller);
+        vm.prank(caller);
+        vm.expectRevert(
+            abi.encodeWithSelector(AdaptiveCurveFeeHookV1.UnauthorizedFeeClaim.selector, caller, creatorRecipient)
+        );
         hook.claimCreatorFees(poolId);
-        hook.claimLauncherFees();
-        vm.stopPrank();
 
-        assertEq(creatorRecipient.balance, creatorBefore + creatorFee);
+        vm.prank(caller);
+        hook.claimLauncherFees();
+
+        assertEq(creatorRecipient.balance, creatorBefore);
         assertEq(launcherTreasury.balance, treasuryBefore + launcherFee);
         assertEq(caller.balance, 0);
+
+        creatorRecipientContract.claimCreatorFees(hook, poolId);
+        assertEq(creatorRecipient.balance, creatorBefore + creatorFee);
         assertEq(hook.totalNativeFeesAccrued(), 0);
     }
 
@@ -316,7 +327,7 @@ contract AdaptiveCurveFeeHookV1Test is Deployers {
         creatorRecipientContract.setRejectsNative(true);
         launcherTreasuryContract.setRejectsNative(true);
         vm.expectRevert();
-        hook.claimCreatorFees(poolId);
+        creatorRecipientContract.claimCreatorFees(hook, poolId);
         vm.expectRevert();
         hook.claimLauncherFees();
 

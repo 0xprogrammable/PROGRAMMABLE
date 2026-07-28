@@ -24,7 +24,11 @@ import {
 import { useWallet } from "@/components/wallet-provider";
 import { AdaptiveCurveEditor } from "@/components/adaptive-curve-editor";
 import adaptiveLayout from "@/components/adaptive-launch-layout.module.css";
-import { validatePreparedAdaptiveLaunchTransaction } from "@/lib/adaptive-launch-validation";
+import {
+  isAdaptiveDeploymentReady,
+  validatePreparedAdaptiveLaunchTransaction,
+  type AdaptiveLaunchManifest,
+} from "@/lib/adaptive-launch-validation";
 import { validatePreparedClassicLaunchTransaction } from "@/lib/classic-launch-validation";
 import { validatePreparedClassicV3LaunchTransaction } from "@/lib/classic-v3-launch-validation";
 import {
@@ -219,13 +223,15 @@ const launchEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
     ? "rehearsal"
     : "production";
-const adaptiveLaunchAvailable =
-  appDeployments[launchEnvironment].adaptiveLaunchStatus === "ready";
+const launchDeployment = appDeployments[launchEnvironment];
+const launchChainId = launchEnvironment === "rehearsal" ? 11_155_111 : 1;
+const adaptiveLaunchAvailable = isAdaptiveDeploymentReady(
+  launchDeployment as unknown as AdaptiveLaunchManifest,
+  launchChainId,
+);
 const classicV3LaunchAvailable = isClassicV3DeploymentReady(
-  appDeployments[
-    launchEnvironment
-  ] as unknown as ClassicV3DeploymentManifest,
-  launchEnvironment === "rehearsal" ? 11_155_111 : 1,
+  launchDeployment as unknown as ClassicV3DeploymentManifest,
+  launchChainId,
 );
 
 function shortenAddress(address: string) {
@@ -287,7 +293,6 @@ function LaunchModelPicker({
         <button
           className="launch-model-card"
           type="button"
-          style={{ animation: "none", transform: "none", transition: "none" }}
           onClick={() =>
             onChoose(classicV3LaunchAvailable ? "classic-v3" : "classic")
           }
@@ -311,17 +316,16 @@ function LaunchModelPicker({
               <strong>Classic</strong>
             </span>
             <span className="launch-model-description">
-              {classicV3LaunchAvailable
-                ? "Set buy and sell fees, then direct creator rewards to one wallet or a fixed split"
-                : "A fixed-supply token with locked liquidity and creator fees paid in ETH"}
+              A straightforward Uniswap v4 token with swap fees fixed at
+              launch. Creator rewards accrue in ETH.
             </span>
             <span className="launch-model-details">
               <span>Uniswap v4</span>
               <span>No liquidity deposit</span>
               <span>
                 {classicV3LaunchAvailable
-                  ? "Custom fees and reward splits"
-                  : "1.00% swap fee"}
+                  ? "Choose buy and sell fees"
+                  : "Fixed 1.00% swap fee"}
               </span>
             </span>
             <span className="launch-model-action">
@@ -334,7 +338,6 @@ function LaunchModelPicker({
         <button
           className="launch-model-card"
           type="button"
-          style={{ animation: "none", transform: "none", transition: "none" }}
           onClick={() => onChoose("adaptive")}
         >
           <span className="launch-model-art" aria-hidden="true">
@@ -350,17 +353,17 @@ function LaunchModelPicker({
           <span className="launch-model-card-body">
             <span className="launch-model-card-heading">
               <strong>Adaptive</strong>
-              <small>
+              <small data-status={adaptiveLaunchAvailable ? "ready" : "pending"}>
                 {adaptiveLaunchAvailable ? "Available" : "In development"}
               </small>
             </span>
             <span className="launch-model-description">
-              Set how the swap fee changes as the token&apos;s onchain value
-              grows
+              Set a market-cap curve that changes the swap fee as the token
+              price moves.
             </span>
             <span className="launch-model-details">
               <span>Uniswap v4</span>
-              <span>2–6 curve points</span>
+              <span>Price-based swap fees</span>
               <span>1%–10% total fee</span>
             </span>
             <span className="launch-model-action">
@@ -401,6 +404,7 @@ function LaunchBuilderForm({
   const currentLaunchContext = useRef({ draft, wallet });
   const draftVersion = useRef(0);
   const launching = launchPhase !== "idle";
+  const usesExtendedLayout = model === "adaptive" || model === "classic-v3";
 
   useEffect(() => {
     currentLaunchContext.current = { draft, wallet };
@@ -738,8 +742,9 @@ function LaunchBuilderForm({
   return (
     <div
       className={`launch-page page-width ${
-        model === "adaptive" ? adaptiveLayout.page : ""
+        usesExtendedLayout ? adaptiveLayout.page : ""
       }`}
+      data-launch-model={model === "adaptive" ? "adaptive" : "classic"}
     >
       <header className="launch-page-heading">
         <button
@@ -759,20 +764,12 @@ function LaunchBuilderForm({
                 : "Classic"}
           </p>
           <h1>Set up your token</h1>
-          <p className="launch-model-summary">
-            1B fixed supply <span>·</span> Uniswap v4 <span>·</span>{" "}
-            {model === "adaptive"
-              ? "Fee curve fixed at launch"
-              : model === "classic-v3"
-                ? "Directional fees and fixed rewards"
-                : "Locked liquidity"}
-          </p>
         </div>
       </header>
 
       <form
         className={`classic-launch-sheet ${
-          model === "adaptive" ? adaptiveLayout.sheet : ""
+          usesExtendedLayout ? adaptiveLayout.sheet : ""
         }`}
         aria-busy={launching}
         onSubmit={(event) => {
@@ -782,7 +779,7 @@ function LaunchBuilderForm({
       >
         <div
           className={`classic-launch-content ${
-            model === "adaptive" ? adaptiveLayout.content : ""
+            usesExtendedLayout ? adaptiveLayout.content : ""
           }`}
         >
           <TokenStep
@@ -800,8 +797,7 @@ function LaunchBuilderForm({
               onMaximumDevBuy={() => void setMaximumDevBuy()}
             />
           ) : model === "classic-v3" ? (
-            <ClassicV3FeeStep
-              account={wallet?.account}
+            <EnhancedClassicFeeStep
               draft={draft}
               setDraft={setDraft}
               onEdit={markDraftEdited}
@@ -821,7 +817,7 @@ function LaunchBuilderForm({
 
         <footer
           className={`classic-launch-footer ${
-            model === "adaptive" ? adaptiveLayout.footer : ""
+            usesExtendedLayout ? adaptiveLayout.footer : ""
           }`}
         >
           <div className="classic-launch-status">
@@ -866,11 +862,6 @@ function LaunchBuilderForm({
                 (model === "adaptive" && !adaptiveLaunchAvailable) ||
                 (model === "classic-v3" && !classicV3LaunchAvailable)
               }
-              style={{
-                animation: "none",
-                transform: "none",
-                transition: "none",
-              }}
             >
               {model === "adaptive" && !adaptiveLaunchAvailable
                 ? "Adaptive is not deployed"
@@ -1294,7 +1285,7 @@ function TokenStep({
               <input
                 value={draft.tokenSymbol}
                 maxLength={MAX_TOKEN_SYMBOL_CHARACTERS}
-                placeholder="TOKEN"
+                placeholder="$TOKEN"
                 spellCheck={false}
                 autoComplete="off"
                 onChange={(event) =>
@@ -1416,8 +1407,8 @@ function AdaptiveFeeStep({
 
       <label className={adaptiveLayout.devBuy} htmlFor="adaptive-dev-buy">
         <span className={adaptiveLayout.devBuyCopy}>
-          <strong>Dev Buy</strong>
-          <small>Optional first buy</small>
+          <strong>Initial Buy</strong>
+          <small>Optional first purchase</small>
         </span>
         <span className={adaptiveLayout.devBuyInput}>
           <input
@@ -1449,15 +1440,13 @@ function AdaptiveFeeStep({
   );
 }
 
-function ClassicV3FeeStep({
-  account,
+function EnhancedClassicFeeStep({
   draft,
   setDraft,
   onEdit,
   settingMaxBuy,
   onMaximumDevBuy,
 }: {
-  account?: string;
   draft: LaunchDraft;
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onEdit: () => void;
@@ -1468,16 +1457,6 @@ function ClassicV3FeeStep({
     onEdit();
     updateDraft(setDraft, patch);
   };
-  let configuration:
-    | ReturnType<typeof validateClassicV3LaunchDraft>
-    | undefined;
-  try {
-    if (account) {
-      configuration = validateClassicV3LaunchDraft(draft, account);
-    }
-  } catch {
-    configuration = undefined;
-  }
 
   function updateSplit(
     index: number,
@@ -1490,65 +1469,98 @@ function ClassicV3FeeStep({
     });
   }
 
+  const splitTotal = draft.rewardSplits.reduce((total, row) => {
+    const share = Number(row.sharePercent);
+    return Number.isFinite(share) ? total + share : total;
+  }, 0);
+  const splitIsComplete = Math.abs(splitTotal - 100) < 0.001;
+  const rewardNote =
+    draft.rewardDestinationMode === "launcher"
+      ? "The connected wallet owns all creator rewards"
+      : draft.rewardDestinationMode === "external"
+        ? "The selected wallet owns all creator rewards"
+        : "Each recipient owns and claims its share";
+
   return (
     <section className="classic-v3-settings" aria-labelledby="classic-v3-fees">
       <div className="classic-section-heading">
         <h2 id="classic-v3-fees">Fees and rewards</h2>
-        <p>These settings are permanent after launch</p>
+        <p>Fixed when the token launches</p>
       </div>
 
-      <div className="classic-v3-fee-grid">
-        {(["buy", "sell"] as const).map((direction) => {
-          const key =
-            direction === "buy"
-              ? "buySwapFeePercent"
-              : "sellSwapFeePercent";
-          return (
-            <label className="classic-v3-fee-control" key={direction}>
-              <span>{direction === "buy" ? "Buy fee" : "Sell fee"}</span>
-              <select
-                value={draft[key]}
-                onChange={(event) =>
-                  updateClassicV3Draft({ [key]: event.target.value })
+      <div className="classic-v3-core">
+        <fieldset className="classic-v3-fees">
+          <legend>Swap fees</legend>
+          <div className="classic-v3-fee-grid">
+            {(["buy", "sell"] as const).map((direction) => {
+              const key =
+                direction === "buy"
+                  ? "buySwapFeePercent"
+                  : "sellSwapFeePercent";
+              const totalFeeBps = Number(draft[key]) * 100;
+              const creatorFeeBps = Math.max(
+                0,
+                totalFeeBps - PLATFORM_FEE_BPS,
+              );
+              return (
+                <label className="classic-v3-fee-control" key={direction}>
+                  <span>
+                    {direction === "buy" ? "Buy fee" : "Sell fee"}
+                  </span>
+                  <select
+                    aria-label={`${direction === "buy" ? "Buy" : "Sell"} fee`}
+                    value={draft[key]}
+                    onChange={(event) =>
+                      updateClassicV3Draft({ [key]: event.target.value })
+                    }
+                  >
+                    {Array.from({ length: 10 }, (_, index) => (
+                      <option value={String(index + 1)} key={index + 1}>
+                        {index + 1}.00%
+                      </option>
+                    ))}
+                  </select>
+                  <small>
+                    Creator{" "}
+                    {Number.isFinite(creatorFeeBps)
+                      ? formatClassicV3Percent(creatorFeeBps)
+                      : "—"}{" "}
+                    <span>·</span> Programmable 0.10%
+                  </small>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset className="classic-v3-reward-mode">
+          <legend>Creator rewards</legend>
+          <div>
+            {(
+              [
+                ["launcher", "Launch wallet"],
+                ["external", "Another wallet"],
+                ["split", "Split rewards"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                type="button"
+                className={
+                  draft.rewardDestinationMode === value ? "is-selected" : ""
                 }
+                aria-pressed={draft.rewardDestinationMode === value}
+                onClick={() =>
+                  updateClassicV3Draft({ rewardDestinationMode: value })
+                }
+                key={value}
               >
-                {Array.from({ length: 10 }, (_, index) => (
-                  <option value={String(index + 1)} key={index + 1}>
-                    {index + 1}.00%
-                  </option>
-                ))}
-              </select>
-            </label>
-          );
-        })}
+                {label}
+              </button>
+            ))}
+          </div>
+          <small className="classic-v3-reward-note">{rewardNote}</small>
+        </fieldset>
       </div>
-
-      <fieldset className="classic-v3-reward-mode">
-        <legend>Creator rewards</legend>
-        <div>
-          {(
-            [
-              ["launcher", "Launch wallet"],
-              ["external", "Another wallet"],
-              ["split", "Fixed split"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              type="button"
-              className={
-                draft.rewardDestinationMode === value ? "is-selected" : ""
-              }
-              aria-pressed={draft.rewardDestinationMode === value}
-              onClick={() =>
-                updateClassicV3Draft({ rewardDestinationMode: value })
-              }
-              key={value}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </fieldset>
 
       {draft.rewardDestinationMode === "external" ? (
         <label className="field classic-v3-address-field">
@@ -1565,7 +1577,7 @@ function ClassicV3FeeStep({
             }
           />
           <small>
-            This wallet owns its rewards and can redirect its payout later
+            Only this wallet can claim or change its payout address
           </small>
         </label>
       ) : null}
@@ -1638,44 +1650,25 @@ function ClassicV3FeeStep({
               Add recipient
             </button>
           ) : null}
+          <p
+            className={`classic-v3-split-total${
+              splitIsComplete ? " is-complete" : ""
+            }`}
+            aria-live="polite"
+          >
+            Total {splitTotal.toFixed(2).replace(/\.00$/, "")}%
+          </p>
         </div>
       ) : null}
 
-      <div className="classic-v3-review" aria-live="polite">
-        <div>
-          <span>Buy</span>
-          <strong>
-            {configuration
-              ? formatClassicV3Percent(configuration.fees.buySwapFeeBps)
-              : draft.buySwapFeePercent
-                ? `${Number(draft.buySwapFeePercent).toFixed(2)}%`
-                : "—"}
-          </strong>
-        </div>
-        <div>
-          <span>Sell</span>
-          <strong>
-            {configuration
-              ? formatClassicV3Percent(configuration.fees.sellSwapFeeBps)
-              : draft.sellSwapFeePercent
-                ? `${Number(draft.sellSwapFeePercent).toFixed(2)}%`
-                : "—"}
-          </strong>
-        </div>
-        <div>
-          <span>Programmable</span>
-          <strong>0.10%</strong>
-        </div>
-        <p>
-          Programmable&apos;s 0.10% is deducted from each selected fee. Reward
-          ownership and shares cannot change after launch.
-        </p>
-      </div>
+      <p className="classic-v3-disclosure">
+        Fee rates and reward shares cannot change after launch.
+      </p>
 
       <div className="classic-fee-layout">
         <label className="meme-dev-buy" htmlFor="classic-v3-dev-buy">
           <span>
-            <strong>Dev Buy</strong>
+            <strong>Initial Buy</strong>
             <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
           </span>
           <span className="meme-dev-buy-input">
@@ -1726,11 +1719,13 @@ function FeeStep({
   return (
     <section className="classic-fee-section">
       <div className="classic-section-heading classic-fee-heading">
-        <h2>Swap fee</h2>
-        <p>
-          Creator receives {(creatorFeeBps / 100).toFixed(2)}%<span>·</span>
-          Programmable receives {(PLATFORM_FEE_BPS / 100).toFixed(2)}%
-        </p>
+        <div>
+          <h2>Swap fee</h2>
+          <p>
+            Creator {(creatorFeeBps / 100).toFixed(2)}%<span>·</span>
+            Programmable {(PLATFORM_FEE_BPS / 100).toFixed(2)}%
+          </p>
+        </div>
       </div>
 
       <div className="classic-fee-layout">
@@ -1741,7 +1736,7 @@ function FeeStep({
 
         <label className="meme-dev-buy" htmlFor="classic-dev-buy">
           <span>
-            <strong>Dev Buy</strong>
+            <strong>Initial Buy</strong>
             <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
           </span>
           <span className="meme-dev-buy-input">

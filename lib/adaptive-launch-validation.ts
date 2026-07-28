@@ -27,7 +27,14 @@ export const MAX_ADAPTIVE_LAUNCH_GAS_LIMIT = 16_000_000n;
 export type AdaptiveLaunchManifest = {
   chainId: number;
   adaptiveLaunchStatus: string;
+  adaptiveCurveFeeHookFactory?: string | null;
   adaptiveCurveLaunch: string | null;
+  lockedPositionFeeForwarderFactory?: string | null;
+  runtimeCodeHashes?: {
+    adaptiveCurveFeeHookFactory?: string | null;
+    adaptiveCurveLaunch?: string | null;
+    lockedPositionFeeForwarderFactory?: string | null;
+  };
 };
 
 type PreparedAdaptiveLaunchInput = {
@@ -50,6 +57,30 @@ function readConnectedAccount(value: string) {
   }
 }
 
+function validAddress(value: string | null | undefined) {
+  return Boolean(value && isAddress(value));
+}
+
+function validHash(value: string | null | undefined) {
+  return Boolean(value && isHex(value, { strict: true }) && value.length === 66);
+}
+
+export function isAdaptiveDeploymentReady(
+  manifest: AdaptiveLaunchManifest,
+  expectedChainId: number,
+) {
+  return (
+    manifest.chainId === expectedChainId &&
+    manifest.adaptiveLaunchStatus === "ready" &&
+    validAddress(manifest.adaptiveCurveFeeHookFactory) &&
+    validAddress(manifest.adaptiveCurveLaunch) &&
+    validAddress(manifest.lockedPositionFeeForwarderFactory) &&
+    validHash(manifest.runtimeCodeHashes?.adaptiveCurveFeeHookFactory) &&
+    validHash(manifest.runtimeCodeHashes?.adaptiveCurveLaunch) &&
+    validHash(manifest.runtimeCodeHashes?.lockedPositionFeeForwarderFactory)
+  );
+}
+
 export function validatePreparedAdaptiveLaunchTransactionAgainstManifest(
   input: PreparedAdaptiveLaunchInput,
   manifest: AdaptiveLaunchManifest,
@@ -59,7 +90,7 @@ export function validatePreparedAdaptiveLaunchTransactionAgainstManifest(
     throw new Error("The prepared transaction is not an Adaptive launch");
   }
   if (
-    manifest.adaptiveLaunchStatus !== "ready" ||
+    !isAdaptiveDeploymentReady(manifest, manifest.chainId) ||
     !manifest.adaptiveCurveLaunch ||
     !isAddress(manifest.adaptiveCurveLaunch)
   ) {
@@ -97,8 +128,8 @@ export function validatePreparedAdaptiveLaunchTransactionAgainstManifest(
   if (
     !isHex(input.draft.launchSalt, { strict: true }) ||
     input.draft.launchSalt.length !== 66 ||
-    !isHex(input.draft.hookSalt, { strict: true }) ||
-    input.draft.hookSalt.length !== 66
+    !isHex(input.draft.hookSaltNonce, { strict: true }) ||
+    input.draft.hookSaltNonce.length !== 66
   ) {
     throw new Error(
       "Prepare fresh deterministic launch addresses before opening the wallet",

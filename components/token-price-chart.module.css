@@ -1,0 +1,205 @@
+.shell {
+  margin-top: 18px;
+  min-height: 216px;
+  padding: 18px 18px 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface-raised) 86%, transparent);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 45px;
+}
+
+.eyebrow {
+  margin: 0 0 3px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 620;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.value {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1.05rem, 1.3vw, 1.25rem);
+  font-weight: 660;
+  letter-spacing: -0.025em;
+}
+
+.change {
+  margin: 3px 0 0;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.positive {
+  color: #16855b;
+}
+
+.negative {
+  color: #cf4f6f;
+}
+
+.range {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 620;
+}
+
+.plot {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 132px;
+  margin-top: 7px;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.area {
+  opacity: 0;
+  animation: reveal-area 520ms var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1))
+    80ms forwards;
+}
+
+.line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.25;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  animation: reveal-line 460ms var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1))
+    forwards;
+}
+
+.guide {
+  stroke: color-mix(in srgb, var(--text) 22%, transparent);
+  stroke-dasharray: 3 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.point {
+  fill: var(--surface-raised);
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -2px;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.tooltip {
+  position: absolute;
+  top: 2px;
+  z-index: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-raised);
+  box-shadow: 0 7px 24px rgba(25, 22, 31, 0.1);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.placeholder {
+  display: grid;
+  min-height: 132px;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.loadingLine {
+  display: block;
+  width: min(360px, 72%);
+  height: 2px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--accent) 58%, transparent),
+      transparent
+    );
+  background-size: 180% 100%;
+  animation: chart-loading 1.25s ease-in-out infinite;
+}
+
+@keyframes reveal-line {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes reveal-area {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes chart-loading {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .shell {
+    min-height: 196px;
+    padding: 15px 14px 12px;
+    border-radius: 17px;
+  }
+
+  .plot {
+    height: 116px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .area,
+  .line,
+  .loadingLine {
+    animation: none;
+    opacity: 1;
+  }
+}
