@@ -6,6 +6,11 @@ type WalletProviderContract = {
     ready: boolean,
     authenticated: boolean,
   ) => "wait" | "login" | "manage";
+  isWalletProviderSettled: (
+    privyReady: boolean,
+    walletsReady: boolean,
+    authenticated: boolean,
+  ) => boolean;
   selectAuthenticatedWallet: <T extends {
     address: string;
     connectedAt: number;
@@ -44,6 +49,13 @@ describe("wallet recovery state", () => {
     expect(subject.getWalletSessionAction(false, false)).toBe("wait");
     expect(subject.getWalletSessionAction(true, false)).toBe("login");
     expect(subject.getWalletSessionAction(true, true)).toBe("manage");
+  });
+
+  it("does not block login while the unauthenticated wallet list is still loading", () => {
+    expect(subject.isWalletProviderSettled).toBeTypeOf("function");
+    expect(subject.isWalletProviderSettled(true, false, false)).toBe(true);
+    expect(subject.getWalletSessionAction(true, false)).toBe("login");
+    expect(subject.isWalletProviderSettled(true, false, true)).toBe(false);
   });
 
   it("uses the lowercase wallet-scoped profile key", () => {
