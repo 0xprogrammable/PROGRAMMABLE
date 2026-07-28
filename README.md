@@ -13,89 +13,66 @@
 <p align="center">
   <a href="https://programmable.family">Launch</a> ·
   <a href="MODELS.md">Models</a> ·
-  <a href="deployments/ethereum.json">Ethereum deployment</a> ·
-  <a href="SECURITY.md">Security</a>
+  <a href="deployments/ethereum.json">Ethereum</a> ·
+  <a href="SECURITY.md">Security</a> ·
+  <a href="https://x.com/0xProgrammable">X</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/0xprogrammable/programmable/actions/workflows/verify.yml">
     <img
       src="https://github.com/0xprogrammable/programmable/actions/workflows/verify.yml/badge.svg"
-      alt="Contract verification status"
+      alt="Repository checks"
     />
   </a>
 </p>
 
-Programmable packages Uniswap v4 pool behavior into launch flows that creators can use without writing or deploying
-contracts. Each release includes its exact contract sources, tests, security assumptions and Ethereum deployment
-evidence.
+Programmable is a launchpad for tokens whose market behavior lives in Uniswap v4. Creators choose a launch model, set
+the token details and launch without writing Solidity.
+
+This repository contains the contracts behind every published model. Each available release includes its exact source,
+tests, security documentation and Ethereum deployment record.
 
 ## Launch models
 
-| Model | Purpose | Status |
+| Model | Pool behavior | Status |
 | --- | --- | --- |
-| Classic | Fixed supply, locked one-sided liquidity and creator fees paid in ETH | Available |
-| Adaptive | An immutable swap-fee curve linked to the token's onchain value | In development |
+| [Classic](models/classic/README.md) | Fixed supply, locked one-sided liquidity and creator fees paid in ETH | Available |
+| [Adaptive](models/adaptive/README.md) | An immutable swap-fee curve linked to onchain value | In development |
 
-A model is marked `Available` once its source, tests, security documentation and deployment record are public. The
-complete catalog is in [`MODELS.md`](MODELS.md).
+[`MODELS.md`](MODELS.md) contains the full catalog and release requirements.
 
-## Classic
+## What is published
 
-Classic creates the token, initializes its ETH pool, locks the launch position and completes the creator's initial buy
-in one transaction.
+Every available model includes:
 
-```mermaid
-flowchart LR
-    creator["Creator"] -->|"launch + initial buy"| launcher["Classic launcher"]
-    launcher --> token["Fixed-supply token"]
-    launcher --> pool["Uniswap v4 pool"]
-    launcher --> position["Locked one-sided position"]
-    pool <--> hook["Creator fee hook"]
-    hook -->|"claim ETH"| creator
-    hook -->|"claim ETH"| treasury["Programmable"]
-```
+- the hook and supporting contract sources;
+- unit, integration, fuzz and invariant tests;
+- compiler and dependency versions;
+- security assumptions and known limitations; and
+- Ethereum addresses, deployment transactions and runtime code hashes.
 
-Classic is the current immutable Ethereum release.
-
-| Property | Current release |
-| --- | --- |
-| Supply | 1 billion fixed-supply UERC20 |
-| Pair | Native ETH |
-| Launch liquidity | Complete token supply in a locked one-sided position |
-| Swap fee | `1.00%`: `0.90%` creator and `0.10%` Programmable |
-| Token transfer tax | None |
-| Uniswap v4 LP fee | Zero |
-
-The deployed hook accepts total swap fees from `1%` to `10%` in one-point increments. The current interface exposes
-only `1%`.
-
-## Ethereum deployment
-
-| Contract | Address |
-| --- | --- |
-| Classic launcher | [`0xD240…E6bAd`](https://etherscan.io/address/0xD240D06f8586eB799f20056054e5b527405E6bAd#code) |
-| Creator fee hook | [`0x025a…b20CC`](https://etherscan.io/address/0x025a386eAa79f6067d29848FD05ccC71bEAb20CC#code) |
-| Hook factory | [`0xD405…5fd67`](https://etherscan.io/address/0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67#code) |
-| Position forwarder factory | [`0x291a…4dB507`](https://etherscan.io/address/0x291a9ff1059d225d02B1659430804486404dB507#code) |
-
-Transactions and runtime code hashes are recorded in
+Classic is live on Ethereum. Its [model documentation](models/classic/README.md) links each deployed contract to
+Etherscan. Machine-readable deployment evidence is in
 [`deployments/ethereum.json`](deployments/ethereum.json).
 
 ## Repository
 
 ```text
-src/                 Exact sources for the current available deployment
+models/              Behavior, economics and security notes for each launch model
+src/                 Exact Solidity sources for deployed contracts
 test/                Unit, integration, fuzz, invariant and regression tests
-deployments/         Public Ethereum deployment evidence
-spec/                Machine-readable product and contract parameters
+deployments/         Ethereum addresses, transactions and runtime code hashes
+spec/                Machine-readable contract parameters
 scripts/             Reproducible dependency bootstrap
-MODELS.md             Launch model catalog and status
-ARCHITECTURE.md       Architecture of the current available model
-SECURITY.md           Security status, trust model and disclosure
+SECURITY.md           Repository security policy and current contract status
 ```
 
-The dependency script checks out every upstream repository at a fixed commit:
+Deployed Solidity sources remain at their original paths so published verification records stay reproducible.
+
+## Build and test
+
+The bootstrap script checks out every upstream dependency at a fixed commit.
 
 ```bash
 ./scripts/bootstrap-deps.sh
@@ -104,15 +81,15 @@ forge build
 FOUNDRY_PROFILE=ci forge test
 ```
 
-The contracts use Solidity `0.8.26`, Cancun opcodes, optimizer runs set to `1,000`, and disabled CBOR metadata. The
-complete compiler configuration is in [`foundry.toml`](foundry.toml).
+The contracts use Solidity `0.8.26`, Cancun opcodes, optimizer runs set to `1,000`, and disabled CBOR metadata. See
+[`foundry.toml`](foundry.toml) for the complete compiler configuration.
 
 ## Security
 
 Classic has unit, integration, fuzz, invariant and regression coverage. It has not received an independent
 smart-contract audit or public security contest. Read [`SECURITY.md`](SECURITY.md) before integrating.
 
-Security vulnerabilities should be reported through
+Report vulnerabilities through
 [GitHub private vulnerability reporting](https://github.com/0xprogrammable/programmable/security/advisories/new).
 
 ## License

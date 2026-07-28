@@ -2,9 +2,9 @@
 
 ## Status
 
-This document covers the current Classic deployment. Its contracts have unit, integration, fuzz, invariant
-and regression coverage. It has not received an independent smart-contract audit or public security contest. These
-checks are evidence, not a safety guarantee.
+Security properties are documented per launch model. Classic is currently the only available model. Its contracts have
+unit, integration, fuzz, invariant and regression coverage. They have not received an independent smart-contract audit
+or public security contest. These checks are evidence, not a safety guarantee.
 
 ## Report a vulnerability
 
@@ -65,5 +65,5 @@ accounting invariants.
 - A failed native ETH recipient can block a direct claim until that recipient calls its authorized redirect function.
 - Swaps that produce unsupported partial-fill accounting revert.
 - Metadata and social links are informational and may not be indexed consistently by third-party services.
-- Permanent lock properties depend on the pinned forwarder and PositionManager semantics described in
-  [`ARCHITECTURE.md`](ARCHITECTURE.md).
+- Permanent lock properties depend on the pinned forwarder and PositionManager semantics described in the
+  [Classic model documentation](models/classic/README.md#liquidity-custody).

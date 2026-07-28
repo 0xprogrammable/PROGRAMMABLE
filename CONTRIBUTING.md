@@ -1,8 +1,9 @@
 # Contributing
 
-This repository contains the available Programmable launch models and their public deployment evidence. Classic is
-currently the only available model. Proposed changes should be small, reviewable and backed by a test that fails
-before the change.
+Programmable publishes independent Uniswap v4 launch models. Start with the relevant document under [`models/`](models/)
+before changing a contract or proposing a new model.
+
+Changes should be small, reviewable and covered by a test that fails before the fix.
 
 Before opening a pull request:
 
@@ -13,8 +14,8 @@ forge build
 FOUNDRY_PROFILE=ci forge test
 ```
 
-Contract changes do not alter an existing deployment. A new model or contract revision requires a separate release,
-source verification, model-specific security documentation and updated deployment evidence before it is marked
-`Available` in [`MODELS.md`](MODELS.md).
+Changing source does not change a contract that is already deployed. A new model or contract revision needs its own
+tests, security documentation, source verification and deployment record before it can be marked `Available` in
+[`MODELS.md`](MODELS.md).
 
-For security vulnerabilities, follow [`SECURITY.md`](SECURITY.md) instead of opening a public issue.
+Use [`SECURITY.md`](SECURITY.md) for vulnerability reports instead of opening a public issue.
