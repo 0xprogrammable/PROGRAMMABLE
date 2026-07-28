@@ -36,7 +36,7 @@ type TokenCard = {
   usesFallbackImage: boolean;
   links: TokenLink[];
   tokenAddress: `0x${string}`;
-  marketCapLabel?: string;
+  fdvLabel?: string;
 };
 
 type TokenSort =
@@ -224,12 +224,12 @@ function formatFdv(token: LauncherToken) {
   if (token.fdvUsdWad && /^\d+$/.test(token.fdvUsdWad)) {
     const value = Number(BigInt(token.fdvUsdWad)) / 1e18;
     if (Number.isFinite(value) && value > 0) {
-      return `${new Intl.NumberFormat("en-US", {
+      return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD",
         notation: "compact",
         maximumFractionDigits: value >= 1_000_000 ? 2 : 0,
-      }).format(value)} FDV`;
+      }).format(value);
     }
   }
 
@@ -244,7 +244,11 @@ function formatFdv(token: LauncherToken) {
           notation: value >= 1_000 ? "compact" : "standard",
           maximumFractionDigits: value >= 100 ? 1 : 4,
         }).format(value);
-  return `${formatted} ETH FDV`;
+  return `${formatted} ETH`;
+}
+
+function formatTokenAddress(address: `0x${string}`) {
+  return `${address.slice(0, 8)}…${address.slice(-6)}`;
 }
 
 function getPaginationItems(
@@ -292,7 +296,7 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     usesFallbackImage: !token.imageUrl?.trim(),
     links: token.links ?? [],
     tokenAddress: token.tokenAddress,
-    marketCapLabel: formatFdv(token),
+    fdvLabel: formatFdv(token),
   }));
 }
 
@@ -575,22 +579,18 @@ export function ExploreView() {
                       : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 800px) 112px, 220px"
+                  sizes="(max-width: 800px) 112px, (max-width: 1100px) 132px, 156px"
                   unoptimized={!token.imageUrl.startsWith("/")}
                 />
               </Link>
 
               <div className="token-card-body">
-                <div className="token-card-heading">
+                <header className="token-card-heading">
                   <Link className="token-card-title" href={href}>
-                    <h3>
-                      <ScrambleText text={token.name} />
-                    </h3>
-                    <span>
-                      <ScrambleText text={`$${token.symbol}`} />
-                    </span>
+                    <h3>{token.name}</h3>
+                    <span>${token.symbol}</span>
                   </Link>
-                </div>
+                </header>
 
                 <button
                   className="token-address"
@@ -600,15 +600,14 @@ export function ExploreView() {
                       ? `${token.name} contract address copied`
                       : `Copy ${token.name} contract address`
                   }
-                  title={copied ? "Copied" : "Copy contract address"}
+                  title={
+                    copied
+                      ? "Copied"
+                      : `${token.tokenAddress} · Copy contract address`
+                  }
                   onClick={() => copyAddress(token.tokenAddress)}
                 >
-                  <code>
-                    <ScrambleText
-                      text={token.tokenAddress}
-                      duration={1650}
-                    />
-                  </code>
+                  <code>{formatTokenAddress(token.tokenAddress)}</code>
                   {copied ? (
                     <Check aria-hidden="true" size={14} />
                   ) : (
@@ -616,35 +615,41 @@ export function ExploreView() {
                   )}
                 </button>
 
-                {token.marketCapLabel ? (
-                  <Link className="token-card-market-cap" href={href}>
-                    <ScrambleText text={token.marketCapLabel} />
-                  </Link>
-                ) : null}
-
                 {token.description ? (
                   <Link className="token-card-description" href={href}>
-                    <ScrambleText
-                      text={token.description}
-                      duration={1650}
-                    />
+                    {token.description}
                   </Link>
                 ) : null}
 
-                {token.links.length > 0 ? (
+                {token.fdvLabel || token.links.length > 0 ? (
                   <div className="token-card-footer">
-                    <div
-                      className="token-social-links"
-                      aria-label={`${token.name} links`}
-                    >
-                      {token.links.map((link) => (
-                        <TokenSocialLink
-                          key={`${link.kind}:${link.url}`}
-                          link={link}
-                          tokenName={token.name}
-                        />
-                      ))}
-                    </div>
+                    {token.fdvLabel ? (
+                      <Link
+                        className="token-card-market-cap"
+                        href={href}
+                        aria-label={`View ${token.name}, ${token.fdvLabel} fully diluted value`}
+                      >
+                        <strong>{token.fdvLabel}</strong>
+                        <span>FDV</span>
+                      </Link>
+                    ) : (
+                      <span />
+                    )}
+
+                    {token.links.length > 0 ? (
+                      <div
+                        className="token-social-links"
+                        aria-label={`${token.name} links`}
+                      >
+                        {token.links.map((link) => (
+                          <TokenSocialLink
+                            key={`${link.kind}:${link.url}`}
+                            link={link}
+                            tokenName={token.name}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
