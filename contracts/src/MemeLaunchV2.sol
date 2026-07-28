@@ -53,6 +53,8 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
     int24 public constant TICK_SPACING = 200;
     uint24 public constant LP_FEE_PIPS = 0;
     uint24 private constant POSITION_WEIGHT = 10_000_000;
+    // Slither 0.11.5 cannot build IR for unlockCallback and consequently misses the native settlement use.
+    // slither-disable-next-line unused-state
     Currency private constant NATIVE = Currency.wrap(address(0));
 
     IPoolManager public immutable poolManager;

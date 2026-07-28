@@ -188,6 +188,9 @@ contract EthCreatorFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
         totalNativeFeesAccrued -= amount;
         _redeemNative(recipient, amount);
 
+        // Every external entry point holds ReentrancyGuardTransient and all accounting effects precede the unlock.
+        // This event is observational and cannot expose partially updated state.
+        // slither-disable-next-line reentrancy-events
         emit CreatorFeesClaimed(poolId, config.creator, recipient, msg.sender, amount);
     }
 
@@ -213,6 +216,9 @@ contract EthCreatorFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
         totalNativeFeesAccrued -= amount;
         _redeemNative(recipient, amount);
 
+        // Every external entry point holds ReentrancyGuardTransient and all accounting effects precede the unlock.
+        // This event is observational and cannot expose partially updated state.
+        // slither-disable-next-line reentrancy-events
         emit LauncherFeesClaimed(launcherFeeRecipient, recipient, msg.sender, amount);
     }
 
