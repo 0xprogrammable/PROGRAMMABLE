@@ -100,6 +100,14 @@ export function getWalletSessionAction(ready: boolean, authenticated: boolean) {
   return "login" as const;
 }
 
+export function isWalletProviderSettled(
+  privyReady: boolean,
+  walletsReady: boolean,
+  authenticated: boolean,
+) {
+  return privyReady && (!authenticated || walletsReady);
+}
+
 export function getWalletProfileStorageKey(account: string) {
   return `${profileStoragePrefix}:${account.toLowerCase()}`;
 }
@@ -433,12 +441,13 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       chainId: normalizeChainId(connectedWallet.chainId),
     };
   }, [connectedWallet]);
-  const sessionReady = ready && walletsReady;
-  const hasSession = activeAuthenticated;
-  const sessionAction = getWalletSessionAction(
-    sessionReady,
+  const providerSettled = isWalletProviderSettled(
+    ready,
+    walletsReady,
     activeAuthenticated,
   );
+  const hasSession = activeAuthenticated;
+  const sessionAction = getWalletSessionAction(ready, activeAuthenticated);
 
   const profileValue = useSyncExternalStore(
     subscribeToProfiles,
@@ -453,14 +462,14 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
   const avatarDataUrl = localProfile.avatarDataUrl;
 
   useEffect(() => {
-    if (sessionReady) return;
+    if (providerSettled) return;
 
     const timeout = window.setTimeout(() => {
       setProviderTimedOut(true);
     }, 8_000);
 
     return () => window.clearTimeout(timeout);
-  }, [sessionReady]);
+  }, [providerSettled]);
 
   const setUsername = useCallback(
     (nextUsername: string) => {
@@ -498,7 +507,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     setError("");
     setDialogOpen(false);
 
-    if (!sessionReady) {
+    if (!ready) {
       setError(
         "Wallet access is taking longer than expected. Reload the page and try again.",
       );
@@ -510,7 +519,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       loginMethods: ["wallet", "email"],
       walletChainType: "ethereum-only",
     });
-  }, [login, sessionReady]);
+  }, [login, ready]);
 
   const openWallet = useCallback(() => {
     setError("");
@@ -746,7 +755,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       avatarDataUrl,
       authenticated: activeAuthenticated,
       hasSession,
-      connecting: !sessionReady && !providerTimedOut,
+      connecting: !providerSettled && !providerTimedOut,
       disconnecting,
       openWallet,
       disconnect,
@@ -768,7 +777,7 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
       readNativeBalance,
       readTradeBalances,
       sendTransaction,
-      sessionReady,
+      providerSettled,
       setUsername,
       username,
       wallet,
