@@ -575,7 +575,7 @@ export function ExploreView() {
                       : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 800px) 100vw, (max-width: 1100px) 50vw, 33vw"
+                  sizes="(max-width: 800px) calc(100vw - 32px), (max-width: 1100px) 31vw, 350px"
                   unoptimized={!token.imageUrl.startsWith("/")}
                 />
               </Link>
@@ -590,11 +590,6 @@ export function ExploreView() {
                       <ScrambleText text={`$${token.symbol}`} />
                     </span>
                   </Link>
-                  {token.marketCapLabel ? (
-                    <Link className="token-card-market-cap" href={href}>
-                      <ScrambleText text={token.marketCapLabel} />
-                    </Link>
-                  ) : null}
                 </div>
 
                 <button
@@ -620,6 +615,12 @@ export function ExploreView() {
                     <Copy aria-hidden="true" size={14} />
                   )}
                 </button>
+
+                {token.marketCapLabel ? (
+                  <Link className="token-card-market-cap" href={href}>
+                    <ScrambleText text={token.marketCapLabel} />
+                  </Link>
+                ) : null}
 
                 {token.description ? (
                   <Link className="token-card-description" href={href}>
