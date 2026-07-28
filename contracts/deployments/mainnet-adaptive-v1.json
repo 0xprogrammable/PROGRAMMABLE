@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "model": "adaptive-v1",
+  "status": "not-deployed",
+  "chainId": 1,
+  "sourceCommitment": null,
+  "startingNonce": null,
+  "addresses": {
+    "deployer": null,
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "positionPlanner": null,
+    "hookFactory": null,
+    "launcher": null,
+    "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
+  },
+  "transactions": {
+    "positionPlanner": null,
+    "hookFactory": null,
+    "launcher": null
+  },
+  "runtimeCodeHashes": {
+    "positionPlanner": null,
+    "hookFactory": null,
+    "launcher": null,
+    "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
+  },
+  "artifactRuntime": {
+    "positionPlanner": {
+      "bytes": 7725,
+      "codeHash": "0x38882800527154032f4e2a40e83d6134bdc6f0a7d44ac7f78bd1f4af7c485e47"
+    },
+    "hookFactory": {
+      "bytes": 18162,
+      "codeHash": "0xbde85d07fea38fe3f78e298e184eb05b65d530398d20c8ee6411c6a1bd935722"
+    },
+    "feeHook": {
+      "bytes": 15571,
+      "codeHash": "0xdee6520081e7fd3413010555e1456729376faddada2217c0d3e8123ff22a135b"
+    },
+    "launcherTemplate": {
+      "bytes": 19038,
+      "codeHash": "0xf230e1d90a1d53782d30fd6a45d28a4d44bd44a00856b8f0a389c854d08861ca",
+      "note": "Artifact runtime before constructor immutable references are patched"
+    }
+  },
+  "officialDependencies": {
+    "poolManager": {
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "runtimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+    },
+    "positionManager": {
+      "address": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+      "runtimeCodeHash": "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b"
+    },
+    "stateView": {
+      "address": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+      "runtimeCodeHash": "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878"
+    },
+    "v4Quoter": {
+      "address": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+      "runtimeCodeHash": "0x06de58fa119c5deaa7a667fb92d3894e25d9160e62fb82c8d86d43b47eefe441"
+    },
+    "uerc20Factory": {
+      "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
+      "runtimeCodeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb"
+    },
+    "permit2": {
+      "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "runtimeCodeHash": "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131"
+    },
+    "universalRouter": {
+      "address": "0xd92A36B0000531EF3063dEd4De20A0783308446C",
+      "runtimeCodeHash": "0x41ccd905c8e4de29ce9536ff49233b79e3085a0987d490664e703ee1e7b1dc49"
+    },
+    "positionForwarderFactory": {
+      "address": "0x291a9ff1059d225d02B1659430804486404dB507",
+      "runtimeCodeHash": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
+    }
+  },
+  "sourceVerification": {
+    "status": "not-submitted",
+    "positionPlanner": null,
+    "hookFactory": null,
+    "launcher": null
+  }
+}

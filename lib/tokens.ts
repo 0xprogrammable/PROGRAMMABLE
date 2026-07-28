@@ -65,6 +65,14 @@ export type LauncherToken = {
   launcherFeeBps?: number;
   transferTaxBps?: number;
   totalSwapFeeBps: number;
+  launchModel?: "classic" | "adaptive";
+  adaptiveCurveHash?: `0x${string}`;
+  adaptiveCurvePoints?: {
+    fdvIndex: number;
+    totalSwapFeeBps: number;
+  }[];
+  adaptiveUsesPreSwapTick?: boolean;
+  adaptiveSymmetricBuyAndSell?: boolean;
   liquidityPath: "meme";
   metadataExtraData?: `0x${string}`;
 };

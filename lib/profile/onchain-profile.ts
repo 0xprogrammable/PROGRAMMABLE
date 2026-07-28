@@ -19,6 +19,7 @@ export type ProfileToken = {
   imageUrl?: string;
   marketCapEthWei?: string;
   fdvUsdWad?: string;
+  launchModel?: "classic" | "adaptive";
 };
 
 export type ProfilePosition = {
@@ -324,6 +325,10 @@ function parseToken(
     "fdvUsdWad",
     "token USD market cap",
   );
+  const launchModel =
+    token.launchModel === "adaptive" || token.launchModel === "classic"
+      ? token.launchModel
+      : undefined;
 
   return {
     address,
@@ -334,6 +339,7 @@ function parseToken(
     ...(imageUrl ? { imageUrl } : {}),
     ...(marketCapEthWei ? { marketCapEthWei } : {}),
     ...(fdvUsdWad ? { fdvUsdWad } : {}),
+    ...(launchModel ? { launchModel } : {}),
     poolId: readHex(token, "poolId", "pool id", 32),
     hookAddress: readAddress(token, "hookAddress", "token hook address"),
     creatorAddress,
@@ -627,6 +633,7 @@ export function mapCreatorProfileResponse(
       imageUrl,
       marketCapEthWei,
       fdvUsdWad,
+      launchModel,
     }) => ({
       address,
       name,
@@ -636,6 +643,7 @@ export function mapCreatorProfileResponse(
       ...(imageUrl ? { imageUrl } : {}),
       ...(marketCapEthWei ? { marketCapEthWei } : {}),
       ...(fdvUsdWad ? { fdvUsdWad } : {}),
+      ...(launchModel ? { launchModel } : {}),
     }),
   );
   const positions: ProfilePosition[] = tokens.map((token) => ({

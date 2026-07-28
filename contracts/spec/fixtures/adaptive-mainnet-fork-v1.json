@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "fixtureType": "decoded-mainnet-fork-receipt",
+  "forkBlock": 25622180,
+  "chainId": 1,
+  "deployer": "0xa11ce00000000000000000000000000000000001",
+  "infrastructure": {
+    "positionPlanner": "0x1A47F253eFA163C9e4eF2d4962c028231A084394",
+    "hookFactory": "0xFCec1C15A7ed9a0479702DaAC676a385f3076E0D",
+    "launcher": "0x9694C70d85deAd721549c511E1d998BcD0EA010F",
+    "sampleHookSalt": "0x0000000000000000000000000000000000000000000000000000000000000b1e",
+    "sourceCommitment": "0xcba1defad0467577ad958875db4256a0ca9cedc98c2ed93872cf4e96c2fb7649"
+  },
+  "launch": {
+    "creator": "0x02eDA466eCeBAa31DB8b3d020946a968C762A1Cf",
+    "token": "0xF69934fd047b4CF8506A804438d7408bF6B41FC1",
+    "hook": "0xD9CCC4834B0Bd91a2b837452637c03Dfad1220cc",
+    "positionRecipient": "0x5eec9044fEf7A00fB07CDd4419B368a347bab1d9",
+    "positionTokenId": "351153",
+    "poolId": "0x44fa75f43459ffb003a715083b0a23931de330aa8db1cb41aea0cb3bf211928c",
+    "curveHash": "0xe4ef98a8d53cb00a9777f102369f98102212c8542c8cc89a44395f6305b11398",
+    "metadataHash": "0x98bec59197a2b2beb1ca2bf3fbe0a8c04909bf48e0e88cbabdd6c66e5d95051d",
+    "launchHash": "0x17c80d6f2ab4c9a6b669ab87672dff9b3dcd4235d55711863efeb4f2f5d5180e",
+    "initialBuyNativeAmount": "2000000000000000",
+    "initialBuyTokenAmount": "1399572124913789524672891"
+  },
+  "events": [
+    {
+      "name": "AdaptiveCurveFeeHookDeployed",
+      "topic0": "0x36a825d6b70981fd6da4bd3b2258f6261f5282f211f417e3194103c50e5550f9",
+      "args": {
+        "hook": "0xD9CCC4834B0Bd91a2b837452637c03Dfad1220cc",
+        "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "launcherFeeRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+        "salt": "0x0000000000000000000000000000000000000000000000000000000000000b1e",
+        "configurationHash": "0x36c80723a472a8a484e6ba3ceb9ff5252954bae36a550f65cf660796e420e8e8"
+      }
+    },
+    {
+      "name": "LockedPositionFeeForwarderDeployed",
+      "topic0": "0x5f4b4eac9bc9dbd1ba3ed7dcec7f0a6f4d5eaf43e97a8c1f46bbaca726f1883e",
+      "args": {
+        "forwarder": "0x5eec9044fEf7A00fB07CDd4419B368a347bab1d9",
+        "feeRecipient": "0x02eDA466eCeBAa31DB8b3d020946a968C762A1Cf",
+        "salt": "0xc60706e1814f587d49fe720742a8b2b770831d3ca5c62b741ee146c2a25fdb29",
+        "configurationHash": "0x90647fafb1ce0b8a4119d67032120eaee1844fcaece964bd54d735b8b0196dc7",
+        "positionManager": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e"
+      }
+    },
+    {
+      "name": "AdaptiveCurveRegistered",
+      "topic0": "0x360d35bd6740a7991824a0e7bee4b22cda9443d8cd731a684370d513accd2ce1",
+      "args": {
+        "poolId": "0x44fa75f43459ffb003a715083b0a23931de330aa8db1cb41aea0cb3bf211928c",
+        "token": "0xF69934fd047b4CF8506A804438d7408bF6B41FC1",
+        "creator": "0x02eDA466eCeBAa31DB8b3d020946a968C762A1Cf",
+        "registrar": "0x9694C70d85deAd721549c511E1d998BcD0EA010F",
+        "fixedSupply": "1000000000000000000000000000",
+        "curveHash": "0xe4ef98a8d53cb00a9777f102369f98102212c8542c8cc89a44395f6305b11398",
+        "curvePointCount": 4
+      }
+    },
+    {
+      "name": "AdaptiveCurveDisclosure",
+      "topic0": "0x54f0c00ff586fe7c19fdf4ce940d1ce3b6c178333e4e273f2498079b8d2bd8af",
+      "args": {
+        "poolId": "0x44fa75f43459ffb003a715083b0a23931de330aa8db1cb41aea0cb3bf211928c",
+        "token": "0xF69934fd047b4CF8506A804438d7408bF6B41FC1",
+        "launcherFeeBps": 10,
+        "transferTaxBps": 0,
+        "lpFeePips": 0,
+        "symmetricBuyAndSell": true,
+        "usesPreSwapTick": true
+      }
+    },
+    {
+      "name": "NativeSwapFeesAccrued",
+      "topic0": "0xa6e8a65d65dda7f37967d72eed111977f82b26550d3c6a47c72b2c1cb3c379de",
+      "args": {
+        "poolId": "0x44fa75f43459ffb003a715083b0a23931de330aa8db1cb41aea0cb3bf211928c",
+        "swapSender": "0x9694C70d85deAd721549c511E1d998BcD0EA010F",
+        "fdvIndex": -204200,
+        "totalSwapFeeBps": 500,
+        "grossNativeAmount": "2000000000000000",
+        "creatorFee": "98000000000000",
+        "launcherFee": "2000000000000"
+      }
+    },
+    {
+      "name": "AdaptiveTokenLaunched",
+      "topic0": "0x9cb1a98d287bf9cdbe951e4a6690d270b54df4010506721a5f0208697fe15c1d",
+      "args": {
+        "creator": "0x02eDA466eCeBAa31DB8b3d020946a968C762A1Cf",
+        "token": "0xF69934fd047b4CF8506A804438d7408bF6B41FC1",
+        "poolId": "0x44fa75f43459ffb003a715083b0a23931de330aa8db1cb41aea0cb3bf211928c",
+        "feeHook": "0xD9CCC4834B0Bd91a2b837452637c03Dfad1220cc",
+        "launchHash": "0x17c80d6f2ab4c9a6b669ab87672dff9b3dcd4235d55711863efeb4f2f5d5180e"
+      }
+    },
+    {
+      "name": "AdaptiveLiquidityConfigured",
+      "topic0": "0x88afd9a7cf4d803492b8a5191ae0570cf70e651365b3fdd585974971c6778392",
+      "args": {
+        "token": "0xF69934fd047b4CF8506A804438d7408bF6B41FC1",
+        "totalSupply": "1000000000000000000000000000",
+        "tokenLiquidityAmount": "999999999999999999999987736",
+        "lockedTokenDust": "12264",
+        "initialTick": 204200,
+        "tickLower": -887200,
+        "tickUpper": 204200,
+        "lpFeePips": 0,
+        "launchHash": "0x17c80d6f2ab4c9a6b669ab87672dff9b3dcd4235d55711863efeb4f2f5d5180e"
+      }
+    },
+    {
+      "name": "AdaptiveCurveConfigured",
+      "topic0": "0x47c8cd95aa7504918b5ec06aa107c5694128f11fb204a33562cf23f577421e10",
+      "args": {
+        "token": "0xF69934fd047b4CF8506A804438d7408bF6B41FC1",
+        "poolId": "0x44fa75f43459ffb003a715083b0a23931de330aa8db1cb41aea0cb3bf211928c",
+        "feeHook": "0xD9CCC4834B0Bd91a2b837452637c03Dfad1220cc",
+        "curveHash": "0xe4ef98a8d53cb00a9777f102369f98102212c8542c8cc89a44395f6305b11398",
+        "curvePointCount": 4,
+        "launchHash": "0x17c80d6f2ab4c9a6b669ab87672dff9b3dcd4235d55711863efeb4f2f5d5180e"
+      }
+    },
+    {
+      "name": "AdaptiveCreatorInitialBuy",
+      "topic0": "0xba53ce54792126db8b3ad4d84d84085d59e0c97dbabfb049d95ab9599e7fc900",
+      "args": {
+        "creator": "0x02eDA466eCeBAa31DB8b3d020946a968C762A1Cf",
+        "token": "0xF69934fd047b4CF8506A804438d7408bF6B41FC1",
+        "poolId": "0x44fa75f43459ffb003a715083b0a23931de330aa8db1cb41aea0cb3bf211928c",
+        "nativeAmount": "2000000000000000",
+        "tokenAmount": "1399572124913789524672891",
+        "launchHash": "0x17c80d6f2ab4c9a6b669ab87672dff9b3dcd4235d55711863efeb4f2f5d5180e"
+      }
+    }
+  ],
+  "curvePoints": [
+    { "pointIndex": 0, "fdvIndex": -887272, "totalSwapFeeBps": 500 },
+    { "pointIndex": 1, "fdvIndex": -204200, "totalSwapFeeBps": 500 },
+    { "pointIndex": 2, "fdvIndex": -160000, "totalSwapFeeBps": 200 },
+    { "pointIndex": 3, "fdvIndex": 887272, "totalSwapFeeBps": 100 }
+  ]
+}

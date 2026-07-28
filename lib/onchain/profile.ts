@@ -41,6 +41,10 @@ export function buildCreatorProfile(
     symbol: token.symbol,
     poolId: token.poolId,
     totalSwapFeeBps: token.totalSwapFeeBps,
+    launchModel: token.launchModel ?? "classic",
+    ...(token.adaptiveCurveHash
+      ? { adaptiveCurveHash: token.adaptiveCurveHash }
+      : {}),
     claimableCreatorFeesWei: token.creatorFeesAccruedWei ?? "0",
     claimableCreatorFeesEth: token.creatorFeesAccruedEth ?? "0",
     generatedCreatorFeesWei: token.creatorFeesGeneratedWei ?? "0",

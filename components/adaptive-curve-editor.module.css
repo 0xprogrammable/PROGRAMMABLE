@@ -1,0 +1,240 @@
+.editor {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.heading h2,
+.heading p {
+  margin: 0;
+}
+
+.heading p {
+  max-width: 48ch;
+  color: #6f6970;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.plot {
+  position: relative;
+  height: 230px;
+  overflow: hidden;
+  border: 1px solid rgba(42, 33, 42, 0.08);
+  border-radius: 22px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.84)),
+    radial-gradient(circle at 14% 18%, #f8d9e9, transparent 42%),
+    radial-gradient(circle at 88% 84%, #e7dff7, transparent 38%);
+}
+
+.grid {
+  position: absolute;
+  inset: 22px 24px 34px 48px;
+  border-left: 1px solid rgba(42, 33, 42, 0.12);
+  border-bottom: 1px solid rgba(42, 33, 42, 0.12);
+  background-image:
+    linear-gradient(to right, rgba(42, 33, 42, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(42, 33, 42, 0.055) 1px, transparent 1px);
+  background-size: 25% 25%;
+}
+
+.line {
+  position: absolute;
+  inset: 22px 24px 34px 48px;
+  width: calc(100% - 72px);
+  height: calc(100% - 56px);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.line polyline {
+  fill: none;
+  stroke: #d96fa7;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.handles {
+  position: absolute;
+  inset: 22px 24px 34px 48px;
+}
+
+.handle {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 3px solid #fff;
+  border-radius: 999px;
+  background: #d96fa7;
+  box-shadow: 0 2px 12px rgba(73, 45, 64, 0.22);
+  cursor: grab;
+  touch-action: none;
+}
+
+.handle:active {
+  cursor: grabbing;
+}
+
+.handle:focus-visible {
+  outline: 3px solid rgba(217, 111, 167, 0.28);
+  outline-offset: 3px;
+}
+
+.axisY,
+.axisX {
+  position: absolute;
+  color: #7d747c;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.axisY {
+  top: 20px;
+  left: 14px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.axisX {
+  right: 24px;
+  bottom: 12px;
+}
+
+.points {
+  display: grid;
+  gap: 7px;
+}
+
+.point {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid rgba(42, 33, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.point strong,
+.point span {
+  min-width: 0;
+}
+
+.point strong {
+  display: block;
+  overflow: hidden;
+  color: #2f2830;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.point span {
+  color: #7d747c;
+  font-size: 12px;
+}
+
+.point input {
+  width: 72px;
+  height: 30px;
+  border: 1px solid rgba(42, 33, 42, 0.1);
+  border-radius: 10px;
+  background: #fff;
+  color: #2f2830;
+  font: inherit;
+  text-align: right;
+}
+
+.remove,
+.add {
+  border: 0;
+  color: #6f6970;
+  font: inherit;
+  cursor: pointer;
+}
+
+.remove {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.remove:hover {
+  background: rgba(42, 33, 42, 0.055);
+}
+
+.remove:disabled {
+  cursor: default;
+  opacity: 0.24;
+}
+
+.add {
+  justify-self: start;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(217, 111, 167, 0.1);
+}
+
+.disclosure {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.disclosure div {
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.disclosure strong,
+.disclosure span {
+  display: block;
+}
+
+.disclosure strong {
+  margin-bottom: 3px;
+  color: #332c33;
+  font-size: 12px;
+}
+
+.disclosure span {
+  color: #766f76;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+@media (max-width: 720px) {
+  .heading,
+  .disclosure {
+    grid-template-columns: 1fr;
+  }
+
+  .heading {
+    display: grid;
+  }
+
+  .plot {
+    height: 210px;
+  }
+
+  .disclosure {
+    display: grid;
+  }
+
+  .point {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+}

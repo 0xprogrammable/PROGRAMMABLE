@@ -22,7 +22,17 @@ import {
   X,
 } from "lucide-react";
 import { useWallet } from "@/components/wallet-provider";
+import { AdaptiveCurveEditor } from "@/components/adaptive-curve-editor";
+import { validatePreparedAdaptiveLaunchTransaction } from "@/lib/adaptive-launch-validation";
 import { validatePreparedClassicLaunchTransaction } from "@/lib/classic-launch-validation";
+import { validatePreparedClassicV3LaunchTransaction } from "@/lib/classic-v3-launch-validation";
+import {
+  formatClassicV3Percent,
+  isClassicV3DeploymentReady,
+  validateClassicV3LaunchDraft,
+  type ClassicV3DeploymentManifest,
+} from "@/lib/classic-v3";
+import appDeployments from "@/contracts/config/app-deployments.v1.json";
 import {
   MAX_METADATA_URL_BYTES,
   MAX_SOCIAL_URL_BYTES,
@@ -34,19 +44,24 @@ import {
   normalizeOptionalHttpsUrl,
   normalizeOptionalSocialUrl,
   utf8ByteLength,
+  validateAdaptiveLaunchDraft,
   validateMemeLaunchDraft,
   type LaunchPreflightResponse,
 } from "@/lib/launch-transaction";
 import {
   CLASSIC_TOTAL_SWAP_FEE_BPS,
   CLASSIC_TOTAL_SWAP_FEE_PERCENT,
+  createAdaptiveDraft,
+  createClassicV3Draft,
   createEmptyDraft,
   maximumClassicDevBuyWei,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
   parseInitialBuyWei,
+  parseOptionalInitialBuyWei,
   PLATFORM_FEE_BPS,
   type LaunchDraft,
+  type LaunchModel,
 } from "@/lib/launch";
 import { prepareTokenImage } from "@/lib/token-image";
 import { formatEther } from "viem";
@@ -113,6 +128,29 @@ export function findIndexedLaunch(
   return null;
 }
 
+export function findClassicV3IndexedLaunch(value: unknown): IndexedLaunch | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const launch = (value as { launch?: unknown }).launch;
+  if (!launch || typeof launch !== "object" || Array.isArray(launch)) {
+    return null;
+  }
+  const candidate = launch as Record<string, unknown>;
+  if (
+    typeof candidate.tokenAddress !== "string" ||
+    !/^0x[a-fA-F0-9]{40}$/.test(candidate.tokenAddress) ||
+    typeof candidate.name !== "string" ||
+    typeof candidate.symbol !== "string"
+  ) {
+    return null;
+  }
+  return {
+    address: candidate.tokenAddress as `0x${string}`,
+    href: `/token/${candidate.tokenAddress}`,
+    name: candidate.name,
+    symbol: candidate.symbol,
+  };
+}
+
 function updateDraft(
   setDraft: Dispatch<SetStateAction<LaunchDraft>>,
   patch: Partial<LaunchDraft>,
@@ -123,6 +161,7 @@ function updateDraft(
 function normalizeStandardDraft(initialDraft: LaunchDraft): LaunchDraft {
   return {
     ...initialDraft,
+    launchModel: "classic",
     assetMode: "new",
     tokenSupply: "1000000000",
     liquidityMode: "meme",
@@ -141,6 +180,53 @@ function normalizeStandardDraft(initialDraft: LaunchDraft): LaunchDraft {
   };
 }
 
+function normalizeAdaptiveDraft(initialDraft: LaunchDraft): LaunchDraft {
+  const fallback = createAdaptiveDraft();
+  return {
+    ...initialDraft,
+    launchModel: "adaptive",
+    assetMode: "new",
+    tokenSupply: "1000000000",
+    liquidityMode: "meme",
+    selectedBehaviors: [],
+    lpFeePercent: "0",
+    totalSwapFeePercent: "",
+    initialBuyEth:
+      parseOptionalInitialBuyWei(initialDraft.initialBuyEth) === null
+        ? "0"
+        : initialDraft.initialBuyEth.trim(),
+    customHookAddress: "",
+    customHookSource: "",
+    adaptiveCurvePoints:
+      initialDraft.adaptiveCurvePoints.length >= 2
+        ? initialDraft.adaptiveCurvePoints
+        : fallback.adaptiveCurvePoints,
+  };
+}
+
+function normalizeClassicV3Draft(initialDraft: LaunchDraft): LaunchDraft {
+  return {
+    ...normalizeStandardDraft(initialDraft),
+    launchModel: "classic-v3",
+    buySwapFeePercent: initialDraft.buySwapFeePercent || "1",
+    sellSwapFeePercent: initialDraft.sellSwapFeePercent || "1",
+    rewardDestinationMode: initialDraft.rewardDestinationMode || "launcher",
+  };
+}
+
+const launchEnvironment =
+  process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
+    ? "rehearsal"
+    : "production";
+const adaptiveLaunchAvailable =
+  appDeployments[launchEnvironment].adaptiveLaunchStatus === "ready";
+const classicV3LaunchAvailable = isClassicV3DeploymentReady(
+  appDeployments[
+    launchEnvironment
+  ] as unknown as ClassicV3DeploymentManifest,
+  launchEnvironment === "rehearsal" ? 11_155_111 : 1,
+);
+
 function shortenAddress(address: string) {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
 }
@@ -154,21 +240,42 @@ function createLaunchSalt() {
 }
 
 export function LaunchBuilder() {
-  const [selectedModel, setSelectedModel] = useState<"classic" | null>(null);
+  const [selectedModel, setSelectedModel] = useState<LaunchModel | null>(null);
+
+  function chooseModel(model: LaunchModel) {
+    window.scrollTo({ left: 0, top: 0, behavior: "auto" });
+    setSelectedModel(model);
+  }
+
+  function returnToModels() {
+    window.scrollTo({ left: 0, top: 0, behavior: "auto" });
+    setSelectedModel(null);
+  }
 
   if (!selectedModel) {
-    return <LaunchModelPicker onChoose={() => setSelectedModel("classic")} />;
+    return <LaunchModelPicker onChoose={chooseModel} />;
   }
 
   return (
     <LaunchBuilderForm
-      initialDraft={normalizeStandardDraft(createEmptyDraft())}
-      onBackToModels={() => setSelectedModel(null)}
+      model={selectedModel}
+      initialDraft={
+        selectedModel === "adaptive"
+          ? createAdaptiveDraft()
+          : selectedModel === "classic-v3"
+            ? createClassicV3Draft()
+          : normalizeStandardDraft(createEmptyDraft())
+      }
+      onBackToModels={returnToModels}
     />
   );
 }
 
-function LaunchModelPicker({ onChoose }: { onChoose: () => void }) {
+function LaunchModelPicker({
+  onChoose,
+}: {
+  onChoose: (model: LaunchModel) => void;
+}) {
   return (
     <div className="launch-model-page page-width">
       <header className="launch-model-heading">
@@ -180,7 +287,7 @@ function LaunchModelPicker({ onChoose }: { onChoose: () => void }) {
           className="launch-model-card"
           type="button"
           style={{ animation: "none", transform: "none", transition: "none" }}
-          onClick={onChoose}
+          onClick={() => onChoose("classic")}
         >
           <span className="launch-model-art" aria-hidden="true">
             <Image
@@ -212,15 +319,94 @@ function LaunchModelPicker({ onChoose }: { onChoose: () => void }) {
             </span>
           </span>
         </button>
+
+        <button
+          className="launch-model-card"
+          type="button"
+          style={{ animation: "none", transform: "none", transition: "none" }}
+          onClick={() => onChoose("classic-v3")}
+        >
+          <span className="launch-model-art" aria-hidden="true">
+            <Image
+              src="/brand/programmable-classic-launch-art.webp"
+              alt=""
+              fill
+              sizes="(max-width: 800px) 100vw, 420px"
+              unoptimized
+            />
+          </span>
+          <span className="launch-model-card-body">
+            <span className="launch-model-card-heading">
+              <strong>Classic V3</strong>
+              <small>
+                {classicV3LaunchAvailable ? "Available" : "In development"}
+              </small>
+            </span>
+            <span className="launch-model-description">
+              Set immutable buy and sell fees, then direct creator rewards to
+              one wallet or a fixed split
+            </span>
+            <span className="launch-model-details">
+              <span>1%–10% directional fees</span>
+              <span>Up to 8 recipients</span>
+              <span>Locked liquidity</span>
+            </span>
+            <span className="launch-model-action">
+              {classicV3LaunchAvailable ? "Launch" : "Review setup"}
+              <ArrowRight aria-hidden="true" size={16} />
+            </span>
+          </span>
+        </button>
+
+        <button
+          className="launch-model-card"
+          type="button"
+          style={{ animation: "none", transform: "none", transition: "none" }}
+          onClick={() => onChoose("adaptive")}
+        >
+          <span className="launch-model-art" aria-hidden="true">
+            <Image
+              src="/brand/programmable-adaptive-model-post-v1-2000x1000.png"
+              alt=""
+              fill
+              sizes="(max-width: 800px) 100vw, 420px"
+              unoptimized
+            />
+          </span>
+
+          <span className="launch-model-card-body">
+            <span className="launch-model-card-heading">
+              <strong>Adaptive</strong>
+              <small>
+                {adaptiveLaunchAvailable ? "Available" : "In development"}
+              </small>
+            </span>
+            <span className="launch-model-description">
+              Draw an immutable swap-fee curve that follows the token&apos;s
+              ETH-denominated onchain value
+            </span>
+            <span className="launch-model-details">
+              <span>Uniswap v4</span>
+              <span>2–8 curve points</span>
+              <span>1.00%–10.00% total fee</span>
+            </span>
+            <span className="launch-model-action">
+              {adaptiveLaunchAvailable ? "Launch" : "Open editor"}
+              <ArrowRight aria-hidden="true" size={16} />
+            </span>
+          </span>
+        </button>
       </div>
     </div>
   );
 }
 
 function LaunchBuilderForm({
+  model,
   initialDraft,
   onBackToModels,
 }: {
+  model: LaunchModel;
   initialDraft: LaunchDraft;
   onBackToModels: () => void;
 }) {
@@ -262,10 +448,16 @@ function LaunchBuilderForm({
 
     const pollForLaunch = async () => {
       try {
+        const endpoint =
+          model === "classic-v3"
+            ? `/api/profile/classic-v3?account=${encodeURIComponent(
+                submittedAccount,
+              )}&launch=${encodeURIComponent(transactionHash)}`
+            : `/api/explore/profile?account=${encodeURIComponent(
+                submittedAccount,
+              )}&launch=${encodeURIComponent(transactionHash)}&attempt=${attempt}`;
         const response = await fetch(
-          `/api/explore/profile?account=${encodeURIComponent(
-            submittedAccount,
-          )}&launch=${encodeURIComponent(transactionHash)}&attempt=${attempt}`,
+          endpoint,
           {
             cache: "no-store",
             headers: { Accept: "application/json" },
@@ -274,7 +466,10 @@ function LaunchBuilderForm({
         );
         const body: unknown = await response.json();
         if (response.ok) {
-          const launch = findIndexedLaunch(body, transactionHash);
+          const launch =
+            model === "classic-v3"
+              ? findClassicV3IndexedLaunch(body)
+              : findIndexedLaunch(body, transactionHash);
           if (launch) {
             setIndexedLaunch(launch);
             setSuccessOpen(true);
@@ -297,7 +492,7 @@ function LaunchBuilderForm({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [indexedLaunch, submittedAccount, transactionHash]);
+  }, [indexedLaunch, model, submittedAccount, transactionHash]);
 
   function validateLaunch() {
     if (
@@ -311,7 +506,14 @@ function LaunchBuilderForm({
       return tokenImageState.message || "Choose the token image again";
     }
     try {
-      validateMemeLaunchDraft(draft);
+      if (model === "adaptive") {
+        validateAdaptiveLaunchDraft(draft);
+      } else if (model === "classic-v3") {
+        if (!wallet) return "Connect a wallet to verify the reward setup";
+        validateClassicV3LaunchDraft(draft, wallet.account);
+      } else {
+        validateMemeLaunchDraft(draft);
+      }
       return "";
     } catch (caught) {
       return caught instanceof Error
@@ -392,7 +594,12 @@ function LaunchBuilderForm({
     setFormError("");
 
     try {
-      let checkedDraft = normalizeStandardDraft(draft);
+      let checkedDraft =
+        model === "adaptive"
+          ? normalizeAdaptiveDraft(draft)
+          : model === "classic-v3"
+            ? normalizeClassicV3Draft(draft)
+          : normalizeStandardDraft(draft);
       if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
         checkedDraft = {
           ...checkedDraft,
@@ -409,7 +616,10 @@ function LaunchBuilderForm({
         gasLimit,
         gasPriceWei: balances.gasPriceWei,
       });
-      const minimum = parseInitialBuyWei(MEME_MIN_INITIAL_BUY_ETH) ?? 0n;
+      const minimum =
+        model === "adaptive"
+          ? 0n
+          : (parseInitialBuyWei(MEME_MIN_INITIAL_BUY_ETH) ?? 0n);
 
       if (maximum < minimum) {
         throw new Error(
@@ -481,7 +691,12 @@ function LaunchBuilderForm({
 
     const launchWallet = { ...wallet };
     const launchDraftVersion = draftVersion.current;
-    let checkedDraft = normalizeStandardDraft(draft);
+    let checkedDraft =
+      model === "adaptive"
+        ? normalizeAdaptiveDraft(draft)
+        : model === "classic-v3"
+          ? normalizeClassicV3Draft(draft)
+        : normalizeStandardDraft(draft);
     if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
       checkedDraft = {
         ...checkedDraft,
@@ -510,12 +725,27 @@ function LaunchBuilderForm({
         throw new Error("The token or connected wallet changed. Try again");
       }
 
-      const validatedTransaction = validatePreparedClassicLaunchTransaction({
-        transaction: prepared.transaction,
-        draft: checkedDraft,
-        account: launchWallet.account,
-        planHash: prepared.planHash,
-      });
+      const validatedTransaction =
+        model === "adaptive"
+          ? validatePreparedAdaptiveLaunchTransaction({
+              transaction: prepared.transaction,
+              draft: checkedDraft,
+              account: launchWallet.account,
+              planHash: prepared.planHash,
+            })
+          : model === "classic-v3"
+            ? validatePreparedClassicV3LaunchTransaction({
+                transaction: prepared.transaction,
+                draft: checkedDraft,
+                account: launchWallet.account,
+                planHash: prepared.planHash,
+              })
+          : validatePreparedClassicLaunchTransaction({
+              transaction: prepared.transaction,
+              draft: checkedDraft,
+              account: launchWallet.account,
+              planHash: prepared.planHash,
+            });
       setLaunchPhase("confirming");
       const hash = await sendTransaction(validatedTransaction);
       setSubmittedAccount(launchWallet.account);
@@ -544,11 +774,21 @@ function LaunchBuilderForm({
           Back
         </button>
         <div className="launch-page-title">
-          <p className="eyebrow">Classic</p>
+          <p className="eyebrow">
+            {model === "adaptive"
+              ? "Adaptive"
+              : model === "classic-v3"
+                ? "Classic V3"
+                : "Classic"}
+          </p>
           <h1>Set up your token</h1>
           <p className="launch-model-summary">
-            1B fixed supply <span>·</span> Uniswap v4 <span>·</span> Locked
-            liquidity
+            1B fixed supply <span>·</span> Uniswap v4 <span>·</span>{" "}
+            {model === "adaptive"
+              ? "Immutable fee curve"
+              : model === "classic-v3"
+                ? "Directional fees and fixed rewards"
+                : "Locked liquidity"}
           </p>
         </div>
       </header>
@@ -568,13 +808,32 @@ function LaunchBuilderForm({
             onEdit={markDraftEdited}
             onImageStateChange={setTokenImageState}
           />
-          <FeeStep
-            draft={draft}
-            setDraft={setDraft}
-            onEdit={markDraftEdited}
-            settingMaxBuy={settingMaxBuy}
-            onMaximumDevBuy={() => void setMaximumDevBuy()}
-          />
+          {model === "adaptive" ? (
+            <AdaptiveFeeStep
+              draft={draft}
+              setDraft={setDraft}
+              onEdit={markDraftEdited}
+              settingMaxBuy={settingMaxBuy}
+              onMaximumDevBuy={() => void setMaximumDevBuy()}
+            />
+          ) : model === "classic-v3" ? (
+            <ClassicV3FeeStep
+              account={wallet?.account}
+              draft={draft}
+              setDraft={setDraft}
+              onEdit={markDraftEdited}
+              settingMaxBuy={settingMaxBuy}
+              onMaximumDevBuy={() => void setMaximumDevBuy()}
+            />
+          ) : (
+            <FeeStep
+              draft={draft}
+              setDraft={setDraft}
+              onEdit={markDraftEdited}
+              settingMaxBuy={settingMaxBuy}
+              onMaximumDevBuy={() => void setMaximumDevBuy()}
+            />
+          )}
         </div>
 
         <footer className="classic-launch-footer">
@@ -614,14 +873,23 @@ function LaunchBuilderForm({
             <button
               className="primary-button classic-launch-button"
               type="submit"
-              disabled={launching || Boolean(transactionHash)}
+              disabled={
+                launching ||
+                Boolean(transactionHash) ||
+                (model === "adaptive" && !adaptiveLaunchAvailable) ||
+                (model === "classic-v3" && !classicV3LaunchAvailable)
+              }
               style={{
                 animation: "none",
                 transform: "none",
                 transition: "none",
               }}
             >
-              {launchPhase === "preparing"
+              {model === "adaptive" && !adaptiveLaunchAvailable
+                ? "Adaptive is not deployed"
+                : model === "classic-v3" && !classicV3LaunchAvailable
+                  ? "Classic V3 is not deployed"
+                : launchPhase === "preparing"
                 ? "Preparing launch"
                 : launchPhase === "confirming"
                   ? "Confirm in wallet"
@@ -638,6 +906,8 @@ function LaunchBuilderForm({
       {indexedLaunch && successOpen ? (
         <LaunchSuccessDialog
           launch={indexedLaunch}
+          draft={model === "classic-v3" ? draft : undefined}
+          account={submittedAccount}
           onClose={() => setSuccessOpen(false)}
         />
       ) : null}
@@ -656,9 +926,13 @@ function LaunchBuilderForm({
 
 function LaunchSuccessDialog({
   launch,
+  draft,
+  account,
   onClose,
 }: {
   launch: IndexedLaunch;
+  draft?: LaunchDraft;
+  account?: string;
   onClose: () => void;
 }) {
   const viewLinkRef = useRef<HTMLAnchorElement>(null);
@@ -678,6 +952,16 @@ function LaunchSuccessDialog({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [onClose]);
+  let classicV3Configuration:
+    | ReturnType<typeof validateClassicV3LaunchDraft>
+    | undefined;
+  try {
+    if (draft && account) {
+      classicV3Configuration = validateClassicV3LaunchDraft(draft, account);
+    }
+  } catch {
+    classicV3Configuration = undefined;
+  }
 
   return (
     <div
@@ -712,6 +996,30 @@ function LaunchSuccessDialog({
         <p>
           {launch.name} <span>${launch.symbol}</span>
         </p>
+        {classicV3Configuration ? (
+          <dl className="launch-success-v3">
+            <div>
+              <dt>Buy fee</dt>
+              <dd>
+                {formatClassicV3Percent(
+                  classicV3Configuration.fees.buySwapFeeBps,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Sell fee</dt>
+              <dd>
+                {formatClassicV3Percent(
+                  classicV3Configuration.fees.sellSwapFeeBps,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Reward owners</dt>
+              <dd>{classicV3Configuration.rewards.beneficiaries.length}</dd>
+            </div>
+          </dl>
+        ) : null}
         <Link ref={viewLinkRef} className="primary-button" href={launch.href}>
           View your token
         </Link>
@@ -1090,6 +1398,325 @@ function TokenStep({
               updateTokenDraft({ tokenTelegram: event.target.value })
             }
           />
+        </label>
+      </div>
+    </section>
+  );
+}
+
+function AdaptiveFeeStep({
+  draft,
+  setDraft,
+  onEdit,
+  settingMaxBuy,
+  onMaximumDevBuy,
+}: {
+  draft: LaunchDraft;
+  setDraft: Dispatch<SetStateAction<LaunchDraft>>;
+  onEdit: () => void;
+  settingMaxBuy: boolean;
+  onMaximumDevBuy: () => void;
+}) {
+  return (
+    <section className="classic-fee-section">
+      <AdaptiveCurveEditor
+        points={draft.adaptiveCurvePoints}
+        onChange={(adaptiveCurvePoints) => {
+          onEdit();
+          updateDraft(setDraft, { adaptiveCurvePoints });
+        }}
+      />
+
+      <div className="classic-fee-layout">
+        <label className="meme-dev-buy" htmlFor="adaptive-dev-buy">
+          <span>
+            <strong>Dev Buy</strong>
+            <small>Optional</small>
+          </span>
+          <span className="meme-dev-buy-input">
+            <input
+              id="adaptive-dev-buy"
+              inputMode="decimal"
+              value={draft.initialBuyEth}
+              maxLength={40}
+              placeholder="0"
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) => {
+                onEdit();
+                updateDraft(setDraft, {
+                  initialBuyEth: event.target.value,
+                });
+              }}
+            />
+            <button
+              type="button"
+              disabled={settingMaxBuy || !adaptiveLaunchAvailable}
+              onClick={onMaximumDevBuy}
+            >
+              {settingMaxBuy ? "Checking" : "Max"}
+            </button>
+            <span>ETH</span>
+          </span>
+        </label>
+      </div>
+    </section>
+  );
+}
+
+function ClassicV3FeeStep({
+  account,
+  draft,
+  setDraft,
+  onEdit,
+  settingMaxBuy,
+  onMaximumDevBuy,
+}: {
+  account?: string;
+  draft: LaunchDraft;
+  setDraft: Dispatch<SetStateAction<LaunchDraft>>;
+  onEdit: () => void;
+  settingMaxBuy: boolean;
+  onMaximumDevBuy: () => void;
+}) {
+  const updateClassicV3Draft = (patch: Partial<LaunchDraft>) => {
+    onEdit();
+    updateDraft(setDraft, patch);
+  };
+  let configuration:
+    | ReturnType<typeof validateClassicV3LaunchDraft>
+    | undefined;
+  try {
+    if (account) {
+      configuration = validateClassicV3LaunchDraft(draft, account);
+    }
+  } catch {
+    configuration = undefined;
+  }
+
+  function updateSplit(
+    index: number,
+    patch: Partial<LaunchDraft["rewardSplits"][number]>,
+  ) {
+    updateClassicV3Draft({
+      rewardSplits: draft.rewardSplits.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...patch } : row,
+      ),
+    });
+  }
+
+  return (
+    <section className="classic-v3-settings" aria-labelledby="classic-v3-fees">
+      <div className="classic-section-heading">
+        <h2 id="classic-v3-fees">Fees and rewards</h2>
+        <p>These settings are permanent after launch</p>
+      </div>
+
+      <div className="classic-v3-fee-grid">
+        {(["buy", "sell"] as const).map((direction) => {
+          const key =
+            direction === "buy"
+              ? "buySwapFeePercent"
+              : "sellSwapFeePercent";
+          return (
+            <label className="classic-v3-fee-control" key={direction}>
+              <span>{direction === "buy" ? "Buy fee" : "Sell fee"}</span>
+              <select
+                value={draft[key]}
+                onChange={(event) =>
+                  updateClassicV3Draft({ [key]: event.target.value })
+                }
+              >
+                {Array.from({ length: 10 }, (_, index) => (
+                  <option value={String(index + 1)} key={index + 1}>
+                    {index + 1}.00%
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        })}
+      </div>
+
+      <fieldset className="classic-v3-reward-mode">
+        <legend>Creator rewards</legend>
+        <div>
+          {(
+            [
+              ["launcher", "Launch wallet"],
+              ["external", "Another wallet"],
+              ["split", "Fixed split"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              type="button"
+              className={
+                draft.rewardDestinationMode === value ? "is-selected" : ""
+              }
+              aria-pressed={draft.rewardDestinationMode === value}
+              onClick={() =>
+                updateClassicV3Draft({ rewardDestinationMode: value })
+              }
+              key={value}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      {draft.rewardDestinationMode === "external" ? (
+        <label className="field classic-v3-address-field">
+          <span>Reward wallet</span>
+          <input
+            value={draft.rewardExternalAddress}
+            placeholder="0x…"
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(event) =>
+              updateClassicV3Draft({
+                rewardExternalAddress: event.target.value,
+              })
+            }
+          />
+          <small>
+            This wallet owns its rewards and can redirect its payout later
+          </small>
+        </label>
+      ) : null}
+
+      {draft.rewardDestinationMode === "split" ? (
+        <div className="classic-v3-split">
+          {draft.rewardSplits.map((row, index) => (
+            <div className="classic-v3-split-row" key={index}>
+              <label>
+                <span>Recipient {index + 1}</span>
+                <input
+                  value={row.beneficiary}
+                  placeholder="0x…"
+                  spellCheck={false}
+                  autoComplete="off"
+                  onChange={(event) =>
+                    updateSplit(index, {
+                      beneficiary: event.target.value,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                <span>Share</span>
+                <span className="classic-v3-share-input">
+                  <input
+                    inputMode="decimal"
+                    value={row.sharePercent}
+                    maxLength={6}
+                    onChange={(event) =>
+                      updateSplit(index, {
+                        sharePercent: event.target.value,
+                      })
+                    }
+                  />
+                  <span>%</span>
+                </span>
+              </label>
+              {draft.rewardSplits.length > 2 ? (
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={`Remove recipient ${index + 1}`}
+                  onClick={() =>
+                    updateClassicV3Draft({
+                      rewardSplits: draft.rewardSplits.filter(
+                        (_, rowIndex) => rowIndex !== index,
+                      ),
+                    })
+                  }
+                >
+                  <Trash2 aria-hidden="true" size={16} />
+                </button>
+              ) : null}
+            </div>
+          ))}
+          {draft.rewardSplits.length < 8 ? (
+            <button
+              className="secondary-button classic-v3-add-recipient"
+              type="button"
+              onClick={() =>
+                updateClassicV3Draft({
+                  rewardSplits: [
+                    ...draft.rewardSplits,
+                    { beneficiary: "", sharePercent: "" },
+                  ],
+                })
+              }
+            >
+              Add recipient
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="classic-v3-review" aria-live="polite">
+        <div>
+          <span>Buy</span>
+          <strong>
+            {configuration
+              ? formatClassicV3Percent(configuration.fees.buySwapFeeBps)
+              : draft.buySwapFeePercent
+                ? `${Number(draft.buySwapFeePercent).toFixed(2)}%`
+                : "—"}
+          </strong>
+        </div>
+        <div>
+          <span>Sell</span>
+          <strong>
+            {configuration
+              ? formatClassicV3Percent(configuration.fees.sellSwapFeeBps)
+              : draft.sellSwapFeePercent
+                ? `${Number(draft.sellSwapFeePercent).toFixed(2)}%`
+                : "—"}
+          </strong>
+        </div>
+        <div>
+          <span>Programmable</span>
+          <strong>0.10%</strong>
+        </div>
+        <p>
+          Programmable&apos;s 0.10% is deducted from each selected fee. Reward
+          ownership and shares cannot change after launch.
+        </p>
+      </div>
+
+      <div className="classic-fee-layout">
+        <label className="meme-dev-buy" htmlFor="classic-v3-dev-buy">
+          <span>
+            <strong>Dev Buy</strong>
+            <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
+          </span>
+          <span className="meme-dev-buy-input">
+            <input
+              id="classic-v3-dev-buy"
+              inputMode="decimal"
+              value={draft.initialBuyEth}
+              maxLength={40}
+              placeholder={MEME_MIN_INITIAL_BUY_ETH}
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) =>
+                updateClassicV3Draft({
+                  initialBuyEth: event.target.value,
+                })
+              }
+            />
+            <button
+              type="button"
+              disabled={settingMaxBuy || !classicV3LaunchAvailable}
+              onClick={onMaximumDevBuy}
+            >
+              {settingMaxBuy ? "Checking" : "Max"}
+            </button>
+            <span>ETH</span>
+          </span>
         </label>
       </div>
     </section>

@@ -506,6 +506,7 @@ async function hydrateVerifiedToken(
     launcherFeeBps,
     transferTaxBps,
     totalSwapFeeBps: launch.totalSwapFeeBps,
+    launchModel: "classic",
     liquidityPath: "meme",
     metadataExtraData: extraData,
   };

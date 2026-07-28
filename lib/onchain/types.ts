@@ -177,6 +177,8 @@ export type CreatorProfilePool = {
   symbol: string;
   poolId: Hex;
   totalSwapFeeBps: number;
+  launchModel: "classic" | "adaptive";
+  adaptiveCurveHash?: Hex;
   claimableCreatorFeesWei: string;
   claimableCreatorFeesEth: string;
   generatedCreatorFeesWei: string;

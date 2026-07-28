@@ -15,6 +15,13 @@ import {
 
 import { useWallet } from "@/components/wallet-provider";
 import { prepareAvatarImage } from "@/lib/profile/avatar";
+import {
+  EMPTY_CLASSIC_V3_PROFILE,
+  fetchClassicV3ProfileRewards,
+  prepareClassicV3RewardAction,
+  type ClassicV3ProfileRewards,
+  type ClassicV3Reward,
+} from "@/lib/profile/classic-v3-rewards";
 import { prepareCreatorClaim } from "@/lib/profile/creator-claim";
 import {
   getProfileStorageKey,
@@ -40,6 +47,12 @@ type ProfileClaimActionState = {
   status: "preparing" | "wallet" | "submitted" | "error";
   message: string;
   transactionHash?: `0x${string}`;
+};
+
+type ClassicV3ActionState = {
+  account: string;
+  status: "preparing" | "wallet" | "submitted" | "error";
+  message: string;
 };
 
 export type ProfileViewProps = {
@@ -126,8 +139,13 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const [remoteOnchainData, setRemoteOnchainData] =
     useState<ProfileOnchainData>(UNAVAILABLE_PROFILE_DATA);
   const [profileRefresh, setProfileRefresh] = useState(0);
+  const [classicV3Rewards, setClassicV3Rewards] =
+    useState<ClassicV3ProfileRewards>(EMPTY_CLASSIC_V3_PROFILE);
   const [claimActionStates, setClaimActionStates] = useState<
     Record<string, ProfileClaimActionState>
+  >({});
+  const [classicV3ActionStates, setClassicV3ActionStates] = useState<
+    Record<string, ClassicV3ActionState>
   >({});
   const editingProfile =
     Boolean(account) && editingAccount === account?.toLowerCase();
@@ -160,6 +178,28 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
     return () => controller.abort();
   }, [account, onchainData, profileRefresh]);
+
+  useEffect(() => {
+    if (!account) return;
+    const controller = new AbortController();
+    void fetchClassicV3ProfileRewards(account, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setClassicV3Rewards(data);
+      })
+      .catch((caught: unknown) => {
+        if (controller.signal.aborted) return;
+        setClassicV3Rewards({
+          status: "error",
+          account,
+          rewards: [],
+          errorMessage:
+            caught instanceof Error
+              ? caught.message
+              : "Classic V3 rewards could not be loaded",
+        });
+      });
+    return () => controller.abort();
+  }, [account, profileRefresh]);
 
   function beginEditingProfile() {
     setUsernameDraft(savedProfile.username);
@@ -246,6 +286,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       ? requestedOnchainData
       : loadingProfileData(account)
     : UNAVAILABLE_PROFILE_DATA;
+  const scopedClassicV3Rewards =
+    account &&
+    classicV3Rewards.account?.toLowerCase() === account.toLowerCase()
+      ? classicV3Rewards
+      : EMPTY_CLASSIC_V3_PROFILE;
   const submitCreatorClaim = useCallback(
     async (claim: ProfileClaim) => {
       const claimAccount = account;
@@ -333,6 +378,80 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       scopedOnchainData.status,
       sendTransaction,
     ],
+  );
+  const submitClassicV3Action = useCallback(
+    async (
+      reward: ClassicV3Reward,
+      action: "claim" | "update-payout",
+      newPayoutAddress?: string,
+    ) => {
+      const actionAccount = account;
+      if (
+        !actionAccount ||
+        scopedClassicV3Rewards.status !== "ready" ||
+        reward.beneficiary.toLowerCase() !== actionAccount.toLowerCase()
+      ) {
+        return;
+      }
+      const stateKey = `${reward.vaultAddress.toLowerCase()}:${action}`;
+      const setActionState = (
+        state: Omit<ClassicV3ActionState, "account">,
+      ) => {
+        setClassicV3ActionStates((current) => ({
+          ...current,
+          [stateKey]: { account: actionAccount, ...state },
+        }));
+      };
+      setActionState({
+        status: "preparing",
+        message: "Checking the current onchain state",
+      });
+      try {
+        const prepared = await prepareClassicV3RewardAction({
+          action,
+          account: actionAccount,
+          vaultAddress: reward.vaultAddress,
+          newPayoutAddress,
+          chainId: scopedClassicV3Rewards.chainId,
+        });
+        if (
+          activeAccountRef.current?.toLowerCase() !==
+          actionAccount.toLowerCase()
+        ) {
+          throw new Error("The connected wallet changed before submission");
+        }
+        setActionState({
+          status: "wallet",
+          message: "Review the transaction in your wallet",
+        });
+        await sendTransaction(prepared.transaction);
+        if (
+          activeAccountRef.current?.toLowerCase() ===
+          actionAccount.toLowerCase()
+        ) {
+          setActionState({
+            status: "submitted",
+            message: "Transaction submitted",
+          });
+          setProfileRefresh((current) => current + 1);
+        }
+      } catch (caught) {
+        if (
+          activeAccountRef.current?.toLowerCase() !==
+          actionAccount.toLowerCase()
+        ) {
+          return;
+        }
+        setActionState({
+          status: "error",
+          message:
+            caught instanceof Error
+              ? caught.message
+              : "The reward action could not be submitted",
+        });
+      }
+    },
+    [account, scopedClassicV3Rewards, sendTransaction],
   );
   const displayName = account
     ? savedProfile.username || shortenAddress(account)
@@ -480,7 +599,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         data={scopedOnchainData}
         account={account}
         claimActionStates={claimActionStates}
+        classicV3Rewards={scopedClassicV3Rewards}
+        classicV3ActionStates={classicV3ActionStates}
         onClaim={submitCreatorClaim}
+        onClassicV3Action={submitClassicV3Action}
         onConnect={openWallet}
         onRetry={() => setProfileRefresh((current) => current + 1)}
       />
@@ -526,7 +648,10 @@ function ProfileAccountWorkspace({
   data,
   account,
   claimActionStates,
+  classicV3Rewards,
+  classicV3ActionStates,
   onClaim,
+  onClassicV3Action,
   onConnect,
   onRetry,
 }: {
@@ -534,7 +659,14 @@ function ProfileAccountWorkspace({
   data: ProfileOnchainData;
   account?: string;
   claimActionStates: Record<string, ProfileClaimActionState>;
+  classicV3Rewards: ClassicV3ProfileRewards;
+  classicV3ActionStates: Record<string, ClassicV3ActionState>;
   onClaim: (claim: ProfileClaim) => void;
+  onClassicV3Action: (
+    reward: ClassicV3Reward,
+    action: "claim" | "update-payout",
+    newPayoutAddress?: string,
+  ) => void;
   onConnect: () => void;
   onRetry: () => void;
 }) {
@@ -612,7 +744,9 @@ function ProfileAccountWorkspace({
                 <div>
                   <strong>{token.name}</strong>
                   <span>
-                    ${token.symbol} · {shortenAddress(token.address)}
+                    ${token.symbol} ·{" "}
+                    {token.launchModel === "adaptive" ? "Adaptive" : "Classic"} ·{" "}
+                    {shortenAddress(token.address)}
                   </span>
                 </div>
                 <Link className="text-link" href={token.href}>
@@ -667,7 +801,190 @@ function ProfileAccountWorkspace({
           />
         )}
       </section>
+
+      {classicV3Rewards.status === "ready" &&
+      classicV3Rewards.rewards.length ? (
+        <section
+          className="profile-account-section profile-v3-section"
+          aria-labelledby="profile-v3-rewards-title"
+        >
+          <header className="profile-account-heading">
+            <h2 id="profile-v3-rewards-title">Classic V3 rewards</h2>
+            <span>{classicV3Rewards.rewards.length}</span>
+          </header>
+          <div className="profile-v3-list">
+            {classicV3Rewards.rewards.map((reward) => (
+              <ClassicV3RewardItem
+                key={reward.vaultAddress}
+                reward={reward}
+                account={account}
+                actionStates={classicV3ActionStates}
+                onAction={onClassicV3Action}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
+  );
+}
+
+function ClassicV3RewardItem({
+  reward,
+  account,
+  actionStates,
+  onAction,
+}: {
+  reward: ClassicV3Reward;
+  account?: string;
+  actionStates: Record<string, ClassicV3ActionState>;
+  onAction: (
+    reward: ClassicV3Reward,
+    action: "claim" | "update-payout",
+    newPayoutAddress?: string,
+  ) => void;
+}) {
+  const [editingPayout, setEditingPayout] = useState(false);
+  const [payoutDraft, setPayoutDraft] = useState<string>(
+    reward.payoutAddress,
+  );
+  const claimState =
+    actionStates[`${reward.vaultAddress.toLowerCase()}:claim`];
+  const payoutState =
+    actionStates[`${reward.vaultAddress.toLowerCase()}:update-payout`];
+  const ownsReward =
+    Boolean(account) &&
+    reward.beneficiary.toLowerCase() === account?.toLowerCase();
+  const claimPending =
+    claimState?.status === "preparing" ||
+    claimState?.status === "wallet" ||
+    claimState?.status === "submitted";
+  const payoutPending =
+    payoutState?.status === "preparing" ||
+    payoutState?.status === "wallet" ||
+    payoutState?.status === "submitted";
+
+  return (
+    <article className="profile-v3-reward">
+      <header>
+        <div>
+          <strong>{reward.tokenName}</strong>
+          <span>
+            ${reward.tokenSymbol} · {shortenAddress(reward.tokenAddress)}
+          </span>
+        </div>
+        <strong>{formatEth(reward.claimableEth)}</strong>
+      </header>
+
+      <dl className="profile-v3-economics">
+        <div>
+          <dt>Buy fee</dt>
+          <dd>{(reward.buySwapFeeBps / 100).toFixed(2)}%</dd>
+        </div>
+        <div>
+          <dt>Sell fee</dt>
+          <dd>{(reward.sellSwapFeeBps / 100).toFixed(2)}%</dd>
+        </div>
+        <div>
+          <dt>Your share</dt>
+          <dd>{(reward.shareBps / 100).toFixed(2)}%</dd>
+        </div>
+        <div>
+          <dt>Programmable</dt>
+          <dd>0.10%</dd>
+        </div>
+      </dl>
+
+      <details className="profile-v3-split">
+        <summary>Immutable reward split</summary>
+        <div>
+          {reward.beneficiaries.map((item) => (
+            <p key={item.beneficiary}>
+              <span>{shortenAddress(item.beneficiary)}</span>
+              <strong>{(item.shareBps / 100).toFixed(2)}%</strong>
+              <small>to {shortenAddress(item.payoutAddress)}</small>
+            </p>
+          ))}
+        </div>
+      </details>
+
+      <div className="profile-v3-payout">
+        <span>Payout address</span>
+        {editingPayout ? (
+          <div>
+            <input
+              value={payoutDraft}
+              spellCheck={false}
+              autoComplete="off"
+              aria-label="New payout address"
+              onChange={(event) => setPayoutDraft(event.target.value)}
+            />
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={!ownsReward || payoutPending}
+              onClick={() =>
+                onAction(reward, "update-payout", payoutDraft.trim())
+              }
+            >
+              {payoutPending ? "Preparing" : "Save"}
+            </button>
+            <button
+              className="text-link"
+              type="button"
+              disabled={payoutPending}
+              onClick={() => {
+                setPayoutDraft(reward.payoutAddress);
+                setEditingPayout(false);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div>
+            <code>{shortenAddress(reward.payoutAddress)}</code>
+            <button
+              className="text-link"
+              type="button"
+              disabled={!ownsReward}
+              onClick={() => setEditingPayout(true)}
+            >
+              Change
+            </button>
+          </div>
+        )}
+        <small>
+          Claim authority stays with {shortenAddress(reward.beneficiary)}
+        </small>
+      </div>
+
+      <footer>
+        <Link className="text-link" href={`/token/${reward.tokenAddress}`}>
+          View token
+        </Link>
+        <button
+          className="secondary-button profile-claim-button"
+          type="button"
+          disabled={
+            !ownsReward ||
+            claimPending ||
+            BigInt(reward.claimableWei) === 0n
+          }
+          onClick={() => onAction(reward, "claim")}
+        >
+          {claimPending ? "Preparing" : "Claim"}
+        </button>
+      </footer>
+      {claimState?.status === "error" ||
+      payoutState?.status === "error" ? (
+        <p className="form-error" role="alert">
+          {claimState?.status === "error"
+            ? claimState.message
+            : payoutState?.message}
+        </p>
+      ) : null}
+    </article>
   );
 }
 
@@ -714,7 +1031,10 @@ function ProfileRewardItem({
       </span>
       <div>
         <Link href={token.href}>{token.name}</Link>
-        <span>${token.symbol}</span>
+        <span>
+          ${token.symbol} ·{" "}
+          {token.launchModel === "adaptive" ? "Adaptive" : "Classic"}
+        </span>
       </div>
       <strong>{formatEth(claim?.claimableEth ?? "0")}</strong>
       {claim ? (
