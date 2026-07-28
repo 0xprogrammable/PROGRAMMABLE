@@ -291,7 +291,10 @@ function LaunchModelPicker({
             onChoose(classicV3LaunchAvailable ? "classic-v3" : "classic")
           }
         >
-          <span className="launch-model-art" aria-hidden="true">
+          <span
+            className="launch-model-art launch-model-art-classic"
+            aria-hidden="true"
+          >
             <Image
               src="/brand/programmable-classic-launch-art.webp"
               alt=""

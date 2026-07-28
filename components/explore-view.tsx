@@ -669,8 +669,16 @@ export function ExploreView() {
   return (
     <div className="explore-page page-width">
       <section className="explore-intro">
-        <h1>
-          <ScrambleText text="Programmable" duration={1800} />
+        <h1 className="explore-brand-heading">
+          <span className="sr-only">Programmable</span>
+          <Image
+            className="explore-brand-logo"
+            src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+            alt=""
+            width={1254}
+            height={1254}
+            priority
+          />
         </h1>
         <p>
           <ScrambleText
@@ -758,6 +766,64 @@ export function ExploreView() {
                 </div>
               </details>
 
+              {state.phase === "ready" &&
+              state.payload.status === "ready" &&
+              state.payload.total > 0 &&
+              cards.length > 0 ? (
+                <nav className="token-pagination" aria-label="Token pages">
+                  <button
+                    type="button"
+                    aria-label="Previous token page"
+                    disabled={activePage === 1 || busy}
+                    onClick={() =>
+                      setCurrentPage((page) => Math.max(1, page - 1))
+                    }
+                  >
+                    <ChevronLeft aria-hidden="true" size={15} />
+                  </button>
+
+                  <div className="token-pagination-pages">
+                    {paginationItems.map((item) =>
+                      typeof item === "number" ? (
+                        <button
+                          key={item}
+                          className={
+                            activePage === item ? "active" : undefined
+                          }
+                          type="button"
+                          aria-label={`Token page ${item}`}
+                          aria-current={
+                            activePage === item ? "page" : undefined
+                          }
+                          disabled={busy}
+                          onClick={() => setCurrentPage(item)}
+                        >
+                          {item}
+                        </button>
+                      ) : (
+                        <span key={item} aria-hidden="true">
+                          …
+                        </span>
+                      ),
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label="Next token page"
+                    disabled={activePage === pageCount || busy}
+                    onClick={() =>
+                      setCurrentPage((page) => Math.min(pageCount, page + 1))
+                    }
+                  >
+                    <ChevronRight aria-hidden="true" size={15} />
+                  </button>
+
+                  <span className="sr-only" aria-live="polite">
+                    Page {activePage} of {pageCount}
+                  </span>
+                </nav>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -768,62 +834,6 @@ export function ExploreView() {
           </span>
         ) : null}
         {renderTokenState()}
-        {state.phase === "ready" &&
-        state.payload.status === "ready" &&
-        state.payload.total > 0 &&
-        cards.length > 0 ? (
-          <div className="token-pagination-row">
-            <nav className="token-pagination" aria-label="Token pages">
-              <button
-                type="button"
-                aria-label="Previous token page"
-                disabled={activePage === 1 || busy}
-                onClick={() =>
-                  setCurrentPage((page) => Math.max(1, page - 1))
-                }
-              >
-                <ChevronLeft aria-hidden="true" size={15} />
-              </button>
-
-              <div className="token-pagination-pages">
-                {paginationItems.map((item) =>
-                  typeof item === "number" ? (
-                    <button
-                      key={item}
-                      className={activePage === item ? "active" : undefined}
-                      type="button"
-                      aria-label={`Token page ${item}`}
-                      aria-current={activePage === item ? "page" : undefined}
-                      disabled={busy}
-                      onClick={() => setCurrentPage(item)}
-                    >
-                      {item}
-                    </button>
-                  ) : (
-                    <span key={item} aria-hidden="true">
-                      …
-                    </span>
-                  ),
-                )}
-              </div>
-
-              <button
-                type="button"
-                aria-label="Next token page"
-                disabled={activePage === pageCount || busy}
-                onClick={() =>
-                  setCurrentPage((page) => Math.min(pageCount, page + 1))
-                }
-              >
-                <ChevronRight aria-hidden="true" size={15} />
-              </button>
-
-              <span className="sr-only" aria-live="polite">
-                Page {activePage} of {pageCount}
-              </span>
-            </nav>
-          </div>
-        ) : null}
       </section>
     </div>
   );
