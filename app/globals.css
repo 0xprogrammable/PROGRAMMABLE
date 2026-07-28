@@ -227,7 +227,7 @@ textarea {
   min-width: 0;
 }
 
-.header-x-link {
+.header-social-link {
   align-items: center;
   border-radius: 50%;
   color: var(--muted);
@@ -241,7 +241,7 @@ textarea {
   width: 46px;
 }
 
-.header-x-link svg {
+.header-social-link svg {
   display: block;
   height: 21px;
   width: 21px;
@@ -3850,7 +3850,7 @@ textarea {
 
 @media (hover: hover) and (pointer: fine) {
   .wordmark:hover,
-  .header-x-link:hover {
+  .header-social-link:hover {
     background: var(--surface-soft);
     color: var(--text);
   }
