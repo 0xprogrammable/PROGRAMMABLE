@@ -1,4 +1,6 @@
 artifacts/
+contracts/cache/
+contracts/out/
 docs/programmable-x-launch-article*.md
 public/brand/*-master-*.png
 public/brand/programmable-adaptive-model-post-*
