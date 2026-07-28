@@ -51,6 +51,7 @@
     "status": {
       "enum": [
         "not-deployed",
+        "deployed-source-and-canary-verified-keeper-pending",
         "deployment-source-and-lifecycle-verified"
       ]
     },
@@ -314,7 +315,134 @@
       "type": "object"
     },
     "lifecycleEvidence": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "releaseEligible",
+        "requiredRelease",
+        "independentRpcCount",
+        "canaryToken",
+        "launchTransaction",
+        "keeperTransaction",
+        "evidenceHash"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "not-run",
+            "launch-and-oracle-verified",
+            "verified-current-release"
+          ]
+        },
+        "releaseEligible": {
+          "type": "boolean"
+        },
+        "requiredRelease": {
+          "const": "deep-full-range-v1"
+        },
+        "independentRpcCount": {
+          "const": 2
+        },
+        "canaryToken": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "launchTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "evidenceHash": {
+          "$ref": "#/definitions/nullableHash"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "not-run"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "releaseEligible": {
+                "const": false
+              },
+              "canaryToken": {
+                "type": "null"
+              },
+              "launchTransaction": {
+                "type": "null"
+              },
+              "keeperTransaction": {
+                "type": "null"
+              },
+              "evidenceHash": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "launch-and-oracle-verified"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "releaseEligible": {
+                "const": false
+              },
+              "canaryToken": {
+                "$ref": "#/definitions/address"
+              },
+              "launchTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "keeperTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "evidenceHash": {
+                "$ref": "#/definitions/hash"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "verified-current-release"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "releaseEligible": {
+                "const": true
+              },
+              "canaryToken": {
+                "$ref": "#/definitions/address"
+              },
+              "launchTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "keeperTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "evidenceHash": {
+                "$ref": "#/definitions/hash"
+              }
+            }
+          }
+        }
+      ]
     },
     "activation": {
       "type": "object"

@@ -55,6 +55,9 @@ export async function GET(request: NextRequest) {
       blockNumber: result.blockNumber,
       tokenCount: result.tokenCount,
       updated: result.updated,
+      deepReleaseVersion: result.deepReleaseVersion,
+      deepLifecycleEvidenceHash:
+        result.deepLifecycleEvidenceHash,
       durationMs: Date.now() - startedAt,
     });
     return NextResponse.json(
@@ -63,6 +66,9 @@ export async function GET(request: NextRequest) {
         blockNumber: result.blockNumber,
         tokenCount: result.tokenCount,
         updated: result.updated,
+        deepReleaseVersion: result.deepReleaseVersion,
+        deepLifecycleEvidenceHash:
+          result.deepLifecycleEvidenceHash,
       },
       { headers: { "Cache-Control": "no-store" } },
     );

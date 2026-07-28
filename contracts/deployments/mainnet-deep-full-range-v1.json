@@ -3,88 +3,163 @@
   "model": "deep",
   "internalContractRelease": "liquidity-growth-full-range-v1",
   "releaseVersion": "deep-full-range-v1",
-  "status": "not-deployed",
+  "status": "deployed-source-and-canary-verified-keeper-pending",
   "releaseEligible": false,
   "chainId": 1,
-  "releaseCommit": null,
+  "releaseCommit": "75d00e2369cd8bc67421859270c0fbf3edc478ff",
   "sourceCommitment": "0x82f6e2745dfbf54f40eae80df645bc75a7952e0505dd0621437dd233a619acfd",
-  "startBlock": null,
-  "startingNonce": null,
+  "startBlock": 25632831,
+  "startingNonce": 34,
   "transactionCount": 6,
   "candidatePlan": {
-    "status": "not-fixed-refresh-before-signing",
-    "observedAtBlock": null,
-    "deployer": null,
-    "startingNonce": null,
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "hookSalt": null,
-    "hookInitCodeHash": null,
-    "rangeSourceFactory": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "launcher": null,
-    "automation": null,
-    "positionPlanner": null
+    "status": "reviewed-refresh-at-signing",
+    "observedAtBlock": 25632830,
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "startingNonce": 34,
+    "feeSplitVaultFactory": "0xF15D4528Db481732Cdb94FC2558d04ce4D85Cb54",
+    "hookFactory": "0xb003a14Ef04D5022A8CfB4158b49f77e2e73b5E9",
+    "feeHook": "0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC",
+    "hookSalt": "0x0000000000000000000000000000000000000000000000000000000000012aab",
+    "hookInitCodeHash": "0x516de7933394b3f0c47f19838cf3264153d1ef010c49d3a66ddaf85fde724025",
+    "rangeSourceFactory": "0xb2Ec2573bB6968b9fA85f1A0b82E33bB0A388a43",
+    "growthVaultFactory": "0x8A7a30A0aC4ae79Ba82248317Ad774F0B96b53dF",
+    "growthVaultImplementation": "0x475C4F40A3eb6c294DEB9E59F52AA4d638C17471",
+    "launcher": "0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB",
+    "automation": "0x856a8E8421e76f55CD1e0D65B4f3c1b474289b2f",
+    "positionPlanner": "0xc713C9BEFde14893d2A6891192EA36B6da62E606"
   },
   "addresses": {
-    "deployer": null,
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
     "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "rangeSourceFactory": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "launcher": null,
-    "automation": null,
-    "positionPlanner": null,
+    "feeSplitVaultFactory": "0xF15D4528Db481732Cdb94FC2558d04ce4D85Cb54",
+    "hookFactory": "0xb003a14Ef04D5022A8CfB4158b49f77e2e73b5E9",
+    "feeHook": "0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC",
+    "rangeSourceFactory": "0xb2Ec2573bB6968b9fA85f1A0b82E33bB0A388a43",
+    "growthVaultFactory": "0x8A7a30A0aC4ae79Ba82248317Ad774F0B96b53dF",
+    "growthVaultImplementation": "0x475C4F40A3eb6c294DEB9E59F52AA4d638C17471",
+    "launcher": "0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB",
+    "automation": "0x856a8E8421e76f55CD1e0D65B4f3c1b474289b2f",
+    "positionPlanner": "0xc713C9BEFde14893d2A6891192EA36B6da62E606",
     "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
   },
   "transactions": {
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "rangeSourceFactory": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "launcher": null,
-    "automation": null,
-    "positionPlanner": null
+    "feeSplitVaultFactory": "0x3ed55f6014249dccbfc6e0c0d2e8194bbac015e60f1dd0852fe90fe4a1e11077",
+    "hookFactory": "0xe35877b27570e30bf8354933e9964b53bcfd2e42f2467e281a747fac59f9271e",
+    "feeHook": "0x5f9d85dfaab541964c96785aaadbf222cacfdf280e7934e12846388e47ed29f7",
+    "rangeSourceFactory": "0x4ab34f8002678bf15e03bc817a3ce6a3fb971b6872db789b9c5efa3e093cdc0c",
+    "growthVaultFactory": "0xf55e60a16a4500d1e0b892b83c8a3c17c8fe56b54b18beb8557118128a128a88",
+    "growthVaultImplementation": "0xf55e60a16a4500d1e0b892b83c8a3c17c8fe56b54b18beb8557118128a128a88",
+    "launcher": "0xff94d678b007c2718b6d13e64702dbb9e9d02ce5fe24aa7678fbcf21dbff6669",
+    "automation": "0xff94d678b007c2718b6d13e64702dbb9e9d02ce5fe24aa7678fbcf21dbff6669",
+    "positionPlanner": "0xff94d678b007c2718b6d13e64702dbb9e9d02ce5fe24aa7678fbcf21dbff6669"
   },
   "deploymentBlocks": {
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "rangeSourceFactory": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "launcher": null,
-    "automation": null,
-    "positionPlanner": null
+    "feeSplitVaultFactory": 25632831,
+    "hookFactory": 25632850,
+    "feeHook": 25632859,
+    "rangeSourceFactory": 25632863,
+    "growthVaultFactory": 25632867,
+    "growthVaultImplementation": 25632867,
+    "launcher": 25632886,
+    "automation": 25632886,
+    "positionPlanner": 25632886
   },
   "deploymentEvidence": {
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "rangeSourceFactory": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "launcher": null,
-    "automation": null,
-    "positionPlanner": null
+    "feeSplitVaultFactory": {
+      "transactionHash": "0x3ed55f6014249dccbfc6e0c0d2e8194bbac015e60f1dd0852fe90fe4a1e11077",
+      "blockNumber": 25632831,
+      "blockHash": "0xf1145570f647f38e88cae7915900dd04e8c03473b731ed07f7df0b789514bd93",
+      "receiptStatus": "success",
+      "nonce": 34,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0xd17ede522c0892134e54d5c22433332c85a27e5ac7f2e6eaf7d2b401094076df"
+    },
+    "hookFactory": {
+      "transactionHash": "0xe35877b27570e30bf8354933e9964b53bcfd2e42f2467e281a747fac59f9271e",
+      "blockNumber": 25632850,
+      "blockHash": "0x5bf020522a2a27e97362a42eaa88379d965c18b8f41954a4fa56a637cc2daed3",
+      "receiptStatus": "success",
+      "nonce": 35,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0xa72fe6458c6fe2c3f7be2c9bbb94a1e9878b2bb94cd9719f9eece60ff725b5c8"
+    },
+    "feeHook": {
+      "transactionHash": "0x5f9d85dfaab541964c96785aaadbf222cacfdf280e7934e12846388e47ed29f7",
+      "blockNumber": 25632859,
+      "blockHash": "0x4b93525642b19211f5aad7776e57b993dccc5e4816393ed3f64a3b47ab4e8acc",
+      "receiptStatus": "success",
+      "nonce": 36,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": "0xb003a14Ef04D5022A8CfB4158b49f77e2e73b5E9",
+      "transactionInputHash": "0x19f7a0108dcea2235905666bc2d3f64d199c356de787f8551eedb9db9a34af1a"
+    },
+    "rangeSourceFactory": {
+      "transactionHash": "0x4ab34f8002678bf15e03bc817a3ce6a3fb971b6872db789b9c5efa3e093cdc0c",
+      "blockNumber": 25632863,
+      "blockHash": "0x89cd6ad7e40bf6318ca35dbf960772bf9f9946913259d93ac281febc0ddb914e",
+      "receiptStatus": "success",
+      "nonce": 37,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0x2cc752b1e6181ee5c0d3afa14f6795d60a27fa4d316ed9313c1ca24afc853b66"
+    },
+    "growthVaultFactory": {
+      "transactionHash": "0xf55e60a16a4500d1e0b892b83c8a3c17c8fe56b54b18beb8557118128a128a88",
+      "blockNumber": 25632867,
+      "blockHash": "0xa7ed61de64a95c5844ffff7a885ca3eea5f457198740b7f383e819d6f7372ba6",
+      "receiptStatus": "success",
+      "nonce": 38,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0x2e887ae43aea0dc8f544e4cc26dfbe8b421d1887511d23b93fad9b815e90effd"
+    },
+    "growthVaultImplementation": {
+      "transactionHash": "0xf55e60a16a4500d1e0b892b83c8a3c17c8fe56b54b18beb8557118128a128a88",
+      "blockNumber": 25632867,
+      "blockHash": "0xa7ed61de64a95c5844ffff7a885ca3eea5f457198740b7f383e819d6f7372ba6",
+      "receiptStatus": "success"
+    },
+    "launcher": {
+      "transactionHash": "0xff94d678b007c2718b6d13e64702dbb9e9d02ce5fe24aa7678fbcf21dbff6669",
+      "blockNumber": 25632886,
+      "blockHash": "0xbcd824a846904baf171303a22912e8a2a8437d742647bce92ed8353b5ad884d1",
+      "receiptStatus": "success",
+      "nonce": 39,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0x3e273e7651e217bab15ef450c41aeb302a7be61ef3c600aff7c05c56fcb14ddc"
+    },
+    "automation": {
+      "transactionHash": "0xff94d678b007c2718b6d13e64702dbb9e9d02ce5fe24aa7678fbcf21dbff6669",
+      "blockNumber": 25632886,
+      "blockHash": "0xbcd824a846904baf171303a22912e8a2a8437d742647bce92ed8353b5ad884d1",
+      "receiptStatus": "success"
+    },
+    "positionPlanner": {
+      "transactionHash": "0xff94d678b007c2718b6d13e64702dbb9e9d02ce5fe24aa7678fbcf21dbff6669",
+      "blockNumber": 25632886,
+      "blockHash": "0xbcd824a846904baf171303a22912e8a2a8437d742647bce92ed8353b5ad884d1",
+      "receiptStatus": "success"
+    }
   },
   "runtimeCodeHashes": {
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "rangeSourceFactory": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "launcher": null,
-    "automation": null,
-    "positionPlanner": null,
+    "feeSplitVaultFactory": "0x6e0fed3c3598d32458b9c7ce04a97ae3e0cc847e4022e3dec5a14cd1f29c88fc",
+    "hookFactory": "0x786c4720eeb3583c6021794e39360369f52510d2d0b29b8212b99bb9e6efe5ae",
+    "feeHook": "0xda536944ead25d438a8a957ec1c7997115fb36d7e1af963d162b1ce99229b002",
+    "rangeSourceFactory": "0x3c909216b8f1200c19d6d01f65b332fe3eca4728e27d671a86a346089df69373",
+    "growthVaultFactory": "0xd732172bfd042198714315b963eaa082668627e5354fece6629ffdde598f43cf",
+    "growthVaultImplementation": "0x761ce52efd302f6c5cf654385bbe465fca7a8748998b126311effd5b5aab7795",
+    "launcher": "0xa2acb1f45f9d5baa4037d837b82e1a4fade65202406bdf530bad536b3a58cde0",
+    "automation": "0x1b6cc50912806d27908a5e01abf30af392b909116e0d0f7321f828be52400ad8",
+    "positionPlanner": "0x091099e5dda7392628b5935eeb1e2eeab687a170c3a6bddb79bb8b264d58a95a",
     "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
   },
   "artifactRuntime": {
@@ -265,11 +340,14 @@
     "minimumTokenReserveBps": 8500
   },
   "keeperPolicy": {
-    "status": "disabled-until-release-verified",
+    "status": "deployed-disabled-lifecycle-pending",
     "enabled": false,
     "transactionSubmission": false,
-    "coordinator": null,
-    "coordinatorRuntimeCodeHash": null,
+    "coordinator": "0x856a8E8421e76f55CD1e0D65B4f3c1b474289b2f",
+    "coordinatorRuntimeCodeHash": "0x1b6cc50912806d27908a5e01abf30af392b909116e0d0f7321f828be52400ad8",
+    "signerAddress": "0x4A7190dA29b6BC41980983e55E0dB35bbaff5fe0",
+    "signingBackend": "privy-policy-wallet",
+    "executionPath": "/api/ops/deep-keeper",
     "confirmations": 12,
     "independentReadRpcCount": 2,
     "intervalMilliseconds": 300000,
@@ -280,7 +358,7 @@
     "vaultSubsidyCapWei": "30000000000000000"
   },
   "sourceVerification": {
-    "status": "not-submitted",
+    "status": "verified",
     "compiler": {
       "version": "0.8.26",
       "optimizerEnabled": true,
@@ -297,8 +375,14 @@
         "constructorTypes": [],
         "constructorArguments": [],
         "encodedConstructorArguments": "0x",
-        "etherscan": null,
-        "sourcify": null
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xF15D4528Db481732Cdb94FC2558d04ce4D85Cb54#code"
+        },
+        "sourcify": {
+          "status": "exact-match",
+          "url": "https://repo.sourcify.dev/contracts/full_match/1/0xF15D4528Db481732Cdb94FC2558d04ce4D85Cb54/"
+        }
       },
       "hookFactory": {
         "fqcn": "src/LiquidityGrowthFeeOracleHookFactoryV1.sol:LiquidityGrowthFeeOracleHookFactoryV1",
@@ -306,8 +390,14 @@
         "constructorTypes": [],
         "constructorArguments": [],
         "encodedConstructorArguments": "0x",
-        "etherscan": null,
-        "sourcify": null
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xb003a14Ef04D5022A8CfB4158b49f77e2e73b5E9#code"
+        },
+        "sourcify": {
+          "status": "exact-match",
+          "url": "https://repo.sourcify.dev/contracts/full_match/1/0xb003a14Ef04D5022A8CfB4158b49f77e2e73b5E9/"
+        }
       },
       "feeHook": {
         "fqcn": "src/LiquidityGrowthFeeOracleHookV1.sol:LiquidityGrowthFeeOracleHookV1",
@@ -318,10 +408,21 @@
           "address",
           "int24"
         ],
-        "constructorArguments": null,
-        "encodedConstructorArguments": null,
-        "etherscan": null,
-        "sourcify": null
+        "constructorArguments": [
+          "0x000000000004444c5dc75cB358380D2e3dE08A90",
+          "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          "0xF15D4528Db481732Cdb94FC2558d04ce4D85Cb54",
+          400
+        ],
+        "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a900000000000000000000000004957f49620aff3adbbe8195a4f633e49cc93376c000000000000000000000000f15d4528db481732cdb94fc2558d04ce4d85cb540000000000000000000000000000000000000000000000000000000000000190",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC#code"
+        },
+        "sourcify": {
+          "status": "exact-match",
+          "url": "https://repo.sourcify.dev/contracts/full_match/1/0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC/"
+        }
       },
       "rangeSourceFactory": {
         "fqcn": "src/LiquidityGrowthRangeSourceFactoryV1.sol:LiquidityGrowthRangeSourceFactoryV1",
@@ -329,8 +430,14 @@
         "constructorTypes": [],
         "constructorArguments": [],
         "encodedConstructorArguments": "0x",
-        "etherscan": null,
-        "sourcify": null
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xb2Ec2573bB6968b9fA85f1A0b82E33bB0A388a43#code"
+        },
+        "sourcify": {
+          "status": "exact-match",
+          "url": "https://repo.sourcify.dev/contracts/full_match/1/0xb2Ec2573bB6968b9fA85f1A0b82E33bB0A388a43/"
+        }
       },
       "growthVaultFactory": {
         "fqcn": "src/LiquidityGrowthFullRangeVaultFactoryV1.sol:LiquidityGrowthFullRangeVaultFactoryV1",
@@ -342,10 +449,22 @@
           "address",
           "address"
         ],
-        "constructorArguments": null,
-        "encodedConstructorArguments": null,
-        "etherscan": null,
-        "sourcify": null
+        "constructorArguments": [
+          "0xb003a14Ef04D5022A8CfB4158b49f77e2e73b5E9",
+          "0xF15D4528Db481732Cdb94FC2558d04ce4D85Cb54",
+          "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+          "0x291a9ff1059d225d02B1659430804486404dB507",
+          "0xb2Ec2573bB6968b9fA85f1A0b82E33bB0A388a43"
+        ],
+        "encodedConstructorArguments": "0x000000000000000000000000b003a14ef04d5022a8cfb4158b49f77e2e73b5e9000000000000000000000000f15d4528db481732cdb94fc2558d04ce4d85cb54000000000000000000000000bd216513d74c8cf14cf4747e6aaa6420ff64ee9e000000000000000000000000291a9ff1059d225d02b1659430804486404db507000000000000000000000000b2ec2573bb6968b9fa85f1a0b82e33bb0a388a43",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x8A7a30A0aC4ae79Ba82248317Ad774F0B96b53dF#code"
+        },
+        "sourcify": {
+          "status": "exact-match",
+          "url": "https://repo.sourcify.dev/contracts/full_match/1/0x8A7a30A0aC4ae79Ba82248317Ad774F0B96b53dF/"
+        }
       },
       "growthVaultImplementation": {
         "fqcn": "src/LiquidityGrowthFullRangeVaultV1.sol:LiquidityGrowthFullRangeVaultV1",
@@ -353,10 +472,18 @@
         "constructorTypes": [
           "address"
         ],
-        "constructorArguments": null,
-        "encodedConstructorArguments": null,
-        "etherscan": null,
-        "sourcify": null
+        "constructorArguments": [
+          "0x8A7a30A0aC4ae79Ba82248317Ad774F0B96b53dF"
+        ],
+        "encodedConstructorArguments": "0x0000000000000000000000008a7a30a0ac4ae79ba82248317ad774f0b96b53df",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x475C4F40A3eb6c294DEB9E59F52AA4d638C17471#code"
+        },
+        "sourcify": {
+          "status": "exact-match",
+          "url": "https://repo.sourcify.dev/contracts/full_match/1/0x475C4F40A3eb6c294DEB9E59F52AA4d638C17471/"
+        }
       },
       "launcher": {
         "fqcn": "src/LiquidityGrowthFullRangeLaunchV1.sol:LiquidityGrowthFullRangeLaunchV1",
@@ -371,10 +498,25 @@
           "address",
           "address"
         ],
-        "constructorArguments": null,
-        "encodedConstructorArguments": null,
-        "etherscan": null,
-        "sourcify": null
+        "constructorArguments": [
+          "0x000000000004444c5dc75cB358380D2e3dE08A90",
+          "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+          "0x000000e200088D55C39a11F609E5F667729ad49b",
+          "0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC",
+          "0xF15D4528Db481732Cdb94FC2558d04ce4D85Cb54",
+          "0xb2Ec2573bB6968b9fA85f1A0b82E33bB0A388a43",
+          "0x8A7a30A0aC4ae79Ba82248317Ad774F0B96b53dF",
+          "0x291a9ff1059d225d02B1659430804486404dB507"
+        ],
+        "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90000000000000000000000000bd216513d74c8cf14cf4747e6aaa6420ff64ee9e000000000000000000000000000000e200088d55c39a11f609e5f667729ad49b00000000000000000000000048dc3009ec1d3298bba31f718a9a29d02fc9b0cc000000000000000000000000f15d4528db481732cdb94fc2558d04ce4d85cb54000000000000000000000000b2ec2573bb6968b9fa85f1a0b82e33bb0a388a430000000000000000000000008a7a30a0ac4ae79ba82248317ad774f0b96b53df000000000000000000000000291a9ff1059d225d02b1659430804486404db507",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB#code"
+        },
+        "sourcify": {
+          "status": "exact-match",
+          "url": "https://repo.sourcify.dev/contracts/full_match/1/0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB/"
+        }
       },
       "automation": {
         "fqcn": "src/LiquidityGrowthFullRangeAutomationV1.sol:LiquidityGrowthFullRangeAutomationV1",
@@ -383,10 +525,19 @@
           "address",
           "address"
         ],
-        "constructorArguments": null,
-        "encodedConstructorArguments": null,
-        "etherscan": null,
-        "sourcify": null
+        "constructorArguments": [
+          "0x8A7a30A0aC4ae79Ba82248317Ad774F0B96b53dF",
+          "0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB"
+        ],
+        "encodedConstructorArguments": "0x0000000000000000000000008a7a30a0ac4ae79ba82248317ad774f0b96b53df0000000000000000000000007aef9a4038fabb1d477bbfd3a106f81b93eb5aeb",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x856a8E8421e76f55CD1e0D65B4f3c1b474289b2f#code"
+        },
+        "sourcify": {
+          "status": "exact-match",
+          "url": "https://repo.sourcify.dev/contracts/full_match/1/0x856a8E8421e76f55CD1e0D65B4f3c1b474289b2f/"
+        }
       },
       "positionPlanner": {
         "fqcn": "src/LiquidityGrowthFullRangePositionPlannerV1.sol:LiquidityGrowthFullRangePositionPlannerV1",
@@ -394,8 +545,14 @@
         "constructorTypes": [],
         "constructorArguments": [],
         "encodedConstructorArguments": "0x",
-        "etherscan": null,
-        "sourcify": null
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xc713C9BEFde14893d2A6891192EA36B6da62E606#code"
+        },
+        "sourcify": {
+          "status": "exact-match",
+          "url": "https://repo.sourcify.dev/contracts/full_match/1/0xc713C9BEFde14893d2A6891192EA36B6da62E606/"
+        }
       },
       "feeSplitVaultTemplate": {
         "fqcn": "src/FeeSplitVaultV1.sol:FeeSplitVaultV1",
@@ -453,26 +610,23 @@
     }
   },
   "lifecycleEvidence": {
-    "status": "not-run",
+    "status": "launch-and-oracle-verified",
     "releaseEligible": false,
     "requiredRelease": "deep-full-range-v1",
     "independentRpcCount": 2,
-    "canaryToken": null,
-    "launchTransaction": null,
-    "keeperTransaction": null,
-    "evidenceHash": null
+    "canaryToken": "0x3a778578b3a21dd842c29be3d1816b1af37d54f3",
+    "launchTransaction": "0xde8041b9d960d72478e6264c745679ce6c17e19959ec15aa283590f3f0fffa4d",
+    "keeperTransaction": "0x7af2803cf42d8ab8455c875549b5637fd3e9969fa4d5e5ba8a7296707f132a47",
+    "evidenceHash": "0x98d978a75cf42c698089765d558bfda5ee6a8bbc4f9377a51a8a1777b08b83eb"
   },
   "activation": {
     "appStatus": "disabled",
-    "keeperStatus": "disabled",
+    "keeperStatus": "disabled-awaiting-lifecycle-proof",
     "requiresExactManifestMatch": true
   },
   "blockers": [
-    "Freeze and push an exact release commit",
-    "Refresh a deterministic deployment plan immediately before signing",
-    "Record successful receipts, blocks and runtime hashes for every deployed component",
-    "Verify every infrastructure contract source on Etherscan and Sourcify",
-    "Run and attest a real canary launch and keeper lifecycle through two independent RPCs",
-    "Enable the app and keeper only after this manifest is complete and independently reviewed"
+    "Fund the policy-bound keeper wallet with a bounded Mainnet gas balance",
+    "Observe the real keeper batch fee-processing and full-range compounding lifecycle on Mainnet",
+    "Promote the release and app manifests only after those checks pass"
   ]
 }

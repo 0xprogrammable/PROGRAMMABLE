@@ -8,7 +8,9 @@ import Ajv from "ajv";
 import {
   concatHex,
   createPublicClient,
+  decodeEventLog,
   encodeAbiParameters,
+  encodeFunctionData,
   getAddress,
   getCreate2Address,
   getCreateAddress,
@@ -44,6 +46,12 @@ const releaseSchemaPath = path.join(
   "schema",
   "deep-full-range-release-v1.schema.json",
 );
+const lifecycleEvidencePath = path.join(
+  contractsRoot,
+  "deployments",
+  "evidence",
+  "deep-full-range-mainnet-canary-v1.json",
+);
 const requireLive = process.argv.includes("--require-live");
 const offline = process.argv.includes("--offline");
 if (requireLive && offline) {
@@ -55,6 +63,29 @@ const expectedForwarderFactory =
   "0x291a9ff1059d225d02B1659430804486404dB507";
 const expectedReleaseManifest =
   "contracts/deployments/mainnet-deep-full-range-v1.json";
+const expectedLifecycleEvidenceHash =
+  "0x98d978a75cf42c698089765d558bfda5ee6a8bbc4f9377a51a8a1777b08b83eb";
+const expectedLifecycleEvidence = {
+  schemaVersion: 1,
+  releaseVersion: "deep-full-range-v1",
+  releaseCommit: "75d00e2369cd8bc67421859270c0fbf3edc478ff",
+  chainId: 1,
+  account: "0x2bb333d48dfaf1596d9036671d2e43168994249e",
+  launcher: "0x7aef9a4038fabb1d477bbfd3a106f81b93eb5aeb",
+  automation: "0x856a8e8421e76f55cd1e0d65b4f3c1b474289b2f",
+  feeHook: "0x48dc3009ec1d3298bba31f718a9a29d02fc9b0cc",
+  token: "0x3a778578b3a21dd842c29be3d1816b1af37d54f3",
+  growthVault: "0x3e311de17c37071504f534bb46d4b5fb59f37549",
+  poolId:
+    "0x9f865e32ce5486b5a72eb5edc290b497a4c40605a303db1e28bc33a37638ab9c",
+  launchHash:
+    "0x2f095043ea96c40ca356b89e5c3e18792fc8820ed8d9c6116b4a44ca85514896",
+  launchTransaction:
+    "0xde8041b9d960d72478e6264c745679ce6c17e19959ec15aa283590f3f0fffa4d",
+  keeperTransaction:
+    "0x7af2803cf42d8ab8455c875549b5637fd3e9969fa4d5e5ba8a7296707f132a47",
+  oracleCardinalityNext: 18,
+};
 const deployedFields = [
   "feeSplitVaultFactory",
   "hookFactory",
@@ -186,6 +217,24 @@ const automationAbi = parseAbi([
   "function OBSERVATION_CARDINALITY_TARGET() view returns (uint16)",
   "function MIN_ORACLE_ACTIVATION_NATIVE() view returns (uint256)",
 ]);
+const lifecycleLauncherAbi = parseAbi([
+  "function growthVaultOf(address token) view returns (address)",
+  "function launchHashOf(address token) view returns (bytes32)",
+  "event LiquidityGrowthFullRangeTokenLaunched(address indexed deployer,address indexed token,bytes32 indexed poolId,address feeHook,address growthVault,address oracleGuard,address upstreamRewardVault,address positionRecipient,uint256 positionTokenId,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 vaultConfigurationHash,bytes32 launchHash)",
+  "event LiquidityGrowthFullRangeCreatorInitialBuy(address indexed deployer,address indexed token,bytes32 indexed poolId,uint256 nativeAmount,uint256 tokenAmount,bytes32 launchHash)",
+]);
+const lifecycleAutomationAbi = parseAbi([
+  "function isRegisteredVault(address vault) view returns (bool)",
+  "function stageOracle(address vaultAddress) returns (bool grew,uint16 previousCardinalityNext,uint16 newCardinalityNext)",
+  "event OracleGrowthStaged(address indexed vault,bytes32 indexed poolId,address indexed executor,uint16 previousCardinalityNext,uint16 newCardinalityNext)",
+]);
+const lifecycleHookAbi = parseAbi([
+  "function stateById(bytes32 poolId) view returns (uint16 index,uint16 cardinality,uint16 cardinalityNext)",
+  "event IncreaseObservationCardinalityNext(bytes32 indexed poolId,uint16 observationCardinalityNextOld,uint16 observationCardinalityNextNew)",
+]);
+const lifecycleVaultAbi = parseAbi([
+  "function poolId() view returns (bytes32)",
+]);
 const forwarderFactoryAbi = parseAbi([
   "function positionManager() view returns (address)",
 ]);
@@ -220,6 +269,306 @@ function unique(values) {
 
 async function readJson(file) {
   return JSON.parse(await fs.readFile(file, "utf8"));
+}
+
+async function readCanonicalLifecycleEvidence() {
+  const raw = await fs.readFile(lifecycleEvidencePath);
+  let evidence;
+  try {
+    evidence = JSON.parse(raw.toString("utf8"));
+  } catch {
+    fail("Deep lifecycle evidence is not valid JSON");
+  }
+  const evidenceHash = keccak256(raw);
+  if (evidenceHash !== expectedLifecycleEvidenceHash) {
+    fail("Deep lifecycle evidence bytes differ from the reviewed artifact");
+  }
+  const expected = expectedLifecycleEvidence;
+  if (
+    evidence.schemaVersion !== expected.schemaVersion ||
+    evidence.releaseVersion !== expected.releaseVersion ||
+    evidence.releaseCommit !== expected.releaseCommit ||
+    evidence.chainId !== expected.chainId ||
+    !sameAddress(evidence.account, expected.account) ||
+    !sameAddress(evidence.launcher, expected.launcher) ||
+    !sameAddress(evidence.automation, expected.automation) ||
+    !sameAddress(evidence.feeHook, expected.feeHook) ||
+    !sameAddress(evidence.token, expected.token) ||
+    !sameAddress(evidence.growthVault, expected.growthVault) ||
+    evidence.poolId !== expected.poolId ||
+    evidence.launchHash !== expected.launchHash ||
+    evidence.launch?.transactionHash !== expected.launchTransaction ||
+    evidence.keeper?.transactionHash !== expected.keeperTransaction ||
+    evidence.postState?.oracleCardinalityNext !==
+      expected.oracleCardinalityNext
+  ) {
+    fail("Deep lifecycle evidence differs from the reviewed Mainnet canary");
+  }
+  if (
+    evidence.launch.blockNumber !== 25_632_994 ||
+    evidence.launch.blockHash !==
+      "0x36fecdb27df170c3f975c073e042bb16d02d96dc87eb28e5ad6215d390c23ccb" ||
+    evidence.launch.nonce !== 40 ||
+    evidence.launch.valueWei !== "600000000000000" ||
+    !validHash(evidence.launch.calldataHash) ||
+    evidence.launch.buySwapFeeBps !== 100 ||
+    evidence.launch.sellSwapFeeBps !== 100 ||
+    evidence.keeper.blockNumber !== 25_632_999 ||
+    evidence.keeper.blockHash !==
+      "0x2c0ad1d7a5feedd46151312e832f5762e06596d2a933a4ed876b0f7ef8f84336" ||
+    evidence.keeper.nonce !== 41 ||
+    evidence.keeper.valueWei !== "0" ||
+    !validHash(evidence.keeper.calldataHash) ||
+    evidence.keeper.previousCardinalityNext !== 2 ||
+    evidence.keeper.newCardinalityNext !== 18
+  ) {
+    fail("Deep lifecycle transaction evidence is malformed");
+  }
+  return { evidence, evidenceHash };
+}
+
+function lifecycleEvent(receipt, address, abi, eventName) {
+  const matches = [];
+  for (const log of receipt.logs) {
+    if (!sameAddress(log.address, address)) continue;
+    try {
+      const decoded = decodeEventLog({
+        abi,
+        data: log.data,
+        topics: log.topics,
+        strict: true,
+      });
+      if (decoded.eventName === eventName) matches.push(decoded.args);
+    } catch {
+      // Logs emitted by another event on the same contract are irrelevant.
+    }
+  }
+  if (matches.length !== 1) {
+    fail(`Deep lifecycle expected exactly one ${eventName} event`);
+  }
+  return matches[0];
+}
+
+async function verifyLifecycleThroughClient(client, evidence) {
+  const launchBlock = BigInt(evidence.launch.blockNumber);
+  const keeperBlock = BigInt(evidence.keeper.blockNumber);
+  const [
+    launchTransaction,
+    launchReceipt,
+    keeperTransaction,
+    keeperReceipt,
+  ] = await Promise.all([
+    client.getTransaction({ hash: evidence.launch.transactionHash }),
+    client.getTransactionReceipt({ hash: evidence.launch.transactionHash }),
+    client.getTransaction({ hash: evidence.keeper.transactionHash }),
+    client.getTransactionReceipt({ hash: evidence.keeper.transactionHash }),
+  ]);
+
+  if (
+    launchTransaction.blockNumber !== launchBlock ||
+    launchTransaction.blockHash !== evidence.launch.blockHash ||
+    launchTransaction.nonce !== evidence.launch.nonce ||
+    !sameAddress(launchTransaction.from, evidence.account) ||
+    !sameAddress(launchTransaction.to, evidence.launcher) ||
+    launchTransaction.value !== BigInt(evidence.launch.valueWei) ||
+    keccak256(launchTransaction.input) !== evidence.launch.calldataHash ||
+    launchReceipt.status !== "success" ||
+    launchReceipt.blockNumber !== launchBlock ||
+    launchReceipt.blockHash !== evidence.launch.blockHash
+  ) {
+    fail("Deep canary launch transaction or receipt differs");
+  }
+  const expectedKeeperInput = encodeFunctionData({
+    abi: lifecycleAutomationAbi,
+    functionName: "stageOracle",
+    args: [evidence.growthVault],
+  });
+  if (
+    keeperTransaction.blockNumber !== keeperBlock ||
+    keeperTransaction.blockHash !== evidence.keeper.blockHash ||
+    keeperTransaction.nonce !== evidence.keeper.nonce ||
+    !sameAddress(keeperTransaction.from, evidence.account) ||
+    !sameAddress(keeperTransaction.to, evidence.automation) ||
+    keeperTransaction.value !== BigInt(evidence.keeper.valueWei) ||
+    keeperTransaction.input !== expectedKeeperInput ||
+    keccak256(keeperTransaction.input) !== evidence.keeper.calldataHash ||
+    keeperReceipt.status !== "success" ||
+    keeperReceipt.blockNumber !== keeperBlock ||
+    keeperReceipt.blockHash !== evidence.keeper.blockHash
+  ) {
+    fail("Deep canary keeper transaction or receipt differs");
+  }
+  if (
+    launchReceipt.logs.some((log) => log.removed) ||
+    keeperReceipt.logs.some((log) => log.removed)
+  ) {
+    fail("Deep lifecycle evidence contains a removed log");
+  }
+
+  const launchEvent = lifecycleEvent(
+    launchReceipt,
+    evidence.launcher,
+    lifecycleLauncherAbi,
+    "LiquidityGrowthFullRangeTokenLaunched",
+  );
+  if (
+    !sameAddress(launchEvent.deployer, evidence.account) ||
+    !sameAddress(launchEvent.token, evidence.token) ||
+    launchEvent.poolId !== evidence.poolId ||
+    !sameAddress(launchEvent.feeHook, evidence.feeHook) ||
+    !sameAddress(launchEvent.growthVault, evidence.growthVault) ||
+    Number(launchEvent.buySwapFeeBps) !== evidence.launch.buySwapFeeBps ||
+    Number(launchEvent.sellSwapFeeBps) !==
+      evidence.launch.sellSwapFeeBps ||
+    launchEvent.launchHash !== evidence.launchHash
+  ) {
+    fail("Deep canary launch event differs");
+  }
+  const initialBuyEvent = lifecycleEvent(
+    launchReceipt,
+    evidence.launcher,
+    lifecycleLauncherAbi,
+    "LiquidityGrowthFullRangeCreatorInitialBuy",
+  );
+  if (
+    !sameAddress(initialBuyEvent.deployer, evidence.account) ||
+    !sameAddress(initialBuyEvent.token, evidence.token) ||
+    initialBuyEvent.poolId !== evidence.poolId ||
+    initialBuyEvent.nativeAmount !== BigInt(evidence.launch.valueWei) ||
+    initialBuyEvent.tokenAmount <= 0n ||
+    initialBuyEvent.launchHash !== evidence.launchHash
+  ) {
+    fail("Deep canary initial-buy event differs");
+  }
+  const oracleGrowthEvent = lifecycleEvent(
+    keeperReceipt,
+    evidence.automation,
+    lifecycleAutomationAbi,
+    "OracleGrowthStaged",
+  );
+  if (
+    !sameAddress(oracleGrowthEvent.vault, evidence.growthVault) ||
+    oracleGrowthEvent.poolId !== evidence.poolId ||
+    !sameAddress(oracleGrowthEvent.executor, evidence.account) ||
+    Number(oracleGrowthEvent.previousCardinalityNext) !==
+      evidence.keeper.previousCardinalityNext ||
+    Number(oracleGrowthEvent.newCardinalityNext) !==
+      evidence.keeper.newCardinalityNext
+  ) {
+    fail("Deep canary automation event differs");
+  }
+  const hookGrowthEvent = lifecycleEvent(
+    keeperReceipt,
+    evidence.feeHook,
+    lifecycleHookAbi,
+    "IncreaseObservationCardinalityNext",
+  );
+  if (
+    hookGrowthEvent.poolId !== evidence.poolId ||
+    Number(hookGrowthEvent.observationCardinalityNextOld) !==
+      evidence.keeper.previousCardinalityNext ||
+    Number(hookGrowthEvent.observationCardinalityNextNew) !==
+      evidence.keeper.newCardinalityNext
+  ) {
+    fail("Deep canary hook cardinality event differs");
+  }
+
+  const [
+    recordedVault,
+    recordedLaunchHash,
+    recordedPoolId,
+    registered,
+    oracleState,
+    tokenCode,
+    vaultCode,
+  ] = await Promise.all([
+    client.readContract({
+      address: evidence.launcher,
+      abi: lifecycleLauncherAbi,
+      functionName: "growthVaultOf",
+      args: [evidence.token],
+      blockNumber: keeperBlock,
+    }),
+    client.readContract({
+      address: evidence.launcher,
+      abi: lifecycleLauncherAbi,
+      functionName: "launchHashOf",
+      args: [evidence.token],
+      blockNumber: keeperBlock,
+    }),
+    client.readContract({
+      address: evidence.growthVault,
+      abi: lifecycleVaultAbi,
+      functionName: "poolId",
+      blockNumber: keeperBlock,
+    }),
+    client.readContract({
+      address: evidence.automation,
+      abi: lifecycleAutomationAbi,
+      functionName: "isRegisteredVault",
+      args: [evidence.growthVault],
+      blockNumber: keeperBlock,
+    }),
+    client.readContract({
+      address: evidence.feeHook,
+      abi: lifecycleHookAbi,
+      functionName: "stateById",
+      args: [evidence.poolId],
+      blockNumber: keeperBlock,
+    }),
+    client.getCode({ address: evidence.token, blockNumber: keeperBlock }),
+    client.getCode({ address: evidence.growthVault, blockNumber: keeperBlock }),
+  ]);
+  if (
+    !sameAddress(recordedVault, evidence.growthVault) ||
+    recordedLaunchHash !== evidence.launchHash ||
+    recordedPoolId !== evidence.poolId ||
+    registered !== true ||
+    Number(oracleState[2]) !== evidence.postState.oracleCardinalityNext ||
+    !tokenCode ||
+    tokenCode === "0x" ||
+    !vaultCode ||
+    vaultCode === "0x"
+  ) {
+    fail("Deep canary post-state differs at the keeper block");
+  }
+}
+
+async function verifyCanonicalLifecycleEvidence(
+  lifecycle,
+  clients,
+  release,
+) {
+  if (clients.length !== 2) {
+    fail("Deep lifecycle verification requires two RPC clients");
+  }
+  await Promise.all(
+    clients.map((client) =>
+      verifyLifecycleThroughClient(client, lifecycle.evidence),
+    ),
+  );
+  if (release.status !== "not-deployed") {
+    if (
+      release.releaseCommit !== lifecycle.evidence.releaseCommit ||
+      !sameAddress(release.addresses.launcher, lifecycle.evidence.launcher) ||
+      !sameAddress(
+        release.addresses.automation,
+        lifecycle.evidence.automation,
+      ) ||
+      !sameAddress(release.addresses.feeHook, lifecycle.evidence.feeHook) ||
+      !sameAddress(
+        release.lifecycleEvidence.canaryToken,
+        lifecycle.evidence.token,
+      ) ||
+      release.lifecycleEvidence.launchTransaction !==
+        lifecycle.evidence.launch.transactionHash ||
+      release.lifecycleEvidence.keeperTransaction !==
+        lifecycle.evidence.keeper.transactionHash ||
+      release.lifecycleEvidence.evidenceHash !== lifecycle.evidenceHash
+    ) {
+      fail("Deep live manifest is not bound to canonical lifecycle evidence");
+    }
+  }
 }
 
 function abiEncode(types, values) {
@@ -855,25 +1204,52 @@ async function verifyLiveSources(release) {
     etherscanUrl.searchParams.set("action", "getsourcecode");
     etherscanUrl.searchParams.set("address", address);
     etherscanUrl.searchParams.set("apikey", process.env.ETHERSCAN_API_KEY);
-    const [etherscanResponse, sourcifyResponse] = await Promise.all([
-      fetch(etherscanUrl, { signal: AbortSignal.timeout(15_000) }),
-      fetch(`https://sourcify.dev/server/v2/contract/1/${address}`, {
-        signal: AbortSignal.timeout(15_000),
-      }),
-    ]);
-    if (!etherscanResponse.ok || !sourcifyResponse.ok) {
+    const sourcifyResponse = await fetch(
+      `https://sourcify.dev/server/v2/contract/1/${address}`,
+      { signal: AbortSignal.timeout(15_000) },
+    );
+    if (!sourcifyResponse.ok) {
       fail(`Deep ${field} source provider did not return success`);
     }
-    const [etherscan, sourcify] = await Promise.all([
-      etherscanResponse.json(),
-      sourcifyResponse.json(),
-    ]);
+    let etherscan;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const etherscanResponse = await fetch(etherscanUrl, {
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!etherscanResponse.ok) {
+        fail(`Deep ${field} source provider did not return success`);
+      }
+      etherscan = await etherscanResponse.json();
+      if (etherscan?.status === "1") break;
+      if (
+        !String(etherscan?.result ?? etherscan?.message)
+          .toLowerCase()
+          .includes("rate limit") ||
+        attempt === 4
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+    }
+    const sourcify = await sourcifyResponse.json();
+    const etherscanSource = etherscan?.result?.[0];
+    const expectedContractName = source.fqcn.split(":").at(-1);
+    const expectedConstructorArguments =
+      source.encodedConstructorArguments === "0x"
+        ? ""
+        : source.encodedConstructorArguments?.slice(2);
     if (
       etherscan?.status !== "1" ||
-      !etherscan?.result?.[0]?.SourceCode ||
-      !String(etherscan.result[0].CompilerVersion).includes("v0.8.26")
+      !etherscanSource?.SourceCode ||
+      etherscanSource.ContractName !== expectedContractName ||
+      etherscanSource.CompilerVersion !== "v0.8.26+commit.8a97fa7a" ||
+      etherscanSource.OptimizationUsed !== "1" ||
+      etherscanSource.Runs !== "1000" ||
+      etherscanSource.EVMVersion !== "cancun" ||
+      etherscanSource.ConstructorArguments.toLowerCase() !==
+        expectedConstructorArguments?.toLowerCase()
     ) {
-      fail(`Deep ${field} is not verified with Solidity 0.8.26 on Etherscan`);
+      fail(`Deep ${field} exact Etherscan source record differs`);
     }
     if (
       ![sourcify?.match, sourcify?.creationMatch, sourcify?.runtimeMatch].some(
@@ -935,25 +1311,43 @@ function verifyConstructorArguments(release) {
 }
 
 async function verifyLiveRelease(release, appRelease, clients, artifacts) {
+  const releaseReady =
+    release.status === "deployment-source-and-lifecycle-verified";
+  const keeperPending =
+    release.status ===
+    "deployed-source-and-canary-verified-keeper-pending";
   if (
-    release.status !== "deployment-source-and-lifecycle-verified" ||
-    release.releaseEligible !== true ||
+    (!releaseReady && !keeperPending) ||
     !validCommit(release.releaseCommit) ||
     !validBlock(release.startBlock) ||
     !Number.isSafeInteger(release.startingNonce) ||
     release.startingNonce < 0 ||
     release.sourceVerification?.status !== "verified" ||
-    release.lifecycleEvidence?.status !== "verified-current-release" ||
-    release.lifecycleEvidence?.releaseEligible !== true ||
     !validHash(release.lifecycleEvidence?.evidenceHash) ||
     release.lifecycleEvidence?.independentRpcCount !== 2 ||
-    release.activation?.appStatus !== "ready" ||
-    release.activation?.keeperStatus !== "ready" ||
     release.activation?.requiresExactManifestMatch !== true ||
-    !Array.isArray(release.blockers) ||
-    release.blockers.length !== 0
+    !Array.isArray(release.blockers)
   ) {
     fail("Live Deep release lacks required deployment, source or lifecycle state");
+  }
+  if (
+    releaseReady
+      ? release.releaseEligible !== true ||
+        release.lifecycleEvidence?.status !== "verified-current-release" ||
+        release.lifecycleEvidence?.releaseEligible !== true ||
+        release.activation?.appStatus !== "ready" ||
+        release.activation?.keeperStatus !== "ready" ||
+        release.blockers.length !== 0
+      : release.releaseEligible !== false ||
+        release.lifecycleEvidence?.status !==
+          "launch-and-oracle-verified" ||
+        release.lifecycleEvidence?.releaseEligible !== false ||
+        release.activation?.appStatus !== "disabled" ||
+        release.activation?.keeperStatus !==
+          "disabled-awaiting-lifecycle-proof" ||
+        release.blockers.length === 0
+  ) {
+    fail("Deep release eligibility does not match its activation state");
   }
   verifyCandidatePlan(release, artifacts);
   verifyConstructorArguments(release);
@@ -1208,7 +1602,7 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
     appRelease.sourceCommitment !== release.sourceCommitment ||
     appRelease.releaseManifest !== expectedReleaseManifest ||
     appRelease.status !== release.status ||
-    appRelease.releaseEligible !== true ||
+    appRelease.releaseEligible !== release.releaseEligible ||
     appRelease.sourceVerificationStatus !== "verified" ||
     appRelease.deploymentVerificationStatus !== "verified" ||
     appRelease.startBlock !== release.startBlock ||
@@ -1229,7 +1623,10 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
     }
   }
   if (
-    release.keeperPolicy.status !== "verified-ready-disabled-by-default" ||
+    release.keeperPolicy.status !==
+      (releaseReady
+        ? "verified-ready-disabled-by-default"
+        : "deployed-disabled-lifecycle-pending") ||
     release.keeperPolicy.enabled !== false ||
     release.keeperPolicy.transactionSubmission !== false ||
     !sameAddress(
@@ -1241,6 +1638,17 @@ async function verifyLiveRelease(release, appRelease, clients, artifacts) {
   ) {
     fail("Deep keeper activation record is not bound to the verified automation");
   }
+  if (
+    !releaseReady &&
+    (!sameAddress(
+      release.keeperPolicy.signerAddress,
+      "0x4A7190dA29b6BC41980983e55E0dB35bbaff5fe0",
+    ) ||
+      release.keeperPolicy.signingBackend !== "privy-policy-wallet" ||
+      release.keeperPolicy.executionPath !== "/api/ops/deep-keeper")
+  ) {
+    fail("Deep pending keeper record is not bound to its policy wallet");
+  }
   await verifyLiveSources(release);
 }
 
@@ -1248,6 +1656,7 @@ const release = await readJson(releasePath);
 const releaseSchema = await readJson(releaseSchemaPath);
 const appManifest = await readJson(appManifestPath);
 const dependencySnapshot = await readJson(dependencySnapshotPath);
+const lifecycle = await readCanonicalLifecycleEvidence();
 const appRelease = appManifest.production?.launchModelReleases?.deep;
 
 if (
@@ -1297,6 +1706,7 @@ if (!offline) {
     }),
   );
   await verifyDependencyRuntime(release, clients);
+  await verifyCanonicalLifecycleEvidence(lifecycle, clients, release);
 }
 
 if (release.status === "not-deployed") {
@@ -1308,7 +1718,12 @@ if (release.status === "not-deployed") {
 } else {
   if (offline) fail("A live Deep release cannot be verified offline");
   await verifyLiveRelease(release, appRelease, clients, artifacts);
+  if (requireLive && !release.releaseEligible) {
+    fail("Deep FullRange is deployed but its keeper lifecycle is not complete");
+  }
   console.log(
-    "Deep FullRange receipts, runtime hashes, source verification, lifecycle evidence, app gate and keeper binding match.",
+    release.releaseEligible
+      ? "Deep FullRange receipts, runtime hashes, source verification, lifecycle evidence, app gate and keeper binding match."
+      : "Deep FullRange deployment, exact sources and launch/oracle canary match; the app remains disabled until fee processing and compounding are proven.",
   );
 }

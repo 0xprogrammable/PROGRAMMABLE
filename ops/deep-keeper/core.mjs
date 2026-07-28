@@ -170,10 +170,24 @@ export function parseKeeperConfig(env = process.env) {
         "DEEP_KEEPER_SIGNER_RPC_URL",
       )
     : null;
-  if (enabled && (!signerAddress || !signerRpcUrl)) {
+  const privyWalletId = env.DEEP_KEEPER_PRIVY_WALLET_ID?.trim() || null;
+  if (
+    privyWalletId &&
+    !/^[a-z0-9]{24}$/.test(privyWalletId)
+  ) {
     throw new DeepKeeperError(
       "INVALID_CONFIG",
-      "Enabled execution requires a dedicated signer address and remote signer RPC",
+      "DEEP_KEEPER_PRIVY_WALLET_ID must be a Privy wallet ID",
+    );
+  }
+  if (
+    enabled &&
+    (!signerAddress ||
+      Boolean(signerRpcUrl) === Boolean(privyWalletId))
+  ) {
+    throw new DeepKeeperError(
+      "INVALID_CONFIG",
+      "Enabled execution requires a dedicated signer address and exactly one remote signing backend",
     );
   }
   if (signerRpcUrl && rpcUrls.includes(signerRpcUrl)) {
@@ -232,6 +246,7 @@ export function parseKeeperConfig(env = process.env) {
     rpcUrls,
     signerAddress,
     signerRpcUrl,
+    privyWalletId,
     simulationAccount: env.DEEP_KEEPER_SIMULATION_ACCOUNT
       ? requiredAddress(
           env.DEEP_KEEPER_SIMULATION_ACCOUNT,

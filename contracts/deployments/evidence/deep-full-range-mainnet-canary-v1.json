@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "deep-full-range-v1",
+  "releaseCommit": "75d00e2369cd8bc67421859270c0fbf3edc478ff",
+  "chainId": 1,
+  "account": "0x2bb333d48dfaf1596d9036671d2e43168994249e",
+  "launcher": "0x7aef9a4038fabb1d477bbfd3a106f81b93eb5aeb",
+  "automation": "0x856a8e8421e76f55cd1e0d65b4f3c1b474289b2f",
+  "feeHook": "0x48dc3009ec1d3298bba31f718a9a29d02fc9b0cc",
+  "token": "0x3a778578b3a21dd842c29be3d1816b1af37d54f3",
+  "growthVault": "0x3e311de17c37071504f534bb46d4b5fb59f37549",
+  "poolId": "0x9f865e32ce5486b5a72eb5edc290b497a4c40605a303db1e28bc33a37638ab9c",
+  "launchHash": "0x2f095043ea96c40ca356b89e5c3e18792fc8820ed8d9c6116b4a44ca85514896",
+  "launch": {
+    "transactionHash": "0xde8041b9d960d72478e6264c745679ce6c17e19959ec15aa283590f3f0fffa4d",
+    "blockNumber": 25632994,
+    "blockHash": "0x36fecdb27df170c3f975c073e042bb16d02d96dc87eb28e5ad6215d390c23ccb",
+    "nonce": 40,
+    "valueWei": "600000000000000",
+    "calldataHash": "0xc55370000b4b09e651506530283314bbbe961f6a2c4e62b8c55fb22b9a0b5abc",
+    "buySwapFeeBps": 100,
+    "sellSwapFeeBps": 100
+  },
+  "keeper": {
+    "transactionHash": "0x7af2803cf42d8ab8455c875549b5637fd3e9969fa4d5e5ba8a7296707f132a47",
+    "blockNumber": 25632999,
+    "blockHash": "0x2c0ad1d7a5feedd46151312e832f5762e06596d2a933a4ed876b0f7ef8f84336",
+    "nonce": 41,
+    "valueWei": "0",
+    "calldataHash": "0x613322a6f4d85aa7bb124fadc456200c469e7dbbdbd21787ef4655ce4bfce1bb",
+    "previousCardinalityNext": 2,
+    "newCardinalityNext": 18
+  },
+  "postState": {
+    "oracleCardinalityNext": 18
+  }
+}

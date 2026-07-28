@@ -1,5 +1,10 @@
 import { keccak256, toBytes, type Address, type Hex } from "viem";
 
+import appDeployments from "../../contracts/config/app-deployments.v1.json";
+import {
+  getVerifiedDeepRelease,
+  type LaunchModelReleaseManifest,
+} from "../launch-model-gating";
 import type {
   ExploreReadModel,
   ReadyOnchainDeployment,
@@ -20,11 +25,39 @@ type DurableExplorePayload = {
   model: Extract<ExploreReadModel, { status: "ready" }>;
 };
 
-type DurableExploreEnvelope = {
+export type DeepExploreReleaseBinding = {
+  releaseVersion: "deep-full-range-v1";
+  releaseCommit: string;
+  sourceCommitment: Hex;
+  lifecycleEvidenceHash: Hex;
+  launcher: Address;
+  feeHook: Address;
+  growthVaultFactory: Address;
+  automation: Address;
+  deploymentBlock: number;
+};
+
+type DurableExplorePayloadV2 = DurableExplorePayload & {
+  launchModels: {
+    deep: DeepExploreReleaseBinding | null;
+  };
+};
+
+type DurableExploreEnvelopeV1 = {
   schemaVersion: "programmable-durable-index-v1";
   contentHash: Hex;
   payload: DurableExplorePayload;
 };
+
+type DurableExploreEnvelopeV2 = {
+  schemaVersion: "programmable-durable-index-v2";
+  contentHash: Hex;
+  payload: DurableExplorePayloadV2;
+};
+
+type DurableExploreEnvelope =
+  | DurableExploreEnvelopeV1
+  | DurableExploreEnvelopeV2;
 
 export type DurableExploreRead =
   | {
@@ -38,7 +71,7 @@ export type DurableExploreRead =
       detail: string;
     };
 
-function contentHash(payload: DurableExplorePayload) {
+function contentHash(payload: unknown) {
   return keccak256(toBytes(JSON.stringify(payload)));
 }
 
@@ -46,10 +79,62 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function validateEnvelope(
+function sameValue(left: unknown, right: unknown) {
+  return (
+    typeof left === "string" &&
+    typeof right === "string" &&
+    left.toLowerCase() === right.toLowerCase()
+  );
+}
+
+function matchesDeepReleaseBinding(
+  value: unknown,
+  expected: DeepExploreReleaseBinding | null,
+) {
+  if (expected === null) return value === null;
+  if (!isRecord(value)) return false;
+  return (
+    value.releaseVersion === expected.releaseVersion &&
+    value.releaseCommit === expected.releaseCommit &&
+    sameValue(value.sourceCommitment, expected.sourceCommitment) &&
+    sameValue(
+      value.lifecycleEvidenceHash,
+      expected.lifecycleEvidenceHash,
+    ) &&
+    sameValue(value.launcher, expected.launcher) &&
+    sameValue(value.feeHook, expected.feeHook) &&
+    sameValue(value.growthVaultFactory, expected.growthVaultFactory) &&
+    sameValue(value.automation, expected.automation) &&
+    value.deploymentBlock === expected.deploymentBlock
+  );
+}
+
+export function resolveDeepExploreReleaseBinding(
+  deployment: ReadyOnchainDeployment,
+): DeepExploreReleaseBinding | null {
+  const manifest = appDeployments[
+    deployment.environment
+  ] as unknown as LaunchModelReleaseManifest;
+  const release = getVerifiedDeepRelease(manifest, deployment.chainId);
+  if (!release) return null;
+  return {
+    releaseVersion: "deep-full-range-v1",
+    releaseCommit: release.releaseCommit as string,
+    sourceCommitment: release.sourceCommitment as Hex,
+    lifecycleEvidenceHash: release.lifecycleEvidenceHash as Hex,
+    launcher: release.launcher as Address,
+    feeHook: release.feeHook as Address,
+    growthVaultFactory: release.growthVaultFactory as Address,
+    automation: release.automation as Address,
+    deploymentBlock: release.deploymentBlock as number,
+  };
+}
+
+export function validateDurableExploreEnvelope(
   value: unknown,
   deployment: ReadyOnchainDeployment,
   maxAgeMs: number,
+  expectedDeepRelease = resolveDeepExploreReleaseBinding(deployment),
 ): DurableExploreRead {
   if (!isRecord(value) || !isRecord(value.payload)) {
     return {
@@ -58,29 +143,48 @@ function validateEnvelope(
       detail: "The durable index envelope is malformed",
     };
   }
-  const envelope = value as unknown as DurableExploreEnvelope;
-  const payload = envelope.payload;
-  const generatedAt = Date.parse(payload.generatedAt);
+  const schemaVersion = value.schemaVersion;
+  if (
+    schemaVersion !== "programmable-durable-index-v1" &&
+    schemaVersion !== "programmable-durable-index-v2"
+  ) {
+    return {
+      status: "unavailable",
+      reason: "invalid",
+      detail: "The durable index schema is not supported",
+    };
+  }
+  const payload = value.payload;
+  const generatedAt =
+    typeof payload.generatedAt === "string"
+      ? Date.parse(payload.generatedAt)
+      : Number.NaN;
   const ageMs = Date.now() - generatedAt;
   if (
-    envelope.schemaVersion !== "programmable-durable-index-v1" ||
-    typeof envelope.contentHash !== "string" ||
+    typeof value.contentHash !== "string" ||
     contentHash(payload).toLowerCase() !==
-      envelope.contentHash.toLowerCase() ||
+      value.contentHash.toLowerCase() ||
     !Number.isFinite(generatedAt) ||
     ageMs < -60_000 ||
     !isRecord(payload.deployment) ||
+    !isRecord(payload.model) ||
+    !isRecord(payload.model.snapshot)
+  ) {
+    return {
+      status: "unavailable",
+      reason: "invalid",
+      detail: "The durable index does not match the verified deployment",
+    };
+  }
+  if (
     payload.deployment.chainId !== deployment.chainId ||
     payload.deployment.releaseVersion !== deployment.releaseVersion ||
-    payload.deployment.launcher?.toLowerCase() !==
-      deployment.launcher.toLowerCase() ||
-    payload.deployment.feeHook?.toLowerCase() !==
-      deployment.feeHook.toLowerCase() ||
-    !isRecord(payload.model) ||
+    !sameValue(payload.deployment.launcher, deployment.launcher) ||
+    !sameValue(payload.deployment.feeHook, deployment.feeHook) ||
     payload.model.status !== "ready" ||
-    payload.model.snapshot?.chainId !== deployment.chainId ||
-    typeof payload.model.snapshot?.blockNumber !== "string" ||
-    typeof payload.model.snapshot?.blockHash !== "string" ||
+    payload.model.snapshot.chainId !== deployment.chainId ||
+    typeof payload.model.snapshot.blockNumber !== "string" ||
+    typeof payload.model.snapshot.blockHash !== "string" ||
     !Array.isArray(payload.model.tokens) ||
     !Array.isArray(payload.model.creatorClaims)
   ) {
@@ -90,6 +194,29 @@ function validateEnvelope(
       detail: "The durable index does not match the verified deployment",
     };
   }
+  if (schemaVersion === "programmable-durable-index-v1") {
+    if (expectedDeepRelease !== null) {
+      return {
+        status: "unavailable",
+        reason: "invalid",
+        detail:
+          "The durable index predates the verified Deep release binding",
+      };
+    }
+  } else if (
+    !isRecord(payload.launchModels) ||
+    !matchesDeepReleaseBinding(
+      payload.launchModels.deep,
+      expectedDeepRelease,
+    )
+  ) {
+    return {
+      status: "unavailable",
+      reason: "invalid",
+      detail:
+        "The durable index Deep release binding does not match the verified lifecycle",
+    };
+  }
   if (ageMs > maxAgeMs) {
     return {
       status: "unavailable",
@@ -97,7 +224,11 @@ function validateEnvelope(
       detail: `The durable index is ${Math.floor(ageMs / 1_000)} seconds old`,
     };
   }
-  return { status: "ready", envelope, ageMs };
+  return {
+    status: "ready",
+    envelope: value as unknown as DurableExploreEnvelope,
+    ageMs,
+  };
 }
 
 export function shouldReplaceDurableSnapshot(
@@ -143,7 +274,11 @@ export async function readDurableExploreModel(
       };
     }
     const text = await new Response(result.stream).text();
-    return validateEnvelope(JSON.parse(text), deployment, maxAgeMs);
+    return validateDurableExploreEnvelope(
+      JSON.parse(text),
+      deployment,
+      maxAgeMs,
+    );
   } catch (error) {
     return {
       status: "unavailable",
@@ -169,6 +304,7 @@ export async function writeDurableExploreModel(
   if (!blobToken) {
     throw new Error("Persistent index storage is not configured");
   }
+  const deepRelease = resolveDeepExploreReleaseBinding(deployment);
 
   const existing = await readDurableExploreModel(
     deployment,
@@ -185,10 +321,13 @@ export async function writeDurableExploreModel(
       updated: false,
       blockNumber: existing.envelope.payload.model.snapshot.blockNumber,
       tokenCount: existing.envelope.payload.model.tokens.length,
+      deepReleaseVersion: deepRelease?.releaseVersion ?? null,
+      deepLifecycleEvidenceHash:
+        deepRelease?.lifecycleEvidenceHash ?? null,
     };
   }
 
-  const payload: DurableExplorePayload = {
+  const payload: DurableExplorePayloadV2 = {
     generatedAt: new Date().toISOString(),
     deployment: {
       chainId: deployment.chainId,
@@ -196,10 +335,13 @@ export async function writeDurableExploreModel(
       launcher: deployment.launcher,
       feeHook: deployment.feeHook,
     },
+    launchModels: {
+      deep: deepRelease,
+    },
     model,
   };
-  const envelope: DurableExploreEnvelope = {
-    schemaVersion: "programmable-durable-index-v1",
+  const envelope: DurableExploreEnvelopeV2 = {
+    schemaVersion: "programmable-durable-index-v2",
     contentHash: contentHash(payload),
     payload,
   };
@@ -216,5 +358,8 @@ export async function writeDurableExploreModel(
     updated: true,
     blockNumber: model.snapshot.blockNumber,
     tokenCount: model.tokens.length,
+    deepReleaseVersion: deepRelease?.releaseVersion ?? null,
+    deepLifecycleEvidenceHash:
+      deepRelease?.lifecycleEvidenceHash ?? null,
   };
 }
