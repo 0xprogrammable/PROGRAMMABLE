@@ -23,6 +23,22 @@ export function oracleBatchRepeatCount(
 
 export function reviewedKeeperExecutorSourceCommitment(): `0x${string}`;
 
+export function normalizeLifecycleFeeConfig(
+  feeConfig: [
+    string,
+    string,
+    bigint | number | string,
+    bigint | number | string,
+    boolean,
+    bigint | number | string,
+  ],
+  expectedRewardVault: string,
+): {
+  buySwapFeeBps: number;
+  sellSwapFeeBps: number;
+  creatorFeesAccrued: string;
+};
+
 export function predictKeeperExecutorAddress(
   deployer: `0x${string}`,
   nonce: bigint | number | string,
