@@ -1,9 +1,10 @@
-# Architecture
+# Classic architecture
 
 ## Scope
 
-Classic V2 is a non-upgradeable launch path for fixed-supply UERC20 tokens paired with ETH on Uniswap v4. Its Uniswap
-and OpenZeppelin dependencies are pinned in [`scripts/bootstrap-deps.sh`](scripts/bootstrap-deps.sh).
+This document covers the current Classic deployment. Classic is a non-upgradeable launch path for fixed-supply UERC20
+tokens paired with ETH on Uniswap v4. Its current Ethereum contract release is V2. Its Uniswap and OpenZeppelin
+dependencies are pinned in [`scripts/bootstrap-deps.sh`](scripts/bootstrap-deps.sh).
 
 ```mermaid
 flowchart LR
@@ -24,7 +25,7 @@ flowchart LR
 initial buy of at least `0.0006 ETH`. There is no separate ETH liquidity deposit.
 
 `MemeLaunchV1` keeps its original contract name because this repository mirrors the deployed source. The public
-product name is Classic V2.
+model is Classic; V2 identifies the current contract release.
 
 ## Position custody
 

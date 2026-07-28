@@ -2,8 +2,9 @@
 
 ## Status
 
-Classic V2 has unit, integration, fuzz, invariant and regression coverage. It has not received an independent
-smart-contract audit or public security contest. These checks are evidence, not a safety guarantee.
+This document covers the current Classic deployment. Its V2 contract release has unit, integration, fuzz, invariant
+and regression coverage. It has not received an independent smart-contract audit or public security contest. These
+checks are evidence, not a safety guarantee.
 
 ## Report a vulnerability
 
