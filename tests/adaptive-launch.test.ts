@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { decodeFunctionData, type Address, type Hex } from "viem";
+import {
+  decodeAbiParameters,
+  decodeFunctionData,
+  parseAbiParameters,
+  type Address,
+  type Hex,
+} from "viem";
 
 import {
+  isAdaptiveDeploymentReady,
   validatePreparedAdaptiveLaunchTransactionAgainstManifest,
 } from "@/lib/adaptive-launch-validation";
 import {
@@ -23,8 +30,16 @@ const launcher =
   "0x2222222222222222222222222222222222222222" as Address;
 const launchSalt =
   "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as Hex;
-const hookSalt =
+const hookSaltNonce =
   "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as Hex;
+const hookFactory =
+  "0x3333333333333333333333333333333333333333" as Address;
+const positionForwarderFactory =
+  "0x4444444444444444444444444444444444444444" as Address;
+const runtimeHash = `0x${"11".repeat(32)}`;
+const adaptiveLaunchParameters = parseAbiParameters(
+  "(string name,string symbol,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,(bytes32 hookSaltNonce,int24[] fdvIndexes,uint16[] totalSwapFeeBps) curve) parameters",
+);
 
 function draft() {
   return {
@@ -34,14 +49,14 @@ function draft() {
     tokenDescription: "Immutable adaptive fee curve",
     initialBuyEth: "0",
     launchSalt,
-    hookSalt,
+    hookSaltNonce,
   };
 }
 
 describe("Adaptive launch transaction boundary", () => {
   it("encodes the immutable curve into the launch bytes", () => {
     const value = draft();
-    expect(validateAdaptiveLaunchDraft(value, { requireHookSalt: true }))
+    expect(validateAdaptiveLaunchDraft(value, { requireHookSaltNonce: true }))
       .toHaveLength(4);
 
     const data = encodeAdaptiveLaunch(value, launchSalt);
@@ -51,6 +66,11 @@ describe("Adaptive launch transaction boundary", () => {
     });
     expect(decoded.functionName).toBe("launch");
     expect(decoded.args[0]).not.toBe("0x");
+    const [parameters] = decodeAbiParameters(
+      adaptiveLaunchParameters,
+      decoded.args[0] as Hex,
+    );
+    expect(parameters.curve.hookSaltNonce).toBe(hookSaltNonce);
   });
 
   it("rejects missing full-range endpoints and out-of-range fees", () => {
@@ -109,9 +129,23 @@ describe("Adaptive launch transaction boundary", () => {
     const manifest = {
       chainId: 1,
       adaptiveLaunchStatus: "ready",
+      adaptiveCurveFeeHookFactory: hookFactory,
       adaptiveCurveLaunch: launcher,
+      lockedPositionFeeForwarderFactory: positionForwarderFactory,
+      runtimeCodeHashes: {
+        adaptiveCurveFeeHookFactory: runtimeHash,
+        adaptiveCurveLaunch: runtimeHash,
+        lockedPositionFeeForwarderFactory: runtimeHash,
+      },
     };
 
+    expect(isAdaptiveDeploymentReady(manifest, 1)).toBe(true);
+    expect(
+      isAdaptiveDeploymentReady(
+        { ...manifest, adaptiveCurveFeeHookFactory: null },
+        1,
+      ),
+    ).toBe(false);
     expect(
       validatePreparedAdaptiveLaunchTransactionAgainstManifest(
         { transaction, draft: value, account, planHash },

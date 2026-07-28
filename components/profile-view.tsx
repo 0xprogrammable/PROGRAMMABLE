@@ -42,6 +42,16 @@ import {
   type ProfileOnchainData,
   type ProfileToken,
 } from "@/lib/profile/onchain-profile";
+import styles from "./profile-experience.module.css";
+
+const fallbackTokenImages = [
+  "/brand/programmable-token-fallback-01-dawn.webp",
+  "/brand/programmable-token-fallback-02-moon.webp",
+  "/brand/programmable-token-fallback-03-sun.webp",
+  "/brand/programmable-token-fallback-04-mint.webp",
+  "/brand/programmable-token-fallback-05-lavender.webp",
+  "/brand/programmable-token-fallback-06-dusk.webp",
+] as const;
 
 type ProfileClaimActionState = {
   account: string;
@@ -63,6 +73,14 @@ export type ProfileViewProps = {
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
+}
+
+function getFallbackTokenImage(address: string) {
+  const suffix = Number.parseInt(address.slice(-8), 16);
+  const index = Number.isFinite(suffix)
+    ? suffix % fallbackTokenImages.length
+    : 0;
+  return fallbackTokenImages[index];
 }
 
 function formatEth(value?: string) {
@@ -558,19 +576,42 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     [account, scopedClassicV3Rewards, sendTransaction],
   );
   const displayName = account
-    ? savedProfile.username || shortenAddress(account)
+    ? savedProfile.username || "Your profile"
     : "Your profile";
   const avatarImage = editingProfile ? avatarDraft : savedProfile.avatarDataUrl;
   const avatarFallback = account
     ? (savedProfile.username || account.slice(2, 4)).slice(0, 2).toUpperCase()
     : "P";
 
+  if (!account) {
+    return (
+      <div className={`${styles.page} page-width`}>
+        <section className={styles.connectCard}>
+          <h1>Connect your wallet</h1>
+          <p>
+            See the tokens connected to your wallet and claim creator rewards
+            from one place
+          </p>
+          <button
+            className={styles.connectButton}
+            type="button"
+            onClick={openWallet}
+          >
+            Connect wallet
+          </button>
+        </section>
+      </div>
+    );
+  }
+
   return (
-    <div className="profile-page page-width">
+    <div className={`${styles.page} page-width`}>
       <section
-        className={`profile-hero${editingProfile ? " profile-hero-editing" : ""}`}
+        className={`${styles.hero} ${
+          editingProfile ? styles.heroEditing : ""
+        }`}
       >
-        <div className="profile-avatar">
+        <div className={styles.avatar}>
           {avatarImage ? (
             <Image
               src={avatarImage}
@@ -584,12 +625,12 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           )}
         </div>
 
-        <div className="profile-hero-copy">
-          <div className="profile-name-row">
+        <div className={styles.heroCopy}>
+          <div className={styles.nameRow}>
             <h1>{displayName}</h1>
-            {account && !editingProfile ? (
+            {!editingProfile ? (
               <button
-                className="secondary-button profile-edit-button"
+                className={styles.editButton}
                 type="button"
                 onClick={beginEditingProfile}
               >
@@ -597,17 +638,13 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
               </button>
             ) : null}
           </div>
-          <p>
-            {account
-              ? shortenAddress(account)
-              : "Connect a wallet to manage your tokens and creator fee claims"}
-          </p>
+          <p className={styles.address}>{shortenAddress(account)}</p>
 
-          {account ? (
-            editingProfile ? (
-              <form className="profile-edit-form" onSubmit={saveProfile}>
-                <div className="profile-image-control">
-                  <span>Profile image</span>
+          {editingProfile ? (
+            <form className={styles.editForm} onSubmit={saveProfile}>
+              <div className={styles.editGrid}>
+                <div className={styles.imageControl}>
+                  <span className={styles.fieldLabel}>Profile image</span>
                   <input
                     ref={fileInputRef}
                     className="sr-only"
@@ -615,9 +652,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                     accept="image/jpeg,image/png,image/webp"
                     onChange={selectAvatar}
                   />
-                  <div>
+                  <div className={styles.imageActions}>
                     <button
-                      className="profile-image-action"
+                      className={styles.imageAction}
                       type="button"
                       disabled={preparingImage}
                       onClick={() => fileInputRef.current?.click()}
@@ -626,7 +663,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                     </button>
                     {avatarDraft ? (
                       <button
-                        className="profile-image-action"
+                        className={styles.imageAction}
                         type="button"
                         disabled={preparingImage}
                         onClick={() => {
@@ -639,61 +676,68 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                       </button>
                     ) : null}
                   </div>
-                  <small
-                    className={avatarError ? "form-error" : undefined}
-                    role={avatarError ? "alert" : undefined}
-                  >
-                    {avatarError ||
-                      "Square crop · JPG, PNG or WebP · up to 8 MB"}
-                  </small>
                 </div>
 
-                <label htmlFor="profile-username">
-                  Username <span>Optional</span>
-                </label>
-                <div className="profile-edit-row">
-                  <input
-                    id="profile-username"
-                    value={usernameDraft}
-                    autoComplete="nickname"
-                    maxLength={12}
-                    pattern="[A-Za-z0-9]{3,12}"
-                    aria-invalid={Boolean(usernameError)}
-                    aria-describedby="profile-username-help"
-                    onChange={(event) => {
-                      setUsernameDraft(event.target.value);
-                      setUsernameError("");
-                      setSaveError("");
-                    }}
-                    autoFocus
-                  />
-                  <button
-                    className="profile-edit-action profile-edit-save"
-                    type="submit"
-                    disabled={preparingImage}
+                <div className={styles.usernameControl}>
+                  <label
+                    className={styles.fieldLabel}
+                    htmlFor="profile-username"
                   >
-                    Save
-                  </button>
-                  <button
-                    className="profile-edit-action"
-                    type="button"
-                    disabled={preparingImage}
-                    onClick={cancelEditingProfile}
-                  >
-                    Cancel
-                  </button>
+                    Username
+                  </label>
+                  <div className={styles.usernameRow}>
+                    <input
+                      id="profile-username"
+                      value={usernameDraft}
+                      autoComplete="nickname"
+                      maxLength={12}
+                      pattern="[A-Za-z0-9]{3,12}"
+                      aria-invalid={Boolean(usernameError)}
+                      aria-describedby="profile-username-help"
+                      onChange={(event) => {
+                        setUsernameDraft(event.target.value);
+                        setUsernameError("");
+                        setSaveError("");
+                      }}
+                      autoFocus
+                    />
+                    <button
+                      className={`${styles.editAction} ${styles.saveAction}`}
+                      type="submit"
+                      disabled={preparingImage}
+                    >
+                      Save
+                    </button>
+                    <button
+                      className={styles.editAction}
+                      type="button"
+                      disabled={preparingImage}
+                      onClick={cancelEditingProfile}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <p
-                  id="profile-username-help"
-                  className={
-                    usernameError || saveError ? "form-error" : undefined
-                  }
-                  role={usernameError || saveError ? "alert" : undefined}
-                >
-                  {usernameError || saveError || "3–12 letters or numbers"}
-                </p>
-              </form>
-            ) : null
+              </div>
+              <p
+                id="profile-username-help"
+                className={`${styles.formHelp} ${
+                  usernameError || avatarError || saveError
+                    ? styles.formError
+                    : ""
+                }`}
+                role={
+                  usernameError || avatarError || saveError
+                    ? "alert"
+                    : undefined
+                }
+              >
+                {usernameError ||
+                  avatarError ||
+                  saveError ||
+                  "3–12 letters or numbers · square JPG, PNG or WebP"}
+              </p>
+            </form>
           ) : null}
         </div>
       </section>
@@ -739,17 +783,27 @@ export function groupProfileRewards(
 }
 
 export function sortProfileTokensByMarketCap(tokens: readonly ProfileToken[]) {
-  return [...tokens].sort((first, second) => {
-    const firstCap = first.fdvUsdWad ?? first.marketCapEthWei;
-    const secondCap = second.fdvUsdWad ?? second.marketCapEthWei;
+  return [...tokens].sort(compareProfileTokensByMarketCap);
+}
 
-    if (firstCap && secondCap && firstCap !== secondCap) {
-      return BigInt(firstCap) > BigInt(secondCap) ? -1 : 1;
-    }
-    if (firstCap && !secondCap) return -1;
-    if (!firstCap && secondCap) return 1;
-    return first.name.localeCompare(second.name);
-  });
+function compareProfileTokensByMarketCap(
+  first: ProfileToken,
+  second: ProfileToken,
+) {
+  const firstCap = first.fdvUsdWad ?? first.marketCapEthWei;
+  const secondCap = second.fdvUsdWad ?? second.marketCapEthWei;
+
+  if (firstCap && secondCap && firstCap !== secondCap) {
+    return BigInt(firstCap) > BigInt(secondCap) ? -1 : 1;
+  }
+  if (firstCap && !secondCap) return -1;
+  if (!firstCap && secondCap) return 1;
+
+  const nameOrder = first.name.localeCompare(second.name);
+  if (nameOrder !== 0) return nameOrder;
+  return first.address
+    .toLowerCase()
+    .localeCompare(second.address.toLowerCase());
 }
 
 export function buildProfilePortfolio(
@@ -804,16 +858,9 @@ export function buildProfilePortfolio(
     });
   }
 
-  return [...entries.values()].sort((first, second) => {
-    const ranked = sortProfileTokensByMarketCap([
-      first.token,
-      second.token,
-    ]);
-    if (ranked[0].address === first.token.address) {
-      return ranked[0].address === ranked[1].address ? 0 : -1;
-    }
-    return 1;
-  });
+  return [...entries.values()].sort((first, second) =>
+    compareProfileTokensByMarketCap(first.token, second.token),
+  );
 }
 
 export function profileClaimableWei(
@@ -857,10 +904,14 @@ function ProfileAccountWorkspace({
 }) {
   if (!connected) {
     return (
-      <section className="profile-account-state">
+      <section className={styles.accountState}>
         <h2>Connect your wallet</h2>
-        <p>Your tokens and rewards will appear here</p>
-        <button className="primary-button" type="button" onClick={onConnect}>
+        <p>Your tokens and creator rewards will appear here</p>
+        <button
+          className={styles.connectButton}
+          type="button"
+          onClick={onConnect}
+        >
           Connect wallet
         </button>
       </section>
@@ -874,7 +925,7 @@ function ProfileAccountWorkspace({
 
   if (!currentReady && !classicReady) {
     return (
-      <section className="profile-account-state" aria-live="polite">
+      <section className={styles.accountState} aria-live="polite">
         <h2>{loading ? "Loading your profile" : "Your profile could not be loaded"}</h2>
         <p>
           {loading
@@ -887,7 +938,11 @@ function ProfileAccountWorkspace({
                 : "Try again in a moment"}
         </p>
         {!loading ? (
-          <button className="secondary-button" type="button" onClick={onRetry}>
+          <button
+            className={styles.retryButton}
+            type="button"
+            onClick={onRetry}
+          >
             Try again
           </button>
         ) : null}
@@ -910,24 +965,25 @@ function ProfileAccountWorkspace({
 
   return (
     <section
-      className="profile-portfolio"
+      className={styles.portfolio}
       aria-labelledby="profile-portfolio-title"
     >
-      <header className="profile-portfolio-heading">
-        <div>
-          <h2 id="profile-portfolio-title">Tokens &amp; rewards</h2>
-          <span>
-            {entries.length} {entries.length === 1 ? "token" : "tokens"}
-          </span>
+      <header className={styles.portfolioHeader}>
+        <div className={styles.portfolioTitle}>
+          <h2 id="profile-portfolio-title">Your tokens</h2>
+          <p>
+            {entries.length} {entries.length === 1 ? "token" : "tokens"} linked
+            to this wallet
+          </p>
         </div>
-        <div className="profile-portfolio-total">
-          <span>Claimable</span>
+        <div className={styles.portfolioTotal}>
+          <span>Ready to claim</span>
           <strong>{formatWei(profileClaimableWei(entries))}</strong>
         </div>
       </header>
 
       {sourceWarning ? (
-        <div className="profile-source-warning" role="status">
+        <div className={styles.sourceWarning} role="status">
           <span>{sourceWarning}</span>
           <button type="button" onClick={onRetry}>
             Retry
@@ -936,7 +992,7 @@ function ProfileAccountWorkspace({
       ) : null}
 
       {entries.length ? (
-        <div className="profile-portfolio-list">
+        <div className={styles.list}>
           {entries.map((entry) => (
             <ProfilePortfolioRow
               key={entry.token.address}
@@ -1037,49 +1093,48 @@ function ProfilePortfolioRow({
   const classicClaimable = BigInt(classicReward?.claimableWei ?? "0");
   const totalClaimable = currentClaimable + classicClaimable;
   const marketCap = formatMarketCap(token);
-  const twoClaimSources = currentClaimable > 0n && classicClaimable > 0n;
+  const tokenImage =
+    token.imageUrl?.trim() || getFallbackTokenImage(token.address);
 
   return (
-    <article className="profile-portfolio-row">
-      <div className="profile-portfolio-main">
-        <Link className="profile-token-identity" href={token.href}>
-          <span
-            className={`token-monogram token-tone-rose profile-token-art${
-              token.imageUrl ? " has-image" : ""
-            }`}
-            aria-hidden="true"
-            style={
-              token.imageUrl
-                ? { backgroundImage: `url("${token.imageUrl}")` }
-                : undefined
-            }
-          >
-            {token.symbol.slice(0, 2).toUpperCase()}
+    <article className={styles.tokenRow}>
+      <div className={styles.tokenMain}>
+        <Link className={styles.tokenIdentity} href={token.href}>
+          <span className={styles.tokenArt}>
+            <Image
+              src={tokenImage}
+              alt={`${token.name} token image`}
+              fill
+              sizes="52px"
+              unoptimized={!tokenImage.startsWith("/")}
+            />
           </span>
-          <span>
+          <span className={styles.tokenCopy}>
             <strong>{token.name}</strong>
-            <small>
+            <span className={styles.tokenSymbol}>
               ${token.symbol} ·{" "}
-              {token.launchModel === "adaptive" ? "Adaptive" : "Classic"} ·{" "}
+              {token.launchModel === "adaptive" ? "Adaptive" : "Classic"}
+            </span>
+            <span className={styles.tokenAddress}>
               {shortenAddress(token.address)}
-            </small>
+            </span>
           </span>
         </Link>
 
-        <div className="profile-token-market">
+        <div className={`${styles.metric} ${styles.marketMetric}`}>
           <span>Market cap</span>
           <strong>{marketCap ?? "—"}</strong>
         </div>
 
-        <div className="profile-token-rewards">
-          <span>Creator rewards</span>
+        <div className={`${styles.metric} ${styles.rewardMetric}`}>
+          <span>Rewards</span>
           <strong>{formatWei(totalClaimable)}</strong>
         </div>
 
-        <div className="profile-token-actions">
+        <div className={styles.actions}>
           {claim && (currentClaimable > 0n || activeClaimState) ? (
             <button
-              className="secondary-button profile-claim-button"
+              className={styles.claimButton}
               type="button"
               aria-label={`${actionLabel(activeClaimState)} ${token.name} position rewards`}
               disabled={
@@ -1089,13 +1144,15 @@ function ProfilePortfolioRow({
               }
               onClick={() => onClaim(claim)}
             >
-              {twoClaimSources ? "Claim position" : actionLabel(activeClaimState)}
+              {activeClaimState
+                ? actionLabel(activeClaimState)
+                : `Claim ${formatWei(currentClaimable)}`}
             </button>
           ) : null}
           {classicReward &&
           (classicClaimable > 0n || activeClassicClaimState) ? (
             <button
-              className="secondary-button profile-claim-button"
+              className={styles.claimButton}
               type="button"
               aria-label={`${actionLabel(activeClassicClaimState)} ${token.name} split rewards`}
               disabled={
@@ -1105,18 +1162,13 @@ function ProfilePortfolioRow({
               }
               onClick={() => onClassicV3Action(classicReward, "claim")}
             >
-              {twoClaimSources
-                ? "Claim split"
-                : actionLabel(activeClassicClaimState)}
+              {activeClassicClaimState
+                ? actionLabel(activeClassicClaimState)
+                : `Claim ${formatWei(classicClaimable)}`}
             </button>
           ) : null}
-          {totalClaimable === 0n &&
-          !activeClaimState &&
-          !activeClassicClaimState ? (
-            <span className="profile-reward-empty">Nothing to claim</span>
-          ) : null}
-          <Link className="text-link" href={token.href}>
-            View
+          <Link className={styles.openToken} href={token.href}>
+            Open token
           </Link>
         </div>
       </div>
@@ -1154,7 +1206,9 @@ function ProfileActionState({
   if (!state) return null;
   return (
     <p
-      className={state.status === "error" ? "form-error" : "profile-action-state"}
+      className={
+        state.status === "error" ? styles.rowError : styles.actionState
+      }
       role={state.status === "error" ? "alert" : "status"}
     >
       {state.message}
@@ -1200,13 +1254,13 @@ function ClassicRewardSettings({
   const payoutPending = actionPending(payoutState);
 
   return (
-    <details className="profile-reward-settings">
+    <details className={styles.rewardSettings}>
       <summary>
-        <span>Reward settings</span>
-        <small>{(reward.shareBps / 100).toFixed(2)}% share</small>
+        <span>Payout</span>
+        <small>{shortenAddress(reward.payoutAddress)}</small>
       </summary>
-      <div className="profile-reward-settings-body">
-        <dl className="profile-reward-economics">
+      <div className={styles.settingsBody}>
+        <dl className={styles.rewardTerms}>
           <div>
             <dt>Buy fee</dt>
             <dd>{(reward.buySwapFeeBps / 100).toFixed(2)}%</dd>
@@ -1221,10 +1275,10 @@ function ClassicRewardSettings({
           </div>
         </dl>
 
-        <div className="profile-v3-payout">
-          <span>Payout address</span>
+        <div className={styles.payout}>
+          <span className={styles.payoutLabel}>Payout address</span>
           {editingPayout ? (
-            <div>
+            <div className={styles.payoutEdit}>
               <input
                 value={payoutDraft}
                 spellCheck={false}
@@ -1233,7 +1287,7 @@ function ClassicRewardSettings({
                 onChange={(event) => setPayoutDraft(event.target.value)}
               />
               <button
-                className="secondary-button"
+                className={styles.secondaryAction}
                 type="button"
                 disabled={!ownsReward || payoutPending}
                 onClick={() =>
@@ -1247,7 +1301,7 @@ function ClassicRewardSettings({
                     : "Save"}
               </button>
               <button
-                className="text-link"
+                className={styles.textAction}
                 type="button"
                 disabled={payoutPending}
                 onClick={() => {
@@ -1259,7 +1313,7 @@ function ClassicRewardSettings({
               </button>
             </div>
           ) : (
-            <div>
+            <div className={styles.payoutRow}>
               <a
                 href={`${
                   chainId === 11_155_111
@@ -1272,7 +1326,7 @@ function ClassicRewardSettings({
                 {shortenAddress(reward.payoutAddress)}
               </a>
               <button
-                className="text-link"
+                className={styles.textAction}
                 type="button"
                 disabled={!ownsReward}
                 onClick={() => setEditingPayout(true)}
@@ -1283,18 +1337,20 @@ function ClassicRewardSettings({
           )}
         </div>
 
-        <details className="profile-reward-split">
-          <summary>Fixed split</summary>
-          <div>
+        {reward.beneficiaries.length > 1 ? (
+          <div className={styles.split}>
+            <span className={styles.splitLabel}>Fixed reward split</span>
+            <div className={styles.splitList}>
             {reward.beneficiaries.map((item) => (
-              <p key={item.beneficiary}>
+              <div className={styles.splitItem} key={item.beneficiary}>
                 <span>{shortenAddress(item.beneficiary)}</span>
                 <strong>{(item.shareBps / 100).toFixed(2)}%</strong>
                 <small>to {shortenAddress(item.payoutAddress)}</small>
-              </p>
+              </div>
             ))}
+            </div>
           </div>
-        </details>
+        ) : null}
 
         <ProfileActionState state={payoutState} chainId={chainId} />
       </div>
@@ -1310,7 +1366,7 @@ function ProfileSectionEmpty({
   detail: string;
 }) {
   return (
-    <div className="profile-section-empty">
+    <div className={styles.emptySection}>
       <strong>{title}</strong>
       <p>{detail}</p>
     </div>

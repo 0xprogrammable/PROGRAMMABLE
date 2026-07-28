@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createPublicClient,
-  concatHex,
+  encodeAbiParameters,
   getAddress,
   getCreate2Address,
   http,
   isAddress,
   isHex,
   keccak256,
-  padHex,
+  parseAbiParameters,
   toHex,
   type Address,
   type Hex,
@@ -53,6 +53,7 @@ import {
   parseInitialBuyWei,
   type LaunchDraft,
 } from "@/lib/launch";
+import { safeServerErrorSummary } from "@/lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -175,7 +176,7 @@ function parseDraft(input: unknown): LaunchDraft {
     "totalSwapFeePercent",
     "initialBuyEth",
     "launchSalt",
-    "hookSalt",
+    "hookSaltNonce",
     "buySwapFeePercent",
     "sellSwapFeePercent",
     "rewardExternalAddress",
@@ -1044,27 +1045,44 @@ async function prepareClassicV3Launch(
   });
 }
 
-function mineAdaptiveHookSalt(
+const adaptiveHookSaltParameters = parseAbiParameters(
+  "address creator,bytes32 creatorSalt,bytes32 hookSaltNonce",
+);
+
+function adaptiveEffectiveHookSalt(
+  account: Address,
+  launchSalt: Hex,
+  hookSaltNonce: Hex,
+) {
+  return keccak256(
+    encodeAbiParameters(adaptiveHookSaltParameters, [
+      account,
+      launchSalt,
+      hookSaltNonce,
+    ]),
+  );
+}
+
+function mineAdaptiveHookSaltNonce(
   account: Address,
   launchSalt: Hex,
   factory: Address,
   initCodeHash: Hex,
 ) {
   for (let counter = 0; counter < 250_000; counter += 1) {
-    const salt = keccak256(
-      concatHex([
-        launchSalt,
-        padHex(account, { size: 32 }),
-        toHex(counter, { size: 32 }),
-      ]),
+    const hookSaltNonce = toHex(counter, { size: 32 });
+    const effectiveSalt = adaptiveEffectiveHookSalt(
+      account,
+      launchSalt,
+      hookSaltNonce,
     );
     const hook = getCreate2Address({
       from: factory,
-      salt,
+      salt: effectiveSalt,
       bytecodeHash: initCodeHash,
     });
     if ((BigInt(hook) & HOOK_FLAG_MASK) === REQUIRED_FEE_HOOK_FLAGS) {
-      return { salt, hook };
+      return { hookSaltNonce, hook };
     }
   }
   throw new Error("A valid deterministic Adaptive hook address was not found");
@@ -1209,7 +1227,7 @@ async function prepareAdaptiveLaunch(
     label: "Adaptive curve",
     status: "pass",
     detail:
-      "The immutable ETH-denominated value curve and its fee bounds are valid",
+      "The immutable market-cap curve and its fee bounds are valid",
   };
 
   if (connectedWalletCheck.status !== "pass") {
@@ -1281,8 +1299,11 @@ async function prepareAdaptiveLaunch(
     functionName: "initCodeHash",
     args: [officialPoolManager, platformTreasury],
   });
-  if (!isHex(draft.hookSalt, { strict: true }) || draft.hookSalt.length !== 66) {
-    const mined = mineAdaptiveHookSalt(
+  if (
+    !isHex(draft.hookSaltNonce, { strict: true }) ||
+    draft.hookSaltNonce.length !== 66
+  ) {
+    const mined = mineAdaptiveHookSaltNonce(
       account,
       draft.launchSalt,
       hookFactory,
@@ -1295,16 +1316,32 @@ async function prepareAdaptiveLaunch(
       detail: "Checking the deterministic hook and launch transaction",
       checks: [tokenCheck, connectedWalletCheck],
       predictedHook: mined.hook,
-      draftPatch: { hookSalt: mined.salt },
+      draftPatch: { hookSaltNonce: mined.hookSaltNonce },
     });
   }
 
-  validateAdaptiveLaunchDraft(draft, { requireHookSalt: true });
-  const predictedHook = getCreate2Address({
+  validateAdaptiveLaunchDraft(draft, { requireHookSaltNonce: true });
+  const effectiveSalt = adaptiveEffectiveHookSalt(
+    account,
+    draft.launchSalt,
+    draft.hookSaltNonce,
+  );
+  const locallyPredictedHook = getCreate2Address({
     from: hookFactory,
-    salt: draft.hookSalt,
+    salt: effectiveSalt,
     bytecodeHash: initCodeHash,
   });
+  const predictedHook = await client.readContract({
+    address: launcher,
+    abi: adaptiveCurveLaunchAbi,
+    functionName: "predictFeeHook",
+    args: [account, draft.launchSalt, draft.hookSaltNonce],
+  });
+  if (predictedHook.toLowerCase() !== locallyPredictedHook.toLowerCase()) {
+    throw new Error(
+      "The Adaptive hook prediction does not match the deployed launcher",
+    );
+  }
   if ((BigInt(predictedHook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS) {
     throw new LaunchInputError(
       "The deterministic hook address has invalid callback permissions",
@@ -1400,7 +1437,7 @@ export async function POST(request: NextRequest) {
       record.walletChainId,
     );
     if (draft.launchModel === "adaptive") {
-      return prepareAdaptiveLaunch(
+      return await prepareAdaptiveLaunch(
         account,
         draft,
         connectedWalletCheck,
@@ -1408,14 +1445,14 @@ export async function POST(request: NextRequest) {
       );
     }
     if (draft.launchModel === "classic-v3") {
-      return prepareClassicV3Launch(
+      return await prepareClassicV3Launch(
         account,
         draft,
         connectedWalletCheck,
         selectedManifest,
       );
     }
-    return prepareMemeLaunch(
+    return await prepareMemeLaunch(
       account,
       draft,
       connectedWalletCheck,
@@ -1426,7 +1463,10 @@ export async function POST(request: NextRequest) {
       return errorResponse(caught.message);
     }
 
-    console.error("Launch preflight failed", caught);
+    console.error(
+      "Launch preflight failed",
+      safeServerErrorSummary(caught),
+    );
     return errorResponse(
       `The ${networkName} simulation could not be completed safely`,
       502,

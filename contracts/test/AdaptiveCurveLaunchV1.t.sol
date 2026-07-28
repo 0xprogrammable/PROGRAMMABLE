@@ -23,7 +23,6 @@ import { PositionManager } from "@uniswap/v4-periphery/src/PositionManager.sol";
 import { IPositionDescriptor } from "@uniswap/v4-periphery/src/interfaces/IPositionDescriptor.sol";
 import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import { IWETH9 } from "@uniswap/v4-periphery/src/interfaces/external/IWETH9.sol";
-import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import { IAllowanceTransfer } from "permit2/src/interfaces/IAllowanceTransfer.sol";
 
 import { AdaptiveCurveFeeHookFactoryV1 } from "../src/AdaptiveCurveFeeHookFactoryV1.sol";
@@ -48,7 +47,7 @@ contract AdaptiveCurveLaunchV1Test is Deployers {
 
     address internal creator;
     address internal launcherTreasury;
-    bytes32 internal hookSalt;
+    bytes32 internal hookSaltNonce;
 
     function setUp() public {
         deployFreshManagerAndRouters();
@@ -81,14 +80,14 @@ contract AdaptiveCurveLaunchV1Test is Deployers {
 
         creator = makeAddr("adaptiveCreator");
         vm.deal(creator, 10 ether);
-        hookSalt = _mineHookSalt();
+        hookSaltNonce = _mineHookSaltNonce(creator, CREATOR_SALT);
     }
 
     function test_launchesWithoutLiquidityDepositOrInitialBuyAndRecordsCompleteProvenance() public {
         AdaptiveCurveLaunchV1.LaunchParameters memory parameters = _parameters();
         (address predictedToken, bytes32 graffiti) =
             launcher.predictTokenAddress(parameters.name, parameters.symbol, creator, parameters.creatorSalt);
-        address predictedHook = launcher.predictFeeHook(hookSalt);
+        address predictedHook = launcher.predictFeeHook(creator, parameters.creatorSalt, hookSaltNonce);
 
         AdaptiveCurveLaunchV1.LaunchResult memory result = _launch(parameters, 0);
         AdaptiveCurveLaunchV1.LaunchRecord memory record = launcher.launchRecord(result.token);
@@ -200,6 +199,32 @@ contract AdaptiveCurveLaunchV1Test is Deployers {
         assertEq(hook.totalNativeFeesAccrued(), creatorFees + hook.launcherFeesAccrued());
     }
 
+    function test_forcedEthCannotBlockZeroBuyLaunch() public {
+        uint256 forcedBalance = 1 wei;
+        // Models native ETH forced in via SELFDESTRUCT without introducing deprecated test bytecode.
+        vm.deal(address(launcher), forcedBalance);
+
+        AdaptiveCurveLaunchV1.LaunchResult memory result = _launch(_parameters(), 0);
+
+        assertEq(result.initialBuyNativeAmount, 0);
+        assertEq(result.initialBuyTokenAmount, 0);
+        assertEq(address(launcher).balance, forcedBalance);
+    }
+
+    function test_forcedEthCannotBlockOrSubsidizeInitialBuy() public {
+        uint256 forcedBalance = 1 wei;
+        uint256 buyAmount = 0.002 ether;
+        vm.deal(address(launcher), forcedBalance);
+        uint256 creatorEthBefore = creator.balance;
+
+        AdaptiveCurveLaunchV1.LaunchResult memory result = _launch(_parameters(), buyAmount);
+
+        assertEq(result.initialBuyNativeAmount, buyAmount);
+        assertGt(result.initialBuyTokenAmount, 0);
+        assertEq(creator.balance, creatorEthBefore - buyAmount);
+        assertEq(address(launcher).balance, forcedBalance);
+    }
+
     function test_firstPublicBuyWorksAfterAZeroBuyLaunch() public {
         AdaptiveCurveLaunchV1.LaunchResult memory result = _launch(_parameters(), 0);
         PoolKey memory key = launcher.poolKey(result.token, result.feeHook);
@@ -230,7 +255,7 @@ contract AdaptiveCurveLaunchV1Test is Deployers {
         parameters.curve.fdvIndexes[0] = -100;
         (address token,) =
             launcher.predictTokenAddress(parameters.name, parameters.symbol, creator, parameters.creatorSalt);
-        address hook = launcher.predictFeeHook(parameters.curve.hookSalt);
+        address hook = launcher.predictFeeHook(creator, parameters.creatorSalt, parameters.curve.hookSaltNonce);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -254,14 +279,12 @@ contract AdaptiveCurveLaunchV1Test is Deployers {
         AdaptiveCurveLaunchV1.LaunchParameters memory second = _parameters();
         second.name = "Second Adaptive Token";
         second.symbol = "ADAPT2";
-        second.creatorSalt = keccak256("second-adaptive-launch");
         (address secondToken,) = launcher.predictTokenAddress(second.name, second.symbol, creator, second.creatorSalt);
+        address assignedHook = launcher.predictFeeHook(creator, second.creatorSalt, second.curve.hookSaltNonce);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                AdaptiveCurveLaunchV1.AlreadyAssignedHook.selector,
-                launcher.predictFeeHook(hookSalt),
-                launcher.tokenOfHook(launcher.predictFeeHook(hookSalt))
+                AdaptiveCurveLaunchV1.AlreadyAssignedHook.selector, assignedHook, launcher.tokenOfHook(assignedHook)
             )
         );
         vm.prank(creator);
@@ -269,6 +292,46 @@ contract AdaptiveCurveLaunchV1Test is Deployers {
 
         assertEq(secondToken.code.length, 0);
         assertEq(launcher.launchHashOf(secondToken), bytes32(0));
+    }
+
+    function test_copiedPendingHookNonceCannotConsumeVictimHook() public {
+        address attacker = makeAddr("adaptiveFrontrunner");
+        vm.deal(attacker, 10 ether);
+
+        AdaptiveCurveLaunchV1.LaunchParameters memory victimParameters = _parameters();
+        victimParameters.curve.hookSaltNonce =
+            _mineHookSaltNonceWithInvalidCopy(creator, attacker, victimParameters.creatorSalt);
+        address victimHook =
+            launcher.predictFeeHook(creator, victimParameters.creatorSalt, victimParameters.curve.hookSaltNonce);
+        address attackerHook =
+            launcher.predictFeeHook(attacker, victimParameters.creatorSalt, victimParameters.curve.hookSaltNonce);
+        uint160 attackerFlags = uint160(attackerHook) & hookFactory.ALL_HOOK_MASK();
+        uint160 requiredFlags = hookFactory.REQUIRED_HOOK_FLAGS();
+
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AdaptiveCurveLaunchV1.HookAddressFlagsMismatch.selector, attackerHook, attackerFlags, requiredFlags
+            )
+        );
+        launcher.launch(abi.encode(victimParameters));
+
+        assertEq(launcher.tokenOfHook(victimHook), address(0));
+        AdaptiveCurveLaunchV1.LaunchResult memory result = _launch(victimParameters, 0);
+        assertEq(result.feeHook, victimHook);
+        assertEq(launcher.tokenOfHook(victimHook), result.token);
+    }
+
+    function test_predeployingVictimHookThroughFactoryCannotBlockLaunch() public {
+        AdaptiveCurveLaunchV1.LaunchParameters memory parameters = _parameters();
+        bytes32 effectiveSalt =
+            launcher.effectiveHookSalt(creator, parameters.creatorSalt, parameters.curve.hookSaltNonce);
+        AdaptiveCurveFeeHookV1 predeployed = hookFactory.deploy(effectiveSalt, manager, launcherTreasury);
+
+        AdaptiveCurveLaunchV1.LaunchResult memory result = _launch(parameters, 0);
+
+        assertEq(result.feeHook, address(predeployed));
+        assertEq(launcher.tokenOfHook(address(predeployed)), result.token);
     }
 
     function testFuzz_optionalBuyNeverLeavesNativeOrTokenCustody(uint96 rawBuy) public {
@@ -293,7 +356,9 @@ contract AdaptiveCurveLaunchV1Test is Deployers {
         launcher.launch(abi.encode(parameters));
 
         assertEq(token.code.length, 0);
-        assertEq(launcher.predictFeeHook(hookSalt).code.length, 0);
+        assertEq(
+            launcher.predictFeeHook(creator, parameters.creatorSalt, parameters.curve.hookSaltNonce).code.length, 0
+        );
     }
 
     function _launch(AdaptiveCurveLaunchV1.LaunchParameters memory parameters, uint256 value)
@@ -317,7 +382,7 @@ contract AdaptiveCurveLaunchV1Test is Deployers {
                 extraData: bytes('{"x":"https://x.com/0xprogrammable"}')
             }),
             curve: AdaptiveCurveLaunchV1.CurveConfiguration({
-                hookSalt: hookSalt, fdvIndexes: indexes, totalSwapFeeBps: fees
+                hookSaltNonce: hookSaltNonce, fdvIndexes: indexes, totalSwapFeeBps: fees
             })
         });
     }
@@ -336,12 +401,29 @@ contract AdaptiveCurveLaunchV1Test is Deployers {
         fees[3] = 100;
     }
 
-    function _mineHookSalt() private view returns (bytes32 salt) {
-        (, salt) = HookMiner.find(
-            address(hookFactory),
-            hookFactory.REQUIRED_HOOK_FLAGS(),
-            type(AdaptiveCurveFeeHookV1).creationCode,
-            abi.encode(manager, launcherTreasury)
-        );
+    function _mineHookSaltNonce(address creator_, bytes32 creatorSalt_) private view returns (bytes32 nonce) {
+        uint160 requiredFlags = hookFactory.REQUIRED_HOOK_FLAGS();
+        uint160 allFlags = hookFactory.ALL_HOOK_MASK();
+        for (uint256 candidate;; ++candidate) {
+            nonce = bytes32(candidate);
+            address predicted = launcher.predictFeeHook(creator_, creatorSalt_, nonce);
+            if ((uint160(predicted) & allFlags) == requiredFlags) return nonce;
+        }
+    }
+
+    function _mineHookSaltNonceWithInvalidCopy(address creator_, address attacker_, bytes32 creatorSalt_)
+        private
+        view
+        returns (bytes32 nonce)
+    {
+        uint160 requiredFlags = hookFactory.REQUIRED_HOOK_FLAGS();
+        uint160 allFlags = hookFactory.ALL_HOOK_MASK();
+        for (uint256 candidate;; ++candidate) {
+            nonce = bytes32(candidate);
+            address creatorHook = launcher.predictFeeHook(creator_, creatorSalt_, nonce);
+            if ((uint160(creatorHook) & allFlags) != requiredFlags) continue;
+            address attackerHook = launcher.predictFeeHook(attacker_, creatorSalt_, nonce);
+            if ((uint160(attackerHook) & allFlags) != requiredFlags) return nonce;
+        }
     }
 }

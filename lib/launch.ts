@@ -78,7 +78,7 @@ export type LaunchDraft = {
   customHookAddress: string;
   customHookSource: string;
   launchSalt: string;
-  hookSalt: string;
+  hookSaltNonce: string;
   adaptiveCurvePoints: AdaptiveCurvePointDraft[];
   buySwapFeePercent: string;
   sellSwapFeePercent: string;
@@ -123,7 +123,7 @@ export function createEmptyDraft(): LaunchDraft {
     customHookAddress: "",
     customHookSource: "",
     launchSalt: "",
-    hookSalt: "",
+    hookSaltNonce: "",
     adaptiveCurvePoints: [],
     buySwapFeePercent: "1",
     sellSwapFeePercent: "1",

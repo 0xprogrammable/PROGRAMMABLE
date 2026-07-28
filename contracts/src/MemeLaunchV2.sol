@@ -319,11 +319,14 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         private
         returns (uint256 tokenAmount)
     {
+        // Native ETH can be forced into any contract. Preserve that unrelated balance instead of allowing it to
+        // permanently block launches, while still proving that this launch spent exactly `nativeAmount`.
+        uint256 residualNativeBalance = address(this).balance - nativeAmount;
         bytes memory result = poolManager.unlock(
             abi.encode(InitialBuyCallbackData({ key: key, creator: deployer, nativeAmount: nativeAmount }))
         );
         tokenAmount = abi.decode(result, (uint256));
-        if (tokenAmount == 0 || address(this).balance != 0) {
+        if (tokenAmount == 0 || address(this).balance != residualNativeBalance) {
             revert InvalidInitialBuyResult(tokenAmount, address(this).balance);
         }
     }

@@ -1,12 +1,12 @@
 "use client";
 
 import {
+  useEffect,
   useId,
   useState,
   type FormEvent,
 } from "react";
 import {
-  formatEther,
   formatUnits,
   getAddress,
   parseEther,
@@ -20,10 +20,22 @@ import {
   validatePreparedTradeResponse,
   type PreparedTokenTrade,
 } from "../lib/trade/client";
+import styles from "./token-experience.module.css";
 
 export type { PreparedTokenTrade } from "../lib/trade/client";
 
 type TradeSide = "buy" | "sell";
+type WalletTradeBalanceState =
+  | {
+      owner: Address;
+      status: "ready";
+      balances: WalletTradeBalances;
+    }
+  | {
+      owner: Address;
+      status: "error";
+    };
+
 export const DEFAULT_TRADE_SLIPPAGE_BPS = 100;
 export const MIN_BUY_GAS_RESERVE_WEI = parseEther("0.003");
 const BUY_GAS_RESERVE_UNITS = 500_000n;
@@ -97,6 +109,41 @@ export function calculateTradeUsdValue(input: {
   return amount * (tokenUsd / tokenEth);
 }
 
+export function calculateEthVolumeUsdValue(input: {
+  grossVolumeEth?: string;
+  tokenPriceEth?: string;
+  tokenPriceUsdWad?: string;
+}) {
+  if (
+    !input.grossVolumeEth ||
+    !/^\d+(?:\.\d+)?$/.test(input.grossVolumeEth) ||
+    !input.tokenPriceEth ||
+    !/^\d+(?:\.\d+)?$/.test(input.tokenPriceEth) ||
+    !input.tokenPriceUsdWad ||
+    !/^\d+$/.test(input.tokenPriceUsdWad)
+  ) {
+    return null;
+  }
+
+  const grossVolumeEth = Number(input.grossVolumeEth);
+  const tokenPriceEth = Number(input.tokenPriceEth);
+  const tokenPriceUsd = Number(
+    formatUnits(BigInt(input.tokenPriceUsdWad), 18),
+  );
+  if (
+    !Number.isFinite(grossVolumeEth) ||
+    !Number.isFinite(tokenPriceEth) ||
+    !Number.isFinite(tokenPriceUsd) ||
+    grossVolumeEth < 0 ||
+    tokenPriceEth <= 0 ||
+    tokenPriceUsd < 0
+  ) {
+    return null;
+  }
+
+  return grossVolumeEth * (tokenPriceUsd / tokenPriceEth);
+}
+
 function formatApproximateUsd(value: number | null) {
   if (value === null || !Number.isFinite(value) || value < 0) return "";
   if (value > 0 && value < 0.01) return "< $0.01";
@@ -110,6 +157,26 @@ function formatApproximateUsd(value: number | null) {
 
 function formatAmountForInput(value: bigint, decimals: number) {
   return formatUnits(value, decimals).replace(/(?:\.0+|(\.\d+?)0+)$/, "$1");
+}
+
+function formatWalletBalance(value: bigint, decimals: number) {
+  const numeric = Number(formatUnits(value, decimals));
+  if (!Number.isFinite(numeric)) return "—";
+  return new Intl.NumberFormat("en-US", {
+    notation: numeric >= 1_000_000 ? "compact" : "standard",
+    maximumFractionDigits: numeric >= 1 ? 4 : 6,
+    maximumSignificantDigits: 7,
+  }).format(numeric);
+}
+
+export function formatTradeAmount(
+  amountRaw: string,
+  decimals: number,
+  unit: string,
+) {
+  return `${new Intl.NumberFormat("en-US", {
+    maximumSignificantDigits: 7,
+  }).format(Number(formatUnits(BigInt(amountRaw), decimals)))} ${unit}`;
 }
 
 export type TokenTradeApiRequest = {
@@ -189,6 +256,7 @@ export function TokenTrade({
   tokenPriceUsdWad,
   totalSwapFeeBps,
   readBalances,
+  onConnect,
   onPrepared,
 }: {
   chainId: number;
@@ -202,6 +270,7 @@ export function TokenTrade({
   tokenPriceUsdWad?: string;
   totalSwapFeeBps: number;
   readBalances(): Promise<WalletTradeBalances>;
+  onConnect(): void;
   onPrepared(prepared: PreparedTokenTrade): void | Promise<void>;
 }) {
   const [side, setSide] = useState<TradeSide>("buy");
@@ -214,8 +283,18 @@ export function TokenTrade({
   const [message, setMessage] = useState("");
   const [review, setReview] = useState<PreparedTokenTrade | null>(null);
   const [maxPending, setMaxPending] = useState(false);
-  const [maxHint, setMaxHint] = useState("");
+  const [balanceState, setBalanceState] =
+    useState<WalletTradeBalanceState | null>(null);
   const amountInputId = useId();
+  const activeBalanceState =
+    owner &&
+    balanceState?.owner.toLowerCase() === owner.toLowerCase()
+      ? balanceState
+      : null;
+  const balances =
+    activeBalanceState?.status === "ready"
+      ? activeBalanceState.balances
+      : null;
   const approximateUsd = formatApproximateUsd(
     calculateTradeUsdValue({
       side,
@@ -224,6 +303,46 @@ export function TokenTrade({
       tokenPriceUsdWad,
     }),
   );
+  const displayBalance = balances
+    ? side === "buy"
+      ? `${formatWalletBalance(balances.nativeBalanceWei, 18)} ETH`
+      : `${formatWalletBalance(
+          balances.tokenBalanceRaw,
+          tokenDecimals,
+        )} ${symbol}`
+    : owner
+      ? activeBalanceState?.status === "error"
+        ? "Balance unavailable"
+        : "Loading balance"
+      : "Wallet not connected";
+
+  useEffect(() => {
+    if (!owner) return;
+
+    let active = true;
+    void readBalances()
+      .then((nextBalances) => {
+        if (active) {
+          setBalanceState({
+            owner,
+            status: "ready",
+            balances: nextBalances,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setBalanceState({
+            owner,
+            status: "error",
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [owner, readBalances]);
 
   async function applyMaximumBalance() {
     setError("");
@@ -236,6 +355,11 @@ export function TokenTrade({
     setMaxPending(true);
     try {
       const balances = await readBalances();
+      setBalanceState({
+        owner,
+        status: "ready",
+        balances,
+      });
       if (side === "sell") {
         if (balances.tokenBalanceRaw <= 0n) {
           throw new Error(`No ${symbol} balance is available`);
@@ -246,7 +370,6 @@ export function TokenTrade({
             tokenDecimals,
           ),
         );
-        setMaxHint(`Full ${symbol} balance`);
         return;
       }
 
@@ -258,11 +381,7 @@ export function TokenTrade({
         throw new Error("Not enough ETH after reserving network fees");
       }
       setAmount(formatAmountForInput(maximum.amountWei, 18));
-      setMaxHint(
-        `${formatEther(maximum.reserveWei)} ETH kept for network fees`,
-      );
     } catch (caught) {
-      setMaxHint("");
       setError(
         caught instanceof Error
           ? caught.message
@@ -381,109 +500,125 @@ export function TokenTrade({
 
   return (
     <form
-      className="launch-form-panel"
+      className={styles.tradeForm}
       onSubmit={prepare}
       aria-label={`Trade ${symbol}`}
     >
-      <div className="form-section">
-        <div className="form-section-heading">
-          <h2>Trade {symbol}</h2>
+      <header className={styles.tradeHeader}>
+        <h2>
+          {side === "buy" ? "Buy" : "Sell"} ${symbol}
+        </h2>
+        <span>{(totalSwapFeeBps / 100).toFixed(2).replace(/\.00$/, "")}% fee</span>
+      </header>
+
+      <div className={styles.sideControl} role="group" aria-label="Trade side">
+        <span
+          aria-hidden="true"
+          className={`${styles.sideIndicator} ${
+            side === "sell" ? styles.sideIndicatorSell : ""
+          }`}
+        />
+        {(["buy", "sell"] as const).map((option) => (
+          <button
+            className={`${styles.sideButton} ${
+              side === option ? styles.sideButtonSelected : ""
+            }`}
+            key={option}
+            type="button"
+            aria-pressed={side === option}
+            onClick={() => {
+              setSide(option);
+              setAmount("");
+              setError("");
+              setMessage("");
+            }}
+          >
+            {option === "buy" ? "Buy" : "Sell"}
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.amountCard}>
+        <div className={styles.amountHeader}>
+          <label htmlFor={amountInputId}>
+            {side === "buy" ? "You pay" : "You sell"}
+          </label>
+          <span className={styles.balance}>{displayBalance}</span>
         </div>
-
-        <div className="trade-side-control" role="group" aria-label="Trade side">
-          {(["buy", "sell"] as const).map((option) => (
-            <button
-              className={`trade-side-button ${
-                side === option ? "selected" : ""
-              }`}
-              key={option}
-              type="button"
-              aria-pressed={side === option}
-              onClick={() => {
-                setSide(option);
-                setAmount("");
-                setError("");
-                setMessage("");
-                setMaxHint("");
-              }}
-            >
-              {option === "buy" ? "Buy" : "Sell"}
-            </button>
-          ))}
+        <div className={styles.amountInputRow}>
+          <input
+            className={styles.amountInput}
+            id={amountInputId}
+            inputMode="decimal"
+            autoComplete="off"
+            value={amount}
+            onChange={(event) => {
+              setAmount(event.target.value);
+            }}
+            placeholder="0"
+          />
+          <span className={styles.asset}>
+            {side === "buy" ? "ETH" : `$${symbol}`}
+          </span>
         </div>
+        <div className={styles.amountMeta}>
+          <span>{approximateUsd || "\u00A0"}</span>
+          <button
+            className={styles.maxButton}
+            type="button"
+            disabled={maxPending || !owner}
+            aria-label={`Use maximum ${
+              side === "buy" ? "ETH" : symbol
+            } balance`}
+            onClick={() => void applyMaximumBalance()}
+          >
+            {maxPending ? "Loading" : "Max"}
+          </button>
+        </div>
+      </div>
 
-        <div className="field-group">
-          <div className="two-column-fields">
-            <div className="field">
-              <div className="trade-field-label">
-                <label htmlFor={amountInputId}>
-                  Amount in {side === "buy" ? "ETH" : symbol}
-                </label>
-                <button
-                  className="trade-max-button"
-                  type="button"
-                  disabled={maxPending || !owner}
-                  aria-label={`Use maximum ${
-                    side === "buy" ? "ETH" : symbol
-                  } balance`}
-                  onClick={() => void applyMaximumBalance()}
-                >
-                  {maxPending ? "Loading" : "Max"}
-                </button>
-              </div>
-              <input
-                id={amountInputId}
-                inputMode="decimal"
-                autoComplete="off"
-                value={amount}
-                onChange={(event) => {
-                  setAmount(event.target.value);
-                  setMaxHint("");
-                }}
-                placeholder="0.0"
-              />
-              {approximateUsd || maxHint ? (
-                <small className="trade-amount-meta">
-                  <span>{approximateUsd}</span>
-                  <span>{maxHint}</span>
-                </small>
-              ) : null}
-            </div>
-
-            <label className="field">
-              <span>Maximum slippage %</span>
-              <input
-                inputMode="numeric"
-                type="number"
-                min="1"
-                max="10"
-                step="1"
-                value={slippageBps / 100}
-                onChange={(event) =>
-                  setSlippageBps(
-                    Math.round(Number(event.target.value) * 100),
-                  )
-                }
-              />
-            </label>
-          </div>
+      <div className={styles.slippageRow}>
+        <label htmlFor={`${amountInputId}-slippage`}>Max slippage</label>
+        <div className={styles.slippageControl}>
+          <input
+            id={`${amountInputId}-slippage`}
+            inputMode="numeric"
+            type="number"
+            min="1"
+            max="10"
+            step="1"
+            value={slippageBps / 100}
+            onChange={(event) =>
+              setSlippageBps(
+                Math.round(Number(event.target.value) * 100),
+              )
+            }
+          />
+          <span>%</span>
         </div>
       </div>
 
       {error ? (
-        <p className="form-error form-error-block" role="alert">
+        <p className={styles.error} role="alert">
           {error}
         </p>
       ) : null}
 
-      <div className="form-navigation">
-        <span role="status">{message}</span>
+      <div className={styles.tradeFooter}>
+        <div className={styles.statusMessage} role="status">
+          {message}
+        </div>
         <button
-          className="primary-button"
-          type="submit"
-          disabled={pending || !owner}
+          className={styles.primaryAction}
+          type={owner ? "submit" : "button"}
+          disabled={pending}
+          onClick={owner ? undefined : onConnect}
         >
-          {pending ? "Preparing" : `Review ${side}`}
+          {pending
+            ? "Preparing trade"
+            : owner
+              ? `Review ${side}`
+              : "Connect wallet"}
         </button>
       </div>
     </form>
@@ -513,12 +648,21 @@ export function PreparedTradeReview({
 }) {
   const outputDecimals = prepared.side === "buy" ? tokenDecimals : 18;
   const outputUnit = prepared.side === "buy" ? symbol : "ETH";
-  const expectedOutput = `${new Intl.NumberFormat("en-US", {
-    maximumSignificantDigits: 7,
-  }).format(Number(formatUnits(BigInt(prepared.quote.amountOut), outputDecimals)))} ${outputUnit}`;
-  const minimumOutput = `${new Intl.NumberFormat("en-US", {
-    maximumSignificantDigits: 7,
-  }).format(Number(formatUnits(BigInt(prepared.quote.amountOutMinimum), outputDecimals)))} ${outputUnit}`;
+  const expectedOutput = formatTradeAmount(
+    prepared.quote.amountOut,
+    outputDecimals,
+    outputUnit,
+  );
+  const minimumOutput = formatTradeAmount(
+    prepared.quote.amountOutMinimum,
+    outputDecimals,
+    outputUnit,
+  );
+  const approvalAmount = formatTradeAmount(
+    prepared.quote.amountIn,
+    tokenDecimals,
+    symbol,
+  );
   const priceImpact = calculatePriceImpactPercent({
     side: prepared.side,
     amountIn: prepared.quote.amountIn,
@@ -535,27 +679,32 @@ export function PreparedTradeReview({
 
   return (
     <div
-      className="launch-form-panel trade-review"
+      className={styles.review}
       aria-label={`Review ${prepared.side}`}
     >
-      <div className="form-section">
-        <div className="form-section-heading">
-          <h2>{approval ? "Review approval" : `Review ${prepared.side}`}</h2>
-        </div>
-        {approval ? <p>{approval}</p> : null}
-        <dl className="trade-review-details">
-          <div>
-            <dt>Expected output</dt>
-            <dd>{expectedOutput}</dd>
-          </div>
+      <h2>{approval ? "Approve token" : `Review ${prepared.side}`}</h2>
+      {approval ? (
+        <p className={styles.reviewLead}>
+          One approval is required before this sell. The approval is limited to
+          this amount.
+        </p>
+      ) : null}
+      <div className={styles.reviewOutput}>
+        <span>{approval ? "Approval amount" : "Expected output"}</span>
+        <strong>{approval ? approvalAmount : expectedOutput}</strong>
+      </div>
+      <dl className={styles.reviewDetails}>
+        {!approval ? (
           <div>
             <dt>Minimum received</dt>
             <dd>{minimumOutput}</dd>
           </div>
-          <div>
-            <dt>Swap fee</dt>
-            <dd>{(totalSwapFeeBps / 100).toFixed(2)}%</dd>
-          </div>
+        ) : null}
+        <div>
+          <dt>Swap fee</dt>
+          <dd>{(totalSwapFeeBps / 100).toFixed(2)}%</dd>
+        </div>
+        {!approval ? (
           <div>
             <dt>Estimated price impact</dt>
             <dd>
@@ -564,28 +713,27 @@ export function PreparedTradeReview({
                 : `${priceImpact.toFixed(2)}%`}
             </dd>
           </div>
-          <div>
-            <dt>Deadline</dt>
-            <dd>
-              {new Date(
-                Number(prepared.quote.deadline) * 1_000,
-              ).toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-                timeZoneName: "short",
-              })}
-            </dd>
-          </div>
-        </dl>
-      </div>
+        ) : null}
+        <div>
+          <dt>Quote valid until</dt>
+          <dd>
+            {new Date(
+              Number(prepared.quote.deadline) * 1_000,
+            ).toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </dd>
+        </div>
+      </dl>
       {error ? (
-        <p className="form-error form-error-block" role="alert">
+        <p className={styles.error} role="alert">
           {error}
         </p>
       ) : null}
-      <div className="form-navigation trade-review-actions">
+      <div className={styles.reviewActions}>
         <button
-          className="secondary-button"
+          className={styles.secondaryAction}
           type="button"
           disabled={pending}
           onClick={onBack}
@@ -593,7 +741,7 @@ export function PreparedTradeReview({
           Back
         </button>
         <button
-          className="primary-button"
+          className={styles.primaryAction}
           type="button"
           disabled={pending}
           onClick={() => void onConfirm()}

@@ -1,0 +1,899 @@
+.page {
+  max-width: 980px;
+  min-height: calc(100svh - var(--header-height));
+  padding-bottom: 42px;
+  padding-top: 24px;
+}
+
+.hero,
+.portfolio,
+.connectCard {
+  backdrop-filter: blur(18px);
+  background: var(--glass-88);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--card-shadow);
+}
+
+.hero {
+  align-items: center;
+  border-radius: 26px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 116px;
+  padding: 18px 22px;
+}
+
+.heroEditing {
+  align-items: start;
+}
+
+.avatar {
+  align-items: center;
+  background: var(--avatar-background);
+  border: 1px solid var(--glass-94);
+  border-radius: 21px;
+  color: var(--accent-strong);
+  display: flex;
+  flex: none;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 18px;
+  font-weight: 600;
+  height: 72px;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  width: 72px;
+}
+
+.avatar img {
+  object-fit: cover;
+}
+
+.heroCopy {
+  min-width: 0;
+}
+
+.nameRow {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.nameRow h1 {
+  font-size: clamp(31px, 3.5vw, 44px);
+  font-weight: 570;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.address {
+  color: var(--muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+.editButton,
+.imageAction,
+.editAction,
+.claimButton,
+.secondaryAction,
+.retryButton {
+  align-items: center;
+  border: 1px solid var(--border);
+  display: inline-flex;
+  font-weight: 640;
+  justify-content: center;
+}
+
+.editButton {
+  background: var(--surface-soft);
+  border-radius: 11px;
+  color: var(--text-soft);
+  flex: none;
+  font-size: 11px;
+  min-height: 34px;
+  padding: 0 11px;
+}
+
+.editForm {
+  border-top: 1px solid var(--border);
+  margin-top: 15px;
+  max-width: 720px;
+  padding-top: 15px;
+}
+
+.editGrid {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(190px, 1fr) minmax(220px, 1.35fr);
+}
+
+.imageControl,
+.usernameControl {
+  display: grid;
+  gap: 7px;
+}
+
+.fieldLabel {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.imageActions,
+.usernameRow {
+  display: flex;
+  gap: 7px;
+}
+
+.imageAction,
+.editAction {
+  background: var(--surface-soft);
+  border-radius: 11px;
+  color: var(--text-soft);
+  font-size: 11px;
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.usernameRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.usernameRow input,
+.payoutEdit input {
+  background: var(--glass-92);
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  color: var(--text);
+  height: 42px;
+  min-width: 0;
+  outline: 0;
+  padding: 0 12px;
+}
+
+.saveAction {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.formHelp {
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 6px;
+}
+
+.formError {
+  color: var(--danger);
+}
+
+.connectCard {
+  align-items: center;
+  border-radius: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 30px auto 0;
+  max-width: 760px;
+  min-height: min(420px, calc(100svh - var(--header-height) - 92px));
+  padding: 42px 24px;
+  text-align: center;
+}
+
+.connectCard h1 {
+  font-size: clamp(38px, 5vw, 64px);
+  font-weight: 560;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+}
+
+.connectCard p {
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.5;
+  margin-top: 12px;
+  max-width: 420px;
+}
+
+.connectButton {
+  align-items: center;
+  background: var(--accent);
+  border: 0;
+  border-radius: 14px;
+  color: var(--accent-ink);
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 680;
+  justify-content: center;
+  margin-top: 22px;
+  min-height: 50px;
+  padding: 0 20px;
+}
+
+.portfolio {
+  border-radius: 26px;
+  margin-top: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.portfolioHeader {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  min-height: 90px;
+  padding: 16px 22px;
+}
+
+.portfolioTitle {
+  min-width: 0;
+}
+
+.portfolioTitle h2 {
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.portfolioTitle p {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.portfolioTotal {
+  align-items: flex-end;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+
+.portfolioTotal span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.portfolioTotal strong {
+  color: var(--accent-strong);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-top: 3px;
+}
+
+.sourceWarning {
+  align-items: center;
+  background: var(--warning-background);
+  border-bottom: 1px solid var(--warning-border);
+  color: var(--warning-text);
+  display: flex;
+  font-size: 11px;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 7px 22px;
+}
+
+.sourceWarning button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 680;
+  min-height: 30px;
+}
+
+.list {
+  padding: 0 22px;
+}
+
+.tokenRow {
+  border-bottom: 1px solid var(--border);
+  padding: 15px 0;
+  transform: translate3d(0, 0, 0);
+  transition: transform 170ms var(--ease-out);
+}
+
+.tokenRow:last-child {
+  border-bottom: 0;
+}
+
+.tokenMain {
+  align-items: center;
+  display: grid;
+  gap: 18px;
+  grid-template-columns:
+    minmax(260px, 1.55fr)
+    minmax(110px, 0.62fr)
+    minmax(120px, 0.68fr)
+    minmax(180px, auto);
+  min-height: 58px;
+}
+
+.tokenIdentity {
+  align-items: center;
+  color: var(--text);
+  display: flex;
+  gap: 13px;
+  min-width: 0;
+}
+
+.tokenArt {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  flex: none;
+  height: 52px;
+  overflow: hidden;
+  position: relative;
+  width: 52px;
+}
+
+.tokenArt img {
+  object-fit: cover;
+}
+
+.tokenCopy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tokenCopy strong {
+  font-size: 14px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tokenSymbol {
+  color: var(--text-soft);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.tokenAddress {
+  color: var(--muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.metric span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.metric strong {
+  font-size: 13px;
+  font-weight: 640;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.rewardMetric strong {
+  color: var(--accent-strong);
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.claimButton,
+.secondaryAction {
+  border-radius: 11px;
+  font-size: 11px;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.claimButton {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.claimButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.secondaryAction {
+  background: var(--surface-soft);
+  color: var(--text-soft);
+}
+
+.openToken {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 620;
+  min-height: 36px;
+  padding: 0 2px;
+}
+
+.actionState,
+.rowError {
+  align-items: center;
+  display: flex;
+  font-size: 10px;
+  gap: 8px;
+  justify-content: flex-end;
+  margin: 6px 0 0;
+}
+
+.actionState {
+  color: var(--muted);
+}
+
+.rowError {
+  color: var(--danger);
+}
+
+.actionState a,
+.rowError a {
+  color: var(--accent-strong);
+  font-weight: 650;
+}
+
+.rewardSettings {
+  border-top: 1px solid transparent;
+  margin-top: 4px;
+}
+
+.rewardSettings[open] {
+  border-top-color: var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.rewardSettings > summary {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 10px;
+  gap: 8px;
+  list-style: none;
+  min-height: 30px;
+}
+
+.rewardSettings > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rewardSettings > summary::after {
+  content: "+";
+  font-size: 13px;
+}
+
+.rewardSettings[open] > summary::after {
+  content: "−";
+}
+
+.rewardSettings > summary small {
+  color: var(--text-soft);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+}
+
+.settingsBody {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(300px, 1.2fr);
+  padding: 8px 0 3px;
+}
+
+.rewardTerms {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.rewardTerms > div {
+  background: var(--surface-soft);
+  border-radius: 11px;
+  display: grid;
+  gap: 2px;
+  padding: 9px;
+}
+
+.rewardTerms dt {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.rewardTerms dd {
+  font-size: 12px;
+  font-weight: 680;
+  margin: 0;
+}
+
+.payout {
+  display: grid;
+  gap: 7px;
+}
+
+.payoutLabel,
+.splitLabel {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 620;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.payoutRow,
+.payoutEdit {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.payoutRow a {
+  color: var(--text-soft);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+}
+
+.textAction {
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 650;
+  min-height: 32px;
+  padding: 0 3px;
+}
+
+.split {
+  border-top: 1px solid var(--border);
+  grid-column: 1 / -1;
+  padding-top: 12px;
+}
+
+.splitList {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.splitItem {
+  align-items: center;
+  display: grid;
+  font-size: 10px;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.splitItem span,
+.splitItem small {
+  color: var(--muted);
+  font-family: var(--font-plex-mono), monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.splitItem small {
+  text-align: right;
+}
+
+.emptySection {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 150px;
+  padding: 24px 22px;
+}
+
+.emptySection strong {
+  font-size: 16px;
+  font-weight: 610;
+}
+
+.emptySection p {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+.accountState {
+  align-items: center;
+  background: var(--glass-88);
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-top: 16px;
+  min-height: 280px;
+  padding: 30px;
+  text-align: center;
+}
+
+.accountState h2 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.accountState p {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.retryButton {
+  background: var(--surface-soft);
+  border-radius: 11px;
+  font-size: 12px;
+  margin-top: 16px;
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tokenRow:hover {
+    transform: translate3d(0, -1px, 0);
+  }
+
+  .editButton:hover,
+  .imageAction:hover,
+  .editAction:hover,
+  .secondaryAction:hover,
+  .retryButton:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+
+  .tokenIdentity:hover strong,
+  .openToken:hover,
+  .textAction:hover {
+    color: var(--accent-strong);
+  }
+
+  .claimButton:not(:disabled):hover,
+  .connectButton:hover {
+    filter: saturate(1.05) brightness(0.99);
+  }
+}
+
+.editButton:focus-visible,
+.imageAction:focus-visible,
+.editAction:focus-visible,
+.usernameRow input:focus-visible,
+.connectButton:focus-visible,
+.claimButton:focus-visible,
+.secondaryAction:focus-visible,
+.openToken:focus-visible,
+.rewardSettings > summary:focus-visible,
+.payoutEdit input:focus-visible,
+.textAction:focus-visible,
+.retryButton:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.editButton,
+.imageAction,
+.editAction,
+.connectButton,
+.claimButton,
+.secondaryAction,
+.openToken,
+.textAction,
+.retryButton {
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    filter 150ms ease,
+    transform 120ms ease;
+}
+
+.editButton:active,
+.imageAction:active,
+.editAction:active,
+.connectButton:active,
+.claimButton:not(:disabled):active,
+.secondaryAction:active,
+.textAction:active {
+  transform: scale(0.985);
+}
+
+@media (max-width: 980px) {
+  .tokenMain {
+    grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.7fr) minmax(
+        180px,
+        auto
+      );
+  }
+
+  .marketMetric {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    min-height: calc(100svh - var(--header-height) - 68px);
+    padding-bottom: 30px;
+    padding-top: 16px;
+  }
+
+  .hero,
+  .portfolio,
+  .connectCard,
+  .accountState {
+    border-radius: 20px;
+  }
+
+  .hero {
+    gap: 14px;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 15px;
+  }
+
+  .heroEditing {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar {
+    border-radius: 17px;
+    height: 60px;
+    width: 60px;
+  }
+
+  .nameRow h1 {
+    font-size: 31px;
+  }
+
+  .editGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .connectCard {
+    margin-top: 0;
+    min-height: calc(100svh - var(--header-height) - 116px);
+  }
+
+  .portfolioHeader {
+    min-height: 82px;
+    padding: 14px 16px;
+  }
+
+  .portfolioTitle h2 {
+    font-size: 20px;
+  }
+
+  .portfolioTotal strong {
+    font-size: 17px;
+  }
+
+  .list {
+    padding: 0 16px;
+  }
+
+  .tokenRow {
+    padding: 15px 0;
+  }
+
+  .tokenMain {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 13px;
+  }
+
+  .tokenIdentity {
+    grid-column: 1 / -1;
+  }
+
+  .rewardMetric {
+    grid-column: 1;
+  }
+
+  .actions {
+    grid-column: 2;
+  }
+
+  .openToken {
+    display: none;
+  }
+
+  .settingsBody {
+    grid-template-columns: 1fr;
+  }
+
+  .split {
+    grid-column: auto;
+  }
+
+  .actionState,
+  .rowError {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .payoutEdit {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 440px) {
+  .nameRow {
+    align-items: flex-start;
+  }
+
+  .nameRow h1 {
+    font-size: 27px;
+  }
+
+  .usernameRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .usernameRow input {
+    grid-column: 1 / -1;
+  }
+
+  .portfolioHeader {
+    align-items: flex-start;
+  }
+
+  .portfolioTotal strong {
+    font-size: 15px;
+  }
+
+  .rewardTerms {
+    grid-template-columns: 1fr;
+  }
+
+  .splitItem {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .splitItem small {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tokenRow,
+  .editButton,
+  .imageAction,
+  .editAction,
+  .connectButton,
+  .claimButton,
+  .secondaryAction,
+  .openToken,
+  .textAction,
+  .retryButton {
+    transition: none;
+  }
+}

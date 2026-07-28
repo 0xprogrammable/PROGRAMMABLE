@@ -40,6 +40,9 @@ contract DeployMainnetAdaptiveInfrastructureV1Test is Test {
 
     function test_dependencyPreflightPassesOnPinnedMainnetSnapshot() public view {
         deployment.validateOfficialDependencies();
+        assertEq(
+            deployment.deploymentSourceCommitment(), 0x48344030f1c885860b69232dd6dee1bd05923a0e0044271437d495f7f5c6a1a4
+        );
     }
 
     function test_planAndDeploymentAreDeterministicAndRuntimePinned() public {
@@ -71,9 +74,10 @@ contract DeployMainnetAdaptiveInfrastructureV1Test is Test {
         uint256 initialBuy = 0.002 ether;
         vm.deal(creator, initialBuy);
 
-        AdaptiveCurveLaunchV1.LaunchParameters memory parameters = _parameters(launcher, infrastructure.sampleHookSalt);
+        AdaptiveCurveLaunchV1.LaunchParameters memory parameters = _parameters(launcher, creator);
         (address predictedToken,) =
             launcher.predictTokenAddress(parameters.name, parameters.symbol, creator, parameters.creatorSalt);
+        address predictedHook = launcher.predictFeeHook(creator, parameters.creatorSalt, parameters.curve.hookSaltNonce);
 
         vm.prank(creator);
         AdaptiveCurveLaunchV1.LaunchResult memory result = launcher.launch{ value: initialBuy }(abi.encode(parameters));
@@ -85,7 +89,7 @@ contract DeployMainnetAdaptiveInfrastructureV1Test is Test {
         PositionFeesForwarder forwarder = PositionFeesForwarder(payable(result.positionRecipient));
 
         assertEq(result.token, predictedToken);
-        assertEq(result.feeHook, infrastructure.sampleHook);
+        assertEq(result.feeHook, predictedHook);
         assertGt(result.initialBuyTokenAmount, 0);
         assertEq(IERC20(result.token).balanceOf(creator), result.initialBuyTokenAmount);
         assertEq(address(launcher).balance, 0);
@@ -138,11 +142,12 @@ contract DeployMainnetAdaptiveInfrastructureV1Test is Test {
         deployment.deployReviewed(DEPLOYER, 0, wrongTreasury);
     }
 
-    function _parameters(AdaptiveCurveLaunchV1 launcher, bytes32 hookSalt)
+    function _parameters(AdaptiveCurveLaunchV1 launcher, address creator)
         private
         view
         returns (AdaptiveCurveLaunchV1.LaunchParameters memory parameters)
     {
+        bytes32 creatorSalt = keccak256("adaptive-mainnet-rehearsal-v1");
         int24[] memory indexes = new int24[](4);
         indexes[0] = launcher.MIN_FDV_INDEX();
         indexes[1] = -204_200;
@@ -158,7 +163,7 @@ contract DeployMainnetAdaptiveInfrastructureV1Test is Test {
         parameters = AdaptiveCurveLaunchV1.LaunchParameters({
             name: "Adaptive Mainnet Rehearsal",
             symbol: "AMR",
-            creatorSalt: keccak256("adaptive-mainnet-rehearsal-v1"),
+            creatorSalt: creatorSalt,
             metadata: UERC20Metadata({
                 description: "Adaptive V1 deterministic deployment rehearsal",
                 website: "https://programmable.family",
@@ -166,8 +171,24 @@ contract DeployMainnetAdaptiveInfrastructureV1Test is Test {
                 extraData: bytes('{"v":1,"model":"adaptive-v1"}')
             }),
             curve: AdaptiveCurveLaunchV1.CurveConfiguration({
-                hookSalt: hookSalt, fdvIndexes: indexes, totalSwapFeeBps: fees
+                hookSaltNonce: _mineHookSaltNonce(launcher, creator, creatorSalt),
+                fdvIndexes: indexes,
+                totalSwapFeeBps: fees
             })
         });
+    }
+
+    function _mineHookSaltNonce(AdaptiveCurveLaunchV1 launcher, address creator, bytes32 creatorSalt)
+        private
+        view
+        returns (bytes32 nonce)
+    {
+        uint160 requiredFlags = launcher.adaptiveHookFactory().REQUIRED_HOOK_FLAGS();
+        uint160 allFlags = launcher.adaptiveHookFactory().ALL_HOOK_MASK();
+        for (uint256 candidate;; ++candidate) {
+            nonce = bytes32(candidate);
+            address predicted = launcher.predictFeeHook(creator, creatorSalt, nonce);
+            if ((uint160(predicted) & allFlags) == requiredFlags) return nonce;
+        }
     }
 }

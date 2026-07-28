@@ -346,10 +346,10 @@ export function AdaptiveCurveEditor({
     <section className={styles.editor} aria-labelledby="adaptive-curve-title">
       <div className={styles.heading}>
         <div>
-          <h2 id="adaptive-curve-title">Fee curve</h2>
+          <h2 id="adaptive-curve-title">Price-based swap fees</h2>
           <p>
-            Drag the line to set how the swap fee changes with the token&apos;s
-            onchain value
+            Set the total fee at different market caps. The curve moves between
+            your points as the token price changes.
           </p>
         </div>
         <button
@@ -386,10 +386,10 @@ export function AdaptiveCurveEditor({
           1%
         </span>
         <span className={styles.valueMinimum} aria-hidden="true">
-          1 ETH value
+          1 ETH market cap
         </span>
         <span className={styles.valueMaximum} aria-hidden="true">
-          1M ETH value
+          1M ETH market cap
         </span>
         <div className={styles.handles}>
           {editablePoints.map((point, index) => {
@@ -432,7 +432,9 @@ export function AdaptiveCurveEditor({
         <div className={styles.inspector}>
           <div className={styles.selectedPoint}>
             <span>{pointName(selectedIndex)}</span>
-            <strong>{ethFdvForIndex(selectedPoint.fdvIndex)}</strong>
+            <strong>
+              {ethFdvForIndex(selectedPoint.fdvIndex)} market cap
+            </strong>
           </div>
 
           <label className={styles.feeInput}>
@@ -486,8 +488,8 @@ export function AdaptiveCurveEditor({
       ) : null}
 
       <p className={styles.disclosure}>
-        The curve is fixed at launch and applies only to swaps in this Uniswap
-        v4 pool
+        The curve is fixed at launch. Programmable&apos;s 0.10% is included in
+        every fee.
       </p>
     </section>
   );

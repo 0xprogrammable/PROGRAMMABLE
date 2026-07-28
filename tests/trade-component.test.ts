@@ -6,8 +6,10 @@ import {
   MIN_BUY_GAS_RESERVE_WEI,
   buildTokenTradeApiRequest,
   calculateBuyMaxWei,
+  calculateEthVolumeUsdValue,
   calculatePriceImpactPercent,
   calculateTradeUsdValue,
+  formatTradeAmount,
 } from "../components/token-trade";
 
 const OWNER = getAddress("0x5555555555555555555555555555555555555555");
@@ -138,6 +140,23 @@ describe("TokenTrade request construction", () => {
     ).toBe(1_000);
   });
 
+  it("derives USD trading volume from the token ETH and USD price", () => {
+    expect(
+      calculateEthVolumeUsdValue({
+        grossVolumeEth: "300",
+        tokenPriceEth: "0.002",
+        tokenPriceUsdWad: parseEther("6").toString(),
+      }),
+    ).toBe(900_000);
+    expect(
+      calculateEthVolumeUsdValue({
+        grossVolumeEth: "300",
+        tokenPriceEth: undefined,
+        tokenPriceUsdWad: parseEther("6").toString(),
+      }),
+    ).toBeNull();
+  });
+
   it("derives a reviewable price impact from the onchain spot price", () => {
     expect(
       calculatePriceImpactPercent({
@@ -157,5 +176,11 @@ describe("TokenTrade request construction", () => {
         tokenPriceEth: "0.001",
       }),
     ).toBeCloseTo(10, 3);
+  });
+
+  it("formats token approval amounts in the token unit", () => {
+    expect(formatTradeAmount("12345678", 6, "TOKEN")).toBe(
+      "12.34568 TOKEN",
+    );
   });
 });

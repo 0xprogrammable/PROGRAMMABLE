@@ -149,6 +149,7 @@ contract AdaptiveCurveMainnetForkTest is Test {
 
         uint256 creatorBefore = creatorRecipient.balance;
         uint256 treasuryBefore = launcherTreasury.balance;
+        vm.prank(creatorRecipient);
         hook.claimCreatorFees(poolId);
         hook.claimLauncherFees();
         assertEq(creatorRecipient.balance, creatorBefore + creatorFees);

@@ -13,7 +13,7 @@ import {
 import { createAdaptiveDraft } from "../lib/launch";
 
 describe("AdaptiveCurveEditor", () => {
-  it("shows a practical onchain-value range instead of contract guard values", () => {
+  it("shows a practical market-cap range instead of contract guard values", () => {
     const points = createAdaptiveDraft().adaptiveCurvePoints;
     const html = renderToStaticMarkup(
       createElement(AdaptiveCurveEditor, {
@@ -24,8 +24,8 @@ describe("AdaptiveCurveEditor", () => {
 
     expect(ethFdvForIndex(ADAPTIVE_PRACTICAL_MIN_FDV_INDEX)).toBe("1 ETH");
     expect(ethFdvForIndex(ADAPTIVE_PRACTICAL_MAX_FDV_INDEX)).toBe("1.0M ETH");
-    expect(html).toContain("1 ETH value");
-    expect(html).toContain("1M ETH value");
+    expect(html).toContain("1 ETH market cap");
+    expect(html).toContain("1M ETH market cap");
     expect(html).not.toContain("10^");
     expect(html).not.toContain("0.000001");
   });

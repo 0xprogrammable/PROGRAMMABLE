@@ -135,7 +135,6 @@ contract AdaptiveCurveFeeHookV1InvariantTest is Deployers {
         token = new AdaptiveInvariantToken(address(this), FIXED_SUPPLY);
         token.approve(address(modifyLiquidityRouter), type(uint256).max);
         factory = new AdaptiveCurveFeeHookFactoryV1();
-        creatorRecipient = makeAddr("adaptiveInvariantCreator");
         launcherTreasury = makeAddr("adaptiveInvariantTreasury");
 
         (, bytes32 salt) = HookMiner.find(
@@ -152,6 +151,10 @@ contract AdaptiveCurveFeeHookV1InvariantTest is Deployers {
             tickSpacing: 200,
             hooks: hook
         });
+        handler = new AdaptiveCurveFeeHookV1Handler{ value: 10_000 ether }(
+            swapRouter, hook, IERC20(address(token)), hookKey
+        );
+        creatorRecipient = address(handler);
 
         int24[] memory indexes = new int24[](5);
         indexes[0] = hook.MIN_FDV_INDEX();
@@ -174,9 +177,6 @@ contract AdaptiveCurveFeeHookV1InvariantTest is Deployers {
             ModifyLiquidityParams({ tickLower: -20_000, tickUpper: 20_000, liquidityDelta: 1000 ether, salt: 0 });
         modifyLiquidityRouter.modifyLiquidity{ value: 1000 ether }(hookKey, LIQUIDITY_PARAMS, ZERO_BYTES);
 
-        handler = new AdaptiveCurveFeeHookV1Handler{ value: 10_000 ether }(
-            swapRouter, hook, IERC20(address(token)), hookKey
-        );
         assertTrue(token.transfer(address(handler), 1e24));
 
         bytes4[] memory selectors = new bytes4[](6);

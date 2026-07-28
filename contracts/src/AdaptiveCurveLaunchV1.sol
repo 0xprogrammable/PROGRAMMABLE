@@ -76,7 +76,7 @@ contract AdaptiveCurveLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     }
 
     struct CurveConfiguration {
-        bytes32 hookSalt;
+        bytes32 hookSaltNonce;
         int24[] fdvIndexes;
         uint16[] totalSwapFeeBps;
     }
@@ -238,8 +238,21 @@ contract AdaptiveCurveLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         token = tokenFactory.getUERC20Address(name, symbol, TOKEN_DECIMALS, address(this), effectiveGraffiti);
     }
 
-    function predictFeeHook(bytes32 hookSalt) public view returns (address) {
-        return adaptiveHookFactory.predict(hookSalt, poolManager, launcherFeeRecipient);
+    /// @notice Derives the creator-bound CREATE2 salt from a user-mined nonce.
+    /// @dev A copied pending launch cannot consume the same hook because `creator` is part of the preimage.
+    function effectiveHookSalt(address creator, bytes32 creatorSalt, bytes32 hookSaltNonce)
+        public
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(creator, creatorSalt, hookSaltNonce));
+    }
+
+    /// @notice Predicts the Adaptive hook for one creator-bound launch nonce.
+    function predictFeeHook(address creator, bytes32 creatorSalt, bytes32 hookSaltNonce) public view returns (address) {
+        return adaptiveHookFactory.predict(
+            effectiveHookSalt(creator, creatorSalt, hookSaltNonce), poolManager, launcherFeeRecipient
+        );
     }
 
     function poolKey(address token, address feeHook) external pure returns (PoolKey memory) {
@@ -258,6 +271,9 @@ contract AdaptiveCurveLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         returns (LaunchResult memory result)
     {
         LaunchParameters memory parameters = abi.decode(encodedParameters, (LaunchParameters));
+        // Native ETH can be forced into any contract. Preserve that unrelated balance while proving this launch
+        // consumes only its own msg.value.
+        uint256 residualNativeBalance = address(this).balance - msg.value;
         LaunchAccounting memory accounting =
             LaunchAccounting({ tokenLiquidityAmount: 0, lockedTokenDust: 0, metadataHash: bytes32(0) });
         _validateLaunch(parameters);
@@ -269,7 +285,9 @@ contract AdaptiveCurveLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         );
         if (result.token.code.length != 0) revert TokenAlreadyExists(result.token);
 
-        result.feeHook = _deployOrReuseFeeHook(parameters.curve.hookSalt);
+        result.feeHook = _deployOrReuseFeeHook(
+            effectiveHookSalt(msg.sender, parameters.creatorSalt, parameters.curve.hookSaltNonce)
+        );
         address assignedToken = tokenOfHook[result.feeHook];
         if (assignedToken != address(0)) revert AlreadyAssignedHook(result.feeHook, assignedToken);
         // ReentrancyGuardTransient protects the complete launch; Slither does not recognize its transient lock.
@@ -290,7 +308,7 @@ contract AdaptiveCurveLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         if (result.initialBuyNativeAmount != 0) {
             result.initialBuyTokenAmount = _executeInitialBuy(setup.key, msg.sender, result.initialBuyNativeAmount);
         }
-        if (address(this).balance != 0) {
+        if (address(this).balance != residualNativeBalance) {
             revert InvalidInitialBuyResult(result.initialBuyTokenAmount, address(this).balance);
         }
 
@@ -368,11 +386,12 @@ contract AdaptiveCurveLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         private
         returns (uint256 tokenAmount)
     {
+        uint256 residualNativeBalance = address(this).balance - nativeAmount;
         bytes memory result = poolManager.unlock(
             abi.encode(InitialBuyCallbackData({ key: key, creator: creator, nativeAmount: nativeAmount }))
         );
         tokenAmount = abi.decode(result, (uint256));
-        if (tokenAmount == 0 || address(this).balance != 0) {
+        if (tokenAmount == 0 || address(this).balance != residualNativeBalance) {
             revert InvalidInitialBuyResult(tokenAmount, address(this).balance);
         }
     }
@@ -448,15 +467,15 @@ contract AdaptiveCurveLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         );
     }
 
-    function _deployOrReuseFeeHook(bytes32 hookSalt) private returns (address hookAddress) {
-        hookAddress = adaptiveHookFactory.predict(hookSalt, poolManager, launcherFeeRecipient);
+    function _deployOrReuseFeeHook(bytes32 effectiveSalt) private returns (address hookAddress) {
+        hookAddress = adaptiveHookFactory.predict(effectiveSalt, poolManager, launcherFeeRecipient);
         uint160 actualFlags = uint160(hookAddress) & adaptiveHookFactory.ALL_HOOK_MASK();
         uint160 requiredFlags = adaptiveHookFactory.REQUIRED_HOOK_FLAGS();
         if (actualFlags != requiredFlags) {
             revert HookAddressFlagsMismatch(hookAddress, actualFlags, requiredFlags);
         }
         if (hookAddress.code.length == 0) {
-            hookAddress = address(adaptiveHookFactory.deploy(hookSalt, poolManager, launcherFeeRecipient));
+            hookAddress = address(adaptiveHookFactory.deploy(effectiveSalt, poolManager, launcherFeeRecipient));
         }
 
         AdaptiveCurveFeeHookV1 hook = AdaptiveCurveFeeHookV1(hookAddress);

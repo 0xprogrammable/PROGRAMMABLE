@@ -11,11 +11,16 @@ import {
   readExploreModel,
   resolveCreatorClaimIntent,
 } from "../../../../../lib/onchain";
+import {
+  errorChainIncludesData,
+  safeServerErrorSummary,
+} from "../../../../../lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_REQUEST_BYTES = 2_048;
+const NO_FEES_TO_CLAIM_SELECTOR = "0x846d8c5c";
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, {
@@ -146,7 +151,22 @@ export async function POST(request: NextRequest) {
         409,
       );
     }
-    console.error("Creator claim preparation failed", error);
+    if (
+      errorChainIncludesData(error, NO_FEES_TO_CLAIM_SELECTOR)
+    ) {
+      return json(
+        blockedResponse(
+          "blocked",
+          "nothing-to-claim",
+          "There are no creator fees to claim for this pool",
+        ),
+        409,
+      );
+    }
+    console.error(
+      "Creator claim preparation failed",
+      safeServerErrorSummary(error),
+    );
     return json(
       blockedResponse(
         "blocked",

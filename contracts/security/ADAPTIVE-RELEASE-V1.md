@@ -37,9 +37,9 @@ node scripts/validate-adaptive-indexer-spec.mjs
 node scripts/verify-adaptive-release-manifest.mjs
 ```
 
-The last command verifies current artifacts, the disabled application manifest,
-and the runtime hashes of every official Mainnet dependency. It does not treat
-an undeployed release as live.
+The last command verifies current artifacts, the deployment source commitment,
+the disabled application manifest and every official Mainnet dependency across
+two independent RPCs. It does not treat an undeployed release as live.
 
 ## Deterministic simulation
 
@@ -53,9 +53,14 @@ ADAPTIVE_MAINNET_TREASURY
 
 `ADAPTIVE_MAINNET_TREASURY` must equal the reviewed treasury in the script.
 `deploymentPlan` predicts the planner, factory and launcher CREATE addresses,
-mines a valid sample hook salt and commits to the exact creation code,
+mines a valid counterfactual factory-hook salt and commits to the exact creation code,
 dependencies and economics. `deployReviewed` rejects a stale nonce, occupied
 address, wrong chain, wrong treasury or changed official dependency.
+
+The release manifest stores a simulation-only candidate plan. Its deployer
+nonce must be refreshed immediately before signing. A deployment of another
+contract stack from the same account makes the candidate stale; plans for two
+models must never be signed from the same nonce.
 
 The script never reads a private key. A Forge run without `--broadcast` is a
 simulation. Broadcasting and signing remain separate operator actions.
@@ -85,10 +90,14 @@ After confirmed receipts, update
 
 - deployer and reviewed starting nonce;
 - planner, factory and launcher addresses;
-- transaction hashes and block numbers;
+- transaction hashes, ordered nonces, senders, created addresses, block numbers
+  and successful receipts;
 - actual runtime codehashes;
 - deployment source commitment;
-- source-verification results.
+- exact Etherscan and Sourcify source-verification results with the reviewed
+  compiler settings;
+- signed lifecycle evidence for launch, buy, sell and both fee-claim paths,
+  including event-derived creator and Launcher fee accounting.
 
 Update the application deployment manifest with the same Adaptive factory and
 launcher addresses and hashes. The planner address and hash remain mandatory in
@@ -100,8 +109,12 @@ Then run:
 node scripts/verify-adaptive-release-manifest.mjs --require-live
 ```
 
-This queries Mainnet and rejects any mismatch between the two manifests,
-deployed runtime code and official dependencies.
+This queries Mainnet and rejects any mismatch in deterministic CREATE
+addresses, deployment senders and nonces, receipts, creation code, runtime
+code, exact immutable dependencies, economics, hook permission bits, Sourcify
+and Etherscan source matches, signed lifecycle receipts and accounting, or
+official dependencies. The application manifest must independently match every
+Adaptive address, runtime hash, transaction and deployment block.
 
 ## Remaining production gates
 

@@ -53,7 +53,8 @@ flowchart LR
 The launcher has no privileged caller. Its only mutable state is the append-only
 launch registry and hook-to-token provenance mapping. The hook accepts
 initialization only from the recorded token creator and v4 callbacks only from
-PoolManager. Fee claims are permissionless, but their recipients are immutable.
+PoolManager. Only the immutable creator can initiate creator-fee claims;
+Launcher claims remain permissionless and can pay only the immutable treasury.
 The stateless planner can only be called for pure plan generation and its exact
 runtime is checked when the launcher is constructed.
 
@@ -69,7 +70,11 @@ The test suite is intended to maintain these properties:
 - the same pre-swap fee applies to buys and sells;
 - native-specified partial fills revert;
 - claims cannot redirect another recipient's funds;
-- the launcher and PositionManager retain no loose ETH or token balance;
+- only the immutable creator can initiate its creator-fee payout;
+- forced ETH cannot block or subsidize zero-buy or initial-buy launches;
+- copied pending calldata cannot consume another creator's hook address;
+- the launcher consumes no ETH beyond the current call's `msg.value`, and the
+  launcher and PositionManager retain no loose launch token balance;
 - the complete fixed supply enters the permanently locked position, excluding
   only tokens bought atomically by the creator;
 - deterministic addresses and release manifests bind the reviewed bytecode and
@@ -87,9 +92,10 @@ fork tests listed in `ADAPTIVE-RELEASE-V1.md`.
   create insolvency even when the token itself has no transfer tax.
 - A swap crossing a curve boundary uses its starting tick for the complete
   swap. The next swap receives the new fee.
-- CREATE2 salts are public before inclusion. Factory provenance and exact
-  configuration checks prevent an unrelated hook from being substituted, but
-  transaction ordering remains an operational concern.
+- CREATE2 nonces are public before inclusion, but the effective salt is bound
+  to the caller and creator launch salt. A copied transaction from another
+  caller derives a different hook address. Direct predeployment through the
+  canonical factory is accepted only when its configuration matches exactly.
 - Universal Router and Quoter fork compatibility does not guarantee support by
   every third-party router, scanner or indexer.
 - Official dependency bytecode and addresses must match the reviewed release

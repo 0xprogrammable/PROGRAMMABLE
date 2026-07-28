@@ -21,9 +21,10 @@ total fee. The creator receives the remainder. There is no LP fee and no ERC-20
 transfer tax.
 
 The same curve applies to buys and sells. All fees accrue as native ETH claims
-inside PoolManager. Permissionless claim functions can send funds only to the
-immutable recipients. A recorded recipient may redirect its own claim to
-recover from an address that cannot receive ETH.
+inside PoolManager. Only the immutable creator may initiate a creator-fee
+claim. Launcher claims remain permissionless but can pay only the immutable
+treasury. A recorded recipient may redirect its own claim to recover from an
+address that cannot receive ETH.
 
 | Swap | User-facing treatment |
 | --- | --- |
@@ -94,9 +95,12 @@ Exact control points return their exact configured fee.
 - The launcher creates each token through the pinned official UERC20Factory and
   creates one deterministic factory hook for that token. A launcher mapping
   prevents the same hook from being assigned to a second token.
-- The launcher validates the official PoolManager, PositionManager,
-  UERC20Factory, adaptive hook factory and locked-position factory in its
-  immutable constructor dependencies.
+- The launcher stores PoolManager, PositionManager, UERC20Factory, adaptive
+  hook factory and locked-position factory as immutable dependencies. Its
+  constructor checks contract presence, manager compatibility, the forwarder
+  factory's PositionManager and the planner's exact runtime codehash. The
+  deployment script and release verifier pin the official addresses and
+  runtime hashes.
 - The one-sided position calculation is delegated by `STATICCALL` to the
   stateless `AdaptiveCurvePositionPlannerV1`. The launcher pins its exact
   runtime codehash in the constructor. The helper has no storage, authority or
@@ -126,14 +130,16 @@ performs one all-or-nothing transaction:
 
 The optional initial buy may be zero. A later public ETH buy can cross the
 initialized boundary and activate the one-sided position. Any revert rolls back
-the token, hook, pool, position and record together. Successful launches leave
-no loose ETH or token balance in the launcher or PositionManager.
+the token, hook, pool, position and record together. Successful launches consume
+exactly the current call's `msg.value`, leave no loose token balance in the
+launcher or PositionManager and preserve any unrelated ETH that was forced into
+the launcher.
 
-The hook salt is mined offchain. The factory rejects any CREATE2 address whose
-low bits do not equal the exact callback permission mask. The app derives the
-salt deterministically from the connected account and creator-bound launch
-salt, then validates the complete prepared calldata again before opening the
-wallet.
+The hook nonce is mined offchain against a creator-bound effective salt. The
+launcher derives that salt from the connected account, creator launch salt and
+nonce. Copying pending launch calldata from another account therefore cannot
+consume the victim's hook address. The factory rejects any CREATE2 address
+whose low bits do not equal the exact callback permission mask.
 
 Every token record commits to:
 
@@ -207,14 +213,17 @@ fork-derived fixture are stored in `spec/adaptive-indexer-v1.json` and
   will route or display the fee.
 - Deploying one hook per token adds substantial launch gas. This is deliberate
   provenance isolation, not a cheap-launch design.
-- `AdaptiveCurveLaunchV1` is 19,038 bytes in the reviewed optimizer build,
-  leaving 5,538 bytes below EIP-170 and 3,962 bytes below the internal
+- `AdaptiveCurveLaunchV1` is 19,388 bytes in the reviewed optimizer build,
+  leaving 5,188 bytes below EIP-170 and 3,612 bytes below the internal
   23,000-byte release ceiling. Any contract change must repeat the size gate.
 - The stateless position planner is an additional deployed dependency. A
   launcher cannot be constructed against altered planner bytecode, and release
   verification must still bind its address and runtime hash in the manifest.
 - Source verification, hook registry review, monitoring and an independent
   security review remain separate release gates.
+- Native ETH can be forced into the launcher. Launch accounting preserves the
+  pre-existing balance and proves that only the current call's `msg.value` is
+  consumed, so forced ETH cannot block or subsidize a launch.
 
 ## Product release boundary
 

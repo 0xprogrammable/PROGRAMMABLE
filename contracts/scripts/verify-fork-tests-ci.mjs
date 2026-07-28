@@ -12,7 +12,7 @@ const chains = [
     name: "Ethereum mainnet",
     environmentKey: "ETHEREUM_RPC_URL",
     testGlob:
-      "test/{AdaptiveCurveLaunchMainnetFork.t.sol,AdaptiveCurveMainnetFork.t.sol,ClassicV3MainnetFork.t.sol,DeployMainnetAdaptiveInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV2.t.sol,EthereumDeploymentSnapshot.t.sol,MainnetMemeLifecycleFork.t.sol}",
+      "test/{AdaptiveCurveLaunchMainnetFork.t.sol,AdaptiveCurveMainnetFork.t.sol,ClassicV3MainnetFork.t.sol,DeployClassicV3InfrastructureV1Mainnet.t.sol,DeployMainnetAdaptiveInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV2.t.sol,EthereumDeploymentSnapshot.t.sol,MainnetMemeLifecycleFork.t.sol}",
     publicEndpoints: [
       "https://eth-mainnet.public.blastapi.io",
       "https://rpc.mevblocker.io",
@@ -27,7 +27,7 @@ const chains = [
     name: "Ethereum Sepolia",
     environmentKey: "SEPOLIA_RPC_URL",
     testGlob:
-      "test/{DeploySepoliaInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV2.t.sol,EthereumSepoliaDeploymentSnapshot.t.sol}",
+      "test/{DeployClassicV3InfrastructureV1Sepolia.t.sol,DeploySepoliaInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV1.t.sol,DeploySepoliaMemeInfrastructureV2.t.sol,EthereumSepoliaDeploymentSnapshot.t.sol}",
     publicEndpoints: [
       "https://sepolia.gateway.tenderly.co",
       "https://sepolia.drpc.org",

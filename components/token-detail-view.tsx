@@ -7,9 +7,8 @@ import {
   Check,
   Copy,
   ExternalLink,
-  Globe2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatUnits,
   getAddress,
@@ -19,10 +18,12 @@ import {
 } from "viem";
 
 import {
+  calculateEthVolumeUsdValue,
   PreparedTradeReview,
   TokenTrade,
   type PreparedTokenTrade,
 } from "@/components/token-trade";
+import { TokenPriceChart } from "@/components/token-price-chart";
 import { useWallet } from "@/components/wallet-provider";
 import { validatePreparedTradeResponse } from "@/lib/trade/client";
 import {
@@ -30,6 +31,7 @@ import {
   type TokenLink,
   type TokenLinkKind,
 } from "@/lib/tokens";
+import styles from "./token-experience.module.css";
 
 type DetailPayload = {
   status: "ready" | "not-deployed";
@@ -249,6 +251,16 @@ function formatUsd(valueWad: string | undefined, mode: "amount" | "price") {
   }).format(value);
 }
 
+function formatUsdAmount(value: number | null) {
+  if (value === null || !Number.isFinite(value) || value < 0) return null;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: value >= 1_000 ? "compact" : "standard",
+    maximumFractionDigits: value >= 1_000 ? 1 : 2,
+  }).format(value);
+}
+
 function formatSwapFee(value: number | undefined) {
   if (
     typeof value !== "number" ||
@@ -314,7 +326,16 @@ function TelegramBrandIcon() {
 
 function TokenLinkIcon({ kind }: { kind: TokenLinkKind }) {
   if (kind === "website") {
-    return <Globe2 aria-hidden="true" size={22} strokeWidth={1.9} />;
+    return (
+      <svg
+        aria-hidden="true"
+        className={styles.websiteIcon}
+        viewBox="0 0 24 24"
+      >
+        <circle cx="12" cy="12" r="8.25" />
+        <path d="M3.95 12h16.1M12 3.75c2.18 2.22 3.27 4.97 3.27 8.25S14.18 18.03 12 20.25C9.82 18.03 8.73 15.28 8.73 12S9.82 5.97 12 3.75Z" />
+      </svg>
+    );
   }
   if (kind === "telegram") return <TelegramBrandIcon />;
   return <XBrandIcon />;
@@ -324,9 +345,9 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
   if (metrics.length === 0) return null;
 
   return (
-    <dl className="token-detail-metrics">
+    <dl className={styles.metrics}>
       {metrics.map((metric) => (
-        <div className="token-detail-metric" key={metric.label}>
+        <div className={styles.metric} key={metric.label}>
           <dt>{metric.label}</dt>
           <dd>{metric.value}</dd>
         </div>
@@ -373,6 +394,11 @@ function TokenDetailContent({
   );
 
   const metrics = useMemo(() => {
+    const volumeUsd = calculateEthVolumeUsdValue({
+      grossVolumeEth: token.grossVolumeEth,
+      tokenPriceEth: token.tokenPriceEth,
+      tokenPriceUsdWad: token.tokenPriceUsdWad,
+    });
     const values: Array<TokenMetric | null> = [
       token.tokenPriceUsdWad !== undefined || token.tokenPriceEth
         ? {
@@ -395,7 +421,10 @@ function TokenDetailContent({
       token.grossVolumeEth
         ? {
             label: "Trading volume",
-            value: formatEth(token.grossVolumeEth, "amount") ?? "",
+            value:
+              formatUsdAmount(volumeUsd) ??
+              formatEth(token.grossVolumeEth, "amount") ??
+              "",
           }
         : null,
       formatSwapFee(token.totalSwapFeeBps)
@@ -418,6 +447,10 @@ function TokenDetailContent({
       : chainId === 11_155_111
         ? "https://sepolia.etherscan.io"
         : null;
+  const readTokenBalances = useCallback(
+    () => readTradeBalances(getAddress(token.tokenAddress)),
+    [readTradeBalances, token.tokenAddress],
+  );
   const preparedForDisplay =
     tradeFlow.phase === "submitted"
       ? (tradeFlow.next ?? tradeFlow.submitted)
@@ -600,16 +633,16 @@ function TokenDetailContent({
   }
 
   return (
-    <div className="token-detail-page page-width">
-      <Link className="launch-model-back" href="/">
+    <div className={`${styles.page} page-width`}>
+      <Link className={styles.back} href="/">
         <ArrowLeft aria-hidden="true" size={16} />
         Explore
       </Link>
 
-      <main className="token-detail-layout">
-        <section className="token-detail-overview">
-          <div className="token-detail-identity">
-            <div className="token-detail-image">
+      <main className={styles.layout}>
+        <section className={styles.overview}>
+          <div className={styles.identity}>
+            <div className={styles.image}>
               <Image
                 src={imageUrl}
                 alt={
@@ -624,48 +657,62 @@ function TokenDetailContent({
               />
             </div>
 
-            <div className="token-detail-heading">
-              <div>
-                <h1>{token.name}</h1>
-                <span>${token.symbol}</span>
+            <div className={styles.identityCopy}>
+              <span className={styles.symbol}>${token.symbol}</span>
+              <h1 className={styles.name}>{token.name}</h1>
+              <div className={styles.addressActions}>
+                <button
+                  className={styles.address}
+                  type="button"
+                  aria-label={
+                    copied
+                      ? `${token.name} contract address copied`
+                      : `Copy ${token.name} contract address`
+                  }
+                  title={copied ? "Copied" : "Copy contract address"}
+                  onClick={copyAddress}
+                >
+                  <code>{token.tokenAddress}</code>
+                  {copied ? (
+                    <Check aria-hidden="true" size={14} />
+                  ) : (
+                    <Copy aria-hidden="true" size={14} />
+                  )}
+                </button>
+                {explorerBase ? (
+                  <a
+                    className={styles.explorerLink}
+                    href={`${explorerBase}/token/${token.tokenAddress}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`View ${token.name} on Etherscan`}
+                    title="View on Etherscan"
+                  >
+                    <ExternalLink aria-hidden="true" size={15} />
+                  </a>
+                ) : null}
               </div>
-              <button
-                className="token-address"
-                type="button"
-                aria-label={
-                  copied
-                    ? `${token.name} contract address copied`
-                    : `Copy ${token.name} contract address`
-                }
-                title={copied ? "Copied" : "Copy contract address"}
-                onClick={copyAddress}
-              >
-                <code>{token.tokenAddress}</code>
-                {copied ? (
-                  <Check aria-hidden="true" size={14} />
-                ) : (
-                  <Copy aria-hidden="true" size={14} />
-                )}
-              </button>
             </div>
           </div>
 
           {token.description?.trim() ? (
-            <p className="token-detail-description">
+            <p className={styles.description}>
               {token.description.trim()}
             </p>
           ) : null}
 
           {token.links && token.links.length > 0 ? (
             <div
-              className="token-social-links"
+              className={styles.links}
               aria-label={`${token.name} links`}
             >
               {token.links.map((link) => {
                 const label = getLinkLabel(link.kind);
                 return (
                   <a
-                    className="token-social-link"
+                    className={`${styles.socialLink} ${
+                      link.kind === "website" ? styles.websiteLink : ""
+                    }`}
                     href={link.url}
                     target="_blank"
                     rel="noreferrer"
@@ -680,44 +727,35 @@ function TokenDetailContent({
             </div>
           ) : null}
 
-          <MetricGrid metrics={metrics} />
+          <TokenPriceChart
+            tokenAddress={token.tokenAddress}
+            tokenName={token.name}
+          />
 
+          <MetricGrid metrics={metrics} />
         </section>
 
-        <aside className="token-detail-trade">
+        <aside className={styles.tradeShell} aria-label={`${token.name} trade`}>
           {chainId !== 1 && chainId !== 11_155_111 ? (
-            <div className="token-detail-prepared" role="status">
+            <div className={styles.submitted} role="status">
               <p>Trading is not supported on this network</p>
             </div>
           ) : tradeFlow.phase === "form" ? (
-            <>
-              {!wallet ? (
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={openWallet}
-                >
-                  Connect wallet
-                </button>
-              ) : null}
-
-              <TokenTrade
-                chainId={chainId}
-                owner={wallet ? (wallet.account as Address) : null}
-                token={getAddress(token.tokenAddress)}
-                hook={getAddress(token.hookAddress)}
-                poolId={token.poolId}
-                symbol={token.symbol}
-                tokenDecimals={tokenDecimals}
-                tokenPriceEth={token.tokenPriceEth}
-                tokenPriceUsdWad={token.tokenPriceUsdWad}
-                totalSwapFeeBps={token.totalSwapFeeBps}
-                readBalances={() =>
-                  readTradeBalances(getAddress(token.tokenAddress))
-                }
-                onPrepared={submitPreparedTrade}
-              />
-            </>
+            <TokenTrade
+              chainId={chainId}
+              owner={wallet ? (wallet.account as Address) : null}
+              token={getAddress(token.tokenAddress)}
+              hook={getAddress(token.hookAddress)}
+              poolId={token.poolId}
+              symbol={token.symbol}
+              tokenDecimals={tokenDecimals}
+              tokenPriceEth={token.tokenPriceEth}
+              tokenPriceUsdWad={token.tokenPriceUsdWad}
+              totalSwapFeeBps={token.totalSwapFeeBps}
+              readBalances={readTokenBalances}
+              onConnect={openWallet}
+              onPrepared={submitPreparedTrade}
+            />
           ) : tradeFlow.phase === "review" ? (
             <PreparedTradeReview
               prepared={tradeFlow.prepared}
@@ -751,7 +789,7 @@ function TokenDetailContent({
               }}
             />
           ) : (
-            <div className="token-detail-prepared" role="status">
+            <div className={styles.submitted} role="status">
               <strong>
                 {tradeFlow.submitted.transaction.kind === "swap"
                   ? "Swap submitted"
@@ -766,7 +804,7 @@ function TokenDetailContent({
               </p>
               {explorerBase ? (
                 <a
-                  className="text-link"
+                  className={styles.transactionLink}
                   href={`${explorerBase}/tx/${tradeFlow.hash}`}
                   target="_blank"
                   rel="noreferrer"
@@ -782,14 +820,14 @@ function TokenDetailContent({
               ) : null}
 
               {tradeFlow.checkError ? (
-                <p className="form-error" role="alert">
+                <p className={styles.error} role="alert">
                   {tradeFlow.checkError}
                 </p>
               ) : null}
 
               {tradeFlow.submitted.transaction.kind === "swap" ? (
                 <button
-                  className="secondary-button"
+                  className={styles.secondaryAction}
                   type="button"
                   onClick={() => setTradeFlow({ phase: "form" })}
                 >
@@ -797,7 +835,7 @@ function TokenDetailContent({
                 </button>
               ) : (
                 <button
-                  className="primary-button"
+                  className={styles.primaryAction}
                   type="button"
                   disabled={tradeFlow.checking}
                   onClick={() => void continueTradeFlow()}
@@ -928,19 +966,19 @@ export function TokenDetailView({ address }: { address: string }) {
             : activeState.message;
 
   return (
-    <div className="token-detail-page page-width">
-      <Link className="launch-model-back" href="/">
+    <div className={`${styles.page} page-width`}>
+      <Link className={styles.back} href="/">
         <ArrowLeft aria-hidden="true" size={16} />
         Explore
       </Link>
       <div
-        className="token-empty"
+        className={styles.emptyState}
         role={activeState.phase === "error" ? "alert" : "status"}
       >
         <p>{message}</p>
         {activeState.phase === "error" ? (
           <button
-            className="text-button"
+            className={styles.retry}
             type="button"
             onClick={() => setRetryKey((value) => value + 1)}
           >
@@ -954,12 +992,12 @@ export function TokenDetailView({ address }: { address: string }) {
 
 function TokenDetailMessage({ message }: { message: string }) {
   return (
-    <div className="token-detail-page page-width">
-      <Link className="launch-model-back" href="/">
+    <div className={`${styles.page} page-width`}>
+      <Link className={styles.back} href="/">
         <ArrowLeft aria-hidden="true" size={16} />
         Explore
       </Link>
-      <div className="token-empty" role="status">
+      <div className={styles.emptyState} role="status">
         <p>{message}</p>
       </div>
     </div>

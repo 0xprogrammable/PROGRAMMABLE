@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "model": "classic",
+  "internalContractRelease": "classic-v3",
+  "status": "not-deployed",
+  "chainId": 11155111,
+  "releaseCommit": null,
+  "sourceCommitment": "0x00c428c40072ee776043903f292fabc66321947d7e1908958b4221235cd7d8c8",
+  "startingNonce": null,
+  "hookSalt": null,
+  "candidatePlan": {
+    "status": "simulation-only-refresh-before-signing",
+    "observedAtBlock": 11368253,
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "startingNonce": 39,
+    "transactionCount": 4,
+    "feeSplitVaultFactory": "0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB",
+    "hookFactory": "0xB7Eb3Ae60EE2f7F2F89DA8D372529919C700e76c",
+    "feeHook": "0xe339d8b8f496cd346517a3C02E5156DFc09060CC",
+    "launcher": "0x5b36779d6B6F571A518725974Fde243a58afFEa2",
+    "hookSalt": "0x0000000000000000000000000000000000000000000000000000000000002914",
+    "estimatedGas": "16955321"
+  },
+  "addresses": {
+    "deployer": null,
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null,
+    "positionForwarderFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448"
+  },
+  "transactions": {
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null
+  },
+  "runtimeCodeHashes": {
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null,
+    "positionForwarderFactory": "0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc"
+  },
+  "artifactRuntime": {
+    "feeSplitVaultFactory": {
+      "bytes": 6994,
+      "codeHash": "0x6e0fed3c3598d32458b9c7ce04a97ae3e0cc847e4022e3dec5a14cd1f29c88fc"
+    },
+    "hookFactory": {
+      "bytes": 15702,
+      "codeHash": "0x068ef58aed42a9772bd63614d535071627ff2812001b884cf936816bff8ce163"
+    },
+    "feeHookTemplate": {
+      "bytes": 12944,
+      "codeHash": "0x58716c294584fef53aba811bff75ac6b491a1c52a1d96f2c9927e5aaa317b5e4",
+      "note": "Artifact runtime before constructor immutable references are patched"
+    },
+    "launcherTemplate": {
+      "bytes": 22879,
+      "codeHash": "0x60016675f2ad06642070c452ad7bd6a5b5a8f8afc148600c0273079b4101b7fb",
+      "note": "Artifact runtime before constructor immutable references are patched"
+    }
+  },
+  "officialDependencies": {
+    "poolManager": {
+      "address": "0xE03A1074c86CFeDd5C142C4F04F1a1536e203543",
+      "runtimeCodeHash": "0x09930125a49f5b95caf8052991cc14d1240dca8b43f42b899115b86867e4bce1"
+    },
+    "positionManager": {
+      "address": "0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4",
+      "runtimeCodeHash": "0xcffd746f78c2b50aafd19076bbe9c48f14446e5248fc5d76b9b4896610e51aab"
+    },
+    "stateView": {
+      "address": "0xE1Dd9c3fA50EDB962E442f60DfBc432e24537E4C",
+      "runtimeCodeHash": "0xaaed3db8eb8ebde8014ce4c8a3938496687f4c6374e17a7d735288f6c65ceb9e"
+    },
+    "v4Quoter": {
+      "address": "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227",
+      "runtimeCodeHash": "0xf481a751ac453d40c46d12360b85b05472028c1b113ab63749d69a5f8b0e47d1"
+    },
+    "uerc20Factory": {
+      "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
+      "runtimeCodeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb"
+    },
+    "permit2": {
+      "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "runtimeCodeHash": "0x96d9f5c3f0fb0423426b7f970186235b7347027f4e5c19c40c412b7d97fc3751"
+    },
+    "universalRouter": {
+      "address": "0x470FFC67b1feEEC31D16C46AC7545C98716a194c",
+      "runtimeCodeHash": "0x14b733fce7cfcca643ef884ed59d2cb2d23b3fead8692613dcee311d65555caf"
+    },
+    "positionForwarderFactory": {
+      "address": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
+      "runtimeCodeHash": "0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc"
+    }
+  },
+  "sourceVerification": {
+    "status": "not-submitted",
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null
+  },
+  "lifecycleEvidence": {
+    "status": "not-run",
+    "releaseEligible": false
+  }
+}

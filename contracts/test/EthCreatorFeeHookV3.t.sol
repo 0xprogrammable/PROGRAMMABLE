@@ -191,6 +191,20 @@ contract EthCreatorFeeHookV3Test is Deployers {
         }
     }
 
+    function test_acceptsIndependentOneAndTenPercentFeeBounds() public {
+        ClassicV3CreatorToken candidateToken = new ClassicV3CreatorToken(address(this));
+        PoolKey memory candidate = _candidateKey(address(candidateToken));
+        bytes32 candidateId = PoolId.unwrap(candidate.toId());
+        FeeSplitVaultV1 candidateVault =
+            _deployVault(candidateId, _addresses1(alice), _shares1(10_000), bytes32("fee-bounds"));
+
+        hook.registerPool(candidate, address(candidateVault), 100, 1000);
+        (,, uint16 buyFeeBps, uint16 sellFeeBps, bool registered,) = hook.poolFeeConfig(candidateId);
+        assertTrue(registered);
+        assertEq(buyFeeBps, 100);
+        assertEq(sellFeeBps, 1000);
+    }
+
     function test_onlyVaultCanPullCreatorFeesAndOnlyBeneficiaryCanClaim() public {
         _swap(true, -int256(0.1 ether), 0.1 ether);
         address attacker = makeAddr("attacker");
@@ -304,7 +318,19 @@ contract EthCreatorFeeHookV3Test is Deployers {
         assertEq(recipient.balance, accrued);
     }
 
-    function test_onlyPoolManagerCanCallUnlockCallback() public {
+    function test_onlyPoolManagerCanCallEnabledHookCallbacksAndUnlockCallback() public {
+        SwapParams memory params =
+            SwapParams({ zeroForOne: true, amountSpecified: -int256(0.01 ether), sqrtPriceLimitX96: MIN_PRICE_LIMIT });
+
+        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        hook.beforeInitialize(address(this), hookKey, SQRT_PRICE_1_1);
+
+        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        hook.beforeSwap(address(this), hookKey, params, "");
+
+        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        hook.afterSwap(address(this), hookKey, params, BalanceDelta.wrap(0), "");
+
         vm.expectRevert(BaseHook.NotPoolManager.selector);
         hook.unlockCallback("");
     }

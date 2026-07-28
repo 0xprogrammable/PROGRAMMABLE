@@ -30,6 +30,23 @@ describe("Classic launch plan", () => {
     expect(preflightSource).not.toContain("The Meme Launch");
   });
 
+  it("awaits asynchronous launch preparation inside the error boundary", () => {
+    const preflightSource = readFileSync(
+      new URL("../app/api/launch/preflight/route.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(preflightSource).toContain(
+      "return await prepareAdaptiveLaunch(",
+    );
+    expect(preflightSource).toContain(
+      "return await prepareClassicV3Launch(",
+    );
+    expect(preflightSource).toContain(
+      "return await prepareMemeLaunch(",
+    );
+  });
+
   it("starts every new draft on the single supported launch path", () => {
     const draft = createEmptyDraft();
 

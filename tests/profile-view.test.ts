@@ -100,6 +100,25 @@ describe("profile reward grouping", () => {
     expect(ranked.map((token) => token.symbol)).toEqual(["FIRST", "SECOND"]);
   });
 
+  it("uses the address as a stable tie-breaker for identical profiles", () => {
+    const tied = [
+      {
+        ...tokens[1],
+        name: "Same",
+        fdvUsdWad: "100",
+      },
+      {
+        ...tokens[0],
+        name: "Same",
+        fdvUsdWad: "100",
+      },
+    ];
+
+    expect(
+      sortProfileTokensByMarketCap(tied).map((token) => token.address),
+    ).toEqual([firstAddress, secondAddress]);
+  });
+
   it("renders one portfolio entry when current and split rewards share a token", () => {
     const portfolio = buildProfilePortfolio(
       tokens,
