@@ -1,0 +1,667 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://programmable.family/schemas/deep-full-range-release-v1.schema.json",
+  "title": "Programmable Deep FullRange V1 Mainnet release",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "model",
+    "internalContractRelease",
+    "releaseVersion",
+    "status",
+    "releaseEligible",
+    "chainId",
+    "releaseCommit",
+    "sourceCommitment",
+    "startBlock",
+    "startingNonce",
+    "transactionCount",
+    "candidatePlan",
+    "addresses",
+    "transactions",
+    "deploymentBlocks",
+    "deploymentEvidence",
+    "runtimeCodeHashes",
+    "artifactRuntime",
+    "officialDependencies",
+    "dependencyProvenance",
+    "compiler",
+    "immutablePolicy",
+    "keeperPolicy",
+    "sourceVerification",
+    "forkPreflight",
+    "lifecycleEvidence",
+    "activation",
+    "blockers"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "model": {
+      "const": "deep"
+    },
+    "internalContractRelease": {
+      "const": "liquidity-growth-full-range-v1"
+    },
+    "releaseVersion": {
+      "const": "deep-full-range-v1"
+    },
+    "status": {
+      "enum": [
+        "not-deployed",
+        "deployment-source-and-lifecycle-verified"
+      ]
+    },
+    "releaseEligible": {
+      "type": "boolean"
+    },
+    "chainId": {
+      "const": 1
+    },
+    "releaseCommit": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/commit"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sourceCommitment": {
+      "$ref": "#/definitions/hash"
+    },
+    "startBlock": {
+      "$ref": "#/definitions/nullableBlock"
+    },
+    "startingNonce": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "transactionCount": {
+      "const": 6
+    },
+    "candidatePlan": {
+      "type": "object",
+      "required": [
+        "status",
+        "observedAtBlock",
+        "deployer",
+        "startingNonce",
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "hookSalt",
+        "hookInitCodeHash",
+        "rangeSourceFactory",
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "not-fixed-refresh-before-signing",
+            "reviewed-refresh-at-signing"
+          ]
+        },
+        "observedAtBlock": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "deployer": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "startingNonce": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "feeSplitVaultFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "hookFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "feeHook": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "hookSalt": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "hookInitCodeHash": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "rangeSourceFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "growthVaultFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "launcher": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "automation": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "positionPlanner": {
+          "$ref": "#/definitions/nullableAddress"
+        }
+      },
+      "additionalProperties": false
+    },
+    "addresses": {
+      "$ref": "#/definitions/addressMap"
+    },
+    "transactions": {
+      "$ref": "#/definitions/hashMap"
+    },
+    "deploymentBlocks": {
+      "$ref": "#/definitions/blockMap"
+    },
+    "deploymentEvidence": {
+      "$ref": "#/definitions/evidenceMap"
+    },
+    "runtimeCodeHashes": {
+      "$ref": "#/definitions/hashMapWithForwarder"
+    },
+    "artifactRuntime": {
+      "type": "object",
+      "required": [
+        "feeSplitVaultFactory",
+        "feeSplitVault",
+        "hookFactory",
+        "feeHookTemplate",
+        "rangeSourceFactory",
+        "rangeSource",
+        "growthVaultFactoryTemplate",
+        "growthVaultImplementationTemplate",
+        "launcherTemplate",
+        "automationTemplate",
+        "positionPlanner"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "feeSplitVaultFactory": {
+          "$ref": "#/definitions/artifact"
+        },
+        "feeSplitVault": {
+          "$ref": "#/definitions/artifact"
+        },
+        "hookFactory": {
+          "$ref": "#/definitions/artifact"
+        },
+        "feeHookTemplate": {
+          "$ref": "#/definitions/artifact"
+        },
+        "rangeSourceFactory": {
+          "$ref": "#/definitions/artifact"
+        },
+        "rangeSource": {
+          "$ref": "#/definitions/artifact"
+        },
+        "growthVaultFactoryTemplate": {
+          "$ref": "#/definitions/artifact"
+        },
+        "growthVaultImplementationTemplate": {
+          "$ref": "#/definitions/artifact"
+        },
+        "launcherTemplate": {
+          "$ref": "#/definitions/artifact"
+        },
+        "automationTemplate": {
+          "$ref": "#/definitions/artifact"
+        },
+        "positionPlanner": {
+          "$ref": "#/definitions/artifact"
+        }
+      }
+    },
+    "officialDependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "poolManager",
+        "positionManager",
+        "stateView",
+        "v4Quoter",
+        "uerc20Factory",
+        "permit2",
+        "universalRouter",
+        "positionForwarderFactory"
+      ],
+      "properties": {
+        "poolManager": {
+          "$ref": "#/definitions/dependency"
+        },
+        "positionManager": {
+          "$ref": "#/definitions/dependency"
+        },
+        "stateView": {
+          "$ref": "#/definitions/dependency"
+        },
+        "v4Quoter": {
+          "$ref": "#/definitions/dependency"
+        },
+        "uerc20Factory": {
+          "$ref": "#/definitions/dependency"
+        },
+        "permit2": {
+          "$ref": "#/definitions/dependency"
+        },
+        "universalRouter": {
+          "$ref": "#/definitions/dependency"
+        },
+        "positionForwarderFactory": {
+          "$ref": "#/definitions/dependency"
+        }
+      }
+    },
+    "dependencyProvenance": {
+      "type": "object"
+    },
+    "compiler": {
+      "$ref": "#/definitions/compiler"
+    },
+    "immutablePolicy": {
+      "type": "object"
+    },
+    "keeperPolicy": {
+      "type": "object"
+    },
+    "sourceVerification": {
+      "type": "object",
+      "required": [
+        "status",
+        "compiler",
+        "contracts"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "not-submitted",
+            "verified"
+          ]
+        },
+        "compiler": {
+          "$ref": "#/definitions/compiler"
+        },
+        "contracts": {
+          "type": "object"
+        }
+      }
+    },
+    "forkPreflight": {
+      "type": "object"
+    },
+    "lifecycleEvidence": {
+      "type": "object"
+    },
+    "activation": {
+      "type": "object"
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "definitions": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{40}$"
+    },
+    "nullableAddress": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/address"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "nullableHash": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/hash"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "nullableBlock": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "fqcn",
+        "creationBytes",
+        "creationCodeHash",
+        "bytes",
+        "codeHash"
+      ],
+      "properties": {
+        "fqcn": {
+          "type": "string",
+          "minLength": 1
+        },
+        "creationBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "creationCodeHash": {
+          "$ref": "#/definitions/hash"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24576
+        },
+        "codeHash": {
+          "$ref": "#/definitions/hash"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependency": {
+      "type": "object",
+      "required": [
+        "address",
+        "runtimeCodeHash"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/address"
+        },
+        "sourceRef": {
+          "type": "string"
+        },
+        "runtimeCodeHash": {
+          "$ref": "#/definitions/hash"
+        },
+        "deploymentTransaction": {
+          "$ref": "#/definitions/hash"
+        },
+        "deploymentBlock": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "compiler": {
+      "type": "object",
+      "required": [
+        "version",
+        "optimizerEnabled",
+        "optimizerRuns",
+        "evmVersion",
+        "bytecodeHash",
+        "cborMetadata",
+        "viaIR"
+      ],
+      "properties": {
+        "version": {
+          "const": "0.8.26"
+        },
+        "optimizerEnabled": {
+          "const": true
+        },
+        "optimizerRuns": {
+          "const": 1000
+        },
+        "evmVersion": {
+          "const": "cancun"
+        },
+        "bytecodeHash": {
+          "const": "none"
+        },
+        "cborMetadata": {
+          "const": false
+        },
+        "viaIR": {
+          "const": false
+        },
+        "linkedLibraries": {
+          "type": "object",
+          "maxProperties": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "addressMap": {
+      "type": "object",
+      "required": [
+        "deployer",
+        "treasury",
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "rangeSourceFactory",
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner",
+        "positionForwarderFactory"
+      ],
+      "properties": {
+        "deployer": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "treasury": {
+          "$ref": "#/definitions/address"
+        },
+        "feeSplitVaultFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "hookFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "feeHook": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "rangeSourceFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "growthVaultFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "launcher": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "automation": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "positionPlanner": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "positionForwarderFactory": {
+          "$ref": "#/definitions/address"
+        }
+      },
+      "additionalProperties": false
+    },
+    "hashMap": {
+      "type": "object",
+      "required": [
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "rangeSourceFactory",
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "feeSplitVaultFactory": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "hookFactory": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "feeHook": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "rangeSourceFactory": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "growthVaultFactory": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "launcher": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "automation": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "positionPlanner": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "positionForwarderFactory": {
+          "$ref": "#/definitions/nullableHash"
+        }
+      }
+    },
+    "hashMapWithForwarder": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/hashMap"
+        },
+        {
+          "type": "object",
+          "required": [
+            "positionForwarderFactory"
+          ],
+          "properties": {
+            "positionForwarderFactory": {
+              "$ref": "#/definitions/hash"
+            }
+          }
+        }
+      ]
+    },
+    "blockMap": {
+      "type": "object",
+      "required": [
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "rangeSourceFactory",
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "feeSplitVaultFactory": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "hookFactory": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "feeHook": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "rangeSourceFactory": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "growthVaultFactory": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "launcher": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "automation": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "positionPlanner": {
+          "$ref": "#/definitions/nullableBlock"
+        }
+      }
+    },
+    "evidenceMap": {
+      "type": "object",
+      "required": [
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "rangeSourceFactory",
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "feeSplitVaultFactory": {},
+        "hookFactory": {},
+        "feeHook": {},
+        "rangeSourceFactory": {},
+        "growthVaultFactory": {},
+        "growthVaultImplementation": {},
+        "launcher": {},
+        "automation": {},
+        "positionPlanner": {}
+      }
+    }
+  }
+}

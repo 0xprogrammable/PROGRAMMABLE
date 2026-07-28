@@ -116,7 +116,7 @@ contract LiquidityGrowthVaultMainnetForkTest is Test {
             maxCompoundNative: GROWTH_TARGET,
             tokenReserveTarget: TOKEN_RESERVE,
             activeRangeHalfWidthTicks: RANGE_HALF_WIDTH,
-            compoundCooldownBlocks: 1,
+            compoundCooldownSeconds: 1,
             beneficiaries: beneficiaries,
             sharesBps: shares
         });
@@ -135,7 +135,7 @@ contract LiquidityGrowthVaultMainnetForkTest is Test {
             }),
             ""
         );
-        hook.increaseObservationCardinalityNext(2, PoolId.wrap(poolId));
+        hook.increaseObservationCardinalityNext(192, PoolId.wrap(poolId));
         vm.warp(block.timestamp + TWAP_WINDOW);
         _swapSpecified(true, -OBSERVATION_SEED_BUY.toInt256(), OBSERVATION_SEED_BUY);
     }

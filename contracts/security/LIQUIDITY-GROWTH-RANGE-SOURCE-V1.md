@@ -50,6 +50,30 @@ An active-liquidity threshold is deliberately not treated as an oracle guarantee
 units and can be supplied temporarily, so it may be a separate operational guard but not evidence that the price is
 safe.
 
+## Canonical V1 policy
+
+The canonical launcher does not accept oracle or range parameters from creators. It fixes:
+
+- a 30-minute TWAP window
+- 192 observation slots
+- a 400-tick truncated-oracle movement limit
+- a 600-tick spot-to-TWAP deviation limit
+- a 20,000-tick range half-width aligned to the pool's 200-tick spacing
+
+The 192-slot ring retains about 38 minutes of history under the worst-case one-write-per-12-second-block schedule.
+Compounding still fails until the requested 30-minute history is actually populated. Cardinality is capacity, not
+proof of maturity.
+
+Launch allocates only the first `1 -> 2` stage. `LiquidityGrowthAutomationV1` authenticates the vault through its
+immutable factory and grows only that vault's exact hook and pool ID. Each later call adds at most 16 slots and caps
+at 192. The range source rejects every quote while `cardinalityNext` is below 192, even when a caller bypasses the
+coordinator and calls the vault directly. Its subsequent `observe([30 minutes, 0])` call separately proves historical
+maturity and fails closed when the required older observation is unavailable.
+
+The canonical vault separately enforces a five-minute timestamp-based minimum interval between successful compounds.
+That interval only bounds cadence. It does not make the same-pool TWAP independently manipulation resistant, and
+every compound must still obtain a mature range quote from this source.
+
 ## Integration requirements
 
 The current Classic hook cannot be upgraded in place and existing pools cannot change their hook. Liquidity Growth
@@ -60,7 +84,8 @@ Before wiring this source into the vault:
 
 - implement the observation recorder in the new composite hook;
 - pin and review the exact OpenZeppelin oracle code used;
-- grow observation cardinality during launch or immediately afterward;
+- prime observation capacity from one to two during launch, then use the factory-bound permissionless coordinator to
+  grow in bounded 16-slot stages to 192;
 - expose `poolManager()` and `observe(uint32[], PoolId)` exactly as
   `ILiquidityGrowthOracleV1` specifies;
 - replace the vault's spot-derived `_activeGrowthRange()` with a call to this source;

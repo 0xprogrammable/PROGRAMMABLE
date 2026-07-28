@@ -31,7 +31,9 @@ export type ProgrammableIndexerToken = {
     currency: "ETH";
     buyHookFeeBps: number;
     sellHookFeeBps: number;
-    creatorFeeBps: number;
+    creatorFeeBps: number | null;
+    buyCreatorFeeBps: number;
+    sellCreatorFeeBps: number;
     launcherFeeBps: number;
     transferTaxBps: number;
     lpFeePips: number;
@@ -43,6 +45,27 @@ export type ProgrammableIndexerToken = {
     blockNumber: LauncherToken["launchBlockNumber"] | null;
     launchedAt: string;
   };
+  liquidityGrowth: {
+    growthVaultAddress: `0x${string}`;
+    oracleGuardAddress: `0x${string}`;
+    upstreamRewardVaultAddress: `0x${string}`;
+    growthTargetNativeWei: string;
+    completionToleranceNativeWei: string;
+    minimumNativeLiquidityForCompletionWei: string;
+    tokenReserveRaw: string;
+    totalNativeAllocatedToGrowthWei: string;
+    totalNativeAddedToLiquidityWei: string;
+    pendingGrowthNativeWei: string;
+    deferredRewardFeesWei: string;
+    growthTargetReached: boolean;
+    oracleReady: boolean;
+    automationAction: 0 | 1 | 2 | 3;
+    nextCompoundTimestamp: string;
+    trustedNativeDepthWei: string;
+    depthCapNativeWei: string;
+    unusedReserveIsActiveLiquidity: false;
+    automationGuaranteed: false;
+  } | null;
 };
 
 export type ProgrammableIndexerFeed = {
@@ -70,21 +93,24 @@ export function serializeIndexerToken(
     launcherFeeBps,
     transferTaxBps,
   } = token;
+  const buyCreatorFeeBps = token.buyCreatorFeeBps ?? creatorFeeBps;
+  const sellCreatorFeeBps = token.sellCreatorFeeBps ?? creatorFeeBps;
   if (
     buyHookFeeBps === undefined ||
     sellHookFeeBps === undefined ||
     creatorFeeBps === undefined ||
     launcherFeeBps === undefined ||
-    transferTaxBps === undefined
+    transferTaxBps === undefined ||
+    buyCreatorFeeBps === undefined ||
+    sellCreatorFeeBps === undefined
   ) {
     throw new Error(
       `Token ${token.tokenAddress} is missing onchain fee disclosure`,
     );
   }
   if (
-    buyHookFeeBps !== token.totalSwapFeeBps ||
-    sellHookFeeBps !== token.totalSwapFeeBps ||
-    creatorFeeBps + launcherFeeBps !== token.totalSwapFeeBps ||
+    buyCreatorFeeBps + launcherFeeBps !== buyHookFeeBps ||
+    sellCreatorFeeBps + launcherFeeBps !== sellHookFeeBps ||
     transferTaxBps !== 0
   ) {
     throw new Error(`Token ${token.tokenAddress} has an invalid fee disclosure`);
@@ -115,7 +141,12 @@ export function serializeIndexerToken(
       currency: "ETH",
       buyHookFeeBps,
       sellHookFeeBps,
-      creatorFeeBps,
+      creatorFeeBps:
+        buyCreatorFeeBps === sellCreatorFeeBps
+          ? buyCreatorFeeBps
+          : null,
+      buyCreatorFeeBps,
+      sellCreatorFeeBps,
       launcherFeeBps,
       transferTaxBps,
       lpFeePips: token.lpFeePips ?? 0,
@@ -127,6 +158,52 @@ export function serializeIndexerToken(
       blockNumber: token.launchBlockNumber ?? null,
       launchedAt: token.launchedAt,
     },
+    liquidityGrowth:
+      token.launchModel === "deep" &&
+      token.growthVaultAddress &&
+      token.oracleGuardAddress &&
+      token.upstreamRewardVaultAddress &&
+      token.growthTargetNativeWei &&
+      token.completionToleranceNativeWei &&
+      token.minimumNativeLiquidityForCompletionWei &&
+      token.tokenReserveRaw &&
+      token.totalNativeAllocatedToGrowthWei &&
+      token.totalNativeAddedToLiquidityWei &&
+      token.pendingGrowthNativeWei &&
+      token.deferredRewardFeesWei &&
+      token.growthTargetReached !== undefined &&
+      token.oracleReady !== undefined &&
+      token.automationAction !== undefined &&
+      token.nextCompoundTimestamp !== undefined &&
+      token.trustedNativeDepthWei !== undefined &&
+      token.depthCapNativeWei !== undefined &&
+      token.automationGuaranteed === false
+        ? {
+            growthVaultAddress: token.growthVaultAddress,
+            oracleGuardAddress: token.oracleGuardAddress,
+            upstreamRewardVaultAddress: token.upstreamRewardVaultAddress,
+            growthTargetNativeWei: token.growthTargetNativeWei,
+            completionToleranceNativeWei:
+              token.completionToleranceNativeWei,
+            minimumNativeLiquidityForCompletionWei:
+              token.minimumNativeLiquidityForCompletionWei,
+            tokenReserveRaw: token.tokenReserveRaw,
+            totalNativeAllocatedToGrowthWei:
+              token.totalNativeAllocatedToGrowthWei,
+            totalNativeAddedToLiquidityWei:
+              token.totalNativeAddedToLiquidityWei,
+            pendingGrowthNativeWei: token.pendingGrowthNativeWei,
+            deferredRewardFeesWei: token.deferredRewardFeesWei,
+            growthTargetReached: token.growthTargetReached,
+            oracleReady: token.oracleReady,
+            automationAction: token.automationAction,
+            nextCompoundTimestamp: token.nextCompoundTimestamp,
+            trustedNativeDepthWei: token.trustedNativeDepthWei,
+            depthCapNativeWei: token.depthCapNativeWei,
+            unusedReserveIsActiveLiquidity: false,
+            automationGuaranteed: false,
+          }
+        : null,
   };
 }
 
@@ -180,7 +257,10 @@ export function buildUniswapTokenList(
             imageUrl: token.imageUrl ?? null,
             links: serialized.links,
             hook: token.hookAddress,
-            model: "v4-custom-accounting",
+            model:
+              token.launchModel === "deep"
+                ? "v4-deep-liquidity"
+                : "v4-custom-accounting",
             poolId: token.poolId,
             positionRecipient: token.positionRecipient ?? null,
             positionTokenId: token.positionTokenId ?? null,
@@ -190,9 +270,12 @@ export function buildUniswapTokenList(
             buyFeeBps: serialized.fees.buyHookFeeBps,
             sellFeeBps: serialized.fees.sellHookFeeBps,
             creatorFeeBps: serialized.fees.creatorFeeBps,
+            buyCreatorFeeBps: serialized.fees.buyCreatorFeeBps,
+            sellCreatorFeeBps: serialized.fees.sellCreatorFeeBps,
             launcherFeeBps: serialized.fees.launcherFeeBps,
             transferTaxBps: serialized.fees.transferTaxBps,
             feeIncluded: true,
+            liquidityGrowth: serialized.liquidityGrowth,
           },
         },
       };

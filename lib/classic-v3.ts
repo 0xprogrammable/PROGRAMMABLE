@@ -95,6 +95,15 @@ export type ClassicV3LaunchConfiguration = {
   rewards: ClassicV3RewardConfiguration;
 };
 
+export type ClassicV3LaunchDisclosure = {
+  buyFee: string;
+  sellFee: string;
+  rewards: readonly {
+    beneficiary: Address;
+    share: string;
+  }[];
+};
+
 export type ClassicV3DeploymentManifest = {
   chainId: number;
   classicV3Status?: string;
@@ -309,4 +318,34 @@ export function isClassicV3DeploymentReady(
 
 export function formatClassicV3Percent(bps: number) {
   return `${(bps / 100).toFixed(2)}%`;
+}
+
+export function buildClassicV3LaunchDisclosure(
+  draft: LaunchDraft,
+  launcherAccount: string,
+): ClassicV3LaunchDisclosure {
+  const configuration = validateClassicV3LaunchDraft(draft, launcherAccount);
+  const feeLine = (totalBps: number, creatorBps: number) =>
+    `${formatClassicV3Percent(totalBps)} total · ${formatClassicV3Percent(
+      creatorBps,
+    )} creator · ${formatClassicV3Percent(PLATFORM_FEE_BPS)} Programmable`;
+
+  return {
+    buyFee: feeLine(
+      configuration.fees.buySwapFeeBps,
+      configuration.fees.buyCreatorFeeBps,
+    ),
+    sellFee: feeLine(
+      configuration.fees.sellSwapFeeBps,
+      configuration.fees.sellCreatorFeeBps,
+    ),
+    rewards: configuration.rewards.beneficiaries.map(
+      (beneficiary, index) => ({
+        beneficiary,
+        share: formatClassicV3Percent(
+          configuration.rewards.sharesBps[index],
+        ),
+      }),
+    ),
+  };
 }

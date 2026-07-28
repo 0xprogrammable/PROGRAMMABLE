@@ -1,8 +1,8 @@
 .page {
-  max-width: 980px;
+  max-width: 1040px;
   min-height: calc(100svh - var(--header-height));
-  padding-bottom: 42px;
-  padding-top: 24px;
+  padding-bottom: 32px;
+  padding-top: 18px;
 }
 
 .hero,
@@ -16,12 +16,12 @@
 
 .hero {
   align-items: center;
-  border-radius: 26px;
+  border-radius: 24px;
   display: grid;
-  gap: 18px;
+  gap: 15px;
   grid-template-columns: auto minmax(0, 1fr);
-  min-height: 116px;
-  padding: 18px 22px;
+  min-height: 96px;
+  padding: 14px 18px;
 }
 
 .heroEditing {
@@ -32,18 +32,18 @@
   align-items: center;
   background: var(--avatar-background);
   border: 1px solid var(--glass-94);
-  border-radius: 21px;
+  border-radius: 18px;
   color: var(--accent-strong);
   display: flex;
   flex: none;
   font-family: var(--font-plex-mono), monospace;
   font-size: 18px;
   font-weight: 600;
-  height: 72px;
+  height: 64px;
   justify-content: center;
   overflow: hidden;
   position: relative;
-  width: 72px;
+  width: 64px;
 }
 
 .avatar img {
@@ -62,7 +62,7 @@
 }
 
 .nameRow h1 {
-  font-size: clamp(31px, 3.5vw, 44px);
+  font-size: clamp(28px, 3.2vw, 38px);
   font-weight: 570;
   letter-spacing: -0.035em;
   line-height: 1;
@@ -73,7 +73,7 @@
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
   font-size: 11px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .editButton,
@@ -180,10 +180,10 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  margin: 30px auto 0;
-  max-width: 760px;
-  min-height: min(420px, calc(100svh - var(--header-height) - 92px));
-  padding: 42px 24px;
+  margin: 24px auto 0;
+  max-width: 700px;
+  min-height: min(360px, calc(100svh - var(--header-height) - 92px));
+  padding: 36px 24px;
   text-align: center;
 }
 
@@ -218,8 +218,8 @@
 }
 
 .portfolio {
-  border-radius: 26px;
-  margin-top: 16px;
+  border-radius: 24px;
+  margin-top: 12px;
   min-width: 0;
   overflow: hidden;
 }
@@ -230,8 +230,8 @@
   display: flex;
   gap: 24px;
   justify-content: space-between;
-  min-height: 90px;
-  padding: 16px 22px;
+  min-height: 74px;
+  padding: 12px 18px;
 }
 
 .portfolioTitle {
@@ -239,7 +239,7 @@
 }
 
 .portfolioTitle h2 {
-  font-size: 23px;
+  font-size: 21px;
   font-weight: 600;
   letter-spacing: -0.025em;
 }
@@ -264,7 +264,7 @@
 
 .portfolioTotal strong {
   color: var(--accent-strong);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 650;
   letter-spacing: -0.02em;
   margin-top: 3px;
@@ -280,7 +280,7 @@
   gap: 16px;
   justify-content: space-between;
   min-height: 42px;
-  padding: 7px 22px;
+  padding: 7px 18px;
 }
 
 .sourceWarning button {
@@ -293,12 +293,12 @@
 }
 
 .list {
-  padding: 0 22px;
+  padding: 0 18px;
 }
 
 .tokenRow {
   border-bottom: 1px solid var(--border);
-  padding: 15px 0;
+  padding: 12px 0;
   transform: translate3d(0, 0, 0);
   transition: transform 170ms var(--ease-out);
 }
@@ -310,32 +310,32 @@
 .tokenMain {
   align-items: center;
   display: grid;
-  gap: 18px;
+  gap: 14px;
   grid-template-columns:
-    minmax(260px, 1.55fr)
-    minmax(110px, 0.62fr)
+    minmax(250px, 1.55fr)
+    minmax(105px, 0.62fr)
     minmax(120px, 0.68fr)
-    minmax(180px, auto);
-  min-height: 58px;
+    minmax(160px, auto);
+  min-height: 52px;
 }
 
 .tokenIdentity {
   align-items: center;
   color: var(--text);
   display: flex;
-  gap: 13px;
+  gap: 11px;
   min-width: 0;
 }
 
 .tokenArt {
   background: var(--surface-soft);
   border: 1px solid var(--border);
-  border-radius: 15px;
+  border-radius: 14px;
   flex: none;
-  height: 52px;
+  height: 48px;
   overflow: hidden;
   position: relative;
-  width: 52px;
+  width: 48px;
 }
 
 .tokenArt img {
@@ -406,7 +406,7 @@
 .secondaryAction {
   border-radius: 11px;
   font-size: 11px;
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 12px;
 }
 
@@ -430,7 +430,7 @@
   color: var(--text-soft);
   font-size: 11px;
   font-weight: 620;
-  min-height: 36px;
+  min-height: 34px;
   padding: 0 2px;
 }
 
@@ -477,7 +477,7 @@
   font-size: 10px;
   gap: 8px;
   list-style: none;
-  min-height: 30px;
+  min-height: 28px;
 }
 
 .rewardSettings > summary::-webkit-details-marker {
@@ -500,10 +500,23 @@
 }
 
 .settingsBody {
+  animation: profile-settings-enter 180ms var(--ease-out) both;
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(220px, 0.8fr) minmax(300px, 1.2fr);
   padding: 8px 0 3px;
+}
+
+@keyframes profile-settings-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 3px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 .rewardTerms {
@@ -755,7 +768,8 @@
   .hero {
     gap: 14px;
     grid-template-columns: auto minmax(0, 1fr);
-    padding: 15px;
+    min-height: 88px;
+    padding: 13px 14px;
   }
 
   .heroEditing {
@@ -764,12 +778,12 @@
 
   .avatar {
     border-radius: 17px;
-    height: 60px;
-    width: 60px;
+    height: 56px;
+    width: 56px;
   }
 
   .nameRow h1 {
-    font-size: 31px;
+    font-size: 28px;
   }
 
   .editGrid {
@@ -778,12 +792,15 @@
 
   .connectCard {
     margin-top: 0;
-    min-height: calc(100svh - var(--header-height) - 116px);
+    min-height: min(
+      440px,
+      calc(100svh - var(--header-height) - 132px)
+    );
   }
 
   .portfolioHeader {
-    min-height: 82px;
-    padding: 14px 16px;
+    min-height: 72px;
+    padding: 12px 14px;
   }
 
   .portfolioTitle h2 {
@@ -795,11 +812,11 @@
   }
 
   .list {
-    padding: 0 16px;
+    padding: 0 14px;
   }
 
   .tokenRow {
-    padding: 15px 0;
+    padding: 13px 0;
   }
 
   .tokenMain {
@@ -895,5 +912,9 @@
   .textAction,
   .retryButton {
     transition: none;
+  }
+
+  .settingsBody {
+    animation: none;
   }
 }

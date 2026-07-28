@@ -14,7 +14,7 @@ import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 import { Deployers } from "@uniswap/v4-core/test/utils/Deployers.sol";
-import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import { PositionManager } from "@uniswap/v4-periphery/src/PositionManager.sol";
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import { EthCreatorFeeHookFactoryV3 } from "../src/EthCreatorFeeHookFactoryV3.sol";
@@ -30,7 +30,7 @@ contract MemeLaunchV2Test is Deployers {
     address internal constant CANONICAL_POSITION_MANAGER = 0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e;
     uint256 internal constant MIN_INITIAL_BUY_WEI = 0.0006 ether;
 
-    IPositionManager internal positionManager;
+    PositionManager internal positionManager;
     UERC20Factory internal tokenFactory;
     EthCreatorFeeHookFactoryV3 internal hookFactory;
     EthCreatorFeeHookV3 internal feeHook;
@@ -50,7 +50,7 @@ contract MemeLaunchV2Test is Deployers {
             abi.encode(manager, address(0), uint256(0), address(0), address(0)),
             CANONICAL_POSITION_MANAGER
         );
-        positionManager = IPositionManager(CANONICAL_POSITION_MANAGER);
+        positionManager = PositionManager(payable(CANONICAL_POSITION_MANAGER));
 
         tokenFactory = new UERC20Factory();
         hookFactory = new EthCreatorFeeHookFactoryV3();

@@ -19,10 +19,12 @@ import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 import { PoolSwapTest } from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import { Deployers } from "@uniswap/v4-core/test/utils/Deployers.sol";
 import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import { PositionManager as CanonicalPositionManager } from "@uniswap/v4-periphery/src/PositionManager.sol";
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import { FeeSplitVaultFactoryV1 } from "../src/FeeSplitVaultFactoryV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "../src/LockedPositionFeeForwarderFactoryV1.sol";
+import { LiquidityGrowthAutomationV1 } from "../src/LiquidityGrowthAutomationV1.sol";
 import { LiquidityGrowthFeeOracleHookFactoryV1 } from "../src/LiquidityGrowthFeeOracleHookFactoryV1.sol";
 import { LiquidityGrowthFeeOracleHookV1 } from "../src/LiquidityGrowthFeeOracleHookV1.sol";
 import { LiquidityGrowthLaunchV1 } from "../src/LiquidityGrowthLaunchV1.sol";
@@ -45,13 +47,15 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
     int24 internal constant MAX_SPOT_TWAP_DEVIATION = 600;
     int24 internal constant MAX_ABS_TICK_DELTA = 400;
     uint32 internal constant TWAP_WINDOW = 30 minutes;
-    uint64 internal constant COOLDOWN = 20;
+    uint16 internal constant INITIAL_OBSERVATION_CARDINALITY_NEXT = 2;
+    uint64 internal constant COOLDOWN = 5 minutes;
 
     IPositionManager internal positionManager;
     UERC20Factory internal tokenFactory;
     FeeSplitVaultFactoryV1 internal splitFactory;
     LiquidityGrowthRangeSourceFactoryV1 internal rangeSourceFactory;
     LiquidityGrowthVaultFactoryV1 internal growthFactory;
+    LiquidityGrowthAutomationV1 internal automation;
     LockedPositionFeeForwarderFactoryV1 internal positionForwarderFactory;
     LiquidityGrowthFeeOracleHookFactoryV1 internal hookFactory;
     LiquidityGrowthFeeOracleHookV1 internal hook;
@@ -62,6 +66,8 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
     address internal treasury;
 
     function setUp() public {
+        // Keep the concrete PositionManager in this compilation unit for deployCodeTo's artifact lookup.
+        assertGt(type(CanonicalPositionManager).creationCode.length, 0);
         deployCodeTo("PoolManager.sol:PoolManager", abi.encode(address(this)), CANONICAL_POOL_MANAGER);
         manager = IPoolManager(CANONICAL_POOL_MANAGER);
         deployCodeTo(
@@ -76,20 +82,12 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
         splitFactory = new FeeSplitVaultFactoryV1();
         rangeSourceFactory = new LiquidityGrowthRangeSourceFactoryV1();
         growthFactory = new LiquidityGrowthVaultFactoryV1();
+        automation = new LiquidityGrowthAutomationV1(growthFactory);
         positionForwarderFactory = new LockedPositionFeeForwarderFactoryV1(positionManager);
         hookFactory = new LiquidityGrowthFeeOracleHookFactoryV1();
         treasury = makeAddr("programmableTreasury");
         hook = _deployHook();
-        launcher = new LiquidityGrowthLaunchV1(
-            manager,
-            positionManager,
-            tokenFactory,
-            hook,
-            splitFactory,
-            rangeSourceFactory,
-            growthFactory,
-            positionForwarderFactory
-        );
+        launcher = _deployLauncher(hook);
 
         deployer = makeAddr("deployer");
         beneficiary = makeAddr("beneficiary");
@@ -100,7 +98,7 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
     function test_launchAtomicallyBindsVerifiedTokenPoolVaultReserveAndLockedPosition() public {
         LiquidityGrowthLaunchV1.LaunchParameters memory parameters = _parameters(bytes32("atomic"));
         (address predictedToken, PoolKey memory key) = _predictedTokenAndKey(parameters);
-        address predictedSource = _predictedRangeSource(predictedToken, key, parameters.growth);
+        address predictedSource = _predictedRangeSource(predictedToken, key);
         address predictedVault = _predictedVault(predictedToken, key, parameters, predictedSource);
         address predictedPosition = positionForwarderFactory.predict(_positionSalt(predictedToken, deployer), deployer);
 
@@ -115,6 +113,10 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
         _assertLockedPosition(result);
         assertEq(launcher.launchHashOf(result.token), result.launchHash);
         assertEq(launcher.growthVaultOf(result.token), result.growthVault);
+        assertEq(address(launcher.automation()), address(automation));
+        assertTrue(automation.isRegisteredVault(result.growthVault));
+        assertEq(automation.registeredVaultCount(), 1);
+        assertEq(automation.registeredVaultAt(0), result.growthVault);
     }
 
     function test_reusesExactFactoryVaultAndPositionPredeployedBeforeTokenCreation() public {
@@ -125,9 +127,9 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
             manager,
             key,
             ILiquidityGrowthOracleV1(address(hook)),
-            parameters.growth.twapWindow,
-            parameters.growth.activeRangeHalfWidthTicks,
-            parameters.growth.maxSpotTwapDeviationTicks
+            TWAP_WINDOW,
+            RANGE_HALF_WIDTH,
+            MAX_SPOT_TWAP_DEVIATION
         );
         LiquidityGrowthVaultV1.Configuration memory configuration = _configuration(key, parameters.growth, source);
 
@@ -193,9 +195,9 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
             manager,
             key,
             ILiquidityGrowthOracleV1(address(hook)),
-            parameters.growth.twapWindow,
-            parameters.growth.activeRangeHalfWidthTicks,
-            parameters.growth.maxSpotTwapDeviationTicks
+            TWAP_WINDOW,
+            RANGE_HALF_WIDTH,
+            MAX_SPOT_TWAP_DEVIATION
         );
         bytes32 mappingSlot = keccak256(abi.encode(address(source), uint256(0)));
         vm.store(address(rangeSourceFactory), mappingSlot, bytes32(0));
@@ -214,12 +216,58 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
         launcher.unlockCallback("");
     }
 
+    function test_constructorRejectsHookOutsidePinnedTickDeltaPolicy() public {
+        LiquidityGrowthFeeOracleHookV1 nonPolicyHook = _deployHook(401);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LiquidityGrowthLaunchV1.InvalidOracleTickDelta.selector, int24(401), MAX_ABS_TICK_DELTA
+            )
+        );
+        _deployLauncher(nonPolicyHook);
+    }
+
+    function test_constructorRejectsAutomationBoundToAnotherVaultFactory() public {
+        LiquidityGrowthVaultFactoryV1 anotherFactory = new LiquidityGrowthVaultFactoryV1();
+        LiquidityGrowthAutomationV1 mismatchedAutomation = new LiquidityGrowthAutomationV1(anotherFactory);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LiquidityGrowthLaunchV1.InvalidAutomationFactory.selector,
+                address(growthFactory),
+                address(anotherFactory)
+            )
+        );
+        _deployLauncherWithAutomation(hook, mismatchedAutomation);
+    }
+
+    function test_compoundLimitIsDerivedFromTargetAndCapped() public view {
+        assertEq(launcher.maxCompoundNativeFor(4 ether), 0.1 ether);
+        assertEq(launcher.maxCompoundNativeFor(NATIVE_TARGET), MAX_COMPOUND);
+        assertEq(launcher.maxCompoundNativeFor(100 ether), MAX_COMPOUND);
+    }
+
+    function test_compoundLimitRejectsTargetTooSmallForNonzeroChunk() public {
+        vm.expectRevert(abi.encodeWithSelector(LiquidityGrowthLaunchV1.InvalidNativeTarget.selector, uint256(39)));
+        launcher.maxCompoundNativeFor(39);
+    }
+
+    function testFuzz_compoundLimitNeverExceedsReleaseSafetyCeiling(uint96 rawTarget) public view {
+        uint256 nativeTarget = bound(uint256(rawTarget), 40, 10_000 ether);
+        uint256 compoundLimit = launcher.maxCompoundNativeFor(nativeTarget);
+        uint256 relativeCeiling = nativeTarget / 20;
+        uint256 safetyCeiling = relativeCeiling < 0.5 ether ? relativeCeiling : 0.5 ether;
+
+        assertLe(compoundLimit, safetyCeiling);
+    }
+
     function test_matureSamePoolTwapAllowsCompounding() public {
         LiquidityGrowthLaunchV1.LaunchParameters memory parameters = _parameters(bytes32("mature-twap"));
         (, PoolKey memory key) = _predictedTokenAndKey(parameters);
         LiquidityGrowthLaunchV1.LaunchResult memory result = _launch(parameters);
         LiquidityGrowthVaultV1 vault = LiquidityGrowthVaultV1(payable(result.growthVault));
 
+        _stageOracleToTarget(result.growthVault);
         _matureOracle(key);
         LiquidityGrowthRangeSourceV1.RangeQuote memory quote =
             LiquidityGrowthRangeSourceV1(result.rangeSource).quoteRange();
@@ -239,6 +287,7 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
         LiquidityGrowthVaultV1 vault = LiquidityGrowthVaultV1(payable(result.growthVault));
         LiquidityGrowthRangeSourceV1 source = LiquidityGrowthRangeSourceV1(result.rangeSource);
 
+        _stageOracleToTarget(result.growthVault);
         _matureOracle(key);
         source.quoteRange();
         swap(key, true, -int256(0.25 ether), "");
@@ -277,7 +326,7 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
         assertEq(vault.maxCompoundNative(), MAX_COMPOUND);
         assertEq(vault.tokenReserveTarget(), RESERVE);
         assertEq(vault.activeRangeHalfWidthTicks(), RANGE_HALF_WIDTH);
-        assertEq(vault.compoundCooldownBlocks(), COOLDOWN);
+        assertEq(vault.compoundCooldownSeconds(), COOLDOWN);
         assertEq(vault.beneficiaryAt(0), deployer);
         assertEq(vault.beneficiaryAt(1), beneficiary);
         assertEq(vault.shareBpsOf(deployer), 7000);
@@ -311,7 +360,7 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
         );
         (, uint16 cardinality, uint16 cardinalityNext) = hook.stateById(PoolId.wrap(result.poolId));
         assertEq(cardinality, 1);
-        assertEq(cardinalityNext, 192);
+        assertEq(cardinalityNext, INITIAL_OBSERVATION_CARDINALITY_NEXT);
 
         (address rewardVault,, uint16 buyFee, uint16 sellFee, bool registered,) = hook.poolFeeConfig(result.poolId);
         assertTrue(registered);
@@ -372,19 +421,15 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
         return Create2.computeAddress(_growthVaultSalt(token, deployer), initCodeHash, address(growthFactory));
     }
 
-    function _predictedRangeSource(
-        address token,
-        PoolKey memory key,
-        LiquidityGrowthLaunchV1.GrowthParameters memory growth
-    ) private view returns (address) {
+    function _predictedRangeSource(address token, PoolKey memory key) private view returns (address) {
         return rangeSourceFactory.predict(
             _rangeSourceSalt(token, deployer),
             manager,
             key,
             ILiquidityGrowthOracleV1(address(hook)),
-            growth.twapWindow,
-            growth.activeRangeHalfWidthTicks,
-            growth.maxSpotTwapDeviationTicks
+            TWAP_WINDOW,
+            RANGE_HALF_WIDTH,
+            MAX_SPOT_TWAP_DEVIATION
         );
     }
 
@@ -392,15 +437,15 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
         PoolKey memory key,
         LiquidityGrowthLaunchV1.GrowthParameters memory growth,
         LiquidityGrowthRangeSourceV1 source
-    ) private pure returns (LiquidityGrowthVaultV1.Configuration memory) {
+    ) private view returns (LiquidityGrowthVaultV1.Configuration memory) {
         return LiquidityGrowthVaultV1.Configuration({
             poolKey: key,
             rangeSource: source,
             growthTargetNative: growth.nativeTarget,
-            maxCompoundNative: growth.maxCompoundNative,
+            maxCompoundNative: launcher.maxCompoundNativeFor(growth.nativeTarget),
             tokenReserveTarget: growth.tokenReserveAmount,
-            activeRangeHalfWidthTicks: growth.activeRangeHalfWidthTicks,
-            compoundCooldownBlocks: growth.compoundCooldownBlocks,
+            activeRangeHalfWidthTicks: RANGE_HALF_WIDTH,
+            compoundCooldownSeconds: COOLDOWN,
             beneficiaries: growth.rewardBeneficiaries,
             sharesBps: growth.rewardSharesBps
         });
@@ -431,12 +476,7 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
             }),
             growth: LiquidityGrowthLaunchV1.GrowthParameters({
                 nativeTarget: NATIVE_TARGET,
-                maxCompoundNative: MAX_COMPOUND,
                 tokenReserveAmount: RESERVE,
-                activeRangeHalfWidthTicks: RANGE_HALF_WIDTH,
-                maxSpotTwapDeviationTicks: MAX_SPOT_TWAP_DEVIATION,
-                twapWindow: TWAP_WINDOW,
-                compoundCooldownBlocks: COOLDOWN,
                 rewardBeneficiaries: beneficiaries,
                 rewardSharesBps: shares
             })
@@ -444,13 +484,41 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
     }
 
     function _deployHook() private returns (LiquidityGrowthFeeOracleHookV1 deployed) {
+        return _deployHook(MAX_ABS_TICK_DELTA);
+    }
+
+    function _deployHook(int24 maxAbsTickDelta) private returns (LiquidityGrowthFeeOracleHookV1 deployed) {
         (, bytes32 salt) = HookMiner.find(
             address(hookFactory),
             hookFactory.REQUIRED_HOOK_FLAGS(),
             type(LiquidityGrowthFeeOracleHookV1).creationCode,
-            abi.encode(manager, treasury, splitFactory, MAX_ABS_TICK_DELTA)
+            abi.encode(manager, treasury, splitFactory, maxAbsTickDelta)
         );
-        deployed = hookFactory.deploy(salt, manager, treasury, splitFactory, MAX_ABS_TICK_DELTA);
+        deployed = hookFactory.deploy(salt, manager, treasury, splitFactory, maxAbsTickDelta);
+    }
+
+    function _deployLauncher(LiquidityGrowthFeeOracleHookV1 feeOracleHook)
+        private
+        returns (LiquidityGrowthLaunchV1 deployed)
+    {
+        return _deployLauncherWithAutomation(feeOracleHook, automation);
+    }
+
+    function _deployLauncherWithAutomation(
+        LiquidityGrowthFeeOracleHookV1 feeOracleHook,
+        LiquidityGrowthAutomationV1 coordinator
+    ) private returns (LiquidityGrowthLaunchV1 deployed) {
+        deployed = new LiquidityGrowthLaunchV1(
+            manager,
+            positionManager,
+            tokenFactory,
+            feeOracleHook,
+            splitFactory,
+            rangeSourceFactory,
+            growthFactory,
+            coordinator,
+            positionForwarderFactory
+        );
     }
 
     function _positionSalt(address token, address creator) private pure returns (bytes32) {
@@ -471,6 +539,17 @@ contract LiquidityGrowthLaunchV1Test is Deployers {
         swap(key, true, -int256(0.000_001 ether), "");
         vm.warp(block.timestamp + TWAP_WINDOW);
         vm.roll(block.number + 150);
+    }
+
+    function _stageOracleToTarget(address vaultAddress) private {
+        uint16 target = automation.OBSERVATION_CARDINALITY_TARGET();
+        (,, uint16 next) = hook.stateById(PoolId.wrap(LiquidityGrowthVaultV1(payable(vaultAddress)).poolId()));
+        for (uint256 stage; stage < 16 && next < target; stage++) {
+            (bool grew,, uint16 stagedNext) = automation.stageOracle(vaultAddress);
+            assertTrue(grew);
+            next = stagedNext;
+        }
+        assertEq(next, target);
     }
 
     function _absoluteTickDifference(int24 a, int24 b) private pure returns (uint24 difference) {

@@ -45,6 +45,11 @@ import type {
   VerifiedLaunchRecord,
 } from "./types";
 import { readDurableExploreModel } from "./durable-model";
+import {
+  isDeepExploreReleaseReady,
+  mergeDeepExploreModel,
+  readDeepExploreModel,
+} from "./deep-read-model";
 
 const ZERO_FEE_VOLUME: FeeVolume = {
   grossNativeAmount: 0n,
@@ -743,6 +748,21 @@ async function readReadyModel(
   };
 }
 
+async function readReadyRegistryModel(
+  config: ReadyOnchainDeployment,
+): Promise<ExploreReadModel> {
+  const classic = await readReadyModel(config);
+  if (!isDeepExploreReleaseReady(config)) return classic;
+  if (!classic.snapshot) {
+    throw new Error("The Classic registry has no confirmed snapshot");
+  }
+  const deep = await readDeepExploreModel(
+    config,
+    classic.snapshot.blockNumber,
+  );
+  return mergeDeepExploreModel(classic, deep);
+}
+
 let cachedRead:
   | {
       key: string;
@@ -766,7 +786,7 @@ export async function readLiveExploreModel(
   config: OnchainDeployment = getPublicOnchainDeployment(),
 ): Promise<ExploreReadModel> {
   const model = config.status === "ready"
-    ? readReadyModel(config)
+    ? readReadyRegistryModel(config)
     : emptyReadModel();
   const resolvedModel = await model;
   if (config.status !== "ready") return resolvedModel;
@@ -792,6 +812,7 @@ export async function readExploreModel(
     config.launcher,
     config.deploymentBlock,
     config.confirmations,
+    isDeepExploreReleaseReady(config) ? "deep-ready" : "classic-only",
   ].join(":");
   if (
     cachedRead &&
@@ -802,7 +823,10 @@ export async function readExploreModel(
   }
 
   const value = (async () => {
-    if (config.environment === "production") {
+    if (
+      config.environment === "production" &&
+      !isDeepExploreReleaseReady(config)
+    ) {
       const durable = await readDurableExploreModel(config);
       if (durable.status === "ready") {
         const model = durable.envelope.payload.model;
@@ -814,7 +838,7 @@ export async function readExploreModel(
         }
       }
     }
-    const model = await readReadyModel(config);
+    const model = await readReadyRegistryModel(config);
     try {
       return await enrichExploreModelWithUsd(model, config);
     } catch (error) {

@@ -3,6 +3,10 @@
 > **Status: IN DEVELOPMENT**
 >
 > **DO NOT DEPLOY. DO NOT EXPOSE THIS MODEL IN THE APP.**
+>
+> **Legacy range-based prototype.** The current Deep release candidate uses one immutable FullRange position and a
+> fixed economic policy. See [`DEEP-FULL-RANGE-V1-TECHNICAL-REVIEW.md`](./DEEP-FULL-RANGE-V1-TECHNICAL-REVIEW.md)
+> and [`../release/DEEP-FULL-RANGE-V1.md`](../release/DEEP-FULL-RANGE-V1.md).
 
 LiquidityGrowth is a proposed launch model that redirects creator swap fees into the token's main Uniswap v4 pool
 until its immutable native-liquidity completion rule is satisfied. Creator rewards begin only after that point.
@@ -42,16 +46,36 @@ The existing Classic NFT forwarder is intentionally not reused. It cannot safely
 
 ## Immutable launch configuration
 
-Each vault fixes the following values at deployment:
+Creators choose the economic terms that are specific to their launch:
 
-- pool and hook
 - native-liquidity target
 - token reserve target
-- maximum native amount per compound
-- active range width
-- block cooldown
 - reward beneficiaries
 - beneficiary shares
+
+The canonical V1 launcher fixes the manipulation and execution policy:
+
+- 30-minute truncated same-pool TWAP
+- 192 observation slots
+- 400-tick maximum truncated-oracle movement per observation
+- 600-tick maximum spot-to-TWAP deviation
+- 20,000-tick active range half-width
+- five-minute timestamp-based minimum interval between successful compounds
+- maximum compound amount equal to the smaller of 0.25 ETH and 2.5% of the native target
+
+The compound limit is always below the separate safety ceiling of the smaller of 0.5 ETH and 5% of the native
+target. Creators cannot override any of these policy values.
+
+The five-minute interval limits compounding cadence; it does not replace the 30-minute oracle-maturity requirement.
+Contracts cannot wake themselves up. Any account or external keeper may submit `process()` or `compoundPending()`
+after the interval, and every attempted compound must still pass the exact-pool TWAP checks.
+
+Oracle storage is allocated separately from historical maturity. Launch allocates only the first `1 -> 2`
+observation stage. The immutable permissionless coordinator then grows capacity in bounded 16-slot stages up to 192.
+Fee processing remains unavailable until capacity reaches 192, and the range source independently requires a real
+30-minute observation history. Allocating storage never manufactures history.
+
+The pool, hook, range source, economic terms and release policy are immutable after launch.
 
 There is no owner, admin, upgrade, rescue, withdrawal, position transfer, or configuration-change path.
 
@@ -97,23 +121,30 @@ The vault no longer centers liquidity on the current spot tick. It uses an immut
 by truncated same-pool TWAP observations from the composite hook. There is no spot fallback. Insufficient history or
 excessive spot-to-TWAP deviation blocks compounding atomically.
 
-The launch path initializes 192 observation slots and tests a mature 30-minute history. A one-transaction spot move
-is rejected in unit and regression tests, and the locked-position lifecycle passes against the pinned official
-mainnet PoolManager.
+The launch path initializes the oracle, registers the exact factory-authenticated vault with the immutable
+coordinator and allocates capacity from one to two observations. Permissionless bounded calls grow capacity by no
+more than 16 slots at a time and cap it at 192. Compounding requires both the full capacity target and a mature
+30-minute history, and separately enforces a five-minute timestamp-based minimum interval. A one-transaction spot
+move is rejected in unit and regression tests, and the locked-position lifecycle passes against the pinned official
+mainnet PoolManager. The canonical launcher rejects a fee-oracle hook configured with any tick-delta value other than
+400 and derives every vault's compound limit from its immutable target.
 
-**LiquidityGrowth V1 remains non-deployable until the release configuration is pinned, sustained-manipulation tests
-pass with that exact configuration, gas is reviewed and a deployment manifest is verified.**
+Sustained-manipulation testing has confirmed that a distortion held for the full 30-minute window can become the
+same-pool TWAP and be accepted. The spot-to-TWAP breaker then prevents further compounding after price restoration
+until a healthy window develops, but it cannot establish an independent fair price.
+
+**LiquidityGrowth V1 remains non-deployable until that sustained-manipulation risk has an explicit safe design,
+gas is reviewed and a deployment manifest is verified.**
 
 ## Required release gates
 
-- pin one disclosed release policy for TWAP window, cardinality, tick-delta cap, spot deviation, range width, compound
-  size and cooldown
 - sustained-manipulation, thin-liquidity, reordering and repeated permissionless-processing tests against that exact
   policy
 - adversarial proof that the bounded completion rule releases only after its disclosed minimum and that material
   reserve underfunding remains fail-closed
-- pin economic bounds for the native target and token reserve
-- gas review for launch-time observation-cardinality initialization and permissionless processing
+- disclose the chosen native target and token reserve before signature
+- mainnet-fork gas review for the atomic two-slot launch prime, bounded observation staging and permissionless
+  processing
 - source verification and deployment manifest for every new component
 - application gating so an unregistered or underfunded vault cannot be presented as available
 
@@ -121,9 +152,6 @@ pass with that exact configuration, gas is reviewed and a deployment manifest is
 
 - native-liquidity target
 - token reserve amount or supply percentage
-- maximum compound size
-- range policy and width
-- cooldown
 - reward beneficiary split
 - whether post-target fees go to beneficiaries, buybacks, burns, or a separate future model
 

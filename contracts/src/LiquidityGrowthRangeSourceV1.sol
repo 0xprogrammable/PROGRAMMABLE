@@ -22,6 +22,7 @@ contract LiquidityGrowthRangeSourceV1 {
 
     uint32 public constant MIN_TWAP_WINDOW = 5 minutes;
     uint32 public constant MAX_TWAP_WINDOW = 1 days;
+    uint16 public constant MIN_OBSERVATION_CARDINALITY_NEXT = 192;
 
     IPoolManager public immutable poolManager;
     ILiquidityGrowthOracleV1 public immutable oracleHook;
@@ -38,6 +39,7 @@ contract LiquidityGrowthRangeSourceV1 {
     error InvalidRangeConfiguration(int24 tickSpacing, int24 rangeHalfWidthTicks, int24 maxSpotTwapDeviationTicks);
     error InvalidTwapTick(int56 tick);
     error InvalidTwapWindow(uint32 twapWindow);
+    error ObservationCapacityInsufficient(uint16 actual, uint16 required);
     error PoolNotInitialized(bytes32 poolId);
     error SpotTwapDeviationExceeded(int24 spotTick, int24 twapTick, uint24 deviation, int24 maximumDeviation);
 
@@ -108,6 +110,16 @@ contract LiquidityGrowthRangeSourceV1 {
         // slither-disable-next-line unused-return
         (uint160 sqrtPriceX96, int24 spotTick,,) = poolManager.getSlot0(id);
         if (sqrtPriceX96 == 0) revert PoolNotInitialized(poolId);
+
+        // Allocated capacity and historical maturity are separate requirements. Capacity prevents a high-frequency
+        // pool from overwriting the complete window immediately after a successful quote; observe() below still
+        // proves that an actual full window exists and fails closed when older observations were already lost.
+        // The range gate needs allocated capacity, not the current write index or populated cardinality.
+        // slither-disable-next-line unused-return
+        (,, uint16 cardinalityNext) = oracleHook.stateById(id);
+        if (cardinalityNext < MIN_OBSERVATION_CARDINALITY_NEXT) {
+            revert ObservationCapacityInsufficient(cardinalityNext, MIN_OBSERVATION_CARDINALITY_NEXT);
+        }
 
         uint32[] memory secondsAgos = new uint32[](2);
         secondsAgos[0] = twapWindow;

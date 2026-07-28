@@ -120,7 +120,7 @@ export type PreparedLaunchTransaction = Extract<
 
 export type LaunchPreflightResponse = {
   status: "blocked" | "ready";
-  mode: "meme" | "classic-v3" | "adaptive";
+  mode: "meme" | "classic-v3" | "adaptive" | "deep";
   title: string;
   detail: string;
   checks: LaunchPreflightCheck[];

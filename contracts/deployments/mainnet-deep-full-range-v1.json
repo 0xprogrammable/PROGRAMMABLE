@@ -1,0 +1,478 @@
+{
+  "schemaVersion": 1,
+  "model": "deep",
+  "internalContractRelease": "liquidity-growth-full-range-v1",
+  "releaseVersion": "deep-full-range-v1",
+  "status": "not-deployed",
+  "releaseEligible": false,
+  "chainId": 1,
+  "releaseCommit": null,
+  "sourceCommitment": "0x82f6e2745dfbf54f40eae80df645bc75a7952e0505dd0621437dd233a619acfd",
+  "startBlock": null,
+  "startingNonce": null,
+  "transactionCount": 6,
+  "candidatePlan": {
+    "status": "not-fixed-refresh-before-signing",
+    "observedAtBlock": null,
+    "deployer": null,
+    "startingNonce": null,
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "hookSalt": null,
+    "hookInitCodeHash": null,
+    "rangeSourceFactory": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "launcher": null,
+    "automation": null,
+    "positionPlanner": null
+  },
+  "addresses": {
+    "deployer": null,
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "rangeSourceFactory": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "launcher": null,
+    "automation": null,
+    "positionPlanner": null,
+    "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
+  },
+  "transactions": {
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "rangeSourceFactory": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "launcher": null,
+    "automation": null,
+    "positionPlanner": null
+  },
+  "deploymentBlocks": {
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "rangeSourceFactory": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "launcher": null,
+    "automation": null,
+    "positionPlanner": null
+  },
+  "deploymentEvidence": {
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "rangeSourceFactory": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "launcher": null,
+    "automation": null,
+    "positionPlanner": null
+  },
+  "runtimeCodeHashes": {
+    "feeSplitVaultFactory": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "rangeSourceFactory": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "launcher": null,
+    "automation": null,
+    "positionPlanner": null,
+    "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
+  },
+  "artifactRuntime": {
+    "feeSplitVaultFactory": {
+      "fqcn": "src/FeeSplitVaultFactoryV1.sol:FeeSplitVaultFactoryV1",
+      "creationBytes": 7022,
+      "creationCodeHash": "0xd17ede522c0892134e54d5c22433332c85a27e5ac7f2e6eaf7d2b401094076df",
+      "bytes": 6994,
+      "codeHash": "0x6e0fed3c3598d32458b9c7ce04a97ae3e0cc847e4022e3dec5a14cd1f29c88fc"
+    },
+    "feeSplitVault": {
+      "fqcn": "src/FeeSplitVaultV1.sol:FeeSplitVaultV1",
+      "creationBytes": 4979,
+      "creationCodeHash": "0xc94474123f2846dbb6fcf9acdf4e4a77bb87b491aefa4e00e27dc9d7d42980c2",
+      "bytes": 3186,
+      "codeHash": "0x451705dfda2463ac571c13d60dc06e3b9f6c4ff5a388f5652b5566cd2ab4fb26"
+    },
+    "hookFactory": {
+      "fqcn": "src/LiquidityGrowthFeeOracleHookFactoryV1.sol:LiquidityGrowthFeeOracleHookFactoryV1",
+      "creationBytes": 21124,
+      "creationCodeHash": "0xa72fe6458c6fe2c3f7be2c9bbb94a1e9878b2bb94cd9719f9eece60ff725b5c8",
+      "bytes": 21096,
+      "codeHash": "0x786c4720eeb3583c6021794e39360369f52510d2d0b29b8212b99bb9e6efe5ae"
+    },
+    "feeHookTemplate": {
+      "fqcn": "src/LiquidityGrowthFeeOracleHookV1.sol:LiquidityGrowthFeeOracleHookV1",
+      "creationBytes": 19291,
+      "creationCodeHash": "0xb6941769ddda7186c5ac3ea484663ef351ed3ae70c107f1355f4a448a21b7117",
+      "bytes": 18085,
+      "codeHash": "0xc91b5c562fa7e9f9f17e672eefd418b67e8f168c740fc0315c956da9243a5d47",
+      "note": "Runtime template before constructor immutable references are patched"
+    },
+    "rangeSourceFactory": {
+      "fqcn": "src/LiquidityGrowthRangeSourceFactoryV1.sol:LiquidityGrowthRangeSourceFactoryV1",
+      "creationBytes": 9340,
+      "creationCodeHash": "0x2cc752b1e6181ee5c0d3afa14f6795d60a27fa4d316ed9313c1ca24afc853b66",
+      "bytes": 9312,
+      "codeHash": "0x3c909216b8f1200c19d6d01f65b332fe3eca4728e27d671a86a346089df69373"
+    },
+    "rangeSource": {
+      "fqcn": "src/LiquidityGrowthRangeSourceV1.sol:LiquidityGrowthRangeSourceV1",
+      "creationBytes": 5886,
+      "creationCodeHash": "0x797aa48f743480d82849bf7285e7fee71ba8cc38930e222ac4c647cf18e1fc95",
+      "bytes": 4203,
+      "codeHash": "0x37d8f0ff1b9608560dc8a9214e31574d3985938f1765c4431b66ca61f88dc04b",
+      "note": "Per-pool runtime template before constructor immutable references are patched"
+    },
+    "growthVaultFactoryTemplate": {
+      "fqcn": "src/LiquidityGrowthFullRangeVaultFactoryV1.sol:LiquidityGrowthFullRangeVaultFactoryV1",
+      "creationBytes": 32192,
+      "creationCodeHash": "0xa5d11bae7041bd1a09dcb3ba7519115e72b557319901498ecd456c43c390db90",
+      "bytes": 9154,
+      "codeHash": "0xd7ad7171eb93edb892f076d487b0006274fe588983facdec3f7c05d8534594cb",
+      "note": "Runtime template before constructor immutable references are patched"
+    },
+    "growthVaultImplementationTemplate": {
+      "fqcn": "src/LiquidityGrowthFullRangeVaultV1.sol:LiquidityGrowthFullRangeVaultV1",
+      "creationBytes": 22147,
+      "creationCodeHash": "0xd7de11a66bb96d0a838d00129f5046acc33f7a6eb9f7635d09425d624288e6cc",
+      "bytes": 21941,
+      "codeHash": "0x8edc7a4e1f19d292a5fcb115971c8fe57b2556e769c71e5b85f538d29cb17f92",
+      "note": "Runtime template before the factory immutable is patched"
+    },
+    "launcherTemplate": {
+      "fqcn": "src/LiquidityGrowthFullRangeLaunchV1.sol:LiquidityGrowthFullRangeLaunchV1",
+      "creationBytes": 40123,
+      "creationCodeHash": "0x532e40c18c3a5ff25680b09052613f282ba789f0aed5354514840aaff9d44295",
+      "bytes": 18785,
+      "codeHash": "0x3931eb47b00199f7cf6afd5d23ec88fd3ce3858a28fd60200a11d44ccfe19251",
+      "note": "Runtime template before constructor immutable references are patched"
+    },
+    "automationTemplate": {
+      "fqcn": "src/LiquidityGrowthFullRangeAutomationV1.sol:LiquidityGrowthFullRangeAutomationV1",
+      "creationBytes": 8869,
+      "creationCodeHash": "0x2ca273984d4a9aebddf20b3cdc77832d60bbdd3f1c742073877f13d23a0f19ee",
+      "bytes": 8548,
+      "codeHash": "0xb2011c7473dccecb744d65cdd8a84f3a356a89516f84bedac3eed7b10f2e0792",
+      "note": "Runtime template before constructor immutable references are patched"
+    },
+    "positionPlanner": {
+      "fqcn": "src/LiquidityGrowthFullRangePositionPlannerV1.sol:LiquidityGrowthFullRangePositionPlannerV1",
+      "creationBytes": 7841,
+      "creationCodeHash": "0x52ad4c8ca425918a913869cb539d0c3ea48cac2cca127c9fddd392546e22f841",
+      "bytes": 7813,
+      "codeHash": "0x091099e5dda7392628b5935eeb1e2eeab687a170c3a6bddb79bb8b264d58a95a"
+    }
+  },
+  "officialDependencies": {
+    "poolManager": {
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "sourceRef": "v4-core@1.0.0",
+      "runtimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+    },
+    "positionManager": {
+      "address": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+      "sourceRef": "v4-periphery@2656054",
+      "runtimeCodeHash": "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b"
+    },
+    "stateView": {
+      "address": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+      "sourceRef": "v4-periphery@2656054",
+      "runtimeCodeHash": "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878"
+    },
+    "v4Quoter": {
+      "address": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+      "sourceRef": "v4-periphery@2656054",
+      "runtimeCodeHash": "0x06de58fa119c5deaa7a667fb92d3894e25d9160e62fb82c8d86d43b47eefe441"
+    },
+    "uerc20Factory": {
+      "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
+      "sourceRef": "uerc20-factory@v2.0.0",
+      "runtimeCodeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb"
+    },
+    "permit2": {
+      "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "sourceRef": "permit2",
+      "runtimeCodeHash": "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131"
+    },
+    "universalRouter": {
+      "address": "0xd92A36B0000531EF3063dEd4De20A0783308446C",
+      "sourceRef": "universal-router@d2d9c4a",
+      "runtimeCodeHash": "0x41ccd905c8e4de29ce9536ff49233b79e3085a0987d490664e703ee1e7b1dc49"
+    },
+    "positionForwarderFactory": {
+      "address": "0x291a9ff1059d225d02B1659430804486404dB507",
+      "sourceRef": "programmable-classic-v2",
+      "runtimeCodeHash": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2",
+      "deploymentTransaction": "0x23077b93bd1bb68d827b26179d7db98bc7f34c1a1ba8c277d35f93e5e2a473e4",
+      "deploymentBlock": 25622031
+    }
+  },
+  "dependencyProvenance": {
+    "uniswapDeploymentDataset": {
+      "url": "https://developers.uniswap.org/deployments.json",
+      "generatedAt": "2026-07-15T22:25:40.000Z",
+      "sourceCommit": "37936185dee7decf681360ec799c124e0e034672"
+    },
+    "runtimeSnapshotBlock": 25612664,
+    "deploymentForkBlock": 25622180,
+    "gitCommits": {
+      "v4-core": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc",
+      "v4-periphery": "ad04c9f24a170accf5ea1b2836bbafd514537ca6",
+      "openzeppelin-contracts": "21c8312b022f495ebe3621d5daeed20552b43ff9",
+      "openzeppelin-uniswap-hooks": "26dc8e53f812a1ca390d470342adb6cd8c3286ad",
+      "liquidity-launcher": "e4660afe4f820f4a39181c7ea1f9bce6c423499f",
+      "uerc20-factory": "6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68"
+    }
+  },
+  "compiler": {
+    "version": "0.8.26",
+    "optimizerEnabled": true,
+    "optimizerRuns": 1000,
+    "evmVersion": "cancun",
+    "bytecodeHash": "none",
+    "cborMetadata": false,
+    "viaIR": false,
+    "linkedLibraries": {}
+  },
+  "immutablePolicy": {
+    "launcherFeeBps": 10,
+    "minimumTotalSwapFeeBps": 100,
+    "maximumTotalSwapFeeBps": 1000,
+    "totalSwapFeeStepBps": 100,
+    "transferTaxBps": 0,
+    "lpFeePips": 0,
+    "tickSpacing": 200,
+    "initialTick": 204200,
+    "tokenSupply": "1000000000000000000000000000",
+    "tokenReserveTarget": "150000000000000000000000000",
+    "growthTargetNativeWei": "50000000000000000",
+    "minimumInitialBuyWei": "600000000000000",
+    "minimumOracleActivationNativeWei": "2000000000000000",
+    "twapWindowSeconds": 1800,
+    "compoundCooldownSeconds": 1800,
+    "maximumSpotTwapDeviationTicks": 600,
+    "maximumHookTickDelta": 400,
+    "maximumTrustedDepthBps": 25,
+    "minimumTokenReserveBps": 8500
+  },
+  "keeperPolicy": {
+    "status": "disabled-until-release-verified",
+    "enabled": false,
+    "transactionSubmission": false,
+    "coordinator": null,
+    "coordinatorRuntimeCodeHash": null,
+    "confirmations": 12,
+    "independentReadRpcCount": 2,
+    "intervalMilliseconds": 300000,
+    "defaultMaxBatchSize": 4,
+    "defaultMaxGas": "3000000",
+    "maximumOperationalBatchSize": 8,
+    "extendedBatchMinimumGas": "6000000",
+    "vaultSubsidyCapWei": "30000000000000000"
+  },
+  "sourceVerification": {
+    "status": "not-submitted",
+    "compiler": {
+      "version": "0.8.26",
+      "optimizerEnabled": true,
+      "optimizerRuns": 1000,
+      "evmVersion": "cancun",
+      "bytecodeHash": "none",
+      "cborMetadata": false,
+      "viaIR": false
+    },
+    "contracts": {
+      "feeSplitVaultFactory": {
+        "fqcn": "src/FeeSplitVaultFactoryV1.sol:FeeSplitVaultFactoryV1",
+        "deploymentKind": "CREATE",
+        "constructorTypes": [],
+        "constructorArguments": [],
+        "encodedConstructorArguments": "0x",
+        "etherscan": null,
+        "sourcify": null
+      },
+      "hookFactory": {
+        "fqcn": "src/LiquidityGrowthFeeOracleHookFactoryV1.sol:LiquidityGrowthFeeOracleHookFactoryV1",
+        "deploymentKind": "CREATE",
+        "constructorTypes": [],
+        "constructorArguments": [],
+        "encodedConstructorArguments": "0x",
+        "etherscan": null,
+        "sourcify": null
+      },
+      "feeHook": {
+        "fqcn": "src/LiquidityGrowthFeeOracleHookV1.sol:LiquidityGrowthFeeOracleHookV1",
+        "deploymentKind": "CREATE2_FACTORY_CALL",
+        "constructorTypes": [
+          "address",
+          "address",
+          "address",
+          "int24"
+        ],
+        "constructorArguments": null,
+        "encodedConstructorArguments": null,
+        "etherscan": null,
+        "sourcify": null
+      },
+      "rangeSourceFactory": {
+        "fqcn": "src/LiquidityGrowthRangeSourceFactoryV1.sol:LiquidityGrowthRangeSourceFactoryV1",
+        "deploymentKind": "CREATE",
+        "constructorTypes": [],
+        "constructorArguments": [],
+        "encodedConstructorArguments": "0x",
+        "etherscan": null,
+        "sourcify": null
+      },
+      "growthVaultFactory": {
+        "fqcn": "src/LiquidityGrowthFullRangeVaultFactoryV1.sol:LiquidityGrowthFullRangeVaultFactoryV1",
+        "deploymentKind": "CREATE",
+        "constructorTypes": [
+          "address",
+          "address",
+          "address",
+          "address",
+          "address"
+        ],
+        "constructorArguments": null,
+        "encodedConstructorArguments": null,
+        "etherscan": null,
+        "sourcify": null
+      },
+      "growthVaultImplementation": {
+        "fqcn": "src/LiquidityGrowthFullRangeVaultV1.sol:LiquidityGrowthFullRangeVaultV1",
+        "deploymentKind": "INTERNAL_CREATE",
+        "constructorTypes": [
+          "address"
+        ],
+        "constructorArguments": null,
+        "encodedConstructorArguments": null,
+        "etherscan": null,
+        "sourcify": null
+      },
+      "launcher": {
+        "fqcn": "src/LiquidityGrowthFullRangeLaunchV1.sol:LiquidityGrowthFullRangeLaunchV1",
+        "deploymentKind": "CREATE",
+        "constructorTypes": [
+          "address",
+          "address",
+          "address",
+          "address",
+          "address",
+          "address",
+          "address",
+          "address"
+        ],
+        "constructorArguments": null,
+        "encodedConstructorArguments": null,
+        "etherscan": null,
+        "sourcify": null
+      },
+      "automation": {
+        "fqcn": "src/LiquidityGrowthFullRangeAutomationV1.sol:LiquidityGrowthFullRangeAutomationV1",
+        "deploymentKind": "INTERNAL_CREATE",
+        "constructorTypes": [
+          "address",
+          "address"
+        ],
+        "constructorArguments": null,
+        "encodedConstructorArguments": null,
+        "etherscan": null,
+        "sourcify": null
+      },
+      "positionPlanner": {
+        "fqcn": "src/LiquidityGrowthFullRangePositionPlannerV1.sol:LiquidityGrowthFullRangePositionPlannerV1",
+        "deploymentKind": "INTERNAL_CREATE",
+        "constructorTypes": [],
+        "constructorArguments": [],
+        "encodedConstructorArguments": "0x",
+        "etherscan": null,
+        "sourcify": null
+      },
+      "feeSplitVaultTemplate": {
+        "fqcn": "src/FeeSplitVaultV1.sol:FeeSplitVaultV1",
+        "deploymentKind": "PER_POOL_CREATE2",
+        "constructorTypes": [
+          "address",
+          "bytes32",
+          "address[]",
+          "uint16[]"
+        ],
+        "constructorArguments": null,
+        "encodedConstructorArguments": null,
+        "etherscan": null,
+        "sourcify": null
+      },
+      "rangeSourceTemplate": {
+        "fqcn": "src/LiquidityGrowthRangeSourceV1.sol:LiquidityGrowthRangeSourceV1",
+        "deploymentKind": "PER_POOL_CREATE2",
+        "constructorTypes": [
+          "address",
+          "tuple(address,address,uint24,int24,address)",
+          "address",
+          "uint32",
+          "int24",
+          "int24"
+        ],
+        "constructorArguments": null,
+        "encodedConstructorArguments": null,
+        "etherscan": null,
+        "sourcify": null
+      }
+    }
+  },
+  "forkPreflight": {
+    "status": "passed-local-not-release-evidence",
+    "dependencyDeploymentBlock": 25622180,
+    "behaviorSnapshotBlock": 25612664,
+    "commands": {
+      "deployment": "forge test --offline --match-path test/DeployMainnetDeepFullRangeInfrastructureV1.t.sol -vv",
+      "fullRange": "forge test --match-path 'test/LiquidityGrowthFullRange*.t.sol' -vv",
+      "invariants": "FOUNDRY_PROFILE=ci forge test --match-path test/invariant/LiquidityGrowthFullRangeInvariant.t.sol -vv"
+    },
+    "results": {
+      "deployment": "4/4",
+      "fullRange": "50/50",
+      "mainnetFork": "6/6",
+      "deterministic": "391/391",
+      "invariants": "9/9 at 1000 runs x 128 calls"
+    },
+    "slither": {
+      "version": "0.11.5",
+      "highOrMediumFindings": 0,
+      "complete": false,
+      "limitation": "Packed Uniswap v4 delta code caused IR-generation failures; review the raw and triaged reports"
+    }
+  },
+  "lifecycleEvidence": {
+    "status": "not-run",
+    "releaseEligible": false,
+    "requiredRelease": "deep-full-range-v1",
+    "independentRpcCount": 2,
+    "canaryToken": null,
+    "launchTransaction": null,
+    "keeperTransaction": null,
+    "evidenceHash": null
+  },
+  "activation": {
+    "appStatus": "disabled",
+    "keeperStatus": "disabled",
+    "requiresExactManifestMatch": true
+  },
+  "blockers": [
+    "Freeze and push an exact release commit",
+    "Refresh a deterministic deployment plan immediately before signing",
+    "Record successful receipts, blocks and runtime hashes for every deployed component",
+    "Verify every infrastructure contract source on Etherscan and Sourcify",
+    "Run and attest a real canary launch and keeper lifecycle through two independent RPCs",
+    "Enable the app and keeper only after this manifest is complete and independently reviewed"
+  ]
+}

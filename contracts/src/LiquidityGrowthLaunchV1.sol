@@ -29,6 +29,7 @@ import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPosition
 
 import { FeeSplitVaultFactoryV1 } from "./FeeSplitVaultFactoryV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "./LockedPositionFeeForwarderFactoryV1.sol";
+import { LiquidityGrowthAutomationV1 } from "./LiquidityGrowthAutomationV1.sol";
 import { LiquidityGrowthFeeOracleHookV1 } from "./LiquidityGrowthFeeOracleHookV1.sol";
 import { LiquidityGrowthRangeSourceFactoryV1 } from "./LiquidityGrowthRangeSourceFactoryV1.sol";
 import { LiquidityGrowthRangeSourceV1 } from "./LiquidityGrowthRangeSourceV1.sol";
@@ -59,7 +60,13 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     int24 public constant INITIAL_TICK = 204_200;
     int24 public constant TICK_SPACING = 200;
     uint24 public constant LP_FEE_PIPS = 0;
-    uint16 private constant OBSERVATION_CARDINALITY_NEXT = 192;
+    uint32 private constant TWAP_WINDOW = 30 minutes;
+    int24 private constant MAX_ABS_TICK_DELTA = 400;
+    int24 private constant MAX_SPOT_TWAP_DEVIATION_TICKS = 600;
+    int24 private constant ACTIVE_RANGE_HALF_WIDTH_TICKS = 20_000;
+    uint64 private constant COMPOUND_COOLDOWN_SECONDS = 5 minutes;
+    uint256 private constant COMPOUND_TARGET_DIVISOR = 40;
+    uint256 private constant COMPOUND_NATIVE_CAP = 0.25 ether;
     uint24 private constant POSITION_WEIGHT = 10_000_000;
     // Slither 0.11.5 cannot build IR for unlockCallback and consequently misses the native settlement use.
     // slither-disable-next-line unused-state
@@ -72,6 +79,7 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     FeeSplitVaultFactoryV1 private immutable feeSplitVaultFactory;
     LiquidityGrowthRangeSourceFactoryV1 private immutable rangeSourceFactory;
     LiquidityGrowthVaultFactoryV1 private immutable growthVaultFactory;
+    LiquidityGrowthAutomationV1 public immutable automation;
     LockedPositionFeeForwarderFactoryV1 private immutable positionForwarderFactory;
 
     mapping(address token => bytes32 launchHash) public launchHashOf;
@@ -79,12 +87,7 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
 
     struct GrowthParameters {
         uint256 nativeTarget;
-        uint256 maxCompoundNative;
         uint256 tokenReserveAmount;
-        int24 activeRangeHalfWidthTicks;
-        int24 maxSpotTwapDeviationTicks;
-        uint32 twapWindow;
-        uint64 compoundCooldownBlocks;
         address[] rewardBeneficiaries;
         uint16[] rewardSharesBps;
     }
@@ -131,9 +134,12 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     error InvalidInitialBuyResult(uint256 tokenAmount, uint256 residualNativeBalance);
     error InvalidInitialBuySettlement(uint256 actual, uint256 expected);
     error InvalidInitialTick(int24 actual, int24 expected);
+    error InvalidAutomationFactory(address expected, address actual);
     error InvalidPosition(uint256 count, uint256 amount0, int24 tickLower, int24 tickUpper);
     error InvalidPositionManager(address expectedPoolManager, address actualPoolManager);
     error InvalidPositionManagerFactory(address expectedPositionManager, address actualPositionManager);
+    error InvalidNativeTarget(uint256 nativeTarget);
+    error InvalidOracleTickDelta(int24 actual, int24 expected);
     error InvalidReserveAmount(uint256 actual, uint256 tokenSupply);
     error InvalidReserveTransfer(uint256 actual, uint256 expected);
     error InvalidSharedHook(address expectedPoolManager, uint24 lpFeePips, int24 tickSpacing);
@@ -181,7 +187,7 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 nativeTarget,
         uint256 maxCompoundNative,
         int24 activeRangeHalfWidthTicks,
-        uint64 compoundCooldownBlocks,
+        uint64 compoundCooldownSeconds,
         bytes32 launchHash
     );
     event LiquidityGrowthCreatorInitialBuy(
@@ -201,6 +207,7 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         FeeSplitVaultFactoryV1 feeSplitVaultFactory_,
         LiquidityGrowthRangeSourceFactoryV1 rangeSourceFactory_,
         LiquidityGrowthVaultFactoryV1 growthVaultFactory_,
+        LiquidityGrowthAutomationV1 automation_,
         LockedPositionFeeForwarderFactoryV1 positionForwarderFactory_
     ) {
         _requireContract(address(poolManager_));
@@ -210,6 +217,7 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         _requireContract(address(feeSplitVaultFactory_));
         _requireContract(address(rangeSourceFactory_));
         _requireContract(address(growthVaultFactory_));
+        _requireContract(address(automation_));
         _requireContract(address(positionForwarderFactory_));
 
         address positionManagerPoolManager = address(positionManager_.poolManager());
@@ -226,9 +234,17 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         ) {
             revert InvalidSharedHook(address(poolManager_), feeHook_.LP_FEE_PIPS(), feeHook_.TICK_SPACING());
         }
+        int24 configuredMaxAbsTickDelta = feeHook_.maxAbsTickDelta();
+        if (configuredMaxAbsTickDelta != MAX_ABS_TICK_DELTA) {
+            revert InvalidOracleTickDelta(configuredMaxAbsTickDelta, MAX_ABS_TICK_DELTA);
+        }
         address configuredVaultFactory = address(feeHook_.feeSplitVaultFactory());
         if (configuredVaultFactory != address(feeSplitVaultFactory_)) {
             revert InvalidVaultFactory(address(feeSplitVaultFactory_), configuredVaultFactory);
+        }
+        address automationVaultFactory = address(automation_.vaultFactory());
+        if (automationVaultFactory != address(growthVaultFactory_)) {
+            revert InvalidAutomationFactory(address(growthVaultFactory_), automationVaultFactory);
         }
 
         poolManager = poolManager_;
@@ -238,6 +254,7 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         feeSplitVaultFactory = feeSplitVaultFactory_;
         rangeSourceFactory = rangeSourceFactory_;
         growthVaultFactory = growthVaultFactory_;
+        automation = automation_;
         positionForwarderFactory = positionForwarderFactory_;
     }
 
@@ -264,7 +281,7 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
 
         PoolKey memory key = _poolKey(result.token);
         result.poolId = PoolId.unwrap(key.toId());
-        result.rangeSource = _deployOrReuseRangeSource(result.token, msg.sender, key, parameters.growth);
+        result.rangeSource = _deployOrReuseRangeSource(result.token, msg.sender, key);
         LiquidityGrowthVaultV1.Configuration memory configuration =
             _growthConfiguration(key, parameters.growth, LiquidityGrowthRangeSourceV1(result.rangeSource));
         result.growthVault = _deployOrReuseGrowthVault(result.token, msg.sender, configuration);
@@ -285,7 +302,9 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         uint160 initialSqrtPriceX96 = TickMath.getSqrtPriceAtTick(INITIAL_TICK);
         int24 initializedTick = poolManager.initialize(key, initialSqrtPriceX96);
         if (initializedTick != INITIAL_TICK) revert InvalidInitialTick(initializedTick, INITIAL_TICK);
-        feeHook.increaseObservationCardinalityNext(OBSERVATION_CARDINALITY_NEXT, PoolId.wrap(result.poolId));
+        // Registration and the minimal 1 -> 2 oracle stage are part of launch. Later permissionless stages grow
+        // capacity in bounded increments without charging the creator for all observation slots here.
+        automation.registerAndStageOracle(result.growthVault);
 
         uint256 poolTokenBudget = TOKEN_SUPPLY - result.tokenReserveAmount;
         (Plan memory plan, Position memory position, uint256 lockedTokenDust) =
@@ -343,12 +362,10 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         growthVault = address(growthVaultFactory.deployOrGet(salt, feeHook, feeSplitVaultFactory, configuration));
     }
 
-    function _deployOrReuseRangeSource(
-        address token,
-        address deployer,
-        PoolKey memory key,
-        GrowthParameters calldata growth
-    ) private returns (address sourceAddress) {
+    function _deployOrReuseRangeSource(address token, address deployer, PoolKey memory key)
+        private
+        returns (address sourceAddress)
+    {
         bytes32 salt = _rangeSourceSalt(token, deployer);
         sourceAddress = address(
             rangeSourceFactory.deployOrGet(
@@ -356,9 +373,9 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
                 poolManager,
                 key,
                 ILiquidityGrowthOracleV1(address(feeHook)),
-                growth.twapWindow,
-                growth.activeRangeHalfWidthTicks,
-                growth.maxSpotTwapDeviationTicks
+                TWAP_WINDOW,
+                ACTIVE_RANGE_HALF_WIDTH_TICKS,
+                MAX_SPOT_TWAP_DEVIATION_TICKS
             )
         );
     }
@@ -541,9 +558,9 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
             result.tokenLiquidityAmount,
             result.lockedTokenDust,
             growth.nativeTarget,
-            growth.maxCompoundNative,
-            growth.activeRangeHalfWidthTicks,
-            growth.compoundCooldownBlocks,
+            maxCompoundNativeFor(growth.nativeTarget),
+            ACTIVE_RANGE_HALF_WIDTH_TICKS,
+            COMPOUND_COOLDOWN_SECONDS,
             launchHash
         );
     }
@@ -557,13 +574,22 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
             poolKey: key,
             rangeSource: source,
             growthTargetNative: growth.nativeTarget,
-            maxCompoundNative: growth.maxCompoundNative,
+            maxCompoundNative: maxCompoundNativeFor(growth.nativeTarget),
             tokenReserveTarget: growth.tokenReserveAmount,
-            activeRangeHalfWidthTicks: growth.activeRangeHalfWidthTicks,
-            compoundCooldownBlocks: growth.compoundCooldownBlocks,
+            activeRangeHalfWidthTicks: ACTIVE_RANGE_HALF_WIDTH_TICKS,
+            compoundCooldownSeconds: COMPOUND_COOLDOWN_SECONDS,
             beneficiaries: growth.rewardBeneficiaries,
             sharesBps: growth.rewardSharesBps
         });
+    }
+
+    /// @notice Returns the immutable per-compound native limit for a proposed economic target.
+    /// @dev The result is at most 2.5% of the target and never more than 0.25 ETH. It is therefore also bounded by
+    ///      the release safety ceiling of min(5% of the target, 0.5 ETH).
+    function maxCompoundNativeFor(uint256 nativeTarget) public pure returns (uint256 amount) {
+        if (nativeTarget < COMPOUND_TARGET_DIVISOR) revert InvalidNativeTarget(nativeTarget);
+        amount = nativeTarget / COMPOUND_TARGET_DIVISOR;
+        if (amount > COMPOUND_NATIVE_CAP) amount = COMPOUND_NATIVE_CAP;
     }
 
     function _poolKey(address token) private view returns (PoolKey memory) {
@@ -582,6 +608,7 @@ contract LiquidityGrowthLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         if (reserveAmount == 0 || reserveAmount >= TOKEN_SUPPLY) {
             revert InvalidReserveAmount(reserveAmount, TOKEN_SUPPLY);
         }
+        maxCompoundNativeFor(parameters.growth.nativeTarget);
 
         _validateSwapFee(parameters.buySwapFeeBps);
         _validateSwapFee(parameters.sellSwapFeeBps);

@@ -19,9 +19,12 @@ import {
   classicV3HookAbi,
   feeSplitVaultAbi,
   feeSplitVaultFactoryAbi,
-  isClassicV3DeploymentReady,
   type ClassicV3DeploymentManifest,
 } from "@/lib/classic-v3";
+import {
+  getConfiguredClassicV3Release,
+  isClassicV3ReleaseVerified,
+} from "@/lib/classic-v3-release";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { encodeClassicV3RewardAction } from "@/lib/profile/classic-v3-rewards";
 
@@ -42,6 +45,8 @@ const environment =
 const manifest = appDeployments[
   environment
 ] as unknown as ClassicV3DeploymentManifest;
+const releaseManifest =
+  getConfiguredClassicV3Release(environment).releaseManifest;
 const chain = environment === "rehearsal" ? sepolia : mainnet;
 const rpcUrl =
   environment === "rehearsal"
@@ -133,7 +138,7 @@ function beneficiaryEntitlement(
 }
 
 async function readRewards(account: Address) {
-  if (!isClassicV3DeploymentReady(manifest, chain.id)) {
+  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
     return {
       status: "not-deployed" as const,
       account,
@@ -358,7 +363,7 @@ async function readRewards(account: Address) {
 }
 
 async function readLaunchByTransaction(account: Address, transactionHash: Hex) {
-  if (!isClassicV3DeploymentReady(manifest, chain.id)) {
+  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
     return { status: "not-deployed" as const, launch: null };
   }
   const launcher = getAddress(manifest.memeLaunchV2 as string);

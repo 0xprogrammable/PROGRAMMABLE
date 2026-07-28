@@ -73,9 +73,9 @@ describe("wallet recovery state", () => {
     expect(subject.readUsernameFromProfileValue).toBeTypeOf("function");
     expect(
       subject.readUsernameFromProfileValue(
-        JSON.stringify({ username: "Kemal36", bio: "preserved" }),
+        JSON.stringify({ username: "Bloom36", bio: "preserved" }),
       ),
-    ).toBe("Kemal36");
+    ).toBe("Bloom36");
     expect(
       subject.readUsernameFromProfileValue(
         JSON.stringify({ username: "not valid" }),

@@ -154,7 +154,7 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
     function test_cooldownAllowsFeeRoutingButBlocksCompoundingUntilExactBoundary() public {
         _buyExactInput(growthKey, 1 ether);
         vault.process();
-        uint256 firstCompoundBlock = vault.lastCompoundBlock();
+        uint256 firstCompoundTimestamp = vault.lastCompoundTimestamp();
 
         _buyExactInput(growthKey, 1 ether);
         (uint256 received, LiquidityGrowthVaultV1.CompoundResult memory duringCooldown) = vault.process();
@@ -162,17 +162,17 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
         assertEq(duringCooldown.liquidityAdded, 0);
         assertGt(vault.pendingGrowthNative(), 0);
 
-        uint256 nextBlock = firstCompoundBlock + COMPOUND_COOLDOWN;
-        vm.roll(nextBlock - 1);
+        uint256 nextTimestamp = firstCompoundTimestamp + COMPOUND_COOLDOWN;
+        vm.warp(nextTimestamp - 1);
         vm.expectRevert(
-            abi.encodeWithSelector(LiquidityGrowthVaultV1.CompoundCooldown.selector, nextBlock - 1, nextBlock)
+            abi.encodeWithSelector(LiquidityGrowthVaultV1.CompoundCooldown.selector, nextTimestamp - 1, nextTimestamp)
         );
         vault.compoundPending();
 
-        vm.roll(nextBlock);
+        vm.warp(nextTimestamp);
         LiquidityGrowthVaultV1.CompoundResult memory result = vault.compoundPending();
         assertGt(result.liquidityAdded, 0);
-        assertEq(vault.lastCompoundBlock(), nextBlock);
+        assertEq(vault.lastCompoundTimestamp(), nextTimestamp);
         assertTrue(vault.growthTargetReached());
     }
 
@@ -195,8 +195,8 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
         vault.process();
         _buyExactInput(growthKey, 1 ether);
         vault.process();
-        uint256 nextBlock = vault.lastCompoundBlock() + COMPOUND_COOLDOWN;
-        vm.roll(nextBlock);
+        uint256 nextTimestamp = vault.lastCompoundTimestamp() + COMPOUND_COOLDOWN;
+        vm.warp(nextTimestamp);
 
         LiquidityGrowthRangeSourceV1.RangeQuote memory preManipulationQuote = rangeSource.quoteRange();
         uint256 snapshot = vm.snapshotState();
@@ -204,7 +204,7 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
         LiquidityGrowthVaultV1.CompoundResult memory unmanipulated = vault.compoundPending();
         assertGt(unmanipulated.liquidityAdded, 0);
         assertTrue(vm.revertToState(snapshot));
-        vm.roll(nextBlock);
+        vm.warp(nextTimestamp);
 
         address attacker = makeAddr("rangeManipulator");
         uint256 attackTokens = 500 ether;
@@ -228,27 +228,27 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
         );
 
         uint256 pendingBefore = vault.pendingGrowthNative();
-        uint64 lastCompoundBlockBefore = vault.lastCompoundBlock();
+        uint64 lastCompoundTimestampBefore = vault.lastCompoundTimestamp();
         vm.expectRevert(expectedError);
         rangeSource.quoteRange();
         vm.expectRevert(expectedError);
         vm.prank(attacker);
         vault.compoundPending();
         assertEq(vault.pendingGrowthNative(), pendingBefore);
-        assertEq(vault.lastCompoundBlock(), lastCompoundBlockBefore);
+        assertEq(vault.lastCompoundTimestamp(), lastCompoundTimestampBefore);
     }
 
     function test_nativeAndTokenDonationsAreRecycledAndCannotBeWithdrawn() public {
         _buyExactInput(growthKey, 1 ether);
+        vm.warp(block.timestamp + COMPOUND_COOLDOWN);
         LiquidityGrowthVaultV1.CompoundResult memory first;
         (, first) = vault.process();
         assertGt(first.liquidityAdded, 0);
 
         donateRouter.donate{ value: 1 ether }(growthKey, 1 ether, 100 ether, "");
         _buyExactInput(growthKey, 1 ether);
-        vault.process();
-        vm.roll(vault.lastCompoundBlock() + COMPOUND_COOLDOWN);
-        LiquidityGrowthVaultV1.CompoundResult memory recycled = vault.compoundPending();
+        vm.warp(vault.lastCompoundTimestamp() + COMPOUND_COOLDOWN);
+        (, LiquidityGrowthVaultV1.CompoundResult memory recycled) = vault.process();
 
         assertGt(recycled.nativeRecycled, 0);
         assertGt(recycled.tokenRecycled, 0);
@@ -264,7 +264,7 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
         );
 
         uint256 liquidityBefore = vault.totalLiquidityAdded();
-        vm.roll(block.number + COMPOUND_COOLDOWN);
+        vm.warp(block.timestamp + COMPOUND_COOLDOWN);
         vault.compoundPending();
         assertGt(vault.totalLiquidityAdded(), liquidityBefore);
 
@@ -363,7 +363,7 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
 
         bool blocked;
         for (uint256 attempt; attempt < 8 && !blocked; attempt++) {
-            vm.roll(block.number + COMPOUND_COOLDOWN);
+            vm.warp(block.timestamp + COMPOUND_COOLDOWN);
             try thinMarket.vault.compoundPending() returns (LiquidityGrowthVaultV1.CompoundResult memory) { }
             catch {
                 blocked = true;
@@ -423,7 +423,7 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
             maxCompoundNative: maxCompound,
             tokenReserveTarget: reserve,
             activeRangeHalfWidthTicks: RANGE_HALF_WIDTH,
-            compoundCooldownBlocks: COMPOUND_COOLDOWN,
+            compoundCooldownSeconds: COMPOUND_COOLDOWN,
             beneficiaries: beneficiaries,
             sharesBps: shares
         });
@@ -445,7 +445,7 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
             ModifyLiquidityParams({ tickLower: -20_000, tickUpper: 20_000, liquidityDelta: 1000 ether, salt: salt }),
             ZERO_BYTES
         );
-        hook.increaseObservationCardinalityNext(2, PoolId.wrap(deployedPoolId));
+        hook.increaseObservationCardinalityNext(192, PoolId.wrap(deployedPoolId));
         vm.warp(block.timestamp + TWAP_WINDOW);
         _buyExactInput(key, OBSERVATION_SEED_BUY);
     }
@@ -455,7 +455,7 @@ contract LiquidityGrowthVaultV1AdversarialTest is Deployers {
         vault.process();
         _buyExactInput(growthKey, 1 ether);
         vault.process();
-        vm.roll(vault.lastCompoundBlock() + COMPOUND_COOLDOWN);
+        vm.warp(vault.lastCompoundTimestamp() + COMPOUND_COOLDOWN);
         vault.compoundPending();
         assertTrue(vault.growthTargetReached());
 

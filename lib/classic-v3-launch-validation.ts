@@ -7,13 +7,16 @@ import {
   type Hex,
 } from "viem";
 
-import appDeployments from "../contracts/config/app-deployments.v1.json";
 import {
   classicV3LaunchAbi,
   encodeClassicV3Launch,
-  isClassicV3DeploymentReady,
   type ClassicV3DeploymentManifest,
 } from "./classic-v3";
+import {
+  getConfiguredClassicV3Release,
+  isClassicV3ReleaseVerified,
+  type ClassicV3ReleaseManifest,
+} from "./classic-v3-release";
 import { parseInitialBuyWei, type LaunchDraft } from "./launch";
 import { buildPlanHash } from "./launch-transaction";
 import {
@@ -91,13 +94,18 @@ function parametersMatch(
 export function validatePreparedClassicV3LaunchTransactionAgainstManifest(
   input: PreparedClassicV3LaunchInput,
   manifest: ClassicV3DeploymentManifest,
+  releaseManifest: ClassicV3ReleaseManifest,
 ): PreparedClassicV3LaunchTransaction {
   const transaction = parsePreparedTransaction(input.transaction);
   if (transaction.kind !== "launch") {
     throw new Error("The prepared transaction is not a Classic launch");
   }
   if (
-    !isClassicV3DeploymentReady(manifest, manifest.chainId) ||
+    !isClassicV3ReleaseVerified(
+      manifest,
+      releaseManifest,
+      manifest.chainId,
+    ) ||
     !manifest.memeLaunchV2 ||
     !isAddress(manifest.memeLaunchV2)
   ) {
@@ -187,8 +195,10 @@ export function validatePreparedClassicV3LaunchTransaction(
     process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
       ? "rehearsal"
       : "production";
+  const configured = getConfiguredClassicV3Release(environment);
   return validatePreparedClassicV3LaunchTransactionAgainstManifest(
     input,
-    appDeployments[environment] as ClassicV3DeploymentManifest,
+    configured.appManifest,
+    configured.releaseManifest,
   );
 }

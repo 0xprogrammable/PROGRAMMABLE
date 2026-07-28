@@ -18,7 +18,9 @@ export type PreparedTransactionKind =
   | "swap"
   | "claim-creator-fees"
   | "claim-classic-v3-rewards"
-  | "update-classic-v3-payout";
+  | "update-classic-v3-payout"
+  | "claim-deep-rewards"
+  | "update-deep-payout";
 
 type PreparedTransactionBase = {
   chainId: PreparedTransactionChainId;
@@ -61,6 +63,12 @@ type PreparedClaimTransaction =
     })
   | (PreparedClaimTransactionBase & {
       kind: "update-classic-v3-payout";
+    })
+  | (PreparedClaimTransactionBase & {
+      kind: "claim-deep-rewards";
+    })
+  | (PreparedClaimTransactionBase & {
+      kind: "update-deep-payout";
     });
 
 export type PreparedTransaction =
@@ -84,6 +92,8 @@ const kinds = new Set<PreparedTransactionKind>([
   "claim-creator-fees",
   "claim-classic-v3-rewards",
   "update-classic-v3-payout",
+  "claim-deep-rewards",
+  "update-deep-payout",
 ]);
 const commonFields = new Set([
   "kind",
@@ -170,7 +180,9 @@ export function parsePreparedTransaction(
   const allowedFields =
     kind === "claim-creator-fees" ||
     kind === "claim-classic-v3-rewards" ||
-    kind === "update-classic-v3-payout"
+    kind === "update-classic-v3-payout" ||
+    kind === "claim-deep-rewards" ||
+    kind === "update-deep-payout"
       ? claimFields
       : commonFields;
   const unsupportedField = Object.keys(record).find(
@@ -205,7 +217,9 @@ export function parsePreparedTransaction(
   if (
     kind === "claim-creator-fees" ||
     kind === "claim-classic-v3-rewards" ||
-    kind === "update-classic-v3-payout"
+    kind === "update-classic-v3-payout" ||
+    kind === "claim-deep-rewards" ||
+    kind === "update-deep-payout"
   ) {
     return {
       ...base,
@@ -246,7 +260,9 @@ export function parsePreparedTransactionForAccount(
   if (
     (transaction.kind === "claim-creator-fees" ||
       transaction.kind === "claim-classic-v3-rewards" ||
-      transaction.kind === "update-classic-v3-payout") &&
+      transaction.kind === "update-classic-v3-payout" ||
+      transaction.kind === "claim-deep-rewards" ||
+      transaction.kind === "update-deep-payout") &&
     transaction.from.toLowerCase() !== connectedAccount.toLowerCase()
   ) {
     throw new Error(
@@ -333,6 +349,20 @@ export function getPreparedTransactionReview(
   if (kind === "update-classic-v3-payout") {
     return {
       description: "Update where your Classic rewards are paid",
+      buttonText: "Update payout address",
+      successHeader: "Payout update submitted",
+    };
+  }
+  if (kind === "claim-deep-rewards") {
+    return {
+      description: "Claim your Deep creator rewards",
+      buttonText: "Claim rewards",
+      successHeader: "Reward claim submitted",
+    };
+  }
+  if (kind === "update-deep-payout") {
+    return {
+      description: "Update where your Deep rewards are paid",
       buttonText: "Update payout address",
       successHeader: "Payout update submitted",
     };

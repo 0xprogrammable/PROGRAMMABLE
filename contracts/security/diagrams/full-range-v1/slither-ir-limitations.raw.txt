@@ -1,0 +1,24 @@
+'forge clean' running (wd: <repo>/contracts)
+'forge config --json' running
+'forge build --build-info src/LiquidityGrowthFullRangeLaunchV1.sol' running (wd: <repo>/contracts)
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthFeeOracleHookV1._absolute (src/LiquidityGrowthFeeOracleHookV1.sol#591-594):
+ 'NoneType' object has no attribute 'parameters'
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthFullRangeLaunchV1.unlockCallback (src/LiquidityGrowthFullRangeLaunchV1.sol#313-336):
+ 'NoneType' object has no attribute 'parameters'
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthFullRangeVaultV1._compoundOneChunk (src/LiquidityGrowthFullRangeVaultV1.sol#452-508):
+ 'NoneType' object has no attribute 'parameters'
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthFullRangeVaultV1._compoundInsideUnlock (src/LiquidityGrowthFullRangeVaultV1.sol#524-570):
+ 'NoneType' object has no attribute 'parameters'
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthFullRangeVaultV1._settleCurrency (src/LiquidityGrowthFullRangeVaultV1.sol#695-702):
+ 'NoneType' object has no attribute 'parameters'
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthFullRangeVaultV1._absolute (src/LiquidityGrowthFullRangeVaultV1.sol#722-725):
+ 'NoneType' object has no attribute 'parameters'
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthRangeSourceV1.quoteRange (src/LiquidityGrowthRangeSourceV1.sol#107-142):
+ 'NoneType' object has no attribute 'parameters'
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthRangeSourceV1.arithmeticMeanTick (src/LiquidityGrowthRangeSourceV1.sol#146-162):
+ 'NoneType' object has no attribute 'parameters'
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthRangeSourceV1.rangeForTwap (src/LiquidityGrowthRangeSourceV1.sol#165-194):
+ 'NoneType' object has no attribute 'parameters'
+ERROR:ContractSolcParsing:Impossible to generate IR for LiquidityGrowthRangeSourceV1._absoluteTickDifference (src/LiquidityGrowthRangeSourceV1.sol#198-202):
+ 'NoneType' object has no attribute 'parameters'
+INFO:Printers:Inheritance Graph: <repo>/contracts/src/LiquidityGrowthFullRangeLaunchV1.sol.inheritance-graph.dot

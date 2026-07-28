@@ -25,13 +25,17 @@ export const CLASSIC_V3_MAX_FEE_BPS = 1_000;
 export const CLASSIC_V3_FEE_STEP_BPS = 100;
 export const CLASSIC_V3_MAX_REWARD_BENEFICIARIES = 8;
 export const REWARD_SHARE_BPS = 10_000;
+export const DEEP_GROWTH_TARGET_WEI = 50_000_000_000_000_000n;
+export const DEEP_GROWTH_TARGET_ETH = "0.05";
+export const DEEP_TOKEN_RESERVE_WHOLE = 150_000_000;
+export const DEEP_INITIAL_POSITION_WHOLE = 850_000_000;
 
 // AssetMode and the legacy draft fields remain only so an older browser draft can
 // be read safely. The active product always normalizes to a new MemeLaunchV1 token.
 export type AssetMode = "new" | "existing";
 export type LiquidityMode = "meme";
 export type BehaviorId = "fixed-fee";
-export type LaunchModel = "classic" | "classic-v3" | "adaptive";
+export type LaunchModel = "classic" | "classic-v3" | "adaptive" | "deep";
 export type RewardDestinationMode = "launcher" | "external" | "split";
 
 export type AdaptiveCurvePointDraft = {
@@ -161,6 +165,13 @@ export function createAdaptiveDraft(): LaunchDraft {
       { fdvIndex: -160_000, totalSwapFeeBps: 200 },
       { fdvIndex: ADAPTIVE_MAX_FDV_INDEX, totalSwapFeeBps: 100 },
     ],
+  };
+}
+
+export function createDeepDraft(): LaunchDraft {
+  return {
+    ...createClassicV3Draft(),
+    launchModel: "deep",
   };
 }
 

@@ -98,6 +98,20 @@ contract LiquidityGrowthRangeSourceV1Test is Deployers {
         source.quoteRange();
     }
 
+    function test_quoteFailsClosedWhenAllocatedObservationCapacityIsBelowPolicy() public {
+        uint16 insufficient = source.MIN_OBSERVATION_CARDINALITY_NEXT() - 1;
+        oracle.setObservationCardinalityNext(insufficient);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LiquidityGrowthRangeSourceV1.ObservationCapacityInsufficient.selector,
+                insufficient,
+                source.MIN_OBSERVATION_CARDINALITY_NEXT()
+            )
+        );
+        source.quoteRange();
+    }
+
     function test_quoteRejectsMalformedOracleResponse() public {
         oracle.setMalformed(true);
 

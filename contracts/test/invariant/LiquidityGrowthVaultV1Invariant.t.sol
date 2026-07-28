@@ -65,7 +65,7 @@ contract LiquidityGrowthHandler is Test {
     }
 
     function compoundPending() external {
-        vm.roll(block.number + vault.compoundCooldownBlocks());
+        vm.warp(block.timestamp + vault.compoundCooldownSeconds());
         vault.compoundPending();
     }
 
@@ -139,7 +139,7 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
             maxCompoundNative: MAX_COMPOUND,
             tokenReserveTarget: TOKEN_RESERVE,
             activeRangeHalfWidthTicks: RANGE_HALF_WIDTH,
-            compoundCooldownBlocks: COMPOUND_COOLDOWN,
+            compoundCooldownSeconds: COMPOUND_COOLDOWN,
             beneficiaries: beneficiaries,
             sharesBps: shares
         });
@@ -149,7 +149,7 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
 
         hook.registerPool(growthKey, address(vault.upstreamVault()), 100, 100);
         manager.initialize(growthKey, SQRT_PRICE_1_1);
-        hook.increaseObservationCardinalityNext(64, PoolId.wrap(poolId));
+        hook.increaseObservationCardinalityNext(192, PoolId.wrap(poolId));
         LIQUIDITY_PARAMS =
             ModifyLiquidityParams({ tickLower: -20_000, tickUpper: 20_000, liquidityDelta: 1000 ether, salt: 0 });
         modifyLiquidityRouter.modifyLiquidity{ value: 1000 ether }(growthKey, LIQUIDITY_PARAMS, ZERO_BYTES);
@@ -209,7 +209,7 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
         assertEq(vault.maxCompoundNative(), MAX_COMPOUND);
         assertEq(vault.tokenReserveTarget(), TOKEN_RESERVE);
         assertEq(vault.activeRangeHalfWidthTicks(), RANGE_HALF_WIDTH);
-        assertEq(vault.compoundCooldownBlocks(), COMPOUND_COOLDOWN);
+        assertEq(vault.compoundCooldownSeconds(), COMPOUND_COOLDOWN);
         assertEq(address(vault.rangeSource()), address(rangeSource));
         assertEq(address(rangeSource.poolManager()), address(manager));
         assertEq(address(rangeSource.oracleHook()), address(hook));
