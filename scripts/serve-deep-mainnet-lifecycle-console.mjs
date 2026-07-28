@@ -1776,7 +1776,7 @@ async function record(plan, body) {
     }),
   );
   if (records.some(({ transaction }) => transaction === null)) {
-    throw new Error("Transaction is not visible on both Mainnet RPCs");
+    return { receipt: null };
   }
   const expected = prepared.request;
   if (prepared.maximumTotalDebitWei === undefined) {
