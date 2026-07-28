@@ -658,8 +658,8 @@ html[data-theme="dark"] .theme-toggle-sun {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: clamp(212px, 24svh, 232px);
-  padding: 38px 0 8px;
+  min-height: clamp(258px, 31svh, 280px);
+  padding: 56px 0 10px;
   text-align: center;
 }
 
@@ -671,19 +671,19 @@ html[data-theme="dark"] .theme-toggle-sun {
 }
 
 .explore-brand-logo {
-  height: clamp(108px, 8.6vw, 124px);
+  height: clamp(132px, 10.4vw, 152px);
   object-fit: contain;
-  width: clamp(108px, 8.6vw, 124px);
+  width: clamp(132px, 10.4vw, 152px);
 }
 
 .explore-intro > p {
   color: var(--text-soft);
-  font-size: clamp(20px, 1.7vw, 24px);
+  font-size: clamp(22px, 1.9vw, 27px);
   font-weight: 510;
   letter-spacing: -0.022em;
   line-height: 1.3;
-  margin-top: 9px;
-  max-width: 680px;
+  margin-top: 12px;
+  max-width: 760px;
   text-wrap: balance;
 }
 
@@ -4439,19 +4439,19 @@ html[data-theme="dark"] .theme-toggle-sun {
 
 @media (min-width: 801px) and (max-height: 800px) {
   .explore-intro {
-    min-height: 164px;
+    min-height: 200px;
     padding-bottom: 5px;
-    padding-top: 20px;
+    padding-top: 30px;
   }
 
   .explore-brand-logo {
-    height: clamp(80px, 6.6vw, 90px);
-    width: clamp(80px, 6.6vw, 90px);
+    height: clamp(102px, 8.1vw, 116px);
+    width: clamp(102px, 8.1vw, 116px);
   }
 
   .explore-intro > p {
-    font-size: 17px;
-    margin-top: 6px;
+    font-size: 19px;
+    margin-top: 8px;
   }
 
   .explore-token-address {
@@ -4789,19 +4789,21 @@ html[data-theme="dark"] .theme-toggle-sun {
   }
 
   .explore-intro {
-    min-height: clamp(148px, 18svh, 166px);
-    padding: 20px 0 6px;
+    min-height: clamp(176px, 21svh, 192px);
+    padding: 30px 0 6px;
   }
 
   .explore-brand-logo {
-    height: clamp(68px, 18vw, 80px);
-    width: clamp(68px, 18vw, 80px);
+    height: clamp(80px, 21vw, 92px);
+    width: clamp(80px, 21vw, 92px);
   }
 
   .explore-intro > p {
-    font-size: clamp(16px, 4.4vw, 18px);
-    margin-top: 7px;
+    font-size: clamp(13.5px, 4.1vw, 17px);
+    margin-top: 9px;
     max-width: 380px;
+    text-wrap: nowrap;
+    white-space: nowrap;
   }
 
   .explore-token-address {
@@ -5319,8 +5321,8 @@ html[data-theme="dark"] .theme-toggle-sun {
   }
 
   .explore-brand-logo {
-    height: clamp(68px, 18vw, 78px);
-    width: clamp(68px, 18vw, 78px);
+    height: clamp(80px, 21vw, 88px);
+    width: clamp(80px, 21vw, 88px);
   }
 
   .token-detail-page {

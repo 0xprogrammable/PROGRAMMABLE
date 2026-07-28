@@ -297,7 +297,7 @@ function LaunchModelPicker({
             aria-hidden="true"
           >
             <Image
-              src="/brand/programmable-classic-launch-art.webp"
+              src="/brand/programmable-classic-launch-art-card.webp"
               alt=""
               fill
               sizes="(max-width: 800px) 100vw, 420px"
