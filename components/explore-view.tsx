@@ -581,7 +581,7 @@ export function ExploreView() {
                       : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 600px) 84px, (max-width: 800px) 106px, (max-height: 800px) 138px, 186px"
+                  sizes="(max-width: 600px) 84px, (max-width: 800px) 106px, (max-height: 930px) 190px, 240px"
                   unoptimized={!token.imageUrl.startsWith("/")}
                 />
               </span>
