@@ -3,8 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, Plus, UserRound } from "lucide-react";
+import { Compass, Moon, Plus, Sun, UserRound } from "lucide-react";
+import { useSyncExternalStore } from "react";
 import { WalletButton } from "@/components/wallet-provider";
+
+type ColorTheme = "light" | "dark";
+const themeChangeEvent = "programmable:theme-changed";
 
 const navItems = [
   { href: "/", label: "Explore", icon: Compass },
@@ -36,6 +40,59 @@ function GitHubBrandIcon() {
 
 function isCurrent(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname.startsWith(href);
+}
+
+function subscribeToTheme(callback: () => void) {
+  window.addEventListener(themeChangeEvent, callback);
+  return () => window.removeEventListener(themeChangeEvent, callback);
+}
+
+function getThemeSnapshot(): ColorTheme {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function getServerThemeSnapshot(): ColorTheme {
+  return "light";
+}
+
+function ThemeToggle() {
+  const theme = useSyncExternalStore(
+    subscribeToTheme,
+    getThemeSnapshot,
+    getServerThemeSnapshot,
+  );
+
+  function toggleTheme() {
+    const nextTheme: ColorTheme = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = nextTheme;
+    document.documentElement.style.colorScheme = nextTheme;
+
+    try {
+      window.localStorage.setItem("programmable-theme", nextTheme);
+    } catch {
+      // The theme still changes for the current page when storage is blocked.
+    }
+
+    window.dispatchEvent(new Event(themeChangeEvent));
+  }
+
+  return (
+    <button
+      className="theme-toggle"
+      type="button"
+      aria-label={
+        theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+      }
+      aria-pressed={theme === "dark"}
+      title={theme === "dark" ? "Light mode" : "Dark mode"}
+      onClick={toggleTheme}
+    >
+      <span className="theme-toggle-icons" aria-hidden="true">
+        <Moon className="theme-toggle-moon" size={20} strokeWidth={1.9} />
+        <Sun className="theme-toggle-sun" size={20} strokeWidth={1.9} />
+      </span>
+    </button>
+  );
 }
 
 export function SiteHeader() {
@@ -88,7 +145,10 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <WalletButton compact />
+        <div className="header-actions">
+          <ThemeToggle />
+          <WalletButton compact />
+        </div>
       </div>
     </header>
   );

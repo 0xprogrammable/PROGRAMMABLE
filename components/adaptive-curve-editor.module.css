@@ -2,9 +2,45 @@
   --adaptive-accent: #d56fa5;
   --adaptive-accent-soft: rgba(213, 111, 165, 0.12);
   --adaptive-border: rgba(69, 51, 64, 0.11);
+  --adaptive-text: #30282e;
+  --adaptive-text-strong: #2d262c;
+  --adaptive-text-soft: #716970;
+  --adaptive-muted: #817881;
+  --adaptive-panel: rgba(255, 255, 255, 0.78);
+  --adaptive-input: #ffffff;
+  --adaptive-plot-layer: rgba(255, 255, 255, 0.88);
+  --adaptive-plot-pink: #f8dce9;
+  --adaptive-plot-blue: #e9e1f5;
+  --adaptive-grid: rgba(69, 51, 64, 0.055);
+  --adaptive-grid-border: rgba(69, 51, 64, 0.12);
+  --adaptive-handle-border: #ffffff;
+  --adaptive-focus-ring: rgba(255, 255, 255, 0.96);
+  --adaptive-tooltip: #30272e;
+  --adaptive-tooltip-text: #ffffff;
   display: grid;
   gap: 12px;
   min-width: 0;
+}
+
+:global(html[data-theme="dark"]) .editor {
+  --adaptive-accent: #e879be;
+  --adaptive-accent-soft: rgba(232, 121, 190, 0.15);
+  --adaptive-border: rgba(230, 233, 244, 0.14);
+  --adaptive-text: #f0eaf0;
+  --adaptive-text-strong: #f7f2f6;
+  --adaptive-text-soft: #b9b0ba;
+  --adaptive-muted: #9b929d;
+  --adaptive-panel: rgba(18, 29, 47, 0.8);
+  --adaptive-input: #172235;
+  --adaptive-plot-layer: rgba(12, 21, 36, 0.88);
+  --adaptive-plot-pink: rgba(118, 56, 93, 0.54);
+  --adaptive-plot-blue: rgba(52, 61, 112, 0.48);
+  --adaptive-grid: rgba(226, 230, 242, 0.07);
+  --adaptive-grid-border: rgba(226, 230, 242, 0.12);
+  --adaptive-handle-border: #172235;
+  --adaptive-focus-ring: rgba(23, 34, 53, 0.98);
+  --adaptive-tooltip: #f4edf3;
+  --adaptive-tooltip-text: #172033;
 }
 
 .heading {
@@ -20,7 +56,7 @@
 }
 
 .heading h2 {
-  color: #2d262c;
+  color: var(--adaptive-text-strong);
   font-size: 19px;
   font-weight: 610;
   letter-spacing: -0.015em;
@@ -28,7 +64,7 @@
 }
 
 .heading p {
-  color: #716970;
+  color: var(--adaptive-text-soft);
   font-size: 13px;
   line-height: 1.45;
   margin-top: 5px;
@@ -52,7 +88,7 @@
 .add {
   background: var(--adaptive-accent-soft);
   border-radius: 999px;
-  color: #9d4d77;
+  color: var(--accent-strong);
   flex: none;
   font-size: 12px;
   font-weight: 650;
@@ -62,16 +98,16 @@
 }
 
 .add:disabled {
-  color: #8a8288;
+  color: var(--adaptive-muted);
   cursor: default;
   opacity: 0.68;
 }
 
 .plot {
   background:
-    linear-gradient(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.88)),
-    radial-gradient(circle at 10% 0%, #f8dce9, transparent 46%),
-    radial-gradient(circle at 92% 100%, #e9e1f5, transparent 42%);
+    linear-gradient(var(--adaptive-plot-layer), var(--adaptive-plot-layer)),
+    radial-gradient(circle at 10% 0%, var(--adaptive-plot-pink), transparent 46%),
+    radial-gradient(circle at 92% 100%, var(--adaptive-plot-blue), transparent 42%);
   border: 1px solid var(--adaptive-border);
   border-radius: 20px;
   height: 248px;
@@ -81,11 +117,11 @@
 
 .grid {
   background-image:
-    linear-gradient(to right, rgba(69, 51, 64, 0.055) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(69, 51, 64, 0.055) 1px, transparent 1px);
+    linear-gradient(to right, var(--adaptive-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--adaptive-grid) 1px, transparent 1px);
   background-size: 25% 25%;
-  border-bottom: 1px solid rgba(69, 51, 64, 0.12);
-  border-left: 1px solid rgba(69, 51, 64, 0.12);
+  border-bottom: 1px solid var(--adaptive-grid-border);
+  border-left: 1px solid var(--adaptive-grid-border);
   inset: 30px 24px 34px 42px;
   position: absolute;
 }
@@ -131,7 +167,7 @@
 
 .handle::after {
   background: var(--adaptive-accent);
-  border: 3px solid #fff;
+  border: 3px solid var(--adaptive-handle-border);
   border-radius: 50%;
   box-shadow: 0 3px 14px rgba(74, 39, 60, 0.22);
   content: "";
@@ -143,10 +179,10 @@
 }
 
 .handle > span {
-  background: #30272e;
+  background: var(--adaptive-tooltip);
   border-radius: 8px;
   bottom: 38px;
-  color: #fff;
+  color: var(--adaptive-tooltip-text);
   font-size: 11px;
   font-weight: 620;
   left: 50%;
@@ -189,7 +225,7 @@
 .handle:focus-visible::after {
   box-shadow:
     0 0 0 5px rgba(213, 111, 165, 0.2),
-    0 0 0 7px rgba(255, 255, 255, 0.96),
+    0 0 0 7px var(--adaptive-focus-ring),
     0 3px 14px rgba(74, 39, 60, 0.22);
 }
 
@@ -197,7 +233,7 @@
 .feeMinimum,
 .valueMinimum,
 .valueMaximum {
-  color: #817881;
+  color: var(--adaptive-muted);
   font-size: 10px;
   line-height: 1;
   pointer-events: none;
@@ -231,7 +267,7 @@
 }
 
 .instructions {
-  color: #817981;
+  color: var(--adaptive-muted);
   font-size: 11px;
   line-height: 1.35;
   margin: -3px 2px 0;
@@ -239,7 +275,7 @@
 
 .inspector {
   align-items: center;
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--adaptive-panel);
   border: 1px solid var(--adaptive-border);
   border-radius: 16px;
   display: grid;
@@ -258,13 +294,13 @@
 
 .selectedPoint > span,
 .feeInput > span:first-child {
-  color: #847b82;
+  color: var(--adaptive-muted);
   font-size: 10px;
   letter-spacing: 0.015em;
 }
 
 .selectedPoint strong {
-  color: #30282e;
+  color: var(--adaptive-text);
   font-size: 13px;
   font-weight: 610;
   overflow: hidden;
@@ -274,7 +310,7 @@
 
 .feeInput > span:last-child {
   align-items: center;
-  background: #fff;
+  background: var(--adaptive-input);
   border: 1px solid var(--adaptive-border);
   border-radius: 10px;
   display: flex;
@@ -285,7 +321,7 @@
 .feeInput input {
   background: transparent;
   border: 0;
-  color: #30282e;
+  color: var(--adaptive-text);
   font: inherit;
   font-size: 13px;
   font-weight: 620;
@@ -297,7 +333,7 @@
 }
 
 .feeInput small {
-  color: #7b7279;
+  color: var(--adaptive-muted);
   font-size: 11px;
 }
 
@@ -313,21 +349,21 @@
 }
 
 .split span {
-  color: #7b7379;
+  color: var(--adaptive-muted);
   display: flex;
   font-size: 11px;
   justify-content: space-between;
 }
 
 .split strong {
-  color: #3b3037;
+  color: var(--adaptive-text);
   font-weight: 620;
 }
 
 .remove {
   background: transparent;
   border-radius: 11px;
-  color: #736b71;
+  color: var(--adaptive-text-soft);
   font-size: 11px;
   gap: 6px;
   min-height: 44px;
@@ -335,7 +371,7 @@
 }
 
 .minimum {
-  color: #8a8288;
+  color: var(--adaptive-muted);
   font-size: 11px;
   justify-self: end;
   line-height: 1.3;
@@ -343,7 +379,7 @@
 }
 
 .disclosure {
-  color: #777077;
+  color: var(--adaptive-text-soft);
   font-size: 11px;
   line-height: 1.4;
   margin: 0 2px;
@@ -356,7 +392,7 @@
 
   .remove:not(:disabled):hover {
     background: rgba(66, 49, 61, 0.055);
-    color: #443640;
+    color: var(--adaptive-text);
   }
 
   .handle:hover::after {

@@ -20,8 +20,8 @@
 
 .devBuy {
   align-items: center;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(69, 51, 64, 0.1);
+  background: var(--glass-72);
+  border: 1px solid var(--border);
   border-radius: 15px;
   display: grid;
   gap: 18px;
@@ -37,20 +37,20 @@
 }
 
 .devBuyCopy strong {
-  color: #30282e;
+  color: var(--text);
   font-size: 13px;
   font-weight: 610;
 }
 
 .devBuyCopy small {
-  color: #7c747b;
+  color: var(--muted);
   font-size: 11px;
 }
 
 .devBuyInput {
   align-items: center;
-  background: #fff;
-  border: 1px solid rgba(69, 51, 64, 0.11);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
   border-radius: 11px;
   display: flex;
   min-height: 44px;
@@ -65,7 +65,7 @@
 .devBuyInput input {
   background: transparent;
   border: 0;
-  color: #30282e;
+  color: var(--text);
   flex: 1;
   font: inherit;
   font-size: 13px;
@@ -78,7 +78,7 @@
   background: rgba(213, 111, 165, 0.1);
   border: 0;
   border-radius: 8px;
-  color: #9d4d77;
+  color: var(--accent-strong);
   cursor: pointer;
   font: inherit;
   font-size: 11px;
@@ -96,13 +96,13 @@
 }
 
 .devBuyInput > span {
-  color: #776f75;
+  color: var(--muted);
   font-size: 11px;
   margin-left: 8px;
 }
 
 .footer {
-  background: rgba(251, 250, 251, 0.96);
+  background: var(--surface-tint-strong);
 }
 
 @media (min-width: 1021px) {
