@@ -25,7 +25,7 @@ const AUTOMATION = "0x856a8e8421e76f55cd1e0d65b4f3c1b474289b2f";
 const FEE_HOOK = "0x48dc3009ec1d3298bba31f718a9a29d02fc9b0cc";
 const POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
 const POSITION_MANAGER = "0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e";
-const RELEASE_COMMIT = "75d00e2369cd8bc67421859270c0fbf3edc478ff";
+const RELEASE_COMMIT = "63a06456f169fc6fa9f346bd22fbc4c63e174ea5";
 const INITIAL_BUY_WEI = 30_000_000_000_000_000n;
 const BUY_FEE_BPS = 1_000;
 const SELL_FEE_BPS = 1_000;
@@ -349,8 +349,7 @@ function assertFrozenContractSource() {
   )
     .trim()
     .split("\n")
-    .filter(Boolean)
-    .filter((file) => file !== "contracts/src/DeepKeeperExecutorV1.sol");
+    .filter(Boolean);
   if (drift.length > 0) {
     throw new Error("The deployed Deep contract source has changed");
   }
