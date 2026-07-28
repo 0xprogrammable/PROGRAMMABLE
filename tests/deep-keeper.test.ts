@@ -1286,9 +1286,10 @@ describe("Deep keeper cycle", () => {
     const transactionHash = `0x${"5a".repeat(32)}`;
     const wallet = {
       supportsStableIdempotency: true,
-      writeContract: vi.fn(
-        async (_request: Record<string, unknown>) => transactionHash,
-      ),
+      writeContract: vi.fn(async (request: Record<string, unknown>) => {
+        void request;
+        return transactionHash;
+      }),
     };
     let durableState: ReturnType<typeof createInitialState> | null = null;
     let persistCalls = 0;
