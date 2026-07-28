@@ -65,7 +65,7 @@ type ExploreState =
 
 type PaginationItem = number | "start-gap" | "end-gap";
 
-const TOKENS_PER_PAGE = 6;
+const TOKENS_PER_PAGE = 9;
 const PROGRAMMABLE_TOKEN_ADDRESS =
   "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
@@ -575,7 +575,7 @@ export function ExploreView() {
                       : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 800px) calc(100vw - 32px), (max-width: 1100px) 31vw, 350px"
+                  sizes="(max-width: 800px) 112px, 220px"
                   unoptimized={!token.imageUrl.startsWith("/")}
                 />
               </Link>
