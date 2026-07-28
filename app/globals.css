@@ -486,11 +486,17 @@ textarea {
   text-align: center;
 }
 
-.explore-intro h1 {
-  font-size: clamp(54px, 5.1vw, 72px);
-  font-weight: 560;
-  letter-spacing: -0.034em;
-  line-height: 0.94;
+.explore-brand-heading {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  line-height: 0;
+}
+
+.explore-brand-logo {
+  height: clamp(64px, 5.7vw, 76px);
+  object-fit: contain;
+  width: clamp(64px, 5.7vw, 76px);
 }
 
 .explore-intro > p {
@@ -510,7 +516,7 @@ textarea {
   color: var(--muted);
   display: inline-flex;
   gap: 7px;
-  margin-top: 4px;
+  margin-top: 8px;
   max-width: min(100%, 430px);
   min-height: 22px;
   padding: 3px 0;
@@ -701,6 +707,14 @@ textarea {
   width: 100%;
 }
 
+@media (min-width: 801px) {
+  .token-card-grid {
+    flex: none;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    height: min(570px, calc(100% - 58px));
+  }
+}
+
 @media (min-width: 801px) and (max-height: 680px) {
   .explore-page {
     height: calc(100svh - var(--header-height));
@@ -711,6 +725,7 @@ textarea {
   .token-card-grid {
     --token-card-body-height: 54px;
     gap: 7px;
+    height: min(408px, calc(100% - 55px));
     max-width: 840px;
   }
 }
@@ -1005,7 +1020,7 @@ textarea {
   .token-card-grid {
     --token-card-body-height: 62px;
     gap: 8px;
-    grid-template-rows: repeat(2, auto);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
     max-width: 900px;
   }
 
@@ -1118,15 +1133,6 @@ textarea {
   padding: 2px;
 }
 
-.token-pagination-row {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-  margin-top: 7px;
-  min-height: 36px;
-  width: 100%;
-}
-
 .token-pagination > button,
 .token-pagination-pages button {
   align-items: center;
@@ -1236,6 +1242,12 @@ textarea {
 
 .launch-model-art img {
   object-fit: cover;
+}
+
+.launch-model-art-classic img {
+  object-position: center bottom;
+  transform: scale(1.42);
+  transform-origin: center bottom;
 }
 
 .launch-model-card-body {
@@ -4082,8 +4094,9 @@ textarea {
     padding-top: 5px;
   }
 
-  .explore-intro h1 {
-    font-size: clamp(46px, 4.8vw, 56px);
+  .explore-brand-logo {
+    height: clamp(60px, 5.2vw, 66px);
+    width: clamp(60px, 5.2vw, 66px);
   }
 
   .explore-intro > p {
@@ -4092,7 +4105,7 @@ textarea {
   }
 
   .explore-token-address {
-    margin-top: 1px;
+    margin-top: 6px;
   }
 
   .token-section-heading {
@@ -4105,6 +4118,10 @@ textarea {
 
   .token-search input {
     height: 36px;
+  }
+
+  .token-card-grid {
+    height: min(467px, calc(100% - 55px));
   }
 
   .launch-model-page {
@@ -4265,6 +4282,12 @@ textarea {
   }
 }
 
+@media (min-width: 801px) and (max-height: 680px) {
+  .token-card-grid {
+    height: min(408px, calc(100% - 55px));
+  }
+}
+
 @media (min-width: 801px) and (max-height: 920px) {
   .review-section {
     padding-bottom: 12px;
@@ -4413,8 +4436,9 @@ textarea {
     padding: 8px 0 5px;
   }
 
-  .explore-intro h1 {
-    font-size: clamp(42px, 12.5vw, 54px);
+  .explore-brand-logo {
+    height: clamp(46px, 12.5vw, 54px);
+    width: clamp(46px, 12.5vw, 54px);
   }
 
   .explore-intro > p {
@@ -4437,21 +4461,18 @@ textarea {
   }
 
   .token-toolbar {
-    display: grid;
+    display: flex;
     gap: 8px;
-    grid-template-columns: minmax(0, 1fr) auto;
     width: 100%;
   }
 
   .token-search {
-    grid-column: 1;
-    grid-row: 1;
+    flex: 1 1 auto;
     min-width: 0;
-    width: 100%;
   }
 
   .token-filter {
-    justify-self: end;
+    flex: none;
   }
 
   .token-filter-menu {
@@ -4490,6 +4511,7 @@ textarea {
     gap: 8px;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: repeat(4, var(--token-card-size));
+    height: auto;
     margin-top: 7px;
     max-width: 720px;
     min-height: 0;
@@ -4939,8 +4961,9 @@ textarea {
     white-space: nowrap;
   }
 
-  .explore-intro h1 {
-    font-size: clamp(43px, 14vw, 52px);
+  .explore-brand-logo {
+    height: clamp(46px, 14vw, 54px);
+    width: clamp(46px, 14vw, 54px);
   }
 
   .token-detail-page {

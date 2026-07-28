@@ -101,8 +101,7 @@ export function ScrambleText({
   }, [displayText, text]);
 
   return (
-    <span className="scramble-text">
-      <span className="sr-only">{text}</span>
+    <span className="scramble-text" aria-label={text}>
       <span className="scramble-text-flow" aria-hidden="true">
         {segments.map((segment) =>
           segment.whitespace ? (
