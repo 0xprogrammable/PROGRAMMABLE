@@ -2,6 +2,8 @@
 pragma solidity 0.8.26;
 
 import { BaseHook } from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
+import { Oracle } from "@openzeppelin/uniswap-hooks/src/oracles/panoptic/libraries/Oracle.sol";
+import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
 import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
@@ -16,13 +18,15 @@ import { Deployers } from "@uniswap/v4-core/test/utils/Deployers.sol";
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import { MockERC20 } from "solmate/src/test/utils/mocks/MockERC20.sol";
 
-import { EthCreatorFeeHookFactoryV3 } from "../src/EthCreatorFeeHookFactoryV3.sol";
-import { EthCreatorFeeHookV3 } from "../src/EthCreatorFeeHookV3.sol";
 import { FeeSplitVaultFactoryV1 } from "../src/FeeSplitVaultFactoryV1.sol";
 import { FeeSplitVaultV1 } from "../src/FeeSplitVaultV1.sol";
+import { LiquidityGrowthFeeOracleHookFactoryV1 } from "../src/LiquidityGrowthFeeOracleHookFactoryV1.sol";
+import { LiquidityGrowthFeeOracleHookV1 } from "../src/LiquidityGrowthFeeOracleHookV1.sol";
+import { LiquidityGrowthRangeSourceV1 } from "../src/LiquidityGrowthRangeSourceV1.sol";
 import { LiquidityGrowthVaultFactoryV1 } from "../src/LiquidityGrowthVaultFactoryV1.sol";
 import { LiquidityGrowthVaultV1 } from "../src/LiquidityGrowthVaultV1.sol";
 import { IClassicFeeHookV3 } from "../src/interfaces/IClassicFeeHookV3.sol";
+import { ILiquidityGrowthOracleV1 } from "../src/interfaces/ILiquidityGrowthOracleV1.sol";
 
 contract LiquidityGrowthCreatorToken is MockERC20 {
     address public immutable creator;
@@ -40,12 +44,16 @@ contract LiquidityGrowthVaultV1Test is Deployers {
     uint256 internal constant MAX_COMPOUND = 0.009 ether;
     uint256 internal constant TOKEN_RESERVE = 10_000 ether;
     int24 internal constant RANGE_HALF_WIDTH = 10_000;
+    int24 internal constant MAX_SPOT_TWAP_DEVIATION = 1000;
+    int24 internal constant MAX_ABS_TICK_DELTA = 5;
+    uint32 internal constant TWAP_WINDOW = 30 minutes;
     uint64 internal constant COMPOUND_COOLDOWN = 1;
 
-    EthCreatorFeeHookFactoryV3 internal hookFactory;
+    LiquidityGrowthFeeOracleHookFactoryV1 internal hookFactory;
     FeeSplitVaultFactoryV1 internal feeSplitVaultFactory;
     LiquidityGrowthVaultFactoryV1 internal growthFactory;
-    EthCreatorFeeHookV3 internal hook;
+    LiquidityGrowthFeeOracleHookV1 internal hook;
+    LiquidityGrowthRangeSourceV1 internal rangeSource;
     LiquidityGrowthVaultV1 internal vault;
     LiquidityGrowthCreatorToken internal token;
     PoolKey internal growthKey;
@@ -67,7 +75,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
         bob = makeAddr("bob");
         feeSplitVaultFactory = new FeeSplitVaultFactoryV1();
         growthFactory = new LiquidityGrowthVaultFactoryV1();
-        hookFactory = new EthCreatorFeeHookFactoryV3();
+        hookFactory = new LiquidityGrowthFeeOracleHookFactoryV1();
         hook = _deployHook();
 
         token = new LiquidityGrowthCreatorToken(address(this));
@@ -84,23 +92,33 @@ contract LiquidityGrowthVaultV1Test is Deployers {
             hooks: hook
         });
         poolId = PoolId.unwrap(growthKey.toId());
+        rangeSource = new LiquidityGrowthRangeSourceV1(
+            manager,
+            growthKey,
+            ILiquidityGrowthOracleV1(address(hook)),
+            TWAP_WINDOW,
+            RANGE_HALF_WIDTH,
+            MAX_SPOT_TWAP_DEVIATION
+        );
         LiquidityGrowthVaultV1.Configuration memory configuration = _configuration(GROWTH_TARGET);
-        address predicted = growthFactory.predict(bytes32("growth"), hook, feeSplitVaultFactory, configuration);
-        vault = growthFactory.deploy(bytes32("growth"), hook, feeSplitVaultFactory, configuration);
+        address predicted = _predictVault(bytes32("growth"), configuration);
+        vault = growthFactory.deployOrGet(bytes32("growth"), hook, feeSplitVaultFactory, configuration);
         assertEq(address(vault), predicted);
         assertTrue(token.transfer(address(vault), TOKEN_RESERVE));
 
         hook.registerPool(growthKey, address(vault.upstreamVault()), TOTAL_SWAP_FEE_BPS, TOTAL_SWAP_FEE_BPS);
         manager.initialize(growthKey, SQRT_PRICE_1_1);
+        hook.increaseObservationCardinalityNext(2, PoolId.wrap(poolId));
 
         LIQUIDITY_PARAMS =
             ModifyLiquidityParams({ tickLower: -20_000, tickUpper: 20_000, liquidityDelta: 1000 ether, salt: 0 });
         modifyLiquidityRouter.modifyLiquidity{ value: 1000 ether }(growthKey, LIQUIDITY_PARAMS, ZERO_BYTES);
     }
 
-    function test_configurationIsImmutableAndReusesClassicHook() public view {
+    function test_configurationIsImmutableAndUsesExactPoolOracleRange() public view {
         assertEq(address(vault.feeHook()), address(hook));
         assertEq(address(vault.poolManager()), address(manager));
+        assertEq(address(vault.rangeSource()), address(rangeSource));
         assertEq(vault.poolId(), poolId);
         assertEq(vault.token(), address(token));
         assertEq(vault.growthTargetNative(), GROWTH_TARGET);
@@ -108,6 +126,12 @@ contract LiquidityGrowthVaultV1Test is Deployers {
         assertEq(vault.tokenReserveTarget(), TOKEN_RESERVE);
         assertEq(vault.activeRangeHalfWidthTicks(), RANGE_HALF_WIDTH);
         assertEq(vault.compoundCooldownBlocks(), COMPOUND_COOLDOWN);
+        uint256 expectedTolerance = GROWTH_TARGET / vault.BASIS_POINTS();
+        if (expectedTolerance > 0.000_001 ether) {
+            expectedTolerance = 0.000_001 ether;
+        }
+        assertEq(vault.completionToleranceNative(), expectedTolerance);
+        assertEq(vault.minimumNativeLiquidityForCompletion(), GROWTH_TARGET - expectedTolerance);
         assertEq(vault.beneficiaryCount(), 2);
         assertEq(vault.beneficiaryAt(0), alice);
         assertEq(vault.beneficiaryAt(1), bob);
@@ -116,6 +140,27 @@ contract LiquidityGrowthVaultV1Test is Deployers {
         assertEq(vault.payoutAddressOf(alice), alice);
         assertEq(vault.payoutAddressOf(bob), bob);
         assertEq(growthFactory.configurationHashOf(address(vault)), vault.configurationHash());
+        assertEq(address(rangeSource.poolManager()), address(manager));
+        assertEq(address(rangeSource.oracleHook()), address(hook));
+        assertEq(rangeSource.poolId(), poolId);
+        assertEq(rangeSource.twapWindow(), TWAP_WINDOW);
+        assertEq(rangeSource.rangeHalfWidthTicks(), RANGE_HALF_WIDTH);
+        assertEq(rangeSource.maxSpotTwapDeviationTicks(), MAX_SPOT_TWAP_DEVIATION);
+        assertEq(
+            vault.oraclePolicyHash(),
+            keccak256(
+                abi.encode(
+                    address(rangeSource),
+                    address(hook),
+                    MAX_ABS_TICK_DELTA,
+                    TWAP_WINDOW,
+                    RANGE_HALF_WIDTH,
+                    MAX_SPOT_TWAP_DEVIATION,
+                    poolId,
+                    hook.TICK_SPACING()
+                )
+            )
+        );
 
         FeeSplitVaultV1 upstream = vault.upstreamVault();
         assertEq(upstream.beneficiaryCount(), 1);
@@ -126,6 +171,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
 
         Hooks.Permissions memory permissions = hook.getHookPermissions();
         assertTrue(permissions.beforeInitialize);
+        assertTrue(permissions.afterInitialize);
         assertTrue(permissions.beforeSwap);
         assertTrue(permissions.afterSwap);
         assertTrue(permissions.beforeSwapReturnDelta);
@@ -137,6 +183,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
     }
 
     function test_creatorFeesBecomePermanentMainPoolLiquidityUntilTarget() public {
+        _matureOracle();
         uint256 gross = 1 ether;
         _buy(gross);
         (uint256 expectedCreatorFee, uint256 expectedProtocolFee) = hook.quoteGrossFees(gross, TOTAL_SWAP_FEE_BPS);
@@ -167,6 +214,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
     }
 
     function test_postTargetCreatorFeesRouteToImmutableBeneficiaries() public {
+        _matureOracle();
         _buy(1 ether);
         vault.process();
 
@@ -176,7 +224,10 @@ contract LiquidityGrowthVaultV1Test is Deployers {
         (uint256 received, LiquidityGrowthVaultV1.CompoundResult memory result) = vault.process();
         assertEq(received, creatorFee);
         assertEq(result.liquidityAdded, 0);
+        assertTrue(vault.growthTargetReached());
         assertEq(vault.totalNativeAllocatedToGrowth(), GROWTH_TARGET);
+        assertGe(vault.totalNativeAddedToLiquidity(), vault.minimumNativeLiquidityForCompletion());
+        assertLe(vault.nativeLiquidityShortfallAtCompletion(), vault.completionToleranceNative());
         assertEq(vault.totalRewardFeesReceived(), creatorFee);
 
         vm.prank(alice);
@@ -191,6 +242,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
     }
 
     function test_onlyBeneficiaryControlsClaimAndPayoutAddress() public {
+        _matureOracle();
         _buy(1 ether);
         vault.process();
         _buy(1 ether);
@@ -215,6 +267,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
     }
 
     function test_processIsPermissionlessButAssetsCannotBeWithdrawn() public {
+        _matureOracle();
         _buy(1 ether);
         address keeper = makeAddr("keeper");
         vm.prank(keeper);
@@ -229,6 +282,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
     }
 
     function test_positionDonationsAreRecycledWithoutBlockingLaterCompounds() public {
+        _matureOracle();
         _buy(0.5 ether);
         (, LiquidityGrowthVaultV1.CompoundResult memory first) = vault.process();
         assertGt(first.liquidityAdded, 0);
@@ -250,7 +304,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
     function test_matchingPredeployedUpstreamVaultIsReused() public {
         LiquidityGrowthVaultV1.Configuration memory configuration = _configuration(GROWTH_TARGET);
         bytes32 growthSalt = bytes32("predeployed-upstream");
-        address predicted = growthFactory.predict(growthSalt, hook, feeSplitVaultFactory, configuration);
+        address predicted = _predictVault(growthSalt, configuration);
 
         address[] memory beneficiaries = new address[](1);
         beneficiaries[0] = predicted;
@@ -261,9 +315,36 @@ contract LiquidityGrowthVaultV1Test is Deployers {
             feeSplitVaultFactory.deploy(upstreamSalt, IClassicFeeHookV3(address(hook)), poolId, beneficiaries, shares)
         );
 
-        LiquidityGrowthVaultV1 reused = growthFactory.deploy(growthSalt, hook, feeSplitVaultFactory, configuration);
+        LiquidityGrowthVaultV1 reused = growthFactory.deployOrGet(growthSalt, hook, feeSplitVaultFactory, configuration);
         assertEq(address(reused), predicted);
         assertEq(address(reused.upstreamVault()), predeployed);
+    }
+
+    function test_processFailsClosedUntilExactPoolTwapMatures() public {
+        uint256 gross = 1 ether;
+        _buy(gross);
+        (uint256 creatorFee,) = hook.quoteGrossFees(gross, TOTAL_SWAP_FEE_BPS);
+
+        uint32 targetTimestamp;
+        unchecked {
+            targetTimestamp = uint32(block.timestamp) - TWAP_WINDOW;
+        }
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Oracle.TargetPredatesOldestObservation.selector, uint32(block.timestamp), targetTimestamp
+            )
+        );
+        vault.process();
+
+        assertEq(vault.totalCreatorFeesReceived(), 0);
+        assertEq(_creatorAccrued(), creatorFee);
+        assertEq(vault.totalNativeAddedToLiquidity(), 0);
+
+        _matureOracle();
+        (uint256 received, LiquidityGrowthVaultV1.CompoundResult memory result) = vault.process();
+        assertEq(received, creatorFee);
+        assertGt(result.liquidityAdded, 0);
+        assertEq(_creatorAccrued(), 0);
     }
 
     function test_onlyPoolManagerCanEnterUnlockCallback() public {
@@ -278,6 +359,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
 
     /// forge-config: default.fuzz.runs = 250
     function testFuzz_growthAllocationNeverExceedsTarget(uint96 rawGross) public {
+        _matureOracle();
         uint256 gross = bound(uint256(rawGross), 0.01 ether, 2 ether);
         _buy(gross);
         (uint256 creatorFee, uint256 protocolFee) = hook.quoteGrossFees(gross, TOTAL_SWAP_FEE_BPS);
@@ -289,20 +371,25 @@ contract LiquidityGrowthVaultV1Test is Deployers {
         assertEq(vault.totalCreatorFeesReceived(), creatorFee);
         assertEq(hook.launcherFeesAccrued(), protocolFee);
         assertLe(vault.totalNativeAllocatedToGrowth(), GROWTH_TARGET);
+        if (vault.growthTargetReached()) {
+            assertEq(vault.totalNativeAllocatedToGrowth(), GROWTH_TARGET);
+            assertGe(vault.totalNativeAddedToLiquidity(), vault.minimumNativeLiquidityForCompletion());
+            assertLe(vault.nativeLiquidityShortfallAtCompletion(), vault.completionToleranceNative());
+        }
         assertEq(
             vault.totalNativeAddedToLiquidity() + vault.pendingGrowthNative(),
             vault.totalNativeAllocatedToGrowth() + vault.totalNativeRecycled()
         );
     }
 
-    function _deployHook() private returns (EthCreatorFeeHookV3 deployed) {
+    function _deployHook() private returns (LiquidityGrowthFeeOracleHookV1 deployed) {
         (, bytes32 salt) = HookMiner.find(
             address(hookFactory),
             hookFactory.REQUIRED_HOOK_FLAGS(),
-            type(EthCreatorFeeHookV3).creationCode,
-            abi.encode(manager, treasury, feeSplitVaultFactory)
+            type(LiquidityGrowthFeeOracleHookV1).creationCode,
+            abi.encode(manager, treasury, feeSplitVaultFactory, MAX_ABS_TICK_DELTA)
         );
-        deployed = hookFactory.deploy(salt, manager, treasury, feeSplitVaultFactory);
+        deployed = hookFactory.deploy(salt, manager, treasury, feeSplitVaultFactory, MAX_ABS_TICK_DELTA);
     }
 
     function _configuration(uint256 target)
@@ -318,6 +405,7 @@ contract LiquidityGrowthVaultV1Test is Deployers {
         shares[1] = 4000;
         configuration = LiquidityGrowthVaultV1.Configuration({
             poolKey: growthKey,
+            rangeSource: rangeSource,
             growthTargetNative: target,
             maxCompoundNative: target,
             tokenReserveTarget: TOKEN_RESERVE,
@@ -326,6 +414,21 @@ contract LiquidityGrowthVaultV1Test is Deployers {
             beneficiaries: beneficiaries,
             sharesBps: shares
         });
+    }
+
+    function _predictVault(bytes32 salt, LiquidityGrowthVaultV1.Configuration memory configuration)
+        private
+        view
+        returns (address)
+    {
+        bytes memory creationCode = abi.encodePacked(
+            type(LiquidityGrowthVaultV1).creationCode, abi.encode(hook, feeSplitVaultFactory, configuration)
+        );
+        return Create2.computeAddress(salt, keccak256(creationCode), address(growthFactory));
+    }
+
+    function _matureOracle() private {
+        vm.warp(block.timestamp + TWAP_WINDOW);
     }
 
     function _buy(uint256 gross) private {
