@@ -19,18 +19,19 @@ import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 import { ModifyLiquidityParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import { LiquidityAmounts } from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 
-import { EthCreatorFeeHookV3 } from "./EthCreatorFeeHookV3.sol";
 import { FeeSplitVaultFactoryV1 } from "./FeeSplitVaultFactoryV1.sol";
 import { FeeSplitVaultV1 } from "./FeeSplitVaultV1.sol";
+import { LiquidityGrowthFeeOracleHookV1 } from "./LiquidityGrowthFeeOracleHookV1.sol";
+import { LiquidityGrowthRangeSourceV1 } from "./LiquidityGrowthRangeSourceV1.sol";
 import { IClassicFeeHookV3 } from "./interfaces/IClassicFeeHookV3.sol";
 
 /// @title LiquidityGrowthVaultV1
-/// @notice Routes Classic creator fees into permanently locked main-pool liquidity until an immutable native target.
-/// @dev The existing Classic hook continues to collect the fixed 0.10 percentage-point Programmable fee separately.
+/// @notice Routes creator fees into permanently locked main-pool liquidity until an immutable native target.
+/// @dev The composite fee-oracle hook continues to collect the fixed 0.10 percentage-point Programmable fee separately.
 ///      Creator fees first pass through a factory-authenticated FeeSplitVault whose sole beneficiary is this contract.
-///      An immutable token reserve supplied by the launch path pairs with fee ETH in active, add-only core positions.
-///      Anyone may process the fees. The contract exposes no liquidity removal, asset withdrawal or administrative
-///      path.
+///      An immutable token reserve supplied by the launch path pairs with fee ETH in add-only core positions selected
+///      by an exact-pool, fail-closed TWAP range source. Anyone may process the fees. The contract exposes no liquidity
+///      removal, asset withdrawal or administrative path.
 contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     using Address for address payable;
     using CurrencySettler for Currency;
@@ -40,10 +41,13 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
 
     uint16 public constant BASIS_POINTS = 10_000;
     uint256 public constant MAX_BENEFICIARIES = 8;
+    uint16 private constant COMPLETION_TOLERANCE_BPS = 1;
+    uint256 private constant MAX_COMPLETION_TOLERANCE_NATIVE = 0.000_001 ether;
     bytes32 public constant LOCKED_POSITION_SALT = keccak256("programmable.liquidity-growth.position.v1");
 
-    EthCreatorFeeHookV3 public immutable feeHook;
+    LiquidityGrowthFeeOracleHookV1 public immutable feeHook;
     IPoolManager public immutable poolManager;
+    LiquidityGrowthRangeSourceV1 public immutable rangeSource;
     FeeSplitVaultV1 public immutable upstreamVault;
     bytes32 public immutable poolId;
     address public immutable token;
@@ -52,6 +56,9 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     uint256 public immutable tokenReserveTarget;
     int24 public immutable activeRangeHalfWidthTicks;
     uint64 public immutable compoundCooldownBlocks;
+    uint256 public immutable completionToleranceNative;
+    uint256 public immutable minimumNativeLiquidityForCompletion;
+    bytes32 public immutable oraclePolicyHash;
     bytes32 public immutable configurationHash;
     uint256 public immutable beneficiaryCount;
 
@@ -110,8 +117,11 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     // slither-disable-next-line constable-states
     uint64 public lastCompoundBlock = 0;
     bool public growthTargetReached;
+    uint256 public nativeLiquidityShortfallAtCompletion;
 
-    mapping(bytes32 rangeId => bool known) public isLockedRange;
+    // Slither 0.11.5 cannot build IR for _compoundOneChunk and therefore misses both reads and writes below.
+    // slither-disable-next-line unused-state
+    mapping(bytes32 rangeId => bool known) private _isLockedRange;
 
     error DuplicateBeneficiary(address beneficiary);
     error EmptyGrowthReceipt();
@@ -130,6 +140,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     error InvalidPoolParameters(uint24 fee, int24 tickSpacing);
     error InvalidShare(address beneficiary, uint16 shareBps);
     error InvalidShareTotal(uint256 totalShareBps);
+    error InvalidRangeSource(address rangeSource);
     error NoGrowthFunds();
     error NoRewardsToClaim(address beneficiary);
     error ReserveUnderfunded(uint256 actual, uint256 required);
@@ -146,7 +157,13 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 totalAllocatedToGrowth,
         uint256 growthTargetNative
     );
-    event GrowthTargetReached(uint256 growthTargetNative, uint256 totalNativeAddedToLiquidity, uint256 rewardsReleased);
+    event GrowthTargetReached(
+        uint256 growthTargetNative,
+        uint256 minimumNativeLiquidityForCompletion,
+        uint256 totalNativeAddedToLiquidity,
+        uint256 nativeLiquidityShortfall,
+        uint256 rewardsReleased
+    );
     event LiquidityCompounded(
         address indexed caller,
         uint256 nativeBudget,
@@ -180,6 +197,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
 
     struct Configuration {
         PoolKey poolKey;
+        LiquidityGrowthRangeSourceV1 rangeSource;
         uint256 growthTargetNative;
         uint256 maxCompoundNative;
         uint256 tokenReserveTarget;
@@ -190,7 +208,7 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     }
 
     constructor(
-        EthCreatorFeeHookV3 feeHook_,
+        LiquidityGrowthFeeOracleHookV1 feeHook_,
         FeeSplitVaultFactoryV1 feeSplitVaultFactory_,
         Configuration memory configuration
     ) {
@@ -228,29 +246,63 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
             revert InvalidPoolParameters(configuration.poolKey.fee, configuration.poolKey.tickSpacing);
         }
 
+        LiquidityGrowthRangeSourceV1 configuredRangeSource = configuration.rangeSource;
+        bytes32 configuredPoolId = PoolId.unwrap(configuration.poolKey.toId());
+        if (
+            address(configuredRangeSource) == address(0) || address(configuredRangeSource).code.length == 0
+                || address(configuredRangeSource.poolManager()) != address(feeHook_.poolManager())
+                || address(configuredRangeSource.oracleHook()) != address(feeHook_)
+                || configuredRangeSource.poolId() != configuredPoolId
+                || configuredRangeSource.tickSpacing() != configuration.poolKey.tickSpacing
+                || configuredRangeSource.rangeHalfWidthTicks() != configuration.activeRangeHalfWidthTicks
+        ) {
+            revert InvalidRangeSource(address(configuredRangeSource));
+        }
+
         uint256 count = _configureBeneficiaries(configuration.beneficiaries, configuration.sharesBps);
 
         feeHook = feeHook_;
         poolManager = feeHook_.poolManager();
+        rangeSource = configuredRangeSource;
         _poolKey = configuration.poolKey;
-        poolId = PoolId.unwrap(configuration.poolKey.toId());
+        poolId = configuredPoolId;
         token = currency1;
         growthTargetNative = configuration.growthTargetNative;
         maxCompoundNative = configuration.maxCompoundNative;
         tokenReserveTarget = configuration.tokenReserveTarget;
         activeRangeHalfWidthTicks = configuration.activeRangeHalfWidthTicks;
         compoundCooldownBlocks = configuration.compoundCooldownBlocks;
+        uint256 relativeCompletionTolerance =
+            FullMath.mulDiv(configuration.growthTargetNative, COMPLETION_TOLERANCE_BPS, BASIS_POINTS);
+        completionToleranceNative = relativeCompletionTolerance < MAX_COMPLETION_TOLERANCE_NATIVE
+            ? relativeCompletionTolerance
+            : MAX_COMPLETION_TOLERANCE_NATIVE;
+        minimumNativeLiquidityForCompletion = configuration.growthTargetNative - completionToleranceNative;
         beneficiaryCount = count;
 
         upstreamVault = _deployOrReuseUpstreamVault(feeSplitVaultFactory_);
 
+        oraclePolicyHash = keccak256(
+            abi.encode(
+                address(configuredRangeSource),
+                address(feeHook_),
+                feeHook_.maxAbsTickDelta(),
+                configuredRangeSource.twapWindow(),
+                configuredRangeSource.rangeHalfWidthTicks(),
+                configuredRangeSource.maxSpotTwapDeviationTicks(),
+                configuredRangeSource.poolId(),
+                configuredRangeSource.tickSpacing()
+            )
+        );
         bytes32 ruleHash = keccak256(
             abi.encode(
                 configuration.growthTargetNative,
                 configuration.maxCompoundNative,
                 configuration.tokenReserveTarget,
                 configuration.activeRangeHalfWidthTicks,
-                configuration.compoundCooldownBlocks
+                configuration.compoundCooldownBlocks,
+                completionToleranceNative,
+                minimumNativeLiquidityForCompletion
             )
         );
         bytes32 beneficiaryHash = keccak256(abi.encode(configuration.beneficiaries, configuration.sharesBps));
@@ -261,8 +313,10 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
                 address(feeHook_),
                 address(poolManager),
                 address(upstreamVault),
+                address(configuredRangeSource),
                 poolId,
                 currency1,
+                oraclePolicyHash,
                 ruleHash,
                 beneficiaryHash
             )
@@ -279,6 +333,8 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         // slither-disable-next-line reentrancy-benign,reentrancy-no-eth
         received = upstreamVault.claim();
         uint256 actualReceived = address(this).balance - balanceBefore;
+        // Exact zero is the intentional no-receipt sentinel; approximate comparison has no meaning for wei.
+        // slither-disable-next-line incorrect-equality
         if (received == 0 || actualReceived == 0) revert EmptyGrowthReceipt();
         if (actualReceived != received) revert UpstreamReceiptMismatch(received, actualReceived);
 
@@ -303,11 +359,6 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     /// @notice Returns the immutable beneficiary at `index`.
     function beneficiaryAt(uint256 index) external view returns (address) {
         return _beneficiaries[index];
-    }
-
-    /// @notice Returns the complete registered pool key.
-    function poolKey() external view returns (PoolKey memory) {
-        return _poolKey;
     }
 
     /// @notice Returns permanently locked core-position liquidity for one emitted range.
@@ -459,8 +510,8 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
         totalLiquidityAdded += result.liquidityAdded;
         lastCompoundBlock = block.number.toUint64();
         bytes32 rangeId = keccak256(abi.encode(result.tickLower, result.tickUpper));
-        if (!isLockedRange[rangeId]) {
-            isLockedRange[rangeId] = true;
+        if (!_isLockedRange[rangeId]) {
+            _isLockedRange[rangeId] = true;
             lockedPositionCount++;
         }
         lastLockedTickLower = result.tickLower;
@@ -494,8 +545,14 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
             nativeBudget,
             IERC20(token).balanceOf(address(this))
         );
+        // Exact zero is the only value that cannot create a position; this is not a price comparison.
+        // slither-disable-next-line incorrect-equality
         if (result.liquidityAdded == 0) revert InsufficientGrowthForLiquidity(nativeBudget, 0);
 
+        // The immutable official PoolManager is trusted, this hook enables no add-liquidity callbacks, and the
+        // pre-call token balance only bounds the liquidity delta already passed into this call. Settlement still
+        // fails atomically if the configured official token cannot cover the returned principal delta.
+        // slither-disable-next-line reentrancy-balance
         (BalanceDelta liquidityDelta, BalanceDelta feesAccrued) = poolManager.modifyLiquidity(
             _poolKey,
             ModifyLiquidityParams({
@@ -530,29 +587,13 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     // Slither 0.11.5 misses this call because it cannot build IR for _compoundInsideUnlock.
     // slither-disable-next-line dead-code
     function _activeGrowthRange() private view returns (int24 tickLower, int24 tickUpper) {
-        // Only the live tick is needed by this in-development spot-derived range policy.
-        // slither-disable-next-line unused-return
-        (, int24 currentTick,,) = poolManager.getSlot0(PoolId.wrap(poolId));
-        int24 tickSpacing = _poolKey.tickSpacing;
-        int24 tickRemainder = currentTick % tickSpacing;
-        int24 center = currentTick - tickRemainder;
-        if (tickRemainder < 0) center -= tickSpacing;
-        tickLower = center - activeRangeHalfWidthTicks;
-        tickUpper = center + activeRangeHalfWidthTicks;
-
-        int24 minTick = TickMath.minUsableTick(tickSpacing);
-        int24 maxTick = TickMath.maxUsableTick(tickSpacing);
-        if (tickLower < minTick) {
-            tickUpper += minTick - tickLower;
-            tickLower = minTick;
-        }
-        if (tickUpper > maxTick) {
-            tickLower -= tickUpper - maxTick;
-            tickUpper = maxTick;
-        }
+        LiquidityGrowthRangeSourceV1.RangeQuote memory quote = rangeSource.quoteRange();
+        return (quote.tickLower, quote.tickUpper);
     }
 
     function _compoundIsReady() private view returns (bool) {
+        // Zero is the explicit never-compounded sentinel initialized at deployment.
+        // slither-disable-next-line incorrect-equality
         return lastCompoundBlock == 0 || block.number >= uint256(lastCompoundBlock) + compoundCooldownBlocks;
     }
 
@@ -564,12 +605,19 @@ contract LiquidityGrowthVaultV1 is IUnlockCallback, ReentrancyGuardTransient {
     // Slither 0.11.5 misses this call because it cannot build IR for _compoundOneChunk.
     // slither-disable-next-line dead-code
     function _releaseRewardsIfGrowthComplete() private {
-        if (growthTargetReached || totalNativeAddedToLiquidity < growthTargetNative) return;
+        if (growthTargetReached || totalNativeAllocatedToGrowth != growthTargetNative) return;
+        uint256 nativeAdded = totalNativeAddedToLiquidity;
+        if (nativeAdded < minimumNativeLiquidityForCompletion) return;
+
         growthTargetReached = true;
+        uint256 shortfall = nativeAdded < growthTargetNative ? growthTargetNative - nativeAdded : 0;
+        nativeLiquidityShortfallAtCompletion = shortfall;
         uint256 released = deferredRewardFees;
         deferredRewardFees = 0;
         totalRewardFeesReceived += released;
-        emit GrowthTargetReached(growthTargetNative, totalNativeAddedToLiquidity, released);
+        emit GrowthTargetReached(
+            growthTargetNative, minimumNativeLiquidityForCompletion, nativeAdded, shortfall, released
+        );
     }
 
     // Slither 0.11.5 misses this call because it cannot build IR for _compoundInsideUnlock.

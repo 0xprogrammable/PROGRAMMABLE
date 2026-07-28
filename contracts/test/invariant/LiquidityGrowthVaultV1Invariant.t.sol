@@ -14,11 +14,13 @@ import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import { MockERC20 } from "solmate/src/test/utils/mocks/MockERC20.sol";
 import { Test } from "forge-std/Test.sol";
 
-import { EthCreatorFeeHookFactoryV3 } from "../../src/EthCreatorFeeHookFactoryV3.sol";
-import { EthCreatorFeeHookV3 } from "../../src/EthCreatorFeeHookV3.sol";
 import { FeeSplitVaultFactoryV1 } from "../../src/FeeSplitVaultFactoryV1.sol";
+import { LiquidityGrowthFeeOracleHookFactoryV1 } from "../../src/LiquidityGrowthFeeOracleHookFactoryV1.sol";
+import { LiquidityGrowthFeeOracleHookV1 } from "../../src/LiquidityGrowthFeeOracleHookV1.sol";
+import { LiquidityGrowthRangeSourceV1 } from "../../src/LiquidityGrowthRangeSourceV1.sol";
 import { LiquidityGrowthVaultFactoryV1 } from "../../src/LiquidityGrowthVaultFactoryV1.sol";
 import { LiquidityGrowthVaultV1 } from "../../src/LiquidityGrowthVaultV1.sol";
+import { ILiquidityGrowthOracleV1 } from "../../src/interfaces/ILiquidityGrowthOracleV1.sol";
 
 contract LiquidityGrowthInvariantToken is MockERC20 {
     address public immutable creator;
@@ -47,6 +49,7 @@ contract LiquidityGrowthHandler is Test {
     function buy(uint96 rawAmount) external {
         uint256 amount = 0.001 ether + (uint256(rawAmount) % 0.2 ether);
         if (address(this).balance < amount) return;
+        vm.warp(block.timestamp + 1 minutes);
         router.swap{ value: amount }(
             growthKey,
             SwapParams({
@@ -74,9 +77,13 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
     uint256 internal constant MAX_COMPOUND = 0.01 ether;
     uint256 internal constant TOKEN_RESERVE = 10_000 ether;
     int24 internal constant RANGE_HALF_WIDTH = 10_000;
+    int24 internal constant MAX_SPOT_TWAP_DEVIATION = 1000;
+    int24 internal constant MAX_ABS_TICK_DELTA = 5;
+    uint32 internal constant TWAP_WINDOW = 30 minutes;
     uint64 internal constant COMPOUND_COOLDOWN = 1;
 
-    EthCreatorFeeHookV3 internal hook;
+    LiquidityGrowthFeeOracleHookV1 internal hook;
+    LiquidityGrowthRangeSourceV1 internal rangeSource;
     LiquidityGrowthVaultV1 internal vault;
     LiquidityGrowthInvariantToken internal token;
     LiquidityGrowthHandler internal handler;
@@ -92,14 +99,14 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
         beneficiary = makeAddr("beneficiary");
 
         FeeSplitVaultFactoryV1 splitFactory = new FeeSplitVaultFactoryV1();
-        EthCreatorFeeHookFactoryV3 hookFactory = new EthCreatorFeeHookFactoryV3();
+        LiquidityGrowthFeeOracleHookFactoryV1 hookFactory = new LiquidityGrowthFeeOracleHookFactoryV1();
         (, bytes32 hookSalt) = HookMiner.find(
             address(hookFactory),
             hookFactory.REQUIRED_HOOK_FLAGS(),
-            type(EthCreatorFeeHookV3).creationCode,
-            abi.encode(manager, treasury, splitFactory)
+            type(LiquidityGrowthFeeOracleHookV1).creationCode,
+            abi.encode(manager, treasury, splitFactory, MAX_ABS_TICK_DELTA)
         );
-        hook = hookFactory.deploy(hookSalt, manager, treasury, splitFactory);
+        hook = hookFactory.deploy(hookSalt, manager, treasury, splitFactory, MAX_ABS_TICK_DELTA);
 
         token = new LiquidityGrowthInvariantToken(address(this));
         token.mint(address(this), 1_000_000 ether);
@@ -112,6 +119,14 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
             hooks: hook
         });
         poolId = PoolId.unwrap(growthKey.toId());
+        rangeSource = new LiquidityGrowthRangeSourceV1(
+            manager,
+            growthKey,
+            ILiquidityGrowthOracleV1(address(hook)),
+            TWAP_WINDOW,
+            RANGE_HALF_WIDTH,
+            MAX_SPOT_TWAP_DEVIATION
+        );
 
         address[] memory beneficiaries = new address[](1);
         beneficiaries[0] = beneficiary;
@@ -119,6 +134,7 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
         shares[0] = 10_000;
         LiquidityGrowthVaultV1.Configuration memory configuration = LiquidityGrowthVaultV1.Configuration({
             poolKey: growthKey,
+            rangeSource: rangeSource,
             growthTargetNative: GROWTH_TARGET,
             maxCompoundNative: MAX_COMPOUND,
             tokenReserveTarget: TOKEN_RESERVE,
@@ -128,14 +144,16 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
             sharesBps: shares
         });
         LiquidityGrowthVaultFactoryV1 growthFactory = new LiquidityGrowthVaultFactoryV1();
-        vault = growthFactory.deploy(bytes32("invariant"), hook, splitFactory, configuration);
+        vault = growthFactory.deployOrGet(bytes32("invariant"), hook, splitFactory, configuration);
         assertTrue(token.transfer(address(vault), TOKEN_RESERVE));
 
         hook.registerPool(growthKey, address(vault.upstreamVault()), 100, 100);
         manager.initialize(growthKey, SQRT_PRICE_1_1);
+        hook.increaseObservationCardinalityNext(64, PoolId.wrap(poolId));
         LIQUIDITY_PARAMS =
             ModifyLiquidityParams({ tickLower: -20_000, tickUpper: 20_000, liquidityDelta: 1000 ether, salt: 0 });
         modifyLiquidityRouter.modifyLiquidity{ value: 1000 ether }(growthKey, LIQUIDITY_PARAMS, ZERO_BYTES);
+        vm.warp(block.timestamp + TWAP_WINDOW);
 
         handler = new LiquidityGrowthHandler{ value: 1000 ether }(swapRouter, growthKey, vault);
         bytes4[] memory selectors = new bytes4[](3);
@@ -148,6 +166,11 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
 
     function invariant_growthTargetAndRoutingConserveAllCreatorFees() public view {
         assertLe(vault.totalNativeAllocatedToGrowth(), GROWTH_TARGET);
+        if (vault.growthTargetReached()) {
+            assertEq(vault.totalNativeAllocatedToGrowth(), GROWTH_TARGET);
+            assertGe(vault.totalNativeAddedToLiquidity(), vault.minimumNativeLiquidityForCompletion());
+            assertLe(vault.nativeLiquidityShortfallAtCompletion(), vault.completionToleranceNative());
+        }
         assertEq(
             vault.totalNativeAddedToLiquidity() + vault.pendingGrowthNative(),
             vault.totalNativeAllocatedToGrowth() + vault.totalNativeRecycled()
@@ -187,6 +210,19 @@ contract LiquidityGrowthVaultV1InvariantTest is Deployers {
         assertEq(vault.tokenReserveTarget(), TOKEN_RESERVE);
         assertEq(vault.activeRangeHalfWidthTicks(), RANGE_HALF_WIDTH);
         assertEq(vault.compoundCooldownBlocks(), COMPOUND_COOLDOWN);
+        assertEq(address(vault.rangeSource()), address(rangeSource));
+        assertEq(address(rangeSource.poolManager()), address(manager));
+        assertEq(address(rangeSource.oracleHook()), address(hook));
+        assertEq(rangeSource.poolId(), poolId);
+        assertEq(rangeSource.twapWindow(), TWAP_WINDOW);
+        assertEq(rangeSource.rangeHalfWidthTicks(), RANGE_HALF_WIDTH);
+        assertEq(rangeSource.maxSpotTwapDeviationTicks(), MAX_SPOT_TWAP_DEVIATION);
+        uint256 expectedTolerance = GROWTH_TARGET / vault.BASIS_POINTS();
+        if (expectedTolerance > 0.000_001 ether) {
+            expectedTolerance = 0.000_001 ether;
+        }
+        assertEq(vault.completionToleranceNative(), expectedTolerance);
+        assertEq(vault.minimumNativeLiquidityForCompletion(), GROWTH_TARGET - vault.completionToleranceNative());
         assertEq(vault.beneficiaryAt(0), beneficiary);
         assertEq(vault.shareBpsOf(beneficiary), 10_000);
         assertEq(vault.payoutAddressOf(beneficiary), beneficiary);
