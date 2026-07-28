@@ -118,29 +118,29 @@ export function parseClassicV3ProfileRewards(
     throw new Error("Connect a valid Ethereum wallet");
   }
   const account = getAddress(requestedAccount);
-  const record = asRecord(value, "Classic V3 profile response");
+  const record = asRecord(value, "Classic profile response");
   if (record.status === "not-deployed") {
     return { status: "not-deployed", account, rewards: [] };
   }
   if (record.status !== "ready") {
-    throw new Error("Classic V3 rewards are temporarily unavailable");
+    throw new Error("Classic rewards are temporarily unavailable");
   }
   const responseAccount = address(record.account, "profile account");
   if (responseAccount.toLowerCase() !== account.toLowerCase()) {
-    throw new Error("Classic V3 profile does not match the connected wallet");
+    throw new Error("Classic profile does not match the connected wallet");
   }
   if (record.chainId !== 1 && record.chainId !== 11_155_111) {
-    throw new Error("Invalid Classic V3 profile network");
+    throw new Error("Invalid Classic profile network");
   }
   if (!Array.isArray(record.rewards)) {
-    throw new Error("Invalid Classic V3 rewards");
+    throw new Error("Invalid Classic rewards");
   }
 
   const rewards = record.rewards.map((entry, rewardIndex) => {
-    const reward = asRecord(entry, `Classic V3 reward ${rewardIndex + 1}`);
+    const reward = asRecord(entry, `Classic reward ${rewardIndex + 1}`);
     const beneficiary = address(reward.beneficiary, "reward beneficiary");
     if (beneficiary.toLowerCase() !== account.toLowerCase()) {
-      throw new Error("Classic V3 reward belongs to another beneficiary");
+      throw new Error("Classic reward belongs to another beneficiary");
     }
     if (!Array.isArray(reward.beneficiaries)) {
       throw new Error("Invalid immutable reward split");
@@ -167,7 +167,7 @@ export function parseClassicV3ProfileRewards(
       (item) => item.beneficiary.toLowerCase() === account.toLowerCase(),
     );
     if (!ownEntry || ownEntry.shareBps !== shareBps) {
-      throw new Error("Classic V3 beneficiary share does not match");
+      throw new Error("Classic beneficiary share does not match");
     }
     const claimableWei = uintString(reward.claimableWei, "claimable rewards");
     const claimedWei = uintString(reward.claimedWei, "claimed rewards");
@@ -175,7 +175,7 @@ export function parseClassicV3ProfileRewards(
       reward.claimableEth !== formatUnits(BigInt(claimableWei), 18) ||
       reward.claimedEth !== formatUnits(BigInt(claimedWei), 18)
     ) {
-      throw new Error("Classic V3 reward ETH values do not match");
+      throw new Error("Classic reward ETH values do not match");
     }
     return {
       tokenAddress: address(reward.tokenAddress, "reward token"),
@@ -240,7 +240,7 @@ export async function fetchClassicV3ProfileRewards(
   );
   const body = await response.json();
   if (!response.ok) {
-    throw new Error("Classic V3 rewards could not be loaded");
+    throw new Error("Classic rewards could not be loaded");
   }
   return parseClassicV3ProfileRewards(body, account);
 }
@@ -267,9 +267,9 @@ export function validatePreparedClassicV3RewardAction(
     chainId: number;
   },
 ): PreparedClassicV3RewardAction {
-  const response = asRecord(value, "Classic V3 reward action");
+  const response = asRecord(value, "Classic reward action");
   if (response.status !== "ready" || response.action !== expected.action) {
-    throw new Error("Classic V3 reward action is not ready");
+    throw new Error("Classic reward action is not ready");
   }
   const account = address(response.account, "reward action account");
   const vaultAddress = address(response.vaultAddress, "reward action vault");
@@ -280,7 +280,7 @@ export function validatePreparedClassicV3RewardAction(
     vaultAddress.toLowerCase() !==
       getAddress(expected.vaultAddress).toLowerCase()
   ) {
-    throw new Error("Classic V3 reward action does not match the selection");
+    throw new Error("Classic reward action does not match the selection");
   }
   const transaction = parsePreparedTransaction(response.transaction);
   const expectedKind =
@@ -294,7 +294,7 @@ export function validatePreparedClassicV3RewardAction(
     transaction.to.toLowerCase() !== vaultAddress.toLowerCase() ||
     transaction.value !== "0"
   ) {
-    throw new Error("Classic V3 reward transaction is not canonical");
+    throw new Error("Classic reward transaction is not canonical");
   }
   const decoded = decodeFunctionData({
     abi: feeSplitVaultAbi,
@@ -302,7 +302,7 @@ export function validatePreparedClassicV3RewardAction(
   });
   if (expected.action === "claim") {
     if (decoded.functionName !== "claim") {
-      throw new Error("Classic V3 reward transaction is not a claim");
+      throw new Error("Classic reward transaction is not a claim");
     }
   } else {
     if (
@@ -312,7 +312,7 @@ export function validatePreparedClassicV3RewardAction(
       decoded.args[0].toLowerCase() !==
         getAddress(expected.newPayoutAddress).toLowerCase()
     ) {
-      throw new Error("Classic V3 payout update does not match the new address");
+      throw new Error("Classic payout update does not match the new address");
     }
   }
   return { action: expected.action, account, vaultAddress, transaction };
@@ -356,7 +356,7 @@ export async function prepareClassicV3RewardAction(
     throw new Error(
       typeof record.error === "string"
         ? record.error
-        : "Classic V3 reward action could not be prepared",
+        : "Classic reward action could not be prepared",
     );
   }
   return validatePreparedClassicV3RewardAction(body, input);

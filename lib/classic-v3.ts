@@ -190,7 +190,7 @@ export function validateClassicV3LaunchDraft(
   launcherAccount: string,
 ): ClassicV3LaunchConfiguration {
   if (draft.launchModel !== "classic-v3") {
-    throw new LaunchInputError("Choose the Classic V3 launch model");
+    throw new LaunchInputError("Choose the Classic launch model");
   }
 
   validateMemeLaunchDraft({

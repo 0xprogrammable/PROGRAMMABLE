@@ -1,4 +1,4 @@
-# Classic V3 gas snapshot
+# Classic gas snapshot
 
 Generated with:
 

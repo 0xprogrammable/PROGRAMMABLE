@@ -1,4 +1,4 @@
-# Classic V2 deployment verification
+# Classic deployment verification
 
 Run this only after all three reviewed deployment transactions are confirmed. It never signs or sends a transaction.
 

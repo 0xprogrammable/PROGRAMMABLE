@@ -1,10 +1,10 @@
-# Classic V3 security and economic semantics
+# Classic security and economic semantics
 
 ## Scope
 
-Classic V3 adds independently selected buy and sell fees plus beneficiary-owned creator rewards. It deliberately reuses the existing UERC20 factory, Uniswap v4 PoolManager, PositionManager, permanent `PositionFeesForwarder` lock, zero-LP-fee pool and atomic initial-buy flow.
+Classic supports independently selected buy and sell fees plus beneficiary-owned creator rewards. It deliberately reuses the existing UERC20 factory, Uniswap v4 PoolManager, PositionManager, permanent `PositionFeesForwarder` lock, zero-LP-fee pool and atomic initial-buy flow.
 
-Existing Classic V1 and Classic V2 tokens and contracts are not modified.
+Existing Classic tokens and contracts are not modified.
 
 ## Immutable economics
 
@@ -69,7 +69,7 @@ There is no proxy, owner, administrator, pause, blacklist, mint authority, fee s
 
 ## Permanent liquidity behavior
 
-Classic V3 retains the existing one-sided position policy:
+Classic retains the existing one-sided position policy:
 
 - The fixed token supply is deposited through the official PositionManager.
 - The position NFT is held by the official `PositionFeesForwarder`.

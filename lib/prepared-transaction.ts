@@ -325,14 +325,14 @@ export function getPreparedTransactionReview(
   }
   if (kind === "claim-classic-v3-rewards") {
     return {
-      description: "Claim your Classic V3 creator rewards",
+      description: "Claim your Classic creator rewards",
       buttonText: "Claim rewards",
       successHeader: "Reward claim submitted",
     };
   }
   if (kind === "update-classic-v3-payout") {
     return {
-      description: "Update where your Classic V3 rewards are paid",
+      description: "Update where your Classic rewards are paid",
       buttonText: "Update payout address",
       successHeader: "Payout update submitted",
     };

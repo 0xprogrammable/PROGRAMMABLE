@@ -101,14 +101,14 @@ Production replays confirmed chain data through two authenticated RPC providers 
 
 ## Release status
 
-- Ethereum mainnet: Classic V2 `ready`
-- Sepolia rehearsal: Classic V2 `ready`
+- Ethereum mainnet: Classic `ready`
+- Sepolia rehearsal: Classic `ready`
 - External contract audit: none
 - Public launch products: Classic only
 
-Mainnet Classic V2 is deployed, source-matched and backed by a signed canary lifecycle covering launch, atomic Dev Buy, a separate Universal Router buy, Permit2 authorization, sell and both native ETH fee claims. Two independent RPCs reconcile the receipts, immutable configuration, runtime hashes, canonical position, balances and fee split. Public launch and trading preparation are enabled and fail closed on manifest drift, runtime drift, RPC disagreement, an unhealthy operations snapshot or an exact-call simulation failure.
+Mainnet Classic is deployed, source-matched and backed by a signed canary lifecycle covering launch, atomic Dev Buy, a separate Universal Router buy, Permit2 authorization, sell and both native ETH fee claims. Two independent RPCs reconcile the receipts, immutable configuration, runtime hashes, canonical position, balances and fee split. Public launch and trading preparation are enabled and fail closed on manifest drift, runtime drift, RPC disagreement, an unhealthy operations snapshot or an exact-call simulation failure.
 
-Sepolia Classic V2 is source-verified and backed by the signed Test2 lifecycle using the current UERC20 v2 dynamic-bytes metadata ABI. Earlier V1 and invalid-metadata lifecycles remain historical and cannot enable preparation.
+Sepolia Classic is source-verified and backed by the signed Test2 lifecycle using the current UERC20 dynamic-bytes metadata ABI. Earlier and invalid-metadata lifecycles remain historical and cannot enable preparation.
 
 There has been no external smart-contract audit or public contest. Product copy may describe exact mechanics, but it must not describe the system or a launched token as audited, safe, unruggable, scam proof or compatible with every scanner.
 

@@ -1,4 +1,4 @@
-# Programmable Classic V2 partner package
+# Programmable Classic partner package
 
 This package is for launchpad-level integrations. It is not a request to
 whitelist individual tokens and it is not evidence that a platform has

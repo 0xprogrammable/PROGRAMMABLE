@@ -287,7 +287,9 @@ function LaunchModelPicker({
           className="launch-model-card"
           type="button"
           style={{ animation: "none", transform: "none", transition: "none" }}
-          onClick={() => onChoose("classic")}
+          onClick={() =>
+            onChoose(classicV3LaunchAvailable ? "classic-v3" : "classic")
+          }
         >
           <span className="launch-model-art" aria-hidden="true">
             <Image
@@ -305,54 +307,21 @@ function LaunchModelPicker({
               <strong>Classic</strong>
             </span>
             <span className="launch-model-description">
-              A fixed-supply token with locked liquidity and creator fees paid
-              in ETH
+              {classicV3LaunchAvailable
+                ? "Set buy and sell fees, then direct creator rewards to one wallet or a fixed split"
+                : "A fixed-supply token with locked liquidity and creator fees paid in ETH"}
             </span>
             <span className="launch-model-details">
               <span>Uniswap v4</span>
               <span>No liquidity deposit</span>
-              <span>1.00% swap fee</span>
+              <span>
+                {classicV3LaunchAvailable
+                  ? "Custom fees and reward splits"
+                  : "1.00% swap fee"}
+              </span>
             </span>
             <span className="launch-model-action">
               Launch
-              <ArrowRight aria-hidden="true" size={16} />
-            </span>
-          </span>
-        </button>
-
-        <button
-          className="launch-model-card"
-          type="button"
-          style={{ animation: "none", transform: "none", transition: "none" }}
-          onClick={() => onChoose("classic-v3")}
-        >
-          <span className="launch-model-art" aria-hidden="true">
-            <Image
-              src="/brand/programmable-classic-launch-art.webp"
-              alt=""
-              fill
-              sizes="(max-width: 800px) 100vw, 420px"
-              unoptimized
-            />
-          </span>
-          <span className="launch-model-card-body">
-            <span className="launch-model-card-heading">
-              <strong>Classic V3</strong>
-              <small>
-                {classicV3LaunchAvailable ? "Available" : "In development"}
-              </small>
-            </span>
-            <span className="launch-model-description">
-              Set immutable buy and sell fees, then direct creator rewards to
-              one wallet or a fixed split
-            </span>
-            <span className="launch-model-details">
-              <span>1%–10% directional fees</span>
-              <span>Up to 8 recipients</span>
-              <span>Locked liquidity</span>
-            </span>
-            <span className="launch-model-action">
-              {classicV3LaunchAvailable ? "Launch" : "Review setup"}
               <ArrowRight aria-hidden="true" size={16} />
             </span>
           </span>
@@ -366,7 +335,7 @@ function LaunchModelPicker({
         >
           <span className="launch-model-art" aria-hidden="true">
             <Image
-              src="/brand/programmable-adaptive-model-post-v1-2000x1000.png"
+              src="/brand/programmable-adaptive-launch-art-v2.webp"
               alt=""
               fill
               sizes="(max-width: 800px) 100vw, 420px"
@@ -778,7 +747,7 @@ function LaunchBuilderForm({
             {model === "adaptive"
               ? "Adaptive"
               : model === "classic-v3"
-                ? "Classic V3"
+                ? "Classic"
                 : "Classic"}
           </p>
           <h1>Set up your token</h1>
@@ -888,7 +857,7 @@ function LaunchBuilderForm({
               {model === "adaptive" && !adaptiveLaunchAvailable
                 ? "Adaptive is not deployed"
                 : model === "classic-v3" && !classicV3LaunchAvailable
-                  ? "Classic V3 is not deployed"
+                  ? "Classic is not deployed"
                 : launchPhase === "preparing"
                 ? "Preparing launch"
                 : launchPhase === "confirming"

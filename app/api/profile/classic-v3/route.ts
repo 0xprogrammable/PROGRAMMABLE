@@ -75,7 +75,7 @@ async function assertCodeHash(
     code === "0x" ||
     keccak256(code).toLowerCase() !== expectedHash.toLowerCase()
   ) {
-    throw new Error(`${label} does not match the Classic V3 manifest`);
+    throw new Error(`${label} does not match the Classic manifest`);
   }
 }
 
@@ -151,19 +151,19 @@ async function readRewards(account: Address) {
       client,
       launcher,
       manifest.runtimeCodeHashes?.memeLaunchV2 as string,
-      "Classic V3 launcher",
+      "Classic launcher",
     ),
     assertCodeHash(
       client,
       hook,
       manifest.runtimeCodeHashes?.ethCreatorFeeHookV3 as string,
-      "Classic V3 hook",
+      "Classic hook",
     ),
     assertCodeHash(
       client,
       vaultFactory,
       manifest.runtimeCodeHashes?.feeSplitVaultFactoryV1 as string,
-      "Classic V3 reward factory",
+      "Classic reward factory",
     ),
   ]);
 
@@ -281,10 +281,10 @@ async function readRewards(account: Address) {
         disclosure[5] !== 0 ||
         disclosure[6] !== 0
       ) {
-        throw new Error("Classic V3 reward configuration is inconsistent");
+        throw new Error("Classic reward configuration is inconsistent");
       }
       if (beneficiaryCount < 1n || beneficiaryCount > 8n) {
-        throw new Error("Classic V3 reward split is outside its bounds");
+        throw new Error("Classic reward split is outside its bounds");
       }
 
       const beneficiaries = await Promise.all(
@@ -367,7 +367,7 @@ async function readLaunchByTransaction(account: Address, transactionHash: Hex) {
     client,
     launcher,
     manifest.runtimeCodeHashes?.memeLaunchV2 as string,
-    "Classic V3 launcher",
+    "Classic launcher",
   );
   const latestBlock = await client.getBlockNumber();
   const snapshotBlock =
@@ -431,8 +431,8 @@ export async function GET(request: NextRequest) {
     }
     return json(await readRewards(getAddress(input)));
   } catch (error) {
-    console.error("Classic V3 profile read failed", error);
-    return json({ error: "Classic V3 rewards are temporarily unavailable" }, 503);
+    console.error("Classic profile read failed", error);
+    return json({ error: "Classic rewards are temporarily unavailable" }, 503);
   }
 }
 
@@ -483,7 +483,7 @@ export async function POST(request: NextRequest) {
   try {
     const profile = await readRewards(account);
     if (profile.status !== "ready") {
-      return json({ error: "Classic V3 is not deployed yet" }, 409);
+      return json({ error: "Classic is not deployed yet" }, 409);
     }
     const reward = profile.rewards.find(
       (item) =>
@@ -546,7 +546,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Classic V3 reward preparation failed", error);
+    console.error("Classic reward preparation failed", error);
     return json(
       { error: "The reward action could not be simulated from current onchain state" },
       502,
