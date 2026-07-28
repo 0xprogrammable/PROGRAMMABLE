@@ -65,7 +65,7 @@ type ExploreState =
 
 type PaginationItem = number | "start-gap" | "end-gap";
 
-const TOKENS_PER_PAGE = 12;
+const TOKENS_PER_PAGE = 10;
 const PROGRAMMABLE_TOKEN_ADDRESS =
   "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
@@ -566,10 +566,12 @@ export function ExploreView() {
           return (
             <article className="token-card" key={token.id}>
               <Link
-                className="token-card-art"
+                className="token-card-hit-area"
                 href={href}
                 aria-label={`View ${token.name}`}
-              >
+              />
+
+              <span className="token-card-art">
                 <Image
                   className="token-card-image"
                   src={token.imageUrl}
@@ -579,23 +581,23 @@ export function ExploreView() {
                       : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 600px) 84px, (max-width: 800px) 106px, (max-height: 800px) 138px, 176px"
+                  sizes="(max-width: 600px) 84px, (max-width: 800px) 106px, (max-height: 800px) 138px, 186px"
                   unoptimized={!token.imageUrl.startsWith("/")}
                 />
-              </Link>
+              </span>
 
               <div className="token-card-body">
                 <header className="token-card-heading">
-                  <Link className="token-card-title" href={href}>
+                  <span className="token-card-title">
                     <h3>{token.name}</h3>
                     <span>${token.symbol}</span>
-                  </Link>
+                  </span>
                 </header>
 
                 {token.description ? (
-                  <Link className="token-card-description" href={href}>
+                  <span className="token-card-description">
                     {token.description}
-                  </Link>
+                  </span>
                 ) : (
                   <span
                     className="token-card-description token-card-description-empty"
@@ -604,14 +606,12 @@ export function ExploreView() {
                 )}
 
                 {token.marketCapLabel ? (
-                  <Link
+                  <span
                     className="token-card-market-cap"
-                    href={href}
-                    aria-label={`View ${token.name}, ${token.marketCapLabel} market cap`}
                   >
                     <strong>{token.marketCapLabel}</strong>
                     <span>MC</span>
-                  </Link>
+                  </span>
                 ) : (
                   <span
                     className="token-card-market-cap token-card-market-cap-empty"

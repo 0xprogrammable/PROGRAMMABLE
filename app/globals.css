@@ -541,14 +541,14 @@ textarea {
   align-items: center;
   display: flex;
   justify-content: center;
-  min-height: 46px;
+  min-height: 38px;
   width: 100%;
 }
 
 .token-toolbar {
   align-items: center;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: center;
   max-width: 100%;
 }
@@ -563,16 +563,16 @@ textarea {
   align-items: center;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(218, 208, 216, 0.86);
-  border-radius: 14px;
+  border-radius: 12px;
   color: var(--text-soft);
   cursor: default;
   display: inline-flex;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  gap: 8px;
-  height: 46px;
+  gap: 7px;
+  height: 38px;
   list-style: none;
-  padding: 0 13px;
+  padding: 0 11px;
   transition:
     background-color 150ms ease,
     border-color 150ms ease,
@@ -642,13 +642,13 @@ textarea {
   align-items: center;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(218, 208, 216, 0.86);
-  border-radius: 14px;
+  border-radius: 12px;
   color: var(--muted);
   display: flex;
-  flex: 0 1 240px;
-  gap: 9px;
-  min-width: 190px;
-  padding: 0 14px;
+  flex: 0 1 222px;
+  gap: 8px;
+  min-width: 178px;
+  padding: 0 12px;
   transition:
     background-color 150ms ease,
     border-color 150ms ease;
@@ -663,7 +663,8 @@ textarea {
 .token-search input {
   background: transparent;
   border: 0;
-  height: 44px;
+  font-size: 13px;
+  height: 38px;
   min-width: 0;
   outline: 0;
   width: 100%;
@@ -686,13 +687,13 @@ textarea {
 }
 
 .token-card-grid {
-  --token-card-body-height: 98px;
+  --token-card-body-height: 94px;
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   grid-template-rows: repeat(2, auto);
-  margin: 12px auto 0;
-  max-width: 1180px;
+  margin: 20px auto 0;
+  max-width: 1000px;
   min-height: 0;
   overflow: visible;
   width: 100%;
@@ -726,10 +727,24 @@ textarea {
   isolation: isolate;
   min-width: 0;
   overflow: hidden;
+  position: relative;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
     transform 160ms var(--ease-out);
+}
+
+.token-card-hit-area {
+  border-radius: inherit;
+  cursor: default;
+  inset: 0;
+  position: absolute;
+  z-index: 1;
+}
+
+.token-card-hit-area:focus-visible {
+  outline: 2px solid rgba(158, 69, 127, 0.68);
+  outline-offset: -3px;
 }
 
 .token-card:nth-child(2) {
@@ -924,6 +939,8 @@ textarea {
   gap: 4px;
   margin-top: 0;
   min-height: 22px;
+  position: relative;
+  z-index: 2;
 }
 
 .token-card .token-address code {
@@ -958,6 +975,8 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
+  position: relative;
+  z-index: 2;
 }
 
 .token-social-link {
@@ -4075,15 +4094,15 @@ textarea {
   }
 
   .token-section-heading {
-    min-height: 42px;
+    min-height: 36px;
   }
 
   .token-filter summary {
-    height: 42px;
+    height: 36px;
   }
 
   .token-search input {
-    height: 40px;
+    height: 36px;
   }
 
   .launch-model-page {
@@ -4473,6 +4492,10 @@ textarea {
     max-width: 720px;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .token-card:nth-child(10):last-child {
+    grid-column: 2;
   }
 
   .token-card {
