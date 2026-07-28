@@ -16,7 +16,9 @@ export type PreparedTransactionKind =
   | "token-to-permit2"
   | "permit2-to-router"
   | "swap"
-  | "claim-creator-fees";
+  | "claim-creator-fees"
+  | "claim-classic-v3-rewards"
+  | "update-classic-v3-payout";
 
 type PreparedTransactionBase = {
   chainId: PreparedTransactionChainId;
@@ -47,11 +49,19 @@ type PreparedLaunchTransaction = PreparedTransactionBase & {
   from?: never;
 };
 
-type PreparedClaimTransaction = PreparedTransactionBase & {
-  kind: "claim-creator-fees";
+type PreparedClaimTransactionBase = PreparedTransactionBase & {
   from: Address;
   gasLimit: string;
 };
+
+type PreparedClaimTransaction =
+  | (PreparedClaimTransactionBase & { kind: "claim-creator-fees" })
+  | (PreparedClaimTransactionBase & {
+      kind: "claim-classic-v3-rewards";
+    })
+  | (PreparedClaimTransactionBase & {
+      kind: "update-classic-v3-payout";
+    });
 
 export type PreparedTransaction =
   | PreparedTradeTransaction
@@ -72,6 +82,8 @@ const kinds = new Set<PreparedTransactionKind>([
   "permit2-to-router",
   "swap",
   "claim-creator-fees",
+  "claim-classic-v3-rewards",
+  "update-classic-v3-payout",
 ]);
 const commonFields = new Set([
   "kind",
@@ -156,7 +168,11 @@ export function parsePreparedTransaction(
   }
   const kind = record.kind as PreparedTransactionKind;
   const allowedFields =
-    kind === "claim-creator-fees" ? claimFields : commonFields;
+    kind === "claim-creator-fees" ||
+    kind === "claim-classic-v3-rewards" ||
+    kind === "update-classic-v3-payout"
+      ? claimFields
+      : commonFields;
   const unsupportedField = Object.keys(record).find(
     (field) => !allowedFields.has(field),
   );
@@ -186,7 +202,11 @@ export function parsePreparedTransaction(
       gasLimit: readUintString(record.gasLimit, "gas limit", false),
     };
   }
-  if (kind === "claim-creator-fees") {
+  if (
+    kind === "claim-creator-fees" ||
+    kind === "claim-classic-v3-rewards" ||
+    kind === "update-classic-v3-payout"
+  ) {
     return {
       ...base,
       kind,
@@ -224,7 +244,9 @@ export function parsePreparedTransactionForAccount(
   const transaction = parsePreparedTransaction(input);
   const connectedAccount = readAddress(account, "connected wallet");
   if (
-    transaction.kind === "claim-creator-fees" &&
+    (transaction.kind === "claim-creator-fees" ||
+      transaction.kind === "claim-classic-v3-rewards" ||
+      transaction.kind === "update-classic-v3-payout") &&
     transaction.from.toLowerCase() !== connectedAccount.toLowerCase()
   ) {
     throw new Error(
@@ -299,6 +321,20 @@ export function getPreparedTransactionReview(
         "Allow the Uniswap router to use only the token amount prepared for this trade through Permit2. This approval is not a swap",
       buttonText: "Approve Uniswap",
       successHeader: "Router approval submitted",
+    };
+  }
+  if (kind === "claim-classic-v3-rewards") {
+    return {
+      description: "Claim your Classic V3 creator rewards",
+      buttonText: "Claim rewards",
+      successHeader: "Reward claim submitted",
+    };
+  }
+  if (kind === "update-classic-v3-payout") {
+    return {
+      description: "Update where your Classic V3 rewards are paid",
+      buttonText: "Update payout address",
+      successHeader: "Payout update submitted",
     };
   }
   if (kind === "swap") {

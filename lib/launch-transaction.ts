@@ -1,7 +1,10 @@
 import {
   encodeFunctionData,
+  encodeAbiParameters,
+  isHex,
   keccak256,
   parseAbi,
+  parseAbiParameters,
   stringToHex,
   toHex,
   type Address,
@@ -10,7 +13,14 @@ import {
 
 import {
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
+  ADAPTIVE_MAX_CURVE_POINTS,
+  ADAPTIVE_MAX_FDV_INDEX,
+  ADAPTIVE_MAX_FEE_BPS,
+  ADAPTIVE_MIN_CURVE_POINTS,
+  ADAPTIVE_MIN_FDV_INDEX,
+  ADAPTIVE_MIN_FEE_BPS,
   parseInitialBuyWei,
+  parseOptionalInitialBuyWei,
   parseTotalSwapFeeBps,
   type LaunchDraft,
 } from "./launch";
@@ -55,6 +65,24 @@ export const memeLaunchAbi = parseAbi([
   "function MIN_INITIAL_BUY_WEI() view returns (uint256)",
 ]);
 
+export const adaptiveCurveLaunchAbi = parseAbi([
+  "function launch(bytes encodedParameters) payable returns ((address token,address feeHook,address positionRecipient,uint256 positionTokenId,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,bytes32 poolId,bytes32 curveHash,bytes32 launchHash) result)",
+  "function predictTokenAddress(string name,string symbol,address creator,bytes32 creatorSalt) view returns (address token,bytes32 effectiveGraffiti)",
+  "function predictFeeHook(bytes32 hookSalt) view returns (address)",
+  "function poolManager() view returns (address)",
+  "function positionManager() view returns (address)",
+  "function tokenFactory() view returns (address)",
+  "function adaptiveHookFactory() view returns (address)",
+  "function positionForwarderFactory() view returns (address)",
+  "function launcherFeeRecipient() view returns (address)",
+]);
+
+export const adaptiveCurveHookFactoryAbi = parseAbi([
+  "function initCodeHash(address poolManager,address launcherFeeRecipient) view returns (bytes32)",
+  "function configurationHashOf(address hook) view returns (bytes32)",
+  "function REQUIRED_HOOK_FLAGS() view returns (uint160)",
+]);
+
 export const ethCreatorFeeHookAbi = parseAbi([
   "function poolManager() view returns (address)",
   "function launcherFeeRecipient() view returns (address)",
@@ -92,7 +120,7 @@ export type PreparedLaunchTransaction = Extract<
 
 export type LaunchPreflightResponse = {
   status: "blocked" | "ready";
-  mode: "meme";
+  mode: "meme" | "classic-v3" | "adaptive";
   title: string;
   detail: string;
   checks: LaunchPreflightCheck[];
@@ -309,6 +337,83 @@ export function validateMemeLaunchDraft(draft: LaunchDraft) {
   return totalSwapFeeBps;
 }
 
+export function validateAdaptiveLaunchDraft(
+  draft: LaunchDraft,
+  options: { requireHookSalt?: boolean } = {},
+) {
+  if (draft.launchModel !== "adaptive") {
+    throw new LaunchInputError("Choose the Adaptive launch model");
+  }
+  if (draft.assetMode !== "new") {
+    throw new LaunchInputError("Adaptive creates a new token");
+  }
+  if (draft.tokenSupply.trim() !== "1000000000") {
+    throw new LaunchInputError(
+      "Adaptive uses a fixed supply of 1,000,000,000 tokens",
+    );
+  }
+
+  const classicShape = {
+    ...draft,
+    launchModel: "classic" as const,
+    totalSwapFeePercent: "1",
+    initialBuyEth: "0.0006",
+  };
+  validateMemeLaunchDraft(classicShape);
+
+  const points = draft.adaptiveCurvePoints;
+  if (
+    points.length < ADAPTIVE_MIN_CURVE_POINTS ||
+    points.length > ADAPTIVE_MAX_CURVE_POINTS
+  ) {
+    throw new LaunchInputError(
+      `Use ${ADAPTIVE_MIN_CURVE_POINTS} to ${ADAPTIVE_MAX_CURVE_POINTS} curve points`,
+    );
+  }
+  if (
+    points[0]?.fdvIndex !== ADAPTIVE_MIN_FDV_INDEX ||
+    points.at(-1)?.fdvIndex !== ADAPTIVE_MAX_FDV_INDEX
+  ) {
+    throw new LaunchInputError(
+      "Keep the lower and upper curve boundaries in place",
+    );
+  }
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    if (
+      !Number.isSafeInteger(point.fdvIndex) ||
+      !Number.isSafeInteger(point.totalSwapFeeBps)
+    ) {
+      throw new LaunchInputError("Curve values must be whole numbers");
+    }
+    if (
+      point.totalSwapFeeBps < ADAPTIVE_MIN_FEE_BPS ||
+      point.totalSwapFeeBps > ADAPTIVE_MAX_FEE_BPS
+    ) {
+      throw new LaunchInputError("Keep every curve fee between 1% and 10%");
+    }
+    if (index > 0 && point.fdvIndex <= points[index - 1].fdvIndex) {
+      throw new LaunchInputError(
+        "Curve points must move from lower to higher onchain value",
+      );
+    }
+  }
+
+  if (parseOptionalInitialBuyWei(draft.initialBuyEth) === null) {
+    throw new LaunchInputError("Enter a valid optional Dev Buy");
+  }
+  if (
+    options.requireHookSalt &&
+    (!isHex(draft.hookSalt, { strict: true }) ||
+      draft.hookSalt.length !== 66)
+  ) {
+    throw new LaunchInputError(
+      "Prepare a deterministic Adaptive hook address first",
+    );
+  }
+  return points;
+}
+
 export function encodeMemeLaunch(
   draft: LaunchDraft,
   creatorSalt: Hex,
@@ -332,6 +437,43 @@ export function encodeMemeLaunch(
         },
       },
     ],
+  });
+}
+
+const adaptiveLaunchParameters = parseAbiParameters(
+  "(string name,string symbol,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,(bytes32 hookSalt,int24[] fdvIndexes,uint16[] totalSwapFeeBps) curve) parameters",
+);
+
+export function encodeAdaptiveLaunch(
+  draft: LaunchDraft,
+  creatorSalt: Hex,
+) {
+  const points = validateAdaptiveLaunchDraft(draft, {
+    requireHookSalt: true,
+  });
+  const metadata = getValidatedMetadata(draft);
+  const encodedParameters = encodeAbiParameters(adaptiveLaunchParameters, [
+    {
+      name: draft.tokenName.trim(),
+      symbol: draft.tokenSymbol.trim(),
+      creatorSalt,
+      metadata: {
+        description: draft.tokenDescription.trim(),
+        website: metadata.website,
+        image: metadata.image,
+        extraData: encodeMemeMetadataExtraData(draft),
+      },
+      curve: {
+        hookSalt: draft.hookSalt as Hex,
+        fdvIndexes: points.map((point) => point.fdvIndex),
+        totalSwapFeeBps: points.map((point) => point.totalSwapFeeBps),
+      },
+    },
+  ]);
+  return encodeFunctionData({
+    abi: adaptiveCurveLaunchAbi,
+    functionName: "launch",
+    args: [encodedParameters],
   });
 }
 

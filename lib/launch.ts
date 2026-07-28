@@ -14,15 +14,39 @@ export const MEME_MIN_INITIAL_BUY_WEI = 600_000_000_000_000n;
 export const MEME_MIN_INITIAL_BUY_ETH = "0.0006";
 export const MEME_MIN_INITIAL_BUY_ETH_LABEL =
   `${MEME_MIN_INITIAL_BUY_ETH} ETH`;
+export const ADAPTIVE_MIN_FDV_INDEX = -887_272;
+export const ADAPTIVE_MAX_FDV_INDEX = 887_272;
+export const ADAPTIVE_MIN_FEE_BPS = 100;
+export const ADAPTIVE_MAX_FEE_BPS = 1_000;
+export const ADAPTIVE_MIN_CURVE_POINTS = 2;
+export const ADAPTIVE_MAX_CURVE_POINTS = 8;
+export const CLASSIC_V3_MIN_FEE_BPS = 100;
+export const CLASSIC_V3_MAX_FEE_BPS = 1_000;
+export const CLASSIC_V3_FEE_STEP_BPS = 100;
+export const CLASSIC_V3_MAX_REWARD_BENEFICIARIES = 8;
+export const REWARD_SHARE_BPS = 10_000;
 
 // AssetMode and the legacy draft fields remain only so an older browser draft can
 // be read safely. The active product always normalizes to a new MemeLaunchV1 token.
 export type AssetMode = "new" | "existing";
 export type LiquidityMode = "meme";
 export type BehaviorId = "fixed-fee";
+export type LaunchModel = "classic" | "classic-v3" | "adaptive";
+export type RewardDestinationMode = "launcher" | "external" | "split";
+
+export type AdaptiveCurvePointDraft = {
+  fdvIndex: number;
+  totalSwapFeeBps: number;
+};
+
+export type RewardSplitDraft = {
+  beneficiary: string;
+  sharePercent: string;
+};
 
 export type LaunchDraft = {
   version: 1;
+  launchModel: LaunchModel;
   assetMode: AssetMode;
   tokenName: string;
   tokenSymbol: string;
@@ -54,12 +78,20 @@ export type LaunchDraft = {
   customHookAddress: string;
   customHookSource: string;
   launchSalt: string;
+  hookSalt: string;
+  adaptiveCurvePoints: AdaptiveCurvePointDraft[];
+  buySwapFeePercent: string;
+  sellSwapFeePercent: string;
+  rewardDestinationMode: RewardDestinationMode;
+  rewardExternalAddress: string;
+  rewardSplits: RewardSplitDraft[];
   updatedAt: string;
 };
 
 export function createEmptyDraft(): LaunchDraft {
   return {
     version: 1,
+    launchModel: "classic",
     assetMode: "new",
     tokenName: "",
     tokenSymbol: "",
@@ -91,7 +123,44 @@ export function createEmptyDraft(): LaunchDraft {
     customHookAddress: "",
     customHookSource: "",
     launchSalt: "",
+    hookSalt: "",
+    adaptiveCurvePoints: [],
+    buySwapFeePercent: "1",
+    sellSwapFeePercent: "1",
+    rewardDestinationMode: "launcher",
+    rewardExternalAddress: "",
+    rewardSplits: [
+      { beneficiary: "", sharePercent: "50" },
+      { beneficiary: "", sharePercent: "50" },
+    ],
     updatedAt: new Date(0).toISOString(),
+  };
+}
+
+export function createClassicV3Draft(): LaunchDraft {
+  return {
+    ...createEmptyDraft(),
+    launchModel: "classic-v3",
+    selectedBehaviors: ["fixed-fee"],
+    buySwapFeePercent: "1",
+    sellSwapFeePercent: "1",
+    rewardDestinationMode: "launcher",
+  };
+}
+
+export function createAdaptiveDraft(): LaunchDraft {
+  return {
+    ...createEmptyDraft(),
+    launchModel: "adaptive",
+    selectedBehaviors: [],
+    totalSwapFeePercent: "",
+    initialBuyEth: "0",
+    adaptiveCurvePoints: [
+      { fdvIndex: ADAPTIVE_MIN_FDV_INDEX, totalSwapFeeBps: 500 },
+      { fdvIndex: -204_200, totalSwapFeeBps: 500 },
+      { fdvIndex: -160_000, totalSwapFeeBps: 200 },
+      { fdvIndex: ADAPTIVE_MAX_FDV_INDEX, totalSwapFeeBps: 100 },
+    ],
   };
 }
 
@@ -125,6 +194,23 @@ export function parseInitialBuyWei(value: string | null | undefined) {
   try {
     const amount = parseEther(normalized);
     return amount >= MEME_MIN_INITIAL_BUY_WEI ? amount : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseOptionalInitialBuyWei(value: string | null | undefined) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (
+    normalized.length === 0 ||
+    normalized.length > 40 ||
+    !/^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/.test(normalized)
+  ) {
+    return null;
+  }
+
+  try {
+    return parseEther(normalized);
   } catch {
     return null;
   }

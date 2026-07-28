@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "model": "adaptive-v1",
+  "chainScope": "ethereum",
+  "receiptProcessing": "buffer-entire-receipt-before-materializing-launch",
+  "canonicalIdentity": {
+    "token": "AdaptiveTokenLaunched.token",
+    "pool": "AdaptiveTokenLaunched.poolId",
+    "hook": "AdaptiveTokenLaunched.feeHook",
+    "launch": "AdaptiveTokenLaunched.launchHash"
+  },
+  "economics": {
+    "feeCurrency": "native-eth",
+    "launcherFeeBps": 10,
+    "launcherFeePercentagePoints": "0.10",
+    "launcherShareTreatment": "deducted-from-total",
+    "transferTaxBps": 0,
+    "curveInput": "negated-pre-swap-uniswap-tick",
+    "curveInputMeaning": "eth-denominated-fixed-supply-fdv-index",
+    "curvePointMinimum": 2,
+    "curvePointMaximum": 8,
+    "totalSwapFeeBpsMinimum": 100,
+    "totalSwapFeeBpsMaximum": 1000,
+    "sameCurveForBuysAndSells": true,
+    "crossedBandPolicy": "the-pre-swap-fee-applies-to-the-complete-swap"
+  },
+  "events": [
+    {
+      "contract": "AdaptiveCurveFeeHookFactoryV1",
+      "name": "AdaptiveCurveFeeHookDeployed",
+      "signature": "AdaptiveCurveFeeHookDeployed(address,address,address,bytes32,bytes32)",
+      "topic0": "0x36a825d6b70981fd6da4bd3b2258f6261f5282f211f417e3194103c50e5550f9",
+      "fields": [
+        { "name": "hook", "type": "address", "indexed": true },
+        { "name": "poolManager", "type": "address", "indexed": true },
+        { "name": "launcherFeeRecipient", "type": "address", "indexed": true },
+        { "name": "salt", "type": "bytes32", "indexed": false },
+        { "name": "configurationHash", "type": "bytes32", "indexed": false }
+      ]
+    },
+    {
+      "contract": "LockedPositionFeeForwarderFactoryV1",
+      "name": "LockedPositionFeeForwarderDeployed",
+      "signature": "LockedPositionFeeForwarderDeployed(address,address,bytes32,bytes32,address)",
+      "topic0": "0x5f4b4eac9bc9dbd1ba3ed7dcec7f0a6f4d5eaf43e97a8c1f46bbaca726f1883e",
+      "fields": [
+        { "name": "forwarder", "type": "address", "indexed": true },
+        { "name": "feeRecipient", "type": "address", "indexed": true },
+        { "name": "salt", "type": "bytes32", "indexed": true },
+        { "name": "configurationHash", "type": "bytes32", "indexed": false },
+        { "name": "positionManager", "type": "address", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveFeeHookV1",
+      "name": "AdaptiveCurvePointRegistered",
+      "signature": "AdaptiveCurvePointRegistered(bytes32,uint8,int24,uint16)",
+      "topic0": "0x1069a3d220867b0162eecaf3634d82c1324ea1d96815a040fa195a00bc9cb608",
+      "fields": [
+        { "name": "poolId", "type": "bytes32", "indexed": true },
+        { "name": "pointIndex", "type": "uint8", "indexed": true },
+        { "name": "fdvIndex", "type": "int24", "indexed": false },
+        { "name": "totalSwapFeeBps", "type": "uint16", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveFeeHookV1",
+      "name": "AdaptiveCurveRegistered",
+      "signature": "AdaptiveCurveRegistered(bytes32,address,address,address,uint256,bytes32,uint8)",
+      "topic0": "0x360d35bd6740a7991824a0e7bee4b22cda9443d8cd731a684370d513accd2ce1",
+      "fields": [
+        { "name": "poolId", "type": "bytes32", "indexed": true },
+        { "name": "token", "type": "address", "indexed": true },
+        { "name": "creator", "type": "address", "indexed": true },
+        { "name": "registrar", "type": "address", "indexed": false },
+        { "name": "fixedSupply", "type": "uint256", "indexed": false },
+        { "name": "curveHash", "type": "bytes32", "indexed": false },
+        { "name": "curvePointCount", "type": "uint8", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveFeeHookV1",
+      "name": "AdaptiveCurveDisclosure",
+      "signature": "AdaptiveCurveDisclosure(bytes32,address,uint16,uint16,uint24,bool,bool)",
+      "topic0": "0x54f0c00ff586fe7c19fdf4ce940d1ce3b6c178333e4e273f2498079b8d2bd8af",
+      "fields": [
+        { "name": "poolId", "type": "bytes32", "indexed": true },
+        { "name": "token", "type": "address", "indexed": true },
+        { "name": "launcherFeeBps", "type": "uint16", "indexed": false },
+        { "name": "transferTaxBps", "type": "uint16", "indexed": false },
+        { "name": "lpFeePips", "type": "uint24", "indexed": false },
+        { "name": "symmetricBuyAndSell", "type": "bool", "indexed": false },
+        { "name": "usesPreSwapTick", "type": "bool", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveFeeHookV1",
+      "name": "NativeSwapFeesAccrued",
+      "signature": "NativeSwapFeesAccrued(bytes32,address,int24,uint16,uint256,uint256,uint256)",
+      "topic0": "0xa6e8a65d65dda7f37967d72eed111977f82b26550d3c6a47c72b2c1cb3c379de",
+      "fields": [
+        { "name": "poolId", "type": "bytes32", "indexed": true },
+        { "name": "swapSender", "type": "address", "indexed": true },
+        { "name": "fdvIndex", "type": "int24", "indexed": false },
+        { "name": "totalSwapFeeBps", "type": "uint16", "indexed": false },
+        { "name": "grossNativeAmount", "type": "uint256", "indexed": false },
+        { "name": "creatorFee", "type": "uint256", "indexed": false },
+        { "name": "launcherFee", "type": "uint256", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveFeeHookV1",
+      "name": "CreatorFeesClaimed",
+      "signature": "CreatorFeesClaimed(bytes32,address,address,address,uint256)",
+      "topic0": "0x009b5a1c4618b3d2ccfe0a34ea641fc5b5dfdc6ed69b99ff9cebe4ffa059db74",
+      "fields": [
+        { "name": "poolId", "type": "bytes32", "indexed": true },
+        { "name": "creator", "type": "address", "indexed": true },
+        { "name": "recipient", "type": "address", "indexed": true },
+        { "name": "caller", "type": "address", "indexed": false },
+        { "name": "amount", "type": "uint256", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveFeeHookV1",
+      "name": "LauncherFeesClaimed",
+      "signature": "LauncherFeesClaimed(address,address,address,uint256)",
+      "topic0": "0x775f4e4bf8b8867e60274a57c3cd35202f03a466c26fd144cc6585b2482168b4",
+      "fields": [
+        { "name": "treasury", "type": "address", "indexed": true },
+        { "name": "recipient", "type": "address", "indexed": true },
+        { "name": "caller", "type": "address", "indexed": true },
+        { "name": "amount", "type": "uint256", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveLaunchV1",
+      "name": "AdaptiveTokenLaunched",
+      "signature": "AdaptiveTokenLaunched(address,address,bytes32,address,bytes32)",
+      "topic0": "0x9cb1a98d287bf9cdbe951e4a6690d270b54df4010506721a5f0208697fe15c1d",
+      "fields": [
+        { "name": "creator", "type": "address", "indexed": true },
+        { "name": "token", "type": "address", "indexed": true },
+        { "name": "poolId", "type": "bytes32", "indexed": true },
+        { "name": "feeHook", "type": "address", "indexed": false },
+        { "name": "launchHash", "type": "bytes32", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveLaunchV1",
+      "name": "AdaptiveLiquidityConfigured",
+      "signature": "AdaptiveLiquidityConfigured(address,uint256,uint256,uint256,int24,int24,int24,uint24,bytes32)",
+      "topic0": "0x88afd9a7cf4d803492b8a5191ae0570cf70e651365b3fdd585974971c6778392",
+      "fields": [
+        { "name": "token", "type": "address", "indexed": true },
+        { "name": "totalSupply", "type": "uint256", "indexed": false },
+        { "name": "tokenLiquidityAmount", "type": "uint256", "indexed": false },
+        { "name": "lockedTokenDust", "type": "uint256", "indexed": false },
+        { "name": "initialTick", "type": "int24", "indexed": false },
+        { "name": "tickLower", "type": "int24", "indexed": false },
+        { "name": "tickUpper", "type": "int24", "indexed": false },
+        { "name": "lpFeePips", "type": "uint24", "indexed": false },
+        { "name": "launchHash", "type": "bytes32", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveLaunchV1",
+      "name": "AdaptiveCurveConfigured",
+      "signature": "AdaptiveCurveConfigured(address,bytes32,address,bytes32,uint8,bytes32)",
+      "topic0": "0x47c8cd95aa7504918b5ec06aa107c5694128f11fb204a33562cf23f577421e10",
+      "fields": [
+        { "name": "token", "type": "address", "indexed": true },
+        { "name": "poolId", "type": "bytes32", "indexed": true },
+        { "name": "feeHook", "type": "address", "indexed": true },
+        { "name": "curveHash", "type": "bytes32", "indexed": false },
+        { "name": "curvePointCount", "type": "uint8", "indexed": false },
+        { "name": "launchHash", "type": "bytes32", "indexed": false }
+      ]
+    },
+    {
+      "contract": "AdaptiveCurveLaunchV1",
+      "name": "AdaptiveCreatorInitialBuy",
+      "signature": "AdaptiveCreatorInitialBuy(address,address,bytes32,uint256,uint256,bytes32)",
+      "topic0": "0xba53ce54792126db8b3ad4d84d84085d59e0c97dbabfb049d95ab9599e7fc900",
+      "fields": [
+        { "name": "creator", "type": "address", "indexed": true },
+        { "name": "token", "type": "address", "indexed": true },
+        { "name": "poolId", "type": "bytes32", "indexed": true },
+        { "name": "nativeAmount", "type": "uint256", "indexed": false },
+        { "name": "tokenAmount", "type": "uint256", "indexed": false },
+        { "name": "launchHash", "type": "bytes32", "indexed": false }
+      ]
+    }
+  ],
+  "materializationRules": [
+    "Accept AdaptiveTokenLaunched only from a launcher address pinned in the deployment manifest.",
+    "Require the hook to have AdaptiveCurveFeeHookDeployed provenance from the pinned factory in the same receipt or an earlier canonical block.",
+    "Require exactly curvePointCount point events with contiguous indexes, strictly increasing fdvIndex values and full-range endpoints.",
+    "Require AdaptiveCurveRegistered, AdaptiveCurveConfigured and AdaptiveTokenLaunched to agree on token, poolId, hook and curveHash.",
+    "Require AdaptiveCurveDisclosure to report launcherFeeBps 10, transferTaxBps 0, lpFeePips 0, symmetricBuyAndSell true and usesPreSwapTick true.",
+    "Treat AdaptiveCreatorInitialBuy with both amounts zero as a valid no-buy launch.",
+    "Rollback all derived rows on a chain reorganization; confirmation depth is an operator policy, not a contract guarantee."
+  ]
+}

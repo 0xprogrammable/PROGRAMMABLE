@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { findIndexedLaunch } from "../components/launch-builder";
+import {
+  findClassicV3IndexedLaunch,
+  findIndexedLaunch,
+} from "../components/launch-builder";
 
 const transactionHash = `0x${"12".repeat(32)}`;
 const tokenAddress = "0x1111111111111111111111111111111111111111";
@@ -51,6 +54,28 @@ describe("launch success indexing", () => {
         },
         transactionHash,
       ),
+    ).toBeNull();
+  });
+
+  it("finds a confirmed Classic V3 launch without the V2 indexer", () => {
+    expect(
+      findClassicV3IndexedLaunch({
+        status: "ready",
+        launch: {
+          tokenAddress,
+          name: "Directional",
+          symbol: "DIR",
+          launchTransactionHash: transactionHash,
+        },
+      }),
+    ).toEqual({
+      address: tokenAddress,
+      href: `/token/${tokenAddress}`,
+      name: "Directional",
+      symbol: "DIR",
+    });
+    expect(
+      findClassicV3IndexedLaunch({ status: "ready", launch: null }),
     ).toBeNull();
   });
 });

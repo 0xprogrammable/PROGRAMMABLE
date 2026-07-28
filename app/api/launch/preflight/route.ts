@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createPublicClient,
+  concatHex,
   getAddress,
+  getCreate2Address,
   http,
   isAddress,
   isHex,
   keccak256,
+  padHex,
+  toHex,
   type Address,
   type Hex,
 } from "viem";
@@ -17,7 +21,19 @@ import mainnetDeployments from "@/contracts/dependencies/ethereum-mainnet.json";
 import sepoliaDeployments from "@/contracts/dependencies/ethereum-sepolia.json";
 import { isClassicDeploymentReady } from "@/lib/launch-deployment";
 import {
+  classicV3HookAbi,
+  classicV3HookFactoryAbi,
+  classicV3LaunchAbi,
+  encodeClassicV3Launch,
+  isClassicV3DeploymentReady,
+  validateClassicV3LaunchDraft,
+  type ClassicV3DeploymentManifest,
+} from "@/lib/classic-v3";
+import {
   buildPlanHash,
+  adaptiveCurveHookFactoryAbi,
+  adaptiveCurveLaunchAbi,
+  encodeAdaptiveLaunch,
   encodeMemeLaunch,
   ethCreatorFeeHookAbi,
   ethCreatorFeeHookFactoryAbi,
@@ -28,10 +44,12 @@ import {
   type LaunchPreflightResponse,
   type PreparedLaunchTransaction,
   validateMemeLaunchDraft,
+  validateAdaptiveLaunchDraft,
 } from "@/lib/launch-transaction";
 import {
   createEmptyDraft,
   MEME_MIN_INITIAL_BUY_WEI,
+  parseOptionalInitialBuyWei,
   parseInitialBuyWei,
   type LaunchDraft,
 } from "@/lib/launch";
@@ -55,7 +73,7 @@ const selectedDeployments =
     ? sepoliaDeployments
     : mainnetDeployments;
 const selectedManifest =
-  appDeployments[launchEnvironment] as ClassicDeployment;
+  appDeployments[launchEnvironment] as ReleaseDeployment;
 
 const client = createPublicClient({
   chain: launchChain,
@@ -81,7 +99,7 @@ const officialTokenFactory = getAddress(
 );
 const platformTreasury = getAddress(deploymentInputs.platform.treasury);
 
-type ClassicDeployment = {
+type ReleaseDeployment = {
   chainId: number;
   status: "not-deployed" | "ready" | "requires-redeploy";
   memeLaunchStatus:
@@ -89,15 +107,32 @@ type ClassicDeployment = {
     | "ready"
     | "requires-redeploy"
     | "lifecycle-pending";
+  adaptiveLaunchStatus: "not-deployed" | "ready" | "requires-redeploy";
+  classicV3Status?: "not-deployed" | "ready" | "requires-redeploy";
   ethCreatorFeeHookFactory: string | null;
   ethCreatorFeeHook: string | null;
   memeLaunch: string | null;
+  adaptiveCurveFeeHookFactory: string | null;
+  adaptiveCurveLaunch: string | null;
+  ethCreatorFeeHookFactoryV3?: string | null;
+  ethCreatorFeeHookV3?: string | null;
+  feeSplitVaultFactoryV1?: string | null;
+  memeLaunchV2?: string | null;
   lockedPositionFeeForwarderFactory: string | null;
   runtimeCodeHashes: {
     ethCreatorFeeHookFactory: string | null;
     ethCreatorFeeHook: string | null;
     memeLaunch: string | null;
+    adaptiveCurveFeeHookFactory: string | null;
+    adaptiveCurveLaunch: string | null;
+    ethCreatorFeeHookFactoryV3?: string | null;
+    ethCreatorFeeHookV3?: string | null;
+    feeSplitVaultFactoryV1?: string | null;
+    memeLaunchV2?: string | null;
     lockedPositionFeeForwarderFactory: string | null;
+  };
+  deploymentBlocks?: {
+    memeLaunchV2?: number | null;
   };
 };
 
@@ -140,6 +175,10 @@ function parseDraft(input: unknown): LaunchDraft {
     "totalSwapFeePercent",
     "initialBuyEth",
     "launchSalt",
+    "hookSalt",
+    "buySwapFeePercent",
+    "sellSwapFeePercent",
+    "rewardExternalAddress",
     "updatedAt",
   ] as const;
 
@@ -147,6 +186,59 @@ function parseDraft(input: unknown): LaunchDraft {
     if (typeof raw[field] === "string") {
       draft[field] = raw[field];
     }
+  }
+
+  if (raw.launchModel === "adaptive") {
+    draft.launchModel = "adaptive";
+  } else if (raw.launchModel === "classic-v3") {
+    draft.launchModel = "classic-v3";
+  }
+  if (
+    raw.rewardDestinationMode === "launcher" ||
+    raw.rewardDestinationMode === "external" ||
+    raw.rewardDestinationMode === "split"
+  ) {
+    draft.rewardDestinationMode = raw.rewardDestinationMode;
+  }
+  if (Array.isArray(raw.rewardSplits)) {
+    draft.rewardSplits = raw.rewardSplits.slice(0, 8).map((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new LaunchInputError("The reward split is invalid");
+      }
+      const row = value as Record<string, unknown>;
+      if (
+        typeof row.beneficiary !== "string" ||
+        typeof row.sharePercent !== "string"
+      ) {
+        throw new LaunchInputError("The reward split is invalid");
+      }
+      return {
+        beneficiary: row.beneficiary,
+        sharePercent: row.sharePercent,
+      };
+    });
+  }
+  if (Array.isArray(raw.adaptiveCurvePoints)) {
+    draft.adaptiveCurvePoints = raw.adaptiveCurvePoints
+      .slice(0, 8)
+      .map((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          throw new LaunchInputError("The Adaptive curve is invalid");
+        }
+        const point = value as Record<string, unknown>;
+        if (
+          typeof point.fdvIndex !== "number" ||
+          !Number.isSafeInteger(point.fdvIndex) ||
+          typeof point.totalSwapFeeBps !== "number" ||
+          !Number.isSafeInteger(point.totalSwapFeeBps)
+        ) {
+          throw new LaunchInputError("The Adaptive curve is invalid");
+        }
+        return {
+          fdvIndex: point.fdvIndex,
+          totalSwapFeeBps: point.totalSwapFeeBps,
+        };
+      });
   }
 
   // The API intentionally ignores obsolete client-supplied product switches.
@@ -421,7 +513,7 @@ async function prepareMemeLaunch(
   account: Address,
   draft: LaunchDraft,
   connectedWalletCheck: LaunchPreflightCheck,
-  deployment: ClassicDeployment,
+  deployment: ReleaseDeployment,
 ) {
   const totalSwapFeeBps = validateMemeLaunchDraft(draft);
   const initialBuyWei = parseInitialBuyWei(draft.initialBuyEth);
@@ -586,6 +678,699 @@ async function prepareMemeLaunch(
   });
 }
 
+async function assertClassicV3Infrastructure(
+  launcher: Address,
+  hook: Address,
+  hookFactory: Address,
+  vaultFactory: Address,
+  positionForwarderFactory: Address,
+  codeHashes: {
+    ethCreatorFeeHookFactoryV3: Hex;
+    ethCreatorFeeHookV3: Hex;
+    feeSplitVaultFactoryV1: Hex;
+    memeLaunchV2: Hex;
+    lockedPositionFeeForwarderFactory: Hex;
+  },
+) {
+  await Promise.all([
+    assertRuntimeCodeHash(
+      officialPoolManager,
+      selectedDeployments.contracts.poolManager.runtimeCodeHash as Hex,
+      "Uniswap PoolManager",
+    ),
+    assertRuntimeCodeHash(
+      officialPositionManager,
+      selectedDeployments.contracts.positionManager.runtimeCodeHash as Hex,
+      "Uniswap PositionManager",
+    ),
+    assertRuntimeCodeHash(
+      officialTokenFactory,
+      selectedDeployments.contracts.uerc20Factory.runtimeCodeHash as Hex,
+      "Uniswap UERC20Factory",
+    ),
+    assertRuntimeCodeHash(
+      hookFactory,
+      codeHashes.ethCreatorFeeHookFactoryV3,
+      "Classic V3 hook factory",
+    ),
+    assertRuntimeCodeHash(
+      hook,
+      codeHashes.ethCreatorFeeHookV3,
+      "Classic V3 hook",
+    ),
+    assertRuntimeCodeHash(
+      vaultFactory,
+      codeHashes.feeSplitVaultFactoryV1,
+      "Classic V3 reward factory",
+    ),
+    assertRuntimeCodeHash(
+      positionForwarderFactory,
+      codeHashes.lockedPositionFeeForwarderFactory,
+      "Locked position factory",
+    ),
+    assertRuntimeCodeHash(
+      launcher,
+      codeHashes.memeLaunchV2,
+      "Classic V3 launcher",
+    ),
+  ]);
+
+  const [
+    configuredPoolManager,
+    configuredPositionManager,
+    configuredTokenFactory,
+    configuredHook,
+    configuredVaultFactory,
+    configuredForwarderFactory,
+    hookPoolManager,
+    hookTreasury,
+    hookVaultFactory,
+    launcherFeeBps,
+    minimumFeeBps,
+    maximumFeeBps,
+    feeStepBps,
+    transferTaxBps,
+    lpFeePips,
+    tickSpacing,
+    minimumInitialBuyWei,
+    factoryRecognizesHook,
+    forwarderPositionManager,
+  ] = await Promise.all([
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "poolManager",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "positionManager",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "tokenFactory",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "feeHook",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "feeSplitVaultFactory",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "positionForwarderFactory",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "poolManager",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "launcherFeeRecipient",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "feeSplitVaultFactory",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "LAUNCHER_FEE_BPS",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "MIN_TOTAL_SWAP_FEE_BPS",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "MAX_TOTAL_SWAP_FEE_BPS",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "TOTAL_SWAP_FEE_STEP_BPS",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "TRANSFER_TAX_BPS",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "LP_FEE_PIPS",
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "TICK_SPACING",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "MIN_INITIAL_BUY_WEI",
+    }),
+    client.readContract({
+      address: hookFactory,
+      abi: classicV3HookFactoryAbi,
+      functionName: "isFactoryHook",
+      args: [hook],
+    }),
+    client.readContract({
+      address: positionForwarderFactory,
+      abi: lockedPositionFeeForwarderFactoryAbi,
+      functionName: "positionManager",
+    }),
+  ]);
+
+  const expectedAddresses = [
+    [configuredPoolManager, officialPoolManager, "PoolManager"],
+    [configuredPositionManager, officialPositionManager, "PositionManager"],
+    [configuredTokenFactory, officialTokenFactory, "UERC20Factory"],
+    [configuredHook, hook, "fee hook"],
+    [configuredVaultFactory, vaultFactory, "reward factory"],
+    [configuredForwarderFactory, positionForwarderFactory, "position factory"],
+    [hookPoolManager, officialPoolManager, "hook PoolManager"],
+    [hookTreasury, platformTreasury, "treasury"],
+    [hookVaultFactory, vaultFactory, "hook reward factory"],
+    [
+      forwarderPositionManager,
+      officialPositionManager,
+      "position factory PositionManager",
+    ],
+  ] as const;
+  for (const [actual, expected, label] of expectedAddresses) {
+    if (actual.toLowerCase() !== expected.toLowerCase()) {
+      throw new Error(
+        `The Classic V3 ${label} does not match the release manifest`,
+      );
+    }
+  }
+  if (
+    !factoryRecognizesHook ||
+    launcherFeeBps !== 10 ||
+    minimumFeeBps !== 100 ||
+    maximumFeeBps !== 1_000 ||
+    feeStepBps !== 100 ||
+    transferTaxBps !== 0 ||
+    lpFeePips !== 0 ||
+    tickSpacing !== 200 ||
+    minimumInitialBuyWei !== MEME_MIN_INITIAL_BUY_WEI ||
+    (BigInt(hook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS
+  ) {
+    throw new Error(
+      "The Classic V3 economics do not match the release manifest",
+    );
+  }
+}
+
+async function prepareClassicV3Launch(
+  account: Address,
+  draft: LaunchDraft,
+  connectedWalletCheck: LaunchPreflightCheck,
+  deployment: ReleaseDeployment,
+) {
+  const configuration = validateClassicV3LaunchDraft(draft, account);
+  const initialBuyWei = parseInitialBuyWei(draft.initialBuyEth);
+  if (initialBuyWei === null) {
+    throw new LaunchInputError("Enter a valid Dev Buy");
+  }
+  validateLaunchSalt(draft.launchSalt);
+  const tokenCheck: LaunchPreflightCheck = {
+    id: "token",
+    label: "Token setup",
+    status: "pass",
+    detail: `Immutable ${(configuration.fees.buySwapFeeBps / 100).toFixed(2)}% buy and ${(configuration.fees.sellSwapFeeBps / 100).toFixed(2)}% sell fees with ${configuration.rewards.beneficiaries.length} reward recipient${configuration.rewards.beneficiaries.length === 1 ? "" : "s"}`,
+  };
+
+  if (connectedWalletCheck.status !== "pass") {
+    return response({
+      status: "blocked",
+      mode: "classic-v3",
+      title: `Switch the wallet to ${networkName}`,
+      detail: `The launch transaction is fixed to ${networkName}`,
+      checks: [tokenCheck, connectedWalletCheck],
+    });
+  }
+  if (
+    !isClassicV3DeploymentReady(
+      deployment as ClassicV3DeploymentManifest,
+      launchChain.id,
+    )
+  ) {
+    return response({
+      status: "blocked",
+      mode: "classic-v3",
+      title: `Classic V3 is not deployed on ${networkName} yet`,
+      detail:
+        "The setup is available for review. Wallet transactions stay disabled until every release address, runtime hash and deployment block is recorded",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Classic V3 contracts",
+          status: "blocked",
+          detail: `No approved ${networkName} Classic V3 deployment is recorded`,
+        },
+      ],
+    });
+  }
+
+  const launcher = getAddress(deployment.memeLaunchV2 as string);
+  const hook = getAddress(deployment.ethCreatorFeeHookV3 as string);
+  const hookFactory = getAddress(
+    deployment.ethCreatorFeeHookFactoryV3 as string,
+  );
+  const vaultFactory = getAddress(
+    deployment.feeSplitVaultFactoryV1 as string,
+  );
+  const positionForwarderFactory = getAddress(
+    deployment.lockedPositionFeeForwarderFactory as string,
+  );
+  await assertClassicV3Infrastructure(
+    launcher,
+    hook,
+    hookFactory,
+    vaultFactory,
+    positionForwarderFactory,
+    {
+      ethCreatorFeeHookFactoryV3:
+        deployment.runtimeCodeHashes.ethCreatorFeeHookFactoryV3 as Hex,
+      ethCreatorFeeHookV3:
+        deployment.runtimeCodeHashes.ethCreatorFeeHookV3 as Hex,
+      feeSplitVaultFactoryV1:
+        deployment.runtimeCodeHashes.feeSplitVaultFactoryV1 as Hex,
+      memeLaunchV2: deployment.runtimeCodeHashes.memeLaunchV2 as Hex,
+      lockedPositionFeeForwarderFactory:
+        deployment.runtimeCodeHashes.lockedPositionFeeForwarderFactory as Hex,
+    },
+  );
+
+  const [predictedToken] = await client.readContract({
+    address: launcher,
+    abi: classicV3LaunchAbi,
+    functionName: "predictTokenAddress",
+    args: [
+      draft.tokenName.trim(),
+      draft.tokenSymbol.trim(),
+      account,
+      draft.launchSalt,
+    ],
+  });
+  const predictedRewardVault = await client.readContract({
+    address: launcher,
+    abi: classicV3LaunchAbi,
+    functionName: "predictRewardVault",
+    args: [
+      predictedToken,
+      account,
+      configuration.rewards.beneficiaries,
+      configuration.rewards.sharesBps,
+    ],
+  });
+  const existingCode = await client.getCode({ address: predictedToken });
+  if (existingCode && existingCode !== "0x") {
+    throw new LaunchInputError(
+      "This deterministic token address is already in use",
+    );
+  }
+
+  const launchBase = {
+    kind: "launch" as const,
+    chainId: launchChain.id,
+    to: launcher,
+    data: encodeClassicV3Launch(draft, draft.launchSalt, account),
+    value: initialBuyWei.toString(),
+  };
+  const gasLimit = await estimatePreparedTransaction(account, launchBase);
+  return response({
+    status: "ready",
+    mode: "classic-v3",
+    title: "Ready for wallet review",
+    detail: `The exact Classic V3 launch succeeded in a read-only ${networkName} simulation`,
+    checks: [
+      tokenCheck,
+      connectedWalletCheck,
+      {
+        id: "contracts",
+        label: "Classic V3 contracts",
+        status: "pass",
+        detail:
+          "Runtime bytecode, immutable directional fees and reward ownership match",
+      },
+      {
+        id: "simulation",
+        label: "Simulation",
+        status: "pass",
+        detail: `The token, locked liquidity and reward vault at ${predictedRewardVault.slice(0, 8)}…${predictedRewardVault.slice(-6)} are prepared atomically`,
+      },
+    ],
+    transaction: { ...launchBase, gasLimit: gasLimit.toString() },
+    predictedToken,
+    predictedHook: hook,
+    planHash: buildPlanHash(account, launchBase),
+  });
+}
+
+function mineAdaptiveHookSalt(
+  account: Address,
+  launchSalt: Hex,
+  factory: Address,
+  initCodeHash: Hex,
+) {
+  for (let counter = 0; counter < 250_000; counter += 1) {
+    const salt = keccak256(
+      concatHex([
+        launchSalt,
+        padHex(account, { size: 32 }),
+        toHex(counter, { size: 32 }),
+      ]),
+    );
+    const hook = getCreate2Address({
+      from: factory,
+      salt,
+      bytecodeHash: initCodeHash,
+    });
+    if ((BigInt(hook) & HOOK_FLAG_MASK) === REQUIRED_FEE_HOOK_FLAGS) {
+      return { salt, hook };
+    }
+  }
+  throw new Error("A valid deterministic Adaptive hook address was not found");
+}
+
+async function assertAdaptiveReleaseInfrastructure(
+  launcher: Address,
+  hookFactory: Address,
+  positionForwarderFactory: Address,
+  codeHashes: {
+    adaptiveCurveFeeHookFactory: Hex;
+    adaptiveCurveLaunch: Hex;
+    lockedPositionFeeForwarderFactory: Hex;
+  },
+) {
+  await Promise.all([
+    assertRuntimeCodeHash(
+      officialPoolManager,
+      selectedDeployments.contracts.poolManager.runtimeCodeHash as Hex,
+      "Uniswap PoolManager",
+    ),
+    assertRuntimeCodeHash(
+      officialPositionManager,
+      selectedDeployments.contracts.positionManager.runtimeCodeHash as Hex,
+      "Uniswap PositionManager",
+    ),
+    assertRuntimeCodeHash(
+      officialTokenFactory,
+      selectedDeployments.contracts.uerc20Factory.runtimeCodeHash as Hex,
+      "Uniswap UERC20Factory",
+    ),
+    assertRuntimeCodeHash(
+      hookFactory,
+      codeHashes.adaptiveCurveFeeHookFactory,
+      "Adaptive hook factory",
+    ),
+    assertRuntimeCodeHash(
+      positionForwarderFactory,
+      codeHashes.lockedPositionFeeForwarderFactory,
+      "Locked position factory",
+    ),
+    assertRuntimeCodeHash(
+      launcher,
+      codeHashes.adaptiveCurveLaunch,
+      "Adaptive launcher",
+    ),
+  ]);
+
+  const [
+    configuredPoolManager,
+    configuredPositionManager,
+    configuredTokenFactory,
+    configuredHookFactory,
+    configuredForwarderFactory,
+    configuredTreasury,
+    forwarderPositionManager,
+    requiredFlags,
+  ] = await Promise.all([
+    client.readContract({
+      address: launcher,
+      abi: adaptiveCurveLaunchAbi,
+      functionName: "poolManager",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: adaptiveCurveLaunchAbi,
+      functionName: "positionManager",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: adaptiveCurveLaunchAbi,
+      functionName: "tokenFactory",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: adaptiveCurveLaunchAbi,
+      functionName: "adaptiveHookFactory",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: adaptiveCurveLaunchAbi,
+      functionName: "positionForwarderFactory",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: adaptiveCurveLaunchAbi,
+      functionName: "launcherFeeRecipient",
+    }),
+    client.readContract({
+      address: positionForwarderFactory,
+      abi: lockedPositionFeeForwarderFactoryAbi,
+      functionName: "positionManager",
+    }),
+    client.readContract({
+      address: hookFactory,
+      abi: adaptiveCurveHookFactoryAbi,
+      functionName: "REQUIRED_HOOK_FLAGS",
+    }),
+  ]);
+
+  const expected = [
+    [configuredPoolManager, officialPoolManager, "PoolManager"],
+    [configuredPositionManager, officialPositionManager, "PositionManager"],
+    [configuredTokenFactory, officialTokenFactory, "UERC20Factory"],
+    [configuredHookFactory, hookFactory, "hook factory"],
+    [
+      configuredForwarderFactory,
+      positionForwarderFactory,
+      "position factory",
+    ],
+    [configuredTreasury, platformTreasury, "treasury"],
+    [
+      forwarderPositionManager,
+      officialPositionManager,
+      "position factory PositionManager",
+    ],
+  ] as const;
+  for (const [actual, wanted, label] of expected) {
+    if (actual.toLowerCase() !== wanted.toLowerCase()) {
+      throw new Error(
+        `The Adaptive ${label} does not match the release manifest`,
+      );
+    }
+  }
+  if (requiredFlags !== REQUIRED_FEE_HOOK_FLAGS) {
+    throw new Error(
+      "The Adaptive hook callback mask does not match the release manifest",
+    );
+  }
+}
+
+async function prepareAdaptiveLaunch(
+  account: Address,
+  draft: LaunchDraft,
+  connectedWalletCheck: LaunchPreflightCheck,
+  deployment: ReleaseDeployment,
+) {
+  validateAdaptiveLaunchDraft(draft);
+  validateLaunchSalt(draft.launchSalt);
+  const tokenCheck: LaunchPreflightCheck = {
+    id: "token",
+    label: "Adaptive curve",
+    status: "pass",
+    detail:
+      "The immutable ETH-denominated value curve and its fee bounds are valid",
+  };
+
+  if (connectedWalletCheck.status !== "pass") {
+    return response({
+      status: "blocked",
+      mode: "adaptive",
+      title: `Switch the wallet to ${networkName}`,
+      detail: `The launch transaction is fixed to ${networkName}`,
+      checks: [tokenCheck, connectedWalletCheck],
+    });
+  }
+
+  const {
+    adaptiveLaunchStatus,
+    adaptiveCurveFeeHookFactory,
+    adaptiveCurveLaunch,
+    lockedPositionFeeForwarderFactory,
+    runtimeCodeHashes,
+  } = deployment;
+  if (
+    adaptiveLaunchStatus !== "ready" ||
+    !adaptiveCurveFeeHookFactory ||
+    !adaptiveCurveLaunch ||
+    !lockedPositionFeeForwarderFactory ||
+    !runtimeCodeHashes.adaptiveCurveFeeHookFactory ||
+    !runtimeCodeHashes.adaptiveCurveLaunch ||
+    !runtimeCodeHashes.lockedPositionFeeForwarderFactory
+  ) {
+    return response({
+      status: "blocked",
+      mode: "adaptive",
+      title: `Adaptive is not deployed on ${networkName} yet`,
+      detail:
+        "The editor is available for review. Wallet transactions remain disabled until the exact deployment is recorded and verified",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Adaptive contracts",
+          status: "blocked",
+          detail: `No approved ${networkName} deployment is recorded`,
+        },
+      ],
+    });
+  }
+
+  const launcher = getAddress(adaptiveCurveLaunch);
+  const hookFactory = getAddress(adaptiveCurveFeeHookFactory);
+  const positionForwarderFactory = getAddress(
+    lockedPositionFeeForwarderFactory,
+  );
+  await assertAdaptiveReleaseInfrastructure(
+    launcher,
+    hookFactory,
+    positionForwarderFactory,
+    {
+      adaptiveCurveFeeHookFactory:
+        runtimeCodeHashes.adaptiveCurveFeeHookFactory as Hex,
+      adaptiveCurveLaunch: runtimeCodeHashes.adaptiveCurveLaunch as Hex,
+      lockedPositionFeeForwarderFactory:
+        runtimeCodeHashes.lockedPositionFeeForwarderFactory as Hex,
+    },
+  );
+
+  const initCodeHash = await client.readContract({
+    address: hookFactory,
+    abi: adaptiveCurveHookFactoryAbi,
+    functionName: "initCodeHash",
+    args: [officialPoolManager, platformTreasury],
+  });
+  if (!isHex(draft.hookSalt, { strict: true }) || draft.hookSalt.length !== 66) {
+    const mined = mineAdaptiveHookSalt(
+      account,
+      draft.launchSalt,
+      hookFactory,
+      initCodeHash,
+    );
+    return response({
+      status: "blocked",
+      mode: "adaptive",
+      title: "Adaptive address prepared",
+      detail: "Checking the deterministic hook and launch transaction",
+      checks: [tokenCheck, connectedWalletCheck],
+      predictedHook: mined.hook,
+      draftPatch: { hookSalt: mined.salt },
+    });
+  }
+
+  validateAdaptiveLaunchDraft(draft, { requireHookSalt: true });
+  const predictedHook = getCreate2Address({
+    from: hookFactory,
+    salt: draft.hookSalt,
+    bytecodeHash: initCodeHash,
+  });
+  if ((BigInt(predictedHook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS) {
+    throw new LaunchInputError(
+      "The deterministic hook address has invalid callback permissions",
+    );
+  }
+
+  const [predictedToken] = await client.readContract({
+    address: launcher,
+    abi: adaptiveCurveLaunchAbi,
+    functionName: "predictTokenAddress",
+    args: [
+      draft.tokenName.trim(),
+      draft.tokenSymbol.trim(),
+      account,
+      draft.launchSalt,
+    ],
+  });
+  const existingTokenCode = await client.getCode({ address: predictedToken });
+  if (existingTokenCode && existingTokenCode !== "0x") {
+    throw new LaunchInputError(
+      "This deterministic token address is already in use",
+    );
+  }
+
+  const initialBuyWei = parseOptionalInitialBuyWei(draft.initialBuyEth);
+  if (initialBuyWei === null) {
+    throw new LaunchInputError("Enter a valid optional Dev Buy");
+  }
+  const launchBase = {
+    kind: "launch" as const,
+    chainId: launchChain.id,
+    to: launcher,
+    data: encodeAdaptiveLaunch(draft, draft.launchSalt),
+    value: initialBuyWei.toString(),
+  };
+  const gasLimit = await estimatePreparedTransaction(account, launchBase);
+  return response({
+    status: "ready",
+    mode: "adaptive",
+    title: "Ready for wallet review",
+    detail:
+      `The Adaptive launch succeeded in a read-only ${networkName} simulation`,
+    checks: [
+      tokenCheck,
+      connectedWalletCheck,
+      {
+        id: "contracts",
+        label: "Adaptive contracts",
+        status: "pass",
+        detail:
+          "Runtime bytecode, official dependencies and deterministic hook permissions match",
+      },
+      {
+        id: "simulation",
+        label: "Simulation",
+        status: "pass",
+        detail: "The complete atomic launch succeeds",
+      },
+    ],
+    transaction: { ...launchBase, gasLimit: gasLimit.toString() },
+    predictedToken,
+    predictedHook,
+    planHash: buildPlanHash(account, launchBase),
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
@@ -610,10 +1395,30 @@ export async function POST(request: NextRequest) {
 
     const account = getAddress(record.account);
     const draft = parseDraft(record.draft);
+    const connectedWalletCheck = walletCheck(
+      account,
+      record.walletChainId,
+    );
+    if (draft.launchModel === "adaptive") {
+      return prepareAdaptiveLaunch(
+        account,
+        draft,
+        connectedWalletCheck,
+        selectedManifest,
+      );
+    }
+    if (draft.launchModel === "classic-v3") {
+      return prepareClassicV3Launch(
+        account,
+        draft,
+        connectedWalletCheck,
+        selectedManifest,
+      );
+    }
     return prepareMemeLaunch(
       account,
       draft,
-      walletCheck(account, record.walletChainId),
+      connectedWalletCheck,
       selectedManifest,
     );
   } catch (caught) {
