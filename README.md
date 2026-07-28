@@ -35,11 +35,7 @@ evidence.
 | Model | Purpose | Status |
 | --- | --- | --- |
 | Classic | Fixed supply, locked one-sided liquidity and creator fees paid in ETH | Available |
-| Protected | Public launches with sandwich protection built into the pool | In development |
-| Permissioned | Issuer-controlled access to swaps and liquidity | Research |
-| Adaptive Fee | Pool fees that respond to market conditions | Research |
-| Limit Orders | Onchain orders executed as the pool crosses their price | Research |
-| Yield Reserve | Pool reserves that can use ERC-4626 vaults | Research |
+| Adaptive | An immutable swap-fee curve linked to the token's onchain value | In development |
 
 A model is marked `Available` once its source, tests, security documentation and deployment record are public. The
 complete catalog is in [`MODELS.md`](MODELS.md).
@@ -60,7 +56,7 @@ flowchart LR
     hook -->|"claim ETH"| treasury["Programmable"]
 ```
 
-Classic V2 is the current immutable Ethereum release.
+Classic is the current immutable Ethereum release.
 
 | Property | Current release |
 | --- | --- |
@@ -78,7 +74,7 @@ only `1%`.
 
 | Contract | Address |
 | --- | --- |
-| Classic launcher (release V2) | [`0xD240…E6bAd`](https://etherscan.io/address/0xD240D06f8586eB799f20056054e5b527405E6bAd#code) |
+| Classic launcher | [`0xD240…E6bAd`](https://etherscan.io/address/0xD240D06f8586eB799f20056054e5b527405E6bAd#code) |
 | Creator fee hook | [`0x025a…b20CC`](https://etherscan.io/address/0x025a386eAa79f6067d29848FD05ccC71bEAb20CC#code) |
 | Hook factory | [`0xD405…5fd67`](https://etherscan.io/address/0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67#code) |
 | Position forwarder factory | [`0x291a…4dB507`](https://etherscan.io/address/0x291a9ff1059d225d02B1659430804486404dB507#code) |
