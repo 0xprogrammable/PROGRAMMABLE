@@ -69,6 +69,7 @@ import {
   type LaunchPreflightResponse,
 } from "@/lib/launch-transaction";
 import {
+  CLASSIC_V3_MAX_REWARD_BENEFICIARIES,
   CLASSIC_TOTAL_SWAP_FEE_BPS,
   CLASSIC_TOTAL_SWAP_FEE_PERCENT,
   createClassicV3Draft,
@@ -802,6 +803,10 @@ function normalizeClassicV3Draft(initialDraft: LaunchDraft): LaunchDraft {
     buySwapFeePercent: initialDraft.buySwapFeePercent || "1",
     sellSwapFeePercent: initialDraft.sellSwapFeePercent || "1",
     rewardDestinationMode: initialDraft.rewardDestinationMode || "launcher",
+    initialBuyCustodyMode:
+      initialDraft.initialBuyCustodyMode || "unlocked",
+    initialBuyDurationDays: initialDraft.initialBuyDurationDays || "30",
+    initialBuyCliffDays: initialDraft.initialBuyCliffDays || "7",
   };
 }
 
@@ -849,6 +854,8 @@ const launchEnvironment =
 const launchChainId =
   launchEnvironment === "rehearsal" ? (11_155_111 as const) : (1 as const);
 const classicV3LaunchAvailable =
+  (process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_CLASSIC_V3_UI_PREVIEW === "true") ||
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
 const deepLaunchAvailable = isConfiguredDeepV3ReleaseReady(launchEnvironment);
 const stockPairedLaunchAvailable =
@@ -2260,6 +2267,17 @@ function LaunchSuccessDialog({
               <dt>Reward owners</dt>
               <dd>{classicConfiguration.rewards.beneficiaries.length}</dd>
             </div>
+            <div>
+              <dt>Initial Buy</dt>
+              <dd>
+                {classicConfiguration.initialBuyCustody.mode === "unlocked"
+                  ? "Unlocked"
+                  : classicConfiguration.initialBuyCustody.mode ===
+                      "fixed-lock"
+                    ? `${classicConfiguration.initialBuyCustody.durationDays}d lock`
+                    : `${classicConfiguration.initialBuyCustody.durationDays}d vest`}
+              </dd>
+            </div>
           </dl>
         ) : null}
         <Link ref={viewLinkRef} className="primary-button" href={launch.href}>
@@ -2939,7 +2957,8 @@ function EnhancedClassicFeeStep({
               ) : null}
             </div>
           ))}
-          {draft.rewardSplits.length < 8 ? (
+          {draft.rewardSplits.length <
+          CLASSIC_V3_MAX_REWARD_BENEFICIARIES ? (
             <button
               className="secondary-button classic-v3-add-recipient"
               type="button"
@@ -2989,8 +3008,9 @@ function EnhancedClassicFeeStep({
               ))}
             </ul>
             <p>
-              Fee rates, beneficiaries and shares cannot change. Each
-              beneficiary alone can claim or update its payout address.
+              Fee rates and split percentages are fixed. Each current payout
+              wallet controls its allocation. Approved CTO changes affect
+              future rewards only.
             </p>
           </>
         ) : (
@@ -3001,7 +3021,7 @@ function EnhancedClassicFeeStep({
         )}
       </div>
 
-      <div className="classic-fee-layout">
+      <div className="classic-v3-initial-buy">
         <label className="meme-dev-buy" htmlFor="classic-v3-dev-buy">
           <span>
             <strong>Initial buy</strong>
@@ -3032,6 +3052,67 @@ function EnhancedClassicFeeStep({
             <span>ETH</span>
           </span>
         </label>
+
+        <fieldset className="classic-v3-custody">
+          <legend>Initial Buy custody</legend>
+          <label>
+            <span>Availability</span>
+            <select
+              value={draft.initialBuyCustodyMode}
+              onChange={(event) =>
+                updateClassicV3Draft({
+                  initialBuyCustodyMode: event.target
+                    .value as LaunchDraft["initialBuyCustodyMode"],
+                })
+              }
+            >
+              <option value="unlocked">Available immediately</option>
+              <option value="fixed-lock">Fixed lock</option>
+              <option value="linear">Linear vesting</option>
+              <option value="cliff-linear">Cliff and linear vesting</option>
+            </select>
+          </label>
+          {draft.initialBuyCustodyMode !== "unlocked" ? (
+            <label>
+              <span>Total duration</span>
+              <span className="classic-v3-days-input">
+                <input
+                  inputMode="numeric"
+                  value={draft.initialBuyDurationDays}
+                  maxLength={4}
+                  onChange={(event) =>
+                    updateClassicV3Draft({
+                      initialBuyDurationDays: event.target.value,
+                    })
+                  }
+                />
+                <span>days</span>
+              </span>
+            </label>
+          ) : null}
+          {draft.initialBuyCustodyMode === "cliff-linear" ? (
+            <label>
+              <span>Cliff</span>
+              <span className="classic-v3-days-input">
+                <input
+                  inputMode="numeric"
+                  value={draft.initialBuyCliffDays}
+                  maxLength={4}
+                  onChange={(event) =>
+                    updateClassicV3Draft({
+                      initialBuyCliffDays: event.target.value,
+                    })
+                  }
+                />
+                <span>days</span>
+              </span>
+            </label>
+          ) : null}
+          <small>
+            {disclosure?.initialBuyCustody ??
+              "Choose when the launch wallet can access the Initial Buy"}
+          </small>
+        </fieldset>
       </div>
     </section>
   );

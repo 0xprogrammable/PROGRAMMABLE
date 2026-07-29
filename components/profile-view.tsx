@@ -22,6 +22,7 @@ import {
   EMPTY_CLASSIC_V3_PROFILE,
   fetchClassicV3ProfileRewards,
   prepareClassicV3RewardAction,
+  type ClassicV3Beneficiary,
   type ClassicV3ProfileRewards,
   type ClassicV3Reward,
 } from "@/lib/profile/classic-v3-rewards";
@@ -1304,6 +1305,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       reward: ClassicV3Reward,
       action: "claim" | "update-payout",
       newPayoutAddress?: string,
+      allocationIndex?: number,
     ) => {
       const actionAccount = account;
       if (
@@ -1314,7 +1316,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       ) {
         return;
       }
-      const stateKey = `${reward.vaultAddress.toLowerCase()}:${action}`;
+      const stateKey =
+        action === "claim"
+          ? `${reward.vaultAddress.toLowerCase()}:claim`
+          : `${reward.vaultAddress.toLowerCase()}:update-payout:${allocationIndex}`;
       const setActionState = (
         state: Omit<ClassicV3ActionState, "account">,
       ) => {
@@ -1360,6 +1365,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           account: actionAccount,
           vaultAddress: reward.vaultAddress,
           newPayoutAddress,
+          allocationIndex,
           chainId: scopedClassicV3Rewards.chainId,
         });
         if (
@@ -2233,6 +2239,7 @@ function ProfileAccountWorkspace({
     reward: ClassicV3Reward,
     action: "claim" | "update-payout",
     newPayoutAddress?: string,
+    allocationIndex?: number,
   ) => void;
   onDeepAction: (
     reward: DeepReward,
@@ -2553,6 +2560,7 @@ function ProfilePortfolioRow({
     reward: ClassicV3Reward,
     action: "claim" | "update-payout",
     newPayoutAddress?: string,
+    allocationIndex?: number,
   ) => void;
   onDeepAction: (
     reward: DeepReward,
@@ -2872,7 +2880,7 @@ function ProfilePortfolioRow({
 
       {ownedClassicRewards.map((reward) => (
         <ClassicRewardSettings
-          key={`${reward.vaultAddress}:${reward.payoutAddress}`}
+          key={reward.vaultAddress}
           reward={reward}
           account={account}
           actionStates={classicV3ActionStates}
@@ -2982,30 +2990,18 @@ function ClassicRewardSettings({
     reward: ClassicV3Reward,
     action: "claim" | "update-payout",
     newPayoutAddress?: string,
+    allocationIndex?: number,
   ) => void;
 }) {
-  const [editingPayout, setEditingPayout] = useState(false);
-  const [payoutDraft, setPayoutDraft] = useState<string>(
-    reward.payoutAddress,
-  );
-  const rawPayoutState =
-    actionStates[`${reward.vaultAddress.toLowerCase()}:update-payout`];
-  const payoutState =
-    rawPayoutState?.account.toLowerCase() === account?.toLowerCase()
-      ? rawPayoutState
-      : undefined;
-  const ownsReward =
-    Boolean(account) &&
-    reward.beneficiary.toLowerCase() === account?.toLowerCase();
-  const payoutPending = actionPending(payoutState);
-
   return (
     <details className={styles.rewardSettings}>
       <summary>
-        <span>
-          Reward payout · {(reward.shareBps / 100).toFixed(2)}%
-        </span>
-        <small>{shortenAddress(reward.payoutAddress)}</small>
+        <span>Classic rewards</span>
+        <small>
+          {reward.shareBps > 0
+            ? `${(reward.shareBps / 100).toFixed(2)}% current share`
+            : "Historic rewards"}
+        </small>
       </summary>
       <div className={styles.settingsBody}>
         <dl className={styles.rewardTerms}>
@@ -3023,95 +3019,146 @@ function ClassicRewardSettings({
           </div>
         </dl>
 
-        <div className={styles.payout}>
-          <span className={styles.payoutLabel}>Payout address</span>
-          {editingPayout ? (
-            <div className={styles.payoutEdit}>
-              <input
-                value={payoutDraft}
-                spellCheck={false}
-                autoComplete="off"
-                aria-label="New payout address"
-                disabled={
-                  payoutPending || actionCanCheckStatus(payoutState)
-                }
-                onChange={(event) => setPayoutDraft(event.target.value)}
-              />
-              <button
-                className={styles.secondaryAction}
-                type="button"
-                disabled={
-                  !ownsReward ||
-                  payoutPending ||
-                  payoutState?.status === "confirmed"
-                }
-                onClick={() =>
-                  onAction(reward, "update-payout", payoutDraft.trim())
-                }
-              >
-                {payoutActionLabel(payoutState)}
-              </button>
-              <button
-                className={styles.textAction}
-                type="button"
-                disabled={
-                  payoutPending || actionCanCheckStatus(payoutState)
-                }
-                onClick={() => {
-                  setPayoutDraft(reward.payoutAddress);
-                  setEditingPayout(false);
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <div className={styles.payoutRow}>
-              <a
-                href={`${
-                  chainId === 11_155_111
-                    ? "https://sepolia.etherscan.io"
-                    : "https://etherscan.io"
-                }/address/${reward.payoutAddress}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {shortenAddress(reward.payoutAddress)}
-              </a>
-              <button
-                className={styles.textAction}
-                type="button"
-                disabled={
-                  !ownsReward ||
-                  actionPending(payoutState) ||
-                  actionCanCheckStatus(payoutState)
-                }
-                onClick={() => setEditingPayout(true)}
-              >
-                Change
-              </button>
-            </div>
-          )}
-        </div>
+        {reward.ownedAllocations.map((allocation) => (
+          <ClassicAllocationSettings
+            key={`${allocation.allocationIndex}:${allocation.payoutAddress}`}
+            reward={reward}
+            allocation={allocation}
+            account={account}
+            actionStates={actionStates}
+            chainId={chainId}
+            onAction={onAction}
+          />
+        ))}
 
         {reward.beneficiaries.length > 1 ? (
           <div className={styles.split}>
-            <span className={styles.splitLabel}>Fixed reward split</span>
+            <span className={styles.splitLabel}>Current reward split</span>
             <div className={styles.splitList}>
-            {reward.beneficiaries.map((item) => (
-              <div className={styles.splitItem} key={item.beneficiary}>
-                <span>{shortenAddress(item.beneficiary)}</span>
-                <strong>{(item.shareBps / 100).toFixed(2)}%</strong>
-                <small>to {shortenAddress(item.payoutAddress)}</small>
-              </div>
-            ))}
+              {reward.beneficiaries.map((item) => (
+                <div
+                  className={styles.splitItem}
+                  key={item.allocationIndex}
+                >
+                  <span>{shortenAddress(item.payoutAddress)}</span>
+                  <strong>{(item.shareBps / 100).toFixed(2)}%</strong>
+                </div>
+              ))}
             </div>
           </div>
         ) : null}
-
-        <ProfileActionState state={payoutState} chainId={chainId} />
       </div>
     </details>
+  );
+}
+
+function ClassicAllocationSettings({
+  reward,
+  allocation,
+  account,
+  actionStates,
+  chainId,
+  onAction,
+}: {
+  reward: ClassicV3Reward;
+  allocation: ClassicV3Beneficiary;
+  account?: string;
+  actionStates: Record<string, ClassicV3ActionState>;
+  chainId?: number;
+  onAction: (
+    reward: ClassicV3Reward,
+    action: "claim" | "update-payout",
+    newPayoutAddress?: string,
+    allocationIndex?: number,
+  ) => void;
+}) {
+  const [editingPayout, setEditingPayout] = useState(false);
+  const [payoutDraft, setPayoutDraft] = useState<string>(
+    allocation.payoutAddress,
+  );
+  const rawPayoutState =
+    actionStates[
+      `${reward.vaultAddress.toLowerCase()}:update-payout:${allocation.allocationIndex}`
+    ];
+  const payoutState =
+    rawPayoutState?.account.toLowerCase() === account?.toLowerCase()
+      ? rawPayoutState
+      : undefined;
+  const ownsAllocation =
+    Boolean(account) &&
+    allocation.payoutAddress.toLowerCase() === account?.toLowerCase();
+  const payoutPending = actionPending(payoutState);
+
+  return (
+    <div className={styles.payout}>
+      <span className={styles.payoutLabel}>
+        Payout · {(allocation.shareBps / 100).toFixed(2)}%
+      </span>
+      {editingPayout ? (
+        <div className={styles.payoutEdit}>
+          <input
+            value={payoutDraft}
+            spellCheck={false}
+            autoComplete="off"
+            aria-label={`New payout address for allocation ${allocation.allocationIndex + 1}`}
+            onChange={(event) => setPayoutDraft(event.target.value)}
+          />
+          <button
+            className={styles.secondaryAction}
+            type="button"
+            disabled={!ownsAllocation || payoutPending}
+            onClick={() =>
+              onAction(
+                reward,
+                "update-payout",
+                payoutDraft.trim(),
+                allocation.allocationIndex,
+              )
+            }
+          >
+            {payoutState?.status === "wallet"
+              ? "Confirm in wallet"
+              : payoutState?.status === "confirming"
+                ? "Confirming"
+                : "Save"}
+          </button>
+          <button
+            className={styles.textAction}
+            type="button"
+            disabled={payoutPending}
+            onClick={() => {
+              setPayoutDraft(allocation.payoutAddress);
+              setEditingPayout(false);
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className={styles.payoutRow}>
+          <a
+            href={`${
+              chainId === 11_155_111
+                ? "https://sepolia.etherscan.io"
+                : "https://etherscan.io"
+            }/address/${allocation.payoutAddress}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {shortenAddress(allocation.payoutAddress)}
+          </a>
+          <button
+            className={styles.textAction}
+            type="button"
+            disabled={!ownsAllocation}
+            onClick={() => setEditingPayout(true)}
+          >
+            Change
+          </button>
+        </div>
+      )}
+      <ProfileActionState state={payoutState} chainId={chainId} />
+    </div>
   );
 }
 

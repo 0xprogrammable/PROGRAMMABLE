@@ -9,6 +9,7 @@ const {
   FINALITY_CONFIRMATIONS,
   assertClassicV3SequenceState,
   assertReviewedClassicV3SourceCommitment,
+  classicV3EvidenceHead,
   computeClassicV3SourceCommitment,
   createClassicV3Evidence,
   mergeClassicV3EvidenceRecord,
@@ -16,13 +17,13 @@ const {
   validateClassicV3TransactionRecord,
 } = releaseCore;
 
-const transactions = Array.from({ length: 4 }, (_, index) => ({
+const transactions = Array.from({ length: 7 }, (_, index) => ({
   name: `Contract${index + 1}`,
   label: `Contract ${index + 1}`,
-  transactionType: index === 2 ? "CALL" : "CREATE",
+  transactionType: index === 5 ? "CALL" : "CREATE",
   address: `0x${String(index + 1).padStart(40, "0")}`,
   to:
-    index === 2
+    index === 5
       ? "0x0000000000000000000000000000000000000002"
       : null,
   nonce: `0x${(30 + index).toString(16)}`,
@@ -37,7 +38,7 @@ const plan = {
   sourceCommitment: `0x${"22".repeat(32)}`,
   simulationDigest: `0x${"33".repeat(32)}`,
   startingNonce: 30,
-  endingNonce: 34,
+  endingNonce: 37,
   transactions,
 };
 
@@ -101,18 +102,18 @@ function successfulReceipt(index: number) {
   };
 }
 
-describe("Classic V3 four-transaction boundary", () => {
+describe("Classic V3 seven-transaction boundary", () => {
   it("accepts a fresh and correctly resumed reviewed sequence", () => {
     expect(() =>
       assertClassicV3SequenceState(
         plan,
-        state(30, 30, [false, false, false, false]),
+        state(30, 30, [false, false, false, false, false, false, false]),
       ),
     ).not.toThrow();
     expect(() =>
       assertClassicV3SequenceState(
         plan,
-        state(32, 32, [true, true, false, false]),
+        state(32, 32, [true, true, false, false, false, false, false]),
       ),
     ).not.toThrow();
   });
@@ -121,7 +122,7 @@ describe("Classic V3 four-transaction boundary", () => {
     expect(() =>
       assertClassicV3SequenceState(
         plan,
-        state(31, 31, [false, false, false, false]),
+        state(31, 31, [false, false, false, false, false, false, false]),
       ),
     ).toThrow("confirmed without the expected");
   });
@@ -130,22 +131,22 @@ describe("Classic V3 four-transaction boundary", () => {
     expect(() =>
       assertClassicV3SequenceState(
         plan,
-        state(30, 30, [false, true, false, false]),
+        state(30, 30, [false, true, false, false, false, false, false]),
       ),
     ).toThrow("exists before its reviewed nonce");
   });
 
-  it("allows later wallet activity only after all four deployments verify", () => {
+  it("allows later wallet activity only after all seven deployments verify", () => {
     expect(() =>
       assertClassicV3SequenceState(
         plan,
-        state(40, 40, [true, true, true, true]),
+        state(40, 40, [true, true, true, true, true, true, true]),
       ),
     ).not.toThrow();
     expect(() =>
       assertClassicV3SequenceState(
         plan,
-        state(40, 40, [true, true, true, false]),
+        state(40, 40, [true, true, true, true, true, true, false]),
       ),
     ).toThrow("moved past the sequence");
   });
@@ -154,7 +155,7 @@ describe("Classic V3 four-transaction boundary", () => {
     expect(() =>
       assertClassicV3SequenceState(
         plan,
-        state(30, 35, [false, false, false, false]),
+        state(30, 38, [false, false, false, false, false, false, false]),
       ),
     ).toThrow("Pending nonce is outside");
   });
@@ -164,7 +165,7 @@ describe("Classic V3 dual-RPC preparation", () => {
   it("prepares only the exact next reviewed transaction", () => {
     const prepared = prepareReviewedTransaction(
       plan,
-      state(30, 30, [false, false, false, false]),
+      state(30, 30, [false, false, false, false, false, false, false]),
       [
         { callResult: "0x1234", estimatedGas: "0x186a0" },
         { callResult: "0x1234", estimatedGas: "0x18a88" },
@@ -178,7 +179,11 @@ describe("Classic V3 dual-RPC preparation", () => {
   });
 
   it("rejects simulation disagreement and gas above the reviewed limit", () => {
-    const current = state(30, 30, [false, false, false, false]);
+    const current = state(
+      30,
+      30,
+      [false, false, false, false, false, false, false],
+    );
     expect(() =>
       prepareReviewedTransaction(plan, current, [
         { callResult: "0x1234", estimatedGas: "0x186a0" },
@@ -197,7 +202,7 @@ describe("Classic V3 dual-RPC preparation", () => {
     expect(() =>
       prepareReviewedTransaction(
         plan,
-        state(30, 30, [false, false, false, false], 1n),
+        state(30, 30, [false, false, false, false, false, false, false], 1n),
         [
           { callResult: "0x1234", estimatedGas: "0x186a0" },
           { callResult: "0x1234", estimatedGas: "0x186a0" },
@@ -208,6 +213,15 @@ describe("Classic V3 dual-RPC preparation", () => {
 });
 
 describe("Classic V3 receipt evidence", () => {
+  it("uses the agreed receipt block when a reconciled head is one block behind", () => {
+    expect(
+      classicV3EvidenceHead(
+        { latestBlock: "0x63" },
+        { receipt: { blockNumber: "0x64" } },
+      ),
+    ).toBe("0x64");
+  });
+
   it("records a pending exact transaction without treating it as confirmed", () => {
     const record = validateClassicV3TransactionRecord(
       plan,
@@ -240,7 +254,7 @@ describe("Classic V3 receipt evidence", () => {
 
   it("marks evidence ready only after every exact receipt is finalized", () => {
     const evidence = createClassicV3Evidence(plan, new Date(0));
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 7; index += 1) {
       const record = validateClassicV3TransactionRecord(
         plan,
         index,
@@ -302,17 +316,22 @@ describe("Classic V3 receipt evidence", () => {
 describe("Classic V3 source commitment", () => {
   it("changes when any reviewed creation bytecode changes", () => {
     const artifacts = {
-      feeSplitVaultFactory: {
+      ctoAuthority: {
         bytecode: { object: "0x6001" },
       },
-      hookFactory: { bytecode: { object: "0x6002" } },
-      feeHook: { bytecode: { object: "0x6003" } },
-      launcher: { bytecode: { object: "0x6004" } },
+      rewardVaultFactory: { bytecode: { object: "0x6002" } },
+      initialBuyVestingWalletFactory: {
+        bytecode: { object: "0x6003" },
+      },
+      launchPolicy: { bytecode: { object: "0x6004" } },
+      hookFactory: { bytecode: { object: "0x6005" } },
+      feeHook: { bytecode: { object: "0x6006" } },
+      launcher: { bytecode: { object: "0x6007" } },
     };
     const original = computeClassicV3SourceCommitment(artifacts);
     const changed = computeClassicV3SourceCommitment({
       ...artifacts,
-      launcher: { bytecode: { object: "0x6005" } },
+      launcher: { bytecode: { object: "0x6008" } },
     });
     expect(original).toMatch(/^0x[0-9a-f]{64}$/);
     expect(changed).not.toBe(original);
@@ -328,5 +347,23 @@ describe("Classic V3 source commitment", () => {
         releaseCore.REVIEWED_SOURCE_COMMITMENT,
       ),
     ).toThrow("artifacts do not match");
+  });
+
+  it("loads the exact reviewed Sepolia plan", async () => {
+    const sepolia = await releaseCore.loadClassicV3ReleasePlan(
+      process.cwd(),
+      "sepolia",
+    );
+    expect(sepolia.network).toBe("Sepolia");
+    expect(sepolia.chainId).toBe(11_155_111);
+    expect(sepolia.chainIdHex).toBe("0xaa36a7");
+    expect(sepolia.sourceCommitment).toBe(
+      releaseCore.REVIEWED_SEPOLIA_SOURCE_COMMITMENT,
+    );
+    expect(sepolia.startingNonce).toBe(39);
+    expect(sepolia.transactions).toHaveLength(7);
+    expect(sepolia.transactions.at(-1)?.address).toBe(
+      "0xDAa2EA44f4cb77781714EC5Aa8144d054272f0e8",
+    );
   });
 });

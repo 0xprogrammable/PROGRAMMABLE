@@ -1,129 +1,77 @@
 # Classic Mainnet release
 
-Status: prepared locally, not deployed.
+Status: tested release candidate, not deployed.
 
-This is the manual MetaMask path for the configurable Classic stack. It does
-not read a private key, sign automatically or publish anything. Every
-transaction requires an explicit action in the local page and a separate
-MetaMask confirmation.
+Classic V2 remains the historical Mainnet release. Its immutable launcher-fee
+recipient cannot be changed. This candidate deploys a new Classic stack and
+routes the fixed 10-basis-point Programmable share directly to the revenue
+wallet:
 
-## Current reviewed plan
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`
 
-This is a simulation-only snapshot, not a reserved nonce sequence. Adaptive and
-Deep simulations currently begin from the same deployer nonce. Deploying any
-one candidate invalidates every other predicted address and salt; regenerate
-the selected model's complete plan immediately before signing.
+The website and production manifest remain disabled until the new contracts
+are deployed, source verified and exercised on Mainnet.
 
-The plan is bound to:
+## Bound release
 
-- Ethereum Mainnet
-- deployer `0x2Bb333d48DFAF1596D9036671d2E43168994249E`
-- treasury `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`
-- starting nonce `30`
-- source commitment
-  `0xa92eeb3234cded560a5aedb0b9e59e7e0944a72e09e636eb43d4b7d5beb0955a`
-- plan digest
-  `0xaabd6edb424c7d3097c97b5717e4496023ebc1989d96763f47b5cd24d9c76a66`
+- Network: Ethereum Mainnet
+- Deployer: `0x2Bb333d48DFAF1596D9036671d2E43168994249E`
+- Launcher fee recipient: `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`
+- Source commitment:
+  `0x58991ed1743aaba5f1988a4576d36eb10af70b96bdb61661ba96e1f80acc9800`
+- Transactions: seven
+- ETH value transferred by infrastructure deployment: zero
 
-All four transactions transfer zero ETH.
+The checked-in candidate plan is a simulation snapshot. Its nonce and
+predicted addresses are not reserved. Regenerate the entire plan immediately
+before any signature.
 
-| Step | Transaction | Nonce | Result | Reviewed gas limit |
-| --- | --- | ---: | --- | ---: |
-| 1 | Create `FeeSplitVaultFactoryV1` | 30 | `0x1bE523967293E7CFbFFCB64cF1FF5d17DEa9B454` | 2,024,583 |
-| 2 | Create `EthCreatorFeeHookFactoryV3` | 31 | `0xb974A9EF7B75650428389b63fa6C4906450ABcE0` | 4,458,429 |
-| 3 | Call the factory to create `EthCreatorFeeHookV3` | 32 | `0x90cD6AAA824CbA7C1b329bb379c08cA2a9b720CC` | 3,720,652 |
-| 4 | Create `MemeLaunchV2` | 33 | `0x6Ae84F188468722d8b5970Bc3924C9C31b75FF4e` | 6,532,630 |
+## Revenue path
 
-The current Foundry simulation, artifact bytecode, constructor arguments,
-CREATE addresses, CREATE2 salt and manifest candidate must all produce this
-exact plan. Any difference stops the tool.
+1. Classic swaps accrue the fixed Programmable share as native currency in
+   `EthCreatorFeeHookV3`.
+2. The hook permits only its immutable `launcherFeeRecipient` to call
+   `claimLauncherFees()`.
+3. The revenue wallet initiates its own claim.
+4. Uniswap v4 `PoolManager` redeems the exact native amount directly to that
+   wallet.
 
-## Check
+No keeper or Deep launch-model contract participates in this path.
 
-Build the current artifacts, then run the read-only check:
+## Candidate snapshot
 
-```sh
-npm run contracts:build
-npm run contracts:classic-v3:mainnet:check
-```
+The latest checked-in simulation used block `25,639,328`, deployer nonce `87`
+and estimated `21,955,928` gas across all seven transactions. The predicted
+addresses and CREATE2 salt are recorded in
+`deployments/mainnet-classic-v3.json`.
 
-Check mode:
+This snapshot is evidence of deterministic construction, not permission to
+broadcast. A changed nonce requires a new simulation, addresses and hook salt.
 
-- reads confirmed and pending nonce, balance, base fee and gas price;
-- verifies all eight official dependency runtime hashes through two
-  independent Mainnet RPCs;
-- checks whether any reviewed deployment address is unexpectedly occupied;
-- simulates the exact next transaction through both RPCs;
-- compares simulation output and gas estimates;
-- calculates a fresh ceiling for every remaining transaction;
-- exits without opening a server, requesting a signature or sending a
-  transaction.
+## Verification
 
-A blocked check exits with status code `2`. A dependency, bytecode, plan or RPC
-disagreement exits with status code `1`.
-
-The check on 2026-07-28 found nonce `30`, no pending transaction and no code at
-the four planned addresses. Both RPCs simulated step one at `1,570,899` gas and
-returned the same runtime hash. The wallet held about `0.006214 ETH`; the
-conservative four-step ceiling at that moment was about `0.019901 ETH`. The
-release therefore remains blocked by balance. These numbers are a snapshot and
-must not be reused without another check.
-
-## Local MetaMask console
-
-Start the loopback-only console:
+Run:
 
 ```sh
-npm run contracts:classic-v3:mainnet:metamask
+forge test --match-contract DeployClassicV3InfrastructureV1MainnetTest --offline
+forge test --match-contract ClassicV3MainnetForkTest --offline
+node scripts/verify-classic-v3-release-manifest.mjs --network=mainnet
 ```
 
-Open `http://127.0.0.1:4176`.
+The fork lifecycle uses the official Mainnet PoolManager, PositionManager,
+Universal Router, Permit2, Quoter, UERC20 factory and position-forwarder
+factory. It launches a token, buys, sells, claims creator rewards, rejects a
+direct launcher-fee claim from an arbitrary caller, then pays the exact
+launcher fee to the immutable revenue wallet.
 
-The page accepts only Ethereum Mainnet and the reviewed deployer account. For
-each step it shows the nonce, zero ETH value, created or target address,
-calldata hash, live gas estimate and reviewed gas limit. Preparing a
-transaction does not open MetaMask. After the operator checks those fields,
-the page performs the full dual-RPC preflight again. MetaMask opens only if the
-second result has the same preparation digest.
+## Remaining release gates
 
-MetaMask remains the signing boundary. Reject the wallet request if any field
-differs from the local review.
+- Refresh the candidate against the current confirmed and pending nonce.
+- Simulate the exact final commit through two independent Mainnet RPCs.
+- Review and sign each transaction explicitly.
+- Wait for final receipts and verify every runtime and immutable binding.
+- Verify all new contract sources and constructor arguments.
+- Run a small-value Mainnet launch, buy, sell, creator claim and launcher claim.
+- Finalize the production manifest and only then enable the website.
 
-## Receipt evidence
-
-After MetaMask returns a hash, the local service checks the transaction and
-receipt through both RPCs. It verifies sender, chain, nonce, target, value,
-input, gas ceiling, fee caps, receipt status, block identity, created address
-and deployed contract state.
-
-Evidence is written atomically with mode `0600` to:
-
-```text
-tmp/classic-v3-mainnet-release-evidence.json
-```
-
-The file records the exact public transaction and receipt fields needed to
-complete the deployment manifest. Receipt evidence is marked complete only
-after all four transactions have at least 12 confirmations and every deployment
-passes its runtime and immutable-configuration checks.
-
-Receipt evidence is not a production release by itself. Source verification,
-manifest finalization, lifecycle checks, product activation and monitoring are
-separate gates.
-
-## Drift and recovery
-
-Stop immediately if:
-
-- the confirmed or pending nonce no longer matches the reviewed sequence;
-- another transaction is pending from the deployer;
-- either RPC reports different code or chain state;
-- an official dependency hash changes;
-- artifact bytecode no longer matches the source commitment;
-- a live gas estimate exceeds its reviewed limit;
-- an expected address is occupied before its nonce;
-- a confirmed nonce does not contain the expected deployment.
-
-Do not edit a transaction around a failed gate. A nonce or source change
-requires a new Foundry simulation and a separately reviewed candidate plan.
-Preparation must never use Forge's `--broadcast` flag.
+No local test, fork result or dry run completes these live gates.

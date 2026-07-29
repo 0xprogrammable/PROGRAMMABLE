@@ -390,12 +390,10 @@
 .formPage :global(.classic-v3-settings > .classic-section-heading),
 .formPage :global(.classic-v3-core),
 .formPage :global(.classic-v3-address-field),
-.formPage :global(.classic-v3-split) {
+.formPage :global(.classic-v3-split),
+.formPage :global(.classic-v3-disclosure),
+.formPage :global(.classic-v3-initial-buy) {
   grid-column: 1 / -1;
-}
-
-.formPage :global(.classic-v3-disclosure) {
-  grid-column: 1;
 }
 
 .formPage :global(.classic-v3-settings > .classic-fee-layout) {
@@ -408,6 +406,16 @@
 .formPage :global(.classic-v3-settings > .classic-fee-layout .meme-dev-buy) {
   align-items: stretch;
   grid-template-columns: 1fr;
+}
+
+.formPage
+  :global(.classic-v3-settings)
+  > :global(.classic-v3-disclosure),
+.formPage
+  :global(.classic-v3-settings)
+  > :global(.classic-v3-initial-buy) {
+  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .formPage :global(.classic-v3-reward-mode > div) {
@@ -640,6 +648,7 @@
   }
 
   .formPage :global(.classic-v3-disclosure),
+  .formPage :global(.classic-v3-initial-buy),
   .formPage :global(.classic-v3-settings > .classic-fee-layout) {
     grid-column: 1;
   }
