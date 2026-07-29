@@ -108,7 +108,7 @@ function standardJson(field) {
 test("source commitment exactly matches the reviewed Solidity deployment commitment", () => {
   assert.equal(
     computeDeepV3SourceCommitment(root),
-    "0xc375eef30da88e2402c52f1c54641f44ed447e536055d46563d01cc85868337c",
+    "0x902cc5e0737e604164e8962bcbdc536eb5df7a1aa508ee322736b2fd394fd440",
   );
   assert.equal(manifest.sourceCommitment, computeDeepV3SourceCommitment(root));
 });

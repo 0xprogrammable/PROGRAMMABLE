@@ -262,17 +262,6 @@ textarea {
       var(--background-overlay-bottom) 100%
     ),
     url("/brand/programmable-floral-background-3000.webp");
-  background-image:
-    linear-gradient(
-      180deg,
-      var(--background-overlay-top) 0%,
-      var(--background-overlay-middle) 48%,
-      var(--background-overlay-bottom) 100%
-    ),
-    image-set(
-      url("/brand/programmable-floral-background-3000.webp") 1x,
-      url("/brand/programmable-floral-background-6000.webp") 2x
-    );
   background-position: center center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -285,14 +274,7 @@ textarea {
 }
 
 .app-frame::after {
-  background-image:
-    linear-gradient(
-      180deg,
-      rgba(7, 14, 27, 0.42) 0%,
-      rgba(8, 16, 30, 0.7) 52%,
-      rgba(8, 16, 29, 0.9) 100%
-    ),
-    url("/brand/programmable-floral-night-background-2172.webp");
+  background-image: none;
   background-position: center center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -306,7 +288,20 @@ textarea {
 }
 
 html[data-theme="dark"] .app-frame::after {
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(7, 14, 27, 0.42) 0%,
+      rgba(8, 16, 30, 0.7) 52%,
+      rgba(8, 16, 29, 0.9) 100%
+    ),
+    url("/brand/programmable-floral-night-background-2172.webp");
   opacity: 1;
+}
+
+html[data-theme="dark"] .app-frame::before {
+  background-image: none;
+  opacity: 0;
 }
 
 .app-frame > main {
@@ -315,13 +310,13 @@ html[data-theme="dark"] .app-frame::after {
 }
 
 .route-transition {
-  animation: route-enter 220ms var(--ease-out) both;
+  animation: route-enter 160ms var(--ease-out) both;
 }
 
 @keyframes route-enter {
   from {
     opacity: 0;
-    transform: translate3d(0, 4px, 0);
+    transform: translate3d(0, 2px, 0);
   }
 
   to {

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "model": "deep",
   "internalRelease": "deep-full-range-v3",
-  "sourceCommit": "7627c46e5370e01186f627aba964615911f38af5",
+  "sourceCommit": "1d6b6fc4aaaaf7c7e6e5d3068a08a5e83181c671",
   "tool": {
     "name": "Slither",
     "version": "0.11.5"
@@ -24,7 +24,7 @@
   "command": "slither . --exclude-dependencies --include-paths 'src/(DeepKeeperExecutorV2|LiquidityGrowthFeeOracleHookFactoryV2|LiquidityGrowthFeeOracleHookV2|LiquidityGrowthFullRangeAutomationV3|LiquidityGrowthFullRangeLaunchV3|LiquidityGrowthFullRangePolicyV3|LiquidityGrowthFullRangePositionPlannerV3|LiquidityGrowthFullRangeVaultFactoryV3|LiquidityGrowthFullRangeVaultV3|LiquidityGrowthZapPlannerV3)\\.sol|src/interfaces/ILiquidityGrowthFeeOracleHookV2\\.sol|src/libraries/LiquidityGrowthSwapMathV3\\.sol' --json /tmp/slither-deep-v3-20260729.json --json-types detectors --disable-color",
   "rawResult": {
     "success": true,
-    "sha256": "d132b589178fe01da6cb2578c2d18a8f76db19da6e4376ba676c14c788ebfc70",
+    "sha256": "0b0c0ee201a322281bbd7cc32c79dca86ecdd5a973d8ccc99725ddd2f68f30d3",
     "findingInstances": 77,
     "impactCounts": {
       "high": 4,

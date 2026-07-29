@@ -1,27 +1,31 @@
-# Deep V3 local security and release evidence
+# Deep V3 replacement security and release evidence
 
 Evidence date: 2026-07-29
 Public model: Deep
 Internal release: `deep-full-range-v3`
-Contract-core commit: `7627c46e5370e01186f627aba964615911f38af5`
+Contract source commit: `1d6b6fc4aaaaf7c7e6e5d3068a08a5e83181c671`
+Replacement source commitment: `0x902cc5e0737e604164e8962bcbdc536eb5df7a1aa508ee322736b2fd394fd440`
 
 ## Result
 
-The exact Deep V3 source snapshot passes its focused build, unit, fuzz, invariant, deployment-rehearsal and Mainnet-fork checks.
+The first immutable Mainnet canary exposed a liveness regression before activation. Its vault measured only native tokens currently held in range, which left a minimum-size launch below the first compound threshold. The deployed stack and keeper remain blocked. The receipts and exact failure state are preserved in `deployments/evidence/deep-full-range-mainnet-canary-v3-blocked.json`.
 
-- 86 tests passed, 0 failed, 0 skipped across 14 suites.
+The replacement source restores launch-anchored virtual native depth without changing the fee split, oracle limits, rolling exposure cap, pool binding or permanent custody model. It passes its focused build, unit, fuzz, invariant, deployment-rehearsal and Mainnet-fork checks.
+
+- 89 tests passed, 0 failed, 0 skipped across 15 suites.
 - Fuzz tests ran 10,000 cases each.
 - Five stateful invariants ran 1,000 campaigns at depth 128: 640,000 handler calls, 0 handler reverts.
 - Three fork tests passed at Ethereum block 25,635,400.
+- One fork characterization reproduced the deployed canary blocker after the exact 19-round-trip fee-generation sequence.
 - Ten deterministic deployment-plan tests passed, including vacancy, nonce, salt, chain, runtime and source-commitment failure paths.
 - Slither produced 77 raw detector instances. Every detector class is triaged in `slither-results-deep-v3.json`; no confirmed High or Medium vulnerability remains from that scan.
 - The exact-source `forge build --sizes --no-cache` passed. The smallest runtime margin is 429 bytes on the hook factory.
 
-This is not an external audit. No Mainnet deployment, signature, transaction, external submission or publication was performed.
+This is not an external audit. The replacement infrastructure is not deployed, source-verified or active.
 
 ## Source snapshot
 
-The contract-core sources were clean against the recorded commit when this evidence was produced. The application, operator and release evidence are frozen separately in the final release commit.
+The replacement source is bound by the commitment above. The final commit, deployment addresses, receipts and provider verification remain separate release gates.
 
 | Source | SHA-256 |
 | --- | --- |
@@ -30,7 +34,7 @@ The contract-core sources were clean against the recorded commit when this evide
 | `LiquidityGrowthFullRangePolicyV3.sol` | `8c7da3fa2f1fbbbf26415a6c9ee9ada3eb1508dc31db99ea3e6f54c037cf7e48` |
 | `LiquidityGrowthZapPlannerV3.sol` | `b3f02e8452d0e94a9717f0bd6d313d3e0eb2236dcddf3d9f7f4a89018d95bdbf` |
 | `LiquidityGrowthFullRangeVaultFactoryV3.sol` | `45bf14fb7b6c29e44cab65c433175f3928e0b0c17efc629f6ea0bba311234f69` |
-| `LiquidityGrowthFullRangeVaultV3.sol` | `a8acb5e1ff5b2ec10fa51683757dc299ee0a52524df91837216860a94b63426b` |
+| `LiquidityGrowthFullRangeVaultV3.sol` | `eef75bf5242da9d05ff4e9fa27db6f8cb6a9d922510f7e22dbacd15e3786f29f` |
 | `LiquidityGrowthFullRangePositionPlannerV3.sol` | `b0d1073b8437145e4f9a9bbf2db3c45faf10e70e863df628d6536a8ef9f76960` |
 | `LiquidityGrowthFullRangeAutomationV3.sol` | `26df0332202d148e8ce80e818956fd1dd6df1919be6bf899a6f8a98c16ddd6d6` |
 | `LiquidityGrowthFullRangeLaunchV3.sol` | `107b38380807d25acf7ce8fe2f2bd7d2a5351af54d54bc08d1601ba45e2f7235` |
@@ -191,10 +195,10 @@ This scorecard applies the Trail of Bits nine-category maturity framework to the
 | Authentication and access control | Satisfactory — 3/4 | Dependencies and policy are immutable; initialization, registration, fee claims and transient compound intents are bound to exact actors and tested. The vault exposes no owner, upgrade, rescue or withdrawal path. |
 | Complexity management | Moderate — 2/4 | Planner, vault, hook, launcher, automation and executor responsibilities are separated, but return deltas, transient intent state, oracle history, atomic settlement and the off-chain keeper form a high-complexity composition. |
 | Decentralization | Moderate — 2/4 | Onchain work is permissionless and no administrator can remove locked liquidity or change policy. The official keeper, its gas funding, RPC selection, deployment and activation remain centrally operated even though another caller may execute the same parameter-free work. |
-| Documentation | Satisfactory — 3/4 | Design, source provenance, security properties, residual risks, release gates and operator recovery are documented. Production procedures have not yet been validated by a live canary and incident exercise. |
+| Documentation | Satisfactory — 3/4 | Design, source provenance, security properties, residual risks, release gates and operator recovery are documented. The failed canary is preserved, but the replacement has not completed a successful live lifecycle. |
 | Transaction ordering and oracle risk | Moderate — 2/4 | Initial-buy deadlines and price limits, long and short TWAPs, raw/truncated comparison, spot limits, internal impact limits and rolling exposure bounds reduce atomic manipulation. A distortion sustained for the complete same-pool oracle window remains an accepted residual risk. |
 | Low-level manipulation | Moderate — 2/4 | Transient storage and bounded memory-safe assembly are narrow and tested, and established Uniswap/OpenZeppelin primitives are reused. There is no independent differential or formal verification of every low-level path and compiler assumption. |
-| Testing and verification | Moderate — 2/4 | The focused suite has 86 passing tests, 10,000-case fuzz tests, 640,000 invariant handler calls, deterministic deployment rehearsals and a pinned Mainnet fork. There is no published 100% branch/statement coverage, mutation testing, formal proof, external audit or live Mainnet canary evidence. |
+| Testing and verification | Moderate — 2/4 | The focused suite has 89 passing tests, 10,000-case fuzz tests, 640,000 invariant handler calls, deterministic deployment rehearsals, a pinned Mainnet fork and a characterization of the failed canary. There is no published 100% branch/statement coverage, mutation testing, formal proof, external audit or successful replacement Mainnet lifecycle. |
 
 **Overall maturity: 2.3/4 — Moderate.** The strongest evidence is arithmetic conservation, immutable custody and adversarial testing. The largest gaps are independent review, live monitoring and incident rehearsal, formal or mutation coverage, sustained-oracle residual risk and centrally funded keeper operations.
 
@@ -251,7 +255,7 @@ forge build --sizes --no-cache \
   src/libraries/LiquidityGrowthSwapMathV3.sol
 
 FOUNDRY_PROFILE=ci forge test \
-  --match-contract '^(LiquidityGrowthFeeOracleHookV2PermissionsTest|LiquidityGrowthZapPlannerV3Test|LiquidityGrowthFullRangeV3PolicyTest|LiquidityGrowthFullRangeV3Test|LiquidityGrowthFullRangeV3FeeAccountingTest|LiquidityGrowthFullRangeV3SecurityTest|LiquidityGrowthDeepAdversarialTest|LiquidityGrowthFullRangeAutomationV3Test|LiquidityGrowthFullRangeLaunchV3Test|DeepKeeperExecutorV2Test|DeployMainnetDeepFullRangeInfrastructureV3Test|DeployMainnetDeepFullRangeInfrastructureV3SecurityTest|LiquidityGrowthFullRangeV3MainnetForkTest|LiquidityGrowthFullRangeV3StatefulInvariantTest)$' \
+  --match-contract '^(LiquidityGrowthFeeOracleHookV2PermissionsTest|LiquidityGrowthZapPlannerV3Test|LiquidityGrowthFullRangeV3PolicyTest|LiquidityGrowthFullRangeV3Test|LiquidityGrowthFullRangeV3BootstrapTest|LiquidityGrowthFullRangeV3FeeAccountingTest|LiquidityGrowthFullRangeV3SecurityTest|LiquidityGrowthDeepAdversarialTest|LiquidityGrowthFullRangeAutomationV3Test|LiquidityGrowthFullRangeLaunchV3Test|DeepKeeperExecutorV2Test|DeployMainnetDeepFullRangeInfrastructureV3Test|DeployMainnetDeepFullRangeInfrastructureV3SecurityTest|LiquidityGrowthFullRangeV3MainnetForkTest|LiquidityGrowthFullRangeV3StatefulInvariantTest)$' \
   -vv
 
 forge lint --severity high --severity med -- \
@@ -269,6 +273,6 @@ forge lint --severity high --severity med -- \
   src/libraries/LiquidityGrowthSwapMathV3.sol
 ```
 
-CI result: 86 passed, 0 failed, 0 skipped.
+CI result: 89 passed, 0 failed, 0 skipped.
 
 A repository-wide cold size build is presently blocked by stack-too-deep errors in unrelated Quote Asset and Stock Paired sources. Those files are outside this review and were not changed. The exact Deep V3 source graph builds from cold state without them.

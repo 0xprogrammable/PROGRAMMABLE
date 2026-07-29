@@ -123,7 +123,7 @@ export function SiteHeader() {
           </a>
           <a
             className="header-social-link"
-            href="https://github.com/0xprogrammable/programmable"
+            href="https://github.com/0xprogrammable"
             target="_blank"
             rel="noreferrer"
             aria-label="Programmable on GitHub"

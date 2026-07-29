@@ -106,8 +106,7 @@
 .footer {
   backdrop-filter: blur(16px);
   background: var(--surface-tint-strong);
-  bottom: 0;
-  position: sticky;
+  position: relative;
   z-index: 4;
 }
 
