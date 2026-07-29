@@ -1,8 +1,8 @@
 .page {
   min-height: calc(100svh - var(--header-height));
-  max-width: 1260px;
-  padding-bottom: 44px;
-  padding-top: 20px;
+  max-width: 1280px;
+  padding-bottom: 46px;
+  padding-top: 18px;
 }
 
 .back {
@@ -26,10 +26,10 @@
 }
 
 .layout {
-  align-items: start;
+  align-items: stretch;
   display: grid;
-  gap: 20px;
-  grid-template-columns: minmax(0, 1fr) minmax(350px, 390px);
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 390px);
 }
 
 .overview,
@@ -40,30 +40,30 @@
   border: 1px solid var(--panel-border-soft);
   box-shadow:
     0 1px 0 var(--card-shadow),
-    0 18px 50px var(--card-shadow-soft);
+    0 22px 64px var(--card-shadow-soft);
 }
 
 .overview {
-  border-radius: 28px;
+  border-radius: 30px;
   display: flex;
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
-  padding: 24px;
+  padding: 26px;
 }
 
 .identity {
   align-items: center;
   display: grid;
-  gap: 22px;
-  grid-template-columns: 138px minmax(0, 1fr);
+  gap: 24px;
+  grid-template-columns: 126px minmax(0, 1fr);
 }
 
 .image {
   aspect-ratio: 1;
   background: var(--surface-soft);
   border: 1px solid var(--panel-border-soft);
-  border-radius: 22px;
+  border-radius: 24px;
   overflow: hidden;
   position: relative;
 }
@@ -79,7 +79,7 @@
 .symbol {
   color: var(--accent-strong);
   display: block;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.015em;
   line-height: 1.15;
@@ -87,8 +87,8 @@
 
 .name {
   color: var(--text);
-  font-size: clamp(38px, 4vw, 54px);
-  font-weight: 570;
+  font-size: clamp(40px, 4vw, 54px);
+  font-weight: 590;
   letter-spacing: -0.048em;
   line-height: 0.98;
   margin-top: 6px;
@@ -141,9 +141,9 @@
 
 .description {
   color: var(--text-soft);
-  font-size: 15px;
+  font-size: 14.5px;
   line-height: 1.55;
-  margin-top: 19px;
+  margin-top: 20px;
   max-width: 68ch;
 }
 
@@ -186,14 +186,14 @@
   border-top: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
-  margin: 18px 0 0;
+  margin: 20px 0 0;
   padding: 0;
 }
 
 .metric {
   border-right: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   min-width: 0;
-  padding: 16px;
+  padding: 17px;
 }
 
 .metric:first-child {
@@ -213,7 +213,7 @@
 
 .metric dd {
   color: var(--text);
-  font-size: 18px;
+  font-size: 19px;
   font-variant-numeric: tabular-nums;
   font-weight: 630;
   letter-spacing: -0.025em;
@@ -281,12 +281,17 @@
 }
 
 .tradeShell {
-  align-self: start;
-  border-radius: 28px;
+  align-self: stretch;
+  border-radius: 30px;
+  display: flex;
   min-width: 0;
-  padding: 22px;
+  padding: 24px;
   position: sticky;
   top: calc(var(--header-height) + 18px);
+  width: 100%;
+}
+
+.tradeShell > * {
   width: 100%;
 }
 
@@ -296,21 +301,21 @@
   animation: token-panel-enter 180ms var(--ease-out) both;
   display: flex;
   flex-direction: column;
-  min-height: 344px;
+  min-height: 100%;
 }
 
 .tradeHeader {
   align-items: baseline;
   display: flex;
   justify-content: space-between;
-  padding: 1px 1px 15px;
+  padding: 2px 1px 18px;
 }
 
 .tradeHeader h2,
 .review h2 {
   color: var(--text);
-  font-size: 24px;
-  font-weight: 630;
+  font-size: 25px;
+  font-weight: 650;
   letter-spacing: -0.03em;
   line-height: 1.1;
 }
@@ -323,7 +328,7 @@
 .sideControl {
   background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  border-radius: 15px;
+  border-radius: 16px;
   display: grid;
   gap: 4px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -336,7 +341,7 @@
 .sideButton {
   background: transparent;
   border: 0;
-  border-radius: 11px;
+  border-radius: 12px;
   color: var(--muted);
   font-size: 14px;
   font-weight: 640;
@@ -352,7 +357,7 @@
 .sideIndicator {
   background: var(--canvas);
   border: 1px solid color-mix(in srgb, var(--border-strong) 70%, transparent);
-  border-radius: 11px;
+  border-radius: 12px;
   bottom: 4px;
   box-shadow: 0 4px 14px var(--card-shadow);
   left: 4px;
@@ -373,9 +378,10 @@
 .amountCard {
   background: color-mix(in srgb, var(--surface-tint) 78%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-  border-radius: 19px;
-  margin-top: 14px;
-  padding: 16px;
+  border-radius: 21px;
+  margin-top: 16px;
+  min-height: 166px;
+  padding: 18px;
 }
 
 .amountHeader,
@@ -435,14 +441,14 @@
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr) auto;
-  margin-top: 7px;
+  margin-top: 9px;
 }
 
 .amountInput {
   background: transparent;
   border: 0;
   color: var(--text);
-  font-size: clamp(34px, 3.1vw, 40px);
+  font-size: clamp(36px, 3.1vw, 42px);
   font-variant-numeric: tabular-nums;
   font-weight: 540;
   height: 50px;
@@ -499,18 +505,19 @@
 }
 
 .tradeFooter {
-  margin-top: 16px;
+  margin-top: auto;
+  padding-top: 20px;
 }
 
 .primaryAction,
 .secondaryAction {
   align-items: center;
-  border-radius: 15px;
+  border-radius: 16px;
   display: inline-flex;
   font-size: 14px;
   font-weight: 690;
   justify-content: center;
-  min-height: 50px;
+  min-height: 52px;
   padding: 0 18px;
 }
 
@@ -751,7 +758,8 @@
   }
 
   .tradeShell {
-    max-width: 560px;
+    display: block;
+    max-width: none;
     position: static;
   }
 
@@ -782,13 +790,13 @@
   }
 
   .overview {
-    padding: 14px;
+    padding: 16px;
   }
 
   .identity {
     align-items: start;
     gap: 14px;
-    grid-template-columns: 88px minmax(0, 1fr);
+    grid-template-columns: 92px minmax(0, 1fr);
   }
 
   .image {
@@ -856,13 +864,17 @@
 
   .tradeShell {
     max-width: none;
-    padding: 18px;
+    padding: 20px;
   }
 
   .tradeForm,
   .review,
   .submitted {
     min-height: 0;
+  }
+
+  .tradeFooter {
+    padding-top: 18px;
   }
 
   .reviewActions {

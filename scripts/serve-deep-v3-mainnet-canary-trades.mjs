@@ -16,10 +16,9 @@ import {
 
 import {
   DEEP_V3_CHAIN_ID_HEX,
-  DEEP_V3_MAX_FEE_PER_GAS_WEI,
-  DEEP_V3_MAX_PRIORITY_FEE_PER_GAS_WEI,
   assertDeepV3ReleaseSourcesMatchCommit,
   assertDeepV3RpcUrls,
+  buildDeepV3DeploymentFeePolicy,
   buildDeepV3CanaryIdentity,
   deepV3AutomationAbi,
   deepV3CompoundEvent,
@@ -49,6 +48,7 @@ import {
   prepareDeepV3CanaryTradeCandidate,
   publicDeepV3CanaryTradeAction,
   reconcileDeepV3CanaryTradeSnapshots,
+  prepareDeepV3CanaryBatchCandidate,
 } from "./deep-v3-canary-trade-core.mjs";
 
 const HOST = "127.0.0.1";
@@ -56,6 +56,11 @@ const PORT = Number(process.env.DEEP_V3_CANARY_TRADE_PORT ?? 4185);
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 4_096;
 const MAX_RPC_BLOCK_LAG = 2;
+const RPC_MIN_INTERVAL_MS = 500;
+const RPC_RETRY_DELAYS_MS = Object.freeze([
+  1_500, 3_000, 6_000, 12_000,
+]);
+const INSPECT_CACHE_MS = 5_000;
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -69,8 +74,31 @@ const rpcUrls = [
 ].filter(Boolean);
 const interactive = process.argv.includes("--write");
 let preparedLock = null;
+const rpcQueues = new Map();
+const rpcStartedAt = new Map();
+let inspectCache = null;
+let inspectInFlight = null;
 
-async function rpc(url, method, params = []) {
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function rpcLabel(url) {
+  return rpcUrls.indexOf(url) === 0 ? "RPC 1" : "RPC 2";
+}
+
+function retryableRpcError(error) {
+  return (
+    error?.status === 429 ||
+    error?.rpcCode === 429 ||
+    error?.rpcCode === -32005 ||
+    /rate limit|too many requests|capacity/i.test(
+      error?.message ?? "",
+    )
+  );
+}
+
+async function rpcRequest(url, method, params) {
   const response = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -78,13 +106,64 @@ async function rpc(url, method, params = []) {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) {
-    throw new Error(`${method} returned HTTP ${response.status}`);
+    const error = new Error(
+      `${method} returned HTTP ${response.status}`,
+    );
+    error.status = response.status;
+    throw error;
   }
   const payload = await response.json();
   if (payload?.error) {
-    throw new Error(`${method} failed: ${payload.error.message}`);
+    const error = new Error(
+      `${method} failed: ${payload.error.message}`,
+    );
+    error.rpcCode = payload.error.code;
+    throw error;
   }
   return payload?.result;
+}
+
+async function rpc(url, method, params = []) {
+  const previous = rpcQueues.get(url) ?? Promise.resolve();
+  const current = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const startedAt = rpcStartedAt.get(url) ?? 0;
+      const spacing =
+        RPC_MIN_INTERVAL_MS - (Date.now() - startedAt);
+      if (spacing > 0) await wait(spacing);
+      for (
+        let attempt = 0;
+        attempt <= RPC_RETRY_DELAYS_MS.length;
+        attempt += 1
+      ) {
+        rpcStartedAt.set(url, Date.now());
+        try {
+          return await rpcRequest(url, method, params);
+        } catch (error) {
+          if (
+            !retryableRpcError(error) ||
+            attempt === RPC_RETRY_DELAYS_MS.length
+          ) {
+            throw new Error(
+              `${rpcLabel(url)} ${error?.message ?? String(error)}`,
+            );
+          }
+          await wait(RPC_RETRY_DELAYS_MS[attempt]);
+        }
+      }
+      throw new Error(`${rpcLabel(url)} ${method} retry failed`);
+    });
+  rpcQueues.set(url, current.catch(() => undefined));
+  return current;
+}
+
+async function optionalRpc(url, method, params = []) {
+  try {
+    return await rpc(url, method, params);
+  } catch {
+    return null;
+  }
 }
 
 async function contractRead(
@@ -190,12 +269,32 @@ async function sharedBlock() {
       "Independent RPCs disagree on the shared canary quote block",
     );
   }
+  const feeSnapshots = await Promise.all(
+    rpcUrls.map(async (url, index) => {
+      const [gasPricePerGas, maxPriorityFeePerGas] =
+        await Promise.all([
+          rpc(url, "eth_gasPrice"),
+          optionalRpc(url, "eth_maxPriorityFeePerGas"),
+        ]);
+      return {
+        baseFeePerGas: BigInt(
+          blocks[index].baseFeePerGas ?? 0,
+        ).toString(),
+        gasPricePerGas: BigInt(gasPricePerGas).toString(),
+        maxPriorityFeePerGas:
+          maxPriorityFeePerGas === null
+            ? null
+            : BigInt(maxPriorityFeePerGas).toString(),
+      };
+    }),
+  );
   return {
     blockNumber,
     blockTag,
     blockHash: normalizeDeepV3Hex(blocks[0].hash),
     timestamp: Number(BigInt(blocks[0].timestamp)),
     baseFeePerGas: BigInt(blocks[0].baseFeePerGas ?? 0),
+    feeSnapshots,
   };
 }
 
@@ -499,7 +598,7 @@ async function observe(url, manifest, identity, block) {
   };
 }
 
-async function inspect(manifest, identity) {
+async function inspectFresh(manifest, identity) {
   const block = await sharedBlock();
   const snapshots = await Promise.all(
     rpcUrls.map((url) => observe(url, manifest, identity, block)),
@@ -510,6 +609,51 @@ async function inspect(manifest, identity) {
     snapshots,
   });
   return { block, snapshots, state };
+}
+
+async function inspect(
+  manifest,
+  identity,
+  { forceInspect = false } = {},
+) {
+  if (
+    !forceInspect &&
+    inspectCache &&
+    inspectCache.expiresAtMs > Date.now()
+  ) {
+    return inspectCache.value;
+  }
+  while (inspectInFlight) {
+    const current = inspectInFlight;
+    if (!forceInspect || current.forceInspect) {
+      return current.promise;
+    }
+    await current.promise.catch(() => undefined);
+  }
+  if (
+    !forceInspect &&
+    inspectCache &&
+    inspectCache.expiresAtMs > Date.now()
+  ) {
+    return inspectCache.value;
+  }
+  const current = {
+    forceInspect,
+    promise: null,
+  };
+  current.promise = inspectFresh(manifest, identity)
+    .then((value) => {
+      inspectCache = {
+        value,
+        expiresAtMs: Date.now() + INSPECT_CACHE_MS,
+      };
+      return value;
+    })
+    .finally(() => {
+      if (inspectInFlight === current) inspectInFlight = null;
+    });
+  inspectInFlight = current;
+  return current.promise;
 }
 
 async function requiredRead(
@@ -637,21 +781,6 @@ function assertSameQuote(left, right) {
   return left;
 }
 
-function feePolicy(baseFeePerGas) {
-  const priority =
-    2_000_000_000n < DEEP_V3_MAX_PRIORITY_FEE_PER_GAS_WEI
-      ? 2_000_000_000n
-      : DEEP_V3_MAX_PRIORITY_FEE_PER_GAS_WEI;
-  const maxFeePerGas = baseFeePerGas * 2n + priority;
-  if (
-    baseFeePerGas <= 0n ||
-    maxFeePerGas > DEEP_V3_MAX_FEE_PER_GAS_WEI
-  ) {
-    throw new Error("Current Mainnet fees exceed the canary policy");
-  }
-  return { maxFeePerGas, maxPriorityFeePerGas: priority };
-}
-
 async function simulate(url, request) {
   const [callResult, estimatedGas] = await Promise.all([
     rpc(url, "eth_call", [request, "pending"]),
@@ -678,18 +807,62 @@ function parseAmount(value) {
   return amount;
 }
 
-async function prepareInput(manifest, identity, input, capturedAtMs) {
+async function prepareInput(
+  manifest,
+  identity,
+  input,
+  { forceInspect = false } = {},
+) {
+  const batch = input?.side === "batch";
   if (
     !input ||
-    (input.side !== "buy" && input.side !== "sell") ||
+    (input.side !== "buy" &&
+      input.side !== "sell" &&
+      !batch) ||
     Object.keys(input).some(
       (field) => field !== "side" && field !== "amount",
-    )
+    ) ||
+    (batch && Object.hasOwn(input, "amount"))
   ) {
     throw new Error("The canary trade request is invalid");
   }
-  const amountIn = parseAmount(input.amount);
-  const { block, state } = await inspect(manifest, identity);
+  const amountIn = batch ? null : parseAmount(input.amount);
+  const { block, state } = await inspect(manifest, identity, {
+    forceInspect,
+  });
+  const capturedAtMs = Date.now();
+  if (batch) {
+    const candidate = prepareDeepV3CanaryBatchCandidate({
+      manifest,
+      state,
+      capturedAtMs,
+      nowMs: Date.now(),
+    });
+    const request = {
+      from: getAddress(account),
+      to: candidate.transaction.to,
+      nonce: deepV3Quantity(state.confirmedNonce),
+      value: deepV3Quantity(candidate.transaction.value),
+      data: candidate.transaction.data,
+    };
+    const simulations = await Promise.all(
+      rpcUrls.map((url) => simulate(url, request)),
+    );
+    const prepared = finalizeDeepV3CanaryTradeAction({
+      candidate,
+      state,
+      simulations,
+      feePolicy: buildDeepV3DeploymentFeePolicy(
+        block.feeSnapshots,
+      ),
+    });
+    return {
+      prepared,
+      state,
+      block,
+      input: { side: "batch" },
+    };
+  }
   const quotes = await Promise.all(
     rpcUrls.map((url) =>
       quoteAndAllowances(
@@ -751,7 +924,9 @@ async function prepareInput(manifest, identity, input, capturedAtMs) {
     candidate,
     state,
     simulations,
-    feePolicy: feePolicy(block.baseFeePerGas),
+    feePolicy: buildDeepV3DeploymentFeePolicy(
+      block.feeSnapshots,
+    ),
   });
   return {
     prepared,
@@ -775,7 +950,7 @@ async function revalidate(manifest, identity, preparedDigest) {
     manifest,
     identity,
     preparedLock.input,
-    Date.now(),
+    { forceInspect: true },
   );
   assertDeepV3CanaryRequote({
     prepared: preparedLock.prepared,
@@ -868,9 +1043,9 @@ function html(manifest) {
 <body><main><h1>Deep canary trades</h1><p>One reviewed action at a time. Every quote uses the original PoolId and two independent Mainnet RPCs. Nothing is submitted by this server.</p>
 <section class="card"><div class="row"><button id="wallet">Connect exact wallet</button><button id="refresh">Refresh state</button></div><div id="walletStatus" class="notice">Wallet not connected.</div></section>
 <section class="card"><h2>Fee progress</h2><div class="grid"><div class="fact"><span>Growth available</span><strong id="available">—</strong></div><div class="fact"><span>Growth remaining</span><strong id="remaining">—</strong></div><div class="fact"><span>Minimum gross volume</span><strong id="volume">—</strong></div></div><div class="fact" style="margin-top:10px"><span>Original PoolId</span><code id="pool">—</code></div></section>
-<section class="card"><h2>Prepare one action</h2><div class="row side"><button id="buy" class="selected">Buy with ETH</button><button id="sell">Sell token</button></div><input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.005"><button id="prepare" class="primary">Prepare exact action</button><div id="notice" class="notice">Choose a side and amount. The 0.0001–0.025 ETH native-volume bound applies to every trade.</div></section>
+<section class="card"><h2>Prepare one action</h2><div class="row side"><button id="batch" class="selected">Synthetic canary batch</button><button id="buy">Buy with ETH</button><button id="sell">Sell token</button></div><input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.005" hidden><button id="prepare" class="primary">Prepare exact action</button><div id="notice" class="notice">The batch creates only disclosed release-canary traffic in the exact original pool. It is never presented as organic volume.</div></section>
 <section id="review" class="card review"><h2>Review</h2><div class="grid"><div class="fact"><span>Action</span><strong id="action">—</strong></div><div class="fact"><span>Transaction value</span><strong id="value">—</strong></div><div class="fact"><span>Maximum debit</span><strong id="debit">—</strong></div><div class="fact"><span>Expected growth fee</span><strong id="growth">—</strong></div><div class="fact"><span>Quote impact</span><strong id="impact">—</strong></div><div class="fact"><span>Target</span><code id="target">—</code></div></div><div class="fact" style="margin-top:10px"><span>Calldata hash</span><code id="calldata">—</code></div><label class="confirm"><input id="ack" type="checkbox">I reviewed this exact action, value, pool and wallet.</label><button id="submit" class="primary" disabled>Confirm in wallet</button><div id="submitStatus" class="notice">No transaction submitted.</div></section>
-</main><script>const CONFIG=${config};let side="buy";let prepared=null;let wallet=null;const $=id=>document.getElementById(id);const eth=v=>(Number(BigInt(v))/1e18).toFixed(6).replace(/0+$/,"").replace(/\\.$/,"")+" ETH";function provider(){const candidates=window.ethereum?.providers;return Array.isArray(candidates)?candidates.find(item=>item?.isMetaMask)||null:window.ethereum?.isMetaMask?window.ethereum:null}async function request(method,params=[]){const injected=provider();if(!injected)throw new Error("MetaMask is unavailable");return injected.request({method,params})}function exactWallet(){if(!wallet||wallet.toLowerCase()!==CONFIG.account.toLowerCase())throw new Error("Connect the exact reviewed canary wallet");}async function connect(){const chain=await request("eth_chainId");if(chain.toLowerCase()!==CONFIG.chainId)throw new Error("Switch MetaMask to Ethereum Mainnet");const accounts=await request("eth_requestAccounts");wallet=accounts[0];exactWallet();$("walletStatus").className="notice success";$("walletStatus").textContent="Connected "+wallet;}async function state(){const response=await fetch("/state",{cache:"no-store"});const body=await response.json();if(!response.ok)throw new Error(body.error);$("available").textContent=eth(body.availableGrowthWei);$("remaining").textContent=eth(body.remainingGrowthWei);$("volume").textContent=eth(body.minimumRemainingGrossVolumeWei);$("pool").textContent=body.poolId;if(body.readyToCompound)$("notice").textContent="The compound threshold is ready. Further canary trades are blocked.";}function choose(next){side=next;$("buy").classList.toggle("selected",side==="buy");$("sell").classList.toggle("selected",side==="sell");prepared=null;$("review").classList.remove("open");}async function prepare(){exactWallet();$("notice").className="notice";$("notice").textContent="Reading two RPCs and quoting the exact pool…";const response=await fetch("/prepare",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({side,amount:$("amount").value})});const body=await response.json();if(!response.ok)throw new Error(body.error);prepared=body;$("action").textContent=body.action;$("value").textContent=eth(body.request.value);$("debit").textContent=eth(body.maximumDebitWei);$("growth").textContent=eth(body.expectedGrowthFeeWei);$("impact").textContent=body.quoteImpactBps+" bps";$("target").textContent=body.request.to;$("calldata").textContent=body.calldataHash;$("ack").checked=false;$("submit").disabled=true;$("review").classList.add("open");$("notice").textContent="Prepared at block "+body.quoteBlockNumber+". Review before signing.";}async function submit(){exactWallet();if(!prepared||!$("ack").checked)throw new Error("Review and acknowledge the exact action");$("submitStatus").className="notice";$("submitStatus").textContent="Re-quoting the latest agreed state…";const response=await fetch("/revalidate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({preparedDigest:prepared.preparedDigest})});const body=await response.json();if(!response.ok)throw new Error(body.error);const hash=await request("eth_sendTransaction",[prepared.request]);$("submitStatus").className="notice success";$("submitStatus").textContent="Submitted "+hash+". Wait for confirmation, then refresh manually.";prepared=null;$("submit").disabled=true;}$("wallet").onclick=()=>connect().catch(error=>{$("walletStatus").className="notice error";$("walletStatus").textContent=error.message});$("refresh").onclick=()=>state().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});$("buy").onclick=()=>choose("buy");$("sell").onclick=()=>choose("sell");$("prepare").onclick=()=>prepare().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});$("ack").onchange=()=>{$("submit").disabled=!$("ack").checked};$("submit").onclick=()=>submit().catch(error=>{$("submitStatus").className="notice error";$("submitStatus").textContent=error.message});state().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});</script></body></html>`;
+</main><script>const CONFIG=${config};let side="batch";let prepared=null;let wallet=null;const $=id=>document.getElementById(id);const eth=v=>(Number(BigInt(v))/1e18).toFixed(6).replace(/0+$/,"").replace(/\\.$/,"")+" ETH";function provider(){const candidates=window.ethereum?.providers;return Array.isArray(candidates)?candidates.find(item=>item?.isMetaMask)||null:window.ethereum?.isMetaMask?window.ethereum:null}async function request(method,params=[]){const injected=provider();if(!injected)throw new Error("MetaMask is unavailable");return injected.request({method,params})}function exactWallet(){if(!wallet||wallet.toLowerCase()!==CONFIG.account.toLowerCase())throw new Error("Connect the exact reviewed canary wallet");}async function connect(){const chain=await request("eth_chainId");if(chain.toLowerCase()!==CONFIG.chainId)throw new Error("Switch MetaMask to Ethereum Mainnet");const accounts=await request("eth_requestAccounts");wallet=accounts[0];exactWallet();$("walletStatus").className="notice success";$("walletStatus").textContent="Connected "+wallet;}async function state(){const response=await fetch("/state",{cache:"no-store"});const body=await response.json();if(!response.ok)throw new Error(body.error);$("available").textContent=eth(body.availableGrowthWei);$("remaining").textContent=eth(body.remainingGrowthWei);$("volume").textContent=eth(body.minimumRemainingGrossVolumeWei);$("pool").textContent=body.poolId;if(body.readyToCompound)$("notice").textContent="The compound threshold is ready. Further canary trades are blocked.";}function choose(next){side=next;$("batch").classList.toggle("selected",side==="batch");$("buy").classList.toggle("selected",side==="buy");$("sell").classList.toggle("selected",side==="sell");$("amount").hidden=side==="batch";prepared=null;$("review").classList.remove("open");$("notice").textContent=side==="batch"?"The batch creates only disclosed release-canary traffic in the exact original pool. It is never presented as organic volume.":"Choose an amount inside the 0.0001–0.025 ETH native-volume bound.";}async function prepare(){exactWallet();$("notice").className="notice";$("notice").textContent="Reading two RPCs and simulating the exact pool action…";const payload=side==="batch"?{side}:{side,amount:$("amount").value};const response=await fetch("/prepare",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});const body=await response.json();if(!response.ok)throw new Error(body.error);prepared=body;$("action").textContent=body.action;$("value").textContent=eth(body.request.value);$("debit").textContent=eth(body.maximumDebitWei);$("growth").textContent=eth(body.expectedGrowthFeeWei);$("impact").textContent=body.side==="batch"?"Bounded batch":body.quoteImpactBps+" bps";$("target").textContent=body.request.to;$("calldata").textContent=body.calldataHash;$("ack").checked=false;$("submit").disabled=true;$("review").classList.add("open");$("notice").textContent="Prepared at block "+body.quoteBlockNumber+". Review before signing.";}async function submit(){exactWallet();if(!prepared||!$("ack").checked)throw new Error("Review and acknowledge the exact action");$("submitStatus").className="notice";$("submitStatus").textContent="Re-quoting the latest agreed state…";const response=await fetch("/revalidate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({preparedDigest:prepared.preparedDigest})});const body=await response.json();if(!response.ok)throw new Error(body.error);const hash=await request("eth_sendTransaction",[prepared.request]);$("submitStatus").className="notice success";$("submitStatus").textContent="Submitted "+hash+". Wait for confirmation, then refresh manually.";prepared=null;$("submit").disabled=true;}$("wallet").onclick=()=>connect().catch(error=>{$("walletStatus").className="notice error";$("walletStatus").textContent=error.message});$("refresh").onclick=()=>state().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});$("batch").onclick=()=>choose("batch");$("buy").onclick=()=>choose("buy");$("sell").onclick=()=>choose("sell");$("prepare").onclick=()=>prepare().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});$("ack").onchange=()=>{$("submit").disabled=!$("ack").checked};$("submit").onclick=()=>submit().catch(error=>{$("submitStatus").className="notice error";$("submitStatus").textContent=error.message});state().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});</script></body></html>`;
 }
 
 async function main() {
@@ -945,7 +1120,7 @@ async function main() {
           manifest,
           identity,
           input,
-          Date.now(),
+          { forceInspect: true },
         );
         sendJson(
           response,

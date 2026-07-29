@@ -51,11 +51,31 @@ export const DEEP_V3_TRADE_DEADLINE_SECONDS = 300n;
 export const DEEP_V3_TRADE_PERMIT2_EXPIRY_SECONDS = 900n;
 export const DEEP_V3_TRADE_PERMIT2_SAFETY_SECONDS = 600n;
 export const DEEP_V3_TRADE_ORACLE_MATURITY_SECONDS = 1_800n;
+export const DEEP_V3_CANARY_BATCH_CYCLES = 19;
+export const DEEP_V3_CANARY_BATCH_BUY_AMOUNT_WEI =
+  6_000_000_000_000_000n;
+export const DEEP_V3_CANARY_BATCH_BUY_MINIMUM_TOKEN_OUT =
+  4_315_122_607_712_108_858_671_086n;
+export const DEEP_V3_CANARY_BATCH_SELL_MINIMUM_NATIVE_OUT_WEI =
+  5_821_794_000_000_000n;
+export const DEEP_V3_CANARY_BATCH_MAX_NATIVE_DEBT_WEI =
+  3_400_000_000_000_000n;
+export const DEEP_V3_CANARY_BATCH_MINIMUM_REFUND_WEI =
+  1_000_000_000_000_000n;
+export const DEEP_V3_CANARY_BATCH_EXPECTED_GROSS_VOLUME_WEI =
+  226_860_000_000_000_000n;
+export const DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI =
+  2_041_740_000_000_000n;
+export const DEEP_V3_CANARY_BATCH_EXPECTED_PROGRAMMABLE_WEI =
+  226_860_000_000_000n;
+export const DEEP_V3_CANARY_BATCH_MIN_REMAINING_GROWTH_WEI =
+  1_900_000_000_000_000n;
 
 export const DEEP_V3_TRADE_GAS_CEILINGS = Object.freeze({
   "token-to-permit2": 100_000n,
   "permit2-to-router": 150_000n,
   swap: 1_500_000n,
+  batch: 2_600_000n,
 });
 
 const BPS = 10_000n;
@@ -518,6 +538,83 @@ function buildSwapTransaction({
   };
 }
 
+function buildCanaryBatchTransaction({
+  manifest,
+  poolKey,
+  account,
+  deadline,
+}) {
+  const planner = new V4Planner();
+  for (let index = 0; index < DEEP_V3_CANARY_BATCH_CYCLES; index += 1) {
+    planner.addAction(
+      Actions.SWAP_EXACT_IN_SINGLE,
+      [
+        {
+          poolKey,
+          zeroForOne: true,
+          amountIn: DEEP_V3_CANARY_BATCH_BUY_AMOUNT_WEI.toString(),
+          amountOutMinimum:
+            DEEP_V3_CANARY_BATCH_BUY_MINIMUM_TOKEN_OUT.toString(),
+          hookData: "0x",
+        },
+      ],
+      URVersion.V2_0,
+    );
+    planner.addAction(
+      Actions.SWAP_EXACT_IN_SINGLE,
+      [
+        {
+          poolKey,
+          zeroForOne: false,
+          amountIn: "0",
+          amountOutMinimum:
+            DEEP_V3_CANARY_BATCH_SELL_MINIMUM_NATIVE_OUT_WEI.toString(),
+          hookData: "0x",
+        },
+      ],
+      URVersion.V2_0,
+    );
+  }
+  planner.addAction(
+    Actions.SETTLE_ALL,
+    [
+      DEEP_V3_TRADE_NATIVE,
+      DEEP_V3_CANARY_BATCH_MAX_NATIVE_DEBT_WEI.toString(),
+    ],
+    URVersion.V2_0,
+  );
+  const route = new RoutePlanner();
+  route.addCommand(
+    CommandType.V4_SWAP,
+    [planner.finalize()],
+    false,
+    UniversalRouterVersion.V2_0,
+  );
+  route.addCommand(
+    CommandType.SWEEP,
+    [
+      DEEP_V3_TRADE_NATIVE,
+      getAddress(account),
+      DEEP_V3_CANARY_BATCH_MINIMUM_REFUND_WEI.toString(),
+    ],
+    false,
+    UniversalRouterVersion.V2_0,
+  );
+  return {
+    kind: "batch",
+    to: getAddress(
+      manifest.officialDependencies.universalRouter.address,
+    ),
+    data: encodeFunctionData({
+      abi: deepV3TradeUniversalRouterAbi,
+      functionName: "execute",
+      args: [route.commands, route.inputs, deadline],
+    }),
+    value: DEEP_V3_CANARY_BATCH_MAX_NATIVE_DEBT_WEI,
+    amountOutMinimum: DEEP_V3_CANARY_BATCH_MINIMUM_REFUND_WEI,
+  };
+}
+
 function approvalState({
   side,
   amountIn,
@@ -711,6 +808,101 @@ export function prepareDeepV3CanaryTradeCandidate({
   };
 }
 
+export function prepareDeepV3CanaryBatchCandidate({
+  manifest,
+  state,
+  capturedAtMs,
+  nowMs,
+}) {
+  if (
+    !Number.isSafeInteger(capturedAtMs) ||
+    !Number.isSafeInteger(nowMs) ||
+    capturedAtMs > nowMs ||
+    nowMs - capturedAtMs > DEEP_V3_TRADE_QUOTE_TTL_MS
+  ) {
+    throw new Error("The Deep V3 canary batch quote is stale");
+  }
+  if (
+    BigInt(state.timestamp) <
+    BigInt(state.oracleGrowthTimestamp) +
+      DEEP_V3_TRADE_ORACLE_MATURITY_SECONDS
+  ) {
+    throw new Error("The Deep V3 canary oracle is not mature");
+  }
+  const progress = deepV3CanaryFeeProgress(state);
+  if (progress.readyToCompound || state.action === 1) {
+    throw new Error(
+      "The Deep V3 canary is ready to compound; synthetic traffic is blocked",
+    );
+  }
+  if (state.compounded) {
+    throw new Error("The Deep V3 canary already compounded");
+  }
+  if (
+    progress.remainingGrowthWei <
+      DEEP_V3_CANARY_BATCH_MIN_REMAINING_GROWTH_WEI ||
+    progress.remainingGrowthWei >
+      DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI
+  ) {
+    throw new Error(
+      "The remaining fee target requires a smaller canary action",
+    );
+  }
+  const deadline =
+    BigInt(state.timestamp) + DEEP_V3_TRADE_DEADLINE_SECONDS;
+  const transaction = buildCanaryBatchTransaction({
+    manifest,
+    poolKey: state.poolKey,
+    account: state.account,
+    deadline,
+  });
+  const remainingAfter =
+    DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI >=
+    progress.remainingGrowthWei
+      ? 0n
+      : progress.remainingGrowthWei -
+        DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI;
+  return {
+    account: state.account,
+    token: state.token,
+    vault: state.vault,
+    poolId: state.poolId,
+    poolKey: state.poolKey,
+    side: "batch",
+    amountIn: DEEP_V3_CANARY_BATCH_MAX_NATIVE_DEBT_WEI,
+    quotedAmountOut: DEEP_V3_CANARY_BATCH_MINIMUM_REFUND_WEI,
+    quoterGasEstimate: 0n,
+    quoteBlockNumber: state.blockNumber,
+    quoteBlockHash: state.blockHash,
+    capturedAtMs,
+    deadline,
+    transaction,
+    batchCycles: DEEP_V3_CANARY_BATCH_CYCLES,
+    batchBuyAmount: DEEP_V3_CANARY_BATCH_BUY_AMOUNT_WEI,
+    quote: {
+      amountOutMinimum: DEEP_V3_CANARY_BATCH_MINIMUM_REFUND_WEI,
+      spotAmountOut: DEEP_V3_CANARY_BATCH_MINIMUM_REFUND_WEI,
+      impactBps: 0,
+    },
+    expectedFees: {
+      grossNative:
+        DEEP_V3_CANARY_BATCH_EXPECTED_GROSS_VOLUME_WEI,
+      growthFee: DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI,
+      programmableFee:
+        DEEP_V3_CANARY_BATCH_EXPECTED_PROGRAMMABLE_WEI,
+      totalFee:
+        DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI +
+        DEEP_V3_CANARY_BATCH_EXPECTED_PROGRAMMABLE_WEI,
+    },
+    progress: {
+      ...progress,
+      remainingGrowthAfterWei: remainingAfter,
+      minimumRemainingGrossVolumeAfterWei:
+        deepV3MinimumGrossVolumeForGrowth(remainingAfter),
+    },
+  };
+}
+
 export function assertDeepV3CanaryRequote({
   prepared,
   refreshed,
@@ -744,6 +936,7 @@ export function assertDeepV3CanaryRequote({
   }
   if (
     prepared.transaction.kind !== "swap" &&
+    prepared.transaction.kind !== "batch" &&
     (normalizeDeepV3Hex(prepared.transaction.to) !==
       normalizeDeepV3Hex(refreshed.transaction.to) ||
       normalizeDeepV3Hex(prepared.transaction.data) !==

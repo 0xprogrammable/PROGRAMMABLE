@@ -650,10 +650,7 @@ export function PreparedTradeReview({
   onConfirm(): void | Promise<void>;
 }) {
   const outputDecimals = prepared.side === "buy" ? tokenDecimals : 18;
-  const outputUnit =
-    prepared.side === "buy"
-      ? symbol
-      : "ETH";
+  const outputUnit = prepared.side === "buy" ? symbol : "ETH";
   const expectedOutput = formatTradeAmount(
     prepared.quote.amountOut,
     outputDecimals,
