@@ -1,25 +1,37 @@
 import { describe, expect, it } from "vitest";
 
-import { isStockPairedDevAccount } from "../lib/stock-paired-access";
+import { isStockPairedPublicLaunchEnabled } from "../lib/stock-paired-access";
 
-describe("Stock-Paired dev access", () => {
-  it("allows only the approved launch wallet", () => {
+describe("Stock-Paired public access", () => {
+  it("allows a verified Mainnet V2 release without a wallet allowlist", () => {
+    const release = {
+      internalContractRelease: "stock-paired-v2",
+      chainId: 1,
+    };
+
     expect(
-      isStockPairedDevAccount(
-        "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
-      ),
+      isStockPairedPublicLaunchEnabled("production", release),
     ).toBe(true);
     expect(
-      isStockPairedDevAccount(
-        "0x2bb333d48dfaf1596d9036671d2e43168994249e",
-      ),
-    ).toBe(true);
-    expect(
-      isStockPairedDevAccount(
-        "0x1111111111111111111111111111111111111111",
-      ),
+      isStockPairedPublicLaunchEnabled("rehearsal", release),
     ).toBe(false);
-    expect(isStockPairedDevAccount("not-a-wallet")).toBe(false);
-    expect(isStockPairedDevAccount(null)).toBe(false);
+  });
+
+  it("fails closed without the verified V2 release", () => {
+    expect(
+      isStockPairedPublicLaunchEnabled("production", null),
+    ).toBe(false);
+    expect(
+      isStockPairedPublicLaunchEnabled("production", {
+        internalContractRelease: "stock-paired-v1",
+        chainId: 1,
+      }),
+    ).toBe(false);
+    expect(
+      isStockPairedPublicLaunchEnabled("production", {
+        internalContractRelease: "stock-paired-v2",
+        chainId: 11_155_111,
+      }),
+    ).toBe(false);
   });
 });

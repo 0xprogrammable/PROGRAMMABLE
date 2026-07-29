@@ -5,15 +5,9 @@ import { lazy, Suspense, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import launchExperience from "@/components/launch-experience.module.css";
-import { useWallet } from "@/components/wallet-provider";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { isConfiguredDeepV3ReleaseReady } from "@/lib/deep-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
-import {
-  isStockPairedDevAccount,
-  isStockPairedLocalPreviewEnabled,
-} from "@/lib/stock-paired-access";
-import { isConfiguredStockPairedReleaseReady } from "@/lib/stock-paired-release";
 import type { LaunchModel } from "@/lib/launch";
 
 const launchEnvironment =
@@ -24,10 +18,6 @@ const classicV3LaunchAvailable =
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
 const deepLaunchAvailable =
   isConfiguredDeepV3ReleaseReady(launchEnvironment);
-const stockPairedLocalPreview = isStockPairedLocalPreviewEnabled();
-const stockPairedReleaseAvailable =
-  stockPairedLocalPreview ||
-  isConfiguredStockPairedReleaseReady(launchEnvironment);
 
 function loadLaunchForm() {
   return import("@/components/launch-builder");
@@ -71,20 +61,19 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
   );
 }
 
-export function LaunchExperience() {
-  const { wallet } = useWallet();
+export function LaunchExperience({
+  stockPairedPublicLaunchEnabled,
+}: {
+  stockPairedPublicLaunchEnabled: boolean;
+}) {
   const [selectedModel, setSelectedModel] = useState<LaunchModel | null>(null);
-  const stockPairedAccess =
-    stockPairedReleaseAvailable &&
-    (stockPairedLocalPreview ||
-      isStockPairedDevAccount(wallet?.account));
 
   function chooseModel(candidate: LaunchModel) {
     const model = resolveImplementedLaunchModel(candidate);
     if (
       !model ||
       (model === "deep" && !deepLaunchAvailable) ||
-      (model === "stock-paired" && !stockPairedAccess)
+      (model === "stock-paired" && !stockPairedPublicLaunchEnabled)
     ) {
       return;
     }
@@ -102,7 +91,7 @@ export function LaunchExperience() {
     return (
       <LaunchModelPicker
         onChoose={chooseModel}
-        stockPairedAccess={stockPairedAccess}
+        stockPairedPublicLaunchEnabled={stockPairedPublicLaunchEnabled}
       />
     );
   }
@@ -112,6 +101,7 @@ export function LaunchExperience() {
       <LazyLaunchBuilderForm
         model={selectedModel}
         onBackToModels={returnToModels}
+        stockPairedPublicLaunchEnabled={stockPairedPublicLaunchEnabled}
       />
     </Suspense>
   );
@@ -119,10 +109,10 @@ export function LaunchExperience() {
 
 export function LaunchModelPicker({
   onChoose,
-  stockPairedAccess = false,
+  stockPairedPublicLaunchEnabled = false,
 }: {
   onChoose: (model: LaunchModel) => void;
-  stockPairedAccess?: boolean;
+  stockPairedPublicLaunchEnabled?: boolean;
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
@@ -190,14 +180,18 @@ export function LaunchModelPicker({
         <button
           className={`launch-model-card launch-model-card-stock ${launchExperience.modelCard}`}
           data-launch-model-option="stock-paired"
-          data-launch-model-available={stockPairedAccess}
+          data-launch-model-available={stockPairedPublicLaunchEnabled}
           type="button"
-          disabled={!stockPairedAccess}
+          disabled={!stockPairedPublicLaunchEnabled}
           aria-describedby="launch-model-stock-description"
           onPointerEnter={
-            stockPairedAccess ? preloadAvailableForm : undefined
+            stockPairedPublicLaunchEnabled
+              ? preloadAvailableForm
+              : undefined
           }
-          onFocus={stockPairedAccess ? preloadAvailableForm : undefined}
+          onFocus={
+            stockPairedPublicLaunchEnabled ? preloadAvailableForm : undefined
+          }
           onClick={() => onChoose("stock-paired")}
         >
           <span
@@ -219,7 +213,7 @@ export function LaunchModelPicker({
               className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
               <strong>Stock-Paired</strong>
-              {!stockPairedAccess ? (
+              {!stockPairedPublicLaunchEnabled ? (
                 <small data-status="pending">Coming soon</small>
               ) : null}
             </span>
@@ -230,7 +224,7 @@ export function LaunchModelPicker({
               Pair a token with a reviewed Ondo Global Markets asset in a
               Uniswap v4 pool.
             </span>
-            {stockPairedAccess ? (
+            {stockPairedPublicLaunchEnabled ? (
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >

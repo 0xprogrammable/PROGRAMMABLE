@@ -27,6 +27,7 @@ import {
   getConfiguredClassicV3Release,
   isClassicV3ReleaseVerified,
 } from "../lib/classic-v3-release";
+import { STOCK_PAIRED_ETH_QUOTE_ASSETS } from "../lib/stock-paired";
 
 const account = "0x1111111111111111111111111111111111111111";
 const launcher = "0x2222222222222222222222222222222222222222";
@@ -190,11 +191,11 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Liquidity Growth");
   });
 
-  it("enables Stock-Paired only for the approved dev wallet", () => {
+  it("enables Stock-Paired when the server public-release gate is open", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
-        stockPairedAccess: true,
+        stockPairedPublicLaunchEnabled: true,
       }),
     );
     const stockButton = html.match(
@@ -438,20 +439,29 @@ describe("unreleased launch model gating", () => {
     });
   });
 
-  it("blocks public Stock-Paired preflight requests", async () => {
+  it("allows public Stock-Paired preflight requests for the released model", async () => {
     const request = new NextRequest("http://localhost/api/launch/preflight", {
       method: "POST",
       body: JSON.stringify({
         account,
-        walletChainId: "0x1",
-        draft: createStockPairedDraft(),
+        walletChainId: "0xaa36a7",
+        draft: {
+          ...createStockPairedDraft(),
+          tokenName: "Public Stock Pair",
+          tokenSymbol: "PSP",
+          tokenDescription: "Checked-in release gate test",
+          stockQuoteAsset: STOCK_PAIRED_ETH_QUOTE_ASSETS[0].address,
+          launchSalt: `0x${"44".repeat(32)}`,
+        },
       }),
     });
 
     const result = await POST(request);
-    expect(result.status).toBe(403);
-    await expect(result.json()).resolves.toEqual({
-      error: "Stock-Paired is coming soon",
+    expect(result.status).toBe(200);
+    await expect(result.json()).resolves.toMatchObject({
+      status: "blocked",
+      mode: "stock-paired",
+      title: "Switch the wallet to Ethereum",
     });
   });
 });

@@ -41,10 +41,7 @@ import {
 import { validatePreparedDeepV3LaunchTransaction } from "@/lib/deep-v3-launch-validation";
 import { isConfiguredDeepV3ReleaseReady } from "@/lib/deep-v3-release";
 import { validatePreparedStockPairedLaunchTransaction } from "@/lib/stock-paired-launch-validation";
-import {
-  isStockPairedDevAccount,
-  isStockPairedLocalPreviewEnabled,
-} from "@/lib/stock-paired-access";
+import { isStockPairedLocalPreviewEnabled } from "@/lib/stock-paired-access";
 import {
   STOCK_PAIRED_DEFAULT_INITIAL_BUY_ETH,
   getStockPairedEthQuoteAsset,
@@ -59,7 +56,6 @@ import {
   STOCK_PAIRED_V2_QUOTE_ASSETS,
   type StockPairedV2QuoteAsset,
 } from "@/lib/stock-paired-v2";
-import { isConfiguredStockPairedReleaseReady } from "@/lib/stock-paired-release";
 import {
   MAX_METADATA_URL_BYTES,
   MAX_SOCIAL_URL_BYTES,
@@ -887,11 +883,6 @@ const classicV3LaunchAvailable =
     process.env.NEXT_PUBLIC_CLASSIC_V3_UI_PREVIEW === "true") ||
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
 const deepLaunchAvailable = isConfiguredDeepV3ReleaseReady(launchEnvironment);
-const stockPairedLaunchAvailable =
-  (process.env.NODE_ENV !== "production" &&
-    process.env.NEXT_PUBLIC_STOCK_PAIRED_UI_PREVIEW === "true") ||
-  isConfiguredStockPairedReleaseReady(launchEnvironment);
-
 function browserPendingLaunchStorages(): PendingLaunchStorage[] {
   if (typeof window === "undefined") return [];
   const storages: PendingLaunchStorage[] = [];
@@ -1040,9 +1031,11 @@ function createLaunchSalt() {
 export function LaunchBuilderForm({
   model,
   onBackToModels,
+  stockPairedPublicLaunchEnabled,
 }: {
   model: LaunchModel;
   onBackToModels: () => void;
+  stockPairedPublicLaunchEnabled: boolean;
 }) {
   const initialDraft =
     model === "deep"
@@ -1058,6 +1051,7 @@ export function LaunchBuilderForm({
       model={model}
       initialDraft={initialDraft}
       onBackToModels={onBackToModels}
+      stockPairedPublicLaunchEnabled={stockPairedPublicLaunchEnabled}
     />
   );
 }
@@ -1066,10 +1060,12 @@ function LaunchBuilderFormView({
   model,
   initialDraft,
   onBackToModels,
+  stockPairedPublicLaunchEnabled,
 }: {
   model: LaunchModel;
   initialDraft: LaunchDraft;
   onBackToModels: () => void;
+  stockPairedPublicLaunchEnabled: boolean;
 }) {
   const { wallet, openWallet, readNativeBalance, sendTransaction } =
     useWallet();
@@ -1181,9 +1177,7 @@ function LaunchBuilderFormView({
       : model === "stock-paired"
         ? "Stock-Paired"
         : "Classic";
-  const stockPairedLaunchAllowed =
-    stockPairedLaunchAvailable &&
-    (stockPairedLocalPreview || isStockPairedDevAccount(wallet?.account));
+  const stockPairedLaunchAllowed = stockPairedPublicLaunchEnabled;
   const submittingWalletConnected = Boolean(
     activeSubmission &&
       wallet &&

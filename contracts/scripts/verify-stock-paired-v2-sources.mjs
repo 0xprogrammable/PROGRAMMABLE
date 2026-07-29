@@ -5,6 +5,8 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { getAddress, isAddress } from "viem";
+
 import {
   STOCK_PAIRED_V2_MANIFEST_PATH,
   loadStockPairedV2ReleasePlan,
@@ -14,6 +16,7 @@ import {
   assertStockPairedV2DependencyTree,
   assertStockPairedV2ReleaseSnapshot,
   assertStockPairedV2StandardJson,
+  stockPairedV2EtherscanReadable,
   stockPairedV2ForgeArguments,
   stockPairedV2PublicLifecycleVerified,
   stockPairedV2SourceRecords,
@@ -118,6 +121,50 @@ export function assertStockPairedV2SourceInput(
   }
 }
 
+export function buildStockPairedV2EtherscanRecord(record, localInput, source) {
+  if (
+    source?.ContractName !== record.contractName ||
+    source?.CompilerVersion !== STOCK_PAIRED_V2_COMPILER_VERSION ||
+    source?.OptimizationUsed !== "1" ||
+    source?.Runs !== "1000" ||
+    source?.EVMVersion !== "cancun" ||
+    source?.Proxy !== "0" ||
+    source?.Implementation !== ""
+  ) {
+    throw new Error(`${record.field} Etherscan metadata does not match`);
+  }
+  const rawMatchedAddress = String(source?.SimilarMatch ?? "").trim();
+  const similar = rawMatchedAddress.length > 0;
+  let matchedAddress = null;
+  if (similar) {
+    if (!isAddress(rawMatchedAddress)) {
+      throw new Error(`${record.field} Etherscan similar match is invalid`);
+    }
+    matchedAddress = getAddress(rawMatchedAddress);
+    if (matchedAddress === getAddress(record.address)) {
+      throw new Error(
+        `${record.field} Etherscan similar match points to itself`,
+      );
+    }
+  } else if (
+    (source?.ConstructorArguments ?? "").toLowerCase() !==
+    record.encodedConstructorArguments.slice(2).toLowerCase()
+  ) {
+    throw new Error(`${record.field} Etherscan metadata does not match`);
+  }
+  assertStockPairedV2SourceInput(record, localInput, source.SourceCode);
+  const url = `https://etherscan.io/address/${record.address}#code`;
+  if (!similar) {
+    return { status: "exact-match", url };
+  }
+  return {
+    status: "similar-match",
+    matchedAddress,
+    url,
+    matchedUrl: `https://etherscan.io/address/${matchedAddress}#code`,
+  };
+}
+
 async function etherscanRecord(record, localInput) {
   const key = process.env.ETHERSCAN_API_KEY?.trim();
   if (!key) {
@@ -137,25 +184,10 @@ async function etherscanRecord(record, localInput) {
   }
   const payload = await response.json();
   const source = payload?.result?.[0];
-  if (
-    payload?.status !== "1" ||
-    source?.ContractName !== record.contractName ||
-    source?.CompilerVersion !== STOCK_PAIRED_V2_COMPILER_VERSION ||
-    source?.OptimizationUsed !== "1" ||
-    source?.Runs !== "1000" ||
-    source?.EVMVersion !== "cancun" ||
-    source?.Proxy !== "0" ||
-    source?.Implementation !== "" ||
-    (source?.ConstructorArguments ?? "").toLowerCase() !==
-      record.encodedConstructorArguments.slice(2).toLowerCase()
-  ) {
+  if (payload?.status !== "1" || !source) {
     throw new Error(`${record.field} Etherscan metadata does not match`);
   }
-  assertStockPairedV2SourceInput(record, localInput, source.SourceCode);
-  return {
-    status: "exact-match",
-    url: `https://etherscan.io/address/${record.address}#code`,
-  };
+  return buildStockPairedV2EtherscanRecord(record, localInput, source);
 }
 
 async function sourcifyRecord(record) {
@@ -192,10 +224,13 @@ async function writeJsonAtomic(file, value) {
 }
 
 function requireCapturedDeployment(manifest, plan, releaseCommit) {
+  const deploymentCaptured =
+    String(manifest.status ?? "").startsWith("deployed-") ||
+    manifest.status === "deployment-source-and-lifecycle-verified";
   if (
     manifest.releaseCommit !== releaseCommit ||
     manifest.sourceCommitment !== plan.sourceCommitment ||
-    !String(manifest.status ?? "").startsWith("deployed-") ||
+    !deploymentCaptured ||
     manifest.lifecycleEvidence?.deploymentTransactionsVerified !== true ||
     manifest.lifecycleEvidence?.runtimeBindingsVerified !== true ||
     manifest.lifecycleEvidence?.ethCoordinatorDeploymentVerified !== true
@@ -232,8 +267,10 @@ async function resolveRelease() {
 }
 
 export function buildStockPairedV2SourceCapture(manifest, sourceVerification) {
-  const sourceVerified =
-    stockPairedV2SourceVerificationComplete(sourceVerification);
+  const sourceVerified = stockPairedV2SourceVerificationComplete(
+    sourceVerification,
+    manifest.addresses,
+  );
   const lifecycleVerified = stockPairedV2PublicLifecycleVerified(manifest);
   const releaseEligible = sourceVerified && lifecycleVerified;
   let status;
@@ -258,7 +295,10 @@ export function buildStockPairedV2SourceCapture(manifest, sourceVerification) {
 }
 
 export function etherscanForSourcifyOnlyCapture(existingRecord) {
-  return existingRecord?.etherscan?.status === "exact-match"
+  return stockPairedV2EtherscanReadable(
+    existingRecord?.etherscan,
+    existingRecord?.address,
+  )
     ? existingRecord.etherscan
     : { status: "pending", url: null };
 }
@@ -348,9 +388,13 @@ export async function main() {
           manifest.sourceVerification?.[record.field],
         )
       : await etherscanRecord(record, localInputs.get(record.field));
-    const fullyVerified = etherscan.status === "exact-match";
+    const readableOnEtherscan = stockPairedV2EtherscanReadable(
+      etherscan,
+      record.address,
+    );
     sourceVerification[record.field] = {
-      status: fullyVerified ? "verified" : "sourcify-verified",
+      status: readableOnEtherscan ? "verified" : "sourcify-verified",
+      address: record.address,
       fqcn: record.fqcn,
       encodedConstructorArguments: record.encodedConstructorArguments,
       constructorArgumentHash: record.constructorArgumentHash,
@@ -381,7 +425,7 @@ export async function main() {
         nextGate: releaseEligible
           ? null
           : captureSourcifyOnly
-            ? "Complete and independently capture the public Mainnet canary lifecycle; Etherscan exact-match capture remains pending."
+            ? "Complete and independently capture the public Mainnet canary lifecycle; readable Etherscan evidence remains pending."
             : "Complete and independently capture the public Mainnet canary lifecycle.",
       },
       null,

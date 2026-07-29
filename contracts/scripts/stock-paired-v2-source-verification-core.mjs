@@ -2,7 +2,13 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { encodeAbiParameters, getAddress, keccak256, stringToHex } from "viem";
+import {
+  encodeAbiParameters,
+  getAddress,
+  isAddress,
+  keccak256,
+  stringToHex,
+} from "viem";
 
 import {
   STOCK_PAIRED_V2_ASSETS,
@@ -57,10 +63,76 @@ export const STOCK_PAIRED_V2_SOURCE_FIELDS = Object.freeze(
   Object.keys(STOCK_PAIRED_V2_SOURCE_ARTIFACTS),
 );
 
+function etherscanCodeUrlMatches(value, address) {
+  if (typeof value !== "string" || !isAddress(address ?? "")) return false;
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(/^\/address\/(0x[0-9a-f]{40})$/iu);
+    return (
+      url.protocol === "https:" &&
+      url.origin === "https://etherscan.io" &&
+      url.search === "" &&
+      url.hash === "#code" &&
+      match !== null &&
+      getAddress(match[1]) === getAddress(address)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function sourcifyContractUrlMatches(value, address) {
+  if (typeof value !== "string" || !isAddress(address ?? "")) return false;
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(
+      /^\/server\/v2\/contract\/1\/(0x[0-9a-f]{40})$/iu,
+    );
+    return (
+      url.origin === "https://sourcify.dev" &&
+      url.search === "" &&
+      url.hash === "" &&
+      match !== null &&
+      getAddress(match[1]) === getAddress(address)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function stockPairedV2EtherscanReadable(etherscan, deployedAddress) {
+  if (
+    !etherscan ||
+    typeof etherscan !== "object" ||
+    Array.isArray(etherscan) ||
+    !isAddress(deployedAddress ?? "") ||
+    !etherscanCodeUrlMatches(etherscan.url, deployedAddress)
+  ) {
+    return false;
+  }
+  if (etherscan.status === "exact-match") {
+    return (
+      etherscan.matchedAddress === undefined ||
+      etherscan.matchedAddress === null ||
+      etherscan.matchedAddress === ""
+    );
+  }
+  if (
+    etherscan.status !== "similar-match" ||
+    !isAddress(etherscan.matchedAddress ?? "") ||
+    getAddress(etherscan.matchedAddress) === getAddress(deployedAddress)
+  ) {
+    return false;
+  }
+  return etherscanCodeUrlMatches(
+    etherscan.matchedUrl,
+    etherscan.matchedAddress,
+  );
+}
+
 export const STOCK_PAIRED_V2_IMMUTABLE_RELEASE_PATHS = Object.freeze(
   STOCK_PAIRED_V2_RELEASE_PATHS.filter(
-    (file) =>
-      file !== STOCK_PAIRED_V2_MANIFEST_PATH && file !== "package.json",
+    (file) => file !== STOCK_PAIRED_V2_MANIFEST_PATH && file !== "package.json",
   ),
 );
 
@@ -198,18 +270,39 @@ export function stockPairedV2SourceRecords(plan) {
   });
 }
 
-export function stockPairedV2SourceVerificationComplete(sourceVerification) {
-  return (
-    sourceVerification?.status === "verified" &&
-    STOCK_PAIRED_V2_SOURCE_FIELDS.every(
-      (field) =>
-        sourceVerification?.[field]?.status === "verified" &&
-        sourceVerification[field]?.etherscan?.status === "exact-match" &&
-        sourceVerification[field]?.sourcify?.status === "match" &&
-        sourceVerification[field]?.sourcify?.creationMatch === "match" &&
-        sourceVerification[field]?.sourcify?.runtimeMatch === "match",
-    )
-  );
+export function stockPairedV2SourceVerificationComplete(
+  sourceVerification,
+  deployedAddresses,
+) {
+  if (
+    sourceVerification?.status !== "verified" ||
+    !deployedAddresses ||
+    typeof deployedAddresses !== "object"
+  ) {
+    return false;
+  }
+  let exactEtherscanMatches = 0;
+  for (const field of STOCK_PAIRED_V2_SOURCE_FIELDS) {
+    const record = sourceVerification[field];
+    const deployedAddress = deployedAddresses[field];
+    if (
+      record?.status !== "verified" ||
+      !isAddress(deployedAddress ?? "") ||
+      !isAddress(record.address ?? "") ||
+      getAddress(record.address) !== getAddress(deployedAddress) ||
+      record?.sourcify?.status !== "match" ||
+      record.sourcify.creationMatch !== "match" ||
+      record.sourcify.runtimeMatch !== "match" ||
+      !sourcifyContractUrlMatches(record.sourcify.url, deployedAddress) ||
+      !stockPairedV2EtherscanReadable(record.etherscan, deployedAddress)
+    ) {
+      return false;
+    }
+    if (record.etherscan.status === "exact-match") {
+      exactEtherscanMatches += 1;
+    }
+  }
+  return exactEtherscanMatches === 1;
 }
 
 export function stockPairedV2ForgeArguments(

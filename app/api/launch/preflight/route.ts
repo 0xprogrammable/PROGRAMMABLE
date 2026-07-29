@@ -110,10 +110,7 @@ import {
   getConfiguredStockPairedLaunchRelease,
   type VerifiedStockPairedRelease,
 } from "@/lib/stock-paired-release";
-import {
-  isStockPairedDevAccount,
-  isStockPairedLocalPreviewEnabled,
-} from "@/lib/stock-paired-access";
+import { isStockPairedPublicLaunchEnabled } from "@/lib/stock-paired-access";
 import {
   resolveImplementedLaunchModel,
   resolveReservedLaunchModel,
@@ -140,6 +137,15 @@ const selectedManifest = appDeployments[launchEnvironment] as ReleaseDeployment;
 const selectedClassicV3Release =
   getConfiguredClassicV3Release(launchEnvironment).releaseManifest;
 const selectedDeepV3Release = getConfiguredDeepV3Release(launchEnvironment);
+const selectedStockPairedRelease =
+  launchEnvironment === "production"
+    ? getConfiguredStockPairedLaunchRelease()
+    : null;
+const stockPairedPublicLaunchEnabled =
+  isStockPairedPublicLaunchEnabled(
+    launchEnvironment,
+    selectedStockPairedRelease,
+  );
 
 const client = createPublicClient({
   chain: launchChain,
@@ -2366,10 +2372,7 @@ async function prepareStockPairedLaunch(
     });
   }
 
-  const release =
-    launchEnvironment === "production"
-      ? getConfiguredStockPairedLaunchRelease()
-      : null;
+  const release = selectedStockPairedRelease;
   if (!release) {
     return response({
       status: "blocked",
@@ -2568,11 +2571,7 @@ export async function POST(request: NextRequest) {
       return await prepareDeepLaunch(account, draft, connectedWalletCheck);
     }
     if (draft.launchModel === "stock-paired") {
-      if (
-        getConfiguredStockPairedLaunchRelease() === null &&
-        !isStockPairedLocalPreviewEnabled() &&
-        !isStockPairedDevAccount(account)
-      ) {
+      if (!stockPairedPublicLaunchEnabled) {
         return errorResponse("Stock-Paired is coming soon", 403);
       }
       return await prepareStockPairedLaunch(

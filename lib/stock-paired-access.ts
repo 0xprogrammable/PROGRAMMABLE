@@ -1,14 +1,16 @@
-const STOCK_PAIRED_DEV_ACCOUNTS = new Set([
-  "0x2bb333d48dfaf1596d9036671d2e43168994249e",
-]);
+export type StockPairedPublicLaunchRelease = {
+  internalContractRelease: string;
+  chainId: number;
+};
 
-export function isStockPairedDevAccount(
-  account: string | null | undefined,
+export function isStockPairedPublicLaunchEnabled(
+  environment: "production" | "rehearsal",
+  release: StockPairedPublicLaunchRelease | null,
 ) {
-  return Boolean(
-    account &&
-      /^0x[a-fA-F0-9]{40}$/.test(account) &&
-      STOCK_PAIRED_DEV_ACCOUNTS.has(account.toLowerCase()),
+  return (
+    environment === "production" &&
+    release?.internalContractRelease === "stock-paired-v2" &&
+    release.chainId === 1
   );
 }
 

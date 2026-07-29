@@ -37,8 +37,7 @@ const officialDependencyFields = [
   "usdc",
 ] as const;
 
-const EXPECTED_TREASURY =
-  "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" as const;
+const EXPECTED_TREASURY = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" as const;
 const EXPECTED_POSITION_FORWARDER_FACTORY =
   "0x291a9ff1059d225d02B1659430804486404dB507" as const;
 const EXPECTED_ONDO_BEACON =
@@ -186,19 +185,130 @@ function verifiedExplorerRecord(value: unknown) {
   if (typeof value === "string") {
     return value === "verified";
   }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as {
+    status?: unknown;
+    etherscan?: { status?: unknown; matchedAddress?: unknown };
+  };
   return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    (value as { status?: unknown }).status === "verified"
+    record.status === "verified" &&
+    record.etherscan?.status === "exact-match" &&
+    (record.etherscan.matchedAddress === undefined ||
+      record.etherscan.matchedAddress === null ||
+      record.etherscan.matchedAddress === "")
   );
 }
 
-function sameAddress(left: unknown, right: string) {
+function sameAddress(left: unknown, right: unknown) {
   return (
     validAddress(left) &&
+    validAddress(right) &&
     getAddress(left).toLowerCase() === getAddress(right).toLowerCase()
   );
+}
+
+function etherscanCodeUrlMatches(value: unknown, address: unknown) {
+  if (typeof value !== "string" || !validAddress(address)) return false;
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(/^\/address\/(0x[0-9a-f]{40})$/iu);
+    return (
+      url.protocol === "https:" &&
+      url.origin === "https://etherscan.io" &&
+      url.search === "" &&
+      url.hash === "#code" &&
+      match !== null &&
+      sameAddress(match[1], address)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function sourcifyContractUrlMatches(value: unknown, address: unknown) {
+  if (typeof value !== "string" || !validAddress(address)) return false;
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(
+      /^\/server\/v2\/contract\/1\/(0x[0-9a-f]{40})$/iu,
+    );
+    return (
+      url.origin === "https://sourcify.dev" &&
+      url.search === "" &&
+      url.hash === "" &&
+      match !== null &&
+      sameAddress(match[1], address)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function verifiedV2SourceRecords(
+  sourceVerification: StockPairedReleaseManifest["sourceVerification"],
+  addresses: StockPairedReleaseManifest["addresses"],
+) {
+  if (sourceVerification?.status !== "verified" || !addresses) return false;
+  let exactEtherscanMatches = 0;
+  for (const field of deployedFields) {
+    const value = sourceVerification[field];
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return false;
+    }
+    const record = value as {
+      status?: unknown;
+      address?: unknown;
+      etherscan?: {
+        status?: unknown;
+        matchedAddress?: unknown;
+        url?: unknown;
+        matchedUrl?: unknown;
+      };
+      sourcify?: {
+        status?: unknown;
+        creationMatch?: unknown;
+        runtimeMatch?: unknown;
+        url?: unknown;
+      };
+    };
+    const deployedAddress = addresses[field];
+    if (
+      record.status !== "verified" ||
+      !sameAddress(record.address, deployedAddress) ||
+      record.sourcify?.status !== "match" ||
+      record.sourcify.creationMatch !== "match" ||
+      record.sourcify.runtimeMatch !== "match" ||
+      !sourcifyContractUrlMatches(record.sourcify.url, deployedAddress) ||
+      !etherscanCodeUrlMatches(record.etherscan?.url, deployedAddress)
+    ) {
+      return false;
+    }
+    if (record.etherscan?.status === "exact-match") {
+      if (
+        record.etherscan.matchedAddress !== undefined &&
+        record.etherscan.matchedAddress !== null &&
+        record.etherscan.matchedAddress !== ""
+      ) {
+        return false;
+      }
+      exactEtherscanMatches += 1;
+      continue;
+    }
+    if (
+      record.etherscan?.status !== "similar-match" ||
+      !validAddress(record.etherscan.matchedAddress) ||
+      sameAddress(record.etherscan.matchedAddress, deployedAddress) ||
+      !etherscanCodeUrlMatches(
+        record.etherscan.matchedUrl,
+        record.etherscan.matchedAddress,
+      )
+    ) {
+      return false;
+    }
+  }
+  return exactEtherscanMatches === 1;
 }
 
 function exactQuoteAssets(
@@ -230,6 +340,7 @@ type StockPairedReleaseDefinition = {
   internalContractRelease: StockPairedInternalRelease;
   quoteAssets: readonly ExpectedQuoteAsset[];
   requiresGMTokenManager: boolean;
+  allowsReadableSimilarMatches: boolean;
 };
 
 const stockPairedV1ReleaseDefinition: StockPairedReleaseDefinition = {
@@ -237,6 +348,7 @@ const stockPairedV1ReleaseDefinition: StockPairedReleaseDefinition = {
   internalContractRelease: STOCK_PAIRED_INTERNAL_RELEASE,
   quoteAssets: EXPECTED_V1_QUOTE_ASSETS,
   requiresGMTokenManager: false,
+  allowsReadableSimilarMatches: false,
 };
 
 const stockPairedV2ReleaseDefinition: StockPairedReleaseDefinition = {
@@ -244,6 +356,7 @@ const stockPairedV2ReleaseDefinition: StockPairedReleaseDefinition = {
   internalContractRelease: STOCK_PAIRED_V2_INTERNAL_RELEASE,
   quoteAssets: EXPECTED_V2_QUOTE_ASSETS,
   requiresGMTokenManager: true,
+  allowsReadableSimilarMatches: true,
 };
 
 function validIssuerManager(
@@ -329,11 +442,7 @@ function resolveStockPairedRelease(
     return null;
   }
 
-  const addressKeys = [
-    ...runtimeFields,
-    "deployer",
-    "treasury",
-  ] as const;
+  const addressKeys = [...runtimeFields, "deployer", "treasury"] as const;
   if (!addressKeys.every((field) => validAddress(addresses[field]))) {
     return null;
   }
@@ -365,11 +474,12 @@ function resolveStockPairedRelease(
   ) {
     return null;
   }
-  if (
-    !deployedFields.every((field) =>
-      verifiedExplorerRecord(sourceVerification[field]),
-    )
-  ) {
+  const sourcesVerified = definition.allowsReadableSimilarMatches
+    ? verifiedV2SourceRecords(sourceVerification, addresses)
+    : deployedFields.every((field) =>
+        verifiedExplorerRecord(sourceVerification[field]),
+      );
+  if (!sourcesVerified) {
     return null;
   }
 
@@ -379,37 +489,32 @@ function resolveStockPairedRelease(
     releaseCommit: release.releaseCommit,
     sourceCommitment: release.sourceCommitment,
     ethCoordinatorReleaseCommit: release.ethCoordinatorReleaseCommit,
-    ethCoordinatorSourceCommitment:
-      release.ethCoordinatorSourceCommitment,
+    ethCoordinatorSourceCommitment: release.ethCoordinatorSourceCommitment,
     ethCoordinatorNonce: Number(release.ethCoordinatorNonce),
     startBlock: Number(release.startBlock),
     addresses: Object.fromEntries(
-      addressKeys.map((field) => [field, getAddress(addresses[field] as string)]),
+      addressKeys.map((field) => [
+        field,
+        getAddress(addresses[field] as string),
+      ]),
     ) as VerifiedStockPairedRelease["addresses"],
     transactions: Object.fromEntries(
       deployedFields.map((field) => [field, transactions[field] as Hex]),
     ) as VerifiedStockPairedRelease["transactions"],
     runtimeCodeHashes: Object.fromEntries(
-      runtimeFields.map((field) => [
-        field,
-        runtimeCodeHashes[field] as Hex,
-      ]),
+      runtimeFields.map((field) => [field, runtimeCodeHashes[field] as Hex]),
     ) as VerifiedStockPairedRelease["runtimeCodeHashes"],
     officialDependencies: Object.fromEntries(
       officialDependencyFields.map((field) => [
         field,
         {
-          address: getAddress(
-            officialDependencies[field]?.address as string,
-          ),
-          runtimeCodeHash: officialDependencies[field]
-            ?.runtimeCodeHash as Hex,
+          address: getAddress(officialDependencies[field]?.address as string),
+          runtimeCodeHash: officialDependencies[field]?.runtimeCodeHash as Hex,
         },
       ]),
     ) as VerifiedStockPairedRelease["officialDependencies"],
     issuerRuntime: {
-      tokenRuntimeCodeHash: release.issuerRuntime
-        ?.tokenRuntimeCodeHash as Hex,
+      tokenRuntimeCodeHash: release.issuerRuntime?.tokenRuntimeCodeHash as Hex,
       beacon: getAddress(release.issuerRuntime?.beacon as string),
       beaconRuntimeCodeHash: release.issuerRuntime
         ?.beaconRuntimeCodeHash as Hex,
@@ -466,17 +571,13 @@ export function findStockPairedReleaseByHook(
 ) {
   if (!validAddress(hook)) return null;
   return (
-    releases.find((release) =>
-      sameAddress(release.addresses.feeHook, hook),
-    ) ?? null
+    releases.find((release) => sameAddress(release.addresses.feeHook, hook)) ??
+    null
   );
 }
 
 export function getConfiguredStockPairedReleaseByHook(hook: string) {
-  return findStockPairedReleaseByHook(
-    getConfiguredStockPairedReleases(),
-    hook,
-  );
+  return findStockPairedReleaseByHook(getConfiguredStockPairedReleases(), hook);
 }
 
 export function isConfiguredStockPairedReleaseReady(
