@@ -7,9 +7,9 @@ import {
 } from "viem";
 
 import appDeployments from "../contracts/config/app-deployments.v1.json";
-import { deepLaunchAbi, encodeDeepLaunch } from "./deep-v1";
+import { deepV2LaunchAbi, encodeDeepV2Launch } from "./deep-v2";
 import {
-  isFutureLaunchModelManifestEligible,
+  getVerifiedDeepV2Release,
   type LaunchModelReleaseManifest,
 } from "./launch-model-gating";
 import { parseInitialBuyWei, type LaunchDraft } from "./launch";
@@ -40,16 +40,11 @@ export function validatePreparedDeepLaunchTransactionAgainstManifest(
   expectedChainId: number,
 ): PreparedDeepLaunchTransaction {
   const transaction = parsePreparedTransaction(input.transaction);
-  const release = manifest.launchModelReleases?.deep;
+  const release = getVerifiedDeepV2Release(manifest, expectedChainId);
   if (transaction.kind !== "launch") {
     throw new Error("The prepared transaction is not a Deep launch");
   }
   if (
-    !isFutureLaunchModelManifestEligible(
-      "deep",
-      manifest,
-      expectedChainId,
-    ) ||
     typeof release?.launcher !== "string" ||
     !isAddress(release.launcher)
   ) {
@@ -97,14 +92,14 @@ export function validatePreparedDeepLaunchTransactionAgainstManifest(
   }
 
   const account: Address = getAddress(input.account);
-  const expectedData = encodeDeepLaunch(
+  const expectedData = encodeDeepV2Launch(
     input.draft,
     input.draft.launchSalt,
     account,
   );
   try {
     const decoded = decodeFunctionData({
-      abi: deepLaunchAbi,
+      abi: deepV2LaunchAbi,
       data: transaction.data,
     });
     if (

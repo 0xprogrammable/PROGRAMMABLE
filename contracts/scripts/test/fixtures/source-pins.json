@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "dependencies": [
+    {
+      "name": "Uniswap v4 Core",
+      "repository": "https://github.com/Uniswap/v4-core.git",
+      "commit": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc"
+    },
+    {
+      "name": "Uniswap v4 Periphery",
+      "repository": "https://github.com/Uniswap/v4-periphery.git",
+      "commit": "ad04c9f24a170accf5ea1b2836bbafd514537ca6"
+    },
+    {
+      "name": "Uniswap Liquidity Launcher",
+      "repository": "https://github.com/Uniswap/liquidity-launcher.git",
+      "commit": "e4660afe4f820f4a39181c7ea1f9bce6c423499f"
+    },
+    {
+      "name": "Uniswap UERC20 Factory",
+      "repository": "https://github.com/Uniswap/uerc20-factory.git",
+      "commit": "6f18f1cdf80dc173d33d3cd6bbe91ee52c314f68"
+    },
+    {
+      "name": "Permit2",
+      "repository": "https://github.com/Uniswap/permit2.git",
+      "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+    }
+  ]
+}

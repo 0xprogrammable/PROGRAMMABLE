@@ -1,0 +1,800 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://programmable.family/schemas/deep-full-range-release-v2.schema.json",
+  "title": "Programmable Deep FullRange V2 Mainnet release",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "model",
+    "internalContractRelease",
+    "releaseVersion",
+    "releaseManifest",
+    "keeperReleaseVersion",
+    "keeperCompatibilityStatus",
+    "status",
+    "releaseEligible",
+    "chainId",
+    "releaseCommit",
+    "sourceCommitment",
+    "startBlock",
+    "startingNonce",
+    "transactionCount",
+    "candidatePlan",
+    "addresses",
+    "transactions",
+    "deploymentBlocks",
+    "deploymentEvidence",
+    "runtimeCodeHashes",
+    "artifactRuntime",
+    "sharedStack",
+    "officialDependencies",
+    "compiler",
+    "fixedPolicy",
+    "keeperPolicy",
+    "sourceVerification",
+    "lifecycleEvidence",
+    "activation",
+    "blockers"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "model": { "const": "deep" },
+    "internalContractRelease": {
+      "const": "liquidity-growth-full-range-v2"
+    },
+    "releaseVersion": { "const": "deep-full-range-v2" },
+    "releaseManifest": {
+      "const": "contracts/deployments/mainnet-deep-full-range-v2.json"
+    },
+    "keeperReleaseVersion": { "const": "deep-keeper-v2" },
+    "keeperCompatibilityStatus": { "const": "verified-deep-v2" },
+    "status": {
+      "enum": [
+        "not-deployed",
+        "deployed-receipts-verified-source-pending",
+        "deployment-source-and-lifecycle-verified"
+      ]
+    },
+    "releaseEligible": { "type": "boolean" },
+    "chainId": { "const": 1 },
+    "releaseCommit": { "$ref": "#/definitions/nullableCommit" },
+    "sourceCommitment": { "$ref": "#/definitions/hash" },
+    "startBlock": { "$ref": "#/definitions/nullableInteger" },
+    "startingNonce": { "$ref": "#/definitions/nullableInteger" },
+    "transactionCount": { "const": 2 },
+    "candidatePlan": { "$ref": "#/definitions/candidatePlan" },
+    "addresses": { "$ref": "#/definitions/addressMap" },
+    "transactions": { "$ref": "#/definitions/hashMap" },
+    "deploymentBlocks": { "$ref": "#/definitions/blockMap" },
+    "deploymentEvidence": { "$ref": "#/definitions/evidenceMap" },
+    "runtimeCodeHashes": { "$ref": "#/definitions/runtimeHashMap" },
+    "artifactRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "properties": {
+        "growthVaultFactory": { "$ref": "#/definitions/artifact" },
+        "growthVaultImplementation": { "$ref": "#/definitions/artifact" },
+        "launcher": { "$ref": "#/definitions/artifact" },
+        "automation": { "$ref": "#/definitions/artifact" },
+        "positionPlanner": { "$ref": "#/definitions/artifact" }
+      }
+    },
+    "sharedStack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "releaseVersion",
+        "sourceManifest",
+        "addresses",
+        "runtimeCodeHashes"
+      ],
+      "properties": {
+        "status": { "const": "reused-source-verified-v1" },
+        "releaseVersion": { "const": "deep-full-range-v1" },
+        "sourceManifest": {
+          "const": "contracts/deployments/mainnet-deep-full-range-v1.json"
+        },
+        "addresses": { "$ref": "#/definitions/sharedAddressMap" },
+        "runtimeCodeHashes": {
+          "$ref": "#/definitions/sharedRuntimeHashMap"
+        }
+      }
+    },
+    "officialDependencies": {
+      "type": "object",
+      "minProperties": 7,
+      "additionalProperties": { "$ref": "#/definitions/dependency" }
+    },
+    "compiler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "solcVersion",
+        "evmVersion",
+        "optimizer",
+        "optimizerRuns",
+        "bytecodeHash",
+        "cborMetadata"
+      ],
+      "properties": {
+        "solcVersion": { "const": "0.8.26" },
+        "evmVersion": { "const": "cancun" },
+        "optimizer": { "const": true },
+        "optimizerRuns": { "const": 1000 },
+        "bytecodeHash": { "const": "none" },
+        "cborMetadata": { "const": false }
+      }
+    },
+    "fixedPolicy": { "$ref": "#/definitions/fixedPolicy" },
+    "keeperPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "enabled",
+        "transactionSubmission",
+        "coordinator",
+        "coordinatorRuntimeCodeHash",
+        "coordinatorSourceCommitment",
+        "automation",
+        "automationRuntimeCodeHash",
+        "signerAddress",
+        "signingBackend",
+        "executionPath",
+        "confirmations",
+        "independentReadRpcCount",
+        "intervalMilliseconds",
+        "defaultMaxBatchSize",
+        "defaultMaxGas",
+        "maximumOperationalBatchSize",
+        "extendedBatchMinimumGas",
+        "vaultSubsidyCapWei",
+        "reviewedBindingPath",
+        "promotionCommand"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "review-required",
+            "verified-ready-disabled-by-default"
+          ]
+        },
+        "enabled": { "const": false },
+        "transactionSubmission": { "const": false },
+        "coordinator": { "$ref": "#/definitions/nullableAddress" },
+        "coordinatorRuntimeCodeHash": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "coordinatorSourceCommitment": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "automation": { "$ref": "#/definitions/nullableAddress" },
+        "automationRuntimeCodeHash": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "signerAddress": { "$ref": "#/definitions/nullableAddress" },
+        "signingBackend": { "const": "privy-policy-wallet" },
+        "executionPath": { "const": "/api/ops/deep-v2-keeper" },
+        "confirmations": { "const": 12 },
+        "independentReadRpcCount": { "const": 2 },
+        "intervalMilliseconds": { "const": 300000 },
+        "defaultMaxBatchSize": { "const": 4 },
+        "defaultMaxGas": { "const": "4500000" },
+        "maximumOperationalBatchSize": { "const": 8 },
+        "extendedBatchMinimumGas": { "const": "9000000" },
+        "vaultSubsidyCapWei": { "const": "30000000000000000" },
+        "reviewedBindingPath": {
+          "const": "ops/deep-keeper-v2/reviewed-release-binding.json"
+        },
+        "promotionCommand": {
+          "const": "npm run contracts:deep-v2:keeper-binding:promote"
+        }
+      }
+    },
+    "sourceVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "contracts"],
+      "properties": {
+        "status": { "enum": ["not-submitted", "verified"] },
+        "contracts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "growthVaultFactory",
+            "growthVaultImplementation",
+            "launcher",
+            "automation",
+            "positionPlanner",
+            "keeperExecutor"
+          ],
+          "properties": {
+            "growthVaultFactory": {
+              "$ref": "#/definitions/sourceRecord"
+            },
+            "growthVaultImplementation": {
+              "$ref": "#/definitions/sourceRecord"
+            },
+            "launcher": { "$ref": "#/definitions/sourceRecord" },
+            "automation": { "$ref": "#/definitions/sourceRecord" },
+            "positionPlanner": { "$ref": "#/definitions/sourceRecord" },
+            "keeperExecutor": { "$ref": "#/definitions/sourceRecord" }
+          }
+        }
+      }
+    },
+    "lifecycleEvidence": { "$ref": "#/definitions/lifecycleEvidence" },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appStatus",
+        "keeperStatus",
+        "requiresExactManifestMatch"
+      ],
+      "properties": {
+        "appStatus": { "enum": ["blocked", "ready"] },
+        "keeperStatus": { "enum": ["blocked", "ready"] },
+        "requiresExactManifestMatch": { "const": true }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "not-deployed" } }
+      },
+      "then": {
+        "properties": {
+          "releaseEligible": { "const": false },
+          "releaseCommit": { "type": "null" },
+          "startBlock": { "type": "null" },
+          "startingNonce": { "type": "null" },
+          "sourceVerification": {
+            "properties": { "status": { "const": "not-submitted" } }
+          },
+          "lifecycleEvidence": {
+            "properties": { "status": { "const": "not-run" } }
+          },
+          "blockers": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "deployment-source-and-lifecycle-verified"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "releaseEligible": { "const": true },
+          "releaseCommit": { "$ref": "#/definitions/commit" },
+          "startBlock": { "type": "integer", "minimum": 1 },
+          "startingNonce": { "type": "integer", "minimum": 0 },
+          "sourceVerification": {
+            "properties": { "status": { "const": "verified" } }
+          },
+          "lifecycleEvidence": {
+            "properties": {
+              "status": { "const": "verified-current-release" }
+            }
+          },
+          "blockers": { "maxItems": 0 }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{40}$"
+    },
+    "nullableAddress": {
+      "anyOf": [{ "$ref": "#/definitions/address" }, { "type": "null" }]
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "nullableHash": {
+      "anyOf": [{ "$ref": "#/definitions/hash" }, { "type": "null" }]
+    },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "nullableCommit": {
+      "anyOf": [{ "$ref": "#/definitions/commit" }, { "type": "null" }]
+    },
+    "nullableInteger": {
+      "anyOf": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "null" }
+      ]
+    },
+    "candidatePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "observedAtBlock",
+        "deployer",
+        "startingNonce",
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "rangeSourceFactory",
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "not-fixed-refresh-before-signing",
+            "reviewed-at-signing",
+            "receipt-reconstructed"
+          ]
+        },
+        "observedAtBlock": {
+          "$ref": "#/definitions/nullableInteger"
+        },
+        "deployer": { "$ref": "#/definitions/nullableAddress" },
+        "startingNonce": { "$ref": "#/definitions/nullableInteger" },
+        "feeSplitVaultFactory": { "$ref": "#/definitions/address" },
+        "hookFactory": { "$ref": "#/definitions/address" },
+        "feeHook": { "$ref": "#/definitions/address" },
+        "rangeSourceFactory": { "$ref": "#/definitions/address" },
+        "growthVaultFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "launcher": { "$ref": "#/definitions/nullableAddress" },
+        "automation": { "$ref": "#/definitions/nullableAddress" },
+        "positionPlanner": { "$ref": "#/definitions/nullableAddress" }
+      }
+    },
+    "addressMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deployer",
+        "treasury",
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "rangeSourceFactory",
+        "positionForwarderFactory",
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "properties": {
+        "deployer": { "$ref": "#/definitions/nullableAddress" },
+        "treasury": { "$ref": "#/definitions/address" },
+        "feeSplitVaultFactory": { "$ref": "#/definitions/address" },
+        "hookFactory": { "$ref": "#/definitions/address" },
+        "feeHook": { "$ref": "#/definitions/address" },
+        "rangeSourceFactory": { "$ref": "#/definitions/address" },
+        "positionForwarderFactory": { "$ref": "#/definitions/address" },
+        "growthVaultFactory": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "launcher": { "$ref": "#/definitions/nullableAddress" },
+        "automation": { "$ref": "#/definitions/nullableAddress" },
+        "positionPlanner": { "$ref": "#/definitions/nullableAddress" }
+      }
+    },
+    "sharedAddressMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "treasury",
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "rangeSourceFactory",
+        "positionForwarderFactory"
+      ],
+      "properties": {
+        "treasury": { "$ref": "#/definitions/address" },
+        "feeSplitVaultFactory": { "$ref": "#/definitions/address" },
+        "hookFactory": { "$ref": "#/definitions/address" },
+        "feeHook": { "$ref": "#/definitions/address" },
+        "rangeSourceFactory": { "$ref": "#/definitions/address" },
+        "positionForwarderFactory": { "$ref": "#/definitions/address" }
+      }
+    },
+    "sharedRuntimeHashMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "rangeSourceFactory",
+        "positionForwarderFactory"
+      ],
+      "properties": {
+        "feeSplitVaultFactory": { "$ref": "#/definitions/hash" },
+        "hookFactory": { "$ref": "#/definitions/hash" },
+        "feeHook": { "$ref": "#/definitions/hash" },
+        "rangeSourceFactory": { "$ref": "#/definitions/hash" },
+        "positionForwarderFactory": { "$ref": "#/definitions/hash" }
+      }
+    },
+    "hashMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "properties": {
+        "growthVaultFactory": { "$ref": "#/definitions/nullableHash" },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "launcher": { "$ref": "#/definitions/nullableHash" },
+        "automation": { "$ref": "#/definitions/nullableHash" },
+        "positionPlanner": { "$ref": "#/definitions/nullableHash" }
+      }
+    },
+    "blockMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "properties": {
+        "growthVaultFactory": { "$ref": "#/definitions/nullableInteger" },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableInteger"
+        },
+        "launcher": { "$ref": "#/definitions/nullableInteger" },
+        "automation": { "$ref": "#/definitions/nullableInteger" },
+        "positionPlanner": { "$ref": "#/definitions/nullableInteger" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transactionHash",
+        "blockNumber",
+        "blockHash",
+        "receiptStatus"
+      ],
+      "properties": {
+        "transactionHash": { "$ref": "#/definitions/hash" },
+        "blockNumber": { "type": "integer", "minimum": 1 },
+        "blockHash": { "$ref": "#/definitions/hash" },
+        "receiptStatus": { "const": "success" },
+        "nonce": { "type": "integer", "minimum": 0 },
+        "valueWei": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "from": { "$ref": "#/definitions/address" },
+        "to": {
+          "anyOf": [
+            { "$ref": "#/definitions/address" },
+            { "type": "null" }
+          ]
+        },
+        "transactionInputHash": { "$ref": "#/definitions/hash" }
+      }
+    },
+    "nullableEvidence": {
+      "anyOf": [
+        { "$ref": "#/definitions/evidence" },
+        { "type": "null" }
+      ]
+    },
+    "evidenceMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "properties": {
+        "growthVaultFactory": { "$ref": "#/definitions/nullableEvidence" },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableEvidence"
+        },
+        "launcher": { "$ref": "#/definitions/nullableEvidence" },
+        "automation": { "$ref": "#/definitions/nullableEvidence" },
+        "positionPlanner": { "$ref": "#/definitions/nullableEvidence" }
+      }
+    },
+    "runtimeHashMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feeSplitVaultFactory",
+        "hookFactory",
+        "feeHook",
+        "rangeSourceFactory",
+        "positionForwarderFactory",
+        "growthVaultFactory",
+        "growthVaultImplementation",
+        "launcher",
+        "automation",
+        "positionPlanner"
+      ],
+      "properties": {
+        "feeSplitVaultFactory": { "$ref": "#/definitions/hash" },
+        "hookFactory": { "$ref": "#/definitions/hash" },
+        "feeHook": { "$ref": "#/definitions/hash" },
+        "rangeSourceFactory": { "$ref": "#/definitions/hash" },
+        "positionForwarderFactory": { "$ref": "#/definitions/hash" },
+        "growthVaultFactory": { "$ref": "#/definitions/nullableHash" },
+        "growthVaultImplementation": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "launcher": { "$ref": "#/definitions/nullableHash" },
+        "automation": { "$ref": "#/definitions/nullableHash" },
+        "positionPlanner": { "$ref": "#/definitions/nullableHash" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fqcn",
+        "creationBytes",
+        "creationCodeHash",
+        "runtimeBytes",
+        "runtimeTemplateCodeHash"
+      ],
+      "properties": {
+        "fqcn": { "type": "string", "minLength": 1 },
+        "creationBytes": { "type": "integer", "minimum": 1 },
+        "creationCodeHash": { "$ref": "#/definitions/hash" },
+        "runtimeBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24576
+        },
+        "runtimeTemplateCodeHash": { "$ref": "#/definitions/hash" }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "runtimeCodeHash", "sourceRef"],
+      "properties": {
+        "address": { "$ref": "#/definitions/address" },
+        "runtimeCodeHash": { "$ref": "#/definitions/hash" },
+        "sourceRef": { "type": "string", "minLength": 1 }
+      }
+    },
+    "fixedPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokenSupplyWei",
+        "tokenReserveTargetWei",
+        "growthTargetNativeWei",
+        "totalSwapFeeBps",
+        "creatorFeeBps",
+        "programmableFeeBps",
+        "minimumInitialBuyWei",
+        "initialTick",
+        "tickSpacing",
+        "lpFeePips",
+        "twapWindowSeconds",
+        "oracleRangeHalfWidthTicks",
+        "maximumSpotTwapDeviationTicks",
+        "maximumAbsoluteTickDelta",
+        "compoundCooldownSeconds",
+        "rollingExposureWindowSeconds",
+        "rollingExposureRecordCapacity",
+        "minimumKeeperProcessNativeWei",
+        "oracleObservationCardinalityTarget"
+      ],
+      "properties": {
+        "tokenSupplyWei": { "const": "1000000000000000000000000000" },
+        "tokenReserveTargetWei": {
+          "const": "150000000000000000000000000"
+        },
+        "growthTargetNativeWei": { "const": "50000000000000000" },
+        "totalSwapFeeBps": { "const": 100 },
+        "creatorFeeBps": { "const": 90 },
+        "programmableFeeBps": { "const": 10 },
+        "minimumInitialBuyWei": { "const": "600000000000000" },
+        "initialTick": { "const": 204200 },
+        "tickSpacing": { "const": 200 },
+        "lpFeePips": { "const": 0 },
+        "twapWindowSeconds": { "const": 1800 },
+        "oracleRangeHalfWidthTicks": { "const": 20000 },
+        "maximumSpotTwapDeviationTicks": { "const": 600 },
+        "maximumAbsoluteTickDelta": { "const": 400 },
+        "compoundCooldownSeconds": { "const": 300 },
+        "rollingExposureWindowSeconds": { "const": 1800 },
+        "rollingExposureRecordCapacity": { "const": 8 },
+        "minimumKeeperProcessNativeWei": {
+          "const": "2000000000000000"
+        },
+        "oracleObservationCardinalityTarget": { "const": 192 }
+      }
+    },
+    "providerRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "url"],
+      "properties": {
+        "status": { "enum": ["not-submitted", "exact-match"] },
+        "url": {
+          "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+        }
+      }
+    },
+    "sourceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "fqcn",
+        "constructorArguments",
+        "encodedConstructorArguments",
+        "etherscan",
+        "sourcify"
+      ],
+      "properties": {
+        "status": { "enum": ["not-submitted", "exact-match"] },
+        "fqcn": { "type": "string", "minLength": 1 },
+        "constructorArguments": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "string" },
+              { "type": "integer" },
+              { "type": "boolean" }
+            ]
+          }
+        },
+        "encodedConstructorArguments": {
+          "anyOf": [
+            { "type": "string", "pattern": "^0x([0-9a-fA-F]{2})*$" },
+            { "type": "null" }
+          ]
+        },
+        "etherscan": { "$ref": "#/definitions/providerRecord" },
+        "sourcify": { "$ref": "#/definitions/providerRecord" }
+      }
+    },
+    "lifecycleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "releaseEligible",
+        "requiredRelease",
+        "evidencePath",
+        "independentRpcCount",
+        "canaryToken",
+        "launchTransaction",
+        "oracleTransaction",
+        "feeProcessCompoundTransaction",
+        "keeperExecutor",
+        "keeperExecutorRuntimeCodeHash",
+        "keeperExecutorDeploymentTransaction",
+        "keeperExecutorDeploymentBlock",
+        "evidenceHash",
+        "noActionKeeperCycle",
+        "actionableKeeperCycle"
+      ],
+      "properties": {
+        "status": { "enum": ["not-run", "verified-current-release"] },
+        "releaseEligible": { "type": "boolean" },
+        "requiredRelease": { "const": "deep-full-range-v2" },
+        "evidencePath": {
+          "const": "contracts/deployments/evidence/deep-full-range-mainnet-canary-v2.json"
+        },
+        "independentRpcCount": { "type": "integer", "minimum": 0 },
+        "canaryToken": { "$ref": "#/definitions/nullableAddress" },
+        "launchTransaction": { "$ref": "#/definitions/nullableHash" },
+        "oracleTransaction": { "$ref": "#/definitions/nullableHash" },
+        "feeProcessCompoundTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperExecutor": { "$ref": "#/definitions/nullableAddress" },
+        "keeperExecutorRuntimeCodeHash": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperExecutorDeploymentTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperExecutorDeploymentBlock": {
+          "$ref": "#/definitions/nullableInteger"
+        },
+        "evidenceHash": { "$ref": "#/definitions/nullableHash" },
+        "noActionKeeperCycle": {
+          "$ref": "#/definitions/noActionKeeperCycle"
+        },
+        "actionableKeeperCycle": {
+          "$ref": "#/definitions/actionableKeeperCycle"
+        }
+      }
+    },
+    "noActionKeeperCycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "outcome",
+        "readyVaults",
+        "submittedTransaction",
+        "observedAtBlock",
+        "evidenceHash"
+      ],
+      "properties": {
+        "status": { "enum": ["not-run", "verified-no-transaction"] },
+        "outcome": { "enum": ["not-run", "idle"] },
+        "readyVaults": { "$ref": "#/definitions/nullableInteger" },
+        "submittedTransaction": { "type": "boolean" },
+        "observedAtBlock": { "$ref": "#/definitions/nullableInteger" },
+        "evidenceHash": { "$ref": "#/definitions/nullableHash" }
+      }
+    },
+    "actionableKeeperCycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "outcome",
+        "readyVaults",
+        "successfulCandidates",
+        "transactionHash",
+        "blockNumber",
+        "evidenceHash"
+      ],
+      "properties": {
+        "status": { "enum": ["not-run", "verified-compound-confirmed"] },
+        "outcome": { "enum": ["not-run", "confirmed-productive"] },
+        "readyVaults": { "$ref": "#/definitions/nullableInteger" },
+        "successfulCandidates": {
+          "$ref": "#/definitions/nullableInteger"
+        },
+        "transactionHash": { "$ref": "#/definitions/nullableHash" },
+        "blockNumber": { "$ref": "#/definitions/nullableInteger" },
+        "evidenceHash": { "$ref": "#/definitions/nullableHash" }
+      }
+    }
+  }
+}

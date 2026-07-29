@@ -1,0 +1,441 @@
+{
+  "schemaVersion": 3,
+  "model": "deep",
+  "internalContractRelease": "liquidity-growth-full-range-v3",
+  "releaseVersion": "deep-full-range-v3",
+  "releaseManifest": "contracts/deployments/mainnet-deep-full-range-v3.json",
+  "keeperReleaseVersion": "deep-keeper-v3-ops-v2",
+  "status": "not-deployed",
+  "releaseEligible": false,
+  "chainId": 1,
+  "releaseCommit": null,
+  "sourceCommitment": "0xc375eef30da88e2402c52f1c54641f44ed447e536055d46563d01cc85868337c",
+  "startBlock": null,
+  "startingNonce": null,
+  "transactionCount": 6,
+  "hookSalt": null,
+  "candidatePlan": {
+    "status": "not-fixed-refresh-before-signing",
+    "observedAtBlock": null,
+    "deployer": null,
+    "startingNonce": null,
+    "hookSalt": null,
+    "zapPlanner": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null,
+    "positionPlanner": null,
+    "automation": null,
+    "keeperExecutor": null
+  },
+  "addresses": {
+    "deployer": null,
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "lockedPositionFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
+    "zapPlanner": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null,
+    "positionPlanner": null,
+    "automation": null,
+    "keeperExecutor": null
+  },
+  "transactions": {
+    "zapPlanner": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null,
+    "positionPlanner": null,
+    "automation": null,
+    "keeperExecutor": null
+  },
+  "deploymentBlocks": {
+    "zapPlanner": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null,
+    "positionPlanner": null,
+    "automation": null,
+    "keeperExecutor": null
+  },
+  "deploymentEvidence": {
+    "zapPlanner": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null,
+    "positionPlanner": null,
+    "automation": null,
+    "keeperExecutor": null
+  },
+  "runtimeCodeHashes": {
+    "lockedPositionFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2",
+    "zapPlanner": null,
+    "growthVaultFactory": null,
+    "growthVaultImplementation": null,
+    "hookFactory": null,
+    "feeHook": null,
+    "launcher": null,
+    "positionPlanner": null,
+    "automation": null,
+    "keeperExecutor": null
+  },
+  "artifactRuntime": {
+    "zapPlanner": {
+      "fqcn": "src/LiquidityGrowthZapPlannerV3.sol:LiquidityGrowthZapPlannerV3",
+      "creationBytes": 14151,
+      "creationCodeHash": "0xd111c325bb4bd846158dd51f8e45140b5ad999ddf43fd088eb54ff1e88cd8a1c",
+      "runtimeBytes": 14123,
+      "runtimeTemplateCodeHash": "0x02ed075cf2c449fc737d76a0b6f71bf49dbaeecb10b1fc31874b3485fec80c62"
+    },
+    "growthVaultFactory": {
+      "fqcn": "src/LiquidityGrowthFullRangeVaultFactoryV3.sol:LiquidityGrowthFullRangeVaultFactoryV3",
+      "creationBytes": 22363,
+      "creationCodeHash": "0xea4a8bea1b05715e4bf471a8b12689d44437c038c025cf3479e756c84a703e6e",
+      "runtimeBytes": 2758,
+      "runtimeTemplateCodeHash": "0xabea341ab354d780d3b677035d7e97e44df98cfcb6484621d6ea7ff3a093c753"
+    },
+    "growthVaultImplementation": {
+      "fqcn": "src/LiquidityGrowthFullRangeVaultV3.sol:LiquidityGrowthFullRangeVaultV3",
+      "creationBytes": 19279,
+      "creationCodeHash": "0x7d221dbec9bc34ecdfd1234e7b7a9af71011b6c5e65549540b20ad81d38510cf",
+      "runtimeBytes": 19059,
+      "runtimeTemplateCodeHash": "0x534c8f21b6aa11272fc094242f542435934bc61b2657aa2d8507a0ee2267a6a2"
+    },
+    "hookFactory": {
+      "fqcn": "src/LiquidityGrowthFeeOracleHookFactoryV2.sol:LiquidityGrowthFeeOracleHookFactoryV2",
+      "creationBytes": 24175,
+      "creationCodeHash": "0x7c4e52210854db2707f5c1f08a93546c59ce34a490db8fb7aaf09e5dc0e72668",
+      "runtimeBytes": 24147,
+      "runtimeTemplateCodeHash": "0x2ed08636a8749c3f7a2970894b5125e6ade42a5d96a66533f8903c2fc1995d1a"
+    },
+    "feeHook": {
+      "fqcn": "src/LiquidityGrowthFeeOracleHookV2.sol:LiquidityGrowthFeeOracleHookV2",
+      "creationBytes": 22277,
+      "creationCodeHash": "0x12555fd007ff6ea7f484bf2fe1f6da8a870d0ada71cdfdc80b594124c909e848",
+      "runtimeBytes": 20320,
+      "runtimeTemplateCodeHash": "0x72689b78dcf371fc58de07d00231edc1570decc0e7aa4bd8f3d60547435ca467"
+    },
+    "launcher": {
+      "fqcn": "src/LiquidityGrowthFullRangeLaunchV3.sol:LiquidityGrowthFullRangeLaunchV3",
+      "creationBytes": 40314,
+      "creationCodeHash": "0xdb93a7694ef70db8652dd197b8d1bda6c42321204781e7ca19efa0a51b8db89c",
+      "runtimeBytes": 18531,
+      "runtimeTemplateCodeHash": "0x222524b68d34746c6dfe441122267fd2647f8a3ee45c3a97d31588ed0bd61304"
+    },
+    "positionPlanner": {
+      "fqcn": "src/LiquidityGrowthFullRangePositionPlannerV3.sol:LiquidityGrowthFullRangePositionPlannerV3",
+      "creationBytes": 8583,
+      "creationCodeHash": "0x97182d4f3b6c3183cbf3810988ec53e84bcc70fe4b2614df88a0d5b17004bd08",
+      "runtimeBytes": 8555,
+      "runtimeTemplateCodeHash": "0x7b7881831fd6bd7a753d517d16d9450faed13387acd7933a95bfbbdd01066f22"
+    },
+    "automation": {
+      "fqcn": "src/LiquidityGrowthFullRangeAutomationV3.sol:LiquidityGrowthFullRangeAutomationV3",
+      "creationBytes": 9338,
+      "creationCodeHash": "0x3b4f64d5e9f73b24febc7f816418245c611c7e6d3618e63c1d7b097ee851caea",
+      "runtimeBytes": 8989,
+      "runtimeTemplateCodeHash": "0xcab642a9b92439547eabe089d8fc4135cc452c04359e0d73355ffba80ff978fa"
+    },
+    "keeperExecutor": {
+      "fqcn": "src/DeepKeeperExecutorV2.sol:DeepKeeperExecutorV2",
+      "creationBytes": 4632,
+      "creationCodeHash": "0x4fca1bff170f34e7d22d40a8d3b4ebc322945f58179d2593de64501be25ab79a",
+      "runtimeBytes": 3673,
+      "runtimeTemplateCodeHash": "0x34712cc0c90354facbd0ff92d0ec86502eb29c64e2bfd4e6dce398024361b57f"
+    }
+  },
+  "officialDependencies": {
+    "poolManager": {
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "runtimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+      "sourceRef": "v4-core@1.0.0"
+    },
+    "positionManager": {
+      "address": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+      "runtimeCodeHash": "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b",
+      "sourceRef": "v4-periphery@2656054"
+    },
+    "stateView": {
+      "address": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+      "runtimeCodeHash": "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878",
+      "sourceRef": "v4-periphery@2656054"
+    },
+    "v4Quoter": {
+      "address": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+      "runtimeCodeHash": "0x06de58fa119c5deaa7a667fb92d3894e25d9160e62fb82c8d86d43b47eefe441",
+      "sourceRef": "v4-periphery@2656054"
+    },
+    "uerc20Factory": {
+      "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
+      "runtimeCodeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb",
+      "sourceRef": "uerc20-factory@v2.0.0",
+      "deploymentSourceCommit": "de5bacd",
+      "reviewedSourcePin": "6f18f1c"
+    },
+    "permit2": {
+      "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "runtimeCodeHash": "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131",
+      "sourceRef": "permit2"
+    },
+    "universalRouter": {
+      "address": "0xd92A36B0000531EF3063dEd4De20A0783308446C",
+      "runtimeCodeHash": "0x41ccd905c8e4de29ce9536ff49233b79e3085a0987d490664e703ee1e7b1dc49",
+      "sourceRef": "universal-router@d2d9c4a"
+    }
+  },
+  "compiler": {
+    "solcVersion": "0.8.26",
+    "evmVersion": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 1000,
+    "bytecodeHash": "none",
+    "cborMetadata": false
+  },
+  "fixedPolicy": {
+    "tokenSupplyWei": "1000000000000000000000000000",
+    "totalSwapFeeBps": 100,
+    "growthFeeBps": 90,
+    "programmableFeeBps": 10,
+    "transferTaxBps": 0,
+    "lpFeePips": 0,
+    "tickSpacing": 200,
+    "initialTick": 204200,
+    "fullRangeTickLower": -887200,
+    "fullRangeTickUpper": 887200,
+    "minimumInitialBuyWei": "600000000000000",
+    "minimumCompoundNativeWei": "2000000000000000",
+    "maximumCompoundNativeWei": "250000000000000000",
+    "compoundCooldownSeconds": 300,
+    "rollingExposureWindowSeconds": 1800,
+    "rollingExposureRecordCapacity": 8,
+    "trustedDepthCycleCapBps": 25,
+    "maximumOptimizerIterations": 64,
+    "twapWindowSeconds": 1800,
+    "shortTwapWindowSeconds": 300,
+    "oracleObservationCardinalityTarget": 192,
+    "maximumObservationTickDelta": 400,
+    "maximumRawTruncatedTwapDeltaTicks": 25,
+    "maximumShortLongTwapDeviationTicks": 50,
+    "maximumPreSpotTwapDeviationTicks": 100,
+    "maximumInternalSwapImpactTicks": 25,
+    "maximumPostSpotTwapDeviationTicks": 125
+  },
+  "keeperPolicy": {
+    "status": "review-required",
+    "enabled": false,
+    "transactionSubmission": false,
+    "keeperExecutor": null,
+    "keeperExecutorRuntimeCodeHash": null,
+    "automation": null,
+    "automationRuntimeCodeHash": null,
+    "signerAddress": null,
+    "signingBackend": "not-configured",
+    "executionPath": "/api/ops/deep-v3-keeper-v2",
+    "controlPath": "ops/deep-keeper-v3/control-v2.json",
+    "legacyControlPath": "ops/deep-keeper-v3/control-v1.json",
+    "controlSchemaVersion": 2,
+    "signerLaneCount": 1,
+    "confirmations": 12,
+    "independentReadRpcCount": 2,
+    "intervalMilliseconds": 300000,
+    "scanPageSize": 32,
+    "maxScanPages": 2,
+    "maxCandidatesPerBatch": 4,
+    "maxNewSubmissionsPerTick": 1,
+    "maxActivePendingBatches": 8,
+    "maxOperatorIncidents": 8,
+    "maxHistoryEntries": 64,
+    "maximumTransactionGas": "18000000",
+    "maximumTotalGasPerTick": "18000000",
+    "maximumCompoundNativeWei": "250000000000000000",
+    "minGrowthToMaxGasRatioBps": null,
+    "maxFeePerGasWei": null,
+    "maxTotalDebitWeiPerTick": null,
+    "maxTotalDebitWeiPerDay": null,
+    "signerBalanceFloorWei": null,
+    "measuredCompoundGas": "2884090",
+    "reviewedPerVaultGasCeiling": "4428255",
+    "gasMixtures": [
+      {
+        "compoundCandidates": 0,
+        "oracleCandidates": 4,
+        "theoreticalGas": "7870636"
+      },
+      {
+        "compoundCandidates": 1,
+        "oracleCandidates": 3,
+        "theoreticalGas": "10308732"
+      },
+      {
+        "compoundCandidates": 2,
+        "oracleCandidates": 2,
+        "theoreticalGas": "12746828"
+      },
+      {
+        "compoundCandidates": 3,
+        "oracleCandidates": 1,
+        "theoreticalGas": "15184924"
+      },
+      {
+        "compoundCandidates": 4,
+        "oracleCandidates": 0,
+        "theoreticalGas": "17623020"
+      }
+    ],
+    "opsSourceCommitment": null,
+    "deploymentCommit": null,
+    "reviewedBindingPath": "ops/deep-keeper-v3/reviewed-ops-v2-binding.json"
+  },
+  "storageSafety": {
+    "status": "not-run",
+    "proxyAdminBeaconSlotsEmpty": false,
+    "contracts": {
+      "zapPlanner": null,
+      "growthVaultFactory": null,
+      "growthVaultImplementation": null,
+      "hookFactory": null,
+      "feeHook": null,
+      "launcher": null,
+      "positionPlanner": null,
+      "automation": null,
+      "keeperExecutor": null
+    }
+  },
+  "sourceVerification": {
+    "status": "not-submitted",
+    "contracts": {
+      "zapPlanner": {
+        "status": "not-submitted",
+        "fqcn": "src/LiquidityGrowthZapPlannerV3.sol:LiquidityGrowthZapPlannerV3",
+        "constructorArguments": [],
+        "encodedConstructorArguments": null,
+        "etherscan": { "status": "not-submitted", "url": null },
+        "sourcify": { "status": "not-submitted", "url": null }
+      },
+      "growthVaultFactory": {
+        "status": "not-submitted",
+        "fqcn": "src/LiquidityGrowthFullRangeVaultFactoryV3.sol:LiquidityGrowthFullRangeVaultFactoryV3",
+        "constructorArguments": [],
+        "encodedConstructorArguments": null,
+        "etherscan": { "status": "not-submitted", "url": null },
+        "sourcify": { "status": "not-submitted", "url": null }
+      },
+      "growthVaultImplementation": {
+        "status": "not-submitted",
+        "fqcn": "src/LiquidityGrowthFullRangeVaultV3.sol:LiquidityGrowthFullRangeVaultV3",
+        "constructorArguments": [],
+        "encodedConstructorArguments": null,
+        "etherscan": { "status": "not-submitted", "url": null },
+        "sourcify": { "status": "not-submitted", "url": null }
+      },
+      "hookFactory": {
+        "status": "not-submitted",
+        "fqcn": "src/LiquidityGrowthFeeOracleHookFactoryV2.sol:LiquidityGrowthFeeOracleHookFactoryV2",
+        "constructorArguments": [],
+        "encodedConstructorArguments": null,
+        "etherscan": { "status": "not-submitted", "url": null },
+        "sourcify": { "status": "not-submitted", "url": null }
+      },
+      "feeHook": {
+        "status": "not-submitted",
+        "fqcn": "src/LiquidityGrowthFeeOracleHookV2.sol:LiquidityGrowthFeeOracleHookV2",
+        "constructorArguments": [],
+        "encodedConstructorArguments": null,
+        "etherscan": { "status": "not-submitted", "url": null },
+        "sourcify": { "status": "not-submitted", "url": null }
+      },
+      "launcher": {
+        "status": "not-submitted",
+        "fqcn": "src/LiquidityGrowthFullRangeLaunchV3.sol:LiquidityGrowthFullRangeLaunchV3",
+        "constructorArguments": [],
+        "encodedConstructorArguments": null,
+        "etherscan": { "status": "not-submitted", "url": null },
+        "sourcify": { "status": "not-submitted", "url": null }
+      },
+      "positionPlanner": {
+        "status": "not-submitted",
+        "fqcn": "src/LiquidityGrowthFullRangePositionPlannerV3.sol:LiquidityGrowthFullRangePositionPlannerV3",
+        "constructorArguments": [],
+        "encodedConstructorArguments": null,
+        "etherscan": { "status": "not-submitted", "url": null },
+        "sourcify": { "status": "not-submitted", "url": null }
+      },
+      "automation": {
+        "status": "not-submitted",
+        "fqcn": "src/LiquidityGrowthFullRangeAutomationV3.sol:LiquidityGrowthFullRangeAutomationV3",
+        "constructorArguments": [],
+        "encodedConstructorArguments": null,
+        "etherscan": { "status": "not-submitted", "url": null },
+        "sourcify": { "status": "not-submitted", "url": null }
+      },
+      "keeperExecutor": {
+        "status": "not-submitted",
+        "fqcn": "src/DeepKeeperExecutorV2.sol:DeepKeeperExecutorV2",
+        "constructorArguments": [],
+        "encodedConstructorArguments": null,
+        "etherscan": { "status": "not-submitted", "url": null },
+        "sourcify": { "status": "not-submitted", "url": null }
+      }
+    }
+  },
+  "lifecycleEvidence": {
+    "status": "not-run",
+    "releaseEligible": false,
+    "requiredRelease": "deep-full-range-v3",
+    "evidencePath": "contracts/deployments/evidence/deep-full-range-mainnet-canary-v3.json",
+    "independentRpcCount": 0,
+    "canaryToken": null,
+    "canaryVault": null,
+    "poolId": null,
+    "launchTransaction": null,
+    "oracleTransaction": null,
+    "compoundTransaction": null,
+    "evidenceHash": null,
+    "noActionKeeperCycle": {
+      "status": "not-run",
+      "outcome": "not-run",
+      "readyVaults": null,
+      "submittedTransaction": false,
+      "observedAtBlock": null,
+      "successfulCandidates": null,
+      "transactionHash": null,
+      "blockNumber": null,
+      "evidenceHash": null
+    },
+    "actionableKeeperCycle": {
+      "status": "not-run",
+      "outcome": "not-run",
+      "readyVaults": null,
+      "submittedTransaction": false,
+      "observedAtBlock": null,
+      "successfulCandidates": null,
+      "transactionHash": null,
+      "blockNumber": null,
+      "evidenceHash": null
+    }
+  },
+  "activation": {
+    "appStatus": "blocked",
+    "keeperStatus": "blocked",
+    "requiresExactManifestMatch": true,
+    "productionTransactionSubmission": false
+  },
+  "blockers": [
+    "Deep V3 infrastructure has not been deployed.",
+    "Two independent RPC receipt and runtime proofs are missing.",
+    "Exact Etherscan source verification and Sourcify v2 match records are missing.",
+    "Current-release canary launch, oracle and atomic compound evidence is missing.",
+    "EIP-1967 storage-slot evidence is missing.",
+    "The reviewed keeper binding is not present and transaction submission remains disabled."
+  ]
+}

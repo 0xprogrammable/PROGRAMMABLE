@@ -233,6 +233,20 @@ function formatMarketCap(token: LauncherToken) {
     }
   }
 
+  if (
+    token.marketCapQuote &&
+    token.quoteAssetSymbol &&
+    /^\d+(?:\.\d+)?$/.test(token.marketCapQuote)
+  ) {
+    const value = Number(token.marketCapQuote);
+    if (Number.isFinite(value) && value >= 0) {
+      return `${new Intl.NumberFormat("en-US", {
+        notation: value >= 1_000 ? "compact" : "standard",
+        maximumFractionDigits: value >= 100 ? 1 : 4,
+      }).format(value)} ${token.quoteAssetSymbol}`;
+    }
+  }
+
   if (!token.marketCapEth) return undefined;
   const value = Number(token.marketCapEth);
   if (!Number.isFinite(value) || value < 0) return undefined;
@@ -584,7 +598,7 @@ export function ExploreView() {
                       : `${token.name} token image`
                   }
                   fill
-                  sizes="168px"
+                  sizes="(max-width: 360px) 260px, (max-width: 800px) 46vw, 214px"
                   unoptimized={!token.imageUrl.startsWith("/")}
                 />
               </span>
@@ -686,7 +700,7 @@ export function ExploreView() {
         <p>
           <ScrambleText
             text="Launch tokens that work the way you imagine"
-            duration={1650}
+            duration={1100}
           />
         </p>
         <button

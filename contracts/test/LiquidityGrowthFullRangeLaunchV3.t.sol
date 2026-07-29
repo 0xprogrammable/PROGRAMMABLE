@@ -101,6 +101,37 @@ contract LiquidityGrowthFullRangeLaunchV3Test is Deployers {
         _assertOracleAndAutomation(result, parameters.initialBuySqrtPriceLimitX96);
     }
 
+    function test_anyFundedWalletCanLaunchWithoutAllowlistOrOperatorApproval() public {
+        address firstWallet = makeAddr("deepV3FirstPublicLauncher");
+        address secondWallet = makeAddr("deepV3SecondPublicLauncher");
+        vm.deal(firstWallet, 1 ether);
+        vm.deal(secondWallet, 1 ether);
+
+        LiquidityGrowthFullRangeLaunchV3.LaunchParameters memory firstParameters =
+            _parameters(keccak256("deep-v3-first-public-launch"));
+        firstParameters.name = "First Deep";
+        firstParameters.symbol = "DEEPA";
+        LiquidityGrowthFullRangeLaunchV3.LaunchParameters memory secondParameters =
+            _parameters(keccak256("deep-v3-second-public-launch"));
+        secondParameters.name = "Second Deep";
+        secondParameters.symbol = "DEEPB";
+
+        vm.prank(firstWallet);
+        LiquidityGrowthFullRangeLaunchV3.LaunchResult memory firstResult =
+            launcher.launch{ value: INITIAL_BUY }(firstParameters);
+        vm.prank(secondWallet);
+        LiquidityGrowthFullRangeLaunchV3.LaunchResult memory secondResult =
+            launcher.launch{ value: INITIAL_BUY }(secondParameters);
+
+        assertNotEq(firstResult.token, secondResult.token);
+        assertEq(IERC20(firstResult.token).balanceOf(firstWallet), firstResult.initialBuyTokenAmount);
+        assertEq(IERC20(secondResult.token).balanceOf(secondWallet), secondResult.initialBuyTokenAmount);
+        assertEq(automation.registeredVaultCount(), 2);
+        assertEq(automation.registeredVaultAt(0), firstResult.growthVault);
+        assertEq(automation.registeredVaultAt(1), secondResult.growthVault);
+        assertEq(address(launcher).balance, 0);
+    }
+
     function test_minimumOutputFailureRollsBackEveryDeploymentAndFee() public {
         LiquidityGrowthFullRangeLaunchV3.LaunchParameters memory parameters =
             _parameters(keccak256("deep-v3-impossible-output"));

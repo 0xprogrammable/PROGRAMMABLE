@@ -31,9 +31,24 @@ import {
   validateClassicV3LaunchDraft,
 } from "@/lib/classic-v3";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
-import { deepPresetDisclosure, validateDeepLaunchDraft } from "@/lib/deep-v1";
-import { validatePreparedDeepLaunchTransaction } from "@/lib/deep-launch-validation";
-import appDeployments from "@/contracts/config/app-deployments.v1.json";
+import {
+  deepV3PresetDisclosure,
+  validateDeepV3LaunchDraft,
+} from "@/lib/deep-v3";
+import { validatePreparedDeepV3LaunchTransaction } from "@/lib/deep-v3-launch-validation";
+import { isConfiguredDeepV3ReleaseReady } from "@/lib/deep-v3-release";
+import {
+  validatePreparedStockPairedLaunchTransaction,
+  validatePreparedStockQuoteApprovalTransaction,
+} from "@/lib/stock-paired-launch-validation";
+import {
+  getStockQuoteAsset,
+  STOCK_QUOTE_ASSETS,
+  STOCK_PAIRED_MIN_INITIAL_BUY,
+  STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
+  validateStockPairedLaunchDraft,
+} from "@/lib/stock-paired";
+import { isConfiguredStockPairedReleaseReady } from "@/lib/stock-paired-release";
 import {
   MAX_METADATA_URL_BYTES,
   MAX_SOCIAL_URL_BYTES,
@@ -54,6 +69,7 @@ import {
   createClassicV3Draft,
   createDeepDraft,
   createEmptyDraft,
+  createStockPairedDraft,
   maximumClassicDevBuyWei,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
@@ -62,13 +78,9 @@ import {
   type LaunchDraft,
   type LaunchModel,
 } from "@/lib/launch";
-import {
-  isFutureLaunchModelManifestEligible,
-  resolveImplementedLaunchModel,
-  type LaunchModelReleaseManifest,
-} from "@/lib/launch-model-gating";
+import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
 import { prepareTokenImage } from "@/lib/token-image";
-import { formatEther } from "viem";
+import { formatEther, formatUnits, type Hex } from "viem";
 
 type TokenImageState = {
   status: "idle" | "preparing" | "waiting" | "uploading" | "ready" | "error";
@@ -157,6 +169,81 @@ export function findClassicV3IndexedLaunch(
   };
 }
 
+export function findDeepV3IndexedLaunch(
+  value: unknown,
+  transactionHash: string,
+): IndexedLaunch | null {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    !/^0x[a-fA-F0-9]{64}$/.test(transactionHash)
+  ) {
+    return null;
+  }
+  const launch = (value as { launch?: unknown }).launch;
+  if (!launch || typeof launch !== "object" || Array.isArray(launch)) {
+    return null;
+  }
+  const candidate = launch as Record<string, unknown>;
+  const provenance = candidate.deepV3Provenance;
+  if (
+    typeof candidate.tokenAddress !== "string" ||
+    !/^0x[a-fA-F0-9]{40}$/.test(candidate.tokenAddress) ||
+    typeof candidate.name !== "string" ||
+    typeof candidate.symbol !== "string" ||
+    candidate.deepReleaseVersion !== "deep-full-range-v3" ||
+    !provenance ||
+    typeof provenance !== "object" ||
+    Array.isArray(provenance)
+  ) {
+    return null;
+  }
+  const proof = provenance as Record<string, unknown>;
+  if (
+    proof.deepReleaseVersion !== "deep-full-range-v3" ||
+    proof.launchModel !== "deep" ||
+    typeof proof.tokenAddress !== "string" ||
+    proof.tokenAddress.toLowerCase() !== candidate.tokenAddress.toLowerCase() ||
+    typeof proof.transactionHash !== "string" ||
+    proof.transactionHash.toLowerCase() !== transactionHash.toLowerCase() ||
+    typeof proof.launcher !== "string" ||
+    !/^0x[a-fA-F0-9]{40}$/.test(proof.launcher) ||
+    typeof proof.creator !== "string" ||
+    !/^0x[a-fA-F0-9]{40}$/.test(proof.creator) ||
+    typeof proof.vaultAddress !== "string" ||
+    !/^0x[a-fA-F0-9]{40}$/.test(proof.vaultAddress) ||
+    typeof proof.hookAddress !== "string" ||
+    !/^0x[a-fA-F0-9]{40}$/.test(proof.hookAddress) ||
+    typeof proof.positionRecipient !== "string" ||
+    !/^0x[a-fA-F0-9]{40}$/.test(proof.positionRecipient) ||
+    typeof proof.positionTokenId !== "string" ||
+    !/^(?:0|[1-9]\d*)$/.test(proof.positionTokenId) ||
+    typeof proof.poolId !== "string" ||
+    !/^0x[a-fA-F0-9]{64}$/.test(proof.poolId) ||
+    typeof proof.launchHash !== "string" ||
+    !/^0x[a-fA-F0-9]{64}$/.test(proof.launchHash) ||
+    typeof proof.vaultConfigurationHash !== "string" ||
+    !/^0x[a-fA-F0-9]{64}$/.test(proof.vaultConfigurationHash) ||
+    typeof proof.blockNumber !== "string" ||
+    !/^\d+$/.test(proof.blockNumber) ||
+    typeof proof.blockHash !== "string" ||
+    !/^0x[a-fA-F0-9]{64}$/.test(proof.blockHash) ||
+    !Number.isSafeInteger(proof.transactionIndex) ||
+    (proof.transactionIndex as number) < 0 ||
+    !Number.isSafeInteger(proof.logIndex) ||
+    (proof.logIndex as number) < 0
+  ) {
+    return null;
+  }
+  return {
+    address: candidate.tokenAddress as `0x${string}`,
+    href: `/token/${candidate.tokenAddress}`,
+    name: candidate.name,
+    symbol: candidate.symbol,
+  };
+}
+
 function updateDraft(
   setDraft: Dispatch<SetStateAction<LaunchDraft>>,
   patch: Partial<LaunchDraft>,
@@ -196,10 +283,39 @@ function normalizeClassicV3Draft(initialDraft: LaunchDraft): LaunchDraft {
   };
 }
 
-function normalizeDeepDraft(initialDraft: LaunchDraft): LaunchDraft {
+export function normalizeDeepDraft(initialDraft: LaunchDraft): LaunchDraft {
   return {
     ...normalizeClassicV3Draft(initialDraft),
     launchModel: "deep",
+    totalSwapFeePercent: "1",
+    buySwapFeePercent: "1",
+    sellSwapFeePercent: "1",
+    rewardDestinationMode: "launcher",
+    rewardExternalAddress: "",
+    rewardSplits: [],
+  };
+}
+
+export function normalizeStockPairedDraft(
+  initialDraft: LaunchDraft,
+): LaunchDraft {
+  const fallbackAsset = STOCK_QUOTE_ASSETS[0];
+  const selectedAsset =
+    getStockQuoteAsset(initialDraft.stockQuoteAsset) ?? fallbackAsset;
+  return {
+    ...normalizeClassicV3Draft(initialDraft),
+    launchModel: "stock-paired",
+    initialBuyEth: "",
+    stockQuoteAsset: selectedAsset.address,
+    initialBuyQuoteAmount:
+      initialDraft.initialBuyQuoteAmount?.trim() ||
+      STOCK_PAIRED_MIN_INITIAL_BUY,
+    totalSwapFeePercent: "1",
+    buySwapFeePercent: "1",
+    sellSwapFeePercent: "1",
+    rewardDestinationMode: "launcher",
+    rewardExternalAddress: "",
+    rewardSplits: [],
   };
 }
 
@@ -207,15 +323,14 @@ const launchEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
     ? "rehearsal"
     : "production";
-const launchDeployment = appDeployments[launchEnvironment];
-const launchChainId = launchEnvironment === "rehearsal" ? 11_155_111 : 1;
 const classicV3LaunchAvailable =
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
-const deepLaunchAvailable = isFutureLaunchModelManifestEligible(
-  "deep",
-  launchDeployment as unknown as LaunchModelReleaseManifest,
-  launchChainId,
-);
+const deepLaunchAvailable =
+  isConfiguredDeepV3ReleaseReady(launchEnvironment);
+const stockPairedLaunchAvailable =
+  (process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_STOCK_PAIRED_UI_PREVIEW === "true") ||
+  isConfiguredStockPairedReleaseReady(launchEnvironment);
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
@@ -229,12 +344,46 @@ function createLaunchSalt() {
   ).join("")}`;
 }
 
+async function waitForLaunchTransaction(
+  transactionHash: Hex,
+  chainId: number,
+): Promise<"confirmed" | "reverted"> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const response = await fetch(
+      `/api/transaction-status?hash=${encodeURIComponent(
+        transactionHash,
+      )}&chainId=${chainId}`,
+      {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      },
+    );
+    const body = (await response.json()) as {
+      status?: "pending" | "confirmed" | "reverted";
+    };
+    if (!response.ok) {
+      throw new Error("The approval status could not be checked");
+    }
+    if (body.status === "confirmed" || body.status === "reverted") {
+      return body.status;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+  }
+  throw new Error("The approval is still pending");
+}
+
 export function LaunchBuilder() {
   const [selectedModel, setSelectedModel] = useState<LaunchModel | null>(null);
 
   function chooseModel(candidate: LaunchModel) {
     const model = resolveImplementedLaunchModel(candidate);
-    if (!model || (model === "deep" && !deepLaunchAvailable)) return;
+    if (
+      !model ||
+      (model === "deep" && !deepLaunchAvailable) ||
+      (model === "stock-paired" && !stockPairedLaunchAvailable)
+    ) {
+      return;
+    }
 
     window.scrollTo({ left: 0, top: 0, behavior: "auto" });
     setSelectedModel(model);
@@ -255,6 +404,8 @@ export function LaunchBuilder() {
       initialDraft={
         selectedModel === "deep"
           ? createDeepDraft()
+          : selectedModel === "stock-paired"
+            ? normalizeStockPairedDraft(createStockPairedDraft())
           : selectedModel === "classic-v3"
             ? createClassicV3Draft()
             : normalizeStandardDraft(createEmptyDraft())
@@ -278,7 +429,9 @@ export function LaunchModelPicker({
       <div className="launch-model-grid">
         <button
           className="launch-model-card"
+          data-launch-model-option="classic"
           type="button"
+          aria-describedby="launch-model-classic-description launch-model-classic-details"
           onClick={() =>
             onChoose(classicV3LaunchAvailable ? "classic-v3" : "classic")
           }
@@ -301,11 +454,17 @@ export function LaunchModelPicker({
             <span className="launch-model-card-heading">
               <strong>Classic</strong>
             </span>
-            <span className="launch-model-description">
+            <span
+              className="launch-model-description"
+              id="launch-model-classic-description"
+            >
               A straightforward Uniswap v4 token with swap fees fixed at launch.
               Creator rewards accrue in ETH.
             </span>
-            <span className="launch-model-details">
+            <span
+              className="launch-model-details"
+              id="launch-model-classic-details"
+            >
               <span>Uniswap v4</span>
               <span>No liquidity deposit</span>
               <span>
@@ -321,13 +480,66 @@ export function LaunchModelPicker({
           </span>
         </button>
 
+        {stockPairedLaunchAvailable ? (
+          <button
+            className="launch-model-card launch-model-card-stock"
+            data-launch-model-option="stock-paired"
+            type="button"
+            aria-describedby="launch-model-stock-description launch-model-stock-details"
+            onClick={() => onChoose("stock-paired")}
+          >
+            <span
+              className="launch-model-art launch-model-art-stock"
+              aria-hidden="true"
+            >
+              <Image
+                src="/brand/programmable-stock-paired-launch-art-v1.webp"
+                alt=""
+                fill
+                sizes="(max-width: 800px) 100vw, 420px"
+                unoptimized
+              />
+            </span>
+
+            <span className="launch-model-card-body">
+              <span className="launch-model-card-heading">
+                <strong>Stock-Paired</strong>
+              </span>
+              <span
+                className="launch-model-description"
+                id="launch-model-stock-description"
+              >
+                Launch a token against one of seven reviewed Ondo Stocks quote
+                assets.
+              </span>
+              <span
+                className="launch-model-details"
+                id="launch-model-stock-details"
+              >
+                <span>Seven quote assets</span>
+                <span>1.00% swap fee</span>
+                <span>Initial buy and rewards in the quote asset</span>
+              </span>
+              <span className="launch-model-action">
+                Launch
+                <ArrowRight aria-hidden="true" size={16} />
+              </span>
+            </span>
+          </button>
+        ) : null}
+
         <button
-          className="launch-model-card"
+          className="launch-model-card launch-model-card-deep"
+          data-launch-model-option="deep"
           type="button"
           disabled={!deepLaunchAvailable}
+          aria-describedby="launch-model-deep-description launch-model-deep-details"
           onClick={() => onChoose("deep")}
         >
-          <span className="launch-model-art" aria-hidden="true">
+          <span
+            className="launch-model-art launch-model-art-deep"
+            aria-hidden="true"
+          >
             <Image
               src="/brand/programmable-deep-liquidity-teaser-v1-1774x887.webp"
               alt=""
@@ -341,21 +553,29 @@ export function LaunchModelPicker({
             <span className="launch-model-card-heading">
               <strong>Deep</strong>
               {!deepLaunchAvailable ? (
-                <small data-status="pending">Final verification</small>
+                <small data-status="pending">Verification pending</small>
               ) : null}
             </span>
-            <span className="launch-model-description">
-              Creator fees deepen the original permanently locked pool before
-              creator rewards begin.
+            <span
+              className="launch-model-description"
+              id="launch-model-deep-description"
+            >
+              Trading fees buy the token and add both assets to the original
+              permanently locked v4 pool.
             </span>
-            <span className="launch-model-details">
-              <span>0.05 ETH growth target</span>
-              <span>850M locked launch allocation</span>
-              <span>150M locked reserve</span>
+            <span
+              className="launch-model-details"
+              id="launch-model-deep-details"
+            >
+              <span>Original v4 pool</span>
+              <span>0.90% pool growth</span>
+              <span>Five-minute checks</span>
             </span>
             <span className="launch-model-action">
-              {deepLaunchAvailable ? "Launch" : "Pending"}
-              <ArrowRight aria-hidden="true" size={16} />
+              {deepLaunchAvailable ? "Launch" : "Unavailable"}
+              {deepLaunchAvailable ? (
+                <ArrowRight aria-hidden="true" size={16} />
+              ) : null}
             </span>
           </span>
         </button>
@@ -373,7 +593,13 @@ function LaunchBuilderForm({
   initialDraft: LaunchDraft;
   onBackToModels: () => void;
 }) {
-  const { wallet, openWallet, readNativeBalance, sendTransaction } =
+  const {
+    wallet,
+    openWallet,
+    readNativeBalance,
+    readTradeBalances,
+    sendTransaction,
+  } =
     useWallet();
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
   const [formError, setFormError] = useState("");
@@ -391,7 +617,10 @@ function LaunchBuilderForm({
   const currentLaunchContext = useRef({ draft, wallet });
   const draftVersion = useRef(0);
   const launching = launchPhase !== "idle";
-  const usesExtendedLayout = model === "classic-v3" || model === "deep";
+  const usesExtendedLayout =
+    model === "classic-v3" ||
+    model === "deep" ||
+    model === "stock-paired";
 
   useEffect(() => {
     currentLaunchContext.current = { draft, wallet };
@@ -413,18 +642,24 @@ function LaunchBuilderForm({
     const pollForLaunch = async () => {
       try {
         const endpoint =
-          model === "classic-v3" || model === "deep"
+          model === "deep"
+            ? `/api/explore/launch/deep-v3?account=${encodeURIComponent(
+                submittedAccount,
+              )}&transaction=${encodeURIComponent(
+                transactionHash,
+              )}`
+            : model === "stock-paired"
+              ? `/api/explore/launch/stock-paired?account=${encodeURIComponent(
+                  submittedAccount,
+                )}&transaction=${encodeURIComponent(transactionHash)}`
+            : model === "classic-v3"
             ? `/api/profile/classic-v3?account=${encodeURIComponent(
                 submittedAccount,
               )}&launch=${encodeURIComponent(transactionHash)}`
             : `/api/explore/profile?account=${encodeURIComponent(
                 submittedAccount,
               )}&launch=${encodeURIComponent(transactionHash)}&attempt=${attempt}`;
-        const resolvedEndpoint =
-          model === "deep"
-            ? endpoint.replace("/api/profile/classic-v3", "/api/profile/deep")
-            : endpoint;
-        const response = await fetch(resolvedEndpoint, {
+        const response = await fetch(endpoint, {
           cache: "no-store",
           headers: { Accept: "application/json" },
           signal: controller.signal,
@@ -432,8 +667,12 @@ function LaunchBuilderForm({
         const body: unknown = await response.json();
         if (response.ok) {
           const launch =
-            model === "classic-v3" || model === "deep"
-              ? findClassicV3IndexedLaunch(body)
+            model === "deep"
+              ? findDeepV3IndexedLaunch(body, transactionHash)
+              : model === "stock-paired"
+                ? findClassicV3IndexedLaunch(body)
+              : model === "classic-v3"
+                ? findClassicV3IndexedLaunch(body)
               : findIndexedLaunch(body, transactionHash);
           if (launch) {
             setIndexedLaunch(launch);
@@ -472,8 +711,11 @@ function LaunchBuilderForm({
     }
     try {
       if (model === "deep") {
-        if (!wallet) return "Connect a wallet to verify the reward setup";
-        validateDeepLaunchDraft(draft, wallet.account);
+        if (!wallet) return "Connect a wallet to verify the launch";
+        validateDeepV3LaunchDraft(draft, wallet.account);
+      } else if (model === "stock-paired") {
+        if (!wallet) return "Connect a wallet to verify the launch";
+        validateStockPairedLaunchDraft(draft, wallet.account);
       } else if (model === "classic-v3") {
         if (!wallet) return "Connect a wallet to verify the reward setup";
         validateClassicV3LaunchDraft(draft, wallet.account);
@@ -563,9 +805,11 @@ function LaunchBuilderForm({
       let checkedDraft =
         model === "deep"
           ? normalizeDeepDraft(draft)
-          : model === "classic-v3"
-            ? normalizeClassicV3Draft(draft)
-            : normalizeStandardDraft(draft);
+          : model === "stock-paired"
+            ? normalizeStockPairedDraft(draft)
+            : model === "classic-v3"
+              ? normalizeClassicV3Draft(draft)
+              : normalizeStandardDraft(draft);
       if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
         checkedDraft = {
           ...checkedDraft,
@@ -574,7 +818,38 @@ function LaunchBuilderForm({
         };
       }
 
+      if (model === "stock-paired") {
+        const configuration = validateStockPairedLaunchDraft(
+          checkedDraft,
+          wallet.account,
+        );
+        const balances = await readTradeBalances(
+          configuration.quoteAsset.address,
+        );
+        if (balances.tokenBalanceRaw < STOCK_PAIRED_MIN_INITIAL_BUY_RAW) {
+          throw new Error(
+            `This wallet needs at least ${STOCK_PAIRED_MIN_INITIAL_BUY} ${configuration.quoteAsset.symbol}`,
+          );
+        }
+        markDraftEdited();
+        persistLaunchDraft(
+          {
+            ...checkedDraft,
+            initialBuyQuoteAmount: formatUnits(
+              balances.tokenBalanceRaw,
+              18,
+            ),
+            updatedAt: new Date().toISOString(),
+          },
+          wallet,
+        );
+        return;
+      }
+
       const prepared = await prepareLaunch(checkedDraft, wallet);
+      if (prepared.kind !== "launch") {
+        throw new Error("Approve the quote token before using Max");
+      }
       const balances = await readNativeBalance();
       const gasLimit = BigInt(prepared.transaction.gasLimit);
       const maximum = maximumClassicDevBuyWei({
@@ -627,11 +902,25 @@ function LaunchBuilderForm({
       result = await requestLaunchCheck(checkedDraft, connectedWallet);
     }
 
+    if (
+      result.status === "approval-required" &&
+      result.approvalTransaction &&
+      result.planHash
+    ) {
+      return {
+        kind: "approval" as const,
+        checkedDraft,
+        planHash: result.planHash,
+        transaction: result.approvalTransaction,
+      };
+    }
+
     if (result.status !== "ready" || !result.transaction || !result.planHash) {
       throw new Error(result.detail || "The launch could not be prepared");
     }
 
     return {
+      kind: "launch" as const,
       checkedDraft,
       planHash: result.planHash,
       transaction: result.transaction,
@@ -657,9 +946,11 @@ function LaunchBuilderForm({
     let checkedDraft =
       model === "deep"
         ? normalizeDeepDraft(draft)
-        : model === "classic-v3"
-          ? normalizeClassicV3Draft(draft)
-          : normalizeStandardDraft(draft);
+        : model === "stock-paired"
+          ? normalizeStockPairedDraft(draft)
+          : model === "classic-v3"
+            ? normalizeClassicV3Draft(draft)
+            : normalizeStandardDraft(draft);
     if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
       checkedDraft = {
         ...checkedDraft,
@@ -673,7 +964,7 @@ function LaunchBuilderForm({
     setTransactionHash("");
 
     try {
-      const prepared = await prepareLaunch(checkedDraft, launchWallet);
+      let prepared = await prepareLaunch(checkedDraft, launchWallet);
       checkedDraft = prepared.checkedDraft;
 
       const latest = currentLaunchContext.current;
@@ -688,14 +979,70 @@ function LaunchBuilderForm({
         throw new Error("The token or connected wallet changed. Try again");
       }
 
+      if (prepared.kind === "approval") {
+        if (model !== "stock-paired") {
+          throw new Error("This launch does not support quote-token approval");
+        }
+        const approval = validatePreparedStockQuoteApprovalTransaction({
+          transaction: prepared.transaction,
+          draft: checkedDraft,
+          account: launchWallet.account,
+          planHash: prepared.planHash,
+        });
+        setLaunchPhase("confirming");
+        const approvalHash = await sendTransaction(approval);
+        setNotice("Confirming Initial Buy approval");
+        const approvalStatus = await waitForLaunchTransaction(
+          approvalHash,
+          1,
+        );
+        if (approvalStatus === "reverted") {
+          throw new Error("The Initial Buy approval reverted onchain");
+        }
+
+        setLaunchPhase("preparing");
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          prepared = await prepareLaunch(checkedDraft, launchWallet);
+          if (prepared.kind === "launch") break;
+          await new Promise((resolve) =>
+            window.setTimeout(resolve, 1_000),
+          );
+        }
+        if (prepared.kind !== "launch") {
+          throw new Error(
+            "The approval is confirmed, but the launch RPC has not indexed it yet. Try Launch again",
+          );
+        }
+        const latestAfterApproval = currentLaunchContext.current;
+        if (
+          draftVersion.current !== launchDraftVersion ||
+          !latestAfterApproval.wallet ||
+          latestAfterApproval.wallet.account.toLowerCase() !==
+            launchWallet.account.toLowerCase() ||
+          latestAfterApproval.wallet.chainId.toLowerCase() !==
+            launchWallet.chainId.toLowerCase()
+        ) {
+          throw new Error(
+            "The token or connected wallet changed after approval. Try Launch again",
+          );
+        }
+      }
+
       const validatedTransaction =
         model === "deep"
-          ? validatePreparedDeepLaunchTransaction({
+          ? await validatePreparedDeepV3LaunchTransaction({
               transaction: prepared.transaction,
               draft: checkedDraft,
               account: launchWallet.account,
               planHash: prepared.planHash,
             })
+          : model === "stock-paired"
+            ? validatePreparedStockPairedLaunchTransaction({
+                transaction: prepared.transaction,
+                draft: checkedDraft,
+                account: launchWallet.account,
+                planHash: prepared.planHash,
+              })
           : model === "classic-v3"
             ? validatePreparedClassicV3LaunchTransaction({
                 transaction: prepared.transaction,
@@ -742,14 +1089,7 @@ function LaunchBuilderForm({
           Back
         </button>
         <div className="launch-page-title">
-          <p className="eyebrow">
-            {model === "deep"
-              ? "Deep"
-              : model === "classic-v3"
-                ? "Classic"
-                : "Classic"}
-          </p>
-          <h1>Set up your token</h1>
+          <h1>Create your token</h1>
         </div>
       </header>
 
@@ -775,15 +1115,29 @@ function LaunchBuilderForm({
             onImageStateChange={setTokenImageState}
           />
           {model === "deep" ? <DeepPresetStep /> : null}
-          {model === "classic-v3" || model === "deep" ? (
+          {model === "deep" ? (
+            <DeepFeeStep
+              draft={draft}
+              setDraft={setDraft}
+              onEdit={markDraftEdited}
+            />
+          ) : model === "classic-v3" ? (
             <EnhancedClassicFeeStep
               draft={draft}
-              model={model}
               account={wallet?.account}
               setDraft={setDraft}
               onEdit={markDraftEdited}
               settingMaxBuy={settingMaxBuy}
               onMaximumDevBuy={() => void setMaximumDevBuy()}
+            />
+          ) : model === "stock-paired" ? (
+            <StockPairedStep
+              draft={draft}
+              account={wallet?.account}
+              setDraft={setDraft}
+              onEdit={markDraftEdited}
+              settingMaxBuy={settingMaxBuy}
+              onMaximumBuy={() => void setMaximumDevBuy()}
             />
           ) : (
             <FeeStep
@@ -841,11 +1195,16 @@ function LaunchBuilderForm({
                 launching ||
                 Boolean(transactionHash) ||
                 (model === "classic-v3" && !classicV3LaunchAvailable) ||
-                (model === "deep" && !deepLaunchAvailable)
+                (model === "deep" && !deepLaunchAvailable) ||
+                (model === "stock-paired" &&
+                  !stockPairedLaunchAvailable)
               }
             >
               {model === "deep" && !deepLaunchAvailable
                 ? "Deep is being finalized"
+                : model === "stock-paired" &&
+                    !stockPairedLaunchAvailable
+                  ? "Stock-Paired is being finalized"
                 : model === "classic-v3" && !classicV3LaunchAvailable
                   ? "Classic is not deployed"
                   : launchPhase === "preparing"
@@ -865,7 +1224,13 @@ function LaunchBuilderForm({
       {indexedLaunch && successOpen ? (
         <LaunchSuccessDialog
           launch={indexedLaunch}
-          draft={model === "classic-v3" || model === "deep" ? draft : undefined}
+          draft={
+            model === "classic-v3" ||
+            model === "deep" ||
+            model === "stock-paired"
+              ? draft
+              : undefined
+          }
           account={submittedAccount}
           onClose={() => setSuccessOpen(false)}
         />
@@ -911,19 +1276,19 @@ function LaunchSuccessDialog({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [onClose]);
-  let classicV3Configuration:
-    ReturnType<typeof validateClassicV3LaunchDraft> | undefined;
+  let classicConfiguration:
+    | ReturnType<typeof validateClassicV3LaunchDraft>
+    | undefined;
+  const deepLaunch = draft?.launchModel === "deep";
   try {
-    if (draft && account) {
-      classicV3Configuration = validateClassicV3LaunchDraft(
-        draft.launchModel === "deep"
-          ? { ...draft, launchModel: "classic-v3" }
-          : draft,
+    if (draft?.launchModel === "classic-v3" && account) {
+      classicConfiguration = validateClassicV3LaunchDraft(
+        draft,
         account,
       );
     }
   } catch {
-    classicV3Configuration = undefined;
+    classicConfiguration = undefined;
   }
 
   return (
@@ -959,13 +1324,28 @@ function LaunchSuccessDialog({
         <p>
           {launch.name} <span>${launch.symbol}</span>
         </p>
-        {classicV3Configuration ? (
+        {deepLaunch ? (
+          <dl className="launch-success-v3">
+            <div>
+              <dt>Deep fee</dt>
+              <dd>1.00%</dd>
+            </div>
+            <div>
+              <dt>Pool growth</dt>
+              <dd>0.90%</dd>
+            </div>
+            <div>
+              <dt>Programmable</dt>
+              <dd>0.10%</dd>
+            </div>
+          </dl>
+        ) : classicConfiguration ? (
           <dl className="launch-success-v3">
             <div>
               <dt>Buy fee</dt>
               <dd>
                 {formatClassicV3Percent(
-                  classicV3Configuration.fees.buySwapFeeBps,
+                  classicConfiguration.fees.buySwapFeeBps,
                 )}
               </dd>
             </div>
@@ -973,13 +1353,13 @@ function LaunchSuccessDialog({
               <dt>Sell fee</dt>
               <dd>
                 {formatClassicV3Percent(
-                  classicV3Configuration.fees.sellSwapFeeBps,
+                  classicConfiguration.fees.sellSwapFeeBps,
                 )}
               </dd>
             </div>
             <div>
               <dt>Reward owners</dt>
-              <dd>{classicV3Configuration.rewards.beneficiaries.length}</dd>
+              <dd>{classicConfiguration.rewards.beneficiaries.length}</dd>
             </div>
           </dl>
         ) : null}
@@ -1367,33 +1747,109 @@ function TokenStep({
   );
 }
 
-function DeepPresetStep() {
-  const disclosure = deepPresetDisclosure();
+export function DeepPresetStep() {
+  const disclosure = deepV3PresetDisclosure();
   return (
     <section className="deep-preset" aria-labelledby="deep-preset-title">
       <div className="classic-section-heading">
         <h2 id="deep-preset-title">Deep liquidity</h2>
-        <p>Fixed public preset</p>
+        <p>Original v4 pool</p>
       </div>
-      <p className="deep-preset-summary">{disclosure.summary}</p>
-      <dl className="deep-preset-stats">
-        <div>
-          <dt>Growth target</dt>
-          <dd>{disclosure.growthTarget}</dd>
+
+      <div className="deep-preset-overview">
+        <p className="deep-preset-summary">{disclosure.summary}</p>
+        <dl className="deep-preset-stats">
+          <div>
+            <dt>Deep fee</dt>
+            <dd>{disclosure.swapFee}</dd>
+          </div>
+          <div>
+            <dt>Pool growth</dt>
+            <dd>{disclosure.growthFee}</dd>
+          </div>
+          <div>
+            <dt>Programmable</dt>
+            <dd>{disclosure.programmableFee}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <details className="deep-preset-details">
+        <summary>How Deep works</summary>
+        <div className="deep-preset-notes">
+          <p>{disclosure.automation}</p>
+          <p>{disclosure.rewards}</p>
+          <p>{disclosure.protocolFees}</p>
         </div>
+      </details>
+
+      <p className="deep-preset-review" role="note">
+        {disclosure.review}
+      </p>
+    </section>
+  );
+}
+
+export function DeepFeeStep({
+  draft,
+  setDraft,
+  onEdit,
+}: {
+  draft: LaunchDraft;
+  setDraft: Dispatch<SetStateAction<LaunchDraft>>;
+  onEdit: () => void;
+}) {
+  const disclosure = deepV3PresetDisclosure();
+
+  return (
+    <section
+      className="classic-fee-section deep-fee-section"
+      aria-labelledby="deep-fee-title"
+    >
+      <div className="classic-section-heading classic-fee-heading">
         <div>
-          <dt>Locked launch allocation</dt>
-          <dd>{disclosure.initialPosition}</dd>
+          <h2 id="deep-fee-title">Initial Buy</h2>
+          <p>
+            Pool growth {disclosure.growthFee}
+            <span>·</span>
+            Programmable {disclosure.programmableFee}
+          </p>
         </div>
-        <div>
-          <dt>Locked reserve</dt>
-          <dd>{disclosure.lockedReserve}</dd>
+      </div>
+
+      <div className="classic-fee-layout">
+        <div
+          className="classic-fee-fixed"
+          aria-label={`Fixed ${disclosure.swapFee} Deep fee`}
+        >
+          <span>Deep fee</span>
+          <strong>{disclosure.swapFee}</strong>
         </div>
-      </dl>
-      <div className="deep-preset-notes" role="note">
-        <p>{disclosure.reserve}</p>
-        <p>{disclosure.automation}</p>
-        <p>{disclosure.review}</p>
+
+        <label className="meme-dev-buy" htmlFor="deep-initial-buy">
+          <span>
+            <strong>Initial Buy</strong>
+            <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
+          </span>
+          <span className="meme-dev-buy-input">
+            <input
+              id="deep-initial-buy"
+              inputMode="decimal"
+              value={draft.initialBuyEth}
+              maxLength={40}
+              placeholder={MEME_MIN_INITIAL_BUY_ETH}
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) => {
+                onEdit();
+                updateDraft(setDraft, {
+                  initialBuyEth: event.target.value,
+                });
+              }}
+            />
+            <span>ETH</span>
+          </span>
+        </label>
       </div>
     </section>
   );
@@ -1401,7 +1857,6 @@ function DeepPresetStep() {
 
 function EnhancedClassicFeeStep({
   draft,
-  model,
   account,
   setDraft,
   onEdit,
@@ -1409,7 +1864,6 @@ function EnhancedClassicFeeStep({
   onMaximumDevBuy,
 }: {
   draft: LaunchDraft;
-  model: "classic-v3" | "deep";
   account?: string;
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onEdit: () => void;
@@ -1446,10 +1900,7 @@ function EnhancedClassicFeeStep({
   let disclosure: ReturnType<typeof buildClassicV3LaunchDisclosure> | undefined;
   try {
     if (account) {
-      disclosure = buildClassicV3LaunchDisclosure(
-        model === "deep" ? { ...draft, launchModel: "classic-v3" } : draft,
-        account,
-      );
+      disclosure = buildClassicV3LaunchDisclosure(draft, account);
     }
   } catch {
     disclosure = undefined;
@@ -1686,12 +2137,7 @@ function EnhancedClassicFeeStep({
             />
             <button
               type="button"
-              disabled={
-                settingMaxBuy ||
-                (model === "deep"
-                  ? !deepLaunchAvailable
-                  : !classicV3LaunchAvailable)
-              }
+              disabled={settingMaxBuy || !classicV3LaunchAvailable}
               onClick={onMaximumDevBuy}
             >
               {settingMaxBuy ? "Checking" : "Max"}
@@ -1699,6 +2145,134 @@ function EnhancedClassicFeeStep({
             <span>ETH</span>
           </span>
         </label>
+      </div>
+    </section>
+  );
+}
+
+function StockPairedStep({
+  draft,
+  account,
+  setDraft,
+  onEdit,
+  settingMaxBuy,
+  onMaximumBuy,
+}: {
+  draft: LaunchDraft;
+  account?: string;
+  setDraft: Dispatch<SetStateAction<LaunchDraft>>;
+  onEdit: () => void;
+  settingMaxBuy: boolean;
+  onMaximumBuy: () => void;
+}) {
+  const selected =
+    getStockQuoteAsset(draft.stockQuoteAsset) ?? STOCK_QUOTE_ASSETS[0];
+
+  function updateStockDraft(patch: Partial<LaunchDraft>) {
+    onEdit();
+    updateDraft(setDraft, {
+      ...patch,
+      launchModel: "stock-paired",
+      rewardDestinationMode: "launcher",
+      rewardExternalAddress: "",
+      rewardSplits: [],
+    });
+  }
+
+  return (
+    <section
+      className="classic-fee-section stock-paired-section"
+      aria-labelledby="stock-paired-title"
+    >
+      <div className="classic-section-heading classic-fee-heading">
+        <div>
+          <h2 id="stock-paired-title">Quote asset</h2>
+          <p>
+            Trades and creator rewards settle in the selected token.
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="stock-quote-grid"
+        role="radiogroup"
+        aria-labelledby="stock-paired-title"
+      >
+        {STOCK_QUOTE_ASSETS.map((asset) => {
+          const active =
+            asset.address.toLowerCase() === selected.address.toLowerCase();
+          return (
+            <button
+              className="stock-quote-option"
+              data-selected={active ? "true" : "false"}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              key={asset.address}
+              onClick={() =>
+                updateStockDraft({ stockQuoteAsset: asset.address })
+              }
+            >
+              <strong>{asset.symbol}</strong>
+              <span>{asset.underlying}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="classic-fee-layout stock-paired-controls">
+        <div
+          className="classic-fee-fixed"
+          aria-label="Fixed 1.00% swap fee"
+        >
+          <span>Swap fee</span>
+          <strong>1.00%</strong>
+          <small>0.90% creator · 0.10% Programmable</small>
+        </div>
+
+        <label className="meme-dev-buy" htmlFor="stock-initial-buy">
+          <span>
+            <strong>Initial Buy</strong>
+            <small>
+              Minimum {STOCK_PAIRED_MIN_INITIAL_BUY} {selected.symbol}
+            </small>
+          </span>
+          <span className="meme-dev-buy-input">
+            <input
+              id="stock-initial-buy"
+              inputMode="decimal"
+              value={draft.initialBuyQuoteAmount}
+              maxLength={40}
+              placeholder={STOCK_PAIRED_MIN_INITIAL_BUY}
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) =>
+                updateStockDraft({
+                  initialBuyQuoteAmount: event.target.value,
+                })
+              }
+            />
+            <button
+              type="button"
+              disabled={settingMaxBuy || !account}
+              onClick={onMaximumBuy}
+            >
+              {settingMaxBuy ? "Checking" : "Max"}
+            </button>
+            <span>{selected.symbol}</span>
+          </span>
+        </label>
+      </div>
+
+      <div className="stock-paired-disclosure">
+        <p>
+          The token you launch is not a share and is not redeemable for the
+          underlying asset. Availability and transferability depend on Ondo
+          and your jurisdiction.
+        </p>
+        <a href={selected.ondoAssetUrl} target="_blank" rel="noreferrer">
+          View {selected.symbol}
+        </a>
       </div>
     </section>
   );

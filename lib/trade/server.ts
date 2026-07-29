@@ -11,6 +11,7 @@ import {
 import appDeployments from "../../contracts/config/app-deployments.v1.json";
 import mainnetDeployments from "../../contracts/dependencies/ethereum-mainnet.json";
 import sepoliaDeployments from "../../contracts/dependencies/ethereum-sepolia.json";
+import mainnetDeepV3Manifest from "../../contracts/deployments/mainnet-deep-full-range-v3.json";
 import {
   NATIVE_ETH,
   amountOutMinimum,
@@ -34,10 +35,30 @@ import {
 } from "./classic";
 import {
   getVerifiedDeepRelease,
+  getVerifiedDeepV2Release,
   type LaunchModelReleaseManifest,
 } from "../launch-model-gating";
 import type { ExploreReadModel } from "../onchain/types";
 import type { LauncherToken } from "../tokens";
+import { requireDeepV2IndexedCandidate } from "../profile/deep-v2-indexed-candidate";
+import {
+  assertDeepV2TradeRuntime,
+  resolveManifestGatedDeepV2TradeBoundary,
+  type DeepV2TradeCandidate,
+  type DeepV2TradeRelease,
+} from "./deep-v2";
+import {
+  assertDeepV3TradeRuntime,
+  buildDeepV3ExactPoolRoute,
+  resolveDeepV3TradeBoundary,
+  resolveManifestGatedDeepV3TradeBoundary,
+  type DeepV3TradeRuntimeClient,
+} from "./deep-v3";
+import type {
+  DeepV3LaunchProvenance,
+  VerifiedDeepV3ReadRelease,
+} from "../onchain/deep-v3-read-model";
+import type { DeepV3ReleaseManifest } from "../deep-v3-release";
 
 const UINT128_MAX = (1n << 128n) - 1n;
 const REQUEST_FIELDS = new Set([
@@ -57,6 +78,14 @@ export type ClassicTradeRelease = ClassicTradeDeployment & {
   universalRouterRuntimeCodeHash: Hex;
   permit2RuntimeCodeHash: Hex;
   hookRuntimeCodeHash: Hex;
+  deepReleaseVersion?:
+    | "deep-full-range-v1"
+    | "deep-full-range-v2"
+    | "deep-full-range-v3";
+  deepV2Release?: DeepV2TradeRelease;
+  deepV2Candidate?: DeepV2TradeCandidate;
+  deepV3Release?: VerifiedDeepV3ReadRelease;
+  deepV3Candidate?: DeepV3LaunchProvenance;
 };
 
 type OfficialTradeStack = Omit<
@@ -74,11 +103,11 @@ export type ClassicTradeRequest = {
   deadline: bigint;
 };
 
-export type ClassicTradeRuntimeClient = ClassicQuoteClient & {
+export type ClassicTradeRuntimeClient = ClassicQuoteClient &
+  DeepV3TradeRuntimeClient & {
   getBlock(): Promise<{ timestamp: bigint }>;
   getBalance(args: { address: Address }): Promise<bigint>;
   getGasPrice(): Promise<bigint>;
-  getCode(args: { address: Address }): Promise<Hex | undefined>;
   estimateGas(args: {
     account: Address;
     to: Address;
@@ -283,14 +312,35 @@ function verifiedIndexedToken(
   return verified;
 }
 
+function deepV3CandidateFromIndexedToken(
+  token: LauncherToken,
+): DeepV3LaunchProvenance {
+  const indexed = token.deepV3Provenance;
+  if (!indexed) {
+    throw new Error("Deep V3 trading requires verified indexed V3 provenance");
+  }
+  return indexed;
+}
+
 export function resolveTradeDeployment(
   chainId: number,
   model: ExploreReadModel,
   token: Address,
-  manifestOverride?: LaunchModelReleaseManifest,
+  manifestOverride?:
+    | LaunchModelReleaseManifest
+    | DeepV3ReleaseManifest,
 ): ClassicTradeRelease {
   const verified = verifiedIndexedToken(model, chainId, token);
   const launchModel = verified.launchModel ?? "classic";
+  const indexedDeepV3 = verified.deepV3Provenance;
+  const declaresDeepV3 =
+    verified.deepReleaseVersion === "deep-full-range-v3" ||
+    indexedDeepV3 !== undefined;
+  if (declaresDeepV3 && launchModel !== "deep") {
+    throw new ClassicTradeUnavailableError(
+      "Deep V3 provenance cannot use a Classic trade release",
+    );
+  }
   if (launchModel === "classic") {
     const deployment = resolveClassicTradeDeployment(chainId);
     assertVerifiedTradeToken(model, deployment, token);
@@ -315,6 +365,116 @@ export function resolveTradeDeployment(
       `Deep trading is not configured on chain ${chainId}`,
     );
   }
+
+  if (declaresDeepV3) {
+    try {
+      if (
+        verified.deepReleaseVersion !== "deep-full-range-v3" ||
+        !indexedDeepV3 ||
+        verified.deepV2Provenance
+      ) {
+        throw new Error(
+          "Deep V3 trading requires one unambiguous indexed V3 provenance record",
+        );
+      }
+      const boundary = resolveManifestGatedDeepV3TradeBoundary({
+        manifest:
+          manifestOverride === undefined
+            ? mainnetDeepV3Manifest
+            : manifestOverride,
+        chainId,
+        candidate: deepV3CandidateFromIndexedToken(verified),
+      });
+      const dependencies = boundary.release.officialDependencies;
+      const deployment: ClassicTradeRelease = {
+        chainId: boundary.release.chainId,
+        launchModel: "deep",
+        poolManager: dependencies.poolManager.address,
+        v4Quoter: dependencies.v4Quoter.address,
+        universalRouter: dependencies.universalRouter.address,
+        universalRouterVersion: "2.0",
+        permit2: dependencies.permit2.address,
+        hook: boundary.release.addresses.feeHook,
+        poolManagerRuntimeCodeHash:
+          dependencies.poolManager.runtimeCodeHash,
+        v4QuoterRuntimeCodeHash:
+          dependencies.v4Quoter.runtimeCodeHash,
+        universalRouterRuntimeCodeHash:
+          dependencies.universalRouter.runtimeCodeHash,
+        permit2RuntimeCodeHash: dependencies.permit2.runtimeCodeHash,
+        hookRuntimeCodeHash:
+          boundary.release.runtimeCodeHashes.feeHook,
+        deepReleaseVersion: "deep-full-range-v3",
+        deepV3Release: boundary.release,
+        deepV3Candidate: boundary.candidate,
+      };
+      assertClassicTradeDeployment(deployment);
+      assertVerifiedTradeToken(model, deployment, token);
+      return deployment;
+    } catch (error) {
+      throw new ClassicTradeUnavailableError(
+        error instanceof Error
+          ? `Deep V3 provenance is not eligible for trading: ${error.message}`
+          : "Deep V3 provenance is not eligible for trading",
+      );
+    }
+  }
+
+  if (verified.deepV2Provenance) {
+    try {
+      const indexed = requireDeepV2IndexedCandidate(verified);
+      const candidate: DeepV2TradeCandidate = {
+        deepReleaseVersion: "deep-full-range-v2",
+        launchModel: "deep",
+        launcher: indexed.launcher,
+        tokenAddress: indexed.tokenAddress,
+        hookAddress: indexed.hookAddress,
+        poolId: indexed.poolId,
+      };
+      const official = getPinnedOfficialTradeStack(chainId);
+      const boundary = resolveManifestGatedDeepV2TradeBoundary({
+        manifest: app as LaunchModelReleaseManifest,
+        chainId,
+        candidate,
+        official: {
+          chainId: official.chainId as 1 | 11_155_111,
+          poolManager: official.poolManager,
+          poolManagerRuntimeCodeHash:
+            official.poolManagerRuntimeCodeHash,
+        },
+      });
+      const deployment: ClassicTradeRelease = {
+        ...official,
+        launchModel: "deep",
+        hook: boundary.release.feeHook,
+        hookRuntimeCodeHash:
+          boundary.release.feeHookRuntimeCodeHash,
+        deepReleaseVersion: "deep-full-range-v2",
+        deepV2Release: boundary.release,
+        deepV2Candidate: boundary.candidate,
+      };
+      assertClassicTradeDeployment(deployment);
+      assertVerifiedTradeToken(model, deployment, token);
+      return deployment;
+    } catch (error) {
+      throw new ClassicTradeUnavailableError(
+        error instanceof Error
+          ? `Deep V2 provenance is not eligible for trading: ${error.message}`
+          : "Deep V2 provenance is not eligible for trading",
+      );
+    }
+  }
+  if (
+    getVerifiedDeepV2Release(
+      app as LaunchModelReleaseManifest,
+      chainId,
+    )
+  ) {
+    throw new ClassicTradeUnavailableError(
+      "Deep V2 trading requires verified indexed V2 provenance",
+    );
+  }
+
   const release = getVerifiedDeepRelease(
     app as LaunchModelReleaseManifest,
     chainId,
@@ -349,6 +509,7 @@ export function resolveTradeDeployment(
     launchModel: "deep",
     hook,
     hookRuntimeCodeHash: hookRuntimeCodeHash as Hex,
+    deepReleaseVersion: "deep-full-range-v1",
   };
   assertClassicTradeDeployment(deployment);
   assertVerifiedTradeToken(model, deployment, token);
@@ -430,10 +591,117 @@ export function assertVerifiedTradeToken(
     token,
   );
   const launchModel = verified.launchModel ?? "classic";
+  if (
+    (verified.deepV3Provenance ||
+      verified.deepReleaseVersion === "deep-full-range-v3") &&
+    deployment.deepReleaseVersion !== "deep-full-range-v3"
+  ) {
+    throw new ClassicTradeUnavailableError(
+      "A Deep V3 token cannot use another trade release",
+    );
+  }
   if (launchModel !== deployment.launchModel) {
     throw new ClassicTradeUnavailableError(
       "The token launch model does not match the selected trade release",
     );
+  }
+  if (deployment.launchModel === "deep") {
+    const indexedDeepV3 = verified.deepV3Provenance;
+    if (deployment.deepReleaseVersion === "deep-full-range-v3") {
+      if (
+        !deployment.deepV3Candidate ||
+        !deployment.deepV3Release ||
+        verified.deepReleaseVersion !== "deep-full-range-v3" ||
+        verified.deepV2Provenance
+      ) {
+        throw new ClassicTradeUnavailableError(
+          "The Deep V3 trade release is incomplete or ambiguous",
+        );
+      }
+      let indexed;
+      try {
+        indexed = resolveDeepV3TradeBoundary(
+          deepV3CandidateFromIndexedToken(verified),
+          deployment.deepV3Release,
+        ).candidate;
+      } catch (error) {
+        throw new ClassicTradeUnavailableError(
+          error instanceof Error
+            ? `Deep V3 provenance is invalid: ${error.message}`
+            : "Deep V3 provenance is invalid",
+        );
+      }
+      const selected = deployment.deepV3Candidate;
+      if (
+        indexed.launcher.toLowerCase() !==
+          selected.launcher.toLowerCase() ||
+        indexed.creator.toLowerCase() !==
+          selected.creator.toLowerCase() ||
+        indexed.tokenAddress.toLowerCase() !==
+          selected.tokenAddress.toLowerCase() ||
+        indexed.vaultAddress.toLowerCase() !==
+          selected.vaultAddress.toLowerCase() ||
+        indexed.hookAddress.toLowerCase() !==
+          selected.hookAddress.toLowerCase() ||
+        indexed.positionRecipient.toLowerCase() !==
+          selected.positionRecipient.toLowerCase() ||
+        indexed.positionTokenId !== selected.positionTokenId ||
+        indexed.poolId.toLowerCase() !== selected.poolId.toLowerCase() ||
+        indexed.launchHash.toLowerCase() !==
+          selected.launchHash.toLowerCase() ||
+        indexed.vaultConfigurationHash.toLowerCase() !==
+          selected.vaultConfigurationHash.toLowerCase() ||
+        indexed.blockNumber !== selected.blockNumber ||
+        indexed.blockHash.toLowerCase() !==
+          selected.blockHash.toLowerCase() ||
+        indexed.transactionHash.toLowerCase() !==
+          selected.transactionHash.toLowerCase() ||
+        indexed.transactionIndex !== selected.transactionIndex ||
+        indexed.logIndex !== selected.logIndex
+      ) {
+        throw new ClassicTradeUnavailableError(
+          "The Deep V3 token does not match its selected verified release",
+        );
+      }
+    } else if (
+      indexedDeepV3 ||
+      verified.deepReleaseVersion === "deep-full-range-v3"
+    ) {
+      throw new ClassicTradeUnavailableError(
+        "A Deep V3 token cannot use a historical Deep trade release",
+      );
+    } else if (deployment.deepReleaseVersion === "deep-full-range-v2") {
+      let indexed;
+      try {
+        indexed = requireDeepV2IndexedCandidate(verified);
+      } catch (error) {
+        throw new ClassicTradeUnavailableError(
+          error instanceof Error
+            ? `Deep V2 provenance is invalid: ${error.message}`
+            : "Deep V2 provenance is invalid",
+        );
+      }
+      if (
+        !deployment.deepV2Candidate ||
+        !deployment.deepV2Release ||
+        indexed.launcher.toLowerCase() !==
+          deployment.deepV2Candidate.launcher.toLowerCase() ||
+        indexed.tokenAddress.toLowerCase() !==
+          deployment.deepV2Candidate.tokenAddress.toLowerCase() ||
+        indexed.hookAddress.toLowerCase() !==
+          deployment.deepV2Candidate.hookAddress.toLowerCase() ||
+        indexed.poolId.toLowerCase() !==
+          deployment.deepV2Candidate.poolId.toLowerCase()
+      ) {
+        throw new ClassicTradeUnavailableError(
+          "The Deep V2 token does not match its selected verified release",
+        );
+      }
+    } else if (verified.deepV2Provenance) {
+      throw new ClassicTradeUnavailableError(
+        "A Deep V2 token cannot use the historical Deep V1 trade release",
+      );
+    }
   }
   const expectedPoolId = getClassicPoolId(
     createClassicPoolKey(token, deployment),
@@ -634,8 +902,75 @@ export async function prepareClassicTrade(
     );
   }
 
-  const poolKey = createClassicPoolKey(request.token, deployment);
-  assertVerifiedTradeToken(registry, deployment, poolKey.currency1);
+  let poolKey = createClassicPoolKey(request.token, deployment);
+  const verifiedToken = assertVerifiedTradeToken(
+    registry,
+    deployment,
+    poolKey.currency1,
+  );
+  if (deployment.deepReleaseVersion === "deep-full-range-v3") {
+    if (registry.status !== "ready") {
+      throw new ClassicTradeUnavailableError(
+        "The verified Programmable launch registry is unavailable",
+      );
+    }
+    if (!deployment.deepV3Release || !deployment.deepV3Candidate) {
+      throw new ClassicTradeUnavailableError(
+        "The Deep V3 trade release is incomplete",
+      );
+    }
+    try {
+      const boundary = resolveDeepV3TradeBoundary(
+        deployment.deepV3Candidate,
+        deployment.deepV3Release,
+      );
+      const route = buildDeepV3ExactPoolRoute(boundary, request.side);
+      const computedPoolId = getClassicPoolId(
+        route.poolKey,
+        deployment,
+      );
+      if (
+        computedPoolId.toLowerCase() !== route.poolId.toLowerCase() ||
+        route.poolId.toLowerCase() !== verifiedToken.poolId.toLowerCase()
+      ) {
+        throw new Error(
+          "Deep V3 trading is not bound to the original PoolId",
+        );
+      }
+      poolKey = { ...route.poolKey };
+      await assertDeepV3TradeRuntime(
+        client,
+        deployment.deepV3Release,
+        deployment.deepV3Candidate,
+        BigInt(registry.snapshot.blockNumber),
+      );
+    } catch (error) {
+      throw new ClassicTradeUnavailableError(
+        error instanceof Error
+          ? error.message
+          : "The Deep V3 runtime is unavailable",
+      );
+    }
+  } else if (deployment.deepReleaseVersion === "deep-full-range-v2") {
+    if (!deployment.deepV2Release || !deployment.deepV2Candidate) {
+      throw new ClassicTradeUnavailableError(
+        "The Deep V2 trade release is incomplete",
+      );
+    }
+    try {
+      await assertDeepV2TradeRuntime(
+        client,
+        deployment.deepV2Release,
+        deployment.deepV2Candidate,
+      );
+    } catch (error) {
+      throw new ClassicTradeUnavailableError(
+        error instanceof Error
+          ? error.message
+          : "The Deep V2 runtime is unavailable",
+      );
+    }
+  }
   await assertRuntimeContracts(
     client,
     deployment,

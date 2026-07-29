@@ -22,6 +22,7 @@
 /var/
 /outputs/qa/
 /artifacts/
+/.codex-temp-programmable-readme-gif/
 *.tsbuildinfo
 
 # Local publishing masters and article drafts

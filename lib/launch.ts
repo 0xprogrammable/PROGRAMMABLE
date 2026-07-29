@@ -35,7 +35,12 @@ export const DEEP_INITIAL_POSITION_WHOLE = 850_000_000;
 export type AssetMode = "new" | "existing";
 export type LiquidityMode = "meme";
 export type BehaviorId = "fixed-fee";
-export type LaunchModel = "classic" | "classic-v3" | "adaptive" | "deep";
+export type LaunchModel =
+  | "classic"
+  | "classic-v3"
+  | "adaptive"
+  | "deep"
+  | "stock-paired";
 export type RewardDestinationMode = "launcher" | "external" | "split";
 
 export type AdaptiveCurvePointDraft = {
@@ -79,6 +84,8 @@ export type LaunchDraft = {
   lpFeePercent: string;
   totalSwapFeePercent: string;
   initialBuyEth: string;
+  stockQuoteAsset: string;
+  initialBuyQuoteAmount: string;
   customHookAddress: string;
   customHookSource: string;
   launchSalt: string;
@@ -124,6 +131,8 @@ export function createEmptyDraft(): LaunchDraft {
     lpFeePercent: "0",
     totalSwapFeePercent: CLASSIC_TOTAL_SWAP_FEE_PERCENT,
     initialBuyEth: MEME_MIN_INITIAL_BUY_ETH,
+    stockQuoteAsset: "",
+    initialBuyQuoteAmount: "0.01",
     customHookAddress: "",
     customHookSource: "",
     launchSalt: "",
@@ -172,6 +181,19 @@ export function createDeepDraft(): LaunchDraft {
   return {
     ...createClassicV3Draft(),
     launchModel: "deep",
+  };
+}
+
+export function createStockPairedDraft(): LaunchDraft {
+  return {
+    ...createClassicV3Draft(),
+    launchModel: "stock-paired",
+    initialBuyEth: "",
+    stockQuoteAsset: "",
+    initialBuyQuoteAmount: "0.01",
+    totalSwapFeePercent: "1",
+    buySwapFeePercent: "1",
+    sellSwapFeePercent: "1",
   };
 }
 

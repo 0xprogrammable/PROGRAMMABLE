@@ -1,100 +1,118 @@
 .shell {
-  margin-top: 18px;
-  min-height: 216px;
-  padding: 18px 18px 14px;
-  border: 1px solid var(--border);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-wash) 42%, transparent),
+      transparent 50%
+    ),
+    color-mix(in srgb, var(--surface-tint) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: 20px;
-  background: color-mix(in srgb, var(--surface-raised) 86%, transparent);
+  margin-top: 22px;
+  min-height: 222px;
   overflow: hidden;
+  padding: 17px 18px 12px;
 }
 
 .header {
+  align-items: center;
   display: flex;
-  align-items: flex-start;
+  gap: 16px;
   justify-content: space-between;
-  gap: 20px;
-  min-height: 45px;
+  min-height: 46px;
 }
 
 .eyebrow {
-  margin: 0 0 3px;
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 620;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  margin: 0 0 3px;
 }
 
 .value {
-  margin: 0;
   color: var(--text);
-  font-size: clamp(1.05rem, 1.3vw, 1.25rem);
-  font-weight: 660;
-  letter-spacing: -0.025em;
-}
-
-.change {
-  margin: 3px 0 0;
-  color: var(--text-soft);
-  font-size: 0.78rem;
+  font-size: clamp(1.2rem, 1.55vw, 1.42rem);
   font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  margin: 0;
 }
 
-.positive {
-  color: #16855b;
+.ranges {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface-soft) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 11px;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
 }
 
-.negative {
-  color: #cf4f6f;
+.rangeButton {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 670;
+  height: 27px;
+  letter-spacing: 0.025em;
+  min-width: 34px;
+  padding: 0 7px;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
 }
 
-.range {
-  flex: 0 0 auto;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: var(--surface-soft);
-  color: var(--text-soft);
-  font-size: 0.72rem;
-  font-weight: 620;
+.rangeButton[aria-pressed="true"] {
+  background: var(--surface-raised);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
 }
 
 .plot {
-  position: relative;
+  cursor: default;
   display: block;
-  width: 100%;
-  height: 132px;
-  margin-top: 7px;
-  cursor: crosshair;
+  height: 146px;
+  margin-top: 8px;
+  position: relative;
   touch-action: pan-y;
+  width: 100%;
+}
+
+.plot svg {
+  overflow: visible;
 }
 
 .grid {
-  stroke: var(--border);
-  stroke-width: 1;
+  stroke: color-mix(in srgb, var(--border) 66%, transparent);
+  stroke-width: 0.8;
   vector-effect: non-scaling-stroke;
 }
 
 .area {
+  animation: reveal-area 280ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1))
+    forwards;
   opacity: 0;
-  animation: reveal-area 520ms var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1))
-    80ms forwards;
 }
 
 .line {
+  animation: reveal-line 300ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1))
+    forwards;
   fill: none;
+  opacity: 0;
   stroke: var(--accent);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.25;
+  stroke-width: 2.6;
   vector-effect: non-scaling-stroke;
-  opacity: 0;
-  animation: reveal-line 460ms var(--ease-out, cubic-bezier(0.2, 0.8, 0.2, 1))
-    forwards;
 }
 
 .guide {
-  stroke: color-mix(in srgb, var(--text) 22%, transparent);
-  stroke-dasharray: 3 4;
+  stroke: color-mix(in srgb, var(--text) 18%, transparent);
+  stroke-dasharray: 3 5;
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
@@ -102,50 +120,21 @@
 .point {
   fill: var(--surface-raised);
   stroke: var(--accent);
-  stroke-width: 2;
+  stroke-width: 2.2;
   vector-effect: non-scaling-stroke;
 }
 
-.axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: -2px;
-  color: var(--muted);
-  font-size: 0.7rem;
-}
-
-.tooltip {
-  position: absolute;
-  top: 2px;
-  z-index: 1;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-raised);
-  box-shadow: 0 7px 24px rgba(25, 22, 31, 0.1);
-  color: var(--text);
-  font-size: 0.72rem;
-  font-weight: 620;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-
 .placeholder {
-  display: grid;
-  min-height: 132px;
-  place-items: center;
   color: var(--muted);
+  display: grid;
   font-size: 0.82rem;
+  min-height: 146px;
+  place-items: center;
   text-align: center;
 }
 
 .loadingLine {
-  display: block;
-  width: min(360px, 72%);
-  height: 2px;
-  border-radius: 999px;
+  animation: chart-loading 0.9s linear infinite;
   background:
     linear-gradient(
       90deg,
@@ -154,14 +143,18 @@
       transparent
     );
   background-size: 180% 100%;
-  animation: chart-loading 1.25s ease-in-out infinite;
+  border-radius: 999px;
+  display: block;
+  height: 2px;
+  width: min(360px, 72%);
 }
 
 @keyframes reveal-line {
   from {
     opacity: 0;
-    transform: translateY(3px);
+    transform: translateY(2px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -178,6 +171,7 @@
   from {
     background-position: 180% 0;
   }
+
   to {
     background-position: -80% 0;
   }
@@ -185,13 +179,28 @@
 
 @media (max-width: 560px) {
   .shell {
-    min-height: 196px;
-    padding: 15px 14px 12px;
     border-radius: 17px;
+    min-height: 204px;
+    padding: 15px 14px 10px;
   }
 
   .plot {
-    height: 116px;
+    height: 132px;
+  }
+
+  .header {
+    gap: 10px;
+  }
+
+  .ranges {
+    gap: 1px;
+    padding: 2px;
+  }
+
+  .rangeButton {
+    height: 26px;
+    min-width: 31px;
+    padding-inline: 5px;
   }
 }
 

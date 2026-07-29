@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decodeFunctionData, type Address } from "viem";
 
 import {
@@ -8,6 +8,10 @@ import {
   validateDeepLaunchDraft,
 } from "../lib/deep-v1";
 import {
+  deepV2LaunchAbi,
+  encodeDeepV2Launch,
+} from "../lib/deep-v2";
+import {
   MAX_DEEP_LAUNCH_GAS_LIMIT,
   validatePreparedDeepLaunchTransactionAgainstManifest,
 } from "../lib/deep-launch-validation";
@@ -15,20 +19,38 @@ import { createDeepDraft, type LaunchDraft } from "../lib/launch";
 import { type LaunchModelReleaseManifest } from "../lib/launch-model-gating";
 import { buildPlanHash } from "../lib/launch-transaction";
 
+vi.mock("@/ops/deep-keeper-v2/reviewed-release-binding.json", () => ({
+  default: {
+    schemaVersion: 1,
+    status: "reviewed",
+    manifestPath:
+      "contracts/deployments/mainnet-deep-full-range-v2.json",
+    model: "deep",
+    releaseVersion: "deep-full-range-v2",
+    internalContractRelease: "liquidity-growth-full-range-v2",
+    sourceCommitment: `0x${"11".repeat(32)}`,
+    automationAddress:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    automationRuntimeCodeHash: `0x${"11".repeat(32)}`,
+    automationFqcn:
+      "src/LiquidityGrowthFullRangeAutomationV2.sol:LiquidityGrowthFullRangeAutomationV2",
+    coordinatorAddress:
+      "0xdddddddddddddddddddddddddddddddddddddddd",
+    coordinatorRuntimeCodeHash: `0x${"11".repeat(32)}`,
+    coordinatorSourceCommitment: `0x${"11".repeat(32)}`,
+    coordinatorFqcn:
+      "src/DeepKeeperExecutorV1.sol:DeepKeeperExecutorV1",
+  },
+}));
+
 const account = "0x1111111111111111111111111111111111111111";
 const external = "0x2222222222222222222222222222222222222222";
 const launcher = "0x3333333333333333333333333333333333333333";
 const salt =
   "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const runtimeHash = `0x${"11".repeat(32)}`;
-const deepSourceCommitment =
-  "0x82f6e2745dfbf54f40eae80df645bc75a7952e0505dd0621437dd233a619acfd";
-const keeperExecutorSourceCommitment =
-  "0x9072fa857d484b944205a969fda41727fa76d0f9e670916451b308615bb82175";
-const keeperExecutorRuntimeCodeHash =
-  "0xd4a6e8f200bd63ab924f5c4cfb1bbcc07c26c7b7b7abaa1f879418d2435f48e6";
 
-function draft(): LaunchDraft {
+function legacyV1Draft(): LaunchDraft {
   return {
     ...createDeepDraft(),
     tokenName: "Deep Token",
@@ -46,20 +68,34 @@ function draft(): LaunchDraft {
   };
 }
 
+function deepV2Draft(): LaunchDraft {
+  return {
+    ...createDeepDraft(),
+    tokenName: "Deep Token",
+    tokenSymbol: "DEEP",
+    tokenDescription: "Liquidity grows before creator rewards begin.",
+    tokenWebsite: "https://programmable.family/",
+    tokenImage: "https://programmable.family/deep.png",
+    tokenX: "https://x.com/0xprogrammable",
+    initialBuyEth: "0.0006",
+    launchSalt: salt,
+  };
+}
+
 function eligibleManifest(): LaunchModelReleaseManifest {
   return {
     chainId: 1,
     status: "ready",
     launchModelReleases: {
       deep: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         model: "deep",
-        internalContractRelease: "liquidity-growth-full-range-v1",
-        releaseVersion: "deep-full-range-v1",
+        internalContractRelease: "liquidity-growth-full-range-v2",
+        releaseVersion: "deep-full-range-v2",
         releaseCommit: "a".repeat(40),
-        sourceCommitment: deepSourceCommitment,
+        sourceCommitment: runtimeHash,
         releaseManifest:
-          "contracts/deployments/mainnet-deep-full-range-v1.json",
+          "contracts/deployments/mainnet-deep-full-range-v2.json",
         status: "deployment-source-and-lifecycle-verified",
         releaseEligible: true,
         sourceVerificationStatus: "verified",
@@ -83,13 +119,36 @@ function eligibleManifest(): LaunchModelReleaseManifest {
         lifecycleLaunchTransaction: `0x${"22".repeat(32)}`,
         lifecycleOracleTransaction: `0x${"33".repeat(32)}`,
         lifecycleFeeProcessCompoundTransaction: `0x${"44".repeat(32)}`,
+        keeperReleaseVersion: "deep-keeper-v2",
+        keeperCompatibilityStatus: "verified-deep-v2",
         keeperExecutor: "0xdddddddddddddddddddddddddddddddddddddddd",
-        keeperExecutorRuntimeCodeHash,
-        keeperExecutorSourceCommitment,
+        keeperExecutorRuntimeCodeHash: runtimeHash,
+        keeperExecutorSourceCommitment: runtimeHash,
         keeperExecutorDeploymentTransaction: `0x${"55".repeat(32)}`,
         keeperExecutorDeploymentBlock: 124,
         keeperExecutorSourceVerificationStatus:
           "etherscan-and-sourcify-exact-match",
+        fixedPolicy: {
+          tokenSupplyWei: "1000000000000000000000000000",
+          tokenReserveTargetWei: "150000000000000000000000000",
+          growthTargetNativeWei: "50000000000000000",
+          totalSwapFeeBps: 100,
+          creatorFeeBps: 90,
+          programmableFeeBps: 10,
+          minimumInitialBuyWei: "600000000000000",
+          initialTick: 204200,
+          tickSpacing: 200,
+          lpFeePips: 0,
+          twapWindowSeconds: 1800,
+          oracleRangeHalfWidthTicks: 20000,
+          maximumSpotTwapDeviationTicks: 600,
+          maximumAbsoluteTickDelta: 400,
+          compoundCooldownSeconds: 300,
+          rollingExposureWindowSeconds: 1800,
+          rollingExposureRecordCapacity: 8,
+          minimumKeeperProcessNativeWei: "2000000000000000",
+          oracleObservationCardinalityTarget: 192,
+        },
         runtimeCodeHashes: {
           launcher: runtimeHash,
           hookFactory: runtimeHash,
@@ -109,7 +168,10 @@ function eligibleManifest(): LaunchModelReleaseManifest {
 
 describe("Deep launch transaction boundary", () => {
   it("uses the reviewed directional fee and immutable beneficiary rules", () => {
-    const configuration = validateDeepLaunchDraft(draft(), account);
+    const configuration = validateDeepLaunchDraft(
+      legacyV1Draft(),
+      account,
+    );
     expect(configuration.fees).toEqual({
       buySwapFeeBps: 300,
       sellSwapFeeBps: 700,
@@ -126,7 +188,7 @@ describe("Deep launch transaction boundary", () => {
   it("encodes token metadata, fees and reward ownership into one launch", () => {
     const decoded = decodeFunctionData({
       abi: deepLaunchAbi,
-      data: encodeDeepLaunch(draft(), salt, account),
+      data: encodeDeepLaunch(legacyV1Draft(), salt, account),
     });
 
     expect(decoded.functionName).toBe("launch");
@@ -149,8 +211,8 @@ describe("Deep launch transaction boundary", () => {
   });
 
   it("binds wallet review to the exact Deep calldata, value and release", () => {
-    const value = draft();
-    const data = encodeDeepLaunch(value, salt, account);
+    const value = deepV2Draft();
+    const data = encodeDeepV2Launch(value, salt, account);
     const transaction = {
       kind: "launch" as const,
       chainId: 1 as const,
@@ -203,9 +265,18 @@ describe("Deep launch transaction boundary", () => {
         1,
       ),
     ).toThrow("Dev Buy");
+
+    const decoded = decodeFunctionData({
+      abi: deepV2LaunchAbi,
+      data: transaction.data,
+    });
+    expect(decoded.functionName).toBe("launch");
+    if (decoded.functionName !== "launch") return;
+    expect(decoded.args[0]).not.toHaveProperty("buySwapFeeBps");
+    expect(decoded.args[0]).not.toHaveProperty("rewardBeneficiaries");
   });
 
-  it("discloses the fixed growth policy without promising automation", () => {
+  it("keeps the deployed V1 disclosure bound to its immutable policy", () => {
     expect(deepPresetDisclosure()).toEqual({
       growthTarget: "0.05 ETH",
       initialPosition: "850M tokens",
