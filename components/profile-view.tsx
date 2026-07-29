@@ -168,6 +168,13 @@ function formatMarketCap(token: ProfileToken) {
   return null;
 }
 
+function formatLaunchModel(model?: ProfileToken["launchModel"]) {
+  if (model === "deep") return "Deep";
+  if (model === "stock-paired") return "Stock paired";
+  if (model === "adaptive") return "Adaptive";
+  return "Classic";
+}
+
 async function waitForTransaction(
   transactionHash: Hex,
   chainId: number,
@@ -1335,31 +1342,38 @@ export function profileClaimableWei(
   entries: readonly ProfilePortfolioEntry[],
   account?: string,
 ) {
+  return entries.reduce(
+    (total, entry) => total + profileEntryClaimableWei(entry, account),
+    0n,
+  );
+}
+
+function profileEntryClaimableWei(
+  entry: ProfilePortfolioEntry,
+  account?: string,
+) {
   const normalizedAccount = account?.toLowerCase();
 
-  return entries.reduce(
-    (total, entry) =>
-      total +
-      BigInt(entry.claim?.claimableWei ?? "0") +
-      entry.classicRewards.reduce(
-        (rewardTotal, reward) =>
-          rewardTotal +
-          (!normalizedAccount ||
-          reward.beneficiary.toLowerCase() === normalizedAccount
-            ? BigInt(reward.claimableWei)
-            : 0n),
-        0n,
-      ) +
-      entry.deepRewards.reduce(
-        (rewardTotal, reward) =>
-          rewardTotal +
-          (!normalizedAccount ||
-          reward.beneficiary.toLowerCase() === normalizedAccount
-            ? BigInt(reward.claimableWei)
-            : 0n),
-        0n,
-      ),
-    0n,
+  return (
+    BigInt(entry.claim?.claimableWei ?? "0") +
+    entry.classicRewards.reduce(
+      (total, reward) =>
+        total +
+        (!normalizedAccount ||
+        reward.beneficiary.toLowerCase() === normalizedAccount
+          ? BigInt(reward.claimableWei)
+          : 0n),
+      0n,
+    ) +
+    entry.deepRewards.reduce(
+      (total, reward) =>
+        total +
+        (!normalizedAccount ||
+        reward.beneficiary.toLowerCase() === normalizedAccount
+          ? BigInt(reward.claimableWei)
+          : 0n),
+      0n,
+    )
   );
 }
 
@@ -1518,6 +1532,13 @@ function ProfileAccountWorkspace({
   );
   const hasRewardSurface = profileHasRewardSurface(entries);
   const nativeClaimable = profileClaimableWei(entries, account);
+  const rewardDistribution = entries
+    .map((entry) => ({
+      address: entry.token.address,
+      name: entry.token.name,
+      value: profileEntryClaimableWei(entry, account),
+    }))
+    .filter((entry) => entry.value > 0n);
   const stockRewardCount = entries.reduce(
     (total, entry) =>
       total +
@@ -1550,23 +1571,59 @@ function ProfileAccountWorkspace({
     >
       <header className={styles.portfolioHeader}>
         <div className={styles.portfolioTitle}>
-          <h2 id="profile-portfolio-title">Your tokens</h2>
-          <p>
-            {entries.length} {entries.length === 1 ? "token" : "tokens"}
-          </p>
+          <h2 id="profile-portfolio-title">Your portfolio</h2>
+          <p>Tokens and creator rewards</p>
         </div>
-        {hasRewardSurface ? (
-          <div className={styles.portfolioTotal}>
-            <span>Claimable</span>
-            <strong>
-              {nativeClaimable > 0n
-                ? formatWei(nativeClaimable)
-                : stockRewardCount > 0
-                  ? `${stockRewardCount} ${
-                      stockRewardCount === 1 ? "reward" : "rewards"
-                    }`
-                  : formatWei(0n)}
-            </strong>
+
+        <div className={styles.portfolioStats}>
+          <div className={styles.portfolioStat}>
+            <span>Tokens</span>
+            <strong>{entries.length}</strong>
+          </div>
+          {hasRewardSurface ? (
+            <div className={`${styles.portfolioStat} ${styles.portfolioTotal}`}>
+              <span>Claimable</span>
+              <strong>
+                {nativeClaimable > 0n
+                  ? formatWei(nativeClaimable)
+                  : stockRewardCount > 0
+                    ? `${stockRewardCount} ${
+                        stockRewardCount === 1 ? "reward" : "rewards"
+                      }`
+                    : formatWei(0n)}
+              </strong>
+              {nativeClaimable > 0n && stockRewardCount > 0 ? (
+                <small>
+                  + {stockRewardCount} quote{" "}
+                  {stockRewardCount === 1 ? "reward" : "rewards"}
+                </small>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        {nativeClaimable > 0n && rewardDistribution.length ? (
+          <div
+            className={styles.rewardDistribution}
+            role="img"
+            aria-label={`Claimable ETH across ${rewardDistribution.length} ${
+              rewardDistribution.length === 1 ? "token" : "tokens"
+            }`}
+          >
+            {rewardDistribution.map((reward) => (
+              <span
+                key={reward.address}
+                title={`${reward.name}: ${formatWei(reward.value)}`}
+                style={{
+                  flexGrow: Math.max(
+                    1,
+                    Number(
+                      (reward.value * 10_000n) / nativeClaimable,
+                    ),
+                  ),
+                }}
+              />
+            ))}
           </div>
         ) : null}
       </header>
@@ -1778,55 +1835,94 @@ function ProfilePortfolioRow({
   const marketCap = formatMarketCap(token);
   const tokenImage =
     token.imageUrl?.trim() || getFallbackTokenImage(token.address);
+  const currentClaimAvailable =
+    Boolean(claim) && (currentClaimable > 0n || Boolean(activeClaimState));
+  const classicClaimCount = classicClaims.filter(
+    ({ claimable, state }) => claimable > 0n || Boolean(state),
+  ).length;
+  const deepClaimCount = deepClaims.filter(
+    ({ claimable, state }) => claimable > 0n || Boolean(state),
+  ).length;
+  const stockClaimCount = stockPairedClaims.filter(
+    ({ claimable, state }) => claimable > 0n || Boolean(state),
+  ).length;
+  const claimSourceCount =
+    Number(currentClaimAvailable) +
+    classicClaimCount +
+    deepClaimCount +
+    stockClaimCount;
+  const formattedStockReward =
+    stockPairedClaimable > 0n && stockQuoteSymbol
+      ? `${new Intl.NumberFormat("en-US", {
+          maximumSignificantDigits: 7,
+        }).format(Number(formatUnits(stockPairedClaimable, 18)))} ${
+          stockQuoteSymbol
+        }`
+      : "";
 
   return (
     <article className={styles.tokenRow}>
       <div className={styles.tokenMain}>
-        <Link className={styles.tokenIdentity} href={token.href}>
-          <span className={styles.tokenArt}>
-            <Image
-              src={tokenImage}
-              alt={`${token.name} token image`}
-              fill
-              sizes="52px"
-              unoptimized={!tokenImage.startsWith("/")}
-            />
-          </span>
-          <span className={styles.tokenCopy}>
-            <strong>{token.name}</strong>
-            <span className={styles.tokenSymbol}>${token.symbol}</span>
-            <span className={styles.tokenAddress}>
-              {shortenAddress(token.address)}
+        <div className={styles.tokenHeader}>
+          <Link className={styles.tokenIdentity} href={token.href}>
+            <span className={styles.tokenArt}>
+              <Image
+                src={tokenImage}
+                alt={`${token.name} token image`}
+                fill
+                sizes="64px"
+                unoptimized={!tokenImage.startsWith("/")}
+              />
             </span>
-          </span>
-        </Link>
+            <span className={styles.tokenCopy}>
+              <span className={styles.tokenNameRow}>
+                <strong>{token.name}</strong>
+                <span className={styles.tokenSymbol}>${token.symbol}</span>
+              </span>
+              <span className={styles.tokenMeta}>
+                <span className={styles.modelLabel}>
+                  {formatLaunchModel(token.launchModel)}
+                </span>
+                {token.launchedAt ? <span>{token.launchedAt}</span> : null}
+              </span>
+              <span className={styles.tokenAddress}>
+                {shortenAddress(token.address)}
+              </span>
+            </span>
+          </Link>
 
-        <div className={`${styles.metric} ${styles.marketMetric}`}>
-          <span>Market cap</span>
-          <strong>{marketCap ?? "—"}</strong>
+          <Link className={styles.openToken} href={token.href}>
+            View token
+          </Link>
         </div>
 
-        <div className={`${styles.metric} ${styles.rewardMetric}`}>
-          <span>
-            {deepV3Token && !hasRewardSurface
-              ? "Liquidity added"
-              : "Rewards"}
-          </span>
-          <strong>
-            {deepV3Token && !hasRewardSurface
-              ? formatWei(BigInt(deepV3Token.totalNativeAddedWei))
-              : stockPairedClaimable > 0n && stockQuoteSymbol
-                ? `${new Intl.NumberFormat("en-US", {
-                    maximumSignificantDigits: 7,
-                  }).format(
-                    Number(formatUnits(stockPairedClaimable, 18)),
-                  )} ${stockQuoteSymbol}`
-              : formatWei(totalClaimable)}
-          </strong>
+        <div className={styles.tokenMetrics}>
+          <div className={`${styles.metric} ${styles.marketMetric}`}>
+            <span>Market cap</span>
+            <strong>{marketCap ?? "—"}</strong>
+          </div>
+
+          <div className={`${styles.metric} ${styles.rewardMetric}`}>
+            <span>
+              {deepV3Token && !hasRewardSurface
+                ? "Liquidity added"
+                : "Claimable"}
+            </span>
+            <strong>
+              {deepV3Token && !hasRewardSurface
+                ? formatWei(BigInt(deepV3Token.totalNativeAddedWei))
+                : totalClaimable > 0n
+                  ? formatWei(totalClaimable)
+                  : formattedStockReward || formatWei(0n)}
+            </strong>
+            {totalClaimable > 0n && formattedStockReward ? (
+              <small>+ {formattedStockReward}</small>
+            ) : null}
+          </div>
         </div>
 
         <div className={styles.actions}>
-          {claim && (currentClaimable > 0n || activeClaimState) ? (
+          {claim && currentClaimAvailable ? (
             <button
               className={styles.claimButton}
               type="button"
@@ -1840,7 +1936,9 @@ function ProfilePortfolioRow({
             >
               {activeClaimState
                 ? actionLabel(activeClaimState)
-                : "Claim"}
+                : claimSourceCount > 1
+                  ? "Claim position"
+                  : "Claim"}
             </button>
           ) : null}
           {classicClaims.map(({ reward, claimable, state }) =>
@@ -1855,11 +1953,13 @@ function ProfilePortfolioRow({
                   claimable === 0n
                 }
                 onClick={() => onClassicV3Action(reward, "claim")}
-                key={reward.vaultAddress}
-              >
+              key={reward.vaultAddress}
+            >
                 {state
                   ? actionLabel(state)
-                  : "Claim"}
+                  : claimSourceCount > 1
+                    ? "Claim Classic"
+                    : "Claim"}
               </button>
             ) : null,
           )}
@@ -1875,11 +1975,13 @@ function ProfilePortfolioRow({
                   claimable === 0n
                 }
                 onClick={() => onDeepAction(reward, "claim")}
-                key={reward.vaultAddress}
-              >
+              key={reward.vaultAddress}
+            >
                 {state
                   ? actionLabel(state)
-                  : "Claim"}
+                  : claimSourceCount > 1
+                    ? "Claim Deep"
+                    : "Claim"}
               </button>
             ) : null,
           )}
@@ -1895,15 +1997,16 @@ function ProfilePortfolioRow({
                   claimable === 0n
                 }
                 onClick={() => onStockPairedAction(reward, "claim")}
-                key={reward.vaultAddress}
-              >
-                {state ? actionLabel(state) : "Claim"}
+              key={reward.vaultAddress}
+            >
+                {state
+                  ? actionLabel(state)
+                  : claimSourceCount > 1 && stockQuoteSymbol
+                    ? `Claim ${stockQuoteSymbol}`
+                    : "Claim"}
               </button>
             ) : null,
           )}
-          <Link className={styles.openToken} href={token.href}>
-            View
-          </Link>
         </div>
       </div>
 
