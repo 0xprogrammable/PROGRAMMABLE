@@ -25,6 +25,7 @@
       "enum": [
         "not-deployed",
         "deployed-receipts-verified-source-pending",
+        "deployed-source-verified-lifecycle-pending",
         "deployment-source-lifecycle-and-keeper-verified"
       ]
     },
@@ -107,13 +108,15 @@
           "status": {
             "enum": [
               "not-deployed",
-              "deployed-receipts-verified-source-pending"
+              "deployed-receipts-verified-source-pending",
+              "deployed-source-verified-lifecycle-pending"
             ]
           }
         }
       },
       "then": {
         "properties": {
+          "releaseEligible": { "const": false },
           "keeperPolicy": {
             "properties": {
               "status": { "const": "review-required" },
