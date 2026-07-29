@@ -25,16 +25,18 @@ import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 import { SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 
+import { ClassicInitialBuyCustodyConfig, ClassicInitialBuyCustodyMode } from "./ClassicInitialBuyVestingWalletV1.sol";
+import { ClassicInitialBuyVestingWalletFactoryV1 } from "./ClassicInitialBuyVestingWalletFactoryV1.sol";
+import { ClassicLaunchPolicyV1 } from "./ClassicLaunchPolicyV1.sol";
+import { ClassicRewardVaultFactoryV1 } from "./ClassicRewardVaultFactoryV1.sol";
 import { EthCreatorFeeHookV3 } from "./EthCreatorFeeHookV3.sol";
-import { FeeSplitVaultFactoryV1 } from "./FeeSplitVaultFactoryV1.sol";
-import { FeeSplitVaultV1 } from "./FeeSplitVaultV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "./LockedPositionFeeForwarderFactoryV1.sol";
 import { IClassicFeeHookV3 } from "./interfaces/IClassicFeeHookV3.sol";
 
 /// @title MemeLaunchV2
 /// @notice Launches a fixed-supply Classic token with immutable directional fees and beneficiary-owned rewards.
-/// @dev This version preserves Classic V1's UERC20, pool, locked one-sided position and initial-buy mechanics.
-///      Creator rewards use one immutable split vault for single-recipient, external-recipient and split launches.
+/// @dev Preserves Classic's UERC20, pool, locked one-sided position and initial-buy mechanics. Creator rewards use one
+///      authenticated vault whose future payout configuration can change only through its disclosed rules.
 contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
     using CurrencySettler for Currency;
     using SafeCast for *;
@@ -42,12 +44,7 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
     uint8 public constant TOKEN_DECIMALS = 18;
     uint256 public constant TOKEN_SUPPLY = 1_000_000_000 ether;
     uint256 public constant MIN_INITIAL_BUY_WEI = 0.0006 ether;
-    uint256 public constant MAX_TOKEN_NAME_BYTES = 48;
-    uint256 public constant MAX_TOKEN_SYMBOL_BYTES = 12;
-    uint256 public constant MAX_TOKEN_DESCRIPTION_BYTES = 280;
-    uint256 public constant MAX_METADATA_URL_BYTES = 2048;
-    uint256 public constant MAX_SOCIAL_EXTRA_DATA_BYTES = 1200;
-    uint256 public constant MAX_REWARD_BENEFICIARIES = 8;
+    uint256 public constant MAX_REWARD_BENEFICIARIES = 5;
     uint16 public constant REWARD_SHARE_BASIS_POINTS = 10_000;
     int24 public constant INITIAL_TICK = 204_200;
     int24 public constant TICK_SPACING = 200;
@@ -61,11 +58,14 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
     IPositionManager public immutable positionManager;
     UERC20Factory public immutable tokenFactory;
     EthCreatorFeeHookV3 public immutable feeHook;
-    FeeSplitVaultFactoryV1 public immutable feeSplitVaultFactory;
+    ClassicRewardVaultFactoryV1 public immutable rewardVaultFactory;
+    ClassicInitialBuyVestingWalletFactoryV1 public immutable initialBuyVestingWalletFactory;
+    ClassicLaunchPolicyV1 public immutable launchPolicy;
     LockedPositionFeeForwarderFactoryV1 public immutable positionForwarderFactory;
 
     mapping(address token => bytes32 launchHash) public launchHashOf;
     mapping(address token => address rewardVault) public rewardVaultOf;
+    mapping(address token => address custody) public initialBuyCustodyOf;
 
     struct LaunchParameters {
         string name;
@@ -76,6 +76,7 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         UERC20Metadata metadata;
         address[] rewardBeneficiaries;
         uint16[] rewardSharesBps;
+        ClassicInitialBuyCustodyConfig initialBuyCustody;
     }
 
     struct LaunchResult {
@@ -87,43 +88,32 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 lockedTokenDust;
         uint256 initialBuyNativeAmount;
         uint256 initialBuyTokenAmount;
+        address initialBuyCustody;
         bytes32 poolId;
         bytes32 launchHash;
     }
 
     struct InitialBuyCallbackData {
         PoolKey key;
-        address creator;
+        address recipient;
         uint256 nativeAmount;
     }
 
-    error DuplicateRewardBeneficiary(address beneficiary);
-    error EmptyName();
-    error EmptySymbol();
     error InitialBuyBelowMinimum(uint256 actual, uint256 minimum);
-    error InvalidBeneficiaryCount(uint256 count);
     error InvalidDependency(address dependency);
     error InvalidInitialBuyDelta(int128 nativeDelta, int128 tokenDelta);
+    error InvalidInitialBuyRecipientBalance(uint256 actual, uint256 expected);
     error InvalidInitialBuyResult(uint256 tokenAmount, uint256 residualNativeBalance);
     error InvalidInitialBuySettlement(uint256 actual, uint256 expected);
     error InvalidInitialTick(int24 actual, int24 expected);
     error InvalidPosition(uint256 count, uint256 amount0, int24 tickLower, int24 tickUpper);
     error InvalidPositionManager(address expectedPoolManager, address actualPoolManager);
     error InvalidPositionManagerFactory(address expectedPositionManager, address actualPositionManager);
-    error InvalidRewardBeneficiary(address beneficiary);
-    error InvalidRewardShare(address beneficiary, uint16 shareBps);
-    error InvalidRewardShareTotal(uint256 totalShareBps);
     error InvalidSharedHook(address expectedPoolManager, uint24 lpFeePips, int24 tickSpacing);
     error InvalidVaultFactory(address expected, address actual);
-    error MetadataExtraDataTooLong(uint256 actualBytes, uint256 maximumBytes);
-    error MetadataImageTooLong(uint256 actualBytes, uint256 maximumBytes);
-    error MetadataWebsiteTooLong(uint256 actualBytes, uint256 maximumBytes);
     error TokenAddressMismatch(address actual, address predicted);
     error TokenAlreadyExists(address token);
     error TokenCustodyMismatch(uint256 launcherBalance, uint256 positionManagerBalance);
-    error TokenDescriptionTooLong(uint256 actualBytes, uint256 maximumBytes);
-    error TokenNameTooLong(uint256 actualBytes, uint256 maximumBytes);
-    error TokenSymbolTooLong(uint256 actualBytes, uint256 maximumBytes);
     error UnauthorizedUnlockCallback(address caller);
     error UnrecognizedFactoryDeployment(address deployment);
 
@@ -159,20 +149,34 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 tokenAmount,
         bytes32 launchHash
     );
+    event MemeCreatorInitialBuyCustodyV2(
+        address indexed deployer,
+        address indexed token,
+        address indexed custody,
+        ClassicInitialBuyCustodyMode mode,
+        uint16 durationDays,
+        uint16 cliffDays,
+        bytes32 configurationHash,
+        bytes32 launchHash
+    );
 
     constructor(
         IPoolManager poolManager_,
         IPositionManager positionManager_,
         UERC20Factory tokenFactory_,
         EthCreatorFeeHookV3 feeHook_,
-        FeeSplitVaultFactoryV1 feeSplitVaultFactory_,
+        ClassicRewardVaultFactoryV1 rewardVaultFactory_,
+        ClassicInitialBuyVestingWalletFactoryV1 initialBuyVestingWalletFactory_,
+        ClassicLaunchPolicyV1 launchPolicy_,
         LockedPositionFeeForwarderFactoryV1 positionForwarderFactory_
     ) {
         _requireContract(address(poolManager_));
         _requireContract(address(positionManager_));
         _requireContract(address(tokenFactory_));
         _requireContract(address(feeHook_));
-        _requireContract(address(feeSplitVaultFactory_));
+        _requireContract(address(rewardVaultFactory_));
+        _requireContract(address(initialBuyVestingWalletFactory_));
+        _requireContract(address(launchPolicy_));
         _requireContract(address(positionForwarderFactory_));
 
         address positionManagerPoolManager = address(positionManager_.poolManager());
@@ -190,15 +194,17 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
             revert InvalidSharedHook(address(poolManager_), feeHook_.LP_FEE_PIPS(), feeHook_.TICK_SPACING());
         }
         address configuredVaultFactory = address(feeHook_.feeSplitVaultFactory());
-        if (configuredVaultFactory != address(feeSplitVaultFactory_)) {
-            revert InvalidVaultFactory(address(feeSplitVaultFactory_), configuredVaultFactory);
+        if (configuredVaultFactory != address(rewardVaultFactory_)) {
+            revert InvalidVaultFactory(address(rewardVaultFactory_), configuredVaultFactory);
         }
 
         poolManager = poolManager_;
         positionManager = positionManager_;
         tokenFactory = tokenFactory_;
         feeHook = feeHook_;
-        feeSplitVaultFactory = feeSplitVaultFactory_;
+        rewardVaultFactory = rewardVaultFactory_;
+        initialBuyVestingWalletFactory = initialBuyVestingWalletFactory_;
+        launchPolicy = launchPolicy_;
         positionForwarderFactory = positionForwarderFactory_;
     }
 
@@ -211,10 +217,6 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         token = tokenFactory.getUERC20Address(name, symbol, TOKEN_DECIMALS, address(this), effectiveGraffiti);
     }
 
-    function predictPositionRecipient(address token, address deployer) external view returns (address) {
-        return positionForwarderFactory.predict(_positionSalt(token, deployer), deployer);
-    }
-
     function predictRewardVault(
         address token,
         address deployer,
@@ -223,12 +225,12 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
     ) external view returns (address) {
         PoolKey memory key = _poolKey(token);
         bytes32 poolId = PoolId.unwrap(key.toId());
-        return feeSplitVaultFactory.predict(
+        return rewardVaultFactory.predict(
             _rewardVaultSalt(token, deployer), IClassicFeeHookV3(address(feeHook)), poolId, beneficiaries, sharesBps
         );
     }
 
-    /// @notice Creates, registers, initializes and permanently positions a Classic V3 launch atomically.
+    /// @notice Creates, registers, initializes and permanently positions a Classic launch atomically.
     function launch(LaunchParameters calldata parameters)
         external
         payable
@@ -278,7 +280,10 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
             revert TokenCustodyMismatch(launcherTokenBalance, positionManagerTokenBalance);
         }
 
-        result.initialBuyTokenAmount = _executeInitialBuy(key, msg.sender, result.initialBuyNativeAmount);
+        result.initialBuyCustody =
+            _deployOrReuseInitialBuyCustody(result.token, msg.sender, parameters.initialBuyCustody);
+        address initialBuyRecipient = result.initialBuyCustody == address(0) ? msg.sender : result.initialBuyCustody;
+        result.initialBuyTokenAmount = _executeInitialBuy(key, initialBuyRecipient, result.initialBuyNativeAmount);
         // ReentrancyGuardTransient protects the complete launch; Slither does not model its transient lock.
         // slither-disable-next-line reentrancy-benign
         result.launchHash = _recordLaunch(parameters, result, position, msg.sender);
@@ -309,7 +314,7 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 tokenAmount = int256(tokenDelta).toUint256();
 
         NATIVE.settle(poolManager, address(this), nativeSettlement, false);
-        callback.key.currency1.take(poolManager, callback.creator, tokenAmount, false);
+        callback.key.currency1.take(poolManager, callback.recipient, tokenAmount, false);
         return abi.encode(tokenAmount);
     }
 
@@ -317,19 +322,25 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         return _poolKey(token);
     }
 
-    function _executeInitialBuy(PoolKey memory key, address deployer, uint256 nativeAmount)
+    function _executeInitialBuy(PoolKey memory key, address recipient, uint256 nativeAmount)
         private
         returns (uint256 tokenAmount)
     {
         // Native ETH can be forced into any contract. Preserve that unrelated balance instead of allowing it to
         // permanently block launches, while still proving that this launch spent exactly `nativeAmount`.
         uint256 residualNativeBalance = address(this).balance - nativeAmount;
+        address token = Currency.unwrap(key.currency1);
+        uint256 recipientBalanceBefore = IERC20(token).balanceOf(recipient);
         bytes memory result = poolManager.unlock(
-            abi.encode(InitialBuyCallbackData({ key: key, creator: deployer, nativeAmount: nativeAmount }))
+            abi.encode(InitialBuyCallbackData({ key: key, recipient: recipient, nativeAmount: nativeAmount }))
         );
         tokenAmount = abi.decode(result, (uint256));
         if (tokenAmount == 0 || address(this).balance != residualNativeBalance) {
             revert InvalidInitialBuyResult(tokenAmount, address(this).balance);
+        }
+        uint256 recipientBalanceIncrease = IERC20(token).balanceOf(recipient) - recipientBalanceBefore;
+        if (recipientBalanceIncrease != tokenAmount) {
+            revert InvalidInitialBuyRecipientBalance(recipientBalanceIncrease, tokenAmount);
         }
     }
 
@@ -371,14 +382,19 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         Position memory position,
         address deployer
     ) private returns (bytes32 launchHash) {
-        bytes32 rewardConfigurationHash = FeeSplitVaultV1(payable(result.rewardVault)).configurationHash();
-        bytes32 infrastructureHash = _infrastructureHash(result, deployer, rewardConfigurationHash);
-        bytes32 economicsHash = _economicsHash(parameters, result, position);
+        bytes32 rewardConfigurationHash = rewardVaultFactory.configurationHashOf(result.rewardVault);
+        bytes32 custodyConfigurationHash = _initialBuyCustodyConfigurationHash(parameters, result, deployer);
+        bytes32 infrastructureHash =
+            _infrastructureHash(result, deployer, rewardConfigurationHash, custodyConfigurationHash);
+        bytes32 economicsHash = _economicsHash(parameters, result, position, custodyConfigurationHash);
         launchHash = keccak256(abi.encode(block.chainid, address(this), infrastructureHash, economicsHash));
         launchHashOf[result.token] = launchHash;
         rewardVaultOf[result.token] = result.rewardVault;
+        initialBuyCustodyOf[result.token] = result.initialBuyCustody;
 
-        _emitLaunchEvents(parameters, result, position, deployer, rewardConfigurationHash, launchHash);
+        _emitLaunchEvents(
+            parameters, result, position, deployer, rewardConfigurationHash, custodyConfigurationHash, launchHash
+        );
     }
 
     function _emitLaunchEvents(
@@ -387,6 +403,7 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         Position memory position,
         address deployer,
         bytes32 rewardConfigurationHash,
+        bytes32 custodyConfigurationHash,
         bytes32 launchHash
     ) private {
         _emitTokenLaunched(parameters, result, deployer, rewardConfigurationHash, launchHash);
@@ -407,6 +424,16 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
             result.poolId,
             result.initialBuyNativeAmount,
             result.initialBuyTokenAmount,
+            launchHash
+        );
+        emit MemeCreatorInitialBuyCustodyV2(
+            deployer,
+            result.token,
+            result.initialBuyCustody,
+            parameters.initialBuyCustody.mode,
+            parameters.initialBuyCustody.durationDays,
+            parameters.initialBuyCustody.cliffDays,
+            custodyConfigurationHash,
             launchHash
         );
     }
@@ -433,11 +460,12 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         );
     }
 
-    function _infrastructureHash(LaunchResult memory result, address deployer, bytes32 rewardConfigurationHash)
-        private
-        view
-        returns (bytes32)
-    {
+    function _infrastructureHash(
+        LaunchResult memory result,
+        address deployer,
+        bytes32 rewardConfigurationHash,
+        bytes32 custodyConfigurationHash
+    ) private view returns (bytes32) {
         return keccak256(
             abi.encode(
                 deployer,
@@ -445,6 +473,9 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
                 address(feeHook),
                 result.rewardVault,
                 rewardConfigurationHash,
+                address(initialBuyVestingWalletFactory),
+                result.initialBuyCustody,
+                custodyConfigurationHash,
                 result.positionRecipient,
                 result.positionTokenId,
                 result.poolId
@@ -452,11 +483,12 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         );
     }
 
-    function _economicsHash(LaunchParameters calldata parameters, LaunchResult memory result, Position memory position)
-        private
-        view
-        returns (bytes32)
-    {
+    function _economicsHash(
+        LaunchParameters calldata parameters,
+        LaunchResult memory result,
+        Position memory position,
+        bytes32 custodyConfigurationHash
+    ) private view returns (bytes32) {
         bytes32 liquidityHash = keccak256(
             abi.encode(
                 TOKEN_SUPPLY,
@@ -475,7 +507,11 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
                 result.initialBuyTokenAmount,
                 parameters.buySwapFeeBps,
                 parameters.sellSwapFeeBps,
-                feeHook.LAUNCHER_FEE_BPS()
+                feeHook.LAUNCHER_FEE_BPS(),
+                parameters.initialBuyCustody.mode,
+                parameters.initialBuyCustody.durationDays,
+                parameters.initialBuyCustody.cliffDays,
+                custodyConfigurationHash
             )
         );
         return keccak256(abi.encode(liquidityHash, tradeHash));
@@ -498,6 +534,20 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         }
     }
 
+    function _deployOrReuseInitialBuyCustody(
+        address token,
+        address deployer,
+        ClassicInitialBuyCustodyConfig calldata config
+    ) private returns (address custody) {
+        initialBuyVestingWalletFactory.validateConfig(config);
+        if (config.mode == ClassicInitialBuyCustodyMode.Unlocked) return address(0);
+        return address(
+            initialBuyVestingWalletFactory.deployOrGet(
+                _initialBuyCustodySalt(token, deployer), IERC20(token), deployer, block.timestamp.toUint64(), config
+            )
+        );
+    }
+
     function _deployOrReuseRewardVault(
         address token,
         address deployer,
@@ -505,24 +555,32 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         address[] calldata beneficiaries,
         uint16[] calldata sharesBps
     ) private returns (address rewardVault) {
-        bytes32 salt = _rewardVaultSalt(token, deployer);
-        rewardVault =
-            feeSplitVaultFactory.predict(salt, IClassicFeeHookV3(address(feeHook)), poolId, beneficiaries, sharesBps);
-        if (rewardVault.code.length == 0) {
-            return address(
-                feeSplitVaultFactory.deploy(salt, IClassicFeeHookV3(address(feeHook)), poolId, beneficiaries, sharesBps)
-            );
-        }
+        return address(
+            rewardVaultFactory.deployOrGet(
+                _rewardVaultSalt(token, deployer), IClassicFeeHookV3(address(feeHook)), poolId, beneficiaries, sharesBps
+            )
+        );
+    }
 
-        FeeSplitVaultV1 vault = FeeSplitVaultV1(payable(rewardVault));
-        bytes32 recordedConfigurationHash = feeSplitVaultFactory.configurationHashOf(rewardVault);
-        if (
-            recordedConfigurationHash == bytes32(0) || vault.configurationHash() != recordedConfigurationHash
-                || address(vault.feeHook()) != address(feeHook) || address(vault.poolManager()) != address(poolManager)
-                || vault.poolId() != poolId
-        ) {
-            revert UnrecognizedFactoryDeployment(rewardVault);
+    function _initialBuyCustodyConfigurationHash(
+        LaunchParameters calldata parameters,
+        LaunchResult memory result,
+        address deployer
+    ) private view returns (bytes32) {
+        if (result.initialBuyCustody != address(0)) {
+            return initialBuyVestingWalletFactory.configurationHashOf(result.initialBuyCustody);
         }
+        return keccak256(
+            abi.encode(
+                block.chainid,
+                address(this),
+                result.token,
+                deployer,
+                parameters.initialBuyCustody.mode,
+                parameters.initialBuyCustody.durationDays,
+                parameters.initialBuyCustody.cliffDays
+            )
+        );
     }
 
     function _createToken(LaunchParameters calldata parameters, bytes32 effectiveGraffiti, address predictedToken)
@@ -550,60 +608,15 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
         });
     }
 
-    function _validateLaunch(LaunchParameters calldata parameters) private pure {
-        _validateMetadata(parameters);
-        _validateRewardConfiguration(parameters.rewardBeneficiaries, parameters.rewardSharesBps);
-    }
-
-    function _validateMetadata(LaunchParameters calldata parameters) private pure {
-        uint256 nameBytes = bytes(parameters.name).length;
-        uint256 symbolBytes = bytes(parameters.symbol).length;
-        uint256 descriptionBytes = bytes(parameters.metadata.description).length;
-        uint256 websiteBytes = bytes(parameters.metadata.website).length;
-        uint256 imageBytes = bytes(parameters.metadata.image).length;
-        uint256 extraDataBytes = parameters.metadata.extraData.length;
-
-        if (nameBytes == 0) revert EmptyName();
-        if (symbolBytes == 0) revert EmptySymbol();
-        if (nameBytes > MAX_TOKEN_NAME_BYTES) revert TokenNameTooLong(nameBytes, MAX_TOKEN_NAME_BYTES);
-        if (symbolBytes > MAX_TOKEN_SYMBOL_BYTES) {
-            revert TokenSymbolTooLong(symbolBytes, MAX_TOKEN_SYMBOL_BYTES);
-        }
-        if (descriptionBytes > MAX_TOKEN_DESCRIPTION_BYTES) {
-            revert TokenDescriptionTooLong(descriptionBytes, MAX_TOKEN_DESCRIPTION_BYTES);
-        }
-        if (websiteBytes > MAX_METADATA_URL_BYTES) {
-            revert MetadataWebsiteTooLong(websiteBytes, MAX_METADATA_URL_BYTES);
-        }
-        if (imageBytes > MAX_METADATA_URL_BYTES) {
-            revert MetadataImageTooLong(imageBytes, MAX_METADATA_URL_BYTES);
-        }
-        if (extraDataBytes > MAX_SOCIAL_EXTRA_DATA_BYTES) {
-            revert MetadataExtraDataTooLong(extraDataBytes, MAX_SOCIAL_EXTRA_DATA_BYTES);
-        }
-    }
-
-    function _validateRewardConfiguration(address[] calldata beneficiaries, uint16[] calldata sharesBps) private pure {
-        uint256 count = beneficiaries.length;
-        if (count == 0 || count > MAX_REWARD_BENEFICIARIES || sharesBps.length != count) {
-            revert InvalidBeneficiaryCount(count);
-        }
-        uint256 totalShareBps = 0;
-        for (uint256 index; index < count; index++) {
-            address beneficiary = beneficiaries[index];
-            uint16 shareBps = sharesBps[index];
-            if (beneficiary == address(0)) revert InvalidRewardBeneficiary(beneficiary);
-            if (shareBps == 0) revert InvalidRewardShare(beneficiary, shareBps);
-            for (uint256 prior; prior < index; prior++) {
-                if (beneficiaries[prior] == beneficiary) {
-                    revert DuplicateRewardBeneficiary(beneficiary);
-                }
-            }
-            totalShareBps += shareBps;
-        }
-        if (totalShareBps != REWARD_SHARE_BASIS_POINTS) {
-            revert InvalidRewardShareTotal(totalShareBps);
-        }
+    function _validateLaunch(LaunchParameters calldata parameters) private view {
+        launchPolicy.validate(
+            parameters.name,
+            parameters.symbol,
+            parameters.metadata,
+            parameters.rewardBeneficiaries,
+            parameters.rewardSharesBps
+        );
+        initialBuyVestingWalletFactory.validateConfig(parameters.initialBuyCustody);
     }
 
     function _effectiveGraffiti(address deployer, bytes32 creatorSalt) private pure returns (bytes32) {
@@ -616,6 +629,12 @@ contract MemeLaunchV2 is IUnlockCallback, ReentrancyGuardTransient {
 
     function _rewardVaultSalt(address token, address deployer) private pure returns (bytes32) {
         return keccak256(abi.encode("programmable.classic-reward-vault.v1", token, deployer));
+    }
+
+    // Slither cannot build IR for the caller and therefore misses this use.
+    // slither-disable-next-line dead-code
+    function _initialBuyCustodySalt(address token, address deployer) private pure returns (bytes32) {
+        return keccak256(abi.encode("programmable.classic-initial-buy-custody.v1", token, deployer));
     }
 
     function _requireContract(address dependency) private view {

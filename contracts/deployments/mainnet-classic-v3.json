@@ -2,51 +2,76 @@
   "schemaVersion": 1,
   "model": "classic",
   "internalContractRelease": "classic-v3",
-  "status": "not-deployed",
+  "status": "deployment-source-and-lifecycle-verified",
   "chainId": 1,
-  "releaseCommit": null,
-  "sourceCommitment": "0xa92eeb3234cded560a5aedb0b9e59e7e0944a72e09e636eb43d4b7d5beb0955a",
-  "startingNonce": null,
-  "hookSalt": null,
+  "releaseCommit": "a117139b24041e87ccc318c6106f5aeb415b8128",
+  "sourceCommitment": "0x58991ed1743aaba5f1988a4576d36eb10af70b96bdb61661ba96e1f80acc9800",
+  "startingNonce": 87,
+  "hookSalt": "0x0000000000000000000000000000000000000000000000000000000000012e40",
   "candidatePlan": {
     "status": "simulation-only-refresh-before-signing",
-    "observedAtBlock": 25630967,
+    "observedAtBlock": 25639328,
     "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
-    "startingNonce": 30,
-    "transactionCount": 4,
-    "feeSplitVaultFactory": "0x1bE523967293E7CFbFFCB64cF1FF5d17DEa9B454",
-    "hookFactory": "0xb974A9EF7B75650428389b63fa6C4906450ABcE0",
-    "feeHook": "0x90cD6AAA824CbA7C1b329bb379c08cA2a9b720CC",
-    "launcher": "0x6Ae84F188468722d8b5970Bc3924C9C31b75FF4e",
-    "hookSalt": "0x00000000000000000000000000000000000000000000000000000000000029c4",
-    "estimatedGas": "16736294"
+    "startingNonce": 87,
+    "transactionCount": 7,
+    "ctoAuthority": "0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C",
+    "rewardVaultFactory": "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a",
+    "initialBuyVestingWalletFactory": "0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4",
+    "launchPolicy": "0x53a4d1E6ab184389D3581085AB73CD3549B20d1a",
+    "hookFactory": "0x61c616E98F9f71bFe813FE4359D012de2Ae70770",
+    "feeHook": "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC",
+    "launcher": "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
+    "hookSalt": "0x0000000000000000000000000000000000000000000000000000000000012e40",
+    "estimatedGas": "21955928"
   },
   "addresses": {
-    "deployer": null,
-    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "launcherFeeRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "ctoAuthority": "0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C",
+    "rewardVaultFactory": "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a",
+    "initialBuyVestingWalletFactory": "0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4",
+    "launchPolicy": "0x53a4d1E6ab184389D3581085AB73CD3549B20d1a",
+    "hookFactory": "0x61c616E98F9f71bFe813FE4359D012de2Ae70770",
+    "feeHook": "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC",
+    "launcher": "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
     "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
   },
   "transactions": {
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null
+    "ctoAuthority": "0x8587ebdb0dc1626ccb65e00722bfde005f62bf0c492ce4f7574a2164f3081969",
+    "rewardVaultFactory": "0xd9eb626691fa213004b0a533e569b85e8987a6bd3a77b7719affffa9b8e33aa3",
+    "initialBuyVestingWalletFactory": "0x0e548eaebe72120fc44314be890455a3e39af59b249d49d0614399e7831fa300",
+    "launchPolicy": "0x8d8d92587026d3d355cd800491b6550a18904182df77fc1eb01dd3e8526fa046",
+    "hookFactory": "0xf8c0ee6cc0bbc11bc8f8d081b9f4c67be99b4ce12b2967c0353660a2263a1ad4",
+    "feeHook": "0x402b3a5d7ace6d6a296bc9fdb461cf79ae56e197d7d4e5baf8544de19a5c49da",
+    "launcher": "0xc25f6a3b13b0789b4f69e28229b0b969184dbc3682555ea7e15bf731f5b1a150"
   },
   "runtimeCodeHashes": {
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
+    "ctoAuthority": "0x7beafb575fba4ffce22da7b3f927df8248eebc6c33e77cb43ed967a91a36984c",
+    "rewardVaultFactory": "0x874ec76f396807bfcbbdd88cc2fd534f10201242ad0479a05fe5d2ee937616ee",
+    "initialBuyVestingWalletFactory": "0x13b7578a8abd0bc0ba724b5815d9bd0aff0d07c2677c00d2577004e8c1f6d5f4",
+    "launchPolicy": "0xb6b31b6cf326784774e13f6d60f9b251dde118469a506fa3b1c124c9f11b49be",
+    "hookFactory": "0x068ef58aed42a9772bd63614d535071627ff2812001b884cf936816bff8ce163",
+    "feeHook": "0x3eba781023d3146ed9b502ac5b402d39cea4c34a14f64c878cb9ea62149590f1",
+    "launcher": "0x9cc9723456c471d90ac838c02fa4fc47ed4b7e82c85358e71deec978c48d2dc8",
     "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
   },
   "artifactRuntime": {
-    "feeSplitVaultFactory": {
-      "bytes": 6994,
-      "codeHash": "0x6e0fed3c3598d32458b9c7ce04a97ae3e0cc847e4022e3dec5a14cd1f29c88fc"
+    "ctoAuthority": {
+      "bytes": 1597,
+      "codeHash": "0x7beafb575fba4ffce22da7b3f927df8248eebc6c33e77cb43ed967a91a36984c"
+    },
+    "rewardVaultFactory": {
+      "bytes": 11474,
+      "codeHash": "0x84b44e2f7b8c315b1f802012d8a1f8b1a4281478a2781e32d1cfbe1cc5469916",
+      "note": "Artifact runtime before constructor immutable references are patched"
+    },
+    "initialBuyVestingWalletFactory": {
+      "bytes": 8715,
+      "codeHash": "0x13b7578a8abd0bc0ba724b5815d9bd0aff0d07c2677c00d2577004e8c1f6d5f4"
+    },
+    "launchPolicy": {
+      "bytes": 2100,
+      "codeHash": "0xb6b31b6cf326784774e13f6d60f9b251dde118469a506fa3b1c124c9f11b49be"
     },
     "hookFactory": {
       "bytes": 15702,
@@ -58,8 +83,8 @@
       "note": "Artifact runtime before constructor immutable references are patched"
     },
     "launcherTemplate": {
-      "bytes": 22879,
-      "codeHash": "0x60016675f2ad06642070c452ad7bd6a5b5a8f8afc148600c0273079b4101b7fb",
+      "bytes": 22933,
+      "codeHash": "0xde9d67fe0a5cae202df0dff2a4fe8a2073ab5c240205e849af1e0cfcc5e7adb6",
       "note": "Artifact runtime before constructor immutable references are patched"
     }
   },
@@ -98,14 +123,189 @@
     }
   },
   "sourceVerification": {
-    "status": "not-submitted",
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null
+    "status": "verified",
+    "checkedAt": "2026-07-29T16:27:29.518Z",
+    "infrastructurePlanDigest": "0xdad609aa9bac638e31b259183dc2a847f4a3f372213c4fbe650d3bf02f07f548",
+    "primaryProvider": "Etherscan",
+    "secondaryProvider": "Sourcify",
+    "exactMatchContractCount": 7,
+    "contracts": {
+      "ctoAuthority": {
+        "field": "ctoAuthority",
+        "address": "0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C",
+        "contractName": "ClassicCtoAuthorityV1",
+        "fqcn": "src/ClassicCtoAuthorityV1.sol:ClassicCtoAuthorityV1",
+        "encodedConstructorArguments": "0x0000000000000000000000002bb333d48dfaf1596d9036671d2e43168994249e",
+        "deploymentTransaction": "0x8587ebdb0dc1626ccb65e00722bfde005f62bf0c492ce4f7574a2164f3081969",
+        "deploymentBlock": 25639532,
+        "status": "etherscan-exact-sourcify-match",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C#code"
+        },
+        "sourcify": {
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C"
+        }
+      },
+      "rewardVaultFactory": {
+        "field": "rewardVaultFactory",
+        "address": "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a",
+        "contractName": "ClassicRewardVaultFactoryV1",
+        "fqcn": "src/ClassicRewardVaultFactoryV1.sol:ClassicRewardVaultFactoryV1",
+        "encodedConstructorArguments": "0x0000000000000000000000009746469cd79fddc5aa7218e7dd51c829ee518c0c",
+        "deploymentTransaction": "0xd9eb626691fa213004b0a533e569b85e8987a6bd3a77b7719affffa9b8e33aa3",
+        "deploymentBlock": 25639538,
+        "status": "etherscan-exact-sourcify-match",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a#code"
+        },
+        "sourcify": {
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a"
+        }
+      },
+      "initialBuyVestingWalletFactory": {
+        "field": "initialBuyVestingWalletFactory",
+        "address": "0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4",
+        "contractName": "ClassicInitialBuyVestingWalletFactoryV1",
+        "fqcn": "src/ClassicInitialBuyVestingWalletFactoryV1.sol:ClassicInitialBuyVestingWalletFactoryV1",
+        "encodedConstructorArguments": "0x",
+        "deploymentTransaction": "0x0e548eaebe72120fc44314be890455a3e39af59b249d49d0614399e7831fa300",
+        "deploymentBlock": 25639564,
+        "status": "etherscan-exact-sourcify-match",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4#code"
+        },
+        "sourcify": {
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4"
+        }
+      },
+      "launchPolicy": {
+        "field": "launchPolicy",
+        "address": "0x53a4d1E6ab184389D3581085AB73CD3549B20d1a",
+        "contractName": "ClassicLaunchPolicyV1",
+        "fqcn": "src/ClassicLaunchPolicyV1.sol:ClassicLaunchPolicyV1",
+        "encodedConstructorArguments": "0x",
+        "deploymentTransaction": "0x8d8d92587026d3d355cd800491b6550a18904182df77fc1eb01dd3e8526fa046",
+        "deploymentBlock": 25639579,
+        "status": "etherscan-exact-sourcify-match",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x53a4d1E6ab184389D3581085AB73CD3549B20d1a#code"
+        },
+        "sourcify": {
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x53a4d1E6ab184389D3581085AB73CD3549B20d1a"
+        }
+      },
+      "hookFactory": {
+        "field": "hookFactory",
+        "address": "0x61c616E98F9f71bFe813FE4359D012de2Ae70770",
+        "contractName": "EthCreatorFeeHookFactoryV3",
+        "fqcn": "src/EthCreatorFeeHookFactoryV3.sol:EthCreatorFeeHookFactoryV3",
+        "encodedConstructorArguments": "0x",
+        "deploymentTransaction": "0xf8c0ee6cc0bbc11bc8f8d081b9f4c67be99b4ce12b2967c0353660a2263a1ad4",
+        "deploymentBlock": 25639584,
+        "status": "etherscan-exact-sourcify-match",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x61c616E98F9f71bFe813FE4359D012de2Ae70770#code"
+        },
+        "sourcify": {
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x61c616E98F9f71bFe813FE4359D012de2Ae70770"
+        }
+      },
+      "feeHook": {
+        "field": "feeHook",
+        "address": "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC",
+        "contractName": "EthCreatorFeeHookV3",
+        "fqcn": "src/EthCreatorFeeHookV3.sol:EthCreatorFeeHookV3",
+        "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a900000000000000000000000004957f49620aff3adbbe8195a4f633e49cc93376c000000000000000000000000f28967f9dfac3ca21384b59d6d75c8106b3eab2a",
+        "deploymentTransaction": "0x402b3a5d7ace6d6a296bc9fdb461cf79ae56e197d7d4e5baf8544de19a5c49da",
+        "deploymentBlock": 25639591,
+        "status": "etherscan-exact-sourcify-match",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC#code"
+        },
+        "sourcify": {
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC"
+        }
+      },
+      "launcher": {
+        "field": "launcher",
+        "address": "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770",
+        "contractName": "MemeLaunchV2",
+        "fqcn": "src/MemeLaunchV2.sol:MemeLaunchV2",
+        "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90000000000000000000000000bd216513d74c8cf14cf4747e6aaa6420ff64ee9e000000000000000000000000000000e200088d55c39a11f609e5f667729ad49b00000000000000000000000035fe236ea82f7cf525c9719d7df8f49f94d720cc000000000000000000000000f28967f9dfac3ca21384b59d6d75c8106b3eab2a000000000000000000000000de21b9c0cc0afdb9be20e8236113f066bb8c66f400000000000000000000000053a4d1e6ab184389d3581085ab73cd3549b20d1a000000000000000000000000291a9ff1059d225d02b1659430804486404db507",
+        "deploymentTransaction": "0xc25f6a3b13b0789b4f69e28229b0b969184dbc3682555ea7e15bf731f5b1a150",
+        "deploymentBlock": 25639596,
+        "status": "etherscan-exact-sourcify-match",
+        "etherscan": {
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770#code"
+        },
+        "sourcify": {
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770"
+        }
+      }
+    }
   },
   "lifecycleEvidence": {
-    "status": "not-run",
-    "releaseEligible": false
+    "status": "verified-current-release",
+    "releaseEligible": true,
+    "checkedAt": "2026-07-29T16:44:24.478Z",
+    "verifier": "scripts/serve-classic-v3-lifecycle-canary.mjs",
+    "independentRpcCount": 2,
+    "deploymentTransactionsVerified": true,
+    "runtimeBindingsVerified": true,
+    "positionLockVerified": true,
+    "buyAndSellVerified": true,
+    "creatorClaimVerified": true,
+    "launcherClaimVerified": true,
+    "canaryToken": "0xFA5D9694D9f8fa47b8A6c15Df4510b76cb844e2c",
+    "rewardVault": "0x4cFEeF5C38F9236f360e5AAC67f5096db307eF3e",
+    "poolId": "0x6f5bf5f01d4d1e41d28d0447f8c40f50e66a110077ace434e924a7dbeb8755f8",
+    "positionRecipient": "0x07af388B834Fd9695aB9F013680a171d9F74c33e",
+    "positionTokenId": "354484",
+    "positionLiquidity": "36819258015569838458222",
+    "buySwapFeeBps": 100,
+    "sellSwapFeeBps": 200,
+    "creatorFeesClaimedWei": "12062218550104",
+    "launcherFeesClaimedWei": "1003274660531",
+    "transactions": {
+      "launch": "0x6297f67812ca78198cc69182a3443f8cf3ca766bf7813b470ce8d0bde663a96e",
+      "buy": "0xab89cdabdd3da223599ae4f2e179e8de5e0222abcf16b345fc36ca0e393a707e",
+      "tokenApproval": "0x4d91378245c0cc49860331f685f264a93877209d45c9a2f91ad211a5494c63bf",
+      "routerApproval": "0x88a91bf89bf92243c94a90f298b45c2d97e266a9ea7f6aeaf4834b7a61dd40cc",
+      "sell": "0xe4198404528819e1b08a05aea371b9a2feefb970091f854bf1c9ac20b566fbd4",
+      "creatorClaim": "0x47e76c194fcd9f9eae3d9a630e589912426a29e0910735c78bd6468f376956a3",
+      "launcherClaim": "0x43b1504d115e49376f91fb032d97765e72ed5d2e0613ae6dd9e2d1b6ec998abd"
+    },
+    "blocks": {
+      "launch": 25639700,
+      "buy": 25639713,
+      "tokenApproval": 25639717,
+      "routerApproval": 25639718,
+      "sell": 25639761,
+      "creatorClaim": 25639764,
+      "launcherClaim": 25639766
+    }
+  },
+  "deploymentBlocks": {
+    "ctoAuthority": 25639532,
+    "rewardVaultFactory": 25639538,
+    "initialBuyVestingWalletFactory": 25639564,
+    "launchPolicy": 25639579,
+    "hookFactory": 25639584,
+    "feeHook": 25639591,
+    "launcher": 25639596
   }
 }
