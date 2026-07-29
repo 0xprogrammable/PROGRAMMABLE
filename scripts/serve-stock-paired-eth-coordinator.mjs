@@ -13,6 +13,7 @@ import {
   STOCK_PAIRED_ETH_COORDINATOR_DEPLOYER,
   STOCK_PAIRED_ETH_COORDINATOR_EVIDENCE,
   assertStockPairedEthCoordinatorCheckout,
+  assertStockPairedEthCoordinatorRevalidation,
   assertStockPairedEthCoordinatorRuntime,
   buildStockPairedEthCoordinatorArtifact,
   loadStockPairedEthCoordinatorPlan,
@@ -24,10 +25,7 @@ const HOST = "127.0.0.1";
 const PORT = Number(process.env.STOCK_PAIRED_ETH_COORDINATOR_PORT ?? 4190);
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 2_048;
-const root = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const interactive = process.argv.includes("--write");
 const releaseCommit =
   process.env.STOCK_PAIRED_ETH_COORDINATOR_RELEASE_COMMIT?.trim() ||
@@ -85,17 +83,13 @@ async function assertDependencies(url, blockTag) {
   for (const [label, dependency] of Object.entries(
     STOCK_PAIRED_ETH_COORDINATOR_DEPENDENCIES,
   )) {
-    const code = await rpc(url, "eth_getCode", [
-      dependency.address,
-      blockTag,
-    ]);
+    const code = await rpc(url, "eth_getCode", [dependency.address, blockTag]);
     const runtime = {
       code,
       hash: code === "0x" ? null : keccak256(code),
     };
     if (
-      runtime.hash?.toLowerCase() !==
-      dependency.runtimeCodeHash.toLowerCase()
+      runtime.hash?.toLowerCase() !== dependency.runtimeCodeHash.toLowerCase()
     ) {
       throw new Error(`${label} runtime changed`);
     }
@@ -104,34 +98,23 @@ async function assertDependencies(url, blockTag) {
 
 async function safeBlock() {
   const heads = await Promise.all(
-    rpcUrls.map((url) =>
-      rpc(url, "eth_getBlockByNumber", ["latest", false]),
-    ),
+    rpcUrls.map((url) => rpc(url, "eth_getBlockByNumber", ["latest", false])),
   );
   if (
-    heads.some(
-      (head) =>
-        !head?.number ||
-        !head?.hash ||
-        !head?.baseFeePerGas,
-    )
+    heads.some((head) => !head?.number || !head?.hash || !head?.baseFeePerGas)
   ) {
     throw new Error("A Mainnet RPC returned an invalid head block");
   }
   const numbers = heads.map((head) => BigInt(head.number));
   const delta =
-    numbers[0] > numbers[1]
-      ? numbers[0] - numbers[1]
-      : numbers[1] - numbers[0];
+    numbers[0] > numbers[1] ? numbers[0] - numbers[1] : numbers[1] - numbers[0];
   if (delta > 4n) {
     throw new Error("Independent Mainnet RPC heads are too far apart");
   }
   const number = numbers[0] < numbers[1] ? numbers[0] : numbers[1];
   const tag = `0x${number.toString(16)}`;
   const blocks = await Promise.all(
-    rpcUrls.map((url) =>
-      rpc(url, "eth_getBlockByNumber", [tag, false]),
-    ),
+    rpcUrls.map((url) => rpc(url, "eth_getBlockByNumber", [tag, false])),
   );
   if (
     blocks.some((block) => !block?.hash || !block?.baseFeePerGas) ||
@@ -224,14 +207,16 @@ async function completedState(evidence) {
       evidence.sourceCommitment?.toLowerCase() ||
     plan.calldataHash.toLowerCase() !== evidence.calldataHash?.toLowerCase()
   ) {
-    throw new Error("The coordinator evidence does not match the reviewed plan");
+    throw new Error(
+      "The coordinator evidence does not match the reviewed plan",
+    );
   }
   const observations = await Promise.all(
     rpcUrls.map((url) => verifyCoordinator(url, plan, evidence)),
   );
   if (
     observations[0].runtimeCodeHash.toLowerCase() !==
-      observations[1].runtimeCodeHash.toLowerCase()
+    observations[1].runtimeCodeHash.toLowerCase()
   ) {
     throw new Error("Independent RPCs disagree on the coordinator runtime");
   }
@@ -250,20 +235,18 @@ async function prepare() {
     rpcUrls.map((url) => inspectRpc(url, block)),
   );
   if (!sameState(states[0], states[1])) {
-    throw new Error("Independent RPCs disagree on the current deployment state");
+    throw new Error(
+      "Independent RPCs disagree on the current deployment state",
+    );
   }
-  await Promise.all(
-    rpcUrls.map((url) => assertDependencies(url, block.tag)),
-  );
+  await Promise.all(rpcUrls.map((url) => assertDependencies(url, block.tag)));
   const nonce = Number(BigInt(states[0].confirmedNonce));
   const plan = await loadStockPairedEthCoordinatorPlan(root, {
     releaseCommit,
     nonce,
   });
   const codes = await Promise.all(
-    rpcUrls.map((url) =>
-      rpc(url, "eth_getCode", [plan.address, block.tag]),
-    ),
+    rpcUrls.map((url) => rpc(url, "eth_getCode", [plan.address, block.tag])),
   );
   if (codes.some((code) => code !== "0x")) {
     throw new Error("The predicted coordinator address is already occupied");
@@ -297,6 +280,51 @@ async function prepare() {
   };
 }
 
+async function revalidate() {
+  assertRpcUrls();
+  assertStockPairedEthCoordinatorCheckout(root, releaseCommit, {
+    build: false,
+  });
+  const block = await safeBlock();
+  const states = await Promise.all(
+    rpcUrls.map((url) => inspectRpc(url, block)),
+  );
+  if (!sameState(states[0], states[1])) {
+    throw new Error(
+      "Independent RPCs disagree on the current deployment state",
+    );
+  }
+  await Promise.all(rpcUrls.map((url) => assertDependencies(url, block.tag)));
+  const codes = await Promise.all(
+    rpcUrls.map((url) =>
+      rpc(url, "eth_getCode", [locked.plan.address, block.tag]),
+    ),
+  );
+  if (codes.some((code) => code !== "0x")) {
+    throw new Error("The predicted coordinator address is already occupied");
+  }
+  const simulations = await Promise.all(
+    rpcUrls.map(async (url) => {
+      const request = {
+        from: locked.plan.deployer,
+        data: locked.plan.data,
+        value: "0x0",
+      };
+      const [callResult, estimatedGas] = await Promise.all([
+        rpc(url, "eth_call", [request, block.tag]),
+        rpc(url, "eth_estimateGas", [request, block.tag]),
+      ]);
+      return { callResult, estimatedGas };
+    }),
+  );
+  assertStockPairedEthCoordinatorRevalidation(
+    locked.plan,
+    locked.prepared,
+    { ...states[0], code: codes[0] },
+    simulations,
+  );
+}
+
 function addressResult(value) {
   return `0x${value.slice(-40)}`.toLowerCase();
 }
@@ -311,7 +339,9 @@ async function verifyCoordinator(url, plan, evidence) {
     identity.runtimeCodeHash.toLowerCase() !==
     evidence.runtimeCodeHash.toLowerCase()
   ) {
-    throw new Error("The coordinator runtime hash does not match the simulation");
+    throw new Error(
+      "The coordinator runtime hash does not match the simulation",
+    );
   }
   for (const check of plan.checks) {
     const result = await rpc(url, "eth_call", [
@@ -362,7 +392,10 @@ async function record(hash) {
       rpcUrls.map((url) => rpc(url, "eth_getTransactionReceipt", [hash])),
     ),
   ]);
-  if (transactions.some((value) => !value) || receipts.some((value) => !value)) {
+  if (
+    transactions.some((value) => !value) ||
+    receipts.some((value) => !value)
+  ) {
     return { status: "pending" };
   }
   if (
@@ -445,20 +478,10 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === "POST" && request.url === "/revalidate") {
       const input = await body(request);
-      if (
-        !locked ||
-        input.preparedDigest !== locked.prepared.preparedDigest
-      ) {
+      if (!locked || input.preparedDigest !== locked.prepared.preparedDigest) {
         throw new Error("The preparation expired");
       }
-      const result = await prepare();
-      if (
-        result.status === "complete" ||
-        result.prepared.preparedDigest !== input.preparedDigest
-      ) {
-        throw new Error("The onchain deployment state changed");
-      }
-      locked = result;
+      await revalidate();
       json(response, 200, { status: "ready" });
       return;
     }
