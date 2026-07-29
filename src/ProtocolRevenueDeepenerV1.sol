@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ReentrancyGuardTransient } from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { TransientSlot } from "@openzeppelin/contracts/utils/TransientSlot.sol";
 import { CurrencySettler } from "@openzeppelin/uniswap-hooks/src/utils/CurrencySettler.sol";
@@ -205,6 +206,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
             revert InvalidFeeDisclosure();
         }
 
+        // Only initialization and the live LP fee are relevant to the immutable target validation.
+        // slither-disable-next-line unused-return
         (uint160 sqrtPriceX96,,, uint24 liveLpFee) = poolManager_.getSlot0(PoolId.wrap(actualPoolId));
         if (sqrtPriceX96 == 0 || liveLpFee != 0) revert InvalidPoolShape();
     }
@@ -220,7 +223,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
     function pullRevenue(address source) external nonReentrant returns (uint256 amount) {
         if (source.code.length == 0) revert InvalidSource(source);
         IProtocolRevenueSourceV1 revenueSource = IProtocolRevenueSourceV1(source);
-        address recipient;
+        // The successful try branch assigns this value and the catch branch always reverts.
+        address recipient = address(0);
         try revenueSource.launcherFeeRecipient() returns (address configuredRecipient) {
             recipient = configuredRecipient;
         } catch {
@@ -228,7 +232,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
         }
         if (recipient != address(this)) revert InvalidSource(source);
 
-        uint256 quoted;
+        // The successful try branch assigns this value and the catch branch always reverts.
+        uint256 quoted = 0;
         try revenueSource.launcherFeesAccrued() returns (uint256 accrued) {
             quoted = accrued;
         } catch {
@@ -255,10 +260,14 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
         }
 
         Snapshot memory previous = snapshot;
+        // Timestamp comparisons intentionally enforce the bounded observation window.
+        // slither-disable-next-line timestamp
         if (previous.timestamp != 0 && block.timestamp <= uint256(previous.timestamp) + MAX_OBSERVATION_AGE_SECONDS) {
             revert AlreadySnapshotted(uint256(previous.timestamp) + MAX_OBSERVATION_AGE_SECONDS);
         }
 
+        // Only the spot tick is required for the delayed observation.
+        // slither-disable-next-line unused-return
         (, int24 tick,,) = poolManager.getSlot0(PoolId.wrap(poolId));
         current = Snapshot({ tick: tick, timestamp: block.timestamp.toUint64() });
         snapshot = current;
@@ -275,12 +284,17 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
         // slither-disable-next-line reentrancy-balance,reentrancy-no-eth,reentrancy-benign
         result = abi.decode(poolManager.unlock(abi.encode(request)), (CompoundResult));
         ACTIVE_REQUEST_SLOT.asBytes32().tstore(bytes32(0));
+        // Equality is required for callback-request binding; this is not a timestamp comparison.
+        // slither-disable-next-line timestamp
         if (result.digest != request.digest) revert ActiveRequestMismatch(request.digest, result.digest);
 
         _verifyCompoundBalances(nativeBefore, tokenBefore, result);
         _finalizeCompound(msg.sender, result);
     }
 
+    // Sentinel equality and timestamp bounds are intentional state-machine checks. The branch count reflects
+    // independent fail-closed guards that are easier to audit together than when hidden behind helper calls.
+    // slither-disable-start timestamp,incorrect-equality,cyclomatic-complexity
     function _prepareCompound()
         private
         view
@@ -304,6 +318,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
         nativeBefore = address(this).balance;
         tokenBefore = IERC20(token).balanceOf(address(this));
 
+        // Only the current price and tick are required by the bounded compound calculation.
+        // slither-disable-next-line unused-return
         (uint160 preSqrtPriceX96, int24 preTick,,) = poolManager.getSlot0(PoolId.wrap(poolId));
         if (_absoluteTickDelta(currentSnapshot.tick, preTick) > uint24(MAX_SNAPSHOT_SPOT_DELTA_TICKS)) {
             revert SnapshotPriceDivergence(currentSnapshot.tick, preTick, MAX_SNAPSHOT_SPOT_DELTA_TICKS);
@@ -316,11 +332,11 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
 
         uint128 activeLiquidity = poolManager.getLiquidity(PoolId.wrap(poolId));
         if (activeLiquidity == 0) revert NoLiquidityAvailable();
-        uint256 maxSwapAtPriceLimit =
+        uint256 rawMaxSwapAtPriceLimit =
             SqrtPriceMath.getAmount0Delta(sqrtPriceLimitX96, preSqrtPriceX96, activeLiquidity, false);
-        maxSwapAtPriceLimit = (maxSwapAtPriceLimit * IMPACT_CAP_UTILIZATION_BPS) / BASIS_POINTS;
         uint256 budgetNative =
-            maxSwapAtPriceLimit >= MAX_COMPOUND_NATIVE / 2 ? MAX_COMPOUND_NATIVE : maxSwapAtPriceLimit * 2;
+            Math.mulDiv(rawMaxSwapAtPriceLimit, uint256(IMPACT_CAP_UTILIZATION_BPS) * 2, BASIS_POINTS);
+        if (budgetNative > MAX_COMPOUND_NATIVE) budgetNative = MAX_COMPOUND_NATIVE;
         if (budgetNative > nativeBefore) budgetNative = nativeBefore;
         if (budgetNative < MIN_COMPOUND_NATIVE) {
             revert InsufficientRevenue(budgetNative, MIN_COMPOUND_NATIVE);
@@ -337,6 +353,7 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
         });
         request.digest = _compoundDigest(request);
     }
+    // slither-disable-end timestamp,incorrect-equality,cyclomatic-complexity
 
     function _compoundDigest(CompoundRequest memory request) private view returns (bytes32) {
         return keccak256(abi.encode(block.chainid, address(this), poolId, compoundNonce, request));
@@ -348,6 +365,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
     {
         uint256 expectedNativeBalance = nativeBefore - result.swapNative - result.nativeAdded;
         uint256 actualNativeBalance = address(this).balance;
+        // Exact conservation checks are intentional; this detector maps them as timestamp comparisons.
+        // slither-disable-next-line timestamp
         if (actualNativeBalance != expectedNativeBalance) {
             revert InvalidCurrencyDelta(
                 (actualNativeBalance.toInt256() - expectedNativeBalance.toInt256()).toInt128(), 0
@@ -355,6 +374,7 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
         }
         uint256 expectedTokenBalance = tokenBefore + result.tokenAcquired - result.tokenAdded;
         uint256 actualTokenBalance = IERC20(token).balanceOf(address(this));
+        // slither-disable-next-line timestamp
         if (actualTokenBalance != expectedTokenBalance) {
             revert InvalidCurrencyDelta(0, (actualTokenBalance.toInt256() - expectedTokenBalance.toInt256()).toInt128());
         }
@@ -374,6 +394,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
             revert InvalidPoolBinding(poolId, PoolId.unwrap(key.toId()));
         }
 
+        // Every field read below is assigned before use; zero-valued accounting fields are valid.
+        // slither-disable-next-line uninitialized-local
         CompoundResult memory result;
         result.budgetNative = request.budgetNative;
         result.preSqrtPriceX96 = request.preSqrtPriceX96;
@@ -402,6 +424,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
         return abi.encode(result);
     }
 
+    // The detector traces the snapshot tick through the request and mistakes price comparisons for timestamp checks.
+    // slither-disable-start timestamp
     function _swapForToken(PoolKey memory key, CompoundRequest memory request)
         private
         returns (uint256 swapNative, uint256 tokenAcquired, uint160 postSqrtPriceX96, int24 postTick)
@@ -419,6 +443,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
         }
 
         tokenAcquired = uint256(int256(swapDelta.amount1()));
+        // Only the post-swap price and tick are required for the impact guard.
+        // slither-disable-next-line unused-return
         (postSqrtPriceX96, postTick,,) = poolManager.getSlot0(PoolId.wrap(poolId));
         if (
             _absoluteTickDelta(request.preTick, postTick) > uint24(MAX_INTERNAL_SWAP_IMPACT_TICKS)
@@ -430,6 +456,7 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
             );
         }
     }
+    // slither-disable-end timestamp
 
     function _addLockedLiquidity(
         PoolKey memory key,
@@ -495,6 +522,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
     }
 
     function lockedLiquidity() public view returns (uint128 liquidity) {
+        // Only liquidity is exposed; fee-growth values are not part of this add-only position metric.
+        // slither-disable-next-line unused-return
         (liquidity,,) = poolManager.getPositionInfo(
             PoolId.wrap(poolId),
             address(this),
@@ -505,6 +534,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
     }
 
     function nextCompoundTimestamp() external view returns (uint256) {
+        // Zero is the explicit sentinel for a pool that has not compounded yet.
+        // slither-disable-next-line timestamp,incorrect-equality
         return lastCompoundTimestamp == 0 ? 0 : uint256(lastCompoundTimestamp) + COMPOUND_INTERVAL_SECONDS;
     }
 
@@ -529,6 +560,8 @@ abstract contract ProtocolRevenueDeepenerBaseV1 is IUnlockCallback, ReentrancyGu
 
     function _absoluteTickDelta(int24 first, int24 second) private pure returns (uint24) {
         int256 difference = int256(first) - int256(second);
+        // Signed tick normalization is unrelated to block timestamps.
+        // slither-disable-next-line timestamp
         return uint24(uint256(difference < 0 ? -difference : difference));
     }
 
