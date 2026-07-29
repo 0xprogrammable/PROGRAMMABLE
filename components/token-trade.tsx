@@ -323,6 +323,8 @@ export function TokenTrade({
       tokenPriceUsdWad,
     }),
   );
+  const hasValidAmount =
+    /^\d+(?:\.\d+)?$/.test(amount.trim()) && Number(amount) > 0;
   const displayBalance = balances
     ? side === "buy" && !stockPaired
       ? `${formatWalletBalance(balances.nativeBalanceWei, 18)} ETH`
@@ -568,7 +570,24 @@ export function TokenTrade({
           <label htmlFor={amountInputId}>
             {side === "buy" ? "You pay" : "You sell"}
           </label>
-          <span className={styles.balance}>{displayBalance}</span>
+          <span className={styles.balanceRow}>
+            <span className={styles.balance}>{displayBalance}</span>
+            <button
+              className={styles.maxButton}
+              type="button"
+              disabled={maxPending || !owner}
+              aria-label={`Use maximum ${
+                side === "buy"
+                  ? stockPaired
+                    ? quoteAssetSymbol ?? "quote asset"
+                    : "ETH"
+                  : symbol
+              } balance`}
+              onClick={() => void applyMaximumBalance()}
+            >
+              {maxPending ? "Loading" : "Max"}
+            </button>
+          </span>
         </div>
         <div className={styles.amountInputRow}>
           <input
@@ -576,9 +595,11 @@ export function TokenTrade({
             id={amountInputId}
             inputMode="decimal"
             autoComplete="off"
+            aria-invalid={Boolean(error)}
             value={amount}
             onChange={(event) => {
               setAmount(event.target.value);
+              if (error) setError("");
             }}
             placeholder="0"
           />
@@ -591,22 +612,7 @@ export function TokenTrade({
           </span>
         </div>
         <div className={styles.amountMeta}>
-          <span>{approximateUsd || "\u00A0"}</span>
-          <button
-            className={styles.maxButton}
-            type="button"
-            disabled={maxPending || !owner}
-            aria-label={`Use maximum ${
-              side === "buy"
-                ? stockPaired
-                  ? quoteAssetSymbol ?? "quote asset"
-                  : "ETH"
-                : symbol
-            } balance`}
-            onClick={() => void applyMaximumBalance()}
-          >
-            {maxPending ? "Loading" : "Max"}
-          </button>
+          <span aria-live="polite">{approximateUsd || "\u00A0"}</span>
         </div>
       </div>
 
@@ -623,7 +629,7 @@ export function TokenTrade({
         <button
           className={styles.primaryAction}
           type={owner ? "submit" : "button"}
-          disabled={pending}
+          disabled={pending || Boolean(owner && !hasValidAmount)}
           onClick={owner ? undefined : onConnect}
         >
           {pending
