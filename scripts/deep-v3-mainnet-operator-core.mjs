@@ -158,6 +158,7 @@ export const DEEP_V3_OPERATOR_RELEASE_PATHS = Object.freeze([
   "contracts/scripts/deep-full-range-release-v3-core.mjs",
   "contracts/scripts/deep-v3-lifecycle-write.mjs",
   "contracts/scripts/capture-deep-full-range-v3-lifecycle.mjs",
+  "contracts/scripts/verify-deep-v3-sources.mjs",
   "scripts/deep-v3-mainnet-operator-core.mjs",
   "scripts/deep-v3-canary-trade-core.mjs",
   "scripts/serve-deep-v3-mainnet-operator.mjs",
