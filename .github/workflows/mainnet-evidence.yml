@@ -6,6 +6,8 @@ on:
     - cron: "17 5 * * *"
   pull_request:
     paths:
+      - "src/**"
+      - "test/ClassicV3MainnetFork.t.sol"
       - "deployments/**"
       - "models/**"
       - "releases/**"
@@ -22,7 +24,7 @@ concurrency:
 jobs:
   mainnet-evidence:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -33,7 +35,22 @@ jobs:
         with:
           version: stable
 
+      - name: Bootstrap pinned dependencies
+        run: ./scripts/bootstrap-deps.sh
+
       - name: Verify Ethereum runtime bytecode
         env:
           ETHEREUM_RPC_URL: https://ethereum-rpc.publicnode.com
         run: ./scripts/verify-mainnet-bytecode.sh
+
+      - name: Run Classic lifecycle fork test
+        run: |
+          for rpc_url in https://rpc.flashbots.net https://eth.drpc.org; do
+            for attempt in 1 2; do
+              echo "Fork attempt ${attempt} with ${rpc_url}"
+              if ETHEREUM_RPC_URL="${rpc_url}" forge test --match-contract ClassicV3MainnetForkTest; then
+                exit 0
+              fi
+            done
+          done
+          exit 1
