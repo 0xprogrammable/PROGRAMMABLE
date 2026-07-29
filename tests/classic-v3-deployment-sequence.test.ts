@@ -9,6 +9,7 @@ const {
   FINALITY_CONFIRMATIONS,
   assertClassicV3SequenceState,
   assertReviewedClassicV3SourceCommitment,
+  classicV3EvidenceHead,
   computeClassicV3SourceCommitment,
   createClassicV3Evidence,
   mergeClassicV3EvidenceRecord,
@@ -212,6 +213,15 @@ describe("Classic V3 dual-RPC preparation", () => {
 });
 
 describe("Classic V3 receipt evidence", () => {
+  it("uses the agreed receipt block when a reconciled head is one block behind", () => {
+    expect(
+      classicV3EvidenceHead(
+        { latestBlock: "0x63" },
+        { receipt: { blockNumber: "0x64" } },
+      ),
+    ).toBe("0x64");
+  });
+
   it("records a pending exact transaction without treating it as confirmed", () => {
     const record = validateClassicV3TransactionRecord(
       plan,
@@ -337,5 +347,23 @@ describe("Classic V3 source commitment", () => {
         releaseCore.REVIEWED_SOURCE_COMMITMENT,
       ),
     ).toThrow("artifacts do not match");
+  });
+
+  it("loads the exact reviewed Sepolia plan", async () => {
+    const sepolia = await releaseCore.loadClassicV3ReleasePlan(
+      process.cwd(),
+      "sepolia",
+    );
+    expect(sepolia.network).toBe("Sepolia");
+    expect(sepolia.chainId).toBe(11_155_111);
+    expect(sepolia.chainIdHex).toBe("0xaa36a7");
+    expect(sepolia.sourceCommitment).toBe(
+      releaseCore.REVIEWED_SEPOLIA_SOURCE_COMMITMENT,
+    );
+    expect(sepolia.startingNonce).toBe(39);
+    expect(sepolia.transactions).toHaveLength(7);
+    expect(sepolia.transactions.at(-1)?.address).toBe(
+      "0xDAa2EA44f4cb77781714EC5Aa8144d054272f0e8",
+    );
   });
 });
