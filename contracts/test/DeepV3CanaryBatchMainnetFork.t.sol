@@ -15,6 +15,20 @@ interface IDeepV3CanaryUniversalRouter {
     function execute(bytes calldata commands, bytes[] calldata inputs, uint256 deadline) external payable;
 }
 
+interface IDeepV3CanaryVault {
+    function workState()
+        external
+        view
+        returns (
+            uint8 action,
+            uint256 hookGrowthFees,
+            uint256 pendingNative,
+            uint256 nextEligibleTimestamp,
+            uint256 rollingCapacity,
+            bytes4 blockedReason
+        );
+}
+
 struct DeepV3CanaryExactInputSingleParams {
     PoolKey poolKey;
     bool zeroForOne;
@@ -39,6 +53,7 @@ contract DeepV3CanaryBatchMainnetForkTest is Test {
     address internal constant UNIVERSAL_ROUTER = 0xd92A36B0000531EF3063dEd4De20A0783308446C;
     address internal constant FEE_HOOK = 0x864aF5CEaD61068b944e9974638760F1bD2dFaeC;
     address internal constant TOKEN = 0x628BDD54595930cF0AfC8e432E3102eFef0D957B;
+    address internal constant VAULT = 0x4b1F2030950D357fc9315058d2427aE651191e37;
     bytes32 internal constant POOL_ID = 0x45e5d3e0e106819e2eb8a97f63661ff71c795fb364ec5fae42127c3ed71e5c18;
 
     uint256 internal constant MAX_NATIVE_DEBT = 0.0034 ether;
@@ -123,6 +138,16 @@ contract DeepV3CanaryBatchMainnetForkTest is Test {
         emit log_named_uint(
             "Deep V3 20-cycle maximum upfront envelope", _maximumUpfrontEnvelope(TWENTY_FULL_TRANSACTION_GAS)
         );
+    }
+
+    function test_deployedV3ReproducesTheReleaseBlockingDepthRegression() public {
+        _executeBatch(NINETEEN_CYCLES, NINETEEN_BUY_AMOUNT, NINETEEN_BUY_MINIMUM, NINETEEN_SELL_MINIMUM);
+
+        (uint8 action, uint256 growthFees,,,, bytes4 blockedReason) = IDeepV3CanaryVault(VAULT).workState();
+
+        assertGe(growthFees, 0.002 ether);
+        assertEq(blockedReason, bytes4(keccak256("RollingExposureCapacityUnavailable(uint256,uint256)")));
+        assertEq(action, 0);
     }
 
     function _executeBatch(uint256 cycles, uint128 buyAmount, uint128 buyMinimum, uint128 sellMinimum)

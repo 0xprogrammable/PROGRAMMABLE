@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "model": "deep",
+  "releaseVersion": "deep-full-range-v3",
+  "status": "blocked-liveness-regression",
+  "chainId": 1,
+  "releaseCommit": "9ddfd79dab6518b2f61729f3a09088b3af2bfdf3",
+  "sourceCommitment": "0xc375eef30da88e2402c52f1c54641f44ed447e536055d46563d01cc85868337c",
+  "observedAtBlock": 25638498,
+  "independentRpcCount": 2,
+  "rpcEvidence": [
+    "BlockPI Ethereum Mainnet",
+    "Tenderly Ethereum Mainnet Gateway"
+  ],
+  "canary": {
+    "token": "0x628BDD54595930cF0AfC8e432E3102eFef0D957B",
+    "vault": "0x4b1F2030950D357fc9315058d2427aE651191e37",
+    "feeHook": "0x864aF5CEaD61068b944e9974638760F1bD2dFaeC",
+    "poolId": "0x45e5d3e0e106819e2eb8a97f63661ff71c795fb364ec5fae42127c3ed71e5c18",
+    "feeGenerationTransaction": "0x865eeb1838dfd8fc330bf4ff38b76aa3401fa03f301fdbe65eff309932b4c666",
+    "feeGenerationBlock": 25638355,
+    "feeGenerationReceiptStatus": "success",
+    "growthFeesWei": "2047140000000000",
+    "pendingGrowthWei": "0",
+    "lockedGrowthLiquidity": "0"
+  },
+  "blocker": {
+    "selector": "0x2a6605ec",
+    "signature": "RollingExposureCapacityUnavailable(uint256,uint256)",
+    "workAction": 0,
+    "deployedTrustedNativeDepthWei": "594000000000000",
+    "deployedRollingCapacityWei": "1485000000000",
+    "minimumCompoundNativeWei": "2000000000000000",
+    "cause": "The deployed vault measured only native tokens currently held in range. The intended launch-anchored virtual-depth policy was not used, leaving the minimum launch permanently below the first compound threshold.",
+    "impact": "Growth fees remain accounted to the exact PoolId, but this immutable vault cannot compound them."
+  },
+  "resolution": {
+    "status": "replacement-required",
+    "newSourceCommitment": "0x902cc5e0737e604164e8962bcbdc536eb5df7a1aa508ee322736b2fd394fd440",
+    "strategy": "Restore launch-anchored virtual native depth, preserve every oracle and exposure bound, deploy a new immutable stack and repeat the Mainnet canary.",
+    "oldDeploymentActivated": false,
+    "oldKeeperActivated": false
+  }
+}

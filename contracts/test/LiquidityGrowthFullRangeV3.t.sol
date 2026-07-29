@@ -3,12 +3,14 @@ pragma solidity 0.8.26;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import { FixedPoint96 } from "@uniswap/v4-core/src/libraries/FixedPoint96.sol";
 import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { TransientStateLibrary } from "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
 import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
-import { ModifyLiquidityParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import { ModifyLiquidityParams, SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 import { LiquidityGrowthFeeOracleHookV2 } from "../src/LiquidityGrowthFeeOracleHookV2.sol";
 import { LiquidityGrowthFullRangePolicyV3 as Policy } from "../src/LiquidityGrowthFullRangePolicyV3.sol";
@@ -49,6 +51,56 @@ contract LiquidityGrowthFullRangeV3Test is LiquidityGrowthFullRangeV3Fixture {
             )
         );
         assertEq(v3Hook.initialPositionSaltByPool(v3PoolId), INITIAL_POSITION_SALT);
+    }
+
+    function test_trustedDepthUsesLaunchAnchoredVirtualNativeDepth() public {
+        (uint160 sqrtPriceX96, int24 currentTick,,) = manager.getSlot0(PoolId.wrap(v3PoolId));
+        assertLt(currentTick, Policy.INITIAL_TICK);
+
+        bytes32 initialSalt = v3Hook.initialPositionSaltByPool(v3PoolId);
+        (uint128 initialLiquidity,,) = manager.getPositionInfo(
+            PoolId.wrap(v3PoolId),
+            address(modifyLiquidityRouter),
+            Policy.FULL_RANGE_TICK_LOWER,
+            Policy.INITIAL_TICK,
+            initialSalt
+        );
+        uint160 anchoredSqrtPriceX96 =
+            sqrtPriceX96 > Policy.initialSqrtPriceX96() ? sqrtPriceX96 : Policy.initialSqrtPriceX96();
+        uint256 expectedDepth = FullMath.mulDiv(
+            uint256(initialLiquidity) + uint256(v3Vault.lockedLiquidity()), FixedPoint96.Q96, anchoredSqrtPriceX96
+        );
+
+        uint256 depthBefore = v3Vault.trustedNativeDepth();
+        assertEq(depthBefore, expectedDepth);
+
+        _ordinaryV3Buy(0.01 ether);
+        (uint160 lowerSqrtPriceX96,,,) = manager.getSlot0(PoolId.wrap(v3PoolId));
+        assertLt(lowerSqrtPriceX96, sqrtPriceX96);
+        assertEq(v3Vault.trustedNativeDepth(), depthBefore);
+    }
+
+    function test_trustedDepthExcludesInitialPositionOnceItIsOutOfRange() public {
+        _matureV3Oracle();
+        v3Vault.compound();
+        v3Token.mint(address(this), Policy.TOKEN_SUPPLY);
+        uint256 tokenBalance = IERC20(address(v3Token)).balanceOf(address(this));
+        assertGt(tokenBalance, 0);
+        swapRouter.swap(
+            v3Key,
+            SwapParams({
+                zeroForOne: false,
+                amountSpecified: -int256(tokenBalance),
+                sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
+            }),
+            v3SwapSettings,
+            ""
+        );
+
+        (uint160 sqrtPriceX96, int24 currentTick,,) = manager.getSlot0(PoolId.wrap(v3PoolId));
+        assertGe(currentTick, Policy.INITIAL_TICK);
+        uint256 expectedDepth = FullMath.mulDiv(v3Vault.lockedLiquidity(), FixedPoint96.Q96, sqrtPriceX96);
+        assertEq(v3Vault.trustedNativeDepth(), expectedDepth);
     }
 
     function test_compoundClaimsGrowthBuysTokenAndAddsPermanentSamePoolLiquidityAtomically() public {
