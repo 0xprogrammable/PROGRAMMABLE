@@ -13,6 +13,7 @@
 <p align="center">
   <a href="https://programmable.family">Launch</a> ·
   <a href="MODELS.md">Models</a> ·
+  <a href="BUILDER_PROGRAM.md">Build a model</a> ·
   <a href="deployments/ethereum.json">Ethereum</a> ·
   <a href="SECURITY.md">Security</a> ·
   <a href="https://x.com/0xProgrammable">X</a>
@@ -32,6 +33,9 @@ the token details and launch without writing Solidity.
 
 This repository contains the contracts behind every published model. Each available release includes its exact source,
 tests, security documentation and Ethereum deployment record.
+
+Independent builders can submit complete launch models through the
+[Hook Builder Program](BUILDER_PROGRAM.md). Submissions are reviewed before any model is accepted or released.
 
 ## Launch models
 
@@ -66,6 +70,7 @@ test/                Unit, integration, fuzz, invariant and regression tests
 deployments/         Ethereum addresses, transactions and runtime code hashes
 spec/                Machine-readable contract parameters
 scripts/             Reproducible dependency bootstrap
+BUILDER_PROGRAM.md    External model submission and participation terms
 SECURITY.md           Repository security policy and current contract status
 ```
 
