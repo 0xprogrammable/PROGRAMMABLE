@@ -9,6 +9,7 @@ import { UERC20Metadata } from "@uniswap/uerc20-factory/src/libraries/UERC20Meta
 import { UERC20 } from "@uniswap/uerc20-factory/src/tokens/UERC20.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
+import { ProtocolFeeLibrary } from "@uniswap/v4-core/src/libraries/ProtocolFeeLibrary.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { TransientStateLibrary } from "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
@@ -37,6 +38,7 @@ import { ILiquidityGrowthFullRangeVaultFactoryV3 } from "../src/interfaces/ILiqu
 /// @notice Deep integration proof against pinned canonical Ethereum deployments.
 /// @dev A green run proves compatibility only at SNAPSHOT_BLOCK; it does not broadcast a transaction.
 contract LiquidityGrowthFullRangeV3MainnetForkTest is Test {
+    using ProtocolFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
     using TransientStateLibrary for IPoolManager;
 
@@ -177,9 +179,16 @@ contract LiquidityGrowthFullRangeV3MainnetForkTest is Test {
         candidates[0] = DeepKeeperExecutorV2.Candidate({
             vault: address(vault), expectedAction: LiquidityGrowthFullRangeAutomationV3.Action.Compound
         });
+        uint256 gasBefore = gasleft();
         (, uint256 attempted, uint256 succeeded) = executor.execute(candidates);
+        uint256 measuredGas = gasBefore - gasleft();
         assertEq(attempted, 1);
         assertEq(succeeded, 1);
+        uint256 reviewedCeiling = _eip150(executor.ASSESSMENT_GAS_STIPEND()) + _eip150(executor.COMPOUND_GAS_STIPEND())
+            + executor.RESULT_GAS_RESERVE() + executor.FINAL_GAS_RESERVE();
+        assertLe(measuredGas * 100, reviewedCeiling * 80);
+        emit log_named_uint("Deep V3 Mainnet fork executor compound gas", measuredGas);
+        emit log_named_uint("Deep V3 Mainnet fork reviewed per-vault ceiling", reviewedCeiling);
         assertGt(vault.lockedLiquidity(), lockedBefore);
         assertEq(vault.lockedLiquidity(), vault.totalLiquidityAdded());
         assertEq(PoolId.unwrap(vault.poolKey().toId()), launchResult.poolId);
@@ -197,6 +206,32 @@ contract LiquidityGrowthFullRangeV3MainnetForkTest is Test {
         assertEq(_growthFeesAccrued(), 0);
         assertEq(hook.launcherFeesAccrued(), programmableBefore);
         assertGt(vault.totalNativeSwapped(), 0);
+        assertGt(vault.totalNativeAdded(), 0);
+        assertGt(vault.totalTokenAdded(), 0);
+    }
+
+    function test_directionalProtocolFeeIsIncludedInTheAtomicCompound() public {
+        address controller = manager.protocolFeeController();
+        assertTrue(controller != address(0));
+        vm.prank(controller);
+        manager.setProtocolFee(key, 500);
+        (,, uint24 packedProtocolFee,) = manager.getSlot0(PoolId.wrap(launchResult.poolId));
+        assertEq(packedProtocolFee.getZeroForOneFee(), 500);
+        assertEq(packedProtocolFee.getOneForZeroFee(), 0);
+
+        _swap(true, -int256(1 ether), 1 ether);
+        _stageAndMatureOracle();
+        (, uint256 programmableBefore) = _feeSnapshot();
+        DeepKeeperExecutorV2.Candidate[] memory candidates = new DeepKeeperExecutorV2.Candidate[](1);
+        candidates[0] = DeepKeeperExecutorV2.Candidate({
+            vault: address(vault), expectedAction: LiquidityGrowthFullRangeAutomationV3.Action.Compound
+        });
+        (, uint256 attempted, uint256 succeeded) = executor.execute(candidates);
+
+        assertEq(attempted, 1);
+        assertEq(succeeded, 1);
+        assertEq(hook.launcherFeesAccrued(), programmableBefore);
+        assertEq(_growthFeesAccrued(), 0);
         assertGt(vault.totalNativeAdded(), 0);
         assertGt(vault.totalTokenAdded(), 0);
     }
@@ -336,5 +371,9 @@ contract LiquidityGrowthFullRangeV3MainnetForkTest is Test {
         assertEq(growth + programmable, gross * Policy.TOTAL_HOOK_FEE_BPS / Policy.BASIS_POINTS);
         assertEq(programmable, FullMath.mulDiv(gross, Policy.PROGRAMMABLE_FEE_BPS, Policy.BASIS_POINTS));
         assertEq(growth, gross * Policy.TOTAL_HOOK_FEE_BPS / Policy.BASIS_POINTS - programmable);
+    }
+
+    function _eip150(uint256 stipend) private pure returns (uint256) {
+        return stipend + (stipend + 62) / 63;
     }
 }
