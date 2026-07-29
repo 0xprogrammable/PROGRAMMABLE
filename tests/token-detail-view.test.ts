@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseEther } from "viem";
 
 import {
+  buildChartVolumeMetric,
   buildTokenDetailMetrics,
   formatPreparedMinimum,
   formatStockPairedGrossVolume,
@@ -38,9 +39,7 @@ describe("token detail metrics", () => {
   });
 
   it("never exposes internal fee accounting in the detail metrics", () => {
-    const labels = buildTokenDetailMetrics(token).map(
-      (metric) => metric.label,
-    );
+    const labels = buildTokenDetailMetrics(token).map((metric) => metric.label);
 
     expect(labels).not.toContain("Creator fees");
     expect(labels).not.toContain("Launcher fees");
@@ -52,6 +51,55 @@ describe("token detail metrics", () => {
       label: "Market cap",
       value: "$212.4K",
     });
+  });
+
+  it("uses the same indexed market cap shown on Explore", () => {
+    expect(
+      buildTokenDetailMetrics({
+        ...token,
+        indexedMarketCapEth: "12.5",
+        indexedMarketCapUsdWad: parseEther("43750").toString(),
+      })[0],
+    ).toEqual({
+      label: "Market cap",
+      value: "$43.75K",
+    });
+  });
+
+  it("replaces all-time volume with the selected chart range", () => {
+    const volume = buildChartVolumeMetric({
+      range: "1h",
+      pending: false,
+      volumeEth: "12.5",
+      volumeUsdWad: parseEther("43750").toString(),
+    });
+
+    expect(buildTokenDetailMetrics(token, null, volume)).toEqual([
+      { label: "Market cap", value: "$168.56K" },
+      { label: "Volume 1H", value: "$43.8K" },
+      { label: "Swap fee", value: "1%" },
+    ]);
+  });
+
+  it("never presents all-time volume while a shorter range is loading", () => {
+    const volume = buildChartVolumeMetric({
+      range: "1w",
+      pending: true,
+    });
+
+    expect(
+      buildTokenDetailMetrics(token, null, volume).find((metric) =>
+        metric.label.startsWith("Volume"),
+      ),
+    ).toEqual({ label: "Volume 1W", value: "—" });
+    expect(buildChartVolumeMetric(null)).toBeUndefined();
+    expect(
+      buildChartVolumeMetric({
+        range: "all",
+        pending: false,
+        volumeEth: "1",
+      }),
+    ).toBeUndefined();
   });
 
   it("labels the fixed Deep V3 hook charge without implying it includes protocol fees", () => {
@@ -108,9 +156,7 @@ describe("token detail metrics", () => {
       snapshot: { chainId: 1 },
     };
 
-    expect(
-      parseDetailPayload(payload).token?.uniswapV4Pool,
-    ).toEqual(validPool);
+    expect(parseDetailPayload(payload).token?.uniswapV4Pool).toEqual(validPool);
     expect(() =>
       parseDetailPayload({
         ...payload,
@@ -196,8 +242,6 @@ describe("token detail metrics", () => {
       },
     } as PreparedTokenTrade;
 
-    expect(formatPreparedMinimum(prepared, "STOCK", 18)).toBe(
-      "0.25 ETH",
-    );
+    expect(formatPreparedMinimum(prepared, "STOCK", 18)).toBe("0.25 ETH");
   });
 });

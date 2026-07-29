@@ -2,12 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  Check,
-  Copy,
-  ExternalLink,
-} from "lucide-react";
+import { ArrowLeft, Check, Copy, ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatUnits,
@@ -23,7 +18,11 @@ import {
   TokenTrade,
   type PreparedTokenTrade,
 } from "@/components/token-trade";
-import { TokenPriceChart } from "@/components/token-price-chart";
+import {
+  TokenPriceChart,
+  type TokenChartVolume,
+} from "@/components/token-price-chart";
+import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { useWallet } from "@/components/wallet-provider";
 import {
   canOptimizeTokenImage,
@@ -59,6 +58,12 @@ export type TokenMetric = {
   label: string;
   value: string;
 };
+
+const CHART_VOLUME_LABELS = {
+  "1h": "Volume 1H",
+  "1d": "Volume 1D",
+  "1w": "Volume 1W",
+} as const;
 
 type TradeFlow =
   | { phase: "form" }
@@ -98,18 +103,12 @@ function isBytes32(value: unknown): value is `0x${string}` {
   return typeof value === "string" && /^0x[a-fA-F0-9]{64}$/.test(value);
 }
 
-function hasOnlyKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-) {
+function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]) {
   const allowed = new Set(keys);
   return Object.keys(value).every((key) => allowed.has(key));
 }
 
-function parseUnsignedDecimal(
-  value: unknown,
-  maximum = (1n << 256n) - 1n,
-) {
+function parseUnsignedDecimal(value: unknown, maximum = (1n << 256n) - 1n) {
   if (
     typeof value !== "string" ||
     !/^(0|[1-9]\d*)$/.test(value) ||
@@ -147,26 +146,16 @@ function parseUniswapV4Pool(
     return null;
   }
 
-  const indexedBlockNumber = parseUnsignedDecimal(
-    value.indexedBlockNumber,
-  );
+  const indexedBlockNumber = parseUnsignedDecimal(value.indexedBlockNumber);
   const volumeUsdWad = parseUnsignedDecimal(value.volumeUsdWad);
   const tvlUsdWad = parseUnsignedDecimal(value.tvlUsdWad);
-  const transactionCount = parseUnsignedDecimal(
-    value.transactionCount,
-  );
-  const liquidity = parseUnsignedDecimal(
-    value.liquidity,
-    (1n << 128n) - 1n,
-  );
+  const transactionCount = parseUnsignedDecimal(value.transactionCount);
+  const liquidity = parseUnsignedDecimal(value.liquidity, (1n << 128n) - 1n);
   const sqrtPriceX96 = parseUnsignedDecimal(
     value.sqrtPriceX96,
     (1n << 160n) - 1n,
   );
-  const feeTierPips = parseUnsignedDecimal(
-    value.feeTierPips,
-    (1n << 24n) - 1n,
-  );
+  const feeTierPips = parseUnsignedDecimal(value.feeTierPips, (1n << 24n) - 1n);
   const tick =
     value.tick === undefined
       ? undefined
@@ -335,8 +324,7 @@ function formatEth(value: string | undefined, mode: "amount" | "price") {
   if (!Number.isFinite(parsed) || parsed < 0) return null;
   if (parsed === 0) return "0 ETH";
 
-  const minimumScientific =
-    mode === "price" ? 0.00000001 : 0.0001;
+  const minimumScientific = mode === "price" ? 0.00000001 : 0.0001;
   const formatted =
     parsed < minimumScientific
       ? parsed.toExponential(3)
@@ -406,11 +394,7 @@ function formatQuoteAmount(
   value: string | undefined,
   symbol: string | undefined,
 ) {
-  if (
-    !value ||
-    !symbol ||
-    !/^\d+(?:\.\d+)?$/.test(value)
-  ) {
+  if (!value || !symbol || !/^\d+(?:\.\d+)?$/.test(value)) {
     return null;
   }
   const parsed = Number(value);
@@ -459,11 +443,7 @@ export function formatStockPairedGrossVolume(token: LauncherToken) {
 }
 
 function formatSwapFee(value: number | undefined) {
-  if (
-    typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
-    value < 0
-  ) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     return null;
   }
   return `${new Intl.NumberFormat("en-US", {
@@ -471,9 +451,25 @@ function formatSwapFee(value: number | undefined) {
   }).format(value / 100)}%`;
 }
 
+export function buildChartVolumeMetric(
+  volume: TokenChartVolume | null,
+): TokenMetric | undefined {
+  if (!volume || volume.range === "all") return undefined;
+
+  return {
+    label: CHART_VOLUME_LABELS[volume.range],
+    value: volume.pending
+      ? "—"
+      : (formatUsdWadAmount(volume.volumeUsdWad) ??
+        formatEth(volume.volumeEth, "amount") ??
+        "—"),
+  };
+}
+
 export function buildTokenDetailMetrics(
   token: LauncherToken,
   marketCapOverride?: string | null,
+  volumeOverride?: TokenMetric,
 ): TokenMetric[] {
   const fallbackVolumeUsd = calculateEthVolumeUsdValue({
     grossVolumeEth: token.grossVolumeEth,
@@ -492,6 +488,8 @@ export function buildTokenDetailMetrics(
       : null;
   const hasMarketCap =
     typeof marketCapOverride === "string" ||
+    token.indexedMarketCapUsdWad !== undefined ||
+    token.indexedMarketCapEth !== undefined ||
     token.fdvUsdWad !== undefined ||
     Boolean(token.marketCapEth) ||
     Boolean(token.marketCapQuote);
@@ -501,33 +499,37 @@ export function buildTokenDetailMetrics(
           label: "Market cap",
           value:
             marketCapOverride ??
-            formatUsd(token.fdvUsdWad, "amount") ??
-            formatEth(token.marketCapEth, "amount") ??
-            formatQuoteAmount(
-              token.marketCapQuote,
-              token.quoteAssetSymbol,
+            formatUsd(
+              token.indexedMarketCapUsdWad ?? token.fdvUsdWad,
+              "amount",
             ) ??
+            formatEth(
+              token.indexedMarketCapEth ?? token.marketCapEth,
+              "amount",
+            ) ??
+            formatQuoteAmount(token.marketCapQuote, token.quoteAssetSymbol) ??
             "",
         }
       : null,
-    officialVolumeUsd !== null ||
-    token.grossVolumeEth ||
-    token.grossVolumeQuote
-      ? {
-          label: "Volume",
-          value:
-            token.launchModel === "stock-paired"
-              ? stockPairedVolume ?? ""
-              : officialVolumeUsd ??
-                formatUsdAmount(fallbackVolumeUsd) ??
-                formatEth(token.grossVolumeEth, "amount") ??
-                formatQuoteAmount(
-                  token.grossVolumeQuote,
-                  token.quoteAssetSymbol,
-                ) ??
-                "",
-        }
-      : null,
+    volumeOverride ??
+      (officialVolumeUsd !== null ||
+      token.grossVolumeEth ||
+      token.grossVolumeQuote
+        ? {
+            label: "Volume",
+            value:
+              token.launchModel === "stock-paired"
+                ? (stockPairedVolume ?? "")
+                : (officialVolumeUsd ??
+                  formatUsdAmount(fallbackVolumeUsd) ??
+                  formatEth(token.grossVolumeEth, "amount") ??
+                  formatQuoteAmount(
+                    token.grossVolumeQuote,
+                    token.quoteAssetSymbol,
+                  ) ??
+                  ""),
+          }
+        : null),
     officialLiquidityUsd !== null
       ? {
           label: "Liquidity",
@@ -618,16 +620,7 @@ function TelegramBrandIcon() {
 
 function TokenLinkIcon({ kind }: { kind: TokenLinkKind }) {
   if (kind === "website") {
-    return (
-      <svg
-        aria-hidden="true"
-        className={styles.websiteIcon}
-        viewBox="0 0 24 24"
-      >
-        <circle cx="12" cy="12" r="8.25" />
-        <path d="M3.95 12h16.1M12 3.75c2.18 2.22 3.27 4.97 3.27 8.25S14.18 18.03 12 20.25C9.82 18.03 8.73 15.28 8.73 12S9.82 5.97 12 3.75Z" />
-      </svg>
-    );
+    return <WebsiteLinkIcon className={styles.websiteIcon} />;
   }
   if (kind === "telegram") return <TelegramBrandIcon />;
   return <XBrandIcon />;
@@ -653,12 +646,11 @@ function DeepLiquiditySummary({ token }: { token: LauncherToken }) {
   const added = BigInt(token.totalNativeAddedToLiquidityWei ?? "0");
   const boundedAdded = added < target ? added : target;
   const targetReached = token.growthTargetReached === true;
-  const progressBps =
-    targetReached
-      ? 10_000
-      : target === 0n
-        ? 0
-        : Number((boundedAdded * 10_000n) / target);
+  const progressBps = targetReached
+    ? 10_000
+    : target === 0n
+      ? 0
+      : Number((boundedAdded * 10_000n) / target);
   const deferredRewards = BigInt(token.deferredRewardFeesWei ?? "0");
 
   return (
@@ -666,9 +658,7 @@ function DeepLiquiditySummary({ token }: { token: LauncherToken }) {
       <div className={styles.deepSummaryHeading}>
         <div>
           <span>Deep liquidity</span>
-          <strong>
-            {formatEth(formatUnits(added, 18), "amount")} added
-          </strong>
+          <strong>{formatEth(formatUnits(added, 18), "amount")} added</strong>
         </div>
         <span>
           {targetReached
@@ -687,10 +677,9 @@ function DeepLiquiditySummary({ token }: { token: LauncherToken }) {
         <span style={{ width: `${progressBps / 100}%` }} />
       </div>
       <p>
-        Creator fees deepen the original permanently locked pool before
-        creator rewards begin. The 150M reserve stays locked, and unused
-        reserve is not active liquidity. Automation is permissionless and not
-        guaranteed.
+        Creator fees deepen the original permanently locked pool before creator
+        rewards begin. The 150M reserve stays locked, and unused reserve is not
+        active liquidity. Automation is permissionless and not guaranteed.
         {deferredRewards > 0n
           ? ` ${formatEth(formatUnits(deferredRewards, 18), "amount")} in creator rewards is deferred until the liquidity target is reached.`
           : ""}
@@ -706,17 +695,12 @@ function TokenDetailContent({
   token: LauncherToken;
   chainId: number;
 }) {
-  const {
-    wallet,
-    openWallet,
-    readTradeBalances,
-    sendTransaction,
-  } = useWallet();
+  const { wallet, openWallet, readTradeBalances, sendTransaction } =
+    useWallet();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
-  const [hoveredMarketCap, setHoveredMarketCap] = useState<string | null>(
-    null,
-  );
+  const [hoveredMarketCap, setHoveredMarketCap] = useState<string | null>(null);
+  const [chartVolume, setChartVolume] = useState<TokenChartVolume | null>(null);
   const [tradeFlow, setTradeFlow] = useState<TradeFlow>({
     phase: "form",
   });
@@ -741,10 +725,13 @@ function TokenDetailContent({
     [],
   );
 
-  const metrics = useMemo(
-    () => buildTokenDetailMetrics(token, hoveredMarketCap),
-    [hoveredMarketCap, token],
-  );
+  const metrics = useMemo(() => {
+    return buildTokenDetailMetrics(
+      token,
+      hoveredMarketCap,
+      buildChartVolumeMetric(chartVolume),
+    );
+  }, [chartVolume, hoveredMarketCap, token]);
 
   const explorerBase =
     chainId === 1
@@ -761,11 +748,7 @@ function TokenDetailContent({
       ? (tradeFlow.next ?? tradeFlow.submitted)
       : null;
   const preparedMinimum = preparedForDisplay
-    ? formatPreparedMinimum(
-        preparedForDisplay,
-        token.symbol,
-        tokenDecimals,
-      )
+    ? formatPreparedMinimum(preparedForDisplay, token.symbol, tokenDecimals)
     : null;
 
   async function copyAddress() {
@@ -776,17 +759,11 @@ function TokenDetailContent({
     try {
       await navigator.clipboard.writeText(token.tokenAddress);
       setCopied(true);
-      copyResetTimer.current = window.setTimeout(
-        () => setCopied(false),
-        1600,
-      );
+      copyResetTimer.current = window.setTimeout(() => setCopied(false), 1600);
     } catch {
       setCopied(false);
       setCopyError("Could not copy address");
-      copyResetTimer.current = window.setTimeout(
-        () => setCopyError(""),
-        2400,
-      );
+      copyResetTimer.current = window.setTimeout(() => setCopyError(""), 2400);
     }
   }
 
@@ -876,9 +853,7 @@ function TokenDetailContent({
     if (!wallet) {
       throw new Error("Connect an Ethereum wallet before continuing");
     }
-    if (
-      prepared.token.toLowerCase() !== token.tokenAddress.toLowerCase()
-    ) {
+    if (prepared.token.toLowerCase() !== token.tokenAddress.toLowerCase()) {
       throw new Error("The prepared trade does not match this token");
     }
     if (
@@ -935,10 +910,7 @@ function TokenDetailContent({
         return;
       }
 
-      await refreshAfterApproval(
-        tradeFlow.submitted,
-        tradeFlow.hash,
-      );
+      await refreshAfterApproval(tradeFlow.submitted, tradeFlow.hash);
     } catch (error) {
       setTradeFlow({
         ...tradeFlow,
@@ -964,11 +936,7 @@ function TokenDetailContent({
             <div className={styles.image}>
               <Image
                 src={imageSource}
-                alt={
-                  token.imageUrl?.trim()
-                    ? `${token.name} token image`
-                    : ""
-                }
+                alt={token.imageUrl?.trim() ? `${token.name} token image` : ""}
                 fill
                 priority
                 sizes="(max-width: 800px) 100vw, 420px"
@@ -1015,16 +983,11 @@ function TokenDetailContent({
           </div>
 
           {token.description?.trim() ? (
-            <p className={styles.description}>
-              {token.description.trim()}
-            </p>
+            <p className={styles.description}>{token.description.trim()}</p>
           ) : null}
 
           {token.links && token.links.length > 0 ? (
-            <div
-              className={styles.links}
-              aria-label={`${token.name} links`}
-            >
+            <div className={styles.links} aria-label={`${token.name} links`}>
               {token.links.map((link) => {
                 const label = getLinkLabel(link.kind);
                 return (
@@ -1052,6 +1015,7 @@ function TokenDetailContent({
             totalSupply={token.totalSupply}
             launchModel={token.launchModel}
             onMarketCapChange={setHoveredMarketCap}
+            onVolumeChange={setChartVolume}
           />
 
           <MetricGrid metrics={metrics} />
@@ -1088,12 +1052,8 @@ function TokenDetailContent({
               }
               quoteAssetSymbol={token.quoteAssetSymbol}
               tokenPriceQuote={token.tokenPriceQuote}
-              buySwapFeeBps={
-                token.buyHookFeeBps ?? token.totalSwapFeeBps
-              }
-              sellSwapFeeBps={
-                token.sellHookFeeBps ?? token.totalSwapFeeBps
-              }
+              buySwapFeeBps={token.buyHookFeeBps ?? token.totalSwapFeeBps}
+              sellSwapFeeBps={token.sellHookFeeBps ?? token.totalSwapFeeBps}
               readBalances={readTokenBalances}
               onConnect={openWallet}
               onPrepared={submitPreparedTrade}
@@ -1107,8 +1067,8 @@ function TokenDetailContent({
               launchModel={token.launchModel}
               totalSwapFeeBps={
                 tradeFlow.prepared.side === "buy"
-                  ? token.buyHookFeeBps ?? token.totalSwapFeeBps
-                  : token.sellHookFeeBps ?? token.totalSwapFeeBps
+                  ? (token.buyHookFeeBps ?? token.totalSwapFeeBps)
+                  : (token.sellHookFeeBps ?? token.totalSwapFeeBps)
               }
               pending={tradeFlow.submitting}
               error={tradeFlow.error}
@@ -1145,8 +1105,7 @@ function TokenDetailContent({
               <p>
                 Transaction{" "}
                 <code>
-                  {tradeFlow.hash.slice(0, 10)}…
-                  {tradeFlow.hash.slice(-8)}
+                  {tradeFlow.hash.slice(0, 10)}…{tradeFlow.hash.slice(-8)}
                 </code>
               </p>
               {explorerBase ? (
@@ -1298,9 +1257,7 @@ export function TokenDetailView({ address }: { address: string }) {
   }
 
   const activeState: DetailState =
-    state.requestKey === requestKey
-      ? state
-      : { phase: "loading", requestKey };
+    state.requestKey === requestKey ? state : { phase: "loading", requestKey };
 
   if (activeState.phase === "ready") {
     return (
@@ -1317,11 +1274,11 @@ export function TokenDetailView({ address }: { address: string }) {
   const message =
     activeState.phase === "loading"
       ? "Loading token"
-          : activeState.phase === "not-found"
-          ? "This token was not launched through Programmable"
-          : activeState.phase === "not-deployed"
-            ? "No verified launch data is available"
-            : activeState.message;
+      : activeState.phase === "not-found"
+        ? "This token was not launched through Programmable"
+        : activeState.phase === "not-deployed"
+          ? "No verified launch data is available"
+          : activeState.message;
 
   return (
     <div className={`${styles.page} page-width`}>

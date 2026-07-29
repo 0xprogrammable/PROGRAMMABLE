@@ -1,10 +1,23 @@
 .page {
-  padding: 46px 0 44px;
+  --docs-content-width: 850px;
+  --docs-layout-gap: 30px;
+  --docs-layout-width: 1116px;
+  --docs-rail-width: 236px;
+  align-items: start;
+  display: grid;
+  gap: 0 var(--docs-layout-gap);
+  grid-template-columns:
+    var(--docs-rail-width)
+    minmax(0, var(--docs-content-width));
+  justify-content: center;
+  padding: 16px 0 44px;
 }
 
 .hero {
-  margin: 0 auto;
-  max-width: 860px;
+  grid-column: 2;
+  margin: 0;
+  max-width: var(--docs-content-width);
+  padding-top: 30px;
   text-align: center;
 }
 
@@ -125,17 +138,21 @@
 
 .layout {
   align-items: start;
-  display: grid;
-  gap: 30px;
-  grid-template-columns: 236px minmax(0, 850px);
-  justify-content: center;
+  display: block;
+  grid-column: 2;
   margin-top: 50px;
+  max-width: var(--docs-content-width);
+  width: 100%;
 }
 
 .sidebar {
   align-self: start;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  inline-size: var(--docs-rail-width);
   position: sticky;
   top: calc(var(--header-height) + 16px);
+  z-index: 44;
 }
 
 .desktopNav,
@@ -216,6 +233,7 @@
   box-shadow:
     0 1px 0 var(--card-shadow),
     0 24px 68px var(--card-shadow-soft);
+  grid-column: 2;
   min-width: 0;
   padding: clamp(30px, 4vw, 52px);
 }
@@ -577,7 +595,13 @@
 
 @media (max-width: 900px) {
   .page {
-    padding-top: 40px;
+    display: block;
+    padding-top: 88px;
+  }
+
+  .hero {
+    max-width: 860px;
+    padding-inline-start: 0;
   }
 
   .layout {
@@ -586,9 +610,11 @@
   }
 
   .sidebar {
-    position: sticky;
+    inline-size: auto;
+    inset-inline: 24px;
+    position: fixed;
     top: calc(var(--header-height) + 8px);
-    z-index: 24;
+    z-index: 44;
   }
 
   .desktopNav {
@@ -643,7 +669,11 @@
 
 @media (max-width: 700px) {
   .page {
-    padding-top: 30px;
+    padding-top: 78px;
+  }
+
+  .sidebar {
+    inset-inline: 14px;
   }
 
   .hero h1 {

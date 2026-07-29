@@ -5,13 +5,7 @@ export type TokenLink = {
   url: string;
 };
 
-export type TokenTone =
-  | "rose"
-  | "violet"
-  | "mint"
-  | "amber"
-  | "sky"
-  | "peach";
+export type TokenTone = "rose" | "violet" | "mint" | "amber" | "sky" | "peach";
 
 export type DeepV2IndexedLaunchProvenance = {
   deepReleaseVersion: "deep-full-range-v2";
@@ -78,6 +72,10 @@ export type LauncherToken = {
   tokenPriceUsdWad?: string;
   marketCapEth?: string;
   marketCapEthWei?: string;
+  indexedMarketCapEth?: string;
+  indexedMarketCapEthWei?: string;
+  indexedMarketCapUsdWad?: string;
+  indexedValuationBlockNumber?: string;
   quoteAssetAddress?: `0x${string}`;
   quoteAssetSymbol?: string;
   quoteAssetName?: string;
@@ -127,9 +125,7 @@ export type LauncherToken = {
   totalSwapFeeBps: number;
   launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
   deepReleaseVersion?:
-    | "deep-full-range-v1"
-    | "deep-full-range-v2"
-    | "deep-full-range-v3";
+    "deep-full-range-v1" | "deep-full-range-v2" | "deep-full-range-v3";
   adaptiveCurveHash?: `0x${string}`;
   adaptiveCurvePoints?: {
     fdvIndex: number;

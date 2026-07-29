@@ -17,6 +17,7 @@ vi.mock("../lib/onchain", () => ({
 vi.mock("../lib/onchain/uniswap-v4-subgraph", () => ({
   enrichExplorePageWithOfficialV4Subgraph:
     mocks.enrichExplorePageWithOfficialV4Subgraph,
+  OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS: 24,
 }));
 
 import { GET } from "../app/api/explore/route";
@@ -45,4 +46,39 @@ describe("Explore API query boundary", () => {
       ).not.toHaveBeenCalled();
     },
   );
+
+  it("uses the ten-second shared cache window for ready Explore data", async () => {
+    const model = { status: "ready", tokens: [] };
+    const page = {
+      status: "ready",
+      tokens: [],
+      page: 1,
+      pageSize: 10,
+      total: 0,
+      totalPages: 0,
+      sort: "market-cap",
+      query: "",
+      snapshot: {
+        chainId: 1,
+        blockNumber: "1",
+        blockHash: `0x${"11".repeat(32)}`,
+        confirmations: 12,
+      },
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    };
+    mocks.readExploreModel.mockResolvedValue(model);
+    mocks.parseExploreSort.mockReturnValue("market-cap");
+    mocks.paginateExplore.mockReturnValue(page);
+    mocks.enrichExplorePageWithOfficialV4Subgraph.mockResolvedValue(page);
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/explore?page=1&limit=10"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=0, s-maxage=10, stale-while-revalidate=10",
+    );
+  });
 });

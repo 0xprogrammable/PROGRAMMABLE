@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
           status: "not-deployed",
           points: [],
           swapCount: 0,
+          volumeWei: "0",
+          volumeEth: "0",
         },
         {
           headers: {
@@ -76,7 +78,7 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control":
-            "public, max-age=0, s-maxage=30, stale-while-revalidate=60",
+            "public, max-age=0, s-maxage=15, stale-while-revalidate=15",
         },
       },
     );

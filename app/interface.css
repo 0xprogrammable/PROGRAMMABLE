@@ -234,7 +234,7 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .route-transition-docs {
-  animation-duration: 180ms;
+  animation: none;
 }
 
 .route-transition:focus {

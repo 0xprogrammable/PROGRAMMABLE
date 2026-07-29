@@ -87,6 +87,10 @@ describe("token detail official Uniswap v4 enrichment", () => {
           {
             ...page.tokens[0],
             name: "Untrusted replacement",
+            indexedMarketCapEth: "12.5",
+            indexedMarketCapEthWei: "12500000000000000000",
+            indexedMarketCapUsdWad: "43750000000000000000000",
+            indexedValuationBlockNumber: snapshot.blockNumber,
             uniswapV4Pool: pool,
           },
           token(OTHER_TOKEN_ADDRESS, {
@@ -119,6 +123,10 @@ describe("token detail official Uniswap v4 enrichment", () => {
       tokenAddress: canonical.tokenAddress,
       hookAddress: canonical.hookAddress,
       poolId: canonical.poolId,
+      indexedMarketCapEth: "12.5",
+      indexedMarketCapEthWei: "12500000000000000000",
+      indexedMarketCapUsdWad: "43750000000000000000000",
+      indexedValuationBlockNumber: snapshot.blockNumber,
       uniswapV4Pool: pool,
     });
   });

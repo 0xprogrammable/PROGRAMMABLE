@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       } satisfies ExplorePage;
       const enriched =
         await enrichExplorePageWithOfficialV4Subgraph(tokenPage);
-      const analytics = enriched.tokens.find(
+      const enrichedCandidate = enriched.tokens.find(
         (candidate) =>
           candidate.id === token.id &&
           candidate.tokenAddress.toLowerCase() ===
@@ -78,9 +78,41 @@ export async function GET(request: NextRequest) {
           candidate.hookAddress.toLowerCase() ===
             token.hookAddress.toLowerCase() &&
           candidate.poolId.toLowerCase() === token.poolId.toLowerCase(),
-      )?.uniswapV4Pool;
-      enrichedToken = analytics
-        ? { ...token, uniswapV4Pool: analytics }
+      );
+      enrichedToken = enrichedCandidate
+        ? {
+            ...token,
+            ...(enrichedCandidate.indexedMarketCapEth === undefined
+              ? {}
+              : {
+                  indexedMarketCapEth:
+                    enrichedCandidate.indexedMarketCapEth,
+                }),
+            ...(enrichedCandidate.indexedMarketCapEthWei === undefined
+              ? {}
+              : {
+                  indexedMarketCapEthWei:
+                    enrichedCandidate.indexedMarketCapEthWei,
+                }),
+            ...(enrichedCandidate.indexedMarketCapUsdWad === undefined
+              ? {}
+              : {
+                  indexedMarketCapUsdWad:
+                    enrichedCandidate.indexedMarketCapUsdWad,
+                }),
+            ...(enrichedCandidate.indexedValuationBlockNumber ===
+            undefined
+              ? {}
+              : {
+                  indexedValuationBlockNumber:
+                    enrichedCandidate.indexedValuationBlockNumber,
+                }),
+            ...(enrichedCandidate.uniswapV4Pool === undefined
+              ? {}
+              : {
+                  uniswapV4Pool: enrichedCandidate.uniswapV4Pool,
+                }),
+          }
         : token;
     }
 

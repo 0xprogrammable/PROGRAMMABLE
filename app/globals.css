@@ -1220,6 +1220,21 @@ html[data-theme="dark"] .theme-toggle-sun {
   width: 13px;
 }
 
+.token-social-link-website {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.token-social-link .token-website-link-icon {
+  height: 14px;
+  width: 14px;
+}
+
+.token-social-link:focus-visible {
+  background: var(--surface-soft);
+  color: var(--text);
+  outline-offset: 2px;
+}
+
 @media (min-width: 801px) and (max-height: 800px) {
   .token-card-grid {
     --token-card-body-height: 62px;
