@@ -188,9 +188,9 @@ export function createStockPairedDraft(): LaunchDraft {
   return {
     ...createClassicV3Draft(),
     launchModel: "stock-paired",
-    initialBuyEth: "",
+    initialBuyEth: "0.01",
     stockQuoteAsset: "",
-    initialBuyQuoteAmount: "0.01",
+    initialBuyQuoteAmount: "",
     totalSwapFeePercent: "1",
     buySwapFeePercent: "1",
     sellSwapFeePercent: "1",

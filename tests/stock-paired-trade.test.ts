@@ -8,10 +8,7 @@ import {
 } from "viem";
 import { describe, expect, it } from "vitest";
 
-import {
-  stockQuoteRegistryAbi,
-  STOCK_QUOTE_ASSETS,
-} from "../lib/stock-paired";
+import { stockQuoteRegistryAbi } from "../lib/stock-paired";
 import {
   classicPermit2Abi,
   classicQuoterAbi,
@@ -21,9 +18,20 @@ import {
 import {
   createStockPairedPoolKey,
   prepareStockPairedTrade,
+  STOCK_PAIRED_MIN_ROUTE_ROUND_TRIP_BPS,
   type StockPairedTradeDeployment,
   type StockPairedTradeRuntimeClient,
 } from "../lib/trade/stock-paired";
+import {
+  encodeStockPairedV3Path,
+  getStockPairedEthRoute,
+  STOCK_PAIRED_NATIVE_ETH,
+  STOCK_PAIRED_V3_FACTORY,
+  STOCK_PAIRED_V3_QUOTER,
+  stockPairedV3FactoryAbi,
+  stockPairedV3PoolAbi,
+  stockPairedV3QuoterAbi,
+} from "../lib/trade/stock-paired-route";
 import { computeOfficialV4PoolId } from "../lib/uniswap/liquidity-launcher-sdk";
 import {
   STOCK_TEST_ACCOUNT,
@@ -60,11 +68,17 @@ function runtimeClient(input?: {
   permit2Allowance?: bigint;
   permit2Expiration?: number;
   runtimeMismatch?: Address;
+  lossyExternalRoute?: boolean;
 }) {
   const candidate = deployment();
   const quotedPoolKeys: unknown[] = [];
   const routerCalldata: Hex[] = [];
   const inputAssets: Address[] = [];
+  const v3QuoteAmounts: bigint[] = [];
+  const ethRoute = getStockPairedEthRoute(candidate.quoteAsset);
+  const routePools = new Map(
+    ethRoute.buyHops.map((hop) => [hop.pool.toLowerCase(), hop]),
+  );
   const client: StockPairedTradeRuntimeClient = {
     async getChainId() {
       return 1;
@@ -89,6 +103,49 @@ function runtimeClient(input?: {
     },
     async call(args) {
       if (
+        args.to.toLowerCase() ===
+        STOCK_PAIRED_V3_FACTORY.toLowerCase()
+      ) {
+        const decoded = decodeFunctionData({
+          abi: stockPairedV3FactoryAbi,
+          data: args.data,
+        });
+        expect(decoded.functionName).toBe("getPool");
+        const hop = ethRoute.buyHops.find(
+          (candidateHop) =>
+            candidateHop.fee === decoded.args[2] &&
+            [candidateHop.tokenIn, candidateHop.tokenOut]
+              .map((address) => address.toLowerCase())
+              .includes(decoded.args[0].toLowerCase()) &&
+            [candidateHop.tokenIn, candidateHop.tokenOut]
+              .map((address) => address.toLowerCase())
+              .includes(decoded.args[1].toLowerCase()),
+        );
+        if (!hop) throw new Error("Unexpected v3 pool lookup");
+        return {
+          data: encodeFunctionResult({
+            abi: stockPairedV3FactoryAbi,
+            functionName: "getPool",
+            result: hop.pool,
+          }),
+        };
+      }
+      const routePool = routePools.get(args.to.toLowerCase());
+      if (routePool) {
+        const decoded = decodeFunctionData({
+          abi: stockPairedV3PoolAbi,
+          data: args.data,
+        });
+        expect(decoded.functionName).toBe("liquidity");
+        return {
+          data: encodeFunctionResult({
+            abi: stockPairedV3PoolAbi,
+            functionName: "liquidity",
+            result: 1n,
+          }),
+        };
+      }
+      if (
         args.to.toLowerCase() === candidate.quoteRegistry.toLowerCase()
       ) {
         const decoded = decodeFunctionData({
@@ -102,6 +159,41 @@ function runtimeClient(input?: {
             abi: stockQuoteRegistryAbi,
             functionName: "assertAssetReady",
             result: `0x${"44".repeat(32)}`,
+          }),
+        };
+      }
+      if (
+        args.to.toLowerCase() ===
+        STOCK_PAIRED_V3_QUOTER.toLowerCase()
+      ) {
+        const decoded = decodeFunctionData({
+          abi: stockPairedV3QuoterAbi,
+          data: args.data,
+        });
+        expect(decoded.functionName).toBe("quoteExactInput");
+        v3QuoteAmounts.push(decoded.args[1]);
+        const isBuyRoute =
+          decoded.args[0].toLowerCase() ===
+          encodeStockPairedV3Path(ethRoute.buyHops).toLowerCase();
+        const amountOut = isBuyRoute
+          ? decoded.args[1] === AMOUNT_IN
+            ? 5_000n
+            : 9_500n
+          : decoded.args[1] === 5_000n
+            ? input?.lossyExternalRoute
+              ? 899n
+              : 950n
+            : 2_000n;
+        return {
+          data: encodeFunctionResult({
+            abi: stockPairedV3QuoterAbi,
+            functionName: "quoteExactInput",
+            result: [
+              amountOut,
+              [],
+              [],
+              111_000n,
+            ],
           }),
         };
       }
@@ -174,7 +266,14 @@ function runtimeClient(input?: {
       throw new Error(`Unexpected call to ${args.to}`);
     },
   };
-  return { candidate, client, inputAssets, quotedPoolKeys, routerCalldata };
+  return {
+    candidate,
+    client,
+    inputAssets,
+    quotedPoolKeys,
+    routerCalldata,
+    v3QuoteAmounts,
+  };
 }
 
 describe("Stock-Paired server trading", () => {
@@ -189,11 +288,11 @@ describe("Stock-Paired server trading", () => {
       status: "ready",
       launchModel: "stock-paired",
       side: "buy",
-      inputAsset: STOCK_QUOTE_ASSETS[0].address,
+      inputAsset: STOCK_PAIRED_NATIVE_ETH,
       transaction: {
         kind: "swap",
         to: buyRuntime.candidate.universalRouter,
-        value: "0",
+        value: AMOUNT_IN.toString(),
       },
       quote: {
         amountOut: "10000",
@@ -203,18 +302,24 @@ describe("Stock-Paired server trading", () => {
     expect(buyRuntime.quotedPoolKeys).toEqual([
       createStockPairedPoolKey(buyRuntime.candidate),
     ]);
-    expect(buyRuntime.inputAssets).toContain(
-      buyRuntime.candidate.quoteAsset,
-    );
+    expect(buyRuntime.inputAssets).toEqual([]);
+    expect(buyRuntime.v3QuoteAmounts).toEqual([AMOUNT_IN, 5_000n]);
     const buyRoute = decodeFunctionData({
       abi: classicUniversalRouterAbi,
       data: buyRuntime.routerCalldata[0],
     });
     expect(buyRoute.functionName).toBe("execute");
     expect(buyRoute.args[0]).toBe(
-      `0x${Number(CommandType.V4_SWAP).toString(16).padStart(2, "0")}`,
+      `0x${[
+        CommandType.WRAP_ETH,
+        CommandType.V3_SWAP_EXACT_IN,
+        CommandType.V4_SWAP,
+        CommandType.SWEEP,
+      ]
+        .map((command) => Number(command).toString(16).padStart(2, "0"))
+        .join("")}`,
     );
-    expect(buyRoute.args[1]).toHaveLength(1);
+    expect(buyRoute.args[1]).toHaveLength(4);
 
     const sellRuntime = runtimeClient();
     const sell = await prepareStockPairedTrade(
@@ -234,6 +339,23 @@ describe("Stock-Paired server trading", () => {
       },
     });
     expect(sellRuntime.inputAssets).toContain(STOCK_TEST_TOKEN);
+    expect(sellRuntime.v3QuoteAmounts).toEqual([10_000n, 2_000n]);
+    const sellRoute = decodeFunctionData({
+      abi: classicUniversalRouterAbi,
+      data: sellRuntime.routerCalldata[0],
+    });
+    expect(sellRoute.args[0]).toBe(
+      `0x${[
+        CommandType.PERMIT2_TRANSFER_FROM,
+        CommandType.V4_SWAP,
+        CommandType.V3_SWAP_EXACT_IN,
+        CommandType.UNWRAP_WETH,
+        CommandType.SWEEP,
+      ]
+        .map((command) => Number(command).toString(16).padStart(2, "0"))
+        .join("")}`,
+    );
+    expect(sellRoute.args[1]).toHaveLength(5);
   });
 
   it("requires the exact ERC20 to Permit2 and Permit2 to Router approvals", async () => {
@@ -243,14 +365,14 @@ describe("Stock-Paired server trading", () => {
     const tokenApproval = await prepareStockPairedTrade(
       tokenApprovalRuntime.client,
       tokenApprovalRuntime.candidate,
-      request("buy"),
+      request("sell"),
     );
     expect(tokenApproval).toMatchObject({
       status: "approval-required",
       approvalState: "token-to-permit2",
       transaction: {
         kind: "token-to-permit2",
-        to: tokenApprovalRuntime.candidate.quoteAsset,
+        to: STOCK_TEST_TOKEN,
       },
     });
     const tokenApprovalData = decodeFunctionData({
@@ -313,5 +435,17 @@ describe("Stock-Paired server trading", () => {
         request("buy"),
       ),
     ).rejects.toThrow(/runtime/);
+  });
+
+  it("fails closed when the external ETH route loses more than the safety limit", async () => {
+    expect(STOCK_PAIRED_MIN_ROUTE_ROUND_TRIP_BPS).toBe(9_000n);
+    const lossyRuntime = runtimeClient({ lossyExternalRoute: true });
+    await expect(
+      prepareStockPairedTrade(
+        lossyRuntime.client,
+        lossyRuntime.candidate,
+        request("buy"),
+      ),
+    ).rejects.toThrow("The ETH route is too thin for this amount");
   });
 });

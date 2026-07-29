@@ -1,0 +1,166 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  encodeAbiParameters,
+  encodeEventTopics,
+  parseAbiParameters,
+} from "viem";
+
+import {
+  STOCK_PAIRED_ETH_CANARY_ASSET,
+  STOCK_PAIRED_ETH_CANARY_INITIAL_BUY,
+  assertStockPairedEthCanaryRouteSafety,
+  buildStockPairedEthCanaryIdentity,
+  buildStockPairedEthCanaryLaunch,
+  buildStockPairedEthCanarySwap,
+  parseStockPairedEthCanaryLaunchReceipt,
+  stockPairedEthCanaryCoordinatorEvent,
+  stockPairedEthCanaryInitialBuyEvent,
+  stockPairedEthCanaryLaunchEvent,
+  stockPairedEthCanaryV3Path,
+} from "../../../scripts/stock-paired-eth-canary-core.mjs";
+import {
+  STOCK_PAIRED_DEPENDENCIES,
+  STOCK_PAIRED_DEPLOYER,
+} from "../../../scripts/stock-paired-mainnet-operator-core.mjs";
+
+const releaseCommit = "1".repeat(40);
+const coordinator = "0x7a737107E748717b7D9e3b98ab908b5AEC775A37";
+const launcher = "0x195750f33caD5eF2DF857a53226B421297A1e79e";
+const hook = "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc";
+const token = "0x1234567890123456789012345678901234567890";
+const rewardVault = "0x2234567890123456789012345678901234567890";
+const positionRecipient =
+  "0x3234567890123456789012345678901234567890";
+const poolId = `0x${"44".repeat(32)}`;
+const launchHash = `0x${"55".repeat(32)}`;
+
+test("builds a deterministic ETH-first launch without a stock approval", () => {
+  const identity = buildStockPairedEthCanaryIdentity({ releaseCommit });
+  assert.deepEqual(
+    identity,
+    buildStockPairedEthCanaryIdentity({ releaseCommit }),
+  );
+  assert.match(identity.metadata.description, /not equity/);
+  const launch = buildStockPairedEthCanaryLaunch({
+    coordinator,
+    identity,
+    minimumQuoteAmountOut: 1n,
+    minimumInitialTokenOut: 1n,
+    deadline: 2_000_000_000n,
+  });
+  assert.equal(launch.from, STOCK_PAIRED_DEPLOYER);
+  assert.equal(launch.to, coordinator);
+  assert.equal(BigInt(launch.value), STOCK_PAIRED_ETH_CANARY_INITIAL_BUY);
+  assert.equal(launch.parameters.launch.initialBuyQuoteAmount, 0n);
+  assert.deepEqual(launch.parameters.launch.rewardBeneficiaries, [
+    STOCK_PAIRED_DEPLOYER,
+  ]);
+});
+
+test("uses exact WETH USDC stock paths in both directions", () => {
+  const buy = stockPairedEthCanaryV3Path("buy").toLowerCase();
+  const sell = stockPairedEthCanaryV3Path("sell").toLowerCase();
+  assert.ok(buy.startsWith("0xc02aaa39"));
+  assert.ok(buy.endsWith(STOCK_PAIRED_ETH_CANARY_ASSET.address.slice(2).toLowerCase()));
+  assert.ok(sell.startsWith(STOCK_PAIRED_ETH_CANARY_ASSET.address.toLowerCase()));
+  assert.ok(sell.endsWith("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"));
+});
+
+test("encodes atomic ETH buy and token sell through Universal Router 2.1.1", () => {
+  const buy = buildStockPairedEthCanarySwap({
+    token,
+    hook,
+    side: "buy",
+    amountIn: 100_000_000_000_000n,
+    quotedAmountOut: 1_000_000_000_000_000n,
+    deadline: 2_000_000_000n,
+  });
+  const sell = buildStockPairedEthCanarySwap({
+    token,
+    hook,
+    side: "sell",
+    amountIn: 1_000_000_000_000_000n,
+    quotedAmountOut: 90_000_000_000_000n,
+    deadline: 2_000_000_000n,
+  });
+  assert.equal(buy.to, STOCK_PAIRED_DEPENDENCIES.universalRouter.address);
+  assert.equal(sell.to, STOCK_PAIRED_DEPENDENCIES.universalRouter.address);
+  assert.equal(BigInt(buy.value), 100_000_000_000_000n);
+  assert.equal(BigInt(sell.value), 0n);
+  assert.notEqual(buy.data, sell.data);
+});
+
+test("rejects an external route below the reviewed round-trip floor", () => {
+  assert.equal(
+    assertStockPairedEthCanaryRouteSafety(1_000n, 900n),
+    true,
+  );
+  assert.throws(
+    () => assertStockPairedEthCanaryRouteSafety(1_000n, 899n),
+    /too thin/,
+  );
+});
+
+test("correlates coordinator and base-launcher receipt events", () => {
+  const launchedLog = {
+    address: launcher,
+    topics: encodeEventTopics({
+      abi: [stockPairedEthCanaryLaunchEvent],
+      eventName: "StockPairedTokenLaunched",
+      args: {
+        deployer: coordinator,
+        token,
+        quoteAsset: STOCK_PAIRED_ETH_CANARY_ASSET.address,
+      },
+    }),
+    data: encodeAbiParameters(
+      parseAbiParameters("bytes32,address,address,uint256,bytes32"),
+      [poolId, rewardVault, positionRecipient, 7n, launchHash],
+    ),
+  };
+  const initialBuyLog = {
+    address: launcher,
+    topics: encodeEventTopics({
+      abi: [stockPairedEthCanaryInitialBuyEvent],
+      eventName: "StockPairedCreatorInitialBuy",
+      args: {
+        deployer: coordinator,
+        token,
+        quoteAsset: STOCK_PAIRED_ETH_CANARY_ASSET.address,
+      },
+    }),
+    data: encodeAbiParameters(
+      parseAbiParameters("bytes32,uint256,uint256,bytes32"),
+      [poolId, 20n, 30n, launchHash],
+    ),
+  };
+  const coordinatorLog = {
+    address: coordinator,
+    topics: encodeEventTopics({
+      abi: [stockPairedEthCanaryCoordinatorEvent],
+      eventName: "StockPairedEthTokenLaunched",
+      args: {
+        creator: STOCK_PAIRED_DEPLOYER,
+        token,
+        quoteAsset: STOCK_PAIRED_ETH_CANARY_ASSET.address,
+      },
+    }),
+    data: encodeAbiParameters(
+      parseAbiParameters("uint256,uint256,uint256,bytes32"),
+      [STOCK_PAIRED_ETH_CANARY_INITIAL_BUY, 20n, 30n, launchHash],
+    ),
+  };
+  const parsed = parseStockPairedEthCanaryLaunchReceipt(
+    {
+      status: "0x1",
+      logs: [launchedLog, initialBuyLog, coordinatorLog],
+    },
+    { coordinator, launcher },
+  );
+  assert.equal(parsed.token, token);
+  assert.equal(parsed.initialBuyEthAmount, STOCK_PAIRED_ETH_CANARY_INITIAL_BUY.toString());
+  assert.equal(parsed.initialBuyQuoteAmount, "20");
+  assert.equal(parsed.initialBuyTokenAmount, "30");
+});

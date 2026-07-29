@@ -1,24 +1,17 @@
-import {
-  decodeFunctionData,
-  getAddress,
-  type Hex,
-} from "viem";
+import { decodeFunctionData, getAddress, parseEther, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 
 import { createStockPairedDraft } from "../lib/launch";
 import { buildPlanHash } from "../lib/launch-transaction";
 import {
-  encodeStockPairedLaunch,
-  encodeStockQuoteApproval,
-  STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
+  encodeStockPairedEthLaunch,
+  STOCK_PAIRED_ETH_QUOTE_ASSETS,
+  STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI,
   STOCK_QUOTE_ASSETS,
-  stockPairedLaunchAbi,
+  stockPairedEthLaunchCoordinatorAbi,
   validateStockPairedLaunchDraft,
 } from "../lib/stock-paired";
-import {
-  validatePreparedStockPairedLaunchTransactionAgainstVerifiedRelease,
-  validatePreparedStockQuoteApprovalTransactionAgainstVerifiedRelease,
-} from "../lib/stock-paired-launch-validation";
+import { validatePreparedStockPairedLaunchTransactionAgainstVerifiedRelease } from "../lib/stock-paired-launch-validation";
 import {
   STOCK_TEST_ACCOUNT,
   stockPairedReleaseFixture,
@@ -36,7 +29,8 @@ function draft() {
     tokenImage: "https://programmable.family/token.png",
     tokenX: "https://x.com/0xprogrammable",
     stockQuoteAsset: STOCK_QUOTE_ASSETS[0].address,
-    initialBuyQuoteAmount: "0.01",
+    initialBuyEth: "0.01",
+    initialBuyQuoteAmount: "",
     launchSalt: salt,
   };
 }
@@ -44,14 +38,15 @@ function draft() {
 describe("Stock-Paired launch preparation", () => {
   it("uses the exact seven-asset registry and immutable 1% split", () => {
     expect(STOCK_QUOTE_ASSETS).toHaveLength(7);
-    expect(
-      new Set(STOCK_QUOTE_ASSETS.map((asset) => asset.address)).size,
-    ).toBe(7);
+    expect(new Set(STOCK_QUOTE_ASSETS.map((asset) => asset.address)).size).toBe(
+      7,
+    );
+    expect(STOCK_PAIRED_ETH_QUOTE_ASSETS).toHaveLength(6);
     expect(
       validateStockPairedLaunchDraft(draft(), STOCK_TEST_ACCOUNT),
     ).toMatchObject({
       quoteAsset: STOCK_QUOTE_ASSETS[0],
-      initialBuyQuoteAmount: STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
+      initialBuyEthAmount: parseEther("0.01"),
       totalSwapFeeBps: 100,
       creatorFeeBps: 90,
       programmableFeeBps: 10,
@@ -62,70 +57,53 @@ describe("Stock-Paired launch preparation", () => {
     });
   });
 
-  it("encodes one atomic launch with canonical metadata and quote asset", () => {
-    const data = encodeStockPairedLaunch(
-      draft(),
-      salt,
-      STOCK_TEST_ACCOUNT,
-    );
+  it("encodes one atomic ETH launch with canonical metadata and quote asset", () => {
+    const deadline = 20_000n;
+    const data = encodeStockPairedEthLaunch(draft(), salt, STOCK_TEST_ACCOUNT, {
+      minimumQuoteAmountOut: 9_000n,
+      minimumInitialTokenOut: 8_000n,
+      deadline,
+    });
     const decoded = decodeFunctionData({
-      abi: stockPairedLaunchAbi,
+      abi: stockPairedEthLaunchCoordinatorAbi,
       data,
     });
     expect(decoded.functionName).toBe("launch");
     if (decoded.functionName !== "launch") throw new Error("bad fixture");
     expect(decoded.args[0]).toMatchObject({
-      name: "Stock Pair Test",
-      symbol: "PAIR",
-      quoteAsset: STOCK_QUOTE_ASSETS[0].address,
-      initialBuyQuoteAmount: STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
-      creatorSalt: salt,
-      metadata: {
-        description: "A token quoted in NVDAon.",
-        website: "https://programmable.family",
-        image: "https://programmable.family/token.png",
+      minimumQuoteAmountOut: 9_000n,
+      minimumInitialTokenOut: 8_000n,
+      deadline,
+      launch: {
+        name: "Stock Pair Test",
+        symbol: "PAIR",
+        quoteAsset: STOCK_QUOTE_ASSETS[0].address,
+        initialBuyQuoteAmount: 0n,
+        creatorSalt: salt,
+        metadata: {
+          description: "A token quoted in NVDAon.",
+          website: "https://programmable.family",
+          image: "https://programmable.family/token.png",
+        },
+        rewardBeneficiaries: [STOCK_TEST_ACCOUNT],
+        rewardSharesBps: [10_000],
       },
-      rewardBeneficiaries: [STOCK_TEST_ACCOUNT],
-      rewardSharesBps: [10_000],
     });
   });
 
-  it("accepts only exact approval and launch wallet plans", () => {
+  it("accepts only the exact payable coordinator launch plan", () => {
     const release = stockPairedReleaseFixture();
-    const approval = {
-      kind: "stock-quote-approval" as const,
-      chainId: 1 as const,
-      to: STOCK_QUOTE_ASSETS[0].address,
-      data: encodeStockQuoteApproval(
-        release.addresses.launcher,
-        STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
-      ),
-      value: "0",
-      gasLimit: "60000",
-    };
-    const approvalInput = {
-      transaction: approval,
-      draft: draft(),
-      account: STOCK_TEST_ACCOUNT,
-      planHash: buildPlanHash(STOCK_TEST_ACCOUNT, approval),
-    };
-    expect(
-      validatePreparedStockQuoteApprovalTransactionAgainstVerifiedRelease(
-        approvalInput,
-        release,
-      ),
-    ).toEqual(approval);
-
+    const deadline = BigInt(Math.floor(Date.now() / 1_000) + 600);
     const launch = {
       kind: "launch" as const,
       chainId: 1 as const,
-      to: release.addresses.launcher,
-      data: encodeStockPairedLaunch(
-        draft(),
-        salt,
-        STOCK_TEST_ACCOUNT,
-      ),
-      value: "0",
+      to: release.addresses.ethLaunchCoordinator,
+      data: encodeStockPairedEthLaunch(draft(), salt, STOCK_TEST_ACCOUNT, {
+        minimumQuoteAmountOut: 9_000n,
+        minimumInitialTokenOut: 8_000n,
+        deadline,
+      }),
+      value: parseEther("0.01").toString(),
       gasLimit: "5000000",
     };
     const launchInput = {
@@ -142,29 +120,12 @@ describe("Stock-Paired launch preparation", () => {
     ).toEqual(launch);
 
     expect(() =>
-      validatePreparedStockQuoteApprovalTransactionAgainstVerifiedRelease(
-        {
-          ...approvalInput,
-          transaction: {
-            ...approval,
-            data: encodeStockQuoteApproval(
-              release.addresses.launcher,
-              STOCK_PAIRED_MIN_INITIAL_BUY_RAW + 1n,
-            ),
-          },
-        },
-        release,
-      ),
-    ).toThrow(/exact Initial Buy amount/);
-    expect(() =>
       validatePreparedStockPairedLaunchTransactionAgainstVerifiedRelease(
         {
           ...launchInput,
           transaction: {
             ...launch,
-            to: getAddress(
-              "0x9999999999999999999999999999999999999999",
-            ),
+            to: getAddress("0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"),
           },
         },
         release,
@@ -172,22 +133,22 @@ describe("Stock-Paired launch preparation", () => {
     ).toThrow(/destination/);
   });
 
-  it("rejects unsupported quote assets and buys below 0.01", () => {
+  it("rejects unsupported quote assets and ETH buys below the minimum", () => {
     expect(() =>
       validateStockPairedLaunchDraft(
         {
           ...draft(),
-          stockQuoteAsset:
-            "0x9999999999999999999999999999999999999999",
+          stockQuoteAsset: "0x9999999999999999999999999999999999999999",
         },
         STOCK_TEST_ACCOUNT,
       ),
-    ).toThrow(/supported quote assets/);
+    ).toThrow(/supported ETH-routed quote assets/);
     expect(() =>
       validateStockPairedLaunchDraft(
-        { ...draft(), initialBuyQuoteAmount: "0.009" },
+        { ...draft(), initialBuyEth: "0.0005" },
         STOCK_TEST_ACCOUNT,
       ),
-    ).toThrow(/at least 0.01/);
+    ).toThrow(/at least 0.0006 ETH/);
+    expect(STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI).toBe(parseEther("0.0006"));
   });
 });

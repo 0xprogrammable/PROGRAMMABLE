@@ -13,7 +13,6 @@ export type PreparedTransactionChainId =
 
 export type PreparedTransactionKind =
   | "launch"
-  | "stock-quote-approval"
   | "token-to-permit2"
   | "permit2-to-router"
   | "swap"
@@ -38,7 +37,6 @@ type PreparedApprovalTransactionBase = PreparedTransactionBase & {
 };
 
 type PreparedApprovalTransaction =
-  | (PreparedApprovalTransactionBase & { kind: "stock-quote-approval" })
   | (PreparedApprovalTransactionBase & { kind: "token-to-permit2" })
   | (PreparedApprovalTransactionBase & { kind: "permit2-to-router" });
 
@@ -99,7 +97,6 @@ const UINT256_MAX = (1n << 256n) - 1n;
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 const kinds = new Set<PreparedTransactionKind>([
   "launch",
-  "stock-quote-approval",
   "token-to-permit2",
   "permit2-to-router",
   "swap",
@@ -343,14 +340,6 @@ export function getPreparedTransactionReview(
       description: "Submit the prepared token launch on Ethereum",
       buttonText: "Launch token",
       successHeader: "Launch submitted",
-    };
-  }
-  if (kind === "stock-quote-approval") {
-    return {
-      description:
-        "Allow the Stock-Paired launcher to use the exact Initial Buy amount",
-      buttonText: "Approve Initial Buy",
-      successHeader: "Approval submitted",
     };
   }
   if (kind === "token-to-permit2") {

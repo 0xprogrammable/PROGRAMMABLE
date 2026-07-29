@@ -32,6 +32,11 @@ import { QuoteAssetCreatorFeeHookFactoryV1 } from "../src/QuoteAssetCreatorFeeHo
 import { QuoteAssetCreatorFeeHookV1 } from "../src/QuoteAssetCreatorFeeHookV1.sol";
 import { QuoteAssetFeeSplitVaultFactoryV1 } from "../src/QuoteAssetFeeSplitVaultFactoryV1.sol";
 import { QuoteAssetFeeSplitVaultV1 } from "../src/QuoteAssetFeeSplitVaultV1.sol";
+import {
+    IUniswapV3FactoryLike,
+    IUniswapV3SwapRouterLike,
+    StockPairedEthLaunchCoordinatorV1
+} from "../src/StockPairedEthLaunchCoordinatorV1.sol";
 import { StockPairedLaunchV1 } from "../src/StockPairedLaunchV1.sol";
 import { StockPairedPositionPlannerV1 } from "../src/StockPairedPositionPlannerV1.sol";
 import { StockQuoteRegistryV1 } from "../src/StockQuoteRegistryV1.sol";
@@ -86,6 +91,59 @@ contract MockStockBeacon is IBeacon {
 
     function implementation() external view returns (address) {
         return _implementation;
+    }
+}
+
+contract MockStockV3Pool { }
+
+contract MockStockV3Factory is IUniswapV3FactoryLike {
+    mapping(bytes32 key => address pool) private _pools;
+
+    function setPool(address tokenA, address tokenB, uint24 fee, address pool) external {
+        _pools[_key(tokenA, tokenB, fee)] = pool;
+    }
+
+    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool) {
+        return _pools[_key(tokenA, tokenB, fee)];
+    }
+
+    function _key(address tokenA, address tokenB, uint24 fee) private pure returns (bytes32) {
+        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+        return keccak256(abi.encode(token0, token1, fee));
+    }
+}
+
+contract MockStockV3Router is IUniswapV3SwapRouterLike {
+    address public immutable factory;
+    address public immutable WETH9;
+    uint256 public amountOut;
+
+    error Expired();
+    error InsufficientOutput(uint256 actual, uint256 minimum);
+    error InvalidEthInput();
+
+    constructor(address factory_, address weth_) {
+        factory = factory_;
+        WETH9 = weth_;
+    }
+
+    function setAmountOut(uint256 amountOut_) external {
+        amountOut = amountOut_;
+    }
+
+    function exactInput(ExactInputParams calldata params) external payable returns (uint256) {
+        if (params.deadline < block.timestamp) revert Expired();
+        if (msg.value != params.amountIn) revert InvalidEthInput();
+        if (amountOut < params.amountOutMinimum) {
+            revert InsufficientOutput(amountOut, params.amountOutMinimum);
+        }
+        address quoteAsset;
+        bytes calldata path = params.path;
+        assembly ("memory-safe") {
+            quoteAsset := shr(96, calldataload(add(path.offset, sub(path.length, 20))))
+        }
+        MockStockQuoteToken(quoteAsset).mint(params.recipient, amountOut);
+        return amountOut;
     }
 }
 
@@ -260,6 +318,91 @@ contract StockPairedLaunchV1Test is Deployers {
             abi.encodeWithSelector(StockQuoteRegistryV1.UnsupportedQuoteAsset.selector, address(unsupported))
         );
         launcher.launch(parameters);
+    }
+
+    function test_ethCoordinatorRoutesTheInitialBuyAndReturnsAllLaunchedTokensToCreator() public {
+        (StockPairedEthLaunchCoordinatorV1 coordinator, MockStockV3Router router) = _deployEthCoordinator();
+        uint256 ethInput = 0.001 ether;
+        router.setAmountOut(INITIAL_BUY);
+
+        StockPairedLaunchV1.LaunchParameters memory launchParameters =
+            _baseParameters("ETH Stock Paired", "ETHSP", address(quoteTokens[0]), bytes32("eth-launch"));
+        launchParameters.initialBuyQuoteAmount = 0;
+        (address predicted,) = coordinator.predictTokenAddress(
+            launchParameters.name, launchParameters.symbol, deployer, launchParameters.creatorSalt
+        );
+        StockPairedEthLaunchCoordinatorV1.EthLaunchParameters memory parameters =
+            _ethLaunchParameters(launchParameters, INITIAL_BUY, 1);
+
+        vm.deal(deployer, ethInput);
+        vm.prank(deployer);
+        StockPairedLaunchV1.LaunchResult memory result = coordinator.launch{ value: ethInput }(parameters);
+
+        assertEq(result.token, predicted);
+        assertEq(result.initialBuyQuoteAmount, INITIAL_BUY);
+        assertGt(result.initialBuyTokenAmount, 0);
+        assertEq(IERC20(result.token).balanceOf(deployer), result.initialBuyTokenAmount);
+        assertEq(IERC20(result.token).balanceOf(address(coordinator)), 0);
+        assertEq(quoteTokens[0].balanceOf(address(coordinator)), 0);
+        assertEq(quoteTokens[0].allowance(address(coordinator), address(launcher)), 0);
+        assertEq(QuoteAssetFeeSplitVaultV1(result.rewardVault).beneficiaryAt(0), deployer);
+    }
+
+    function test_ethCoordinatorSeparatesCreatorSaltsAndRequiresOutputProtection() public {
+        (StockPairedEthLaunchCoordinatorV1 coordinator, MockStockV3Router router) = _deployEthCoordinator();
+        bytes32 salt = bytes32("shared-salt");
+        (address deployerToken,) = coordinator.predictTokenAddress("Salt A", "SALTA", deployer, salt);
+        (address aliceToken,) = coordinator.predictTokenAddress("Salt A", "SALTA", alice, salt);
+        assertNotEq(deployerToken, aliceToken);
+
+        router.setAmountOut(INITIAL_BUY);
+        StockPairedLaunchV1.LaunchParameters memory launchParameters =
+            _baseParameters("Protected ETH launch", "PROTECT", address(quoteTokens[1]), salt);
+        launchParameters.initialBuyQuoteAmount = 0;
+        (address protectedToken,) = coordinator.predictTokenAddress(
+            launchParameters.name, launchParameters.symbol, deployer, launchParameters.creatorSalt
+        );
+        StockPairedEthLaunchCoordinatorV1.EthLaunchParameters memory parameters =
+            _ethLaunchParameters(launchParameters, INITIAL_BUY, type(uint256).max);
+
+        vm.deal(deployer, 0.001 ether);
+        parameters.minimumQuoteAmountOut = 0;
+        vm.prank(deployer);
+        vm.expectRevert(StockPairedEthLaunchCoordinatorV1.QuoteOutputRequired.selector);
+        coordinator.launch{ value: 0.001 ether }(parameters);
+
+        parameters.minimumQuoteAmountOut = INITIAL_BUY;
+        vm.prank(deployer);
+        vm.expectPartialRevert(StockPairedEthLaunchCoordinatorV1.InitialTokenOutputBelowMinimum.selector);
+        coordinator.launch{ value: 0.001 ether }(parameters);
+        assertEq(protectedToken.code.length, 0);
+    }
+
+    function test_ethCoordinatorRejectsUnsupportedRoutesAndReentrancy() public {
+        (StockPairedEthLaunchCoordinatorV1 coordinator, MockStockV3Router router) = _deployEthCoordinator();
+        MockStockQuoteToken unsupported = new MockStockQuoteToken("Unsupported", "NOPE");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                StockPairedEthLaunchCoordinatorV1.UnsupportedQuoteAsset.selector, address(unsupported)
+            )
+        );
+        coordinator.routePath(address(unsupported));
+
+        router.setAmountOut(INITIAL_BUY);
+        StockPairedLaunchV1.LaunchParameters memory launchParameters =
+            _baseParameters("Reentrant ETH launch", "REENT", address(quoteTokens[2]), bytes32("reentrant"));
+        launchParameters.initialBuyQuoteAmount = 0;
+        StockPairedEthLaunchCoordinatorV1.EthLaunchParameters memory parameters =
+            _ethLaunchParameters(launchParameters, INITIAL_BUY, 1);
+        quoteTokens[2].setTransferFromCallback(
+            address(coordinator), abi.encodeCall(StockPairedEthLaunchCoordinatorV1.launch, (parameters))
+        );
+
+        vm.deal(deployer, 0.001 ether);
+        vm.prank(deployer);
+        StockPairedLaunchV1.LaunchResult memory result = coordinator.launch{ value: 0.001 ether }(parameters);
+        assertGt(result.initialBuyTokenAmount, 0);
+        assertFalse(quoteTokens[2].lastCallbackSucceeded());
     }
 
     function test_feeOnTransferQuoteAssetFailsBeforeInitialBuy() public {
@@ -510,6 +653,41 @@ contract StockPairedLaunchV1Test is Deployers {
             abi.encode(manager, treasury, quoteRegistry, vaultFactory)
         );
         deployed = hookFactory.deploy(salt, manager, treasury, quoteRegistry, vaultFactory);
+    }
+
+    function _deployEthCoordinator()
+        private
+        returns (StockPairedEthLaunchCoordinatorV1 coordinator, MockStockV3Router router)
+    {
+        MockStockQuoteToken weth = new MockStockQuoteToken("Wrapped Ether", "WETH");
+        MockStockQuoteToken usdc = new MockStockQuoteToken("USD Coin", "USDC");
+        MockStockV3Factory factory = new MockStockV3Factory();
+        router = new MockStockV3Router(address(factory), address(weth));
+        MockStockV3Pool pool = new MockStockV3Pool();
+        factory.setPool(address(weth), address(usdc), 500, address(pool));
+
+        address[] memory assets = _quoteAssetAddresses();
+        uint24[] memory fees = new uint24[](assets.length);
+        for (uint256 index; index < assets.length; index++) {
+            fees[index] = 10_000;
+            factory.setPool(address(usdc), assets[index], fees[index], address(pool));
+        }
+        coordinator = new StockPairedEthLaunchCoordinatorV1(
+            launcher, router, factory, address(weth), address(usdc), assets, fees
+        );
+    }
+
+    function _ethLaunchParameters(
+        StockPairedLaunchV1.LaunchParameters memory launchParameters,
+        uint256 minimumQuoteAmountOut,
+        uint256 minimumInitialTokenOut
+    ) private view returns (StockPairedEthLaunchCoordinatorV1.EthLaunchParameters memory parameters) {
+        parameters = StockPairedEthLaunchCoordinatorV1.EthLaunchParameters({
+            minimumQuoteAmountOut: minimumQuoteAmountOut,
+            minimumInitialTokenOut: minimumInitialTokenOut,
+            deadline: block.timestamp + 1 hours,
+            launch: launchParameters
+        });
     }
 
     function _launch(StockPairedLaunchV1.LaunchParameters memory parameters)

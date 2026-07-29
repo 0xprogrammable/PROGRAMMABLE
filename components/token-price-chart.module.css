@@ -2,48 +2,49 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--accent-wash) 42%, transparent),
-      transparent 50%
+      color-mix(in srgb, var(--accent-wash) 38%, transparent),
+      transparent 58%
     ),
-    color-mix(in srgb, var(--surface-tint) 78%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 20px;
+    color-mix(in srgb, var(--surface-tint) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 22px;
   margin-top: 22px;
-  min-height: 222px;
+  min-height: 258px;
   overflow: hidden;
-  padding: 17px 18px 12px;
+  padding: 18px 18px 13px;
 }
 
 .header {
   align-items: center;
   display: flex;
-  gap: 16px;
+  gap: 18px;
   justify-content: space-between;
-  min-height: 46px;
+  min-height: 48px;
 }
 
 .eyebrow {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 11px;
   font-weight: 620;
-  letter-spacing: 0.025em;
-  margin: 0 0 3px;
+  letter-spacing: 0.015em;
+  margin: 0 0 4px;
 }
 
 .value {
   color: var(--text);
-  font-size: clamp(1.2rem, 1.55vw, 1.42rem);
+  font-size: clamp(21px, 1.7vw, 25px);
   font-variant-numeric: tabular-nums;
-  font-weight: 650;
-  letter-spacing: -0.03em;
+  font-weight: 660;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
   margin: 0;
 }
 
 .ranges {
   align-items: center;
-  background: color-mix(in srgb, var(--surface-soft) 80%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 13px;
   display: flex;
   gap: 2px;
   padding: 3px;
@@ -52,30 +53,40 @@
 .rangeButton {
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--muted);
-  font-size: 0.66rem;
-  font-weight: 670;
-  height: 27px;
+  font-size: 10px;
+  font-weight: 700;
+  height: 38px;
   letter-spacing: 0.025em;
-  min-width: 34px;
-  padding: 0 7px;
+  min-width: 40px;
+  padding: 0 8px;
   transition:
     background-color 150ms ease,
+    box-shadow 150ms ease,
     color 150ms ease,
-    box-shadow 150ms ease;
+    transform 140ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
 
 .rangeButton[aria-pressed="true"] {
   background: var(--surface-raised);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 8%, transparent);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
 }
 
+.rangeButton:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+}
+
+.rangeButton:active {
+  transform: scale(0.97);
+}
+
 .plot {
-  cursor: default;
+  cursor: crosshair;
   display: block;
-  height: 146px;
+  height: 174px;
   margin-top: 8px;
   position: relative;
   touch-action: pan-y;
@@ -87,31 +98,29 @@
 }
 
 .grid {
-  stroke: color-mix(in srgb, var(--border) 66%, transparent);
-  stroke-width: 0.8;
+  stroke: color-mix(in srgb, var(--border) 62%, transparent);
+  stroke-width: 0.75;
   vector-effect: non-scaling-stroke;
 }
 
 .area {
-  animation: reveal-area 280ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1))
-    forwards;
-  opacity: 0;
+  animation: reveal-area 180ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1))
+    both;
 }
 
 .line {
-  animation: reveal-line 300ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1))
-    forwards;
+  animation: reveal-line 190ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1))
+    both;
   fill: none;
-  opacity: 0;
   stroke: var(--accent);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.6;
+  stroke-width: 2.45;
   vector-effect: non-scaling-stroke;
 }
 
 .guide {
-  stroke: color-mix(in srgb, var(--text) 18%, transparent);
+  stroke: color-mix(in srgb, var(--text) 20%, transparent);
   stroke-dasharray: 3 5;
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
@@ -127,8 +136,8 @@
 .placeholder {
   color: var(--muted);
   display: grid;
-  font-size: 0.82rem;
-  min-height: 146px;
+  font-size: 13px;
+  min-height: 174px;
   place-items: center;
   text-align: center;
 }
@@ -152,16 +161,20 @@
 @keyframes reveal-line {
   from {
     opacity: 0;
-    transform: translateY(2px);
+    transform: translate3d(0, 2px, 0);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes reveal-area {
+  from {
+    opacity: 0;
+  }
+
   to {
     opacity: 1;
   }
@@ -177,30 +190,45 @@
   }
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .rangeButton:not([aria-pressed="true"]):hover {
+    color: var(--text-soft);
+  }
+}
+
 @media (max-width: 560px) {
   .shell {
-    border-radius: 17px;
-    min-height: 204px;
-    padding: 15px 14px 10px;
-  }
-
-  .plot {
-    height: 132px;
+    border-radius: 19px;
+    min-height: 224px;
+    padding: 15px 13px 10px;
   }
 
   .header {
+    align-items: flex-start;
     gap: 10px;
   }
 
+  .value {
+    font-size: 21px;
+  }
+
   .ranges {
+    border-radius: 11px;
     gap: 1px;
     padding: 2px;
   }
 
   .rangeButton {
-    height: 26px;
-    min-width: 31px;
+    border-radius: 9px;
+    height: 36px;
+    min-width: 34px;
     padding-inline: 5px;
+  }
+
+  .plot,
+  .placeholder {
+    height: 148px;
+    min-height: 148px;
   }
 }
 
@@ -208,7 +236,10 @@
   .area,
   .line,
   .loadingLine {
-    animation: none;
-    opacity: 1;
+    animation-duration: 1ms;
+  }
+
+  .rangeButton {
+    transition-duration: 1ms;
   }
 }

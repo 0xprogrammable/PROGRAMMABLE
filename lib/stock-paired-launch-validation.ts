@@ -13,9 +13,8 @@ import {
   type PreparedTransaction,
 } from "./prepared-transaction";
 import {
-  encodeStockPairedLaunch,
-  parseStockInitialBuyAmount,
-  stockQuoteTokenAbi,
+  encodeStockPairedEthLaunch,
+  stockPairedEthLaunchCoordinatorAbi,
   validateStockPairedLaunchDraft,
 } from "./stock-paired";
 import {
@@ -23,16 +22,12 @@ import {
   type VerifiedStockPairedRelease,
 } from "./stock-paired-release";
 
-const MIN_APPROVAL_GAS_LIMIT = 25_000n;
-const MAX_APPROVAL_GAS_LIMIT = 250_000n;
 const MIN_LAUNCH_GAS_LIMIT = 1_500_000n;
 const MAX_LAUNCH_GAS_LIMIT = 15_000_000n;
+const MAX_DEADLINE_AHEAD_SECONDS = 3_600n;
+const DEADLINE_CLOCK_SKEW_SECONDS = 60n;
 
 type PreparedLaunch = Extract<PreparedTransaction, { kind: "launch" }>;
-type PreparedApproval = Extract<
-  PreparedTransaction,
-  { kind: "stock-quote-approval" }
->;
 
 type ValidationInput = {
   transaction: unknown;
@@ -59,7 +54,7 @@ function validPlanHash(value: unknown): value is Hex {
 
 function assertPlanHash(
   account: Address,
-  transaction: PreparedLaunch | PreparedApproval,
+  transaction: PreparedLaunch,
   received: unknown,
 ) {
   if (!validPlanHash(received)) {
@@ -89,72 +84,6 @@ function releaseOrThrow() {
   return release;
 }
 
-export function validatePreparedStockQuoteApprovalTransactionAgainstVerifiedRelease(
-  input: ValidationInput,
-  release: VerifiedStockPairedRelease,
-): PreparedApproval {
-  const transaction = parsePreparedTransaction(input.transaction);
-  if (transaction.kind !== "stock-quote-approval") {
-    throw new Error("The prepared transaction is not a quote-token approval");
-  }
-  const account = connectedAccount(input.account);
-  const configuration = validateStockPairedLaunchDraft(input.draft, account);
-  const amount = parseStockInitialBuyAmount(input.draft.initialBuyQuoteAmount);
-  if (amount === null) {
-    throw new Error("The Initial Buy amount is invalid");
-  }
-  if (
-    transaction.chainId !== release.chainId ||
-    transaction.to.toLowerCase() !==
-      configuration.quoteAsset.address.toLowerCase() ||
-    transaction.value !== "0"
-  ) {
-    throw new Error(
-      "The quote-token approval does not match the Stock-Paired release",
-    );
-  }
-  const gasLimit = transaction.gasLimit
-    ? BigInt(transaction.gasLimit)
-    : 0n;
-  if (
-    gasLimit < MIN_APPROVAL_GAS_LIMIT ||
-    gasLimit > MAX_APPROVAL_GAS_LIMIT
-  ) {
-    throw new Error("The quote-token approval gas limit is outside the reviewed range");
-  }
-
-  let decoded;
-  try {
-    decoded = decodeFunctionData({
-      abi: stockQuoteTokenAbi,
-      data: transaction.data,
-    });
-  } catch {
-    throw new Error("The prepared transaction is not a quote-token approval");
-  }
-  if (
-    decoded.functionName !== "approve" ||
-    decoded.args[0].toLowerCase() !==
-      release.addresses.launcher.toLowerCase() ||
-    decoded.args[1] !== amount
-  ) {
-    throw new Error(
-      "The approval must be limited to the exact Initial Buy amount",
-    );
-  }
-  assertPlanHash(account, transaction, input.planHash);
-  return transaction;
-}
-
-export function validatePreparedStockQuoteApprovalTransaction(
-  input: ValidationInput,
-): PreparedApproval {
-  return validatePreparedStockQuoteApprovalTransactionAgainstVerifiedRelease(
-    input,
-    releaseOrThrow(),
-  );
-}
-
 export function validatePreparedStockPairedLaunchTransactionAgainstVerifiedRelease(
   input: ValidationInput,
   release: VerifiedStockPairedRelease,
@@ -164,7 +93,10 @@ export function validatePreparedStockPairedLaunchTransactionAgainstVerifiedRelea
     throw new Error("The prepared transaction is not a Stock-Paired launch");
   }
   const account = connectedAccount(input.account);
-  validateStockPairedLaunchDraft(input.draft, account);
+  const configuration = validateStockPairedLaunchDraft(
+    input.draft,
+    account,
+  );
   if (
     !isHex(input.draft.launchSalt, { strict: true }) ||
     input.draft.launchSalt.length !== 66
@@ -176,8 +108,8 @@ export function validatePreparedStockPairedLaunchTransactionAgainstVerifiedRelea
   if (
     transaction.chainId !== release.chainId ||
     transaction.to.toLowerCase() !==
-      release.addresses.launcher.toLowerCase() ||
-    transaction.value !== "0"
+      release.addresses.ethLaunchCoordinator.toLowerCase() ||
+    BigInt(transaction.value) !== configuration.initialBuyEthAmount
   ) {
     throw new Error(
       "The launch destination does not match the Stock-Paired release",
@@ -191,10 +123,37 @@ export function validatePreparedStockPairedLaunchTransactionAgainstVerifiedRelea
     throw new Error("The launch gas limit is outside the reviewed range");
   }
 
-  const expectedData = encodeStockPairedLaunch(
+  let decoded;
+  try {
+    decoded = decodeFunctionData({
+      abi: stockPairedEthLaunchCoordinatorAbi,
+      data: transaction.data,
+    });
+  } catch {
+    throw new Error("The prepared transaction is not a Stock-Paired launch");
+  }
+  if (decoded.functionName !== "launch") {
+    throw new Error("The prepared transaction is not a Stock-Paired launch");
+  }
+  const parameters = decoded.args[0];
+  const now = BigInt(Math.floor(Date.now() / 1_000));
+  if (
+    parameters.minimumQuoteAmountOut <= 0n ||
+    parameters.minimumInitialTokenOut <= 0n ||
+    parameters.deadline + DEADLINE_CLOCK_SKEW_SECONDS < now ||
+    parameters.deadline > now + MAX_DEADLINE_AHEAD_SECONDS
+  ) {
+    throw new Error("The Stock-Paired launch protection is invalid");
+  }
+  const expectedData = encodeStockPairedEthLaunch(
     input.draft,
     input.draft.launchSalt,
     account,
+    {
+      minimumQuoteAmountOut: parameters.minimumQuoteAmountOut,
+      minimumInitialTokenOut: parameters.minimumInitialTokenOut,
+      deadline: parameters.deadline,
+    },
   );
   if (transaction.data.toLowerCase() !== expectedData.toLowerCase()) {
     throw new Error(

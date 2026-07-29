@@ -7,7 +7,7 @@ pool quoted in one supported Ondo stock token. The launched token is not a share
 does not represent ownership in the underlying company and is not redeemable for
 the selected stock. The stock token is the pool's quote asset.
 
-V1 supports seven Ethereum Mainnet quote assets:
+The immutable base registry recognizes seven Ethereum Mainnet quote assets:
 
 - NVDAon
 - SPYon
@@ -17,22 +17,25 @@ V1 supports seven Ethereum Mainnet quote assets:
 - TSLAon
 - AAPLon
 
-The list is immutable for this deployment. Adding another quote asset requires a
-new reviewed registry and launcher deployment.
+The ETH coordinator exposes six of them: NVDAon, SPYon, GOOGLon, SLVon,
+TSLAon and AAPLon. QQQon remains registered in the base contracts but is not a
+coordinator route because its current ETH round trip fails the liquidity gate.
+Adding another registry asset requires a new reviewed registry and launcher
+deployment. Adding a safe ETH route requires a new coordinator deployment.
 
 ## User flow
 
 1. Choose Stock-Paired.
 2. Enter the token name, ticker, image, description and project links.
-3. Choose one of the seven quote assets.
-4. Enter an initial buy of at least `0.01` quote tokens.
-5. Approve that exact quote-token amount when allowance is insufficient.
-6. Launch in one transaction.
+3. Choose one of the six ETH-routed quote assets.
+4. Enter the Initial Buy in ETH.
+5. Launch in one wallet transaction.
 
-The launch transaction creates the token, registers its fee policy, initializes
-the pool, places the complete supply in a permanently locked one-sided position
-and executes the creator's initial buy. No launched-token allocation is sent to
-the creator outside that buy.
+The launch coordinator routes ETH through the reviewed
+WETH/USDC/stock-token path, creates the token, registers its fee policy,
+initializes the pool, places the complete supply in a permanently locked
+one-sided position and executes the creator's initial buy atomically. The
+creator receives only the tokens returned by that Initial Buy.
 
 ## Economics
 
@@ -62,7 +65,7 @@ orientation without mining token addresses.
 - `CurrencySettler` for ERC-20 settlement and ERC-6909 fee claims
 - `BaseHook` for callback authorization and hook permission validation
 - `StateView`, `V4Quoter`, Universal Router 2.1.1 and the v4 SDK for reads,
-  quotes and direct stock-token trades
+  quotes and atomic ETH-routed trades
 
 The canonical Uniswap Liquidity Launcher auction contracts are not used. They
 solve price discovery through a CCA, while this model needs an immediate,
@@ -97,6 +100,14 @@ registry, rejects fee-on-transfer behavior by exact balance checks, creates the
 UERC-20, registers the pool, mints the complete one-sided position to the
 permanent lock and executes the initial stock-token buy.
 
+### `StockPairedEthLaunchCoordinatorV1`
+
+An ownerless, non-upgradeable wrapper around the reviewed launcher. It accepts
+ETH, routes it through fixed Uniswap v3 pools into the selected stock token and
+passes the exact output into `StockPairedLaunchV1`. It forwards every token from
+the Initial Buy to the creator and rejects residual balances, expired
+transactions, unsupported routes and unprotected output.
+
 ### `StockPairedPositionPlannerV1`
 
 A stateless adapter around Uniswap's official `PositionPlanner`. It builds the
@@ -105,18 +116,26 @@ runtime hash so another planner implementation cannot be substituted.
 
 ## Trading
 
-The canonical pool is stock-token/new-token. A holder of the selected stock
-token trades directly through the v4 pool.
+The canonical pool remains stock-token/new-token. Programmable presents ETH as
+the user-facing asset and executes both legs atomically through Universal Router
+2.1.1:
 
-An ETH purchase is a routed product flow, not a property of this pool:
+- buy: ETH to stock token through reviewed v3 pools, then stock token to the
+  launched token through its exact v4 pool;
+- sell: launched token to stock token through the exact v4 pool, then stock
+  token to ETH through the reviewed v3 pools.
 
-1. acquire the selected stock token through an official Uniswap route;
-2. approve Permit2 or the required spender;
-3. execute the stock-token/new-token v4 swap.
+Before preparing a transaction, the server quotes the external route in both
+directions. It fails closed when the round trip returns less than 90% of the
+input. This gate is amount-specific and runs against current Mainnet state.
+At the reviewed snapshot and in the latest pre-release quote check, six assets
+pass the one-transaction ETH launch test. QQQon is not included in the
+coordinator and remains unavailable through the ETH interface until a later
+reviewed route passes the same gate.
 
-V1 must not pretend an ETH route is available when the provider cannot produce
-and simulate it. The interface may combine the steps only after the exact route,
-recipient, calldata, hook, allowance and output checks pass.
+Third-party terminals do not automatically inherit this mixed v3/v4 route.
+GMGN, Fomo and other external interfaces must be tested separately and cannot
+be represented as supported before they execute the route themselves.
 
 ## Runtime and issuer assumptions
 
@@ -146,6 +165,10 @@ The model is not production-ready until all of the following hold:
 - unit tests cover both currency orders and all fee modes;
 - stateful invariants bind hook claim balances to accrued liabilities;
 - every one of the seven quote assets completes a Mainnet-fork launch;
+- every exposed ETH-first asset completes a Mainnet-fork launch through the
+  exact v3 and v4 route;
+- currently thin assets fail closed without deploying a token or retaining
+  user funds;
 - stock-token buy, sell, creator claim and treasury claim complete on a fork;
 - fee-on-transfer, issuer-runtime drift, unsupported asset, partial fill,
   reentrancy and unauthorized claim paths fail closed;

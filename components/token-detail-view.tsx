@@ -1040,9 +1040,7 @@ function TokenDetailContent({
               symbol={token.symbol}
               tokenDecimals={tokenDecimals}
               tokenPriceEth={token.tokenPriceEth}
-              tokenPriceQuote={token.tokenPriceQuote}
               launchModel={token.launchModel}
-              quoteAssetSymbol={token.quoteAssetSymbol}
               totalSwapFeeBps={
                 tradeFlow.prepared.side === "buy"
                   ? token.buyHookFeeBps ?? token.totalSwapFeeBps
