@@ -143,18 +143,20 @@ function reviewedDeepBinding(manifest = eligibleDeepManifest()) {
 }
 
 describe("unreleased launch model gating", () => {
-  it("shows Deep as the second model without exposing Adaptive", () => {
+  it("shows verified Stock-Paired beside Classic and Deep without Adaptive", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
       }),
     );
 
-    expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
+    expect(html.match(/data-launch-model-option=/g)).toHaveLength(3);
     expect(html).toContain('data-launch-model-option="classic"');
     expect(html).toContain('data-launch-model-option="deep"');
+    expect(html).toContain('data-launch-model-option="stock-paired"');
     expect(html).toContain("<strong>Classic</strong>");
     expect(html).toContain("<strong>Deep</strong>");
+    expect(html).toContain("<strong>Stock-Paired</strong>");
     expect(html).toContain("Verification pending");
     expect(html).toContain(
       'aria-describedby="launch-model-deep-description launch-model-deep-details"',

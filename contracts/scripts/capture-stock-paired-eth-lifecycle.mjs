@@ -16,6 +16,7 @@ import {
   STOCK_PAIRED_ETH_CANARY_ROUTE_POOLS,
 } from "../../scripts/stock-paired-eth-canary-core.mjs";
 import {
+  stockPairedCanaryErc20Abi,
   stockPairedCanaryForwarderAbi,
   stockPairedCanaryHookAbi,
   stockPairedCanaryPositionManagerAbi,
@@ -44,7 +45,6 @@ const FINALITY_CONFIRMATIONS = 12n;
 const requiredSteps = [
   "launch",
   "buy",
-  "token-permit2-approval",
   "token-router-approval",
   "sell",
   "creator-claim",
@@ -267,6 +267,17 @@ async function verifyRpc(url, manifest, evidence) {
       }),
     ),
   ]);
+  const permit2TokenAllowance = BigInt(
+    await call(
+      url,
+      evidence.launchResult.token,
+      encodeFunctionData({
+        abi: stockPairedCanaryErc20Abi,
+        functionName: "allowance",
+        args: [STOCK_PAIRED_DEPLOYER, STOCK_PAIRED_DEPENDENCIES.permit2.address],
+      }),
+    ),
+  );
   if (
     poolConfig[5] !== true ||
     normalizeStockPairedHex(poolConfig[0]) !==
@@ -277,6 +288,8 @@ async function verifyRpc(url, manifest, evidence) {
       normalizeStockPairedHex(evidence.launchResult.rewardVault) ||
     BigInt(poolConfig[6]) !== 0n ||
     launcherFees !== 0n ||
+    permit2TokenAllowance <
+      BigInt(evidence.steps.sell.effects.spentToken ?? 0) ||
     BigInt(claimedBy) <= 0n ||
     BigInt(totalCreatorFeesClaimed) <= 0n
   ) {
@@ -318,7 +331,10 @@ async function main() {
   if (!releaseCommit || !/^[0-9a-f]{40}$/.test(releaseCommit)) {
     throw new Error("STOCK_PAIRED_ETH_COORDINATOR_RELEASE_COMMIT is required");
   }
-  assertStockPairedEthCoordinatorCheckout(root, releaseCommit);
+  assertStockPairedEthCoordinatorCheckout(root, releaseCommit, {
+    allowDescendant: true,
+    build: false,
+  });
   const [manifest, evidence] = await Promise.all([
     readFile(manifestPath, "utf8").then(JSON.parse),
     readFile(evidencePath, "utf8").then(JSON.parse),
@@ -335,6 +351,7 @@ async function main() {
         !/^0x[0-9a-f]{64}$/i.test(evidence.steps[step].txHash ?? ""),
     ) ||
     BigInt(evidence.steps.buy.effects.receivedToken ?? 0) <= 0n ||
+    BigInt(evidence.steps.sell.effects.spentToken ?? 0) <= 0n ||
     BigInt(evidence.steps.sell.effects.receivedEth ?? 0) <= 0n ||
     BigInt(evidence.steps["creator-claim"].effects.receivedQuote ?? 0) <= 0n ||
     BigInt(evidence.steps["launcher-claim"].effects.receivedQuote ?? 0) <= 0n
