@@ -19,6 +19,7 @@ import {
 } from "viem";
 
 import {
+  DEEP_V3_CANARY_GAS_CEILINGS,
   DEEP_V3_MIN_PRIORITY_FEE_PER_GAS_WEI,
   DEEP_V3_OPERATOR_RELEASE_PATHS,
   assertDeepV3OperatorCheckoutClean,
@@ -336,6 +337,21 @@ test("derives a bounded fee envelope from both Mainnet RPCs", () => {
         },
       ]),
     /priority fee exceeds/,
+  );
+});
+
+test("keeps the complete oracle activation inside its reviewed envelope", () => {
+  const mainnetObservedActivationGas = 4_672_130n;
+  const bufferedActivationGas =
+    (mainnetObservedActivationGas * 120n + 99n) / 100n;
+
+  assert.equal(
+    DEEP_V3_CANARY_GAS_CEILINGS.growOracle,
+    6_000_000n,
+  );
+  assert.ok(
+    bufferedActivationGas <
+      DEEP_V3_CANARY_GAS_CEILINGS.growOracle,
   );
 });
 

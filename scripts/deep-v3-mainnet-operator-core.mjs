@@ -44,7 +44,7 @@ export const DEEP_V3_DEPLOYMENT_GAS_CEILINGS = Object.freeze({
 
 export const DEEP_V3_CANARY_GAS_CEILINGS = Object.freeze({
   launch: 20_000_000n,
-  growOracle: 3_000_000n,
+  growOracle: 6_000_000n,
   compound: 4_500_000n,
 });
 
