@@ -1,8 +1,8 @@
 .page {
-  max-width: 1160px;
+  max-width: 1180px;
   min-height: calc(100svh - var(--header-height));
-  padding-bottom: 52px;
-  padding-top: 30px;
+  padding-bottom: 48px;
+  padding-top: 24px;
 }
 
 .hero,
@@ -10,43 +10,55 @@
 .connectCard,
 .accountState {
   backdrop-filter: blur(22px) saturate(1.08);
-  background: color-mix(in srgb, var(--glass-96) 95%, transparent);
+  background: color-mix(in srgb, var(--glass-96) 94%, transparent);
   border: 1px solid var(--panel-border-soft);
   box-shadow:
     0 1px 0 var(--card-shadow),
-    0 18px 52px var(--card-shadow-soft);
+    0 22px 64px var(--card-shadow-soft);
 }
 
 .hero {
   align-items: center;
-  border-radius: 24px;
+  backdrop-filter: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   display: grid;
-  gap: 20px;
+  gap: 18px;
   grid-template-columns: auto minmax(0, 1fr);
-  min-height: 112px;
-  padding: 18px 22px;
+  min-height: 104px;
+  padding: 12px 8px;
 }
 
 .heroEditing {
   align-items: start;
+  backdrop-filter: blur(22px) saturate(1.08);
+  background: color-mix(in srgb, var(--glass-96) 94%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 26px;
+  box-shadow:
+    0 1px 0 var(--card-shadow),
+    0 22px 64px var(--card-shadow-soft);
+  padding: 20px 24px;
 }
 
 .avatar {
   align-items: center;
   background: var(--avatar-background);
   border: 1px solid color-mix(in srgb, var(--glass-94) 88%, var(--border));
-  border-radius: 21px;
+  border-radius: 20px;
   color: var(--accent-strong);
   display: flex;
   flex: none;
   font-family: var(--font-plex-mono), monospace;
   font-size: 20px;
   font-weight: 500;
-  height: 72px;
+  height: 70px;
   justify-content: center;
   overflow: hidden;
   position: relative;
-  width: 72px;
+  width: 70px;
 }
 
 .avatar img {
@@ -65,7 +77,7 @@
 }
 
 .nameRow h1 {
-  font-size: clamp(31px, 3.2vw, 40px);
+  font-size: clamp(32px, 3vw, 40px);
   font-weight: 570;
   letter-spacing: -0.045em;
   line-height: 1;
@@ -78,10 +90,10 @@
 .address {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11.5px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
-  margin-top: 8px;
+  margin-top: 9px;
 }
 
 .editButton,
@@ -99,12 +111,12 @@
 
 .editButton {
   background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
-  border-radius: 11px;
+  border-radius: 12px;
   color: var(--text-soft);
   flex: none;
   font-size: 12px;
-  min-height: 40px;
-  padding: 0 13px;
+  min-height: 42px;
+  padding: 0 14px;
 }
 
 .editForm {
@@ -227,8 +239,8 @@
 }
 
 .portfolio {
-  border-radius: 24px;
-  margin-top: 16px;
+  border-radius: 28px;
+  margin-top: 14px;
   min-width: 0;
   overflow: hidden;
 }
@@ -237,10 +249,10 @@
   align-items: center;
   border-bottom: 1px solid var(--border);
   display: grid;
-  gap: 18px 34px;
+  gap: 20px 36px;
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 112px;
-  padding: 23px 26px 20px;
+  min-height: 124px;
+  padding: 24px 28px 22px;
 }
 
 .portfolioTitle {
@@ -248,38 +260,32 @@
 }
 
 .portfolioTitle h2 {
-  font-size: 29px;
-  font-weight: 590;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-}
-
-.portfolioTitle p {
-  color: var(--muted);
-  font-size: 13px;
-  margin-top: 7px;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
 
 .portfolioStats {
   align-items: center;
   display: flex;
   flex: none;
-  gap: 0;
+  gap: 8px;
 }
 
 .portfolioStat {
   display: grid;
   gap: 5px;
   min-width: 96px;
-  padding: 0 24px;
+  padding: 11px 18px;
 }
 
 .portfolioStat + .portfolioStat {
-  border-left: 1px solid var(--border);
+  border-left: 0;
 }
 
 .portfolioStat:last-child {
-  padding-right: 0;
+  padding-right: 18px;
 }
 
 .portfolioStat span {
@@ -290,7 +296,7 @@
 
 .portfolioStat strong {
   color: var(--text);
-  font-size: 21px;
+  font-size: 22px;
   font-variant-numeric: tabular-nums;
   font-weight: 620;
   letter-spacing: -0.025em;
@@ -302,6 +308,13 @@
   color: var(--accent-strong);
 }
 
+.portfolioTotal {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
+  border-radius: 16px;
+  min-width: 190px;
+}
+
 .portfolioTotal small {
   color: var(--muted);
   font-size: 10px;
@@ -310,12 +323,12 @@
 }
 
 .rewardDistribution {
-  background: color-mix(in srgb, var(--surface-soft) 82%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
   border-radius: 999px;
   display: flex;
   gap: 2px;
   grid-column: 1 / -1;
-  height: 4px;
+  height: 5px;
   overflow: hidden;
   width: 100%;
 }
@@ -363,10 +376,10 @@
 .tokenMain {
   display: grid;
   grid-template-columns:
-    minmax(300px, 1.7fr)
-    minmax(124px, 0.68fr)
-    minmax(160px, 0.9fr)
-    minmax(172px, auto);
+    minmax(310px, 1.72fr)
+    minmax(128px, 0.7fr)
+    minmax(168px, 0.92fr)
+    minmax(178px, auto);
 }
 
 .ledgerHeader {
@@ -375,8 +388,8 @@
   font-size: 10px;
   font-weight: 620;
   letter-spacing: 0.045em;
-  min-height: 43px;
-  padding: 0 26px;
+  min-height: 46px;
+  padding: 0 28px;
   text-transform: uppercase;
 }
 
@@ -395,11 +408,12 @@
   background: color-mix(in srgb, var(--glass-82) 88%, transparent);
   border-bottom: 1px solid var(--border);
   min-width: 0;
-  padding: 0 26px;
+  padding: 0 28px;
   transform: translate3d(0, 0, 0);
   transition:
     background-color 170ms ease,
-    box-shadow 170ms ease;
+    box-shadow 170ms ease,
+    transform 170ms var(--ease-out);
 }
 
 .tokenRow:last-child {
@@ -418,7 +432,7 @@
 
 .tokenMain {
   align-items: center;
-  min-height: 102px;
+  min-height: 106px;
   min-width: 0;
 }
 
@@ -426,7 +440,7 @@
   align-items: center;
   color: var(--text);
   display: flex;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
   padding-right: 24px;
 }
@@ -434,12 +448,12 @@
 .tokenArt {
   background: var(--surface-soft);
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 16px;
+  border-radius: 18px;
   flex: none;
-  height: 58px;
+  height: 62px;
   overflow: hidden;
   position: relative;
-  width: 58px;
+  width: 62px;
 }
 
 .tokenArt img {
@@ -460,7 +474,7 @@
 }
 
 .tokenCopy strong {
-  font-size: 16.5px;
+  font-size: 17.5px;
   font-weight: 630;
   letter-spacing: -0.02em;
   overflow: hidden;
@@ -471,7 +485,7 @@
 .tokenSymbol {
   color: var(--accent-strong);
   flex: none;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -507,7 +521,7 @@
 .tokenAddress {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10.5px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   margin-top: 5px;
   overflow: hidden;
@@ -519,16 +533,17 @@
   align-items: center;
   background: color-mix(in srgb, var(--glass-88) 72%, transparent);
   border: 1px solid var(--border);
-  border-radius: 11px;
+  border-radius: 12px;
   color: var(--text-soft);
   display: inline-flex;
   flex: none;
   font-size: 12px;
   font-weight: 610;
-  height: 40px;
+  height: 44px;
   justify-content: center;
   line-height: 1;
-  padding: 0 14px;
+  min-width: 76px;
+  padding: 0 15px;
   white-space: nowrap;
 }
 
@@ -552,7 +567,7 @@
 }
 
 .metric strong {
-  font-size: 15px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
   font-weight: 630;
   letter-spacing: -0.015em;
@@ -587,10 +602,11 @@
 
 .claimButton,
 .secondaryAction {
-  border-radius: 11px;
+  border-radius: 12px;
   font-size: 12px;
-  min-height: 40px;
-  padding: 0 14px;
+  min-height: 44px;
+  min-width: 76px;
+  padding: 0 15px;
 }
 
 .claimButton {
@@ -860,6 +876,7 @@
   .tokenRow:hover {
     background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
     box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 58%, transparent);
+    transform: translate3d(2px, 0, 0);
   }
 
   .tokenIdentity:hover strong {
@@ -1014,8 +1031,8 @@
 
   .hero {
     gap: 14px;
-    min-height: 92px;
-    padding: 14px;
+    min-height: 96px;
+    padding: 15px;
   }
 
   .avatar {
@@ -1043,11 +1060,11 @@
   }
 
   .portfolioHeader {
-    padding: 18px;
+    padding: 20px 18px;
   }
 
   .portfolioTitle h2 {
-    font-size: 24px;
+    font-size: 27px;
   }
 
   .portfolioStat {
@@ -1102,7 +1119,7 @@
 
   .portfolioHeader {
     align-items: start;
-    gap: 16px;
+    gap: 18px;
     grid-template-columns: 1fr;
   }
 
@@ -1116,13 +1133,17 @@
   }
 
   .portfolioStat:last-child {
-    padding-right: 0;
+    padding-right: 16px;
+  }
+
+  .portfolioTotal {
+    min-width: 0;
   }
 
   .tokenArt {
-    border-radius: 15px;
-    height: 58px;
-    width: 58px;
+    border-radius: 16px;
+    height: 60px;
+    width: 60px;
   }
 
   .tokenCopy strong {
@@ -1161,7 +1182,7 @@
   .openToken {
     flex: 1 1 auto;
     font-size: 11px;
-    height: 44px;
+    height: 46px;
     padding: 0 11px;
   }
 
@@ -1171,7 +1192,7 @@
 
   .claimButton {
     flex: 1 1 auto;
-    min-height: 44px;
+    min-height: 46px;
   }
 
   .rewardTerms {

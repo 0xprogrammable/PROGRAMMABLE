@@ -943,7 +943,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       <div className={`${styles.page} page-width`}>
         <section className={styles.connectCard}>
           <h1>Connect your wallet</h1>
-          <p>Connect to view your tokens and claim creator rewards</p>
+          <p>View your tokens and claim creator rewards</p>
           <button
             className={styles.connectButton}
             type="button"
@@ -1571,18 +1571,17 @@ function ProfileAccountWorkspace({
     >
       <header className={styles.portfolioHeader}>
         <div className={styles.portfolioTitle}>
-          <h2 id="profile-portfolio-title">Creator portfolio</h2>
-          <p>Your tokens and their rewards</p>
+          <h2 id="profile-portfolio-title">Tokens &amp; rewards</h2>
         </div>
 
         <div className={styles.portfolioStats}>
           <div className={styles.portfolioStat}>
-            <span>Launched</span>
+            <span>Tokens</span>
             <strong>{entries.length}</strong>
           </div>
           {hasRewardSurface ? (
             <div className={`${styles.portfolioStat} ${styles.portfolioTotal}`}>
-              <span>Ready to claim</span>
+              <span>Claimable</span>
               <strong>
                 {nativeClaimable > 0n
                   ? formatWei(nativeClaimable)
@@ -1679,7 +1678,7 @@ function ProfileAccountWorkspace({
       ) : (
         <ProfileSectionEmpty
           title="No tokens yet"
-          detail="Tokens and creator rewards connected to this wallet will appear here"
+          detail="Tokens launched by this wallet will appear here"
         />
       )}
     </section>
@@ -2020,7 +2019,7 @@ function ProfilePortfolioRow({
             ) : null,
           )}
           <Link className={styles.openToken} href={token.href}>
-            Open
+            View
           </Link>
         </div>
       </div>

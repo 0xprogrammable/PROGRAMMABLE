@@ -7,11 +7,11 @@
     ),
     color-mix(in srgb, var(--surface-tint) 72%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 22px;
-  margin-top: 22px;
-  min-height: 258px;
+  border-radius: 24px;
+  margin-top: 24px;
+  min-height: 282px;
   overflow: hidden;
-  padding: 18px 18px 13px;
+  padding: 19px 20px 14px;
 }
 
 .header {
@@ -32,7 +32,7 @@
 
 .value {
   color: var(--text);
-  font-size: clamp(21px, 1.7vw, 25px);
+  font-size: clamp(22px, 1.8vw, 27px);
   font-variant-numeric: tabular-nums;
   font-weight: 660;
   letter-spacing: -0.035em;
@@ -86,8 +86,8 @@
 .plot {
   cursor: crosshair;
   display: block;
-  height: 174px;
-  margin-top: 8px;
+  height: 194px;
+  margin-top: 9px;
   position: relative;
   touch-action: pan-y;
   width: 100%;
@@ -137,7 +137,7 @@
   color: var(--muted);
   display: grid;
   font-size: 13px;
-  min-height: 174px;
+  min-height: 194px;
   place-items: center;
   text-align: center;
 }
@@ -199,7 +199,7 @@
 @media (max-width: 560px) {
   .shell {
     border-radius: 19px;
-    min-height: 224px;
+    min-height: 238px;
     padding: 15px 13px 10px;
   }
 
@@ -227,8 +227,8 @@
 
   .plot,
   .placeholder {
-    height: 148px;
-    min-height: 148px;
+    height: 160px;
+    min-height: 160px;
   }
 }
 
