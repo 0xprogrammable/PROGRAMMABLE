@@ -44,6 +44,7 @@ import {
 } from "../deep-v3-lifecycle-write.mjs";
 import {
   DEEP_V3_CANARY_BATCH_BUY_AMOUNT_WEI,
+  DEEP_V3_CANARY_BATCH_BUY_MINIMUM_TOKEN_OUT,
   DEEP_V3_CANARY_BATCH_CYCLES,
   DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI,
   DEEP_V3_CANARY_BATCH_EXPECTED_GROSS_VOLUME_WEI,
@@ -840,6 +841,10 @@ test("builds one bounded same-pool synthetic canary batch", () => {
   );
   assert.equal(candidate.batchBuyAmount, DEEP_V3_CANARY_BATCH_BUY_AMOUNT_WEI);
   assert.equal(candidate.batchCycles, DEEP_V3_CANARY_BATCH_CYCLES);
+  assert.equal(
+    DEEP_V3_CANARY_BATCH_BUY_MINIMUM_TOKEN_OUT,
+    4_315_122_607_712_108_858_671_086n,
+  );
   assert.equal(
     candidate.expectedFees.growthFee,
     DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI,
