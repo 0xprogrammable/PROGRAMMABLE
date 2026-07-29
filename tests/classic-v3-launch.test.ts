@@ -94,6 +94,8 @@ function readyRelease(): ClassicV3ReleaseManifest {
       launcher,
       positionForwarderFactory:
         "0x8888888888888888888888888888888888888888",
+      launcherFeeRecipient:
+        "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
     },
     runtimeCodeHashes: {
       ctoAuthority: hash,

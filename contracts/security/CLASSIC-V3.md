@@ -8,9 +8,9 @@ Existing Classic tokens and contracts are not modified.
 
 ## Deployment status
 
-The configurable Classic stack described here is implemented and release-gated, but it is not deployed on Ethereum
-mainnet or Sepolia. Both Classic manifests remain `not-deployed`, contain no configurable Classic contract addresses or
-transactions, and have no lifecycle or source-verification record.
+The configurable Classic stack described here is implemented and release-gated. Its Sepolia rehearsal is deployed,
+source verified and lifecycle tested. The Mainnet release remains `not-deployed`; its production manifest contains no
+new Classic contract addresses or transactions.
 
 The currently deployed mainnet Classic stack is the earlier release recorded in
 `deployments/mainnet-classic-v2.json`. Passing local tests, pinned-fork tests or deterministic deployment simulations
@@ -35,7 +35,7 @@ The hook exposes `feeDisclosure`, `totalSwapFeeBpsFor` and `poolFeeConfig`. Regi
 
 Every pool has one deterministic `FeeSplitVaultV1`, including single-recipient launches.
 
-- One to eight immutable beneficiary identities are supported.
+- One to five immutable beneficiary identities are supported.
 - Each identity is nonzero and unique.
 - Each share is positive.
 - Shares total exactly 10,000 basis points.
@@ -69,7 +69,8 @@ The vault counts only ETH redeemed from the registered hook. Forced ETH is exclu
 - A reward vault must be deployed and recorded by the immutable vault factory and must match the hook, PoolManager and pool ID.
 - Hook deployment must satisfy the exact Uniswap v4 permission-bit mask.
 - Only the registered vault may redeem creator fees from the hook.
-- Only the immutable Programmable treasury may claim or redirect the Programmable portion.
+- Only the immutable launcher-fee recipient may claim or redirect the Programmable portion.
+- The next Mainnet release binds that recipient to the Programmable revenue wallet.
 - Claims and payout changes use OpenZeppelin `ReentrancyGuardTransient`.
 - State is updated before the untrusted payout call.
 - A reverting payout reverts only that beneficiary's claim and does not block another beneficiary.
@@ -97,7 +98,7 @@ The dedicated tests cover:
 - One to ten percent bounds and one-percentage-point steps.
 - The fixed 10-basis-point Programmable share.
 - Deployer, external and split reward configurations.
-- Eight beneficiaries, uniqueness, positive shares and exact totals.
+- Five beneficiaries, uniqueness, positive shares and exact totals.
 - One-step payout changes, duplicate payout destinations and reward redirection.
 - Every unauthorized claim and payout-change path.
 - Reverting payout isolation, no double claim and no cross-vault claim.

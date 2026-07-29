@@ -19,7 +19,8 @@ import {
 
 export const EXPECTED_ACCOUNT =
   "0x2Bb333d48DFAF1596D9036671d2E43168994249E";
-export const TREASURY = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
+export const LAUNCHER_FEE_RECIPIENT =
+  "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
 export const INITIAL_CTO_AUTHORITY = EXPECTED_ACCOUNT;
 export const REVIEWED_SOURCE_COMMITMENT =
   "0x58991ed1743aaba5f1988a4576d36eb10af70b96bdb61661ba96e1f80acc9800";
@@ -136,6 +137,7 @@ const NETWORKS = {
     chainIdHex: MAINNET_CHAIN_ID_HEX,
     explorer: "https://etherscan.io",
     sourceCommitment: REVIEWED_SOURCE_COMMITMENT,
+    launcherFeeRecipient: LAUNCHER_FEE_RECIPIENT,
     dependencies: MAINNET_DEPENDENCIES,
     deploymentManifest: "contracts/deployments/mainnet-classic-v3.json",
     foundryDryRun:
@@ -149,6 +151,7 @@ const NETWORKS = {
     chainIdHex: SEPOLIA_CHAIN_ID_HEX,
     explorer: "https://sepolia.etherscan.io",
     sourceCommitment: REVIEWED_SEPOLIA_SOURCE_COMMITMENT,
+    launcherFeeRecipient: LAUNCHER_FEE_RECIPIENT,
     dependencies: SEPOLIA_DEPENDENCIES,
     deploymentManifest: "contracts/deployments/sepolia-classic-v3.json",
     foundryDryRun:
@@ -333,7 +336,7 @@ function dependencyAddresses(config) {
     dependencies.permit2.address,
     dependencies.universalRouter.address,
     dependencies.positionForwarderFactory.address,
-    TREASURY,
+    config.launcherFeeRecipient,
     INITIAL_CTO_AUTHORITY,
   ];
 }
@@ -785,14 +788,15 @@ export async function loadClassicV3ReleasePlan(
   const [
     decodedSalt,
     decodedPoolManager,
-    decodedTreasury,
+    decodedLauncherFeeRecipient,
     decodedVaultFactory,
   ] = decodedHookCall.args;
   if (
     normalizeHex(decodedSalt) !== normalizeHex(hookSalt) ||
     normalizeHex(decodedPoolManager) !==
       normalizeHex(config.dependencies.poolManager.address) ||
-    normalizeHex(decodedTreasury) !== normalizeHex(TREASURY) ||
+    normalizeHex(decodedLauncherFeeRecipient) !==
+      normalizeHex(config.launcherFeeRecipient) ||
     normalizeHex(decodedVaultFactory) !==
       normalizeHex(rewardVaultFactoryAddress)
   ) {
@@ -806,7 +810,7 @@ export async function loadClassicV3ReleasePlan(
     ],
     [
       canonicalAddress(config.dependencies.poolManager.address),
-      TREASURY,
+      config.launcherFeeRecipient,
       rewardVaultFactoryAddress,
     ],
   );
@@ -834,7 +838,7 @@ export async function loadClassicV3ReleasePlan(
     args: [
       hookSalt,
       canonicalAddress(config.dependencies.poolManager.address),
-      TREASURY,
+      config.launcherFeeRecipient,
       rewardVaultFactoryAddress,
     ],
   });
@@ -1165,11 +1169,11 @@ export async function loadClassicV3ReleasePlan(
           addressResult(config.dependencies.poolManager.address),
         ),
         callCheck(
-          "treasury",
+          "launcher fee recipient",
           hookAddress,
           hookAbi,
           "launcherFeeRecipient",
-          addressResult(TREASURY),
+          addressResult(config.launcherFeeRecipient),
         ),
         callCheck(
           "reward vault factory",
@@ -1384,7 +1388,7 @@ export async function loadClassicV3ReleasePlan(
     chainIdHex: config.chainIdHex,
     explorer: config.explorer,
     expectedAccount: EXPECTED_ACCOUNT,
-    treasury: TREASURY,
+    launcherFeeRecipient: config.launcherFeeRecipient,
     sourceCommitment: config.sourceCommitment,
     dependencies: config.dependencies,
     sourceArtifactCommitments: {
@@ -1778,7 +1782,7 @@ export function createClassicV3Evidence(plan, now = new Date()) {
     network: planNetwork(plan),
     chainId: planChainId(plan),
     expectedAccount: planExpectedAccount(plan),
-    treasury: TREASURY,
+    launcherFeeRecipient: plan.launcherFeeRecipient,
     sourceCommitment: plan.sourceCommitment,
     planDigest: plan.planDigest,
     simulationDigest: plan.simulationDigest,
@@ -1903,7 +1907,7 @@ export function publicPlan(plan) {
     chainIdHex: plan.chainIdHex,
     explorer: plan.explorer,
     expectedAccount: plan.expectedAccount,
-    treasury: plan.treasury,
+    launcherFeeRecipient: plan.launcherFeeRecipient,
     sourceCommitment: plan.sourceCommitment,
     sourceArtifactCommitments: plan.sourceArtifactCommitments,
     simulationCommit: plan.simulationCommit,
