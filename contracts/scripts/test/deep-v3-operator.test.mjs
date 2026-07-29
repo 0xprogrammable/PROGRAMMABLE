@@ -887,6 +887,16 @@ test("operator entrypoints are localhost-only, explicit, and V3-only", () => {
     files[1].includes("toBlock: deepV3Quantity(endBlock)"),
   );
   assert.ok(files[2].includes('const HOST = "127.0.0.1"'));
+  assert.ok(
+    files[2].includes("buildDeepV3DeploymentFeePolicy"),
+  );
+  assert.ok(files[2].includes('rpc(url, "eth_gasPrice")'));
+  assert.ok(
+    files[2].includes(
+      'optionalRpc(url, "eth_maxPriorityFeePerGas")',
+    ),
+  );
+  assert.ok(!files[2].includes("2_000_000_000n"));
   assert.ok(files[0].includes("callResultHash"));
   assert.ok(files[0].includes("callResultBytes"));
   assert.ok(files[0].includes("includeTransactionData: false"));

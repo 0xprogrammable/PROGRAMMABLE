@@ -16,10 +16,9 @@ import {
 
 import {
   DEEP_V3_CHAIN_ID_HEX,
-  DEEP_V3_MAX_FEE_PER_GAS_WEI,
-  DEEP_V3_MAX_PRIORITY_FEE_PER_GAS_WEI,
   assertDeepV3ReleaseSourcesMatchCommit,
   assertDeepV3RpcUrls,
+  buildDeepV3DeploymentFeePolicy,
   buildDeepV3CanaryIdentity,
   deepV3AutomationAbi,
   deepV3CompoundEvent,
@@ -85,6 +84,14 @@ async function rpc(url, method, params = []) {
     throw new Error(`${method} failed: ${payload.error.message}`);
   }
   return payload?.result;
+}
+
+async function optionalRpc(url, method, params = []) {
+  try {
+    return await rpc(url, method, params);
+  } catch {
+    return null;
+  }
 }
 
 async function contractRead(
@@ -190,12 +197,32 @@ async function sharedBlock() {
       "Independent RPCs disagree on the shared canary quote block",
     );
   }
+  const feeSnapshots = await Promise.all(
+    rpcUrls.map(async (url, index) => {
+      const [gasPricePerGas, maxPriorityFeePerGas] =
+        await Promise.all([
+          rpc(url, "eth_gasPrice"),
+          optionalRpc(url, "eth_maxPriorityFeePerGas"),
+        ]);
+      return {
+        baseFeePerGas: BigInt(
+          blocks[index].baseFeePerGas ?? 0,
+        ).toString(),
+        gasPricePerGas: BigInt(gasPricePerGas).toString(),
+        maxPriorityFeePerGas:
+          maxPriorityFeePerGas === null
+            ? null
+            : BigInt(maxPriorityFeePerGas).toString(),
+      };
+    }),
+  );
   return {
     blockNumber,
     blockTag,
     blockHash: normalizeDeepV3Hex(blocks[0].hash),
     timestamp: Number(BigInt(blocks[0].timestamp)),
     baseFeePerGas: BigInt(blocks[0].baseFeePerGas ?? 0),
+    feeSnapshots,
   };
 }
 
@@ -637,21 +664,6 @@ function assertSameQuote(left, right) {
   return left;
 }
 
-function feePolicy(baseFeePerGas) {
-  const priority =
-    2_000_000_000n < DEEP_V3_MAX_PRIORITY_FEE_PER_GAS_WEI
-      ? 2_000_000_000n
-      : DEEP_V3_MAX_PRIORITY_FEE_PER_GAS_WEI;
-  const maxFeePerGas = baseFeePerGas * 2n + priority;
-  if (
-    baseFeePerGas <= 0n ||
-    maxFeePerGas > DEEP_V3_MAX_FEE_PER_GAS_WEI
-  ) {
-    throw new Error("Current Mainnet fees exceed the canary policy");
-  }
-  return { maxFeePerGas, maxPriorityFeePerGas: priority };
-}
-
 async function simulate(url, request) {
   const [callResult, estimatedGas] = await Promise.all([
     rpc(url, "eth_call", [request, "pending"]),
@@ -751,7 +763,9 @@ async function prepareInput(manifest, identity, input, capturedAtMs) {
     candidate,
     state,
     simulations,
-    feePolicy: feePolicy(block.baseFeePerGas),
+    feePolicy: buildDeepV3DeploymentFeePolicy(
+      block.feeSnapshots,
+    ),
   });
   return {
     prepared,
