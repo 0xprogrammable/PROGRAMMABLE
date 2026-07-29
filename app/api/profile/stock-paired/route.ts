@@ -6,6 +6,7 @@ import {
   getAddress,
   http,
   isAddress,
+  isHex,
   keccak256,
   type Address,
   type Hex,
@@ -19,6 +20,10 @@ import {
 } from "@/lib/onchain";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
 import {
+  StockPairedClaimReceiptError,
+  verifyStockPairedClaimReceipt,
+} from "@/lib/server/stock-paired-claim-receipt";
+import {
   getStockQuoteAsset,
   stockFeeSplitVaultAbi,
   stockFeeSplitVaultFactoryAbi,
@@ -26,12 +31,22 @@ import {
 } from "@/lib/stock-paired";
 import { getConfiguredStockPairedRelease } from "@/lib/stock-paired-release";
 import type { LauncherToken } from "@/lib/tokens";
+import { ClassicTradeInputError } from "@/lib/trade/classic";
+import {
+  prepareStockPairedRewardConversion,
+  quoteStockPairedQuoteAssetToEth,
+  resolveStockPairedTradeDeployment,
+  StockPairedTradeUnavailableError,
+  type StockPairedTradeRuntimeClient,
+} from "@/lib/trade/stock-paired";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_REQUEST_BYTES = 2_048;
 const ZERO_HASH = `0x${"0".repeat(64)}`;
+const CONVERSION_SLIPPAGE_BPS = 100;
+const MAX_RPC_QUOTE_DIFFERENCE_BPS = 300n;
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, {
@@ -64,6 +79,67 @@ function clients() {
       transport: http(endpoint, { retryCount: 1, timeout: 12_000 }),
     }),
   );
+}
+
+function tradeRuntimeClient(
+  client: PublicClient,
+): StockPairedTradeRuntimeClient {
+  return {
+    getChainId: () => client.getChainId(),
+    async getBlock() {
+      const block = await client.getBlock({ blockTag: "latest" });
+      return { timestamp: block.timestamp };
+    },
+    getBalance: ({ address }) =>
+      client.getBalance({ address, blockTag: "latest" }),
+    getGasPrice: () => client.getGasPrice(),
+    getCode: ({ address, blockNumber }) =>
+      client.getCode({
+        address,
+        ...(blockNumber === undefined
+          ? { blockTag: "latest" as const }
+          : { blockNumber }),
+      }),
+    estimateGas: (args) => client.estimateGas(args),
+    async call(args) {
+      const result = await client.call(args);
+      return { data: result.data };
+    },
+  };
+}
+
+function quoteDifferenceIsSafe(left: bigint, right: bigint) {
+  const high = left > right ? left : right;
+  const low = left > right ? right : left;
+  return (
+    low > 0n &&
+    (high - low) * 10_000n <=
+      low * MAX_RPC_QUOTE_DIFFERENCE_BPS
+  );
+}
+
+function conservativeRewardConversion<T extends {
+  quote: { amountOut: string; usdAmountOut: string };
+  transaction: { kind: string };
+}>(left: T, right: T) {
+  if (left.transaction.kind !== right.transaction.kind) {
+    throw new StockPairedTradeUnavailableError(
+      "Independent RPCs disagree on the required conversion step",
+    );
+  }
+  const leftEth = BigInt(left.quote.amountOut);
+  const rightEth = BigInt(right.quote.amountOut);
+  const leftUsd = BigInt(left.quote.usdAmountOut);
+  const rightUsd = BigInt(right.quote.usdAmountOut);
+  if (
+    !quoteDifferenceIsSafe(leftEth, rightEth) ||
+    !quoteDifferenceIsSafe(leftUsd, rightUsd)
+  ) {
+    throw new StockPairedTradeUnavailableError(
+      "Independent RPC conversion quotes differ too much",
+    );
+  }
+  return leftEth <= rightEth ? left : right;
 }
 
 async function assertRuntime(
@@ -350,7 +426,59 @@ async function readVaultReward(
   };
 }
 
-async function readRewards(account: Address) {
+async function addRewardEstimate(
+  rpcClients: readonly PublicClient[],
+  reward: NonNullable<Awaited<ReturnType<typeof readVaultReward>>>,
+  account: Address,
+) {
+  if (BigInt(reward.claimableRaw) === 0n) return reward;
+  const quotes = await Promise.allSettled(
+    rpcClients.map((client) =>
+      quoteStockPairedQuoteAssetToEth(tradeRuntimeClient(client), {
+        quoteAsset: reward.quoteAsset,
+        owner: account,
+        amountIn: BigInt(reward.claimableRaw),
+      }),
+    ),
+  );
+  if (quotes.some((result) => result.status === "rejected")) {
+    return reward;
+  }
+  const [left, right] = quotes.map(
+    (result) =>
+      (
+        result as PromiseFulfilledResult<
+          Awaited<ReturnType<typeof quoteStockPairedQuoteAssetToEth>>
+        >
+      ).value,
+  );
+  if (
+    !quoteDifferenceIsSafe(left.amountOut, right.amountOut) ||
+    !quoteDifferenceIsSafe(left.usdAmountOut, right.usdAmountOut)
+  ) {
+    return reward;
+  }
+  const estimatedEthRaw =
+    left.amountOut <= right.amountOut
+      ? left.amountOut
+      : right.amountOut;
+  const estimatedUsdRaw =
+    left.usdAmountOut <= right.usdAmountOut
+      ? left.usdAmountOut
+      : right.usdAmountOut;
+  return {
+    ...reward,
+    estimatedEthRaw: estimatedEthRaw.toString(),
+    estimatedEth: formatUnits(estimatedEthRaw, 18),
+    estimatedUsdRaw: estimatedUsdRaw.toString(),
+    estimatedUsd: formatUnits(estimatedUsdRaw, 6),
+  };
+}
+
+async function readRewards(
+  account: Address,
+  includeEstimates = true,
+) {
   const release = getConfiguredStockPairedRelease();
   if (!release) {
     return {
@@ -411,12 +539,19 @@ async function readRewards(account: Address) {
       "Independent RPCs disagree on Stock-Paired rewards",
     );
   }
+  const rewards = includeEstimates
+    ? await Promise.all(
+        rewardSets[0].map((reward) =>
+          addRewardEstimate(rpcClients, reward, account),
+        ),
+      )
+    : rewardSets[0];
   return {
     status: "ready" as const,
     account,
     chainId: 1 as const,
     snapshotBlock: snapshotBlock.toString(),
-    rewards: rewardSets[0],
+    rewards,
   };
 }
 
@@ -468,21 +603,43 @@ export async function POST(request: NextRequest) {
     "account",
     "vaultAddress",
     "newPayoutAddress",
+    "claimTransactionHash",
+    "amountIn",
+    "slippageBps",
+    "deadline",
     "chainId",
   ]);
   const unsupported = Object.keys(input).find((key) => !allowed.has(key));
+  const isClaim = input.action === "claim";
+  const isPayoutUpdate = input.action === "update-payout";
+  const isConversion = input.action === "convert-to-eth";
   if (
     unsupported ||
-    (input.action !== "claim" && input.action !== "update-payout") ||
+    (!isClaim && !isPayoutUpdate && !isConversion) ||
     input.chainId !== 1 ||
     typeof input.account !== "string" ||
     !isAddress(input.account) ||
     typeof input.vaultAddress !== "string" ||
     !isAddress(input.vaultAddress) ||
-    (input.action === "update-payout" &&
+    (isPayoutUpdate &&
       (typeof input.newPayoutAddress !== "string" ||
         !isAddress(input.newPayoutAddress) ||
-        /^0x0{40}$/i.test(input.newPayoutAddress)))
+        /^0x0{40}$/i.test(input.newPayoutAddress))) ||
+    (!isPayoutUpdate && input.newPayoutAddress !== undefined) ||
+    (isConversion &&
+      (typeof input.claimTransactionHash !== "string" ||
+        !isHex(input.claimTransactionHash, { strict: true }) ||
+        input.claimTransactionHash.length !== 66 ||
+        typeof input.amountIn !== "string" ||
+        !/^[1-9]\d{0,77}$/.test(input.amountIn) ||
+        input.slippageBps !== CONVERSION_SLIPPAGE_BPS ||
+        typeof input.deadline !== "string" ||
+        !/^[1-9]\d{0,77}$/.test(input.deadline))) ||
+    (!isConversion &&
+      (input.claimTransactionHash !== undefined ||
+        input.amountIn !== undefined ||
+        input.slippageBps !== undefined ||
+        input.deadline !== undefined))
   ) {
     return json({ error: "The reward request is invalid" }, 400);
   }
@@ -490,7 +647,7 @@ export async function POST(request: NextRequest) {
   try {
     const account = getAddress(input.account);
     const vaultAddress = getAddress(input.vaultAddress);
-    const profile = await readRewards(account);
+    const profile = await readRewards(account, false);
     if (profile.status !== "ready") {
       return json({ error: "Stock-Paired rewards are not deployed" }, 409);
     }
@@ -505,11 +662,102 @@ export async function POST(request: NextRequest) {
         403,
       );
     }
-    if (input.action === "claim" && BigInt(reward.claimableRaw) === 0n) {
+    if (isClaim && BigInt(reward.claimableRaw) === 0n) {
       return json({ error: "No Stock-Paired rewards are claimable" }, 409);
     }
+    const rpcClients = clients();
+    if (isConversion) {
+      if (
+        reward.payoutAddress.toLowerCase() !== account.toLowerCase()
+      ) {
+        return json(
+          {
+            error:
+              "Claim as ETH requires the payout address to be this wallet",
+          },
+          409,
+        );
+      }
+      const amountIn = BigInt(input.amountIn as string);
+      const claimTransactionHash = input.claimTransactionHash as Hex;
+      const claimedAmount = await verifyStockPairedClaimReceipt({
+        rpcClients,
+        transactionHash: claimTransactionHash,
+        account,
+        vaultAddress,
+        quoteAsset: reward.quoteAsset,
+        minimumAmount: amountIn,
+      });
+      const registry = await readExploreModel(
+        getOnchainDeployment("production"),
+      );
+      const { deployment, verifiedToken } =
+        resolveStockPairedTradeDeployment(
+          1,
+          registry,
+          reward.tokenAddress,
+        );
+      if (
+        verifiedToken.rewardVaultAddress?.toLowerCase() !==
+          vaultAddress.toLowerCase() ||
+        deployment.quoteAsset.toLowerCase() !==
+          reward.quoteAsset.toLowerCase() ||
+        deployment.poolId.toLowerCase() !== reward.poolId.toLowerCase()
+      ) {
+        throw new StockPairedTradeUnavailableError(
+          "The reward does not match its verified Stock-Paired launch",
+        );
+      }
+      const conversionRequest = {
+        chainId: 1 as const,
+        owner: account,
+        amountIn: claimedAmount,
+        slippageBps: CONVERSION_SLIPPAGE_BPS,
+        deadline: BigInt(input.deadline as string),
+      };
+      const preparations = await Promise.allSettled(
+        rpcClients.map((client) =>
+          prepareStockPairedRewardConversion(
+            tradeRuntimeClient(client),
+            deployment,
+            conversionRequest,
+          ),
+        ),
+      );
+      const inputFailure = preparations.find(
+        (
+          result,
+        ): result is PromiseRejectedResult =>
+          result.status === "rejected" &&
+          result.reason instanceof ClassicTradeInputError,
+      );
+      if (inputFailure) throw inputFailure.reason;
+      if (preparations.some((result) => result.status === "rejected")) {
+        throw new StockPairedTradeUnavailableError(
+          "The conversion could not be verified across both independent RPCs",
+        );
+      }
+      const [left, right] = preparations.map(
+        (result) =>
+          (
+            result as PromiseFulfilledResult<
+              Awaited<
+                ReturnType<typeof prepareStockPairedRewardConversion>
+              >
+            >
+          ).value,
+      );
+      return json({
+        ...conservativeRewardConversion(left, right),
+        action: "convert-to-eth",
+        vaultAddress,
+        claimTransactionHash,
+        claimedAmount: claimedAmount.toString(),
+      });
+    }
+
     const data =
-      input.action === "claim"
+      isClaim
         ? encodeFunctionData({
             abi: stockFeeSplitVaultAbi,
             functionName: "claim",
@@ -519,7 +767,6 @@ export async function POST(request: NextRequest) {
             functionName: "setPayoutAddress",
             args: [getAddress(input.newPayoutAddress as string)],
           });
-    const rpcClients = clients();
     const requestForRpc = {
       account,
       to: vaultAddress,
@@ -551,7 +798,7 @@ export async function POST(request: NextRequest) {
       action: input.action,
       transaction: {
         kind:
-          input.action === "claim"
+          isClaim
             ? "claim-stock-paired-rewards"
             : "update-stock-paired-payout",
         chainId: 1,
@@ -563,6 +810,15 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof ClassicTradeInputError) {
+      return json({ error: error.message }, 400);
+    }
+    if (
+      error instanceof StockPairedClaimReceiptError ||
+      error instanceof StockPairedTradeUnavailableError
+    ) {
+      return json({ error: error.message }, 409);
+    }
     console.error(
       "Stock-Paired reward preparation failed",
       safeServerErrorSummary(error),
