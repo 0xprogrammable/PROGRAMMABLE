@@ -118,13 +118,13 @@ release evidence is public.
 
 Every available model has a complete release record:
 
-| Record | What it establishes | Current Classic evidence |
-| --- | --- | --- |
-| Contract source | Exact launcher, hook and custody behavior | [`src/`](src/) |
-| Tests | Unit, integration, fuzz, invariant and regression coverage | [`test/`](test/) |
-| Fixed parameters | Compiler, dependencies and launch settings | [`spec/classic-v2.json`](spec/classic-v2.json) |
-| Ethereum deployment | Addresses, transactions and runtime code hashes | [`deployments/ethereum.json`](deployments/ethereum.json) |
-| Security status | Permissions, assumptions and known limitations | [`SECURITY.md`](SECURITY.md) |
+| Release record | Current Classic evidence |
+| --- | --- |
+| Exact launcher, hook and custody source | [`src/`](src/) |
+| Unit, integration, fuzz, invariant and regression tests | [`test/`](test/) |
+| Fixed compiler, dependencies and launch parameters | [`spec/classic-v2.json`](spec/classic-v2.json) |
+| Addresses, transactions and runtime code hashes | [`deployments/ethereum.json`](deployments/ethereum.json) |
+| Permissions, assumptions and known limitations | [`SECURITY.md`](SECURITY.md) |
 
 Open source code makes behavior inspectable. It is not a security guarantee.
 
