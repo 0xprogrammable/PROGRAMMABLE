@@ -64,6 +64,8 @@ import {
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.STOCK_PAIRED_ETH_CANARY_PORT ?? 4191);
 const REQUEST_TIMEOUT_MS = 15_000;
+const RPC_MAX_ATTEMPTS = 4;
+const RPC_RETRY_BASE_MS = 250;
 const MAX_REQUEST_BYTES = 4_096;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = path.join(
@@ -108,20 +110,44 @@ function assertRpcUrls() {
 }
 
 async function rpc(url, method, params = []) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!response.ok) {
-    throw new Error(`${method} returned HTTP ${response.status}`);
+  for (let attempt = 1; attempt <= RPC_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        const retryable =
+          response.status === 408 ||
+          response.status === 425 ||
+          response.status === 429 ||
+          response.status >= 500;
+        if (!retryable || attempt === RPC_MAX_ATTEMPTS) {
+          throw new Error(`${method} returned HTTP ${response.status}`);
+        }
+      } else {
+        const payload = await response.json();
+        if (payload?.error) {
+          throw new Error(`${method} failed: ${payload.error.message}`);
+        }
+        return payload?.result;
+      }
+    } catch (error) {
+      if (
+        attempt === RPC_MAX_ATTEMPTS ||
+        (error instanceof Error &&
+          !["AbortError", "TimeoutError", "TypeError"].includes(error.name))
+      ) {
+        throw error;
+      }
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, RPC_RETRY_BASE_MS * 2 ** (attempt - 1)),
+    );
   }
-  const payload = await response.json();
-  if (payload?.error) {
-    throw new Error(`${method} failed: ${payload.error.message}`);
-  }
-  return payload?.result;
+  throw new Error(`${method} failed after retries`);
 }
 
 async function pair(method, params, label = method) {
