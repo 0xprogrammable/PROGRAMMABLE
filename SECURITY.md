@@ -2,15 +2,17 @@
 
 ## Current status
 
-Security properties are recorded per launch model. Classic is currently the only available model. It has unit,
-integration, fuzz, invariant, regression, static-analysis and coverage checks. It has not received an independent
-smart-contract audit or public security contest.
+Classic is the only available launch model. Its current Ethereum release has unit, integration, fuzz, invariant,
+regression and Mainnet-fork coverage. All seven release contracts are Etherscan exact matches and Sourcify matches.
+Classic has not received an independent smart-contract audit or public security contest.
 
-These checks are evidence, not a safety guarantee.
+These records are evidence, not a safety guarantee.
 
 | Record | Scope |
 | --- | --- |
 | [Classic security properties](docs/security/CLASSIC_PROPERTIES.md) | Trust boundaries, permissions, accounting and invariant evidence |
+| [Classic Slither review](docs/security/SLITHER_CLASSIC_V3.md) | Static-analysis findings and manual dispositions |
+| [Classic release](releases/classic-v3/RELEASE.md) | Version-bound source, tests and Mainnet lifecycle evidence |
 | [Operations](docs/OPERATIONS.md) | Automated checks, monitoring status and incident response |
 | [Independent reviews](audits/README.md) | Published external reports, currently none |
 | [Ethereum deployment](deployments/ethereum.json) | Addresses, transactions, runtime hashes and verification status |
@@ -33,26 +35,32 @@ time.
 
 ## Classic control model
 
-The live Classic contracts are non-upgradeable and expose no administrator role, pause function, mint path, blacklist
-or mutable fee allocation. This removes administrative recovery as well as administrative control.
+The fee hook, launcher, policy, factories and vault implementations are non-upgradeable. The hook and launcher expose
+no owner, pause function, blacklist, post-launch fee setter or token mint path.
+
+The current release has one disclosed administrative role: the Community Takeover authority. It can replace only a
+reward vault's future beneficiaries and shares. The vault checkpoints accrued ETH before any replacement, preserving
+the prior wallets' historic rewards. The authority cannot alter fee rates, token supply, trading or launch liquidity.
 
 The intended properties include:
 
 - only `PoolManager` may enter swap callbacks;
-- each pool is registered once and bound to its recorded creator;
-- the pool shape, hook permissions and public fee disclosure remain fixed;
+- each pool is registered once with immutable buy and sell fees;
+- the fixed `0.10` percentage-point Programmable share is deducted from the selected fee;
 - the complete launch supply enters permanent position custody;
-- creator and Programmable claims are accounted separately in native ETH;
-- unrelated callers cannot redirect a claim;
+- each beneficiary alone controls its claims and future payout-wallet changes;
+- prior rewards remain with the wallet that earned them after a payout or CTO change;
+- initial-buy custody schedules and beneficiaries are immutable;
 - token transfers have no tax; and
 - unsupported partial-fill accounting reverts.
 
-The detailed property-to-test map is in
+The property-to-test map is in
 [`docs/security/CLASSIC_PROPERTIES.md`](docs/security/CLASSIC_PROPERTIES.md).
 
 ## Trust assumptions
 
 - Pinned Uniswap v4, liquidity-launcher and UERC20 contracts behave as documented.
+- The disclosed CTO authority is used only for reviewed Community Takeovers.
 - Ethereum consensus and native ETH settlement remain available.
 - Integrators use the exact addresses and runtime hashes in
   [`deployments/ethereum.json`](deployments/ethereum.json).
@@ -61,8 +69,8 @@ The detailed property-to-test map is in
 ## Known limitations
 
 - There is no emergency pause or upgrade path.
-- A native ETH recipient that rejects payment can block its direct claim until that recipient uses its authorized
-  redirect function.
+- A compromised CTO authority can replace future creator-reward recipients after existing rewards are checkpointed.
+- A native ETH recipient that rejects payment can block its own claim transaction.
 - Swaps that produce unsupported partial-fill accounting revert.
 - Public ordering and sandwich risks remain applicable to swaps.
 - Metadata and project links may be indexed inconsistently by third-party services.

@@ -4,11 +4,11 @@
   "id": "classic",
   "name": "Classic",
   "status": "available",
-  "summary": "A fixed-supply token with a native ETH Uniswap v4 pool, permanently locked launch liquidity and disclosed ETH-denominated swap fees.",
+  "summary": "A fixed-supply token with independent buy and sell fees, beneficiary-owned ETH rewards, optional initial-buy custody and permanently locked Uniswap v4 liquidity.",
   "documentation": "models/classic/README.md",
-  "currentRelease": "classic-v2",
-  "releaseManifest": "releases/classic-v2/manifest.json",
-  "specification": "spec/classic-v2.json",
+  "currentRelease": "classic-v3",
+  "releaseManifest": "releases/classic-v3/manifest.json",
+  "specification": "spec/classic-v3.json",
   "deployment": "deployments/ethereum.json",
   "security": "SECURITY.md",
   "network": {
@@ -17,19 +17,39 @@
   },
   "contracts": [
     {
-      "deploymentKey": "launcher",
-      "name": "MemeLaunchV1",
-      "address": "0xD240D06f8586eB799f20056054e5b527405E6bAd"
+      "deploymentKey": "ctoAuthority",
+      "name": "ClassicCtoAuthorityV1",
+      "address": "0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C"
     },
     {
-      "deploymentKey": "feeHook",
-      "name": "EthCreatorFeeHookV2",
-      "address": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC"
+      "deploymentKey": "rewardVaultFactory",
+      "name": "ClassicRewardVaultFactoryV1",
+      "address": "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a"
+    },
+    {
+      "deploymentKey": "initialBuyVestingWalletFactory",
+      "name": "ClassicInitialBuyVestingWalletFactoryV1",
+      "address": "0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4"
+    },
+    {
+      "deploymentKey": "launchPolicy",
+      "name": "ClassicLaunchPolicyV1",
+      "address": "0x53a4d1E6ab184389D3581085AB73CD3549B20d1a"
     },
     {
       "deploymentKey": "hookFactory",
-      "name": "EthCreatorFeeHookFactoryV2",
-      "address": "0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67"
+      "name": "EthCreatorFeeHookFactoryV3",
+      "address": "0x61c616E98F9f71bFe813FE4359D012de2Ae70770"
+    },
+    {
+      "deploymentKey": "feeHook",
+      "name": "EthCreatorFeeHookV3",
+      "address": "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC"
+    },
+    {
+      "deploymentKey": "launcher",
+      "name": "MemeLaunchV2",
+      "address": "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770"
     },
     {
       "deploymentKey": "positionForwarderFactory",

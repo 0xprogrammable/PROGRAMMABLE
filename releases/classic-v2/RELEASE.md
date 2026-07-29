@@ -1,6 +1,7 @@
 # Classic Ethereum release
 
-`classic-v2` is the current immutable Classic contract release used by the Programmable interface on Ethereum.
+`classic-v2` is a historical immutable Classic contract release. New Classic launches use
+[`classic-v3`](../classic-v3/RELEASE.md).
 
 ## Evidence
 

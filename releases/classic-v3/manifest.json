@@ -1,0 +1,37 @@
+{
+  "$schema": "../../models/schema/release.schema.json",
+  "schemaVersion": 1,
+  "release": "classic-v3",
+  "model": "classic",
+  "status": "available",
+  "network": {
+    "name": "Ethereum",
+    "chainId": 1
+  },
+  "sourcePublicationCommit": "84a1f7db32290de5cf1bea47af3b76ba207392a3",
+  "compiler": {
+    "solc": "0.8.26",
+    "evmVersion": "cancun",
+    "optimizerRuns": 1000
+  },
+  "evidence": {
+    "specification": "spec/classic-v3.json",
+    "deployment": "deployments/ethereum.json",
+    "security": "SECURITY.md",
+    "tests": [
+      "test/ClassicLaunchPolicyV1.t.sol",
+      "test/ClassicInitialBuyVestingWalletV1.t.sol",
+      "test/ClassicRewardVaultV1.t.sol",
+      "test/EthCreatorFeeHookV3.t.sol",
+      "test/MemeLaunchV2.t.sol",
+      "test/invariant/ClassicRewardVaultV1Invariant.t.sol",
+      "test/invariant/ClassicV3FeeAccountingInvariant.t.sol",
+      "test/ClassicV3MainnetFork.t.sol"
+    ]
+  },
+  "review": {
+    "independentAudit": false,
+    "publicContest": false,
+    "sourceVerification": "Etherscan exact match and Sourcify match for all seven release contracts"
+  }
+}

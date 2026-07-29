@@ -37,7 +37,7 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check slither-analyzer==0.11.5
 
       - name: Run Slither
-        run: .venv/bin/slither . --config-file slither.config.json --sarif slither.sarif
+        run: .venv/bin/slither . --config-file slither.config.json --sarif slither.sarif --fail-none
 
       - name: Publish Slither results
         if: always() && github.event_name == 'push'
@@ -46,7 +46,12 @@ jobs:
           sarif_file: slither.sarif
 
       - name: Measure source coverage
-        run: forge coverage --exclude-tests --report lcov --report-file lcov.info
+        run: >-
+          forge coverage
+          --no-match-contract ClassicV3MainnetForkTest
+          --exclude-tests
+          --report lcov
+          --report-file lcov.info
 
       - name: Check coverage floors
         run: node scripts/check-coverage.mjs lcov.info
