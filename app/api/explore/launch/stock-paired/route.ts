@@ -21,6 +21,9 @@ export const runtime = "nodejs";
 const launchEvent = parseAbiItem(
   "event StockPairedTokenLaunched(address indexed deployer,address indexed token,address indexed quoteAsset,bytes32 poolId,address rewardVault,address positionRecipient,uint256 positionTokenId,bytes32 launchHash)",
 );
+const ethLaunchEvent = parseAbiItem(
+  "event StockPairedEthTokenLaunched(address indexed creator,address indexed token,address indexed quoteAsset,uint256 initialBuyEthAmount,uint256 initialBuyQuoteAmount,uint256 initialBuyTokenAmount,bytes32 launchHash)",
+);
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, {
@@ -94,7 +97,7 @@ export async function GET(request: NextRequest) {
           receipt.blockNumber !== canonical.blockNumber ||
           receipt.transactionIndex !== canonical.transactionIndex ||
           receipt.to.toLowerCase() !==
-            release.addresses.launcher.toLowerCase() ||
+            release.addresses.ethLaunchCoordinator.toLowerCase() ||
           receipt.from.toLowerCase() !== account.toLowerCase(),
       ) ||
       canonical.blockNumber < BigInt(release.startBlock)
@@ -125,9 +128,49 @@ export async function GET(request: NextRequest) {
     });
     if (
       launchLogs.length !== 1 ||
-      launchLogs[0].deployer.toLowerCase() !== account.toLowerCase()
+      launchLogs[0].deployer.toLowerCase() !==
+        release.addresses.ethLaunchCoordinator.toLowerCase()
     ) {
       return json({ error: "The launch event could not be verified" }, 409);
+    }
+    const ethLaunchLogs = canonical.logs.flatMap((log) => {
+      if (
+        log.address.toLowerCase() !==
+        release.addresses.ethLaunchCoordinator.toLowerCase()
+      ) {
+        return [];
+      }
+      try {
+        const decoded = decodeEventLog({
+          abi: [ethLaunchEvent],
+          data: log.data,
+          topics: log.topics,
+          strict: true,
+        });
+        return decoded.eventName === "StockPairedEthTokenLaunched"
+          ? [decoded.args]
+          : [];
+      } catch {
+        return [];
+      }
+    });
+    if (
+      ethLaunchLogs.length !== 1 ||
+      ethLaunchLogs[0].creator.toLowerCase() !== account.toLowerCase() ||
+      ethLaunchLogs[0].token.toLowerCase() !==
+        launchLogs[0].token.toLowerCase() ||
+      ethLaunchLogs[0].quoteAsset.toLowerCase() !==
+        launchLogs[0].quoteAsset.toLowerCase() ||
+      ethLaunchLogs[0].launchHash.toLowerCase() !==
+        launchLogs[0].launchHash.toLowerCase() ||
+      ethLaunchLogs[0].initialBuyEthAmount <= 0n ||
+      ethLaunchLogs[0].initialBuyQuoteAmount <= 0n ||
+      ethLaunchLogs[0].initialBuyTokenAmount <= 0n
+    ) {
+      return json(
+        { error: "The ETH launch event could not be verified" },
+        409,
+      );
     }
 
     const token = getAddress(launchLogs[0].token);
@@ -156,6 +199,13 @@ export async function GET(request: NextRequest) {
           launchLogs[0].positionRecipient,
         ),
         positionTokenId: launchLogs[0].positionTokenId.toString(),
+        creator: account,
+        initialBuyEthAmount:
+          ethLaunchLogs[0].initialBuyEthAmount.toString(),
+        initialBuyQuoteAmount:
+          ethLaunchLogs[0].initialBuyQuoteAmount.toString(),
+        initialBuyTokenAmount:
+          ethLaunchLogs[0].initialBuyTokenAmount.toString(),
         transactionHash,
       },
     });

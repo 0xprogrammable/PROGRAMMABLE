@@ -12,6 +12,7 @@ import {
   STOCK_TEST_ACCOUNT,
   STOCK_TEST_POOL_ID,
   STOCK_TEST_TOKEN,
+  stockPairedReleaseFixture,
 } from "./stock-paired-fixture";
 
 const transactionHash = `0x${"42".repeat(32)}` as Hex;
@@ -24,10 +25,12 @@ const positionRecipient = getAddress(
 );
 
 function events() {
+  const coordinator =
+    stockPairedReleaseFixture().addresses.ethLaunchCoordinator;
   return {
     launches: [
       {
-        deployer: STOCK_TEST_ACCOUNT,
+        deployer: coordinator,
         token: STOCK_TEST_TOKEN,
         quoteAsset: STOCK_QUOTE_ASSETS[0].address,
         poolId: STOCK_TEST_POOL_ID,
@@ -39,6 +42,21 @@ function events() {
         transactionHash,
         transactionIndex: 1,
         logIndex: 2,
+      },
+    ],
+    ethLaunches: [
+      {
+        creator: STOCK_TEST_ACCOUNT,
+        token: STOCK_TEST_TOKEN,
+        quoteAsset: STOCK_QUOTE_ASSETS[0].address,
+        initialBuyEthAmount: 5n * 10n ** 15n,
+        initialBuyQuoteAmount: 10n ** 16n,
+        initialBuyTokenAmount: 2n * 10n ** 18n,
+        launchHash,
+        blockNumber: 123n,
+        transactionHash,
+        transactionIndex: 1,
+        logIndex: 3,
       },
     ],
     liquidities: [
@@ -59,7 +77,7 @@ function events() {
     ],
     initialBuys: [
       {
-        deployer: STOCK_TEST_ACCOUNT,
+        deployer: coordinator,
         token: STOCK_TEST_TOKEN,
         quoteAsset: STOCK_QUOTE_ASSETS[0].address,
         poolId: STOCK_TEST_POOL_ID,
@@ -125,6 +143,10 @@ describe("Stock-Paired read model provenance", () => {
         initialBuy: {
           quoteAmount: 10n ** 16n,
         },
+        ethLaunch: {
+          creator: STOCK_TEST_ACCOUNT,
+          initialBuyEthAmount: 5n * 10n ** 15n,
+        },
       },
     ]);
   });
@@ -140,6 +162,10 @@ describe("Stock-Paired read model provenance", () => {
 
     const duplicate = events();
     duplicate.launches.push({ ...duplicate.launches[0], logIndex: 9 });
+    duplicate.ethLaunches.push({
+      ...duplicate.ethLaunches[0],
+      logIndex: 10,
+    });
     duplicate.liquidities.push({ ...duplicate.liquidities[0] });
     duplicate.initialBuys.push({ ...duplicate.initialBuys[0] });
     expect(() => pairStockPairedLaunches(duplicate)).toThrow(/Duplicate/);

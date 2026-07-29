@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createPublicClient,
+  decodeFunctionResult,
   encodeAbiParameters,
+  encodeFunctionData,
   getAddress,
   getCreate2Address,
   http,
@@ -62,7 +64,6 @@ import {
   type LaunchPreflightCheck,
   type LaunchPreflightResponse,
   type PreparedLaunchTransaction,
-  type PreparedStockQuoteApprovalTransaction,
   validateMemeLaunchDraft,
   validateAdaptiveLaunchDraft,
 } from "@/lib/launch-transaction";
@@ -74,20 +75,28 @@ import {
   type LaunchDraft,
 } from "@/lib/launch";
 import {
-  encodeStockPairedLaunch,
-  encodeStockQuoteApproval,
+  encodeStockPairedEthLaunch,
+  stockPairedEthLaunchCoordinatorAbi,
   stockPairedHookAbi,
   stockPairedHookFactoryAbi,
   stockPairedLaunchAbi,
   stockQuoteRegistryAbi,
-  stockQuoteTokenAbi,
   STOCK_QUOTE_ASSETS,
+  STOCK_PAIRED_ETH_QUOTE_ASSETS,
   STOCK_PAIRED_CREATOR_FEE_BPS,
+  STOCK_PAIRED_MIN_INITIAL_BUY,
   STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
   STOCK_PAIRED_PROGRAMMABLE_FEE_BPS,
   STOCK_PAIRED_TOTAL_SWAP_FEE_BPS,
   validateStockPairedLaunchDraft,
 } from "@/lib/stock-paired";
+import {
+  encodeStockPairedV3Path,
+  getStockPairedEthRoute,
+  STOCK_PAIRED_MIN_ROUTE_ROUND_TRIP_BPS,
+  STOCK_PAIRED_V3_QUOTER,
+  stockPairedV3QuoterAbi,
+} from "@/lib/trade/stock-paired-route";
 import {
   getConfiguredStockPairedRelease,
   type VerifiedStockPairedRelease,
@@ -111,25 +120,20 @@ const launchEnvironment =
     ? "rehearsal"
     : "production";
 const launchChain = launchEnvironment === "rehearsal" ? sepolia : mainnet;
-const networkName =
-  launchEnvironment === "rehearsal" ? "Sepolia" : "Ethereum";
+const networkName = launchEnvironment === "rehearsal" ? "Sepolia" : "Ethereum";
 const selectedDeployments =
-  launchEnvironment === "rehearsal"
-    ? sepoliaDeployments
-    : mainnetDeployments;
-const selectedManifest =
-  appDeployments[launchEnvironment] as ReleaseDeployment;
+  launchEnvironment === "rehearsal" ? sepoliaDeployments : mainnetDeployments;
+const selectedManifest = appDeployments[launchEnvironment] as ReleaseDeployment;
 const selectedClassicV3Release =
   getConfiguredClassicV3Release(launchEnvironment).releaseManifest;
-const selectedDeepV3Release =
-  getConfiguredDeepV3Release(launchEnvironment);
+const selectedDeepV3Release = getConfiguredDeepV3Release(launchEnvironment);
 
 const client = createPublicClient({
   chain: launchChain,
   transport: http(
     launchEnvironment === "rehearsal"
-      ? process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org"
-      : process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org",
+      ? (process.env.SEPOLIA_RPC_URL ?? "https://sepolia.drpc.org")
+      : (process.env.ETHEREUM_RPC_URL ?? "https://eth.drpc.org"),
     {
       retryCount: 1,
       timeout: 12_000,
@@ -179,10 +183,7 @@ function createDeepV3RuntimeBindingClients(): readonly [
       readContract: (input) =>
         runtimeClient.readContract(input as never) as Promise<unknown>,
     } satisfies DeepV3RuntimeBindingClient;
-  }) as [
-    DeepV3RuntimeBindingClient,
-    DeepV3RuntimeBindingClient,
-  ];
+  }) as [DeepV3RuntimeBindingClient, DeepV3RuntimeBindingClient];
 }
 
 function deepV3RuntimeRelease(
@@ -211,9 +212,7 @@ function deepV3RuntimeRelease(
       lockedPositionFactory: address(addresses.lockedPositionFactory),
       zapPlanner: address(addresses.zapPlanner),
       growthVaultFactory: address(addresses.growthVaultFactory),
-      growthVaultImplementation: address(
-        addresses.growthVaultImplementation,
-      ),
+      growthVaultImplementation: address(addresses.growthVaultImplementation),
       hookFactory: address(addresses.hookFactory),
       feeHook: address(addresses.feeHook),
       launcher: address(addresses.launcher),
@@ -256,10 +255,7 @@ type ReleaseDeployment = {
   chainId: number;
   status: "not-deployed" | "ready" | "requires-redeploy";
   memeLaunchStatus:
-    | "not-deployed"
-    | "ready"
-    | "requires-redeploy"
-    | "lifecycle-pending";
+    "not-deployed" | "ready" | "requires-redeploy" | "lifecycle-pending";
   adaptiveLaunchStatus: "not-deployed" | "ready" | "requires-redeploy";
   classicV3Status?: "not-deployed" | "ready" | "requires-redeploy";
   ethCreatorFeeHookFactory: string | null;
@@ -348,17 +344,13 @@ function parseDraft(input: unknown): LaunchDraft {
 
   const requestedLaunchModel =
     raw.launchModel === undefined ? "classic" : raw.launchModel;
-  const implementedLaunchModel = resolveImplementedLaunchModel(
-    requestedLaunchModel,
-  );
+  const implementedLaunchModel =
+    resolveImplementedLaunchModel(requestedLaunchModel);
   if (!implementedLaunchModel) {
-    const reservedLaunchModel = resolveReservedLaunchModel(
-      requestedLaunchModel,
-    );
+    const reservedLaunchModel =
+      resolveReservedLaunchModel(requestedLaunchModel);
     if (reservedLaunchModel) {
-      if (
-        !isConfiguredDeepV3ReleaseReady(launchEnvironment)
-      ) {
+      if (!isConfiguredDeepV3ReleaseReady(launchEnvironment)) {
         throw new LaunchInputError(
           "Deep is not enabled by a verified release manifest",
         );
@@ -561,11 +553,7 @@ async function assertMemeReleaseInfrastructure(
       codeHashes.lockedPositionFeeForwarderFactory,
       "Locked position factory",
     ),
-    assertRuntimeCodeHash(
-      launcher,
-      codeHashes.memeLaunch,
-      "Classic",
-    ),
+    assertRuntimeCodeHash(launcher, codeHashes.memeLaunch, "Classic"),
   ]);
 
   const [
@@ -683,9 +671,7 @@ async function assertMemeReleaseInfrastructure(
     tickSpacing !== 200 ||
     minimumInitialBuyWei !== MEME_MIN_INITIAL_BUY_WEI
   ) {
-    throw new Error(
-      "The fee hook economics do not match the release manifest",
-    );
+    throw new Error("The fee hook economics do not match the release manifest");
   }
   if ((BigInt(feeHook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS) {
     throw new Error(
@@ -763,8 +749,7 @@ async function prepareMemeLaunch(
       status: "blocked",
       mode: "meme",
       title: `Classic is not deployed on ${networkName} yet`,
-      detail:
-        `Wallet transactions stay disabled until the exact ${networkName} release is deployed and verified`,
+      detail: `Wallet transactions stay disabled until the exact ${networkName} release is deployed and verified`,
       checks: [
         tokenCheck,
         connectedWalletCheck,
@@ -772,8 +757,7 @@ async function prepareMemeLaunch(
           id: "contracts",
           label: "Programmable contracts",
           status: "blocked",
-          detail:
-            `No approved ${networkName} deployment is recorded in the release manifest`,
+          detail: `No approved ${networkName} deployment is recorded in the release manifest`,
         },
         {
           id: "simulation",
@@ -836,8 +820,7 @@ async function prepareMemeLaunch(
     status: "ready",
     mode: "meme",
     title: "Ready for wallet review",
-    detail:
-      `The exact launch and selected Dev Buy succeeded in a read-only ${networkName} simulation`,
+    detail: `The exact launch and selected Dev Buy succeeded in a read-only ${networkName} simulation`,
     checks: [
       tokenCheck,
       connectedWalletCheck,
@@ -898,11 +881,7 @@ async function assertClassicV3Infrastructure(
       codeHashes.ethCreatorFeeHookFactoryV3,
       "Classic hook factory",
     ),
-    assertRuntimeCodeHash(
-      hook,
-      codeHashes.ethCreatorFeeHookV3,
-      "Classic hook",
-    ),
+    assertRuntimeCodeHash(hook, codeHashes.ethCreatorFeeHookV3, "Classic hook"),
     assertRuntimeCodeHash(
       vaultFactory,
       codeHashes.feeSplitVaultFactoryV1,
@@ -1074,9 +1053,7 @@ async function assertClassicV3Infrastructure(
     minimumInitialBuyWei !== MEME_MIN_INITIAL_BUY_WEI ||
     (BigInt(hook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS
   ) {
-    throw new Error(
-      "The Classic economics do not match the release manifest",
-    );
+    throw new Error("The Classic economics do not match the release manifest");
   }
 }
 
@@ -1139,9 +1116,7 @@ async function prepareClassicV3Launch(
   const hookFactory = getAddress(
     deployment.ethCreatorFeeHookFactoryV3 as string,
   );
-  const vaultFactory = getAddress(
-    deployment.feeSplitVaultFactoryV1 as string,
-  );
+  const vaultFactory = getAddress(deployment.feeSplitVaultFactoryV1 as string);
   const positionForwarderFactory = getAddress(
     deployment.lockedPositionFeeForwarderFactory as string,
   );
@@ -1152,15 +1127,15 @@ async function prepareClassicV3Launch(
     vaultFactory,
     positionForwarderFactory,
     {
-      ethCreatorFeeHookFactoryV3:
-        deployment.runtimeCodeHashes.ethCreatorFeeHookFactoryV3 as Hex,
-      ethCreatorFeeHookV3:
-        deployment.runtimeCodeHashes.ethCreatorFeeHookV3 as Hex,
-      feeSplitVaultFactoryV1:
-        deployment.runtimeCodeHashes.feeSplitVaultFactoryV1 as Hex,
+      ethCreatorFeeHookFactoryV3: deployment.runtimeCodeHashes
+        .ethCreatorFeeHookFactoryV3 as Hex,
+      ethCreatorFeeHookV3: deployment.runtimeCodeHashes
+        .ethCreatorFeeHookV3 as Hex,
+      feeSplitVaultFactoryV1: deployment.runtimeCodeHashes
+        .feeSplitVaultFactoryV1 as Hex,
       memeLaunchV2: deployment.runtimeCodeHashes.memeLaunchV2 as Hex,
-      lockedPositionFeeForwarderFactory:
-        deployment.runtimeCodeHashes.lockedPositionFeeForwarderFactory as Hex,
+      lockedPositionFeeForwarderFactory: deployment.runtimeCodeHashes
+        .lockedPositionFeeForwarderFactory as Hex,
     },
   );
 
@@ -1314,8 +1289,7 @@ async function prepareDeepLaunch(
     to: runtimeRelease.addresses.launcher,
     data: encodeDeepV3Launch(draft, draft.launchSalt, account, {
       minimumInitialTokenOut: quote.minimumInitialTokenOut,
-      initialBuySqrtPriceLimitX96:
-        quote.initialBuySqrtPriceLimitX96,
+      initialBuySqrtPriceLimitX96: quote.initialBuySqrtPriceLimitX96,
       deadline,
     }),
     value: initialBuyWei.toString(),
@@ -1494,11 +1468,7 @@ async function assertAdaptiveReleaseInfrastructure(
     [configuredPositionManager, officialPositionManager, "PositionManager"],
     [configuredTokenFactory, officialTokenFactory, "UERC20Factory"],
     [configuredHookFactory, hookFactory, "hook factory"],
-    [
-      configuredForwarderFactory,
-      positionForwarderFactory,
-      "position factory",
-    ],
+    [configuredForwarderFactory, positionForwarderFactory, "position factory"],
     [configuredTreasury, platformTreasury, "treasury"],
     [
       forwarderPositionManager,
@@ -1532,8 +1502,7 @@ async function prepareAdaptiveLaunch(
     id: "token",
     label: "Adaptive curve",
     status: "pass",
-    detail:
-      "The immutable market-cap curve and its fee bounds are valid",
+    detail: "The immutable market-cap curve and its fee bounds are valid",
   };
 
   if (connectedWalletCheck.status !== "pass") {
@@ -1688,8 +1657,7 @@ async function prepareAdaptiveLaunch(
     status: "ready",
     mode: "adaptive",
     title: "Ready for wallet review",
-    detail:
-      `The Adaptive launch succeeded in a read-only ${networkName} simulation`,
+    detail: `The Adaptive launch succeeded in a read-only ${networkName} simulation`,
     checks: [
       tokenCheck,
       connectedWalletCheck,
@@ -1724,9 +1692,19 @@ async function assertStockPairedInfrastructure(
     hookFactory,
     feeHook,
     launcher,
+    ethLaunchCoordinator,
     positionForwarderFactory,
     treasury,
   } = release.addresses;
+  const routePools = [
+    ...new Map(
+      STOCK_PAIRED_ETH_QUOTE_ASSETS.flatMap((asset) =>
+        getStockPairedEthRoute(asset.address).buyHops.map(
+          (hop) => [hop.pool.toLowerCase(), hop] as const,
+        ),
+      ),
+    ).values(),
+  ];
 
   await Promise.all([
     assertRuntimeCodeHash(
@@ -1746,6 +1724,21 @@ async function assertStockPairedInfrastructure(
     ),
     ...(
       [
+        ["v3Factory", "Uniswap v3 factory"],
+        ["v3SwapRouter", "Uniswap v3 SwapRouter"],
+        ["v3Quoter", "Uniswap v3 Quoter"],
+        ["weth", "Wrapped Ether"],
+        ["usdc", "USD Coin"],
+      ] as const
+    ).map(([field, label]) =>
+      assertRuntimeCodeHash(
+        release.officialDependencies[field].address,
+        release.officialDependencies[field].runtimeCodeHash,
+        label,
+      ),
+    ),
+    ...(
+      [
         ["quoteRegistry", quoteRegistry, "Stock quote registry"],
         ["positionPlanner", positionPlanner, "Stock-Paired position planner"],
         [
@@ -1757,16 +1750,24 @@ async function assertStockPairedInfrastructure(
         ["feeHook", feeHook, "Stock-Paired hook"],
         ["launcher", launcher, "Stock-Paired launcher"],
         [
+          "ethLaunchCoordinator",
+          ethLaunchCoordinator,
+          "Stock-Paired ETH launch coordinator",
+        ],
+        [
           "positionForwarderFactory",
           positionForwarderFactory,
           "Locked position factory",
         ],
       ] as const
     ).map(([field, address, label]) =>
+      assertRuntimeCodeHash(address, release.runtimeCodeHashes[field], label),
+    ),
+    ...routePools.map((pool) =>
       assertRuntimeCodeHash(
-        address,
-        release.runtimeCodeHashes[field],
-        label,
+        pool.pool,
+        pool.poolRuntimeCodeHash,
+        "Stock-Paired ETH route pool",
       ),
     ),
   ]);
@@ -1794,6 +1795,11 @@ async function assertStockPairedInfrastructure(
     factoryRecognizesHook,
     positionFactoryManager,
     registryAssetCount,
+    coordinatorLauncher,
+    coordinatorV3Router,
+    coordinatorV3Factory,
+    coordinatorWeth,
+    coordinatorUsdc,
   ] = await Promise.all([
     client.readContract({
       address: launcher,
@@ -1906,6 +1912,31 @@ async function assertStockPairedInfrastructure(
       abi: stockQuoteRegistryAbi,
       functionName: "assetCount",
     }),
+    client.readContract({
+      address: ethLaunchCoordinator,
+      abi: stockPairedEthLaunchCoordinatorAbi,
+      functionName: "launcher",
+    }),
+    client.readContract({
+      address: ethLaunchCoordinator,
+      abi: stockPairedEthLaunchCoordinatorAbi,
+      functionName: "v3SwapRouter",
+    }),
+    client.readContract({
+      address: ethLaunchCoordinator,
+      abi: stockPairedEthLaunchCoordinatorAbi,
+      functionName: "v3Factory",
+    }),
+    client.readContract({
+      address: ethLaunchCoordinator,
+      abi: stockPairedEthLaunchCoordinatorAbi,
+      functionName: "weth",
+    }),
+    client.readContract({
+      address: ethLaunchCoordinator,
+      abi: stockPairedEthLaunchCoordinatorAbi,
+      functionName: "usdc",
+    }),
   ]);
 
   const expectedAddresses = [
@@ -1933,6 +1964,27 @@ async function assertStockPairedInfrastructure(
       positionFactoryManager,
       officialPositionManager,
       "position factory PositionManager",
+    ],
+    [coordinatorLauncher, launcher, "ETH coordinator launcher"],
+    [
+      coordinatorV3Router,
+      release.officialDependencies.v3SwapRouter.address,
+      "ETH coordinator v3 router",
+    ],
+    [
+      coordinatorV3Factory,
+      release.officialDependencies.v3Factory.address,
+      "ETH coordinator v3 factory",
+    ],
+    [
+      coordinatorWeth,
+      release.officialDependencies.weth.address,
+      "ETH coordinator WETH",
+    ],
+    [
+      coordinatorUsdc,
+      release.officialDependencies.usdc.address,
+      "ETH coordinator USDC",
     ],
   ] as const;
   for (const [actual, expected, label] of expectedAddresses) {
@@ -1979,13 +2031,17 @@ async function assertStockPairedInfrastructure(
           args: [asset.address],
         }),
       ]);
-      return { asset, registered, supported, configurationHash };
+      return {
+        asset,
+        registered,
+        supported,
+        configurationHash,
+      };
     }),
   );
   for (const entry of registryAssets) {
     if (
-      entry.registered.toLowerCase() !==
-        entry.asset.address.toLowerCase() ||
+      entry.registered.toLowerCase() !== entry.asset.address.toLowerCase() ||
       !entry.supported ||
       entry.configurationHash ===
         "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -1995,38 +2051,103 @@ async function assertStockPairedInfrastructure(
       );
     }
   }
-}
 
-async function estimateStockQuoteApproval(
-  account: Address,
-  transaction: Omit<
-    PreparedStockQuoteApprovalTransaction,
-    "gasLimit"
-  >,
-) {
-  const balance = await client.getBalance({ address: account });
-  await client.call({
-    account,
-    to: transaction.to,
-    data: transaction.data,
-    value: 0n,
-  });
-  const [estimate, gasPrice] = await Promise.all([
-    client.estimateGas({
-      account,
-      to: transaction.to,
-      data: transaction.data,
-      value: 0n,
+  const coordinatorRoutes = await Promise.all(
+    STOCK_PAIRED_ETH_QUOTE_ASSETS.map(async (asset) => {
+      const route = getStockPairedEthRoute(asset.address);
+      const [routeFee, routePath] = await Promise.all([
+        client.readContract({
+          address: ethLaunchCoordinator,
+          abi: stockPairedEthLaunchCoordinatorAbi,
+          functionName: "stockPoolFee",
+          args: [asset.address],
+        }),
+        client.readContract({
+          address: ethLaunchCoordinator,
+          abi: stockPairedEthLaunchCoordinatorAbi,
+          functionName: "routePath",
+          args: [asset.address],
+        }),
+      ]);
+      return {
+        asset,
+        routeFee,
+        routePath,
+        expectedRouteFee: route.buyHops[1].fee,
+        expectedRoutePath: encodeStockPairedV3Path(route.buyHops),
+      };
     }),
-    client.getGasPrice(),
-  ]);
-  const gasLimit = (estimate * 120n + 99n) / 100n;
-  if (balance < gasLimit * gasPrice) {
-    throw new LaunchInputError(
-      "The wallet does not have enough ETH for the quote-token approval",
+  );
+  for (const entry of coordinatorRoutes) {
+    if (
+      entry.routeFee !== entry.expectedRouteFee ||
+      entry.routePath.toLowerCase() !== entry.expectedRoutePath.toLowerCase()
+    ) {
+      throw new Error(`The ${entry.asset.symbol} ETH route is not ready`);
+    }
+  }
+  const routedAddresses = new Set(
+    STOCK_PAIRED_ETH_QUOTE_ASSETS.map((asset) => asset.address.toLowerCase()),
+  );
+  const unroutedFees = await Promise.all(
+    STOCK_QUOTE_ASSETS.filter(
+      (asset) => !routedAddresses.has(asset.address.toLowerCase()),
+    ).map((asset) =>
+      client.readContract({
+        address: ethLaunchCoordinator,
+        abi: stockPairedEthLaunchCoordinatorAbi,
+        functionName: "stockPoolFee",
+        args: [asset.address],
+      }),
+    ),
+  );
+  if (unroutedFees.some((fee) => fee !== 0)) {
+    throw new Error(
+      "An unreviewed Stock-Paired ETH route is unexpectedly enabled",
     );
   }
-  return gasLimit;
+}
+
+async function quoteStockPairedExternalRoute(
+  account: Address,
+  quoteAsset: Address,
+  amountIn: bigint,
+  side: "buy" | "sell",
+) {
+  const route = getStockPairedEthRoute(quoteAsset);
+  const hops = side === "buy" ? route.buyHops : route.sellHops;
+  let result;
+  try {
+    result = await client.call({
+      account,
+      to: STOCK_PAIRED_V3_QUOTER,
+      data: encodeFunctionData({
+        abi: stockPairedV3QuoterAbi,
+        functionName: "quoteExactInput",
+        args: [encodeStockPairedV3Path(hops), amountIn],
+      }),
+    });
+  } catch {
+    throw new LaunchInputError(
+      "The selected stock does not have enough ETH route liquidity for this Initial Buy",
+    );
+  }
+  if (!result.data || result.data === "0x") {
+    throw new LaunchInputError(
+      "The selected stock does not have a usable ETH route",
+    );
+  }
+  const [amountOut, , , gasEstimate] = decodeFunctionResult({
+    abi: stockPairedV3QuoterAbi,
+    functionName: "quoteExactInput",
+    data: result.data,
+  });
+  if (amountOut <= 0n) {
+    throw new LaunchInputError(
+      "The selected stock does not have a usable ETH route",
+    );
+  }
+  return { amountOut, gasEstimate };
 }
 
 async function prepareStockPairedLaunch(
@@ -2078,23 +2199,11 @@ async function prepareStockPairedLaunch(
   }
 
   await assertStockPairedInfrastructure(release);
-  const { launcher, feeHook } = release.addresses;
-  const [quoteBalance, quoteAllowance, predicted] = await Promise.all([
+  const { ethLaunchCoordinator, feeHook } = release.addresses;
+  const [predicted, block, forwardQuote] = await Promise.all([
     client.readContract({
-      address: configuration.quoteAsset.address,
-      abi: stockQuoteTokenAbi,
-      functionName: "balanceOf",
-      args: [account],
-    }),
-    client.readContract({
-      address: configuration.quoteAsset.address,
-      abi: stockQuoteTokenAbi,
-      functionName: "allowance",
-      args: [account, launcher],
-    }),
-    client.readContract({
-      address: launcher,
-      abi: stockPairedLaunchAbi,
+      address: ethLaunchCoordinator,
+      abi: stockPairedEthLaunchCoordinatorAbi,
       functionName: "predictTokenAddress",
       args: [
         draft.tokenName.trim(),
@@ -2103,11 +2212,32 @@ async function prepareStockPairedLaunch(
         draft.launchSalt,
       ],
     }),
+    client.getBlock(),
+    quoteStockPairedExternalRoute(
+      account,
+      configuration.quoteAsset.address,
+      configuration.initialBuyEthAmount,
+      "buy",
+    ),
   ]);
   const [predictedToken] = predicted;
-  if (quoteBalance < configuration.initialBuyQuoteAmount) {
+  if (forwardQuote.amountOut < STOCK_PAIRED_MIN_INITIAL_BUY_RAW) {
     throw new LaunchInputError(
-      `The wallet needs at least ${draft.initialBuyQuoteAmount.trim()} ${configuration.quoteAsset.symbol} for the Initial Buy`,
+      `Increase the Initial Buy so it routes to at least ${STOCK_PAIRED_MIN_INITIAL_BUY} ${configuration.quoteAsset.symbol}`,
+    );
+  }
+  const reverseQuote = await quoteStockPairedExternalRoute(
+    account,
+    configuration.quoteAsset.address,
+    forwardQuote.amountOut,
+    "sell",
+  );
+  if (
+    reverseQuote.amountOut * 10_000n <
+    configuration.initialBuyEthAmount * STOCK_PAIRED_MIN_ROUTE_ROUND_TRIP_BPS
+  ) {
+    throw new LaunchInputError(
+      "The selected stock route is too thin for this Initial Buy",
     );
   }
   const existingCode = await client.getCode({ address: predictedToken });
@@ -2117,57 +2247,65 @@ async function prepareStockPairedLaunch(
     );
   }
 
-  if (quoteAllowance < configuration.initialBuyQuoteAmount) {
-    const approvalBase = {
-      kind: "stock-quote-approval" as const,
-      chainId: 1 as const,
-      to: configuration.quoteAsset.address,
-      data: encodeStockQuoteApproval(
-        launcher,
-        configuration.initialBuyQuoteAmount,
-      ),
-      value: "0",
-    };
-    const gasLimit = await estimateStockQuoteApproval(account, approvalBase);
-    return response({
-      status: "approval-required",
-      mode: "stock-paired",
-      title: "Approve the Initial Buy",
-      detail: `Allow exactly ${draft.initialBuyQuoteAmount.trim()} ${configuration.quoteAsset.symbol}, then the launch will be prepared`,
-      checks: [
-        tokenCheck,
-        connectedWalletCheck,
-        {
-          id: "contracts",
-          label: "Stock-Paired contracts",
-          status: "pass",
-          detail:
-            "Runtime bytecode, quote-asset registry and immutable fee split match",
-        },
-      ],
-      approvalTransaction: {
-        ...approvalBase,
-        gasLimit: gasLimit.toString(),
-      },
-      predictedToken,
-      predictedHook: feeHook,
-      planHash: buildPlanHash(account, approvalBase),
-    });
+  const deadline = block.timestamp + 1_200n;
+  const minimumQuoteAmountOut = (forwardQuote.amountOut * 9_900n) / 10_000n;
+  const probeData = encodeStockPairedEthLaunch(
+    draft,
+    draft.launchSalt,
+    account,
+    {
+      minimumQuoteAmountOut,
+      minimumInitialTokenOut: 1n,
+      deadline,
+    },
+  );
+  const probe = await client.call({
+    account,
+    to: ethLaunchCoordinator,
+    data: probeData,
+    value: configuration.initialBuyEthAmount,
+  });
+  if (!probe.data || probe.data === "0x") {
+    throw new LaunchInputError(
+      "The atomic ETH launch simulation returned no result",
+    );
   }
-
+  const simulated = decodeFunctionResult({
+    abi: stockPairedEthLaunchCoordinatorAbi,
+    functionName: "launch",
+    data: probe.data,
+  });
+  if (
+    simulated.token.toLowerCase() !== predictedToken.toLowerCase() ||
+    simulated.quoteAsset.toLowerCase() !==
+      configuration.quoteAsset.address.toLowerCase() ||
+    simulated.initialBuyQuoteAmount < minimumQuoteAmountOut ||
+    simulated.initialBuyTokenAmount <= 0n
+  ) {
+    throw new LaunchInputError(
+      "The atomic ETH launch simulation does not match the reviewed route",
+    );
+  }
+  const minimumInitialTokenOut =
+    (simulated.initialBuyTokenAmount * 9_900n) / 10_000n;
   const launchBase = {
     kind: "launch" as const,
     chainId: 1 as const,
-    to: launcher,
-    data: encodeStockPairedLaunch(draft, draft.launchSalt, account),
-    value: "0",
+    to: ethLaunchCoordinator,
+    data: encodeStockPairedEthLaunch(draft, draft.launchSalt, account, {
+      minimumQuoteAmountOut,
+      minimumInitialTokenOut:
+        minimumInitialTokenOut > 0n ? minimumInitialTokenOut : 1n,
+      deadline,
+    }),
+    value: configuration.initialBuyEthAmount.toString(),
   };
   const gasLimit = await estimatePreparedTransaction(account, launchBase);
   return response({
     status: "ready",
     mode: "stock-paired",
     title: "Ready for wallet review",
-    detail: `The exact ${configuration.quoteAsset.symbol}-quoted launch succeeded in a read-only Ethereum simulation`,
+    detail: `ETH routes into ${configuration.quoteAsset.symbol} and launches the token atomically`,
     checks: [
       tokenCheck,
       connectedWalletCheck,
@@ -2176,14 +2314,14 @@ async function prepareStockPairedLaunch(
         label: "Stock-Paired contracts",
         status: "pass",
         detail:
-          "Runtime bytecode, quote asset, fixed fee split and permanent LP custody match",
+          "Runtime bytecode, ETH route, quote asset, fixed fee split and permanent LP custody match",
       },
       {
         id: "simulation",
         label: "Simulation",
         status: "pass",
         detail:
-          "The token, stock-token Initial Buy and locked v4 pool are prepared atomically",
+          "One wallet transaction converts ETH, creates the token and initializes its locked v4 pool",
       },
     ],
     transaction: { ...launchBase, gasLimit: gasLimit.toString() },
@@ -2217,10 +2355,7 @@ export async function POST(request: NextRequest) {
 
     const account = getAddress(record.account);
     const draft = parseDraft(record.draft);
-    const connectedWalletCheck = walletCheck(
-      account,
-      record.walletChainId,
-    );
+    const connectedWalletCheck = walletCheck(account, record.walletChainId);
     if (draft.launchModel === "adaptive") {
       return await prepareAdaptiveLaunch(
         account,
@@ -2238,11 +2373,7 @@ export async function POST(request: NextRequest) {
       );
     }
     if (draft.launchModel === "deep") {
-      return await prepareDeepLaunch(
-        account,
-        draft,
-        connectedWalletCheck,
-      );
+      return await prepareDeepLaunch(account, draft, connectedWalletCheck);
     }
     if (draft.launchModel === "stock-paired") {
       return await prepareStockPairedLaunch(
@@ -2262,10 +2393,7 @@ export async function POST(request: NextRequest) {
       return errorResponse(caught.message);
     }
 
-    console.error(
-      "Launch preflight failed",
-      safeServerErrorSummary(caught),
-    );
+    console.error("Launch preflight failed", safeServerErrorSummary(caught));
     return errorResponse(
       `The ${networkName} simulation could not be completed safely`,
       502,

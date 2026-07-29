@@ -12,6 +12,7 @@ const runtimeFields = [
   "hookFactory",
   "feeHook",
   "launcher",
+  "ethLaunchCoordinator",
   "positionForwarderFactory",
 ] as const;
 
@@ -26,6 +27,11 @@ const officialDependencyFields = [
   "permit2",
   "universalRouter",
   "uerc20Factory",
+  "v3Factory",
+  "v3SwapRouter",
+  "v3Quoter",
+  "weth",
+  "usdc",
 ] as const;
 
 const EXPECTED_TREASURY =
@@ -44,6 +50,11 @@ const EXPECTED_OFFICIAL_DEPENDENCIES = {
   permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
   universalRouter: "0x4C82D1fBFe28C977cBB58D8C7FF8FCF9F70a2cCA",
   uerc20Factory: "0x000000e200088D55C39a11F609E5F667729ad49b",
+  v3Factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+  v3SwapRouter: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+  v3Quoter: "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+  weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
 } as const;
 
 type RuntimeField = (typeof runtimeFields)[number];
@@ -58,6 +69,9 @@ export type StockPairedReleaseManifest = {
   chainId?: unknown;
   releaseCommit?: unknown;
   sourceCommitment?: unknown;
+  ethCoordinatorReleaseCommit?: unknown;
+  ethCoordinatorSourceCommitment?: unknown;
+  ethCoordinatorNonce?: unknown;
   startingNonce?: unknown;
   startBlock?: unknown;
   addresses?: Partial<Record<RuntimeField | "deployer" | "treasury", unknown>>;
@@ -85,6 +99,7 @@ export type StockPairedReleaseManifest = {
     hookFactory?: unknown;
     feeHook?: unknown;
     launcher?: unknown;
+    ethLaunchCoordinator?: unknown;
   };
   lifecycleEvidence?: {
     status?: unknown;
@@ -92,10 +107,13 @@ export type StockPairedReleaseManifest = {
     independentRpcCount?: unknown;
     deploymentTransactionsVerified?: unknown;
     runtimeBindingsVerified?: unknown;
+    ethCoordinatorDeploymentVerified?: unknown;
     canaryLaunchTransaction?: unknown;
     canaryQuoteAsset?: unknown;
     positionLockVerified?: unknown;
     buyAndSellVerified?: unknown;
+    ethFirstLaunchVerified?: unknown;
+    ethBuyAndSellVerified?: unknown;
     creatorClaimVerified?: unknown;
     launcherClaimVerified?: unknown;
   };
@@ -105,6 +123,9 @@ export type VerifiedStockPairedRelease = {
   chainId: 1;
   releaseCommit: string;
   sourceCommitment: Hex;
+  ethCoordinatorReleaseCommit: string;
+  ethCoordinatorSourceCommitment: Hex;
+  ethCoordinatorNonce: number;
   startBlock: number;
   addresses: Record<RuntimeField | "deployer" | "treasury", Address>;
   transactions: Record<DeployedField, Hex>;
@@ -197,6 +218,10 @@ export function resolveVerifiedStockPairedRelease(
     release.chainId !== 1 ||
     !validReleaseCommit(release.releaseCommit) ||
     !validHash(release.sourceCommitment) ||
+    !validReleaseCommit(release.ethCoordinatorReleaseCommit) ||
+    !validHash(release.ethCoordinatorSourceCommitment) ||
+    !Number.isSafeInteger(release.ethCoordinatorNonce) ||
+    Number(release.ethCoordinatorNonce) < 0 ||
     !Number.isSafeInteger(release.startingNonce) ||
     Number(release.startingNonce) < 0 ||
     !Number.isSafeInteger(release.startBlock) ||
@@ -223,6 +248,7 @@ export function resolveVerifiedStockPairedRelease(
     Number(release.lifecycleEvidence.independentRpcCount) < 2 ||
     release.lifecycleEvidence.deploymentTransactionsVerified !== true ||
     release.lifecycleEvidence.runtimeBindingsVerified !== true ||
+    release.lifecycleEvidence.ethCoordinatorDeploymentVerified !== true ||
     !validHash(release.lifecycleEvidence.canaryLaunchTransaction) ||
     !validAddress(release.lifecycleEvidence.canaryQuoteAsset) ||
     !STOCK_QUOTE_ASSETS.some((asset) =>
@@ -230,6 +256,8 @@ export function resolveVerifiedStockPairedRelease(
     ) ||
     release.lifecycleEvidence.positionLockVerified !== true ||
     release.lifecycleEvidence.buyAndSellVerified !== true ||
+    release.lifecycleEvidence.ethFirstLaunchVerified !== true ||
+    release.lifecycleEvidence.ethBuyAndSellVerified !== true ||
     release.lifecycleEvidence.creatorClaimVerified !== true ||
     release.lifecycleEvidence.launcherClaimVerified !== true
   ) {
@@ -284,6 +312,10 @@ export function resolveVerifiedStockPairedRelease(
     chainId: 1,
     releaseCommit: release.releaseCommit,
     sourceCommitment: release.sourceCommitment,
+    ethCoordinatorReleaseCommit: release.ethCoordinatorReleaseCommit,
+    ethCoordinatorSourceCommitment:
+      release.ethCoordinatorSourceCommitment,
+    ethCoordinatorNonce: Number(release.ethCoordinatorNonce),
     startBlock: Number(release.startBlock),
     addresses: Object.fromEntries(
       addressKeys.map((field) => [field, getAddress(addresses[field] as string)]),

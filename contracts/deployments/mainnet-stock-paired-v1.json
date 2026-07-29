@@ -2,13 +2,16 @@
   "schemaVersion": 1,
   "model": "stock-paired",
   "internalContractRelease": "stock-paired-v1",
-  "status": "not-deployed",
+  "status": "base-infrastructure-deployed-eth-coordinator-pending",
   "chainId": 1,
-  "releaseCommit": null,
+  "releaseCommit": "eda6fc90ca8d60507e7e121f81e9a1674aaad68d",
   "sourceCommitment": "0xa38eb2fead47e2dbfda7589ddeb235dd66c5dc26a604e49898a8bf51494b7693",
-  "startingNonce": null,
+  "ethCoordinatorReleaseCommit": null,
+  "ethCoordinatorSourceCommitment": null,
+  "ethCoordinatorNonce": null,
+  "startingNonce": 46,
   "candidatePlan": {
-    "status": "simulation-only-refresh-before-signing",
+    "status": "deployed-and-finalized",
     "observedAt": "2026-07-29T03:56:16Z",
     "observedAtBlock": 25635933,
     "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
@@ -26,31 +29,34 @@
     "estimatedRequiredEth": "0.002178320286031352"
   },
   "addresses": {
-    "deployer": null,
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
     "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-    "quoteRegistry": null,
-    "positionPlanner": null,
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
+    "quoteRegistry": "0x553730c56D07A13dF2f7fAC478E03624BFb13f59",
+    "positionPlanner": "0x8a2f56196903D4cffB71402E88Fc46b1CA4435EB",
+    "feeSplitVaultFactory": "0xD430d9162c153AFDf9E4CACA6D2317E72a044441",
+    "hookFactory": "0xcE9f68963117B1EA87364e5d62AC511D911EBbeD",
+    "feeHook": "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc",
+    "launcher": "0x195750f33caD5eF2DF857a53226B421297A1e79e",
+    "ethLaunchCoordinator": null,
     "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
   },
   "transactions": {
-    "quoteRegistry": null,
-    "positionPlanner": null,
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null
+    "quoteRegistry": "0x14378f1b0a92393417ee860ac6704d02f4813d6ca926fcf7da9d379695dd1aab",
+    "positionPlanner": "0xae409e8dc7bfc05af5678719cdb052b8169b2d6a257d109b146661f3053a62cc",
+    "feeSplitVaultFactory": "0xd61c4deec17a070045792cd6c64e2163a2359a6d7b2ab9b531f592d0f6e9a0a6",
+    "hookFactory": "0xe54a735d325cb0e08c81304d2989ba0e9d561ea2c970a1d2399897fd3803eb08",
+    "feeHook": "0x3978af35fff2ec18a99fa5c58c12a1e2be9348736c476018c43e7a873738c28f",
+    "launcher": "0x9b9b0147929190b4d6f5265c4e87f4ca14130bbe9733c04f1c5250d9d6d92631",
+    "ethLaunchCoordinator": null
   },
   "runtimeCodeHashes": {
-    "quoteRegistry": null,
-    "positionPlanner": null,
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
+    "quoteRegistry": "0x283acfe82cfd8215d70ea0b957c33e70f5caf4a76c9909935f5f17a591222a3a",
+    "positionPlanner": "0x74e846b3d4f57ce5dac489914961c6dfae69ae4efc6c941f994961cc1c7b257a",
+    "feeSplitVaultFactory": "0x14a1e46cbb829712c7ba64ce018537aed9385d6116b939ef3d355fa2fdc0f2b6",
+    "hookFactory": "0x6f4fb8e100039d4f9dd488f625b7ecb2e8d4d389b914d9031c6c5e6b228ad79d",
+    "feeHook": "0x4da04b13565c195132988b3b96e3c43b9f199c0324f18fee616f888b775a2230",
+    "launcher": "0xbd6f60760341db3d4ed31118676ab4342d0868cff42cc6f8205d877086fbce65",
+    "ethLaunchCoordinator": null,
     "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
   },
   "artifactRuntime": {
@@ -111,6 +117,26 @@
       "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
       "runtimeCodeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb"
     },
+    "v3Factory": {
+      "address": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+      "runtimeCodeHash": "0x4d7b8525cd5d14343fa67a732fba5b24cddba11620ca88392f4ec6c52f91fd69"
+    },
+    "v3SwapRouter": {
+      "address": "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+      "runtimeCodeHash": "0xbb90113d2f9a5e9b7feb15a1d1fff06c1ee1575b3f9b1181778ffd0cf633e7ea"
+    },
+    "v3Quoter": {
+      "address": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+      "runtimeCodeHash": "0x06148f47d0f41a68d3bc970030a7150e5d608cfbc28d372440a2e41ce543d92b"
+    },
+    "weth": {
+      "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "runtimeCodeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23"
+    },
+    "usdc": {
+      "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "runtimeCodeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505"
+    },
     "positionForwarderFactory": {
       "address": "0x291a9ff1059d225d02B1659430804486404dB507",
       "runtimeCodeHash": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
@@ -154,7 +180,7 @@
     "implementationRuntimeCodeHash": "0x7480293a8fad3f98f01f39aa59cd4e4c30d7fc4e7019e8f6e691eb5a9be53d11"
   },
   "sourceVerification": {
-    "status": "not-submitted",
+    "status": "base-infrastructure-verified-coordinator-pending",
     "compiler": {
       "version": "0.8.26",
       "optimizerEnabled": true,
@@ -163,24 +189,97 @@
       "bytecodeHash": "none",
       "cborMetadata": false
     },
-    "quoteRegistry": null,
-    "positionPlanner": null,
-    "feeSplitVaultFactory": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null
+    "quoteRegistry": {
+      "status": "verified",
+      "encodedConstructorArguments": "0x00000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000000985462c9aa4d6c3ad59ae6e1e9c0c11347ed1598000000000000000000000000ebbcb2cee51c2fee4062c9c1270dcb98b0b222509806c8207a455c012b2799be651ac0146d54866f92db90b502e5e2efa283bee9feff50d5e739b863fc9e0db874d5558375a3e2c81bc20c24923a685263d639bd7480293a8fad3f98f01f39aa59cd4e4c30d7fc4e7019e8f6e691eb5a9be53d1100000000000000000000000000000000000000000000000000000000000000070000000000000000000000002d1f7226bd1f780af6b9a49dcc0ae00e8df4bdee000000000000000000000000fedc5f4a6c38211c1338aa411018dfaf26612c08000000000000000000000000ba47214edd2bb43099611b208f75e4b42fdcfedc000000000000000000000000f3e4872e6a4cf365888d93b6146a2baa7348f1a40000000000000000000000000e397938c1aa0680954093495b70a9f5e2249aba000000000000000000000000f6b1117ec07684d3958cad8beb1b302bfd21103f00000000000000000000000014c3abf95cb9c93a8b82c1cdcb76d72cb87b2d4c000000000000000000000000000000000000000000000000000000000000000757093d9f3ca0882077640c62a489e053e5749c3330202ccab4778cdfd3b835090f2d68b28bf0992fd5ee8946838aecb65d87542a0dfc46fd2dc6ce365f4fa242e1b19e26ad8db710a24a7a4837aaa1084fc3c3ce46d123d1b8d92a4f9a312ad23068806970c0e2b1976c4410346d9abc723550d1142d2497401e27a3aa3a7ff895f18c18973d5b864c43e2297ca7050eec7dae284812db1b4a39c026c5ff82aaf8a528fd051180e5bc8bdeae1d77bf2910d9f0714525357bcebc05ac8d28a18aff62f95729d1adb0ba39cf6b487049b04c7df0a1d19c0abca7490c2bde32610a",
+      "etherscan": {
+        "status": "exact-match",
+        "url": "https://etherscan.io/address/0x553730c56D07A13dF2f7fAC478E03624BFb13f59#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "url": "https://sourcify.dev/server/v2/contract/1/0x553730c56D07A13dF2f7fAC478E03624BFb13f59"
+      }
+    },
+    "positionPlanner": {
+      "status": "verified",
+      "encodedConstructorArguments": "0x",
+      "etherscan": {
+        "status": "exact-match",
+        "url": "https://etherscan.io/address/0x8a2f56196903D4cffB71402E88Fc46b1CA4435EB#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "url": "https://sourcify.dev/server/v2/contract/1/0x8a2f56196903D4cffB71402E88Fc46b1CA4435EB"
+      }
+    },
+    "feeSplitVaultFactory": {
+      "status": "verified",
+      "encodedConstructorArguments": "0x",
+      "etherscan": {
+        "status": "exact-match",
+        "url": "https://etherscan.io/address/0xD430d9162c153AFDf9E4CACA6D2317E72a044441#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "url": "https://sourcify.dev/server/v2/contract/1/0xD430d9162c153AFDf9E4CACA6D2317E72a044441"
+      }
+    },
+    "hookFactory": {
+      "status": "verified",
+      "encodedConstructorArguments": "0x",
+      "etherscan": {
+        "status": "exact-match",
+        "url": "https://etherscan.io/address/0xcE9f68963117B1EA87364e5d62AC511D911EBbeD#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "url": "https://sourcify.dev/server/v2/contract/1/0xcE9f68963117B1EA87364e5d62AC511D911EBbeD"
+      }
+    },
+    "feeHook": {
+      "status": "verified",
+      "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a900000000000000000000000004957f49620aff3adbbe8195a4f633e49cc93376c000000000000000000000000553730c56d07a13df2f7fac478e03624bfb13f59000000000000000000000000d430d9162c153afdf9e4caca6d2317e72a044441",
+      "etherscan": {
+        "status": "exact-match",
+        "url": "https://etherscan.io/address/0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "url": "https://sourcify.dev/server/v2/contract/1/0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc"
+      }
+    },
+    "launcher": {
+      "status": "verified",
+      "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90000000000000000000000000bd216513d74c8cf14cf4747e6aaa6420ff64ee9e000000000000000000000000000000e200088d55c39a11f609e5f667729ad49b0000000000000000000000007773d183fe7b60d4f1885047fa42b815a62fe0cc000000000000000000000000553730c56d07a13df2f7fac478e03624bfb13f590000000000000000000000008a2f56196903d4cffb71402e88fc46b1ca4435eb000000000000000000000000d430d9162c153afdf9e4caca6d2317e72a044441000000000000000000000000291a9ff1059d225d02b1659430804486404db507",
+      "etherscan": {
+        "status": "exact-match",
+        "url": "https://etherscan.io/address/0x195750f33caD5eF2DF857a53226B421297A1e79e#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "url": "https://sourcify.dev/server/v2/contract/1/0x195750f33caD5eF2DF857a53226B421297A1e79e"
+      }
+    },
+    "ethLaunchCoordinator": {
+      "status": "pending"
+    }
   },
   "lifecycleEvidence": {
-    "status": "not-run-on-deployed-addresses",
+    "status": "deployment-verified-canary-pending",
     "releaseEligible": false,
-    "independentRpcCount": 0,
-    "deploymentTransactionsVerified": false,
-    "runtimeBindingsVerified": false,
+    "independentRpcCount": 2,
+    "deploymentTransactionsVerified": true,
+    "runtimeBindingsVerified": true,
+    "ethCoordinatorDeploymentVerified": false,
     "canaryLaunchTransaction": null,
     "canaryQuoteAsset": null,
     "positionLockVerified": false,
     "buyAndSellVerified": false,
+    "ethFirstLaunchVerified": false,
+    "ethBuyAndSellVerified": false,
     "creatorClaimVerified": false,
     "launcherClaimVerified": false
-  }
+  },
+  "startBlock": 25637469
 }

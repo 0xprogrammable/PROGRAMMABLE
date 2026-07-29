@@ -258,8 +258,6 @@ export function TokenTrade({
   tokenPriceUsdWad,
   launchModel,
   quoteAsset,
-  quoteAssetSymbol,
-  tokenPriceQuote,
   buySwapFeeBps,
   sellSwapFeeBps,
   readBalances,
@@ -298,13 +296,8 @@ export function TokenTrade({
   const amountInputId = useId();
   const activeSwapFeeBps =
     side === "buy" ? buySwapFeeBps : sellSwapFeeBps;
-  const stockPaired = launchModel === "stock-paired";
-  const activeInputAsset =
-    stockPaired && side === "buy" && quoteAsset ? quoteAsset : token;
-  const activeInputSymbol =
-    stockPaired && side === "buy"
-      ? quoteAssetSymbol ?? "Quote"
-      : symbol;
+  const activeInputAsset = token;
+  const activeInputSymbol = side === "buy" ? "ETH" : symbol;
   const activeBalanceState =
     owner &&
     balanceState?.owner.toLowerCase() === owner.toLowerCase() &&
@@ -319,16 +312,18 @@ export function TokenTrade({
     calculateTradeUsdValue({
       side,
       amount,
-      tokenPriceEth: stockPaired ? tokenPriceQuote : tokenPriceEth,
+      tokenPriceEth,
       tokenPriceUsdWad,
     }),
   );
+  const hasValidAmount =
+    /^\d+(?:\.\d+)?$/.test(amount.trim()) && Number(amount) > 0;
   const displayBalance = balances
-    ? side === "buy" && !stockPaired
+    ? side === "buy"
       ? `${formatWalletBalance(balances.nativeBalanceWei, 18)} ETH`
       : `${formatWalletBalance(
           balances.tokenBalanceRaw,
-          side === "buy" ? 18 : tokenDecimals,
+          tokenDecimals,
         )} ${activeInputSymbol}`
     : owner
       ? activeBalanceState?.status === "error"
@@ -383,14 +378,14 @@ export function TokenTrade({
         status: "ready",
         balances,
       });
-      if (side === "sell" || stockPaired) {
+      if (side === "sell") {
         if (balances.tokenBalanceRaw <= 0n) {
           throw new Error(`No ${activeInputSymbol} balance is available`);
         }
         setAmount(
           formatAmountForInput(
             balances.tokenBalanceRaw,
-            side === "buy" ? 18 : tokenDecimals,
+            tokenDecimals,
           ),
         );
         return;
@@ -511,9 +506,7 @@ export function TokenTrade({
         symbol={symbol}
         tokenDecimals={tokenDecimals}
         tokenPriceEth={tokenPriceEth}
-        tokenPriceQuote={tokenPriceQuote}
         launchModel={launchModel}
-        quoteAssetSymbol={quoteAssetSymbol}
         totalSwapFeeBps={activeSwapFeeBps}
         pending={pending}
         error={error}
@@ -568,7 +561,20 @@ export function TokenTrade({
           <label htmlFor={amountInputId}>
             {side === "buy" ? "You pay" : "You sell"}
           </label>
-          <span className={styles.balance}>{displayBalance}</span>
+          <span className={styles.balanceRow}>
+            <span className={styles.balance}>{displayBalance}</span>
+            <button
+              className={styles.maxButton}
+              type="button"
+              disabled={maxPending || !owner}
+              aria-label={`Use maximum ${
+                side === "buy" ? "ETH" : symbol
+              } balance`}
+              onClick={() => void applyMaximumBalance()}
+            >
+              {maxPending ? "Loading" : "Max"}
+            </button>
+          </span>
         </div>
         <div className={styles.amountInputRow}>
           <input
@@ -576,37 +582,20 @@ export function TokenTrade({
             id={amountInputId}
             inputMode="decimal"
             autoComplete="off"
+            aria-invalid={Boolean(error)}
             value={amount}
             onChange={(event) => {
               setAmount(event.target.value);
+              if (error) setError("");
             }}
             placeholder="0"
           />
           <span className={styles.asset}>
-            {side === "buy"
-              ? stockPaired
-                ? quoteAssetSymbol ?? "Quote"
-                : "ETH"
-              : `$${symbol}`}
+            {side === "buy" ? "ETH" : `$${symbol}`}
           </span>
         </div>
         <div className={styles.amountMeta}>
-          <span>{approximateUsd || "\u00A0"}</span>
-          <button
-            className={styles.maxButton}
-            type="button"
-            disabled={maxPending || !owner}
-            aria-label={`Use maximum ${
-              side === "buy"
-                ? stockPaired
-                  ? quoteAssetSymbol ?? "quote asset"
-                  : "ETH"
-                : symbol
-            } balance`}
-            onClick={() => void applyMaximumBalance()}
-          >
-            {maxPending ? "Loading" : "Max"}
-          </button>
+          <span aria-live="polite">{approximateUsd || "\u00A0"}</span>
         </div>
       </div>
 
@@ -623,7 +612,7 @@ export function TokenTrade({
         <button
           className={styles.primaryAction}
           type={owner ? "submit" : "button"}
-          disabled={pending}
+          disabled={pending || Boolean(owner && !hasValidAmount)}
           onClick={owner ? undefined : onConnect}
         >
           {pending
@@ -642,9 +631,7 @@ export function PreparedTradeReview({
   symbol,
   tokenDecimals,
   tokenPriceEth,
-  tokenPriceQuote,
   launchModel,
-  quoteAssetSymbol,
   totalSwapFeeBps,
   pending,
   error,
@@ -655,23 +642,18 @@ export function PreparedTradeReview({
   symbol: string;
   tokenDecimals: number;
   tokenPriceEth?: string;
-  tokenPriceQuote?: string;
   launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
-  quoteAssetSymbol?: string;
   totalSwapFeeBps: number;
   pending: boolean;
   error?: string;
   onBack(): void;
   onConfirm(): void | Promise<void>;
 }) {
-  const stockPaired = launchModel === "stock-paired";
   const outputDecimals = prepared.side === "buy" ? tokenDecimals : 18;
   const outputUnit =
     prepared.side === "buy"
       ? symbol
-      : stockPaired
-        ? quoteAssetSymbol ?? "Quote"
-        : "ETH";
+      : "ETH";
   const expectedOutput = formatTradeAmount(
     prepared.quote.amountOut,
     outputDecimals,
@@ -684,17 +666,15 @@ export function PreparedTradeReview({
   );
   const approvalAmount = formatTradeAmount(
     prepared.quote.amountIn,
-    stockPaired && prepared.side === "buy" ? 18 : tokenDecimals,
-    stockPaired && prepared.side === "buy"
-      ? quoteAssetSymbol ?? "Quote"
-      : symbol,
+    tokenDecimals,
+    symbol,
   );
   const priceImpact = calculatePriceImpactPercent({
     side: prepared.side,
     amountIn: prepared.quote.amountIn,
     amountOut: prepared.quote.amountOut,
     tokenDecimals,
-    tokenPriceEth: stockPaired ? tokenPriceQuote : tokenPriceEth,
+    tokenPriceEth,
   });
   const approval =
     prepared.transaction.kind === "token-to-permit2"

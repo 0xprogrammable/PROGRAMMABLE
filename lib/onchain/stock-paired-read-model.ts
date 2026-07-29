@@ -33,6 +33,9 @@ import type {
 const launchedEvent = parseAbiItem(
   "event StockPairedTokenLaunched(address indexed deployer,address indexed token,address indexed quoteAsset,bytes32 poolId,address rewardVault,address positionRecipient,uint256 positionTokenId,bytes32 launchHash)",
 );
+const ethLaunchedEvent = parseAbiItem(
+  "event StockPairedEthTokenLaunched(address indexed creator,address indexed token,address indexed quoteAsset,uint256 initialBuyEthAmount,uint256 initialBuyQuoteAmount,uint256 initialBuyTokenAmount,bytes32 launchHash)",
+);
 const liquidityEvent = parseAbiItem(
   "event StockPairedLiquidityConfigured(address indexed token,address indexed quoteAsset,uint256 totalSupply,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,int24 initialTick,int24 tickLower,int24 tickUpper,uint24 lpFeePips,bytes32 launchHash)",
 );
@@ -51,6 +54,20 @@ type StockLaunch = {
   rewardVault: Address;
   positionRecipient: Address;
   positionTokenId: bigint;
+  launchHash: Hex;
+  blockNumber: bigint;
+  transactionHash: Hex;
+  transactionIndex: number;
+  logIndex: number;
+};
+
+type StockEthLaunch = {
+  creator: Address;
+  token: Address;
+  quoteAsset: Address;
+  initialBuyEthAmount: bigint;
+  initialBuyQuoteAmount: bigint;
+  initialBuyTokenAmount: bigint;
   launchHash: Hex;
   blockNumber: bigint;
   transactionHash: Hex;
@@ -160,6 +177,7 @@ async function readEvents(
   toBlock: bigint,
 ) {
   const launches: StockLaunch[] = [];
+  const ethLaunches: StockEthLaunch[] = [];
   const liquidities: StockLiquidity[] = [];
   const initialBuys: StockInitialBuy[] = [];
   const volumes = new Map<string, StockVolume>();
@@ -173,11 +191,18 @@ async function readEvents(
       toBlock,
       fromBlock + config.logBlockRange - 1n,
     );
-    const [launchLogs, liquidityLogs, initialBuyLogs, feeLogs] =
+    const [launchLogs, ethLaunchLogs, liquidityLogs, initialBuyLogs, feeLogs] =
       await Promise.all([
         client.getLogs({
           address: release.addresses.launcher,
           event: launchedEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: release.addresses.ethLaunchCoordinator,
+          event: ethLaunchedEvent,
           fromBlock,
           toBlock: rangeEnd,
           strict: true,
@@ -215,6 +240,22 @@ async function readEvents(
         rewardVault: getAddress(log.args.rewardVault),
         positionRecipient: getAddress(log.args.positionRecipient),
         positionTokenId: log.args.positionTokenId,
+        launchHash: log.args.launchHash,
+        blockNumber: log.blockNumber,
+        transactionHash: log.transactionHash,
+        transactionIndex: log.transactionIndex,
+        logIndex: log.logIndex,
+      });
+    }
+    for (const log of ethLaunchLogs) {
+      if (log.removed || log.blockNumber === null) continue;
+      ethLaunches.push({
+        creator: getAddress(log.args.creator),
+        token: getAddress(log.args.token),
+        quoteAsset: getAddress(log.args.quoteAsset),
+        initialBuyEthAmount: log.args.initialBuyEthAmount,
+        initialBuyQuoteAmount: log.args.initialBuyQuoteAmount,
+        initialBuyTokenAmount: log.args.initialBuyTokenAmount,
         launchHash: log.args.launchHash,
         blockNumber: log.blockNumber,
         transactionHash: log.transactionHash,
@@ -265,13 +306,14 @@ async function readEvents(
     }
   }
 
-  return { launches, liquidities, initialBuys, volumes };
+  return { launches, ethLaunches, liquidities, initialBuys, volumes };
 }
 
 function eventFingerprint(value: Awaited<ReturnType<typeof readEvents>>) {
   return JSON.stringify(
     {
       launches: value.launches,
+      ethLaunches: value.ethLaunches,
       liquidities: value.liquidities,
       initialBuys: value.initialBuys,
       volumes: [...value.volumes.entries()].sort(([left], [right]) =>
@@ -287,7 +329,8 @@ export function pairStockPairedLaunches(
 ) {
   if (
     events.launches.length !== events.liquidities.length ||
-    events.launches.length !== events.initialBuys.length
+    events.launches.length !== events.initialBuys.length ||
+    events.launches.length !== events.ethLaunches.length
   ) {
     throw new Error("Unpaired Stock-Paired launch evidence");
   }
@@ -323,12 +366,32 @@ export function pairStockPairedLaunches(
         sameHex(candidate.transactionHash, launch.transactionHash) &&
         candidate.blockNumber === launch.blockNumber,
     );
-    if (liquidity.length !== 1 || initialBuy.length !== 1) {
+    const ethLaunch = events.ethLaunches.filter(
+      (candidate) =>
+        sameHex(candidate.token, launch.token) &&
+        sameHex(candidate.quoteAsset, launch.quoteAsset) &&
+        sameHex(candidate.launchHash, launch.launchHash) &&
+        sameHex(candidate.transactionHash, launch.transactionHash) &&
+        candidate.blockNumber === launch.blockNumber,
+    );
+    if (
+      liquidity.length !== 1 ||
+      initialBuy.length !== 1 ||
+      ethLaunch.length !== 1 ||
+      ethLaunch[0].initialBuyQuoteAmount !== initialBuy[0].quoteAmount ||
+      ethLaunch[0].initialBuyTokenAmount !== initialBuy[0].tokenAmount ||
+      ethLaunch[0].initialBuyEthAmount <= 0n
+    ) {
       throw new Error(
         `Incomplete Stock-Paired launch provenance for ${launch.token}`,
       );
     }
-    return { launch, liquidity: liquidity[0], initialBuy: initialBuy[0] };
+    return {
+      launch,
+      ethLaunch: ethLaunch[0],
+      liquidity: liquidity[0],
+      initialBuy: initialBuy[0],
+    };
   });
 }
 
@@ -341,7 +404,7 @@ async function hydrateToken(
   timestamp: bigint,
   snapshotBlock: bigint,
 ): Promise<LauncherToken> {
-  const { launch, liquidity, initialBuy } = record;
+  const { launch, ethLaunch, liquidity, initialBuy } = record;
   const quote = getStockQuoteAsset(launch.quoteAsset);
   if (!quote) {
     throw new Error(`Unsupported quote asset in launch ${launch.token}`);
@@ -472,7 +535,8 @@ async function hydrateToken(
     liquidity.lpFeePips !== 0 ||
     liquidity.initialTick !== expectedInitialTick ||
     initialBuy.quoteAmount <= 0n ||
-    initialBuy.tokenAmount <= 0n
+    initialBuy.tokenAmount <= 0n ||
+    !sameHex(launch.deployer, release.addresses.ethLaunchCoordinator)
   ) {
     throw new Error(
       `Stock-Paired launch provenance mismatch for ${launch.token}`,
@@ -502,7 +566,7 @@ async function hydrateToken(
     tokenAddress: launch.token,
     hookAddress: release.addresses.feeHook,
     poolId: launch.poolId,
-    creatorAddress: launch.deployer,
+    creatorAddress: ethLaunch.creator,
     positionRecipient: launch.positionRecipient,
     positionTokenId: launch.positionTokenId.toString(),
     rewardVaultAddress: launch.rewardVault,
@@ -594,6 +658,13 @@ export async function readStockPairedExploreModel(
         release.runtimeCodeHashes.launcher,
         toBlock,
         "Stock-Paired launcher",
+      ),
+      assertRuntime(
+        candidate,
+        release.addresses.ethLaunchCoordinator,
+        release.runtimeCodeHashes.ethLaunchCoordinator,
+        toBlock,
+        "Stock-Paired ETH launch coordinator",
       ),
       assertRuntime(
         candidate,

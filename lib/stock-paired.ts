@@ -15,6 +15,7 @@ import {
 } from "./classic-v3";
 import {
   MEME_MIN_INITIAL_BUY_ETH,
+  MEME_MIN_INITIAL_BUY_WEI,
   type LaunchDraft,
 } from "./launch";
 import {
@@ -27,6 +28,9 @@ import {
 
 export const STOCK_PAIRED_MIN_INITIAL_BUY_RAW = 10_000_000_000_000_000n;
 export const STOCK_PAIRED_MIN_INITIAL_BUY = "0.01";
+export const STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI = MEME_MIN_INITIAL_BUY_WEI;
+export const STOCK_PAIRED_MIN_INITIAL_BUY_ETH = MEME_MIN_INITIAL_BUY_ETH;
+export const STOCK_PAIRED_DEFAULT_INITIAL_BUY_ETH = "0.01";
 export const STOCK_PAIRED_TOTAL_SWAP_FEE_BPS = 100;
 export const STOCK_PAIRED_CREATOR_FEE_BPS = 90;
 export const STOCK_PAIRED_PROGRAMMABLE_FEE_BPS = 10;
@@ -93,6 +97,19 @@ function loadStockQuoteAssets(): readonly StockQuoteAsset[] {
 }
 
 export const STOCK_QUOTE_ASSETS = loadStockQuoteAssets();
+const STOCK_PAIRED_ETH_QUOTE_SYMBOLS = new Set([
+  "NVDAon",
+  "SPYon",
+  "GOOGLon",
+  "SLVon",
+  "TSLAon",
+  "AAPLon",
+]);
+export const STOCK_PAIRED_ETH_QUOTE_ASSETS = Object.freeze(
+  STOCK_QUOTE_ASSETS.filter((asset) =>
+    STOCK_PAIRED_ETH_QUOTE_SYMBOLS.has(asset.symbol),
+  ),
+);
 
 export function getStockQuoteAsset(value: string) {
   if (!isAddress(value.trim())) return null;
@@ -104,7 +121,14 @@ export function getStockQuoteAsset(value: string) {
   );
 }
 
-export function parseStockInitialBuyAmount(value: string) {
+export function getStockPairedEthQuoteAsset(value: string) {
+  const asset = getStockQuoteAsset(value);
+  return asset && STOCK_PAIRED_ETH_QUOTE_SYMBOLS.has(asset.symbol)
+    ? asset
+    : null;
+}
+
+export function parseStockInitialBuyEthAmount(value: string) {
   const normalized = value.trim();
   if (
     normalized.length === 0 ||
@@ -115,7 +139,7 @@ export function parseStockInitialBuyAmount(value: string) {
   }
   try {
     const amount = parseUnits(normalized, 18);
-    return amount >= STOCK_PAIRED_MIN_INITIAL_BUY_RAW ? amount : null;
+    return amount >= STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI ? amount : null;
   } catch {
     return null;
   }
@@ -123,7 +147,7 @@ export function parseStockInitialBuyAmount(value: string) {
 
 export type StockPairedLaunchConfiguration = {
   quoteAsset: StockQuoteAsset;
-  initialBuyQuoteAmount: bigint;
+  initialBuyEthAmount: bigint;
   rewards: ClassicV3RewardConfiguration;
   totalSwapFeeBps: typeof STOCK_PAIRED_TOTAL_SWAP_FEE_BPS;
   creatorFeeBps: typeof STOCK_PAIRED_CREATOR_FEE_BPS;
@@ -145,22 +169,24 @@ export function validateStockPairedLaunchDraft(
     initialBuyEth: MEME_MIN_INITIAL_BUY_ETH,
   });
 
-  const quoteAsset = getStockQuoteAsset(draft.stockQuoteAsset);
+  const quoteAsset = getStockPairedEthQuoteAsset(draft.stockQuoteAsset);
   if (!quoteAsset) {
-    throw new LaunchInputError("Choose one of the supported quote assets");
-  }
-  const initialBuyQuoteAmount = parseStockInitialBuyAmount(
-    draft.initialBuyQuoteAmount,
-  );
-  if (initialBuyQuoteAmount === null) {
     throw new LaunchInputError(
-      `Enter an Initial Buy of at least ${STOCK_PAIRED_MIN_INITIAL_BUY} ${quoteAsset.symbol}`,
+      "Choose one of the supported ETH-routed quote assets",
+    );
+  }
+  const initialBuyEthAmount = parseStockInitialBuyEthAmount(
+    draft.initialBuyEth,
+  );
+  if (initialBuyEthAmount === null) {
+    throw new LaunchInputError(
+      `Enter an Initial Buy of at least ${STOCK_PAIRED_MIN_INITIAL_BUY_ETH} ETH`,
     );
   }
 
   return {
     quoteAsset,
-    initialBuyQuoteAmount,
+    initialBuyEthAmount,
     rewards: validateRewardConfiguration(draft, launcherAccount),
     totalSwapFeeBps: STOCK_PAIRED_TOTAL_SWAP_FEE_BPS,
     creatorFeeBps: STOCK_PAIRED_CREATOR_FEE_BPS,
@@ -181,6 +207,19 @@ export const stockPairedLaunchAbi = parseAbi([
   "function feeSplitVaultFactory() view returns (address)",
   "function positionForwarderFactory() view returns (address)",
   "function MIN_INITIAL_BUY_QUOTE_AMOUNT() view returns (uint256)",
+]);
+
+export const stockPairedEthLaunchCoordinatorAbi = parseAbi([
+  "function launch((uint256 minimumQuoteAmountOut,uint256 minimumInitialTokenOut,uint256 deadline,(string name,string symbol,address quoteAsset,uint256 initialBuyQuoteAmount,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps) launch) parameters) payable returns ((address token,address quoteAsset,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyQuoteAmount,uint256 initialBuyTokenAmount,int24 initialTick,bool quoteIsCurrency0,bytes32 poolId,bytes32 quoteConfigurationHash,bytes32 launchHash) result)",
+  "function predictTokenAddress(string name,string symbol,address creator,bytes32 creatorSalt) view returns (address token,bytes32 effectiveGraffiti)",
+  "function launcher() view returns (address)",
+  "function v3SwapRouter() view returns (address)",
+  "function v3Factory() view returns (address)",
+  "function weth() view returns (address)",
+  "function usdc() view returns (address)",
+  "function stockPoolFee(address quoteAsset) view returns (uint24)",
+  "function routePath(address quoteAsset) view returns (bytes path)",
+  "event StockPairedEthTokenLaunched(address indexed creator,address indexed token,address indexed quoteAsset,uint256 initialBuyEthAmount,uint256 initialBuyQuoteAmount,uint256 initialBuyTokenAmount,bytes32 launchHash)",
 ]);
 
 export const stockPairedHookAbi = parseAbi([
@@ -209,12 +248,6 @@ export const stockQuoteRegistryAbi = parseAbi([
   "function assertAssetReady(address asset) view returns (bytes32 assetConfigurationHash)",
 ]);
 
-export const stockQuoteTokenAbi = parseAbi([
-  "function balanceOf(address owner) view returns (uint256)",
-  "function allowance(address owner,address spender) view returns (uint256)",
-  "function approve(address spender,uint256 amount) returns (bool)",
-]);
-
 export const stockFeeSplitVaultAbi = parseAbi([
   "function feeHook() view returns (address)",
   "function poolId() view returns (bytes32)",
@@ -236,53 +269,56 @@ export const stockFeeSplitVaultFactoryAbi = parseAbi([
   "function isFactoryVault(address vault) view returns (bool)",
 ]);
 
-export function encodeStockPairedLaunch(
+export function encodeStockPairedEthLaunch(
   draft: LaunchDraft,
   creatorSalt: Hex,
   launcherAccount: string,
+  envelope: {
+    minimumQuoteAmountOut: bigint;
+    minimumInitialTokenOut: bigint;
+    deadline: bigint;
+  },
 ) {
-  const configuration = validateStockPairedLaunchDraft(
-    draft,
-    launcherAccount,
-  );
+  const configuration = validateStockPairedLaunchDraft(draft, launcherAccount);
+  if (
+    envelope.minimumQuoteAmountOut <= 0n ||
+    envelope.minimumInitialTokenOut <= 0n ||
+    envelope.deadline <= 0n
+  ) {
+    throw new LaunchInputError("The Stock-Paired launch protection is invalid");
+  }
   return encodeFunctionData({
-    abi: stockPairedLaunchAbi,
+    abi: stockPairedEthLaunchCoordinatorAbi,
     functionName: "launch",
     args: [
       {
-        name: draft.tokenName.trim(),
-        symbol: draft.tokenSymbol.trim(),
-        quoteAsset: configuration.quoteAsset.address,
-        initialBuyQuoteAmount: configuration.initialBuyQuoteAmount,
-        creatorSalt,
-        metadata: {
-          description: draft.tokenDescription.trim(),
-          website: normalizeOptionalHttpsUrl(
-            draft.tokenWebsite,
-            "the website",
-            MAX_METADATA_URL_BYTES,
-          ),
-          image: normalizeOptionalHttpsUrl(
-            draft.tokenImage,
-            "the token image URL",
-            MAX_METADATA_URL_BYTES,
-          ),
-          extraData: encodeMemeMetadataExtraData(draft),
+        minimumQuoteAmountOut: envelope.minimumQuoteAmountOut,
+        minimumInitialTokenOut: envelope.minimumInitialTokenOut,
+        deadline: envelope.deadline,
+        launch: {
+          name: draft.tokenName.trim(),
+          symbol: draft.tokenSymbol.trim(),
+          quoteAsset: configuration.quoteAsset.address,
+          initialBuyQuoteAmount: 0n,
+          creatorSalt,
+          metadata: {
+            description: draft.tokenDescription.trim(),
+            website: normalizeOptionalHttpsUrl(
+              draft.tokenWebsite,
+              "the website",
+              MAX_METADATA_URL_BYTES,
+            ),
+            image: normalizeOptionalHttpsUrl(
+              draft.tokenImage,
+              "the token image URL",
+              MAX_METADATA_URL_BYTES,
+            ),
+            extraData: encodeMemeMetadataExtraData(draft),
+          },
+          rewardBeneficiaries: configuration.rewards.beneficiaries,
+          rewardSharesBps: configuration.rewards.sharesBps,
         },
-        rewardBeneficiaries: configuration.rewards.beneficiaries,
-        rewardSharesBps: configuration.rewards.sharesBps,
       },
     ],
-  });
-}
-
-export function encodeStockQuoteApproval(
-  launcher: Address,
-  amount: bigint,
-) {
-  return encodeFunctionData({
-    abi: stockQuoteTokenAbi,
-    functionName: "approve",
-    args: [launcher, amount],
   });
 }

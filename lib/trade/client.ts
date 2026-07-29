@@ -28,6 +28,10 @@ import {
   type StockPairedTradeDeployment,
 } from "./stock-paired";
 import {
+  getStockPairedEthRouteRuntimeCodeHashes,
+  STOCK_PAIRED_NATIVE_ETH,
+} from "./stock-paired-route";
+import {
   parsePreparedTransaction,
   type PreparedTradeTransaction,
 } from "../prepared-transaction";
@@ -181,6 +185,8 @@ function stockPairedDeploymentForContext(input: {
     quoteAsset: input.quoteAsset,
     quoteAssetRuntimeCodeHash:
       release.issuerRuntime.tokenRuntimeCodeHash,
+    ethRouteRuntimeCodeHashes:
+      getStockPairedEthRouteRuntimeCodeHashes(input.quoteAsset),
     token: input.token,
     poolId: input.poolId,
     release,
@@ -329,7 +335,7 @@ export function validatePreparedTradeResponse(
   }
   const expectedInputAsset = isStockPaired
     ? context.side === "buy"
-      ? expectedQuoteAsset!
+      ? STOCK_PAIRED_NATIVE_ETH
       : expectedToken
     : context.side === "sell"
       ? expectedToken
@@ -459,7 +465,7 @@ export function validatePreparedTradeResponse(
     if (
       input.status !== "approval-required" ||
       input.approvalState !== transaction.kind ||
-      (!isStockPaired && context.side !== "sell")
+      context.side !== "sell"
     ) {
       throw new Error("The token approval state is inconsistent");
     }
@@ -481,7 +487,7 @@ export function validatePreparedTradeResponse(
     if (
       input.status !== "approval-required" ||
       input.approvalState !== transaction.kind ||
-      (!isStockPaired && context.side !== "sell")
+      context.side !== "sell"
     ) {
       throw new Error("The Permit2 approval state is inconsistent");
     }

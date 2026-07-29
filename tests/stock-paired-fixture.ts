@@ -7,6 +7,10 @@ import {
 
 import { STOCK_QUOTE_ASSETS } from "../lib/stock-paired";
 import type { VerifiedStockPairedRelease } from "../lib/stock-paired-release";
+import {
+  getStockPairedEthRoute,
+  getStockPairedEthRouteRuntimeCodeHashes,
+} from "../lib/trade/stock-paired-route";
 
 export const STOCK_TEST_ACCOUNT = getAddress(
   "0x1111111111111111111111111111111111111111",
@@ -36,6 +40,9 @@ const deployedAddresses = {
   ),
   launcher: getAddress(
     "0x8888888888888888888888888888888888888888",
+  ),
+  ethLaunchCoordinator: getAddress(
+    "0x9999999999999999999999999999999999999999",
   ),
   positionForwarderFactory: getAddress(
     "0x291a9ff1059d225d02B1659430804486404dB507",
@@ -70,6 +77,21 @@ const officialDependencies = {
   uerc20Factory: getAddress(
     "0x000000e200088D55C39a11F609E5F667729ad49b",
   ),
+  v3Factory: getAddress(
+    "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+  ),
+  v3SwapRouter: getAddress(
+    "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+  ),
+  v3Quoter: getAddress(
+    "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+  ),
+  weth: getAddress(
+    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  ),
+  usdc: getAddress(
+    "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  ),
 } as const;
 
 export function stockPairedReleaseFixture(): VerifiedStockPairedRelease {
@@ -77,6 +99,9 @@ export function stockPairedReleaseFixture(): VerifiedStockPairedRelease {
     chainId: 1,
     releaseCommit: "1".repeat(40),
     sourceCommitment: `0x${"12".repeat(32)}`,
+    ethCoordinatorReleaseCommit: "2".repeat(40),
+    ethCoordinatorSourceCommitment: `0x${"13".repeat(32)}`,
+    ethCoordinatorNonce: 52,
     startBlock: 100,
     addresses: { ...deployedAddresses },
     transactions: {
@@ -86,6 +111,7 @@ export function stockPairedReleaseFixture(): VerifiedStockPairedRelease {
       hookFactory: `0x${"24".repeat(32)}`,
       feeHook: `0x${"25".repeat(32)}`,
       launcher: `0x${"26".repeat(32)}`,
+      ethLaunchCoordinator: `0x${"27".repeat(32)}`,
     },
     runtimeCodeHashes: {
       quoteRegistry: STOCK_TEST_RUNTIME_HASH,
@@ -94,6 +120,7 @@ export function stockPairedReleaseFixture(): VerifiedStockPairedRelease {
       hookFactory: STOCK_TEST_RUNTIME_HASH,
       feeHook: STOCK_TEST_RUNTIME_HASH,
       launcher: STOCK_TEST_RUNTIME_HASH,
+      ethLaunchCoordinator: STOCK_TEST_RUNTIME_HASH,
       positionForwarderFactory: STOCK_TEST_RUNTIME_HASH,
     },
     officialDependencies: Object.fromEntries(
@@ -125,6 +152,10 @@ export function stockPairedManifestFixture() {
     chainId: 1,
     releaseCommit: release.releaseCommit,
     sourceCommitment: release.sourceCommitment,
+    ethCoordinatorReleaseCommit: release.ethCoordinatorReleaseCommit,
+    ethCoordinatorSourceCommitment:
+      release.ethCoordinatorSourceCommitment,
+    ethCoordinatorNonce: release.ethCoordinatorNonce,
     startingNonce: 46,
     startBlock: release.startBlock,
     addresses: release.addresses,
@@ -144,6 +175,7 @@ export function stockPairedManifestFixture() {
       hookFactory: "verified",
       feeHook: "verified",
       launcher: "verified",
+      ethLaunchCoordinator: "verified",
     },
     lifecycleEvidence: {
       status: "verified-current-release",
@@ -151,10 +183,13 @@ export function stockPairedManifestFixture() {
       independentRpcCount: 2,
       deploymentTransactionsVerified: true,
       runtimeBindingsVerified: true,
+      ethCoordinatorDeploymentVerified: true,
       canaryLaunchTransaction: `0x${"31".repeat(32)}`,
       canaryQuoteAsset: STOCK_QUOTE_ASSETS[0].address,
       positionLockVerified: true,
       buyAndSellVerified: true,
+      ethFirstLaunchVerified: true,
+      ethBuyAndSellVerified: true,
       creatorClaimVerified: true,
       launcherClaimVerified: true,
     },
@@ -167,6 +202,9 @@ export function stockTradeDeployment(input?: {
   poolId?: Hex;
 }) {
   const release = stockPairedReleaseFixture();
+  const quoteAsset = input?.quoteAsset ?? STOCK_QUOTE_ASSETS[0].address;
+  const route = getStockPairedEthRoute(quoteAsset);
+  const routeRuntime = getStockPairedEthRouteRuntimeCodeHashes(quoteAsset);
   return {
     chainId: 1 as const,
     poolManager: release.officialDependencies.poolManager.address,
@@ -182,8 +220,22 @@ export function stockTradeDeployment(input?: {
     hookRuntimeCodeHash: STOCK_TEST_RUNTIME_HASH,
     quoteRegistry: release.addresses.quoteRegistry,
     quoteRegistryRuntimeCodeHash: STOCK_TEST_RUNTIME_HASH,
-    quoteAsset: input?.quoteAsset ?? STOCK_QUOTE_ASSETS[0].address,
+    quoteAsset,
     quoteAssetRuntimeCodeHash: STOCK_TEST_RUNTIME_HASH,
+    ethRouteRuntimeCodeHashes: {
+      ...routeRuntime,
+      v3Factory: STOCK_TEST_RUNTIME_HASH,
+      v3SwapRouter: STOCK_TEST_RUNTIME_HASH,
+      v3Quoter: STOCK_TEST_RUNTIME_HASH,
+      weth: STOCK_TEST_RUNTIME_HASH,
+      usdc: STOCK_TEST_RUNTIME_HASH,
+      pools: Object.fromEntries(
+        route.buyHops.map((hop) => [
+          hop.pool.toLowerCase(),
+          STOCK_TEST_RUNTIME_HASH,
+        ]),
+      ),
+    },
     token: input?.token ?? STOCK_TEST_TOKEN,
     poolId: input?.poolId ?? STOCK_TEST_POOL_ID,
     release,
