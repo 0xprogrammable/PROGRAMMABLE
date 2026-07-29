@@ -98,6 +98,66 @@ export const stockPairedEthCanaryCoordinatorEvent = parseAbiItem(
   "event StockPairedEthTokenLaunched(address indexed creator,address indexed token,address indexed quoteAsset,uint256 initialBuyEthAmount,uint256 initialBuyQuoteAmount,uint256 initialBuyTokenAmount,bytes32 launchHash)",
 );
 
+export function assertStockPairedEthCanaryRevalidation({
+  prepared,
+  nonceStates,
+  simulations,
+  baseFeePerGas,
+}) {
+  if (
+    !prepared?.request ||
+    !Array.isArray(nonceStates) ||
+    nonceStates.length !== 2 ||
+    !Array.isArray(simulations) ||
+    simulations.length !== 2
+  ) {
+    throw new Error("The ETH canary revalidation input is incomplete");
+  }
+  const confirmed = nonceStates.map((state) => BigInt(state.confirmed));
+  const pending = nonceStates.map((state) => BigInt(state.pending));
+  if (
+    confirmed[0] !== confirmed[1] ||
+    pending[0] !== pending[1] ||
+    confirmed.some((nonce, index) => nonce !== pending[index]) ||
+    confirmed[0] !== BigInt(prepared.request.nonce)
+  ) {
+    throw new Error("The ETH canary nonce changed");
+  }
+  if (
+    simulations[0].callResult.toLowerCase() !==
+    simulations[1].callResult.toLowerCase()
+  ) {
+    throw new Error("Independent ETH canary simulations disagree");
+  }
+  const estimates = simulations.map((simulation) =>
+    BigInt(simulation.estimatedGas),
+  );
+  const highGas = estimates[0] > estimates[1] ? estimates[0] : estimates[1];
+  const lowGas = estimates[0] < estimates[1] ? estimates[0] : estimates[1];
+  if (
+    highGas * 100n > lowGas * 105n ||
+    highGas > BigInt(prepared.request.gas)
+  ) {
+    throw new Error("The ETH canary gas envelope changed");
+  }
+  const maxFeePerGas = BigInt(prepared.request.maxFeePerGas);
+  const maxPriorityFeePerGas = BigInt(prepared.request.maxPriorityFeePerGas);
+  if (maxFeePerGas < BigInt(baseFeePerGas) + maxPriorityFeePerGas) {
+    throw new Error("The ETH canary fee cap is stale");
+  }
+  const maximumDebit =
+    BigInt(prepared.request.value) +
+    BigInt(prepared.request.gas) * maxFeePerGas;
+  if (maximumDebit !== BigInt(prepared.maximumDebit)) {
+    throw new Error("The ETH canary maximum debit changed");
+  }
+  const balances = nonceStates.map((state) => BigInt(state.balance));
+  if (balances.some((balance) => balance < maximumDebit)) {
+    throw new Error("The ETH canary account balance is insufficient");
+  }
+  return true;
+}
+
 function validAddress(value) {
   try {
     return getAddress(value);

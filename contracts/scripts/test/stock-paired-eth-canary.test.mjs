@@ -11,6 +11,7 @@ import {
   STOCK_PAIRED_ETH_CANARY_ASSET,
   STOCK_PAIRED_ETH_CANARY_INITIAL_BUY,
   assertStockPairedEthCanaryRouteSafety,
+  assertStockPairedEthCanaryRevalidation,
   buildStockPairedEthCanaryIdentity,
   buildStockPairedEthCanaryLaunch,
   buildStockPairedEthCanarySwap,
@@ -31,8 +32,7 @@ const launcher = "0x195750f33caD5eF2DF857a53226B421297A1e79e";
 const hook = "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc";
 const token = "0x1234567890123456789012345678901234567890";
 const rewardVault = "0x2234567890123456789012345678901234567890";
-const positionRecipient =
-  "0x3234567890123456789012345678901234567890";
+const positionRecipient = "0x3234567890123456789012345678901234567890";
 const poolId = `0x${"44".repeat(32)}`;
 const launchHash = `0x${"55".repeat(32)}`;
 
@@ -63,8 +63,12 @@ test("uses exact WETH USDC stock paths in both directions", () => {
   const buy = stockPairedEthCanaryV3Path("buy").toLowerCase();
   const sell = stockPairedEthCanaryV3Path("sell").toLowerCase();
   assert.ok(buy.startsWith("0xc02aaa39"));
-  assert.ok(buy.endsWith(STOCK_PAIRED_ETH_CANARY_ASSET.address.slice(2).toLowerCase()));
-  assert.ok(sell.startsWith(STOCK_PAIRED_ETH_CANARY_ASSET.address.toLowerCase()));
+  assert.ok(
+    buy.endsWith(STOCK_PAIRED_ETH_CANARY_ASSET.address.slice(2).toLowerCase()),
+  );
+  assert.ok(
+    sell.startsWith(STOCK_PAIRED_ETH_CANARY_ASSET.address.toLowerCase()),
+  );
   assert.ok(sell.endsWith("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"));
 });
 
@@ -93,13 +97,60 @@ test("encodes atomic ETH buy and token sell through Universal Router 2.1.1", () 
 });
 
 test("rejects an external route below the reviewed round-trip floor", () => {
-  assert.equal(
-    assertStockPairedEthCanaryRouteSafety(1_000n, 900n),
-    true,
-  );
+  assert.equal(assertStockPairedEthCanaryRouteSafety(1_000n, 900n), true);
   assert.throws(
     () => assertStockPairedEthCanaryRouteSafety(1_000n, 899n),
     /too thin/,
+  );
+});
+
+test("revalidates the exact reviewed request without rebuilding its deadline", () => {
+  const prepared = {
+    maximumDebit: "1100000",
+    request: {
+      nonce: "0x4",
+      value: "0x186a0",
+      gas: "0x186a0",
+      maxFeePerGas: "0xa",
+      maxPriorityFeePerGas: "0x1",
+    },
+  };
+  const nonceStates = [
+    { confirmed: "0x4", pending: "0x4", balance: "0x200000" },
+    { confirmed: "0x4", pending: "0x4", balance: "0x200000" },
+  ];
+  const simulations = [
+    { callResult: "0x01", estimatedGas: "0x15f90" },
+    { callResult: "0x01", estimatedGas: "0x16120" },
+  ];
+  assert.equal(
+    assertStockPairedEthCanaryRevalidation({
+      prepared,
+      nonceStates,
+      simulations,
+      baseFeePerGas: 8n,
+    }),
+    true,
+  );
+  assert.throws(
+    () =>
+      assertStockPairedEthCanaryRevalidation({
+        prepared,
+        nonceStates,
+        simulations,
+        baseFeePerGas: 10n,
+      }),
+    /fee cap/,
+  );
+  assert.throws(
+    () =>
+      assertStockPairedEthCanaryRevalidation({
+        prepared,
+        nonceStates: [nonceStates[0], { ...nonceStates[1], pending: "0x5" }],
+        simulations,
+        baseFeePerGas: 8n,
+      }),
+    /nonce/,
   );
 });
 
@@ -160,7 +211,10 @@ test("correlates coordinator and base-launcher receipt events", () => {
     { coordinator, launcher },
   );
   assert.equal(parsed.token, token);
-  assert.equal(parsed.initialBuyEthAmount, STOCK_PAIRED_ETH_CANARY_INITIAL_BUY.toString());
+  assert.equal(
+    parsed.initialBuyEthAmount,
+    STOCK_PAIRED_ETH_CANARY_INITIAL_BUY.toString(),
+  );
   assert.equal(parsed.initialBuyQuoteAmount, "20");
   assert.equal(parsed.initialBuyTokenAmount, "30");
 });
