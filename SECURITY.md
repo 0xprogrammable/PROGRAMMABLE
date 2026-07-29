@@ -6,6 +6,10 @@ Classic is the only available launch model. Its current Ethereum release has uni
 regression and Mainnet-fork coverage. All seven release contracts are Etherscan exact matches and Sourcify matches.
 Classic has not received an independent smart-contract audit or public security contest.
 
+Stock-Paired is a deployed candidate, not an available launch model. Its lifecycle canary passed on Mainnet and all
+seven contracts have Sourcify matches. One contract has an Etherscan Exact Match; the other six currently have Similar
+Matches. Stock-Paired also has no independent audit or public security contest.
+
 These records are evidence, not a safety guarantee.
 
 | Record | Scope |
@@ -13,6 +17,7 @@ These records are evidence, not a safety guarantee.
 | [Classic security properties](docs/security/CLASSIC_PROPERTIES.md) | Trust boundaries, permissions, accounting and invariant evidence |
 | [Classic Slither review](docs/security/SLITHER_CLASSIC_V3.md) | Static-analysis findings and manual dispositions |
 | [Classic release](releases/classic-v3/RELEASE.md) | Version-bound source, tests and Mainnet lifecycle evidence |
+| [Stock-Paired candidate properties](docs/security/STOCK_PAIRED_PROPERTIES.md) | Quote-asset accounting, issuer controls and remaining release gates |
 | [Operations](docs/OPERATIONS.md) | Automated checks, monitoring status and incident response |
 | [Independent reviews](audits/README.md) | Published external reports, currently none |
 | [Ethereum deployment](deployments/ethereum.json) | Addresses, transactions, runtime hashes and verification status |

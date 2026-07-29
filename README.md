@@ -132,6 +132,7 @@ contest.
 | --- | --- |
 | Current security status | [`SECURITY.md`](SECURITY.md) |
 | Classic trust boundaries and invariants | [`docs/security/CLASSIC_PROPERTIES.md`](docs/security/CLASSIC_PROPERTIES.md) |
+| Stock-Paired candidate properties and gates | [`docs/security/STOCK_PAIRED_PROPERTIES.md`](docs/security/STOCK_PAIRED_PROPERTIES.md) |
 | Automated checks and incident process | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
 | Independent review archive | [`audits/`](audits/) |
 
