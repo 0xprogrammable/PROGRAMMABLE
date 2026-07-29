@@ -880,16 +880,25 @@ function assertManifest(manifest) {
     "launcher",
     "ethLaunchCoordinator",
   ];
+  const sourceStatus = manifest?.sourceVerification?.status;
+  const coordinatorSourceStatus =
+    manifest?.sourceVerification?.ethLaunchCoordinator?.status;
+  const sourceVerified =
+    sourceStatus === "verified" ||
+    sourceStatus === "sourcify-verified-etherscan-pending";
+  const coordinatorSourceVerified =
+    coordinatorSourceStatus === "verified" ||
+    coordinatorSourceStatus === "sourcify-verified";
   if (
     manifest?.chainId !== 1 ||
     manifest?.ethCoordinatorReleaseCommit !== coordinatorReleaseCommit ||
-    manifest?.sourceVerification?.status !== "verified" ||
+    !sourceVerified ||
     requiredRuntimeFields.some(
       (field) =>
         !/^0x[0-9a-f]{40}$/i.test(manifest.addresses?.[field] ?? "") ||
         !/^0x[0-9a-f]{64}$/i.test(manifest.runtimeCodeHashes?.[field] ?? ""),
     ) ||
-    manifest.sourceVerification?.ethLaunchCoordinator?.status !== "verified"
+    !coordinatorSourceVerified
   ) {
     throw new Error(
       "Deploy and source-verify the exact ETH coordinator release first",
