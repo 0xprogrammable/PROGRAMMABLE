@@ -21,6 +21,9 @@ interface ILiquidityGrowthFeeOracleHookV2 {
     function LP_FEE_PIPS() external view returns (uint24);
     function TICK_SPACING() external view returns (int24);
     function COMPOUND_DOMAIN_TAG() external view returns (bytes32);
+    function BOOTSTRAP_DOMAIN_TAG() external view returns (bytes32);
+    function LAUNCH_BUY_DOMAIN_TAG() external view returns (bytes32);
+    function LIFECYCLE_FINALIZED() external view returns (uint8);
 
     function poolManager() external view returns (IPoolManager);
     function positionManager() external view returns (IPositionManager);
