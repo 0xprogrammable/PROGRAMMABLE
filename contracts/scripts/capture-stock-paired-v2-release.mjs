@@ -190,6 +190,7 @@ function sameObservation(left, right) {
 export function stockPairedV2CaptureGates(manifest) {
   const sourceVerified = stockPairedV2SourceVerificationComplete(
     manifest.sourceVerification,
+    manifest.addresses,
   );
   const publicLifecycleVerified =
     stockPairedV2PublicLifecycleVerified(manifest);
@@ -343,9 +344,15 @@ export async function main() {
       deployer: plan.deployer,
       treasury: plan.treasury,
       ...plan.addresses,
+      positionForwarderFactory:
+        STOCK_PAIRED_V2_DEPENDENCIES.positionForwarderFactory.address,
     },
     transactions,
-    runtimeCodeHashes,
+    runtimeCodeHashes: {
+      ...runtimeCodeHashes,
+      positionForwarderFactory:
+        STOCK_PAIRED_V2_DEPENDENCIES.positionForwarderFactory.runtimeCodeHash,
+    },
     ...capturedEvidence,
   };
   const report = {

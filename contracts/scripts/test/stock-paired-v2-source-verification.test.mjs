@@ -14,7 +14,9 @@ import {
   assertStockPairedV2StandardJson,
   stockPairedV2ForgeArguments,
   stockPairedV2PublicLifecycleVerified,
+  stockPairedV2EtherscanReadable,
   stockPairedV2SourceRecords,
+  stockPairedV2SourceVerificationComplete,
   stockPairedV2VerificationEnvironment,
 } from "../stock-paired-v2-source-verification-core.mjs";
 import {
@@ -23,6 +25,7 @@ import {
 } from "../capture-stock-paired-v2-release.mjs";
 import {
   assertStockPairedV2SourceInput,
+  buildStockPairedV2EtherscanRecord,
   buildStockPairedV2SourceCapture,
   etherscanForSourcifyOnlyCapture,
 } from "../verify-stock-paired-v2-sources.mjs";
@@ -64,22 +67,51 @@ const SOURCE_FIELDS = Object.freeze([
   "ethLaunchCoordinator",
 ]);
 
-function completeSourceVerification() {
+function etherscanCodeUrl(address) {
+  return `https://etherscan.io/address/${address}#code`;
+}
+
+function sourcifyContractUrl(address) {
+  return `https://sourcify.dev/server/v2/contract/1/${address}`;
+}
+
+function similarMatchAddress(index) {
+  return `0x${(index + 1).toString(16).padStart(40, "0")}`;
+}
+
+function completeSourceVerification({ allSimilar = false } = {}) {
   return {
     status: "verified",
     ...Object.fromEntries(
-      SOURCE_FIELDS.map((field) => [
-        field,
-        {
-          status: "verified",
-          etherscan: { status: "exact-match" },
-          sourcify: {
-            status: "match",
-            creationMatch: "match",
-            runtimeMatch: "match",
+      SOURCE_FIELDS.map((field, index) => {
+        const address = plan.addresses[field];
+        const exact = index === 0 && !allSimilar;
+        const matchedAddress = similarMatchAddress(index);
+        return [
+          field,
+          {
+            status: "verified",
+            address,
+            etherscan: exact
+              ? {
+                  status: "exact-match",
+                  url: etherscanCodeUrl(address),
+                }
+              : {
+                  status: "similar-match",
+                  matchedAddress,
+                  url: etherscanCodeUrl(address),
+                  matchedUrl: etherscanCodeUrl(matchedAddress),
+                },
+            sourcify: {
+              status: "match",
+              creationMatch: "match",
+              runtimeMatch: "match",
+              url: sourcifyContractUrl(address),
+            },
           },
-        },
-      ]),
+        ];
+      }),
     ),
   };
 }
@@ -370,11 +402,26 @@ test("keeps Sourcify-only capture truthful and preserves lifecycle evidence", ()
 });
 
 test("Sourcify-only capture never downgrades exact Etherscan evidence", () => {
+  const address = plan.addresses.quoteRegistry;
   const exact = {
     status: "exact-match",
-    url: "https://etherscan.io/address/0x1#code",
+    url: etherscanCodeUrl(address),
   };
-  assert.equal(etherscanForSourcifyOnlyCapture({ etherscan: exact }), exact);
+  assert.equal(
+    etherscanForSourcifyOnlyCapture({ address, etherscan: exact }),
+    exact,
+  );
+  const matchedAddress = similarMatchAddress(1);
+  const similar = {
+    status: "similar-match",
+    matchedAddress,
+    url: etherscanCodeUrl(address),
+    matchedUrl: etherscanCodeUrl(matchedAddress),
+  };
+  assert.equal(
+    etherscanForSourcifyOnlyCapture({ address, etherscan: similar }),
+    similar,
+  );
   assert.deepEqual(etherscanForSourcifyOnlyCapture(null), {
     status: "pending",
     url: null,
@@ -382,7 +429,10 @@ test("Sourcify-only capture never downgrades exact Etherscan evidence", () => {
 
   const existing = completeSourceVerification();
   const updated = buildStockPairedV2SourceCapture(
-    { lifecycleEvidence: { status: "pending" } },
+    {
+      addresses: plan.addresses,
+      lifecycleEvidence: { status: "pending" },
+    },
     existing,
   );
   assert.equal(updated.sourceVerification, existing);
@@ -394,6 +444,7 @@ test("Sourcify-only capture never downgrades exact Etherscan evidence", () => {
 
 test("requires both source and lifecycle gates and preserves partial evidence", () => {
   const neither = {
+    addresses: plan.addresses,
     sourceVerification: { status: "pending", retainedSourceField: "source" },
     lifecycleEvidence: {
       status: "pending",
@@ -435,11 +486,198 @@ test("requires both source and lifecycle gates and preserves partial evidence", 
   );
 
   const complete = stockPairedV2CaptureGates({
+    addresses: plan.addresses,
     sourceVerification: completeSourceVerification(),
     lifecycleEvidence: completeLifecycleEvidence(),
   });
   assert.equal(complete.releaseEligible, true);
   assert.equal(complete.status, "deployment-source-and-lifecycle-verified");
+});
+
+test("requires seven exact Sourcify matches and truthful readable Etherscan records", () => {
+  const complete = completeSourceVerification();
+  assert.equal(
+    stockPairedV2SourceVerificationComplete(complete, plan.addresses),
+    true,
+  );
+  assert.equal(
+    SOURCE_FIELDS.filter(
+      (field) => complete[field].etherscan.status === "exact-match",
+    ).length,
+    1,
+  );
+  assert.equal(
+    SOURCE_FIELDS.filter(
+      (field) => complete[field].etherscan.status === "similar-match",
+    ).length,
+    6,
+  );
+  for (const field of SOURCE_FIELDS) {
+    assert.equal(
+      stockPairedV2EtherscanReadable(
+        complete[field].etherscan,
+        plan.addresses[field],
+      ),
+      true,
+    );
+    assert.equal(complete[field].sourcify.creationMatch, "match");
+    assert.equal(complete[field].sourcify.runtimeMatch, "match");
+  }
+});
+
+test("rejects missing, invalid, self-referential, or mismatched similar-match evidence", () => {
+  const cases = [
+    [
+      "missing matched address",
+      (record) => delete record.etherscan.matchedAddress,
+    ],
+    [
+      "invalid matched address",
+      (record) => (record.etherscan.matchedAddress = "not-an-address"),
+    ],
+    [
+      "self-referential matched address",
+      (record) =>
+        (record.etherscan.matchedAddress = plan.addresses.positionPlanner),
+    ],
+    [
+      "wrong current URL",
+      (record) =>
+        (record.etherscan.url = etherscanCodeUrl(plan.addresses.quoteRegistry)),
+    ],
+    [
+      "wrong matched URL",
+      (record) =>
+        (record.etherscan.matchedUrl = etherscanCodeUrl(
+          similarMatchAddress(6),
+        )),
+    ],
+  ];
+  for (const [name, mutate] of cases) {
+    const candidate = completeSourceVerification();
+    mutate(candidate.positionPlanner);
+    assert.equal(
+      stockPairedV2SourceVerificationComplete(candidate, plan.addresses),
+      false,
+      name,
+    );
+  }
+});
+
+test("never treats similar evidence as exact and requires an actual exact Etherscan match", () => {
+  const mislabeled = completeSourceVerification();
+  mislabeled.positionPlanner.etherscan.status = "exact-match";
+  assert.equal(
+    stockPairedV2SourceVerificationComplete(mislabeled, plan.addresses),
+    false,
+  );
+
+  assert.equal(
+    stockPairedV2SourceVerificationComplete(
+      completeSourceVerification({ allSimilar: true }),
+      plan.addresses,
+    ),
+    false,
+  );
+
+  const twoExact = completeSourceVerification();
+  twoExact.positionPlanner.etherscan = {
+    status: "exact-match",
+    url: etherscanCodeUrl(plan.addresses.positionPlanner),
+  };
+  assert.equal(
+    stockPairedV2SourceVerificationComplete(twoExact, plan.addresses),
+    false,
+  );
+});
+
+test("rejects any missing Sourcify creation or runtime match", () => {
+  for (const field of ["creationMatch", "runtimeMatch"]) {
+    const candidate = completeSourceVerification();
+    delete candidate.feeHook.sourcify[field];
+    assert.equal(
+      stockPairedV2SourceVerificationComplete(candidate, plan.addresses),
+      false,
+      field,
+    );
+  }
+
+  const wrongUrl = completeSourceVerification();
+  wrongUrl.feeHook.sourcify.url = sourcifyContractUrl(
+    plan.addresses.quoteRegistry,
+  );
+  assert.equal(
+    stockPairedV2SourceVerificationComplete(wrongUrl, plan.addresses),
+    false,
+  );
+});
+
+test("returns false for a missing or invalid deployed source address", () => {
+  for (const address of [undefined, "not-an-address"]) {
+    const addresses = {
+      ...plan.addresses,
+      positionPlanner: address,
+    };
+    assert.equal(
+      stockPairedV2SourceVerificationComplete(
+        completeSourceVerification(),
+        addresses,
+      ),
+      false,
+    );
+  }
+});
+
+test("classifies Etherscan exact and similar records without conflating them", () => {
+  const record = stockPairedV2SourceRecords(plan)[0];
+  const local = standardJsonFixture(record);
+  const base = {
+    ContractName: record.contractName,
+    CompilerVersion: "v0.8.26+commit.8a97fa7a",
+    OptimizationUsed: "1",
+    Runs: "1000",
+    EVMVersion: "cancun",
+    Proxy: "0",
+    Implementation: "",
+    ConstructorArguments: record.encodedConstructorArguments.slice(2),
+    SourceCode: JSON.stringify(local),
+    SimilarMatch: "",
+  };
+
+  assert.deepEqual(buildStockPairedV2EtherscanRecord(record, local, base), {
+    status: "exact-match",
+    url: etherscanCodeUrl(record.address),
+  });
+
+  const matchedAddress = similarMatchAddress(6);
+  assert.deepEqual(
+    buildStockPairedV2EtherscanRecord(record, local, {
+      ...base,
+      SimilarMatch: matchedAddress,
+    }),
+    {
+      status: "similar-match",
+      matchedAddress,
+      url: etherscanCodeUrl(record.address),
+      matchedUrl: etherscanCodeUrl(matchedAddress),
+    },
+  );
+  assert.throws(
+    () =>
+      buildStockPairedV2EtherscanRecord(record, local, {
+        ...base,
+        SimilarMatch: record.address,
+      }),
+    /points to itself/,
+  );
+  assert.throws(
+    () =>
+      buildStockPairedV2EtherscanRecord(record, local, {
+        ...base,
+        SimilarMatch: "not-an-address",
+      }),
+    /similar match is invalid/,
+  );
 });
 
 test("accepts workflow commits only when deployed release files still match", () => {
