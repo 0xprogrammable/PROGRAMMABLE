@@ -38,6 +38,10 @@ import { validatePreparedDeepV3LaunchTransaction } from "@/lib/deep-v3-launch-va
 import { isConfiguredDeepV3ReleaseReady } from "@/lib/deep-v3-release";
 import { validatePreparedStockPairedLaunchTransaction } from "@/lib/stock-paired-launch-validation";
 import {
+  isStockPairedDevAccount,
+  isStockPairedLocalPreviewEnabled,
+} from "@/lib/stock-paired-access";
+import {
   STOCK_PAIRED_DEFAULT_INITIAL_BUY_ETH,
   getStockPairedEthQuoteAsset,
   parseStockInitialBuyEthAmount,
@@ -96,6 +100,7 @@ const emptyTokenImageState: TokenImageState = {
   status: "idle",
   message: "",
 };
+const stockPairedLocalPreview = isStockPairedLocalPreviewEnabled();
 
 export function findIndexedLaunch(
   value: unknown,
@@ -375,8 +380,12 @@ function LaunchBuilderFormView({
   initialDraft: LaunchDraft;
   onBackToModels: () => void;
 }) {
-  const { wallet, openWallet, readNativeBalance, sendTransaction } =
-    useWallet();
+  const {
+    wallet,
+    openWallet,
+    readNativeBalance,
+    sendTransaction,
+  } = useWallet();
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -403,6 +412,10 @@ function LaunchBuilderFormView({
       : model === "stock-paired"
         ? "Stock-Paired"
         : "Classic";
+  const stockPairedLaunchAllowed =
+    stockPairedLaunchAvailable &&
+    (stockPairedLocalPreview ||
+      isStockPairedDevAccount(wallet?.account));
 
   useEffect(() => {
     currentLaunchContext.current = { draft, wallet };
@@ -497,6 +510,9 @@ function LaunchBuilderFormView({
         validateDeepV3LaunchDraft(draft, wallet.account);
       } else if (model === "stock-paired") {
         if (!wallet) return "Connect a wallet to verify the launch";
+        if (!stockPairedLaunchAllowed) {
+          return "Stock-Paired is coming soon";
+        }
         validateStockPairedLaunchDraft(draft, wallet.account);
       } else if (model === "classic-v3") {
         if (!wallet) return "Connect a wallet to verify the reward setup";
@@ -889,14 +905,14 @@ function LaunchBuilderFormView({
                 (model === "classic-v3" && !classicV3LaunchAvailable) ||
                 (model === "deep" && !deepLaunchAvailable) ||
                 (model === "stock-paired" &&
-                  !stockPairedLaunchAvailable)
+                  !stockPairedLaunchAllowed)
               }
             >
               {model === "deep" && !deepLaunchAvailable
                 ? "Deep is being finalized"
                 : model === "stock-paired" &&
-                    !stockPairedLaunchAvailable
-                  ? "Stock-Paired is being finalized"
+                    !stockPairedLaunchAllowed
+                  ? "Stock-Paired is coming soon"
                 : model === "classic-v3" && !classicV3LaunchAvailable
                   ? "Classic is not deployed"
                   : launchPhase === "preparing"
@@ -1843,6 +1859,14 @@ function StockPairedStep({
   settingMaxBuy: boolean;
   onMaximumBuy: () => void;
 }) {
+  const displayNames: Record<string, string> = {
+    NVDAon: "NVIDIA",
+    SPYon: "S&P 500",
+    GOOGLon: "Alphabet",
+    SLVon: "Silver",
+    TSLAon: "Tesla",
+    AAPLon: "Apple",
+  };
   const selected =
     getStockPairedEthQuoteAsset(draft.stockQuoteAsset) ??
     STOCK_PAIRED_ETH_QUOTE_ASSETS[0];
@@ -1881,6 +1905,7 @@ function StockPairedStep({
         {STOCK_PAIRED_ETH_QUOTE_ASSETS.map((asset) => {
           const active =
             asset.address.toLowerCase() === selected.address.toLowerCase();
+          const displayName = displayNames[asset.symbol] ?? asset.underlying;
           return (
             <button
               className="stock-quote-option"
@@ -1888,13 +1913,23 @@ function StockPairedStep({
               type="button"
               role="radio"
               aria-checked={active}
+              aria-label={displayName}
               key={asset.address}
               onClick={() =>
                 updateStockDraft({ stockQuoteAsset: asset.address })
               }
             >
-              <strong>{asset.symbol}</strong>
-              <span>{asset.underlying}</span>
+              {/* The source is Ondo's official asset-logo CDN. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="stock-quote-logo"
+                src={`https://cdn.ondo.finance/tokens/logos/${asset.symbol.toLowerCase()}_160x160.png`}
+                alt=""
+                width={40}
+                height={40}
+                loading="lazy"
+              />
+              <span>{displayName}</span>
             </button>
           );
         })}
@@ -1945,9 +1980,6 @@ function StockPairedStep({
           underlying asset. Availability and transferability depend on Ondo and
           your jurisdiction.
         </p>
-        <a href={selected.ondoAssetUrl} target="_blank" rel="noreferrer">
-          View {selected.symbol}
-        </a>
       </div>
     </section>
   );

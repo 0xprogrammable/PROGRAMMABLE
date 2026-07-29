@@ -5,9 +5,14 @@ import { lazy, Suspense, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import launchExperience from "@/components/launch-experience.module.css";
+import { useWallet } from "@/components/wallet-provider";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { isConfiguredDeepV3ReleaseReady } from "@/lib/deep-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
+import {
+  isStockPairedDevAccount,
+  isStockPairedLocalPreviewEnabled,
+} from "@/lib/stock-paired-access";
 import { isConfiguredStockPairedReleaseReady } from "@/lib/stock-paired-release";
 import type { LaunchModel } from "@/lib/launch";
 
@@ -19,9 +24,9 @@ const classicV3LaunchAvailable =
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
 const deepLaunchAvailable =
   isConfiguredDeepV3ReleaseReady(launchEnvironment);
-const stockPairedLaunchAvailable =
-  (process.env.NODE_ENV !== "production" &&
-    process.env.NEXT_PUBLIC_STOCK_PAIRED_UI_PREVIEW === "true") ||
+const stockPairedLocalPreview = isStockPairedLocalPreviewEnabled();
+const stockPairedReleaseAvailable =
+  stockPairedLocalPreview ||
   isConfiguredStockPairedReleaseReady(launchEnvironment);
 
 function loadLaunchForm() {
@@ -67,14 +72,19 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
 }
 
 export function LaunchExperience() {
+  const { wallet } = useWallet();
   const [selectedModel, setSelectedModel] = useState<LaunchModel | null>(null);
+  const stockPairedAccess =
+    stockPairedReleaseAvailable &&
+    (stockPairedLocalPreview ||
+      isStockPairedDevAccount(wallet?.account));
 
   function chooseModel(candidate: LaunchModel) {
     const model = resolveImplementedLaunchModel(candidate);
     if (
       !model ||
       (model === "deep" && !deepLaunchAvailable) ||
-      (model === "stock-paired" && !stockPairedLaunchAvailable)
+      (model === "stock-paired" && !stockPairedAccess)
     ) {
       return;
     }
@@ -89,7 +99,12 @@ export function LaunchExperience() {
   }
 
   if (!selectedModel) {
-    return <LaunchModelPicker onChoose={chooseModel} />;
+    return (
+      <LaunchModelPicker
+        onChoose={chooseModel}
+        stockPairedAccess={stockPairedAccess}
+      />
+    );
   }
 
   return (
@@ -104,8 +119,10 @@ export function LaunchExperience() {
 
 export function LaunchModelPicker({
   onChoose,
+  stockPairedAccess = false,
 }: {
   onChoose: (model: LaunchModel) => void;
+  stockPairedAccess?: boolean;
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
@@ -126,7 +143,7 @@ export function LaunchModelPicker({
           className={`launch-model-card ${launchExperience.modelCard}`}
           data-launch-model-option="classic"
           type="button"
-          aria-describedby="launch-model-classic-description launch-model-classic-details"
+          aria-describedby="launch-model-classic-description"
           onPointerEnter={preloadAvailableForm}
           onFocus={preloadAvailableForm}
           onClick={() =>
@@ -162,18 +179,6 @@ export function LaunchModelPicker({
               familiar way to launch on Uniswap v4.
             </span>
             <span
-              className={`launch-model-details ${launchExperience.modelDetails}`}
-              id="launch-model-classic-details"
-            >
-              <span>No liquidity deposit</span>
-              <span>
-                {classicV3LaunchAvailable
-                  ? "Choose buy and sell fees"
-                  : "1.00% swap fee"}
-              </span>
-              <span>Rewards in ETH</span>
-            </span>
-            <span
               className={`launch-model-action ${launchExperience.modelAction}`}
             >
               Launch
@@ -182,60 +187,59 @@ export function LaunchModelPicker({
           </span>
         </button>
 
-        {stockPairedLaunchAvailable ? (
-          <button
-            className={`launch-model-card launch-model-card-stock ${launchExperience.modelCard}`}
-            data-launch-model-option="stock-paired"
-            type="button"
-            aria-describedby="launch-model-stock-description launch-model-stock-details"
-            onPointerEnter={preloadAvailableForm}
-            onFocus={preloadAvailableForm}
-            onClick={() => onChoose("stock-paired")}
+        <button
+          className={`launch-model-card launch-model-card-stock ${launchExperience.modelCard}`}
+          data-launch-model-option="stock-paired"
+          data-launch-model-available={stockPairedAccess}
+          type="button"
+          disabled={!stockPairedAccess}
+          aria-describedby="launch-model-stock-description"
+          onPointerEnter={
+            stockPairedAccess ? preloadAvailableForm : undefined
+          }
+          onFocus={stockPairedAccess ? preloadAvailableForm : undefined}
+          onClick={() => onChoose("stock-paired")}
+        >
+          <span
+            className={`launch-model-art launch-model-art-stock ${launchExperience.modelArt}`}
+            aria-hidden="true"
+          >
+            <Image
+              src="/brand/programmable-stock-paired-launch-art-v1.webp"
+              alt=""
+              fill
+              sizes="(max-width: 520px) calc(100vw - 28px), (max-width: 800px) calc(100vw - 48px), 500px"
+            />
+          </span>
+
+          <span
+            className={`launch-model-card-body ${launchExperience.modelBody}`}
           >
             <span
-              className={`launch-model-art launch-model-art-stock ${launchExperience.modelArt}`}
-              aria-hidden="true"
+              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
-              <Image
-                src="/brand/programmable-stock-paired-launch-art-v1.webp"
-                alt=""
-                fill
-                sizes="(max-width: 520px) calc(100vw - 28px), (max-width: 800px) calc(100vw - 48px), 500px"
-              />
+              <strong>Stock-Paired</strong>
+              {!stockPairedAccess ? (
+                <small data-status="pending">Coming soon</small>
+              ) : null}
             </span>
-
             <span
-              className={`launch-model-card-body ${launchExperience.modelBody}`}
+              className={`launch-model-description ${launchExperience.modelDescription}`}
+              id="launch-model-stock-description"
             >
-              <span
-                className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-              >
-                <strong>Stock-Paired</strong>
-              </span>
-              <span
-                className={`launch-model-description ${launchExperience.modelDescription}`}
-                id="launch-model-stock-description"
-              >
-                Launch a token whose v4 pool is paired with a reviewed Ondo
-                Global Markets asset.
-              </span>
-              <span
-                className={`launch-model-details ${launchExperience.modelDetails}`}
-                id="launch-model-stock-details"
-              >
-                <span>Six ETH-routed quote assets</span>
-                <span>1.00% swap fee</span>
-                <span>Buy and sell with ETH</span>
-              </span>
+              Launch a token whose v4 pool is paired with a reviewed Ondo
+              Global Markets asset.
+            </span>
+            {stockPairedAccess ? (
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >
                 Launch
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
-            </span>
-          </button>
-        ) : null}
+            ) : null}
+          </span>
+        </button>
 
         <button
           className={`launch-model-card launch-model-card-deep ${launchExperience.modelCard}`}
@@ -243,7 +247,7 @@ export function LaunchModelPicker({
           data-launch-model-available={deepLaunchAvailable}
           type="button"
           disabled={!deepLaunchAvailable}
-          aria-describedby="launch-model-deep-description launch-model-deep-details"
+          aria-describedby="launch-model-deep-description"
           onPointerEnter={deepLaunchAvailable ? preloadAvailableForm : undefined}
           onFocus={deepLaunchAvailable ? preloadAvailableForm : undefined}
           onClick={() => onChoose("deep")}
@@ -278,22 +282,14 @@ export function LaunchModelPicker({
               Every cycle uses trading fees to add ETH and tokens to the
               original locked Uniswap v4 pool.
             </span>
-            <span
-              className={`launch-model-details ${launchExperience.modelDetails}`}
-              id="launch-model-deep-details"
-            >
-              <span>1.00% swap fee</span>
-              <span>0.90% grows liquidity</span>
-              <span>Five-minute cycles</span>
-            </span>
-            <span
-              className={`launch-model-action ${launchExperience.modelAction}`}
-            >
-              {deepLaunchAvailable ? "Launch" : "Coming soon"}
-              {deepLaunchAvailable ? (
+            {deepLaunchAvailable ? (
+              <span
+                className={`launch-model-action ${launchExperience.modelAction}`}
+              >
+                Launch
                 <ArrowRight aria-hidden="true" size={16} />
-              ) : null}
-            </span>
+              </span>
+            ) : null}
           </span>
         </button>
       </div>

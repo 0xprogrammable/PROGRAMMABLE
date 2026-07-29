@@ -14,6 +14,7 @@ import appDeployments from "../contracts/config/app-deployments.v1.json";
 import {
   createClassicV3Draft,
   createDeepDraft,
+  createStockPairedDraft,
 } from "../lib/launch";
 import {
   isFutureLaunchModelManifestEligible,
@@ -159,14 +160,36 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain("<strong>Stock-Paired</strong>");
     expect(html).toContain("Coming soon");
     expect(html).toContain(
-      'aria-describedby="launch-model-deep-description launch-model-deep-details"',
+      'aria-describedby="launch-model-deep-description"',
     );
+    expect(html).not.toContain("launch-model-classic-details");
+    expect(html).not.toContain("launch-model-stock-details");
+    expect(html).not.toContain("launch-model-deep-details");
+    const stockButton = html.match(
+      /<button[^>]*data-launch-model-option="stock-paired"[^>]*>/,
+    )?.[0];
+    expect(stockButton).toContain("disabled");
     expect(html).toContain(
       "Every cycle uses trading fees to add ETH and tokens",
     );
     expect(html).not.toMatch(/adaptive/i);
     expect(html).not.toContain("LiquidityGrowth");
     expect(html).not.toContain("Liquidity Growth");
+  });
+
+  it("enables Stock-Paired only for the approved dev wallet", () => {
+    const html = renderToStaticMarkup(
+      createElement(LaunchModelPicker, {
+        onChoose: () => undefined,
+        stockPairedAccess: true,
+      }),
+    );
+    const stockButton = html.match(
+      /<button[^>]*data-launch-model-option="stock-paired"[^>]*>/,
+    )?.[0];
+
+    expect(stockButton).not.toContain("disabled");
+    expect(html).toContain(">Launch<");
   });
 
   it("keeps the Deep preset concise while retaining its material limits", () => {
@@ -391,6 +414,23 @@ describe("unreleased launch model gating", () => {
         { id: "wallet", status: "pass" },
         { id: "contracts", status: "blocked" },
       ],
+    });
+  });
+
+  it("blocks public Stock-Paired preflight requests", async () => {
+    const request = new NextRequest("http://localhost/api/launch/preflight", {
+      method: "POST",
+      body: JSON.stringify({
+        account,
+        walletChainId: "0x1",
+        draft: createStockPairedDraft(),
+      }),
+    });
+
+    const result = await POST(request);
+    expect(result.status).toBe(403);
+    await expect(result.json()).resolves.toEqual({
+      error: "Stock-Paired is coming soon",
     });
   });
 });
