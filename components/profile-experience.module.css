@@ -1,26 +1,28 @@
 .page {
-  max-width: 1040px;
+  max-width: 980px;
   min-height: calc(100svh - var(--header-height));
-  padding-bottom: 32px;
-  padding-top: 18px;
+  padding-bottom: 34px;
+  padding-top: 24px;
 }
 
 .hero,
 .portfolio,
 .connectCard {
   backdrop-filter: blur(18px);
-  background: var(--glass-88);
+  background: var(--glass-90);
   border: 1px solid var(--panel-border);
-  box-shadow: var(--card-shadow);
+  box-shadow:
+    0 1px 0 var(--card-shadow),
+    0 14px 40px var(--card-shadow-soft);
 }
 
 .hero {
   align-items: center;
-  border-radius: 24px;
+  border-radius: 22px;
   display: grid;
   gap: 15px;
   grid-template-columns: auto minmax(0, 1fr);
-  min-height: 96px;
+  min-height: 92px;
   padding: 14px 18px;
 }
 
@@ -176,30 +178,30 @@
 
 .connectCard {
   align-items: center;
-  border-radius: 28px;
+  border-radius: 24px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  margin: 24px auto 0;
-  max-width: 700px;
-  min-height: min(360px, calc(100svh - var(--header-height) - 92px));
-  padding: 36px 24px;
+  margin: clamp(34px, 8svh, 72px) auto 0;
+  max-width: 590px;
+  min-height: 254px;
+  padding: 34px 28px;
   text-align: center;
 }
 
 .connectCard h1 {
-  font-size: clamp(38px, 5vw, 64px);
-  font-weight: 560;
-  letter-spacing: -0.045em;
-  line-height: 0.98;
+  font-size: clamp(36px, 4vw, 48px);
+  font-weight: 570;
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
 
 .connectCard p {
   color: var(--text-soft);
   font-size: 14px;
   line-height: 1.5;
-  margin-top: 12px;
-  max-width: 420px;
+  margin-top: 11px;
+  max-width: 390px;
 }
 
 .connectButton {
@@ -212,14 +214,14 @@
   font-size: 14px;
   font-weight: 680;
   justify-content: center;
-  margin-top: 22px;
-  min-height: 50px;
-  padding: 0 20px;
+  margin-top: 20px;
+  min-height: 46px;
+  padding: 0 18px;
 }
 
 .portfolio {
-  border-radius: 24px;
-  margin-top: 12px;
+  border-radius: 22px;
+  margin-top: 14px;
   min-width: 0;
   overflow: hidden;
 }
@@ -230,7 +232,7 @@
   display: flex;
   gap: 24px;
   justify-content: space-between;
-  min-height: 74px;
+  min-height: 70px;
   padding: 12px 18px;
 }
 
@@ -754,7 +756,7 @@
 @media (max-width: 720px) {
   .page {
     min-height: calc(100svh - var(--header-height) - 68px);
-    padding-bottom: 30px;
+    padding-bottom: 34px;
     padding-top: 16px;
   }
 
@@ -791,11 +793,13 @@
   }
 
   .connectCard {
-    margin-top: 0;
-    min-height: min(
-      440px,
-      calc(100svh - var(--header-height) - 132px)
-    );
+    margin-top: 18px;
+    min-height: 272px;
+    padding: 30px 22px;
+  }
+
+  .connectCard h1 {
+    font-size: clamp(34px, 10.5vw, 42px);
   }
 
   .portfolioHeader {

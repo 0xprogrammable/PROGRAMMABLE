@@ -657,13 +657,15 @@
 
 .emptyState {
   align-items: center;
-  border-radius: 24px;
+  border-radius: 20px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 220px;
-  padding: 28px;
+  margin: 0 auto;
+  min-height: 164px;
+  padding: 24px;
   text-align: center;
+  width: min(100%, 900px);
 }
 
 .emptyState p {
