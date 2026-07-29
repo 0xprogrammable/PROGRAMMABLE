@@ -15,15 +15,21 @@ import {
   buildStockPairedEthCanaryIdentity,
   buildStockPairedEthCanaryLaunch,
   buildStockPairedEthCanarySwap,
+  parseStockPairedEthCanaryRecoveredBuy,
+  parseStockPairedEthCanaryRecoveredCreatorClaim,
+  parseStockPairedEthCanaryRecoveredLauncherClaim,
+  parseStockPairedEthCanaryRecoveredSell,
   parseStockPairedEthCanaryLaunchReceipt,
   stockPairedEthCanaryCoordinatorEvent,
   stockPairedEthCanaryInitialBuyEvent,
   stockPairedEthCanaryLaunchEvent,
+  stockPairedEthCanaryTransferEvent,
   stockPairedEthCanaryV3Path,
 } from "../../../scripts/stock-paired-eth-canary-core.mjs";
 import {
   STOCK_PAIRED_DEPENDENCIES,
   STOCK_PAIRED_DEPLOYER,
+  STOCK_PAIRED_TREASURY,
 } from "../../../scripts/stock-paired-mainnet-operator-core.mjs";
 
 const releaseCommit = "1".repeat(40);
@@ -217,4 +223,197 @@ test("correlates coordinator and base-launcher receipt events", () => {
   );
   assert.equal(parsed.initialBuyQuoteAmount, "20");
   assert.equal(parsed.initialBuyTokenAmount, "30");
+});
+
+test("recovers only a successful Universal Router buy into the canary token", () => {
+  const input =
+    `0x3593564c${token.slice(2)}${hook.slice(2)}` +
+    STOCK_PAIRED_ETH_CANARY_ASSET.address.slice(2);
+  const blockHash = `0x${"66".repeat(32)}`;
+  const transaction = {
+    from: STOCK_PAIRED_DEPLOYER,
+    to: STOCK_PAIRED_DEPENDENCIES.universalRouter.address,
+    value: "0x5af3107a4000",
+    input,
+    blockHash,
+  };
+  const receipt = {
+    status: "0x1",
+    blockHash,
+    logs: [
+      {
+        address: token,
+        topics: encodeEventTopics({
+          abi: [stockPairedEthCanaryTransferEvent],
+          eventName: "Transfer",
+          args: {
+            from: STOCK_PAIRED_DEPENDENCIES.universalRouter.address,
+            to: STOCK_PAIRED_DEPLOYER,
+          },
+        }),
+        data: encodeAbiParameters(parseAbiParameters("uint256"), [123n]),
+      },
+    ],
+  };
+  assert.deepEqual(
+    parseStockPairedEthCanaryRecoveredBuy(transaction, receipt, {
+      token,
+      hook,
+    }),
+    {
+      receivedToken: "123",
+      spentEth: "100000000000000",
+    },
+  );
+  assert.throws(
+    () =>
+      parseStockPairedEthCanaryRecoveredBuy(
+        { ...transaction, to: coordinator },
+        receipt,
+        { token, hook },
+      ),
+    /inconsistent/,
+  );
+});
+
+test("recovers only the exact reviewed canary sell amount", () => {
+  const input =
+    `0x3593564c${token.slice(2)}${hook.slice(2)}` +
+    STOCK_PAIRED_ETH_CANARY_ASSET.address.slice(2);
+  const blockHash = `0x${"77".repeat(32)}`;
+  const expectedAmount = 456n;
+  const transaction = {
+    from: STOCK_PAIRED_DEPLOYER,
+    to: STOCK_PAIRED_DEPENDENCIES.universalRouter.address,
+    value: "0x0",
+    input,
+    blockHash,
+  };
+  const receipt = {
+    status: "0x1",
+    blockHash,
+    logs: [
+      {
+        address: token,
+        topics: encodeEventTopics({
+          abi: [stockPairedEthCanaryTransferEvent],
+          eventName: "Transfer",
+          args: {
+            from: STOCK_PAIRED_DEPLOYER,
+            to: STOCK_PAIRED_DEPENDENCIES.universalRouter.address,
+          },
+        }),
+        data: encodeAbiParameters(parseAbiParameters("uint256"), [
+          expectedAmount,
+        ]),
+      },
+    ],
+  };
+  assert.deepEqual(
+    parseStockPairedEthCanaryRecoveredSell(transaction, receipt, {
+      token,
+      hook,
+      expectedAmount,
+    }),
+    { spentToken: expectedAmount.toString() },
+  );
+  assert.throws(
+    () =>
+      parseStockPairedEthCanaryRecoveredSell(transaction, receipt, {
+        token,
+        hook,
+        expectedAmount: expectedAmount + 1n,
+      }),
+    /transfer is inconsistent/,
+  );
+});
+
+test("recovers only a creator claim paid by the canary reward vault", () => {
+  const blockHash = `0x${"88".repeat(32)}`;
+  const transaction = {
+    from: STOCK_PAIRED_DEPLOYER,
+    to: rewardVault,
+    value: "0x0",
+    input: "0x4e71d92d",
+    blockHash,
+  };
+  const receipt = {
+    status: "0x1",
+    blockHash,
+    logs: [
+      {
+        address: STOCK_PAIRED_ETH_CANARY_ASSET.address,
+        topics: encodeEventTopics({
+          abi: [stockPairedEthCanaryTransferEvent],
+          eventName: "Transfer",
+          args: {
+            from: rewardVault,
+            to: STOCK_PAIRED_DEPLOYER,
+          },
+        }),
+        data: encodeAbiParameters(parseAbiParameters("uint256"), [789n]),
+      },
+    ],
+  };
+  assert.deepEqual(
+    parseStockPairedEthCanaryRecoveredCreatorClaim(transaction, receipt, {
+      rewardVault,
+    }),
+    { receivedQuote: "789" },
+  );
+  assert.throws(
+    () =>
+      parseStockPairedEthCanaryRecoveredCreatorClaim(
+        { ...transaction, input: "0x12345678" },
+        receipt,
+        { rewardVault },
+      ),
+    /inconsistent/,
+  );
+});
+
+test("recovers only a launcher claim paid by the canonical PoolManager", () => {
+  const blockHash = `0x${"99".repeat(32)}`;
+  const transaction = {
+    from: STOCK_PAIRED_TREASURY,
+    to: hook,
+    value: "0x0",
+    input:
+      "0xaee8cd6f000000000000000000000000" +
+      STOCK_PAIRED_ETH_CANARY_ASSET.address.slice(2).toLowerCase(),
+    blockHash,
+  };
+  const receipt = {
+    status: "0x1",
+    blockHash,
+    logs: [
+      {
+        address: STOCK_PAIRED_ETH_CANARY_ASSET.address,
+        topics: encodeEventTopics({
+          abi: [stockPairedEthCanaryTransferEvent],
+          eventName: "Transfer",
+          args: {
+            from: STOCK_PAIRED_DEPENDENCIES.poolManager.address,
+            to: STOCK_PAIRED_TREASURY,
+          },
+        }),
+        data: encodeAbiParameters(parseAbiParameters("uint256"), [987n]),
+      },
+    ],
+  };
+  assert.deepEqual(
+    parseStockPairedEthCanaryRecoveredLauncherClaim(transaction, receipt, {
+      feeHook: hook,
+    }),
+    { receivedQuote: "987" },
+  );
+  assert.throws(
+    () =>
+      parseStockPairedEthCanaryRecoveredLauncherClaim(
+        { ...transaction, from: STOCK_PAIRED_DEPLOYER },
+        receipt,
+        { feeHook: hook },
+      ),
+    /inconsistent/,
+  );
 });

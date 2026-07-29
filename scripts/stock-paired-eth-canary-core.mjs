@@ -15,6 +15,7 @@ import {
 import {
   STOCK_PAIRED_DEPENDENCIES,
   STOCK_PAIRED_DEPLOYER,
+  STOCK_PAIRED_TREASURY,
   normalizeStockPairedHex,
 } from "./stock-paired-mainnet-operator-core.mjs";
 import {
@@ -84,9 +85,15 @@ export const stockPairedEthCanaryErc20Abi = parseAbi([
   "function allowance(address owner,address spender) view returns (uint256)",
   "function approve(address spender,uint256 amount) returns (bool)",
 ]);
+export const stockPairedEthCanaryTransferEvent = parseAbiItem(
+  "event Transfer(address indexed from,address indexed to,uint256 value)",
+);
 export const stockPairedEthCanaryPermit2Abi = parseAbi([
   "function allowance(address owner,address token,address spender) view returns (uint160 amount,uint48 expiration,uint48 nonce)",
   "function approve(address token,address spender,uint160 amount,uint48 expiration)",
+]);
+export const stockPairedEthCanaryHookAbi = parseAbi([
+  "function claimLauncherFees(address quoteAsset) returns (uint256 amount)",
 ]);
 export const stockPairedEthCanaryLaunchEvent = parseAbiItem(
   "event StockPairedTokenLaunched(address indexed deployer,address indexed token,address indexed quoteAsset,bytes32 poolId,address rewardVault,address positionRecipient,uint256 positionTokenId,bytes32 launchHash)",
@@ -613,4 +620,244 @@ export function assertStockPairedEthCanaryRouteSafety(
     throw new Error("The reviewed ETH route is too thin for the canary");
   }
   return true;
+}
+
+export function parseStockPairedEthCanaryRecoveredBuy(
+  transaction,
+  receipt,
+  { token, hook },
+) {
+  const launchedToken = validAddress(token);
+  const feeHook = validAddress(hook);
+  const input = normalizeStockPairedHex(transaction?.input ?? "");
+  if (
+    !transaction ||
+    !receipt ||
+    normalizeStockPairedHex(receipt.status) !== "0x1" ||
+    normalizeStockPairedHex(transaction.from) !==
+      normalizeStockPairedHex(STOCK_PAIRED_DEPLOYER) ||
+    normalizeStockPairedHex(transaction.to) !==
+      normalizeStockPairedHex(STOCK_PAIRED_DEPENDENCIES.universalRouter.address) ||
+    BigInt(transaction.value ?? 0) !== STOCK_PAIRED_ETH_CANARY_TRADE_AMOUNT ||
+    normalizeStockPairedHex(transaction.blockHash) !==
+      normalizeStockPairedHex(receipt.blockHash) ||
+    !input.startsWith("0x3593564c") ||
+    !input.includes(launchedToken.slice(2).toLowerCase()) ||
+    !input.includes(feeHook.slice(2).toLowerCase()) ||
+    !input.includes(STOCK_PAIRED_ETH_CANARY_ASSET.address.slice(2).toLowerCase())
+  ) {
+    throw new Error("The recovered ETH canary buy is inconsistent");
+  }
+  const transfers = receipt.logs
+    .filter(
+      (log) =>
+        normalizeStockPairedHex(log.address) ===
+        normalizeStockPairedHex(launchedToken),
+    )
+    .flatMap((log) => {
+      try {
+        const decoded = decodeEventLog({
+          abi: [stockPairedEthCanaryTransferEvent],
+          data: log.data,
+          topics: log.topics,
+          strict: true,
+        });
+        return decoded.eventName === "Transfer" &&
+          normalizeStockPairedHex(decoded.args.from) ===
+            normalizeStockPairedHex(
+              STOCK_PAIRED_DEPENDENCIES.universalRouter.address,
+            ) &&
+          normalizeStockPairedHex(decoded.args.to) ===
+            normalizeStockPairedHex(STOCK_PAIRED_DEPLOYER)
+          ? [BigInt(decoded.args.value)]
+          : [];
+      } catch {
+        return [];
+      }
+    });
+  if (transfers.length !== 1 || transfers[0] <= 0n) {
+    throw new Error("The recovered ETH canary buy transfer is inconsistent");
+  }
+  return {
+    receivedToken: transfers[0].toString(),
+    spentEth: STOCK_PAIRED_ETH_CANARY_TRADE_AMOUNT.toString(),
+  };
+}
+
+export function parseStockPairedEthCanaryRecoveredSell(
+  transaction,
+  receipt,
+  { token, hook, expectedAmount },
+) {
+  const launchedToken = validAddress(token);
+  const feeHook = validAddress(hook);
+  const expected = positiveAmount(expectedAmount, "Recovered sell amount");
+  const input = normalizeStockPairedHex(transaction?.input ?? "");
+  if (
+    !transaction ||
+    !receipt ||
+    normalizeStockPairedHex(receipt.status) !== "0x1" ||
+    normalizeStockPairedHex(transaction.from) !==
+      normalizeStockPairedHex(STOCK_PAIRED_DEPLOYER) ||
+    normalizeStockPairedHex(transaction.to) !==
+      normalizeStockPairedHex(STOCK_PAIRED_DEPENDENCIES.universalRouter.address) ||
+    BigInt(transaction.value ?? 0) !== 0n ||
+    normalizeStockPairedHex(transaction.blockHash) !==
+      normalizeStockPairedHex(receipt.blockHash) ||
+    !input.startsWith("0x3593564c") ||
+    !input.includes(launchedToken.slice(2).toLowerCase()) ||
+    !input.includes(feeHook.slice(2).toLowerCase()) ||
+    !input.includes(STOCK_PAIRED_ETH_CANARY_ASSET.address.slice(2).toLowerCase())
+  ) {
+    throw new Error("The recovered ETH canary sell is inconsistent");
+  }
+  const transfers = receipt.logs
+    .filter(
+      (log) =>
+        normalizeStockPairedHex(log.address) ===
+        normalizeStockPairedHex(launchedToken),
+    )
+    .flatMap((log) => {
+      try {
+        const decoded = decodeEventLog({
+          abi: [stockPairedEthCanaryTransferEvent],
+          data: log.data,
+          topics: log.topics,
+          strict: true,
+        });
+        return decoded.eventName === "Transfer" &&
+          normalizeStockPairedHex(decoded.args.from) ===
+            normalizeStockPairedHex(STOCK_PAIRED_DEPLOYER) &&
+          normalizeStockPairedHex(decoded.args.to) ===
+            normalizeStockPairedHex(
+              STOCK_PAIRED_DEPENDENCIES.universalRouter.address,
+            )
+          ? [BigInt(decoded.args.value)]
+          : [];
+      } catch {
+        return [];
+      }
+    });
+  if (transfers.length !== 1 || transfers[0] !== expected) {
+    throw new Error("The recovered ETH canary sell transfer is inconsistent");
+  }
+  return { spentToken: expected.toString() };
+}
+
+export function parseStockPairedEthCanaryRecoveredCreatorClaim(
+  transaction,
+  receipt,
+  { rewardVault },
+) {
+  const vault = validAddress(rewardVault);
+  if (
+    !transaction ||
+    !receipt ||
+    normalizeStockPairedHex(receipt.status) !== "0x1" ||
+    normalizeStockPairedHex(transaction.from) !==
+      normalizeStockPairedHex(STOCK_PAIRED_DEPLOYER) ||
+    normalizeStockPairedHex(transaction.to) !==
+      normalizeStockPairedHex(vault) ||
+    BigInt(transaction.value ?? 0) !== 0n ||
+    normalizeStockPairedHex(transaction.input) !== "0x4e71d92d" ||
+    normalizeStockPairedHex(transaction.blockHash) !==
+      normalizeStockPairedHex(receipt.blockHash)
+  ) {
+    throw new Error("The recovered ETH canary creator claim is inconsistent");
+  }
+  const transfers = receipt.logs
+    .filter(
+      (log) =>
+        normalizeStockPairedHex(log.address) ===
+        normalizeStockPairedHex(STOCK_PAIRED_ETH_CANARY_ASSET.address),
+    )
+    .flatMap((log) => {
+      try {
+        const decoded = decodeEventLog({
+          abi: [stockPairedEthCanaryTransferEvent],
+          data: log.data,
+          topics: log.topics,
+          strict: true,
+        });
+        return decoded.eventName === "Transfer" &&
+          normalizeStockPairedHex(decoded.args.from) ===
+            normalizeStockPairedHex(vault) &&
+          normalizeStockPairedHex(decoded.args.to) ===
+            normalizeStockPairedHex(STOCK_PAIRED_DEPLOYER)
+          ? [BigInt(decoded.args.value)]
+          : [];
+      } catch {
+        return [];
+      }
+    });
+  if (transfers.length !== 1 || transfers[0] <= 0n) {
+    throw new Error(
+      "The recovered ETH canary creator claim transfer is inconsistent",
+    );
+  }
+  return { receivedQuote: transfers[0].toString() };
+}
+
+export function parseStockPairedEthCanaryRecoveredLauncherClaim(
+  transaction,
+  receipt,
+  { feeHook },
+) {
+  const hook = validAddress(feeHook);
+  const expectedInput = encodeFunctionData({
+    abi: stockPairedEthCanaryHookAbi,
+    functionName: "claimLauncherFees",
+    args: [STOCK_PAIRED_ETH_CANARY_ASSET.address],
+  });
+  if (
+    !transaction ||
+    !receipt ||
+    normalizeStockPairedHex(receipt.status) !== "0x1" ||
+    normalizeStockPairedHex(transaction.from) !==
+      normalizeStockPairedHex(STOCK_PAIRED_TREASURY) ||
+    normalizeStockPairedHex(transaction.to) !==
+      normalizeStockPairedHex(hook) ||
+    BigInt(transaction.value ?? 0) !== 0n ||
+    normalizeStockPairedHex(transaction.input) !==
+      normalizeStockPairedHex(expectedInput) ||
+    normalizeStockPairedHex(transaction.blockHash) !==
+      normalizeStockPairedHex(receipt.blockHash)
+  ) {
+    throw new Error(
+      "The recovered ETH canary launcher claim is inconsistent",
+    );
+  }
+  const transfers = receipt.logs
+    .filter(
+      (log) =>
+        normalizeStockPairedHex(log.address) ===
+        normalizeStockPairedHex(STOCK_PAIRED_ETH_CANARY_ASSET.address),
+    )
+    .flatMap((log) => {
+      try {
+        const decoded = decodeEventLog({
+          abi: [stockPairedEthCanaryTransferEvent],
+          data: log.data,
+          topics: log.topics,
+          strict: true,
+        });
+        return decoded.eventName === "Transfer" &&
+          normalizeStockPairedHex(decoded.args.from) ===
+            normalizeStockPairedHex(
+              STOCK_PAIRED_DEPENDENCIES.poolManager.address,
+            ) &&
+          normalizeStockPairedHex(decoded.args.to) ===
+            normalizeStockPairedHex(STOCK_PAIRED_TREASURY)
+          ? [BigInt(decoded.args.value)]
+          : [];
+      } catch {
+        return [];
+      }
+    });
+  if (transfers.length !== 1 || transfers[0] <= 0n) {
+    throw new Error(
+      "The recovered ETH canary launcher claim transfer is inconsistent",
+    );
+  }
+  return { receivedQuote: transfers[0].toString() };
 }
