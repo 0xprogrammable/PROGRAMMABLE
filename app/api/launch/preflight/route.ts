@@ -102,6 +102,10 @@ import {
   type VerifiedStockPairedRelease,
 } from "@/lib/stock-paired-release";
 import {
+  isStockPairedDevAccount,
+  isStockPairedLocalPreviewEnabled,
+} from "@/lib/stock-paired-access";
+import {
   resolveImplementedLaunchModel,
   resolveReservedLaunchModel,
   type DeepLaunchModelRelease,
@@ -2376,6 +2380,12 @@ export async function POST(request: NextRequest) {
       return await prepareDeepLaunch(account, draft, connectedWalletCheck);
     }
     if (draft.launchModel === "stock-paired") {
+      if (
+        !isStockPairedLocalPreviewEnabled() &&
+        !isStockPairedDevAccount(account)
+      ) {
+        return errorResponse("Stock-Paired is coming soon", 403);
+      }
       return await prepareStockPairedLaunch(
         account,
         draft,
