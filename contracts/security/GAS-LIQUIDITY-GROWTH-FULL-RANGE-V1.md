@@ -1,6 +1,6 @@
 # Full-Range V1 gas policy
 
-Status: local measurement only. Full-Range V1 has not been deployed.
+Status: local gas measurement for the deployed but inactive Full-Range V1 release.
 
 The numbers below were measured on the 28 July 2026 working tree with Forge
 1.7.1 and Solidity 0.8.26. They are call-gas measurements from `gasleft()`.

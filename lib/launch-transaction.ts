@@ -117,14 +117,19 @@ export type PreparedLaunchTransaction = Extract<
   PreparedTransaction,
   { kind: "launch" }
 >;
+export type PreparedStockQuoteApprovalTransaction = Extract<
+  PreparedTransaction,
+  { kind: "stock-quote-approval" }
+>;
 
 export type LaunchPreflightResponse = {
-  status: "blocked" | "ready";
-  mode: "meme" | "classic-v3" | "adaptive" | "deep";
+  status: "blocked" | "approval-required" | "ready";
+  mode: "meme" | "classic-v3" | "adaptive" | "deep" | "stock-paired";
   title: string;
   detail: string;
   checks: LaunchPreflightCheck[];
   transaction?: PreparedLaunchTransaction;
+  approvalTransaction?: PreparedStockQuoteApprovalTransaction;
   predictedToken?: Address;
   predictedHook?: Address;
   draftPatch?: Partial<LaunchDraft>;
@@ -479,7 +484,10 @@ export function encodeAdaptiveLaunch(
 
 export function buildPlanHash(
   account: Address,
-  transaction: Omit<PreparedLaunchTransaction, "gasLimit">,
+  transaction: Pick<
+    PreparedTransaction,
+    "kind" | "chainId" | "to" | "data" | "value"
+  >,
 ) {
   return keccak256(
     toHex(

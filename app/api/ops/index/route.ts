@@ -7,6 +7,7 @@ import {
   readLiveExploreModel,
   writeDurableExploreModel,
 } from "../../../../lib/onchain";
+import { writePortfolioHistorySnapshot } from "../../../../lib/profile/portfolio-history-storage.server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -50,11 +51,19 @@ export async function GET(request: NextRequest) {
     if (model.status !== "ready") {
       throw new Error("The live Explore model is not ready");
     }
-    const result = await writeDurableExploreModel(deployment, model);
+    const [result, history] = await Promise.all([
+      writeDurableExploreModel(deployment, model),
+      writePortfolioHistorySnapshot(model),
+    ]);
     console.info("Programmable index refresh completed", {
       blockNumber: result.blockNumber,
       tokenCount: result.tokenCount,
       updated: result.updated,
+      portfolioHistoryStatus: history.status,
+      portfolioHistoryPath: history.path,
+      deepReleaseVersion: result.deepReleaseVersion,
+      deepLifecycleEvidenceHash:
+        result.deepLifecycleEvidenceHash,
       durationMs: Date.now() - startedAt,
     });
     return NextResponse.json(
@@ -63,6 +72,15 @@ export async function GET(request: NextRequest) {
         blockNumber: result.blockNumber,
         tokenCount: result.tokenCount,
         updated: result.updated,
+        portfolioHistory: {
+          status: history.status,
+          path: history.path,
+          tokenCount: history.tokenCount,
+          blockNumber: history.blockNumber,
+        },
+        deepReleaseVersion: result.deepReleaseVersion,
+        deepLifecycleEvidenceHash:
+          result.deepLifecycleEvidenceHash,
       },
       { headers: { "Cache-Control": "no-store" } },
     );

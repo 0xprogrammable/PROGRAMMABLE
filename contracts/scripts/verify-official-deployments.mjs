@@ -1,12 +1,28 @@
+import { execFile as execFileCallback } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
-const OFFICIAL_DEPLOYMENTS_URL =
-  "https://developers.uniswap.org/deployments.json";
+import {
+  OFFICIAL_DEPLOYMENTS_URL,
+  REQUIRED_SOURCE_DEPENDENCIES,
+  fetchMainnetRuntimeHashes,
+  verifyDependencyPins,
+  verifyMainnetRuntimeHashes,
+  verifyOfficialDeploymentSnapshot,
+} from "./verify-official-deployments-lib.mjs";
+
 const EXPECTED_DATASET_REPOSITORY = "https://github.com/Uniswap/contracts";
+const execFile = promisify(execFileCallback);
 
 const dependencyDirectory = fileURLToPath(
   new URL("../dependencies/", import.meta.url),
+);
+const libraryDirectory = fileURLToPath(
+  new URL("../lib/", import.meta.url),
+);
+const sourcePinsFile = fileURLToPath(
+  new URL("../dependencies/source-pins.json", import.meta.url),
 );
 
 const networks = [
@@ -104,6 +120,16 @@ function versionMatches(sourceRef, version) {
   );
 }
 
+function repositoryName(repository) {
+  const pathname = new URL(repository).pathname.replace(/\/$/, "");
+  return pathname.split("/").at(-1).replace(/\.git$/, "").toLowerCase();
+}
+
+async function gitOutput(args, options = {}) {
+  const { stdout } = await execFile("git", args, options);
+  return stdout.trim();
+}
+
 const response = await fetch(OFFICIAL_DEPLOYMENTS_URL, {
   headers: { accept: "application/json" },
 });
@@ -123,6 +149,8 @@ assert(
 assert(Array.isArray(dataset.records), "Deployment records are missing");
 
 let verifiedCount = 0;
+let mainnetSnapshot;
+const reviewWarnings = [];
 
 for (const network of networks) {
   const snapshot = JSON.parse(
@@ -133,14 +161,25 @@ for (const network of networks) {
     snapshot.source?.deployments === OFFICIAL_DEPLOYMENTS_URL,
     `${network.file} points to an unexpected deployment source`,
   );
-  assert(
-    snapshot.source?.generatedAt === dataset.generatedAt,
-    `${network.file} was generated from an older official dataset`,
-  );
-  assert(
-    snapshot.source?.sourceCommit === dataset.source.commit,
-    `${network.file} does not pin the current official dataset commit`,
-  );
+  if (network.file === "ethereum-mainnet.json") {
+    mainnetSnapshot = snapshot;
+    const verification = verifyOfficialDeploymentSnapshot({
+      dataset,
+      snapshot,
+    });
+    reviewWarnings.push(...verification.reviewWarnings);
+  } else {
+    if (snapshot.source?.generatedAt !== dataset.generatedAt) {
+      reviewWarnings.push(
+        `${network.file} dataset timestamp drift: pinned ${snapshot.source?.generatedAt}, upstream ${dataset.generatedAt}`,
+      );
+    }
+    if (snapshot.source?.sourceCommit !== dataset.source.commit) {
+      reviewWarnings.push(
+        `${network.file} dataset commit drift: pinned ${snapshot.source?.sourceCommit}, upstream ${dataset.source.commit}`,
+      );
+    }
+  }
 
   for (const key of network.requiredKeys) {
     const local = snapshot.contracts[key];
@@ -196,7 +235,68 @@ for (const network of networks) {
   }
 }
 
+assert(mainnetSnapshot, "Mainnet dependency snapshot is missing");
+const rpcUrl =
+  process.env.ETHEREUM_MAINNET_RPC_URL ??
+  mainnetSnapshot.runtimeSnapshot?.rpc;
+assert(rpcUrl, "ETHEREUM_MAINNET_RPC_URL is required");
+
+const runtimeSnapshot = await fetchMainnetRuntimeHashes({
+  snapshot: mainnetSnapshot,
+  rpcUrl,
+});
+const runtimeVerification = verifyMainnetRuntimeHashes({
+  snapshot: mainnetSnapshot,
+  runtimeCodeHashes: runtimeSnapshot.runtimeCodeHashes,
+});
+
+const sourcePins = JSON.parse(await readFile(sourcePinsFile, "utf8"));
+const dependencyStates = {};
+await Promise.all(
+  REQUIRED_SOURCE_DEPENDENCIES.map(async (dependency) => {
+    const pin = sourcePins.dependencies?.find(
+      (candidate) => repositoryName(candidate.repository) === dependency,
+    );
+    assert(pin, `Missing reviewed source pin for ${dependency}`);
+
+    const checkoutDirectory = `${libraryDirectory}${dependency}`;
+    const [localCommit, status, remote] = await Promise.all([
+      gitOutput(["rev-parse", "HEAD"], { cwd: checkoutDirectory }),
+      gitOutput(
+        ["status", "--porcelain", "--untracked-files=all"],
+        { cwd: checkoutDirectory },
+      ),
+      gitOutput(["ls-remote", pin.repository, "HEAD"]),
+    ]);
+    const upstreamCommit = remote.split(/\s+/)[0];
+    dependencyStates[dependency] = {
+      localCommit: localCommit.toLowerCase(),
+      upstreamCommit: upstreamCommit?.toLowerCase(),
+      dirty: status.length > 0,
+    };
+  }),
+);
+const dependencyVerification = verifyDependencyPins({
+  sourcePins,
+  dependencyStates,
+});
+reviewWarnings.push(...dependencyVerification.reviewWarnings);
+
 console.log(
   `Verified ${verifiedCount} active contracts against Uniswap deployments ${dataset.generatedAt}`,
 );
 console.log(`Dataset commit ${dataset.source.commit}`);
+console.log(
+  `Verified ${runtimeVerification.verifiedCount} canonical Mainnet runtime hashes at block ${runtimeSnapshot.blockNumber}`,
+);
+console.log(
+  `Verified ${dependencyVerification.verifiedCount} reviewed dependency pins against clean local checkouts`,
+);
+for (const [dependency, commit] of Object.entries(
+  dependencyVerification.pinnedCommits,
+)) {
+  console.log(`Pinned ${dependency}@${commit}`);
+}
+for (const warning of new Set(reviewWarnings)) {
+  console.warn(`REVIEW REQUIRED: ${warning}`);
+}

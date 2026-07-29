@@ -2,12 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import { readExploreModel } from "../../../../lib/onchain";
+import type { ExplorePage } from "../../../../lib/onchain/types";
+import {
+  enrichExplorePageWithOfficialV4Subgraph,
+} from "../../../../lib/onchain/uniswap-v4-subgraph";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const input = request.nextUrl.searchParams.get("address")?.trim();
+  const search = request.nextUrl.searchParams;
+  if (
+    [...search.keys()].some((key) => key !== "address") ||
+    search.getAll("address").length !== 1
+  ) {
+    return NextResponse.json(
+      { error: "Unsupported query parameters" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  const input = search.get("address")?.trim();
   if (!input || !isAddress(input)) {
     return NextResponse.json(
       { error: "Enter a valid Ethereum token address" },
@@ -39,10 +53,41 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    let enrichedToken = token;
+    if (token) {
+      const tokenPage = {
+        status: model.status,
+        tokens: [token],
+        page: 1,
+        pageSize: 1,
+        total: 1,
+        totalPages: 1,
+        sort: "market-cap",
+        query: address,
+        snapshot: model.snapshot,
+        launcherFeesAccruedWei: model.launcherFeesAccruedWei,
+        launcherFeesAccruedEth: model.launcherFeesAccruedEth,
+      } satisfies ExplorePage;
+      const enriched =
+        await enrichExplorePageWithOfficialV4Subgraph(tokenPage);
+      const analytics = enriched.tokens.find(
+        (candidate) =>
+          candidate.id === token.id &&
+          candidate.tokenAddress.toLowerCase() ===
+            token.tokenAddress.toLowerCase() &&
+          candidate.hookAddress.toLowerCase() ===
+            token.hookAddress.toLowerCase() &&
+          candidate.poolId.toLowerCase() === token.poolId.toLowerCase(),
+      )?.uniswapV4Pool;
+      enrichedToken = analytics
+        ? { ...token, uniswapV4Pool: analytics }
+        : token;
+    }
+
     return NextResponse.json(
       {
         status: model.status,
-        token,
+        token: enrichedToken,
         snapshot: model.snapshot,
       },
       {

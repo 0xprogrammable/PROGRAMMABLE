@@ -28,11 +28,13 @@ type TradeSide = "buy" | "sell";
 type WalletTradeBalanceState =
   | {
       owner: Address;
+      asset: Address;
       status: "ready";
       balances: WalletTradeBalances;
     }
   | {
       owner: Address;
+      asset: Address;
       status: "error";
     };
 
@@ -254,6 +256,10 @@ export function TokenTrade({
   tokenDecimals = 18,
   tokenPriceEth,
   tokenPriceUsdWad,
+  launchModel,
+  quoteAsset,
+  quoteAssetSymbol,
+  tokenPriceQuote,
   buySwapFeeBps,
   sellSwapFeeBps,
   readBalances,
@@ -269,17 +275,19 @@ export function TokenTrade({
   tokenDecimals?: number;
   tokenPriceEth?: string;
   tokenPriceUsdWad?: string;
+  launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
+  quoteAsset?: Address;
+  quoteAssetSymbol?: string;
+  tokenPriceQuote?: string;
   buySwapFeeBps: number;
   sellSwapFeeBps: number;
-  readBalances(): Promise<WalletTradeBalances>;
+  readBalances(inputAsset: Address): Promise<WalletTradeBalances>;
   onConnect(): void;
   onPrepared(prepared: PreparedTokenTrade): void | Promise<void>;
 }) {
   const [side, setSide] = useState<TradeSide>("buy");
   const [amount, setAmount] = useState("");
-  const [slippageBps, setSlippageBps] = useState(
-    DEFAULT_TRADE_SLIPPAGE_BPS,
-  );
+  const slippageBps = DEFAULT_TRADE_SLIPPAGE_BPS;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -290,9 +298,17 @@ export function TokenTrade({
   const amountInputId = useId();
   const activeSwapFeeBps =
     side === "buy" ? buySwapFeeBps : sellSwapFeeBps;
+  const stockPaired = launchModel === "stock-paired";
+  const activeInputAsset =
+    stockPaired && side === "buy" && quoteAsset ? quoteAsset : token;
+  const activeInputSymbol =
+    stockPaired && side === "buy"
+      ? quoteAssetSymbol ?? "Quote"
+      : symbol;
   const activeBalanceState =
     owner &&
-    balanceState?.owner.toLowerCase() === owner.toLowerCase()
+    balanceState?.owner.toLowerCase() === owner.toLowerCase() &&
+    balanceState.asset.toLowerCase() === activeInputAsset.toLowerCase()
       ? balanceState
       : null;
   const balances =
@@ -303,17 +319,17 @@ export function TokenTrade({
     calculateTradeUsdValue({
       side,
       amount,
-      tokenPriceEth,
+      tokenPriceEth: stockPaired ? tokenPriceQuote : tokenPriceEth,
       tokenPriceUsdWad,
     }),
   );
   const displayBalance = balances
-    ? side === "buy"
+    ? side === "buy" && !stockPaired
       ? `${formatWalletBalance(balances.nativeBalanceWei, 18)} ETH`
       : `${formatWalletBalance(
           balances.tokenBalanceRaw,
-          tokenDecimals,
-        )} ${symbol}`
+          side === "buy" ? 18 : tokenDecimals,
+        )} ${activeInputSymbol}`
     : owner
       ? activeBalanceState?.status === "error"
         ? "Balance unavailable"
@@ -324,11 +340,12 @@ export function TokenTrade({
     if (!owner) return;
 
     let active = true;
-    void readBalances()
+    void readBalances(activeInputAsset)
       .then((nextBalances) => {
         if (active) {
           setBalanceState({
             owner,
+            asset: activeInputAsset,
             status: "ready",
             balances: nextBalances,
           });
@@ -338,6 +355,7 @@ export function TokenTrade({
         if (active) {
           setBalanceState({
             owner,
+            asset: activeInputAsset,
             status: "error",
           });
         }
@@ -346,7 +364,7 @@ export function TokenTrade({
     return () => {
       active = false;
     };
-  }, [owner, readBalances]);
+  }, [activeInputAsset, owner, readBalances]);
 
   async function applyMaximumBalance() {
     setError("");
@@ -358,20 +376,21 @@ export function TokenTrade({
 
     setMaxPending(true);
     try {
-      const balances = await readBalances();
+      const balances = await readBalances(activeInputAsset);
       setBalanceState({
         owner,
+        asset: activeInputAsset,
         status: "ready",
         balances,
       });
-      if (side === "sell") {
+      if (side === "sell" || stockPaired) {
         if (balances.tokenBalanceRaw <= 0n) {
-          throw new Error(`No ${symbol} balance is available`);
+          throw new Error(`No ${activeInputSymbol} balance is available`);
         }
         setAmount(
           formatAmountForInput(
             balances.tokenBalanceRaw,
-            tokenDecimals,
+            side === "buy" ? 18 : tokenDecimals,
           ),
         );
         return;
@@ -442,6 +461,8 @@ export function TokenTrade({
         token,
         hook,
         poolId,
+        launchModel,
+        quoteAsset,
         side: body.side,
         amountIn: body.amountIn,
         slippageBps: body.slippageBps,
@@ -490,6 +511,9 @@ export function TokenTrade({
         symbol={symbol}
         tokenDecimals={tokenDecimals}
         tokenPriceEth={tokenPriceEth}
+        tokenPriceQuote={tokenPriceQuote}
+        launchModel={launchModel}
+        quoteAssetSymbol={quoteAssetSymbol}
         totalSwapFeeBps={activeSwapFeeBps}
         pending={pending}
         error={error}
@@ -509,12 +533,7 @@ export function TokenTrade({
       aria-label={`Trade ${symbol}`}
     >
       <header className={styles.tradeHeader}>
-        <h2>
-          {side === "buy" ? "Buy" : "Sell"} ${symbol}
-        </h2>
-        <span>
-          {(activeSwapFeeBps / 100).toFixed(2).replace(/\.00$/, "")}% fee
-        </span>
+        <h2>Trade ${symbol}</h2>
       </header>
 
       <div className={styles.sideControl} role="group" aria-label="Trade side">
@@ -564,7 +583,11 @@ export function TokenTrade({
             placeholder="0"
           />
           <span className={styles.asset}>
-            {side === "buy" ? "ETH" : `$${symbol}`}
+            {side === "buy"
+              ? stockPaired
+                ? quoteAssetSymbol ?? "Quote"
+                : "ETH"
+              : `$${symbol}`}
           </span>
         </div>
         <div className={styles.amountMeta}>
@@ -574,33 +597,16 @@ export function TokenTrade({
             type="button"
             disabled={maxPending || !owner}
             aria-label={`Use maximum ${
-              side === "buy" ? "ETH" : symbol
+              side === "buy"
+                ? stockPaired
+                  ? quoteAssetSymbol ?? "quote asset"
+                  : "ETH"
+                : symbol
             } balance`}
             onClick={() => void applyMaximumBalance()}
           >
             {maxPending ? "Loading" : "Max"}
           </button>
-        </div>
-      </div>
-
-      <div className={styles.slippageRow}>
-        <label htmlFor={`${amountInputId}-slippage`}>Max slippage</label>
-        <div className={styles.slippageControl}>
-          <input
-            id={`${amountInputId}-slippage`}
-            inputMode="numeric"
-            type="number"
-            min="1"
-            max="10"
-            step="1"
-            value={slippageBps / 100}
-            onChange={(event) =>
-              setSlippageBps(
-                Math.round(Number(event.target.value) * 100),
-              )
-            }
-          />
-          <span>%</span>
         </div>
       </div>
 
@@ -636,6 +642,9 @@ export function PreparedTradeReview({
   symbol,
   tokenDecimals,
   tokenPriceEth,
+  tokenPriceQuote,
+  launchModel,
+  quoteAssetSymbol,
   totalSwapFeeBps,
   pending,
   error,
@@ -646,14 +655,23 @@ export function PreparedTradeReview({
   symbol: string;
   tokenDecimals: number;
   tokenPriceEth?: string;
+  tokenPriceQuote?: string;
+  launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
+  quoteAssetSymbol?: string;
   totalSwapFeeBps: number;
   pending: boolean;
   error?: string;
   onBack(): void;
   onConfirm(): void | Promise<void>;
 }) {
+  const stockPaired = launchModel === "stock-paired";
   const outputDecimals = prepared.side === "buy" ? tokenDecimals : 18;
-  const outputUnit = prepared.side === "buy" ? symbol : "ETH";
+  const outputUnit =
+    prepared.side === "buy"
+      ? symbol
+      : stockPaired
+        ? quoteAssetSymbol ?? "Quote"
+        : "ETH";
   const expectedOutput = formatTradeAmount(
     prepared.quote.amountOut,
     outputDecimals,
@@ -666,15 +684,17 @@ export function PreparedTradeReview({
   );
   const approvalAmount = formatTradeAmount(
     prepared.quote.amountIn,
-    tokenDecimals,
-    symbol,
+    stockPaired && prepared.side === "buy" ? 18 : tokenDecimals,
+    stockPaired && prepared.side === "buy"
+      ? quoteAssetSymbol ?? "Quote"
+      : symbol,
   );
   const priceImpact = calculatePriceImpactPercent({
     side: prepared.side,
     amountIn: prepared.quote.amountIn,
     amountOut: prepared.quote.amountOut,
     tokenDecimals,
-    tokenPriceEth,
+    tokenPriceEth: stockPaired ? tokenPriceQuote : tokenPriceEth,
   });
   const approval =
     prepared.transaction.kind === "token-to-permit2"
@@ -691,8 +711,8 @@ export function PreparedTradeReview({
       <h2>{approval ? "Approve token" : `Review ${prepared.side}`}</h2>
       {approval ? (
         <p className={styles.reviewLead}>
-          One approval is required before this sell. The approval is limited to
-          this amount.
+          One approval is required before this trade. The approval is limited
+          to this amount.
         </p>
       ) : null}
       <div className={styles.reviewOutput}>
@@ -707,7 +727,7 @@ export function PreparedTradeReview({
           </div>
         ) : null}
         <div>
-          <dt>Swap fee</dt>
+          <dt>{launchModel === "deep" ? "Deep fee" : "Swap fee"}</dt>
           <dd>{(totalSwapFeeBps / 100).toFixed(2)}%</dd>
         </div>
         {!approval ? (

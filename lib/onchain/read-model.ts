@@ -50,6 +50,20 @@ import {
   mergeDeepExploreModel,
   readDeepExploreModel,
 } from "./deep-read-model";
+import {
+  isDeepV2ExploreReleaseReady,
+  readDeepV2ExploreModel,
+} from "./deep-v2-read-model";
+import {
+  isDeepV3ExploreReleaseReady,
+  mergeDeepV3ExploreModel,
+  readDeepV3ExploreModel,
+} from "./deep-v3-explore";
+import {
+  isStockPairedExploreReleaseReady,
+  mergeStockPairedExploreModel,
+  readStockPairedExploreModel,
+} from "./stock-paired-read-model";
 
 const ZERO_FEE_VOLUME: FeeVolume = {
   grossNativeAmount: 0n,
@@ -751,16 +765,36 @@ async function readReadyModel(
 async function readReadyRegistryModel(
   config: ReadyOnchainDeployment,
 ): Promise<ExploreReadModel> {
-  const classic = await readReadyModel(config);
-  if (!isDeepExploreReleaseReady(config)) return classic;
-  if (!classic.snapshot) {
+  let registry = await readReadyModel(config);
+  if (!registry.snapshot) {
     throw new Error("The Classic registry has no confirmed snapshot");
   }
-  const deep = await readDeepExploreModel(
-    config,
-    classic.snapshot.blockNumber,
-  );
-  return mergeDeepExploreModel(classic, deep);
+  const snapshotBlockNumber = registry.snapshot.blockNumber;
+  if (isDeepExploreReleaseReady(config)) {
+    registry = mergeDeepExploreModel(
+      registry,
+      await readDeepExploreModel(config, snapshotBlockNumber),
+    );
+  }
+  if (isDeepV2ExploreReleaseReady(config)) {
+    registry = mergeDeepExploreModel(
+      registry,
+      await readDeepV2ExploreModel(config, snapshotBlockNumber),
+    );
+  }
+  if (isDeepV3ExploreReleaseReady(config)) {
+    registry = mergeDeepV3ExploreModel(
+      registry,
+      await readDeepV3ExploreModel(config, snapshotBlockNumber),
+    );
+  }
+  if (isStockPairedExploreReleaseReady(config)) {
+    registry = mergeStockPairedExploreModel(
+      registry,
+      await readStockPairedExploreModel(config, snapshotBlockNumber),
+    );
+  }
+  return registry;
 }
 
 let cachedRead:
@@ -812,7 +846,12 @@ export async function readExploreModel(
     config.launcher,
     config.deploymentBlock,
     config.confirmations,
-    isDeepExploreReleaseReady(config) ? "deep-ready" : "classic-only",
+    isDeepExploreReleaseReady(config) ? "deep-v1-ready" : "deep-v1-off",
+    isDeepV2ExploreReleaseReady(config) ? "deep-v2-ready" : "deep-v2-off",
+    isDeepV3ExploreReleaseReady(config) ? "deep-v3-ready" : "deep-v3-off",
+    isStockPairedExploreReleaseReady(config)
+      ? "stock-paired-ready"
+      : "stock-paired-off",
   ].join(":");
   if (
     cachedRead &&
@@ -823,13 +862,22 @@ export async function readExploreModel(
   }
 
   const value = (async () => {
-    if (
-      config.environment === "production" &&
-      !isDeepExploreReleaseReady(config)
-    ) {
+    if (config.environment === "production") {
       const durable = await readDurableExploreModel(config);
       if (durable.status === "ready") {
-        const model = durable.envelope.payload.model;
+        let model = durable.envelope.payload.model;
+        if (
+          model.snapshot &&
+          isStockPairedExploreReleaseReady(config)
+        ) {
+          model = mergeStockPairedExploreModel(
+            model,
+            await readStockPairedExploreModel(
+              config,
+              model.snapshot.blockNumber,
+            ),
+          );
+        }
         try {
           return await enrichExploreModelWithUsd(model, config);
         } catch (error) {
@@ -837,6 +885,10 @@ export async function readExploreModel(
           return model;
         }
       }
+      console.warn("Durable Explore index unavailable; using live RPCs", {
+        reason: durable.reason,
+        detail: durable.detail,
+      });
     }
     const model = await readReadyRegistryModel(config);
     try {

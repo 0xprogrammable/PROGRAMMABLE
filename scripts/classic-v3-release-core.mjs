@@ -20,10 +20,15 @@ import {
 export const EXPECTED_ACCOUNT =
   "0x2Bb333d48DFAF1596D9036671d2E43168994249E";
 export const TREASURY = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
+export const INITIAL_CTO_AUTHORITY = EXPECTED_ACCOUNT;
 export const REVIEWED_SOURCE_COMMITMENT =
-  "0xa92eeb3234cded560a5aedb0b9e59e7e0944a72e09e636eb43d4b7d5beb0955a";
+  "0x58991ed1743aaba5f1988a4576d36eb10af70b96bdb61661ba96e1f80acc9800";
+export const REVIEWED_SEPOLIA_SOURCE_COMMITMENT =
+  "0x19b0bc50cdffb1872a581c4c410a4ebf1acfe4e7ac8ddb334d1696218f3b2b0c";
 export const MAINNET_CHAIN_ID = 1;
 export const MAINNET_CHAIN_ID_HEX = "0x1";
+export const SEPOLIA_CHAIN_ID = 11_155_111;
+export const SEPOLIA_CHAIN_ID_HEX = "0xaa36a7";
 export const REQUIRED_HOOK_FLAGS = 8_396n;
 export const HOOK_ADDRESS_MASK = (1n << 14n) - 1n;
 export const FINALITY_CONFIRMATIONS = 12;
@@ -80,13 +85,97 @@ export const MAINNET_DEPENDENCIES = {
   },
 };
 
-const DEPLOYMENT_MANIFEST =
-  "contracts/deployments/mainnet-classic-v3.json";
-const FOUNDRY_DRY_RUN =
-  "contracts/broadcast/DeployClassicV3InfrastructureV1.s.sol/1/dry-run/run-latest.json";
+export const SEPOLIA_DEPENDENCIES = {
+  poolManager: {
+    address: "0xE03A1074c86CFeDd5C142C4F04F1a1536e203543",
+    runtimeCodeHash:
+      "0x09930125a49f5b95caf8052991cc14d1240dca8b43f42b899115b86867e4bce1",
+  },
+  positionManager: {
+    address: "0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4",
+    runtimeCodeHash:
+      "0xcffd746f78c2b50aafd19076bbe9c48f14446e5248fc5d76b9b4896610e51aab",
+  },
+  stateView: {
+    address: "0xE1Dd9c3fA50EDB962E442f60DfBc432e24537E4C",
+    runtimeCodeHash:
+      "0xaaed3db8eb8ebde8014ce4c8a3938496687f4c6374e17a7d735288f6c65ceb9e",
+  },
+  v4Quoter: {
+    address: "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227",
+    runtimeCodeHash:
+      "0xf481a751ac453d40c46d12360b85b05472028c1b113ab63749d69a5f8b0e47d1",
+  },
+  uerc20Factory: {
+    address: "0x000000e200088D55C39a11F609E5F667729ad49b",
+    runtimeCodeHash:
+      "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb",
+  },
+  permit2: {
+    address: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+    runtimeCodeHash:
+      "0x96d9f5c3f0fb0423426b7f970186235b7347027f4e5c19c40c412b7d97fc3751",
+  },
+  universalRouter: {
+    address: "0x470FFC67b1feEEC31D16C46AC7545C98716a194c",
+    runtimeCodeHash:
+      "0x14b733fce7cfcca643ef884ed59d2cb2d23b3fead8692613dcee311d65555caf",
+  },
+  positionForwarderFactory: {
+    address: "0xaE3C324B742a7576863A546120c4280b7c9E8448",
+    runtimeCodeHash:
+      "0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc",
+  },
+};
+
+const NETWORKS = {
+  mainnet: {
+    key: "mainnet",
+    network: "Ethereum Mainnet",
+    chainId: MAINNET_CHAIN_ID,
+    chainIdHex: MAINNET_CHAIN_ID_HEX,
+    explorer: "https://etherscan.io",
+    sourceCommitment: REVIEWED_SOURCE_COMMITMENT,
+    dependencies: MAINNET_DEPENDENCIES,
+    deploymentManifest: "contracts/deployments/mainnet-classic-v3.json",
+    foundryDryRun:
+      "contracts/broadcast/DeployClassicV3InfrastructureV1.s.sol/1/dry-run/run-latest.json",
+    defaultRpcEndpoints: DEFAULT_RPC_ENDPOINTS,
+  },
+  sepolia: {
+    key: "sepolia",
+    network: "Sepolia",
+    chainId: SEPOLIA_CHAIN_ID,
+    chainIdHex: SEPOLIA_CHAIN_ID_HEX,
+    explorer: "https://sepolia.etherscan.io",
+    sourceCommitment: REVIEWED_SEPOLIA_SOURCE_COMMITMENT,
+    dependencies: SEPOLIA_DEPENDENCIES,
+    deploymentManifest: "contracts/deployments/sepolia-classic-v3.json",
+    foundryDryRun:
+      "contracts/broadcast/DeployClassicV3InfrastructureV1.s.sol/11155111/dry-run/run-latest.json",
+    defaultRpcEndpoints: [
+      "https://sepolia.drpc.org",
+      "https://ethereum-sepolia-rpc.publicnode.com",
+    ],
+  },
+};
+
+export function getClassicV3NetworkConfig(network = "mainnet") {
+  const config = NETWORKS[String(network).toLowerCase()];
+  if (!config) {
+    throw new Error(`Unsupported Classic release network: ${network}`);
+  }
+  return config;
+}
 const ARTIFACTS = {
-  feeSplitVaultFactory:
-    "contracts/out/FeeSplitVaultFactoryV1.sol/FeeSplitVaultFactoryV1.json",
+  ctoAuthority:
+    "contracts/out/ClassicCtoAuthorityV1.sol/ClassicCtoAuthorityV1.json",
+  rewardVaultFactory:
+    "contracts/out/ClassicRewardVaultFactoryV1.sol/ClassicRewardVaultFactoryV1.json",
+  initialBuyVestingWalletFactory:
+    "contracts/out/ClassicInitialBuyVestingWalletFactoryV1.sol/ClassicInitialBuyVestingWalletFactoryV1.json",
+  launchPolicy:
+    "contracts/out/ClassicLaunchPolicyV1.sol/ClassicLaunchPolicyV1.json",
   hookFactory:
     "contracts/out/EthCreatorFeeHookFactoryV3.sol/EthCreatorFeeHookFactoryV3.json",
   feeHook: "contracts/out/EthCreatorFeeHookV3.sol/EthCreatorFeeHookV3.json",
@@ -116,7 +205,9 @@ const launcherAbi = parseAbi([
   "function positionManager() view returns (address)",
   "function tokenFactory() view returns (address)",
   "function feeHook() view returns (address)",
-  "function feeSplitVaultFactory() view returns (address)",
+  "function rewardVaultFactory() view returns (address)",
+  "function initialBuyVestingWalletFactory() view returns (address)",
+  "function launchPolicy() view returns (address)",
   "function positionForwarderFactory() view returns (address)",
   "function MIN_INITIAL_BUY_WEI() view returns (uint256)",
   "function TOKEN_SUPPLY() view returns (uint256)",
@@ -124,6 +215,25 @@ const launcherAbi = parseAbi([
   "function REWARD_SHARE_BASIS_POINTS() view returns (uint16)",
   "function LP_FEE_PIPS() view returns (uint24)",
   "function TICK_SPACING() view returns (int24)",
+]);
+const ctoAuthorityAbi = parseAbi([
+  "function authority() view returns (address)",
+]);
+const rewardVaultFactoryAbi = parseAbi([
+  "function ctoAuthority() view returns (address)",
+]);
+const initialBuyVestingWalletFactoryAbi = parseAbi([
+  "function MIN_DURATION_DAYS() view returns (uint16)",
+  "function MAX_DURATION_DAYS() view returns (uint16)",
+]);
+const launchPolicyAbi = parseAbi([
+  "function MAX_TOKEN_NAME_BYTES() view returns (uint256)",
+  "function MAX_TOKEN_SYMBOL_BYTES() view returns (uint256)",
+  "function MAX_TOKEN_DESCRIPTION_BYTES() view returns (uint256)",
+  "function MAX_METADATA_URL_BYTES() view returns (uint256)",
+  "function MAX_SOCIAL_EXTRA_DATA_BYTES() view returns (uint256)",
+  "function MAX_REWARD_BENEFICIARIES() view returns (uint256)",
+  "function REWARD_SHARE_BASIS_POINTS() view returns (uint16)",
 ]);
 
 function normalizeHex(value) {
@@ -212,27 +322,48 @@ function artifactRuntime(artifact, label) {
   return value;
 }
 
-function dependencyAddresses() {
+function dependencyAddresses(config) {
+  const dependencies = config.dependencies;
   return [
-    MAINNET_DEPENDENCIES.poolManager.address,
-    MAINNET_DEPENDENCIES.positionManager.address,
-    MAINNET_DEPENDENCIES.stateView.address,
-    MAINNET_DEPENDENCIES.v4Quoter.address,
-    MAINNET_DEPENDENCIES.uerc20Factory.address,
-    MAINNET_DEPENDENCIES.permit2.address,
-    MAINNET_DEPENDENCIES.universalRouter.address,
-    MAINNET_DEPENDENCIES.positionForwarderFactory.address,
+    dependencies.poolManager.address,
+    dependencies.positionManager.address,
+    dependencies.stateView.address,
+    dependencies.v4Quoter.address,
+    dependencies.uerc20Factory.address,
+    dependencies.permit2.address,
+    dependencies.universalRouter.address,
+    dependencies.positionForwarderFactory.address,
     TREASURY,
+    INITIAL_CTO_AUTHORITY,
   ];
 }
 
-export function computeClassicV3SourceCommitment(artifacts) {
+export function computeClassicV3SourceCommitment(
+  artifacts,
+  network = "mainnet",
+) {
+  const config = getClassicV3NetworkConfig(network);
   const creationCodeHashes = [
     keccak256(
       artifactBytecode(
-        artifacts.feeSplitVaultFactory,
-        "FeeSplitVaultFactoryV1",
+        artifacts.ctoAuthority,
+        "ClassicCtoAuthorityV1",
       ),
+    ),
+    keccak256(
+      artifactBytecode(
+        artifacts.rewardVaultFactory,
+        "ClassicRewardVaultFactoryV1",
+      ),
+    ),
+    keccak256(
+      artifactBytecode(
+        artifacts.initialBuyVestingWalletFactory,
+        "ClassicInitialBuyVestingWalletFactoryV1",
+      ),
+    ),
+    keccak256(
+      artifactBytecode(artifacts.launchPolicy, "ClassicLaunchPolicyV1"),
     ),
     keccak256(
       artifactBytecode(
@@ -247,23 +378,23 @@ export function computeClassicV3SourceCommitment(artifacts) {
   ];
   const bytecodeCommitment = keccak256(
     encodeAbiParameters(
-      Array.from({ length: 4 }, () => ({ type: "bytes32" })),
+      Array.from({ length: 7 }, () => ({ type: "bytes32" })),
       creationCodeHashes,
     ),
   );
 
-  const addresses = dependencyAddresses();
+  const addresses = dependencyAddresses(config);
   const dependencyCommitment = keccak256(
     encodeAbiParameters(
       [
         { type: "uint256" },
         ...addresses.map(() => ({ type: "address" })),
       ],
-      [1n, ...addresses.map(canonicalAddress)],
+      [BigInt(config.chainId), ...addresses.map(canonicalAddress)],
     ),
   );
 
-  const economicsCommitment = keccak256(
+  const feeCommitment = keccak256(
     encodeAbiParameters(
       [
         { type: "uint256" },
@@ -272,13 +403,6 @@ export function computeClassicV3SourceCommitment(artifacts) {
         { type: "uint256" },
         { type: "uint256" },
         { type: "int256" },
-        { type: "uint256" },
-        { type: "uint256" },
-        { type: "uint256" },
-        { type: "uint256" },
-        { type: "bytes32" },
-        { type: "bytes32" },
-        { type: "bytes32" },
         { type: "bytes32" },
       ],
       [
@@ -288,19 +412,60 @@ export function computeClassicV3SourceCommitment(artifacts) {
         100n,
         0n,
         200n,
+        keccak256(stringToHex("immutable-directional-buy-and-sell-fees")),
+      ],
+    ),
+  );
+  const rewardCommitment = keccak256(
+    encodeAbiParameters(
+      [
+        { type: "uint256" },
+        { type: "uint256" },
+        { type: "bytes32" },
+        { type: "bytes32" },
+        { type: "bytes32" },
+      ],
+      [
+        5n,
+        10_000n,
+        keccak256(stringToHex("beneficiary-owned-historic-rewards")),
+        keccak256(stringToHex("prospective-payout-wallet-change")),
+        keccak256(stringToHex("programmable-approved-prospective-cto")),
+      ],
+    ),
+  );
+  const launchCommitment = keccak256(
+    encodeAbiParameters(
+      [
+        { type: "uint256" },
+        { type: "uint256" },
+        { type: "uint256" },
+        { type: "uint256" },
+        { type: "bytes32" },
+        { type: "bytes32" },
+        { type: "bytes32" },
+      ],
+      [
         600_000_000_000_000n,
         1_000_000_000n * 10n ** 18n,
-        8n,
-        10_000n,
-        keccak256(stringToHex("immutable-directional-buy-and-sell-fees")),
-        keccak256(stringToHex("immutable-beneficiaries-and-shares")),
+        1n,
+        3_650n,
         keccak256(
-          stringToHex("beneficiary-authorized-claim-and-payout-update"),
+          stringToHex(
+            "unlocked-fixed-lock-linear-and-cliff-linear-initial-buy-custody",
+          ),
         ),
+        keccak256(stringToHex("immutable-initial-buy-beneficiary")),
         keccak256(
           stringToHex("one-sided-permanently-locked-official-v4-position"),
         ),
       ],
+    ),
+  );
+  const economicsCommitment = keccak256(
+    encodeAbiParameters(
+      Array.from({ length: 3 }, () => ({ type: "bytes32" })),
+      [feeCommitment, rewardCommitment, launchCommitment],
     ),
   );
 
@@ -322,16 +487,18 @@ export function computeClassicV3SourceCommitment(artifacts) {
 export function assertReviewedClassicV3SourceCommitment(
   artifacts,
   manifestSourceCommitment,
+  network = "mainnet",
 ) {
+  const config = getClassicV3NetworkConfig(network);
   if (
     normalizeHex(manifestSourceCommitment) !==
-    REVIEWED_SOURCE_COMMITMENT
+    config.sourceCommitment
   ) {
     throw new Error("Classic V3 manifest source commitment drifted");
   }
   const computedSourceCommitment =
-    computeClassicV3SourceCommitment(artifacts);
-  if (computedSourceCommitment !== REVIEWED_SOURCE_COMMITMENT) {
+    computeClassicV3SourceCommitment(artifacts, config.key);
+  if (computedSourceCommitment !== config.sourceCommitment) {
     throw new Error(
       "Current Classic V3 artifacts do not match the reviewed source commitment",
     );
@@ -339,8 +506,8 @@ export function assertReviewedClassicV3SourceCommitment(
   return computedSourceCommitment;
 }
 
-function assertManifestDependencyPin(manifest) {
-  for (const [name, expected] of Object.entries(MAINNET_DEPENDENCIES)) {
+function assertManifestDependencyPin(manifest, config) {
+  for (const [name, expected] of Object.entries(config.dependencies)) {
     const actual = manifest?.officialDependencies?.[name];
     if (
       normalizeHex(actual?.address) !== normalizeHex(expected.address) ||
@@ -358,13 +525,38 @@ function assertCandidateField(candidate, field, expected) {
   }
 }
 
-export async function loadClassicV3ReleasePlan(repositoryRoot) {
+export async function loadClassicV3ReleasePlan(
+  repositoryRoot,
+  network = "mainnet",
+) {
+  const config = getClassicV3NetworkConfig(network);
   const root = path.resolve(repositoryRoot);
-  const [manifest, broadcast, feeSplitVaultFactory, hookFactory, feeHook, launcher] =
-    await Promise.all([
-      readFile(path.join(root, DEPLOYMENT_MANIFEST), "utf8").then(JSON.parse),
-      readFile(path.join(root, FOUNDRY_DRY_RUN), "utf8").then(JSON.parse),
-      readFile(path.join(root, ARTIFACTS.feeSplitVaultFactory), "utf8").then(
+  const [
+    manifest,
+    broadcast,
+    ctoAuthority,
+    rewardVaultFactory,
+    initialBuyVestingWalletFactory,
+    launchPolicy,
+    hookFactory,
+    feeHook,
+    launcher,
+  ] = await Promise.all([
+      readFile(path.join(root, config.deploymentManifest), "utf8").then(
+        JSON.parse,
+      ),
+      readFile(path.join(root, config.foundryDryRun), "utf8").then(JSON.parse),
+      readFile(path.join(root, ARTIFACTS.ctoAuthority), "utf8").then(
+        JSON.parse,
+      ),
+      readFile(path.join(root, ARTIFACTS.rewardVaultFactory), "utf8").then(
+        JSON.parse,
+      ),
+      readFile(
+        path.join(root, ARTIFACTS.initialBuyVestingWalletFactory),
+        "utf8",
+      ).then(JSON.parse),
+      readFile(path.join(root, ARTIFACTS.launchPolicy), "utf8").then(
         JSON.parse,
       ),
       readFile(path.join(root, ARTIFACTS.hookFactory), "utf8").then(JSON.parse),
@@ -372,29 +564,33 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
       readFile(path.join(root, ARTIFACTS.launcher), "utf8").then(JSON.parse),
     ]);
   const artifacts = {
-    feeSplitVaultFactory,
+    ctoAuthority,
+    rewardVaultFactory,
+    initialBuyVestingWalletFactory,
+    launchPolicy,
     hookFactory,
     feeHook,
     launcher,
   };
 
-  if (manifest.schemaVersion !== 1 || manifest.chainId !== MAINNET_CHAIN_ID) {
-    throw new Error("Classic V3 release manifest is not for Ethereum Mainnet");
+  if (manifest.schemaVersion !== 1 || manifest.chainId !== config.chainId) {
+    throw new Error(`Classic V3 release manifest is not for ${config.network}`);
   }
-  assertManifestDependencyPin(manifest);
+  assertManifestDependencyPin(manifest, config);
 
   assertReviewedClassicV3SourceCommitment(
     artifacts,
     manifest.sourceCommitment,
+    config.key,
   );
 
   if (
-    broadcast.chain !== MAINNET_CHAIN_ID ||
+    broadcast.chain !== config.chainId ||
     !Array.isArray(broadcast.transactions) ||
-    broadcast.transactions.length !== 4
+    broadcast.transactions.length !== 7
   ) {
     throw new Error(
-      "Classic V3 Foundry simulation must contain exactly four Mainnet transactions",
+      `Classic V3 Foundry simulation must contain exactly seven ${config.network} transactions`,
     );
   }
   if (
@@ -410,9 +606,20 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
   }
 
   const entries = broadcast.transactions;
-  const expectedTypes = ["CREATE", "CREATE", "CALL", "CREATE"];
+  const expectedTypes = [
+    "CREATE",
+    "CREATE",
+    "CREATE",
+    "CREATE",
+    "CREATE",
+    "CALL",
+    "CREATE",
+  ];
   const expectedContracts = [
-    "FeeSplitVaultFactoryV1",
+    "ClassicCtoAuthorityV1",
+    "ClassicRewardVaultFactoryV1",
+    "ClassicInitialBuyVestingWalletFactoryV1",
+    "ClassicLaunchPolicyV1",
     "EthCreatorFeeHookFactoryV3",
     "EthCreatorFeeHookFactoryV3",
     "MemeLaunchV2",
@@ -434,7 +641,7 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
     }
     if (
       normalizeHex(transaction.from) !== normalizeHex(EXPECTED_ACCOUNT) ||
-      normalizeHex(transaction.chainId) !== MAINNET_CHAIN_ID_HEX ||
+      normalizeHex(transaction.chainId) !== config.chainIdHex ||
       normalizeQuantity(transaction.value) !== "0x0" ||
       Number(BigInt(transaction.nonce)) !== startingNonce + index
     ) {
@@ -451,8 +658,25 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
     }
   }
 
-  const [vaultEntry, factoryEntry, hookEntry, launcherEntry] = entries;
-  const vaultAddress = canonicalAddress(vaultEntry.contractAddress);
+  const [
+    ctoEntry,
+    rewardVaultEntry,
+    custodyFactoryEntry,
+    launchPolicyEntry,
+    factoryEntry,
+    hookEntry,
+    launcherEntry,
+  ] = entries;
+  const ctoAddress = canonicalAddress(ctoEntry.contractAddress);
+  const rewardVaultFactoryAddress = canonicalAddress(
+    rewardVaultEntry.contractAddress,
+  );
+  const custodyFactoryAddress = canonicalAddress(
+    custodyFactoryEntry.contractAddress,
+  );
+  const launchPolicyAddress = canonicalAddress(
+    launchPolicyEntry.contractAddress,
+  );
   const factoryAddress = canonicalAddress(factoryEntry.contractAddress);
   const hookAddress = canonicalAddress(
     hookEntry.additionalContracts?.[0]?.address,
@@ -472,24 +696,68 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
       from: EXPECTED_ACCOUNT,
       nonce: BigInt(startingNonce + 1),
     }),
-    hookAddress,
+    getContractAddress({
+      from: EXPECTED_ACCOUNT,
+      nonce: BigInt(startingNonce + 2),
+    }),
     getContractAddress({
       from: EXPECTED_ACCOUNT,
       nonce: BigInt(startingNonce + 3),
     }),
+    getContractAddress({
+      from: EXPECTED_ACCOUNT,
+      nonce: BigInt(startingNonce + 4),
+    }),
+    hookAddress,
+    getContractAddress({
+      from: EXPECTED_ACCOUNT,
+      nonce: BigInt(startingNonce + 6),
+    }),
   ];
   if (
-    normalizeHex(vaultAddress) !== normalizeHex(expectedCreateAddresses[0]) ||
-    normalizeHex(factoryAddress) !== normalizeHex(expectedCreateAddresses[1]) ||
-    normalizeHex(launcherAddress) !== normalizeHex(expectedCreateAddresses[3])
+    normalizeHex(ctoAddress) !== normalizeHex(expectedCreateAddresses[0]) ||
+    normalizeHex(rewardVaultFactoryAddress) !==
+      normalizeHex(expectedCreateAddresses[1]) ||
+    normalizeHex(custodyFactoryAddress) !==
+      normalizeHex(expectedCreateAddresses[2]) ||
+    normalizeHex(launchPolicyAddress) !==
+      normalizeHex(expectedCreateAddresses[3]) ||
+    normalizeHex(factoryAddress) !== normalizeHex(expectedCreateAddresses[4]) ||
+    normalizeHex(launcherAddress) !== normalizeHex(expectedCreateAddresses[6])
   ) {
     throw new Error("Classic V3 CREATE address prediction drifted");
   }
 
+  const expectedCtoInput =
+    artifactBytecode(ctoAuthority, "ClassicCtoAuthorityV1") +
+    encodeAbiParameters(
+      [{ type: "address" }],
+      [canonicalAddress(INITIAL_CTO_AUTHORITY)],
+    ).slice(2);
+  const expectedRewardVaultFactoryInput =
+    artifactBytecode(
+      rewardVaultFactory,
+      "ClassicRewardVaultFactoryV1",
+    ) +
+    encodeAbiParameters(
+      [{ type: "address" }],
+      [ctoAddress],
+    ).slice(2);
   if (
-    normalizeHex(vaultEntry.transaction.input) !==
+    normalizeHex(ctoEntry.transaction.input) !==
+      normalizeHex(expectedCtoInput) ||
+    normalizeHex(rewardVaultEntry.transaction.input) !==
+      normalizeHex(expectedRewardVaultFactoryInput) ||
+    normalizeHex(custodyFactoryEntry.transaction.input) !==
       normalizeHex(
-        artifactBytecode(feeSplitVaultFactory, "FeeSplitVaultFactoryV1"),
+        artifactBytecode(
+          initialBuyVestingWalletFactory,
+          "ClassicInitialBuyVestingWalletFactoryV1",
+        ),
+      ) ||
+    normalizeHex(launchPolicyEntry.transaction.input) !==
+      normalizeHex(
+        artifactBytecode(launchPolicy, "ClassicLaunchPolicyV1"),
       ) ||
     normalizeHex(factoryEntry.transaction.input) !==
       normalizeHex(
@@ -497,7 +765,7 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
       )
   ) {
     throw new Error(
-      "Classic V3 factory creation bytecode differs from the reviewed artifacts",
+      "Classic V3 creation bytecode or constructor arguments differ from the reviewed artifacts",
     );
   }
 
@@ -523,9 +791,10 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
   if (
     normalizeHex(decodedSalt) !== normalizeHex(hookSalt) ||
     normalizeHex(decodedPoolManager) !==
-      normalizeHex(MAINNET_DEPENDENCIES.poolManager.address) ||
+      normalizeHex(config.dependencies.poolManager.address) ||
     normalizeHex(decodedTreasury) !== normalizeHex(TREASURY) ||
-    normalizeHex(decodedVaultFactory) !== normalizeHex(vaultAddress)
+    normalizeHex(decodedVaultFactory) !==
+      normalizeHex(rewardVaultFactoryAddress)
   ) {
     throw new Error("Classic V3 hook deployment arguments drifted");
   }
@@ -536,9 +805,9 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
       { type: "address" },
     ],
     [
-      canonicalAddress(MAINNET_DEPENDENCIES.poolManager.address),
+      canonicalAddress(config.dependencies.poolManager.address),
       TREASURY,
-      vaultAddress,
+      rewardVaultFactoryAddress,
     ],
   );
   const expectedHookInitCode =
@@ -564,9 +833,9 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
     functionName: "deploy",
     args: [
       hookSalt,
-      canonicalAddress(MAINNET_DEPENDENCIES.poolManager.address),
+      canonicalAddress(config.dependencies.poolManager.address),
       TREASURY,
-      vaultAddress,
+      rewardVaultFactoryAddress,
     ],
   });
   if (
@@ -584,15 +853,19 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
       { type: "address" },
       { type: "address" },
       { type: "address" },
+      { type: "address" },
+      { type: "address" },
     ],
     [
-      canonicalAddress(MAINNET_DEPENDENCIES.poolManager.address),
-      canonicalAddress(MAINNET_DEPENDENCIES.positionManager.address),
-      canonicalAddress(MAINNET_DEPENDENCIES.uerc20Factory.address),
+      canonicalAddress(config.dependencies.poolManager.address),
+      canonicalAddress(config.dependencies.positionManager.address),
+      canonicalAddress(config.dependencies.uerc20Factory.address),
       hookAddress,
-      vaultAddress,
+      rewardVaultFactoryAddress,
+      custodyFactoryAddress,
+      launchPolicyAddress,
       canonicalAddress(
-        MAINNET_DEPENDENCIES.positionForwarderFactory.address,
+        config.dependencies.positionForwarderFactory.address,
       ),
     ],
   );
@@ -610,7 +883,7 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
 
   const returnValue = String(broadcast?.returns?.result?.value ?? "");
   if (
-    !returnValue.toLowerCase().includes(REVIEWED_SOURCE_COMMITMENT) ||
+    !returnValue.toLowerCase().includes(config.sourceCommitment) ||
     !returnValue.toLowerCase().includes(normalizeHex(hookSalt))
   ) {
     throw new Error(
@@ -620,49 +893,211 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
 
   const candidate = manifest.candidatePlan;
   if (
-    candidate?.transactionCount !== 4 ||
+    candidate?.transactionCount !== 7 ||
     candidate?.startingNonce !== startingNonce
   ) {
     throw new Error("Classic V3 candidate plan nonce or count drifted");
   }
   assertCandidateField(candidate, "deployer", EXPECTED_ACCOUNT);
-  assertCandidateField(candidate, "feeSplitVaultFactory", vaultAddress);
+  assertCandidateField(candidate, "ctoAuthority", ctoAddress);
+  assertCandidateField(
+    candidate,
+    "rewardVaultFactory",
+    rewardVaultFactoryAddress,
+  );
+  assertCandidateField(
+    candidate,
+    "initialBuyVestingWalletFactory",
+    custodyFactoryAddress,
+  );
+  assertCandidateField(candidate, "launchPolicy", launchPolicyAddress);
   assertCandidateField(candidate, "hookFactory", factoryAddress);
   assertCandidateField(candidate, "feeHook", hookAddress);
   assertCandidateField(candidate, "launcher", launcherAddress);
   assertCandidateField(candidate, "hookSalt", hookSalt);
 
   const shared = {
-    chainId: MAINNET_CHAIN_ID_HEX,
+    chainId: config.chainIdHex,
     from: EXPECTED_ACCOUNT,
     value: "0x0",
   };
   const transactions = [
     {
       ...shared,
-      name: "FeeSplitVaultFactoryV1",
-      label: "Fee split vault factory",
+      name: "ClassicCtoAuthorityV1",
+      label: "CTO authority",
       transactionType: "CREATE",
-      address: vaultAddress,
+      address: ctoAddress,
       to: null,
-      nonce: normalizeQuantity(vaultEntry.transaction.nonce),
-      data: vaultEntry.transaction.input,
-      inputHash: keccak256(vaultEntry.transaction.input),
-      reviewedGasLimit: normalizeQuantity(vaultEntry.transaction.gas),
+      nonce: normalizeQuantity(ctoEntry.transaction.nonce),
+      data: ctoEntry.transaction.input,
+      inputHash: keccak256(ctoEntry.transaction.input),
+      reviewedGasLimit: normalizeQuantity(ctoEntry.transaction.gas),
+      runtimeCodeHash: keccak256(
+        artifactRuntime(ctoAuthority, "ClassicCtoAuthorityV1"),
+      ),
+      runtimeBytes:
+        (artifactRuntime(
+          ctoAuthority,
+          "ClassicCtoAuthorityV1",
+        ).length -
+          2) /
+        2,
+      checks: [
+        callCheck(
+          "current CTO authority",
+          ctoAddress,
+          ctoAuthorityAbi,
+          "authority",
+          addressResult(INITIAL_CTO_AUTHORITY),
+        ),
+      ],
+    },
+    {
+      ...shared,
+      name: "ClassicRewardVaultFactoryV1",
+      label: "Reward vault factory",
+      transactionType: "CREATE",
+      address: rewardVaultFactoryAddress,
+      to: null,
+      nonce: normalizeQuantity(rewardVaultEntry.transaction.nonce),
+      data: rewardVaultEntry.transaction.input,
+      inputHash: keccak256(rewardVaultEntry.transaction.input),
+      reviewedGasLimit: normalizeQuantity(
+        rewardVaultEntry.transaction.gas,
+      ),
+      runtimeCodeHash: null,
+      runtimeBytes:
+        (artifactRuntime(
+          rewardVaultFactory,
+          "ClassicRewardVaultFactoryV1",
+        ).length -
+          2) /
+        2,
+      checks: [
+        callCheck(
+          "CTO authority binding",
+          rewardVaultFactoryAddress,
+          rewardVaultFactoryAbi,
+          "ctoAuthority",
+          addressResult(ctoAddress),
+        ),
+      ],
+    },
+    {
+      ...shared,
+      name: "ClassicInitialBuyVestingWalletFactoryV1",
+      label: "Initial Buy custody factory",
+      transactionType: "CREATE",
+      address: custodyFactoryAddress,
+      to: null,
+      nonce: normalizeQuantity(custodyFactoryEntry.transaction.nonce),
+      data: custodyFactoryEntry.transaction.input,
+      inputHash: keccak256(custodyFactoryEntry.transaction.input),
+      reviewedGasLimit: normalizeQuantity(
+        custodyFactoryEntry.transaction.gas,
+      ),
       runtimeCodeHash: keccak256(
         artifactRuntime(
-          feeSplitVaultFactory,
-          "FeeSplitVaultFactoryV1",
+          initialBuyVestingWalletFactory,
+          "ClassicInitialBuyVestingWalletFactoryV1",
         ),
       ),
       runtimeBytes:
         (artifactRuntime(
-          feeSplitVaultFactory,
-          "FeeSplitVaultFactoryV1",
+          initialBuyVestingWalletFactory,
+          "ClassicInitialBuyVestingWalletFactoryV1",
         ).length -
           2) /
         2,
-      checks: [],
+      checks: [
+        callCheck(
+          "minimum custody duration",
+          custodyFactoryAddress,
+          initialBuyVestingWalletFactoryAbi,
+          "MIN_DURATION_DAYS",
+          uintResult(1, "uint16"),
+        ),
+        callCheck(
+          "maximum custody duration",
+          custodyFactoryAddress,
+          initialBuyVestingWalletFactoryAbi,
+          "MAX_DURATION_DAYS",
+          uintResult(3_650, "uint16"),
+        ),
+      ],
+    },
+    {
+      ...shared,
+      name: "ClassicLaunchPolicyV1",
+      label: "Launch policy",
+      transactionType: "CREATE",
+      address: launchPolicyAddress,
+      to: null,
+      nonce: normalizeQuantity(launchPolicyEntry.transaction.nonce),
+      data: launchPolicyEntry.transaction.input,
+      inputHash: keccak256(launchPolicyEntry.transaction.input),
+      reviewedGasLimit: normalizeQuantity(
+        launchPolicyEntry.transaction.gas,
+      ),
+      runtimeCodeHash: keccak256(
+        artifactRuntime(launchPolicy, "ClassicLaunchPolicyV1"),
+      ),
+      runtimeBytes:
+        (artifactRuntime(launchPolicy, "ClassicLaunchPolicyV1").length -
+          2) /
+        2,
+      checks: [
+        callCheck(
+          "token name bytes",
+          launchPolicyAddress,
+          launchPolicyAbi,
+          "MAX_TOKEN_NAME_BYTES",
+          uintResult(48),
+        ),
+        callCheck(
+          "token symbol bytes",
+          launchPolicyAddress,
+          launchPolicyAbi,
+          "MAX_TOKEN_SYMBOL_BYTES",
+          uintResult(12),
+        ),
+        callCheck(
+          "token description bytes",
+          launchPolicyAddress,
+          launchPolicyAbi,
+          "MAX_TOKEN_DESCRIPTION_BYTES",
+          uintResult(280),
+        ),
+        callCheck(
+          "metadata URL bytes",
+          launchPolicyAddress,
+          launchPolicyAbi,
+          "MAX_METADATA_URL_BYTES",
+          uintResult(2_048),
+        ),
+        callCheck(
+          "social metadata bytes",
+          launchPolicyAddress,
+          launchPolicyAbi,
+          "MAX_SOCIAL_EXTRA_DATA_BYTES",
+          uintResult(1_200),
+        ),
+        callCheck(
+          "maximum reward recipients",
+          launchPolicyAddress,
+          launchPolicyAbi,
+          "MAX_REWARD_BENEFICIARIES",
+          uintResult(5),
+        ),
+        callCheck(
+          "reward share denominator",
+          launchPolicyAddress,
+          launchPolicyAbi,
+          "REWARD_SHARE_BASIS_POINTS",
+          uintResult(10_000, "uint16"),
+        ),
+      ],
     },
     {
       ...shared,
@@ -727,7 +1162,7 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
           hookAddress,
           hookAbi,
           "poolManager",
-          addressResult(MAINNET_DEPENDENCIES.poolManager.address),
+          addressResult(config.dependencies.poolManager.address),
         ),
         callCheck(
           "treasury",
@@ -737,11 +1172,11 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
           addressResult(TREASURY),
         ),
         callCheck(
-          "fee split vault factory",
+          "reward vault factory",
           hookAddress,
           hookAbi,
           "feeSplitVaultFactory",
-          addressResult(vaultAddress),
+          addressResult(rewardVaultFactoryAddress),
         ),
         callCheck(
           "launcher fee",
@@ -814,21 +1249,21 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
           launcherAddress,
           launcherAbi,
           "poolManager",
-          addressResult(MAINNET_DEPENDENCIES.poolManager.address),
+          addressResult(config.dependencies.poolManager.address),
         ),
         callCheck(
           "PositionManager",
           launcherAddress,
           launcherAbi,
           "positionManager",
-          addressResult(MAINNET_DEPENDENCIES.positionManager.address),
+          addressResult(config.dependencies.positionManager.address),
         ),
         callCheck(
           "UERC20 factory",
           launcherAddress,
           launcherAbi,
           "tokenFactory",
-          addressResult(MAINNET_DEPENDENCIES.uerc20Factory.address),
+          addressResult(config.dependencies.uerc20Factory.address),
         ),
         callCheck(
           "creator fee hook",
@@ -838,11 +1273,25 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
           addressResult(hookAddress),
         ),
         callCheck(
-          "fee split vault factory",
+          "reward vault factory",
           launcherAddress,
           launcherAbi,
-          "feeSplitVaultFactory",
-          addressResult(vaultAddress),
+          "rewardVaultFactory",
+          addressResult(rewardVaultFactoryAddress),
+        ),
+        callCheck(
+          "Initial Buy custody factory",
+          launcherAddress,
+          launcherAbi,
+          "initialBuyVestingWalletFactory",
+          addressResult(custodyFactoryAddress),
+        ),
+        callCheck(
+          "launch policy",
+          launcherAddress,
+          launcherAbi,
+          "launchPolicy",
+          addressResult(launchPolicyAddress),
         ),
         callCheck(
           "locked position factory",
@@ -850,11 +1299,11 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
           launcherAbi,
           "positionForwarderFactory",
           addressResult(
-            MAINNET_DEPENDENCIES.positionForwarderFactory.address,
+            config.dependencies.positionForwarderFactory.address,
           ),
         ),
         callCheck(
-          "minimum Dev Buy",
+          "minimum Initial Buy",
           launcherAddress,
           launcherAbi,
           "MIN_INITIAL_BUY_WEI",
@@ -872,7 +1321,7 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
           launcherAddress,
           launcherAbi,
           "MAX_REWARD_BENEFICIARIES",
-          uintResult(8),
+          uintResult(5),
         ),
         callCheck(
           "reward share denominator",
@@ -909,9 +1358,9 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
   }
 
   const planCommitment = {
-    chainId: MAINNET_CHAIN_ID,
+    chainId: config.chainId,
     expectedAccount: EXPECTED_ACCOUNT,
-    sourceCommitment: REVIEWED_SOURCE_COMMITMENT,
+    sourceCommitment: config.sourceCommitment,
     startingNonce,
     hookSalt: normalizeHex(hookSalt),
     transactions: transactions.map((transaction) => ({
@@ -929,19 +1378,36 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
   return {
     schemaVersion: 1,
     release: "classic-v3",
-    network: "Ethereum Mainnet",
-    chainId: MAINNET_CHAIN_ID,
-    chainIdHex: MAINNET_CHAIN_ID_HEX,
-    explorer: "https://etherscan.io",
+    network: config.network,
+    networkKey: config.key,
+    chainId: config.chainId,
+    chainIdHex: config.chainIdHex,
+    explorer: config.explorer,
     expectedAccount: EXPECTED_ACCOUNT,
     treasury: TREASURY,
-    sourceCommitment: REVIEWED_SOURCE_COMMITMENT,
+    sourceCommitment: config.sourceCommitment,
+    dependencies: config.dependencies,
     sourceArtifactCommitments: {
-      feeSplitVaultFactory: keccak256(
+      ctoAuthority: keccak256(
         artifactBytecode(
-          feeSplitVaultFactory,
-          "FeeSplitVaultFactoryV1",
+          ctoAuthority,
+          "ClassicCtoAuthorityV1",
         ),
+      ),
+      rewardVaultFactory: keccak256(
+        artifactBytecode(
+          rewardVaultFactory,
+          "ClassicRewardVaultFactoryV1",
+        ),
+      ),
+      initialBuyVestingWalletFactory: keccak256(
+        artifactBytecode(
+          initialBuyVestingWalletFactory,
+          "ClassicInitialBuyVestingWalletFactoryV1",
+        ),
+      ),
+      launchPolicy: keccak256(
+        artifactBytecode(launchPolicy, "ClassicLaunchPolicyV1"),
       ),
       hookFactory: keccak256(
         artifactBytecode(hookFactory, "EthCreatorFeeHookFactoryV3"),
@@ -965,7 +1431,7 @@ export async function loadClassicV3ReleasePlan(repositoryRoot) {
     ),
     planDigest: jsonDigest(planCommitment),
     startingNonce,
-    endingNonce: startingNonce + 4,
+    endingNonce: startingNonce + 7,
     hookSalt: normalizeHex(hookSalt),
     reviewedGas: reviewedGas.toString(),
     transactions,
@@ -990,7 +1456,7 @@ export function assertClassicV3SequenceState(plan, state) {
   }
   if (state.deployments.length !== plan.transactions.length) {
     throw new Error(
-      "Deployment state does not match the four reviewed transactions",
+      "Deployment state does not match the seven reviewed transactions",
     );
   }
 
@@ -1021,6 +1487,22 @@ export function assertClassicV3SequenceState(plan, state) {
   return confirmedCount;
 }
 
+function planChainIdHex(plan) {
+  return plan.chainIdHex ?? MAINNET_CHAIN_ID_HEX;
+}
+
+function planChainId(plan) {
+  return plan.chainId ?? MAINNET_CHAIN_ID;
+}
+
+function planNetwork(plan) {
+  return plan.network ?? "Ethereum Mainnet";
+}
+
+function planExpectedAccount(plan) {
+  return plan.expectedAccount ?? EXPECTED_ACCOUNT;
+}
+
 export function recommendFeePolicy(state) {
   const baseFee = BigInt(state.baseFeePerGas);
   const observedGasPrice = BigInt(state.gasPrice);
@@ -1033,7 +1515,7 @@ export function recommendFeePolicy(state) {
   }
   priority = (priority * 125n + 99n) / 100n;
   if (priority > MAX_PRIORITY_FEE_PER_GAS_WEI) {
-    throw new Error("Observed Mainnet priority fee exceeds the release cap");
+    throw new Error("Observed priority fee exceeds the release cap");
   }
 
   const marketBuffer = (observedGasPrice * 125n + 99n) / 100n;
@@ -1041,7 +1523,7 @@ export function recommendFeePolicy(state) {
   const maxFee =
     marketBuffer > baseFeeBuffer ? marketBuffer : baseFeeBuffer;
   if (maxFee > MAX_FEE_PER_GAS_WEI) {
-    throw new Error("Observed Mainnet fee exceeds the release cap");
+    throw new Error("Observed fee exceeds the release cap");
   }
   return {
     maxFeePerGas: normalizeQuantity(maxFee),
@@ -1091,7 +1573,7 @@ export function prepareReviewedTransaction(plan, state, simulations) {
       normalizeHex(simulation.callResult) !==
       normalizeHex(simulations[0].callResult)
     ) {
-      throw new Error("Independent Mainnet simulations disagree");
+      throw new Error("Independent simulations disagree");
     }
     const gas = BigInt(simulation.estimatedGas);
     if (gas <= 21_000n) {
@@ -1106,7 +1588,7 @@ export function prepareReviewedTransaction(plan, state, simulations) {
     current < lowest ? current : lowest,
   );
   if (highEstimate * 100n > lowEstimate * 105n) {
-    throw new Error("Independent Mainnet gas estimates differ by more than 5%");
+    throw new Error("Independent gas estimates differ by more than 5%");
   }
   const paddedEstimate =
     (highEstimate * GAS_PADDING_BPS + 9_999n) / 10_000n;
@@ -1120,13 +1602,13 @@ export function prepareReviewedTransaction(plan, state, simulations) {
   const cost = classicV3CostRequirement(plan, state);
   if (!cost.sufficient) {
     throw new Error(
-      "Deployment wallet balance is below the current four-step gas ceiling",
+      "Deployment wallet balance is below the current seven-step gas ceiling",
     );
   }
 
   const request = {
-    from: EXPECTED_ACCOUNT,
-    chainId: MAINNET_CHAIN_ID_HEX,
+    from: planExpectedAccount(plan),
+    chainId: planChainIdHex(plan),
     nonce: transaction.nonce,
     value: transaction.value,
     data: transaction.data,
@@ -1209,21 +1691,25 @@ export function validateClassicV3TransactionRecord(
   transaction,
   receipt,
 ) {
-  if (!Number.isInteger(index) || index < 0 || index >= 4) {
+  if (
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index >= plan.transactions.length
+  ) {
     throw new Error("Invalid Classic V3 transaction index");
   }
   const expected = plan.transactions[index];
   const actual = transactionComparison(transaction);
-  if (!actual) throw new Error("Transaction is not visible on both Mainnet RPCs");
+  if (!actual) throw new Error("Transaction is not visible on both RPCs");
   assertHex(actual.hash, "transaction hash", 32);
 
   if (
-    actual.from !== normalizeHex(EXPECTED_ACCOUNT) ||
+    actual.from !== normalizeHex(planExpectedAccount(plan)) ||
     actual.to !== (expected.to ? normalizeHex(expected.to) : null) ||
     actual.nonce !== expected.nonce ||
     actual.value !== "0x0" ||
     actual.input !== normalizeHex(expected.data) ||
-    actual.chainId !== MAINNET_CHAIN_ID_HEX
+    actual.chainId !== planChainIdHex(plan)
   ) {
     throw new Error(
       `${expected.name} transaction does not match the reviewed request`,
@@ -1253,7 +1739,7 @@ export function validateClassicV3TransactionRecord(
   if (
     normalizedReceipt.transactionHash !== actual.hash ||
     normalizedReceipt.status !== "0x1" ||
-    normalizedReceipt.from !== normalizeHex(EXPECTED_ACCOUNT) ||
+    normalizedReceipt.from !== normalizeHex(planExpectedAccount(plan)) ||
     normalizedReceipt.to !== (expected.to ? normalizeHex(expected.to) : null) ||
     normalizedReceipt.blockNumber !== actual.blockNumber ||
     normalizedReceipt.blockHash !== actual.blockHash
@@ -1275,13 +1761,23 @@ export function validateClassicV3TransactionRecord(
   };
 }
 
+export function classicV3EvidenceHead(state, record) {
+  const reconciledHead = BigInt(state.latestBlock);
+  const receiptBlock = record.receipt
+    ? BigInt(record.receipt.blockNumber)
+    : 0n;
+  return normalizeQuantity(
+    receiptBlock > reconciledHead ? receiptBlock : reconciledHead,
+  );
+}
+
 export function createClassicV3Evidence(plan, now = new Date()) {
   return {
     schemaVersion: 1,
     release: "classic-v3",
-    network: "Ethereum Mainnet",
-    chainId: MAINNET_CHAIN_ID,
-    expectedAccount: EXPECTED_ACCOUNT,
+    network: planNetwork(plan),
+    chainId: planChainId(plan),
+    expectedAccount: planExpectedAccount(plan),
     treasury: TREASURY,
     sourceCommitment: plan.sourceCommitment,
     planDigest: plan.planDigest,
@@ -1341,7 +1837,7 @@ export function mergeClassicV3EvidenceRecord(
     confirmations =
       Number(BigInt(latestBlock) - BigInt(record.receipt.blockNumber)) + 1;
     if (confirmations < 1) {
-      throw new Error("Receipt block is ahead of the reconciled Mainnet head");
+      throw new Error("Receipt block is ahead of the reconciled network head");
     }
     if (confirmations >= FINALITY_CONFIRMATIONS && deploymentVerified) {
       status = "finalized";
@@ -1376,7 +1872,7 @@ export async function readClassicV3Evidence(filePath, plan) {
       parsed.planDigest !== plan.planDigest ||
       parsed.sourceCommitment !== plan.sourceCommitment ||
       !Array.isArray(parsed.transactions) ||
-      parsed.transactions.length !== 4
+      parsed.transactions.length !== plan.transactions.length
     ) {
       throw new Error("Local Classic V3 evidence does not match this plan");
     }
@@ -1404,6 +1900,7 @@ export function publicPlan(plan) {
     release: plan.release,
     network: plan.network,
     chainId: plan.chainId,
+    chainIdHex: plan.chainIdHex,
     explorer: plan.explorer,
     expectedAccount: plan.expectedAccount,
     treasury: plan.treasury,

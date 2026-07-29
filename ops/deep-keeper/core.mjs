@@ -1,11 +1,23 @@
-import { getAddress, keccak256, parseAbi } from "viem";
+import {
+  decodeEventLog,
+  getAddress,
+  keccak256,
+  parseAbi,
+  stringToHex,
+} from "viem";
 import { DEEP_RELEASE_MANIFEST_PATH } from "./release-gate.mjs";
 
-export const DEEP_KEEPER_ABI = parseAbi([
+export const DEEP_AUTOMATION_ABI = parseAbi([
   "function registeredVaultCount() view returns (uint256)",
   "function registeredVaultAt(uint256 index) view returns (address)",
   "function scan(uint256 cursor,uint256 limit) view returns ((address vault,uint8 action)[] ready,uint256 nextCursor)",
-  "function performBatch(address[] candidates) returns (uint256 attempted,uint256 succeeded)",
+  "function checkVault(address vault) view returns (uint8 action)",
+]);
+
+export const DEEP_KEEPER_ABI = parseAbi([
+  "function automation() view returns (address)",
+  "function execute((address vault,uint8 expectedAction)[] candidates) returns (bytes32 batchHash,uint256 attempted,uint256 succeeded)",
+  "event CandidateResult(bytes32 indexed batchHash,uint256 indexed candidateIndex,address indexed vault,address executor,uint8 expectedAction,uint8 actualAction,uint8 outcome,bytes4 errorSelector,uint256 gasUsed)",
 ]);
 
 export const ACTION = Object.freeze({
@@ -14,15 +26,25 @@ export const ACTION = Object.freeze({
   compoundPending: 2,
   growOracle: 3,
 });
+export const OUTCOME = Object.freeze({
+  skippedNone: 0,
+  skippedActionDrift: 1,
+  assessmentFailed: 2,
+  executionFailed: 3,
+  succeeded: 4,
+});
 
 export const DEFAULT_SIMULATION_ACCOUNT =
   "0x000000000000000000000000000000000000dEaD";
 export const DEFAULT_VAULT_SUBSIDY_CAP_WEI = 30_000_000_000_000_000n;
 export const DEFAULT_MAX_BATCH_SIZE = 4;
-export const DEFAULT_MAX_GAS = 3_000_000n;
-export const EXTENDED_BATCH_MIN_GAS = 6_000_000n;
+export const DEFAULT_MAX_GAS = 4_500_000n;
+export const EXTENDED_BATCH_MIN_GAS = 9_000_000n;
 export const MAX_OPERATIONAL_BATCH_SIZE = 8;
-export const KEEPER_STATE_SCHEMA_VERSION = 2;
+export const KEEPER_STATE_SCHEMA_VERSION = 4;
+export const PRIVY_IDEMPOTENCY_REPLAY_WINDOW_MS = 23 * 60 * 60 * 1000;
+export const DEEP_KEEPER_EXECUTOR_SOURCE_COMMITMENT =
+  "0x9072fa857d484b944205a969fda41727fa76d0f9e670916451b308615bb82175";
 
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 const HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
@@ -58,11 +80,7 @@ function requiredHash(value, label) {
 
 function integer(value, fallback, label, minimum, maximum) {
   const parsed = value === undefined || value === "" ? fallback : Number(value);
-  if (
-    !Number.isSafeInteger(parsed) ||
-    parsed < minimum ||
-    parsed > maximum
-  ) {
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
     throw new DeepKeeperError(
       "INVALID_CONFIG",
       `${label} must be an integer from ${minimum} to ${maximum}`,
@@ -170,10 +188,20 @@ export function parseKeeperConfig(env = process.env) {
         "DEEP_KEEPER_SIGNER_RPC_URL",
       )
     : null;
-  if (enabled && (!signerAddress || !signerRpcUrl)) {
+  const privyWalletId = env.DEEP_KEEPER_PRIVY_WALLET_ID?.trim() || null;
+  if (privyWalletId && !/^[a-z0-9]{24}$/.test(privyWalletId)) {
     throw new DeepKeeperError(
       "INVALID_CONFIG",
-      "Enabled execution requires a dedicated signer address and remote signer RPC",
+      "DEEP_KEEPER_PRIVY_WALLET_ID must be a Privy wallet ID",
+    );
+  }
+  if (
+    enabled &&
+    (!signerAddress || !privyWalletId || Boolean(signerRpcUrl))
+  ) {
+    throw new DeepKeeperError(
+      "INVALID_CONFIG",
+      "Enabled execution requires a dedicated signer address and the replay-safe Privy policy wallet",
     );
   }
   if (signerRpcUrl && rpcUrls.includes(signerRpcUrl)) {
@@ -209,8 +237,7 @@ export function parseKeeperConfig(env = process.env) {
     );
   }
   const releaseManifest =
-    env.DEEP_KEEPER_RELEASE_MANIFEST ||
-    DEEP_RELEASE_MANIFEST_PATH;
+    env.DEEP_KEEPER_RELEASE_MANIFEST || DEEP_RELEASE_MANIFEST_PATH;
   if (releaseManifest !== DEEP_RELEASE_MANIFEST_PATH) {
     throw new DeepKeeperError(
       "INVALID_CONFIG",
@@ -221,6 +248,14 @@ export function parseKeeperConfig(env = process.env) {
   return Object.freeze({
     enabled,
     chainId,
+    automationAddress: requiredAddress(
+      env.DEEP_KEEPER_AUTOMATION_ADDRESS,
+      "DEEP_KEEPER_AUTOMATION_ADDRESS",
+    ),
+    automationRuntimeHash: requiredHash(
+      env.DEEP_KEEPER_AUTOMATION_RUNTIME_HASH,
+      "DEEP_KEEPER_AUTOMATION_RUNTIME_HASH",
+    ),
     coordinatorAddress: requiredAddress(
       env.DEEP_KEEPER_COORDINATOR_ADDRESS,
       "DEEP_KEEPER_COORDINATOR_ADDRESS",
@@ -229,9 +264,14 @@ export function parseKeeperConfig(env = process.env) {
       env.DEEP_KEEPER_COORDINATOR_RUNTIME_HASH,
       "DEEP_KEEPER_COORDINATOR_RUNTIME_HASH",
     ),
+    coordinatorSourceCommitment: requiredHash(
+      env.DEEP_KEEPER_COORDINATOR_SOURCE_COMMITMENT,
+      "DEEP_KEEPER_COORDINATOR_SOURCE_COMMITMENT",
+    ),
     rpcUrls,
     signerAddress,
     signerRpcUrl,
+    privyWalletId,
     simulationAccount: env.DEEP_KEEPER_SIMULATION_ACCOUNT
       ? requiredAddress(
           env.DEEP_KEEPER_SIMULATION_ACCOUNT,
@@ -283,8 +323,7 @@ export function parseKeeperConfig(env = process.env) {
       600_000,
       7_200_000,
     ),
-    stateFile:
-      env.DEEP_KEEPER_STATE_FILE || "./var/deep-keeper-state.json",
+    stateFile: env.DEEP_KEEPER_STATE_FILE || "./var/deep-keeper-state.json",
     releaseManifest,
     healthHost: env.DEEP_KEEPER_HEALTH_HOST || "127.0.0.1",
     healthPort: integer(
@@ -302,8 +341,10 @@ export function createInitialState(config) {
     schemaVersion: KEEPER_STATE_SCHEMA_VERSION,
     chainId: config.chainId,
     coordinatorAddress: config.coordinatorAddress,
+    automationAddress: config.automationAddress,
     cursor: 0,
     checkpoint: null,
+    submissionIntent: null,
     pendingTransaction: null,
     recentTransactions: [],
     vaultSubsidies: {},
@@ -356,14 +397,17 @@ function normalizePendingTransaction(pending, config) {
     pending.submittedAtMs < 0 ||
     !Array.isArray(pending.candidates) ||
     pending.candidates.length === 0 ||
-    pending.candidates.length > config.maxBatchSize
+    pending.candidates.length > MAX_OPERATIONAL_BATCH_SIZE
   ) {
     fail("INVALID_STATE", "Pending transaction metadata is invalid");
   }
   const candidates = pending.candidates.map((candidate) =>
     requiredAddress(candidate, "pendingTransaction.candidates"),
   );
-  if (new Set(candidates.map((candidate) => candidate.toLowerCase())).size !== candidates.length) {
+  if (
+    new Set(candidates.map((candidate) => candidate.toLowerCase())).size !==
+    candidates.length
+  ) {
     fail("INVALID_STATE", "Pending transaction contains duplicate vaults");
   }
   const gas = decimalString(pending.gas, "pendingTransaction.gas", {
@@ -379,11 +423,78 @@ function normalizePendingTransaction(pending, config) {
     "pendingTransaction.maximumTransactionCostWei",
     { positive: true },
   );
-  if (maximumTransactionCostWei > gas * maxFeePerGas) {
+  const reservationPolicy =
+    pending.reservationPolicy === "batch-envelope-v1"
+      ? "batch-envelope-v1"
+      : "legacy-v1";
+  const signedGasEnvelopeWei = gas * maxFeePerGas;
+  if (
+    maximumTransactionCostWei > signedGasEnvelopeWei ||
+    (reservationPolicy === "batch-envelope-v1" &&
+      maximumTransactionCostWei !== signedGasEnvelopeWei)
+  ) {
     fail(
       "INVALID_STATE",
-      "Pending maximum transaction cost exceeds its gas envelope",
+      "Pending maximum transaction cost does not match its gas envelope",
     );
+  }
+
+  let candidateActions = null;
+  let executor = null;
+  let batchHash = null;
+  if (
+    pending.candidateActions != null ||
+    pending.executor != null ||
+    pending.batchHash != null
+  ) {
+    if (
+      !pending.candidateActions ||
+      typeof pending.candidateActions !== "object" ||
+      Array.isArray(pending.candidateActions) ||
+      !pending.executor ||
+      !HASH_PATTERN.test(pending.batchHash ?? "")
+    ) {
+      fail("INVALID_STATE", "Pending work receipt metadata is incomplete");
+    }
+    candidateActions = {};
+    const candidateKeys = new Set(
+      candidates.map((candidate) => candidate.toLowerCase()),
+    );
+    for (const [address, rawAction] of Object.entries(
+      pending.candidateActions,
+    )) {
+      let key;
+      try {
+        key = getAddress(address).toLowerCase();
+      } catch {
+        fail(
+          "INVALID_STATE",
+          `Invalid pending action vault address: ${address}`,
+        );
+      }
+      const action = Number(rawAction);
+      if (
+        !candidateKeys.has(key) ||
+        candidateActions[key] !== undefined ||
+        (action !== ACTION.processFees &&
+          action !== ACTION.compoundPending &&
+          action !== ACTION.growOracle)
+      ) {
+        fail(
+          "INVALID_STATE",
+          "Pending candidate actions do not match the submitted vaults",
+        );
+      }
+      candidateActions[key] = action;
+    }
+    if (Object.keys(candidateActions).length !== candidates.length) {
+      fail(
+        "INVALID_STATE",
+        "Pending candidate actions do not cover every submitted vault",
+      );
+    }
+    executor = requiredAddress(pending.executor, "pendingTransaction.executor");
+    batchHash = pending.batchHash.toLowerCase();
   }
 
   const sourceReservations = pending.perVaultReservedWei ?? {};
@@ -410,15 +521,15 @@ function normalizePendingTransaction(pending, config) {
     hash: pending.hash.toLowerCase(),
     submittedAtMs: pending.submittedAtMs,
     candidates,
+    candidateActions,
+    executor,
+    batchHash,
     gas: gas.toString(),
     maxFeePerGas: maxFeePerGas.toString(),
     maximumTransactionCostWei: maximumTransactionCostWei.toString(),
     perVaultReservedWei,
     perVaultEstimatedGas,
-    reservationPolicy:
-      pending.reservationPolicy === "batch-envelope-v1"
-        ? "batch-envelope-v1"
-        : "legacy-v1",
+    reservationPolicy,
     subsidyCapWeiAtSubmission: decimalString(
       pending.subsidyCapWeiAtSubmission ?? config.vaultSubsidyCapWei,
       "pendingTransaction.subsidyCapWeiAtSubmission",
@@ -427,13 +538,68 @@ function normalizePendingTransaction(pending, config) {
   };
 }
 
+function normalizeSubmissionIntent(intent, config) {
+  if (intent === null || intent === undefined) return null;
+  if (
+    !/^deep-[0-9a-f]{32}$/.test(intent.idempotencyKey ?? "") ||
+    !Number.isSafeInteger(intent.createdAtMs) ||
+    intent.createdAtMs < 0
+  ) {
+    fail("INVALID_STATE", "Submission intent metadata is invalid");
+  }
+  const normalized = normalizePendingTransaction(
+    {
+      ...intent,
+      hash: `0x${"00".repeat(32)}`,
+      submittedAtMs: intent.createdAtMs,
+    },
+    config,
+  );
+  const maxPriorityFeePerGas = decimalString(
+    intent.maxPriorityFeePerGas,
+    "submissionIntent.maxPriorityFeePerGas",
+  );
+  if (
+    !normalized.executor ||
+    !config.signerAddress ||
+    normalized.executor.toLowerCase() !== config.signerAddress.toLowerCase() ||
+    maxPriorityFeePerGas > BigInt(normalized.maxFeePerGas)
+  ) {
+    fail(
+      "INVALID_STATE",
+      "Submission intent does not match the configured signer policy",
+    );
+  }
+  return {
+    idempotencyKey: intent.idempotencyKey,
+    createdAtMs: intent.createdAtMs,
+    candidates: normalized.candidates,
+    candidateActions: normalized.candidateActions,
+    executor: normalized.executor,
+    batchHash: normalized.batchHash,
+    gas: normalized.gas,
+    maxFeePerGas: normalized.maxFeePerGas,
+    maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
+    maximumTransactionCostWei: normalized.maximumTransactionCostWei,
+    perVaultReservedWei: normalized.perVaultReservedWei,
+    perVaultEstimatedGas: normalized.perVaultEstimatedGas,
+    reservationPolicy: normalized.reservationPolicy,
+    subsidyCapWeiAtSubmission: normalized.subsidyCapWeiAtSubmission,
+  };
+}
+
 export function migrateKeeperState(state, config) {
   if (
     (state?.schemaVersion !== 1 &&
+      state?.schemaVersion !== 2 &&
+      state?.schemaVersion !== 3 &&
       state?.schemaVersion !== KEEPER_STATE_SCHEMA_VERSION) ||
     state.chainId !== config.chainId ||
     String(state.coordinatorAddress).toLowerCase() !==
       config.coordinatorAddress.toLowerCase() ||
+    (state.automationAddress !== undefined &&
+      String(state.automationAddress).toLowerCase() !==
+        config.automationAddress.toLowerCase()) ||
     !Number.isSafeInteger(state.cursor) ||
     state.cursor < 0 ||
     !Array.isArray(state.recentTransactions)
@@ -463,18 +629,27 @@ export function migrateKeeperState(state, config) {
     state.pendingTransaction,
     config,
   );
-  if (pendingTransaction?.reservationPolicy === "batch-envelope-v1") {
+  const submissionIntent = normalizeSubmissionIntent(
+    state.submissionIntent,
+    config,
+  );
+  if (submissionIntent && pendingTransaction) {
+    fail(
+      "INVALID_STATE",
+      "Keeper state cannot contain both a submission intent and a pending transaction",
+    );
+  }
+  for (const reservedWork of [pendingTransaction, submissionIntent]) {
+    if (reservedWork?.reservationPolicy !== "batch-envelope-v1") continue;
     const capAtSubmission = BigInt(
-      pendingTransaction.subsidyCapWeiAtSubmission,
+      reservedWork.subsidyCapWeiAtSubmission,
     );
     const maximumTransactionCostWei = BigInt(
-      pendingTransaction.maximumTransactionCostWei,
+      reservedWork.maximumTransactionCostWei,
     );
-    for (const candidate of pendingTransaction.candidates) {
+    for (const candidate of reservedWork.candidates) {
       const key = candidate.toLowerCase();
-      const reservation = BigInt(
-        pendingTransaction.perVaultReservedWei[key],
-      );
+      const reservation = BigInt(reservedWork.perVaultReservedWei[key]);
       const spent = BigInt(vaultSubsidies[key]?.actualCostWei ?? "0");
       if (
         reservation !== maximumTransactionCostWei ||
@@ -492,8 +667,10 @@ export function migrateKeeperState(state, config) {
     schemaVersion: KEEPER_STATE_SCHEMA_VERSION,
     chainId: state.chainId,
     coordinatorAddress: config.coordinatorAddress,
+    automationAddress: config.automationAddress,
     cursor: state.cursor,
     checkpoint: state.checkpoint ?? null,
+    submissionIntent,
     pendingTransaction,
     recentTransactions: state.recentTransactions.slice(0, 16),
     vaultSubsidies,
@@ -515,13 +692,18 @@ export function createMetrics() {
     simulationFailures: 0,
     batchesSubmitted: 0,
     transactionsConfirmed: 0,
+    transactionsNonproductive: 0,
     transactionsReverted: 0,
     transactionsDropped: 0,
+    unknownReceiptPending: 0,
+    staleSubmissionIntent: 0,
+    submissionIntentPolicyBlocked: 0,
     subsidyVaultsSkipped: 0,
     subsidyVaultsExhausted: 0,
     subsidyBudgetOverruns: 0,
     subsidySimulatedCostWei: "0",
     subsidyActualCostWei: "0",
+    sponsorAbsorbedCostWei: "0",
     lastSuccessTimestampSeconds: 0,
   };
 }
@@ -547,9 +729,7 @@ function subsidyEntry(state, vault) {
 
 function addSimulatedSubsidyCost(state, vault, amount, nowMs) {
   const { entry } = subsidyEntry(state, vault);
-  entry.simulatedCostWei = (
-    BigInt(entry.simulatedCostWei) + amount
-  ).toString();
+  entry.simulatedCostWei = (BigInt(entry.simulatedCostWei) + amount).toString();
   entry.lastUpdatedAtMs = nowMs;
 }
 
@@ -658,11 +838,10 @@ export async function readAgreedSnapshot(readers, config) {
   if (!Array.isArray(readers) || readers.length !== 2) {
     fail("INVALID_RUNTIME", "Exactly two read clients are required");
   }
-  const chainIds = await Promise.all(readers.map((client) => client.getChainId()));
-  if (
-    chainIds[0] !== config.chainId ||
-    chainIds[1] !== config.chainId
-  ) {
+  const chainIds = await Promise.all(
+    readers.map((client) => client.getChainId()),
+  );
+  if (chainIds[0] !== config.chainId || chainIds[1] !== config.chainId) {
     fail("RPC_DISAGREEMENT", "Read RPC chain IDs do not match Mainnet", {
       chainIds,
     });
@@ -678,26 +857,64 @@ export async function readAgreedSnapshot(readers, config) {
   const confirmedNumber = lowestHead - BigInt(config.confirmations);
   const confirmedBlock = await readBlockPair(readers, confirmedNumber);
 
-  const codes = await Promise.all(
+  const verifyRuntime = async (address, expectedHash, label) => {
+    const codes = await Promise.all(
+      readers.map((client) =>
+        client.getCode({
+          address,
+          blockNumber: confirmedNumber,
+        }),
+      ),
+    );
+    if (!codes[0] || codes[0] === "0x" || !sameHex(codes[0], codes[1])) {
+      fail("RPC_DISAGREEMENT", `Read RPCs disagree on the ${label} bytecode`);
+    }
+    const runtimeHash = keccak256(codes[0]).toLowerCase();
+    if (runtimeHash !== expectedHash) {
+      fail(
+        label === "executor" ? "COORDINATOR_MISMATCH" : "AUTOMATION_MISMATCH",
+        `${label === "executor" ? "Executor" : "Automation"} runtime hash mismatch`,
+        {
+          actual: runtimeHash,
+          expected: expectedHash,
+        },
+      );
+    }
+  };
+  await Promise.all([
+    verifyRuntime(
+      config.coordinatorAddress,
+      config.coordinatorRuntimeHash,
+      "executor",
+    ),
+    verifyRuntime(
+      config.automationAddress,
+      config.automationRuntimeHash,
+      "automation",
+    ),
+  ]);
+  const boundAutomations = await Promise.all(
     readers.map((client) =>
-      client.getCode({
+      client.readContract({
         address: config.coordinatorAddress,
+        abi: DEEP_KEEPER_ABI,
+        functionName: "automation",
         blockNumber: confirmedNumber,
       }),
     ),
   );
-  if (!codes[0] || codes[0] === "0x" || !sameHex(codes[0], codes[1])) {
+  if (
+    !sameHex(boundAutomations[0], boundAutomations[1]) ||
+    !sameHex(boundAutomations[0], config.automationAddress)
+  ) {
     fail(
-      "RPC_DISAGREEMENT",
-      "Read RPCs disagree on the coordinator bytecode",
+      "AUTOMATION_MISMATCH",
+      "Executor immutable automation binding mismatch",
+      {
+        expected: config.automationAddress,
+        actual: boundAutomations,
+      },
     );
-  }
-  const runtimeHash = keccak256(codes[0]).toLowerCase();
-  if (runtimeHash !== config.coordinatorRuntimeHash) {
-    fail("COORDINATOR_MISMATCH", "Coordinator runtime hash mismatch", {
-      actual: runtimeHash,
-      expected: config.coordinatorRuntimeHash,
-    });
   }
 
   return {
@@ -754,8 +971,8 @@ async function discoverReady(readers, config, state, blockNumber) {
   const counts = await Promise.all(
     readers.map((client) =>
       client.readContract({
-        address: config.coordinatorAddress,
-        abi: DEEP_KEEPER_ABI,
+        address: config.automationAddress,
+        abi: DEEP_AUTOMATION_ABI,
         functionName: "registeredVaultCount",
         blockNumber,
       }),
@@ -774,8 +991,8 @@ async function discoverReady(readers, config, state, blockNumber) {
   const results = await Promise.all(
     readers.map((client) =>
       client.readContract({
-        address: config.coordinatorAddress,
-        abi: DEEP_KEEPER_ABI,
+        address: config.automationAddress,
+        abi: DEEP_AUTOMATION_ABI,
         functionName: "scan",
         args: [BigInt(state.cursor), BigInt(config.scanLimit)],
         blockNumber,
@@ -794,26 +1011,111 @@ async function discoverReady(readers, config, state, blockNumber) {
   return { registryCount, ...normalized[0] };
 }
 
-function normalizeSimulation(simulation) {
-  const result = simulation?.result ?? simulation;
-  const attempted = BigInt(result?.[0] ?? result?.attempted ?? -1);
-  const succeeded = BigInt(result?.[1] ?? result?.succeeded ?? -1);
-  return { attempted, succeeded };
+function normalizeCheckedAction(value, vault) {
+  const action = Number(value);
+  if (
+    action !== ACTION.none &&
+    action !== ACTION.processFees &&
+    action !== ACTION.compoundPending &&
+    action !== ACTION.growOracle
+  ) {
+    fail(
+      "RPC_INVALID_RESPONSE",
+      "Coordinator returned an invalid latest action",
+      { vault, action },
+    );
+  }
+  return action;
 }
 
-async function simulateBatch(
+async function readLatestAgreedBlock(readers, minimumBlockNumber) {
+  const heads = await Promise.all(
+    readers.map((client) => client.getBlockNumber()),
+  );
+  const latestAgreedNumber = heads[0] < heads[1] ? heads[0] : heads[1];
+  if (latestAgreedNumber < minimumBlockNumber) {
+    fail(
+      "RPC_DISAGREEMENT",
+      "Latest read RPC state is older than the confirmed snapshot",
+      {
+        heads: heads.map((head) => head.toString()),
+        minimumBlockNumber: minimumBlockNumber.toString(),
+      },
+    );
+  }
+  return readBlockPair(readers, latestAgreedNumber);
+}
+
+async function verifyLatestCandidateActions(
   readers,
   config,
-  candidates,
-  account,
+  ready,
   blockNumber,
 ) {
+  const results = await Promise.all(
+    readers.map((client) =>
+      Promise.all(
+        ready.map((work) =>
+          client.readContract({
+            address: config.automationAddress,
+            abi: DEEP_AUTOMATION_ABI,
+            functionName: "checkVault",
+            args: [work.vault],
+            blockNumber,
+          }),
+        ),
+      ),
+    ),
+  );
+  const normalized = results.map((actions) =>
+    actions.map((action, index) =>
+      normalizeCheckedAction(action, ready[index].vault),
+    ),
+  );
+  if (comparable(normalized[0]) !== comparable(normalized[1])) {
+    fail("RPC_DISAGREEMENT", "Read RPCs disagree on latest Deep work", {
+      blockNumber: blockNumber.toString(),
+      actions: normalized,
+    });
+  }
+  for (let index = 0; index < ready.length; index += 1) {
+    const expected = ready[index].action;
+    const actual = normalized[0][index];
+    if (actual === ACTION.none || actual !== expected) {
+      fail("PRE_BROADCAST_STATE_DRIFT", "Deep work changed after discovery", {
+        blockNumber: blockNumber.toString(),
+        vault: ready[index].vault,
+        expectedAction: expected,
+        actualAction: actual,
+      });
+    }
+  }
+}
+
+function normalizeSimulation(simulation) {
+  const result = simulation?.result ?? simulation;
+  const batchHash = String(
+    result?.[0] ?? result?.batchHash ?? "",
+  ).toLowerCase();
+  const attempted = BigInt(result?.[1] ?? result?.attempted ?? -1);
+  const succeeded = BigInt(result?.[2] ?? result?.succeeded ?? -1);
+  if (!HASH_PATTERN.test(batchHash)) {
+    fail("RPC_INVALID_RESPONSE", "Executor returned an invalid batch hash");
+  }
+  return { batchHash, attempted, succeeded };
+}
+
+async function simulateBatch(readers, config, ready, account, blockNumber) {
+  const candidates = ready.map((work) => ({
+    vault: work.vault,
+    expectedAction: work.action,
+  }));
   const simulations = await Promise.all(
     readers.map((client) =>
       client.simulateContract({
         address: config.coordinatorAddress,
         abi: DEEP_KEEPER_ABI,
-        functionName: "performBatch",
+        functionName: "execute",
         args: [candidates],
         account,
         blockNumber,
@@ -826,7 +1128,7 @@ async function simulateBatch(
       simulations: normalized,
     });
   }
-  const expected = BigInt(candidates.length);
+  const expected = BigInt(ready.length);
   if (
     normalized[0].attempted !== expected ||
     normalized[0].succeeded !== expected
@@ -861,6 +1163,168 @@ async function maybeReceipt(client, hash) {
   }
 }
 
+function decodeReceiptResults(receipt, coordinatorAddress) {
+  const results = [];
+  for (const log of receipt?.logs ?? []) {
+    if (
+      typeof log?.address !== "string" ||
+      log.address.toLowerCase() !== coordinatorAddress.toLowerCase()
+    ) {
+      continue;
+    }
+    let decoded;
+    try {
+      decoded = decodeEventLog({
+        abi: DEEP_KEEPER_ABI,
+        data: log.data,
+        topics: log.topics,
+        strict: true,
+      });
+    } catch {
+      continue;
+    }
+    if (decoded.eventName !== "CandidateResult") continue;
+    const vault = getAddress(decoded.args.vault);
+    const expectedAction = normalizeCheckedAction(
+      decoded.args.expectedAction,
+      vault,
+    );
+    const actualAction = normalizeCheckedAction(
+      decoded.args.actualAction,
+      vault,
+    );
+    const outcome = Number(decoded.args.outcome);
+    const candidateIndex = Number(decoded.args.candidateIndex);
+    const gasUsed = BigInt(decoded.args.gasUsed);
+    if (
+      expectedAction === ACTION.none ||
+      !Number.isSafeInteger(candidateIndex) ||
+      candidateIndex < 0 ||
+      !Number.isSafeInteger(outcome) ||
+      outcome < 0 ||
+      outcome > 4 ||
+      gasUsed <= 0n
+    ) {
+      fail("RPC_INVALID_RESPONSE", "Candidate result is malformed", {
+        vault,
+      });
+    }
+    const executor = getAddress(decoded.args.executor);
+    results.push({
+      batchHash: String(decoded.args.batchHash).toLowerCase(),
+      candidateIndex,
+      vault,
+      executor,
+      expectedAction,
+      actualAction,
+      outcome,
+      errorSelector: String(decoded.args.errorSelector).toLowerCase(),
+      gasUsed: gasUsed.toString(),
+    });
+  }
+  return results;
+}
+
+function verifyReceiptResults(results, pending) {
+  if (!pending.candidateActions || !pending.executor || !pending.batchHash) {
+    fail(
+      "WORK_RECEIPT_REJECTED",
+      "Pending transaction lacks exact executor receipt metadata",
+    );
+  }
+  if (results.length !== pending.candidates.length) {
+    fail(
+      "WORK_RECEIPT_REJECTED",
+      "Receipt does not contain exactly one candidate result per submitted vault",
+      {
+        expected: pending.candidates.length,
+        actual: results.length,
+      },
+    );
+  }
+
+  const seenVaults = new Set();
+  const seenIndexes = new Set();
+  let productive = true;
+  for (const event of results) {
+    const key = event.vault.toLowerCase();
+    const expectedVault = pending.candidates[event.candidateIndex];
+    if (
+      !expectedVault ||
+      expectedVault.toLowerCase() !== key ||
+      seenVaults.has(key) ||
+      seenIndexes.has(event.candidateIndex)
+    ) {
+      fail(
+        "WORK_RECEIPT_REJECTED",
+        "Receipt contains an unknown, reordered or duplicate candidate result",
+        { vault: event.vault, candidateIndex: event.candidateIndex },
+      );
+    }
+    seenVaults.add(key);
+    seenIndexes.add(event.candidateIndex);
+    const expectedAction = pending.candidateActions[key];
+    if (
+      event.batchHash !== pending.batchHash ||
+      event.expectedAction !== expectedAction ||
+      event.executor.toLowerCase() !== pending.executor.toLowerCase()
+    ) {
+      fail(
+        "WORK_RECEIPT_REJECTED",
+        "Executor result does not match the submitted batch",
+        {
+          vault: event.vault,
+          expectedBatchHash: pending.batchHash,
+          actualBatchHash: event.batchHash,
+          expectedAction,
+          resultExpectedAction: event.expectedAction,
+          actualAction: event.actualAction,
+          outcome: event.outcome,
+          expectedExecutor: pending.executor,
+          actualExecutor: event.executor,
+          errorSelector: event.errorSelector,
+        },
+      );
+    }
+    const zeroError = event.errorSelector === "0x00000000";
+    const validOutcome =
+      (event.outcome === OUTCOME.succeeded &&
+        event.actualAction === expectedAction &&
+        zeroError) ||
+      (event.outcome === OUTCOME.skippedNone &&
+        event.actualAction === ACTION.none &&
+        zeroError) ||
+      (event.outcome === OUTCOME.skippedActionDrift &&
+        event.actualAction !== ACTION.none &&
+        event.actualAction !== expectedAction &&
+        zeroError) ||
+      (event.outcome === OUTCOME.assessmentFailed &&
+        event.actualAction === ACTION.none) ||
+      event.outcome === OUTCOME.executionFailed;
+    if (!validOutcome) {
+      fail(
+        "WORK_RECEIPT_REJECTED",
+        "Executor result outcome is internally inconsistent",
+        {
+          vault: event.vault,
+          expectedAction,
+          actualAction: event.actualAction,
+          outcome: event.outcome,
+          errorSelector: event.errorSelector,
+        },
+      );
+    }
+    if (event.outcome !== OUTCOME.succeeded) productive = false;
+  }
+  if (
+    seenVaults.size !== pending.candidates.length ||
+    seenIndexes.size !== pending.candidates.length
+  ) {
+    fail("WORK_RECEIPT_REJECTED", "Receipt omits a submitted candidate");
+  }
+  return { productive, results };
+}
+
 async function reconcilePending(
   readers,
   config,
@@ -888,12 +1352,11 @@ async function reconcilePending(
         outcome: "waiting-for-confirmation",
       };
     }
-    state.pendingTransaction = null;
-    metrics.transactionsDropped += 1;
+    metrics.unknownReceiptPending = 1;
     return {
-      waiting: false,
-      retryDeferred: true,
-      outcome: "pending-dropped-retry-next-cycle",
+      waiting: true,
+      retryDeferred: false,
+      outcome: "receipt-unknown-manual-recovery-required",
     };
   }
   if (!receipts[0] || !receipts[1]) {
@@ -945,21 +1408,28 @@ async function reconcilePending(
 
   const canonical = await readBlockPair(readers, receipt.blockNumber);
   if (canonical.hash !== receipt.blockHash) {
-    state.pendingTransaction = null;
     state.cursor = 0;
     state.checkpoint = null;
     metrics.reorgs += 1;
+    metrics.unknownReceiptPending = 1;
     return {
-      waiting: false,
+      waiting: true,
       retryDeferred: false,
-      outcome: "pending-reorged",
+      outcome: "pending-reorg-manual-recovery-required",
     };
   }
 
-  const actualCostWei = receipt.gasUsed * receipt.effectiveGasPrice;
-  const maximumTransactionCostWei = BigInt(
-    pending.maximumTransactionCostWei,
+  const receiptResults = receipts.map((item) =>
+    decodeReceiptResults(item, config.coordinatorAddress),
   );
+  if (comparable(receiptResults[0]) !== comparable(receiptResults[1])) {
+    fail("RPC_DISAGREEMENT", "Read RPCs disagree on executor receipt logs", {
+      results: receiptResults,
+    });
+  }
+
+  const actualCostWei = receipt.gasUsed * receipt.effectiveGasPrice;
+  const maximumTransactionCostWei = BigInt(pending.maximumTransactionCostWei);
   if (actualCostWei > maximumTransactionCostWei) {
     metrics.subsidyBudgetOverruns += 1;
     fail(
@@ -980,16 +1450,19 @@ async function reconcilePending(
     const key = candidate.toLowerCase();
     const previousCostWei = actualSubsidyCost(state, candidate);
     const reservedCostWei = BigInt(pending.perVaultReservedWei[key]);
-    const capAtSubmission = BigInt(pending.subsidyCapWeiAtSubmission);
+    const capAtSubmission =
+      pending.reservationPolicy === "batch-envelope-v1"
+        ? BigInt(pending.subsidyCapWeiAtSubmission)
+        : config.vaultSubsidyCapWei;
     if (
-      pending.reservationPolicy === "batch-envelope-v1" &&
-      (allocations[key] > reservedCostWei ||
-        previousCostWei + allocations[key] > capAtSubmission)
+      (pending.reservationPolicy === "batch-envelope-v1" &&
+        allocations[key] > reservedCostWei) ||
+      previousCostWei + allocations[key] > capAtSubmission
     ) {
       metrics.subsidyBudgetOverruns += 1;
       fail(
         "SUBSIDY_ACCOUNTING_REJECTED",
-        "Receipt allocation exceeds a vault's persisted hard-cap reservation",
+        "Receipt allocation exceeds a vault's durable subsidy cap",
         {
           vault: candidate,
           allocationWei: allocations[key].toString(),
@@ -999,16 +1472,89 @@ async function reconcilePending(
         },
       );
     }
-    addActualSubsidyCost(state, candidate, allocations[key], nowMs);
-    if (
-      pending.reservationPolicy === "legacy-v1" &&
-      actualSubsidyCost(state, candidate) > config.vaultSubsidyCapWei
-    ) {
-      metrics.subsidyBudgetOverruns += 1;
+  }
+
+  if (receipt.status === "reverted") {
+    for (const candidate of pending.candidates) {
+      const key = candidate.toLowerCase();
+      addActualSubsidyCost(state, candidate, allocations[key], nowMs);
     }
+    addWeiMetric(metrics, "subsidyActualCostWei", actualCostWei);
+    addWeiMetric(metrics, "sponsorAbsorbedCostWei", actualCostWei);
+    state.pendingTransaction = null;
+    state.recentTransactions = [
+      {
+        hash: pending.hash,
+        blockNumber: receipt.blockNumber.toString(),
+        blockHash: receipt.blockHash,
+        status: receipt.status,
+        gasUsed: receipt.gasUsed.toString(),
+        effectiveGasPrice: receipt.effectiveGasPrice.toString(),
+        actualCostWei: actualCostWei.toString(),
+        sponsorAbsorbedCostWei: actualCostWei.toString(),
+        perVaultActualCostWei: Object.fromEntries(
+          Object.entries(allocations).map(([key, value]) => [
+            key,
+            value.toString(),
+          ]),
+        ),
+      },
+      ...state.recentTransactions,
+    ].slice(0, 16);
+    metrics.transactionsReverted += 1;
+    return {
+      waiting: false,
+      retryDeferred: true,
+      outcome: "transaction-reverted-retry-next-cycle",
+    };
+  }
+
+  const receiptProof = verifyReceiptResults(receiptResults[0], pending);
+  for (const candidate of pending.candidates) {
+    const key = candidate.toLowerCase();
+    addActualSubsidyCost(state, candidate, allocations[key], nowMs);
   }
   addWeiMetric(metrics, "subsidyActualCostWei", actualCostWei);
 
+  if (!receiptProof.productive) {
+    const nonproductiveCostWei = receiptProof.results.reduce(
+      (total, result) =>
+        result.outcome === OUTCOME.succeeded
+          ? total
+          : total + allocations[result.vault.toLowerCase()],
+      0n,
+    );
+    state.pendingTransaction = null;
+    state.recentTransactions = [
+      {
+        hash: pending.hash,
+        blockNumber: receipt.blockNumber.toString(),
+        blockHash: receipt.blockHash,
+        status: "executor-nonproductive",
+        receiptStatus: receipt.status,
+        gasUsed: receipt.gasUsed.toString(),
+        effectiveGasPrice: receipt.effectiveGasPrice.toString(),
+        actualCostWei: actualCostWei.toString(),
+        sponsorAbsorbedCostWei: nonproductiveCostWei.toString(),
+        perVaultActualCostWei: Object.fromEntries(
+          Object.entries(allocations).map(([key, value]) => [
+            key,
+            value.toString(),
+          ]),
+        ),
+        candidateResults: receiptProof.results,
+      },
+      ...state.recentTransactions,
+    ].slice(0, 16);
+    metrics.transactionsConfirmed += 1;
+    metrics.transactionsNonproductive += 1;
+    addWeiMetric(metrics, "sponsorAbsorbedCostWei", nonproductiveCostWei);
+    return {
+      waiting: false,
+      retryDeferred: true,
+      outcome: "executor-nonproductive-retry-next-cycle",
+    };
+  }
   state.pendingTransaction = null;
   state.recentTransactions = [
     {
@@ -1028,32 +1574,27 @@ async function reconcilePending(
     },
     ...state.recentTransactions,
   ].slice(0, 16);
-  if (receipt.status === "success") {
-    metrics.transactionsConfirmed += 1;
-  } else {
-    metrics.transactionsReverted += 1;
-    return {
-      waiting: false,
-      retryDeferred: true,
-      outcome: "transaction-reverted-retry-next-cycle",
-    };
-  }
+  metrics.transactionsConfirmed += 1;
   return { waiting: false, retryDeferred: false, outcome: null };
 }
 
 async function estimateGasEnvelope(
   readers,
   config,
-  candidates,
+  ready,
   blockNumber,
   account,
 ) {
+  const candidates = ready.map((work) => ({
+    vault: work.vault,
+    expectedAction: work.action,
+  }));
   const estimates = await Promise.all(
     readers.map((client) =>
       client.estimateContractGas({
         address: config.coordinatorAddress,
         abi: DEEP_KEEPER_ABI,
-        functionName: "performBatch",
+        functionName: "execute",
         args: [candidates],
         account,
         blockNumber,
@@ -1091,10 +1632,14 @@ async function estimateFeePolicy(readers, config) {
     return value > maximum ? value : maximum;
   }, 0n);
   if (maxFeePerGas === 0n || maxFeePerGas > config.maxFeePerGasWei) {
-    fail("GAS_PRICE_REJECTED", "Current fee quote exceeds the configured ceiling", {
-      maxFeePerGas: maxFeePerGas.toString(),
-      maximum: config.maxFeePerGasWei.toString(),
-    });
+    fail(
+      "GAS_PRICE_REJECTED",
+      "Current fee quote exceeds the configured ceiling",
+      {
+        maxFeePerGas: maxFeePerGas.toString(),
+        maximum: config.maxFeePerGasWei.toString(),
+      },
+    );
   }
   if (maxPriorityFeePerGas > maxFeePerGas) {
     fail("RPC_INVALID_RESPONSE", "RPC returned an invalid EIP-1559 fee quote");
@@ -1102,12 +1647,7 @@ async function estimateFeePolicy(readers, config) {
   return { maxFeePerGas, maxPriorityFeePerGas };
 }
 
-async function checkSignerBalance(
-  readers,
-  config,
-  blockNumber,
-  maximumCost,
-) {
+async function checkSignerBalance(readers, config, blockNumber, maximumCost) {
   const account = config.signerAddress;
   const balances = await Promise.all(
     readers.map((client) =>
@@ -1130,10 +1670,14 @@ async function checkSignerBalance(
     );
   }
   if (balances[0] < maximumCost) {
-    fail("SIGNER_BALANCE_REJECTED", "Signer cannot cover the bounded gas cost", {
-      balance: balances[0].toString(),
-      maximumCost: maximumCost.toString(),
-    });
+    fail(
+      "SIGNER_BALANCE_REJECTED",
+      "Signer cannot cover the bounded gas cost",
+      {
+        balance: balances[0].toString(),
+        maximumCost: maximumCost.toString(),
+      },
+    );
   }
 }
 
@@ -1164,21 +1708,18 @@ async function prepareBudgetedBatch({
   let batchGas = null;
   let maximumTransactionCostWei = 0n;
   while (eligible.length > 0) {
-    const candidates = eligible.map((work) => work.vault);
     batchGas = await estimateGasEnvelope(
       readers,
       config,
-      candidates,
+      eligible,
       blockNumber,
       account,
     );
-    maximumTransactionCostWei =
-      batchGas.gas * feePolicy.maxFeePerGas;
+    maximumTransactionCostWei = batchGas.gas * feePolicy.maxFeePerGas;
     const retained = [];
     for (const work of eligible) {
       if (
-        actualSubsidyCost(state, work.vault) +
-          maximumTransactionCostWei >
+        actualSubsidyCost(state, work.vault) + maximumTransactionCostWei >
         config.vaultSubsidyCapWei
       ) {
         skipped.push(work);
@@ -1202,8 +1743,7 @@ async function prepareBudgetedBatch({
     };
   }
 
-  const candidates = eligible.map((work) => work.vault);
-  await simulateBatch(readers, config, candidates, account, blockNumber);
+  await simulateBatch(readers, config, eligible, account, blockNumber);
   metrics.simulations += 1;
 
   for (const work of eligible) {
@@ -1211,7 +1751,7 @@ async function prepareBudgetedBatch({
     const standaloneGas = await estimateGasEnvelope(
       readers,
       config,
-      [work.vault],
+      [work],
       blockNumber,
       account,
     );
@@ -1247,11 +1787,248 @@ async function prepareBudgetedBatch({
   };
 }
 
+async function prepareLatestBroadcast({
+  readers,
+  config,
+  state,
+  metrics,
+  ready,
+  minimumBlockNumber,
+  account,
+}) {
+  const latestBlock = await readLatestAgreedBlock(readers, minimumBlockNumber);
+  await verifyLatestCandidateActions(
+    readers,
+    config,
+    ready,
+    latestBlock.number,
+  );
+
+  const simulation = await simulateBatch(
+    readers,
+    config,
+    ready,
+    account,
+    latestBlock.number,
+  );
+  metrics.simulations += 1;
+
+  const [batchGas, feePolicy] = await Promise.all([
+    estimateGasEnvelope(readers, config, ready, latestBlock.number, account),
+    estimateFeePolicy(readers, config),
+  ]);
+  const maximumTransactionCostWei = batchGas.gas * feePolicy.maxFeePerGas;
+  const reservations = {};
+  const gasWeights = {};
+  for (const work of ready) {
+    if (
+      actualSubsidyCost(state, work.vault) + maximumTransactionCostWei >
+      config.vaultSubsidyCapWei
+    ) {
+      fail(
+        "SUBSIDY_ACCOUNTING_REJECTED",
+        "Latest gas envelope exceeds a vault's remaining subsidy",
+        {
+          vault: work.vault,
+          actualCostWei: actualSubsidyCost(state, work.vault).toString(),
+          maximumTransactionCostWei: maximumTransactionCostWei.toString(),
+          capWei: config.vaultSubsidyCapWei.toString(),
+        },
+      );
+    }
+    const key = work.vault.toLowerCase();
+    const standaloneGas = await estimateGasEnvelope(
+      readers,
+      config,
+      [work],
+      latestBlock.number,
+      account,
+    );
+    reservations[key] = maximumTransactionCostWei;
+    gasWeights[key] = standaloneGas.gas;
+  }
+  await checkSignerBalance(
+    readers,
+    config,
+    latestBlock.number,
+    maximumTransactionCostWei,
+  );
+
+  return {
+    latestBlock,
+    simulation,
+    reservations,
+    gasWeights,
+    execution: {
+      gas: batchGas.gas,
+      estimatedGas: batchGas.estimatedGas,
+      maxFeePerGas: feePolicy.maxFeePerGas,
+      maxPriorityFeePerGas: feePolicy.maxPriorityFeePerGas,
+      maximumTransactionCostWei,
+    },
+  };
+}
+
 function checkpointFrom(block) {
   return {
     number: block.number.toString(),
     hash: block.hash,
   };
+}
+
+function submissionIntentIdempotencyKey({
+  config,
+  latestBlock,
+  candidates,
+  batchHash,
+  execution,
+}) {
+  const commitment = keccak256(
+    stringToHex(
+      comparable({
+        version: "deep-keeper-submission-v1",
+        chainId: config.chainId,
+        coordinator: config.coordinatorAddress.toLowerCase(),
+        signer: config.signerAddress.toLowerCase(),
+        latestBlockNumber: latestBlock.number.toString(),
+        latestBlockHash: latestBlock.hash,
+        candidates: candidates.map((candidate) => ({
+          vault: candidate.vault.toLowerCase(),
+          expectedAction: candidate.expectedAction,
+        })),
+        batchHash,
+        gas: execution.gas.toString(),
+        maxFeePerGas: execution.maxFeePerGas.toString(),
+        maxPriorityFeePerGas: execution.maxPriorityFeePerGas.toString(),
+      }),
+    ),
+  );
+  return `deep-${commitment.slice(2, 34)}`;
+}
+
+function createSubmissionIntent({
+  config,
+  ready,
+  latest,
+  nowMs,
+}) {
+  const candidates = ready.map((work) => ({
+    vault: work.vault,
+    expectedAction: work.action,
+  }));
+  const execution = latest.execution;
+  return {
+    idempotencyKey: submissionIntentIdempotencyKey({
+      config,
+      latestBlock: latest.latestBlock,
+      candidates,
+      batchHash: latest.simulation.batchHash,
+      execution,
+    }),
+    createdAtMs: nowMs,
+    candidates: candidates.map((candidate) => candidate.vault),
+    candidateActions: Object.fromEntries(
+      candidates.map((candidate) => [
+        candidate.vault.toLowerCase(),
+        candidate.expectedAction,
+      ]),
+    ),
+    executor: config.signerAddress,
+    batchHash: latest.simulation.batchHash,
+    gas: execution.gas.toString(),
+    maxFeePerGas: execution.maxFeePerGas.toString(),
+    maxPriorityFeePerGas: execution.maxPriorityFeePerGas.toString(),
+    maximumTransactionCostWei: execution.maximumTransactionCostWei.toString(),
+    perVaultReservedWei: Object.fromEntries(
+      Object.entries(latest.reservations).map(([key, value]) => [
+        key,
+        value.toString(),
+      ]),
+    ),
+    perVaultEstimatedGas: Object.fromEntries(
+      Object.entries(latest.gasWeights).map(([key, value]) => [
+        key,
+        value.toString(),
+      ]),
+    ),
+    reservationPolicy: "batch-envelope-v1",
+    subsidyCapWeiAtSubmission: config.vaultSubsidyCapWei.toString(),
+  };
+}
+
+function executorCandidatesFromIntent(intent) {
+  return intent.candidates.map((vault) => ({
+    vault,
+    expectedAction: intent.candidateActions[vault.toLowerCase()],
+  }));
+}
+
+async function submitIntent(wallet, config, intent) {
+  const hash = await wallet.writeContract({
+    address: config.coordinatorAddress,
+    abi: DEEP_KEEPER_ABI,
+    functionName: "execute",
+    args: [executorCandidatesFromIntent(intent)],
+    account: config.signerAddress,
+    gas: BigInt(intent.gas),
+    maxFeePerGas: BigInt(intent.maxFeePerGas),
+    maxPriorityFeePerGas: BigInt(intent.maxPriorityFeePerGas),
+    idempotencyKey: intent.idempotencyKey,
+  });
+  if (!HASH_PATTERN.test(hash ?? "")) {
+    fail("SIGNER_INVALID_RESPONSE", "Remote signer returned an invalid hash");
+  }
+  return hash.toLowerCase();
+}
+
+function pendingFromSubmissionIntent(intent, hash) {
+  const pending = { ...intent };
+  delete pending.idempotencyKey;
+  delete pending.createdAtMs;
+  delete pending.maxPriorityFeePerGas;
+  return {
+    ...pending,
+    hash,
+    submittedAtMs: intent.createdAtMs,
+  };
+}
+
+function intentReplayPolicyViolation(state, intent, config) {
+  if (intent.candidates.length > config.maxBatchSize) {
+    return "candidate count exceeds the current batch policy";
+  }
+  if (BigInt(intent.gas) > config.maxGas) {
+    return "gas limit exceeds the current keeper ceiling";
+  }
+  if (BigInt(intent.maxFeePerGas) > config.maxFeePerGasWei) {
+    return "fee cap exceeds the current keeper ceiling";
+  }
+  if (intent.reservationPolicy !== "batch-envelope-v1") {
+    return "intent lacks the reviewed full-envelope reservation";
+  }
+  const persistedCap = BigInt(intent.subsidyCapWeiAtSubmission);
+  const effectiveCap =
+    persistedCap < config.vaultSubsidyCapWei
+      ? persistedCap
+      : config.vaultSubsidyCapWei;
+  for (const candidate of intent.candidates) {
+    const key = candidate.toLowerCase();
+    const reservation = BigInt(intent.perVaultReservedWei[key]);
+    if (actualSubsidyCost(state, candidate) + reservation > effectiveCap) {
+      return `vault subsidy reservation exceeds the current effective cap: ${candidate}`;
+    }
+  }
+  return null;
+}
+
+async function persistExecutionState(persistPendingState, state) {
+  if (typeof persistPendingState !== "function") {
+    fail(
+      "STATE_PERSISTENCE_UNAVAILABLE",
+      "Enabled execution requires durable state persistence",
+    );
+  }
+  await persistPendingState(JSON.parse(JSON.stringify(state)));
 }
 
 export async function runKeeperCycle({
@@ -1272,8 +2049,96 @@ export async function runKeeperCycle({
     if (await detectReorg(readers, nextState, snapshot.confirmedBlock)) {
       nextState.cursor = 0;
       nextState.checkpoint = null;
-      nextState.pendingTransaction = null;
       metrics.reorgs += 1;
+    }
+
+    if (nextState.submissionIntent) {
+      const intentAgeMs = nowMs - nextState.submissionIntent.createdAtMs;
+      if (
+        intentAgeMs < 0 ||
+        intentAgeMs > PRIVY_IDEMPOTENCY_REPLAY_WINDOW_MS
+      ) {
+        metrics.staleSubmissionIntent = 1;
+        return {
+          state: nextState,
+          outcome: "submission-intent-manual-recovery-required",
+          confirmedBlock: snapshot.confirmedBlock,
+          registryCount: null,
+          ready: [],
+        };
+      }
+      if (!config.enabled || !wallet || !config.signerAddress) {
+        fail(
+          "SIGNER_UNAVAILABLE",
+          "A durable submission intent requires its policy-bound signer",
+        );
+      }
+      const policyViolation = intentReplayPolicyViolation(
+        nextState,
+        nextState.submissionIntent,
+        config,
+      );
+      if (policyViolation) {
+        metrics.submissionIntentPolicyBlocked = 1;
+        return {
+          state: nextState,
+          outcome: "submission-intent-policy-manual-recovery-required",
+          confirmedBlock: snapshot.confirmedBlock,
+          registryCount: null,
+          ready: [],
+          recoveryReason: policyViolation,
+        };
+      }
+      if (wallet.supportsStableIdempotency !== true) {
+        fail(
+          "SIGNER_UNAVAILABLE",
+          "The configured signer does not guarantee stable idempotent replay",
+        );
+      }
+      try {
+        const latestBalanceBlock = await readLatestAgreedBlock(
+          readers,
+          snapshot.confirmedBlock.number,
+        );
+        await checkSignerBalance(
+          readers,
+          config,
+          latestBalanceBlock.number,
+          BigInt(nextState.submissionIntent.maximumTransactionCostWei),
+        );
+      } catch (error) {
+        if (error?.code !== "SIGNER_BALANCE_REJECTED") throw error;
+        metrics.submissionIntentPolicyBlocked = 1;
+        return {
+          state: nextState,
+          outcome: "submission-intent-policy-manual-recovery-required",
+          confirmedBlock: snapshot.confirmedBlock,
+          registryCount: null,
+          ready: [],
+          recoveryReason: error.message,
+        };
+      }
+      const hash = await submitIntent(
+        wallet,
+        config,
+        nextState.submissionIntent,
+      );
+      nextState.pendingTransaction = pendingFromSubmissionIntent(
+        nextState.submissionIntent,
+        hash,
+      );
+      nextState.submissionIntent = null;
+      await persistExecutionState(persistPendingState, nextState);
+      metrics.batchesSubmitted += 1;
+      metrics.lastSuccessTimestampSeconds = Math.floor(nowMs / 1000);
+      return {
+        state: nextState,
+        outcome: "submission-recovered-awaiting-confirmation",
+        confirmedBlock: snapshot.confirmedBlock,
+        registryCount: null,
+        ready: [],
+        transactionHash: hash,
+      };
     }
 
     const pending = await reconcilePending(
@@ -1356,48 +2221,37 @@ export async function runKeeperCycle({
     if (!wallet || !config.signerAddress) {
       fail("SIGNER_UNAVAILABLE", "Enabled keeper has no remote signer client");
     }
+    if (wallet.supportsStableIdempotency !== true) {
+      fail(
+        "SIGNER_UNAVAILABLE",
+        "The configured signer does not guarantee stable idempotent replay",
+      );
+    }
 
-    const candidates = budgeted.ready.map((work) => work.vault);
-    const execution = budgeted.execution;
-    const hash = await wallet.writeContract({
-      address: config.coordinatorAddress,
-      abi: DEEP_KEEPER_ABI,
-      functionName: "performBatch",
-      args: [candidates],
+    const latest = await prepareLatestBroadcast({
+      readers,
+      config,
+      state: nextState,
+      metrics,
+      ready: budgeted.ready,
+      minimumBlockNumber: snapshot.confirmedBlock.number,
       account: config.signerAddress,
-      gas: execution.gas,
-      maxFeePerGas: execution.maxFeePerGas,
-      maxPriorityFeePerGas: execution.maxPriorityFeePerGas,
     });
-    if (!HASH_PATTERN.test(hash ?? "")) {
-      fail("SIGNER_INVALID_RESPONSE", "Remote signer returned an invalid hash");
-    }
-    nextState.pendingTransaction = {
+    nextState.submissionIntent = createSubmissionIntent({
+      config,
+      ready: budgeted.ready,
+      latest,
+      nowMs,
+    });
+    nextState.pendingTransaction = null;
+    await persistExecutionState(persistPendingState, nextState);
+    const hash = await submitIntent(wallet, config, nextState.submissionIntent);
+    nextState.pendingTransaction = pendingFromSubmissionIntent(
+      nextState.submissionIntent,
       hash,
-      submittedAtMs: nowMs,
-      candidates,
-      gas: execution.gas.toString(),
-      maxFeePerGas: execution.maxFeePerGas.toString(),
-      maximumTransactionCostWei:
-        execution.maximumTransactionCostWei.toString(),
-      perVaultReservedWei: Object.fromEntries(
-        Object.entries(budgeted.reservations).map(([key, value]) => [
-          key,
-          value.toString(),
-        ]),
-      ),
-      perVaultEstimatedGas: Object.fromEntries(
-        Object.entries(budgeted.gasWeights).map(([key, value]) => [
-          key,
-          value.toString(),
-        ]),
-      ),
-      reservationPolicy: "batch-envelope-v1",
-      subsidyCapWeiAtSubmission: config.vaultSubsidyCapWei.toString(),
-    };
-    if (persistPendingState) {
-      await persistPendingState(nextState);
-    }
+    );
+    nextState.submissionIntent = null;
+    await persistExecutionState(persistPendingState, nextState);
     metrics.batchesSubmitted += 1;
     metrics.lastSuccessTimestampSeconds = Math.floor(nowMs / 1000);
     return {
@@ -1420,9 +2274,7 @@ export async function runKeeperCycle({
 }
 
 export function renderPrometheusMetrics(metrics, runtime, config) {
-  const subsidyEntries = Object.values(
-    runtime.state?.vaultSubsidies ?? {},
-  );
+  const subsidyEntries = Object.values(runtime.state?.vaultSubsidies ?? {});
   const durableActualCostWei = subsidyEntries.reduce(
     (total, entry) => total + BigInt(entry.actualCostWei),
     0n,
@@ -1432,7 +2284,9 @@ export function renderPrometheusMetrics(metrics, runtime, config) {
     0n,
   );
   const pendingReservedWei = Object.values(
-    runtime.state?.pendingTransaction?.perVaultReservedWei ?? {},
+    runtime.state?.pendingTransaction?.perVaultReservedWei ??
+      runtime.state?.submissionIntent?.perVaultReservedWei ??
+      {},
   ).reduce((total, value) => total + BigInt(value), 0n);
   const lines = [
     "# HELP deep_keeper_enabled Whether transaction submission is enabled.",
@@ -1465,12 +2319,24 @@ export function renderPrometheusMetrics(metrics, runtime, config) {
     "# HELP deep_keeper_transactions_confirmed_total Canonically confirmed transactions.",
     "# TYPE deep_keeper_transactions_confirmed_total counter",
     `deep_keeper_transactions_confirmed_total ${metrics.transactionsConfirmed}`,
+    "# HELP deep_keeper_transactions_nonproductive_total Confirmed executor transactions with at least one authentic non-success result.",
+    "# TYPE deep_keeper_transactions_nonproductive_total counter",
+    `deep_keeper_transactions_nonproductive_total ${metrics.transactionsNonproductive}`,
     "# HELP deep_keeper_transactions_reverted_total Canonically reverted transactions.",
     "# TYPE deep_keeper_transactions_reverted_total counter",
     `deep_keeper_transactions_reverted_total ${metrics.transactionsReverted}`,
-    "# HELP deep_keeper_transactions_dropped_total Timed-out transactions released for retry.",
+    "# HELP deep_keeper_transactions_dropped_total Canonically proven dropped or replaced transactions.",
     "# TYPE deep_keeper_transactions_dropped_total counter",
     `deep_keeper_transactions_dropped_total ${metrics.transactionsDropped}`,
+    "# HELP deep_keeper_pending_receipt_unknown Whether a transaction has exceeded the receipt timeout without canonical drop proof.",
+    "# TYPE deep_keeper_pending_receipt_unknown gauge",
+    `deep_keeper_pending_receipt_unknown ${metrics.unknownReceiptPending}`,
+    "# HELP deep_keeper_submission_intent_stale Whether an unresolved signer intent is outside Privy's safe replay window.",
+    "# TYPE deep_keeper_submission_intent_stale gauge",
+    `deep_keeper_submission_intent_stale ${metrics.staleSubmissionIntent}`,
+    "# HELP deep_keeper_submission_intent_policy_blocked Whether an unresolved signer intent violates current execution policy.",
+    "# TYPE deep_keeper_submission_intent_policy_blocked gauge",
+    `deep_keeper_submission_intent_policy_blocked ${metrics.submissionIntentPolicyBlocked}`,
     "# HELP deep_keeper_vault_subsidy_cap_wei Configured hard gas subsidy cap for each vault.",
     "# TYPE deep_keeper_vault_subsidy_cap_wei gauge",
     `deep_keeper_vault_subsidy_cap_wei ${config.vaultSubsidyCapWei}`,
@@ -1492,13 +2358,16 @@ export function renderPrometheusMetrics(metrics, runtime, config) {
     "# HELP deep_keeper_vault_subsidy_actual_wei_total Canonical receipt gas costs attributed by this process.",
     "# TYPE deep_keeper_vault_subsidy_actual_wei_total counter",
     `deep_keeper_vault_subsidy_actual_wei_total ${metrics.subsidyActualCostWei}`,
+    "# HELP deep_keeper_sponsor_absorbed_wei_total Confirmed gas cost absorbed by the sponsor for authentic nonproductive executor results.",
+    "# TYPE deep_keeper_sponsor_absorbed_wei_total counter",
+    `deep_keeper_sponsor_absorbed_wei_total ${metrics.sponsorAbsorbedCostWei}`,
     "# HELP deep_keeper_vault_subsidy_durable_simulated_wei Persisted conservative gas quotes across restarts.",
     "# TYPE deep_keeper_vault_subsidy_durable_simulated_wei gauge",
     `deep_keeper_vault_subsidy_durable_simulated_wei ${durableSimulatedCostWei}`,
     "# HELP deep_keeper_vault_subsidy_durable_actual_wei Persisted canonical receipt costs across restarts.",
     "# TYPE deep_keeper_vault_subsidy_durable_actual_wei gauge",
     `deep_keeper_vault_subsidy_durable_actual_wei ${durableActualCostWei}`,
-    "# HELP deep_keeper_vault_subsidy_pending_reserved_wei Conservative per-vault reservations for the pending transaction.",
+    "# HELP deep_keeper_vault_subsidy_pending_reserved_wei Conservative per-vault reservations for a submission intent or pending transaction.",
     "# TYPE deep_keeper_vault_subsidy_pending_reserved_wei gauge",
     `deep_keeper_vault_subsidy_pending_reserved_wei ${pendingReservedWei}`,
     "# HELP deep_keeper_last_success_timestamp_seconds Last successful cycle.",
@@ -1508,6 +2377,11 @@ export function renderPrometheusMetrics(metrics, runtime, config) {
     "# TYPE deep_keeper_pending_transaction gauge",
     `deep_keeper_pending_transaction ${
       runtime.state?.pendingTransaction ? 1 : 0
+    }`,
+    "# HELP deep_keeper_submission_intent Whether one durable signer request awaits idempotent replay.",
+    "# TYPE deep_keeper_submission_intent gauge",
+    `deep_keeper_submission_intent ${
+      runtime.state?.submissionIntent ? 1 : 0
     }`,
   ];
   return `${lines.join("\n")}\n`;

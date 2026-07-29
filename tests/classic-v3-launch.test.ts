@@ -41,19 +41,28 @@ function readyManifest(): ClassicV3DeploymentManifest {
   return {
     chainId: 1,
     classicV3Status: "ready",
+    classicCtoAuthorityV1:
+      "0x7777777777777777777777777777777777777777",
+    classicRewardVaultFactoryV1:
+      "0x9999999999999999999999999999999999999999",
+    classicInitialBuyVestingWalletFactoryV1:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    classicLaunchPolicyV1:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     ethCreatorFeeHookFactoryV3:
       "0x5555555555555555555555555555555555555555",
     ethCreatorFeeHookV3:
       "0x6666666666666666666666666666666666666666",
-    feeSplitVaultFactoryV1:
-      "0x7777777777777777777777777777777777777777",
     memeLaunchV2: launcher,
     lockedPositionFeeForwarderFactory:
       "0x8888888888888888888888888888888888888888",
     runtimeCodeHashes: {
+      classicCtoAuthorityV1: hash,
+      classicRewardVaultFactoryV1: hash,
+      classicInitialBuyVestingWalletFactoryV1: hash,
+      classicLaunchPolicyV1: hash,
       ethCreatorFeeHookFactoryV3: hash,
       ethCreatorFeeHookV3: hash,
-      feeSplitVaultFactoryV1: hash,
       memeLaunchV2: hash,
       lockedPositionFeeForwarderFactory: hash,
     },
@@ -73,8 +82,13 @@ function readyRelease(): ClassicV3ReleaseManifest {
     startingNonce: 12,
     hookSalt: `0x${"33".repeat(32)}`,
     addresses: {
-      feeSplitVaultFactory:
+      ctoAuthority:
         "0x7777777777777777777777777777777777777777",
+      rewardVaultFactory:
+        "0x9999999999999999999999999999999999999999",
+      initialBuyVestingWalletFactory:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      launchPolicy: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       hookFactory: "0x5555555555555555555555555555555555555555",
       feeHook: "0x6666666666666666666666666666666666666666",
       launcher,
@@ -82,7 +96,10 @@ function readyRelease(): ClassicV3ReleaseManifest {
         "0x8888888888888888888888888888888888888888",
     },
     runtimeCodeHashes: {
-      feeSplitVaultFactory: hash,
+      ctoAuthority: hash,
+      rewardVaultFactory: hash,
+      initialBuyVestingWalletFactory: hash,
+      launchPolicy: hash,
       hookFactory: hash,
       feeHook: hash,
       launcher: hash,
@@ -249,6 +266,7 @@ describe("Classic V3 launch configuration", () => {
         { beneficiary: external, share: "25.00%" },
         { beneficiary: third, share: "75.00%" },
       ],
+      initialBuyCustody: "Available immediately",
     });
   });
 

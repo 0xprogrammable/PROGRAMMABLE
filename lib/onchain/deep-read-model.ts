@@ -737,6 +737,7 @@ async function hydrateDeepToken(
     transferTaxBps: feeDisclosure[5],
     totalSwapFeeBps: Math.max(feeDisclosure[0], feeDisclosure[1]),
     launchModel: "deep",
+    deepReleaseVersion: "deep-full-range-v1",
     growthVaultAddress: launch.growthVault,
     oracleGuardAddress: launch.oracleGuard,
     upstreamRewardVaultAddress: launch.upstreamRewardVault,
