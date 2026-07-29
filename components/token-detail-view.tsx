@@ -359,21 +359,46 @@ function formatUsd(valueWad: string | undefined, mode: "amount" | "price") {
     }).format(value)}`;
   }
 
+  if (value >= 1_000) {
+    return formatCompactUsd(value, 2);
+  }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    notation: value >= 1_000 ? "compact" : "standard",
-    maximumFractionDigits: value >= 1_000 ? 2 : 2,
+    notation: "standard",
+    maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatCompactUsd(value: number, maximumFractionDigits: number) {
+  const units = [
+    { threshold: 1_000_000_000_000, suffix: "T" },
+    { threshold: 1_000_000_000, suffix: "B" },
+    { threshold: 1_000_000, suffix: "M" },
+    { threshold: 1_000, suffix: "K" },
+  ] as const;
+  const unit = units.find(({ threshold }) => value >= threshold);
+  if (!unit) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+  const compact = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits,
+  }).format(value / unit.threshold);
+  return `$${compact}${unit.suffix}`;
 }
 
 function formatUsdAmount(value: number | null) {
   if (value === null || !Number.isFinite(value) || value < 0) return null;
+  if (value >= 1_000) return formatCompactUsd(value, 1);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    notation: value >= 1_000 ? "compact" : "standard",
-    maximumFractionDigits: value >= 1_000 ? 1 : 2,
+    notation: "standard",
+    maximumFractionDigits: 2,
   }).format(value);
 }
 

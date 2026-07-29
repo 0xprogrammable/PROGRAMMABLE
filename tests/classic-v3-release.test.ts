@@ -9,13 +9,20 @@ import {
 } from "../lib/classic-v3-release";
 
 const hash = `0x${"11".repeat(32)}`;
+const launcherFeeRecipient =
+  "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
 const addresses = {
-  feeSplitVaultFactory: "0x1111111111111111111111111111111111111111",
-  hookFactory: "0x2222222222222222222222222222222222222222",
-  feeHook: "0x3333333333333333333333333333333333333333",
-  launcher: "0x4444444444444444444444444444444444444444",
+  ctoAuthority: "0x1111111111111111111111111111111111111111",
+  rewardVaultFactory: "0x2222222222222222222222222222222222222222",
+  initialBuyVestingWalletFactory:
+    "0x3333333333333333333333333333333333333333",
+  launchPolicy: "0x4444444444444444444444444444444444444444",
+  hookFactory: "0x5555555555555555555555555555555555555555",
+  feeHook: "0x6666666666666666666666666666666666666666",
+  launcher: "0x7777777777777777777777777777777777777777",
   positionForwarderFactory:
-    "0x5555555555555555555555555555555555555555",
+    "0x8888888888888888888888888888888888888888",
+  launcherFeeRecipient,
 };
 
 function verifiedPair(): {
@@ -26,14 +33,21 @@ function verifiedPair(): {
     app: {
       chainId: 1,
       classicV3Status: "ready",
-      feeSplitVaultFactoryV1: addresses.feeSplitVaultFactory,
+      classicCtoAuthorityV1: addresses.ctoAuthority,
+      classicRewardVaultFactoryV1: addresses.rewardVaultFactory,
+      classicInitialBuyVestingWalletFactoryV1:
+        addresses.initialBuyVestingWalletFactory,
+      classicLaunchPolicyV1: addresses.launchPolicy,
       ethCreatorFeeHookFactoryV3: addresses.hookFactory,
       ethCreatorFeeHookV3: addresses.feeHook,
       memeLaunchV2: addresses.launcher,
       lockedPositionFeeForwarderFactory:
         addresses.positionForwarderFactory,
       runtimeCodeHashes: {
-        feeSplitVaultFactoryV1: hash,
+        classicCtoAuthorityV1: hash,
+        classicRewardVaultFactoryV1: hash,
+        classicInitialBuyVestingWalletFactoryV1: hash,
+        classicLaunchPolicyV1: hash,
         ethCreatorFeeHookFactoryV3: hash,
         ethCreatorFeeHookV3: hash,
         memeLaunchV2: hash,
@@ -53,7 +67,10 @@ function verifiedPair(): {
       hookSalt: `0x${"33".repeat(32)}`,
       addresses,
       runtimeCodeHashes: {
-        feeSplitVaultFactory: hash,
+        ctoAuthority: hash,
+        rewardVaultFactory: hash,
+        initialBuyVestingWalletFactory: hash,
+        launchPolicy: hash,
         hookFactory: hash,
         feeHook: hash,
         launcher: hash,
@@ -69,14 +86,14 @@ function verifiedPair(): {
 }
 
 describe("Classic verified release gate", () => {
-  it("keeps the checked-in production release disabled", () => {
+  it("accepts the checked-in verified production release", () => {
     expect(
       isClassicV3ReleaseVerified(
         appDeployments.production as unknown as ClassicV3DeploymentManifest,
         mainnetRelease as unknown as ClassicV3ReleaseManifest,
         1,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("accepts only matching source- and lifecycle-verified manifests", () => {
@@ -117,6 +134,20 @@ describe("Classic verified release gate", () => {
           addresses: {
             ...release.addresses,
             launcher: "0x6666666666666666666666666666666666666666",
+          },
+        },
+        1,
+      ),
+    ).toBe(false);
+    expect(
+      isClassicV3ReleaseVerified(
+        app,
+        {
+          ...release,
+          addresses: {
+            ...release.addresses,
+            launcherFeeRecipient:
+              "0x1111111111111111111111111111111111111111",
           },
         },
         1,

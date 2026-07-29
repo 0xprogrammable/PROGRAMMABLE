@@ -1,5 +1,86 @@
 {
-  "success": true,
-  "error": null,
-  "results": {}
+  "schemaVersion": 1,
+  "tool": {
+    "name": "Slither",
+    "version": "0.11.5",
+    "runDate": "2026-07-29",
+    "sourceCommit": "6529604616b79e58ba51227d9d134ef9e23e7a4d"
+  },
+  "scope": [
+    "src/EthCreatorFeeHookV3.sol",
+    "src/EthCreatorFeeHookFactoryV3.sol",
+    "src/MemeLaunchV2.sol",
+    "src/ClassicRewardVaultV1.sol",
+    "src/ClassicRewardVaultFactoryV1.sol",
+    "src/ClassicCtoAuthorityV1.sol",
+    "src/ClassicLaunchPolicyV1.sol",
+    "src/ClassicInitialBuyVestingWalletV1.sol",
+    "src/ClassicInitialBuyVestingWalletFactoryV1.sol"
+  ],
+  "configuration": {
+    "excludeDependencies": true,
+    "compiler": "solc 0.8.26",
+    "optimizerRuns": 1000
+  },
+  "summary": {
+    "openHigh": 0,
+    "openMedium": 0,
+    "openLow": 0,
+    "reviewedToolWarnings": 5,
+    "informationalDependencyWarnings": 9
+  },
+  "findings": [
+    {
+      "target": "src/MemeLaunchV2.sol",
+      "detector": "reentrancy-balance",
+      "impact": "High",
+      "confidence": "Medium",
+      "status": "reviewed-not-exploitable-in-this-composition",
+      "reason": "The flagged private function is reachable only through launch(), which holds OpenZeppelin ReentrancyGuardTransient. The only external transition is the immutable canonical PoolManager unlock path, unlockCallback accepts only that PoolManager, the launched UERC20 has no transfer callback, and the balance comparison is a post-settlement integrity assertion."
+    },
+    {
+      "target": "src/MemeLaunchV2.sol",
+      "detector": "incorrect-equality",
+      "impact": "Medium",
+      "confidence": "High",
+      "status": "reviewed-intentional-invariant",
+      "reason": "Exact equality proves that the launch consumed exactly msg.value while preserving unrelated ETH that may have been forced into the launcher. A mismatch reverts the atomic launch."
+    },
+    {
+      "target": "src/MemeLaunchV2.sol",
+      "detector": "timestamp",
+      "impact": "Low",
+      "confidence": "Medium",
+      "status": "reviewed-tool-noise",
+      "reason": "The detector attributes address, pool-id and balance comparisons to timestamp use. block.timestamp only records the PositionManager transaction deadline and immutable custody schedule start; it is not used for pricing, randomness or authorization."
+    },
+    {
+      "target": "src/EthCreatorFeeHookV3.sol",
+      "detector": "unimplemented-functions",
+      "impact": "Informational",
+      "confidence": "High",
+      "status": "reviewed-false-positive",
+      "reason": "EthCreatorFeeHookV3 implements getHookPermissions() explicitly and the source compiles. Slither fails to resolve this OpenZeppelin BaseHook override in the pinned dependency graph."
+    },
+    {
+      "target": "src/EthCreatorFeeHookFactoryV3.sol",
+      "detector": "unimplemented-functions",
+      "impact": "Informational",
+      "confidence": "High",
+      "status": "reviewed-false-positive",
+      "reason": "The factory compilation includes EthCreatorFeeHookV3 and repeats the same false BaseHook.getHookPermissions report."
+    }
+  ],
+  "informational": [
+    {
+      "detector": "pragma",
+      "status": "accepted-dependency-variance",
+      "reason": "Pinned OpenZeppelin and Uniswap dependencies declare compatible 0.8.x pragma ranges while project contracts pin 0.8.26."
+    }
+  ],
+  "limitations": [
+    "Slither cannot generate complete SlithIR for several v4 unlock callback paths in the pinned dependency graph.",
+    "Static analysis does not replace fuzz tests, invariants, pinned-fork tests, source verification or an independent audit.",
+    "No independent audit is claimed."
+  ]
 }

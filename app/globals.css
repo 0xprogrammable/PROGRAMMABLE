@@ -6769,14 +6769,92 @@ html[data-theme="dark"] .theme-toggle-sun {
   margin: 0;
 }
 
-.classic-v3-settings .classic-fee-layout {
-  grid-template-columns: 1fr;
-  margin-top: 0;
+.classic-v3-initial-buy {
+  align-items: stretch;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
 }
 
-.classic-v3-settings .classic-fee-layout .meme-dev-buy {
+.classic-v3-initial-buy .meme-dev-buy {
   align-items: center;
-  grid-template-columns: minmax(0, 1fr) 246px;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 246px);
+}
+
+.classic-v3-custody {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  min-width: 0;
+  padding: 12px;
+}
+
+.classic-v3-custody legend,
+.classic-v3-custody label > span:first-child {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.classic-v3-custody legend {
+  padding: 0 4px;
+}
+
+.classic-v3-custody label {
+  display: grid;
+  gap: 6px;
+}
+
+.classic-v3-custody label:first-of-type,
+.classic-v3-custody > small {
+  grid-column: 1 / -1;
+}
+
+.classic-v3-custody select,
+.classic-v3-custody input {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  min-height: 44px;
+  outline: none;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.classic-v3-custody select:focus-visible,
+.classic-v3-custody input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.classic-v3-days-input {
+  display: block;
+  position: relative;
+}
+
+.classic-v3-days-input input {
+  padding-right: 48px;
+}
+
+.classic-v3-days-input > span {
+  color: var(--muted);
+  font-size: 11px;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.classic-v3-custody > small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .deep-preset {
@@ -6954,7 +7032,7 @@ html[data-theme="dark"] .theme-toggle-sun {
 
 .launch-success-v3 {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 7px;
   margin: 16px 0;
 }
@@ -7005,7 +7083,11 @@ html[data-theme="dark"] .theme-toggle-sun {
 }
 
 @media (max-width: 720px) {
-  .classic-v3-settings .classic-fee-layout .meme-dev-buy {
+  .classic-v3-initial-buy {
+    grid-template-columns: 1fr;
+  }
+
+  .classic-v3-initial-buy .meme-dev-buy {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
