@@ -22,6 +22,7 @@ import {
   stockPairedV2CaptureGates,
 } from "../capture-stock-paired-v2-release.mjs";
 import {
+  assertStockPairedV2SourceInput,
   buildStockPairedV2SourceCapture,
   etherscanForSourcifyOnlyCapture,
 } from "../verify-stock-paired-v2-sources.mjs";
@@ -167,6 +168,7 @@ test("builds fail-closed Etherscan and Sourcify commands", () => {
   assert(etherscan.includes(registry.encodedConstructorArguments));
   assert(etherscan.includes("--etherscan-api-key"));
   assert(etherscan.includes("test-key"));
+  assert(etherscan.includes("--skip-is-verified-check"));
   assert.throws(
     () => stockPairedV2ForgeArguments(registry, "etherscan"),
     /ETHERSCAN_API_KEY/,
@@ -174,6 +176,7 @@ test("builds fail-closed Etherscan and Sourcify commands", () => {
 
   const sourcify = stockPairedV2ForgeArguments(registry, "sourcify");
   assert(!sourcify.includes("--etherscan-api-key"));
+  assert(!sourcify.includes("--skip-is-verified-check"));
   assert(sourcify.includes("--constructor-args"));
   assert(sourcify.includes(registry.encodedConstructorArguments));
   assert(sourcify.includes("sourcify"));
@@ -227,6 +230,86 @@ test("rejects incomplete or path-leaking standard-json inputs", () => {
   assert.throws(
     () => assertStockPairedV2StandardJson(record, incomplete),
     /source graph is incomplete/,
+  );
+});
+
+test("accepts Etherscan output normalization without weakening source verification", () => {
+  const record = stockPairedV2SourceRecords(plan)[0];
+  const local = standardJsonFixture(record);
+  local.settings.outputSelection = {
+    "*": {
+      "*": ["abi", "evm.bytecode", "evm.deployedBytecode", "metadata"],
+    },
+  };
+  const remote = structuredClone(local);
+  remote.settings = {
+    viaIR: remote.settings.viaIR,
+    evmVersion: remote.settings.evmVersion,
+    outputSelection: { "*": { "*": ["*"] } },
+    metadata: remote.settings.metadata,
+    optimizer: remote.settings.optimizer,
+    remappings: remote.settings.remappings,
+  };
+
+  assert.doesNotThrow(() =>
+    assertStockPairedV2SourceInput(record, local, JSON.stringify(remote)),
+  );
+});
+
+test("rejects compilation-affecting Etherscan input drift", () => {
+  const record = stockPairedV2SourceRecords(plan)[0];
+  const local = standardJsonFixture(record);
+  const cases = [
+    [
+      "optimizer enabled",
+      (input) => (input.settings.optimizer.enabled = false),
+    ],
+    ["optimizer runs", (input) => (input.settings.optimizer.runs = 999)],
+    [
+      "metadata bytecode hash",
+      (input) => (input.settings.metadata.bytecodeHash = "ipfs"),
+    ],
+    ["metadata CBOR", (input) => (input.settings.metadata.appendCBOR = true)],
+    ["EVM version", (input) => (input.settings.evmVersion = "paris")],
+    ["via IR", (input) => (input.settings.viaIR = true)],
+    [
+      "remappings",
+      (input) =>
+        (input.settings.remappings = ["dependency/=lib/other-dependency/"]),
+    ],
+    [
+      "nonempty libraries",
+      (input) =>
+        (input.settings.libraries = {
+          "lib/dependency-1.sol": {
+            Dependency1: "0x0000000000000000000000000000000000000001",
+          },
+        }),
+    ],
+  ];
+
+  for (const [name, mutate] of cases) {
+    const remote = structuredClone(local);
+    mutate(remote);
+    assert.throws(
+      () =>
+        assertStockPairedV2SourceInput(record, local, JSON.stringify(remote)),
+      /compiler (?:settings drifted|input settings differ)/,
+      name,
+    );
+  }
+});
+
+test("rejects Etherscan source-content differences", () => {
+  const record = stockPairedV2SourceRecords(plan)[0];
+  const local = standardJsonFixture(record);
+  const remote = structuredClone(local);
+  remote.sources[record.fqcn.split(":")[0]].content =
+    "contract Target { function changed() external {} }";
+
+  assert.throws(
+    () => assertStockPairedV2SourceInput(record, local, JSON.stringify(remote)),
+    /source differs at/,
   );
 });
 

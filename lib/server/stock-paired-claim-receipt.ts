@@ -6,7 +6,7 @@ import {
 } from "viem";
 
 import { stockFeeSplitVaultAbi } from "../stock-paired";
-import { getConfiguredStockPairedRelease } from "../stock-paired-release";
+import { getConfiguredStockPairedReleases } from "../stock-paired-release";
 
 export class StockPairedClaimReceiptError extends Error {
   constructor(message: string) {
@@ -38,21 +38,27 @@ export async function verifyStockPairedClaimReceipt(input: {
     );
   }
   const canonical = receipts[0];
-  const release = getConfiguredStockPairedRelease();
+  const releases = getConfiguredStockPairedReleases();
+  const earliestStartBlock = releases.reduce(
+    (earliest, release) =>
+      BigInt(release.startBlock) < earliest
+        ? BigInt(release.startBlock)
+        : earliest,
+    releases.length > 0 ? BigInt(releases[0].startBlock) : 0n,
+  );
   if (
-    !release ||
+    releases.length === 0 ||
     receipts.some(
       (receipt) =>
         receipt.status !== "success" ||
         !receipt.to ||
         receipt.to.toLowerCase() !== input.vaultAddress.toLowerCase() ||
         receipt.from.toLowerCase() !== input.account.toLowerCase() ||
-        receipt.blockHash.toLowerCase() !==
-          canonical.blockHash.toLowerCase() ||
+        receipt.blockHash.toLowerCase() !== canonical.blockHash.toLowerCase() ||
         receipt.blockNumber !== canonical.blockNumber ||
         receipt.transactionIndex !== canonical.transactionIndex,
     ) ||
-    canonical.blockNumber < BigInt(release.startBlock)
+    canonical.blockNumber < earliestStartBlock
   ) {
     throw new StockPairedClaimReceiptError(
       "The Stock-Paired claim receipt is invalid",

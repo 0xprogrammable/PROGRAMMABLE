@@ -229,7 +229,11 @@ export function stockPairedV2ForgeArguments(
     if (!etherscanApiKey?.trim()) {
       throw new Error("ETHERSCAN_API_KEY is required for Etherscan submission");
     }
-    values.push("--etherscan-api-key", etherscanApiKey.trim());
+    values.push(
+      "--skip-is-verified-check",
+      "--etherscan-api-key",
+      etherscanApiKey.trim(),
+    );
   }
   values.push(record.address, record.fqcn);
   return values;

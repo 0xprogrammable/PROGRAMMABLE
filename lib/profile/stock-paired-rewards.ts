@@ -12,7 +12,8 @@ import {
   stockFeeSplitVaultAbi,
 } from "../stock-paired";
 import {
-  getConfiguredStockPairedRelease,
+  getConfiguredStockPairedReleaseByHook,
+  getConfiguredStockPairedReleases,
 } from "../stock-paired-release";
 import {
   parsePreparedTransaction,
@@ -42,6 +43,7 @@ export type StockPairedReward = {
   tokenName: string;
   tokenSymbol: string;
   imageUrl?: string;
+  hookAddress: Address;
   poolId: Hex;
   vaultAddress: Address;
   quoteAsset: Address;
@@ -210,7 +212,7 @@ function optionalEstimate(reward: Record<string, unknown>) {
 }
 
 export function isConfiguredStockPairedRewardsReady() {
-  return getConfiguredStockPairedRelease() !== null;
+  return getConfiguredStockPairedReleases().length > 0;
 }
 
 export function parseStockPairedProfileRewards(
@@ -296,6 +298,7 @@ export function parseStockPairedProfileRewards(
       tokenName: text(reward.tokenName, "reward token name"),
       tokenSymbol: text(reward.tokenSymbol, "reward token symbol"),
       ...(imageUrl ? { imageUrl } : {}),
+      hookAddress: address(reward.hookAddress, "reward hook"),
       poolId: bytes32(reward.poolId, "reward pool"),
       vaultAddress: address(reward.vaultAddress, "reward vault"),
       quoteAsset: address(reward.quoteAsset, "quote asset"),
@@ -486,7 +489,9 @@ export type PreparedStockPairedRewardConversion = {
 function stockPairedTradeDeployment(
   reward: StockPairedReward,
 ): StockPairedTradeDeployment {
-  const release = getConfiguredStockPairedRelease();
+  const release = getConfiguredStockPairedReleaseByHook(
+    reward.hookAddress,
+  );
   if (!release) {
     throw new Error(
       "Stock-Paired conversion is not enabled by a verified release",

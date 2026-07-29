@@ -22,11 +22,11 @@ import {
 } from "viem";
 
 import {
-  getStockQuoteAsset,
+  getStockPairedQuoteAssetForRelease,
   stockQuoteRegistryAbi,
 } from "../stock-paired";
 import {
-  getConfiguredStockPairedRelease,
+  getConfiguredStockPairedReleaseByHook,
   type VerifiedStockPairedRelease,
 } from "../stock-paired-release";
 import type { ExploreReadModel } from "../onchain/types";
@@ -215,14 +215,17 @@ export function resolveStockPairedTradeDeployment(
       "Stock-Paired trading is only available on Ethereum Mainnet",
     );
   }
-  const release = getConfiguredStockPairedRelease();
+  const verifiedToken = verifiedStockToken(model, token);
+  const release = getConfiguredStockPairedReleaseByHook(
+    verifiedToken.hookAddress,
+  );
   if (!release) {
     throw new ClassicTradeUnavailableError(
       "Stock-Paired trading is not enabled by a verified Mainnet release",
     );
   }
-  const verifiedToken = verifiedStockToken(model, token);
-  const quoteAsset = getStockQuoteAsset(
+  const quoteAsset = getStockPairedQuoteAssetForRelease(
+    release,
     verifiedToken.quoteAssetAddress as string,
   );
   if (!quoteAsset) {

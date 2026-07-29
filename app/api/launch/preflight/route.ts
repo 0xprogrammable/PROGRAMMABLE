@@ -76,13 +76,13 @@ import {
 } from "@/lib/launch";
 import {
   encodeStockPairedEthLaunch,
+  getStockPairedEthQuoteAssetsForRelease,
+  getStockPairedQuoteAssetsForRelease,
   stockPairedEthLaunchCoordinatorAbi,
   stockPairedHookAbi,
   stockPairedHookFactoryAbi,
   stockPairedLaunchAbi,
   stockQuoteRegistryAbi,
-  STOCK_QUOTE_ASSETS,
-  STOCK_PAIRED_ETH_QUOTE_ASSETS,
   STOCK_PAIRED_CREATOR_FEE_BPS,
   STOCK_PAIRED_MIN_INITIAL_BUY,
   STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
@@ -98,7 +98,7 @@ import {
   stockPairedV3QuoterAbi,
 } from "@/lib/trade/stock-paired-route";
 import {
-  getConfiguredStockPairedRelease,
+  getConfiguredStockPairedLaunchRelease,
   type VerifiedStockPairedRelease,
 } from "@/lib/stock-paired-release";
 import {
@@ -1700,9 +1700,11 @@ async function assertStockPairedInfrastructure(
     positionForwarderFactory,
     treasury,
   } = release.addresses;
+  const quoteAssets = getStockPairedQuoteAssetsForRelease(release);
+  const ethQuoteAssets = getStockPairedEthQuoteAssetsForRelease(release);
   const routePools = [
     ...new Map(
-      STOCK_PAIRED_ETH_QUOTE_ASSETS.flatMap((asset) =>
+      ethQuoteAssets.flatMap((asset) =>
         getStockPairedEthRoute(asset.address).buyHops.map(
           (hop) => [hop.pool.toLowerCase(), hop] as const,
         ),
@@ -2005,7 +2007,7 @@ async function assertStockPairedInfrastructure(
     lpFeePips !== 0 ||
     tickSpacing !== 200 ||
     !factoryRecognizesHook ||
-    registryAssetCount !== BigInt(STOCK_QUOTE_ASSETS.length) ||
+    registryAssetCount !== BigInt(quoteAssets.length) ||
     (BigInt(feeHook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS
   ) {
     throw new Error(
@@ -2014,7 +2016,7 @@ async function assertStockPairedInfrastructure(
   }
 
   const registryAssets = await Promise.all(
-    STOCK_QUOTE_ASSETS.map(async (asset, index) => {
+    quoteAssets.map(async (asset, index) => {
       const [registered, supported, configurationHash] = await Promise.all([
         client.readContract({
           address: quoteRegistry,
@@ -2057,7 +2059,7 @@ async function assertStockPairedInfrastructure(
   }
 
   const coordinatorRoutes = await Promise.all(
-    STOCK_PAIRED_ETH_QUOTE_ASSETS.map(async (asset) => {
+    ethQuoteAssets.map(async (asset) => {
       const route = getStockPairedEthRoute(asset.address);
       const [routeFee, routePath] = await Promise.all([
         client.readContract({
@@ -2091,19 +2093,19 @@ async function assertStockPairedInfrastructure(
     }
   }
   const routedAddresses = new Set(
-    STOCK_PAIRED_ETH_QUOTE_ASSETS.map((asset) => asset.address.toLowerCase()),
+    ethQuoteAssets.map((asset) => asset.address.toLowerCase()),
   );
   const unroutedFees = await Promise.all(
-    STOCK_QUOTE_ASSETS.filter(
-      (asset) => !routedAddresses.has(asset.address.toLowerCase()),
-    ).map((asset) =>
-      client.readContract({
-        address: ethLaunchCoordinator,
-        abi: stockPairedEthLaunchCoordinatorAbi,
-        functionName: "stockPoolFee",
-        args: [asset.address],
-      }),
-    ),
+    quoteAssets
+      .filter((asset) => !routedAddresses.has(asset.address.toLowerCase()))
+      .map((asset) =>
+        client.readContract({
+          address: ethLaunchCoordinator,
+          abi: stockPairedEthLaunchCoordinatorAbi,
+          functionName: "stockPoolFee",
+          args: [asset.address],
+        }),
+      ),
   );
   if (unroutedFees.some((fee) => fee !== 0)) {
     throw new Error(
@@ -2180,7 +2182,7 @@ async function prepareStockPairedLaunch(
 
   const release =
     launchEnvironment === "production"
-      ? getConfiguredStockPairedRelease()
+      ? getConfiguredStockPairedLaunchRelease()
       : null;
   if (!release) {
     return response({
@@ -2381,6 +2383,7 @@ export async function POST(request: NextRequest) {
     }
     if (draft.launchModel === "stock-paired") {
       if (
+        getConfiguredStockPairedLaunchRelease() === null &&
         !isStockPairedLocalPreviewEnabled() &&
         !isStockPairedDevAccount(account)
       ) {
