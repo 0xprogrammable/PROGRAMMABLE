@@ -58,7 +58,7 @@
 
 .modelArt img {
   transform: scale(1.002);
-  transition: transform 480ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition: transform 260ms var(--ease-out);
 }
 
 .modelBody {
@@ -141,7 +141,7 @@
 }
 
 .modelAction svg {
-  transition: transform 180ms var(--ease-out);
+  transition: transform 160ms var(--ease-out);
 }
 
 .modelCard[data-launch-model-available="false"] {
@@ -154,6 +154,59 @@
 
 .formPage {
   min-height: calc(100svh - var(--header-height));
+}
+
+.formLoadingPage {
+  padding-top: 16px;
+}
+
+.formLoadingSheet {
+  backdrop-filter: blur(22px);
+  background: color-mix(in srgb, var(--glass-96) 96%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 26px;
+  box-shadow:
+    0 1px 0 var(--card-shadow),
+    0 20px 54px var(--card-shadow-soft);
+  display: grid;
+  gap: 18px;
+  margin: 7px auto 0;
+  max-width: 1020px;
+  min-height: 420px;
+  padding: 28px;
+}
+
+.formLoadingTitle,
+.formLoadingBlock,
+.formLoadingRow {
+  animation: launch-loading-pulse 900ms ease-in-out infinite alternate;
+  background: color-mix(in srgb, var(--surface-soft) 82%, transparent);
+  border-radius: 12px;
+  display: block;
+}
+
+.formLoadingTitle {
+  height: 22px;
+  width: min(180px, 48%);
+}
+
+.formLoadingBlock {
+  height: 196px;
+}
+
+.formLoadingRow {
+  height: 64px;
+  width: min(620px, 76%);
+}
+
+@keyframes launch-loading-pulse {
+  from {
+    opacity: 0.55;
+  }
+
+  to {
+    opacity: 0.92;
+  }
 }
 
 .formPageTitle {
@@ -515,17 +568,21 @@
     );
     box-shadow:
       0 1px 0 var(--card-shadow),
-      0 28px 72px var(--hover-shadow);
-    transform: translateY(-4px);
+      0 24px 62px var(--hover-shadow);
+    transform: translateY(-3px);
   }
 
   .modelCard:not(:disabled):hover .modelArt img {
-    transform: scale(1.018);
+    transform: scale(1.014);
   }
 
   .modelCard:not(:disabled):hover .modelAction svg {
     transform: translateX(3px);
   }
+}
+
+.modelCard:not(:disabled):active {
+  transform: scale(0.992);
 }
 
 @media (max-width: 1020px) {
@@ -718,42 +775,45 @@
 
   .modelCard {
     border-radius: 22px;
-    grid-template-columns: 110px minmax(0, 1fr);
-    min-height: 254px;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
   }
 
   .modelArt {
-    min-height: 254px;
+    height: 148px;
+    min-height: 148px;
   }
 
   .modelBody {
-    min-height: 254px;
-    padding: 18px 17px 15px;
+    min-height: 238px;
+    padding: 20px 20px 17px;
   }
 
   .modelHeading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
+    align-items: center;
+    flex-direction: row;
+    gap: 9px;
   }
 
   .modelHeading strong {
-    font-size: 22px;
+    font-size: 23px;
   }
 
   .modelHeading small {
-    font-size: 9px;
-    padding: 5px 7px;
+    font-size: 9.5px;
+    padding: 5px 8px;
   }
 
   .modelDescription {
-    font-size: 12.5px;
+    font-size: 14px;
+    line-height: 1.48;
   }
 
   .modelDetails > span,
   .modelDetails > span:first-child,
   .modelDetails > span:last-child {
-    font-size: 9.5px;
+    font-size: 10.5px;
+    line-height: 1.4;
   }
 
   .formPage :global(.launch-page-heading) {
@@ -776,6 +836,11 @@
 
   .formPage :global(.classic-launch-content) {
     padding: 18px 17px;
+  }
+
+  .formPage :global(.field > span),
+  .formPage :global(.token-image-field > span) {
+    font-size: 12.5px;
   }
 
   .formPage :global(.classic-token-grid) {
@@ -811,19 +876,21 @@
   .formPage :global(.deep-preset-stats > div:first-child) {
     border-top: 0;
   }
+
+  .formLoadingSheet {
+    border-radius: 22px;
+    min-height: 460px;
+    padding: 20px 18px;
+  }
 }
 
 @media (max-width: 340px) {
   .modelCard {
-    grid-template-columns: 92px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .modelBody {
-    padding-inline: 14px;
-  }
-
-  .modelDetails > span:nth-child(3) {
-    display: none;
+    padding-inline: 16px;
   }
 }
 
@@ -832,5 +899,11 @@
   .modelAction svg,
   .modelCard {
     transition-duration: 0.01ms;
+  }
+
+  .formLoadingTitle,
+  .formLoadingBlock,
+  .formLoadingRow {
+    animation: none;
   }
 }

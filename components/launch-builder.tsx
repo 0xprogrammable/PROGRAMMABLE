@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import {
   useCallback,
@@ -13,7 +12,6 @@ import {
 } from "react";
 import {
   ArrowLeft,
-  ArrowRight,
   Check,
   CircleCheck,
   ImagePlus,
@@ -79,7 +77,6 @@ import {
   type LaunchDraft,
   type LaunchModel,
 } from "@/lib/launch";
-import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
 import { prepareTokenImage } from "@/lib/token-image";
 import { formatEther, formatUnits, type Hex } from "viem";
 
@@ -373,242 +370,32 @@ async function waitForLaunchTransaction(
   throw new Error("The approval is still pending");
 }
 
-export function LaunchBuilder() {
-  const [selectedModel, setSelectedModel] = useState<LaunchModel | null>(null);
-
-  function chooseModel(candidate: LaunchModel) {
-    const model = resolveImplementedLaunchModel(candidate);
-    if (
-      !model ||
-      (model === "deep" && !deepLaunchAvailable) ||
-      (model === "stock-paired" && !stockPairedLaunchAvailable)
-    ) {
-      return;
-    }
-
-    window.scrollTo({ left: 0, top: 0, behavior: "auto" });
-    setSelectedModel(model);
-  }
-
-  function returnToModels() {
-    window.scrollTo({ left: 0, top: 0, behavior: "auto" });
-    setSelectedModel(null);
-  }
-
-  if (!selectedModel) {
-    return <LaunchModelPicker onChoose={chooseModel} />;
-  }
+export function LaunchBuilderForm({
+  model,
+  onBackToModels,
+}: {
+  model: LaunchModel;
+  onBackToModels: () => void;
+}) {
+  const initialDraft =
+    model === "deep"
+      ? createDeepDraft()
+      : model === "stock-paired"
+        ? normalizeStockPairedDraft(createStockPairedDraft())
+        : model === "classic-v3"
+          ? createClassicV3Draft()
+          : normalizeStandardDraft(createEmptyDraft());
 
   return (
-    <LaunchBuilderForm
-      model={selectedModel}
-      initialDraft={
-        selectedModel === "deep"
-          ? createDeepDraft()
-          : selectedModel === "stock-paired"
-            ? normalizeStockPairedDraft(createStockPairedDraft())
-          : selectedModel === "classic-v3"
-            ? createClassicV3Draft()
-            : normalizeStandardDraft(createEmptyDraft())
-      }
-      onBackToModels={returnToModels}
+    <LaunchBuilderFormView
+      model={model}
+      initialDraft={initialDraft}
+      onBackToModels={onBackToModels}
     />
   );
 }
 
-export function LaunchModelPicker({
-  onChoose,
-}: {
-  onChoose: (model: LaunchModel) => void;
-}) {
-  return (
-    <div
-      className={`launch-model-page page-width ${launchExperience.pickerPage}`}
-    >
-      <header
-        className={`launch-model-heading ${launchExperience.pickerHeading}`}
-      >
-        <h1>Choose a launch model</h1>
-      </header>
-
-      <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
-        <button
-          className={`launch-model-card ${launchExperience.modelCard}`}
-          data-launch-model-option="classic"
-          type="button"
-          aria-describedby="launch-model-classic-description launch-model-classic-details"
-          onClick={() =>
-            onChoose(classicV3LaunchAvailable ? "classic-v3" : "classic")
-          }
-        >
-          <span
-            className={`launch-model-art launch-model-art-classic ${launchExperience.modelArt}`}
-            aria-hidden="true"
-          >
-            <Image
-              src="/brand/programmable-classic-launch-art-card.webp"
-              alt=""
-              fill
-              sizes="(max-width: 800px) calc(100vw - 32px), 500px"
-              priority
-              unoptimized
-            />
-          </span>
-
-          <span
-            className={`launch-model-card-body ${launchExperience.modelBody}`}
-          >
-            <span
-              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-            >
-              <strong>Classic</strong>
-            </span>
-            <span
-              className={`launch-model-description ${launchExperience.modelDescription}`}
-              id="launch-model-classic-description"
-            >
-              Fixed swap fees with creator rewards paid in ETH. A direct,
-              familiar way to launch on Uniswap v4.
-            </span>
-            <span
-              className={`launch-model-details ${launchExperience.modelDetails}`}
-              id="launch-model-classic-details"
-            >
-              <span>No liquidity deposit</span>
-              <span>
-                {classicV3LaunchAvailable
-                  ? "Choose buy and sell fees"
-                  : "1.00% swap fee"}
-              </span>
-              <span>Rewards in ETH</span>
-            </span>
-            <span
-              className={`launch-model-action ${launchExperience.modelAction}`}
-            >
-              Launch
-              <ArrowRight aria-hidden="true" size={16} />
-            </span>
-          </span>
-        </button>
-
-        {stockPairedLaunchAvailable ? (
-          <button
-            className={`launch-model-card launch-model-card-stock ${launchExperience.modelCard}`}
-            data-launch-model-option="stock-paired"
-            type="button"
-            aria-describedby="launch-model-stock-description launch-model-stock-details"
-            onClick={() => onChoose("stock-paired")}
-          >
-            <span
-              className={`launch-model-art launch-model-art-stock ${launchExperience.modelArt}`}
-              aria-hidden="true"
-            >
-              <Image
-                src="/brand/programmable-stock-paired-launch-art-v1.webp"
-                alt=""
-                fill
-                sizes="(max-width: 800px) calc(100vw - 32px), 500px"
-                unoptimized
-              />
-            </span>
-
-            <span
-              className={`launch-model-card-body ${launchExperience.modelBody}`}
-            >
-              <span
-                className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-              >
-                <strong>Stock-Paired</strong>
-              </span>
-              <span
-                className={`launch-model-description ${launchExperience.modelDescription}`}
-                id="launch-model-stock-description"
-              >
-                Launch a token against one of seven reviewed Ondo Stocks quote
-                assets.
-              </span>
-              <span
-                className={`launch-model-details ${launchExperience.modelDetails}`}
-                id="launch-model-stock-details"
-              >
-                <span>Seven quote assets</span>
-                <span>1.00% swap fee</span>
-                <span>Initial buy and rewards in the quote asset</span>
-              </span>
-              <span
-                className={`launch-model-action ${launchExperience.modelAction}`}
-              >
-                Launch
-                <ArrowRight aria-hidden="true" size={16} />
-              </span>
-            </span>
-          </button>
-        ) : null}
-
-        <button
-          className={`launch-model-card launch-model-card-deep ${launchExperience.modelCard}`}
-          data-launch-model-option="deep"
-          data-launch-model-available={deepLaunchAvailable}
-          type="button"
-          disabled={!deepLaunchAvailable}
-          aria-describedby="launch-model-deep-description launch-model-deep-details"
-          onClick={() => onChoose("deep")}
-        >
-          <span
-            className={`launch-model-art launch-model-art-deep ${launchExperience.modelArt}`}
-            aria-hidden="true"
-          >
-            <Image
-              src="/brand/programmable-deep-liquidity-teaser-v1-1774x887.webp"
-              alt=""
-              fill
-              sizes="(max-width: 800px) calc(100vw - 32px), 500px"
-              unoptimized
-            />
-          </span>
-
-          <span
-            className={`launch-model-card-body ${launchExperience.modelBody}`}
-          >
-            <span
-              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-            >
-              <strong>Deep</strong>
-              {!deepLaunchAvailable ? (
-                <small data-status="pending">Coming soon</small>
-              ) : null}
-            </span>
-            <span
-              className={`launch-model-description ${launchExperience.modelDescription}`}
-              id="launch-model-deep-description"
-            >
-              Every cycle uses trading fees to add ETH and tokens to the
-              original locked Uniswap v4 pool.
-            </span>
-            <span
-              className={`launch-model-details ${launchExperience.modelDetails}`}
-              id="launch-model-deep-details"
-            >
-              <span>1.00% swap fee</span>
-              <span>0.90% grows liquidity</span>
-              <span>Five-minute cycles</span>
-            </span>
-            <span
-              className={`launch-model-action ${launchExperience.modelAction}`}
-            >
-              {deepLaunchAvailable ? "Launch" : "Coming soon"}
-              {deepLaunchAvailable ? (
-                <ArrowRight aria-hidden="true" size={16} />
-              ) : null}
-            </span>
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function LaunchBuilderForm({
+function LaunchBuilderFormView({
   model,
   initialDraft,
   onBackToModels,

@@ -21,7 +21,7 @@ html[data-theme="light"] {
 }
 
 .route-transition {
-  animation-duration: 280ms;
+  animation-duration: 160ms;
 }
 
 /* Stable-width text reveal */
@@ -552,7 +552,7 @@ html[data-theme="light"] {
 
 /* Explore uses a larger editorial card with one clear reading order. */
 .route-transition {
-  animation-duration: 220ms;
+  animation-duration: 160ms;
 }
 
 .explore-intro {
