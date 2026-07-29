@@ -32,7 +32,7 @@ const requestedNetwork =
     ?.split("=")[1] ?? "all";
 const hookMask = (1n << 14n) - 1n;
 const requiredHookFlags = 8_396n;
-const expectedTreasury = getAddress(
+const launcherFeeRecipient = getAddress(
   "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
 );
 const initialCtoAuthority = getAddress(
@@ -43,6 +43,7 @@ const networkDefinitions = {
   mainnet: {
     chain: mainnet,
     environment: "production",
+    launcherFeeRecipient,
     releasePath: path.join(
       contractsRoot,
       "deployments",
@@ -57,6 +58,7 @@ const networkDefinitions = {
   sepolia: {
     chain: sepolia,
     environment: "rehearsal",
+    launcherFeeRecipient,
     releasePath: path.join(
       contractsRoot,
       "deployments",
@@ -247,7 +249,9 @@ function sourceCommitment(release, artifacts) {
     release.officialDependencies.permit2.address,
     release.officialDependencies.universalRouter.address,
     release.officialDependencies.positionForwarderFactory.address,
-    expectedTreasury,
+    getAddress(
+      release.addresses.launcherFeeRecipient ?? release.addresses.treasury,
+    ),
     initialCtoAuthority,
   ].map((address) => getAddress(address));
   const dependencyCommitment = keccak256(
@@ -418,7 +422,9 @@ function verifyCandidatePlan(release, feeHookCreationCode) {
     ],
     [
       getAddress(release.officialDependencies.poolManager.address),
-      expectedTreasury,
+      getAddress(
+        release.addresses.launcherFeeRecipient ?? release.addresses.treasury,
+      ),
       rewardVaultFactory,
     ],
   );
@@ -518,7 +524,12 @@ function assertDisabled(release, appRelease) {
   }
 }
 
-async function verifyLiveRelease(release, appRelease, clients) {
+async function verifyLiveRelease(
+  release,
+  appRelease,
+  clients,
+  launcherFeeRecipient,
+) {
   if (release.status !== "deployment-source-and-lifecycle-verified") {
     fail(`Unsupported live Classic release status: ${release.status}`);
   }
@@ -675,7 +686,7 @@ async function verifyLiveRelease(release, appRelease, clients) {
   const [
     factoryProvenance,
     hookPoolManager,
-    hookTreasury,
+    hookLauncherFeeRecipient,
     hookRewardFactory,
     launcherFee,
     minimumFee,
@@ -714,7 +725,11 @@ async function verifyLiveRelease(release, appRelease, clients) {
 
   const addressExpectations = [
     [hookPoolManager, dependencies.poolManager.address, "hook PoolManager"],
-    [hookTreasury, expectedTreasury, "treasury"],
+    [
+      hookLauncherFeeRecipient,
+      launcherFeeRecipient,
+      "launcher fee recipient",
+    ],
     [hookRewardFactory, addresses.rewardVaultFactory, "hook reward factory"],
     [
       launcherPoolManager,
@@ -825,8 +840,15 @@ for (const name of selectedNetworks) {
   ) {
     fail(`${name} Classic release identity is invalid`);
   }
-  if (!sameAddress(release.addresses.treasury, expectedTreasury)) {
-    fail(`${name} Classic treasury mismatch`);
+  const manifestLauncherFeeRecipient =
+    release.addresses.launcherFeeRecipient ?? release.addresses.treasury;
+  if (
+    !sameAddress(
+      manifestLauncherFeeRecipient,
+      definition.launcherFeeRecipient,
+    )
+  ) {
+    fail(`${name} Classic launcher fee recipient mismatch`);
   }
 
   const clients = unique(definition.rpcUrls)
@@ -842,7 +864,6 @@ for (const name of selectedNetworks) {
   verifyArtifacts(release, artifacts);
   verifyCandidatePlan(release, feeHookCreationCode);
   await verifyDependencies(release, clients);
-
   const appRelease = appManifest[definition.environment];
   if (release.status === "not-deployed") {
     assertDisabled(release, appRelease);
@@ -862,7 +883,12 @@ for (const name of selectedNetworks) {
     continue;
   }
 
-  await verifyLiveRelease(release, appRelease, clients);
+  await verifyLiveRelease(
+    release,
+    appRelease,
+    clients,
+    definition.launcherFeeRecipient,
+  );
   console.log(
     `${name}: live Classic release, app manifest and two-RPC runtime evidence match.`,
   );

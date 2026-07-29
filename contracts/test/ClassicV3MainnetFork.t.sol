@@ -54,7 +54,7 @@ struct ClassicV3ExactInputSingleParams {
 contract ClassicV3MainnetForkTest is Test {
     using CurrencyLibrary for Currency;
 
-    uint256 internal constant SNAPSHOT_BLOCK = 25_630_967;
+    uint256 internal constant SNAPSHOT_BLOCK = 25_639_000;
     uint256 internal constant BUY_AMOUNT = 0.01 ether;
     uint256 internal constant MIN_INITIAL_BUY_WEI = 0.0006 ether;
     uint8 internal constant SWAP_EXACT_IN_SINGLE = 0x06;
@@ -69,6 +69,7 @@ contract ClassicV3MainnetForkTest is Test {
     address internal constant UNIVERSAL_ROUTER = 0xd92A36B0000531EF3063dEd4De20A0783308446C;
     address internal constant UERC20_FACTORY = 0x000000e200088D55C39a11F609E5F667729ad49b;
     address internal constant POSITION_FORWARDER_FACTORY = 0x291a9ff1059d225d02B1659430804486404dB507;
+    address internal constant LAUNCHER_FEE_RECIPIENT = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
 
     bytes32 internal constant POOL_MANAGER_CODE_HASH =
         0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293;
@@ -100,7 +101,7 @@ contract ClassicV3MainnetForkTest is Test {
 
         poolManager = IPoolManager(POOL_MANAGER);
         positionManager = IPositionManager(POSITION_MANAGER);
-        treasury = makeAddr("forkTreasury");
+        treasury = LAUNCHER_FEE_RECIPIENT;
         _assertOfficialDependencyHashes();
 
         ClassicCtoAuthorityV1 ctoAuthority = new ClassicCtoAuthorityV1(makeAddr("forkCtoAuthority"));
@@ -188,8 +189,20 @@ contract ClassicV3MainnetForkTest is Test {
         uint256 claimB = vault.claim();
         assertEq(claimA + claimB, creatorFees);
 
-        vm.prank(treasury);
+        address unauthorizedCaller = makeAddr("unauthorizedLauncherFeeCaller");
+        vm.prank(unauthorizedCaller);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                EthCreatorFeeHookV3.UnauthorizedFeeRedirect.selector, unauthorizedCaller, LAUNCHER_FEE_RECIPIENT
+            )
+        );
         feeHook.claimLauncherFees();
+
+        uint256 treasuryBalanceBefore = LAUNCHER_FEE_RECIPIENT.balance;
+        vm.prank(LAUNCHER_FEE_RECIPIENT);
+        uint256 claimed = feeHook.claimLauncherFees();
+        assertEq(claimed, platformFees);
+        assertEq(LAUNCHER_FEE_RECIPIENT.balance - treasuryBalanceBefore, platformFees);
         assertEq(feeHook.totalNativeFeesAccrued(), 0);
         assertEq(poolManager.balanceOf(address(feeHook), Currency.wrap(address(0)).toId()), 0);
     }

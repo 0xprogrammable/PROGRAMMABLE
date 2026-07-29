@@ -28,7 +28,7 @@ contract DeployClassicV3InfrastructureV1 is Script {
     uint256 internal constant SEPOLIA_CHAIN_ID = 11_155_111;
     uint256 internal constant MAX_LAUNCHER_RUNTIME_BYTES = 23_000;
 
-    address public constant LAUNCHER_TREASURY = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
+    address public constant LAUNCHER_FEE_RECIPIENT = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address public constant INITIAL_CTO_AUTHORITY = 0x2Bb333d48DFAF1596D9036671d2E43168994249E;
     uint160 public constant REQUIRED_HOOK_FLAGS = uint160(
         Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
@@ -89,14 +89,15 @@ contract DeployClassicV3InfrastructureV1 is Script {
     error UnexpectedCodeHash(address target, bytes32 actual, bytes32 expected);
     error UnexpectedHookFlags(uint160 actual, uint160 expected);
     error UnexpectedNonce(address broadcaster, uint64 actual, uint64 expected);
-    error UnexpectedTreasury(address actual, address expected);
+    error UnexpectedLauncherFeeRecipient(address actual, address expected);
     error UnexpectedValue(bytes32 field, uint256 actual, uint256 expected);
 
     /// @notice Simulates or broadcasts the reviewed seven-transaction sequence.
-    /// @dev Required environment: CLASSIC_V3_DEPLOYER, CLASSIC_V3_START_NONCE and CLASSIC_V3_TREASURY.
+    /// @dev Required environment: CLASSIC_V3_DEPLOYER, CLASSIC_V3_START_NONCE and
+    ///      CLASSIC_V3_LAUNCHER_FEE_RECIPIENT.
     function run() external returns (DeploymentResult memory result) {
         address broadcaster = vm.envAddress("CLASSIC_V3_DEPLOYER");
-        address configuredTreasury = vm.envAddress("CLASSIC_V3_TREASURY");
+        address configuredLauncherFeeRecipient = vm.envAddress("CLASSIC_V3_LAUNCHER_FEE_RECIPIENT");
         uint256 configuredNonce = vm.envUint("CLASSIC_V3_START_NONCE");
         if (configuredNonce > type(uint64).max) {
             revert UnexpectedValue(keccak256("startingNonce"), configuredNonce, type(uint64).max);
@@ -104,17 +105,18 @@ contract DeployClassicV3InfrastructureV1 is Script {
 
         // The explicit bound above makes this narrowing conversion lossless.
         // forge-lint: disable-next-line(unsafe-typecast)
-        return deployReviewed(broadcaster, uint64(configuredNonce), configuredTreasury);
+        return deployReviewed(broadcaster, uint64(configuredNonce), configuredLauncherFeeRecipient);
     }
 
-    function deployReviewed(address broadcaster, uint64 startingNonce, address configuredTreasury)
+    function deployReviewed(address broadcaster, uint64 startingNonce, address configuredLauncherFeeRecipient)
         public
         returns (DeploymentResult memory result)
     {
         Dependencies memory dependencies = validateOfficialDependencies();
         if (broadcaster == address(0)) revert InvalidBroadcaster(broadcaster);
-        if (configuredTreasury != LAUNCHER_TREASURY) {
-            revert UnexpectedTreasury(configuredTreasury, LAUNCHER_TREASURY);
+        address expectedRecipient = expectedLauncherFeeRecipient();
+        if (configuredLauncherFeeRecipient != expectedRecipient) {
+            revert UnexpectedLauncherFeeRecipient(configuredLauncherFeeRecipient, expectedRecipient);
         }
 
         uint64 actualNonce = vm.getNonce(broadcaster);
@@ -139,7 +141,7 @@ contract DeployClassicV3InfrastructureV1 is Script {
             .deploy(
                 plan.hookSalt,
                 IPoolManager(dependencies.poolManager),
-                configuredTreasury,
+                configuredLauncherFeeRecipient,
                 FeeSplitVaultFactoryV1(address(result.rewardVaultFactory))
             );
         result.launcher = new MemeLaunchV2(
@@ -193,13 +195,14 @@ contract DeployClassicV3InfrastructureV1 is Script {
         plan.initialBuyVestingWalletFactory = vm.computeCreateAddress(broadcaster, uint256(startingNonce) + 2);
         plan.launchPolicy = vm.computeCreateAddress(broadcaster, uint256(startingNonce) + 3);
         plan.hookFactory = vm.computeCreateAddress(broadcaster, uint256(startingNonce) + 4);
+        address launcherFeeRecipient = expectedLauncherFeeRecipient();
         (plan.feeHook, plan.hookSalt) = HookMiner.find(
             plan.hookFactory,
             REQUIRED_HOOK_FLAGS,
             type(EthCreatorFeeHookV3).creationCode,
             abi.encode(
                 IPoolManager(dependencies.poolManager),
-                LAUNCHER_TREASURY,
+                launcherFeeRecipient,
                 FeeSplitVaultFactoryV1(plan.rewardVaultFactory)
             )
         );
@@ -213,12 +216,13 @@ contract DeployClassicV3InfrastructureV1 is Script {
         returns (address)
     {
         Dependencies memory dependencies = _dependencies();
+        address launcherFeeRecipient = expectedLauncherFeeRecipient();
         bytes32 initCodeHash = keccak256(
             abi.encodePacked(
                 type(EthCreatorFeeHookV3).creationCode,
                 abi.encode(
                     IPoolManager(dependencies.poolManager),
-                    LAUNCHER_TREASURY,
+                    launcherFeeRecipient,
                     FeeSplitVaultFactoryV1(rewardVaultFactory)
                 )
             )
@@ -237,6 +241,13 @@ contract DeployClassicV3InfrastructureV1 is Script {
         _assertCodeHash(dependencies.permit2, dependencies.permit2CodeHash);
         _assertCodeHash(dependencies.universalRouter, dependencies.universalRouterCodeHash);
         _assertCodeHash(dependencies.positionForwarderFactory, dependencies.positionForwarderFactoryCodeHash);
+    }
+
+    function expectedLauncherFeeRecipient() public view returns (address) {
+        if (block.chainid == MAINNET_CHAIN_ID || block.chainid == SEPOLIA_CHAIN_ID) {
+            return LAUNCHER_FEE_RECIPIENT;
+        }
+        revert UnexpectedChain(block.chainid);
     }
 
     function deploymentSourceCommitment() public view returns (bytes32) {
@@ -263,7 +274,7 @@ contract DeployClassicV3InfrastructureV1 is Script {
                 dependencies.permit2,
                 dependencies.universalRouter,
                 dependencies.positionForwarderFactory,
-                LAUNCHER_TREASURY,
+                expectedLauncherFeeRecipient(),
                 INITIAL_CTO_AUTHORITY
             )
         );
@@ -327,7 +338,11 @@ contract DeployClassicV3InfrastructureV1 is Script {
         }
 
         _assertAddress(keccak256("hook.poolManager"), address(result.feeHook.poolManager()), dependencies.poolManager);
-        _assertAddress(keccak256("hook.launcherFeeRecipient"), result.feeHook.launcherFeeRecipient(), LAUNCHER_TREASURY);
+        _assertAddress(
+            keccak256("hook.launcherFeeRecipient"),
+            result.feeHook.launcherFeeRecipient(),
+            expectedLauncherFeeRecipient()
+        );
         _assertAddress(
             keccak256("hook.feeSplitVaultFactory"),
             address(result.feeHook.feeSplitVaultFactory()),

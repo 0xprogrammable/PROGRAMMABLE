@@ -21,6 +21,10 @@ import {
   resolveReservedLaunchModel,
   type LaunchModelReleaseManifest,
 } from "../lib/launch-model-gating";
+import {
+  getConfiguredClassicV3Release,
+  isClassicV3ReleaseVerified,
+} from "../lib/classic-v3-release";
 
 const account = "0x1111111111111111111111111111111111111111";
 const launcher = "0x2222222222222222222222222222222222222222";
@@ -363,12 +367,21 @@ describe("unreleased launch model gating", () => {
     },
   );
 
-  it("blocks Classic upgrades before any transaction can be prepared", async () => {
+  it("keeps Classic preflight bound to the verified Mainnet release", async () => {
+    const release = getConfiguredClassicV3Release("production");
+    expect(
+      isClassicV3ReleaseVerified(
+        appDeployments.production,
+        release.releaseManifest,
+        1,
+      ),
+    ).toBe(true);
+
     const request = new NextRequest("http://localhost/api/launch/preflight", {
       method: "POST",
       body: JSON.stringify({
         account,
-        walletChainId: "0x1",
+        walletChainId: "0xaa36a7",
         draft: {
           ...createClassicV3Draft(),
           tokenName: "Verified Classic",
@@ -384,11 +397,10 @@ describe("unreleased launch model gating", () => {
     await expect(result.json()).resolves.toMatchObject({
       status: "blocked",
       mode: "classic-v3",
-      title: "Classic is not deployed on Ethereum yet",
+      title: "Switch the wallet to Ethereum",
       checks: [
         { id: "token", status: "pass" },
-        { id: "wallet", status: "pass" },
-        { id: "contracts", status: "blocked" },
+        { id: "wallet", status: "blocked" },
       ],
     });
   });

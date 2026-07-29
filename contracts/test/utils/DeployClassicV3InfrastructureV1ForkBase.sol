@@ -16,7 +16,6 @@ import { MemeLaunchV2 } from "../../src/MemeLaunchV2.sol";
 
 abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
     address internal constant DEPLOYER = 0xA11Ce00000000000000000000000000000000003;
-    address internal constant TREASURY = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     uint256 internal constant MIN_INITIAL_BUY = 0.0006 ether;
 
     DeployClassicV3InfrastructureV1 internal deployment;
@@ -29,8 +28,9 @@ abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
 
     function _assertDeterministicDeploymentAndLaunch() internal {
         DeployClassicV3InfrastructureV1.DeploymentPlan memory plan = deployment.deploymentPlan(DEPLOYER, 0);
+        address launcherFeeRecipient = deployment.expectedLauncherFeeRecipient();
         DeployClassicV3InfrastructureV1.DeploymentResult memory result =
-            deployment.deployReviewed(DEPLOYER, 0, TREASURY);
+            deployment.deployReviewed(DEPLOYER, 0, launcherFeeRecipient);
 
         assertEq(plan.chainId, block.chainid);
         assertEq(address(result.ctoAuthority), plan.ctoAuthority);
@@ -68,7 +68,7 @@ abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
         (address rewardVault,,,, bool registered,) = result.feeHook.poolFeeConfig(launchResult.poolId);
         assertTrue(registered);
         assertEq(rewardVault, launchResult.rewardVault);
-        assertEq(result.feeHook.launcherFeeRecipient(), TREASURY);
+        assertEq(result.feeHook.launcherFeeRecipient(), launcherFeeRecipient);
         assertEq(result.feeHook.TRANSFER_TAX_BPS(), 0);
         assertEq(result.feeHook.LP_FEE_PIPS(), 0);
     }
