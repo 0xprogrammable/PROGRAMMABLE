@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   STOCK_PAIRED_DEPLOYER,
+  assertStockPairedPreparedRefresh,
   assertStockPairedSequenceState,
   prepareStockPairedDeploymentTransaction,
 } from "../../../scripts/stock-paired-mainnet-operator-core.mjs";
@@ -105,5 +106,55 @@ test("blocks a pending nonce or a preoccupied V2 address", async () => {
   assert.throws(
     () => assertStockPairedSequenceState(plan, occupied),
     /before its reviewed nonce/,
+  );
+});
+
+test("refreshes only the live fee envelope for the same reviewed transaction", async () => {
+  const plan = await loadStockPairedV2ReleasePlan(root);
+  const firstState = undeployedState(plan);
+  const reviewed = prepareStockPairedDeploymentTransaction(plan, firstState, [
+    { callResult: "0x", estimatedGas: "0x1b5900" },
+    { callResult: "0x", estimatedGas: "0x1b5930" },
+  ]);
+  const laterState = undeployedState(plan);
+  laterState.gasPrice = "0x4a817c80";
+  laterState.baseFeePerGas = "0x2faf0800";
+  const refreshed = prepareStockPairedDeploymentTransaction(plan, laterState, [
+    { callResult: "0x", estimatedGas: "0x1b5920" },
+    { callResult: "0x", estimatedGas: "0x1b5950" },
+  ]);
+  assert.notEqual(reviewed.preparedDigest, refreshed.preparedDigest);
+  assert.equal(
+    assertStockPairedPreparedRefresh(
+      plan,
+      {
+        planDigest: plan.planDigest,
+        index: reviewed.index,
+        field: reviewed.field,
+        address: reviewed.address,
+        calldataHash: reviewed.calldataHash,
+        nonce: reviewed.request.nonce,
+        value: reviewed.request.value,
+      },
+      refreshed,
+    ),
+    refreshed,
+  );
+  assert.throws(
+    () =>
+      assertStockPairedPreparedRefresh(
+        plan,
+        {
+          planDigest: plan.planDigest,
+          index: reviewed.index,
+          field: reviewed.field,
+          address: reviewed.address,
+          calldataHash: reviewed.calldataHash,
+          nonce: "0x67",
+          value: reviewed.request.value,
+        },
+        refreshed,
+      ),
+    /fields changed/,
   );
 });
