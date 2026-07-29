@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "chainId": 1,
+  "network": "ethereum-mainnet",
+  "issuer": "Ondo Global Markets",
+  "model": "stock-paired-v1",
+  "runtimeSnapshot": {
+    "blockNumber": 25635535,
+    "blockTimestamp": 1785292499,
+    "capturedAt": "2026-07-29",
+    "rpc": "https://ethereum-rpc.publicnode.com"
+  },
+  "sharedRuntime": {
+    "tokenCodeHash": "0x9806c8207a455c012b2799be651ac0146d54866f92db90b502e5e2efa283bee9",
+    "beacon": "0x985462c9aa4d6c3ad59ae6e1e9c0c11347ed1598",
+    "beaconCodeHash": "0xfeff50d5e739b863fc9e0db874d5558375a3e2c81bc20c24923a685263d639bd",
+    "implementation": "0xebBcb2cEE51c2FeE4062c9C1270dcb98B0b22250",
+    "implementationCodeHash": "0x7480293a8fad3f98f01f39aa59cd4e4c30d7fc4e7019e8f6e691eb5a9be53d11"
+  },
+  "launchPolicy": {
+    "tokenSupply": "1000000000000000000000000000",
+    "tokenDecimals": 18,
+    "quoteDecimals": 18,
+    "initialAbsoluteTick": 191200,
+    "tickSpacing": 200,
+    "minimumInitialBuy": "10000000000000000",
+    "totalSwapFeeBps": 100,
+    "creatorFeeBps": 90,
+    "launcherFeeBps": 10,
+    "transferTaxBps": 0,
+    "lpFeePips": 0
+  },
+  "assets": [
+    {
+      "symbol": "NVDAon",
+      "name": "NVIDIA (Ondo Tokenized)",
+      "underlying": "NVIDIA",
+      "address": "0x2d1f7226bd1f780af6b9a49dcc0ae00e8df4bdee",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/nvdaon"
+    },
+    {
+      "symbol": "SPYon",
+      "name": "SPDR S&P 500 ETF (Ondo Tokenized)",
+      "underlying": "SPDR S&P 500 ETF",
+      "address": "0xfedc5f4a6c38211c1338aa411018dfaf26612c08",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/spyon"
+    },
+    {
+      "symbol": "GOOGLon",
+      "name": "Alphabet Class A (Ondo Tokenized)",
+      "underlying": "Alphabet Class A",
+      "address": "0xba47214edd2bb43099611b208f75e4b42fdcfedc",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/googlon"
+    },
+    {
+      "symbol": "SLVon",
+      "name": "iShares Silver Trust (Ondo Tokenized)",
+      "underlying": "iShares Silver Trust",
+      "address": "0xf3e4872e6a4cf365888d93b6146a2baa7348f1a4",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/slvon"
+    },
+    {
+      "symbol": "QQQon",
+      "name": "Invesco QQQ (Ondo Tokenized)",
+      "underlying": "Invesco QQQ",
+      "address": "0x0e397938c1aa0680954093495b70a9f5e2249aba",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/qqqon"
+    },
+    {
+      "symbol": "TSLAon",
+      "name": "Tesla (Ondo Tokenized)",
+      "underlying": "Tesla",
+      "address": "0xf6b1117ec07684d3958cad8beb1b302bfd21103f",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/tslaon"
+    },
+    {
+      "symbol": "AAPLon",
+      "name": "Apple (Ondo Tokenized)",
+      "underlying": "Apple",
+      "address": "0x14c3abf95cb9c93a8b82c1cdcb76d72cb87b2d4c",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/aaplon"
+    }
+  ]
+}
