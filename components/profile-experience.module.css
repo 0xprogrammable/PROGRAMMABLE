@@ -1,8 +1,8 @@
 .page {
-  max-width: 1120px;
+  max-width: 1160px;
   min-height: calc(100svh - var(--header-height));
-  padding-bottom: 48px;
-  padding-top: 28px;
+  padding-bottom: 52px;
+  padding-top: 30px;
 }
 
 .hero,
@@ -19,12 +19,12 @@
 
 .hero {
   align-items: center;
-  border-radius: 26px;
+  border-radius: 24px;
   display: grid;
-  gap: 18px;
+  gap: 20px;
   grid-template-columns: auto minmax(0, 1fr);
-  min-height: 98px;
-  padding: 15px 20px;
+  min-height: 112px;
+  padding: 18px 22px;
 }
 
 .heroEditing {
@@ -35,18 +35,18 @@
   align-items: center;
   background: var(--avatar-background);
   border: 1px solid color-mix(in srgb, var(--glass-94) 88%, var(--border));
-  border-radius: 20px;
+  border-radius: 21px;
   color: var(--accent-strong);
   display: flex;
   flex: none;
   font-family: var(--font-plex-mono), monospace;
   font-size: 20px;
   font-weight: 500;
-  height: 66px;
+  height: 72px;
   justify-content: center;
   overflow: hidden;
   position: relative;
-  width: 66px;
+  width: 72px;
 }
 
 .avatar img {
@@ -65,7 +65,7 @@
 }
 
 .nameRow h1 {
-  font-size: clamp(31px, 3.4vw, 42px);
+  font-size: clamp(31px, 3.2vw, 40px);
   font-weight: 570;
   letter-spacing: -0.045em;
   line-height: 1;
@@ -78,7 +78,7 @@
 .address {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   margin-top: 8px;
@@ -99,12 +99,12 @@
 
 .editButton {
   background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
-  border-radius: 12px;
+  border-radius: 11px;
   color: var(--text-soft);
   flex: none;
   font-size: 12px;
-  min-height: 44px;
-  padding: 0 14px;
+  min-height: 40px;
+  padding: 0 13px;
 }
 
 .editForm {
@@ -227,7 +227,7 @@
 }
 
 .portfolio {
-  border-radius: 26px;
+  border-radius: 24px;
   margin-top: 16px;
   min-width: 0;
   overflow: hidden;
@@ -237,10 +237,10 @@
   align-items: center;
   border-bottom: 1px solid var(--border);
   display: grid;
-  gap: 18px 28px;
+  gap: 18px 34px;
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 104px;
-  padding: 18px 22px 16px;
+  min-height: 112px;
+  padding: 23px 26px 20px;
 }
 
 .portfolioTitle {
@@ -248,16 +248,16 @@
 }
 
 .portfolioTitle h2 {
-  font-size: 26px;
-  font-weight: 600;
+  font-size: 29px;
+  font-weight: 590;
   letter-spacing: -0.035em;
   line-height: 1.05;
 }
 
 .portfolioTitle p {
   color: var(--muted);
-  font-size: 12px;
-  margin-top: 6px;
+  font-size: 13px;
+  margin-top: 7px;
 }
 
 .portfolioStats {
@@ -269,9 +269,9 @@
 
 .portfolioStat {
   display: grid;
-  gap: 3px;
-  min-width: 88px;
-  padding: 0 22px;
+  gap: 5px;
+  min-width: 96px;
+  padding: 0 24px;
 }
 
 .portfolioStat + .portfolioStat {
@@ -284,13 +284,13 @@
 
 .portfolioStat span {
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 570;
+  font-size: 11px;
+  font-weight: 560;
 }
 
 .portfolioStat strong {
   color: var(--text);
-  font-size: 20px;
+  font-size: 21px;
   font-variant-numeric: tabular-nums;
   font-weight: 620;
   letter-spacing: -0.025em;
@@ -304,7 +304,7 @@
 
 .portfolioTotal small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -315,7 +315,7 @@
   display: flex;
   gap: 2px;
   grid-column: 1 / -1;
-  height: 5px;
+  height: 4px;
   overflow: hidden;
   width: 100%;
 }
@@ -355,41 +355,70 @@
   min-height: 32px;
 }
 
-.list {
+.ledger {
+  min-width: 0;
+}
+
+.ledgerHeader,
+.tokenMain {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 12px;
+  grid-template-columns:
+    minmax(300px, 1.7fr)
+    minmax(124px, 0.68fr)
+    minmax(160px, 0.9fr)
+    minmax(172px, auto);
+}
+
+.ledgerHeader {
+  align-items: center;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 620;
+  letter-spacing: 0.045em;
+  min-height: 43px;
+  padding: 0 26px;
+  text-transform: uppercase;
+}
+
+.ledgerHeader span:nth-child(2),
+.ledgerHeader span:nth-child(3) {
+  padding-left: 20px;
+}
+
+.list {
+  border-top: 1px solid var(--border);
+  display: grid;
 }
 
 .tokenRow {
   align-self: stretch;
-  background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: 20px;
+  background: color-mix(in srgb, var(--glass-82) 88%, transparent);
+  border-bottom: 1px solid var(--border);
   min-width: 0;
-  padding: 16px;
+  padding: 0 26px;
   transform: translate3d(0, 0, 0);
   transition:
     background-color 170ms ease,
-    border-color 170ms ease,
-    box-shadow 170ms ease,
-    transform 170ms var(--ease-out);
+    box-shadow 170ms ease;
+}
+
+.tokenRow:last-child {
+  border-bottom: 0;
+}
+
+.tokenRowClaimable {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--accent-soft) 72%, transparent),
+      transparent 44%
+    ),
+    color-mix(in srgb, var(--glass-82) 90%, transparent);
 }
 
 .tokenMain {
-  display: grid;
-  gap: 14px;
-  grid-template-rows: auto auto 1fr;
-  height: 100%;
-  min-width: 0;
-}
-
-.tokenHeader {
   align-items: center;
-  display: flex;
-  gap: 14px;
-  justify-content: space-between;
+  min-height: 102px;
   min-width: 0;
 }
 
@@ -397,19 +426,20 @@
   align-items: center;
   color: var(--text);
   display: flex;
-  gap: 13px;
+  gap: 14px;
   min-width: 0;
+  padding-right: 24px;
 }
 
 .tokenArt {
   background: var(--surface-soft);
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 17px;
+  border-radius: 16px;
   flex: none;
-  height: 64px;
+  height: 58px;
   overflow: hidden;
   position: relative;
-  width: 64px;
+  width: 58px;
 }
 
 .tokenArt img {
@@ -425,13 +455,13 @@
 .tokenNameRow {
   align-items: baseline;
   display: flex;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
 }
 
 .tokenCopy strong {
-  font-size: 17px;
-  font-weight: 640;
+  font-size: 16.5px;
+  font-weight: 630;
   letter-spacing: -0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -441,8 +471,8 @@
 .tokenSymbol {
   color: var(--accent-strong);
   flex: none;
-  font-size: 12px;
-  font-weight: 620;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .tokenMeta {
@@ -450,8 +480,8 @@
   color: var(--muted);
   display: flex;
   font-size: 10.5px;
-  gap: 7px;
-  margin-top: 4px;
+  gap: 8px;
+  margin-top: 5px;
   min-width: 0;
 }
 
@@ -462,22 +492,24 @@
 }
 
 .modelLabel {
-  background: var(--accent-soft);
-  border-radius: 999px;
   color: var(--accent-strong);
   flex: none;
-  font-size: 9px;
-  font-weight: 650;
-  line-height: 20px;
-  padding: 0 7px;
+  font-size: 10.5px;
+  font-weight: 620;
+}
+
+.modelLabel::after {
+  color: var(--muted);
+  content: "·";
+  margin-left: 8px;
 }
 
 .tokenAddress {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
-  margin-top: 6px;
+  margin-top: 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -485,52 +517,46 @@
 
 .openToken {
   align-items: center;
-  background: color-mix(in srgb, var(--glass-88) 80%, transparent);
+  background: color-mix(in srgb, var(--glass-88) 72%, transparent);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 11px;
   color: var(--text-soft);
   display: inline-flex;
   flex: none;
   font-size: 12px;
-  font-weight: 620;
-  height: 44px;
+  font-weight: 610;
+  height: 40px;
   justify-content: center;
   line-height: 1;
-  padding: 0 13px;
+  padding: 0 14px;
   white-space: nowrap;
-}
-
-.tokenMetrics {
-  border-bottom: 1px solid var(--border);
-  border-top: 1px solid var(--border);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 13px 0;
 }
 
 .metric {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  padding: 0 20px;
 }
 
-.metric + .metric {
+.marketMetric,
+.rewardMetric {
   border-left: 1px solid var(--border);
-  padding-left: 18px;
 }
 
 .metric span {
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 570;
+  display: none;
+  font-size: 10.5px;
+  font-weight: 560;
 }
 
 .metric strong {
-  font-size: 16px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
   font-weight: 630;
   letter-spacing: -0.015em;
-  margin-top: 4px;
+  margin-top: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -538,21 +564,21 @@
 
 .metric small {
   color: var(--muted);
-  font-size: 9px;
-  margin-top: 2px;
+  font-size: 9.5px;
+  margin-top: 3px;
 }
 
-.rewardMetric strong {
+.rewardMetricReady strong {
   color: var(--accent-strong);
 }
 
 .actions {
-  align-self: end;
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+  padding-left: 18px;
 }
 
 .actions:empty {
@@ -561,9 +587,9 @@
 
 .claimButton,
 .secondaryAction {
-  border-radius: 12px;
+  border-radius: 11px;
   font-size: 12px;
-  min-height: 44px;
+  min-height: 40px;
   padding: 0 14px;
 }
 
@@ -586,7 +612,7 @@
   gap: 8px;
   justify-content: flex-end;
   line-height: 1.4;
-  margin: 9px 0 0;
+  margin: 0 0 12px;
 }
 
 .actionState {
@@ -605,8 +631,8 @@
 
 .rewardSettings {
   border-top: 1px solid var(--border);
-  margin-top: 13px;
-  padding-top: 2px;
+  margin: 0;
+  padding: 0;
 }
 
 .rewardSettings > summary {
@@ -618,7 +644,7 @@
   gap: 8px;
   justify-content: space-between;
   list-style: none;
-  min-height: 44px;
+  min-height: 46px;
   outline: 0;
 }
 
@@ -659,7 +685,7 @@
   display: grid;
   gap: 16px;
   grid-template-columns: 1fr;
-  padding: 4px 0 8px;
+  padding: 2px 0 17px;
 }
 
 @keyframes profile-settings-enter {
@@ -832,10 +858,8 @@
 
 @media (hover: hover) and (pointer: fine) {
   .tokenRow:hover {
-    background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
-    border-color: var(--border-strong);
-    box-shadow: 0 12px 28px var(--card-shadow-soft);
-    transform: translate3d(0, -2px, 0);
+    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 58%, transparent);
   }
 
   .tokenIdentity:hover strong {
@@ -908,13 +932,69 @@
   transform: scale(0.985);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .page {
-    max-width: 760px;
+    max-width: 840px;
+  }
+
+  .ledgerHeader {
+    display: none;
   }
 
   .list {
-    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .tokenRow {
+    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .tokenRow:last-child {
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  }
+
+  .tokenMain {
+    gap: 14px 0;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
+    min-height: 0;
+  }
+
+  .tokenIdentity {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .marketMetric {
+    border-left: 0;
+    grid-column: 1;
+    grid-row: 2;
+    padding-left: 0;
+  }
+
+  .rewardMetric {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .metric {
+    border-top: 1px solid var(--border);
+    padding-top: 13px;
+  }
+
+  .metric span {
+    display: block;
+  }
+
+  .metric strong {
+    margin-top: 4px;
+  }
+
+  .actions {
+    grid-column: 2;
+    grid-row: 1;
   }
 }
 
@@ -983,11 +1063,6 @@
     gap: 9px;
     padding: 9px;
   }
-
-  .tokenRow {
-    border-radius: 18px;
-    padding: 14px;
-  }
 }
 
 @media (max-width: 520px) {
@@ -1054,21 +1129,49 @@
     font-size: 16px;
   }
 
-  .openToken {
-    font-size: 10.5px;
-    padding: 0 11px;
+  .tokenMain {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .metric + .metric {
-    padding-left: 14px;
+  .tokenIdentity {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    padding-right: 0;
+  }
+
+  .marketMetric {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .rewardMetric {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .actions {
+    border-top: 1px solid var(--border);
+    grid-column: 1 / -1;
+    grid-row: 3;
     justify-content: stretch;
+    padding-left: 0;
+    padding-top: 13px;
+  }
+
+  .openToken {
+    flex: 1 1 auto;
+    font-size: 11px;
+    height: 44px;
+    padding: 0 11px;
+  }
+
+  .rewardMetric {
+    padding-left: 14px;
   }
 
   .claimButton {
     flex: 1 1 auto;
+    min-height: 44px;
   }
 
   .rewardTerms {
@@ -1104,15 +1207,6 @@
 
   .address {
     font-size: 10px;
-  }
-
-  .tokenHeader {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .openToken {
-    width: 100%;
   }
 
   .rewardTerms {
