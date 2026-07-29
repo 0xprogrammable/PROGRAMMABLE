@@ -41,7 +41,6 @@ contract DeepV3FixtureToken is MockERC20 {
 abstract contract LiquidityGrowthFullRangeV3Fixture is Deployers, IUnlockCallback {
     using CurrencySettler for Currency;
 
-    uint256 internal constant INITIAL_BUY = 1 ether;
     bytes32 internal constant INITIAL_POSITION_SALT = bytes32(uint256(1));
     Currency internal constant NATIVE = Currency.wrap(address(0));
 
@@ -111,8 +110,12 @@ abstract contract LiquidityGrowthFullRangeV3Fixture is Deployers, IUnlockCallbac
         );
         assertTrue(v3Token.transfer(address(v3Vault), v3InitialTokenDust));
 
-        manager.unlock(abi.encode(uint8(1), INITIAL_BUY));
+        manager.unlock(abi.encode(uint8(1), _initialBuy()));
         v3Hook.finalizePool(v3Key);
+    }
+
+    function _initialBuy() internal pure virtual returns (uint256) {
+        return 1 ether;
     }
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {

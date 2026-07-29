@@ -6,10 +6,10 @@ import { ReentrancyGuardTransient } from "@openzeppelin/contracts/utils/Reentran
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { TransientSlot } from "@openzeppelin/contracts/utils/TransientSlot.sol";
 import { CurrencySettler } from "@openzeppelin/uniswap-hooks/src/utils/CurrencySettler.sol";
+import { FixedPoint96 } from "@uniswap/v4-core/src/libraries/FixedPoint96.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { IUnlockCallback } from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
-import { SqrtPriceMath } from "@uniswap/v4-core/src/libraries/SqrtPriceMath.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { TransientStateLibrary } from "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
@@ -398,27 +398,28 @@ contract LiquidityGrowthFullRangeVaultV3 is IUnlockCallback, ReentrancyGuardTran
         );
     }
 
+    /// @notice Returns launch-anchored virtual native depth from only permanent, protocol-created liquidity.
+    /// @dev The launch anchor prevents a lower spot price from inflating the rolling compound budget.
     function trustedNativeDepth() public view returns (uint256 trustedDepth) {
-        bytes32 initialSalt = feeHook.initialPositionSaltByPool(poolId);
-        (uint128 initialLiquidity,,) = poolManager.getPositionInfo(
-            PoolId.wrap(poolId),
-            address(positionManager),
-            Policy.FULL_RANGE_TICK_LOWER,
-            Policy.INITIAL_TICK,
-            initialSalt
-        );
-        if (initialSalt == bytes32(0) || initialLiquidity == 0) {
-            revert InvalidInitialPosition(initialSalt, initialLiquidity);
-        }
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(PoolId.wrap(poolId));
-        trustedDepth =
-            _nativeAmountInRange(sqrtPriceX96, Policy.FULL_RANGE_TICK_LOWER, Policy.INITIAL_TICK, initialLiquidity);
-        uint128 growthLiquidity = lockedLiquidity();
-        if (growthLiquidity != 0) {
-            trustedDepth += _nativeAmountInRange(
-                sqrtPriceX96, FULL_RANGE_TICK_LOWER, FULL_RANGE_TICK_UPPER, growthLiquidity
+        (uint160 sqrtPriceX96, int24 currentTick,,) = poolManager.getSlot0(PoolId.wrap(poolId));
+        uint256 trustedLiquidity = lockedLiquidity();
+        if (currentTick >= Policy.FULL_RANGE_TICK_LOWER && currentTick < Policy.INITIAL_TICK) {
+            bytes32 initialSalt = feeHook.initialPositionSaltByPool(poolId);
+            (uint128 initialLiquidity,,) = poolManager.getPositionInfo(
+                PoolId.wrap(poolId),
+                address(positionManager),
+                Policy.FULL_RANGE_TICK_LOWER,
+                Policy.INITIAL_TICK,
+                initialSalt
             );
+            if (initialSalt == bytes32(0) || initialLiquidity == 0) {
+                revert InvalidInitialPosition(initialSalt, initialLiquidity);
+            }
+            trustedLiquidity += initialLiquidity;
         }
+        uint160 anchoredSqrtPriceX96 =
+            sqrtPriceX96 > Policy.initialSqrtPriceX96() ? sqrtPriceX96 : Policy.initialSqrtPriceX96();
+        trustedDepth = FullMath.mulDiv(trustedLiquidity, FixedPoint96.Q96, anchoredSqrtPriceX96);
     }
 
     function rollingExposure() public view returns (uint256 activeExposure) {
@@ -553,20 +554,6 @@ contract LiquidityGrowthFullRangeVaultV3 is IUnlockCallback, ReentrancyGuardTran
         _nextExposureRecord = uint8((uint256(index) + 1) % ROLLING_EXPOSURE_RECORD_CAPACITY);
         activeAfter = activeBefore + exposure;
         emit RollingExposureRecorded(timestamp, exposure, activeAfter, _rollingWindowAnchoredDepthCapNative);
-    }
-
-    function _nativeAmountInRange(uint160 sqrtPriceX96, int24 tickLower, int24 tickUpper, uint128 liquidity)
-        private
-        pure
-        returns (uint256)
-    {
-        uint160 lower = TickMath.getSqrtPriceAtTick(tickLower);
-        uint160 upper = TickMath.getSqrtPriceAtTick(tickUpper);
-        if (sqrtPriceX96 >= upper) return 0;
-        if (sqrtPriceX96 <= lower) {
-            return SqrtPriceMath.getAmount0Delta(lower, upper, liquidity, false);
-        }
-        return SqrtPriceMath.getAmount0Delta(sqrtPriceX96, upper, liquidity, false);
     }
 
     function _settleCurrency(Currency currency) private {
