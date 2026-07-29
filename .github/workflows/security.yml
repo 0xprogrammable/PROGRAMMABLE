@@ -45,7 +45,9 @@ jobs:
         run: node scripts/check-coverage.mjs lcov.info
 
       - name: Install actionlint
+        env:
+          GOBIN: ${{ runner.temp }}/bin
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 
       - name: Check workflows
-        run: "$(go env GOPATH)/bin/actionlint"
+        run: '"$RUNNER_TEMP/bin/actionlint"'
