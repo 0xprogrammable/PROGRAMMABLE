@@ -7,9 +7,9 @@ import { POST } from "../app/api/launch/preflight/route";
 import {
   DeepFeeStep,
   DeepPresetStep,
-  LaunchModelPicker,
   normalizeDeepDraft,
 } from "../components/launch-builder";
+import { LaunchModelPicker } from "../components/launch-entry";
 import appDeployments from "../contracts/config/app-deployments.v1.json";
 import {
   createClassicV3Draft,

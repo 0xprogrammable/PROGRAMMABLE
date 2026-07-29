@@ -1,5 +1,5 @@
-import { LaunchBuilder } from "@/components/launch-builder";
+import { LaunchExperience } from "@/components/launch-entry";
 
 export default function LaunchPage() {
-  return <LaunchBuilder />;
+  return <LaunchExperience />;
 }
