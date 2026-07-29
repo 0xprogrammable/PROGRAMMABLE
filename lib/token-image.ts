@@ -7,6 +7,9 @@ const acceptedTokenImageTypes = new Set([
   "image/png",
   "image/webp",
 ]);
+export function canOptimizeTokenImage(source: string) {
+  return source.startsWith("/");
+}
 
 export function getTokenImageFileError(file: Pick<File, "size" | "type">) {
   if (!acceptedTokenImageTypes.has(file.type)) {

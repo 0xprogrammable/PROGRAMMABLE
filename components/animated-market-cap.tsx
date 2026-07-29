@@ -120,7 +120,7 @@ export function AnimatedMarketCap({
 
     let animationFrame = 0;
     let delayTimer = 0;
-    const duration = 620;
+    const duration = 520;
 
     element.textContent = formatMarketCapValue(kind, value, symbol, 0);
 

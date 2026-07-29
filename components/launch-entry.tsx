@@ -175,8 +175,8 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-classic-description"
             >
-              Fixed swap fees with creator rewards paid in ETH. A direct,
-              familiar way to launch on Uniswap v4.
+              Fixed swap fees with creator rewards paid in ETH. A familiar
+              token launch on Uniswap v4.
             </span>
             <span
               className={`launch-model-action ${launchExperience.modelAction}`}
@@ -227,8 +227,8 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-stock-description"
             >
-              Launch a token whose v4 pool is paired with a reviewed Ondo
-              Global Markets asset.
+              Pair a token with a reviewed Ondo Global Markets asset in a
+              Uniswap v4 pool.
             </span>
             {stockPairedAccess ? (
               <span
@@ -279,8 +279,8 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-deep-description"
             >
-              Every cycle uses trading fees to add ETH and tokens to the
-              original locked Uniswap v4 pool.
+              Trading fees automatically deepen the original locked Uniswap
+              v4 pool.
             </span>
             {deepLaunchAvailable ? (
               <span

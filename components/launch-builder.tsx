@@ -414,6 +414,9 @@ function LaunchBuilderFormView({
     null,
   );
   const [successOpen, setSuccessOpen] = useState(false);
+  const closeSuccessDialog = useCallback(() => {
+    setSuccessOpen(false);
+  }, []);
   const [settingMaxBuy, setSettingMaxBuy] = useState(false);
   const [tokenImageState, setTokenImageState] =
     useState<TokenImageState>(emptyTokenImageState);
@@ -796,7 +799,7 @@ function LaunchBuilderFormView({
   }
 
   const launchStatus: ReactNode = formError ? (
-    <p className="form-error" role="alert">
+    <p className="form-error" id="launch-form-error" role="alert">
       {formError}
     </p>
   ) : indexedLaunch ? (
@@ -885,6 +888,7 @@ function LaunchBuilderFormView({
           usesExtendedLayout ? extendedLayout.sheet : ""
         }`}
         aria-busy={launching}
+        aria-describedby={formError ? "launch-form-error" : undefined}
         onSubmit={(event) => {
           event.preventDefault();
           void launchToken();
@@ -962,7 +966,7 @@ function LaunchBuilderFormView({
               : undefined
           }
           account={submittedAccount}
-          onClose={() => setSuccessOpen(false)}
+          onClose={closeSuccessDialog}
         />
       ) : null}
 
@@ -990,20 +994,66 @@ function LaunchSuccessDialog({
   onClose: () => void;
 }) {
   const viewLinkRef = useRef<HTMLAnchorElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     viewLinkRef.current?.focus();
 
+    const inertedElements: HTMLElement[] = [];
+    let activeLayer = dialogRef.current?.parentElement;
+    while (activeLayer?.parentElement && activeLayer !== document.body) {
+      for (const sibling of activeLayer.parentElement.children) {
+        if (
+          sibling !== activeLayer &&
+          sibling instanceof HTMLElement &&
+          !sibling.inert
+        ) {
+          sibling.inert = true;
+          inertedElements.push(sibling);
+        }
+      }
+      activeLayer = activeLayer.parentElement;
+    }
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      for (const element of inertedElements) {
+        element.inert = false;
+      }
       window.removeEventListener("keydown", onKeyDown);
+      previouslyFocused?.focus({ preventScroll: true });
     };
   }, [onClose]);
   let classicConfiguration:
@@ -1030,6 +1080,7 @@ function LaunchSuccessDialog({
       }}
     >
       <section
+        ref={dialogRef}
         className="launch-success-dialog"
         role="dialog"
         aria-modal="true"
@@ -1361,6 +1412,7 @@ function TokenStep({
               <span>Token name</span>
               <input
                 value={draft.tokenName}
+                required
                 maxLength={MAX_TOKEN_NAME_CHARACTERS}
                 placeholder="Token name"
                 autoComplete="off"
@@ -1379,6 +1431,7 @@ function TokenStep({
               <span>Ticker</span>
               <input
                 value={draft.tokenSymbol}
+                required
                 maxLength={MAX_TOKEN_SYMBOL_CHARACTERS}
                 placeholder="$TOKEN"
                 spellCheck={false}
@@ -1536,7 +1589,7 @@ export function DeepFeeStep({
     >
       <div className="classic-section-heading classic-fee-heading">
         <div>
-          <h2 id="deep-fee-title">Initial Buy</h2>
+          <h2 id="deep-fee-title">Initial buy</h2>
           <p>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</p>
         </div>
       </div>
@@ -1833,7 +1886,7 @@ function EnhancedClassicFeeStep({
       <div className="classic-fee-layout">
         <label className="meme-dev-buy" htmlFor="classic-v3-dev-buy">
           <span>
-            <strong>Initial Buy</strong>
+            <strong>Initial buy</strong>
             <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
           </span>
           <span className="meme-dev-buy-input">
@@ -2114,7 +2167,7 @@ function StockPairedStep({
           htmlFor="stock-initial-buy"
         >
           <span className="stock-paired-initial-buy-copy">
-            <strong>Initial Buy</strong>
+            <strong>Initial buy</strong>
             <small>Minimum {STOCK_PAIRED_MIN_INITIAL_BUY_ETH} ETH</small>
           </span>
           <span className="meme-dev-buy-input">
@@ -2190,7 +2243,7 @@ function FeeStep({
 
         <label className="meme-dev-buy" htmlFor="classic-dev-buy">
           <span>
-            <strong>Initial Buy</strong>
+            <strong>Initial buy</strong>
             <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
           </span>
           <span className="meme-dev-buy-input">

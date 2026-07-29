@@ -3,6 +3,7 @@ import { IBM_Plex_Mono, Instrument_Sans } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 import "./programmable-experience.css";
+import "./interface.css";
 
 const instrumentSans = Instrument_Sans({
   subsets: ["latin"],
@@ -14,7 +15,7 @@ const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   variable: "--font-plex-mono",
   display: "swap",
-  weight: ["400", "500"],
+  weight: ["400", "500", "600"],
 });
 
 const siteUrl = new URL("https://programmable.family");
@@ -94,6 +95,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: "light dark",
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#09111f" },

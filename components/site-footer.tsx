@@ -51,8 +51,7 @@ export function SiteFooter() {
           </Link>
           <p>
             Launch and explore fixed-supply tokens whose behavior is defined by
-            Uniswap v4 hooks. Every transaction requires approval from your
-            connected wallet.
+            Uniswap v4 hooks. Your connected wallet submits every transaction.
           </p>
         </section>
 

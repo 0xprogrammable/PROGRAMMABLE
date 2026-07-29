@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 const narrowGlyphs = "Iil1tfrj";
 const regularGlyphs = "ABCDEFGHKNOPQRSTUVXYZ023456789";
 const wideGlyphs = "MWmw✿❀";
+let hasPlayedScramble = false;
 
 function getSeed(text: string) {
   let seed = 0;
@@ -30,7 +31,7 @@ function getScrambledText(text: string, revealed: number, frame: number) {
 
 export function ScrambleText({
   text,
-  duration = 1450,
+  duration = 640,
 }: {
   text: string;
   duration?: number;
@@ -46,11 +47,12 @@ export function ScrambleText({
     let animationFrame = 0;
     let timer = 0;
 
-    if (reducedMotion.matches) {
+    if (reducedMotion.matches || hasPlayedScramble) {
       animationFrame = window.requestAnimationFrame(() => setDisplayText(text));
       return () => window.cancelAnimationFrame(animationFrame);
     }
 
+    hasPlayedScramble = true;
     const startedAt = performance.now();
     const safeDuration = Math.max(1, duration);
 
@@ -101,7 +103,8 @@ export function ScrambleText({
   }, [displayText, text]);
 
   return (
-    <span className="scramble-text" aria-label={text}>
+    <span className="scramble-text">
+      <span className="sr-only">{text}</span>
       <span className="scramble-text-flow" aria-hidden="true">
         {segments.map((segment) =>
           segment.whitespace ? (

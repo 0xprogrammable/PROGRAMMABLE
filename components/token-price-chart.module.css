@@ -97,6 +97,12 @@
   overflow: visible;
 }
 
+.plot svg:focus-visible {
+  border-radius: 12px;
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
 .grid {
   stroke: color-mix(in srgb, var(--border) 62%, transparent);
   stroke-width: 0.75;
@@ -143,19 +149,28 @@
 }
 
 .loadingLine {
-  animation: chart-loading 0.9s linear infinite;
-  background:
-    linear-gradient(
-      90deg,
-      transparent,
-      color-mix(in srgb, var(--accent) 58%, transparent),
-      transparent
-    );
-  background-size: 180% 100%;
+  background: color-mix(in srgb, var(--border) 54%, transparent);
   border-radius: 999px;
   display: block;
   height: 2px;
+  overflow: hidden;
+  position: relative;
   width: min(360px, 72%);
+}
+
+.loadingLine::after {
+  animation: chart-loading 0.9s linear infinite;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 58%, transparent),
+    transparent
+  );
+  content: "";
+  inset: 0;
+  position: absolute;
+  transform: translateX(-100%);
+  width: 80%;
 }
 
 @keyframes reveal-line {
@@ -182,11 +197,11 @@
 
 @keyframes chart-loading {
   from {
-    background-position: 180% 0;
+    transform: translateX(-100%);
   }
 
   to {
-    background-position: -80% 0;
+    transform: translateX(225%);
   }
 }
 
@@ -220,8 +235,8 @@
 
   .rangeButton {
     border-radius: 9px;
-    height: 36px;
-    min-width: 34px;
+    height: 44px;
+    min-width: 44px;
     padding-inline: 5px;
   }
 
@@ -235,8 +250,8 @@
 @media (prefers-reduced-motion: reduce) {
   .area,
   .line,
-  .loadingLine {
-    animation-duration: 1ms;
+  .loadingLine::after {
+    animation: none;
   }
 
   .rangeButton {

@@ -294,6 +294,7 @@ export function TokenTrade({
   const [balanceState, setBalanceState] =
     useState<WalletTradeBalanceState | null>(null);
   const amountInputId = useId();
+  const amountErrorId = useId();
   const activeSwapFeeBps =
     side === "buy" ? buySwapFeeBps : sellSwapFeeBps;
   const activeInputAsset = token;
@@ -583,6 +584,7 @@ export function TokenTrade({
             inputMode="decimal"
             autoComplete="off"
             aria-invalid={Boolean(error)}
+            aria-describedby={error ? amountErrorId : undefined}
             value={amount}
             onChange={(event) => {
               setAmount(event.target.value);
@@ -600,7 +602,7 @@ export function TokenTrade({
       </div>
 
       {error ? (
-        <p className={styles.error} role="alert">
+        <p className={styles.error} id={amountErrorId} role="alert">
           {error}
         </p>
       ) : null}

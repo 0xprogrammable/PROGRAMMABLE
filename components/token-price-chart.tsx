@@ -216,6 +216,30 @@ export function TokenPriceChart({
     );
   }
 
+  function moveActivePoint(
+    key:
+      | "ArrowLeft"
+      | "ArrowRight"
+      | "ArrowUp"
+      | "ArrowDown"
+      | "Home"
+      | "End",
+  ) {
+    if (!chart) return;
+    const lastIndex = chart.points.length - 1;
+    const currentIndex = activeIndex ?? lastIndex;
+
+    if (key === "Home") {
+      setActiveIndex(0);
+    } else if (key === "End") {
+      setActiveIndex(lastIndex);
+    } else if (key === "ArrowLeft" || key === "ArrowDown") {
+      setActiveIndex(Math.max(0, currentIndex - 1));
+    } else {
+      setActiveIndex(Math.min(lastIndex, currentIndex + 1));
+    }
+  }
+
   return (
     <section className={styles.shell} aria-label={`${tokenName} price history`}>
       <div className={styles.header}>
@@ -258,8 +282,34 @@ export function TokenPriceChart({
             ref={plotRef}
             viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
             preserveAspectRatio="none"
-            role="img"
-            aria-label={`${tokenName} onchain price chart`}
+            role="slider"
+            tabIndex={0}
+            aria-label={`${tokenName} price point`}
+            aria-valuemin={0}
+            aria-valuemax={chart.points.length - 1}
+            aria-valuenow={activeIndex ?? chart.points.length - 1}
+            aria-valuetext={`${formatPrice(
+              activePoint?.value ?? chart.current,
+              chart.unit,
+            )} at block ${
+              activePoint?.blockNumber ??
+              chart.points.at(-1)?.blockNumber ??
+              "unknown"
+            }`}
+            onBlur={() => setActiveIndex(null)}
+            onKeyDown={(event) => {
+              if (
+                event.key === "ArrowLeft" ||
+                event.key === "ArrowRight" ||
+                event.key === "ArrowUp" ||
+                event.key === "ArrowDown" ||
+                event.key === "Home" ||
+                event.key === "End"
+              ) {
+                event.preventDefault();
+                moveActivePoint(event.key);
+              }
+            }}
             onPointerDown={(event) => updateActivePoint(event.clientX)}
             onPointerMove={(event) => updateActivePoint(event.clientX)}
             onPointerLeave={(event) => {

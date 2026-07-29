@@ -52,7 +52,7 @@
 
 .label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -108,12 +108,12 @@
   border-radius: 50%;
   color: var(--brand-pink);
   display: inline-flex;
-  height: 36px;
+  height: 44px;
   justify-content: center;
   transition:
     background-color 150ms ease,
     transform 160ms var(--ease-out);
-  width: 36px;
+  width: 44px;
 }
 
 .socials svg {
@@ -179,14 +179,14 @@
 
 @media (max-width: 420px) {
   .surface {
-    gap: 26px;
-    grid-template-columns: 1fr;
-    padding-inline: 20px;
+    gap: 24px 18px;
+    grid-template-columns: 1fr 1fr;
+    padding-inline: 18px;
   }
 
   .brand,
   .risk {
-    grid-column: auto;
+    grid-column: 1 / -1;
   }
 
   .bottom {

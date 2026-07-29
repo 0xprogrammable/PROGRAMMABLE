@@ -156,7 +156,7 @@
 
 .navLabel {
   color: var(--dim);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 680;
   letter-spacing: 0.09em;
   padding: 0 9px;
@@ -251,6 +251,7 @@
   color: var(--text-soft);
   font-size: 15px;
   line-height: 1.68;
+  max-width: 65ch;
 }
 
 .content h2 + p,
@@ -369,7 +370,7 @@
   border: 1px solid var(--panel-border-soft);
   border-radius: 999px;
   color: var(--muted);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 680;
   letter-spacing: 0.04em;
   padding: 4px 7px;
@@ -416,7 +417,7 @@
 
 .fact span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 670;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -455,7 +456,7 @@
 
 .table th {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 680;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -474,7 +475,7 @@
 
 .address {
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -536,7 +537,7 @@
 
 .flowItem span {
   color: var(--accent-strong);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 680;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -639,6 +640,10 @@
     margin-top: 24px;
   }
 
+  .search input {
+    font-size: 16px;
+  }
+
   .content {
     padding: 28px 22px;
   }
@@ -659,6 +664,73 @@
 
   .flow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tableWrap {
+    border: 0;
+    overflow: visible;
+  }
+
+  .table {
+    display: block;
+    min-width: 0;
+  }
+
+  .table thead {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+
+  .table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .table tr {
+    background: color-mix(in srgb, var(--glass-90) 92%, transparent);
+    border: 1px solid var(--panel-border-soft);
+    border-radius: 15px;
+    overflow: hidden;
+    padding: 12px 14px;
+  }
+
+  .table td {
+    border: 0;
+    display: grid;
+    gap: 4px;
+    padding: 7px 0;
+  }
+
+  .table td::before {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 680;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .table td:nth-child(1)::before {
+    content: "Contract";
+  }
+
+  .table td:nth-child(2)::before {
+    content: "Address";
+  }
+
+  .table td:nth-child(3)::before {
+    content: "Purpose";
   }
 }
 

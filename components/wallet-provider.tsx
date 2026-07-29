@@ -1115,6 +1115,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     openWallet,
   } = useWallet();
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCopied, setMenuCopied] = useState(false);
   const [menuError, setMenuError] = useState("");
@@ -1131,7 +1132,11 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
     };
 
     document.addEventListener("mousedown", closeOnOutsidePress);
@@ -1160,12 +1165,13 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
 
   const button = (
     <button
+      ref={menuButtonRef}
       className={
         compact ? "wallet-button wallet-button-compact" : "wallet-button"
       }
       type="button"
       disabled={connecting || disconnecting}
-      aria-haspopup={wallet ? "menu" : "dialog"}
+      aria-haspopup={wallet ? undefined : "dialog"}
       aria-expanded={wallet ? menuOpen : undefined}
       aria-label={
         wallet
@@ -1207,24 +1213,34 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   if (!wallet) return button;
 
   return (
-    <div className="wallet-menu-root" ref={menuRef}>
+    <div
+      className="wallet-menu-root"
+      ref={menuRef}
+      onBlur={(event) => {
+        if (
+          event.relatedTarget instanceof Node &&
+          event.currentTarget.contains(event.relatedTarget)
+        ) {
+          return;
+        }
+        setMenuOpen(false);
+      }}
+    >
       {button}
       {menuOpen ? (
-        <div className="wallet-menu" role="menu" aria-label="Wallet">
+        <div className="wallet-menu" aria-label="Wallet actions">
           <div className="wallet-menu-account">
             <strong>{username || shortenAddress(wallet.account)}</strong>
             <span>{shortenAddress(wallet.account)}</span>
           </div>
           <Link
             href="/profile"
-            role="menuitem"
             onClick={() => setMenuOpen(false)}
           >
             Profile
           </Link>
           <button
             type="button"
-            role="menuitem"
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(wallet.account);
@@ -1240,7 +1256,6 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
           <button
             className="wallet-menu-disconnect"
             type="button"
-            role="menuitem"
             disabled={disconnecting}
             onClick={() => {
               setMenuOpen(false);
