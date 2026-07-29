@@ -129,7 +129,11 @@ export function stockPairedEthCoordinatorDigest(value) {
   return keccak256(stringToHex(JSON.stringify(stable(value))));
 }
 
-export function assertStockPairedEthCoordinatorCheckout(root, releaseCommit) {
+export function assertStockPairedEthCoordinatorCheckout(
+  root,
+  releaseCommit,
+  { build = true } = {},
+) {
   if (
     typeof releaseCommit !== "string" ||
     !/^[0-9a-f]{40}$/.test(releaseCommit)
@@ -155,7 +159,7 @@ export function assertStockPairedEthCoordinatorCheckout(root, releaseCommit) {
   if (dirty) {
     throw new Error("The coordinator release files have uncommitted changes");
   }
-  buildStockPairedEthCoordinatorArtifact(root);
+  if (build) buildStockPairedEthCoordinatorArtifact(root);
 }
 
 export function buildStockPairedEthCoordinatorArtifact(root) {
@@ -435,6 +439,66 @@ export function prepareStockPairedEthCoordinatorTransaction(
       request,
     }),
   };
+}
+
+export function assertStockPairedEthCoordinatorRevalidation(
+  plan,
+  prepared,
+  state,
+  simulations,
+) {
+  const confirmedNonce = BigInt(state.confirmedNonce);
+  const pendingNonce = BigInt(state.pendingNonce);
+  if (
+    confirmedNonce !== BigInt(plan.nonce) ||
+    pendingNonce !== confirmedNonce ||
+    BigInt(prepared.request.nonce) !== confirmedNonce
+  ) {
+    throw new Error(
+      "The deployment wallet has another nonce or pending transaction",
+    );
+  }
+  if (state.code !== "0x") {
+    throw new Error("The predicted coordinator address is already occupied");
+  }
+  if (BigInt(state.balance) < BigInt(prepared.requiredBalance)) {
+    throw new Error("The deployment wallet no longer has enough ETH");
+  }
+  if (
+    BigInt(state.baseFeePerGas) +
+      BigInt(prepared.request.maxPriorityFeePerGas) >
+    BigInt(prepared.request.maxFeePerGas)
+  ) {
+    throw new Error("Mainnet gas moved above the reviewed coordinator fee cap");
+  }
+  if (
+    !Array.isArray(simulations) ||
+    simulations.length !== 2 ||
+    simulations.some(
+      (simulation) =>
+        !simulation?.callResult ||
+        simulation.callResult === "0x" ||
+        BigInt(simulation.estimatedGas ?? 0) <= 0n ||
+        BigInt(simulation.estimatedGas) > BigInt(prepared.request.gas),
+    ) ||
+    simulations[0].callResult.toLowerCase() !==
+      simulations[1].callResult.toLowerCase()
+  ) {
+    throw new Error(
+      "The reviewed coordinator no longer passes both RPC simulations",
+    );
+  }
+  const runtime = assertStockPairedEthCoordinatorRuntime(
+    plan.artifact,
+    simulations[0].callResult,
+  );
+  if (
+    runtime.runtimeCodeHash.toLowerCase() !==
+    prepared.runtimeCodeHash.toLowerCase()
+  ) {
+    throw new Error("The simulated coordinator runtime changed");
+  }
+  return true;
 }
 
 export function validateStockPairedEthCoordinatorReceipt(

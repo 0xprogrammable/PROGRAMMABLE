@@ -8,6 +8,7 @@ import {
   STOCK_PAIRED_ETH_COORDINATOR_ASSETS,
   STOCK_PAIRED_ETH_COORDINATOR_DEPLOYER,
   assertStockPairedEthCoordinatorRuntime,
+  assertStockPairedEthCoordinatorRevalidation,
   loadStockPairedEthCoordinatorPlan,
   prepareStockPairedEthCoordinatorTransaction,
   validateStockPairedEthCoordinatorReceipt,
@@ -62,7 +63,10 @@ test("builds one exact Mainnet coordinator deployment plan", async () => {
   );
   assert.equal(plan.calldataHash, keccak256(plan.data));
   assert.equal(plan.sourceCommitment, keccak256(plan.data));
-  assert.equal(plan.routeChecks.length, STOCK_PAIRED_ETH_COORDINATOR_ASSETS.length);
+  assert.equal(
+    plan.routeChecks.length,
+    STOCK_PAIRED_ETH_COORDINATOR_ASSETS.length,
+  );
   assert.ok(plan.routeChecks.every((route) => route.fee > 0));
   assert.ok(plan.constructorArguments.length > 2);
 });
@@ -73,10 +77,7 @@ test("accepts only runtime differences at compiler-declared immutable slots", as
     nonce,
   });
   const runtime = patchImmutableReferences(plan.artifact);
-  const result = assertStockPairedEthCoordinatorRuntime(
-    plan.artifact,
-    runtime,
-  );
+  const result = assertStockPairedEthCoordinatorRuntime(plan.artifact, runtime);
   assert.equal(result.runtimeCodeHash, keccak256(runtime));
   assert.ok(result.runtimeBytes > 0);
 
@@ -129,19 +130,15 @@ test("prepares one capped transaction only when two RPC simulations agree", asyn
   );
   assert.throws(
     () =>
-      prepareStockPairedEthCoordinatorTransaction(
-        plan,
-        deploymentState(plan),
-        [
-          { callResult: runtime, estimatedGas: "0x1e8480" },
-          {
-            callResult: `${runtime.slice(0, -2)}${
-              runtime.endsWith("00") ? "01" : "00"
-            }`,
-            estimatedGas: "0x1e8480",
-          },
-        ],
-      ),
+      prepareStockPairedEthCoordinatorTransaction(plan, deploymentState(plan), [
+        { callResult: runtime, estimatedGas: "0x1e8480" },
+        {
+          callResult: `${runtime.slice(0, -2)}${
+            runtime.endsWith("00") ? "01" : "00"
+          }`,
+          estimatedGas: "0x1e8480",
+        },
+      ]),
     /disagree/,
   );
   assert.throws(
@@ -230,5 +227,79 @@ test("binds the confirmed receipt to the reviewed calldata and fee caps", async 
         receipt,
       ),
     /does not match/,
+  );
+});
+
+test("revalidates the reviewed request without rebinding it to a later block", async () => {
+  const plan = await loadStockPairedEthCoordinatorPlan(root, {
+    releaseCommit,
+    nonce,
+  });
+  const runtime = patchImmutableReferences(plan.artifact);
+  const prepared = prepareStockPairedEthCoordinatorTransaction(
+    plan,
+    deploymentState(plan),
+    [
+      { callResult: runtime, estimatedGas: "0x1e8480" },
+      { callResult: runtime, estimatedGas: "0x1e8480" },
+    ],
+  );
+  const simulations = [
+    { callResult: runtime, estimatedGas: "0x1f0000" },
+    { callResult: runtime, estimatedGas: "0x1f1000" },
+  ];
+
+  assert.equal(
+    assertStockPairedEthCoordinatorRevalidation(
+      plan,
+      prepared,
+      deploymentState(plan, {
+        baseFeePerGas: "0x1e000000",
+        priorityFeePerGas: "0x77359400",
+      }),
+      simulations,
+    ),
+    true,
+  );
+
+  assert.throws(
+    () =>
+      assertStockPairedEthCoordinatorRevalidation(
+        plan,
+        prepared,
+        deploymentState(plan, { pendingNonce: "0x35" }),
+        simulations,
+      ),
+    /pending transaction/,
+  );
+  assert.throws(
+    () =>
+      assertStockPairedEthCoordinatorRevalidation(
+        plan,
+        prepared,
+        deploymentState(plan, {
+          baseFeePerGas: prepared.request.maxFeePerGas,
+        }),
+        simulations,
+      ),
+    /gas moved above/,
+  );
+  assert.throws(
+    () =>
+      assertStockPairedEthCoordinatorRevalidation(
+        plan,
+        prepared,
+        deploymentState(plan),
+        [
+          simulations[0],
+          {
+            callResult: runtime,
+            estimatedGas: `0x${(BigInt(prepared.request.gas) + 1n).toString(
+              16,
+            )}`,
+          },
+        ],
+      ),
+    /no longer passes/,
   );
 });
