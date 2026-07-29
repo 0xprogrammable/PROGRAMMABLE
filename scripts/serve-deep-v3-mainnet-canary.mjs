@@ -155,6 +155,7 @@ async function eventLogs(
   event,
   indexedArgs,
   startBlock,
+  endBlock,
 ) {
   const topics = encodeEventTopics({
     abi: [event],
@@ -166,7 +167,7 @@ async function eventLogs(
       address,
       topics,
       fromBlock: deepV3Quantity(startBlock),
-      toBlock: "latest",
+      toBlock: deepV3Quantity(endBlock),
     },
   ]);
 }
@@ -295,6 +296,7 @@ async function observe(url, manifest, identity) {
       deepV3OracleEvent,
       { vault },
       manifest.startBlock,
+      base.blockNumber,
     ),
     eventLogs(
       url,
@@ -302,6 +304,7 @@ async function observe(url, manifest, identity) {
       deepV3CompoundEvent,
       { poolId },
       manifest.startBlock,
+      base.blockNumber,
     ),
   ]);
   const targetOracle = lastDecoded(

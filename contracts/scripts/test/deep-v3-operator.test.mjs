@@ -883,6 +883,9 @@ test("operator entrypoints are localhost-only, explicit, and V3-only", () => {
   ].map((file) => readFileSync(path.join(root, file), "utf8"));
   assert.ok(files[0].includes('const HOST = "127.0.0.1"'));
   assert.ok(files[1].includes('const HOST = "127.0.0.1"'));
+  assert.ok(
+    files[1].includes("toBlock: deepV3Quantity(endBlock)"),
+  );
   assert.ok(files[2].includes('const HOST = "127.0.0.1"'));
   assert.ok(files[0].includes("callResultHash"));
   assert.ok(files[0].includes("callResultBytes"));
