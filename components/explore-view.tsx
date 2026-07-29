@@ -469,6 +469,7 @@ export function ExploreView() {
   const [sort, setSort] = useState<TokenSort>("market-cap");
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedAddress, setCopiedAddress] = useState("");
+  const [copyError, setCopyError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
@@ -602,18 +603,24 @@ export function ExploreView() {
     Boolean(debouncedQuery);
 
   async function copyAddress(address: string) {
+    if (copyResetTimer.current !== null) {
+      window.clearTimeout(copyResetTimer.current);
+    }
+    setCopyError("");
     try {
       await navigator.clipboard.writeText(address);
       setCopiedAddress(address);
-      if (copyResetTimer.current !== null) {
-        window.clearTimeout(copyResetTimer.current);
-      }
       copyResetTimer.current = window.setTimeout(
         () => setCopiedAddress(""),
         1600,
       );
     } catch {
       setCopiedAddress("");
+      setCopyError("Could not copy address");
+      copyResetTimer.current = window.setTimeout(
+        () => setCopyError(""),
+        2400,
+      );
     }
   }
 
@@ -980,6 +987,13 @@ export function ExploreView() {
         </section>
       </div>
       <SiteFooter />
+      {copyError ? (
+        <div className="toast-region" aria-live="assertive" aria-atomic="true">
+          <p className="toast" role="alert">
+            {copyError}
+          </p>
+        </div>
+      ) : null}
     </>
   );
 }

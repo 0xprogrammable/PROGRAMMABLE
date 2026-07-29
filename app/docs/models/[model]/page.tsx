@@ -7,6 +7,13 @@ import styles from "@/components/docs-experience.module.css";
 
 type ModelSlug = "classic" | "deep" | "stock-paired";
 
+const classicEvidenceCommit =
+  "1fb9558af4f0248de75d5c7983f80036e32f47cb";
+const deepSourceCommit =
+  "db4599b7e3280c381a500c6f738ec2a2c244ca35";
+const stockPairedEvidenceCommit =
+  "ef2bbb51336a20aa2886dad0232f61495e8f2911";
+
 const modelMetadata: Record<
   ModelSlug,
   { description: string; title: string }
@@ -14,17 +21,17 @@ const modelMetadata: Record<
   classic: {
     title: "Classic",
     description:
-      "Fixed swap fees, creator rewards in ETH and permanently locked one-sided Uniswap v4 liquidity.",
+      "Configure buy and sell fees, creator rewards and Initial Buy custody for a fixed-supply Uniswap v4 token.",
   },
   deep: {
     title: "Deep",
     description:
-      "The coming Programmable model that turns its fee share into permanently pool-bound liquidity.",
+      "An unreleased model designed to turn its fee share into permanently pool-bound liquidity.",
   },
   "stock-paired": {
     title: "Stock-Paired",
     description:
-      "A limited-access model whose Uniswap v4 pool uses a reviewed stock token as its quote asset.",
+      "A restricted model whose Uniswap v4 pool uses a reviewed stock token as its quote asset.",
   },
 };
 
@@ -53,59 +60,68 @@ export async function generateMetadata({
 }
 
 function ClassicDocs() {
-  const launcher = "0xD240D06f8586eB799f20056054e5b527405E6bAd";
-  const hook = "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC";
+  const launcher = "0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770";
+  const hook = "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC";
+  const rewardVaultFactory =
+    "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a";
+  const initialBuyCustodyFactory =
+    "0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4";
+  const positionRecipientFactory =
+    "0x291a9ff1059d225d02B1659430804486404dB507";
+  const ctoAuthority =
+    "0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C";
 
   return (
     <DocsShell
       currentPath="/docs/models/classic"
       kicker="Launch model · Live"
       title="Classic"
-      description="Fixed swap fees, creator rewards in ETH and a direct path into Uniswap v4."
+      description="A fixed-supply Uniswap v4 launch with configurable fees, creator rewards in ETH and permanent one-sided liquidity."
     >
       <section>
-        <span className={styles.sectionEyebrow}>What it does</span>
-        <h2>A fixed-supply token with a fixed fee policy</h2>
+        <span className={styles.sectionEyebrow}>Model overview</span>
+        <h2>Set the terms before the token launches</h2>
         <p className={styles.lead}>
-          Classic creates a new token, initializes its ETH pool and places the
+          Classic creates the token, initializes its ETH pool and deposits the
           complete supply into a permanently locked one-sided Uniswap v4
-          position in one launch transaction.
+          position. The launch wallet chooses the buy fee, sell fee, reward
+          destination and Initial Buy custody before signing.
         </p>
         <div className={styles.factGrid}>
           <div className={styles.fact}>
             <span>Supply</span>
-            <strong>1,000,000,000 tokens with 18 decimals</strong>
+            <strong>1 billion tokens with 18 decimals</strong>
           </div>
           <div className={styles.fact}>
             <span>Transfer tax</span>
             <strong>0%</strong>
           </div>
           <div className={styles.fact}>
-            <span>Public swap fee</span>
-            <strong>1.00% through the canonical pool</strong>
+            <span>Buy and sell fees</span>
+            <strong>Set separately from 1% to 10%</strong>
           </div>
           <div className={styles.fact}>
-            <span>Liquidity deposit</span>
-            <strong>None from the creator</strong>
+            <span>Creator liquidity deposit</span>
+            <strong>Not required</strong>
           </div>
         </div>
       </section>
 
       <section>
         <span className={styles.sectionEyebrow}>Fee path</span>
-        <h2>Creator rewards are paid in ETH</h2>
+        <h2>Each direction has its own fixed fee</h2>
         <div className={styles.flow}>
           <div className={styles.flowItem}>
-            <span>Swap</span>
-            <strong>A buy or sell reaches the canonical v4 pool</strong>
+            <span>Direction</span>
+            <strong>The pool identifies a buy or a sell</strong>
           </div>
           <div className={styles.flowItem}>
-            <span>Total fee</span>
-            <strong>1.00% is accounted on the ETH side</strong>
+            <span>Selected fee</span>
+            <strong>The launch&apos;s fixed rate is accounted in ETH</strong>
           </div>
           <div className={styles.flowItem}>
             <span>Creator</span>
-            <strong>0.90% accrues as creator rewards</strong>
+            <strong>The selected rate minus 0.10% accrues as rewards</strong>
           </div>
           <div className={styles.flowItem}>
             <span>Programmable</span>
@@ -113,43 +129,101 @@ function ClassicDocs() {
           </div>
         </div>
         <div className={styles.callout}>
-          <strong>The Programmable share is not added on top.</strong>
+          <strong>The 0.10% Programmable share is included.</strong>
           <p>
-            It is deducted from the fixed 1.00% hook fee. Normal ERC-20
-            transfers do not pay this fee.
+            A 1% buy fee leaves 0.90% for creator rewards. It is not a second
+            fee added to the selected rate. Normal ERC-20 transfers do not pay
+            the hook fee.
           </p>
         </div>
       </section>
 
       <section>
+        <span className={styles.sectionEyebrow}>Creator rewards</span>
+        <h2>Choose who receives the ETH</h2>
+        <p>
+          Rewards can go to the launch wallet, another wallet or a split
+          between two and five unique wallets. That configuration is recorded
+          at launch. Each current payout wallet can claim only its own
+          allocation.
+        </p>
+        <ol className={styles.steps}>
+          <li>
+            <strong>Rewards accrue by allocation</strong>
+            <span>
+              The vault accounts for each beneficiary without requiring the
+              launch wallet to distribute funds.
+            </span>
+          </li>
+          <li>
+            <strong>Each beneficiary claims independently</strong>
+            <span>
+              A beneficiary cannot claim another wallet&apos;s rewards or
+              redirect them.
+            </span>
+          </li>
+          <li>
+            <strong>A payout wallet can move future rewards</strong>
+            <span>
+              Accrued rewards remain claimable by the previous wallet. Future
+              accrual for that allocation moves to the new address without
+              changing its percentage.
+            </span>
+          </li>
+        </ol>
+        <div className={styles.callout}>
+          <strong>
+            A disclosed CTO authority can replace the future reward
+            configuration.
+          </strong>
+          <p>
+            It checkpoints the existing configuration first, then can change
+            future recipients and split percentages. It cannot move accrued
+            rewards, alter swap fees, change token supply or remove liquidity.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <span className={styles.sectionEyebrow}>Initial Buy</span>
+        <h2>Buy at launch, then choose how the tokens are held</h2>
+        <p>
+          The launch wallet chooses at least 0.0006 ETH for its Initial Buy.
+          Purchased tokens can remain unlocked, use a fixed lock, vest
+          linearly or vest after a cliff. Lock and vesting periods are
+          immutable after launch and can run from 1 to 3,650 days.
+        </p>
+      </section>
+
+      <section>
         <span className={styles.sectionEyebrow}>Launch transaction</span>
-        <h2>What the wallet approves</h2>
+        <h2>One confirmation creates the complete launch</h2>
         <ol className={styles.steps}>
           <li>
             <strong>Create the fixed-supply token</strong>
             <span>
-              The official Uniswap UERC20 factory creates the token and stores
-              its metadata.
+              The UERC20 factory creates the token and records its metadata.
             </span>
           </li>
           <li>
-            <strong>Create and initialize the canonical pool</strong>
+            <strong>Initialize the recorded ETH pool</strong>
             <span>
-              ETH is the quote asset and the hook records the fixed fee policy.
+              The hook stores the buy fee, sell fee and reward vault for the
+              pool.
             </span>
           </li>
           <li>
-            <strong>Lock the complete launch position</strong>
+            <strong>Lock the one-sided position</strong>
             <span>
-              The full token supply enters one one-sided position with no
-              liquidity-removal path.
+              The complete supply enters a position with no liquidity-removal
+              path.
             </span>
           </li>
           <li>
             <strong>Execute the Initial Buy</strong>
             <span>
-              The creator chooses at least 0.0006 ETH. Purchased tokens go
-              directly to the creator.
+              Purchased tokens go to the launch wallet or its selected custody
+              contract.
             </span>
           </li>
         </ol>
@@ -157,17 +231,18 @@ function ClassicDocs() {
 
       <section>
         <span className={styles.sectionEyebrow}>Opening price</span>
-        <h2>A deterministic starting valuation</h2>
+        <h2>A deterministic starting point</h2>
         <p>
-          The current Classic release starts at an approximate fully diluted
-          valuation of 1.36 ETH. This is a mathematical starting point, not
-          guaranteed liquidity, sale proceeds or future market value. The
-          Initial Buy moves the live pool price before public trading begins.
+          The current Classic curve begins at an approximate fully diluted
+          valuation of 1.36 ETH before the Initial Buy. This is a mathematical
+          starting point, not guaranteed liquidity, sale proceeds or future
+          market value. The Initial Buy moves the live pool price before public
+          trading begins.
         </p>
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Token behavior</span>
+        <span className={styles.sectionEyebrow}>Boundaries</span>
         <h2>What Classic does not add</h2>
         <ul className={styles.contentList}>
           <li>No minting after launch.</li>
@@ -175,8 +250,12 @@ function ClassicDocs() {
           <li>No token allocation for the creator or Programmable.</li>
           <li>No protocol launch fee beyond Ethereum gas.</li>
           <li>
+            No conventional LP fee. Creator rewards come from the configured
+            hook fee.
+          </li>
+          <li>
             No guarantee that a third-party terminal routes through the
-            canonical hooked pool.
+            recorded hooked pool.
           </li>
         </ul>
       </section>
@@ -219,12 +298,64 @@ function ClassicDocs() {
                   </a>
                 </td>
               </tr>
+              <tr>
+                <td>Reward vault factory</td>
+                <td>
+                  <a
+                    className={styles.address}
+                    href={`https://etherscan.io/address/${rewardVaultFactory}#code`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {rewardVaultFactory}
+                  </a>
+                </td>
+              </tr>
+              <tr>
+                <td>Initial Buy custody factory</td>
+                <td>
+                  <a
+                    className={styles.address}
+                    href={`https://etherscan.io/address/${initialBuyCustodyFactory}#code`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {initialBuyCustodyFactory}
+                  </a>
+                </td>
+              </tr>
+              <tr>
+                <td>Position recipient factory</td>
+                <td>
+                  <a
+                    className={styles.address}
+                    href={`https://etherscan.io/address/${positionRecipientFactory}#code`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {positionRecipientFactory}
+                  </a>
+                </td>
+              </tr>
+              <tr>
+                <td>CTO authority</td>
+                <td>
+                  <a
+                    className={styles.address}
+                    href={`https://etherscan.io/address/${ctoAuthority}#code`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {ctoAuthority}
+                  </a>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
         <div className={styles.sourceLinks}>
           <a
-            href="https://github.com/0xprogrammable/programmable/blob/codex/deep-v3-mainnet-release/contracts/deployments/mainnet-classic-v2.json"
+            href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/deployments/mainnet-classic-v3.json`}
             target="_blank"
             rel="noreferrer"
           >
@@ -232,11 +363,11 @@ function ClassicDocs() {
             <ExternalLink aria-hidden="true" size={13} />
           </a>
           <a
-            href="https://github.com/0xprogrammable/programmable/blob/codex/deep-v3-mainnet-release/contracts/security/REVIEW-MEME-V1-2026-07-26.md"
+            href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/security/CLASSIC-V3.md`}
             target="_blank"
             rel="noreferrer"
           >
-            Launch review
+            Security notes
             <ExternalLink aria-hidden="true" size={13} />
           </a>
         </div>
@@ -249,7 +380,7 @@ function DeepDocs() {
   return (
     <DocsShell
       currentPath="/docs/models/deep"
-      kicker="Launch model · Coming soon"
+      kicker="Launch model · In development"
       title="Deep"
       description="A fixed-supply launch designed to turn trading fees into permanently pool-bound liquidity."
     >
@@ -302,10 +433,11 @@ function DeepDocs() {
         <span className={styles.sectionEyebrow}>Automation</span>
         <h2>Five minutes is the earliest eligible retry</h2>
         <p>
-          A reviewed offchain executor pays gas and checks eligible pools.
-          When the vault has enough accounted fees and its safety checks pass,
-          it can compound no more than once in an eligible five-minute window.
-          If a cycle cannot run, it is skipped and checked again later.
+          After release, an offchain executor would pay gas and check eligible
+          pools. When a vault has enough accounted fees and its safety checks
+          pass, it could compound no more than once in an eligible five-minute
+          window. A failed or ineligible cycle would be skipped and checked
+          again later.
         </p>
         <div className={styles.factGrid}>
           <div className={styles.fact}>
@@ -366,7 +498,7 @@ function DeepDocs() {
         </ul>
         <div className={styles.sourceLinks}>
           <a
-            href="https://github.com/0xprogrammable/programmable/blob/codex/deep-v3-mainnet-release/docs/superpowers/specs/2026-07-29-deep-eth-buy-and-lock-design.md"
+            href={`https://github.com/0xprogrammable/programmable/blob/${deepSourceCommit}/docs/superpowers/specs/2026-07-29-deep-eth-buy-and-lock-design.md`}
             target="_blank"
             rel="noreferrer"
           >
@@ -374,11 +506,19 @@ function DeepDocs() {
             <ExternalLink aria-hidden="true" size={13} />
           </a>
           <a
-            href="https://github.com/0xprogrammable/programmable/blob/codex/deep-v3-mainnet-release/contracts/security/DEEP-V3.md"
+            href={`https://github.com/0xprogrammable/programmable/blob/${deepSourceCommit}/contracts/security/DEEP-V3.md`}
             target="_blank"
             rel="noreferrer"
           >
             Security notes
+            <ExternalLink aria-hidden="true" size={13} />
+          </a>
+          <a
+            href={`https://github.com/0xprogrammable/programmable/blob/${deepSourceCommit}/contracts/deployments/mainnet-deep-full-range-v3.json`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Release status
             <ExternalLink aria-hidden="true" size={13} />
           </a>
         </div>
@@ -390,11 +530,13 @@ function DeepDocs() {
 function StockPairedDocs() {
   const launcher = "0x195750f33caD5eF2DF857a53226B421297A1e79e";
   const hook = "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc";
+  const coordinator =
+    "0xfa5f17389CA28D071781d59750b32C842ab6A54b";
 
   return (
     <DocsShell
       currentPath="/docs/models/stock-paired"
-      kicker="Launch model · Limited access"
+      kicker="Launch model · Restricted"
       title="Stock-Paired"
       description="A fixed-supply token whose Uniswap v4 pool uses a reviewed stock token as the quote asset."
     >
@@ -410,8 +552,9 @@ function StockPairedDocs() {
         <div className={styles.callout}>
           <strong>General public access is not enabled.</strong>
           <p>
-            The release is restricted while route, issuer and integration
-            boundaries remain under review.
+            The current interface exposes this model only to an approved
+            account. Its verified deployment does not make it a public launch
+            option.
           </p>
         </div>
       </section>
@@ -551,12 +694,25 @@ function StockPairedDocs() {
                   </a>
                 </td>
               </tr>
+              <tr>
+                <td>ETH launch coordinator</td>
+                <td>
+                  <a
+                    className={styles.address}
+                    href={`https://etherscan.io/address/${coordinator}#code`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {coordinator}
+                  </a>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
         <div className={styles.sourceLinks}>
           <a
-            href="https://github.com/0xprogrammable/programmable/blob/codex/deep-v3-mainnet-release/docs/superpowers/specs/2026-07-29-stock-paired-v1-design.md"
+            href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/docs/superpowers/specs/2026-07-29-stock-paired-v1-design.md`}
             target="_blank"
             rel="noreferrer"
           >
@@ -564,11 +720,19 @@ function StockPairedDocs() {
             <ExternalLink aria-hidden="true" size={13} />
           </a>
           <a
-            href="https://github.com/0xprogrammable/programmable/blob/codex/deep-v3-mainnet-release/contracts/deployments/mainnet-stock-paired-v1.json"
+            href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/deployments/mainnet-stock-paired-v1.json`}
             target="_blank"
             rel="noreferrer"
           >
             Deployment record
+            <ExternalLink aria-hidden="true" size={13} />
+          </a>
+          <a
+            href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/security/STOCK-PAIRED-V1.md`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Security notes
             <ExternalLink aria-hidden="true" size={13} />
           </a>
         </div>

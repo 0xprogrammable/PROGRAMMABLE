@@ -83,6 +83,7 @@ export function LaunchExperience() {
     const model = resolveImplementedLaunchModel(candidate);
     if (
       !model ||
+      (model === "classic-v3" && !classicV3LaunchAvailable) ||
       (model === "deep" && !deepLaunchAvailable) ||
       (model === "stock-paired" && !stockPairedAccess)
     ) {
@@ -142,13 +143,15 @@ export function LaunchModelPicker({
         <button
           className={`launch-model-card ${launchExperience.modelCard}`}
           data-launch-model-option="classic"
+          data-launch-model-available={classicV3LaunchAvailable}
           type="button"
+          disabled={!classicV3LaunchAvailable}
           aria-describedby="launch-model-classic-description"
-          onPointerEnter={preloadAvailableForm}
-          onFocus={preloadAvailableForm}
-          onClick={() =>
-            onChoose(classicV3LaunchAvailable ? "classic-v3" : "classic")
+          onPointerEnter={
+            classicV3LaunchAvailable ? preloadAvailableForm : undefined
           }
+          onFocus={classicV3LaunchAvailable ? preloadAvailableForm : undefined}
+          onClick={() => onChoose("classic-v3")}
         >
           <span
             className={`launch-model-art launch-model-art-classic ${launchExperience.modelArt}`}
@@ -170,6 +173,9 @@ export function LaunchModelPicker({
               className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
               <strong>Classic</strong>
+              {!classicV3LaunchAvailable ? (
+                <small data-status="pending">Unavailable</small>
+              ) : null}
             </span>
             <span
               className={`launch-model-description ${launchExperience.modelDescription}`}
@@ -178,12 +184,14 @@ export function LaunchModelPicker({
               Fixed swap fees with creator rewards paid in ETH. A familiar
               token launch on Uniswap v4.
             </span>
-            <span
-              className={`launch-model-action ${launchExperience.modelAction}`}
-            >
-              Launch
-              <ArrowRight aria-hidden="true" size={16} />
-            </span>
+            {classicV3LaunchAvailable ? (
+              <span
+                className={`launch-model-action ${launchExperience.modelAction}`}
+              >
+                Launch
+                <ArrowRight aria-hidden="true" size={16} />
+              </span>
+            ) : null}
           </span>
         </button>
 
