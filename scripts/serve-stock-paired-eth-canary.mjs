@@ -55,10 +55,15 @@ import {
   encodeStockPairedEthCanaryPrediction,
   encodeStockPairedEthCanaryV3Quote,
   encodeStockPairedEthCanaryV4Quote,
+  parseStockPairedEthCanaryRecoveredBuy,
+  parseStockPairedEthCanaryRecoveredCreatorClaim,
+  parseStockPairedEthCanaryRecoveredLauncherClaim,
+  parseStockPairedEthCanaryRecoveredSell,
   parseStockPairedEthCanaryLaunchReceipt,
   stockPairedEthCanaryCoordinatorEvent,
   stockPairedEthCanaryErc20Abi,
   stockPairedEthCanaryPermit2Abi,
+  stockPairedEthCanaryTransferEvent,
 } from "./stock-paired-eth-canary-core.mjs";
 
 const HOST = "127.0.0.1";
@@ -155,6 +160,41 @@ async function pair(method, params, label = method) {
     rpcUrls.map((url) => rpc(url, method, params)),
   );
   if (!stockPairedRpcValuesEqual(results[0], results[1])) {
+    throw new Error(`Independent Mainnet RPCs disagree on ${label}`);
+  }
+  return results[0];
+}
+
+function comparableReceipt(receipt) {
+  if (!receipt) return null;
+  return {
+    transactionHash: receipt.transactionHash,
+    transactionIndex: receipt.transactionIndex,
+    blockHash: receipt.blockHash,
+    blockNumber: receipt.blockNumber,
+    from: receipt.from,
+    to: receipt.to,
+    cumulativeGasUsed: receipt.cumulativeGasUsed,
+    gasUsed: receipt.gasUsed,
+    effectiveGasPrice: receipt.effectiveGasPrice,
+    contractAddress: receipt.contractAddress,
+    status: receipt.status,
+    type: receipt.type,
+    logsBloom: receipt.logsBloom,
+    logs: receipt.logs,
+  };
+}
+
+async function pairReceipt(hash, label = "transaction receipt") {
+  const results = await Promise.all(
+    rpcUrls.map((url) => rpc(url, "eth_getTransactionReceipt", [hash])),
+  );
+  if (
+    !stockPairedRpcValuesEqual(
+      comparableReceipt(results[0]),
+      comparableReceipt(results[1]),
+    )
+  ) {
     throw new Error(`Independent Mainnet RPCs disagree on ${label}`);
   }
   return results[0];
@@ -328,9 +368,8 @@ async function recoverConfirmedLaunch(manifest, evidence, prediction, block) {
   );
   if (code === "0x") return;
 
-  const deploymentReceipt = await pair(
-    "eth_getTransactionReceipt",
-    [manifest.transactions.ethLaunchCoordinator],
+  const deploymentReceipt = await pairReceipt(
+    manifest.transactions.ethLaunchCoordinator,
     "coordinator deployment receipt",
   );
   if (
@@ -379,9 +418,8 @@ async function recoverConfirmedLaunch(manifest, evidence, prediction, block) {
       [logs[0].transactionHash],
       "recovered launch transaction",
     ),
-    pair(
-      "eth_getTransactionReceipt",
-      [logs[0].transactionHash],
+    pairReceipt(
+      logs[0].transactionHash,
       "recovered launch receipt",
     ),
   ]);
@@ -430,6 +468,388 @@ async function recoverConfirmedLaunch(manifest, evidence, prediction, block) {
     gasUsed: BigInt(receipt.gasUsed).toString(),
     effectiveGasPrice: BigInt(receipt.effectiveGasPrice).toString(),
     effects: { ...result, positionLockVerified: true },
+  };
+  await writeEvidence(evidence);
+}
+
+async function recoverConfirmedBuy(manifest, evidence, block) {
+  if (
+    evidence.steps.buy ||
+    !evidence.steps.launch?.confirmed ||
+    !evidence.launchResult?.token
+  ) {
+    return;
+  }
+  const fromBlock = BigInt(evidence.steps.launch.blockNumber) + 1n;
+  if (block.number < fromBlock || block.number - fromBlock > 2_048n) {
+    throw new Error("The missing canary buy is outside the recovery window");
+  }
+  const topics = encodeEventTopics({
+    abi: [stockPairedEthCanaryTransferEvent],
+    eventName: "Transfer",
+    args: {
+      from: STOCK_PAIRED_DEPENDENCIES.universalRouter.address,
+      to: STOCK_PAIRED_DEPLOYER,
+    },
+  });
+  const logs = [];
+  for (let start = fromBlock; start <= block.number; start += 10n) {
+    const end = start + 9n < block.number ? start + 9n : block.number;
+    const chunk = await pair(
+      "eth_getLogs",
+      [
+        {
+          address: evidence.launchResult.token,
+          fromBlock: stockPairedQuantity(start),
+          toBlock: stockPairedQuantity(end),
+          topics,
+        },
+      ],
+      "canary buy recovery logs",
+    );
+    logs.push(...chunk);
+  }
+  if (!logs.length) return;
+
+  const recovered = [];
+  for (const log of logs.sort((left, right) => {
+    const blockDelta = Number(BigInt(left.blockNumber) - BigInt(right.blockNumber));
+    return blockDelta || Number(BigInt(left.logIndex) - BigInt(right.logIndex));
+  })) {
+    const [transaction, receipt] = await Promise.all([
+      pair(
+        "eth_getTransactionByHash",
+        [log.transactionHash],
+        "recovered buy transaction",
+      ),
+      pairReceipt(
+        log.transactionHash,
+        "recovered buy receipt",
+      ),
+    ]);
+    const effects = parseStockPairedEthCanaryRecoveredBuy(
+      transaction,
+      receipt,
+      {
+        token: evidence.launchResult.token,
+        hook: manifest.addresses.feeHook,
+      },
+    );
+    recovered.push({ transaction, receipt, effects });
+  }
+  const primary = recovered[0];
+  evidence.steps.buy = {
+    txHash: normalizeStockPairedHex(primary.transaction.hash),
+    preparedDigest: keccak256(
+      new TextEncoder().encode(
+        `recovered:buy:${normalizeStockPairedHex(primary.transaction.hash)}`,
+      ),
+    ),
+    request: {
+      from: getAddress(primary.transaction.from),
+      to: getAddress(primary.transaction.to),
+      value: stockPairedQuantity(BigInt(primary.transaction.value)),
+      data: normalizeStockPairedHex(primary.transaction.input),
+      nonce: stockPairedQuantity(BigInt(primary.transaction.nonce)),
+    },
+    before: { recovered: true },
+    confirmed: true,
+    recovered: true,
+    blockNumber: Number(BigInt(primary.receipt.blockNumber)),
+    blockHash: primary.receipt.blockHash,
+    gasUsed: BigInt(primary.receipt.gasUsed).toString(),
+    effectiveGasPrice: BigInt(primary.receipt.effectiveGasPrice).toString(),
+    effects: primary.effects,
+  };
+  if (recovered.length > 1) {
+    evidence.additionalConfirmedBuys = recovered.slice(1).map((entry) => ({
+      txHash: normalizeStockPairedHex(entry.transaction.hash),
+      nonce: stockPairedQuantity(BigInt(entry.transaction.nonce)),
+      blockNumber: Number(BigInt(entry.receipt.blockNumber)),
+      gasUsed: BigInt(entry.receipt.gasUsed).toString(),
+      effectiveGasPrice: BigInt(entry.receipt.effectiveGasPrice).toString(),
+      effects: entry.effects,
+    }));
+  }
+  await writeEvidence(evidence);
+}
+
+async function recoverConfirmedSell(manifest, evidence, block) {
+  if (evidence.steps.sell || !evidence.steps.buy?.confirmed) return;
+  const expectedAmount = BigInt(evidence.steps.buy.effects.receivedToken) / 2n;
+  if (expectedAmount <= 0n) {
+    throw new Error("The recovered canary buy produced no sellable tokens");
+  }
+  const precedingBlock =
+    evidence.steps["token-router-approval"]?.blockNumber ??
+    evidence.steps.buy.blockNumber;
+  const fromBlock = BigInt(precedingBlock) + 1n;
+  if (block.number < fromBlock || block.number - fromBlock > 2_048n) {
+    throw new Error("The missing canary sell is outside the recovery window");
+  }
+  const topics = encodeEventTopics({
+    abi: [stockPairedEthCanaryTransferEvent],
+    eventName: "Transfer",
+    args: {
+      from: STOCK_PAIRED_DEPLOYER,
+      to: STOCK_PAIRED_DEPENDENCIES.universalRouter.address,
+    },
+  });
+  const logs = [];
+  for (let start = fromBlock; start <= block.number; start += 10n) {
+    const end = start + 9n < block.number ? start + 9n : block.number;
+    const chunk = await pair(
+      "eth_getLogs",
+      [
+        {
+          address: evidence.launchResult.token,
+          fromBlock: stockPairedQuantity(start),
+          toBlock: stockPairedQuantity(end),
+          topics,
+        },
+      ],
+      "canary sell recovery logs",
+    );
+    logs.push(...chunk);
+  }
+  if (!logs.length) return;
+  if (logs.length !== 1) {
+    throw new Error("The confirmed canary sell is ambiguous");
+  }
+  const [transaction, receipt] = await Promise.all([
+    pair(
+      "eth_getTransactionByHash",
+      [logs[0].transactionHash],
+      "recovered sell transaction",
+    ),
+    pairReceipt(logs[0].transactionHash, "recovered sell receipt"),
+  ]);
+  const effects = parseStockPairedEthCanaryRecoveredSell(
+    transaction,
+    receipt,
+    {
+      token: evidence.launchResult.token,
+      hook: manifest.addresses.feeHook,
+      expectedAmount,
+    },
+  );
+  const receiptBlock = BigInt(receipt.blockNumber);
+  if (receiptBlock <= 0n) {
+    throw new Error("The recovered sell block is invalid");
+  }
+  const [nativeBefore, nativeAfter] = await Promise.all([
+    pair(
+      "eth_getBalance",
+      [STOCK_PAIRED_DEPLOYER, stockPairedQuantity(receiptBlock - 1n)],
+      "deployer balance before recovered sell",
+    ).then(BigInt),
+    pair(
+      "eth_getBalance",
+      [STOCK_PAIRED_DEPLOYER, stockPairedQuantity(receiptBlock)],
+      "deployer balance after recovered sell",
+    ).then(BigInt),
+  ]);
+  const gasCost =
+    BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice);
+  const receivedEth = nativeAfter + gasCost - nativeBefore;
+  if (receivedEth <= 0n) {
+    throw new Error("The recovered atomic sell returned no ETH");
+  }
+  effects.receivedEth = receivedEth.toString();
+  evidence.steps.sell = {
+    txHash: normalizeStockPairedHex(transaction.hash),
+    preparedDigest: keccak256(
+      new TextEncoder().encode(
+        `recovered:sell:${normalizeStockPairedHex(transaction.hash)}`,
+      ),
+    ),
+    request: {
+      from: getAddress(transaction.from),
+      to: getAddress(transaction.to),
+      value: stockPairedQuantity(BigInt(transaction.value)),
+      data: normalizeStockPairedHex(transaction.input),
+      nonce: stockPairedQuantity(BigInt(transaction.nonce)),
+    },
+    before: {
+      recovered: true,
+      nativeBalance: nativeBefore.toString(),
+    },
+    confirmed: true,
+    recovered: true,
+    blockNumber: Number(receiptBlock),
+    blockHash: receipt.blockHash,
+    gasUsed: BigInt(receipt.gasUsed).toString(),
+    effectiveGasPrice: BigInt(receipt.effectiveGasPrice).toString(),
+    effects,
+  };
+  await writeEvidence(evidence);
+}
+
+async function recoverConfirmedCreatorClaim(evidence, block) {
+  if (
+    evidence.steps["creator-claim"] ||
+    !evidence.steps.sell?.confirmed ||
+    !evidence.launchResult?.rewardVault
+  ) {
+    return;
+  }
+  const fromBlock = BigInt(evidence.steps.sell.blockNumber) + 1n;
+  if (block.number < fromBlock || block.number - fromBlock > 2_048n) {
+    throw new Error(
+      "The missing canary creator claim is outside the recovery window",
+    );
+  }
+  const topics = encodeEventTopics({
+    abi: [stockPairedEthCanaryTransferEvent],
+    eventName: "Transfer",
+    args: {
+      from: evidence.launchResult.rewardVault,
+      to: STOCK_PAIRED_DEPLOYER,
+    },
+  });
+  const logs = [];
+  for (let start = fromBlock; start <= block.number; start += 10n) {
+    const end = start + 9n < block.number ? start + 9n : block.number;
+    const chunk = await pair(
+      "eth_getLogs",
+      [
+        {
+          address: STOCK_PAIRED_ETH_CANARY_ASSET.address,
+          fromBlock: stockPairedQuantity(start),
+          toBlock: stockPairedQuantity(end),
+          topics,
+        },
+      ],
+      "canary creator claim recovery logs",
+    );
+    logs.push(...chunk);
+  }
+  if (!logs.length) return;
+  if (logs.length !== 1) {
+    throw new Error("The confirmed canary creator claim is ambiguous");
+  }
+  const [transaction, receipt] = await Promise.all([
+    pair(
+      "eth_getTransactionByHash",
+      [logs[0].transactionHash],
+      "recovered creator claim transaction",
+    ),
+    pairReceipt(
+      logs[0].transactionHash,
+      "recovered creator claim receipt",
+    ),
+  ]);
+  const effects = parseStockPairedEthCanaryRecoveredCreatorClaim(
+    transaction,
+    receipt,
+    { rewardVault: evidence.launchResult.rewardVault },
+  );
+  evidence.steps["creator-claim"] = {
+    txHash: normalizeStockPairedHex(transaction.hash),
+    preparedDigest: keccak256(
+      new TextEncoder().encode(
+        `recovered:creator-claim:${normalizeStockPairedHex(transaction.hash)}`,
+      ),
+    ),
+    request: {
+      from: getAddress(transaction.from),
+      to: getAddress(transaction.to),
+      value: stockPairedQuantity(BigInt(transaction.value)),
+      data: normalizeStockPairedHex(transaction.input),
+      nonce: stockPairedQuantity(BigInt(transaction.nonce)),
+    },
+    before: { recovered: true },
+    confirmed: true,
+    recovered: true,
+    blockNumber: Number(BigInt(receipt.blockNumber)),
+    blockHash: receipt.blockHash,
+    gasUsed: BigInt(receipt.gasUsed).toString(),
+    effectiveGasPrice: BigInt(receipt.effectiveGasPrice).toString(),
+    effects,
+  };
+  await writeEvidence(evidence);
+}
+
+async function recoverConfirmedLauncherClaim(manifest, evidence, block) {
+  if (
+    evidence.steps["launcher-claim"] ||
+    !evidence.steps["creator-claim"]?.confirmed
+  ) {
+    return;
+  }
+  const fromBlock = BigInt(evidence.steps["creator-claim"].blockNumber) + 1n;
+  if (block.number < fromBlock || block.number - fromBlock > 2_048n) {
+    throw new Error(
+      "The missing canary launcher claim is outside the recovery window",
+    );
+  }
+  const topics = encodeEventTopics({
+    abi: [stockPairedEthCanaryTransferEvent],
+    eventName: "Transfer",
+    args: {
+      from: STOCK_PAIRED_DEPENDENCIES.poolManager.address,
+      to: STOCK_PAIRED_TREASURY,
+    },
+  });
+  const logs = [];
+  for (let start = fromBlock; start <= block.number; start += 10n) {
+    const end = start + 9n < block.number ? start + 9n : block.number;
+    const chunk = await pair(
+      "eth_getLogs",
+      [
+        {
+          address: STOCK_PAIRED_ETH_CANARY_ASSET.address,
+          fromBlock: stockPairedQuantity(start),
+          toBlock: stockPairedQuantity(end),
+          topics,
+        },
+      ],
+      "canary launcher claim recovery logs",
+    );
+    logs.push(...chunk);
+  }
+  if (!logs.length) return;
+  if (logs.length !== 1) {
+    throw new Error("The confirmed canary launcher claim is ambiguous");
+  }
+  const [transaction, receipt] = await Promise.all([
+    pair(
+      "eth_getTransactionByHash",
+      [logs[0].transactionHash],
+      "recovered launcher claim transaction",
+    ),
+    pairReceipt(
+      logs[0].transactionHash,
+      "recovered launcher claim receipt",
+    ),
+  ]);
+  const effects = parseStockPairedEthCanaryRecoveredLauncherClaim(
+    transaction,
+    receipt,
+    { feeHook: manifest.addresses.feeHook },
+  );
+  evidence.steps["launcher-claim"] = {
+    txHash: normalizeStockPairedHex(transaction.hash),
+    preparedDigest: keccak256(
+      new TextEncoder().encode(
+        `recovered:launcher-claim:${normalizeStockPairedHex(transaction.hash)}`,
+      ),
+    ),
+    request: {
+      from: getAddress(transaction.from),
+      to: getAddress(transaction.to),
+      value: stockPairedQuantity(BigInt(transaction.value)),
+      data: normalizeStockPairedHex(transaction.input),
+      nonce: stockPairedQuantity(BigInt(transaction.nonce)),
+    },
+    before: { recovered: true },
+    confirmed: true,
+    recovered: true,
+    blockNumber: Number(BigInt(receipt.blockNumber)),
+    blockHash: receipt.blockHash,
+    gasUsed: BigInt(receipt.gasUsed).toString(),
+    effectiveGasPrice: BigInt(receipt.effectiveGasPrice).toString(),
+    effects,
   };
   await writeEvidence(evidence);
 }
@@ -960,7 +1380,7 @@ async function refreshPending(manifest, evidence, block) {
     if (record.confirmed || !record.txHash) continue;
     const [transaction, receipt] = await Promise.all([
       pair("eth_getTransactionByHash", [record.txHash], `${step} transaction`),
-      pair("eth_getTransactionReceipt", [record.txHash], `${step} receipt`),
+      pairReceipt(record.txHash, `${step} receipt`),
     ]);
     if (!transaction || !receipt) continue;
     if (
@@ -1109,6 +1529,10 @@ async function inspect(manifest, identity) {
   evidence.predictedToken = prediction.token;
   await writeEvidence(evidence);
   await recoverConfirmedLaunch(manifest, evidence, prediction, block);
+  await recoverConfirmedBuy(manifest, evidence, block);
+  await recoverConfirmedSell(manifest, evidence, block);
+  await recoverConfirmedCreatorClaim(evidence, block);
+  await recoverConfirmedLauncherClaim(manifest, evidence, block);
   await refreshPending(manifest, evidence, block);
   const pending = Object.entries(evidence.steps).find(
     ([, record]) => record.txHash && !record.confirmed,
