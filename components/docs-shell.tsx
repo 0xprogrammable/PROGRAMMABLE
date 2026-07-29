@@ -18,19 +18,19 @@ export function DocsShell({
   title: string;
 }) {
   return (
-    <div className={`${styles.page} page-width`}>
-      <header className={styles.hero}>
+    <div className={`${styles.page} page-width`} data-docs-shell>
+      <header className={styles.hero} data-docs-hero>
         <span className={styles.kicker}>{kicker}</span>
         <h1>{title}</h1>
         <p>{description}</p>
         <DocsSearch />
       </header>
 
-      <div className={styles.layout}>
-        <aside className={styles.sidebar}>
-          <DocsNavigation currentPath={currentPath} />
-        </aside>
+      <aside className={styles.sidebar} data-docs-sidebar>
+        <DocsNavigation currentPath={currentPath} />
+      </aside>
 
+      <div className={styles.layout} data-docs-layout>
         <article className={styles.content} data-docs-content>
           {children}
         </article>

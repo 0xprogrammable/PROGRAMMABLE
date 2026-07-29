@@ -21,6 +21,9 @@ type ChartPayload = {
   status: "ready" | "insufficient-history" | "not-deployed";
   points: ChartPoint[];
   swapCount: number;
+  volumeWei: string;
+  volumeEth: string;
+  volumeUsdWad?: string;
 };
 
 type PlottedPoint = ChartPoint & {
@@ -29,12 +32,14 @@ type PlottedPoint = ChartPoint & {
   value: number;
 };
 
-type ChartRange = "1h" | "1d" | "1w" | "all";
-type ChartLaunchModel =
-  | "classic"
-  | "adaptive"
-  | "deep"
-  | "stock-paired";
+export type ChartRange = "1h" | "1d" | "1w" | "all";
+export type TokenChartVolume = {
+  range: ChartRange;
+  pending: boolean;
+  volumeEth?: string;
+  volumeUsdWad?: string;
+};
+type ChartLaunchModel = "classic" | "adaptive" | "deep" | "stock-paired";
 
 const STOCK_PAIRED_HISTORY_MESSAGE =
   "Historical price data is not available for Stock-Paired tokens";
@@ -42,6 +47,8 @@ const STOCK_PAIRED_EMPTY_CHART: ChartPayload = {
   status: "insufficient-history",
   points: [],
   swapCount: 0,
+  volumeWei: "0",
+  volumeEth: "0",
 };
 
 export function getPriceHistoryEmptyMessage(
@@ -137,11 +144,14 @@ function formatMarketCap(value: number, unit: "USD" | "ETH") {
 function linePath(points: PlottedPoint[]) {
   if (points.length === 0) return "";
 
-  return points.slice(1).reduce((path, point, index) => {
-    const previous = points[index];
-    const midpoint = (previous.x + point.x) / 2;
-    return `${path} C${midpoint.toFixed(2)},${previous.y.toFixed(2)} ${midpoint.toFixed(2)},${point.y.toFixed(2)} ${point.x.toFixed(2)},${point.y.toFixed(2)}`;
-  }, `M${points[0].x.toFixed(2)},${points[0].y.toFixed(2)}`);
+  return points.slice(1).reduce(
+    (path, point, index) => {
+      const previous = points[index];
+      const midpoint = (previous.x + point.x) / 2;
+      return `${path} C${midpoint.toFixed(2)},${previous.y.toFixed(2)} ${midpoint.toFixed(2)},${point.y.toFixed(2)} ${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+    },
+    `M${points[0].x.toFixed(2)},${points[0].y.toFixed(2)}`,
+  );
 }
 
 export function TokenPriceChart({
@@ -150,12 +160,14 @@ export function TokenPriceChart({
   totalSupply,
   launchModel,
   onMarketCapChange,
+  onVolumeChange,
 }: {
   tokenAddress: `0x${string}`;
   tokenName: string;
   totalSupply?: string;
   launchModel?: ChartLaunchModel;
   onMarketCapChange?: (marketCap: string | null) => void;
+  onVolumeChange?: (volume: TokenChartVolume | null) => void;
 }) {
   const [request, setRequest] = useState<{
     key: string;
@@ -212,7 +224,8 @@ export function TokenPriceChart({
         setActiveIndexIfChanged(null);
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
         setRequest({
           key: requestKey,
           payload: null,
@@ -221,13 +234,7 @@ export function TokenPriceChart({
       });
 
     return () => controller.abort();
-  }, [
-    launchModel,
-    range,
-    requestKey,
-    setActiveIndexIfChanged,
-    tokenAddress,
-  ]);
+  }, [launchModel, range, requestKey, setActiveIndexIfChanged, tokenAddress]);
 
   const chart = useMemo(() => {
     if (!payload || payload.points.length < 2) return null;
@@ -271,20 +278,16 @@ export function TokenPriceChart({
   const activePoint =
     chart && activeIndex !== null ? chart.points[activeIndex] : null;
   const emptyMessage = getPriceHistoryEmptyMessage(launchModel, failed);
-  const chartStatus = !payload && !failed
-    ? "Loading price history"
-    : chart
-      ? `Price history loaded with ${chart.points.length} points`
-      : emptyMessage;
+  const chartStatus =
+    !payload && !failed
+      ? "Loading price history"
+      : chart
+        ? `Price history loaded with ${chart.points.length} points`
+        : emptyMessage;
 
   useEffect(() => {
     const supply = Number(totalSupply);
-    if (
-      !activePoint ||
-      !chart ||
-      !Number.isFinite(supply) ||
-      supply <= 0
-    ) {
+    if (!activePoint || !chart || !Number.isFinite(supply) || supply <= 0) {
       onMarketCapChange?.(null);
       return;
     }
@@ -293,6 +296,28 @@ export function TokenPriceChart({
       formatMarketCap(activePoint.value * supply, chart.unit),
     );
   }, [activePoint, chart, onMarketCapChange, totalSupply]);
+
+  useEffect(() => {
+    if (launchModel === "stock-paired" || range === "all") {
+      onVolumeChange?.(null);
+      return;
+    }
+
+    if (!payload) {
+      onVolumeChange?.({
+        range,
+        pending: !failed,
+      });
+      return;
+    }
+
+    onVolumeChange?.({
+      range,
+      pending: false,
+      volumeEth: payload.volumeEth,
+      volumeUsdWad: payload.volumeUsdWad,
+    });
+  }, [failed, launchModel, onVolumeChange, payload, range]);
 
   useEffect(
     () => () => {
@@ -335,13 +360,7 @@ export function TokenPriceChart({
   }
 
   function moveActivePoint(
-    key:
-      | "ArrowLeft"
-      | "ArrowRight"
-      | "ArrowUp"
-      | "ArrowDown"
-      | "Home"
-      | "End",
+    key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Home" | "End",
   ) {
     if (!chart) return;
     const lastIndex = chart.points.length - 1;
@@ -377,10 +396,7 @@ export function TokenPriceChart({
           <p className={styles.eyebrow}>Price history</p>
           <p className={styles.value}>
             {chart
-              ? formatPrice(
-                  activePoint?.value ?? chart.current,
-                  chart.unit,
-                )
+              ? formatPrice(activePoint?.value ?? chart.current, chart.unit)
               : launchModel === "stock-paired"
                 ? "Unavailable"
                 : "Onchain"}
@@ -395,7 +411,13 @@ export function TokenPriceChart({
                 aria-pressed={range === option.value}
                 key={option.value}
                 onClick={() => {
+                  if (option.value === range) return;
                   cancelScheduledActivePoint();
+                  onVolumeChange?.(
+                    option.value === "all"
+                      ? null
+                      : { range: option.value, pending: true },
+                  );
                   setRange(option.value);
                   setActiveIndexIfChanged(null);
                 }}
@@ -458,20 +480,17 @@ export function TokenPriceChart({
             }}
           >
             <defs>
-              <linearGradient
-                id={gradientId}
-                x1="0"
-                x2="0"
-                y1="0"
-                y2="1"
-              >
-                <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.18" />
+              <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                <stop
+                  offset="0%"
+                  stopColor="var(--accent)"
+                  stopOpacity="0.18"
+                />
                 <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
               </linearGradient>
             </defs>
             {[0.34, 0.68, 1].map((position) => {
-              const y =
-                PLOT_TOP + (PLOT_BOTTOM - PLOT_TOP) * position;
+              const y = PLOT_TOP + (PLOT_BOTTOM - PLOT_TOP) * position;
               return (
                 <line
                   className={styles.grid}

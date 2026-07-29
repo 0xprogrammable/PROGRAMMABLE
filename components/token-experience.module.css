@@ -176,11 +176,7 @@
 }
 
 .websiteIcon {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.55;
+  display: block;
 }
 
 .metrics {
@@ -381,10 +377,19 @@
 .amountCard {
   background: color-mix(in srgb, var(--surface-tint) 78%, transparent);
   border: 1px solid var(--border-strong);
-  border-radius: 21px;
-  margin-top: 16px;
-  min-height: 166px;
-  padding: 18px;
+  border-radius: 18px;
+  margin-top: 12px;
+  min-height: 132px;
+  padding: 10px 14px 9px;
+  transition: border-color 150ms ease;
+}
+
+.amountCardInvalid {
+  border-color: color-mix(
+    in srgb,
+    var(--danger) 48%,
+    var(--border-strong)
+  );
 }
 
 .amountHeader,
@@ -398,7 +403,7 @@
   color: var(--muted);
   font-size: 12px;
   gap: 12px;
-  min-height: 34px;
+  min-height: 44px;
 }
 
 .balanceRow {
@@ -443,20 +448,32 @@
 
 .amountInputRow {
   align-items: center;
+  border-radius: 13px;
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr) auto;
-  margin-top: 9px;
+  margin-top: 0;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 150ms ease;
+}
+
+.amountInputRow:focus-within {
+  outline-color: var(--text-soft);
+}
+
+.amountCardInvalid .amountInputRow:focus-within {
+  outline-color: var(--danger);
 }
 
 .amountInput {
   background: transparent;
   border: 0;
   color: var(--text);
-  font-size: clamp(36px, 3.1vw, 42px);
+  font-size: clamp(32px, 2.8vw, 38px);
   font-variant-numeric: tabular-nums;
   font-weight: 540;
-  height: 50px;
+  height: 44px;
   letter-spacing: -0.04em;
   min-width: 0;
   outline: 0;
@@ -478,7 +495,7 @@
   font-weight: 700;
   justify-content: center;
   max-width: 118px;
-  min-height: 38px;
+  min-height: 34px;
   overflow: hidden;
   padding: 0 12px;
   text-overflow: ellipsis;
@@ -487,10 +504,11 @@
 
 .amountMeta {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
-  margin-top: 5px;
-  min-height: 20px;
+  line-height: 1.25;
+  margin-top: 0;
+  min-height: 16px;
 }
 
 .error {
@@ -724,12 +742,20 @@
 .socialLink:focus-visible,
 .sideButton:focus-visible,
 .maxButton:focus-visible,
-.amountInput:focus-visible,
 .primaryAction:focus-visible,
 .secondaryAction:focus-visible,
 .retry:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.amountInput:focus-visible {
+  outline: 0;
+}
+
+.socialLink:focus-visible {
+  background: var(--surface-soft);
+  color: var(--text);
 }
 
 .back,
@@ -905,7 +931,7 @@
   }
 
   .amountInput {
-    font-size: 34px;
+    font-size: 32px;
   }
 }
 

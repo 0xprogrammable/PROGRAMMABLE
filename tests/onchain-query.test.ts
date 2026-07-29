@@ -83,6 +83,30 @@ describe("Explore query", () => {
     ]);
   });
 
+  it("sorts by the fresher indexed market cap when it is available", () => {
+    const refreshed = [
+      {
+        ...tokens[0],
+        indexedMarketCapEthWei: "500",
+      },
+      {
+        ...tokens[1],
+        indexedMarketCapEthWei: "50",
+      },
+      tokens[2],
+    ];
+
+    expect(
+      filterAndSortTokens(refreshed, "", "market-cap").map(
+        (entry) => entry.tokenAddress,
+      ),
+    ).toEqual([
+      tokens[0].tokenAddress,
+      tokens[2].tokenAddress,
+      tokens[1].tokenAddress,
+    ]);
+  });
+
   it("supports the public sort aliases and bounded pagination", () => {
     expect(parseExploreSort(null)).toBe("market-cap");
     expect(parseExploreSort("newest")).toBe("newest");

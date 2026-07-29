@@ -1300,7 +1300,11 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         ) {
           return;
         }
-        setMenuOpen(false);
+        window.requestAnimationFrame(() => {
+          if (!menuRef.current?.contains(document.activeElement)) {
+            setMenuOpen(false);
+          }
+        });
       }}
     >
       {button}
