@@ -8,6 +8,9 @@ import {
   type ClassicV3DeploymentManifest,
 } from "./classic-v3";
 
+const LAUNCHER_FEE_RECIPIENT =
+  "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
+
 export type ClassicV3ReleaseManifest = {
   schemaVersion?: number;
   model?: string;
@@ -27,6 +30,7 @@ export type ClassicV3ReleaseManifest = {
     feeHook?: string | null;
     launcher?: string | null;
     positionForwarderFactory?: string | null;
+    launcherFeeRecipient?: string | null;
   };
   runtimeCodeHashes?: {
     ctoAuthority?: string | null;
@@ -161,8 +165,16 @@ export function isClassicV3ReleaseVerified(
       release.runtimeCodeHashes?.positionForwarderFactory,
       appManifest.runtimeCodeHashes?.lockedPositionFeeForwarderFactory,
     );
+  const launcherFeeRecipientMatches = sameAddress(
+    release.addresses?.launcherFeeRecipient,
+    LAUNCHER_FEE_RECIPIENT,
+  );
 
-  return addressesMatch && runtimeHashesMatch;
+  return (
+    addressesMatch &&
+    runtimeHashesMatch &&
+    launcherFeeRecipientMatches
+  );
 }
 
 export function getConfiguredClassicV3Release(

@@ -9,6 +9,8 @@ import {
 } from "../lib/classic-v3-release";
 
 const hash = `0x${"11".repeat(32)}`;
+const launcherFeeRecipient =
+  "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
 const addresses = {
   ctoAuthority: "0x1111111111111111111111111111111111111111",
   rewardVaultFactory: "0x2222222222222222222222222222222222222222",
@@ -20,6 +22,7 @@ const addresses = {
   launcher: "0x7777777777777777777777777777777777777777",
   positionForwarderFactory:
     "0x8888888888888888888888888888888888888888",
+  launcherFeeRecipient,
 };
 
 function verifiedPair(): {
@@ -131,6 +134,20 @@ describe("Classic verified release gate", () => {
           addresses: {
             ...release.addresses,
             launcher: "0x6666666666666666666666666666666666666666",
+          },
+        },
+        1,
+      ),
+    ).toBe(false);
+    expect(
+      isClassicV3ReleaseVerified(
+        app,
+        {
+          ...release,
+          addresses: {
+            ...release.addresses,
+            launcherFeeRecipient:
+              "0x1111111111111111111111111111111111111111",
           },
         },
         1,
