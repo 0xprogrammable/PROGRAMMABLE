@@ -94,6 +94,110 @@ function isBytes32(value: unknown): value is `0x${string}` {
   return typeof value === "string" && /^0x[a-fA-F0-9]{64}$/.test(value);
 }
 
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+) {
+  const allowed = new Set(keys);
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function parseUnsignedDecimal(
+  value: unknown,
+  maximum = (1n << 256n) - 1n,
+) {
+  if (
+    typeof value !== "string" ||
+    !/^(0|[1-9]\d*)$/.test(value) ||
+    value.length > 78
+  ) {
+    return null;
+  }
+  try {
+    return BigInt(value) <= maximum ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseUniswapV4Pool(
+  value: unknown,
+): LauncherToken["uniswapV4Pool"] | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, [
+      "source",
+      "indexedBlockNumber",
+      "indexedBlockHash",
+      "volumeUsdWad",
+      "tvlUsdWad",
+      "transactionCount",
+      "liquidity",
+      "sqrtPriceX96",
+      "tick",
+      "feeTierPips",
+    ]) ||
+    value.source !== "official-uniswap-v4-subgraph" ||
+    !isBytes32(value.indexedBlockHash)
+  ) {
+    return null;
+  }
+
+  const indexedBlockNumber = parseUnsignedDecimal(
+    value.indexedBlockNumber,
+  );
+  const volumeUsdWad = parseUnsignedDecimal(value.volumeUsdWad);
+  const tvlUsdWad = parseUnsignedDecimal(value.tvlUsdWad);
+  const transactionCount = parseUnsignedDecimal(
+    value.transactionCount,
+  );
+  const liquidity = parseUnsignedDecimal(
+    value.liquidity,
+    (1n << 128n) - 1n,
+  );
+  const sqrtPriceX96 = parseUnsignedDecimal(
+    value.sqrtPriceX96,
+    (1n << 160n) - 1n,
+  );
+  const feeTierPips = parseUnsignedDecimal(
+    value.feeTierPips,
+    (1n << 24n) - 1n,
+  );
+  const tick =
+    value.tick === undefined
+      ? undefined
+      : Number.isSafeInteger(value.tick) &&
+          Number(value.tick) >= -887_272 &&
+          Number(value.tick) <= 887_272
+        ? Number(value.tick)
+        : null;
+  if (
+    indexedBlockNumber === null ||
+    volumeUsdWad === null ||
+    tvlUsdWad === null ||
+    transactionCount === null ||
+    liquidity === null ||
+    sqrtPriceX96 === null ||
+    feeTierPips === null ||
+    tick === null
+  ) {
+    return null;
+  }
+
+  return {
+    source: value.source,
+    indexedBlockNumber,
+    indexedBlockHash: value.indexedBlockHash,
+    volumeUsdWad,
+    tvlUsdWad,
+    transactionCount,
+    liquidity,
+    sqrtPriceX96,
+    ...(tick === undefined ? {} : { tick }),
+    feeTierPips,
+  };
+}
+
 function safeImageUrl(value: unknown) {
   if (typeof value !== "string") return undefined;
 
@@ -161,6 +265,13 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
         .map(parseTokenLink)
         .filter((link): link is TokenLink => link !== null)
     : [];
+  const uniswapV4Pool =
+    value.uniswapV4Pool === undefined
+      ? undefined
+      : parseUniswapV4Pool(value.uniswapV4Pool);
+  if (value.uniswapV4Pool !== undefined && uniswapV4Pool === null) {
+    return null;
+  }
 
   return {
     ...(value as unknown as LauncherToken),
@@ -168,10 +279,11 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
     description:
       typeof value.description === "string" ? value.description : undefined,
     imageUrl: safeImageUrl(value.imageUrl),
+    uniswapV4Pool: uniswapV4Pool ?? undefined,
   };
 }
 
-function parseDetailPayload(value: unknown): DetailPayload {
+export function parseDetailPayload(value: unknown): DetailPayload {
   if (!isRecord(value)) {
     throw new Error("The token registry returned an invalid response");
   }
@@ -261,6 +373,33 @@ function formatUsdAmount(value: number | null) {
   }).format(value);
 }
 
+function formatQuoteAmount(
+  value: string | undefined,
+  symbol: string | undefined,
+) {
+  if (
+    !value ||
+    !symbol ||
+    !/^\d+(?:\.\d+)?$/.test(value)
+  ) {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return `${new Intl.NumberFormat("en-US", {
+    notation: parsed >= 1_000 ? "compact" : "standard",
+    maximumFractionDigits: parsed >= 100 ? 1 : 5,
+    maximumSignificantDigits: 7,
+  }).format(parsed)} ${symbol}`;
+}
+
+function formatUsdWadAmount(valueWad: string | undefined) {
+  const parsed = parseUnsignedDecimal(valueWad);
+  if (parsed === null) return null;
+  const value = Number(formatUnits(BigInt(parsed), 18));
+  return formatUsdAmount(value);
+}
+
 function formatSwapFee(value: number | undefined) {
   if (
     typeof value !== "number" ||
@@ -274,38 +413,61 @@ function formatSwapFee(value: number | undefined) {
   }).format(value / 100)}%`;
 }
 
-export function buildTokenDetailMetrics(token: LauncherToken): TokenMetric[] {
-  const volumeUsd = calculateEthVolumeUsdValue({
+export function buildTokenDetailMetrics(
+  token: LauncherToken,
+  marketCapOverride?: string | null,
+): TokenMetric[] {
+  const fallbackVolumeUsd = calculateEthVolumeUsdValue({
     grossVolumeEth: token.grossVolumeEth,
     tokenPriceEth: token.tokenPriceEth,
     tokenPriceUsdWad: token.tokenPriceUsdWad,
   });
+  const officialVolumeUsd = formatUsdWadAmount(
+    token.uniswapV4Pool?.volumeUsdWad,
+  );
+  const officialLiquidityUsd = formatUsdWadAmount(
+    token.uniswapV4Pool?.tvlUsdWad,
+  );
+  const hasMarketCap =
+    typeof marketCapOverride === "string" ||
+    token.fdvUsdWad !== undefined ||
+    Boolean(token.marketCapEth) ||
+    Boolean(token.marketCapQuote);
   const values: Array<TokenMetric | null> = [
-    token.tokenPriceUsdWad !== undefined || token.tokenPriceEth
-      ? {
-          label: "Price",
-          value:
-            formatUsd(token.tokenPriceUsdWad, "price") ??
-            formatEth(token.tokenPriceEth, "price") ??
-            "",
-        }
-      : null,
-    token.fdvUsdWad !== undefined || token.marketCapEth
+    hasMarketCap
       ? {
           label: "Market cap",
           value:
+            marketCapOverride ??
             formatUsd(token.fdvUsdWad, "amount") ??
             formatEth(token.marketCapEth, "amount") ??
+            formatQuoteAmount(
+              token.marketCapQuote,
+              token.quoteAssetSymbol,
+            ) ??
             "",
         }
       : null,
-    token.grossVolumeEth
+    officialVolumeUsd !== null ||
+    token.grossVolumeEth ||
+    token.grossVolumeQuote
       ? {
           label: "Volume",
           value:
-            formatUsdAmount(volumeUsd) ??
+            officialVolumeUsd ??
+            formatUsdAmount(fallbackVolumeUsd) ??
             formatEth(token.grossVolumeEth, "amount") ??
+            formatQuoteAmount(
+              token.grossVolumeQuote,
+              token.quoteAssetSymbol,
+            ) ??
             "",
+        }
+      : null,
+    officialLiquidityUsd !== null
+      ? {
+          label: "Liquidity",
+          value: officialLiquidityUsd,
         }
       : null,
     token.buyHookFeeBps !== undefined &&
@@ -317,7 +479,10 @@ export function buildTokenDetailMetrics(token: LauncherToken): TokenMetric[] {
         }
       : formatSwapFee(token.totalSwapFeeBps)
         ? {
-            label: "Swap fee",
+            label:
+              token.deepReleaseVersion === "deep-full-range-v3"
+                ? "Deep fee"
+                : "Swap fee",
             value: formatSwapFee(token.totalSwapFeeBps) ?? "",
           }
         : null,
@@ -341,10 +506,17 @@ function formatPreparedMinimum(
   prepared: PreparedTokenTrade,
   symbol: string,
   tokenDecimals: number,
+  launchModel?: LauncherToken["launchModel"],
+  quoteAssetSymbol?: string,
 ) {
   try {
     const decimals = prepared.side === "buy" ? tokenDecimals : 18;
-    const unit = prepared.side === "buy" ? symbol : "ETH";
+    const unit =
+      prepared.side === "buy"
+        ? symbol
+        : launchModel === "stock-paired"
+          ? quoteAssetSymbol ?? "Quote"
+          : "ETH";
     const value = formatUnits(
       BigInt(prepared.quote.amountOutMinimum),
       decimals,
@@ -484,6 +656,9 @@ function TokenDetailContent({
     sendTransaction,
   } = useWallet();
   const [copied, setCopied] = useState(false);
+  const [hoveredMarketCap, setHoveredMarketCap] = useState<string | null>(
+    null,
+  );
   const [tradeFlow, setTradeFlow] = useState<TradeFlow>({
     phase: "form",
   });
@@ -507,7 +682,10 @@ function TokenDetailContent({
     [],
   );
 
-  const metrics = useMemo(() => buildTokenDetailMetrics(token), [token]);
+  const metrics = useMemo(
+    () => buildTokenDetailMetrics(token, hoveredMarketCap),
+    [hoveredMarketCap, token],
+  );
 
   const explorerBase =
     chainId === 1
@@ -516,8 +694,8 @@ function TokenDetailContent({
         ? "https://sepolia.etherscan.io"
         : null;
   const readTokenBalances = useCallback(
-    () => readTradeBalances(getAddress(token.tokenAddress)),
-    [readTradeBalances, token.tokenAddress],
+    (inputAsset: Address) => readTradeBalances(inputAsset),
+    [readTradeBalances],
   );
   const preparedForDisplay =
     tradeFlow.phase === "submitted"
@@ -528,6 +706,8 @@ function TokenDetailContent({
         preparedForDisplay,
         token.symbol,
         tokenDecimals,
+        token.launchModel,
+        token.quoteAssetSymbol,
       )
     : null;
 
@@ -582,6 +762,10 @@ function TokenDetailContent({
       token: getAddress(token.tokenAddress),
       hook: getAddress(token.hookAddress),
       poolId: token.poolId,
+      launchModel: token.launchModel,
+      quoteAsset: token.quoteAssetAddress
+        ? getAddress(token.quoteAssetAddress)
+        : undefined,
       side: request.side,
       amountIn: request.amountIn,
       slippageBps: request.slippageBps,
@@ -647,6 +831,10 @@ function TokenDetailContent({
       token: getAddress(token.tokenAddress),
       hook: getAddress(token.hookAddress),
       poolId: token.poolId,
+      launchModel: token.launchModel,
+      quoteAsset: token.quoteAssetAddress
+        ? getAddress(token.quoteAssetAddress)
+        : undefined,
       side: prepared.side,
       amountIn: prepared.quote.amountIn,
       slippageBps: prepared.quote.slippageBps,
@@ -798,6 +986,8 @@ function TokenDetailContent({
           <TokenPriceChart
             tokenAddress={token.tokenAddress}
             tokenName={token.name}
+            totalSupply={token.totalSupply}
+            onMarketCapChange={setHoveredMarketCap}
           />
 
           <MetricGrid metrics={metrics} />
@@ -826,6 +1016,14 @@ function TokenDetailContent({
               tokenDecimals={tokenDecimals}
               tokenPriceEth={token.tokenPriceEth}
               tokenPriceUsdWad={token.tokenPriceUsdWad}
+              launchModel={token.launchModel}
+              quoteAsset={
+                token.quoteAssetAddress
+                  ? getAddress(token.quoteAssetAddress)
+                  : undefined
+              }
+              quoteAssetSymbol={token.quoteAssetSymbol}
+              tokenPriceQuote={token.tokenPriceQuote}
               buySwapFeeBps={
                 token.buyHookFeeBps ?? token.totalSwapFeeBps
               }
@@ -842,6 +1040,9 @@ function TokenDetailContent({
               symbol={token.symbol}
               tokenDecimals={tokenDecimals}
               tokenPriceEth={token.tokenPriceEth}
+              tokenPriceQuote={token.tokenPriceQuote}
+              launchModel={token.launchModel}
+              quoteAssetSymbol={token.quoteAssetSymbol}
               totalSwapFeeBps={
                 tradeFlow.prepared.side === "buy"
                   ? token.buyHookFeeBps ?? token.totalSwapFeeBps

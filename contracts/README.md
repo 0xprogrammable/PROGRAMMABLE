@@ -82,7 +82,25 @@ npm run contracts:official-deployments
 npm run contracts:sepolia:validate
 ```
 
-Every dependency is pinned to an exact commit. Deployment checks compare checked-in Ethereum snapshots with Uniswap's official registry and fail when required addresses or runtime code hashes drift.
+Every dependency is pinned to an exact commit. `npm run contracts:official-deployments`
+first runs the verifier regression tests and then:
+
+- matches the checked-in Ethereum deployment snapshots against Uniswap's
+  official `developers.uniswap.org/deployments.json` registry;
+- reads PoolManager, PositionManager, StateView, V4Quoter, Universal Router and
+  Permit2 bytecode from one explicit current Ethereum Mainnet block and rejects
+  any runtime hash mismatch;
+- verifies clean local checkouts at the reviewed v4-core, v4-periphery,
+  liquidity-launcher, uerc20-factory and Permit2 commits recorded in
+  `dependencies/source-pins.json`; and
+- compares those five pins with each repository's current upstream `HEAD`.
+
+An address, source reference, runtime hash, local commit or dirty dependency
+checkout is a hard failure. A newer official dataset commit or dependency
+upstream `HEAD` is printed as `REVIEW REQUIRED`; the verifier never changes a
+snapshot, dependency pin or checkout. Set `ETHEREUM_MAINNET_RPC_URL` to select
+the read-only Mainnet RPC used for the runtime check. Otherwise the pinned
+snapshot's public RPC is used.
 
 Tests cover the four exact-input and exact-output swap quadrants, inclusive fee splitting, tiny-amount rounding, canonical-pool isolation, partial-fill rejection, rejecting-recipient recovery, atomic token and locked-liquidity creation, claims and stateful accounting invariants.
 

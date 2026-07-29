@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   findClassicV3IndexedLaunch,
+  findDeepV3IndexedLaunch,
   findIndexedLaunch,
 } from "../components/launch-builder";
 
@@ -76,6 +77,105 @@ describe("launch success indexing", () => {
     });
     expect(
       findClassicV3IndexedLaunch({ status: "ready", launch: null }),
+    ).toBeNull();
+  });
+
+  it("accepts Deep success only from the confirmed V3 provenance response", () => {
+    expect(
+      findDeepV3IndexedLaunch(
+        {
+          status: "ready",
+          launch: {
+            tokenAddress,
+            name: "Deep",
+            symbol: "DEEP",
+            deepReleaseVersion: "deep-full-range-v3",
+            deepV3Provenance: {
+              deepReleaseVersion: "deep-full-range-v3",
+              launchModel: "deep",
+              launcher:
+                "0x2222222222222222222222222222222222222222",
+              creator:
+                "0x3333333333333333333333333333333333333333",
+              tokenAddress,
+              vaultAddress:
+                "0x4444444444444444444444444444444444444444",
+              hookAddress:
+                "0x5555555555555555555555555555555555555555",
+              positionRecipient:
+                "0x6666666666666666666666666666666666666666",
+              positionTokenId: "42",
+              poolId: `0x${"66".repeat(32)}`,
+              launchHash: `0x${"77".repeat(32)}`,
+              vaultConfigurationHash: `0x${"88".repeat(32)}`,
+              blockNumber: "123",
+              blockHash: `0x${"99".repeat(32)}`,
+              transactionHash,
+              transactionIndex: 2,
+              logIndex: 5,
+            },
+          },
+        },
+        transactionHash,
+      ),
+    ).toEqual({
+      address: tokenAddress,
+      href: `/token/${tokenAddress}`,
+      name: "Deep",
+      symbol: "DEEP",
+    });
+
+    expect(
+      findDeepV3IndexedLaunch(
+        {
+          status: "ready",
+          launch: {
+            tokenAddress,
+            name: "Deep",
+            symbol: "DEEP",
+            deepV3Provenance: {
+              deepReleaseVersion: "deep-full-range-v3",
+              launchModel: "deep",
+              launcher:
+                "0x2222222222222222222222222222222222222222",
+              creator:
+                "0x3333333333333333333333333333333333333333",
+              tokenAddress,
+              vaultAddress:
+                "0x4444444444444444444444444444444444444444",
+              hookAddress:
+                "0x5555555555555555555555555555555555555555",
+              positionRecipient:
+                "0x6666666666666666666666666666666666666666",
+              positionTokenId: "42",
+              poolId: `0x${"66".repeat(32)}`,
+              launchHash: `0x${"77".repeat(32)}`,
+              vaultConfigurationHash: `0x${"88".repeat(32)}`,
+              blockNumber: "123",
+              blockHash: `0x${"99".repeat(32)}`,
+              transactionHash,
+              transactionIndex: 2,
+              logIndex: 5,
+            },
+          },
+        },
+        transactionHash,
+      ),
+    ).toBeNull();
+
+    expect(
+      findDeepV3IndexedLaunch(
+        {
+          status: "ready",
+          launch: {
+            tokenAddress,
+            name: "Deep",
+            symbol: "DEEP",
+            launchTransactionHash: transactionHash,
+          },
+        },
+        transactionHash,
+      ),
     ).toBeNull();
   });
 });

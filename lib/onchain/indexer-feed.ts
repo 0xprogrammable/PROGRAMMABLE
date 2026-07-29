@@ -32,40 +32,70 @@ export type ProgrammableIndexerToken = {
     buyHookFeeBps: number;
     sellHookFeeBps: number;
     creatorFeeBps: number | null;
-    buyCreatorFeeBps: number;
-    sellCreatorFeeBps: number;
+    buyCreatorFeeBps: number | null;
+    sellCreatorFeeBps: number | null;
+    growthFeeBps: number | null;
+    programmableFeeBps: number;
     launcherFeeBps: number;
     transferTaxBps: number;
     lpFeePips: number;
     launcherFeeIncludedInHookFee: true;
   };
   launch: {
+    model: "classic" | "deep-v1" | "deep-v2" | "deep-v3";
+    deepReleaseVersion:
+      | "deep-full-range-v1"
+      | "deep-full-range-v2"
+      | "deep-full-range-v3"
+      | null;
+    deepV2Provenance: LauncherToken["deepV2Provenance"] | null;
+    deepV3Provenance: LauncherToken["deepV3Provenance"] | null;
     creatorAddress: LauncherToken["creatorAddress"] | null;
     transactionHash: LauncherToken["launchTransactionHash"] | null;
     blockNumber: LauncherToken["launchBlockNumber"] | null;
     launchedAt: string;
   };
-  liquidityGrowth: {
-    growthVaultAddress: `0x${string}`;
-    oracleGuardAddress: `0x${string}`;
-    upstreamRewardVaultAddress: `0x${string}`;
-    growthTargetNativeWei: string;
-    completionToleranceNativeWei: string;
-    minimumNativeLiquidityForCompletionWei: string;
-    tokenReserveRaw: string;
-    totalNativeAllocatedToGrowthWei: string;
-    totalNativeAddedToLiquidityWei: string;
-    pendingGrowthNativeWei: string;
-    deferredRewardFeesWei: string;
-    growthTargetReached: boolean;
-    oracleReady: boolean;
-    automationAction: 0 | 1 | 2 | 3;
-    nextCompoundTimestamp: string;
-    trustedNativeDepthWei: string;
-    depthCapNativeWei: string;
-    unusedReserveIsActiveLiquidity: false;
-    automationGuaranteed: false;
-  } | null;
+  liquidityGrowth:
+    | {
+        growthVaultAddress: `0x${string}`;
+        oracleGuardAddress: `0x${string}`;
+        upstreamRewardVaultAddress: `0x${string}`;
+        growthTargetNativeWei: string;
+        completionToleranceNativeWei: string;
+        minimumNativeLiquidityForCompletionWei: string;
+        tokenReserveRaw: string;
+        totalNativeAllocatedToGrowthWei: string;
+        totalNativeAddedToLiquidityWei: string;
+        pendingGrowthNativeWei: string;
+        deferredRewardFeesWei: string;
+        growthTargetReached: boolean;
+        oracleReady: boolean;
+        automationAction: 0 | 1 | 2 | 3;
+        nextCompoundTimestamp: string;
+        trustedNativeDepthWei: string;
+        depthCapNativeWei: string;
+        unusedReserveIsActiveLiquidity: false;
+        automationGuaranteed: false;
+      }
+    | {
+        growthVaultAddress: `0x${string}`;
+        totalNativeAddedToLiquidityWei: string;
+        totalTokenAddedToLiquidityRaw: string;
+        totalGrowthEthReceivedWei: string;
+        totalNativeSwappedWei: string;
+        totalTokenAcquiredRaw: string;
+        pendingGrowthNativeWei: string;
+        lockedLiquidity: string;
+        trustedNativeDepthWei: string;
+        rollingExposureWei: string;
+        compoundCount: string;
+        lastCompoundTimestamp: string;
+        automationAction: 0 | 1;
+        nextCompoundTimestamp: string;
+        samePoolPermanentLiquidity: true;
+        automationGuaranteed: false;
+      }
+    | null;
 };
 
 export type ProgrammableIndexerFeed = {
@@ -82,6 +112,105 @@ function indexerLinks(token: LauncherToken): IndexerLinks {
   );
 }
 
+function serializeLiquidityGrowth(
+  token: LauncherToken,
+  isDeepV3: boolean,
+): ProgrammableIndexerToken["liquidityGrowth"] {
+  if (isDeepV3) {
+    const required = [
+      token.growthVaultAddress,
+      token.totalNativeAddedToLiquidityWei,
+      token.totalTokenAddedToLiquidityRaw,
+      token.totalGrowthEthReceivedWei,
+      token.totalNativeSwappedWei,
+      token.totalTokenAcquiredRaw,
+      token.pendingGrowthNativeWei,
+      token.lockedLiquidity,
+      token.trustedNativeDepthWei,
+      token.rollingExposureWei,
+      token.compoundCount,
+      token.lastCompoundTimestamp,
+      token.nextCompoundTimestamp,
+    ];
+    if (
+      required.some((value) => value === undefined) ||
+      token.automationAction === undefined ||
+      token.automationAction > 1 ||
+      token.automationGuaranteed !== false
+    ) {
+      throw new Error(
+        `Token ${token.tokenAddress} is missing Deep V3 growth accounting`,
+      );
+    }
+    return {
+      growthVaultAddress: token.growthVaultAddress!,
+      totalNativeAddedToLiquidityWei:
+        token.totalNativeAddedToLiquidityWei!,
+      totalTokenAddedToLiquidityRaw:
+        token.totalTokenAddedToLiquidityRaw!,
+      totalGrowthEthReceivedWei: token.totalGrowthEthReceivedWei!,
+      totalNativeSwappedWei: token.totalNativeSwappedWei!,
+      totalTokenAcquiredRaw: token.totalTokenAcquiredRaw!,
+      pendingGrowthNativeWei: token.pendingGrowthNativeWei!,
+      lockedLiquidity: token.lockedLiquidity!,
+      trustedNativeDepthWei: token.trustedNativeDepthWei!,
+      rollingExposureWei: token.rollingExposureWei!,
+      compoundCount: token.compoundCount!,
+      lastCompoundTimestamp: token.lastCompoundTimestamp!,
+      automationAction: token.automationAction as 0 | 1,
+      nextCompoundTimestamp: token.nextCompoundTimestamp!,
+      samePoolPermanentLiquidity: true,
+      automationGuaranteed: false,
+    };
+  }
+
+  return token.launchModel === "deep" &&
+    token.growthVaultAddress &&
+    token.oracleGuardAddress &&
+    token.upstreamRewardVaultAddress &&
+    token.growthTargetNativeWei &&
+    token.completionToleranceNativeWei &&
+    token.minimumNativeLiquidityForCompletionWei &&
+    token.tokenReserveRaw &&
+    token.totalNativeAllocatedToGrowthWei &&
+    token.totalNativeAddedToLiquidityWei &&
+    token.pendingGrowthNativeWei &&
+    token.deferredRewardFeesWei &&
+    token.growthTargetReached !== undefined &&
+    token.oracleReady !== undefined &&
+    token.automationAction !== undefined &&
+    token.nextCompoundTimestamp !== undefined &&
+    token.trustedNativeDepthWei !== undefined &&
+    token.depthCapNativeWei !== undefined &&
+    token.automationGuaranteed === false
+    ? {
+        growthVaultAddress: token.growthVaultAddress,
+        oracleGuardAddress: token.oracleGuardAddress,
+        upstreamRewardVaultAddress: token.upstreamRewardVaultAddress,
+        growthTargetNativeWei: token.growthTargetNativeWei,
+        completionToleranceNativeWei:
+          token.completionToleranceNativeWei,
+        minimumNativeLiquidityForCompletionWei:
+          token.minimumNativeLiquidityForCompletionWei,
+        tokenReserveRaw: token.tokenReserveRaw,
+        totalNativeAllocatedToGrowthWei:
+          token.totalNativeAllocatedToGrowthWei,
+        totalNativeAddedToLiquidityWei:
+          token.totalNativeAddedToLiquidityWei,
+        pendingGrowthNativeWei: token.pendingGrowthNativeWei,
+        deferredRewardFeesWei: token.deferredRewardFeesWei,
+        growthTargetReached: token.growthTargetReached,
+        oracleReady: token.oracleReady,
+        automationAction: token.automationAction,
+        nextCompoundTimestamp: token.nextCompoundTimestamp,
+        trustedNativeDepthWei: token.trustedNativeDepthWei,
+        depthCapNativeWei: token.depthCapNativeWei,
+        unusedReserveIsActiveLiquidity: false,
+        automationGuaranteed: false,
+      }
+    : null;
+}
+
 export function serializeIndexerToken(
   token: LauncherToken,
   chainId: number,
@@ -93,27 +222,119 @@ export function serializeIndexerToken(
     launcherFeeBps,
     transferTaxBps,
   } = token;
-  const buyCreatorFeeBps = token.buyCreatorFeeBps ?? creatorFeeBps;
-  const sellCreatorFeeBps = token.sellCreatorFeeBps ?? creatorFeeBps;
+  const isDeepV1 = token.deepReleaseVersion === "deep-full-range-v1";
+  const isDeepV2 = token.deepReleaseVersion === "deep-full-range-v2";
+  const isDeepV3 = token.deepReleaseVersion === "deep-full-range-v3";
+  if (
+    (token.launchModel === "deep" &&
+      !isDeepV1 &&
+      !isDeepV2 &&
+      !isDeepV3) ||
+    (token.launchModel !== "deep" &&
+      (token.deepReleaseVersion !== undefined ||
+        token.deepV2Provenance !== undefined ||
+        token.deepV3Provenance !== undefined))
+  ) {
+    throw new Error(
+      `Token ${token.tokenAddress} is missing an exact Deep release`,
+    );
+  }
+  const buyCreatorFeeBps = isDeepV3
+    ? null
+    : token.buyCreatorFeeBps ?? creatorFeeBps ?? null;
+  const sellCreatorFeeBps = isDeepV3
+    ? null
+    : token.sellCreatorFeeBps ?? creatorFeeBps ?? null;
+  const growthFeeBps = isDeepV3 ? token.growthFeeBps ?? null : null;
+  const programmableFeeBps =
+    token.programmableFeeBps ?? launcherFeeBps;
   if (
     buyHookFeeBps === undefined ||
     sellHookFeeBps === undefined ||
-    creatorFeeBps === undefined ||
     launcherFeeBps === undefined ||
     transferTaxBps === undefined ||
-    buyCreatorFeeBps === undefined ||
-    sellCreatorFeeBps === undefined
+    programmableFeeBps === undefined ||
+    (!isDeepV3 &&
+      (creatorFeeBps === undefined ||
+        buyCreatorFeeBps === null ||
+        sellCreatorFeeBps === null)) ||
+    (isDeepV3 && growthFeeBps === null)
   ) {
     throw new Error(
       `Token ${token.tokenAddress} is missing onchain fee disclosure`,
     );
   }
   if (
-    buyCreatorFeeBps + launcherFeeBps !== buyHookFeeBps ||
-    sellCreatorFeeBps + launcherFeeBps !== sellHookFeeBps ||
+    (isDeepV3
+      ? growthFeeBps! + programmableFeeBps !== buyHookFeeBps ||
+        growthFeeBps! + programmableFeeBps !== sellHookFeeBps ||
+        launcherFeeBps !== programmableFeeBps ||
+        ![undefined, 0].includes(token.creatorFeeBps) ||
+        ![undefined, 0].includes(token.buyCreatorFeeBps) ||
+        ![undefined, 0].includes(token.sellCreatorFeeBps)
+      : (buyCreatorFeeBps as number) + launcherFeeBps !==
+          buyHookFeeBps ||
+        (sellCreatorFeeBps as number) + launcherFeeBps !==
+          sellHookFeeBps) ||
     transferTaxBps !== 0
   ) {
     throw new Error(`Token ${token.tokenAddress} has an invalid fee disclosure`);
+  }
+  const deepV2Provenance = token.deepV2Provenance;
+  const deepV3Provenance = token.deepV3Provenance;
+  if (
+    (isDeepV2 &&
+      (!deepV2Provenance ||
+        token.launchModel !== "deep" ||
+        deepV2Provenance.deepReleaseVersion !== "deep-full-range-v2" ||
+        deepV2Provenance.tokenAddress.toLowerCase() !==
+          token.tokenAddress.toLowerCase() ||
+        deepV2Provenance.hookAddress.toLowerCase() !==
+          token.hookAddress.toLowerCase() ||
+        deepV2Provenance.poolId.toLowerCase() !== token.poolId.toLowerCase() ||
+        deepV2Provenance.transactionHash.toLowerCase() !==
+          token.launchTransactionHash?.toLowerCase() ||
+        deepV2Provenance.creator.toLowerCase() !==
+          token.creatorAddress?.toLowerCase() ||
+        deepV2Provenance.vaultAddress.toLowerCase() !==
+          token.growthVaultAddress?.toLowerCase())) ||
+    (!isDeepV2 && deepV2Provenance !== undefined)
+  ) {
+    throw new Error(
+      `Token ${token.tokenAddress} has invalid Deep V2 provenance`,
+    );
+  }
+  if (
+    (isDeepV3 &&
+      (!deepV3Provenance ||
+        token.launchModel !== "deep" ||
+        deepV3Provenance.deepReleaseVersion !==
+          "deep-full-range-v3" ||
+        deepV3Provenance.launchModel !== "deep" ||
+        deepV3Provenance.tokenAddress.toLowerCase() !==
+          token.tokenAddress.toLowerCase() ||
+        deepV3Provenance.hookAddress.toLowerCase() !==
+          token.hookAddress.toLowerCase() ||
+        deepV3Provenance.poolId.toLowerCase() !==
+          token.poolId.toLowerCase() ||
+        deepV3Provenance.transactionHash.toLowerCase() !==
+          token.launchTransactionHash?.toLowerCase() ||
+        deepV3Provenance.transactionIndex !==
+          token.launchTransactionIndex ||
+        deepV3Provenance.logIndex !== token.launchLogIndex ||
+        deepV3Provenance.creator.toLowerCase() !==
+          token.creatorAddress?.toLowerCase() ||
+        deepV3Provenance.vaultAddress.toLowerCase() !==
+          token.growthVaultAddress?.toLowerCase() ||
+        deepV3Provenance.positionRecipient.toLowerCase() !==
+          token.positionRecipient?.toLowerCase() ||
+        deepV3Provenance.positionTokenId !== token.positionTokenId)) ||
+    (!isDeepV3 && deepV3Provenance !== undefined) ||
+    (isDeepV3 && deepV2Provenance !== undefined)
+  ) {
+    throw new Error(
+      `Token ${token.tokenAddress} has invalid Deep V3 provenance`,
+    );
   }
 
   return {
@@ -142,68 +363,41 @@ export function serializeIndexerToken(
       buyHookFeeBps,
       sellHookFeeBps,
       creatorFeeBps:
+        buyCreatorFeeBps !== null &&
+        sellCreatorFeeBps !== null &&
         buyCreatorFeeBps === sellCreatorFeeBps
           ? buyCreatorFeeBps
           : null,
       buyCreatorFeeBps,
       sellCreatorFeeBps,
+      growthFeeBps,
+      programmableFeeBps,
       launcherFeeBps,
       transferTaxBps,
       lpFeePips: token.lpFeePips ?? 0,
       launcherFeeIncludedInHookFee: true,
     },
     launch: {
+      model:
+        token.launchModel === "deep"
+          ? isDeepV3
+            ? "deep-v3"
+            : isDeepV2
+              ? "deep-v2"
+              : "deep-v1"
+          : "classic",
+      deepReleaseVersion:
+        token.launchModel === "deep"
+          ? token.deepReleaseVersion!
+          : null,
+      deepV2Provenance: deepV2Provenance ?? null,
+      deepV3Provenance: deepV3Provenance ?? null,
       creatorAddress: token.creatorAddress ?? null,
       transactionHash: token.launchTransactionHash ?? null,
       blockNumber: token.launchBlockNumber ?? null,
       launchedAt: token.launchedAt,
     },
-    liquidityGrowth:
-      token.launchModel === "deep" &&
-      token.growthVaultAddress &&
-      token.oracleGuardAddress &&
-      token.upstreamRewardVaultAddress &&
-      token.growthTargetNativeWei &&
-      token.completionToleranceNativeWei &&
-      token.minimumNativeLiquidityForCompletionWei &&
-      token.tokenReserveRaw &&
-      token.totalNativeAllocatedToGrowthWei &&
-      token.totalNativeAddedToLiquidityWei &&
-      token.pendingGrowthNativeWei &&
-      token.deferredRewardFeesWei &&
-      token.growthTargetReached !== undefined &&
-      token.oracleReady !== undefined &&
-      token.automationAction !== undefined &&
-      token.nextCompoundTimestamp !== undefined &&
-      token.trustedNativeDepthWei !== undefined &&
-      token.depthCapNativeWei !== undefined &&
-      token.automationGuaranteed === false
-        ? {
-            growthVaultAddress: token.growthVaultAddress,
-            oracleGuardAddress: token.oracleGuardAddress,
-            upstreamRewardVaultAddress: token.upstreamRewardVaultAddress,
-            growthTargetNativeWei: token.growthTargetNativeWei,
-            completionToleranceNativeWei:
-              token.completionToleranceNativeWei,
-            minimumNativeLiquidityForCompletionWei:
-              token.minimumNativeLiquidityForCompletionWei,
-            tokenReserveRaw: token.tokenReserveRaw,
-            totalNativeAllocatedToGrowthWei:
-              token.totalNativeAllocatedToGrowthWei,
-            totalNativeAddedToLiquidityWei:
-              token.totalNativeAddedToLiquidityWei,
-            pendingGrowthNativeWei: token.pendingGrowthNativeWei,
-            deferredRewardFeesWei: token.deferredRewardFeesWei,
-            growthTargetReached: token.growthTargetReached,
-            oracleReady: token.oracleReady,
-            automationAction: token.automationAction,
-            nextCompoundTimestamp: token.nextCompoundTimestamp,
-            trustedNativeDepthWei: token.trustedNativeDepthWei,
-            depthCapNativeWei: token.depthCapNativeWei,
-            unusedReserveIsActiveLiquidity: false,
-            automationGuaranteed: false,
-          }
-        : null,
+    liquidityGrowth: serializeLiquidityGrowth(token, isDeepV3),
   };
 }
 

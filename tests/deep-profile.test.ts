@@ -43,6 +43,7 @@ function rewardResponse() {
     rewards: [
       {
         model: "deep",
+        deepReleaseVersion: "deep-full-range-v1",
         tokenAddress: token,
         tokenName: "Deep Token",
         tokenSymbol: "DEEP",
@@ -150,12 +151,14 @@ describe("Deep profile rewards", () => {
         {
           status: "ready",
           action: "claim",
+          deepReleaseVersion: "deep-full-range-v1",
           account,
           vaultAddress: vault,
           transaction,
         },
         {
           action: "claim",
+          deepReleaseVersion: "deep-full-range-v1",
           account,
           vaultAddress: vault,
           chainId: 1,
@@ -168,12 +171,34 @@ describe("Deep profile rewards", () => {
         {
           status: "ready",
           action: "claim",
+          deepReleaseVersion: "deep-full-range-v2",
+          account,
+          vaultAddress: vault,
+          transaction,
+        },
+        {
+          action: "claim",
+          deepReleaseVersion: "deep-full-range-v1",
+          account,
+          vaultAddress: vault,
+          chainId: 1,
+        },
+      ),
+    ).toThrow("not ready");
+
+    expect(() =>
+      validatePreparedDeepRewardAction(
+        {
+          status: "ready",
+          action: "claim",
+          deepReleaseVersion: "deep-full-range-v1",
           account,
           vaultAddress: vault,
           transaction: { ...transaction, from: other },
         },
         {
           action: "claim",
+          deepReleaseVersion: "deep-full-range-v1",
           account,
           vaultAddress: vault,
           chainId: 1,
@@ -201,12 +226,14 @@ describe("Deep profile rewards", () => {
         {
           status: "ready",
           action: "update-payout",
+          deepReleaseVersion: "deep-full-range-v1",
           account,
           vaultAddress: vault,
           transaction,
         },
         {
           action: "update-payout",
+          deepReleaseVersion: "deep-full-range-v1",
           account,
           vaultAddress: vault,
           newPayoutAddress: payout,

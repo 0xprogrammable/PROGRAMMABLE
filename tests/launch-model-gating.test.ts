@@ -4,9 +4,17 @@ import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 
 import { POST } from "../app/api/launch/preflight/route";
-import { LaunchModelPicker } from "../components/launch-builder";
+import {
+  DeepFeeStep,
+  DeepPresetStep,
+  LaunchModelPicker,
+  normalizeDeepDraft,
+} from "../components/launch-builder";
 import appDeployments from "../contracts/config/app-deployments.v1.json";
-import { createClassicV3Draft } from "../lib/launch";
+import {
+  createClassicV3Draft,
+  createDeepDraft,
+} from "../lib/launch";
 import {
   isFutureLaunchModelManifestEligible,
   resolveImplementedLaunchModel,
@@ -16,13 +24,11 @@ import {
 
 const account = "0x1111111111111111111111111111111111111111";
 const launcher = "0x2222222222222222222222222222222222222222";
+const automation =
+  "0x3333333333333333333333333333333333333333";
+const keeperExecutor =
+  "0x4444444444444444444444444444444444444444";
 const runtimeCodeHash = `0x${"11".repeat(32)}`;
-const deepSourceCommitment =
-  "0x82f6e2745dfbf54f40eae80df645bc75a7952e0505dd0621437dd233a619acfd";
-const keeperExecutorSourceCommitment =
-  "0x9072fa857d484b944205a969fda41727fa76d0f9e670916451b308615bb82175";
-const keeperExecutorRuntimeCodeHash =
-  "0xd4a6e8f200bd63ab924f5c4cfb1bbcc07c26c7b7b7abaa1f879418d2435f48e6";
 
 function eligibleDeepManifest(): LaunchModelReleaseManifest {
   return {
@@ -30,14 +36,14 @@ function eligibleDeepManifest(): LaunchModelReleaseManifest {
     status: "ready",
     launchModelReleases: {
       deep: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         model: "deep",
-        internalContractRelease: "liquidity-growth-full-range-v1",
-        releaseVersion: "deep-full-range-v1",
+        internalContractRelease: "liquidity-growth-full-range-v2",
+        releaseVersion: "deep-full-range-v2",
         releaseCommit: "1".repeat(40),
-        sourceCommitment: deepSourceCommitment,
+        sourceCommitment: runtimeCodeHash,
         releaseManifest:
-          "contracts/deployments/mainnet-deep-full-range-v1.json",
+          "contracts/deployments/mainnet-deep-full-range-v2.json",
         status: "deployment-source-and-lifecycle-verified",
         releaseEligible: true,
         sourceVerificationStatus: "verified",
@@ -49,7 +55,7 @@ function eligibleDeepManifest(): LaunchModelReleaseManifest {
         rangeSourceFactory: launcher,
         growthVaultFactory: launcher,
         growthVaultImplementation: launcher,
-        automation: launcher,
+        automation,
         positionPlanner: launcher,
         positionForwarderFactory: launcher,
         startBlock: 1,
@@ -61,13 +67,38 @@ function eligibleDeepManifest(): LaunchModelReleaseManifest {
         lifecycleLaunchTransaction: `0x${"22".repeat(32)}`,
         lifecycleOracleTransaction: `0x${"33".repeat(32)}`,
         lifecycleFeeProcessCompoundTransaction: `0x${"44".repeat(32)}`,
-        keeperExecutor: launcher,
-        keeperExecutorRuntimeCodeHash,
-        keeperExecutorSourceCommitment,
+        keeperReleaseVersion: "deep-keeper-v2",
+        keeperCompatibilityStatus: "verified-deep-v2",
+        keeperExecutor,
+        keeperExecutorRuntimeCodeHash: runtimeCodeHash,
+        keeperExecutorSourceCommitment: runtimeCodeHash,
         keeperExecutorDeploymentTransaction: `0x${"55".repeat(32)}`,
         keeperExecutorDeploymentBlock: 2,
         keeperExecutorSourceVerificationStatus:
           "etherscan-and-sourcify-exact-match",
+        fixedPolicy: {
+          tokenSupplyWei:
+            "1000000000000000000000000000",
+          tokenReserveTargetWei:
+            "150000000000000000000000000",
+          growthTargetNativeWei: "50000000000000000",
+          totalSwapFeeBps: 100,
+          creatorFeeBps: 90,
+          programmableFeeBps: 10,
+          minimumInitialBuyWei: "600000000000000",
+          initialTick: 204200,
+          tickSpacing: 200,
+          lpFeePips: 0,
+          twapWindowSeconds: 1800,
+          oracleRangeHalfWidthTicks: 20000,
+          maximumSpotTwapDeviationTicks: 600,
+          maximumAbsoluteTickDelta: 400,
+          compoundCooldownSeconds: 300,
+          rollingExposureWindowSeconds: 1800,
+          rollingExposureRecordCapacity: 8,
+          minimumKeeperProcessNativeWei: "2000000000000000",
+          oracleObservationCardinalityTarget: 192,
+        },
         runtimeCodeHashes: {
           launcher: runtimeCodeHash,
           hookFactory: runtimeCodeHash,
@@ -85,6 +116,32 @@ function eligibleDeepManifest(): LaunchModelReleaseManifest {
   };
 }
 
+function reviewedDeepBinding(manifest = eligibleDeepManifest()) {
+  const release = manifest.launchModelReleases?.deep;
+  if (!release) throw new Error("Deep fixture missing");
+  return {
+    schemaVersion: 1,
+    status: "reviewed",
+    manifestPath:
+      "contracts/deployments/mainnet-deep-full-range-v2.json",
+    model: "deep",
+    releaseVersion: "deep-full-range-v2",
+    internalContractRelease: "liquidity-growth-full-range-v2",
+    sourceCommitment: release.sourceCommitment,
+    automationAddress: release.automation,
+    automationRuntimeCodeHash: release.runtimeCodeHashes?.automation,
+    automationFqcn:
+      "src/LiquidityGrowthFullRangeAutomationV2.sol:LiquidityGrowthFullRangeAutomationV2",
+    coordinatorAddress: release.keeperExecutor,
+    coordinatorRuntimeCodeHash:
+      release.keeperExecutorRuntimeCodeHash,
+    coordinatorSourceCommitment:
+      release.keeperExecutorSourceCommitment,
+    coordinatorFqcn:
+      "src/DeepKeeperExecutorV1.sol:DeepKeeperExecutorV1",
+  };
+}
+
 describe("unreleased launch model gating", () => {
   it("shows Deep as the second model without exposing Adaptive", () => {
     const html = renderToStaticMarkup(
@@ -93,12 +150,86 @@ describe("unreleased launch model gating", () => {
       }),
     );
 
+    expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
+    expect(html).toContain('data-launch-model-option="classic"');
+    expect(html).toContain('data-launch-model-option="deep"');
     expect(html).toContain("<strong>Classic</strong>");
     expect(html).toContain("<strong>Deep</strong>");
-    expect(html).toContain("Final verification");
-    expect(html).not.toContain("Adaptive");
+    expect(html).toContain("Verification pending");
+    expect(html).toContain(
+      'aria-describedby="launch-model-deep-description launch-model-deep-details"',
+    );
+    expect(html).toContain(
+      "Trading fees buy the token and add both assets",
+    );
+    expect(html).not.toMatch(/adaptive/i);
     expect(html).not.toContain("LiquidityGrowth");
     expect(html).not.toContain("Liquidity Growth");
+  });
+
+  it("keeps the Deep preset concise while retaining its material limits", () => {
+    const html = renderToStaticMarkup(createElement(DeepPresetStep));
+
+    expect(html).toContain("<h2");
+    expect(html).toContain("Deep liquidity");
+    expect(html).toContain(
+      "The growth fee buys the token and adds both assets",
+    );
+    expect(html).toContain("<summary>How Deep works</summary>");
+    expect(html).toContain("1.00%");
+    expect(html).toContain("0.90%");
+    expect(html).toContain("0.10%");
+    expect(html).toContain("Any Uniswap protocol fee");
+    expect(html).toContain("has not received an independent external audit");
+  });
+
+  it("renders only the fixed V3 fee and initial-buy controls for Deep", () => {
+    const html = renderToStaticMarkup(
+      createElement(DeepFeeStep, {
+        draft: createDeepDraft(),
+        setDraft: () => undefined,
+        onEdit: () => undefined,
+      }),
+    );
+
+    expect(html).toContain("Fixed 1.00% Deep fee");
+    expect(html).toContain(">Deep fee</span>");
+    expect(html).toContain("Pool growth 0.90%");
+    expect(html).toContain("Programmable 0.10%");
+    expect(html).toContain("Initial Buy");
+    expect(html).not.toContain(">Max<");
+    expect(html).not.toContain("<select");
+    expect(html).not.toContain("Another wallet");
+    expect(html).not.toContain("Split rewards");
+    expect(html).not.toContain("Add recipient");
+  });
+
+  it("removes stale Classic V3 fee and reward choices from Deep drafts", () => {
+    expect(
+      normalizeDeepDraft({
+        ...createDeepDraft(),
+        buySwapFeePercent: "7",
+        sellSwapFeePercent: "10",
+        rewardDestinationMode: "external",
+        rewardExternalAddress:
+          "0x2222222222222222222222222222222222222222",
+        rewardSplits: [
+          {
+            beneficiary:
+              "0x3333333333333333333333333333333333333333",
+            sharePercent: "100",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      launchModel: "deep",
+      totalSwapFeePercent: "1",
+      buySwapFeePercent: "1",
+      sellSwapFeePercent: "1",
+      rewardDestinationMode: "launcher",
+      rewardExternalAddress: "",
+      rewardSplits: [],
+    });
   });
 
   it("does not resolve reserved or unknown identifiers as implemented models", () => {
@@ -118,9 +249,20 @@ describe("unreleased launch model gating", () => {
     ).toBe(false);
 
     const manifest = eligibleDeepManifest();
-    expect(isFutureLaunchModelManifestEligible("deep", manifest, 1)).toBe(true);
+    const binding = reviewedDeepBinding(manifest);
+    expect(isFutureLaunchModelManifestEligible("deep", manifest, 1)).toBe(
+      false,
+    );
     expect(
-      isFutureLaunchModelManifestEligible("liquidity-growth", manifest, 1),
+      isFutureLaunchModelManifestEligible("deep", manifest, 1, binding),
+    ).toBe(true);
+    expect(
+      isFutureLaunchModelManifestEligible(
+        "liquidity-growth",
+        manifest,
+        1,
+        binding,
+      ),
     ).toBe(true);
     expect(
       isFutureLaunchModelManifestEligible(
@@ -135,15 +277,38 @@ describe("unreleased launch model gating", () => {
           },
         },
         1,
+        binding,
       ),
     ).toBe(false);
     expect(
-      isFutureLaunchModelManifestEligible("deep", manifest, 11_155_111),
+      isFutureLaunchModelManifestEligible(
+        "deep",
+        manifest,
+        11_155_111,
+        binding,
+      ),
+    ).toBe(false);
+
+    const historicalV1 = eligibleDeepManifest();
+    Object.assign(historicalV1.launchModelReleases?.deep ?? {}, {
+      schemaVersion: 1,
+      internalContractRelease: "liquidity-growth-full-range-v1",
+      releaseVersion: "deep-full-range-v1",
+      releaseManifest:
+        "contracts/deployments/mainnet-deep-full-range-v1.json",
+    });
+    expect(
+      isFutureLaunchModelManifestEligible(
+        "deep",
+        historicalV1,
+        1,
+        binding,
+      ),
     ).toBe(false);
   });
 
   it.each([
-    ["sourceCommitment", runtimeCodeHash],
+    ["sourceCommitment", "0x1234"],
     ["lifecycleStatus", "launch-and-oracle-verified"],
     ["lifecycleIndependentRpcCount", 1],
     ["lifecycleOracleTransaction", null],
@@ -151,15 +316,31 @@ describe("unreleased launch model gating", () => {
     ["keeperExecutorDeploymentTransaction", null],
     ["keeperExecutorDeploymentBlock", 0],
     ["keeperExecutorSourceVerificationStatus", "pending"],
+    ["keeperReleaseVersion", "deep-keeper-v1"],
+    ["keeperCompatibilityStatus", "unverified"],
   ])("rejects an otherwise eligible mirror with invalid %s", (field, value) => {
     const manifest = eligibleDeepManifest();
+    const binding = reviewedDeepBinding(manifest);
     if (!manifest.launchModelReleases?.deep) {
       throw new Error("Deep fixture missing");
     }
     Object.assign(manifest.launchModelReleases.deep, { [field]: value });
-    expect(isFutureLaunchModelManifestEligible("deep", manifest, 1)).toBe(
-      false,
-    );
+    expect(
+      isFutureLaunchModelManifestEligible("deep", manifest, 1, binding),
+    ).toBe(false);
+  });
+
+  it("rejects any drift from the exact V2 fixed policy", () => {
+    const manifest = eligibleDeepManifest();
+    const binding = reviewedDeepBinding(manifest);
+    if (!manifest.launchModelReleases?.deep?.fixedPolicy) {
+      throw new Error("Deep V2 policy fixture missing");
+    }
+    manifest.launchModelReleases.deep.fixedPolicy.compoundCooldownSeconds =
+      1_800;
+    expect(
+      isFutureLaunchModelManifestEligible("deep", manifest, 1, binding),
+    ).toBe(false);
   });
 
   it.each(["deep", "liquidity-growth"])(

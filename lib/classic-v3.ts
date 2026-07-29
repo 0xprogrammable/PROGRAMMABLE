@@ -104,6 +104,30 @@ export type ClassicV3LaunchDisclosure = {
   }[];
 };
 
+export function validateRewardConfiguration(
+  draft: LaunchDraft,
+  launcherAccount: string,
+): ClassicV3RewardConfiguration {
+  if (draft.rewardDestinationMode === "launcher") {
+    return {
+      beneficiaries: [readBeneficiary(launcherAccount, "the launch wallet")],
+      sharesBps: [REWARD_SHARE_BPS],
+    };
+  }
+  if (draft.rewardDestinationMode === "external") {
+    return {
+      beneficiaries: [
+        readBeneficiary(draft.rewardExternalAddress, "the reward wallet"),
+      ],
+      sharesBps: [REWARD_SHARE_BPS],
+    };
+  }
+  if (draft.rewardDestinationMode === "split") {
+    return validateSplitRows(draft.rewardSplits);
+  }
+  throw new LaunchInputError("Choose a reward destination");
+}
+
 export type ClassicV3DeploymentManifest = {
   chainId: number;
   classicV3Status?: string;
@@ -217,24 +241,7 @@ export function validateClassicV3LaunchDraft(
     "Sell fee",
   );
 
-  let rewards: ClassicV3RewardConfiguration;
-  if (draft.rewardDestinationMode === "launcher") {
-    rewards = {
-      beneficiaries: [readBeneficiary(launcherAccount, "the launch wallet")],
-      sharesBps: [REWARD_SHARE_BPS],
-    };
-  } else if (draft.rewardDestinationMode === "external") {
-    rewards = {
-      beneficiaries: [
-        readBeneficiary(draft.rewardExternalAddress, "the reward wallet"),
-      ],
-      sharesBps: [REWARD_SHARE_BPS],
-    };
-  } else if (draft.rewardDestinationMode === "split") {
-    rewards = validateSplitRows(draft.rewardSplits);
-  } else {
-    throw new LaunchInputError("Choose a reward destination");
-  }
+  const rewards = validateRewardConfiguration(draft, launcherAccount);
 
   return {
     fees: {

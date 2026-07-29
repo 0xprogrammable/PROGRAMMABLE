@@ -5,10 +5,12 @@ import {
   buildProfilePortfolio,
   groupProfileRewards,
   profileClaimableWei,
+  profileHasRewardSurface,
   profileRewardsForAccount,
   sortProfileTokensByMarketCap,
 } from "../components/profile-view";
 import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
+import type { DeepV3CreatorToken } from "../lib/profile/deep-v3-profile";
 import type {
   ProfileClaim,
   ProfileToken,
@@ -90,6 +92,40 @@ const secondClassicReward = {
   claimableEth: "0.004",
   launchTransactionHash: `0x${"77".repeat(32)}`,
 } satisfies ClassicV3Reward;
+const deepV3Token = {
+  deepReleaseVersion: "deep-full-range-v3",
+  launchModel: "deep",
+  tokenAddress: thirdAddress,
+  tokenName: "Deep Three",
+  tokenSymbol: "D3",
+  imageUrl: "https://programmable.family/deep-three.png",
+  creator: firstAddress,
+  hookAddress: getAddress(
+    "0x4444444444444444444444444444444444444444",
+  ),
+  vaultAddress: getAddress(
+    "0x5555555555555555555555555555555555555555",
+  ),
+  poolId: `0x${"88".repeat(32)}`,
+  launchTransactionHash: `0x${"99".repeat(32)}`,
+  launchedAt: "2026-07-29T12:00:00.000Z",
+  marketCapNativeWad: "500",
+  pendingGrowthNativeWei: "10",
+  accruedGrowthFeesWei: "20",
+  totalGrowthEthReceivedWei: "100",
+  totalNativeSwappedWei: "40",
+  totalNativeAddedWei: "50",
+  totalTokenAddedRaw: "70",
+  lockedLiquidity: "30",
+  trustedNativeDepthWei: "1000",
+  rollingExposureWei: "40",
+  compoundCount: "1",
+  lastCompoundTimestamp: "1800000000",
+  automationAction: 0,
+  nextEligibleTimestamp: "1800000300",
+  rollingCapacityWei: "250",
+  blockedReason: "0x00000000",
+} satisfies DeepV3CreatorToken;
 
 describe("profile reward grouping", () => {
   it("keeps deployed-token order and attaches each reward to its token", () => {
@@ -211,5 +247,32 @@ describe("profile reward grouping", () => {
         firstAddress,
       ),
     ).toEqual([classicReward]);
+  });
+
+  it("shows Deep V3 creator tokens without inventing rewards or claims", () => {
+    const portfolio = buildProfilePortfolio(
+      [],
+      [],
+      [],
+      [],
+      [deepV3Token],
+    );
+
+    expect(portfolio).toHaveLength(1);
+    expect(portfolio[0]).toMatchObject({
+      token: {
+        address: thirdAddress,
+        name: "Deep Three",
+        symbol: "D3",
+        launchModel: "deep",
+      },
+      deepV3Token,
+      launchedByWallet: true,
+      classicRewards: [],
+      deepRewards: [],
+    });
+    expect(portfolio[0].claim).toBeUndefined();
+    expect(profileClaimableWei(portfolio, firstAddress)).toBe(0n);
+    expect(profileHasRewardSurface(portfolio)).toBe(false);
   });
 });

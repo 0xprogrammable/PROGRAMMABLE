@@ -2,7 +2,12 @@
 pragma solidity 0.8.26;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
+import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
+import { SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 import { LiquidityGrowthFullRangePolicyV3 as Policy } from "../src/LiquidityGrowthFullRangePolicyV3.sol";
 import { LiquidityGrowthFullRangeVaultFactoryV3 } from "../src/LiquidityGrowthFullRangeVaultFactoryV3.sol";
@@ -12,6 +17,8 @@ import { ILiquidityGrowthFeeOracleHookV2 } from "../src/interfaces/ILiquidityGro
 import { LiquidityGrowthFullRangeV3Fixture } from "./utils/LiquidityGrowthFullRangeV3Fixture.sol";
 
 contract LiquidityGrowthFullRangeV3SecurityTest is LiquidityGrowthFullRangeV3Fixture {
+    using StateLibrary for IPoolManager;
+
     function test_failedOraclePreflightRollsBackTheFeeClaimAndAllVaultState() public {
         uint256 growthBefore = _growthFeesAccrued();
         uint256 hookTotalBefore = v3Hook.totalNativeFeesAccrued();
@@ -49,6 +56,17 @@ contract LiquidityGrowthFullRangeV3SecurityTest is LiquidityGrowthFullRangeV3Fix
         assertEq(v3Vault.pendingGrowthNative(), 0);
         assertEq(v3Vault.compoundNonce(), 0);
         assertEq(v3Vault.lockedLiquidity(), 0);
+    }
+
+    function test_sustainedSamePoolCaptureAndCompoundBackrunRemainLossMakingWithinRollingExposureCap() public {
+        _matureV3Oracle();
+
+        uint256[3] memory nativeInputs = [uint256(0.02 ether), 0.1 ether, 0.5 ether];
+        for (uint256 index; index < nativeInputs.length; ++index) {
+            uint256 baseline = vm.snapshotState();
+            _assertSustainedCaptureBackrunBoundary(nativeInputs[index]);
+            assertTrue(vm.revertToState(baseline));
+        }
     }
 
     function test_forcedNativeAndUnsolicitedTokensRemainOutsideCompoundAccounting() public {
@@ -174,5 +192,69 @@ contract LiquidityGrowthFullRangeV3SecurityTest is LiquidityGrowthFullRangeV3Fix
         assertEq(capacityAfter, capacityBefore);
         assertEq(blockedAfter, blockedBefore);
         assertEq(PoolId.unwrap(v3Vault.poolKey().toId()), v3PoolId);
+    }
+
+    function _assertSustainedCaptureBackrunBoundary(uint256 nativeInput) private {
+        uint256 nativeBefore = address(this).balance;
+        uint256 tokenBefore = IERC20(address(v3Token)).balanceOf(address(this));
+
+        _ordinaryV3Buy(nativeInput);
+        for (uint256 write; write < 64; ++write) {
+            vm.warp(block.timestamp + 1);
+            vm.roll(block.number + 1);
+            _ordinaryV3Buy(0.000_001 ether);
+        }
+
+        vm.warp(block.timestamp + Policy.TWAP_WINDOW);
+        vm.roll(block.number + 150);
+
+        (LiquidityGrowthFullRangeVaultV3.WorkAction action, uint256 hookGrowthFees, uint256 pendingNative,,,) =
+            v3Vault.workState();
+        assertEq(uint8(action), uint8(LiquidityGrowthFullRangeVaultV3.WorkAction.Compound));
+
+        uint256 available = hookGrowthFees + pendingNative;
+        uint256 trustedDepth = v3Vault.trustedNativeDepth();
+        uint256 exposureCap = FullMath.mulDiv(trustedDepth, Policy.TRUSTED_DEPTH_CYCLE_CAP_BPS, Policy.BASIS_POINTS);
+        uint256 planningBudget = available;
+        if (planningBudget > Policy.MAX_COMPOUND_NATIVE) planningBudget = Policy.MAX_COMPOUND_NATIVE;
+        if (planningBudget > exposureCap) planningBudget = exposureCap;
+
+        (LiquidityGrowthZapPlannerV3.OracleQuote memory quote,) = v3Planner.plan(
+            v3Key, address(v3Vault), v3Vault.compoundNonce(), planningBudget, v3Vault.accountedTokenDust()
+        );
+        assertLe(
+            _absoluteTickDelta(quote.spotTick, quote.longTwapTick), uint24(Policy.MAX_PRE_SPOT_TWAP_DEVIATION_TICKS)
+        );
+        assertLe(
+            _absoluteTickDelta(quote.shortTwapTick, quote.longTwapTick),
+            uint24(Policy.MAX_SHORT_LONG_TWAP_DEVIATION_TICKS)
+        );
+        assertLe(
+            _absoluteTickDelta(quote.rawLongTwapTick, quote.longTwapTick),
+            uint24(Policy.MAX_RAW_TRUNCATED_TWAP_DELTA_TICKS)
+        );
+
+        LiquidityGrowthFullRangeVaultV3.CompoundResult memory result = v3Vault.compound();
+        assertLe(result.rollingExposure, exposureCap);
+        assertLe(result.swapNative + result.nativeAdded, exposureCap);
+
+        uint256 acquired = IERC20(address(v3Token)).balanceOf(address(this)) - tokenBefore;
+        swapRouter.swap(
+            v3Key,
+            SwapParams({
+                zeroForOne: false, amountSpecified: -int256(acquired), sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
+            }),
+            v3SwapSettings,
+            ""
+        );
+
+        assertEq(IERC20(address(v3Token)).balanceOf(address(this)), tokenBefore);
+        assertLt(address(this).balance, nativeBefore);
+    }
+
+    function _absoluteTickDelta(int24 left, int24 right) private pure returns (uint24) {
+        int256 delta = int256(left) - int256(right);
+        if (delta < 0) delta = -delta;
+        return uint24(uint256(delta));
     }
 }

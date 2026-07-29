@@ -922,3 +922,298 @@
     animation: none;
   }
 }
+
+/* Profile keeps ownership and rewards in one compact, readable portfolio. */
+.page {
+  max-width: 1060px;
+  padding-bottom: 44px;
+  padding-top: 28px;
+}
+
+.hero,
+.portfolio,
+.connectCard,
+.accountState {
+  background: color-mix(in srgb, var(--glass-96) 94%, transparent);
+  border-color: var(--panel-border-soft);
+  box-shadow:
+    0 1px 0 var(--card-shadow),
+    0 18px 50px var(--card-shadow-soft);
+}
+
+.hero {
+  border-radius: 26px;
+  gap: 18px;
+  min-height: 112px;
+  padding: 18px 22px;
+}
+
+.avatar {
+  border-radius: 20px;
+  font-size: 20px;
+  height: 74px;
+  width: 74px;
+}
+
+.nameRow {
+  gap: 12px;
+}
+
+.nameRow h1 {
+  font-size: clamp(31px, 3.4vw, 42px);
+}
+
+.address {
+  font-size: 11.5px;
+  margin-top: 7px;
+}
+
+.editButton {
+  background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+  border-radius: 999px;
+  min-height: 36px;
+  padding: 0 13px;
+}
+
+.connectCard {
+  border-radius: 26px;
+  margin-top: clamp(34px, 8svh, 74px);
+  max-width: 620px;
+  min-height: 270px;
+}
+
+.connectCard h1 {
+  font-size: clamp(38px, 4.2vw, 50px);
+}
+
+.connectCard p {
+  font-size: 14px;
+}
+
+.portfolio {
+  border-radius: 26px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.portfolioHeader {
+  min-height: 82px;
+  padding: 14px 20px;
+}
+
+.portfolioTitle h2 {
+  font-size: 24px;
+  font-weight: 610;
+}
+
+.portfolioTitle p {
+  font-size: 11.5px;
+  margin-top: 3px;
+}
+
+.portfolioTotal span {
+  font-size: 10.5px;
+}
+
+.portfolioTotal strong {
+  font-size: 20px;
+}
+
+.list {
+  display: grid;
+  gap: 9px;
+  padding: 13px;
+}
+
+.tokenRow {
+  background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 18px;
+  padding: 12px 14px;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms var(--ease-out);
+}
+
+.tokenRow:last-child {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+}
+
+.tokenMain {
+  gap: 16px;
+  grid-template-columns:
+    minmax(250px, 1.65fr)
+    minmax(105px, 0.54fr)
+    minmax(126px, 0.64fr)
+    minmax(136px, auto);
+  min-height: 62px;
+}
+
+.tokenIdentity {
+  gap: 13px;
+}
+
+.tokenArt {
+  border: 0;
+  border-radius: 15px;
+  height: 58px;
+  width: 58px;
+}
+
+.tokenCopy strong {
+  font-size: 16px;
+  font-weight: 640;
+}
+
+.tokenSymbol {
+  color: var(--accent-strong);
+  font-size: 11.5px;
+  font-weight: 620;
+  margin-top: 2px;
+}
+
+.tokenAddress {
+  font-size: 9.5px;
+  margin-top: 4px;
+}
+
+.metric span {
+  font-size: 10.5px;
+}
+
+.metric strong {
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.rewardMetric strong {
+  font-size: 15px;
+}
+
+.actions {
+  gap: 8px;
+}
+
+.claimButton,
+.secondaryAction {
+  border-radius: 12px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.openToken {
+  align-items: center;
+  border-radius: 10px;
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  line-height: 1;
+  min-height: 40px;
+  padding: 0 11px;
+}
+
+.rewardSettings {
+  margin-top: 7px;
+}
+
+.rewardSettings[open] {
+  margin-top: 12px;
+  padding: 12px 2px 2px;
+}
+
+.rewardSettings > summary {
+  font-size: 10.5px;
+}
+
+.settingsBody {
+  animation-duration: 160ms;
+}
+
+.emptySection {
+  min-height: 166px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tokenRow:hover {
+    background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
+    border-color: var(--border-strong);
+    transform: translate3d(0, -1px, 0);
+  }
+}
+
+@media (max-width: 980px) {
+  .tokenMain {
+    grid-template-columns: minmax(230px, 1.45fr) minmax(120px, 0.7fr) minmax(
+        150px,
+        auto
+      );
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding-bottom: 100px;
+    padding-top: 16px;
+  }
+
+  .hero {
+    border-radius: 22px;
+    min-height: 98px;
+    padding: 14px;
+  }
+
+  .avatar {
+    border-radius: 18px;
+    height: 62px;
+    width: 62px;
+  }
+
+  .portfolio {
+    border-radius: 22px;
+  }
+
+  .portfolioHeader {
+    min-height: 76px;
+    padding: 12px 15px;
+  }
+
+  .portfolioTitle h2 {
+    font-size: 22px;
+  }
+
+  .list {
+    gap: 8px;
+    padding: 9px;
+  }
+
+  .tokenRow {
+    border-radius: 16px;
+    padding: 12px;
+  }
+
+  .tokenMain {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 12px;
+  }
+
+  .tokenIdentity {
+    grid-column: 1 / -1;
+  }
+
+  .rewardMetric {
+    grid-column: 1;
+  }
+
+  .actions {
+    grid-column: 2;
+  }
+
+  .claimButton,
+  .secondaryAction,
+  .openToken {
+    height: 38px;
+    min-height: 38px;
+  }
+}

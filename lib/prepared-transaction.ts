@@ -13,6 +13,7 @@ export type PreparedTransactionChainId =
 
 export type PreparedTransactionKind =
   | "launch"
+  | "stock-quote-approval"
   | "token-to-permit2"
   | "permit2-to-router"
   | "swap"
@@ -20,7 +21,9 @@ export type PreparedTransactionKind =
   | "claim-classic-v3-rewards"
   | "update-classic-v3-payout"
   | "claim-deep-rewards"
-  | "update-deep-payout";
+  | "update-deep-payout"
+  | "claim-stock-paired-rewards"
+  | "update-stock-paired-payout";
 
 type PreparedTransactionBase = {
   chainId: PreparedTransactionChainId;
@@ -29,11 +32,15 @@ type PreparedTransactionBase = {
   value: string;
 };
 
-type PreparedApprovalTransaction = PreparedTransactionBase & {
-  kind: "token-to-permit2" | "permit2-to-router";
+type PreparedApprovalTransactionBase = PreparedTransactionBase & {
   gasLimit?: string;
   from?: never;
 };
+
+type PreparedApprovalTransaction =
+  | (PreparedApprovalTransactionBase & { kind: "stock-quote-approval" })
+  | (PreparedApprovalTransactionBase & { kind: "token-to-permit2" })
+  | (PreparedApprovalTransactionBase & { kind: "permit2-to-router" });
 
 type PreparedSwapTransaction = PreparedTransactionBase & {
   kind: "swap";
@@ -69,6 +76,12 @@ type PreparedClaimTransaction =
     })
   | (PreparedClaimTransactionBase & {
       kind: "update-deep-payout";
+    })
+  | (PreparedClaimTransactionBase & {
+      kind: "claim-stock-paired-rewards";
+    })
+  | (PreparedClaimTransactionBase & {
+      kind: "update-stock-paired-payout";
     });
 
 export type PreparedTransaction =
@@ -86,6 +99,7 @@ const UINT256_MAX = (1n << 256n) - 1n;
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 const kinds = new Set<PreparedTransactionKind>([
   "launch",
+  "stock-quote-approval",
   "token-to-permit2",
   "permit2-to-router",
   "swap",
@@ -94,6 +108,8 @@ const kinds = new Set<PreparedTransactionKind>([
   "update-classic-v3-payout",
   "claim-deep-rewards",
   "update-deep-payout",
+  "claim-stock-paired-rewards",
+  "update-stock-paired-payout",
 ]);
 const commonFields = new Set([
   "kind",
@@ -182,7 +198,9 @@ export function parsePreparedTransaction(
     kind === "claim-classic-v3-rewards" ||
     kind === "update-classic-v3-payout" ||
     kind === "claim-deep-rewards" ||
-    kind === "update-deep-payout"
+    kind === "update-deep-payout" ||
+    kind === "claim-stock-paired-rewards" ||
+    kind === "update-stock-paired-payout"
       ? claimFields
       : commonFields;
   const unsupportedField = Object.keys(record).find(
@@ -219,7 +237,9 @@ export function parsePreparedTransaction(
     kind === "claim-classic-v3-rewards" ||
     kind === "update-classic-v3-payout" ||
     kind === "claim-deep-rewards" ||
-    kind === "update-deep-payout"
+    kind === "update-deep-payout" ||
+    kind === "claim-stock-paired-rewards" ||
+    kind === "update-stock-paired-payout"
   ) {
     return {
       ...base,
@@ -262,7 +282,9 @@ export function parsePreparedTransactionForAccount(
       transaction.kind === "claim-classic-v3-rewards" ||
       transaction.kind === "update-classic-v3-payout" ||
       transaction.kind === "claim-deep-rewards" ||
-      transaction.kind === "update-deep-payout") &&
+      transaction.kind === "update-deep-payout" ||
+      transaction.kind === "claim-stock-paired-rewards" ||
+      transaction.kind === "update-stock-paired-payout") &&
     transaction.from.toLowerCase() !== connectedAccount.toLowerCase()
   ) {
     throw new Error(
@@ -323,6 +345,14 @@ export function getPreparedTransactionReview(
       successHeader: "Launch submitted",
     };
   }
+  if (kind === "stock-quote-approval") {
+    return {
+      description:
+        "Allow the Stock-Paired launcher to use the exact Initial Buy amount",
+      buttonText: "Approve Initial Buy",
+      successHeader: "Approval submitted",
+    };
+  }
   if (kind === "token-to-permit2") {
     return {
       description:
@@ -363,6 +393,20 @@ export function getPreparedTransactionReview(
   if (kind === "update-deep-payout") {
     return {
       description: "Update where your Deep rewards are paid",
+      buttonText: "Update payout address",
+      successHeader: "Payout update submitted",
+    };
+  }
+  if (kind === "claim-stock-paired-rewards") {
+    return {
+      description: "Claim your Stock-Paired creator rewards",
+      buttonText: "Claim rewards",
+      successHeader: "Reward claim submitted",
+    };
+  }
+  if (kind === "update-stock-paired-payout") {
+    return {
+      description: "Update where your Stock-Paired rewards are paid",
       buttonText: "Update payout address",
       successHeader: "Payout update submitted",
     };
