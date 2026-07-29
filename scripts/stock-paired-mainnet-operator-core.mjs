@@ -1484,6 +1484,48 @@ export function prepareStockPairedDeploymentTransaction(
   };
 }
 
+export function assertStockPairedPreparedRefresh(plan, reviewed, refreshed) {
+  if (
+    !reviewed ||
+    !refreshed ||
+    reviewed.planDigest !== plan.planDigest ||
+    !Number.isInteger(reviewed.index) ||
+    reviewed.index !== refreshed.index
+  ) {
+    throw new Error("The reviewed transaction no longer matches the release");
+  }
+  const expected = plan.transactions[reviewed.index];
+  if (
+    !expected ||
+    reviewed.field !== expected.field ||
+    refreshed.field !== expected.field ||
+    normalizeStockPairedHex(reviewed.address) !==
+      normalizeStockPairedHex(expected.address) ||
+    normalizeStockPairedHex(refreshed.address) !==
+      normalizeStockPairedHex(expected.address) ||
+    normalizeStockPairedHex(reviewed.calldataHash) !==
+      normalizeStockPairedHex(expected.calldataHash) ||
+    normalizeStockPairedHex(refreshed.calldataHash) !==
+      normalizeStockPairedHex(expected.calldataHash) ||
+    stockPairedQuantity(reviewed.nonce) !== expected.nonce ||
+    refreshed.request.nonce !== expected.nonce ||
+    stockPairedQuantity(reviewed.value) !== "0x0" ||
+    refreshed.request.value !== "0x0" ||
+    normalizeStockPairedHex(refreshed.request.from) !==
+      normalizeStockPairedHex(plan.deployer) ||
+    normalizeStockPairedHex(refreshed.request.data) !==
+      normalizeStockPairedHex(expected.data) ||
+    normalizeStockPairedHex(refreshed.request.to) !==
+      normalizeStockPairedHex(expected.to)
+  ) {
+    throw new Error("The reviewed transaction fields changed");
+  }
+  if (BigInt(refreshed.request.gas) > BigInt(expected.reviewedGasLimit)) {
+    throw new Error("The refreshed gas limit exceeds the reviewed ceiling");
+  }
+  return refreshed;
+}
+
 function normalizedTransaction(transaction) {
   if (!transaction) return null;
   return {
