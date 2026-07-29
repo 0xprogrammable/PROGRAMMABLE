@@ -121,7 +121,7 @@ Before signing, the app shows:
   `Available now`
 - The configurable fee, reward allocation, payout-wallet, CTO and Initial Buy custody
   contracts are integrated into the local Classic launch lifecycle
-- The current candidate passes 686 app tests, 10,000 reward-conservation fuzz
+- The current candidate passes 688 app tests, 10,000 reward-conservation fuzz
   cases, 1,000-by-128 stateful reward and directional-fee invariant runs, and
   pinned Ethereum and Sepolia fork lifecycles
 - ESLint, TypeScript, Forge formatting, Forge lint, the webpack production build
@@ -130,8 +130,9 @@ Before signing, the app shows:
 - Deterministic seven-contract deployment plans exist for Ethereum and Sepolia
 - The app remains fail closed until exact deployed addresses, runtime hashes and the
   deployment block are written to the production manifest
-- None of the capabilities under `Implemented, not released` are deployed on Ethereum
-  or Sepolia
+- The complete candidate is deployed, source verified and lifecycle tested on Sepolia
+- None of the capabilities under `Implemented, not released` are deployed or activated
+  on Ethereum
 - A simulated deployment sequence is only a rehearsal. It must be refreshed against
   the deployment wallet's live nonce immediately before signing
 - Existing Classic tokens cannot be retrofitted with the new reward or Initial Buy

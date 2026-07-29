@@ -33,33 +33,39 @@ The hook exposes `feeDisclosure`, `totalSwapFeeBpsFor` and `poolFeeConfig`. Regi
 
 ## Reward configuration
 
-Every pool has one deterministic `FeeSplitVaultV1`, including single-recipient launches.
+Every pool has one deterministic `ClassicRewardVaultV1`, including single-recipient launches.
 
-- One to five immutable beneficiary identities are supported.
-- Each identity is nonzero and unique.
-- Each share is positive.
-- Shares total exactly 10,000 basis points.
-- The deployer may be a beneficiary but has no special reward authority.
-- An external beneficiary does not accept or approve assignment.
-- Beneficiary identities and shares cannot change.
+- The launch configuration contains one to five nonzero, unique payout wallets.
+- Every share is positive and the launch shares total exactly 10,000 basis points.
+- The deployer may be a payout wallet but receives no special claim authority.
+- An external payout wallet does not need to accept the allocation.
+- Only the wallet that currently owns an allocation may claim its ETH or move that allocation's future rewards.
 
-Each beneficiary initially pays to itself. Only that immutable beneficiary may change its payout address or initiate its claim. A payout address receives funds but receives no claim or configuration authority.
+A payout-wallet change checkpoints the old configuration before it updates one allocation. Accrued rewards remain
+claimable by the old wallet. Only later rewards use the new wallet. The new wallet does not need to accept, and it may
+already own another allocation.
 
-Payout changes are one-step and accept any nonzero address. Contract wallets, counterfactual wallets and duplicate payout destinations are valid. Existing unclaimed and future rewards follow the current payout address.
+Programmable's disclosed CTO authority may replace the complete future reward configuration after the vault checkpoints
+the old configuration. A CTO cannot move historic rewards, change swap fees, change the Programmable share or touch
+token and liquidity custody. Each change emits the previous and next configuration hashes, epoch and approval reference.
 
-No deployer, keeper, other beneficiary or platform address can initiate a beneficiary claim.
+No deployer, keeper, other beneficiary or platform wallet can claim another wallet's creator rewards.
 
 ## Accounting and rounding
 
-Swap callbacks perform constant work. Creator fees accrue once per pool in the hook. Recipient iteration never occurs during a swap.
+Swap callbacks perform constant work. Creator fees accrue once per pool in the hook. Recipient iteration never occurs
+during a swap.
 
 The first beneficiary through the penultimate beneficiary receives:
 
 `floor(total received * share / 10,000)`
 
-The final immutable beneficiary receives the remainder after those cumulative allocations. This makes rounding deterministic and conserves all creator-fee wei.
+The final active allocation receives the remainder after those cumulative allocations. This makes rounding deterministic
+and conserves all creator-fee wei.
 
-Claims use cumulative entitlement minus cumulative claimed value. This prevents double claims and preserves entitlement when beneficiaries claim at different times.
+Every checkpoint credits claimable balances before a payout-wallet or CTO configuration change takes effect. Claims zero
+the caller's checkpointed balance before sending ETH. This prevents double claims and preserves historic entitlement
+across configuration epochs.
 
 The vault counts only ETH redeemed from the registered hook. Forced ETH is excluded from reward accounting. Its `receive` function accepts ordinary transfers only from the immutable PoolManager.
 
@@ -70,7 +76,9 @@ The vault counts only ETH redeemed from the registered hook. Forced ETH is exclu
 - Hook deployment must satisfy the exact Uniswap v4 permission-bit mask.
 - Only the registered vault may redeem creator fees from the hook.
 - Only the immutable launcher-fee recipient may claim or redirect the Programmable portion.
-- The next Mainnet release binds that recipient to the Programmable revenue wallet.
+- The next Mainnet release binds that recipient directly to
+  `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`.
+- Only the disclosed CTO authority may replace future creator-reward allocations.
 - Claims and payout changes use OpenZeppelin `ReentrancyGuardTransient`.
 - State is updated before the untrusted payout call.
 - A reverting payout reverts only that beneficiary's claim and does not block another beneficiary.
@@ -99,24 +107,32 @@ The dedicated tests cover:
 - The fixed 10-basis-point Programmable share.
 - Deployer, external and split reward configurations.
 - Five beneficiaries, uniqueness, positive shares and exact totals.
-- One-step payout changes, duplicate payout destinations and reward redirection.
+- One-step payout changes, duplicate payout destinations and future-only reward redirection.
+- CTO checkpoints, future-only configuration replacement and two-step authority transfer.
 - Every unauthorized claim and payout-change path.
 - Reverting payout isolation, no double claim and no cross-vault claim.
 - Fuzzed fee arithmetic and split conservation.
-- Stateful native-claim accounting and immutable-economics invariants.
+- Stateful native-claim accounting, reward conservation, active-share and immutable-dependency invariants.
 - A lifecycle against code-hash-pinned Ethereum mainnet PoolManager, PositionManager, Universal Router, Permit2,
   Quoter, UERC20 factory and the deployed Programmable position-forwarder factory.
 - Regression execution of the existing contract suite.
 
-Slither output is stored in `security/slither-results-classic-v3.json`. The run excluded dependency findings, mixed dependency pragma findings and Slither's false `BaseHook.getHookPermissions` implementation report. The remaining 99 detectors returned zero findings.
+The Slither 0.11.5 review is recorded in `security/slither-results-classic-v3.json`. Individual source-target runs covered
+the hook, launcher, reward vault, CTO authority, launch policy, vesting wallet and their factories. The report records the
+raw detector categories and the disposition of each finding; it does not replace the findings with an empty success
+object. The launcher produced one reviewed reentrancy-balance warning, one reviewed strict-equality warning and timestamp
+noise. The hook/factory compilation produced Slither's false `BaseHook.getHookPermissions` report. Dependency pragma
+differences are informational.
+
+Architecture and authorization diagrams are in `security/diagrams/classic-v3`.
 
 ## Remaining release gates
 
-This work is not a security audit and is not mainnet-ready solely because local and fork tests pass.
+This work is not an independent audit and is not mainnet-ready solely because local and fork tests pass. The release is
+proceeding with that residual risk disclosed.
 
 Before deployment:
 
-- Obtain independent review of the hook, vault and launcher composition.
 - Pin and record the exact deployment commit, compiler settings, constructor arguments, salts and addresses.
 - Verify every deployed source and constructor argument on Etherscan.
 - Validate scanner and indexer disclosure for directional hook fees, transfer tax, LP fee, vault and locked position.
