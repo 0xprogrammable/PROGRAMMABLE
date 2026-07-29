@@ -44,6 +44,13 @@ jobs:
         run: ./scripts/verify-mainnet-bytecode.sh
 
       - name: Run Classic lifecycle fork test
-        env:
-          ETHEREUM_RPC_URL: https://eth.drpc.org
-        run: forge test --match-contract ClassicV3MainnetForkTest
+        run: |
+          for rpc_url in https://rpc.flashbots.net https://eth.drpc.org; do
+            for attempt in 1 2; do
+              echo "Fork attempt ${attempt} with ${rpc_url}"
+              if ETHEREUM_RPC_URL="${rpc_url}" forge test --match-contract ClassicV3MainnetForkTest; then
+                exit 0
+              fi
+            done
+          done
+          exit 1
