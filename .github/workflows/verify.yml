@@ -35,6 +35,9 @@ jobs:
       - name: Verify model registry
         run: node scripts/verify-model-registry.mjs
 
+      - name: Verify configurable Classic candidate
+        run: node scripts/verify-classic-configurable-candidate.mjs
+
       - name: Verify release evidence
         run: node scripts/verify-release-evidence.mjs
 

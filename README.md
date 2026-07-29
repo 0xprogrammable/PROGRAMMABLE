@@ -71,6 +71,7 @@ change a model that has already been deployed.
 | --- | --- | --- |
 | Model registry | Current lifecycle status and documentation | [`models/registry.json`](models/registry.json) |
 | Model manifest | Release, network, contracts and review state | [`models/<model>/model.json`](models/) |
+| Candidate evidence | Source and rehearsal records awaiting an Ethereum release | [`models/classic/candidates/`](models/classic/candidates/) |
 | Contract source | Hook, launcher and custody behavior | [`src/`](src/) |
 | Test evidence | Unit, integration, fuzz, invariant and regression coverage | [`test/`](test/) |
 | Fixed parameters | Compiler, dependencies and model settings | [`spec/`](spec/) |
@@ -130,6 +131,7 @@ or mutable fee allocation. Classic has not received an independent smart-contrac
 | --- | --- |
 | Current security status | [`SECURITY.md`](SECURITY.md) |
 | Classic trust boundaries and invariants | [`docs/security/CLASSIC_PROPERTIES.md`](docs/security/CLASSIC_PROPERTIES.md) |
+| Configurable Classic candidate | [`docs/security/CLASSIC_CONFIGURABLE_PROPERTIES.md`](docs/security/CLASSIC_CONFIGURABLE_PROPERTIES.md) |
 | Protocol Revenue Deepener candidate | [`docs/security/PROTOCOL_REVENUE_DEEPENER_V1.md`](docs/security/PROTOCOL_REVENUE_DEEPENER_V1.md) |
 | Automated checks and incident process | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
 | Independent review archive | [`audits/`](audits/) |

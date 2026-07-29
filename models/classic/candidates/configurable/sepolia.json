@@ -1,0 +1,363 @@
+{
+  "schemaVersion": 1,
+  "model": "classic",
+  "internalContractRelease": "classic-v3",
+  "status": "deployment-source-and-lifecycle-verified",
+  "chainId": 11155111,
+  "releaseCommit": "7e78103fc326c6fa6b0deb38fae3560212c075a6",
+  "sourcePublicationCommit": "2c2938a5fc6220f40da584a01271941a6df324dd",
+  "sourceCommitment": "0x19b0bc50cdffb1872a581c4c410a4ebf1acfe4e7ac8ddb334d1696218f3b2b0c",
+  "startingNonce": 39,
+  "hookSalt": "0x0000000000000000000000000000000000000000000000000000000000001db9",
+  "candidatePlan": {
+    "status": "simulation-only-refresh-before-signing",
+    "observedAtBlock": 11375415,
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "startingNonce": 39,
+    "transactionCount": 7,
+    "ctoAuthority": "0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB",
+    "rewardVaultFactory": "0xB7Eb3Ae60EE2f7F2F89DA8D372529919C700e76c",
+    "initialBuyVestingWalletFactory": "0xF41568B2b4681bDbA4f5e03345597a526973F65c",
+    "launchPolicy": "0x5b36779d6B6F571A518725974Fde243a58afFEa2",
+    "hookFactory": "0xBdAbD708Ff728ca871739d05393EE60F4E63955E",
+    "feeHook": "0xE36D165CD527A282f472aA9049618341129d20Cc",
+    "launcher": "0xDAa2EA44f4cb77781714EC5Aa8144d054272f0e8",
+    "hookSalt": "0x0000000000000000000000000000000000000000000000000000000000001db9",
+    "estimatedGas": "21737178"
+  },
+  "addresses": {
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "ctoAuthority": "0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB",
+    "rewardVaultFactory": "0xB7Eb3Ae60EE2f7F2F89DA8D372529919C700e76c",
+    "initialBuyVestingWalletFactory": "0xF41568B2b4681bDbA4f5e03345597a526973F65c",
+    "launchPolicy": "0x5b36779d6B6F571A518725974Fde243a58afFEa2",
+    "hookFactory": "0xBdAbD708Ff728ca871739d05393EE60F4E63955E",
+    "feeHook": "0xE36D165CD527A282f472aA9049618341129d20Cc",
+    "launcher": "0xDAa2EA44f4cb77781714EC5Aa8144d054272f0e8",
+    "positionForwarderFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448"
+  },
+  "transactions": {
+    "ctoAuthority": "0x93cd6a1d19673e695afbf12abe34a2d23a358dc051af6e1c9a841312e2924c28",
+    "rewardVaultFactory": "0x6fa5e07eb673db3fd28f5a967d76304b3c644326c4ea80644b992ef75ad0d4c0",
+    "initialBuyVestingWalletFactory": "0xa8f1e5c7b63d000015ead887d769d42570159b5618ba9f3cfaeb4033df37cd1d",
+    "launchPolicy": "0x4cd75607a663f79aaba3ee3f7fe2cae65c6cc78955f6a88628b03185f61404e6",
+    "hookFactory": "0xfe91b3429b806ff46da1bc9f00c10f6dccfae962e9c946d559665b83790ea651",
+    "feeHook": "0x3e5b1a1a47c2acad083df242913c7bae2a3d41c40b2412d3a42371a625c1aeea",
+    "launcher": "0x1e3830de5e39f095fb4675f528819019773a4e6b475c6f3eb223603111629461"
+  },
+  "runtimeCodeHashes": {
+    "ctoAuthority": "0x7beafb575fba4ffce22da7b3f927df8248eebc6c33e77cb43ed967a91a36984c",
+    "rewardVaultFactory": "0x89f07bb8a3158631e10177259699a4cbf88a54e18901de90592042a211861c73",
+    "initialBuyVestingWalletFactory": "0x13b7578a8abd0bc0ba724b5815d9bd0aff0d07c2677c00d2577004e8c1f6d5f4",
+    "launchPolicy": "0xb6b31b6cf326784774e13f6d60f9b251dde118469a506fa3b1c124c9f11b49be",
+    "hookFactory": "0x068ef58aed42a9772bd63614d535071627ff2812001b884cf936816bff8ce163",
+    "feeHook": "0xbdca6d47e15236693168e166b60186c572e19e06276b7b37632aa26b067518e3",
+    "launcher": "0x88582cc02188c007ab11bca4c0b0e22f73e55c032e9f3edf5c08d1df48dc80b9",
+    "positionForwarderFactory": "0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc"
+  },
+  "artifactRuntime": {
+    "ctoAuthority": {
+      "bytes": 1597,
+      "codeHash": "0x7beafb575fba4ffce22da7b3f927df8248eebc6c33e77cb43ed967a91a36984c"
+    },
+    "rewardVaultFactory": {
+      "bytes": 11474,
+      "codeHash": "0x84b44e2f7b8c315b1f802012d8a1f8b1a4281478a2781e32d1cfbe1cc5469916",
+      "note": "Artifact runtime before constructor immutable references are patched"
+    },
+    "initialBuyVestingWalletFactory": {
+      "bytes": 8715,
+      "codeHash": "0x13b7578a8abd0bc0ba724b5815d9bd0aff0d07c2677c00d2577004e8c1f6d5f4"
+    },
+    "launchPolicy": {
+      "bytes": 2100,
+      "codeHash": "0xb6b31b6cf326784774e13f6d60f9b251dde118469a506fa3b1c124c9f11b49be"
+    },
+    "hookFactory": {
+      "bytes": 15702,
+      "codeHash": "0x068ef58aed42a9772bd63614d535071627ff2812001b884cf936816bff8ce163"
+    },
+    "feeHookTemplate": {
+      "bytes": 12944,
+      "codeHash": "0x58716c294584fef53aba811bff75ac6b491a1c52a1d96f2c9927e5aaa317b5e4",
+      "note": "Artifact runtime before constructor immutable references are patched"
+    },
+    "launcherTemplate": {
+      "bytes": 22933,
+      "codeHash": "0xde9d67fe0a5cae202df0dff2a4fe8a2073ab5c240205e849af1e0cfcc5e7adb6",
+      "note": "Artifact runtime before constructor immutable references are patched"
+    }
+  },
+  "officialDependencies": {
+    "poolManager": {
+      "address": "0xE03A1074c86CFeDd5C142C4F04F1a1536e203543",
+      "runtimeCodeHash": "0x09930125a49f5b95caf8052991cc14d1240dca8b43f42b899115b86867e4bce1"
+    },
+    "positionManager": {
+      "address": "0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4",
+      "runtimeCodeHash": "0xcffd746f78c2b50aafd19076bbe9c48f14446e5248fc5d76b9b4896610e51aab"
+    },
+    "stateView": {
+      "address": "0xE1Dd9c3fA50EDB962E442f60DfBc432e24537E4C",
+      "runtimeCodeHash": "0xaaed3db8eb8ebde8014ce4c8a3938496687f4c6374e17a7d735288f6c65ceb9e"
+    },
+    "v4Quoter": {
+      "address": "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227",
+      "runtimeCodeHash": "0xf481a751ac453d40c46d12360b85b05472028c1b113ab63749d69a5f8b0e47d1"
+    },
+    "uerc20Factory": {
+      "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
+      "runtimeCodeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb"
+    },
+    "permit2": {
+      "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "runtimeCodeHash": "0x96d9f5c3f0fb0423426b7f970186235b7347027f4e5c19c40c412b7d97fc3751"
+    },
+    "universalRouter": {
+      "address": "0x470FFC67b1feEEC31D16C46AC7545C98716a194c",
+      "runtimeCodeHash": "0x14b733fce7cfcca643ef884ed59d2cb2d23b3fead8692613dcee311d65555caf"
+    },
+    "positionForwarderFactory": {
+      "address": "0xaE3C324B742a7576863A546120c4280b7c9E8448",
+      "runtimeCodeHash": "0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc"
+    }
+  },
+  "sourceVerification": {
+    "status": "verified",
+    "checkedAt": "2026-07-29T13:18:38Z",
+    "primaryProvider": "Sourcify",
+    "secondaryExplorers": [
+      "Blockscout",
+      "Routescan"
+    ],
+    "etherscanStatus": "not-verified-provider-daily-submission-limit",
+    "ctoAuthority": {
+      "status": "verified",
+      "contractName": "ClassicCtoAuthorityV1",
+      "verifiedAt": "2026-07-29T13:15:57Z",
+      "sourcify": {
+        "match": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "matchId": "43019972",
+        "jobId": "b288cd56-dd72-4400-9e4f-771d7dad4a38",
+        "url": "https://sourcify.dev/server/v2/verify/b288cd56-dd72-4400-9e4f-771d7dad4a38"
+      },
+      "blockscout": {
+        "verified": true,
+        "url": "https://eth-sepolia.blockscout.com/address/0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB?tab=contract"
+      },
+      "routescan": {
+        "verified": true,
+        "url": "https://routescan.io/address/0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB?chainid=11155111"
+      },
+      "etherscan": {
+        "verified": false,
+        "reason": "Daily limit of 500 source code submissions reached"
+      }
+    },
+    "rewardVaultFactory": {
+      "status": "verified",
+      "contractName": "ClassicRewardVaultFactoryV1",
+      "verifiedAt": "2026-07-29T13:18:32Z",
+      "sourcify": {
+        "match": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "matchId": "43020094",
+        "jobId": "364a4675-e1bc-40d8-ba38-cc55199bd064",
+        "url": "https://sourcify.dev/server/v2/verify/364a4675-e1bc-40d8-ba38-cc55199bd064"
+      },
+      "blockscout": {
+        "verified": true,
+        "url": "https://eth-sepolia.blockscout.com/address/0xB7Eb3Ae60EE2f7F2F89DA8D372529919C700e76c?tab=contract"
+      },
+      "routescan": {
+        "verified": true,
+        "url": "https://routescan.io/address/0xB7Eb3Ae60EE2f7F2F89DA8D372529919C700e76c?chainid=11155111"
+      },
+      "etherscan": {
+        "verified": false,
+        "reason": "Daily limit of 500 source code submissions reached"
+      }
+    },
+    "initialBuyVestingWalletFactory": {
+      "status": "verified",
+      "contractName": "ClassicInitialBuyVestingWalletFactoryV1",
+      "verifiedAt": "2026-07-29T13:18:31Z",
+      "sourcify": {
+        "match": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "matchId": "43020091",
+        "jobId": "15159f30-444d-4304-96fa-c9a01feacee1",
+        "url": "https://sourcify.dev/server/v2/verify/15159f30-444d-4304-96fa-c9a01feacee1"
+      },
+      "blockscout": {
+        "verified": true,
+        "url": "https://eth-sepolia.blockscout.com/address/0xF41568B2b4681bDbA4f5e03345597a526973F65c?tab=contract"
+      },
+      "routescan": {
+        "verified": true,
+        "url": "https://routescan.io/address/0xF41568B2b4681bDbA4f5e03345597a526973F65c?chainid=11155111"
+      },
+      "etherscan": {
+        "verified": false,
+        "reason": "Daily limit of 500 source code submissions reached"
+      }
+    },
+    "launchPolicy": {
+      "status": "verified",
+      "contractName": "ClassicLaunchPolicyV1",
+      "verifiedAt": "2026-07-29T13:18:31Z",
+      "sourcify": {
+        "match": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "matchId": "43020092",
+        "jobId": "311809d3-5120-4891-988a-a133a31b9d73",
+        "url": "https://sourcify.dev/server/v2/verify/311809d3-5120-4891-988a-a133a31b9d73"
+      },
+      "blockscout": {
+        "verified": true,
+        "url": "https://eth-sepolia.blockscout.com/address/0x5b36779d6B6F571A518725974Fde243a58afFEa2?tab=contract"
+      },
+      "routescan": {
+        "verified": true,
+        "url": "https://routescan.io/address/0x5b36779d6B6F571A518725974Fde243a58afFEa2?chainid=11155111"
+      },
+      "etherscan": {
+        "verified": false,
+        "reason": "Daily limit of 500 source code submissions reached"
+      }
+    },
+    "hookFactory": {
+      "status": "verified",
+      "contractName": "EthCreatorFeeHookFactoryV3",
+      "verifiedAt": "2026-07-29T13:18:32Z",
+      "sourcify": {
+        "match": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "matchId": "43020093",
+        "jobId": "2d37e0df-dced-4659-85d4-f8c3260d94ba",
+        "url": "https://sourcify.dev/server/v2/verify/2d37e0df-dced-4659-85d4-f8c3260d94ba"
+      },
+      "blockscout": {
+        "verified": true,
+        "url": "https://eth-sepolia.blockscout.com/address/0xBdAbD708Ff728ca871739d05393EE60F4E63955E?tab=contract"
+      },
+      "routescan": {
+        "verified": true,
+        "url": "https://routescan.io/address/0xBdAbD708Ff728ca871739d05393EE60F4E63955E?chainid=11155111"
+      },
+      "etherscan": {
+        "verified": false,
+        "reason": "Daily limit of 500 source code submissions reached"
+      }
+    },
+    "feeHook": {
+      "status": "verified",
+      "contractName": "EthCreatorFeeHookV3",
+      "verifiedAt": "2026-07-29T13:18:33Z",
+      "sourcify": {
+        "match": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "matchId": "43020096",
+        "jobId": "9674d585-9c35-442f-8aed-2fd07e7cc6c4",
+        "url": "https://sourcify.dev/server/v2/verify/9674d585-9c35-442f-8aed-2fd07e7cc6c4"
+      },
+      "blockscout": {
+        "verified": true,
+        "url": "https://eth-sepolia.blockscout.com/address/0xE36D165CD527A282f472aA9049618341129d20Cc?tab=contract"
+      },
+      "routescan": {
+        "verified": true,
+        "url": "https://routescan.io/address/0xE36D165CD527A282f472aA9049618341129d20Cc?chainid=11155111"
+      },
+      "etherscan": {
+        "verified": false,
+        "reason": "Daily limit of 500 source code submissions reached"
+      }
+    },
+    "launcher": {
+      "status": "verified",
+      "contractName": "MemeLaunchV2",
+      "verifiedAt": "2026-07-29T13:18:38Z",
+      "sourcify": {
+        "match": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "matchId": "43020099",
+        "jobId": "34985b08-3e95-4f73-95e1-8d12ee223d61",
+        "url": "https://sourcify.dev/server/v2/verify/34985b08-3e95-4f73-95e1-8d12ee223d61"
+      },
+      "blockscout": {
+        "verified": true,
+        "url": "https://eth-sepolia.blockscout.com/address/0xDAa2EA44f4cb77781714EC5Aa8144d054272f0e8?tab=contract"
+      },
+      "routescan": {
+        "verified": true,
+        "url": "https://routescan.io/address/0xDAa2EA44f4cb77781714EC5Aa8144d054272f0e8?chainid=11155111"
+      },
+      "etherscan": {
+        "verified": false,
+        "reason": "Daily limit of 500 source code submissions reached"
+      }
+    }
+  },
+  "lifecycleEvidence": {
+    "status": "verified-current-release",
+    "releaseEligible": true,
+    "checkedAt": "2026-07-29T13:52:53.342Z",
+    "verifier": "scripts/serve-classic-v3-sepolia-canary.mjs",
+    "independentRpcCount": 2,
+    "deploymentTransactionsVerified": true,
+    "runtimeBindingsVerified": true,
+    "positionLockVerified": true,
+    "buyAndSellVerified": true,
+    "creatorClaimVerified": true,
+    "launcherClaimVerified": true,
+    "canaryToken": "0x727AB0Ae6A83D3449750a132670F39Ba0A91c415",
+    "rewardVault": "0x095aD5b7EEa592Afe8fE17Df3EaE2f9b1A323087",
+    "poolId": "0x40aefeb8694f783804bd9938efa5cc2e5d717db8b318f135732a44bb5c7afb3f",
+    "positionRecipient": "0x4d3e23754CdB7DA764d69f6389Ff462a1c037837",
+    "positionTokenId": "37888",
+    "positionLiquidity": "36819258015569838458222",
+    "buySwapFeeBps": 200,
+    "sellSwapFeeBps": 700,
+    "creatorFeesClaimedWei": "25137990488535",
+    "launcherFeesClaimedWei": "871565079543",
+    "transactions": {
+      "launch": "0xb32c229f0a54b3b0bb63064973f0ae689e9c6e3e2b7601adb4728f2257987d6a",
+      "buy": "0x7385e34bd01e47ba13372ba8c709069a01984fafe47a0f854b3c80784ea3964f",
+      "tokenApproval": "0xacf0f67ff3102b15ec9e10be3d690c3799a35ca7cb99413c1a63187463e02577",
+      "routerApproval": "0x4c180e5cbc3b7dc0723226ac3209c457c124c5d1d4cced42a999130baa9caa3d",
+      "sell": "0x69a9f182b7c805a6f5b0f69a78985e57332c2d94fc24900328fbc513930d7e98",
+      "creatorClaim": "0xd106640e755120c70995a82e4576dceb2d00d64e86dc9a078cf5e2076b19eb3d",
+      "launcherClaim": "0x3f17db829b6ee7f00d1ffbe4b56f69ac1effc7f323f227d73af43aab91c182eb",
+      "treasuryFunding": "0x15e705bb9218a3857e3443943562c34cd9b66d0f4bf13ced682b3f3302797fd6"
+    },
+    "blocks": {
+      "launch": 11375796,
+      "buy": 11375813,
+      "tokenApproval": 11375814,
+      "routerApproval": 11375815,
+      "sell": 11375817,
+      "creatorClaim": 11375818,
+      "launcherClaim": 11375842,
+      "treasuryFunding": 11375838
+    }
+  },
+  "deploymentBlocks": {
+    "ctoAuthority": 11375639,
+    "rewardVaultFactory": 11375654,
+    "initialBuyVestingWalletFactory": 11375656,
+    "launchPolicy": 11375660,
+    "hookFactory": 11375664,
+    "feeHook": 11375685,
+    "launcher": 11375703
+  }
+}

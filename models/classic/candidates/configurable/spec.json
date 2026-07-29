@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "model": "classic",
+  "candidate": "configurable",
+  "status": "candidate",
+  "sourcePublicationCommit": "2c2938a5fc6220f40da584a01271941a6df324dd",
+  "network": {
+    "name": "Sepolia",
+    "chainId": 11155111
+  },
+  "compiler": {
+    "solc": "0.8.26",
+    "evmVersion": "cancun",
+    "optimizerRuns": 1000
+  },
+  "token": {
+    "supply": "1000000000000000000000000000",
+    "decimals": 18,
+    "minimumInitialBuyWei": "600000000000000"
+  },
+  "fees": {
+    "buyFeeBps": {
+      "minimum": 100,
+      "maximum": 1000,
+      "step": 100
+    },
+    "sellFeeBps": {
+      "minimum": 100,
+      "maximum": 1000,
+      "step": 100
+    },
+    "programmableFeeBps": 10,
+    "transferTaxBps": 0,
+    "lpFeePips": 0,
+    "currency": "native ETH"
+  },
+  "rewards": {
+    "minimumBeneficiaries": 1,
+    "maximumBeneficiaries": 5,
+    "totalSharesBps": 10000,
+    "beneficiaryClaimsOnly": true,
+    "payoutWalletChangesAffectFutureAccrualOnly": true,
+    "communityTakeoverCanReplaceFutureAllocation": true
+  },
+  "initialBuyCustody": {
+    "modes": [
+      "unlocked",
+      "fixed-lock",
+      "linear-vesting",
+      "cliff-plus-linear"
+    ],
+    "minimumDurationDays": 1,
+    "maximumDurationDays": 3650,
+    "beneficiary": "launch wallet"
+  },
+  "liquidity": {
+    "pair": "native ETH",
+    "tickSpacing": 200,
+    "initialTick": 204200,
+    "positionOperator": "0x0000000000000000000000000000000000000000",
+    "positionTimelockBlock": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+  },
+  "evidence": {
+    "deployment": "models/classic/candidates/configurable/sepolia.json",
+    "security": "docs/security/CLASSIC_CONFIGURABLE_PROPERTIES.md",
+    "sourceFiles": [
+      "src/ClassicCtoAuthorityV1.sol",
+      "src/ClassicInitialBuyVestingWalletFactoryV1.sol",
+      "src/ClassicInitialBuyVestingWalletV1.sol",
+      "src/ClassicLaunchPolicyV1.sol",
+      "src/ClassicRewardVaultFactoryV1.sol",
+      "src/ClassicRewardVaultV1.sol",
+      "src/EthCreatorFeeHookFactoryV3.sol",
+      "src/EthCreatorFeeHookV3.sol",
+      "src/FeeSplitVaultFactoryV1.sol",
+      "src/FeeSplitVaultV1.sol",
+      "src/MemeLaunchV2.sol"
+    ],
+    "tests": [
+      "test/ClassicInitialBuyVestingWalletV1.t.sol",
+      "test/ClassicLaunchPolicyV1.t.sol",
+      "test/ClassicRewardVaultV1.t.sol",
+      "test/EthCreatorFeeHookV3.t.sol",
+      "test/MemeLaunchV2.t.sol",
+      "test/invariant/ClassicRewardVaultV1Invariant.t.sol",
+      "test/invariant/ClassicV3FeeAccountingInvariant.t.sol"
+    ]
+  },
+  "releaseGates": [
+    "Deploy the exact candidate to Ethereum Mainnet",
+    "Verify Mainnet runtime code and constructor bindings through two independent RPCs",
+    "Publish Mainnet source verification and a complete launch, buy, sell and claim lifecycle",
+    "Activate the production interface only after the Mainnet release manifest passes"
+  ]
+}

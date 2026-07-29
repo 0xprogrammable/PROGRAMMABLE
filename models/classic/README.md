@@ -96,3 +96,14 @@ Classic has unit, integration, fuzz, invariant and regression coverage. It has n
 smart-contract audit or public security contest. The full trust model and known limitations are in
 [`SECURITY.md`](../../SECURITY.md), with the property-to-test map in
 [`docs/security/CLASSIC_PROPERTIES.md`](../../docs/security/CLASSIC_PROPERTIES.md).
+
+## Configurable candidate
+
+A configurable Classic release is deployed and lifecycle-tested on Sepolia. It keeps the same launch model while
+adding separate buy and sell fees, up to five reward wallets, beneficiary-controlled payout changes, disclosed
+community takeovers and optional lock or vesting for the Initial Buy.
+
+This candidate is not active on Ethereum Mainnet. The current Mainnet behavior and addresses above remain unchanged.
+
+[Open the candidate record](candidates/configurable/README.md) ·
+[Inspect the Sepolia evidence](candidates/configurable/sepolia.json)

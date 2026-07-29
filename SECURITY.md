@@ -11,6 +11,7 @@ These checks are evidence, not a safety guarantee.
 | Record | Scope |
 | --- | --- |
 | [Classic security properties](docs/security/CLASSIC_PROPERTIES.md) | Trust boundaries, permissions, accounting and invariant evidence |
+| [Configurable Classic candidate](docs/security/CLASSIC_CONFIGURABLE_PROPERTIES.md) | Directional fees, reward custody and Sepolia lifecycle evidence |
 | [Protocol Revenue Deepener V1](docs/security/PROTOCOL_REVENUE_DEEPENER_V1.md) | Candidate add-only `$V4` liquidity program |
 | [Operations](docs/OPERATIONS.md) | Automated checks, monitoring status and incident response |
 | [Independent reviews](audits/README.md) | Published external reports, currently none |
@@ -69,5 +70,7 @@ The detailed property-to-test map is in
 - Metadata and project links may be indexed inconsistently by third-party services.
 - Permanent lock properties depend on the pinned forwarder and PositionManager semantics described in the
   [Classic model documentation](models/classic/README.md#liquidity-custody).
+- Configurable Classic remains a Sepolia candidate until the exact Mainnet deployment and lifecycle evidence are
+  published.
 - Protocol Revenue Deepener V1 is a candidate and is not active until an Ethereum deployment, exact source
   verification and keeper receipts are published.

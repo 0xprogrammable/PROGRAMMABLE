@@ -34,6 +34,16 @@ launch position and executes the creator's initial buy in one transaction. Its c
 [Ethereum deployment](deployments/ethereum.json) ·
 [Security properties](docs/security/CLASSIC_PROPERTIES.md)
 
+### Configurable candidate
+
+The next Classic release is deployed and lifecycle-tested on Sepolia. It adds separate buy and sell fees, up to five
+reward wallets, beneficiary-owned payout changes, disclosed community takeovers and optional custody for the Initial
+Buy. The current Ethereum release remains unchanged until equivalent Mainnet evidence is published.
+
+[Candidate behavior and evidence](models/classic/candidates/configurable/README.md) ·
+[Sepolia deployment](models/classic/candidates/configurable/sepolia.json) ·
+[Security properties](docs/security/CLASSIC_CONFIGURABLE_PROPERTIES.md)
+
 ## Deep
 
 <p>
