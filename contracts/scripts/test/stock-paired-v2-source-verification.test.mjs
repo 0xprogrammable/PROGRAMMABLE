@@ -448,6 +448,12 @@ test("accepts workflow commits only when deployed release files still match", ()
       STOCK_PAIRED_V2_MANIFEST_PATH,
     ),
   );
+  assert(!STOCK_PAIRED_V2_IMMUTABLE_RELEASE_PATHS.includes("package.json"));
+  assert(
+    STOCK_PAIRED_V2_IMMUTABLE_RELEASE_PATHS.includes(
+      "contracts/src/StockPairedLaunchV1.sol",
+    ),
+  );
   assert.doesNotThrow(() =>
     assertStockPairedV2ReleaseSnapshot(root, evidence.releaseCommit),
   );

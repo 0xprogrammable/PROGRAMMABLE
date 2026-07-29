@@ -59,9 +59,21 @@ export const STOCK_PAIRED_V2_SOURCE_FIELDS = Object.freeze(
 
 export const STOCK_PAIRED_V2_IMMUTABLE_RELEASE_PATHS = Object.freeze(
   STOCK_PAIRED_V2_RELEASE_PATHS.filter(
-    (file) => file !== STOCK_PAIRED_V2_MANIFEST_PATH,
+    (file) =>
+      file !== STOCK_PAIRED_V2_MANIFEST_PATH && file !== "package.json",
   ),
 );
+
+const STOCK_PAIRED_V2_PACKAGE_TOOLCHAIN_FIELDS = Object.freeze([
+  "packageManager",
+  "engines",
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+  "overrides",
+  "resolutions",
+]);
 
 const DEPENDENCY_COMMITS = Object.freeze({
   "liquidity-launcher": "e4660afe4f820f4a39181c7ea1f9bce6c423499f",
@@ -263,6 +275,35 @@ export function assertStockPairedV2ReleaseSnapshot(
     releaseCommit,
     STOCK_PAIRED_V2_IMMUTABLE_RELEASE_PATHS,
   );
+  assertStockPairedV2PackageToolchain(repositoryRoot, releaseCommit);
+}
+
+function stockPairedV2PackageToolchain(value) {
+  return Object.fromEntries(
+    STOCK_PAIRED_V2_PACKAGE_TOOLCHAIN_FIELDS.filter(
+      (field) => value?.[field] !== undefined,
+    ).map((field) => [field, value[field]]),
+  );
+}
+
+export function assertStockPairedV2PackageToolchain(
+  repositoryRoot,
+  releaseCommit,
+) {
+  const expected = JSON.parse(
+    checkedGit(repositoryRoot, ["show", `${releaseCommit}:package.json`]),
+  );
+  const actual = JSON.parse(
+    readFileSync(path.join(repositoryRoot, "package.json"), "utf8"),
+  );
+  if (
+    JSON.stringify(stockPairedV2PackageToolchain(actual)) !==
+    JSON.stringify(stockPairedV2PackageToolchain(expected))
+  ) {
+    throw new Error(
+      "The Stock-Paired V2 package toolchain drifted from the deployed release",
+    );
+  }
 }
 
 export function assertStockPairedV2ReleasePaths(

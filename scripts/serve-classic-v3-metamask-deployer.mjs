@@ -3,12 +3,11 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { keccak256 } from "viem";
 import {
-  DEFAULT_RPC_ENDPOINTS,
   EXPECTED_ACCOUNT,
-  MAINNET_CHAIN_ID_HEX,
-  MAINNET_DEPENDENCIES,
   assertClassicV3SequenceState,
+  classicV3EvidenceHead,
   classicV3CostRequirement,
+  getClassicV3NetworkConfig,
   loadClassicV3ReleasePlan,
   mergeClassicV3EvidenceRecord,
   prepareReviewedTransaction,
@@ -19,6 +18,9 @@ import {
 } from "./classic-v3-release-core.mjs";
 
 const HOST = "127.0.0.1";
+const NETWORK_KEY =
+  process.env.CLASSIC_V3_RELEASE_NETWORK ?? "mainnet";
+const NETWORK = getClassicV3NetworkConfig(NETWORK_KEY);
 const PORT = Number(
   process.env.PROGRAMMABLE_CLASSIC_V3_DEPLOY_PORT ?? 4176,
 );
@@ -28,7 +30,10 @@ const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..");
 const evidencePath = path.resolve(
   process.env.CLASSIC_V3_RELEASE_EVIDENCE_PATH ??
-    path.join(repositoryRoot, "tmp/classic-v3-mainnet-release-evidence.json"),
+    path.join(
+      repositoryRoot,
+      `tmp/classic-v3-${NETWORK.key}-release-evidence.json`,
+    ),
 );
 
 function normalizeHex(value) {
@@ -41,8 +46,8 @@ function normalizeQuantity(value) {
 
 function configuredRpcEndpoints() {
   const endpoints = [
-    process.env.CLASSIC_V3_RPC_A ?? DEFAULT_RPC_ENDPOINTS[0],
-    process.env.CLASSIC_V3_RPC_B ?? DEFAULT_RPC_ENDPOINTS[1],
+    process.env.CLASSIC_V3_RPC_A ?? NETWORK.defaultRpcEndpoints[0],
+    process.env.CLASSIC_V3_RPC_B ?? NETWORK.defaultRpcEndpoints[1],
   ];
   if (
     endpoints.length !== 2 ||
@@ -55,7 +60,9 @@ function configuredRpcEndpoints() {
       }
     })
   ) {
-    throw new Error("Two distinct HTTPS Mainnet RPC endpoints are required");
+    throw new Error(
+      `Two distinct HTTPS ${NETWORK.network} RPC endpoints are required`,
+    );
   }
   return endpoints;
 }
@@ -68,11 +75,15 @@ async function rpc(endpoint, method, params = []) {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) {
-    throw new Error(`Mainnet RPC ${method} returned HTTP ${response.status}`);
+    throw new Error(
+      `${NETWORK.network} RPC ${method} returned HTTP ${response.status}`,
+    );
   }
   const payload = await response.json();
   if (payload?.error) {
-    throw new Error(`Mainnet RPC ${method} failed: ${payload.error.message}`);
+    throw new Error(
+      `${NETWORK.network} RPC ${method} failed: ${payload.error.message}`,
+    );
   }
   return payload?.result;
 }
@@ -147,7 +158,7 @@ async function readRpcSnapshot(endpoint, plan) {
     rpc(endpoint, "eth_gasPrice"),
     rpc(endpoint, "eth_getBlockByNumber", ["latest", false]),
     Promise.all(
-      Object.entries(MAINNET_DEPENDENCIES).map(
+      Object.entries(plan.dependencies).map(
         async ([name, dependency]) => {
           const code = await rpc(endpoint, "eth_getCode", [
             dependency.address,
@@ -155,7 +166,9 @@ async function readRpcSnapshot(endpoint, plan) {
           ]);
           const runtimeCodeHash = keccak256(code);
           if (runtimeCodeHash !== dependency.runtimeCodeHash) {
-            throw new Error(`Official Mainnet dependency drift at ${name}`);
+            throw new Error(
+              `Official ${plan.network} dependency drift at ${name}`,
+            );
           }
           return {
             name,
@@ -172,18 +185,20 @@ async function readRpcSnapshot(endpoint, plan) {
     ),
   ]);
 
-  if (normalizeQuantity(chainId) !== MAINNET_CHAIN_ID_HEX) {
-    throw new Error("RPC is not connected to Ethereum Mainnet");
+  if (normalizeQuantity(chainId) !== plan.chainIdHex) {
+    throw new Error(`RPC is not connected to ${plan.network}`);
   }
   if (
     !latestBlock?.number ||
     !latestBlock?.hash ||
     !latestBlock?.baseFeePerGas
   ) {
-    throw new Error("Mainnet RPC did not return an EIP-1559 head block");
+    throw new Error(
+      `${plan.network} RPC did not return an EIP-1559 head block`,
+    );
   }
   return {
-    chainId: MAINNET_CHAIN_ID_HEX,
+    chainId: plan.chainIdHex,
     confirmedNonce: normalizeQuantity(confirmedNonce),
     pendingNonce: normalizeQuantity(pendingNonce),
     balance: normalizeQuantity(balance),
@@ -221,18 +236,22 @@ export async function readReconciledClassicV3State(
     left.pendingNonce !== right.pendingNonce ||
     !sameDeploymentState(left, right)
   ) {
-    throw new Error("Independent Mainnet RPCs disagree on release state");
+    throw new Error(
+      `Independent ${plan.network} RPCs disagree on release state`,
+    );
   }
   const blockDelta =
     BigInt(left.latestBlock) > BigInt(right.latestBlock)
       ? BigInt(left.latestBlock) - BigInt(right.latestBlock)
       : BigInt(right.latestBlock) - BigInt(left.latestBlock);
   if (blockDelta > 4n) {
-    throw new Error("Independent Mainnet RPC heads differ by more than four blocks");
+    throw new Error(
+      `Independent ${plan.network} RPC heads differ by more than four blocks`,
+    );
   }
 
   const state = {
-    chainId: MAINNET_CHAIN_ID_HEX,
+    chainId: plan.chainIdHex,
     confirmedNonce: left.confirmedNonce,
     pendingNonce: left.pendingNonce,
     balance:
@@ -366,7 +385,7 @@ async function refreshRecordedEvidence(plan, endpoints, state) {
     );
     if (JSON.stringify(records[0]) !== JSON.stringify(records[1])) {
       throw new Error(
-        "Independent Mainnet RPCs disagree on recorded release evidence",
+        `Independent ${plan.network} RPCs disagree on recorded release evidence`,
       );
     }
     const deploymentVerified =
@@ -377,7 +396,7 @@ async function refreshRecordedEvidence(plan, endpoints, state) {
       plan,
       entry.index,
       records[0],
-      state.latestBlock,
+      classicV3EvidenceHead(state, records[0]),
       deploymentVerified,
     );
     changed = true;
@@ -397,7 +416,9 @@ async function recordTransaction(plan, endpoints, index, hash) {
     ),
   );
   if (JSON.stringify(records[0]) !== JSON.stringify(records[1])) {
-    throw new Error("Independent Mainnet RPCs disagree on the transaction");
+    throw new Error(
+      `Independent ${plan.network} RPCs disagree on the transaction`,
+    );
   }
 
   const state = await readReconciledClassicV3State(plan, endpoints);
@@ -415,7 +436,7 @@ async function recordTransaction(plan, endpoints, index, hash) {
     plan,
     index,
     records[0],
-    state.latestBlock,
+    classicV3EvidenceHead(state, records[0]),
     deploymentVerified,
   );
   await writeClassicV3Evidence(evidencePath, evidence);
@@ -476,17 +497,17 @@ function renderHtml(plan) {
   <header>
     <div>
       <h1>Classic release</h1>
-      <p>Four reviewed Mainnet transactions. MetaMask remains the only signer.</p>
+      <p>Seven reviewed ${plan.network} transactions. MetaMask remains the only signer.</p>
     </div>
     <div class="bar">
-      <button id="switch">Switch to Mainnet</button>
+      <button id="switch">Switch to ${plan.network}</button>
       <button id="connect" class="primary">Connect MetaMask</button>
     </div>
   </header>
   <section class="card">
     <div class="facts">
       <div class="fact"><span>Required account</span><code id="account">${plan.expectedAccount}</code></div>
-      <div class="fact"><span>Network</span><strong>Ethereum Mainnet</strong></div>
+      <div class="fact"><span>Network</span><strong>${plan.network}</strong></div>
       <div class="fact"><span>Source commitment</span><code>${plan.sourceCommitment}</code></div>
     </div>
     <div class="bar" style="justify-content:space-between">
@@ -610,8 +631,8 @@ function renderHtml(plan) {
   }
   async function ensureMainnet() {
     const chainId = String(await request("eth_chainId")).toLowerCase();
-    if (chainId !== config.chainId.toString(16).replace(/^/, "0x")) {
-      throw new Error("Select Ethereum Mainnet before continuing");
+    if (chainId !== "0x" + config.chainId.toString(16)) {
+      throw new Error("Select " + config.network + " before continuing");
     }
   }
   async function ensureAccount() {
@@ -637,8 +658,8 @@ function renderHtml(plan) {
     if (inspection.status === "complete") {
       notice(
         inspection.evidence.receiptEvidenceReady
-          ? "All four transactions are finalized and recorded."
-          : "All four deployments are verified. Receipt finality evidence is still maturing.",
+          ? "All seven transactions are finalized and recorded."
+          : "All seven deployments are verified. Receipt finality evidence is still maturing.",
         "success",
       );
     } else if (inspection.status === "ready") {
@@ -674,8 +695,8 @@ function renderHtml(plan) {
     try {
       provider = injectedMetaMask();
       if (!provider) throw new Error("MetaMask is not available");
-      await request("wallet_switchEthereumChain", [{ chainId: "0x1" }]);
-      notice("Ethereum Mainnet selected.", "success");
+      await request("wallet_switchEthereumChain", [{ chainId: config.chainIdHex }]);
+      notice(config.network + " selected.", "success");
       if ((await request("eth_accounts")).length) {
         await ensureAccount();
         await refresh();
@@ -740,13 +761,17 @@ function renderHtml(plan) {
       const fresh = await serverInspection();
       if (
         fresh.status !== "ready" ||
-        fresh.prepared?.preparedDigest !== prepared.preparedDigest
+        fresh.prepared?.index !== prepared.index ||
+        fresh.prepared?.address !== prepared.address ||
+        fresh.prepared?.inputHash !== prepared.inputHash ||
+        fresh.prepared?.reviewedGasLimit !== prepared.reviewedGasLimit
       ) {
         throw new Error("Release state changed. Prepare the transaction again");
       }
-      notice("Review " + prepared.label + " in MetaMask. ETH value must be zero.");
-      const hash = await request("eth_sendTransaction", [prepared.request]);
-      notice("Transaction submitted. Recording its Mainnet receipt.");
+      const current = fresh.prepared;
+      notice("Review " + current.label + " in MetaMask. ETH value must be zero.");
+      const hash = await request("eth_sendTransaction", [current.request]);
+      notice("Transaction submitted. Recording its " + config.network + " receipt.");
       await record(hash, prepared.index);
       clearPreparation();
       await refresh();
@@ -838,7 +863,7 @@ function checkOutput(inspection) {
 }
 
 async function main() {
-  const plan = await loadClassicV3ReleasePlan(repositoryRoot);
+  const plan = await loadClassicV3ReleasePlan(repositoryRoot, NETWORK.key);
   const endpoints = configuredRpcEndpoints();
   const inspection = await inspectRelease(plan, endpoints);
   if (process.argv.includes("--check")) {
@@ -886,7 +911,7 @@ async function main() {
       } catch (error) {
         const message = error?.message ?? String(error);
         const retryable =
-          message.includes("not visible on both Mainnet RPCs") ||
+          message.includes("not visible on both RPCs") ||
           message.includes("RPCs disagree on the transaction");
         sendJson(response, retryable ? 409 : 400, { error: message });
       }
@@ -899,7 +924,7 @@ async function main() {
       `Programmable Classic V3 release console: http://${HOST}:${PORT}`,
     );
     console.log(
-      `Loaded four reviewed transactions. Evidence: ${evidencePath}`,
+      `Loaded seven reviewed transactions. Evidence: ${evidencePath}`,
     );
   });
 }

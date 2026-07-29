@@ -23,7 +23,9 @@ export const ADAPTIVE_MAX_CURVE_POINTS = 8;
 export const CLASSIC_V3_MIN_FEE_BPS = 100;
 export const CLASSIC_V3_MAX_FEE_BPS = 1_000;
 export const CLASSIC_V3_FEE_STEP_BPS = 100;
-export const CLASSIC_V3_MAX_REWARD_BENEFICIARIES = 8;
+export const CLASSIC_V3_MAX_REWARD_BENEFICIARIES = 5;
+export const CLASSIC_INITIAL_BUY_MIN_DURATION_DAYS = 1;
+export const CLASSIC_INITIAL_BUY_MAX_DURATION_DAYS = 3_650;
 export const REWARD_SHARE_BPS = 10_000;
 export const DEEP_GROWTH_TARGET_WEI = 50_000_000_000_000_000n;
 export const DEEP_GROWTH_TARGET_ETH = "0.05";
@@ -42,6 +44,11 @@ export type LaunchModel =
   | "deep"
   | "stock-paired";
 export type RewardDestinationMode = "launcher" | "external" | "split";
+export type ClassicInitialBuyCustodyMode =
+  | "unlocked"
+  | "fixed-lock"
+  | "linear"
+  | "cliff-linear";
 
 export type AdaptiveCurvePointDraft = {
   fdvIndex: number;
@@ -96,6 +103,9 @@ export type LaunchDraft = {
   rewardDestinationMode: RewardDestinationMode;
   rewardExternalAddress: string;
   rewardSplits: RewardSplitDraft[];
+  initialBuyCustodyMode: ClassicInitialBuyCustodyMode;
+  initialBuyDurationDays: string;
+  initialBuyCliffDays: string;
   updatedAt: string;
 };
 
@@ -146,6 +156,9 @@ export function createEmptyDraft(): LaunchDraft {
       { beneficiary: "", sharePercent: "50" },
       { beneficiary: "", sharePercent: "50" },
     ],
+    initialBuyCustodyMode: "unlocked",
+    initialBuyDurationDays: "30",
+    initialBuyCliffDays: "7",
     updatedAt: new Date(0).toISOString(),
   };
 }
@@ -158,6 +171,9 @@ export function createClassicV3Draft(): LaunchDraft {
     buySwapFeePercent: "1",
     sellSwapFeePercent: "1",
     rewardDestinationMode: "launcher",
+    initialBuyCustodyMode: "unlocked",
+    initialBuyDurationDays: "30",
+    initialBuyCliffDays: "7",
   };
 }
 
