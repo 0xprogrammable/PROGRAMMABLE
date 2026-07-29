@@ -713,6 +713,7 @@ function TokenDetailContent({
     sendTransaction,
   } = useWallet();
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
   const [hoveredMarketCap, setHoveredMarketCap] = useState<string | null>(
     null,
   );
@@ -768,18 +769,24 @@ function TokenDetailContent({
     : null;
 
   async function copyAddress() {
+    if (copyResetTimer.current !== null) {
+      window.clearTimeout(copyResetTimer.current);
+    }
+    setCopyError("");
     try {
       await navigator.clipboard.writeText(token.tokenAddress);
       setCopied(true);
-      if (copyResetTimer.current !== null) {
-        window.clearTimeout(copyResetTimer.current);
-      }
       copyResetTimer.current = window.setTimeout(
         () => setCopied(false),
         1600,
       );
     } catch {
       setCopied(false);
+      setCopyError("Could not copy address");
+      copyResetTimer.current = window.setTimeout(
+        () => setCopyError(""),
+        2400,
+      );
     }
   }
 
@@ -1195,11 +1202,19 @@ function TokenDetailContent({
           )}
         </aside>
       </div>
+      {copyError ? (
+        <div className="toast-region" aria-live="assertive" aria-atomic="true">
+          <p className="toast" role="alert">
+            {copyError}
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 export function TokenDetailView({ address }: { address: string }) {
+  const { wallet: activeWallet } = useWallet();
   const normalizedAddress = isAddress(address) ? getAddress(address) : null;
   const [retryKey, setRetryKey] = useState(0);
   const requestKey = `${normalizedAddress ?? "invalid"}\u0000${retryKey}`;
@@ -1290,6 +1305,9 @@ export function TokenDetailView({ address }: { address: string }) {
   if (activeState.phase === "ready") {
     return (
       <TokenDetailContent
+        key={`${activeState.token.tokenAddress}:${
+          activeWallet?.account.toLowerCase() ?? "disconnected"
+        }`}
         token={activeState.token}
         chainId={activeState.chainId}
       />

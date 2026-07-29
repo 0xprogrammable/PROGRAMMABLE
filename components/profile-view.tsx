@@ -3101,12 +3101,17 @@ function ClassicAllocationSettings({
             spellCheck={false}
             autoComplete="off"
             aria-label={`New payout address for allocation ${allocation.allocationIndex + 1}`}
+            disabled={payoutPending || actionCanCheckStatus(payoutState)}
             onChange={(event) => setPayoutDraft(event.target.value)}
           />
           <button
             className={styles.secondaryAction}
             type="button"
-            disabled={!ownsAllocation || payoutPending}
+            disabled={
+              !ownsAllocation ||
+              payoutPending ||
+              payoutState?.status === "confirmed"
+            }
             onClick={() =>
               onAction(
                 reward,
@@ -3116,16 +3121,12 @@ function ClassicAllocationSettings({
               )
             }
           >
-            {payoutState?.status === "wallet"
-              ? "Confirm in wallet"
-              : payoutState?.status === "confirming"
-                ? "Confirming"
-                : "Save"}
+            {payoutActionLabel(payoutState)}
           </button>
           <button
             className={styles.textAction}
             type="button"
-            disabled={payoutPending}
+            disabled={payoutPending || actionCanCheckStatus(payoutState)}
             onClick={() => {
               setPayoutDraft(allocation.payoutAddress);
               setEditingPayout(false);
@@ -3263,7 +3264,11 @@ function StockPairedRewardSettings({
           ) : (
             <div className={styles.payoutRow}>
               <a
-                href={`https://etherscan.io/address/${reward.payoutAddress}`}
+                href={`${
+                  chainId === 11_155_111
+                    ? "https://sepolia.etherscan.io"
+                    : "https://etherscan.io"
+                }/address/${reward.payoutAddress}`}
                 target="_blank"
                 rel="noreferrer"
               >

@@ -5,6 +5,7 @@ import {
   isDocsNavigationItemActive,
   normalizeDocsHash,
   pickActiveDocsSection,
+  resolveDocsLocationTarget,
 } from "../components/docs-navigation";
 import {
   getDocsSearchResults,
@@ -37,6 +38,29 @@ describe("Docs navigation state", () => {
   it("falls back to Overview for missing or unknown hashes", () => {
     expect(normalizeDocsHash("")).toBe("/docs#overview");
     expect(normalizeDocsHash("#unknown")).toBe("/docs#overview");
+  });
+
+  it("canonicalizes a duplicated topic hash", () => {
+    expect(normalizeDocsHash("#overview#overview")).toBe("/docs#overview");
+    expect(normalizeDocsHash("#rewards#rewards")).toBe("/docs#rewards");
+  });
+
+  it("resolves browser Back and Forward hashes to one deterministic scroll target", () => {
+    expect(resolveDocsLocationTarget("#rewards")).toEqual({
+      href: "/docs#rewards",
+      sectionId: "rewards",
+      shouldScroll: true,
+    });
+    expect(resolveDocsLocationTarget("#unknown")).toEqual({
+      href: "/docs#overview",
+      sectionId: "overview",
+      shouldScroll: true,
+    });
+    expect(resolveDocsLocationTarget("")).toEqual({
+      href: "/docs#overview",
+      sectionId: "overview",
+      shouldScroll: false,
+    });
   });
 
   it("keeps model routes active independently of the overview hash", () => {
@@ -118,11 +142,19 @@ describe("Docs navigation state", () => {
     const rewardResults = getDocsSearchResults("reward");
 
     expect(launchResults.length).toBeGreaterThan(0);
-    expect(launchResults[0]?.title).toBe("Launching a token");
+    expect(launchResults[0]?.title).toBe("Launch flow");
     expect(rewardResults.length).toBeGreaterThan(0);
     expect(rewardResults[0]?.title).toBe("Creator rewards");
     expect(rewardResults).not.toEqual(launchResults);
     expect(getDocsSearchResults("")).toEqual([]);
+  });
+
+  it("describes launch-model availability without implying a public release", () => {
+    const deepResults = getDocsSearchResults("deep");
+    const stockResults = getDocsSearchResults("stock");
+
+    expect(deepResults[0]?.description).toContain("unreleased");
+    expect(stockResults[0]?.description).toContain("restricted");
   });
 
   it("opens keyboard navigation on the first or last result", () => {

@@ -218,10 +218,15 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .app-frame > main,
-.site-header,
 .mobile-nav {
   position: relative;
   z-index: 1;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .route-transition {
@@ -229,7 +234,7 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .route-transition-docs {
-  animation: none;
+  animation-duration: 180ms;
 }
 
 .route-transition:focus {
