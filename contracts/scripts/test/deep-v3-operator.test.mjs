@@ -919,6 +919,23 @@ test("operator entrypoints are localhost-only, explicit, and V3-only", () => {
       files[3].indexOf("await writeDeepV3LifecycleFiles"),
   );
 
+  const sourceVerifier = readFileSync(
+    path.join(
+      root,
+      "contracts/scripts/verify-deep-v3-sources.mjs",
+    ),
+    "utf8",
+  );
+  assert.ok(
+    sourceVerifier.includes(
+      "DEEP_V3_RUNTIME_FIELDS.map((field)",
+    ),
+  );
+  assert.ok(sourceVerifier.includes("assertDeepV3EtherscanBuildInput"));
+  assert.ok(sourceVerifier.includes('for (const verifier of ["etherscan", "sourcify"])'));
+  assert.ok(sourceVerifier.includes("etherscan-exact-sourcify-match"));
+  assert.ok(!/PRIVATE_KEY|MNEMONIC|eth_sendRawTransaction/.test(sourceVerifier));
+
   const packageJson = JSON.parse(
     readFileSync(path.join(root, "package.json"), "utf8"),
   );
