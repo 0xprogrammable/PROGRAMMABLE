@@ -80,9 +80,10 @@
   font-size: clamp(32px, 3vw, 40px);
   font-weight: 570;
   letter-spacing: -0.045em;
-  line-height: 1;
+  line-height: 1.08;
   min-width: 0;
   overflow: hidden;
+  padding-bottom: 0.06em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
