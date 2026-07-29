@@ -155,12 +155,12 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain('data-launch-model-option="deep"');
     expect(html).toContain("<strong>Classic</strong>");
     expect(html).toContain("<strong>Deep</strong>");
-    expect(html).toContain("Verification pending");
+    expect(html).toContain("Coming soon");
     expect(html).toContain(
       'aria-describedby="launch-model-deep-description launch-model-deep-details"',
     );
     expect(html).toContain(
-      "Trading fees buy the token and add both assets",
+      "Every cycle uses trading fees to add ETH and tokens",
     );
     expect(html).not.toMatch(/adaptive/i);
     expect(html).not.toContain("LiquidityGrowth");
@@ -171,11 +171,11 @@ describe("unreleased launch model gating", () => {
     const html = renderToStaticMarkup(createElement(DeepPresetStep));
 
     expect(html).toContain("<h2");
-    expect(html).toContain("Deep liquidity");
+    expect(html).toContain("How Deep works");
     expect(html).toContain(
       "The growth fee buys the token and adds both assets",
     );
-    expect(html).toContain("<summary>How Deep works</summary>");
+    expect(html).toContain("<summary>Execution details</summary>");
     expect(html).toContain("1.00%");
     expect(html).toContain("0.90%");
     expect(html).toContain("0.10%");
@@ -183,7 +183,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain("has not received an independent external audit");
   });
 
-  it("renders only the fixed V3 fee and initial-buy controls for Deep", () => {
+  it("keeps the Deep launch controls limited to the initial buy", () => {
     const html = renderToStaticMarkup(
       createElement(DeepFeeStep, {
         draft: createDeepDraft(),
@@ -192,12 +192,11 @@ describe("unreleased launch model gating", () => {
       }),
     );
 
-    expect(html).toContain("Fixed 1.00% Deep fee");
-    expect(html).toContain(">Deep fee</span>");
-    expect(html).toContain("Pool growth 0.90%");
-    expect(html).toContain("Programmable 0.10%");
     expect(html).toContain("Initial Buy");
+    expect(html).toContain("ETH added when the token launches");
     expect(html).not.toContain(">Max<");
+    expect(html).not.toContain("Deep fee");
+    expect(html).not.toContain("Pool growth");
     expect(html).not.toContain("<select");
     expect(html).not.toContain("Another wallet");
     expect(html).not.toContain("Split rewards");
