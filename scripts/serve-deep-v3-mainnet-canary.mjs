@@ -18,10 +18,9 @@ import {
   DEEP_V3_CANARY_GAS_CEILINGS,
   DEEP_V3_CANARY_INITIAL_BUY_WEI,
   DEEP_V3_CHAIN_ID_HEX,
-  DEEP_V3_MAX_FEE_PER_GAS_WEI,
-  DEEP_V3_MAX_PRIORITY_FEE_PER_GAS_WEI,
   assertDeepV3ReleaseSourcesMatchCommit,
   assertDeepV3RpcUrls,
+  buildDeepV3DeploymentFeePolicy,
   buildDeepV3CanaryIdentity,
   decideDeepV3CanaryAction,
   deepV3AutomationAbi,
@@ -72,6 +71,14 @@ async function rpc(url, method, params = []) {
     throw new Error(`${method} failed: ${payload.error.message}`);
   }
   return payload?.result;
+}
+
+async function optionalRpc(url, method, params = []) {
+  try {
+    return await rpc(url, method, params);
+  } catch {
+    return null;
+  }
 }
 
 async function contractRead(
@@ -192,6 +199,8 @@ async function observe(url, manifest, identity) {
     pendingNonce,
     balance,
     block,
+    gasPricePerGas,
+    maxPriorityFeePerGas,
     predicted,
   ] = await Promise.all([
     rpc(url, "eth_chainId"),
@@ -199,6 +208,8 @@ async function observe(url, manifest, identity) {
     rpc(url, "eth_getTransactionCount", [account, "pending"]),
     rpc(url, "eth_getBalance", [account, "latest"]),
     rpc(url, "eth_getBlockByNumber", ["latest", false]),
+    rpc(url, "eth_gasPrice"),
+    optionalRpc(url, "eth_maxPriorityFeePerGas"),
     contractRead(
       url,
       manifest.addresses.launcher,
@@ -222,6 +233,11 @@ async function observe(url, manifest, identity) {
     blockHash: normalizeDeepV3Hex(block.hash),
     timestamp: Number(BigInt(block.timestamp)),
     baseFeePerGas: BigInt(block.baseFeePerGas ?? 0).toString(),
+    gasPricePerGas: BigInt(gasPricePerGas).toString(),
+    maxPriorityFeePerGas:
+      maxPriorityFeePerGas === null
+        ? null
+        : BigInt(maxPriorityFeePerGas).toString(),
     launched,
     token,
     vault: null,
@@ -371,21 +387,13 @@ function reconcile(states) {
 }
 
 function feePolicy(states) {
-  const baseFee = states
-    .map((state) => BigInt(state.baseFeePerGas))
-    .reduce((left, right) => (left > right ? left : right));
-  const priority =
-    2_000_000_000n < DEEP_V3_MAX_PRIORITY_FEE_PER_GAS_WEI
-      ? 2_000_000_000n
-      : DEEP_V3_MAX_PRIORITY_FEE_PER_GAS_WEI;
-  const maxFeePerGas = baseFee * 2n + priority;
-  if (
-    baseFee <= 0n ||
-    maxFeePerGas > DEEP_V3_MAX_FEE_PER_GAS_WEI
-  ) {
-    throw new Error("Current Mainnet fees exceed the canary policy");
-  }
-  return { maxFeePerGas, maxPriorityFeePerGas: priority };
+  return buildDeepV3DeploymentFeePolicy(
+    states.map((state) => ({
+      baseFeePerGas: state.baseFeePerGas,
+      gasPricePerGas: state.gasPricePerGas,
+      maxPriorityFeePerGas: state.maxPriorityFeePerGas,
+    })),
+  );
 }
 
 async function simulate(url, request) {
