@@ -8,11 +8,13 @@ import {
   useState,
   type ChangeEvent,
   type Dispatch,
+  type ReactNode,
   type SetStateAction,
 } from "react";
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   CircleCheck,
   ImagePlus,
   RotateCcw,
@@ -101,6 +103,22 @@ const emptyTokenImageState: TokenImageState = {
   message: "",
 };
 const stockPairedLocalPreview = isStockPairedLocalPreviewEnabled();
+const STOCK_PAIRED_DISPLAY_NAMES: Record<string, string> = {
+  NVDAon: "NVIDIA",
+  SPYon: "S&P 500",
+  GOOGLon: "Alphabet",
+  SLVon: "Silver",
+  TSLAon: "Tesla",
+  AAPLon: "Apple",
+};
+
+function stockPairedDisplayName(symbol: string, fallback: string) {
+  return STOCK_PAIRED_DISPLAY_NAMES[symbol] ?? fallback;
+}
+
+function stockPairedLogoUrl(symbol: string) {
+  return `https://cdn.ondo.finance/tokens/logos/${symbol.toLowerCase()}_160x160.png`;
+}
 
 export function findIndexedLaunch(
   value: unknown,
@@ -777,6 +795,67 @@ function LaunchBuilderFormView({
     }
   }
 
+  const launchStatus: ReactNode = formError ? (
+    <p className="form-error" role="alert">
+      {formError}
+    </p>
+  ) : indexedLaunch ? (
+    <p>
+      {indexedLaunch.name} <span>·</span> ${indexedLaunch.symbol}
+    </p>
+  ) : transactionHash ? (
+    <a
+      className="transaction-link"
+      href={`${
+        wallet?.chainId === "0xaa36a7"
+          ? "https://sepolia.etherscan.io"
+          : "https://etherscan.io"
+      }/tx/${transactionHash}`}
+      target="_blank"
+      rel="noreferrer"
+    >
+      Confirming launch
+      <span>{shortenAddress(transactionHash)}</span>
+    </a>
+  ) : null;
+
+  const launchAction: ReactNode = indexedLaunch ? (
+    <Link
+      className="primary-button classic-launch-button"
+      href={indexedLaunch.href}
+    >
+      View your token
+    </Link>
+  ) : (
+    <button
+      className="primary-button classic-launch-button"
+      type="submit"
+      disabled={
+        launching ||
+        Boolean(transactionHash) ||
+        (model === "classic-v3" && !classicV3LaunchAvailable) ||
+        (model === "deep" && !deepLaunchAvailable) ||
+        (model === "stock-paired" && !stockPairedLaunchAllowed)
+      }
+    >
+      {model === "deep" && !deepLaunchAvailable
+        ? "Deep is being finalized"
+        : model === "stock-paired" && !stockPairedLaunchAllowed
+          ? "Stock-Paired is coming soon"
+          : model === "classic-v3" && !classicV3LaunchAvailable
+            ? "Classic is not deployed"
+            : launchPhase === "preparing"
+              ? "Preparing launch"
+              : launchPhase === "confirming"
+                ? "Confirm in wallet"
+                : transactionHash
+                  ? "Confirming launch"
+                  : wallet
+                    ? "Launch token"
+                    : "Connect wallet"}
+    </button>
+  );
+
   return (
     <div
       className={`launch-page page-width ${launchExperience.formPage} ${
@@ -846,6 +925,8 @@ function LaunchBuilderFormView({
               onEdit={markDraftEdited}
               settingMaxBuy={settingMaxBuy}
               onMaximumBuy={() => void setMaximumDevBuy()}
+              launchAction={launchAction}
+              launchStatus={launchStatus}
             />
           ) : (
             <FeeStep
@@ -858,75 +939,16 @@ function LaunchBuilderFormView({
           )}
         </div>
 
-        <footer
-          className={`classic-launch-footer ${
-            usesExtendedLayout ? extendedLayout.footer : ""
-          }`}
-        >
-          <div className="classic-launch-status">
-            {formError ? (
-              <p className="form-error" role="alert">
-                {formError}
-              </p>
-            ) : indexedLaunch ? (
-              <p>
-                {indexedLaunch.name} <span>·</span> ${indexedLaunch.symbol}
-              </p>
-            ) : transactionHash ? (
-              <a
-                className="transaction-link"
-                href={`${
-                  wallet?.chainId === "0xaa36a7"
-                    ? "https://sepolia.etherscan.io"
-                    : "https://etherscan.io"
-                }/tx/${transactionHash}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Confirming launch
-                <span>{shortenAddress(transactionHash)}</span>
-              </a>
-            ) : null}
-          </div>
-          {indexedLaunch ? (
-            <Link
-              className="primary-button classic-launch-button"
-              href={indexedLaunch.href}
-            >
-              View your token
-            </Link>
-          ) : (
-            <button
-              className="primary-button classic-launch-button"
-              type="submit"
-              disabled={
-                launching ||
-                Boolean(transactionHash) ||
-                (model === "classic-v3" && !classicV3LaunchAvailable) ||
-                (model === "deep" && !deepLaunchAvailable) ||
-                (model === "stock-paired" &&
-                  !stockPairedLaunchAllowed)
-              }
-            >
-              {model === "deep" && !deepLaunchAvailable
-                ? "Deep is being finalized"
-                : model === "stock-paired" &&
-                    !stockPairedLaunchAllowed
-                  ? "Stock-Paired is coming soon"
-                : model === "classic-v3" && !classicV3LaunchAvailable
-                  ? "Classic is not deployed"
-                  : launchPhase === "preparing"
-                    ? "Preparing launch"
-                    : launchPhase === "confirming"
-                      ? "Confirm in wallet"
-                      : transactionHash
-                        ? "Confirming launch"
-                        : wallet
-                          ? "Launch token"
-                          : "Connect wallet"}
-            </button>
-          )}
-        </footer>
+        {model !== "stock-paired" ? (
+          <footer
+            className={`classic-launch-footer ${
+              usesExtendedLayout ? extendedLayout.footer : ""
+            }`}
+          >
+            <div className="classic-launch-status">{launchStatus}</div>
+            {launchAction}
+          </footer>
+        ) : null}
       </form>
 
       {indexedLaunch && successOpen ? (
@@ -1851,6 +1873,8 @@ function StockPairedStep({
   onEdit,
   settingMaxBuy,
   onMaximumBuy,
+  launchAction,
+  launchStatus,
 }: {
   draft: LaunchDraft;
   account?: string;
@@ -1858,18 +1882,48 @@ function StockPairedStep({
   onEdit: () => void;
   settingMaxBuy: boolean;
   onMaximumBuy: () => void;
+  launchAction: ReactNode;
+  launchStatus: ReactNode;
 }) {
-  const displayNames: Record<string, string> = {
-    NVDAon: "NVIDIA",
-    SPYon: "S&P 500",
-    GOOGLon: "Alphabet",
-    SLVon: "Silver",
-    TSLAon: "Tesla",
-    AAPLon: "Apple",
-  };
+  const [assetListOpen, setAssetListOpen] = useState(false);
+  const [activeAssetIndex, setActiveAssetIndex] = useState(0);
+  const assetSelectRef = useRef<HTMLDivElement>(null);
+  const assetTriggerRef = useRef<HTMLButtonElement>(null);
+  const assetOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selected =
     getStockPairedEthQuoteAsset(draft.stockQuoteAsset) ??
     STOCK_PAIRED_ETH_QUOTE_ASSETS[0];
+  const selectedIndex = Math.max(
+    0,
+    STOCK_PAIRED_ETH_QUOTE_ASSETS.findIndex(
+      (asset) => asset.address.toLowerCase() === selected.address.toLowerCase(),
+    ),
+  );
+  const selectedDisplayName = stockPairedDisplayName(
+    selected.symbol,
+    selected.underlying,
+  );
+
+  useEffect(() => {
+    if (!assetListOpen) return;
+
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !assetSelectRef.current?.contains(event.target)
+      ) {
+        setAssetListOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+  }, [assetListOpen]);
+
+  useEffect(() => {
+    if (!assetListOpen) return;
+    assetOptionRefs.current[activeAssetIndex]?.focus();
+  }, [activeAssetIndex, assetListOpen]);
 
   function updateStockDraft(patch: Partial<LaunchDraft>) {
     onEdit();
@@ -1880,6 +1934,57 @@ function StockPairedStep({
       rewardExternalAddress: "",
       rewardSplits: [],
     });
+  }
+
+  function openAssetList(index = selectedIndex) {
+    setActiveAssetIndex(index);
+    setAssetListOpen(true);
+  }
+
+  function closeAssetList({ restoreFocus = true } = {}) {
+    setAssetListOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => assetTriggerRef.current?.focus());
+    }
+  }
+
+  function selectAsset(index: number) {
+    const asset = STOCK_PAIRED_ETH_QUOTE_ASSETS[index];
+    if (!asset) return;
+    updateStockDraft({ stockQuoteAsset: asset.address });
+    closeAssetList();
+  }
+
+  function onAssetOptionKeyDown(
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveAssetIndex(
+        (index + 1) % STOCK_PAIRED_ETH_QUOTE_ASSETS.length,
+      );
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveAssetIndex(
+        (index - 1 + STOCK_PAIRED_ETH_QUOTE_ASSETS.length) %
+          STOCK_PAIRED_ETH_QUOTE_ASSETS.length,
+      );
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setActiveAssetIndex(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setActiveAssetIndex(STOCK_PAIRED_ETH_QUOTE_ASSETS.length - 1);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeAssetList();
+    } else if (event.key === "Tab") {
+      setAssetListOpen(false);
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectAsset(index);
+    }
   }
 
   return (
@@ -1897,53 +2002,118 @@ function StockPairedStep({
         </div>
       </div>
 
-      <div
-        className="stock-quote-grid"
-        role="radiogroup"
-        aria-labelledby="stock-paired-title"
-      >
-        {STOCK_PAIRED_ETH_QUOTE_ASSETS.map((asset) => {
-          const active =
-            asset.address.toLowerCase() === selected.address.toLowerCase();
-          const displayName = displayNames[asset.symbol] ?? asset.underlying;
-          return (
-            <button
-              className="stock-quote-option"
-              data-selected={active ? "true" : "false"}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              aria-label={displayName}
-              key={asset.address}
-              onClick={() =>
-                updateStockDraft({ stockQuoteAsset: asset.address })
-              }
-            >
-              {/* The source is Ondo's official asset-logo CDN. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                className="stock-quote-logo"
-                src={`https://cdn.ondo.finance/tokens/logos/${asset.symbol.toLowerCase()}_160x160.png`}
-                alt=""
-                width={40}
-                height={40}
-                loading="lazy"
-              />
-              <span>{displayName}</span>
-            </button>
-          );
-        })}
+      <div className="stock-quote-select" ref={assetSelectRef}>
+        <button
+          ref={assetTriggerRef}
+          className="stock-quote-trigger"
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={assetListOpen}
+          aria-controls="stock-quote-listbox"
+          onClick={() =>
+            assetListOpen
+              ? closeAssetList({ restoreFocus: false })
+              : openAssetList()
+          }
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              openAssetList(selectedIndex);
+            }
+          }}
+        >
+          {/* The source is Ondo's official asset-logo CDN. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="stock-quote-trigger-logo"
+            src={stockPairedLogoUrl(selected.symbol)}
+            alt=""
+            width={48}
+            height={48}
+          />
+          <span className="stock-quote-trigger-copy">
+            <small>Quote asset</small>
+            <strong>{selectedDisplayName}</strong>
+          </span>
+          <ChevronDown
+            className="stock-quote-trigger-chevron"
+            aria-hidden="true"
+            size={19}
+            strokeWidth={1.8}
+          />
+        </button>
+
+        {assetListOpen ? (
+          <div
+            id="stock-quote-listbox"
+            className="stock-quote-list"
+            role="listbox"
+            aria-label="Quote asset"
+          >
+            {STOCK_PAIRED_ETH_QUOTE_ASSETS.map((asset, index) => {
+              const active =
+                asset.address.toLowerCase() === selected.address.toLowerCase();
+              const displayName = stockPairedDisplayName(
+                asset.symbol,
+                asset.underlying,
+              );
+              return (
+                <button
+                  ref={(element) => {
+                    assetOptionRefs.current[index] = element;
+                  }}
+                  className="stock-quote-option"
+                  data-active={activeAssetIndex === index ? "true" : "false"}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  key={asset.address}
+                  onClick={() => selectAsset(index)}
+                  onMouseEnter={() => setActiveAssetIndex(index)}
+                  onKeyDown={(event) => onAssetOptionKeyDown(event, index)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="stock-quote-logo"
+                    src={stockPairedLogoUrl(asset.symbol)}
+                    alt=""
+                    width={40}
+                    height={40}
+                    loading="lazy"
+                  />
+                  <span>{displayName}</span>
+                  {active ? (
+                    <Check
+                      className="stock-quote-option-check"
+                      aria-hidden="true"
+                      size={17}
+                      strokeWidth={2}
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       <div className="classic-fee-layout stock-paired-controls">
-        <div className="classic-fee-fixed" aria-label="Fixed 1.00% swap fee">
-          <span>Swap fee</span>
-          <strong>1.00%</strong>
+        <div
+          className="classic-fee-fixed stock-paired-fee-card"
+          aria-label="Fixed 1.00% swap fee"
+        >
+          <span className="stock-paired-control-heading">
+            <span>Swap fee</span>
+            <strong>1.00%</strong>
+          </span>
           <small>0.90% creator · 0.10% Programmable</small>
         </div>
 
-        <label className="meme-dev-buy" htmlFor="stock-initial-buy">
-          <span>
+        <label
+          className="meme-dev-buy stock-paired-initial-buy"
+          htmlFor="stock-initial-buy"
+        >
+          <span className="stock-paired-initial-buy-copy">
             <strong>Initial Buy</strong>
             <small>Minimum {STOCK_PAIRED_MIN_INITIAL_BUY_ETH} ETH</small>
           </span>
@@ -1972,15 +2142,15 @@ function StockPairedStep({
             <span>ETH</span>
           </span>
         </label>
+
+        <div className="stock-paired-launch-action">{launchAction}</div>
       </div>
 
-      <div className="stock-paired-disclosure">
-        <p>
-          The token you launch is not a share and is not redeemable for the
-          underlying asset. Availability and transferability depend on Ondo and
-          your jurisdiction.
-        </p>
-      </div>
+      {launchStatus ? (
+        <div className="classic-launch-status stock-paired-launch-status">
+          {launchStatus}
+        </div>
+      ) : null}
     </section>
   );
 }
