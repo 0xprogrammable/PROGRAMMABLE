@@ -20,7 +20,12 @@ import {
   useState,
 } from "react";
 
+import {
+  AnimatedMarketCap,
+  type MarketCapMetric,
+} from "@/components/animated-market-cap";
 import { ScrambleText } from "@/components/scramble-text";
+import { SiteFooter } from "@/components/site-footer";
 import {
   type LauncherToken,
   type TokenLink,
@@ -36,7 +41,7 @@ type TokenCard = {
   usesFallbackImage: boolean;
   links: TokenLink[];
   tokenAddress: `0x${string}`;
-  marketCapLabel?: string;
+  marketCap?: MarketCapMetric;
 };
 
 type TokenSort =
@@ -220,16 +225,11 @@ function getFallbackTokenImage(address: string) {
   return fallbackTokenImages[index];
 }
 
-function formatMarketCap(token: LauncherToken) {
+function getMarketCap(token: LauncherToken): MarketCapMetric | undefined {
   if (token.fdvUsdWad && /^\d+$/.test(token.fdvUsdWad)) {
     const value = Number(BigInt(token.fdvUsdWad)) / 1e18;
     if (Number.isFinite(value) && value > 0) {
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        notation: "compact",
-        maximumFractionDigits: value >= 1_000_000 ? 2 : 0,
-      }).format(value);
+      return { kind: "usd", value };
     }
   }
 
@@ -240,10 +240,11 @@ function formatMarketCap(token: LauncherToken) {
   ) {
     const value = Number(token.marketCapQuote);
     if (Number.isFinite(value) && value >= 0) {
-      return `${new Intl.NumberFormat("en-US", {
-        notation: value >= 1_000 ? "compact" : "standard",
-        maximumFractionDigits: value >= 100 ? 1 : 4,
-      }).format(value)} ${token.quoteAssetSymbol}`;
+      return {
+        kind: "quote",
+        symbol: token.quoteAssetSymbol,
+        value,
+      };
     }
   }
 
@@ -251,14 +252,7 @@ function formatMarketCap(token: LauncherToken) {
   const value = Number(token.marketCapEth);
   if (!Number.isFinite(value) || value < 0) return undefined;
 
-  const formatted =
-    value > 0 && value < 0.0001
-      ? value.toExponential(2)
-      : new Intl.NumberFormat("en-US", {
-          notation: value >= 1_000 ? "compact" : "standard",
-          maximumFractionDigits: value >= 100 ? 1 : 4,
-        }).format(value);
-  return `${formatted} ETH`;
+  return { kind: "eth", value };
 }
 
 function formatTokenAddress(address: `0x${string}`) {
@@ -310,7 +304,7 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     usesFallbackImage: !token.imageUrl?.trim(),
     links: token.links ?? [],
     tokenAddress: token.tokenAddress,
-    marketCapLabel: formatMarketCap(token),
+    marketCap: getMarketCap(token),
   }));
 }
 
@@ -576,7 +570,7 @@ export function ExploreView() {
         className="token-card-grid"
         key={`${activePage}:${sort}:${deferredQuery}`}
       >
-        {cards.map((token) => {
+        {cards.map((token, index) => {
           const copied = copiedAddress === token.tokenAddress;
           const href = `/token/${token.tokenAddress}`;
 
@@ -622,11 +616,13 @@ export function ExploreView() {
                   />
                 )}
 
-                {token.marketCapLabel ? (
-                  <span
-                    className="token-card-market-cap"
-                  >
-                    <strong>{token.marketCapLabel}</strong>
+                {token.marketCap ? (
+                  <span className="token-card-market-cap">
+                    <AnimatedMarketCap
+                      delay={index * 24}
+                      metric={token.marketCap}
+                      replayKey={`${activePage}:${sort}:${deferredQuery}`}
+                    />
                     <span>MC</span>
                   </span>
                 ) : (
@@ -684,54 +680,55 @@ export function ExploreView() {
   }
 
   return (
-    <div className="explore-page page-width">
-      <section className="explore-intro">
-        <h1 className="explore-brand-heading">
-          <span className="sr-only">Programmable</span>
-          <Image
-            className="explore-brand-logo"
-            src="/brand/loop/programmable-loop-mark-transparent-v1.png"
-            alt=""
-            width={1254}
-            height={1254}
-            priority
-          />
-        </h1>
-        <p>
-          <ScrambleText
-            text="Launch tokens that work the way you imagine"
-            duration={1100}
-          />
-        </p>
-        <button
-          className="explore-token-address"
-          type="button"
-          aria-label={
-            copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-              ? "Programmable contract address copied"
-              : "Copy Programmable contract address"
-          }
-          title={
-            copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-              ? "Copied"
-              : "Copy contract address"
-          }
-          onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
-        >
-          <code>{PROGRAMMABLE_TOKEN_ADDRESS}</code>
-          {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
-            <Check aria-hidden="true" size={13} />
-          ) : (
-            <Copy aria-hidden="true" size={13} />
-          )}
-        </button>
-      </section>
+    <>
+      <div className="explore-page page-width">
+        <section className="explore-intro">
+          <h1 className="explore-brand-heading">
+            <span className="sr-only">Programmable</span>
+            <Image
+              className="explore-brand-logo"
+              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+              alt=""
+              width={1254}
+              height={1254}
+              priority
+            />
+          </h1>
+          <p>
+            <ScrambleText
+              text="Launch tokens that work the way you imagine"
+              duration={1100}
+            />
+          </p>
+          <button
+            className="explore-token-address"
+            type="button"
+            aria-label={
+              copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
+                ? "Programmable contract address copied"
+                : "Copy Programmable contract address"
+            }
+            title={
+              copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
+                ? "Copied"
+                : "Copy contract address"
+            }
+            onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
+          >
+            <code>{PROGRAMMABLE_TOKEN_ADDRESS}</code>
+            {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
+              <Check aria-hidden="true" size={13} />
+            ) : (
+              <Copy aria-hidden="true" size={13} />
+            )}
+          </button>
+        </section>
 
-      <section className="token-section" id="tokens" aria-busy={busy}>
-        {hasPublicTokens ? (
-          <div className="token-section-heading">
-            <h2 className="sr-only">Tokens</h2>
-            <div className="token-toolbar">
+        <section className="token-section" id="tokens" aria-busy={busy}>
+          {hasPublicTokens ? (
+            <div className="token-section-heading">
+              <h2 className="sr-only">Tokens</h2>
+              <div className="token-toolbar">
               <label className="token-search">
                 <Search aria-hidden="true" size={17} />
                 <span className="sr-only">
@@ -841,17 +838,19 @@ export function ExploreView() {
                   </span>
                 </nav>
               ) : null}
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {state.phase === "ready" && busy ? (
-          <span className="sr-only" role="status">
-            Updating tokens
-          </span>
-        ) : null}
-        {renderTokenState()}
-      </section>
-    </div>
+          {state.phase === "ready" && busy ? (
+            <span className="sr-only" role="status">
+              Updating tokens
+            </span>
+          ) : null}
+          {renderTokenState()}
+        </section>
+      </div>
+      <SiteFooter />
+    </>
   );
 }
