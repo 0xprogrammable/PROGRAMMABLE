@@ -6,7 +6,6 @@ accounted for.
 | Model | Status | Documentation |
 | --- | --- | --- |
 | Classic | Available | [Read the Classic documentation](models/classic/README.md) |
-| Adaptive | In development | [Read the Adaptive design](models/adaptive/README.md) |
 | Deep | In development | [Read the Deep design](models/deep/README.md) |
 
 ## Classic
@@ -15,13 +14,6 @@ Classic launches a fixed-supply token against native ETH. The complete supply en
 position, and a disclosed fee is collected on the ETH side of swaps.
 
 [Behavior, fees, contracts and deployment evidence](models/classic/README.md)
-
-## Adaptive
-
-Adaptive introduces an immutable fee curve selected at launch. The displayed swap fee changes automatically as the
-pool moves through published onchain value bands.
-
-[Design and release requirements](models/adaptive/README.md)
 
 ## Deep
 

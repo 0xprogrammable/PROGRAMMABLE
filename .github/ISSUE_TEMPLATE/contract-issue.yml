@@ -6,14 +6,11 @@ body:
     attributes:
       value: |
         Do not disclose a vulnerability here. Use private vulnerability reporting for security-sensitive findings.
-  - type: dropdown
+  - type: input
     id: release
     attributes:
-      label: Release
-      options:
-        - Classic
-        - Unreleased main branch
-        - Other
+      label: Model or release
+      placeholder: Model name, version or unreleased main branch
     validations:
       required: true
   - type: input
