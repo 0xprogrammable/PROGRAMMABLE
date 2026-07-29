@@ -56,8 +56,11 @@ const PORT = Number(process.env.DEEP_V3_CANARY_TRADE_PORT ?? 4185);
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 4_096;
 const MAX_RPC_BLOCK_LAG = 2;
-const RPC_MIN_INTERVAL_MS = 250;
-const RPC_RETRY_DELAYS_MS = Object.freeze([750, 1_500, 3_000]);
+const RPC_MIN_INTERVAL_MS = 500;
+const RPC_RETRY_DELAYS_MS = Object.freeze([
+  1_500, 3_000, 6_000, 12_000,
+]);
+const INSPECT_CACHE_MS = 5_000;
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -73,6 +76,8 @@ const interactive = process.argv.includes("--write");
 let preparedLock = null;
 const rpcQueues = new Map();
 const rpcStartedAt = new Map();
+let inspectCache = null;
+let inspectInFlight = null;
 
 function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -593,7 +598,7 @@ async function observe(url, manifest, identity, block) {
   };
 }
 
-async function inspect(manifest, identity) {
+async function inspectFresh(manifest, identity) {
   const block = await sharedBlock();
   const snapshots = await Promise.all(
     rpcUrls.map((url) => observe(url, manifest, identity, block)),
@@ -604,6 +609,51 @@ async function inspect(manifest, identity) {
     snapshots,
   });
   return { block, snapshots, state };
+}
+
+async function inspect(
+  manifest,
+  identity,
+  { forceInspect = false } = {},
+) {
+  if (
+    !forceInspect &&
+    inspectCache &&
+    inspectCache.expiresAtMs > Date.now()
+  ) {
+    return inspectCache.value;
+  }
+  while (inspectInFlight) {
+    const current = inspectInFlight;
+    if (!forceInspect || current.forceInspect) {
+      return current.promise;
+    }
+    await current.promise.catch(() => undefined);
+  }
+  if (
+    !forceInspect &&
+    inspectCache &&
+    inspectCache.expiresAtMs > Date.now()
+  ) {
+    return inspectCache.value;
+  }
+  const current = {
+    forceInspect,
+    promise: null,
+  };
+  current.promise = inspectFresh(manifest, identity)
+    .then((value) => {
+      inspectCache = {
+        value,
+        expiresAtMs: Date.now() + INSPECT_CACHE_MS,
+      };
+      return value;
+    })
+    .finally(() => {
+      if (inspectInFlight === current) inspectInFlight = null;
+    });
+  inspectInFlight = current;
+  return current.promise;
 }
 
 async function requiredRead(
@@ -757,7 +807,12 @@ function parseAmount(value) {
   return amount;
 }
 
-async function prepareInput(manifest, identity, input, capturedAtMs) {
+async function prepareInput(
+  manifest,
+  identity,
+  input,
+  { forceInspect = false } = {},
+) {
   const batch = input?.side === "batch";
   if (
     !input ||
@@ -772,7 +827,10 @@ async function prepareInput(manifest, identity, input, capturedAtMs) {
     throw new Error("The canary trade request is invalid");
   }
   const amountIn = batch ? null : parseAmount(input.amount);
-  const { block, state } = await inspect(manifest, identity);
+  const { block, state } = await inspect(manifest, identity, {
+    forceInspect,
+  });
+  const capturedAtMs = Date.now();
   if (batch) {
     const candidate = prepareDeepV3CanaryBatchCandidate({
       manifest,
@@ -892,7 +950,7 @@ async function revalidate(manifest, identity, preparedDigest) {
     manifest,
     identity,
     preparedLock.input,
-    Date.now(),
+    { forceInspect: true },
   );
   assertDeepV3CanaryRequote({
     prepared: preparedLock.prepared,
@@ -1062,7 +1120,7 @@ async function main() {
           manifest,
           identity,
           input,
-          Date.now(),
+          { forceInspect: true },
         );
         sendJson(
           response,

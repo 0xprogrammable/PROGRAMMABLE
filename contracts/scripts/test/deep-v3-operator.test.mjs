@@ -999,6 +999,9 @@ test("operator entrypoints are localhost-only, explicit, and V3-only", () => {
   assert.ok(files[2].includes("RPC_MIN_INTERVAL_MS"));
   assert.ok(files[2].includes("RPC_RETRY_DELAYS_MS"));
   assert.ok(files[2].includes("rpcQueues"));
+  assert.ok(files[2].includes("INSPECT_CACHE_MS"));
+  assert.ok(files[2].includes("inspectInFlight"));
+  assert.ok(files[2].includes("forceInspect"));
   assert.ok(files[2].includes("RPC 1"));
   assert.ok(files[2].includes("error?.status === 429"));
   assert.ok(
