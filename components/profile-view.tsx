@@ -139,19 +139,19 @@ function formatMarketCap(token: ProfileToken) {
     const dollars = Number(BigInt(token.fdvUsdWad) / 10n ** 18n);
     if (Number.isFinite(dollars)) {
       if (dollars >= 1_000_000_000) {
-        return `$${(dollars / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B MC`;
+        return `$${(dollars / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B`;
       }
       if (dollars >= 1_000_000) {
-        return `$${(dollars / 1_000_000).toFixed(1).replace(/\.0$/, "")}M MC`;
+        return `$${(dollars / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
       }
       if (dollars >= 1_000) {
-        return `$${(dollars / 1_000).toFixed(1).replace(/\.0$/, "")}K MC`;
+        return `$${(dollars / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
       }
-      return `$${dollars.toLocaleString("en-US")} MC`;
+      return `$${dollars.toLocaleString("en-US")}`;
     }
   }
   if (token.marketCapEthWei) {
-    return `${formatEth(formatUnits(BigInt(token.marketCapEthWei), 18))} MC`;
+    return formatEth(formatUnits(BigInt(token.marketCapEthWei), 18));
   }
   if (token.marketCapQuoteWad && token.quoteAssetSymbol) {
     const value = Number(
@@ -162,7 +162,7 @@ function formatMarketCap(token: ProfileToken) {
         notation: value >= 1_000 ? "compact" : "standard",
         maximumFractionDigits: 2,
         maximumSignificantDigits: 6,
-      }).format(value)} ${token.quoteAssetSymbol} MC`;
+      }).format(value)} ${token.quoteAssetSymbol}`;
     }
   }
   return null;
@@ -1571,18 +1571,18 @@ function ProfileAccountWorkspace({
     >
       <header className={styles.portfolioHeader}>
         <div className={styles.portfolioTitle}>
-          <h2 id="profile-portfolio-title">Your portfolio</h2>
-          <p>Tokens and creator rewards</p>
+          <h2 id="profile-portfolio-title">Creator portfolio</h2>
+          <p>Your tokens and their rewards</p>
         </div>
 
         <div className={styles.portfolioStats}>
           <div className={styles.portfolioStat}>
-            <span>Tokens</span>
+            <span>Launched</span>
             <strong>{entries.length}</strong>
           </div>
           {hasRewardSurface ? (
             <div className={`${styles.portfolioStat} ${styles.portfolioTotal}`}>
-              <span>Claimable</span>
+              <span>Ready to claim</span>
               <strong>
                 {nativeClaimable > 0n
                   ? formatWei(nativeClaimable)
@@ -1638,35 +1638,43 @@ function ProfileAccountWorkspace({
       ) : null}
 
       {entries.length ? (
-        <div className={styles.list}>
-          {entries.map((entry) => (
-            <ProfilePortfolioRow
-              key={entry.token.address}
-              entry={entry}
-              account={account}
-              chainId={
-                currentReady
-                  ? data.chainId
-                  : classicReady
-                    ? classicV3Rewards.chainId
-                    : deepReady
-                      ? deepRewards.chainId
-                    : deepV3Ready
-                      ? deepV3Profile.chainId
-                    : stockPairedReady
-                      ? stockPairedRewards.chainId
-                      : undefined
-              }
-              claimActionStates={claimActionStates}
-              classicV3ActionStates={classicV3ActionStates}
-              deepActionStates={deepActionStates}
-              stockPairedActionStates={stockPairedActionStates}
-              onClaim={onClaim}
-              onClassicV3Action={onClassicV3Action}
-              onDeepAction={onDeepAction}
-              onStockPairedAction={onStockPairedAction}
-            />
-          ))}
+        <div className={styles.ledger}>
+          <div className={styles.ledgerHeader} aria-hidden="true">
+            <span>Token</span>
+            <span>Market cap</span>
+            <span>Creator rewards</span>
+            <span />
+          </div>
+          <div className={styles.list}>
+            {entries.map((entry) => (
+              <ProfilePortfolioRow
+                key={entry.token.address}
+                entry={entry}
+                account={account}
+                chainId={
+                  currentReady
+                    ? data.chainId
+                    : classicReady
+                      ? classicV3Rewards.chainId
+                      : deepReady
+                        ? deepRewards.chainId
+                        : deepV3Ready
+                          ? deepV3Profile.chainId
+                          : stockPairedReady
+                            ? stockPairedRewards.chainId
+                            : undefined
+                }
+                claimActionStates={claimActionStates}
+                classicV3ActionStates={classicV3ActionStates}
+                deepActionStates={deepActionStates}
+                stockPairedActionStates={stockPairedActionStates}
+                onClaim={onClaim}
+                onClassicV3Action={onClassicV3Action}
+                onDeepAction={onDeepAction}
+                onStockPairedAction={onStockPairedAction}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <ProfileSectionEmpty
@@ -1859,66 +1867,70 @@ function ProfilePortfolioRow({
           stockQuoteSymbol
         }`
       : "";
+  const hasClaimableReward =
+    totalClaimable > 0n || stockPairedClaimable > 0n;
 
   return (
-    <article className={styles.tokenRow}>
+    <article
+      className={`${styles.tokenRow} ${
+        hasClaimableReward ? styles.tokenRowClaimable : ""
+      }`}
+    >
       <div className={styles.tokenMain}>
-        <div className={styles.tokenHeader}>
-          <Link className={styles.tokenIdentity} href={token.href}>
-            <span className={styles.tokenArt}>
-              <Image
-                src={tokenImage}
-                alt={`${token.name} token image`}
-                fill
-                sizes="64px"
-                unoptimized={!tokenImage.startsWith("/")}
-              />
+        <Link className={styles.tokenIdentity} href={token.href}>
+          <span className={styles.tokenArt}>
+            <Image
+              src={tokenImage}
+              alt={`${token.name} token image`}
+              fill
+              sizes="58px"
+              unoptimized={!tokenImage.startsWith("/")}
+            />
+          </span>
+          <span className={styles.tokenCopy}>
+            <span className={styles.tokenNameRow}>
+              <strong>{token.name}</strong>
+              <span className={styles.tokenSymbol}>${token.symbol}</span>
             </span>
-            <span className={styles.tokenCopy}>
-              <span className={styles.tokenNameRow}>
-                <strong>{token.name}</strong>
-                <span className={styles.tokenSymbol}>${token.symbol}</span>
+            <span className={styles.tokenMeta}>
+              <span className={styles.modelLabel}>
+                {formatLaunchModel(token.launchModel)}
               </span>
-              <span className={styles.tokenMeta}>
-                <span className={styles.modelLabel}>
-                  {formatLaunchModel(token.launchModel)}
-                </span>
-                {token.launchedAt ? <span>{token.launchedAt}</span> : null}
-              </span>
-              <span className={styles.tokenAddress}>
-                {shortenAddress(token.address)}
-              </span>
+              {token.launchedAt ? <span>{token.launchedAt}</span> : null}
             </span>
-          </Link>
+            <span className={styles.tokenAddress}>
+              {shortenAddress(token.address)}
+            </span>
+          </span>
+        </Link>
 
-          <Link className={styles.openToken} href={token.href}>
-            View token
-          </Link>
+        <div className={`${styles.metric} ${styles.marketMetric}`}>
+          <span>Market cap</span>
+          <strong>{marketCap ?? "—"}</strong>
         </div>
 
-        <div className={styles.tokenMetrics}>
-          <div className={`${styles.metric} ${styles.marketMetric}`}>
-            <span>Market cap</span>
-            <strong>{marketCap ?? "—"}</strong>
-          </div>
-
-          <div className={`${styles.metric} ${styles.rewardMetric}`}>
-            <span>
-              {deepV3Token && !hasRewardSurface
-                ? "Liquidity added"
-                : "Claimable"}
-            </span>
-            <strong>
-              {deepV3Token && !hasRewardSurface
-                ? formatWei(BigInt(deepV3Token.totalNativeAddedWei))
-                : totalClaimable > 0n
-                  ? formatWei(totalClaimable)
-                  : formattedStockReward || formatWei(0n)}
-            </strong>
-            {totalClaimable > 0n && formattedStockReward ? (
-              <small>+ {formattedStockReward}</small>
-            ) : null}
-          </div>
+        <div
+          className={`${styles.metric} ${styles.rewardMetric} ${
+            hasClaimableReward ? styles.rewardMetricReady : ""
+          }`}
+        >
+          <span>
+            {deepV3Token && !hasRewardSurface
+              ? "Liquidity added"
+              : hasClaimableReward
+                ? "Ready to claim"
+                : "Creator rewards"}
+          </span>
+          <strong>
+            {deepV3Token && !hasRewardSurface
+              ? formatWei(BigInt(deepV3Token.totalNativeAddedWei))
+              : totalClaimable > 0n
+                ? formatWei(totalClaimable)
+                : formattedStockReward || formatWei(0n)}
+          </strong>
+          {totalClaimable > 0n && formattedStockReward ? (
+            <small>+ {formattedStockReward}</small>
+          ) : null}
         </div>
 
         <div className={styles.actions}>
@@ -2007,6 +2019,9 @@ function ProfilePortfolioRow({
               </button>
             ) : null,
           )}
+          <Link className={styles.openToken} href={token.href}>
+            Open
+          </Link>
         </div>
       </div>
 
