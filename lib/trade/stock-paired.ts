@@ -59,6 +59,7 @@ import {
   stockPairedV3FactoryAbi,
   stockPairedV3PoolAbi,
   stockPairedV3QuoterAbi,
+  type StockPairedV3Hop,
   type StockPairedEthRouteRuntimeCodeHashes,
 } from "./stock-paired-route";
 
@@ -443,6 +444,153 @@ export function buildStockPairedSwapTransaction(input: {
   };
 }
 
+export function buildStockPairedQuoteAssetToEthSwapTransaction(input: {
+  deployment: StockPairedTradeDeployment;
+  amountIn: bigint;
+  quotedAmountOut: bigint;
+  slippageBps: number;
+  now: bigint;
+  deadline: bigint;
+}) {
+  const { deployment, amountIn, quotedAmountOut } = input;
+  positiveAmount(amountIn, "Reward amount");
+  assertClassicDeadline(input.now, input.deadline);
+  const minimum = amountOutMinimum(quotedAmountOut, input.slippageBps);
+  const route = getStockPairedEthRoute(deployment.quoteAsset);
+  const inputCurrency = new Token(
+    deployment.chainId,
+    deployment.quoteAsset,
+    18,
+  );
+  const outputCurrency = Ether.onChain(deployment.chainId);
+  const method = SwapRouter.encodeSwaps(
+    {
+      tradeType: TradeType.EXACT_INPUT,
+      routing: {
+        inputToken: inputCurrency,
+        outputToken: outputCurrency,
+        amount: CurrencyAmount.fromRawAmount(
+          inputCurrency,
+          amountIn.toString(),
+        ),
+        quote: CurrencyAmount.fromRawAmount(
+          outputCurrency,
+          quotedAmountOut.toString(),
+        ),
+      },
+      slippageTolerance: new Percent(input.slippageBps, 10_000),
+      deadline: input.deadline.toString(),
+      urVersion: UniversalRouterVersion.V2_1_1,
+    },
+    [
+      {
+        type: "V3_SWAP_EXACT_IN",
+        recipient: ROUTER_AS_RECIPIENT,
+        amountIn,
+        amountOutMin: minimum,
+        path: encodeStockPairedV3Path(route.sellHops),
+        payerIsUser: false,
+      },
+      {
+        type: "UNWRAP_WETH",
+        recipient: ROUTER_AS_RECIPIENT,
+        amountMin: minimum,
+      },
+    ],
+  );
+  return {
+    kind: "swap" as const,
+    chainId: deployment.chainId,
+    to: deployment.universalRouter,
+    data: method.calldata as Hex,
+    value: BigInt(method.value).toString(),
+    amountIn: amountIn.toString(),
+    quotedAmountOut: quotedAmountOut.toString(),
+    amountOutMinimum: minimum.toString(),
+    slippageBps: input.slippageBps,
+    deadline: input.deadline.toString(),
+  };
+}
+
+export type StockPairedQuoteRuntimeClient = Pick<
+  StockPairedTradeRuntimeClient,
+  "call"
+>;
+
+async function quoteStockPairedV3ExactInput(
+  client: StockPairedQuoteRuntimeClient,
+  input: {
+    owner: Address;
+    hops: readonly StockPairedV3Hop[];
+    amountIn: bigint;
+  },
+) {
+  positiveAmount(input.amountIn, "Routed quote input");
+  const result = await client.call({
+    to: STOCK_PAIRED_V3_QUOTER,
+    account: input.owner,
+    data: encodeFunctionData({
+      abi: stockPairedV3QuoterAbi,
+      functionName: "quoteExactInput",
+      args: [encodeStockPairedV3Path(input.hops), input.amountIn],
+    }),
+  });
+  if (!result.data || result.data === "0x") {
+    throw new ClassicTradeUnavailableError(
+      "The Uniswap v3 quoter returned no Stock-Paired route",
+    );
+  }
+  const [amountOut, , , gasEstimate] = decodeFunctionResult({
+    abi: stockPairedV3QuoterAbi,
+    functionName: "quoteExactInput",
+    data: result.data,
+  });
+  positiveAmount(amountOut, "Routed quote output");
+  return { amountOut, gasEstimate };
+}
+
+export async function quoteStockPairedQuoteAssetToEth(
+  client: StockPairedQuoteRuntimeClient,
+  input: {
+    quoteAsset: Address;
+    owner: Address;
+    amountIn: bigint;
+  },
+) {
+  positiveAmount(input.amountIn, "Reward amount");
+  const route = getStockPairedEthRoute(input.quoteAsset);
+  const [ethQuote, usdQuote] = await Promise.all([
+    quoteStockPairedV3ExactInput(client, {
+      owner: input.owner,
+      hops: route.sellHops,
+      amountIn: input.amountIn,
+    }),
+    quoteStockPairedV3ExactInput(client, {
+      owner: input.owner,
+      hops: route.sellHops.slice(0, 1),
+      amountIn: input.amountIn,
+    }),
+  ]);
+  const reverse = await quoteStockPairedV3ExactInput(client, {
+    owner: input.owner,
+    hops: route.buyHops,
+    amountIn: ethQuote.amountOut,
+  });
+  if (
+    reverse.amountOut * BPS_DENOMINATOR <
+    input.amountIn * STOCK_PAIRED_MIN_ROUTE_ROUND_TRIP_BPS
+  ) {
+    throw new ClassicTradeUnavailableError(
+      "The ETH route is too thin for this amount",
+    );
+  }
+  return {
+    amountOut: ethQuote.amountOut,
+    usdAmountOut: usdQuote.amountOut,
+    gasEstimate: ethQuote.gasEstimate,
+  };
+}
+
 export async function quoteStockPairedExactInput(
   client: StockPairedTradeRuntimeClient,
   input: {
@@ -468,27 +616,11 @@ export async function quoteStockPairedExactInput(
   ) => {
     const hops =
       side === "buy" ? externalRoute.buyHops : externalRoute.sellHops;
-    const result = await client.call({
-      to: STOCK_PAIRED_V3_QUOTER,
-      account: input.owner,
-      data: encodeFunctionData({
-        abi: stockPairedV3QuoterAbi,
-        functionName: "quoteExactInput",
-        args: [encodeStockPairedV3Path(hops), amount],
-      }),
+    return quoteStockPairedV3ExactInput(client, {
+      owner: input.owner,
+      hops,
+      amountIn: amount,
     });
-    if (!result.data || result.data === "0x") {
-      throw new ClassicTradeUnavailableError(
-        "The Uniswap v3 quoter returned no Stock-Paired route",
-      );
-    }
-    const [amountOut, , , gasEstimate] = decodeFunctionResult({
-      abi: stockPairedV3QuoterAbi,
-      functionName: "quoteExactInput",
-      data: result.data,
-    });
-    positiveAmount(amountOut, "Routed quote output");
-    return { amountOut, gasEstimate };
   };
   const quoteV4 = async (amount: bigint) => {
     positiveAmount(amount, "Stock-Paired pool input");
@@ -1018,6 +1150,164 @@ export async function prepareStockPairedTrade(
       request.side === "buy"
         ? "The ETH amount plus network fees exceeds the wallet balance"
         : "The wallet needs more ETH to pay for the swap transaction",
+    );
+  }
+
+  return {
+    ...base,
+    status: "ready" as const,
+    approvalState: "ready" as const,
+    transaction: {
+      ...walletTransaction(swap),
+      gasLimit: gasLimit.toString(),
+    },
+  };
+}
+
+export type StockPairedRewardConversionRequest = {
+  chainId: 1;
+  owner: Address;
+  amountIn: bigint;
+  slippageBps: number;
+  deadline: bigint;
+};
+
+export async function prepareStockPairedRewardConversion(
+  client: StockPairedTradeRuntimeClient,
+  deployment: StockPairedTradeDeployment,
+  request: StockPairedRewardConversionRequest,
+) {
+  if (request.chainId !== 1 || request.chainId !== deployment.chainId) {
+    throw new ClassicTradeInputError(
+      "Stock reward conversion must use Ethereum Mainnet",
+    );
+  }
+  positiveAmount(request.amountIn, "Reward amount");
+  const poolKey = createStockPairedPoolKey(deployment);
+  if (
+    computeOfficialV4PoolId(poolKey).toLowerCase() !==
+    deployment.poolId.toLowerCase()
+  ) {
+    throw new ClassicTradeUnavailableError(
+      "The Stock-Paired pool no longer matches the verified launch",
+    );
+  }
+  await assertRuntime(client, deployment);
+
+  const block = await client.getBlock();
+  assertClassicDeadline(block.timestamp, request.deadline);
+  const [nativeBalance, quoted, quoteAssetBalance] = await Promise.all([
+    client.getBalance({ address: request.owner }),
+    quoteStockPairedQuoteAssetToEth(client, {
+      quoteAsset: deployment.quoteAsset,
+      owner: request.owner,
+      amountIn: request.amountIn,
+    }),
+    tokenBalance(
+      client,
+      deployment.quoteAsset,
+      request.owner,
+    ),
+  ]);
+  if (request.amountIn > quoteAssetBalance) {
+    throw new ClassicTradeInputError(
+      "The reward amount exceeds the stock balance in this wallet",
+    );
+  }
+
+  const state = await approvalState(
+    client,
+    deployment,
+    request.owner,
+    deployment.quoteAsset,
+    request.amountIn,
+    block.timestamp,
+  );
+  const quote = {
+    amountIn: request.amountIn.toString(),
+    amountOut: quoted.amountOut.toString(),
+    usdAmountOut: quoted.usdAmountOut.toString(),
+    amountOutMinimum: amountOutMinimum(
+      quoted.amountOut,
+      request.slippageBps,
+    ).toString(),
+    gasEstimate: quoted.gasEstimate.toString(),
+    slippageBps: request.slippageBps,
+    deadline: request.deadline.toString(),
+  };
+  const base = {
+    launchModel: "stock-paired" as const,
+    conversion: "quote-asset-to-eth" as const,
+    chainId: deployment.chainId,
+    owner: request.owner,
+    token: deployment.token,
+    quoteAsset: deployment.quoteAsset,
+    inputAsset: deployment.quoteAsset,
+    poolId: deployment.poolId,
+    quote,
+  };
+  if (state === "token-to-permit2") {
+    return {
+      ...base,
+      status: "approval-required" as const,
+      approvalState: state,
+      transaction: walletTransaction(
+        buildStockPairedTokenApprovalTransaction({
+          deployment,
+          inputAsset: deployment.quoteAsset,
+          amountIn: request.amountIn,
+        }),
+      ),
+    };
+  }
+  if (state === "permit2-to-router") {
+    return {
+      ...base,
+      status: "approval-required" as const,
+      approvalState: state,
+      transaction: walletTransaction(
+        buildStockPairedPermit2ApprovalTransaction({
+          deployment,
+          inputAsset: deployment.quoteAsset,
+          amountIn: request.amountIn,
+          now: block.timestamp,
+          deadline: request.deadline,
+        }),
+      ),
+    };
+  }
+
+  const swap = buildStockPairedQuoteAssetToEthSwapTransaction({
+    deployment,
+    amountIn: request.amountIn,
+    quotedAmountOut: quoted.amountOut,
+    slippageBps: request.slippageBps,
+    now: block.timestamp,
+    deadline: request.deadline,
+  });
+  const simulation = {
+    account: request.owner,
+    to: swap.to,
+    data: swap.data,
+    value: BigInt(swap.value),
+  };
+  await client.call(simulation);
+  const [estimatedGas, gasPrice] = await Promise.all([
+    client.estimateGas(simulation),
+    client.getGasPrice(),
+  ]);
+  if (estimatedGas <= 0n || gasPrice <= 0n) {
+    throw new ClassicTradeUnavailableError(
+      "The network returned an invalid reward-conversion gas estimate",
+    );
+  }
+  const gasLimit = (estimatedGas * 120n + 99n) / 100n;
+  if (
+    nativeBalance <
+    classicGasReserve({ gasLimit, gasPrice })
+  ) {
+    throw new ClassicTradeInputError(
+      "The wallet needs more ETH to pay for the conversion transaction",
     );
   }
 

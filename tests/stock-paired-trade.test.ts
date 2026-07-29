@@ -17,6 +17,7 @@ import {
 } from "../lib/trade/classic";
 import {
   createStockPairedPoolKey,
+  prepareStockPairedRewardConversion,
   prepareStockPairedTrade,
   STOCK_PAIRED_MIN_ROUTE_ROUND_TRIP_BPS,
   type StockPairedTradeDeployment,
@@ -69,6 +70,8 @@ function runtimeClient(input?: {
   permit2Expiration?: number;
   runtimeMismatch?: Address;
   lossyExternalRoute?: boolean;
+  nativeBalance?: bigint;
+  quoteAssetBalance?: bigint;
 }) {
   const candidate = deployment();
   const quotedPoolKeys: unknown[] = [];
@@ -87,7 +90,7 @@ function runtimeClient(input?: {
       return { timestamp: 10_000n };
     },
     async getBalance() {
-      return 10n ** 18n;
+      return input?.nativeBalance ?? 10n ** 18n;
     },
     async getGasPrice() {
       return 1n;
@@ -250,7 +253,11 @@ function runtimeClient(input?: {
             data: encodeFunctionResult({
               abi: classicTokenAbi,
               functionName: "balanceOf",
-              result: 100_000n,
+              result:
+                args.to.toLowerCase() ===
+                candidate.quoteAsset.toLowerCase()
+                  ? input?.quoteAssetBalance ?? 100_000n
+                  : 100_000n,
             }),
           };
         }
@@ -410,6 +417,124 @@ describe("Stock-Paired server trading", () => {
       permit2Runtime.candidate.universalRouter,
       AMOUNT_IN,
     ]);
+  });
+
+  it("converts the claimed quote asset directly to ETH through the reviewed route", async () => {
+    const conversionRuntime = runtimeClient();
+    const conversion = await prepareStockPairedRewardConversion(
+      conversionRuntime.client,
+      conversionRuntime.candidate,
+      {
+        chainId: 1,
+        owner: STOCK_TEST_ACCOUNT,
+        amountIn: AMOUNT_IN,
+        slippageBps: 100,
+        deadline: 10_900n,
+      },
+    );
+    expect(conversion).toMatchObject({
+      status: "ready",
+      conversion: "quote-asset-to-eth",
+      inputAsset: conversionRuntime.candidate.quoteAsset,
+      approvalState: "ready",
+      quote: {
+        amountIn: AMOUNT_IN.toString(),
+        amountOut: "2000",
+        usdAmountOut: "2000",
+        amountOutMinimum: "1980",
+      },
+      transaction: {
+        kind: "swap",
+        to: conversionRuntime.candidate.universalRouter,
+        value: "0",
+      },
+    });
+    const route = decodeFunctionData({
+      abi: classicUniversalRouterAbi,
+      data: conversionRuntime.routerCalldata[0],
+    });
+    expect(route.functionName).toBe("execute");
+    expect(route.args[0]).toBe(
+      `0x${[
+        CommandType.PERMIT2_TRANSFER_FROM,
+        CommandType.V3_SWAP_EXACT_IN,
+        CommandType.UNWRAP_WETH,
+        CommandType.SWEEP,
+      ]
+        .map((command) => Number(command).toString(16).padStart(2, "0"))
+        .join("")}`,
+    );
+    expect(route.args[1]).toHaveLength(4);
+    expect(conversionRuntime.inputAssets).toContain(
+      conversionRuntime.candidate.quoteAsset,
+    );
+  });
+
+  it("uses exact quote-asset approvals and never an unlimited allowance", async () => {
+    const approvalRuntime = runtimeClient({
+      tokenAllowance: AMOUNT_IN - 1n,
+    });
+    const approval = await prepareStockPairedRewardConversion(
+      approvalRuntime.client,
+      approvalRuntime.candidate,
+      {
+        chainId: 1,
+        owner: STOCK_TEST_ACCOUNT,
+        amountIn: AMOUNT_IN,
+        slippageBps: 100,
+        deadline: 10_900n,
+      },
+    );
+    expect(approval).toMatchObject({
+      status: "approval-required",
+      approvalState: "token-to-permit2",
+      transaction: {
+        kind: "token-to-permit2",
+        to: approvalRuntime.candidate.quoteAsset,
+      },
+    });
+    const decoded = decodeFunctionData({
+      abi: classicTokenAbi,
+      data: approval.transaction.data,
+    });
+    expect(decoded.args).toEqual([
+      approvalRuntime.candidate.permit2,
+      AMOUNT_IN,
+    ]);
+  });
+
+  it("keeps conversion closed when the stock is missing or ETH cannot cover gas", async () => {
+    const missingStockRuntime = runtimeClient({
+      quoteAssetBalance: AMOUNT_IN - 1n,
+    });
+    await expect(
+      prepareStockPairedRewardConversion(
+        missingStockRuntime.client,
+        missingStockRuntime.candidate,
+        {
+          chainId: 1,
+          owner: STOCK_TEST_ACCOUNT,
+          amountIn: AMOUNT_IN,
+          slippageBps: 100,
+          deadline: 10_900n,
+        },
+      ),
+    ).rejects.toThrow(/stock balance/);
+
+    const noGasRuntime = runtimeClient({ nativeBalance: 0n });
+    await expect(
+      prepareStockPairedRewardConversion(
+        noGasRuntime.client,
+        noGasRuntime.candidate,
+        {
+          chainId: 1,
+          owner: STOCK_TEST_ACCOUNT,
+          amountIn: AMOUNT_IN,
+          slippageBps: 100,
+          deadline: 10_900n,
+        },
+      ),
+    ).rejects.toThrow(/more ETH/);
   });
 
   it("fails closed on another pool or runtime drift", async () => {

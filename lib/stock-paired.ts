@@ -249,6 +249,7 @@ export const stockQuoteRegistryAbi = parseAbi([
 ]);
 
 export const stockFeeSplitVaultAbi = parseAbi([
+  "event BeneficiaryFeesClaimed(address indexed beneficiary,address indexed payoutAddress,address indexed quoteAsset,uint256 amount,uint256 beneficiaryTotalClaimed,uint256 vaultTotalReceived)",
   "function feeHook() view returns (address)",
   "function poolId() view returns (bytes32)",
   "function quoteAsset() view returns (address)",
