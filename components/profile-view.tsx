@@ -738,10 +738,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       <div className={`${styles.page} page-width`}>
         <section className={styles.connectCard}>
           <h1>Connect your wallet</h1>
-          <p>
-            See the tokens connected to your wallet and claim creator rewards
-            from one place
-          </p>
+          <p>Connect to view your tokens and claim creator rewards</p>
           <button
             className={styles.connectButton}
             type="button"

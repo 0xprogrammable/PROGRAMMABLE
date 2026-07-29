@@ -1,0 +1,391 @@
+/* Shared visual system */
+
+html[data-theme="light"] {
+  --text-soft: #433b41;
+  --muted: #685f65;
+  --dim: #746a70;
+  --background-overlay-top: rgba(255, 255, 255, 0.44);
+  --background-overlay-middle: rgba(255, 255, 255, 0.63);
+  --background-overlay-bottom: rgba(255, 255, 255, 0.81);
+  --header-background: rgba(255, 255, 255, 0.9);
+  --glass-82: rgba(255, 255, 255, 0.87);
+  --glass-88: rgba(255, 255, 255, 0.91);
+  --glass-90: rgba(255, 255, 255, 0.93);
+  --glass-96: rgba(255, 255, 255, 0.97);
+  --panel-border: rgba(205, 194, 202, 0.82);
+  --panel-border-soft: rgba(210, 199, 207, 0.72);
+  --panel-border-muted: rgba(205, 194, 202, 0.76);
+  --control-border: rgba(205, 194, 202, 0.86);
+  --card-shadow: rgba(63, 39, 55, 0.05);
+  --card-shadow-soft: rgba(63, 39, 55, 0.035);
+}
+
+.route-transition {
+  animation-duration: 280ms;
+}
+
+/* Stable-width text reveal */
+.scramble-character {
+  overflow: clip;
+  vertical-align: baseline;
+}
+
+.scramble-character-layer {
+  inset-inline: 0;
+  left: 0;
+  overflow: hidden;
+  text-align: center;
+  transform: none;
+  width: 100%;
+}
+
+/* Explore */
+
+.explore-intro {
+  min-height: clamp(252px, 30svh, 276px);
+  padding-bottom: 8px;
+  padding-top: 48px;
+}
+
+.explore-brand-logo {
+  height: clamp(138px, 10.5vw, 154px);
+  width: clamp(138px, 10.5vw, 154px);
+}
+
+.explore-intro > p {
+  color: var(--text);
+  font-size: clamp(25px, 2vw, 30px);
+  font-weight: 520;
+  letter-spacing: -0.027em;
+  line-height: 1.24;
+  margin-top: 10px;
+}
+
+.explore-token-address {
+  color: var(--text-soft);
+  margin-top: 7px;
+}
+
+.explore-token-address code {
+  font-size: 11.5px;
+}
+
+.token-search,
+.token-filter summary,
+.token-pagination {
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 24px var(--card-shadow-soft);
+}
+
+.token-empty {
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--panel-border-soft);
+  justify-content: center;
+  margin: 18px auto 0;
+  min-height: 76px;
+  padding: 16px 20px;
+  text-align: center;
+  width: min(100%, 900px);
+}
+
+.token-empty p {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.token-empty-initial {
+  background: var(--glass-82);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 18px;
+  justify-content: space-between;
+  min-height: 104px;
+  text-align: left;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .token-card:hover {
+    box-shadow:
+      0 1px 0 var(--card-shadow),
+      0 16px 38px var(--hover-shadow);
+    transform: translateY(-3px);
+  }
+}
+
+/* Launch */
+
+.launch-model-page {
+  padding-top: 42px;
+}
+
+.launch-model-heading h1 {
+  font-size: clamp(44px, 4.4vw, 56px);
+  font-weight: 570;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  word-spacing: normal;
+}
+
+.launch-model-grid {
+  gap: 16px;
+  margin-top: 26px;
+}
+
+.launch-model-card {
+  background: var(--glass-96);
+  border-radius: 24px;
+  box-shadow:
+    0 1px 0 var(--card-shadow),
+    0 16px 44px var(--card-shadow-soft);
+}
+
+.launch-model-art {
+  height: 152px;
+}
+
+.launch-model-card-body {
+  min-height: 218px;
+  padding: 20px 21px 17px;
+}
+
+.launch-model-card-heading strong {
+  font-size: 23px;
+  letter-spacing: -0.025em;
+}
+
+.launch-model-description {
+  color: var(--text-soft);
+  line-height: 1.52;
+  margin-top: 10px;
+}
+
+.launch-model-details {
+  gap: 6px 14px;
+  margin-top: 15px;
+}
+
+.launch-model-action {
+  padding-top: 13px;
+}
+
+@media (max-width: 800px) {
+  .explore-page {
+    height: auto;
+    min-height: calc(100svh - var(--header-height) - 68px);
+    overflow: visible;
+    padding-bottom: 18px;
+  }
+
+  .explore-intro {
+    min-height: 184px;
+    padding: 26px 0 7px;
+  }
+
+  .explore-brand-logo {
+    height: clamp(84px, 22vw, 94px);
+    width: clamp(84px, 22vw, 94px);
+  }
+
+  .explore-intro > p {
+    font-size: clamp(15px, 4.15vw, 18px);
+    line-height: 1.25;
+    margin-top: 8px;
+    max-width: 360px;
+    text-wrap: balance;
+    white-space: normal;
+  }
+
+  .explore-token-address {
+    margin-top: 4px;
+  }
+
+  .explore-token-address code {
+    font-size: 9.5px;
+  }
+
+  .token-section {
+    justify-content: flex-start;
+  }
+
+  .token-toolbar {
+    position: relative;
+    z-index: 12;
+  }
+
+  .token-card-grid {
+    --token-card-body-height: 98px;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    height: auto;
+    margin-top: 10px;
+    max-width: 100%;
+    overflow: visible;
+    padding-bottom: 12px;
+  }
+
+  .token-card:nth-child(10):last-child {
+    grid-column: auto;
+  }
+
+  .token-card {
+    border-radius: 16px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto var(--token-card-body-height);
+  }
+
+  .token-card-art {
+    aspect-ratio: 1;
+    border-radius: 12px;
+    height: auto;
+    margin: 6px auto 0;
+    width: calc(100% - 12px);
+  }
+
+  .token-card-body {
+    height: var(--token-card-body-height);
+    padding: 7px 8px 7px;
+  }
+
+  .token-card-heading h3 {
+    font-size: 13.5px;
+  }
+
+  .token-card-title {
+    gap: 2px;
+  }
+
+  .token-card-title > span {
+    font-size: 9px;
+  }
+
+  .token-card-description {
+    display: block;
+    font-size: 9.5px;
+    line-height: 1.2;
+    margin-top: 3px;
+    min-height: 12px;
+  }
+
+  .token-card-market-cap {
+    margin-top: 3px;
+    min-height: 13px;
+  }
+
+  .token-card-market-cap strong {
+    font-size: 11px;
+  }
+
+  .token-card-market-cap span {
+    font-size: 7px;
+  }
+
+  .token-card-footer {
+    display: flex;
+    min-height: 22px;
+  }
+
+  .token-card .token-address {
+    display: inline-flex;
+  }
+
+  .token-card .token-address code {
+    font-size: 8px;
+  }
+
+  .token-social-links {
+    display: flex;
+  }
+
+  .token-social-link {
+    height: 22px;
+    width: 22px;
+  }
+
+  .token-social-link svg {
+    height: 12px;
+    width: 12px;
+  }
+
+  .token-empty {
+    margin-top: 12px;
+    min-height: 70px;
+  }
+
+  .launch-model-page {
+    padding-bottom: 88px;
+    padding-top: 30px;
+  }
+
+  .launch-model-heading h1 {
+    font-size: clamp(40px, 10.8vw, 47px);
+  }
+
+  .launch-model-grid {
+    gap: 14px;
+    margin-top: 22px;
+  }
+
+  .launch-model-card-body {
+    min-height: 210px;
+  }
+}
+
+@media (max-width: 600px) {
+  .token-card-grid {
+    --token-card-body-height: 98px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .token-card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto var(--token-card-body-height);
+  }
+
+  .token-card-art {
+    height: auto;
+    margin: 6px auto 0;
+    width: calc(100% - 12px);
+  }
+
+  .token-card-body {
+    height: var(--token-card-body-height);
+    padding: 7px 8px;
+  }
+
+  .token-address,
+  .token-card-description,
+  .token-social-links {
+    display: flex;
+  }
+
+  .token-card-description {
+    display: block;
+  }
+
+  .token-card-footer {
+    display: flex;
+  }
+}
+
+@media (max-width: 360px) {
+  .explore-intro > p {
+    max-width: 292px;
+  }
+
+  .token-card-grid {
+    --token-card-body-height: 102px;
+    grid-template-columns: minmax(0, 260px);
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-transition,
+  .token-card {
+    animation: none;
+  }
+}
