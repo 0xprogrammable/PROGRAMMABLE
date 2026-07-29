@@ -55,7 +55,9 @@ function marketCap(
   source: "usd" | "eth",
 ) {
   return unsignedWad(
-    source === "usd" ? token.fdvUsdWad : token.marketCapEthWei,
+    source === "usd"
+      ? token.indexedMarketCapUsdWad ?? token.fdvUsdWad
+      : token.indexedMarketCapEthWei ?? token.marketCapEthWei,
   );
 }
 
@@ -77,7 +79,10 @@ export function filterAndSortTokens(
       )
     : [...tokens];
   const marketCapSource = filtered.some(
-    (token) => unsignedWad(token.fdvUsdWad) !== null,
+    (token) =>
+      unsignedWad(
+        token.indexedMarketCapUsdWad ?? token.fdvUsdWad,
+      ) !== null,
   )
     ? "usd"
     : "eth";

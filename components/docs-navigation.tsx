@@ -34,8 +34,22 @@ const docsSectionHrefSet = new Set<string>(docsSectionHrefs);
 export const docsNavigateEvent = "programmable:docs-navigate";
 
 export function normalizeDocsHash(hash: string): string {
-  const href = `/docs${hash.startsWith("#") ? hash : `#${hash}`}`;
+  const sectionId = hash.replace(/^#/, "").split("#", 1)[0];
+  const href = `/docs#${sectionId}`;
   return docsSectionHrefSet.has(href) ? href : overviewHref;
+}
+
+export function resolveDocsLocationTarget(hash: string): {
+  href: string;
+  sectionId: string;
+  shouldScroll: boolean;
+} {
+  const href = normalizeDocsHash(hash);
+  return {
+    href,
+    sectionId: href.slice(6),
+    shouldScroll: hash.length > 0,
+  };
 }
 
 export function isDocsNavigationItemActive({
@@ -145,6 +159,7 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
 
     let scrollFrame = 0;
     let layoutFrame = 0;
+    let locationFrame = 0;
     let headerHeight = 68;
     let sectionPositions: SectionPosition[] = [];
 
@@ -189,13 +204,24 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     };
 
     const updateFromLocation = () => {
-      const nextHref = normalizeDocsHash(window.location.hash);
-      setActiveSectionHref(nextHref);
-      const section = document.getElementById(nextHref.slice(6));
-      if (section && window.location.hash) {
-        window.requestAnimationFrame(() => focusDocsSection(section));
+      const target = resolveDocsLocationTarget(window.location.hash);
+      const currentHref = window.location.pathname + window.location.hash;
+      if (window.location.hash && currentHref !== target.href) {
+        window.history.replaceState(window.history.state, "", target.href);
       }
-      scheduleLayoutMeasurement();
+      setActiveSectionHref(target.href);
+      const section = document.getElementById(target.sectionId);
+      if (section && target.shouldScroll) {
+        if (locationFrame) window.cancelAnimationFrame(locationFrame);
+        locationFrame = window.requestAnimationFrame(() => {
+          locationFrame = 0;
+          section.scrollIntoView({ behavior: "auto", block: "start" });
+          focusDocsSection(section);
+          scheduleLayoutMeasurement();
+        });
+      } else {
+        scheduleLayoutMeasurement();
+      }
     };
 
     updateFromLocation();
@@ -207,6 +233,7 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     return () => {
       if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
       if (layoutFrame) window.cancelAnimationFrame(layoutFrame);
+      if (locationFrame) window.cancelAnimationFrame(locationFrame);
       window.removeEventListener("hashchange", updateFromLocation);
       window.removeEventListener("popstate", updateFromLocation);
       window.removeEventListener("resize", scheduleLayoutMeasurement);

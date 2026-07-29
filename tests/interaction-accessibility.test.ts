@@ -36,6 +36,59 @@ describe("interaction accessibility", () => {
     expect(source).not.toContain('aria-pressed={theme === "dark"}');
   });
 
+  it("exposes the wallet actions as a native, labelled disclosure", () => {
+    const source = readFileSync(
+      join(root, "components/wallet-provider.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain('href="/profile"');
+    expect(source).toContain("aria-controls={wallet ? menuId : undefined}");
+    expect(source).toContain('role="group"');
+    expect(source).toContain('aria-label="Wallet actions"');
+    expect(source).toContain("event.relatedTarget instanceof Node");
+    expect(source).toContain("event.currentTarget.contains(event.relatedTarget)");
+  });
+
+  it("dismisses the wallet disclosure with Escape and outside pointer input", () => {
+    const source = readFileSync(
+      join(root, "components/wallet-provider.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      'document.addEventListener("pointerdown", closeOnOutsidePress)',
+    );
+    expect(source).toContain('if (event.key === "Escape")');
+    expect(source).toContain("menuButtonRef.current?.focus()");
+  });
+
+  it("keeps the sticky header and its wallet disclosure above page content", () => {
+    const css = readFileSync(join(root, "app/interface.css"), "utf8");
+
+    expect(css).not.toContain(
+      ".app-frame > main,\n.site-header,\n.mobile-nav",
+    );
+    expect(css).toMatch(
+      /\.site-header\s*\{[^}]*position:\s*sticky;[^}]*z-index:\s*50;/s,
+    );
+  });
+
+  it("fails the public Classic launch card closed when its verified release is unavailable", () => {
+    const source = readFileSync(
+      join(root, "components/launch-entry.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("disabled={!classicV3LaunchAvailable}");
+    expect(source).toContain(
+      'model === "classic-v3" && !classicV3LaunchAvailable',
+    );
+    expect(source).not.toContain(
+      'classicV3LaunchAvailable ? "classic-v3" : "classic"',
+    );
+  });
+
   it("maps chart pointer coordinates to a bounded point index", () => {
     expect(
       getChartPointIndex({

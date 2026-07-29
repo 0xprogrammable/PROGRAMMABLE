@@ -6,13 +6,12 @@ export type DocsSearchItem = {
 
 export const docsNavigation = [
   {
-    label: "Start here",
+    label: "Using Programmable",
     items: [
       { href: "/docs#overview", label: "Overview" },
-      { href: "/docs#launching", label: "Launching a token" },
+      { href: "/docs#launching", label: "Launch flow" },
       { href: "/docs#trading", label: "Trading and pricing" },
       { href: "/docs#rewards", label: "Creator rewards" },
-      { href: "/docs#risks", label: "Risk" },
     ],
   },
   {
@@ -24,12 +23,13 @@ export const docsNavigation = [
     ],
   },
   {
-    label: "Reference",
+    label: "Verify",
     items: [
       { href: "/docs#network", label: "Network" },
       { href: "/docs#contracts", label: "Contracts" },
       { href: "/docs#metadata", label: "Token metadata" },
-      { href: "/docs#releases", label: "Source and releases" },
+      { href: "/docs#releases", label: "Release evidence" },
+      { href: "/docs#risks", label: "Risks" },
     ],
   },
 ] as const;
@@ -41,8 +41,8 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs#overview",
   },
   {
-    title: "Launching a token",
-    description: "From model selection to the wallet transaction.",
+    title: "Launch flow",
+    description: "From model selection to a confirmed wallet transaction.",
     href: "/docs#launching",
   },
   {
@@ -57,17 +57,20 @@ export const docsSearchItems: DocsSearchItem[] = [
   },
   {
     title: "Classic",
-    description: "Fixed fee launches with creator rewards in ETH.",
+    description:
+      "Directional swap fees, ETH creator rewards and Initial Buy custody.",
     href: "/docs/models/classic",
   },
   {
     title: "Deep",
-    description: "A coming model that returns trading fees to locked liquidity.",
+    description:
+      "An unreleased model designed to return trading fees to locked liquidity.",
     href: "/docs/models/deep",
   },
   {
     title: "Stock-Paired",
-    description: "A limited model whose pool uses a reviewed stock token.",
+    description:
+      "A restricted model whose pool uses a reviewed stock token.",
     href: "/docs/models/stock-paired",
   },
   {
@@ -86,12 +89,12 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs#metadata",
   },
   {
-    title: "Source and releases",
+    title: "Release evidence",
     description: "How source, runtime and lifecycle evidence reach the app.",
     href: "/docs#releases",
   },
   {
-    title: "Risk",
+    title: "Risks",
     description: "Transaction, token, liquidity and integration boundaries.",
     href: "/docs#risks",
   },

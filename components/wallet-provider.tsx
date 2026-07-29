@@ -25,6 +25,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -1190,6 +1191,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   } = useWallet();
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCopied, setMenuCopied] = useState(false);
   const [menuError, setMenuError] = useState("");
@@ -1197,7 +1199,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     if (!menuOpen) return;
 
-    const closeOnOutsidePress = (event: MouseEvent) => {
+    const closeOnOutsidePress = (event: PointerEvent) => {
       if (
         event.target instanceof Node &&
         !menuRef.current?.contains(event.target)
@@ -1213,10 +1215,10 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       }
     };
 
-    document.addEventListener("mousedown", closeOnOutsidePress);
+    document.addEventListener("pointerdown", closeOnOutsidePress);
     window.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.removeEventListener("mousedown", closeOnOutsidePress);
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [menuOpen]);
@@ -1247,6 +1249,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       disabled={connecting || disconnecting}
       aria-haspopup={wallet ? undefined : "dialog"}
       aria-expanded={wallet ? menuOpen : undefined}
+      aria-controls={wallet ? menuId : undefined}
       aria-label={
         wallet
           ? `Manage wallet ${username || shortenAddress(wallet.account)}`
@@ -1297,12 +1300,21 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         ) {
           return;
         }
-        setMenuOpen(false);
+        window.requestAnimationFrame(() => {
+          if (!menuRef.current?.contains(document.activeElement)) {
+            setMenuOpen(false);
+          }
+        });
       }}
     >
       {button}
       {menuOpen ? (
-        <div className="wallet-menu" aria-label="Wallet actions">
+        <div
+          className="wallet-menu"
+          id={menuId}
+          role="group"
+          aria-label="Wallet actions"
+        >
           <div className="wallet-menu-account">
             <strong>{username || shortenAddress(wallet.account)}</strong>
             <span>{shortenAddress(wallet.account)}</span>
