@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 concurrency:
   group: security-${{ github.ref }}
@@ -36,7 +37,13 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check slither-analyzer==0.11.5
 
       - name: Run Slither
-        run: .venv/bin/slither . --config-file slither.config.json
+        run: .venv/bin/slither . --config-file slither.config.json --sarif slither.sarif
+
+      - name: Publish Slither results
+        if: always() && github.event_name == 'push'
+        uses: github/codeql-action/upload-sarif@4187e74d05793876e9989daffde9c3e66b4acd07 # v3
+        with:
+          sarif_file: slither.sarif
 
       - name: Measure source coverage
         run: forge coverage --exclude-tests --report lcov --report-file lcov.info
