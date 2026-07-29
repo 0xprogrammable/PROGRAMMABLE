@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 2,
+  "model": "stock-paired",
+  "internalContractRelease": "stock-paired-v2",
+  "status": "not-deployed",
+  "chainId": 1,
+  "releaseCommit": null,
+  "sourceCommitment": null,
+  "ethCoordinatorReleaseCommit": null,
+  "ethCoordinatorSourceCommitment": null,
+  "ethCoordinatorNonce": null,
+  "startingNonce": null,
+  "startBlock": null,
+  "addresses": {},
+  "transactions": {},
+  "runtimeCodeHashes": {},
+  "officialDependencies": {},
+  "issuerRuntime": {
+    "tokenRuntimeCodeHash": "0x9806c8207a455c012b2799be651ac0146d54866f92db90b502e5e2efa283bee9",
+    "beacon": "0x985462c9aa4d6c3ad59ae6e1e9c0c11347ed1598",
+    "beaconRuntimeCodeHash": "0xfeff50d5e739b863fc9e0db874d5558375a3e2c81bc20c24923a685263d639bd",
+    "implementation": "0xebBcb2cEE51c2FeE4062c9C1270dcb98B0b22250",
+    "implementationRuntimeCodeHash": "0x7480293a8fad3f98f01f39aa59cd4e4c30d7fc4e7019e8f6e691eb5a9be53d11",
+    "gmTokenManager": "0x2c158bc456e027b2affccadf1bdbd9f5fc4c5c8c",
+    "gmTokenManagerRuntimeCodeHash": "0x6d111c0eae4517448b28f089392aef41d2b865ea8420f504e5d57d238fb8e821"
+  },
+  "quoteAssets": [
+    {
+      "symbol": "NVDAon",
+      "address": "0x2d1f7226bd1f780af6b9a49dcc0ae00e8df4bdee"
+    },
+    {
+      "symbol": "SPYon",
+      "address": "0xfedc5f4a6c38211c1338aa411018dfaf26612c08"
+    },
+    {
+      "symbol": "GOOGLon",
+      "address": "0xba47214edd2bb43099611b208f75e4b42fdcfedc"
+    },
+    {
+      "symbol": "SLVon",
+      "address": "0xf3e4872e6a4cf365888d93b6146a2baa7348f1a4"
+    },
+    {
+      "symbol": "TSLAon",
+      "address": "0xf6b1117ec07684d3958cad8beb1b302bfd21103f"
+    },
+    {
+      "symbol": "AAPLon",
+      "address": "0x14c3abf95cb9c93a8b82c1cdcb76d72cb87b2d4c"
+    },
+    {
+      "symbol": "BABAon",
+      "address": "0x41765f0fcddc276309195166c7a62ae522fa09ef"
+    },
+    {
+      "symbol": "COPXon",
+      "address": "0x423a63dfe8d82cd9c6568c92210aa537d8ef6885"
+    },
+    {
+      "symbol": "CRCLon",
+      "address": "0x3632dea96a953c11dac2f00b4a05a32cd1063fae"
+    },
+    {
+      "symbol": "TLTon",
+      "address": "0x992651bfeb9a0dcc4457610e284ba66d86489d4d"
+    },
+    {
+      "symbol": "USOon",
+      "address": "0x1f5fc5c3c8b0f15c7e21af623936ff2b210b6415"
+    }
+  ],
+  "sourceVerification": {
+    "status": "pending"
+  },
+  "lifecycleEvidence": {
+    "status": "pending",
+    "releaseEligible": false
+  }
+}

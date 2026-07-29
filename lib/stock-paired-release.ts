@@ -1,9 +1,12 @@
 import { getAddress, isAddress, isHex, type Address, type Hex } from "viem";
 
 import mainnetReleaseJson from "../contracts/deployments/mainnet-stock-paired-v1.json";
-import { STOCK_QUOTE_ASSETS } from "./stock-paired";
+import mainnetReleaseV2Json from "../contracts/deployments/mainnet-stock-paired-v2.json";
+import stockAssetsV1Json from "../config/stock-paired-assets.v1.json";
+import { STOCK_PAIRED_V2_QUOTE_ASSETS } from "./stock-paired-v2";
 
 export const STOCK_PAIRED_INTERNAL_RELEASE = "stock-paired-v1" as const;
+export const STOCK_PAIRED_V2_INTERNAL_RELEASE = "stock-paired-v2" as const;
 
 const runtimeFields = [
   "quoteRegistry",
@@ -42,6 +45,10 @@ const EXPECTED_ONDO_BEACON =
   "0x985462C9aA4D6c3Ad59Ae6e1e9c0C11347ED1598" as const;
 const EXPECTED_ONDO_IMPLEMENTATION =
   "0xebBcb2cEE51c2FeE4062c9C1270dcb98B0b22250" as const;
+const EXPECTED_ONDO_GM_TOKEN_MANAGER =
+  "0x2c158BC456e027b2AfFCCadF1BDBD9f5fC4c5C8c" as const;
+const EXPECTED_ONDO_GM_TOKEN_MANAGER_CODE_HASH =
+  "0x6d111c0eae4517448b28f089392aef41d2b865ea8420f504e5d57d238fb8e821" as const;
 const EXPECTED_OFFICIAL_DEPENDENCIES = {
   poolManager: "0x000000000004444c5dc75cB358380D2e3dE08A90",
   positionManager: "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
@@ -60,6 +67,17 @@ const EXPECTED_OFFICIAL_DEPENDENCIES = {
 type RuntimeField = (typeof runtimeFields)[number];
 type DeployedField = (typeof deployedFields)[number];
 type OfficialDependencyField = (typeof officialDependencyFields)[number];
+type StockPairedInternalRelease =
+  | typeof STOCK_PAIRED_INTERNAL_RELEASE
+  | typeof STOCK_PAIRED_V2_INTERNAL_RELEASE;
+type ExpectedQuoteAsset = { symbol: string; address: string };
+
+const EXPECTED_V1_QUOTE_ASSETS = (
+  stockAssetsV1Json as { assets: ExpectedQuoteAsset[] }
+).assets;
+const EXPECTED_V2_QUOTE_ASSETS = STOCK_PAIRED_V2_QUOTE_ASSETS.map(
+  ({ symbol, address }) => ({ symbol, address }),
+);
 
 export type StockPairedReleaseManifest = {
   schemaVersion?: unknown;
@@ -89,6 +107,8 @@ export type StockPairedReleaseManifest = {
     beaconRuntimeCodeHash?: unknown;
     implementation?: unknown;
     implementationRuntimeCodeHash?: unknown;
+    gmTokenManager?: unknown;
+    gmTokenManagerRuntimeCodeHash?: unknown;
   };
   quoteAssets?: unknown;
   sourceVerification?: {
@@ -120,6 +140,7 @@ export type StockPairedReleaseManifest = {
 };
 
 export type VerifiedStockPairedRelease = {
+  internalContractRelease: StockPairedInternalRelease;
   chainId: 1;
   releaseCommit: string;
   sourceCommitment: Hex;
@@ -140,6 +161,8 @@ export type VerifiedStockPairedRelease = {
     beaconRuntimeCodeHash: Hex;
     implementation: Address;
     implementationRuntimeCodeHash: Hex;
+    gmTokenManager?: Address;
+    gmTokenManagerRuntimeCodeHash?: Hex;
   };
 };
 
@@ -178,8 +201,11 @@ function sameAddress(left: unknown, right: string) {
   );
 }
 
-function exactQuoteAssets(value: unknown) {
-  if (!Array.isArray(value) || value.length !== STOCK_QUOTE_ASSETS.length) {
+function exactQuoteAssets(
+  value: unknown,
+  expectedAssets: readonly ExpectedQuoteAsset[],
+) {
+  if (!Array.isArray(value) || value.length !== expectedAssets.length) {
     return false;
   }
   return value.every((candidate, index) => {
@@ -191,7 +217,7 @@ function exactQuoteAssets(value: unknown) {
       return false;
     }
     const record = candidate as { symbol?: unknown; address?: unknown };
-    const expected = STOCK_QUOTE_ASSETS[index];
+    const expected = expectedAssets[index];
     return (
       record.symbol === expected.symbol &&
       sameAddress(record.address, expected.address)
@@ -199,8 +225,46 @@ function exactQuoteAssets(value: unknown) {
   });
 }
 
-export function resolveVerifiedStockPairedRelease(
-  input: unknown = mainnetReleaseJson,
+type StockPairedReleaseDefinition = {
+  schemaVersion: 1 | 2;
+  internalContractRelease: StockPairedInternalRelease;
+  quoteAssets: readonly ExpectedQuoteAsset[];
+  requiresGMTokenManager: boolean;
+};
+
+const stockPairedV1ReleaseDefinition: StockPairedReleaseDefinition = {
+  schemaVersion: 1,
+  internalContractRelease: STOCK_PAIRED_INTERNAL_RELEASE,
+  quoteAssets: EXPECTED_V1_QUOTE_ASSETS,
+  requiresGMTokenManager: false,
+};
+
+const stockPairedV2ReleaseDefinition: StockPairedReleaseDefinition = {
+  schemaVersion: 2,
+  internalContractRelease: STOCK_PAIRED_V2_INTERNAL_RELEASE,
+  quoteAssets: EXPECTED_V2_QUOTE_ASSETS,
+  requiresGMTokenManager: true,
+};
+
+function validIssuerManager(
+  release: StockPairedReleaseManifest,
+  required: boolean,
+) {
+  if (!required) return true;
+  return (
+    sameAddress(
+      release.issuerRuntime?.gmTokenManager,
+      EXPECTED_ONDO_GM_TOKEN_MANAGER,
+    ) &&
+    validHash(release.issuerRuntime?.gmTokenManagerRuntimeCodeHash) &&
+    release.issuerRuntime?.gmTokenManagerRuntimeCodeHash.toLowerCase() ===
+      EXPECTED_ONDO_GM_TOKEN_MANAGER_CODE_HASH.toLowerCase()
+  );
+}
+
+function resolveStockPairedRelease(
+  input: unknown,
+  definition: StockPairedReleaseDefinition,
 ): VerifiedStockPairedRelease | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const release = input as StockPairedReleaseManifest;
@@ -211,9 +275,9 @@ export function resolveVerifiedStockPairedRelease(
   const officialDependencies = release.officialDependencies;
 
   if (
-    release.schemaVersion !== 1 ||
+    release.schemaVersion !== definition.schemaVersion ||
     release.model !== "stock-paired" ||
-    release.internalContractRelease !== STOCK_PAIRED_INTERNAL_RELEASE ||
+    release.internalContractRelease !== definition.internalContractRelease ||
     release.status !== "deployment-source-and-lifecycle-verified" ||
     release.chainId !== 1 ||
     !validReleaseCommit(release.releaseCommit) ||
@@ -240,7 +304,8 @@ export function resolveVerifiedStockPairedRelease(
       release.issuerRuntime?.implementation,
       EXPECTED_ONDO_IMPLEMENTATION,
     ) ||
-    !exactQuoteAssets(release.quoteAssets) ||
+    !validIssuerManager(release, definition.requiresGMTokenManager) ||
+    !exactQuoteAssets(release.quoteAssets, definition.quoteAssets) ||
     sourceVerification?.status !== "verified" ||
     release.lifecycleEvidence?.status !== "verified-current-release" ||
     release.lifecycleEvidence.releaseEligible !== true ||
@@ -251,7 +316,7 @@ export function resolveVerifiedStockPairedRelease(
     release.lifecycleEvidence.ethCoordinatorDeploymentVerified !== true ||
     !validHash(release.lifecycleEvidence.canaryLaunchTransaction) ||
     !validAddress(release.lifecycleEvidence.canaryQuoteAsset) ||
-    !STOCK_QUOTE_ASSETS.some((asset) =>
+    !definition.quoteAssets.some((asset) =>
       sameAddress(release.lifecycleEvidence?.canaryQuoteAsset, asset.address),
     ) ||
     release.lifecycleEvidence.positionLockVerified !== true ||
@@ -309,6 +374,7 @@ export function resolveVerifiedStockPairedRelease(
   }
 
   return {
+    internalContractRelease: definition.internalContractRelease,
     chainId: 1,
     releaseCommit: release.releaseCommit,
     sourceCommitment: release.sourceCommitment,
@@ -352,12 +418,36 @@ export function resolveVerifiedStockPairedRelease(
       ),
       implementationRuntimeCodeHash: release.issuerRuntime
         ?.implementationRuntimeCodeHash as Hex,
+      ...(definition.requiresGMTokenManager
+        ? {
+            gmTokenManager: getAddress(
+              release.issuerRuntime?.gmTokenManager as string,
+            ),
+            gmTokenManagerRuntimeCodeHash: release.issuerRuntime
+              ?.gmTokenManagerRuntimeCodeHash as Hex,
+          }
+        : {}),
     },
   };
 }
 
+export function resolveVerifiedStockPairedRelease(
+  input: unknown = mainnetReleaseJson,
+) {
+  return resolveStockPairedRelease(input, stockPairedV1ReleaseDefinition);
+}
+
+export function resolveVerifiedStockPairedV2Release(
+  input: unknown = mainnetReleaseV2Json,
+) {
+  return resolveStockPairedRelease(input, stockPairedV2ReleaseDefinition);
+}
+
 export function getConfiguredStockPairedRelease() {
-  return resolveVerifiedStockPairedRelease(mainnetReleaseJson);
+  return (
+    resolveVerifiedStockPairedV2Release(mainnetReleaseV2Json) ??
+    resolveVerifiedStockPairedRelease(mainnetReleaseJson)
+  );
 }
 
 export function isConfiguredStockPairedReleaseReady(

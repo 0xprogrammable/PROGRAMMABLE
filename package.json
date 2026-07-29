@@ -73,6 +73,7 @@
     "contracts:deep-v3:keeper:test": "vitest run tests/deep-v3-keeper-*.test.ts",
     "contracts:deep-v3:verify:offline": "npm run contracts:deep-v3:core:test && npm run contracts:deep-v3:deployer:test && npm run contracts:deep-v3:release:test && npm run contracts:deep-v3:manifest:offline && npm run contracts:deep-v3:operator:test && npm run contracts:deep-v3:keeper:test",
     "contracts:stock-paired:operator:check": "node scripts/serve-stock-paired-mainnet-operator.mjs",
+    "contracts:stock-paired-v2:audit": "node contracts/scripts/audit-stock-paired-v2.mjs",
     "contracts:stock-paired:operator": "node scripts/serve-stock-paired-mainnet-operator.mjs --write",
     "contracts:stock-paired:operator:test": "cd contracts && forge build --force script/DeployMainnetStockPairedInfrastructureV1.s.sol src/StockPairedEthLaunchCoordinatorV1.sol && cd .. && node --test contracts/scripts/test/stock-paired-operator.test.mjs contracts/scripts/test/stock-paired-eth-coordinator-operator.test.mjs contracts/scripts/test/stock-paired-canary.test.mjs contracts/scripts/test/stock-paired-eth-canary.test.mjs",
     "contracts:stock-paired:eth-coordinator:check": "node scripts/serve-stock-paired-eth-coordinator.mjs",
