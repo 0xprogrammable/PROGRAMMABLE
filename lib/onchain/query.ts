@@ -44,9 +44,19 @@ function compareLaunchOrder(
   return first.tokenAddress.localeCompare(second.tokenAddress);
 }
 
-function marketCap(token: LauncherToken) {
-  const value = token.marketCapEthWei;
-  return value && /^\d+$/.test(value) ? BigInt(value) : null;
+function unsignedWad(value: string | undefined) {
+  return value && /^(0|[1-9]\d*)$/.test(value) && value.length <= 78
+    ? BigInt(value)
+    : null;
+}
+
+function marketCap(
+  token: LauncherToken,
+  source: "usd" | "eth",
+) {
+  return unsignedWad(
+    source === "usd" ? token.fdvUsdWad : token.marketCapEthWei,
+  );
 }
 
 export function filterAndSortTokens(
@@ -66,11 +76,16 @@ export function filterAndSortTokens(
           token.tokenAddress.toLowerCase().includes(normalizedQuery),
       )
     : [...tokens];
+  const marketCapSource = filtered.some(
+    (token) => unsignedWad(token.fdvUsdWad) !== null,
+  )
+    ? "usd"
+    : "eth";
 
   return filtered.sort((first, second) => {
     if (sort === "market-cap" || sort === "market-cap-asc") {
-      const firstCap = marketCap(first);
-      const secondCap = marketCap(second);
+      const firstCap = marketCap(first, marketCapSource);
+      const secondCap = marketCap(second, marketCapSource);
       if (firstCap === null || secondCap === null) {
         if (firstCap === null && secondCap !== null) return 1;
         if (firstCap !== null && secondCap === null) return -1;

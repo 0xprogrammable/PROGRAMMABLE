@@ -25,7 +25,10 @@ import {
 } from "@/components/token-trade";
 import { TokenPriceChart } from "@/components/token-price-chart";
 import { useWallet } from "@/components/wallet-provider";
-import { canOptimizeTokenImage } from "@/lib/token-image";
+import {
+  canOptimizeTokenImage,
+  getTokenCardImageSource,
+} from "@/lib/token-image";
 import { validatePreparedTradeResponse } from "@/lib/trade/client";
 import {
   type LauncherToken,
@@ -401,6 +404,35 @@ function formatUsdWadAmount(valueWad: string | undefined) {
   return formatUsdAmount(value);
 }
 
+export function formatStockPairedGrossVolume(token: LauncherToken) {
+  if (token.launchModel !== "stock-paired") return null;
+
+  const quoteUnitVolume = formatQuoteAmount(
+    token.grossVolumeQuote,
+    token.quoteAssetSymbol,
+  );
+  if (
+    !token.grossVolumeQuoteRaw ||
+    !/^\d+$/.test(token.grossVolumeQuoteRaw) ||
+    !token.tokenPriceQuoteWad ||
+    !/^[1-9]\d*$/.test(token.tokenPriceQuoteWad) ||
+    !token.tokenPriceUsdWad ||
+    !/^[1-9]\d*$/.test(token.tokenPriceUsdWad)
+  ) {
+    return quoteUnitVolume;
+  }
+
+  const grossVolumeQuoteRaw = BigInt(token.grossVolumeQuoteRaw);
+  const volumeUsdWad =
+    (grossVolumeQuoteRaw * BigInt(token.tokenPriceUsdWad)) /
+    BigInt(token.tokenPriceQuoteWad);
+  if (grossVolumeQuoteRaw > 0n && volumeUsdWad === 0n) {
+    return quoteUnitVolume;
+  }
+
+  return formatUsdWadAmount(volumeUsdWad.toString()) ?? quoteUnitVolume;
+}
+
 function formatSwapFee(value: number | undefined) {
   if (
     typeof value !== "number" ||
@@ -429,6 +461,10 @@ export function buildTokenDetailMetrics(
   const officialLiquidityUsd = formatUsdWadAmount(
     token.uniswapV4Pool?.tvlUsdWad,
   );
+  const stockPairedVolume =
+    token.launchModel === "stock-paired"
+      ? formatStockPairedGrossVolume(token)
+      : null;
   const hasMarketCap =
     typeof marketCapOverride === "string" ||
     token.fdvUsdWad !== undefined ||
@@ -455,14 +491,16 @@ export function buildTokenDetailMetrics(
       ? {
           label: "Volume",
           value:
-            officialVolumeUsd ??
-            formatUsdAmount(fallbackVolumeUsd) ??
-            formatEth(token.grossVolumeEth, "amount") ??
-            formatQuoteAmount(
-              token.grossVolumeQuote,
-              token.quoteAssetSymbol,
-            ) ??
-            "",
+            token.launchModel === "stock-paired"
+              ? stockPairedVolume ?? ""
+              : officialVolumeUsd ??
+                formatUsdAmount(fallbackVolumeUsd) ??
+                formatEth(token.grossVolumeEth, "amount") ??
+                formatQuoteAmount(
+                  token.grossVolumeQuote,
+                  token.quoteAssetSymbol,
+                ) ??
+                "",
         }
       : null,
     officialLiquidityUsd !== null
@@ -503,21 +541,14 @@ export function buildTokenDetailMetrics(
   );
 }
 
-function formatPreparedMinimum(
+export function formatPreparedMinimum(
   prepared: PreparedTokenTrade,
   symbol: string,
   tokenDecimals: number,
-  launchModel?: LauncherToken["launchModel"],
-  quoteAssetSymbol?: string,
 ) {
   try {
     const decimals = prepared.side === "buy" ? tokenDecimals : 18;
-    const unit =
-      prepared.side === "buy"
-        ? symbol
-        : launchModel === "stock-paired"
-          ? quoteAssetSymbol ?? "Quote"
-          : "ETH";
+    const unit = prepared.side === "buy" ? symbol : "ETH";
     const value = formatUnits(
       BigInt(prepared.quote.amountOutMinimum),
       decimals,
@@ -666,6 +697,7 @@ function TokenDetailContent({
   const copyResetTimer = useRef<number | null>(null);
   const imageUrl =
     token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress);
+  const imageSource = getTokenCardImageSource(imageUrl);
   const tokenDecimals =
     typeof token.tokenDecimals === "number" &&
     Number.isInteger(token.tokenDecimals) &&
@@ -707,8 +739,6 @@ function TokenDetailContent({
         preparedForDisplay,
         token.symbol,
         tokenDecimals,
-        token.launchModel,
-        token.quoteAssetSymbol,
       )
     : null;
 
@@ -901,7 +931,7 @@ function TokenDetailContent({
           <div className={styles.identity}>
             <div className={styles.image}>
               <Image
-                src={imageUrl}
+                src={imageSource}
                 alt={
                   token.imageUrl?.trim()
                     ? `${token.name} token image`
@@ -910,7 +940,7 @@ function TokenDetailContent({
                 fill
                 priority
                 sizes="(max-width: 800px) 100vw, 420px"
-                unoptimized={!canOptimizeTokenImage(imageUrl)}
+                unoptimized={!canOptimizeTokenImage(imageSource)}
               />
             </div>
 
@@ -988,6 +1018,7 @@ function TokenDetailContent({
             tokenAddress={token.tokenAddress}
             tokenName={token.name}
             totalSupply={token.totalSupply}
+            launchModel={token.launchModel}
             onMarketCapChange={setHoveredMarketCap}
           />
 

@@ -542,11 +542,22 @@ async function fetchPoolAnalyticsCached(input: {
 function matchesCanonicalToken(pool: ParsedPool, token: LauncherToken) {
   const tokenAddress = token.tokenAddress.toLowerCase();
   const hookAddress = token.hookAddress.toLowerCase();
+  const counterCurrency =
+    token.launchModel === "stock-paired"
+      ? token.quoteAssetAddress?.toLowerCase()
+      : NATIVE_CURRENCY_ADDRESS;
+  if (
+    !counterCurrency ||
+    !/^0x[0-9a-f]{40}$/.test(counterCurrency) ||
+    counterCurrency === tokenAddress
+  ) {
+    return false;
+  }
   const currencies = new Set<string>([pool.token0, pool.token1]);
   return (
     pool.hooks === hookAddress &&
     currencies.has(tokenAddress) &&
-    currencies.has(NATIVE_CURRENCY_ADDRESS)
+    currencies.has(counterCurrency)
   );
 }
 
@@ -631,7 +642,7 @@ export async function enrichExplorePageWithOfficialV4Subgraph(
       const pool = pools.get(token.poolId.toLowerCase());
       if (!pool) return token;
       if (!matchesCanonicalToken(pool, token)) {
-        throw new Error("Subgraph pool does not match canonical launch");
+        return token;
       }
       return {
         ...token,

@@ -140,6 +140,70 @@ describe("Explore query", () => {
     ).toBe("missing");
   });
 
+  it("uses one validated unit for market-cap sorting and keeps incomparable values last", () => {
+    const usdLow = {
+      ...tokens[0],
+      id: "usd-low",
+      fdvUsdWad: "10",
+      marketCapEthWei: "999999",
+    };
+    const usdHigh = {
+      ...tokens[1],
+      id: "usd-high",
+      fdvUsdWad: "20",
+      marketCapEthWei: "1",
+    };
+    const ethFallback = {
+      ...tokens[2],
+      id: "eth-fallback",
+      fdvUsdWad: "not-a-wad",
+      marketCapEthWei: "500",
+    };
+    const unknown = {
+      ...tokens[0],
+      id: "unknown",
+      fdvUsdWad: "-1",
+      marketCapEthWei: undefined,
+    };
+
+    expect(
+      filterAndSortTokens(
+        [ethFallback, unknown, usdLow, usdHigh],
+        "",
+        "market-cap",
+      ).map((entry) => entry.id),
+    ).toEqual(["usd-high", "usd-low", "eth-fallback", "unknown"]);
+    expect(
+      filterAndSortTokens(
+        [ethFallback, unknown, usdLow, usdHigh],
+        "",
+        "market-cap-asc",
+      ).map((entry) => entry.id),
+    ).toEqual(["usd-low", "usd-high", "eth-fallback", "unknown"]);
+
+    const newerEthHigh = {
+      ...tokens[0],
+      id: "newer-eth-high",
+      launchBlockNumber: "40",
+      fdvUsdWad: undefined,
+      marketCapEthWei: "1000000",
+    };
+    const olderEthLow = {
+      ...tokens[1],
+      id: "older-eth-low",
+      launchBlockNumber: "30",
+      fdvUsdWad: undefined,
+      marketCapEthWei: "1",
+    };
+    expect(
+      filterAndSortTokens(
+        [olderEthLow, usdLow, newerEthHigh, usdHigh],
+        "",
+        "market-cap-asc",
+      ).map((entry) => entry.id),
+    ).toEqual(["usd-low", "usd-high", "newer-eth-high", "older-eth-low"]);
+  });
+
   it("keeps all Mainnet rehearsals out of Explore and shows the next launch", () => {
     const model: ExploreReadModel = {
       status: "ready",

@@ -49,7 +49,10 @@ import {
   type StockPairedReward,
 } from "@/lib/profile/stock-paired-rewards";
 import { prepareCreatorClaim } from "@/lib/profile/creator-claim";
-import { canOptimizeTokenImage } from "@/lib/token-image";
+import {
+  canOptimizeTokenImage,
+  getTokenCardImageSource,
+} from "@/lib/token-image";
 import {
   getProfileStorageKey,
   getProfileUsernameError,
@@ -92,14 +95,26 @@ const stockPairedReleaseAvailable =
 
 type ProfileClaimActionState = {
   account: string;
-  status: "preparing" | "wallet" | "confirming" | "confirmed" | "error";
+  status:
+    | "preparing"
+    | "wallet"
+    | "confirming"
+    | "pending"
+    | "confirmed"
+    | "error";
   message: string;
   transactionHash?: Hex;
 };
 
 type ClassicV3ActionState = {
   account: string;
-  status: "preparing" | "wallet" | "confirming" | "confirmed" | "error";
+  status:
+    | "preparing"
+    | "wallet"
+    | "confirming"
+    | "pending"
+    | "confirmed"
+    | "error";
   message: string;
   transactionHash?: Hex;
 };
@@ -107,9 +122,32 @@ type ClassicV3ActionState = {
 type DeepActionState = ClassicV3ActionState;
 type StockPairedActionState = ClassicV3ActionState;
 
+export type PendingProfileTransactionSource =
+  | "classic"
+  | "classic-v3"
+  | "deep"
+  | "stock-paired";
+
+export type PendingProfileTransactionRecord = {
+  version: 1;
+  account: string;
+  chainId: 1 | 11_155_111;
+  source: PendingProfileTransactionSource;
+  stateKey: string;
+  action: "claim" | "update-payout";
+  transactionHash: Hex;
+  submittedAt: number;
+};
+
 export type ProfileViewProps = {
   onchainData?: ProfileOnchainData;
 };
+
+const pendingProfileTransactionStoragePrefix =
+  "programmable:profile-pending-transactions:v1:";
+const maximumPersistedProfileTransactions = 32;
+const ethereumAddressPattern = /^0x[0-9a-f]{40}$/;
+const ethereumBytes32Pattern = /^0x[0-9a-f]{64}$/;
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
@@ -176,12 +214,66 @@ function formatLaunchModel(model?: ProfileToken["launchModel"]) {
   return "Classic";
 }
 
-async function waitForTransaction(
+type WaitForTransactionOptions = {
+  maxAttempts?: number;
+  intervalMs?: number;
+  fetcher?: typeof fetch;
+  wait?: (milliseconds: number) => Promise<void>;
+  signal?: AbortSignal;
+};
+
+function throwIfTransactionPollAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  throw signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException("Transaction polling aborted", "AbortError");
+}
+
+function waitForTransactionInterval(
+  milliseconds: number,
+  signal?: AbortSignal,
+) {
+  return new Promise<void>((resolve, reject) => {
+    try {
+      throwIfTransactionPollAborted(signal);
+    } catch (caught) {
+      reject(caught);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      reject(
+        signal?.reason instanceof Error
+          ? signal.reason
+          : new DOMException("Transaction polling aborted", "AbortError"),
+      );
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+export async function waitForTransaction(
   transactionHash: Hex,
   chainId: number,
-): Promise<"confirmed" | "reverted"> {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const response = await fetch(
+  options: WaitForTransactionOptions = {},
+): Promise<"pending" | "confirmed" | "reverted"> {
+  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 40));
+  const intervalMs = options.intervalMs ?? 1_500;
+  const fetcher = options.fetcher ?? fetch;
+  const wait =
+    options.wait ??
+    ((milliseconds: number) =>
+      waitForTransactionInterval(milliseconds, options.signal));
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    throwIfTransactionPollAborted(options.signal);
+    const response = await fetcher(
       `/api/transaction-status?hash=${encodeURIComponent(
         transactionHash,
       )}&chainId=${chainId}`,
@@ -189,20 +281,340 @@ async function waitForTransaction(
         method: "GET",
         cache: "no-store",
         headers: { Accept: "application/json" },
+        signal: options.signal,
       },
     );
+    throwIfTransactionPollAborted(options.signal);
     const body = (await response.json()) as {
       status?: "pending" | "confirmed" | "reverted";
     };
+    throwIfTransactionPollAborted(options.signal);
     if (!response.ok) {
       throw new Error("The transaction status could not be checked");
     }
     if (body.status === "confirmed" || body.status === "reverted") {
       return body.status;
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+    if (attempt < maxAttempts - 1) {
+      await wait(intervalMs);
+      throwIfTransactionPollAborted(options.signal);
+    }
   }
-  throw new Error("The transaction is still pending");
+  return "pending";
+}
+
+type RecoverableTransactionActionState = {
+  status: string;
+  message: string;
+  transactionHash?: Hex;
+};
+
+export function preserveInterruptedTransactionStates<
+  T extends RecoverableTransactionActionState,
+>(states: Record<string, T>): Record<string, T> {
+  let changed = false;
+  const next = { ...states };
+
+  for (const [key, state] of Object.entries(states)) {
+    if (state.status !== "confirming" || !state.transactionHash) continue;
+    next[key] = {
+      ...state,
+      status: "pending",
+      message: "Status check paused. Check the same transaction again",
+    };
+    changed = true;
+  }
+
+  return changed ? next : states;
+}
+
+export function profileTransactionPollAttempts(manualCheck: boolean) {
+  return manualCheck ? 1 : 40;
+}
+
+function normalizeEthereumAddress(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return ethereumAddressPattern.test(normalized) ? normalized : null;
+}
+
+function isPendingProfileTransactionRecord(
+  value: unknown,
+  expectedAccount: string,
+): value is PendingProfileTransactionRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  const record = value as Partial<PendingProfileTransactionRecord>;
+  const account =
+    typeof record.account === "string"
+      ? normalizeEthereumAddress(record.account)
+      : null;
+  const transactionHash =
+    typeof record.transactionHash === "string"
+      ? record.transactionHash.toLowerCase()
+      : "";
+  const stateKey =
+    typeof record.stateKey === "string" ? record.stateKey.toLowerCase() : "";
+  const validSource =
+    record.source === "classic" ||
+    record.source === "classic-v3" ||
+    record.source === "deep" ||
+    record.source === "stock-paired";
+  const validAction =
+    record.action === "claim" || record.action === "update-payout";
+  const validNetwork = record.chainId === 1 || record.chainId === 11_155_111;
+  const validSubmittedAt =
+    typeof record.submittedAt === "number" &&
+    Number.isSafeInteger(record.submittedAt) &&
+    record.submittedAt > 0;
+
+  if (
+    record.version !== 1 ||
+    account !== expectedAccount ||
+    !ethereumBytes32Pattern.test(transactionHash) ||
+    !validSource ||
+    !validAction ||
+    !validNetwork ||
+    !validSubmittedAt
+  ) {
+    return false;
+  }
+
+  if (record.source === "classic") {
+    return record.action === "claim" && ethereumBytes32Pattern.test(stateKey);
+  }
+
+  const [vaultAddress, stateAction, extra] = stateKey.split(":");
+  return (
+    extra === undefined &&
+    ethereumAddressPattern.test(vaultAddress ?? "") &&
+    stateAction === record.action
+  );
+}
+
+export function parsePendingProfileTransactions(
+  serialized: string | null | undefined,
+  account: string,
+): PendingProfileTransactionRecord[] {
+  const normalizedAccount = normalizeEthereumAddress(account);
+  if (!normalizedAccount || !serialized) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return [];
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+
+  const envelope = parsed as { version?: unknown; transactions?: unknown };
+  if (envelope.version !== 1 || !Array.isArray(envelope.transactions)) return [];
+
+  const uniqueRecords = new Map<string, PendingProfileTransactionRecord>();
+  for (const value of envelope.transactions.slice(
+    -maximumPersistedProfileTransactions,
+  )) {
+    if (!isPendingProfileTransactionRecord(value, normalizedAccount)) continue;
+    const record = value as PendingProfileTransactionRecord;
+    const normalizedRecord: PendingProfileTransactionRecord = {
+      ...record,
+      account: normalizedAccount,
+      stateKey: record.stateKey.toLowerCase(),
+      transactionHash: record.transactionHash.toLowerCase() as Hex,
+    };
+    uniqueRecords.set(
+      `${normalizedRecord.source}:${normalizedRecord.stateKey}`,
+      normalizedRecord,
+    );
+  }
+  return [...uniqueRecords.values()];
+}
+
+export function upsertPendingProfileTransactionRecords(
+  records: readonly PendingProfileTransactionRecord[],
+  record: PendingProfileTransactionRecord,
+): PendingProfileTransactionRecord[] {
+  const normalized = parsePendingProfileTransactions(
+    JSON.stringify({ version: 1, transactions: [record] }),
+    record.account,
+  )[0];
+  if (!normalized) return [...records];
+
+  const matchingRecord = records.find(
+    (candidate) =>
+      candidate.source === normalized.source &&
+      candidate.stateKey === normalized.stateKey &&
+      candidate.transactionHash.toLowerCase() ===
+        normalized.transactionHash.toLowerCase(),
+  );
+  const nextRecord = matchingRecord
+    ? { ...normalized, submittedAt: matchingRecord.submittedAt }
+    : normalized;
+
+  return [
+    ...records.filter(
+      (candidate) =>
+        candidate.source !== nextRecord.source ||
+        candidate.stateKey !== nextRecord.stateKey,
+    ),
+    nextRecord,
+  ].slice(-maximumPersistedProfileTransactions);
+}
+
+export function removePendingProfileTransactionRecord(
+  records: readonly PendingProfileTransactionRecord[],
+  target: Pick<
+    PendingProfileTransactionRecord,
+    "source" | "stateKey" | "transactionHash"
+  >,
+): PendingProfileTransactionRecord[] {
+  return records.filter(
+    (record) =>
+      record.source !== target.source ||
+      record.stateKey !== target.stateKey.toLowerCase() ||
+      record.transactionHash.toLowerCase() !==
+        target.transactionHash.toLowerCase(),
+  );
+}
+
+export function clearConfirmedProfileActionStates<
+  T extends RecoverableTransactionActionState,
+>(
+  states: Record<string, T>,
+  confirmed: ReadonlyMap<string, Hex>,
+): Record<string, T> {
+  let changed = false;
+  const next = { ...states };
+
+  for (const [stateKey, transactionHash] of confirmed) {
+    const state = states[stateKey];
+    if (
+      state?.status !== "confirmed" ||
+      state.transactionHash?.toLowerCase() !== transactionHash.toLowerCase()
+    ) {
+      continue;
+    }
+    delete next[stateKey];
+    changed = true;
+  }
+
+  return changed ? next : states;
+}
+
+function pendingProfileTransactionStorageKey(account: string) {
+  const normalizedAccount = normalizeEthereumAddress(account);
+  return normalizedAccount
+    ? `${pendingProfileTransactionStoragePrefix}${normalizedAccount}`
+    : null;
+}
+
+function readPendingProfileTransactions(
+  storage: Storage,
+  account: string,
+): PendingProfileTransactionRecord[] {
+  const storageKey = pendingProfileTransactionStorageKey(account);
+  if (!storageKey) return [];
+  return parsePendingProfileTransactions(storage.getItem(storageKey), account);
+}
+
+function writePendingProfileTransactions(
+  storage: Storage,
+  account: string,
+  records: readonly PendingProfileTransactionRecord[],
+) {
+  const storageKey = pendingProfileTransactionStorageKey(account);
+  if (!storageKey) return;
+  if (records.length === 0) {
+    storage.removeItem(storageKey);
+    return;
+  }
+  storage.setItem(
+    storageKey,
+    JSON.stringify({ version: 1, transactions: records }),
+  );
+}
+
+function persistPendingProfileTransaction(
+  record: PendingProfileTransactionRecord,
+) {
+  if (typeof window === "undefined") return;
+  try {
+    const records = readPendingProfileTransactions(
+      window.localStorage,
+      record.account,
+    );
+    writePendingProfileTransactions(
+      window.localStorage,
+      record.account,
+      upsertPendingProfileTransactionRecords(records, record),
+    );
+  } catch {
+    // A blocked storage layer must not interrupt an already-submitted transaction.
+  }
+}
+
+function forgetPendingProfileTransaction(
+  target: Pick<
+    PendingProfileTransactionRecord,
+    "account" | "source" | "stateKey" | "transactionHash"
+  >,
+) {
+  if (typeof window === "undefined") return;
+  try {
+    const records = readPendingProfileTransactions(
+      window.localStorage,
+      target.account,
+    );
+    writePendingProfileTransactions(
+      window.localStorage,
+      target.account,
+      removePendingProfileTransactionRecord(records, target),
+    );
+  } catch {
+    // The confirmed receipt remains authoritative if browser storage is blocked.
+  }
+}
+
+function restoredPendingProfileActionState(
+  record: PendingProfileTransactionRecord,
+): ProfileClaimActionState {
+  return {
+    account: record.account,
+    status: "pending",
+    message: "Transaction submitted. Check its current status",
+    transactionHash: record.transactionHash,
+  };
+}
+
+export function groupPendingProfileTransactionStates(
+  records: readonly PendingProfileTransactionRecord[],
+) {
+  const grouped: Record<
+    PendingProfileTransactionSource,
+    Record<string, ProfileClaimActionState>
+  > = {
+    classic: {},
+    "classic-v3": {},
+    deep: {},
+    "stock-paired": {},
+  };
+  for (const record of records) {
+    grouped[record.source][record.stateKey] =
+      restoredPendingProfileActionState(record);
+  }
+  return grouped;
+}
+
+function consumeConfirmedProfileTransactions(
+  active: Map<string, Hex>,
+  consumed: ReadonlyMap<string, Hex>,
+) {
+  for (const [stateKey, transactionHash] of consumed) {
+    if (
+      active.get(stateKey)?.toLowerCase() === transactionHash.toLowerCase()
+    ) {
+      active.delete(stateKey);
+    }
+  }
 }
 
 function useWalletLocalProfile(address?: string) {
@@ -263,6 +675,18 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const account = wallet?.account;
   const activeAccountRef = useRef(account);
+  const transactionPollControllersRef = useRef<Set<AbortController>>(
+    new Set(),
+  );
+  const hydratedPendingAccountRef = useRef<string | undefined>(undefined);
+  const confirmedProfileTransactionsRef = useRef<
+    Record<PendingProfileTransactionSource, Map<string, Hex>>
+  >({
+    classic: new Map(),
+    "classic-v3": new Map(),
+    deep: new Map(),
+    "stock-paired": new Map(),
+  });
   const savedProfile = useWalletLocalProfile(account);
   const [editingAccount, setEditingAccount] = useState("");
   const [usernameDraft, setUsernameDraft] = useState("");
@@ -296,22 +720,90 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   >({});
   const editingProfile =
     Boolean(account) && editingAccount === account?.toLowerCase();
+  const abortTransactionPolls = useCallback(() => {
+    for (const controller of transactionPollControllersRef.current) {
+      controller.abort();
+    }
+    transactionPollControllersRef.current.clear();
+  }, []);
 
   useEffect(() => {
+    const previousAccount = activeAccountRef.current?.toLowerCase();
     activeAccountRef.current = account;
-  }, [account]);
+    const normalizedAccount = account?.toLowerCase();
+
+    if (previousAccount !== normalizedAccount) {
+      abortTransactionPolls();
+      hydratedPendingAccountRef.current = undefined;
+      for (const targets of Object.values(
+        confirmedProfileTransactionsRef.current,
+      )) {
+        targets.clear();
+      }
+    }
+    if (hydratedPendingAccountRef.current === normalizedAccount) return;
+
+    let cancelled = false;
+    if (!account || !normalizedAccount) {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setClaimActionStates({});
+        setClassicV3ActionStates({});
+        setDeepActionStates({});
+        setStockPairedActionStates({});
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    let persisted: PendingProfileTransactionRecord[] = [];
+    try {
+      persisted = readPendingProfileTransactions(window.localStorage, account);
+    } catch {
+      persisted = [];
+    }
+    const restored = groupPendingProfileTransactionStates(persisted);
+    hydratedPendingAccountRef.current = normalizedAccount;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setClaimActionStates(restored.classic);
+      setClassicV3ActionStates(restored["classic-v3"]);
+      setDeepActionStates(restored.deep);
+      setStockPairedActionStates(restored["stock-paired"]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [abortTransactionPolls, account]);
+
+  useEffect(
+    () => () => {
+      abortTransactionPolls();
+    },
+    [abortTransactionPolls],
+  );
 
   useEffect(() => {
     if (onchainData) return;
     if (!account) return;
 
     const controller = new AbortController();
+    const confirmedTransactions = new Map(
+      confirmedProfileTransactionsRef.current.classic,
+    );
 
     void fetchCreatorProfile(account, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
           setRemoteOnchainData(data);
-          if (profileRefresh > 0) setClaimActionStates({});
+          setClaimActionStates((current) =>
+            clearConfirmedProfileActionStates(current, confirmedTransactions),
+          );
+          consumeConfirmedProfileTransactions(
+            confirmedProfileTransactionsRef.current.classic,
+            confirmedTransactions,
+          );
         }
       })
       .catch((caught: unknown) => {
@@ -332,11 +824,20 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   useEffect(() => {
     if (!account || !classicV3ReleaseAvailable) return;
     const controller = new AbortController();
+    const confirmedTransactions = new Map(
+      confirmedProfileTransactionsRef.current["classic-v3"],
+    );
     void fetchClassicV3ProfileRewards(account, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
           setClassicV3Rewards(data);
-          if (profileRefresh > 0) setClassicV3ActionStates({});
+          setClassicV3ActionStates((current) =>
+            clearConfirmedProfileActionStates(current, confirmedTransactions),
+          );
+          consumeConfirmedProfileTransactions(
+            confirmedProfileTransactionsRef.current["classic-v3"],
+            confirmedTransactions,
+          );
         }
       })
       .catch((caught: unknown) => {
@@ -357,11 +858,20 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   useEffect(() => {
     if (!account || !deepReleaseAvailable) return;
     const controller = new AbortController();
+    const confirmedTransactions = new Map(
+      confirmedProfileTransactionsRef.current.deep,
+    );
     void fetchDeepProfileRewards(account, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
           setDeepRewards(data);
-          if (profileRefresh > 0) setDeepActionStates({});
+          setDeepActionStates((current) =>
+            clearConfirmedProfileActionStates(current, confirmedTransactions),
+          );
+          consumeConfirmedProfileTransactions(
+            confirmedProfileTransactionsRef.current.deep,
+            confirmedTransactions,
+          );
         }
       })
       .catch((caught: unknown) => {
@@ -407,11 +917,20 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   useEffect(() => {
     if (!account || !stockPairedReleaseAvailable) return;
     const controller = new AbortController();
+    const confirmedTransactions = new Map(
+      confirmedProfileTransactionsRef.current["stock-paired"],
+    );
     void fetchStockPairedProfileRewards(account, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
           setStockPairedRewards(data);
-          if (profileRefresh > 0) setStockPairedActionStates({});
+          setStockPairedActionStates((current) =>
+            clearConfirmedProfileActionStates(current, confirmedTransactions),
+          );
+          consumeConfirmedProfileTransactions(
+            confirmedProfileTransactionsRef.current["stock-paired"],
+            confirmedTransactions,
+          );
         }
       })
       .catch((caught: unknown) => {
@@ -533,6 +1052,123 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     stockPairedRewards.account?.toLowerCase() === account.toLowerCase()
       ? stockPairedRewards
       : EMPTY_STOCK_PAIRED_PROFILE;
+  const settleSubmittedTransaction = useCallback(
+    async ({
+      transactionHash,
+      chainId,
+      actionAccount,
+      source,
+      stateKey,
+      action,
+      confirmedMessage,
+      revertedMessage,
+      setActionState,
+      manualCheck = false,
+    }: {
+      transactionHash: Hex;
+      chainId: 1 | 11_155_111;
+      actionAccount: string;
+      source: PendingProfileTransactionSource;
+      stateKey: string;
+      action: "claim" | "update-payout";
+      confirmedMessage: string;
+      revertedMessage: string;
+      setActionState: (
+        state: Omit<ProfileClaimActionState, "account">,
+      ) => void;
+      manualCheck?: boolean;
+    }) => {
+      const pendingTransaction: PendingProfileTransactionRecord = {
+        version: 1,
+        account: actionAccount.toLowerCase(),
+        chainId,
+        source,
+        stateKey,
+        action,
+        transactionHash,
+        submittedAt: Date.now(),
+      };
+      persistPendingProfileTransaction(pendingTransaction);
+      if (
+        activeAccountRef.current?.toLowerCase() !==
+        actionAccount.toLowerCase()
+      ) {
+        return;
+      }
+
+      const controller = new AbortController();
+      transactionPollControllersRef.current.add(controller);
+      setActionState({
+        status: "confirming",
+        message: manualCheck
+          ? "Checking transaction status"
+          : "Confirming on Ethereum",
+        transactionHash,
+      });
+
+      try {
+        const receiptStatus = await waitForTransaction(
+          transactionHash,
+          chainId,
+          {
+            maxAttempts: profileTransactionPollAttempts(manualCheck),
+            signal: controller.signal,
+          },
+        );
+        if (controller.signal.aborted) return;
+        if (
+          activeAccountRef.current?.toLowerCase() !==
+          actionAccount.toLowerCase()
+        ) {
+          return;
+        }
+        if (receiptStatus === "pending") {
+          setActionState({
+            status: "pending",
+            message: "Still pending on Ethereum. Check the status again",
+            transactionHash,
+          });
+          return;
+        }
+        if (receiptStatus === "reverted") {
+          forgetPendingProfileTransaction(pendingTransaction);
+          setActionState({
+            status: "error",
+            message: revertedMessage,
+            transactionHash,
+          });
+          return;
+        }
+        forgetPendingProfileTransaction(pendingTransaction);
+        confirmedProfileTransactionsRef.current[source].set(
+          stateKey,
+          transactionHash,
+        );
+        setActionState({
+          status: "confirmed",
+          message: confirmedMessage,
+          transactionHash,
+        });
+        setProfileRefresh((current) => current + 1);
+      } catch {
+        if (controller.signal.aborted) return;
+        if (
+          activeAccountRef.current?.toLowerCase() !==
+          actionAccount.toLowerCase()
+        ) {
+          return;
+        }
+        setActionState({
+          status: "pending",
+          message: "Status unavailable. Check the transaction again",
+          transactionHash,
+        });
+      } finally {
+        transactionPollControllersRef.current.delete(controller);
+      }
+    },
+    [],
+  );
   const submitCreatorClaim = useCallback(
     async (claim: ProfileClaim) => {
       const claimAccount = account;
@@ -557,6 +1193,31 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           message: "Creator claims are not supported on this network",
         });
         return;
+      }
+
+      const existingState = claimActionStates[stateKey];
+      if (
+        existingState?.account.toLowerCase() === claimAccount.toLowerCase()
+      ) {
+        if (
+          existingState.status === "pending" &&
+          existingState.transactionHash
+        ) {
+          await settleSubmittedTransaction({
+            transactionHash: existingState.transactionHash,
+            chainId,
+            actionAccount: claimAccount,
+            source: "classic",
+            stateKey,
+            action: "claim",
+            confirmedMessage: "Claim confirmed",
+            revertedMessage: "The claim reverted onchain",
+            setActionState: setClaimState,
+            manualCheck: true,
+          });
+          return;
+        }
+        if (actionPending(existingState)) return;
       }
 
       setClaimState({
@@ -588,34 +1249,31 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           message: "Review the transaction in your wallet",
         });
         const transactionHash = await sendTransaction(prepared.transaction);
+        persistPendingProfileTransaction({
+          version: 1,
+          account: claimAccount.toLowerCase(),
+          chainId,
+          source: "classic",
+          stateKey,
+          action: "claim",
+          transactionHash,
+          submittedAt: Date.now(),
+        });
 
         if (
           activeAccountRef.current?.toLowerCase() === claimAccount.toLowerCase()
         ) {
-          setClaimState({
-            status: "confirming",
-            message: "Confirming on Ethereum",
-            transactionHash,
-          });
-          const receiptStatus = await waitForTransaction(
+          await settleSubmittedTransaction({
             transactionHash,
             chainId,
-          );
-          if (receiptStatus === "reverted") {
-            throw new Error("The claim reverted onchain");
-          }
-          if (
-            activeAccountRef.current?.toLowerCase() !==
-            claimAccount.toLowerCase()
-          ) {
-            return;
-          }
-          setClaimState({
-            status: "confirmed",
-            message: "Claim confirmed",
-            transactionHash,
+            actionAccount: claimAccount,
+            source: "classic",
+            stateKey,
+            action: "claim",
+            confirmedMessage: "Claim confirmed",
+            revertedMessage: "The claim reverted onchain",
+            setActionState: setClaimState,
           });
-          setProfileRefresh((current) => current + 1);
         }
       } catch (caught) {
         if (
@@ -634,9 +1292,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     },
     [
       account,
+      claimActionStates,
       scopedOnchainData.chainId,
       scopedOnchainData.status,
       sendTransaction,
+      settleSubmittedTransaction,
     ],
   );
   const submitClassicV3Action = useCallback(
@@ -663,6 +1323,33 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           [stateKey]: { account: actionAccount, ...state },
         }));
       };
+      const existingState = classicV3ActionStates[stateKey];
+      if (
+        existingState?.account.toLowerCase() === actionAccount.toLowerCase()
+      ) {
+        if (
+          existingState.status === "pending" &&
+          existingState.transactionHash
+        ) {
+          await settleSubmittedTransaction({
+            transactionHash: existingState.transactionHash,
+            chainId: scopedClassicV3Rewards.chainId,
+            actionAccount,
+            source: "classic-v3",
+            stateKey,
+            action,
+            confirmedMessage:
+              action === "claim"
+                ? "Claim confirmed"
+                : "Payout address updated",
+            revertedMessage: "The reward transaction reverted onchain",
+            setActionState,
+            manualCheck: true,
+          });
+          return;
+        }
+        if (actionPending(existingState)) return;
+      }
       setActionState({
         status: "preparing",
         message: "Checking the current onchain state",
@@ -686,37 +1373,34 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           message: "Review the transaction in your wallet",
         });
         const transactionHash = await sendTransaction(prepared.transaction);
+        persistPendingProfileTransaction({
+          version: 1,
+          account: actionAccount.toLowerCase(),
+          chainId: scopedClassicV3Rewards.chainId,
+          source: "classic-v3",
+          stateKey,
+          action,
+          transactionHash,
+          submittedAt: Date.now(),
+        });
         if (
           activeAccountRef.current?.toLowerCase() ===
           actionAccount.toLowerCase()
         ) {
-          setActionState({
-            status: "confirming",
-            message: "Confirming on Ethereum",
+          await settleSubmittedTransaction({
             transactionHash,
-          });
-          const receiptStatus = await waitForTransaction(
-            transactionHash,
-            scopedClassicV3Rewards.chainId,
-          );
-          if (receiptStatus === "reverted") {
-            throw new Error("The reward transaction reverted onchain");
-          }
-          if (
-            activeAccountRef.current?.toLowerCase() !==
-            actionAccount.toLowerCase()
-          ) {
-            return;
-          }
-          setActionState({
-            status: "confirmed",
-            message:
+            chainId: scopedClassicV3Rewards.chainId,
+            actionAccount,
+            source: "classic-v3",
+            stateKey,
+            action,
+            confirmedMessage:
               action === "claim"
                 ? "Claim confirmed"
                 : "Payout address updated",
-            transactionHash,
+            revertedMessage: "The reward transaction reverted onchain",
+            setActionState,
           });
-          setProfileRefresh((current) => current + 1);
         }
       } catch (caught) {
         if (
@@ -734,7 +1418,13 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         });
       }
     },
-    [account, scopedClassicV3Rewards, sendTransaction],
+    [
+      account,
+      classicV3ActionStates,
+      scopedClassicV3Rewards,
+      sendTransaction,
+      settleSubmittedTransaction,
+    ],
   );
   const submitDeepAction = useCallback(
     async (
@@ -760,6 +1450,33 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           [stateKey]: { account: actionAccount, ...state },
         }));
       };
+      const existingState = deepActionStates[stateKey];
+      if (
+        existingState?.account.toLowerCase() === actionAccount.toLowerCase()
+      ) {
+        if (
+          existingState.status === "pending" &&
+          existingState.transactionHash
+        ) {
+          await settleSubmittedTransaction({
+            transactionHash: existingState.transactionHash,
+            chainId: scopedDeepRewards.chainId,
+            actionAccount,
+            source: "deep",
+            stateKey,
+            action,
+            confirmedMessage:
+              action === "claim"
+                ? "Claim confirmed"
+                : "Payout address updated",
+            revertedMessage: "The reward transaction reverted onchain",
+            setActionState,
+            manualCheck: true,
+          });
+          return;
+        }
+        if (actionPending(existingState)) return;
+      }
       setActionState({
         status: "preparing",
         message: "Checking the current onchain state",
@@ -784,37 +1501,34 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           message: "Review the transaction in your wallet",
         });
         const transactionHash = await sendTransaction(prepared.transaction);
+        persistPendingProfileTransaction({
+          version: 1,
+          account: actionAccount.toLowerCase(),
+          chainId: scopedDeepRewards.chainId,
+          source: "deep",
+          stateKey,
+          action,
+          transactionHash,
+          submittedAt: Date.now(),
+        });
         if (
           activeAccountRef.current?.toLowerCase() ===
           actionAccount.toLowerCase()
         ) {
-          setActionState({
-            status: "confirming",
-            message: "Confirming on Ethereum",
+          await settleSubmittedTransaction({
             transactionHash,
-          });
-          const receiptStatus = await waitForTransaction(
-            transactionHash,
-            scopedDeepRewards.chainId,
-          );
-          if (receiptStatus === "reverted") {
-            throw new Error("The reward transaction reverted onchain");
-          }
-          if (
-            activeAccountRef.current?.toLowerCase() !==
-            actionAccount.toLowerCase()
-          ) {
-            return;
-          }
-          setActionState({
-            status: "confirmed",
-            message:
+            chainId: scopedDeepRewards.chainId,
+            actionAccount,
+            source: "deep",
+            stateKey,
+            action,
+            confirmedMessage:
               action === "claim"
                 ? "Claim confirmed"
                 : "Payout address updated",
-            transactionHash,
+            revertedMessage: "The reward transaction reverted onchain",
+            setActionState,
           });
-          setProfileRefresh((current) => current + 1);
         }
       } catch (caught) {
         if (
@@ -832,7 +1546,13 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         });
       }
     },
-    [account, scopedDeepRewards, sendTransaction],
+    [
+      account,
+      deepActionStates,
+      scopedDeepRewards,
+      sendTransaction,
+      settleSubmittedTransaction,
+    ],
   );
   const submitStockPairedAction = useCallback(
     async (
@@ -858,6 +1578,33 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           [stateKey]: { account: actionAccount, ...state },
         }));
       };
+      const existingState = stockPairedActionStates[stateKey];
+      if (
+        existingState?.account.toLowerCase() === actionAccount.toLowerCase()
+      ) {
+        if (
+          existingState.status === "pending" &&
+          existingState.transactionHash
+        ) {
+          await settleSubmittedTransaction({
+            transactionHash: existingState.transactionHash,
+            chainId: scopedStockPairedRewards.chainId,
+            actionAccount,
+            source: "stock-paired",
+            stateKey,
+            action,
+            confirmedMessage:
+              action === "claim"
+                ? "Claim confirmed"
+                : "Payout address updated",
+            revertedMessage: "The reward transaction reverted onchain",
+            setActionState,
+            manualCheck: true,
+          });
+          return;
+        }
+        if (actionPending(existingState)) return;
+      }
       setActionState({
         status: "preparing",
         message: "Checking the current onchain state",
@@ -881,37 +1628,34 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           message: "Review the transaction in your wallet",
         });
         const transactionHash = await sendTransaction(prepared.transaction);
+        persistPendingProfileTransaction({
+          version: 1,
+          account: actionAccount.toLowerCase(),
+          chainId: scopedStockPairedRewards.chainId,
+          source: "stock-paired",
+          stateKey,
+          action,
+          transactionHash,
+          submittedAt: Date.now(),
+        });
         if (
           activeAccountRef.current?.toLowerCase() ===
           actionAccount.toLowerCase()
         ) {
-          setActionState({
-            status: "confirming",
-            message: "Confirming on Ethereum",
+          await settleSubmittedTransaction({
             transactionHash,
-          });
-          const receiptStatus = await waitForTransaction(
-            transactionHash,
-            scopedStockPairedRewards.chainId,
-          );
-          if (receiptStatus === "reverted") {
-            throw new Error("The reward transaction reverted onchain");
-          }
-          if (
-            activeAccountRef.current?.toLowerCase() !==
-            actionAccount.toLowerCase()
-          ) {
-            return;
-          }
-          setActionState({
-            status: "confirmed",
-            message:
+            chainId: scopedStockPairedRewards.chainId,
+            actionAccount,
+            source: "stock-paired",
+            stateKey,
+            action,
+            confirmedMessage:
               action === "claim"
                 ? "Claim confirmed"
                 : "Payout address updated",
-            transactionHash,
+            revertedMessage: "The reward transaction reverted onchain",
+            setActionState,
           });
-          setProfileRefresh((current) => current + 1);
         }
       } catch (caught) {
         if (
@@ -929,7 +1673,13 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         });
       }
     },
-    [account, scopedStockPairedRewards, sendTransaction],
+    [
+      account,
+      scopedStockPairedRewards,
+      sendTransaction,
+      settleSubmittedTransaction,
+      stockPairedActionStates,
+    ],
   );
   const displayName = account
     ? savedProfile.username || "Your profile"
@@ -1154,21 +1904,49 @@ export function groupProfileRewards(
 }
 
 export function sortProfileTokensByMarketCap(tokens: readonly ProfileToken[]) {
-  return [...tokens].sort(compareProfileTokensByMarketCap);
+  const marketCapSource = profileMarketCapSource(tokens);
+
+  return [...tokens].sort((first, second) =>
+    compareProfileTokensByMarketCap(first, second, marketCapSource),
+  );
+}
+
+function unsignedProfileMarketCap(value: string | undefined) {
+  return value && /^(0|[1-9]\d*)$/.test(value) && value.length <= 78
+    ? BigInt(value)
+    : null;
+}
+
+function profileMarketCapSource(tokens: readonly ProfileToken[]) {
+  return tokens.some(
+    (token) => unsignedProfileMarketCap(token.fdvUsdWad) !== null,
+  )
+    ? ("usd" as const)
+    : ("eth" as const);
+}
+
+function profileMarketCap(
+  token: ProfileToken,
+  source: "usd" | "eth",
+) {
+  return unsignedProfileMarketCap(
+    source === "usd" ? token.fdvUsdWad : token.marketCapEthWei,
+  );
 }
 
 function compareProfileTokensByMarketCap(
   first: ProfileToken,
   second: ProfileToken,
+  source: "usd" | "eth",
 ) {
-  const firstCap = first.fdvUsdWad ?? first.marketCapEthWei;
-  const secondCap = second.fdvUsdWad ?? second.marketCapEthWei;
+  const firstCap = profileMarketCap(first, source);
+  const secondCap = profileMarketCap(second, source);
 
-  if (firstCap && secondCap && firstCap !== secondCap) {
-    return BigInt(firstCap) > BigInt(secondCap) ? -1 : 1;
+  if (firstCap !== null && secondCap !== null && firstCap !== secondCap) {
+    return firstCap > secondCap ? -1 : 1;
   }
-  if (firstCap && !secondCap) return -1;
-  if (!firstCap && secondCap) return 1;
+  if (firstCap !== null && secondCap === null) return -1;
+  if (firstCap === null && secondCap !== null) return 1;
 
   const nameOrder = first.name.localeCompare(second.name);
   if (nameOrder !== 0) return nameOrder;
@@ -1342,8 +2120,16 @@ export function buildProfilePortfolio(
     });
   }
 
-  return [...entries.values()].sort((first, second) =>
-    compareProfileTokensByMarketCap(first.token, second.token),
+  const portfolio = [...entries.values()];
+  const marketCapSource = profileMarketCapSource(
+    portfolio.map((entry) => entry.token),
+  );
+  return portfolio.sort((first, second) =>
+    compareProfileTokensByMarketCap(
+      first.token,
+      second.token,
+      marketCapSource,
+    ),
   );
 }
 
@@ -1702,7 +2488,7 @@ function transactionHref(chainId: number | undefined, hash: Hex) {
   }/tx/${hash}`;
 }
 
-function actionPending(
+export function actionPending(
   state: ProfileClaimActionState | ClassicV3ActionState | undefined,
 ) {
   return (
@@ -1712,15 +2498,34 @@ function actionPending(
   );
 }
 
-function actionLabel(
+export function actionCanCheckStatus(
+  state: ProfileClaimActionState | ClassicV3ActionState | undefined,
+) {
+  return state?.status === "pending" && Boolean(state.transactionHash);
+}
+
+export function actionLabel(
   state: ProfileClaimActionState | ClassicV3ActionState | undefined,
 ) {
   if (state?.status === "preparing") return "Preparing";
   if (state?.status === "wallet") return "Confirm in wallet";
   if (state?.status === "confirming") return "Confirming";
+  if (actionCanCheckStatus(state)) return "Check status";
   if (state?.status === "confirmed") return "Confirmed";
   if (state?.status === "error") return "Try again";
   return "Claim";
+}
+
+function payoutActionLabel(
+  state: ProfileClaimActionState | ClassicV3ActionState | undefined,
+) {
+  if (state?.status === "preparing") return "Preparing";
+  if (state?.status === "wallet") return "Confirm in wallet";
+  if (state?.status === "confirming") return "Confirming";
+  if (actionCanCheckStatus(state)) return "Check status";
+  if (state?.status === "confirmed") return "Updated";
+  if (state?.status === "error") return "Try again";
+  return "Save";
 }
 
 function ProfilePortfolioRow({
@@ -1851,6 +2656,7 @@ function ProfilePortfolioRow({
   const marketCap = formatMarketCap(token);
   const tokenImage =
     token.imageUrl?.trim() || getFallbackTokenImage(token.address);
+  const tokenImageSource = getTokenCardImageSource(tokenImage);
   const currentClaimAvailable =
     Boolean(claim) && (currentClaimable > 0n || Boolean(activeClaimState));
   const classicClaimCount = classicClaims.filter(
@@ -1888,11 +2694,11 @@ function ProfilePortfolioRow({
         <Link className={styles.tokenIdentity} href={token.href}>
           <span className={styles.tokenArt}>
             <Image
-              src={tokenImage}
+              src={tokenImageSource}
               alt={`${token.name} token image`}
               fill
               sizes="58px"
-              unoptimized={!canOptimizeTokenImage(tokenImage)}
+              unoptimized={!canOptimizeTokenImage(tokenImageSource)}
             />
           </span>
           <span className={styles.tokenCopy}>
@@ -1950,7 +2756,8 @@ function ProfilePortfolioRow({
               disabled={
                 actionPending(activeClaimState) ||
                 activeClaimState?.status === "confirmed" ||
-                currentClaimable === 0n
+                (currentClaimable === 0n &&
+                  !actionCanCheckStatus(activeClaimState))
               }
               onClick={() => onClaim(claim)}
             >
@@ -1970,7 +2777,7 @@ function ProfilePortfolioRow({
                 disabled={
                   actionPending(state) ||
                   state?.status === "confirmed" ||
-                  claimable === 0n
+                  (claimable === 0n && !actionCanCheckStatus(state))
                 }
                 onClick={() => onClassicV3Action(reward, "claim")}
               key={reward.vaultAddress}
@@ -1992,7 +2799,7 @@ function ProfilePortfolioRow({
                 disabled={
                   actionPending(state) ||
                   state?.status === "confirmed" ||
-                  claimable === 0n
+                  (claimable === 0n && !actionCanCheckStatus(state))
                 }
                 onClick={() => onDeepAction(reward, "claim")}
               key={reward.vaultAddress}
@@ -2014,7 +2821,7 @@ function ProfilePortfolioRow({
                 disabled={
                   actionPending(state) ||
                   state?.status === "confirmed" ||
-                  claimable === 0n
+                  (claimable === 0n && !actionCanCheckStatus(state))
                 }
                 onClick={() => onStockPairedAction(reward, "claim")}
               key={reward.vaultAddress}
@@ -2225,26 +3032,31 @@ function ClassicRewardSettings({
                 spellCheck={false}
                 autoComplete="off"
                 aria-label="New payout address"
+                disabled={
+                  payoutPending || actionCanCheckStatus(payoutState)
+                }
                 onChange={(event) => setPayoutDraft(event.target.value)}
               />
               <button
                 className={styles.secondaryAction}
                 type="button"
-                disabled={!ownsReward || payoutPending}
+                disabled={
+                  !ownsReward ||
+                  payoutPending ||
+                  payoutState?.status === "confirmed"
+                }
                 onClick={() =>
                   onAction(reward, "update-payout", payoutDraft.trim())
                 }
               >
-                {payoutState?.status === "wallet"
-                  ? "Confirm in wallet"
-                  : payoutState?.status === "confirming"
-                    ? "Confirming"
-                    : "Save"}
+                {payoutActionLabel(payoutState)}
               </button>
               <button
                 className={styles.textAction}
                 type="button"
-                disabled={payoutPending}
+                disabled={
+                  payoutPending || actionCanCheckStatus(payoutState)
+                }
                 onClick={() => {
                   setPayoutDraft(reward.payoutAddress);
                   setEditingPayout(false);
@@ -2269,7 +3081,11 @@ function ClassicRewardSettings({
               <button
                 className={styles.textAction}
                 type="button"
-                disabled={!ownsReward}
+                disabled={
+                  !ownsReward ||
+                  actionPending(payoutState) ||
+                  actionCanCheckStatus(payoutState)
+                }
                 onClick={() => setEditingPayout(true)}
               >
                 Change
@@ -2364,26 +3180,31 @@ function StockPairedRewardSettings({
                 spellCheck={false}
                 autoComplete="off"
                 aria-label="New Stock-Paired payout address"
+                disabled={
+                  payoutPending || actionCanCheckStatus(payoutState)
+                }
                 onChange={(event) => setPayoutDraft(event.target.value)}
               />
               <button
                 className={styles.secondaryAction}
                 type="button"
-                disabled={!ownsReward || payoutPending}
+                disabled={
+                  !ownsReward ||
+                  payoutPending ||
+                  payoutState?.status === "confirmed"
+                }
                 onClick={() =>
                   onAction(reward, "update-payout", payoutDraft.trim())
                 }
               >
-                {payoutState?.status === "wallet"
-                  ? "Confirm in wallet"
-                  : payoutState?.status === "confirming"
-                    ? "Confirming"
-                    : "Save"}
+                {payoutActionLabel(payoutState)}
               </button>
               <button
                 className={styles.textAction}
                 type="button"
-                disabled={payoutPending}
+                disabled={
+                  payoutPending || actionCanCheckStatus(payoutState)
+                }
                 onClick={() => {
                   setPayoutDraft(reward.payoutAddress);
                   setEditingPayout(false);
@@ -2404,7 +3225,11 @@ function StockPairedRewardSettings({
               <button
                 className={styles.textAction}
                 type="button"
-                disabled={!ownsReward}
+                disabled={
+                  !ownsReward ||
+                  actionPending(payoutState) ||
+                  actionCanCheckStatus(payoutState)
+                }
                 onClick={() => setEditingPayout(true)}
               >
                 Change
@@ -2553,26 +3378,31 @@ function DeepRewardSettings({
                 spellCheck={false}
                 autoComplete="off"
                 aria-label="New Deep payout address"
+                disabled={
+                  payoutPending || actionCanCheckStatus(payoutState)
+                }
                 onChange={(event) => setPayoutDraft(event.target.value)}
               />
               <button
                 className={styles.secondaryAction}
                 type="button"
-                disabled={!ownsReward || payoutPending}
+                disabled={
+                  !ownsReward ||
+                  payoutPending ||
+                  payoutState?.status === "confirmed"
+                }
                 onClick={() =>
                   onAction(reward, "update-payout", payoutDraft.trim())
                 }
               >
-                {payoutState?.status === "wallet"
-                  ? "Confirm in wallet"
-                  : payoutState?.status === "confirming"
-                    ? "Confirming"
-                    : "Save"}
+                {payoutActionLabel(payoutState)}
               </button>
               <button
                 className={styles.textAction}
                 type="button"
-                disabled={payoutPending}
+                disabled={
+                  payoutPending || actionCanCheckStatus(payoutState)
+                }
                 onClick={() => {
                   setPayoutDraft(reward.payoutAddress);
                   setEditingPayout(false);
@@ -2597,7 +3427,11 @@ function DeepRewardSettings({
               <button
                 className={styles.textAction}
                 type="button"
-                disabled={!ownsReward}
+                disabled={
+                  !ownsReward ||
+                  actionPending(payoutState) ||
+                  actionCanCheckStatus(payoutState)
+                }
                 onClick={() => setEditingPayout(true)}
               >
                 Change

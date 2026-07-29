@@ -25,6 +25,10 @@ import {
 import type { LauncherToken } from "../tokens";
 import { stateViewReadAbi, uerc20ReadAbi } from "./abis";
 import { buildTokenLinks, sanitizeImageUrl } from "./metadata";
+import {
+  enrichStockPairedTokenWithUsd,
+  readStockQuoteAssetUsdWad,
+} from "./stock-paired-usd";
 import type {
   ExploreReadModel,
   ReadyOnchainDeployment,
@@ -753,7 +757,37 @@ export async function readStockPairedExploreModel(
       "Independent RPCs disagree on Stock-Paired token state",
     );
   }
-  return tokenSets[0];
+  const quoteAssetPrices = new Map<string, bigint | null>();
+  await Promise.all(
+    [
+      ...new Set(
+        tokenSets[0]
+          .map((token) => token.quoteAssetAddress?.toLowerCase())
+          .filter((address): address is string => Boolean(address)),
+      ),
+    ].map(async (address) => {
+      const quoteAsset = getAddress(address);
+      quoteAssetPrices.set(
+        address,
+        await readStockQuoteAssetUsdWad({
+          clients,
+          quoteAsset,
+          expectedQuoteAssetRuntimeCodeHash:
+            release.issuerRuntime.tokenRuntimeCodeHash,
+          blockNumber: toBlock,
+        }),
+      );
+    }),
+  );
+
+  return tokenSets[0].map((token) =>
+    enrichStockPairedTokenWithUsd(
+      token,
+      token.quoteAssetAddress
+        ? (quoteAssetPrices.get(token.quoteAssetAddress.toLowerCase()) ?? null)
+        : null,
+    ),
+  );
 }
 
 function isSameStockPairedLaunch(
@@ -812,7 +846,7 @@ export function mergeStockPairedExploreModel<T extends ExploreReadModel>(
         `Duplicate token across launch models: ${token.tokenAddress}`,
       );
     }
-    if (!existing) tokens.set(key, token);
+    tokens.set(key, token);
   }
   return { ...model, tokens: [...tokens.values()] } as T;
 }

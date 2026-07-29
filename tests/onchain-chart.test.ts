@@ -4,8 +4,29 @@ import {
   collapsePricePointsByBlock,
   findChartRangeStartBlock,
   isTokenChartRange,
+  readTokenChartSeries,
   samplePricePoints,
 } from "../lib/onchain/chart";
+import type { ReadyOnchainDeployment } from "../lib/onchain/types";
+import type { LauncherToken } from "../lib/tokens";
+
+const deployment = {
+  environment: "production",
+  releaseVersion: "classic-v2",
+  chainId: 1,
+  status: "ready",
+  launcher: "0x1111111111111111111111111111111111111111",
+  feeHook: "0x2222222222222222222222222222222222222222",
+  launcherRuntimeCodeHash: `0x${"11".repeat(32)}`,
+  feeHookRuntimeCodeHash: `0x${"22".repeat(32)}`,
+  deploymentBlock: 100n,
+  stateView: "0x3333333333333333333333333333333333333333",
+  stateViewRuntimeCodeHash: `0x${"33".repeat(32)}`,
+  rpcUrl: "https://primary.example",
+  rpcUrlSecondary: "https://secondary.example",
+  confirmations: 12n,
+  logBlockRange: 10_000n,
+} satisfies ReadyOnchainDeployment;
 
 describe("onchain token chart", () => {
   it("keeps the closing swap from each block", () => {
@@ -71,5 +92,36 @@ describe("onchain token chart", () => {
 
     expect(startBlock).toBe(123n);
     expect(reads).toBe(0);
+  });
+
+  it("fails closed for Stock-Paired history instead of applying native ETH chart math", async () => {
+    const stockToken = {
+      id: "1:stock",
+      name: "Stock",
+      symbol: "STOCK",
+      tokenAddress: "0x4444444444444444444444444444444444444444",
+      hookAddress: "0x5555555555555555555555555555555555555555",
+      poolId: `0x${"66".repeat(32)}`,
+      launchedAt: "2026-07-29T00:00:00.000Z",
+      launchBlockNumber: "not-a-block",
+      tokenDecimals: 18,
+      launchModel: "stock-paired",
+      quoteAssetAddress: "0x7777777777777777777777777777777777777777",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme",
+    } satisfies LauncherToken;
+
+    await expect(
+      readTokenChartSeries({
+        deployment,
+        token: stockToken,
+        snapshotBlock: 1_000n,
+        ethUsdQuote: { answer: "350000000000", decimals: 8 },
+      }),
+    ).resolves.toEqual({
+      status: "insufficient-history",
+      points: [],
+      swapCount: 0,
+    });
   });
 });

@@ -1,0 +1,307 @@
+"use client";
+
+import Link from "next/link";
+import { ChevronDown } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
+
+import { docsNavigation } from "@/components/docs-data";
+import styles from "@/components/docs-experience.module.css";
+
+type SectionPosition = {
+  id: string;
+  top: number;
+};
+
+const overviewHref = "/docs#overview";
+const docsSectionHrefs = (() => {
+  const hrefs: string[] = [];
+  for (const group of docsNavigation) {
+    for (const item of group.items) {
+      if (item.href.startsWith("/docs#")) hrefs.push(item.href);
+    }
+  }
+  return hrefs;
+})();
+const docsSectionIds = docsSectionHrefs.map((href) => href.slice(6));
+const docsSectionHrefSet = new Set<string>(docsSectionHrefs);
+
+export const docsNavigateEvent = "programmable:docs-navigate";
+
+export function normalizeDocsHash(hash: string): string {
+  const href = `/docs${hash.startsWith("#") ? hash : `#${hash}`}`;
+  return docsSectionHrefSet.has(href) ? href : overviewHref;
+}
+
+export function isDocsNavigationItemActive({
+  activeHref,
+  currentPath,
+  itemHref,
+}: {
+  activeHref: string;
+  currentPath: string;
+  itemHref: string;
+}): boolean {
+  const itemPath = itemHref.split("#")[0];
+  if (itemPath !== currentPath) return false;
+  if (itemHref.includes("#")) {
+    return currentPath === "/docs" && activeHref === itemHref;
+  }
+  return itemPath !== "/docs";
+}
+
+export function pickActiveDocsSection({
+  atPageEnd,
+  marker,
+  positions,
+}: {
+  atPageEnd: boolean;
+  marker: number;
+  positions: SectionPosition[];
+}): string {
+  const orderedPositions = [...positions].sort((a, b) => a.top - b.top);
+  if (orderedPositions.length === 0) return "overview";
+  if (atPageEnd) return orderedPositions[orderedPositions.length - 1].id;
+
+  let activeId = orderedPositions[0].id;
+  for (const position of orderedPositions) {
+    if (position.top > marker) break;
+    activeId = position.id;
+  }
+  return activeId;
+}
+
+function hasModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
+  return (
+    event.button !== 0 ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey
+  );
+}
+
+function focusDocsSection(section: HTMLElement) {
+  const heading = section.querySelector<HTMLElement>("h2, h3");
+  if (!heading) return;
+  heading.tabIndex = -1;
+  heading.focus({ preventScroll: true });
+}
+
+export function DocsNavigation({ currentPath }: { currentPath: string }) {
+  const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
+  const [activeSectionHref, setActiveSectionHref] = useState(overviewHref);
+  const activeHref =
+    currentPath === "/docs" ? activeSectionHref : currentPath;
+
+  const navigateToDocsTopic = useCallback(
+    (itemHref: string) => {
+      const [itemPath, itemHash] = itemHref.split("#");
+      const isSamePageTopic =
+        currentPath === "/docs" && itemPath === "/docs" && Boolean(itemHash);
+      if (!isSamePageTopic) return false;
+
+      const section = document.getElementById(itemHash);
+      if (!section) return false;
+
+      if (window.location.pathname + window.location.hash !== itemHref) {
+        window.history.pushState(null, "", itemHref);
+      }
+      setActiveSectionHref(itemHref);
+
+      const mobileNavigationWasOpen =
+        mobileNavigationRef.current?.open === true;
+      if (mobileNavigationRef.current) {
+        mobileNavigationRef.current.open = false;
+      }
+
+      const scrollToSection = () => {
+        section.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "auto"
+            : "smooth",
+          block: "start",
+        });
+        focusDocsSection(section);
+      };
+
+      if (mobileNavigationWasOpen) {
+        window.requestAnimationFrame(scrollToSection);
+      } else {
+        scrollToSection();
+      }
+      return true;
+    },
+    [currentPath],
+  );
+
+  useEffect(() => {
+    if (currentPath !== "/docs") return;
+
+    let scrollFrame = 0;
+    let layoutFrame = 0;
+    let headerHeight = 68;
+    let sectionPositions: SectionPosition[] = [];
+
+    const updateFromScroll = () => {
+      scrollFrame = 0;
+      const scrollY = window.scrollY;
+      const activeId = pickActiveDocsSection({
+        atPageEnd:
+          Math.ceil(scrollY + window.innerHeight) >=
+          document.documentElement.scrollHeight - 2,
+        marker: scrollY + headerHeight + 36,
+        positions: sectionPositions,
+      });
+      const nextHref = `/docs#${activeId}`;
+      setActiveSectionHref((currentHref) =>
+        currentHref === nextHref ? currentHref : nextHref,
+      );
+    };
+
+    const scheduleScrollUpdate = () => {
+      if (scrollFrame) return;
+      scrollFrame = window.requestAnimationFrame(updateFromScroll);
+    };
+
+    const measureLayout = () => {
+      layoutFrame = 0;
+      const scrollY = window.scrollY;
+      sectionPositions = docsSectionIds.flatMap((id) => {
+        const section = document.getElementById(id);
+        return section
+          ? [{ id, top: section.getBoundingClientRect().top + scrollY }]
+          : [];
+      });
+      headerHeight =
+        document.querySelector<HTMLElement>(".site-header")?.offsetHeight ?? 68;
+      scheduleScrollUpdate();
+    };
+
+    const scheduleLayoutMeasurement = () => {
+      if (layoutFrame) return;
+      layoutFrame = window.requestAnimationFrame(measureLayout);
+    };
+
+    const updateFromLocation = () => {
+      const nextHref = normalizeDocsHash(window.location.hash);
+      setActiveSectionHref(nextHref);
+      const section = document.getElementById(nextHref.slice(6));
+      if (section && window.location.hash) {
+        window.requestAnimationFrame(() => focusDocsSection(section));
+      }
+      scheduleLayoutMeasurement();
+    };
+
+    updateFromLocation();
+    window.addEventListener("hashchange", updateFromLocation);
+    window.addEventListener("popstate", updateFromLocation);
+    window.addEventListener("resize", scheduleLayoutMeasurement);
+    window.addEventListener("scroll", scheduleScrollUpdate, { passive: true });
+
+    return () => {
+      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
+      if (layoutFrame) window.cancelAnimationFrame(layoutFrame);
+      window.removeEventListener("hashchange", updateFromLocation);
+      window.removeEventListener("popstate", updateFromLocation);
+      window.removeEventListener("resize", scheduleLayoutMeasurement);
+      window.removeEventListener("scroll", scheduleScrollUpdate);
+    };
+  }, [currentPath]);
+
+  useEffect(() => {
+    const handleDocsNavigationRequest = (event: Event) => {
+      const href = (event as CustomEvent<{ href?: string }>).detail?.href;
+      if (href) navigateToDocsTopic(href);
+    };
+
+    window.addEventListener(docsNavigateEvent, handleDocsNavigationRequest);
+    return () =>
+      window.removeEventListener(
+        docsNavigateEvent,
+        handleDocsNavigationRequest,
+      );
+  }, [navigateToDocsTopic]);
+
+  function handleNavigation(
+    event: MouseEvent<HTMLAnchorElement>,
+    itemHref: string,
+  ) {
+    if (hasModifiedClick(event)) return;
+    const [itemPath, itemHash] = itemHref.split("#");
+    const isSamePageTopic =
+      currentPath === "/docs" && itemPath === "/docs" && Boolean(itemHash);
+
+    if (isSamePageTopic) {
+      event.preventDefault();
+      navigateToDocsTopic(itemHref);
+    } else if (mobileNavigationRef.current?.open) {
+      mobileNavigationRef.current.open = false;
+    }
+  }
+
+  function renderNavigation() {
+    return docsNavigation.map((group) => (
+      <div className={styles.navGroup} key={group.label}>
+        <p className={styles.navLabel}>{group.label}</p>
+        <ul>
+          {group.items.map((item) => {
+            const active = isDocsNavigationItemActive({
+              activeHref,
+              currentPath,
+              itemHref: item.href,
+            });
+
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  data-active={active ? "true" : undefined}
+                  aria-current={
+                    active
+                      ? item.href.includes("#")
+                        ? "location"
+                        : "page"
+                      : undefined
+                  }
+                  onClick={(event) => handleNavigation(event, item.href)}
+                >
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    ));
+  }
+
+  return (
+    <>
+      <nav
+        className={styles.desktopNav}
+        aria-label="Documentation navigation"
+      >
+        {renderNavigation()}
+      </nav>
+
+      <details className={styles.mobileNav} ref={mobileNavigationRef}>
+        <summary>
+          Browse the docs
+          <ChevronDown aria-hidden="true" size={17} />
+        </summary>
+        <nav
+          className={styles.mobileNavBody}
+          aria-label="Documentation navigation"
+        >
+          {renderNavigation()}
+        </nav>
+      </details>
+    </>
+  );
+}

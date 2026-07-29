@@ -10,6 +10,7 @@ import {
   calculatePriceImpactPercent,
   calculateTradeUsdValue,
   formatTradeAmount,
+  getTradeAmountValidationError,
 } from "../components/token-trade";
 
 const OWNER = getAddress("0x5555555555555555555555555555555555555555");
@@ -83,6 +84,20 @@ describe("TokenTrade request construction", () => {
         nowSeconds: 1_000,
       }),
     ).toThrow("decimals");
+  });
+
+  it("returns actionable validation before preparing an invalid trade", () => {
+    expect(getTradeAmountValidationError("", 18)).toBe("Enter an amount");
+    expect(getTradeAmountValidationError("not a number", 18)).toBe(
+      "Enter a valid amount",
+    );
+    expect(getTradeAmountValidationError("0", 18)).toBe(
+      "The amount must be greater than zero",
+    );
+    expect(getTradeAmountValidationError("1.0000001", 6)).toBe(
+      "Use no more than 6 decimal places",
+    );
+    expect(getTradeAmountValidationError("0.25", 18)).toBe("");
   });
 
   it("rejects slippage outside the server limit", () => {

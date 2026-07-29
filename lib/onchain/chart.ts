@@ -181,6 +181,9 @@ export async function readTokenChartSeries(input: {
     ethUsdQuote,
     range = "all",
   } = input;
+  if (token.launchModel === "stock-paired") {
+    return { status: "insufficient-history", points: [], swapCount: 0 };
+  }
   const launchBlock = token.launchBlockNumber
     ? BigInt(token.launchBlockNumber)
     : deployment.deploymentBlock;

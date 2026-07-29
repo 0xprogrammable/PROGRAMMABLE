@@ -1,13 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getAddress } from "viem";
 
 import {
+  actionCanCheckStatus,
+  actionLabel,
+  actionPending,
   buildProfilePortfolio,
+  clearConfirmedProfileActionStates,
+  groupPendingProfileTransactionStates,
   groupProfileRewards,
+  parsePendingProfileTransactions,
   profileClaimableWei,
   profileHasRewardSurface,
   profileRewardsForAccount,
+  profileTransactionPollAttempts,
+  preserveInterruptedTransactionStates,
+  removePendingProfileTransactionRecord,
   sortProfileTokensByMarketCap,
+  upsertPendingProfileTransactionRecords,
+  waitForTransaction,
+  type PendingProfileTransactionRecord,
 } from "../components/profile-view";
 import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
 import type { DeepV3CreatorToken } from "../lib/profile/deep-v3-profile";
@@ -167,6 +179,77 @@ describe("profile reward grouping", () => {
     ).toEqual([firstAddress, secondAddress]);
   });
 
+  it("sorts with one validated market-cap unit and leaves incomparable tokens last", () => {
+    const usdLow = {
+      ...tokens[0],
+      name: "USD Low",
+      symbol: "USD_LOW",
+      fdvUsdWad: "10",
+      marketCapEthWei: "999999",
+    };
+    const usdHigh = {
+      ...tokens[1],
+      name: "USD High",
+      symbol: "USD_HIGH",
+      fdvUsdWad: "20",
+      marketCapEthWei: "1",
+    };
+    const ethOnly = {
+      ...tokens[0],
+      address: thirdAddress,
+      href: `/token/${thirdAddress}`,
+      name: "ETH Only",
+      symbol: "ETH_ONLY",
+      fdvUsdWad: undefined,
+      marketCapEthWei: "1000000",
+    };
+    const malformedUsd = {
+      ...tokens[1],
+      name: "Malformed USD",
+      symbol: "MALFORMED_USD",
+      fdvUsdWad: "not-a-wad",
+      marketCapEthWei: "2000000",
+    };
+
+    expect(
+      sortProfileTokensByMarketCap([
+        ethOnly,
+        usdLow,
+        malformedUsd,
+        usdHigh,
+      ]).map((token) => token.symbol),
+    ).toEqual(["USD_HIGH", "USD_LOW", "ETH_ONLY", "MALFORMED_USD"]);
+
+    expect(
+      buildProfilePortfolio(
+        [ethOnly, usdLow, usdHigh],
+        [],
+        [],
+      ).map((entry) => entry.token.symbol),
+    ).toEqual(["USD_HIGH", "USD_LOW", "ETH_ONLY"]);
+  });
+
+  it("uses ETH market caps when no token has a validated USD valuation", () => {
+    const ethLow = {
+      ...tokens[0],
+      symbol: "ETH_LOW",
+      fdvUsdWad: "not-a-wad",
+      marketCapEthWei: "10",
+    };
+    const ethHigh = {
+      ...tokens[1],
+      symbol: "ETH_HIGH",
+      fdvUsdWad: undefined,
+      marketCapEthWei: "20",
+    };
+
+    expect(
+      sortProfileTokensByMarketCap([ethLow, ethHigh]).map(
+        (token) => token.symbol,
+      ),
+    ).toEqual(["ETH_HIGH", "ETH_LOW"]);
+  });
+
   it("renders one portfolio entry when current and split rewards share a token", () => {
     const portfolio = buildProfilePortfolio(
       tokens,
@@ -274,5 +357,310 @@ describe("profile reward grouping", () => {
     expect(portfolio[0].claim).toBeUndefined();
     expect(profileClaimableWei(portfolio, firstAddress)).toBe(0n);
     expect(profileHasRewardSurface(portfolio)).toBe(false);
+  });
+});
+
+describe("profile transaction status", () => {
+  const transactionHash = `0x${"ab".repeat(32)}` as const;
+  const secondTransactionHash = `0x${"cd".repeat(32)}` as const;
+
+  it("keeps an unresolved receipt check distinct from a retryable error", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ status: "pending" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const wait = vi.fn(async () => undefined);
+
+    await expect(
+      waitForTransaction(transactionHash, 1, {
+        maxAttempts: 2,
+        fetcher,
+        wait,
+      }),
+    ).resolves.toBe("pending");
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledTimes(1);
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain(transactionHash);
+    expect(
+      actionCanCheckStatus({
+        account: firstAddress,
+        status: "pending",
+        message: "Still pending on Ethereum",
+        transactionHash,
+      }),
+    ).toBe(true);
+    expect(
+      actionLabel({
+        account: firstAddress,
+        status: "pending",
+        message: "Still pending on Ethereum",
+        transactionHash,
+      }),
+    ).toBe("Check status");
+    expect(
+      actionPending({
+        account: firstAddress,
+        status: "pending",
+        message: "Still pending on Ethereum",
+        transactionHash,
+      }),
+    ).toBe(false);
+  });
+
+  it("uses one receipt request for a manual status check", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ status: "pending" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const wait = vi.fn(async () => undefined);
+
+    expect(profileTransactionPollAttempts(true)).toBe(1);
+    expect(profileTransactionPollAttempts(false)).toBe(40);
+    await expect(
+      waitForTransaction(transactionHash, 1, {
+        maxAttempts: profileTransactionPollAttempts(true),
+        fetcher,
+        wait,
+      }),
+    ).resolves.toBe("pending");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it("aborts receipt polling before another account can inherit it", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ status: "pending" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    controller.abort();
+
+    await expect(
+      waitForTransaction(transactionHash, 1, {
+        maxAttempts: 2,
+        fetcher,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("interrupts the polling delay and retains the submitted hash", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      expect(init?.signal).toBe(controller.signal);
+      return new Response(JSON.stringify({ status: "pending" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    await expect(
+      waitForTransaction(transactionHash, 1, {
+        maxAttempts: 2,
+        fetcher,
+        signal: controller.signal,
+        wait: async () => {
+          controller.abort();
+        },
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    const interrupted = preserveInterruptedTransactionStates({
+      claim: {
+        account: firstAddress,
+        status: "confirming" as const,
+        message: "Confirming on Ethereum",
+        transactionHash,
+      },
+    });
+    expect(interrupted.claim).toMatchObject({
+      status: "pending",
+      transactionHash,
+    });
+    expect(actionCanCheckStatus(interrupted.claim)).toBe(true);
+  });
+
+  it("polls the same hash until it becomes confirmed", async () => {
+    const statuses = ["pending", "confirmed"] as const;
+    let requestIndex = 0;
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      new Response(
+        JSON.stringify({
+          status: statuses[requestIndex++],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    await expect(
+      waitForTransaction(transactionHash, 1, {
+        maxAttempts: 2,
+        fetcher,
+        wait: async () => undefined,
+      }),
+    ).resolves.toBe("confirmed");
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    for (const [request] of fetcher.mock.calls) {
+      expect(String(request)).toContain(transactionHash);
+    }
+  });
+
+  it("reports a reverted receipt as a retryable terminal result", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ status: "reverted" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(
+      waitForTransaction(transactionHash, 1, {
+        maxAttempts: 1,
+        fetcher,
+        wait: async () => undefined,
+      }),
+    ).resolves.toBe("reverted");
+
+    expect(
+      actionLabel({
+        account: firstAddress,
+        status: "error",
+        message: "The reward transaction reverted onchain",
+        transactionHash,
+      }),
+    ).toBe("Try again");
+  });
+
+  it("clears only the confirmed action whose exact hash was refreshed", () => {
+    const firstKey = `${secondAddress.toLowerCase()}:claim`;
+    const secondKey = `${thirdAddress.toLowerCase()}:claim`;
+    const states = {
+      [firstKey]: {
+        account: firstAddress,
+        status: "confirmed" as const,
+        message: "Claim confirmed",
+        transactionHash,
+      },
+      [secondKey]: {
+        account: firstAddress,
+        status: "pending" as const,
+        message: "Still pending on Ethereum",
+        transactionHash: secondTransactionHash,
+      },
+    };
+
+    const cleared = clearConfirmedProfileActionStates(
+      states,
+      new Map([[firstKey, transactionHash]]),
+    );
+    expect(cleared[firstKey]).toBeUndefined();
+    expect(cleared[secondKey]).toEqual(states[secondKey]);
+
+    const hashMismatch = clearConfirmedProfileActionStates(
+      states,
+      new Map([[firstKey, secondTransactionHash]]),
+    );
+    expect(hashMismatch).toBe(states);
+  });
+
+  it("restores only validated pending transactions for the connected account", () => {
+    const stateKey = `${secondAddress.toLowerCase()}:claim`;
+    const record = {
+      version: 1,
+      account: firstAddress.toLowerCase(),
+      chainId: 1,
+      source: "classic-v3",
+      stateKey,
+      action: "claim",
+      transactionHash,
+      submittedAt: 1_800_000_000_000,
+    } satisfies PendingProfileTransactionRecord;
+    const serialized = JSON.stringify({
+      version: 1,
+      transactions: [
+        record,
+        { ...record, account: secondAddress.toLowerCase() },
+        { ...record, transactionHash: "0x1234" },
+        { ...record, stateKey: `${secondAddress.toLowerCase()}:update-payout` },
+        { ...record, chainId: 10 },
+      ],
+    });
+
+    expect(parsePendingProfileTransactions(serialized, firstAddress)).toEqual([
+      record,
+    ]);
+    expect(parsePendingProfileTransactions(serialized, secondAddress)).toEqual([
+      { ...record, account: secondAddress.toLowerCase() },
+    ]);
+    expect(parsePendingProfileTransactions("{", firstAddress)).toEqual([]);
+
+    const restored = groupPendingProfileTransactionStates([record]);
+    expect(restored["classic-v3"][stateKey]).toMatchObject({
+      account: firstAddress.toLowerCase(),
+      status: "pending",
+      transactionHash,
+    });
+    expect(restored.classic).toEqual({});
+    expect(restored.deep).toEqual({});
+    expect(restored["stock-paired"]).toEqual({});
+  });
+
+  it("upserts and removes one persisted source action without touching siblings", () => {
+    const firstKey = `${secondAddress.toLowerCase()}:claim`;
+    const secondKey = `${thirdAddress.toLowerCase()}:claim`;
+    const firstRecord = {
+      version: 1,
+      account: firstAddress.toLowerCase(),
+      chainId: 1,
+      source: "deep",
+      stateKey: firstKey,
+      action: "claim",
+      transactionHash,
+      submittedAt: 1_800_000_000_000,
+    } satisfies PendingProfileTransactionRecord;
+    const siblingRecord = {
+      ...firstRecord,
+      stateKey: secondKey,
+      transactionHash: secondTransactionHash,
+    } satisfies PendingProfileTransactionRecord;
+    const replacement = {
+      ...firstRecord,
+      transactionHash: secondTransactionHash,
+      submittedAt: firstRecord.submittedAt + 1_000,
+    } satisfies PendingProfileTransactionRecord;
+
+    const upserted = upsertPendingProfileTransactionRecords(
+      [firstRecord, siblingRecord],
+      replacement,
+    );
+    expect(upserted).toEqual([siblingRecord, replacement]);
+
+    expect(
+      removePendingProfileTransactionRecord(upserted, {
+        source: replacement.source,
+        stateKey: replacement.stateKey,
+        transactionHash: replacement.transactionHash,
+      }),
+    ).toEqual([siblingRecord]);
+    expect(
+      removePendingProfileTransactionRecord(upserted, {
+        source: replacement.source,
+        stateKey: replacement.stateKey,
+        transactionHash,
+      }),
+    ).toEqual(upserted);
   });
 });

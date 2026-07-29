@@ -3,6 +3,7 @@
 import {
   useEffect,
   useId,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -222,11 +223,18 @@ export function buildTokenTradeApiRequest(input: {
     throw new Error("Slippage must be between 0.01% and 10%");
   }
 
+  const amountDecimals = input.side === "buy" ? 18 : input.tokenDecimals;
+  const amountValidationError = getTradeAmountValidationError(
+    input.amount,
+    amountDecimals,
+  );
+  if (amountValidationError) throw new Error(amountValidationError);
+
   let amountIn: bigint;
   try {
     amountIn = parseUnits(
       input.amount.trim(),
-      input.side === "buy" ? 18 : input.tokenDecimals,
+      amountDecimals,
     );
   } catch {
     throw new Error("Enter a valid amount");
@@ -244,6 +252,32 @@ export function buildTokenTradeApiRequest(input: {
     slippageBps: input.slippageBps,
     deadline: String(input.nowSeconds + 1_200),
   };
+}
+
+export function getTradeAmountValidationError(
+  amount: string,
+  decimals: number,
+) {
+  const trimmedAmount = amount.trim();
+  if (!trimmedAmount) return "Enter an amount";
+  if (!/^\d+(?:\.\d+)?$/.test(trimmedAmount)) {
+    return "Enter a valid amount";
+  }
+
+  const fractionalDigits = trimmedAmount.split(".")[1]?.length ?? 0;
+  if (fractionalDigits > decimals) {
+    return `Use no more than ${decimals} decimal places`;
+  }
+
+  try {
+    if (parseUnits(trimmedAmount, decimals) <= 0n) {
+      return "The amount must be greater than zero";
+    }
+  } catch {
+    return "Enter a valid amount";
+  }
+
+  return "";
 }
 
 export function TokenTrade({
@@ -288,6 +322,7 @@ export function TokenTrade({
   const slippageBps = DEFAULT_TRADE_SLIPPAGE_BPS;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [amountInvalid, setAmountInvalid] = useState(false);
   const [message, setMessage] = useState("");
   const [review, setReview] = useState<PreparedTokenTrade | null>(null);
   const [maxPending, setMaxPending] = useState(false);
@@ -295,6 +330,7 @@ export function TokenTrade({
     useState<WalletTradeBalanceState | null>(null);
   const amountInputId = useId();
   const amountErrorId = useId();
+  const amountInputRef = useRef<HTMLInputElement>(null);
   const activeSwapFeeBps =
     side === "buy" ? buySwapFeeBps : sellSwapFeeBps;
   const activeInputAsset = token;
@@ -317,8 +353,6 @@ export function TokenTrade({
       tokenPriceUsdWad,
     }),
   );
-  const hasValidAmount =
-    /^\d+(?:\.\d+)?$/.test(amount.trim()) && Number(amount) > 0;
   const displayBalance = balances
     ? side === "buy"
       ? `${formatWalletBalance(balances.nativeBalanceWei, 18)} ETH`
@@ -364,6 +398,7 @@ export function TokenTrade({
 
   async function applyMaximumBalance() {
     setError("");
+    setAmountInvalid(false);
     setMessage("");
     if (!owner) {
       setError("Connect a wallet to use your balance");
@@ -414,9 +449,21 @@ export function TokenTrade({
   async function prepare(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setAmountInvalid(false);
     setMessage("");
     if (!owner) {
       setError("Connect a wallet to prepare this trade");
+      return;
+    }
+
+    const amountValidationError = getTradeAmountValidationError(
+      amount,
+      side === "buy" ? 18 : tokenDecimals,
+    );
+    if (amountValidationError) {
+      setAmountInvalid(true);
+      setError(amountValidationError);
+      amountInputRef.current?.focus();
       return;
     }
 
@@ -549,6 +596,7 @@ export function TokenTrade({
               setSide(option);
               setAmount("");
               setError("");
+              setAmountInvalid(false);
               setMessage("");
             }}
           >
@@ -579,16 +627,18 @@ export function TokenTrade({
         </div>
         <div className={styles.amountInputRow}>
           <input
+            ref={amountInputRef}
             className={styles.amountInput}
             id={amountInputId}
             inputMode="decimal"
             autoComplete="off"
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? amountErrorId : undefined}
+            aria-invalid={amountInvalid}
+            aria-describedby={amountInvalid ? amountErrorId : undefined}
             value={amount}
             onChange={(event) => {
               setAmount(event.target.value);
               if (error) setError("");
+              if (amountInvalid) setAmountInvalid(false);
             }}
             placeholder="0"
           />
@@ -614,7 +664,7 @@ export function TokenTrade({
         <button
           className={styles.primaryAction}
           type={owner ? "submit" : "button"}
-          disabled={pending || Boolean(owner && !hasValidAmount)}
+          disabled={pending}
           onClick={owner ? undefined : onConnect}
         >
           {pending

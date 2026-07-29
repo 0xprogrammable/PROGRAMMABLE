@@ -13,7 +13,6 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import {
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -26,7 +25,10 @@ import {
 } from "@/components/animated-market-cap";
 import { ScrambleText } from "@/components/scramble-text";
 import { SiteFooter } from "@/components/site-footer";
-import { canOptimizeTokenImage } from "@/lib/token-image";
+import {
+  canOptimizeTokenImage,
+  getTokenCardImageSource,
+} from "@/lib/token-image";
 import {
   type LauncherToken,
   type TokenLink,
@@ -62,16 +64,48 @@ type ExplorePayload = {
 
 type ExploreState =
   | { phase: "loading" }
-  | { phase: "error"; message: string; requestKey: string }
+  | {
+      phase: "error";
+      message: string;
+      requestKey: string;
+      contentKey: string;
+    }
   | {
       phase: "ready";
       payload: ExplorePayload;
       requestKey: string;
+      contentKey: string;
+      refreshError?: string;
     };
+
+export function preserveExplorePayloadOnRefreshFailure(
+  current: ExploreState,
+  input: {
+    contentKey: string;
+    requestKey: string;
+    message: string;
+  },
+): ExploreState {
+  return current.phase === "ready" &&
+    current.contentKey === input.contentKey
+    ? {
+        ...current,
+        requestKey: input.requestKey,
+        refreshError: input.message,
+      }
+    : {
+        phase: "error",
+        contentKey: input.contentKey,
+        requestKey: input.requestKey,
+        message: input.message,
+      };
+}
 
 type PaginationItem = number | "start-gap" | "end-gap";
 
 const TOKENS_PER_PAGE = 10;
+const QUERY_DEBOUNCE_MS = 200;
+const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
 const PROGRAMMABLE_TOKEN_ADDRESS =
   "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
@@ -216,6 +250,66 @@ function readApiError(value: unknown) {
   return isRecord(value) && typeof value.error === "string"
     ? value.error
     : "Tokens are temporarily unavailable";
+}
+
+type PendingExploreRequest = {
+  controller: AbortController;
+  promise: Promise<ExplorePayload>;
+};
+
+const pendingExploreRequests = new Map<string, PendingExploreRequest>();
+
+export function loadExplorePayload(
+  contentKey: string,
+  search: URLSearchParams,
+) {
+  const pendingRequest = pendingExploreRequests.get(contentKey);
+  if (pendingRequest) return pendingRequest.promise;
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, EXPLORE_REQUEST_TIMEOUT_MS);
+  const request = (async (): Promise<ExplorePayload> => {
+    try {
+      const response = await fetch(`/api/explore?${search.toString()}`, {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(readApiError(body));
+      }
+      return parseExplorePayload(body);
+    } catch (error) {
+      if (timedOut) {
+        throw new Error("Tokens took too long to respond");
+      }
+      throw error;
+    } finally {
+      globalThis.clearTimeout(timeout);
+    }
+  })();
+
+  const entry = { controller, promise: request };
+  pendingExploreRequests.set(contentKey, entry);
+  const clearPendingRequest = () => {
+    if (pendingExploreRequests.get(contentKey) === entry) {
+      pendingExploreRequests.delete(contentKey);
+    }
+  };
+  void request.then(clearPendingRequest, clearPendingRequest);
+
+  return request;
+}
+
+function abortExplorePayload(contentKey: string) {
+  const pendingRequest = pendingExploreRequests.get(contentKey);
+  if (!pendingRequest) return;
+  pendingExploreRequests.delete(contentKey);
+  pendingRequest.controller.abort();
 }
 
 function getFallbackTokenImage(address: string) {
@@ -370,7 +464,8 @@ function TokenSocialLink({
 
 export function ExploreView() {
   const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query.trim());
+  const normalizedQuery = query.trim();
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sort, setSort] = useState<TokenSort>("market-cap");
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedAddress, setCopiedAddress] = useState("");
@@ -378,17 +473,33 @@ export function ExploreView() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
   const copyResetTimer = useRef<number | null>(null);
+  const activeExploreContentKey = useRef<string | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
-  const requestKey = `${deferredQuery}\u0000${sort}\u0000${currentPage}\u0000${retryKey}\u0000${refreshKey}`;
+  const contentKey = `${debouncedQuery}\u0000${sort}\u0000${currentPage}`;
+  const requestKey = `${contentKey}\u0000${retryKey}\u0000${refreshKey}`;
 
   useEffect(
     () => () => {
       if (copyResetTimer.current !== null) {
         window.clearTimeout(copyResetTimer.current);
       }
+      if (activeExploreContentKey.current) {
+        abortExplorePayload(activeExploreContentKey.current);
+      }
     },
     [],
   );
+
+  useEffect(() => {
+    if (normalizedQuery === debouncedQuery) return;
+
+    const timer = window.setTimeout(() => {
+      setCurrentPage(1);
+      setDebouncedQuery(normalizedQuery);
+    }, QUERY_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [debouncedQuery, normalizedQuery]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -427,9 +538,14 @@ export function ExploreView() {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
+    let ignore = false;
+    const previousContentKey = activeExploreContentKey.current;
+    if (previousContentKey && previousContentKey !== contentKey) {
+      abortExplorePayload(previousContentKey);
+    }
+    activeExploreContentKey.current = contentKey;
     const search = new URLSearchParams({
-      q: deferredQuery,
+      q: debouncedQuery,
       sort,
       page: String(currentPage),
       limit: String(TOKENS_PER_PAGE),
@@ -437,36 +553,38 @@ export function ExploreView() {
 
     async function loadTokens() {
       try {
-        const response = await fetch(`/api/explore?${search.toString()}`, {
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-        });
-        const body: unknown = await response.json().catch(() => null);
-        if (!response.ok) {
-          throw new Error(readApiError(body));
-        }
-
-        const payload = parseExplorePayload(body);
+        const payload = await loadExplorePayload(contentKey, search);
+        if (ignore) return;
         if (payload.page !== currentPage) {
           setCurrentPage(payload.page);
         }
-        setState({ phase: "ready", payload, requestKey });
-      } catch (error) {
-        if (controller.signal.aborted) return;
         setState({
-          phase: "error",
+          phase: "ready",
+          payload,
           requestKey,
-          message:
-            error instanceof Error
-              ? error.message
-              : "Tokens are temporarily unavailable",
+          contentKey,
         });
+      } catch (error) {
+        if (ignore) return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Tokens are temporarily unavailable";
+        setState((current) =>
+          preserveExplorePayloadOnRefreshFailure(current, {
+            contentKey,
+            requestKey,
+            message,
+          }),
+        );
       }
     }
 
     void loadTokens();
-    return () => controller.abort();
-  }, [currentPage, deferredQuery, requestKey, sort]);
+    return () => {
+      ignore = true;
+    };
+  }, [contentKey, currentPage, debouncedQuery, requestKey, sort]);
 
   const payload = state.phase === "ready" ? state.payload : null;
   const cards = useMemo(
@@ -481,7 +599,7 @@ export function ExploreView() {
   const hasPublicTokens =
     state.phase !== "ready" ||
     state.payload.total > 0 ||
-    Boolean(deferredQuery);
+    Boolean(debouncedQuery);
 
   async function copyAddress(address: string) {
     try {
@@ -535,7 +653,7 @@ export function ExploreView() {
     }
 
     if (cards.length === 0) {
-      if (deferredQuery) {
+      if (debouncedQuery) {
         return (
           <div className="token-empty">
             <p>No tokens match this search</p>
@@ -569,11 +687,12 @@ export function ExploreView() {
     return (
       <div
         className="token-card-grid"
-        key={`${activePage}:${sort}:${deferredQuery}`}
+        key={`${activePage}:${sort}:${debouncedQuery}`}
       >
         {cards.map((token, index) => {
           const copied = copiedAddress === token.tokenAddress;
           const href = `/token/${token.tokenAddress}`;
+          const imageSource = getTokenCardImageSource(token.imageUrl);
 
           return (
             <article className="token-card" key={token.id}>
@@ -586,7 +705,7 @@ export function ExploreView() {
               <span className="token-card-art">
                 <Image
                   className="token-card-image"
-                  src={token.imageUrl}
+                  src={imageSource}
                   alt={
                     token.usesFallbackImage
                       ? ""
@@ -594,7 +713,7 @@ export function ExploreView() {
                   }
                   fill
                   sizes="(max-width: 360px) 260px, (max-width: 800px) 46vw, 214px"
-                  unoptimized={!canOptimizeTokenImage(token.imageUrl)}
+                  unoptimized={!canOptimizeTokenImage(imageSource)}
                 />
               </span>
 
@@ -622,7 +741,7 @@ export function ExploreView() {
                     <AnimatedMarketCap
                       delay={index * 18}
                       metric={token.marketCap}
-                      replayKey={`${activePage}:${sort}:${deferredQuery}`}
+                      replayKey={`${activePage}:${sort}:${debouncedQuery}`}
                     />
                     <span>MC</span>
                   </span>
@@ -738,10 +857,7 @@ export function ExploreView() {
                 <input
                   value={query}
                   placeholder="Search tokens"
-                  onChange={(event) => {
-                    setQuery(event.target.value);
-                    setCurrentPage(1);
-                  }}
+                  onChange={(event) => setQuery(event.target.value)}
                 />
               </label>
 
@@ -840,6 +956,18 @@ export function ExploreView() {
                 </nav>
               ) : null}
               </div>
+            </div>
+          ) : null}
+
+          {state.phase === "ready" && state.refreshError ? (
+            <div className="token-refresh-warning" role="status">
+              <span>Prices may be out of date</span>
+              <button
+                type="button"
+                onClick={() => setRetryKey((value) => value + 1)}
+              >
+                Refresh
+              </button>
             </div>
           ) : null}
 

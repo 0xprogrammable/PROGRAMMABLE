@@ -2,11 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import {
   canOptimizeTokenImage,
+  getProgrammableTokenImageAssetName,
+  getTokenCardImageSource,
   getTokenImageFileError,
   hasValidTokenImageSignature,
+  isProgrammableTokenImageUrl,
+  MAX_TOKEN_IMAGE_UPLOAD_BYTES,
+  PROGRAMMABLE_TOKEN_IMAGE_HOST,
 } from "../lib/token-image";
 
 describe("token image policy", () => {
+  it("keeps prepared uploads within the card-performance budget", () => {
+    expect(MAX_TOKEN_IMAGE_UPLOAD_BYTES).toBe(1_000_000);
+  });
+
   it("accepts supported files within the source limit", () => {
     expect(
       getTokenImageFileError({
@@ -53,5 +62,34 @@ describe("token image policy", () => {
     expect(
       canOptimizeTokenImage("https://programmable.family/token.webp"),
     ).toBe(false);
+    expect(canOptimizeTokenImage("//example.com/token.webp")).toBe(false);
+  });
+
+  it("routes only the Programmable image store through local optimization", () => {
+    const image =
+      `https://${PROGRAMMABLE_TOKEN_IMAGE_HOST}/token-images/example.webp`;
+    expect(isProgrammableTokenImageUrl(image)).toBe(true);
+    expect(getProgrammableTokenImageAssetName(image)).toBe("example.webp");
+    expect(getTokenCardImageSource(image)).toBe(
+      "/api/token-image-proxy/example.webp",
+    );
+    expect(
+      isProgrammableTokenImageUrl(
+        "https://example.com/token-images/example.webp",
+      ),
+    ).toBe(false);
+    expect(
+      isProgrammableTokenImageUrl(
+        `https://${PROGRAMMABLE_TOKEN_IMAGE_HOST}.example.com/token-images/example.webp`,
+      ),
+    ).toBe(false);
+    expect(
+      getTokenCardImageSource("https://example.com/token.webp"),
+    ).toBe("https://example.com/token.webp");
+    expect(
+      getProgrammableTokenImageAssetName(
+        `https://${PROGRAMMABLE_TOKEN_IMAGE_HOST}/token-images/nested/example.webp`,
+      ),
+    ).toBe("");
   });
 });

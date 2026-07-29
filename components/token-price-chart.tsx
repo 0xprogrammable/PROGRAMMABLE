@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import styles from "./token-price-chart.module.css";
 
@@ -23,6 +30,31 @@ type PlottedPoint = ChartPoint & {
 };
 
 type ChartRange = "1h" | "1d" | "1w" | "all";
+type ChartLaunchModel =
+  | "classic"
+  | "adaptive"
+  | "deep"
+  | "stock-paired";
+
+const STOCK_PAIRED_HISTORY_MESSAGE =
+  "Historical price data is not available for Stock-Paired tokens";
+const STOCK_PAIRED_EMPTY_CHART: ChartPayload = {
+  status: "insufficient-history",
+  points: [],
+  swapCount: 0,
+};
+
+export function getPriceHistoryEmptyMessage(
+  launchModel: ChartLaunchModel | undefined,
+  failed: boolean,
+) {
+  if (launchModel === "stock-paired") {
+    return STOCK_PAIRED_HISTORY_MESSAGE;
+  }
+  return failed
+    ? "Price history is temporarily unavailable"
+    : "Price history appears after confirmed trades";
+}
 
 const CHART_RANGES: ReadonlyArray<{
   value: ChartRange;
@@ -40,6 +72,30 @@ const PLOT_LEFT = 7;
 const PLOT_RIGHT = VIEWBOX_WIDTH - 7;
 const PLOT_TOP = 9;
 const PLOT_BOTTOM = VIEWBOX_HEIGHT - 9;
+
+export function getChartPointIndex(input: {
+  clientX: number;
+  left: number;
+  width: number;
+  pointCount: number;
+}) {
+  if (
+    !Number.isFinite(input.clientX) ||
+    !Number.isFinite(input.left) ||
+    !Number.isFinite(input.width) ||
+    input.width <= 0 ||
+    !Number.isInteger(input.pointCount) ||
+    input.pointCount <= 0
+  ) {
+    return null;
+  }
+
+  const relative = Math.min(
+    1,
+    Math.max(0, (input.clientX - input.left) / input.width),
+  );
+  return Math.round(relative * Math.max(0, input.pointCount - 1));
+}
 
 function formatPrice(value: number, unit: "USD" | "ETH") {
   if (!Number.isFinite(value) || value < 0) return "Unavailable";
@@ -92,11 +148,13 @@ export function TokenPriceChart({
   tokenAddress,
   tokenName,
   totalSupply,
+  launchModel,
   onMarketCapChange,
 }: {
   tokenAddress: `0x${string}`;
   tokenName: string;
   totalSupply?: string;
+  launchModel?: ChartLaunchModel;
   onMarketCapChange?: (marketCap: string | null) => void;
 }) {
   const [request, setRequest] = useState<{
@@ -106,15 +164,35 @@ export function TokenPriceChart({
   } | null>(null);
   const [range, setRange] = useState<ChartRange>("all");
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const activeIndexRef = useRef<number | null>(null);
   const plotRef = useRef<SVGSVGElement | null>(null);
+  const pointerFrameRef = useRef<number | null>(null);
+  const pendingPointerXRef = useRef<number | null>(null);
+  const setActiveIndexIfChanged = useCallback((nextIndex: number | null) => {
+    if (activeIndexRef.current === nextIndex) return;
+    activeIndexRef.current = nextIndex;
+    setActiveIndex(nextIndex);
+  }, []);
   const gradientId = useId().replaceAll(":", "");
   const requestKey = `${tokenAddress.toLowerCase()}:${range}`;
   const payload =
-    request?.key === requestKey ? request.payload : null;
+    launchModel === "stock-paired"
+      ? STOCK_PAIRED_EMPTY_CHART
+      : request?.key === requestKey
+        ? request.payload
+        : null;
   const failed =
-    request?.key === requestKey ? request.failed : false;
+    launchModel === "stock-paired"
+      ? false
+      : request?.key === requestKey
+        ? request.failed
+        : false;
 
   useEffect(() => {
+    if (launchModel === "stock-paired") {
+      return;
+    }
+
     const controller = new AbortController();
 
     void fetch(
@@ -131,7 +209,7 @@ export function TokenPriceChart({
           payload: nextPayload,
           failed: false,
         });
-        setActiveIndex(null);
+        setActiveIndexIfChanged(null);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -143,7 +221,13 @@ export function TokenPriceChart({
       });
 
     return () => controller.abort();
-  }, [range, requestKey, tokenAddress]);
+  }, [
+    launchModel,
+    range,
+    requestKey,
+    setActiveIndexIfChanged,
+    tokenAddress,
+  ]);
 
   const chart = useMemo(() => {
     if (!payload || payload.points.length < 2) return null;
@@ -186,6 +270,12 @@ export function TokenPriceChart({
 
   const activePoint =
     chart && activeIndex !== null ? chart.points[activeIndex] : null;
+  const emptyMessage = getPriceHistoryEmptyMessage(launchModel, failed);
+  const chartStatus = !payload && !failed
+    ? "Loading price history"
+    : chart
+      ? `Price history loaded with ${chart.points.length} points`
+      : emptyMessage;
 
   useEffect(() => {
     const supply = Number(totalSupply);
@@ -204,16 +294,44 @@ export function TokenPriceChart({
     );
   }, [activePoint, chart, onMarketCapChange, totalSupply]);
 
+  useEffect(
+    () => () => {
+      if (pointerFrameRef.current !== null) {
+        window.cancelAnimationFrame(pointerFrameRef.current);
+      }
+    },
+    [],
+  );
+
   function updateActivePoint(clientX: number) {
     if (!chart || !plotRef.current) return;
     const bounds = plotRef.current.getBoundingClientRect();
-    const relative = Math.min(
-      1,
-      Math.max(0, (clientX - bounds.left) / bounds.width),
-    );
-    setActiveIndex(
-      Math.round(relative * Math.max(0, chart.points.length - 1)),
-    );
+    const nextIndex = getChartPointIndex({
+      clientX,
+      left: bounds.left,
+      width: bounds.width,
+      pointCount: chart.points.length,
+    });
+    if (nextIndex !== null) setActiveIndexIfChanged(nextIndex);
+  }
+
+  function scheduleActivePoint(clientX: number) {
+    pendingPointerXRef.current = clientX;
+    if (pointerFrameRef.current !== null) return;
+
+    pointerFrameRef.current = window.requestAnimationFrame(() => {
+      pointerFrameRef.current = null;
+      const pendingClientX = pendingPointerXRef.current;
+      pendingPointerXRef.current = null;
+      if (pendingClientX !== null) updateActivePoint(pendingClientX);
+    });
+  }
+
+  function cancelScheduledActivePoint() {
+    pendingPointerXRef.current = null;
+    if (pointerFrameRef.current === null) return;
+    window.cancelAnimationFrame(pointerFrameRef.current);
+    pointerFrameRef.current = null;
   }
 
   function moveActivePoint(
@@ -230,18 +348,30 @@ export function TokenPriceChart({
     const currentIndex = activeIndex ?? lastIndex;
 
     if (key === "Home") {
-      setActiveIndex(0);
+      setActiveIndexIfChanged(0);
     } else if (key === "End") {
-      setActiveIndex(lastIndex);
+      setActiveIndexIfChanged(lastIndex);
     } else if (key === "ArrowLeft" || key === "ArrowDown") {
-      setActiveIndex(Math.max(0, currentIndex - 1));
+      setActiveIndexIfChanged(Math.max(0, currentIndex - 1));
     } else {
-      setActiveIndex(Math.min(lastIndex, currentIndex + 1));
+      setActiveIndexIfChanged(Math.min(lastIndex, currentIndex + 1));
     }
   }
 
   return (
-    <section className={styles.shell} aria-label={`${tokenName} price history`}>
+    <section
+      className={styles.shell}
+      aria-busy={!payload && !failed}
+      aria-label={`${tokenName} price history`}
+    >
+      <span
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {chartStatus}
+      </span>
       <div className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Price history</p>
@@ -251,29 +381,34 @@ export function TokenPriceChart({
                   activePoint?.value ?? chart.current,
                   chart.unit,
                 )
-              : "Onchain"}
+              : launchModel === "stock-paired"
+                ? "Unavailable"
+                : "Onchain"}
           </p>
         </div>
-        <div className={styles.ranges} aria-label="Chart range" role="group">
-          {CHART_RANGES.map((option) => (
-            <button
-              className={styles.rangeButton}
-              type="button"
-              aria-pressed={range === option.value}
-              key={option.value}
-              onClick={() => {
-                setRange(option.value);
-                setActiveIndex(null);
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        {launchModel !== "stock-paired" ? (
+          <div className={styles.ranges} aria-label="Chart range" role="group">
+            {CHART_RANGES.map((option) => (
+              <button
+                className={styles.rangeButton}
+                type="button"
+                aria-pressed={range === option.value}
+                key={option.value}
+                onClick={() => {
+                  cancelScheduledActivePoint();
+                  setRange(option.value);
+                  setActiveIndexIfChanged(null);
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {!payload && !failed ? (
-        <div className={styles.placeholder} aria-label="Loading price history">
+        <div className={styles.placeholder} aria-hidden="true">
           <span className={styles.loadingLine} />
         </div>
       ) : chart ? (
@@ -296,7 +431,10 @@ export function TokenPriceChart({
               chart.points.at(-1)?.blockNumber ??
               "unknown"
             }`}
-            onBlur={() => setActiveIndex(null)}
+            onBlur={() => {
+              cancelScheduledActivePoint();
+              setActiveIndexIfChanged(null);
+            }}
             onKeyDown={(event) => {
               if (
                 event.key === "ArrowLeft" ||
@@ -311,9 +449,12 @@ export function TokenPriceChart({
               }
             }}
             onPointerDown={(event) => updateActivePoint(event.clientX)}
-            onPointerMove={(event) => updateActivePoint(event.clientX)}
+            onPointerMove={(event) => scheduleActivePoint(event.clientX)}
             onPointerLeave={(event) => {
-              if (event.pointerType !== "touch") setActiveIndex(null);
+              cancelScheduledActivePoint();
+              if (event.pointerType !== "touch") {
+                setActiveIndexIfChanged(null);
+              }
             }}
           >
             <defs>
@@ -368,10 +509,8 @@ export function TokenPriceChart({
           </svg>
         </div>
       ) : (
-        <div className={styles.placeholder}>
-          {failed
-            ? "Price history is temporarily unavailable"
-            : "Price history appears after confirmed trades"}
+        <div className={styles.placeholder} aria-hidden="true">
+          {emptyMessage}
         </div>
       )}
     </section>

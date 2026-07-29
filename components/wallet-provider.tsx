@@ -72,7 +72,9 @@ type WalletContextValue = {
   connecting: boolean;
   disconnecting: boolean;
   openWallet: () => void;
-  disconnect: () => Promise<void>;
+  disconnect: (options?: {
+    showDialogOnFailure?: boolean;
+  }) => Promise<boolean>;
   getAccessToken: () => Promise<string | null>;
   setUsername: (username: string) => void;
   sendTransaction: (transaction: PreparedTransaction) => Promise<Hex>;
@@ -164,6 +166,53 @@ export function getWalletTransactionErrorMessage(error: unknown) {
   }
 
   return message || "The wallet could not open the transaction";
+}
+
+export function getWalletDisconnectOutcome(succeeded: boolean) {
+  return succeeded
+    ? {
+        dialogOpen: false,
+        error: "",
+        sessionSuppressed: true,
+      }
+    : {
+        dialogOpen: true,
+        error: "Unable to disconnect wallet. Try again.",
+        sessionSuppressed: false,
+      };
+}
+
+export async function executeWalletDisconnect(input: {
+  authenticated: boolean;
+  logout: () => Promise<unknown>;
+  disconnectProviderWallets: () => Promise<boolean>;
+  markAppDisconnected: () => void;
+}) {
+  if (input.authenticated) {
+    try {
+      await input.logout();
+    } catch {
+      return false;
+    }
+
+    try {
+      await input.disconnectProviderWallets();
+    } catch {
+      // Privy logout is the authoritative session boundary. Provider cleanup is
+      // best effort, but it must settle before a new login can begin.
+    }
+    input.markAppDisconnected();
+    return true;
+  }
+
+  try {
+    const providersDisconnected = await input.disconnectProviderWallets();
+    if (!providersDisconnected) return false;
+    input.markAppDisconnected();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readProfileValue(account?: string) {
@@ -539,35 +588,52 @@ function PrivyWalletBridge({ children }: { children: ReactNode }) {
     startLogin();
   }, [providerTimedOut, sessionAction, startLogin]);
 
-  const disconnect = useCallback(async () => {
-    setSessionSuppressed(true);
+  const disconnect = useCallback(async (options?: {
+    showDialogOnFailure?: boolean;
+  }) => {
     setDisconnecting(true);
     setError("");
+    const markDisconnectFailed = () => {
+      const outcome = getWalletDisconnectOutcome(false);
+      setSessionSuppressed(outcome.sessionSuppressed);
+      setDialogOpen(
+        options?.showDialogOnFailure === false ? false : outcome.dialogOpen,
+      );
+      setError(outcome.error);
+      return false;
+    };
 
     try {
-      const operations = wallets.map((candidate) =>
-        Promise.resolve().then(() => candidate.disconnect()),
-      );
-      if (authenticated) {
-        operations.push(Promise.resolve().then(logout));
-      }
-
-      const results = await Promise.allSettled(operations);
-      if (results.some((result) => result.status === "rejected")) {
-        throw new Error("disconnect_failed");
-      }
-
-      setDialogOpen(false);
+      const succeeded = await executeWalletDisconnect({
+        authenticated,
+        logout,
+        disconnectProviderWallets: async () => {
+          const results = await Promise.allSettled(
+            wallets.map((candidate) =>
+              Promise.resolve().then(() => candidate.disconnect()),
+            ),
+          );
+          return results.every((result) => result.status === "fulfilled");
+        },
+        markAppDisconnected: () => {
+          const outcome = getWalletDisconnectOutcome(true);
+          setSessionSuppressed(outcome.sessionSuppressed);
+          setDialogOpen(outcome.dialogOpen);
+          setError(outcome.error);
+        },
+      });
+      if (succeeded) return true;
+      return markDisconnectFailed();
     } catch {
-      setError("Unable to disconnect wallet. Try again.");
+      return markDisconnectFailed();
     } finally {
-      setDialogOpen(false);
       setDisconnecting(false);
     }
   }, [authenticated, logout, wallets]);
 
   const copyAddress = useCallback(async () => {
     if (!wallet) return;
+    setError("");
 
     try {
       await navigator.clipboard.writeText(wallet.account);
@@ -819,7 +885,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       connecting: false,
       disconnecting: false,
       openWallet: () => setDialogOpen(true),
-      disconnect: async () => undefined,
+      disconnect: async () => false,
       getAccessToken: async () => null,
       setUsername: () => undefined,
       sendTransaction: async () => {
@@ -885,7 +951,7 @@ function WalletDialog({
   onAddWallet: () => void;
   onClose: () => void;
   onCopyAddress: () => void;
-  onLogout: () => void;
+  onLogout: () => Promise<boolean>;
   onRetryLogin: () => void;
   onSwitchNetwork: () => void;
 }) {
@@ -927,6 +993,14 @@ function WalletDialog({
               {error}
             </p>
           ) : null}
+          <span
+            className="sr-only"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {copied ? "Address copied" : ""}
+          </span>
 
           <div className="dialog-actions">
             <button
@@ -945,7 +1019,7 @@ function WalletDialog({
               className="text-button danger-text"
               type="button"
               disabled={disconnecting}
-              onClick={onLogout}
+              onClick={() => void onLogout()}
             >
               <LogOut aria-hidden="true" size={16} />
               {disconnecting ? "Disconnecting" : "Disconnect wallet"}
@@ -981,7 +1055,7 @@ function WalletDialog({
               className="text-button dialog-logout-button danger-text"
               type="button"
               disabled={disconnecting}
-              onClick={onLogout}
+              onClick={() => void onLogout()}
             >
               {disconnecting ? "Disconnecting" : "Disconnect wallet"}
             </button>
@@ -1242,6 +1316,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
           <button
             type="button"
             onClick={async () => {
+              setMenuError("");
               try {
                 await navigator.clipboard.writeText(wallet.account);
                 setMenuCopied(true);
@@ -1258,13 +1333,29 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
             type="button"
             disabled={disconnecting}
             onClick={() => {
-              setMenuOpen(false);
-              void disconnect();
+              setMenuError("");
+              void disconnect({ showDialogOnFailure: false }).then(
+                (succeeded) => {
+                  if (succeeded) {
+                    setMenuOpen(false);
+                    return;
+                  }
+                  setMenuError("Unable to disconnect wallet. Try again.");
+                  setMenuOpen(true);
+                },
+              );
             }}
           >
             {disconnecting ? "Disconnecting" : "Disconnect"}
           </button>
-          {menuError ? <p role="alert">{menuError}</p> : null}
+          <p
+            className={menuError ? undefined : "sr-only"}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {menuCopied ? "Address copied" : menuError}
+          </p>
         </div>
       ) : null}
     </div>

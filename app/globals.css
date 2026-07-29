@@ -309,22 +309,6 @@ html[data-theme="dark"] .app-frame::before {
   z-index: 1;
 }
 
-.route-transition {
-  animation: route-enter 160ms var(--ease-out) both;
-}
-
-@keyframes route-enter {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 2px, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
 .page-width {
   margin: 0 auto;
   max-width: var(--page-width);
@@ -1440,7 +1424,6 @@ html[data-theme="dark"] .theme-toggle-sun {
   background: var(--glass-90);
   border: 1px solid var(--panel-border);
   border-radius: 22px;
-  cursor: pointer;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1455,10 +1438,6 @@ html[data-theme="dark"] .theme-toggle-sun {
 
 .launch-model-card:active {
   transform: scale(0.985);
-}
-
-.launch-model-card:disabled {
-  cursor: not-allowed;
 }
 
 .launch-model-card:disabled .launch-model-action {
@@ -1606,7 +1585,6 @@ html[data-theme="dark"] .theme-toggle-sun {
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--text-soft);
-  cursor: pointer;
   display: inline-flex;
   font-size: 14px;
   font-weight: 590;
@@ -4024,7 +4002,6 @@ html[data-theme="dark"] .theme-toggle-sun {
 .profile-reward-settings > summary {
   align-items: center;
   color: var(--muted);
-  cursor: pointer;
   display: inline-flex;
   font-size: 11px;
   gap: 7px;
@@ -4093,7 +4070,6 @@ html[data-theme="dark"] .theme-toggle-sun {
 
 .profile-reward-split > summary {
   color: var(--text-soft);
-  cursor: pointer;
   font-size: 11px;
   font-weight: 620;
   min-height: 32px;
@@ -5779,10 +5755,6 @@ html[data-theme="dark"] .theme-toggle-sun {
     animation: none;
   }
 
-  .route-transition {
-    animation: none;
-  }
-
   .token-card,
   .token-card:nth-child(n) {
     animation: token-card-fade 120ms var(--ease-out) both;
@@ -5953,7 +5925,6 @@ html[data-theme="dark"] .theme-toggle-sun {
   border: 1px solid var(--control-border);
   border-radius: 15px;
   color: var(--text);
-  cursor: pointer;
   display: flex;
   gap: 12px;
   min-height: 70px;
@@ -6047,7 +6018,6 @@ html[data-theme="dark"] .theme-toggle-sun {
   border: 1px solid transparent;
   border-radius: 11px;
   color: var(--text);
-  cursor: pointer;
   display: flex;
   gap: 11px;
   min-height: 50px;
@@ -6656,7 +6626,6 @@ html[data-theme="dark"] .theme-toggle-sun {
   border-radius: 11px;
   background: transparent;
   color: var(--muted);
-  cursor: pointer;
   font: inherit;
   font-size: 13px;
   font-weight: 650;
@@ -6884,7 +6853,6 @@ html[data-theme="dark"] .theme-toggle-sun {
 .deep-preset-details summary {
   align-items: center;
   color: var(--text-soft);
-  cursor: pointer;
   display: flex;
   font-size: 12px;
   font-weight: 650;
