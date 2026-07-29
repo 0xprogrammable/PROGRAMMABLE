@@ -66,7 +66,7 @@ different launcher-fee recipient.
 Slither 0.11.5 was rerun against the Classic hook and launcher. Its raw output
 contains dependency noise and known reviewed findings in the Classic sources,
 so this release does not claim a clean external audit. Stateful fee and reward
-invariants ran 256 sequences of 64 calls. Manticore is not available in the
+invariants ran 1,000 sequences of 128 calls. Manticore is not available in the
 local toolchain and is not counted as passing evidence.
 
 ## Release boundary
