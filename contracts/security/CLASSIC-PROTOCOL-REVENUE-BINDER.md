@@ -69,9 +69,10 @@ so this release does not claim a clean external audit. Stateful fee and reward
 invariants ran 1,000 sequences of 128 calls. Manticore is not available in the
 local toolchain and is not counted as passing evidence.
 
-## Release boundary
+## Mainnet evidence
 
-This binder proves local bytecode, deterministic construction and pinned
-Mainnet-fork behavior. It does not prove a new Mainnet deployment. Source
-verification, receipt reconciliation, a small-value live lifecycle and
-production activation remain mandatory after deployment.
+The Mainnet release binds the reviewed bytecode directly to the revenue wallet.
+All seven deployment receipts reached finality, all sources match on Etherscan and
+Sourcify, and the live lifecycle redeemed the exact Programmable amount to
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The app manifest pins the same
+addresses and runtime hashes.

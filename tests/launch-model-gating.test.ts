@@ -363,7 +363,7 @@ describe("unreleased launch model gating", () => {
     },
   );
 
-  it("blocks Classic upgrades before any transaction can be prepared", async () => {
+  it("prepares Classic against the verified Mainnet release", async () => {
     const request = new NextRequest("http://localhost/api/launch/preflight", {
       method: "POST",
       body: JSON.stringify({
@@ -382,14 +382,20 @@ describe("unreleased launch model gating", () => {
     const result = await POST(request);
     expect(result.status).toBe(200);
     await expect(result.json()).resolves.toMatchObject({
-      status: "blocked",
+      status: "ready",
       mode: "classic-v3",
-      title: "Classic is not deployed on Ethereum yet",
+      title: "Ready for wallet review",
       checks: [
         { id: "token", status: "pass" },
         { id: "wallet", status: "pass" },
-        { id: "contracts", status: "blocked" },
+        { id: "contracts", status: "pass" },
+        { id: "simulation", status: "pass" },
       ],
+      transaction: {
+        kind: "launch",
+        chainId: 1,
+        to: appDeployments.production.memeLaunchV2,
+      },
     });
   });
 });

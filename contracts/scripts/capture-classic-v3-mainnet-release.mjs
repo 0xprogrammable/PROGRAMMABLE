@@ -13,7 +13,7 @@ import {
   keccak256,
   parseAbi,
 } from "viem";
-import { sepolia } from "viem/chains";
+import { mainnet } from "viem/chains";
 
 import {
   loadClassicV3ReleasePlan,
@@ -26,7 +26,7 @@ const releasePath = path.join(
   root,
   "contracts",
   "deployments",
-  "sepolia-classic-v3.json",
+  "mainnet-classic-v3.json",
 );
 const appManifestPath = path.join(
   root,
@@ -34,24 +34,27 @@ const appManifestPath = path.join(
   "config",
   "app-deployments.v1.json",
 );
-const deploymentEvidencePath = path.join(
-  root,
-  "tmp",
-  "classic-v3-sepolia-release-evidence.json",
+const deploymentEvidencePath = path.resolve(
+  process.env.CLASSIC_V3_RELEASE_EVIDENCE_PATH ??
+    path.join(root, "tmp/classic-v3-mainnet-release-evidence.json"),
 );
-const lifecycleEvidencePath = path.join(
-  root,
-  "tmp",
-  "classic-v3-sepolia-lifecycle-evidence.json",
+const sourceEvidencePath = path.resolve(
+  process.env.CLASSIC_V3_SOURCE_EVIDENCE_PATH ??
+    path.join(root, "tmp/classic-v3-mainnet-source-evidence.json"),
+);
+const lifecycleEvidencePath = path.resolve(
+  process.env.CLASSIC_V3_LIFECYCLE_EVIDENCE_PATH ??
+    path.join(root, "tmp/classic-v3-mainnet-lifecycle-evidence.json"),
 );
 const rpcEndpoints = [
-  process.env.CLASSIC_V3_RPC_A ?? "https://sepolia.drpc.org",
+  process.env.CLASSIC_V3_RPC_A ??
+    "https://ethereum-rpc.publicnode.com",
   process.env.CLASSIC_V3_RPC_B ??
-    "https://ethereum-sepolia-rpc.publicnode.com",
+    "https://eth-mainnet.public.blastapi.io",
 ];
 const clients = rpcEndpoints.map((endpoint) =>
   createPublicClient({
-    chain: sepolia,
+    chain: mainnet,
     transport: http(endpoint, {
       retryCount: 3,
       retryDelay: 500,
@@ -60,36 +63,6 @@ const clients = rpcEndpoints.map((endpoint) =>
   }),
 );
 
-const sourceTargets = {
-  ctoAuthority: {
-    contractName: "ClassicCtoAuthorityV1",
-    jobId: "b288cd56-dd72-4400-9e4f-771d7dad4a38",
-  },
-  rewardVaultFactory: {
-    contractName: "ClassicRewardVaultFactoryV1",
-    jobId: "364a4675-e1bc-40d8-ba38-cc55199bd064",
-  },
-  initialBuyVestingWalletFactory: {
-    contractName: "ClassicInitialBuyVestingWalletFactoryV1",
-    jobId: "15159f30-444d-4304-96fa-c9a01feacee1",
-  },
-  launchPolicy: {
-    contractName: "ClassicLaunchPolicyV1",
-    jobId: "311809d3-5120-4891-988a-a133a31b9d73",
-  },
-  hookFactory: {
-    contractName: "EthCreatorFeeHookFactoryV3",
-    jobId: "2d37e0df-dced-4659-85d4-f8c3260d94ba",
-  },
-  feeHook: {
-    contractName: "EthCreatorFeeHookV3",
-    jobId: "9674d585-9c35-442f-8aed-2fd07e7cc6c4",
-  },
-  launcher: {
-    contractName: "MemeLaunchV2",
-    jobId: "34985b08-3e95-4f73-95e1-8d12ee223d61",
-  },
-};
 const fieldByContractName = {
   ClassicCtoAuthorityV1: "ctoAuthority",
   ClassicRewardVaultFactoryV1: "rewardVaultFactory",
@@ -118,85 +91,26 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function sameAddress(left, right) {
+  return (
+    typeof left === "string" &&
+    typeof right === "string" &&
+    left.toLowerCase() === right.toLowerCase()
+  );
+}
+
 async function readJson(file) {
   return JSON.parse(await fs.readFile(file, "utf8"));
 }
 
 async function writeJsonAtomic(file, value) {
-  const temporaryPath = `${file}.tmp`;
+  const temporaryPath = `${file}.${process.pid}.tmp`;
   await fs.writeFile(
     temporaryPath,
     `${JSON.stringify(value, null, 2)}\n`,
+    "utf8",
   );
   await fs.rename(temporaryPath, file);
-}
-
-async function fetchJson(url) {
-  const response = await fetch(url, {
-    headers: { accept: "application/json" },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) {
-    throw new Error(`${url} returned HTTP ${response.status}`);
-  }
-  return response.json();
-}
-
-async function verifySource(field, address) {
-  const target = sourceTargets[field];
-  const jobUrl = `https://sourcify.dev/server/v2/verify/${target.jobId}`;
-  const [job, blockscout, routescan] = await Promise.all([
-    fetchJson(jobUrl),
-    fetchJson(
-      `https://eth-sepolia.blockscout.com/api/v2/smart-contracts/${address}`,
-    ),
-    fetchJson(
-      `https://api.routescan.io/v2/network/testnet/evm/11155111/etherscan/api?module=contract&action=getsourcecode&chainid=11155111&address=${address}`,
-    ),
-  ]);
-  assert(job.isJobCompleted === true, `${field} Sourcify job is pending`);
-  assert(job.contract?.match === "match", `${field} Sourcify mismatch`);
-  assert(
-    job.contract.address.toLowerCase() === address.toLowerCase(),
-    `${field} Sourcify address mismatch`,
-  );
-  assert(blockscout.is_verified === true, `${field} is not verified on Blockscout`);
-  assert(
-    blockscout.name === target.contractName,
-    `${field} Blockscout contract-name mismatch`,
-  );
-  assert(routescan.status === "1", `${field} is not verified on Routescan`);
-  assert(
-    routescan.result?.[0]?.ContractName === target.contractName,
-    `${field} Routescan contract-name mismatch`,
-  );
-  return {
-    status: "verified",
-    contractName: target.contractName,
-    verifiedAt: job.contract.verifiedAt,
-    sourcify: {
-      match: job.contract.match,
-      creationMatch: job.contract.creationMatch,
-      runtimeMatch: job.contract.runtimeMatch,
-      matchId: job.contract.matchId,
-      jobId: target.jobId,
-      url: jobUrl,
-    },
-    blockscout: {
-      verified: true,
-      url: `https://eth-sepolia.blockscout.com/address/${address}?tab=contract`,
-    },
-    routescan: {
-      verified: true,
-      url: `https://routescan.io/address/${address}?chainid=11155111`,
-    },
-    etherscan: {
-      verified: false,
-      reason:
-        job.externalVerifications?.etherscan?.error ??
-        "No Etherscan verification result",
-    },
-  };
 }
 
 function receiptBlock(record) {
@@ -236,18 +150,24 @@ function lifecycleBlocks(evidence) {
 }
 
 async function main() {
-  const releasePlan = await loadClassicV3ReleasePlan(root, "sepolia");
-  const [release, appManifest, lifecycle, fullCommit] =
-    await Promise.all([
-      readJson(releasePath),
-      readJson(appManifestPath),
-      readJson(lifecycleEvidencePath),
-      execFileAsync(
-        "git",
-        ["rev-parse", `${releasePlan.simulationCommit}^{commit}`],
-        { cwd: root },
-      ).then(({ stdout }) => stdout.trim()),
-    ]);
+  const releasePlan = await loadClassicV3ReleasePlan(root, "mainnet");
+  const [
+    release,
+    appManifest,
+    sourceEvidence,
+    lifecycle,
+    fullCommit,
+  ] = await Promise.all([
+    readJson(releasePath),
+    readJson(appManifestPath),
+    readJson(sourceEvidencePath),
+    readJson(lifecycleEvidencePath),
+    execFileAsync(
+      "git",
+      ["rev-parse", `${releasePlan.simulationCommit}^{commit}`],
+      { cwd: root },
+    ).then(({ stdout }) => stdout.trim()),
+  ]);
   const deploymentEvidence = await readClassicV3Evidence(
     deploymentEvidencePath,
     releasePlan,
@@ -258,7 +178,19 @@ async function main() {
     "Deployment receipts have not reached finality",
   );
   assert(
+    deploymentEvidence.chainId === 1 &&
+      deploymentEvidence.planDigest === releasePlan.planDigest,
+    "Deployment evidence belongs to another release",
+  );
+  assert(
+    sourceEvidence.status === "verified" &&
+      sourceEvidence.chainId === 1 &&
+      sourceEvidence.infrastructurePlanDigest === releasePlan.planDigest,
+    "Source evidence is not verified for this release",
+  );
+  assert(
     lifecycle.status === "verified-current-release" &&
+      lifecycle.chainId === 1 &&
       lifecycle.verification?.status === "verified",
     "Lifecycle evidence is not verified",
   );
@@ -266,6 +198,19 @@ async function main() {
     lifecycle.infrastructurePlanDigest === releasePlan.planDigest,
     "Lifecycle evidence belongs to another deployment plan",
   );
+  for (const flag of [
+    "deploymentTransactionsVerified",
+    "runtimeBindingsVerified",
+    "positionLockVerified",
+    "buyAndSellVerified",
+    "creatorClaimVerified",
+    "launcherClaimVerified",
+  ]) {
+    assert(
+      lifecycle.verification[flag] === true,
+      `Lifecycle verification is missing ${flag}`,
+    );
+  }
   assert(
     /^[a-f0-9]{40}$/.test(fullCommit),
     "Release commit must be a full Git commit",
@@ -293,6 +238,28 @@ async function main() {
       getAddress(record.address),
     ]),
   );
+  assert(
+    Object.keys(sourceEvidence.contracts ?? {}).length === 7,
+    "Expected seven source-verification records",
+  );
+  for (const [field, record] of Object.entries(deploymentByField)) {
+    const source = sourceEvidence.contracts[field];
+    assert(source, `${field} source evidence is missing`);
+    assert(
+      source.status === "etherscan-exact-sourcify-match" &&
+        source.etherscan?.status === "exact-match" &&
+        source.sourcify?.status === "match",
+      `${field} source verification is incomplete`,
+    );
+    assert(
+      sameAddress(source.address, record.address) &&
+        source.deploymentTransaction.toLowerCase() ===
+          transactionHash(record) &&
+        source.deploymentBlock === receiptBlock(record),
+      `${field} source evidence differs from deployment evidence`,
+    );
+  }
+
   const runtimeCodeHashes = {};
   for (const [field, address] of Object.entries(addresses)) {
     const codes = await Promise.all(
@@ -305,34 +272,24 @@ async function main() {
     const hashes = codes.map((code) => keccak256(code));
     assert(
       hashes[0] === hashes[1],
-      `${field} runtime differs across Sepolia RPCs`,
+      `${field} runtime differs across Mainnet RPCs`,
     );
     runtimeCodeHashes[field] = hashes[0];
   }
 
-  const sourceEntries = Object.fromEntries(
-    await Promise.all(
-      Object.entries(addresses).map(async ([field, address]) => [
-        field,
-        await verifySource(field, address),
-      ]),
-    ),
+  const launcherClaim = lifecycle.transactions?.launcherClaim;
+  assert(
+    launcherClaim?.transactionHash,
+    "Launcher claim transaction is missing",
   );
-  const sourceCheckedAt = Object.values(sourceEntries)
-    .map((entry) => entry.verifiedAt)
-    .sort()
-    .at(-1);
-  assert(sourceCheckedAt, "Source-verification timestamp is missing");
-
-  const launcherClaimHash =
-    lifecycle.transactions.launcherClaim.transactionHash;
   const launcherClaimReceipt = await clients[0].getTransactionReceipt({
-    hash: launcherClaimHash,
+    hash: launcherClaim.transactionHash,
   });
-  const launcherClaimEvent = launcherClaimReceipt.logs
+  const launcherClaimEvents = launcherClaimReceipt.logs
     .filter(
       (log) =>
-        log.address.toLowerCase() === addresses.feeHook.toLowerCase(),
+        log.address.toLowerCase() ===
+        addresses.feeHook.toLowerCase(),
     )
     .flatMap((log) => {
       try {
@@ -349,8 +306,24 @@ async function main() {
       }
     });
   assert(
-    launcherClaimEvent.length === 1,
+    launcherClaimEvents.length === 1,
     "Launcher claim event is missing",
+  );
+  const launcherClaimEvent = launcherClaimEvents[0];
+  assert(
+    sameAddress(
+      launcherClaimEvent.args.treasury,
+      releasePlan.launcherFeeRecipient,
+    ) &&
+      sameAddress(
+        launcherClaimEvent.args.recipient,
+        releasePlan.launcherFeeRecipient,
+      ) &&
+      sameAddress(
+        launcherClaimEvent.args.caller,
+        releasePlan.launcherFeeRecipient,
+      ),
+    "Launcher claim was not executed by and paid to the reviewed revenue wallet",
   );
 
   const deploymentBlocks = Object.fromEntries(
@@ -375,6 +348,9 @@ async function main() {
     addresses: {
       ...release.addresses,
       deployer: getAddress(releasePlan.expectedAccount),
+      launcherFeeRecipient: getAddress(
+        releasePlan.launcherFeeRecipient,
+      ),
       ...addresses,
     },
     transactions: deploymentTransactions,
@@ -385,19 +361,18 @@ async function main() {
     },
     sourceVerification: {
       status: "verified",
-      checkedAt: sourceCheckedAt,
-      primaryProvider: "Sourcify",
-      secondaryExplorers: ["Blockscout", "Routescan"],
-      etherscanStatus:
-        "not-verified-provider-daily-submission-limit",
-      ...sourceEntries,
+      checkedAt: sourceEvidence.checkedAt,
+      infrastructurePlanDigest: releasePlan.planDigest,
+      primaryProvider: "Etherscan",
+      secondaryProvider: "Sourcify",
+      exactMatchContractCount: 7,
+      contracts: sourceEvidence.contracts,
     },
     lifecycleEvidence: {
       status: "verified-current-release",
       releaseEligible: true,
       checkedAt: lifecycle.verification.checkedAt,
-      verifier:
-        "scripts/serve-classic-v3-lifecycle-canary.mjs",
+      verifier: "scripts/serve-classic-v3-lifecycle-canary.mjs",
       independentRpcCount:
         lifecycle.verification.independentRpcCount,
       deploymentTransactionsVerified:
@@ -425,23 +400,23 @@ async function main() {
       creatorFeesClaimedWei:
         observations.totalCreatorFeesClaimed,
       launcherFeesClaimedWei:
-        launcherClaimEvent[0].args.amount.toString(),
+        launcherClaimEvent.args.amount.toString(),
       transactions: lifecycleTransactions(lifecycle),
       blocks: lifecycleBlocks(lifecycle),
     },
   };
 
-  const rehearsal = appManifest.rehearsal;
-  rehearsal.classicV3Status = "ready";
+  const production = appManifest.production;
+  production.classicV3Status = "ready";
   for (const [field, appField] of Object.entries(
     appFieldByReleaseField,
   )) {
-    rehearsal[appField] = addresses[field];
-    rehearsal.runtimeCodeHashes[appField] =
+    production[appField] = addresses[field];
+    production.runtimeCodeHashes[appField] =
       runtimeCodeHashes[field];
-    rehearsal.deploymentTransactions[appField] =
+    production.deploymentTransactions[appField] =
       deploymentTransactions[field];
-    rehearsal.deploymentBlocks[appField] =
+    production.deploymentBlocks[appField] =
       deploymentBlocks[field];
   }
 
@@ -456,8 +431,10 @@ async function main() {
         releaseCommit: fullCommit,
         launcher: addresses.launcher,
         feeHook: addresses.feeHook,
+        launcherFeeRecipient:
+          updatedRelease.addresses.launcherFeeRecipient,
         canaryToken: lifecycle.token,
-        sourceContractsVerified: Object.keys(sourceEntries).length,
+        sourceContractsVerified: 7,
         lifecycleTransactions:
           Object.keys(lifecycle.transactions).length,
       },
@@ -468,6 +445,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error?.message ?? error);
+  console.error(error?.stack ?? error);
   process.exitCode = 1;
 });

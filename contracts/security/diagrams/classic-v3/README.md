@@ -1,7 +1,8 @@
 # Classic security diagrams
 
-These diagrams describe the configurable Classic candidate. The Sepolia deployment is
-verified and lifecycle tested. Ethereum deployment remains a separate release gate.
+These diagrams describe the deployed configurable Classic release. Its Ethereum
+contracts are source verified and its launch, swap, claim and permanent-custody
+lifecycle is recorded in `deployments/mainnet-classic-v3.json`.
 
 ```mermaid
 flowchart LR

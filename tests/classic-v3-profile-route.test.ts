@@ -10,7 +10,7 @@ const account = "0x1111111111111111111111111111111111111111";
 const vault = "0x2222222222222222222222222222222222222222";
 
 describe("Classic profile release gate", () => {
-  it("does not expose unreleased reward data", async () => {
+  it("returns the verified release with no rewards for an unused wallet", async () => {
     const response = await GET(
       new NextRequest(
         `http://localhost/api/profile/classic-v3?account=${account}`,
@@ -19,14 +19,14 @@ describe("Classic profile release gate", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      status: "not-deployed",
+      status: "ready",
       account,
       chainId: 1,
       rewards: [],
     });
   });
 
-  it("does not prepare an unreleased beneficiary action", async () => {
+  it("rejects claims from a wallet that does not own the vault", async () => {
     const response = await POST(
       new NextRequest("http://localhost/api/profile/classic-v3", {
         method: "POST",
@@ -39,9 +39,9 @@ describe("Classic profile release gate", () => {
       }),
     );
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({
-      error: "Classic is not deployed yet",
+      error: "Only a current or historic payout wallet can continue",
     });
   });
 });

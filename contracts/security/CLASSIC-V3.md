@@ -8,13 +8,19 @@ Existing Classic tokens and contracts are not modified.
 
 ## Deployment status
 
-The configurable Classic stack described here is implemented and release-gated. Its Sepolia rehearsal is deployed,
-source verified and lifecycle tested. The Mainnet release remains `not-deployed`; its production manifest contains no
-new Classic contract addresses or transactions.
+The configurable Classic stack is deployed on Ethereum, verified on Etherscan and
+Sourcify, and enabled by the production manifest. The seven-contract deployment is
+recorded in `deployments/mainnet-classic-v3.json`.
 
-The currently deployed mainnet Classic stack is the earlier release recorded in
-`deployments/mainnet-classic-v2.json`. Passing local tests, pinned-fork tests or deterministic deployment simulations
-does not change that live status.
+- Launcher: `0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770`
+- Fee hook: `0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC`
+- Launcher fee recipient: `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`
+
+The Mainnet canary completed an atomic launch, buy, sell, creator claim and
+Programmable claim against the official Uniswap v4 contracts. Two independent RPC
+endpoints confirmed the deployment code, immutable bindings and permanent position
+custody. Earlier Classic contracts remain unchanged and are retained as historical
+releases.
 
 ## Immutable economics
 
@@ -126,16 +132,14 @@ differences are informational.
 
 Architecture and authorization diagrams are in `security/diagrams/classic-v3`.
 
-## Remaining release gates
+## Release evidence and limitations
 
-This work is not an independent audit and is not mainnet-ready solely because local and fork tests pass. The release is
-proceeding with that residual risk disclosed.
+The exact deployment commit, compiler settings, constructor arguments, salt,
+addresses, runtime hashes and transaction receipts are recorded in the release
+manifest. Etherscan and Sourcify match all seven contracts. The small-value Mainnet
+lifecycle verified launch, permanent position custody, buy, sell and both fee-claim
+paths.
 
-Before deployment:
-
-- Pin and record the exact deployment commit, compiler settings, constructor arguments, salts and addresses.
-- Verify every deployed source and constructor argument on Etherscan.
-- Validate scanner and indexer disclosure for directional hook fees, transfer tax, LP fee, vault and locked position.
-- Run live small-value buy, sell and each beneficiary claim path on the intended network.
-- Confirm the public UI derives fees and reward authority from onchain getters rather than duplicated frontend constants.
-- Monitor ecosystem support for directional v4 hook fees. Third-party scanners may display incomplete or unknown tax information even when the onchain disclosure is correct.
+This is still not an independent audit. Scanner and indexer support for directional
+v4 hook fees varies, so a third-party interface may show incomplete fee information
+even when the onchain disclosure is correct.

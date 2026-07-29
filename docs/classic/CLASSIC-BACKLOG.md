@@ -19,8 +19,6 @@ evidence and app release are complete.
 - No owner minting, blacklist, pause or post-launch fee changes
 - Public launch, liquidity, Initial Buy and fee events
 
-## Implemented, not released
-
 ### Directional fees
 
 - Buy and sell fees are selected independently
@@ -97,8 +95,6 @@ Before signing, the app shows:
 ## Under design
 
 - The public CTO application form, evidence requirements and approval-reference format
-- Source verification, canary launch, buy, sell, claims, wallet change and CTO lifecycle
-  evidence for Sepolia and Ethereum
 - Future fee destinations such as liquidity growth, buyback and burn, or holder rewards;
   each requires a separate launch model or security review
 
@@ -117,23 +113,16 @@ Before signing, the app shows:
 
 ## Current release state
 
-- The live Ethereum Classic release is the fixed 1.00% product described in
-  `Available now`
-- The configurable fee, reward allocation, payout-wallet, CTO and Initial Buy custody
-  contracts are integrated into the local Classic launch lifecycle
-- The current candidate passes 688 app tests, 10,000 reward-conservation fuzz
-  cases, 1,000-by-128 stateful reward and directional-fee invariant runs, and
-  pinned Ethereum and Sepolia fork lifecycles
+- The configurable Classic release is deployed on Ethereum and enabled by the
+  production manifest
+- All seven contracts match on Etherscan and Sourcify
+- The Mainnet canary completed launch, buy, sell, creator claim and Programmable claim
+- The release passes 688 app tests, 613 deterministic Solidity tests, fuzz and
+  stateful invariants, plus the pinned Ethereum lifecycle
 - ESLint, TypeScript, Forge formatting, Forge lint, the webpack production build
   and Classic-focused Slither analysis pass; the repository-wide Solidity linters
   still report unrelated Deep-model warnings
-- Deterministic seven-contract deployment plans exist for Ethereum and Sepolia
-- The app remains fail closed until exact deployed addresses, runtime hashes and the
-  deployment block are written to the production manifest
-- The complete candidate is deployed, source verified and lifecycle tested on Sepolia
-- None of the capabilities under `Implemented, not released` are deployed or activated
-  on Ethereum
-- A simulated deployment sequence is only a rehearsal. It must be refreshed against
-  the deployment wallet's live nonce immediately before signing
+- Exact deployed addresses, runtime hashes, blocks and transactions are recorded in
+  `contracts/deployments/mainnet-classic-v3.json`
 - Existing Classic tokens cannot be retrofitted with the new reward or Initial Buy
   custody rules
