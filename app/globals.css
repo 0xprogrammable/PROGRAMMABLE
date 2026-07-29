@@ -5937,88 +5937,250 @@ html[data-theme="dark"] .theme-toggle-sun {
 
 .stock-paired-section {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
-.stock-quote-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+.stock-quote-select {
+  max-width: 390px;
+  position: relative;
+  width: 100%;
+  z-index: 12;
 }
 
-.stock-quote-option {
+.stock-quote-trigger {
   align-items: center;
   background: var(--glass-72);
   border: 1px solid var(--control-border);
-  border-radius: 13px;
+  border-radius: 15px;
   color: var(--text);
   cursor: pointer;
   display: flex;
-  flex-direction: row;
-  gap: 9px;
-  min-height: 64px;
-  min-width: 0;
-  padding: 10px 11px;
+  gap: 12px;
+  min-height: 70px;
+  padding: 9px 13px 9px 10px;
   text-align: left;
   transition:
     background-color 150ms ease,
     border-color 150ms ease,
     box-shadow 150ms ease,
     transform 150ms var(--ease-out);
+  width: 100%;
 }
 
-.stock-quote-logo {
-  flex: 0 0 36px;
-  height: 36px;
+.stock-quote-trigger-logo {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  flex: 0 0 48px;
+  height: 48px;
   object-fit: contain;
-  width: 36px;
+  padding: 4px;
+  width: 48px;
 }
 
-.stock-quote-option span {
-  color: var(--text);
+.stock-quote-trigger-copy {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stock-quote-trigger-copy small {
+  color: var(--muted);
   font-size: 11px;
-  font-weight: 620;
+  line-height: 1.2;
+}
+
+.stock-quote-trigger-copy strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 630;
+  letter-spacing: -0.01em;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.stock-quote-trigger-chevron {
+  color: var(--muted);
+  flex: none;
+  transition: transform 150ms var(--ease-out);
+}
+
+.stock-quote-trigger[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.stock-quote-trigger[aria-expanded="true"] .stock-quote-trigger-chevron {
+  transform: rotate(180deg);
+}
+
+.stock-quote-trigger:focus-visible,
+.stock-quote-option:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: 0;
+}
+
+.stock-quote-list {
+  background: var(--glass-98);
+  border: 1px solid var(--popover-border);
+  bottom: calc(100% + 7px);
+  border-radius: 16px;
+  box-shadow: var(--overlay-shadow);
+  display: grid;
+  gap: 3px;
+  left: 0;
+  max-height: 324px;
+  overflow-y: auto;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: auto;
+}
+
+.stock-quote-option {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  gap: 11px;
+  min-height: 50px;
+  padding: 5px 8px;
+  text-align: left;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
   width: 100%;
 }
 
-.stock-quote-option[data-selected="true"] {
+.stock-quote-logo {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  flex: 0 0 40px;
+  height: 40px;
+  object-fit: contain;
+  padding: 3px;
+  width: 40px;
+}
+
+.stock-quote-option > span {
+  color: var(--text);
+  flex: 1;
+  font-size: 13px;
+  font-weight: 610;
+  line-height: 1.2;
+}
+
+.stock-quote-option-check {
+  color: var(--accent-strong);
+  flex: none;
+  margin-right: 5px;
+}
+
+.stock-quote-option[data-active="true"],
+.stock-quote-option[aria-selected="true"] {
   background: var(--accent-wash);
-  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .stock-paired-controls {
-  grid-template-columns: minmax(250px, 330px) minmax(280px, 360px);
+  align-items: stretch;
+  grid-template-columns:
+    minmax(220px, 0.78fr)
+    minmax(350px, 1.3fr)
+    minmax(180px, 0.72fr);
   margin-top: 0;
+  width: 100%;
 }
 
-.stock-paired-controls .classic-fee-fixed {
-  align-items: flex-start;
+.stock-paired-controls .stock-paired-fee-card {
+  align-items: stretch;
   flex-direction: column;
   justify-content: center;
+  min-height: 66px;
+  padding: 10px 15px;
 }
 
-.stock-paired-controls .classic-fee-fixed strong {
-  position: absolute;
-  right: 16px;
+.stock-paired-control-heading {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
 }
 
-.stock-paired-controls .classic-fee-fixed {
-  position: relative;
+.stock-paired-control-heading > span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 610;
 }
 
-.stock-paired-controls .classic-fee-fixed small {
-  margin: 2px 0 0;
+.stock-paired-control-heading > strong {
+  font-size: 20px;
+  line-height: 1;
 }
 
-.stock-paired-disclosure {
+.stock-paired-controls .stock-paired-fee-card small {
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+
+.stock-paired-controls .stock-paired-initial-buy {
+  align-items: center;
+  background: var(--glass-72);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(92px, auto) minmax(190px, 1fr);
+  min-height: 66px;
+  padding: 8px 9px 8px 15px;
+}
+
+.stock-paired-initial-buy-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.stock-paired-initial-buy-copy strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 610;
+}
+
+.stock-paired-initial-buy-copy small {
   color: var(--muted);
   font-size: 10px;
-  line-height: 1.45;
+  line-height: 1.25;
+}
+
+.stock-paired-controls .stock-paired-initial-buy .meme-dev-buy-input {
+  min-height: 46px;
+}
+
+.stock-paired-launch-action {
+  display: flex;
+}
+
+.stock-paired-launch-action .classic-launch-button {
+  min-height: 66px;
+  min-width: 0;
+  width: 100%;
+}
+
+.stock-paired-launch-status {
+  min-height: 0;
+  padding: 0 2px;
+}
+
+.stock-paired-launch-status:empty {
+  display: none;
 }
 
 .classic-fee-layout .meme-dev-buy {
@@ -6098,6 +6260,37 @@ html[data-theme="dark"] .theme-toggle-sun {
   display: inline-flex;
   justify-content: center;
   min-width: 170px;
+}
+
+.launch-page[data-launch-model="stock-paired"] .stock-paired-controls {
+  grid-template-columns: 230px minmax(360px, 1fr) 200px;
+  justify-content: stretch;
+}
+
+.launch-page[data-launch-model="stock-paired"]
+  .stock-paired-controls
+  .stock-paired-fee-card {
+  min-height: 68px;
+}
+
+.launch-page[data-launch-model="stock-paired"]
+  .stock-paired-controls
+  .stock-paired-initial-buy {
+  align-items: center;
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(92px, auto) minmax(190px, 1fr);
+  min-height: 68px;
+  padding: 8px 9px 8px 15px;
+}
+
+.launch-page[data-launch-model="stock-paired"]
+  .stock-paired-launch-action
+  .classic-launch-button {
+  min-height: 68px;
+  min-width: 0;
+  width: 100%;
 }
 
 .launch-success-backdrop {
@@ -6247,17 +6440,20 @@ html[data-theme="dark"] .theme-toggle-sun {
     grid-template-columns: 1fr;
   }
 
-  .stock-quote-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
   .stock-paired-controls {
-    grid-template-columns: 1fr;
+    grid-template-columns:
+      minmax(190px, 0.75fr)
+      minmax(300px, 1.25fr)
+      minmax(160px, 0.65fr);
   }
 
   .classic-fee-layout .meme-dev-buy {
     align-items: center;
     grid-template-columns: minmax(0, 1fr) 246px;
+  }
+
+  .stock-paired-controls .stock-paired-initial-buy {
+    grid-template-columns: minmax(84px, auto) minmax(180px, 1fr);
   }
 }
 
@@ -6290,14 +6486,26 @@ html[data-theme="dark"] .theme-toggle-sun {
     grid-template-columns: 1fr;
   }
 
-  .stock-quote-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .stock-quote-select {
+    max-width: none;
   }
 
-  .stock-paired-disclosure {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
+  .stock-paired-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .stock-paired-controls .stock-paired-initial-buy {
+    grid-template-columns: minmax(92px, auto) minmax(180px, 1fr);
+  }
+
+  .launch-page[data-launch-model="stock-paired"] .stock-paired-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .launch-page[data-launch-model="stock-paired"]
+    .stock-paired-controls
+    .stock-paired-initial-buy {
+    grid-template-columns: minmax(92px, auto) minmax(180px, 1fr);
   }
 
   .classic-launch-footer {
