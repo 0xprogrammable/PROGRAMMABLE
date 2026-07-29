@@ -4,8 +4,10 @@ import Link from "next/link";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ChangeEvent,
   type Dispatch,
   type ReactNode,
@@ -90,12 +92,64 @@ type TokenImageState = {
 };
 
 type LaunchPhase = "idle" | "preparing" | "confirming";
+export type LaunchSubmissionPhase =
+  | "idle"
+  | "receipt"
+  | "indexing"
+  | "pending-timeout"
+  | "index-timeout"
+  | "receipt-unavailable"
+  | "index-unavailable"
+  | "reverted";
+
+export type LaunchReceiptStatus =
+  | "pending"
+  | "confirmed"
+  | "reverted"
+  | "not-found";
+export type LaunchReceiptPollResult =
+  | "confirmed"
+  | "reverted"
+  | "not-found"
+  | "unavailable"
+  | "pending-timeout";
+
+export type IndexedLaunchPollResult<T> =
+  | { status: "indexed"; launch: T }
+  | { status: "timeout" }
+  | { status: "unavailable" };
+
+export type PendingLaunchSubmission = {
+  version: 2;
+  transactionHash: `0x${string}`;
+  account: `0x${string}`;
+  chainId: 1 | 11_155_111;
+  model: LaunchModel;
+  submittedAtMs: number;
+  receiptConfirmedAtMs?: number;
+};
+
+export type LaunchSubmissionPhaseRecord = {
+  account: `0x${string}`;
+  transactionHash: `0x${string}`;
+  phase: LaunchSubmissionPhase;
+};
+
+export type PendingLaunchStorage = Pick<
+  Storage,
+  "getItem" | "setItem" | "removeItem"
+>;
 
 export type IndexedLaunch = {
   address: `0x${string}`;
   href: string;
   name: string;
   symbol: string;
+};
+
+type IndexedLaunchRecord = {
+  launch: IndexedLaunch;
+  submission: PendingLaunchSubmission;
 };
 
 const emptyTokenImageState: TokenImageState = {
@@ -111,6 +165,455 @@ const STOCK_PAIRED_DISPLAY_NAMES: Record<string, string> = {
   TSLAon: "Tesla",
   AAPLon: "Apple",
 };
+
+const LAUNCH_RECEIPT_POLL_ATTEMPTS = 12;
+export const LAUNCH_INDEX_POLL_ATTEMPTS = 18;
+export const PENDING_LAUNCH_STALE_AFTER_MS = 24 * 60 * 60 * 1_000;
+const PENDING_LAUNCH_MAX_CLOCK_SKEW_MS = 5 * 60 * 1_000;
+const PENDING_LAUNCH_STORAGE_PREFIX = "programmable.pending-launch.v2";
+const PENDING_LAUNCH_CHANGED_EVENT = "programmable:pending-launch-changed";
+const PENDING_LAUNCH_EMPTY_SNAPSHOT = "__none__";
+const SUPPORTED_LAUNCH_MODELS = new Set<LaunchModel>([
+  "classic",
+  "classic-v3",
+  "adaptive",
+  "deep",
+  "stock-paired",
+]);
+
+export function launchPollDelayMs(attempt: number) {
+  const normalizedAttempt = Math.max(0, Math.floor(attempt));
+  return Math.min(1_000 * 2 ** Math.floor(normalizedAttempt / 3), 5_000);
+}
+
+export function launchIndexPollDelayMs(attempt: number) {
+  const normalizedAttempt = Math.max(0, Math.floor(attempt));
+  return Math.min(4_000 + normalizedAttempt * 1_000, 12_000);
+}
+
+export function launchDraftIsLocked(
+  pendingRestoreComplete: boolean,
+  launchPhase: LaunchPhase,
+  transactionHash: string,
+) {
+  return (
+    !pendingRestoreComplete ||
+    launchPhase !== "idle" ||
+    Boolean(transactionHash)
+  );
+}
+
+export function launchDraftForSuccessDisplay(
+  draft: LaunchDraft,
+  submittedFromCurrentDraft: boolean,
+) {
+  return submittedFromCurrentDraft ? draft : undefined;
+}
+
+export function launchSubmissionUsesCurrentDraft(
+  transactionHash: string,
+  currentDraftSubmissionHash: string,
+  currentDraftVersion: number,
+  submittedDraftVersion: number | null,
+) {
+  return Boolean(
+    transactionHash &&
+      currentDraftSubmissionHash &&
+      transactionHash.toLowerCase() ===
+        currentDraftSubmissionHash.toLowerCase() &&
+      submittedDraftVersion !== null &&
+      currentDraftVersion === submittedDraftVersion,
+  );
+}
+
+export function pendingLaunchStorageKey(
+  model: LaunchModel,
+  chainId: 1 | 11_155_111,
+  account: string,
+  transactionHash: string,
+) {
+  return `${PENDING_LAUNCH_STORAGE_PREFIX}:${chainId}:${model}:${account.toLowerCase()}:${transactionHash.toLowerCase()}`;
+}
+
+export function pendingLaunchPointerKey(
+  model: LaunchModel,
+  chainId: 1 | 11_155_111,
+  account: string,
+) {
+  return `${PENDING_LAUNCH_STORAGE_PREFIX}:${chainId}:${model}:${account.toLowerCase()}:active`;
+}
+
+export function pendingLaunchReleasedKey(
+  submission: PendingLaunchSubmission,
+) {
+  return `${pendingLaunchStorageKey(
+    submission.model,
+    submission.chainId,
+    submission.account,
+    submission.transactionHash,
+  )}:released`;
+}
+
+export function parsePendingLaunchSubmission(
+  serialized: string | null,
+  expectedModel: LaunchModel,
+  expectedChainId: 1 | 11_155_111,
+  expectedAccount?: string,
+  nowMs = Date.now(),
+): PendingLaunchSubmission | null {
+  if (!serialized) return null;
+
+  try {
+    const value: unknown = JSON.parse(serialized);
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    const candidate = value as Record<string, unknown>;
+    if (
+      candidate.version !== 2 ||
+      typeof candidate.transactionHash !== "string" ||
+      !/^0x[a-fA-F0-9]{64}$/.test(candidate.transactionHash) ||
+      typeof candidate.account !== "string" ||
+      !/^0x[a-fA-F0-9]{40}$/.test(candidate.account) ||
+      (expectedAccount !== undefined &&
+        candidate.account.toLowerCase() !== expectedAccount.toLowerCase()) ||
+      (candidate.chainId !== 1 && candidate.chainId !== 11_155_111) ||
+      candidate.chainId !== expectedChainId ||
+      typeof candidate.model !== "string" ||
+      !SUPPORTED_LAUNCH_MODELS.has(candidate.model as LaunchModel) ||
+      candidate.model !== expectedModel ||
+      typeof candidate.submittedAtMs !== "number" ||
+      !Number.isSafeInteger(candidate.submittedAtMs) ||
+      candidate.submittedAtMs <= 0 ||
+      candidate.submittedAtMs > nowMs + PENDING_LAUNCH_MAX_CLOCK_SKEW_MS ||
+      (candidate.receiptConfirmedAtMs !== undefined &&
+        (typeof candidate.receiptConfirmedAtMs !== "number" ||
+          !Number.isSafeInteger(candidate.receiptConfirmedAtMs) ||
+          candidate.receiptConfirmedAtMs < candidate.submittedAtMs ||
+          candidate.receiptConfirmedAtMs >
+            nowMs + PENDING_LAUNCH_MAX_CLOCK_SKEW_MS))
+    ) {
+      return null;
+    }
+
+    return {
+      version: 2,
+      transactionHash: candidate.transactionHash as `0x${string}`,
+      account: candidate.account as `0x${string}`,
+      chainId: candidate.chainId,
+      model: candidate.model as LaunchModel,
+      submittedAtMs: candidate.submittedAtMs,
+      ...(typeof candidate.receiptConfirmedAtMs === "number"
+        ? { receiptConfirmedAtMs: candidate.receiptConfirmedAtMs }
+        : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function pendingSubmissionIsStale(
+  submission: PendingLaunchSubmission,
+  nowMs = Date.now(),
+) {
+  return nowMs - submission.submittedAtMs >= PENDING_LAUNCH_STALE_AFTER_MS;
+}
+
+export function pendingSubmissionCanBeDiscarded({
+  submission,
+  observedHash,
+  observedStatus,
+  connectedAccount,
+  nowMs = Date.now(),
+}: {
+  submission: PendingLaunchSubmission;
+  observedHash: string;
+  observedStatus: LaunchReceiptStatus;
+  connectedAccount?: string;
+  nowMs?: number;
+}) {
+  return (
+    pendingSubmissionIsStale(submission, nowMs) &&
+    observedStatus === "not-found" &&
+    observedHash.toLowerCase() === submission.transactionHash.toLowerCase() &&
+    Boolean(
+      connectedAccount &&
+        connectedAccount.toLowerCase() === submission.account.toLowerCase(),
+    )
+  );
+}
+
+export function pendingSubmissionForConnectedAccount(
+  submission: PendingLaunchSubmission | null,
+  model: LaunchModel,
+  chainId: 1 | 11_155_111,
+  connectedAccount: string | undefined,
+) {
+  if (
+    !submission ||
+    !connectedAccount ||
+    submission.model !== model ||
+    submission.chainId !== chainId ||
+    submission.account.toLowerCase() !== connectedAccount.toLowerCase()
+  ) {
+    return null;
+  }
+  return submission;
+}
+
+export function pendingLaunchSubmissionsMatch(
+  left: PendingLaunchSubmission | null | undefined,
+  right: PendingLaunchSubmission | null | undefined,
+) {
+  return Boolean(
+    left &&
+      right &&
+      left.account.toLowerCase() === right.account.toLowerCase() &&
+      left.transactionHash.toLowerCase() ===
+        right.transactionHash.toLowerCase() &&
+      left.chainId === right.chainId &&
+      left.model === right.model,
+  );
+}
+
+export function submissionPhaseForPendingLaunch(
+  record: LaunchSubmissionPhaseRecord | null,
+  submission: PendingLaunchSubmission | null,
+): LaunchSubmissionPhase {
+  if (
+    !record ||
+    !submission ||
+    record.account.toLowerCase() !== submission.account.toLowerCase() ||
+    record.transactionHash.toLowerCase() !==
+      submission.transactionHash.toLowerCase()
+  ) {
+    return "idle";
+  }
+  return record.phase;
+}
+
+export function launchIsConfirmedButUnindexed(
+  submission: PendingLaunchSubmission | null,
+  indexedSubmission: PendingLaunchSubmission | null,
+) {
+  return Boolean(
+    submission?.receiptConfirmedAtMs &&
+      !pendingLaunchSubmissionsMatch(submission, indexedSubmission),
+  );
+}
+
+export function readPendingLaunchSubmission(
+  storage: PendingLaunchStorage,
+  model: LaunchModel,
+  chainId: 1 | 11_155_111,
+  account: string,
+) {
+  if (!/^0x[a-fA-F0-9]{40}$/.test(account)) return null;
+  try {
+    const transactionHash = storage.getItem(
+      pendingLaunchPointerKey(model, chainId, account),
+    );
+    if (
+      !transactionHash ||
+      !/^0x[a-fA-F0-9]{64}$/.test(transactionHash)
+    ) {
+      return null;
+    }
+    const submission = parsePendingLaunchSubmission(
+      storage.getItem(
+        pendingLaunchStorageKey(model, chainId, account, transactionHash),
+      ),
+      model,
+      chainId,
+      account,
+    );
+    if (
+      submission &&
+      storage.getItem(pendingLaunchReleasedKey(submission)) === "1"
+    ) {
+      return null;
+    }
+    return submission;
+  } catch {
+    return null;
+  }
+}
+
+export function writePendingLaunchSubmission(
+  storage: PendingLaunchStorage,
+  submission: PendingLaunchSubmission,
+) {
+  try {
+    storage.setItem(
+      pendingLaunchStorageKey(
+        submission.model,
+        submission.chainId,
+        submission.account,
+        submission.transactionHash,
+      ),
+      JSON.stringify(submission),
+    );
+    storage.setItem(
+      pendingLaunchPointerKey(
+        submission.model,
+        submission.chainId,
+        submission.account,
+      ),
+      submission.transactionHash,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function updatePendingLaunchSubmission(
+  storage: PendingLaunchStorage,
+  submission: PendingLaunchSubmission,
+) {
+  try {
+    storage.setItem(
+      pendingLaunchStorageKey(
+        submission.model,
+        submission.chainId,
+        submission.account,
+        submission.transactionHash,
+      ),
+      JSON.stringify(submission),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function removePendingLaunchSubmission(
+  storage: PendingLaunchStorage,
+  submission: PendingLaunchSubmission,
+) {
+  try {
+    storage.removeItem(
+      pendingLaunchStorageKey(
+        submission.model,
+        submission.chainId,
+        submission.account,
+        submission.transactionHash,
+      ),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function releaseConfirmedLaunchSubmission(
+  storage: PendingLaunchStorage,
+  submission: PendingLaunchSubmission,
+) {
+  if (!submission.receiptConfirmedAtMs) return false;
+  try {
+    storage.setItem(pendingLaunchReleasedKey(submission), "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function pollLaunchReceipt({
+  readStatus,
+  wait,
+  maxAttempts = LAUNCH_RECEIPT_POLL_ATTEMPTS,
+  stopOnNotFound = false,
+  maxConsecutiveErrors = 2,
+}: {
+  readStatus: () => Promise<LaunchReceiptStatus>;
+  wait: (delayMs: number) => Promise<void>;
+  maxAttempts?: number;
+  stopOnNotFound?: boolean;
+  maxConsecutiveErrors?: number;
+}): Promise<LaunchReceiptPollResult> {
+  const boundedAttempts = Math.max(1, Math.floor(maxAttempts));
+  const boundedErrors = Math.max(0, Math.floor(maxConsecutiveErrors));
+  let consecutiveErrors = 0;
+  let successfulReads = 0;
+
+  for (let attempt = 0; attempt < boundedAttempts; attempt += 1) {
+    try {
+      const status = await readStatus();
+      successfulReads += 1;
+      consecutiveErrors = 0;
+      if (status === "confirmed" || status === "reverted") {
+        return status;
+      }
+      if (status === "not-found" && stopOnNotFound) {
+        return status;
+      }
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        throw caught;
+      }
+      consecutiveErrors += 1;
+      if (consecutiveErrors > boundedErrors) {
+        return "unavailable";
+      }
+    }
+
+    if (attempt + 1 < boundedAttempts) {
+      await wait(launchPollDelayMs(attempt));
+    }
+  }
+
+  return successfulReads === 0 ? "unavailable" : "pending-timeout";
+}
+
+export async function pollIndexedLaunch<T>({
+  readLaunch,
+  wait,
+  maxAttempts = LAUNCH_INDEX_POLL_ATTEMPTS,
+  maxConsecutiveErrors = 2,
+}: {
+  readLaunch: (attempt: number) => Promise<T | null>;
+  wait: (delayMs: number) => Promise<void>;
+  maxAttempts?: number;
+  maxConsecutiveErrors?: number;
+}): Promise<IndexedLaunchPollResult<T>> {
+  const boundedAttempts = Math.max(1, Math.floor(maxAttempts));
+  const boundedErrors = Math.max(0, Math.floor(maxConsecutiveErrors));
+  let consecutiveErrors = 0;
+  let successfulReads = 0;
+
+  for (let attempt = 0; attempt < boundedAttempts; attempt += 1) {
+    try {
+      const launch = await readLaunch(attempt);
+      successfulReads += 1;
+      consecutiveErrors = 0;
+      if (launch) return { status: "indexed", launch };
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        throw caught;
+      }
+      consecutiveErrors += 1;
+      if (consecutiveErrors > boundedErrors) {
+        return { status: "unavailable" };
+      }
+    }
+
+    if (attempt + 1 < boundedAttempts) {
+      await wait(launchIndexPollDelayMs(attempt));
+    }
+  }
+
+  return successfulReads === 0
+    ? { status: "unavailable" }
+    : { status: "timeout" };
+}
+
+export function stockQuoteOptionTabIndex(
+  optionIndex: number,
+  activeIndex: number,
+) {
+  return optionIndex === activeIndex ? 0 : -1;
+}
 
 function stockPairedDisplayName(symbol: string, fallback: string) {
   return STOCK_PAIRED_DISPLAY_NAMES[symbol] ?? fallback;
@@ -343,14 +846,148 @@ const launchEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
     ? "rehearsal"
     : "production";
+const launchChainId =
+  launchEnvironment === "rehearsal" ? (11_155_111 as const) : (1 as const);
 const classicV3LaunchAvailable =
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
-const deepLaunchAvailable =
-  isConfiguredDeepV3ReleaseReady(launchEnvironment);
+const deepLaunchAvailable = isConfiguredDeepV3ReleaseReady(launchEnvironment);
 const stockPairedLaunchAvailable =
   (process.env.NODE_ENV !== "production" &&
     process.env.NEXT_PUBLIC_STOCK_PAIRED_UI_PREVIEW === "true") ||
   isConfiguredStockPairedReleaseReady(launchEnvironment);
+
+function browserPendingLaunchStorages(): PendingLaunchStorage[] {
+  if (typeof window === "undefined") return [];
+  const storages: PendingLaunchStorage[] = [];
+  try {
+    storages.push(window.localStorage);
+  } catch {
+    // Storage can be unavailable in hardened browser contexts.
+  }
+  try {
+    storages.push(window.sessionStorage);
+  } catch {
+    // Session storage remains an optional fallback.
+  }
+  return storages;
+}
+
+function readBrowserPendingLaunch(
+  model: LaunchModel,
+  account: string | undefined,
+) {
+  if (!account) return null;
+  let latest: PendingLaunchSubmission | null = null;
+  for (const storage of browserPendingLaunchStorages()) {
+    const submission = readPendingLaunchSubmission(
+      storage,
+      model,
+      launchChainId,
+      account,
+    );
+    if (
+      submission &&
+      (!latest ||
+        submission.submittedAtMs > latest.submittedAtMs ||
+        (submission.submittedAtMs === latest.submittedAtMs &&
+          submission.transactionHash.toLowerCase() >
+            latest.transactionHash.toLowerCase()))
+    ) {
+      latest = submission;
+    }
+  }
+  return latest;
+}
+
+function emitPendingLaunchChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(PENDING_LAUNCH_CHANGED_EVENT));
+  }
+}
+
+function writeBrowserPendingLaunch(submission: PendingLaunchSubmission) {
+  let persisted = false;
+  for (const storage of browserPendingLaunchStorages()) {
+    persisted = writePendingLaunchSubmission(storage, submission) || persisted;
+  }
+  if (persisted) emitPendingLaunchChanged();
+  return persisted;
+}
+
+function updateBrowserPendingLaunch(submission: PendingLaunchSubmission) {
+  let persisted = false;
+  for (const storage of browserPendingLaunchStorages()) {
+    persisted =
+      updatePendingLaunchSubmission(storage, submission) || persisted;
+  }
+  if (persisted) emitPendingLaunchChanged();
+  return persisted;
+}
+
+function removeBrowserPendingLaunch(submission: PendingLaunchSubmission) {
+  for (const storage of browserPendingLaunchStorages()) {
+    removePendingLaunchSubmission(storage, submission);
+  }
+  emitPendingLaunchChanged();
+}
+
+function releaseBrowserConfirmedLaunch(
+  submission: PendingLaunchSubmission,
+) {
+  let released = false;
+  for (const storage of browserPendingLaunchStorages()) {
+    released =
+      releaseConfirmedLaunchSubmission(storage, submission) || released;
+  }
+  if (released) emitPendingLaunchChanged();
+  return released;
+}
+
+function subscribePendingLaunch(listener: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+  const notify = () => listener();
+  window.addEventListener("storage", notify);
+  window.addEventListener(PENDING_LAUNCH_CHANGED_EVENT, notify);
+  return () => {
+    window.removeEventListener("storage", notify);
+    window.removeEventListener(PENDING_LAUNCH_CHANGED_EVENT, notify);
+  };
+}
+
+function useBrowserPendingLaunch(
+  model: LaunchModel,
+  account: string | undefined,
+) {
+  const getSnapshot = useCallback(() => {
+    const submission = readBrowserPendingLaunch(model, account);
+    return submission
+      ? JSON.stringify(submission)
+      : PENDING_LAUNCH_EMPTY_SNAPSHOT;
+  }, [account, model]);
+  const serialized = useSyncExternalStore(
+    subscribePendingLaunch,
+    getSnapshot,
+    () => "",
+  );
+  const submission = useMemo(
+    () =>
+      account &&
+      serialized &&
+      serialized !== PENDING_LAUNCH_EMPTY_SNAPSHOT
+        ? parsePendingLaunchSubmission(
+            serialized,
+            model,
+            launchChainId,
+            account,
+          )
+        : null,
+    [account, model, serialized],
+  );
+  return {
+    pendingRestoreComplete: Boolean(serialized),
+    submission,
+  };
+}
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
@@ -398,21 +1035,34 @@ function LaunchBuilderFormView({
   initialDraft: LaunchDraft;
   onBackToModels: () => void;
 }) {
-  const {
-    wallet,
-    openWallet,
-    readNativeBalance,
-    sendTransaction,
-  } = useWallet();
+  const { wallet, openWallet, readNativeBalance, sendTransaction } =
+    useWallet();
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
   const [launchPhase, setLaunchPhase] = useState<LaunchPhase>("idle");
-  const [transactionHash, setTransactionHash] = useState("");
-  const [submittedAccount, setSubmittedAccount] = useState("");
-  const [indexedLaunch, setIndexedLaunch] = useState<IndexedLaunch | null>(
-    null,
-  );
+  const [submissionPhaseRecord, setSubmissionPhaseRecord] =
+    useState<LaunchSubmissionPhaseRecord | null>(null);
+  const [submissionPersistenceWarning, setSubmissionPersistenceWarning] =
+    useState(false);
+  const [submissionError, setSubmissionError] = useState("");
+  const [currentDraftSubmissionHash, setCurrentDraftSubmissionHash] =
+    useState("");
+  const [submittedDraftVersion, setSubmittedDraftVersion] = useState<
+    number | null
+  >(null);
+  const [currentSubmission, setCurrentSubmission] =
+    useState<PendingLaunchSubmission | null>(null);
+  const [transactionObservation, setTransactionObservation] = useState<{
+    account: string;
+    hash: string;
+    status: LaunchReceiptStatus;
+  } | null>(null);
+  const [discardingStaleSubmission, setDiscardingStaleSubmission] =
+    useState(false);
+  const [confirmationRetryKey, setConfirmationRetryKey] = useState(0);
+  const [indexedLaunchRecord, setIndexedLaunchRecord] =
+    useState<IndexedLaunchRecord | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
   const closeSuccessDialog = useCallback(() => {
     setSuccessOpen(false);
@@ -422,11 +1072,73 @@ function LaunchBuilderFormView({
     useState<TokenImageState>(emptyTokenImageState);
   const currentLaunchContext = useRef({ draft, wallet });
   const draftVersion = useRef(0);
+  const {
+    pendingRestoreComplete,
+    submission: storedSubmission,
+  } = useBrowserPendingLaunch(model, wallet?.account);
+  const activeCurrentSubmission = pendingSubmissionForConnectedAccount(
+    currentSubmission,
+    model,
+    launchChainId,
+    wallet?.account,
+  );
+  const activeSubmission = activeCurrentSubmission ?? storedSubmission;
+  const transactionHash = activeSubmission?.transactionHash ?? "";
+  const submittedAccount = activeSubmission?.account ?? "";
+  const submittedChainId = activeSubmission?.chainId ?? null;
+  const indexedLaunch =
+    activeSubmission &&
+    indexedLaunchRecord &&
+    pendingLaunchSubmissionsMatch(
+      indexedLaunchRecord.submission,
+      activeSubmission,
+    )
+      ? indexedLaunchRecord.launch
+      : null;
+  const confirmedButUnindexed = launchIsConfirmedButUnindexed(
+    activeSubmission,
+    indexedLaunchRecord?.submission ?? null,
+  );
+  const submissionPhase = submissionPhaseForPendingLaunch(
+    submissionPhaseRecord,
+    activeSubmission,
+  );
+  const setSubmissionPhaseFor = useCallback(
+    (
+      submission: PendingLaunchSubmission,
+      phase: LaunchSubmissionPhase,
+    ) => {
+      setSubmissionPhaseRecord({
+        account: submission.account,
+        transactionHash: submission.transactionHash,
+        phase,
+      });
+    },
+    [],
+  );
+  const clearSubmissionPhase = useCallback(() => {
+    setSubmissionPhaseRecord(null);
+  }, []);
   const launching = launchPhase !== "idle";
+  const submissionBusy =
+    Boolean(transactionHash) &&
+    (submissionPhase === "receipt" || submissionPhase === "indexing");
+  const hasSubmittedTransaction = Boolean(transactionHash);
+  const unresolvedSubmission = Boolean(transactionHash) && !indexedLaunch;
+  const draftLocked = launchDraftIsLocked(
+    pendingRestoreComplete,
+    launchPhase,
+    transactionHash,
+  );
+  const setEditableDraft = useCallback<Dispatch<SetStateAction<LaunchDraft>>>(
+    (action) => {
+      if (draftLocked) return;
+      setDraft(action);
+    },
+    [draftLocked],
+  );
   const usesExtendedLayout =
-    model === "classic-v3" ||
-    model === "deep" ||
-    model === "stock-paired";
+    model === "classic-v3" || model === "deep" || model === "stock-paired";
   const modelName =
     model === "deep"
       ? "Deep"
@@ -435,8 +1147,33 @@ function LaunchBuilderFormView({
         : "Classic";
   const stockPairedLaunchAllowed =
     stockPairedLaunchAvailable &&
-    (stockPairedLocalPreview ||
-      isStockPairedDevAccount(wallet?.account));
+    (stockPairedLocalPreview || isStockPairedDevAccount(wallet?.account));
+  const submittingWalletConnected = Boolean(
+    activeSubmission &&
+      wallet &&
+      wallet.account.toLowerCase() === activeSubmission.account.toLowerCase(),
+  );
+  const staleSubmissionNotFound = Boolean(
+    activeSubmission &&
+      pendingSubmissionIsStale(activeSubmission) &&
+      transactionObservation?.account.toLowerCase() ===
+        activeSubmission.account.toLowerCase() &&
+      transactionObservation?.hash.toLowerCase() ===
+        activeSubmission.transactionHash.toLowerCase() &&
+      transactionObservation.status === "not-found",
+  );
+  const canDiscardStaleSubmission = Boolean(
+    activeSubmission &&
+      transactionObservation &&
+      transactionObservation.account.toLowerCase() ===
+        activeSubmission.account.toLowerCase() &&
+      pendingSubmissionCanBeDiscarded({
+        submission: activeSubmission,
+        observedHash: transactionObservation.hash,
+        observedStatus: transactionObservation.status,
+        connectedAccount: wallet?.account,
+      }),
+  );
 
   useEffect(() => {
     currentLaunchContext.current = { draft, wallet };
@@ -449,70 +1186,191 @@ function LaunchBuilderFormView({
   }, [notice]);
 
   useEffect(() => {
-    if (!transactionHash || !submittedAccount || indexedLaunch) return;
+    if (
+      !transactionHash ||
+      !submittedAccount ||
+      !submittedChainId ||
+      indexedLaunch
+    ) {
+      return;
+    }
 
     const controller = new AbortController();
-    let timer = 0;
-    let attempt = 0;
+    const wait = (delayMs: number) =>
+      new Promise<void>((resolve, reject) => {
+        if (controller.signal.aborted) {
+          reject(new DOMException("Launch polling aborted", "AbortError"));
+          return;
+        }
 
-    const pollForLaunch = async () => {
-      try {
-        const endpoint =
-          model === "deep"
-            ? `/api/explore/launch/deep-v3?account=${encodeURIComponent(
-                submittedAccount,
-              )}&transaction=${encodeURIComponent(
-                transactionHash,
-              )}`
-            : model === "stock-paired"
-              ? `/api/explore/launch/stock-paired?account=${encodeURIComponent(
-                  submittedAccount,
-                )}&transaction=${encodeURIComponent(transactionHash)}`
-            : model === "classic-v3"
-            ? `/api/profile/classic-v3?account=${encodeURIComponent(
-                submittedAccount,
-              )}&launch=${encodeURIComponent(transactionHash)}`
-            : `/api/explore/profile?account=${encodeURIComponent(
-                submittedAccount,
-              )}&launch=${encodeURIComponent(transactionHash)}&attempt=${attempt}`;
-        const response = await fetch(endpoint, {
+        const timer = window.setTimeout(() => {
+          controller.signal.removeEventListener("abort", abort);
+          resolve();
+        }, delayMs);
+        const abort = () => {
+          window.clearTimeout(timer);
+          controller.signal.removeEventListener("abort", abort);
+          reject(new DOMException("Launch polling aborted", "AbortError"));
+        };
+        controller.signal.addEventListener("abort", abort, { once: true });
+      });
+
+    const readReceipt = async (): Promise<LaunchReceiptStatus> => {
+      const response = await fetch(
+        `/api/transaction-status?hash=${encodeURIComponent(
+          transactionHash,
+        )}&chainId=${submittedChainId}`,
+        {
           cache: "no-store",
           headers: { Accept: "application/json" },
           signal: controller.signal,
+        },
+      );
+      const body: unknown = await response.json();
+      if (
+        !response.ok ||
+        !body ||
+        typeof body !== "object" ||
+        Array.isArray(body) ||
+        !["pending", "confirmed", "reverted", "not-found"].includes(
+          String((body as { status?: unknown }).status),
+        )
+      ) {
+        throw new Error("Transaction status is unavailable");
+      }
+      const status = (body as { status: LaunchReceiptStatus }).status;
+      setTransactionObservation({
+        account: submittedAccount,
+        hash: transactionHash,
+        status,
+      });
+      return status;
+    };
+
+    const readIndexedLaunch = async (
+      attempt: number,
+    ): Promise<IndexedLaunch | null> => {
+      const endpoint =
+        model === "deep"
+          ? `/api/explore/launch/deep-v3?account=${encodeURIComponent(
+              submittedAccount,
+            )}&transaction=${encodeURIComponent(transactionHash)}`
+          : model === "stock-paired"
+            ? `/api/explore/launch/stock-paired?account=${encodeURIComponent(
+                submittedAccount,
+              )}&transaction=${encodeURIComponent(transactionHash)}`
+            : model === "classic-v3"
+              ? `/api/profile/classic-v3?account=${encodeURIComponent(
+                  submittedAccount,
+                )}&launch=${encodeURIComponent(transactionHash)}`
+              : `/api/explore/profile?account=${encodeURIComponent(
+                  submittedAccount,
+                )}&launch=${encodeURIComponent(
+                  transactionHash,
+                )}&attempt=${attempt}`;
+      const response = await fetch(endpoint, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+      const body: unknown = await response.json();
+      if (!response.ok) throw new Error("Launch index is unavailable");
+      return model === "deep"
+        ? findDeepV3IndexedLaunch(body, transactionHash)
+        : model === "stock-paired" || model === "classic-v3"
+          ? findClassicV3IndexedLaunch(body)
+          : findIndexedLaunch(body, transactionHash);
+    };
+
+    const confirmLaunch = async () => {
+      if (!activeSubmission) return;
+      try {
+        setSubmissionPhaseFor(activeSubmission, "receipt");
+        const receipt = await pollLaunchReceipt({
+          readStatus: readReceipt,
+          wait,
+          stopOnNotFound: Boolean(
+            activeSubmission && pendingSubmissionIsStale(activeSubmission),
+          ),
         });
-        const body: unknown = await response.json();
-        if (response.ok) {
-          const launch =
-            model === "deep"
-              ? findDeepV3IndexedLaunch(body, transactionHash)
-              : model === "stock-paired"
-                ? findClassicV3IndexedLaunch(body)
-              : model === "classic-v3"
-                ? findClassicV3IndexedLaunch(body)
-              : findIndexedLaunch(body, transactionHash);
-          if (launch) {
-            setIndexedLaunch(launch);
-            setSuccessOpen(true);
-            setNotice("Token launched");
-            return;
-          }
+        if (controller.signal.aborted) return;
+
+        if (receipt === "reverted") {
+          setSubmissionPhaseFor(activeSubmission, "reverted");
+          return;
         }
+        if (receipt === "unavailable") {
+          setSubmissionError("");
+          setSubmissionPhaseFor(activeSubmission, "receipt-unavailable");
+          return;
+        }
+        if (receipt === "pending-timeout" || receipt === "not-found") {
+          setSubmissionPhaseFor(activeSubmission, "pending-timeout");
+          return;
+        }
+
+        const confirmedSubmission = activeSubmission.receiptConfirmedAtMs
+          ? activeSubmission
+          : {
+              ...activeSubmission,
+              receiptConfirmedAtMs: Date.now(),
+            };
+        if (!activeSubmission.receiptConfirmedAtMs) {
+          updateBrowserPendingLaunch(confirmedSubmission);
+          setCurrentSubmission(confirmedSubmission);
+        }
+
+        setSubmissionPhaseFor(confirmedSubmission, "indexing");
+        const indexedResult = await pollIndexedLaunch({
+          readLaunch: readIndexedLaunch,
+          wait,
+        });
+        if (controller.signal.aborted) return;
+
+        if (indexedResult.status === "unavailable") {
+          setSubmissionError("");
+          setSubmissionPhaseFor(confirmedSubmission, "index-unavailable");
+          return;
+        }
+        if (indexedResult.status === "timeout") {
+          setSubmissionPhaseFor(confirmedSubmission, "index-timeout");
+          return;
+        }
+        const launch = indexedResult.launch;
+
+        setCurrentSubmission(confirmedSubmission);
+        removeBrowserPendingLaunch(confirmedSubmission);
+        setSubmissionPersistenceWarning(false);
+        setSubmissionError("");
+        setIndexedLaunchRecord({
+          launch,
+          submission: confirmedSubmission,
+        });
+        clearSubmissionPhase();
+        setSuccessOpen(true);
+        setNotice("Token launched");
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
           return;
         }
+        setSubmissionError("");
+        setSubmissionPhaseFor(activeSubmission, "receipt-unavailable");
       }
-
-      attempt += 1;
-      timer = window.setTimeout(pollForLaunch, 3_000);
     };
 
-    void pollForLaunch();
-    return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-    };
-  }, [indexedLaunch, model, submittedAccount, transactionHash]);
+    void confirmLaunch();
+    return () => controller.abort();
+  }, [
+    confirmationRetryKey,
+    activeSubmission,
+    indexedLaunch,
+    model,
+    submittedAccount,
+    submittedChainId,
+    clearSubmissionPhase,
+    setSubmissionPhaseFor,
+    transactionHash,
+  ]);
 
   function validateLaunch() {
     if (
@@ -550,11 +1408,10 @@ function LaunchBuilderFormView({
   }
 
   function markDraftEdited() {
+    if (draftLocked) return;
     draftVersion.current += 1;
     setFormError("");
-    setTransactionHash("");
-    setSubmittedAccount("");
-    setIndexedLaunch(null);
+    setIndexedLaunchRecord(null);
     setSuccessOpen(false);
   }
 
@@ -606,7 +1463,7 @@ function LaunchBuilderFormView({
   }
 
   async function setMaximumDevBuy() {
-    if (!wallet || settingMaxBuy || launching) {
+    if (!wallet || settingMaxBuy || draftLocked) {
       if (!wallet) openWallet();
       return;
     }
@@ -703,7 +1560,7 @@ function LaunchBuilderFormView({
   }
 
   async function launchToken() {
-    if (launching || transactionHash) return;
+    if (draftLocked) return;
 
     if (!wallet) {
       openWallet();
@@ -736,7 +1593,12 @@ function LaunchBuilderFormView({
     persistLaunchDraft(checkedDraft, launchWallet);
     setFormError("");
     setLaunchPhase("preparing");
-    setTransactionHash("");
+    clearSubmissionPhase();
+    setCurrentSubmission(null);
+    setTransactionObservation(null);
+    setCurrentDraftSubmissionHash("");
+    setSubmittedDraftVersion(null);
+    setSubmissionPersistenceWarning(false);
 
     try {
       const prepared = await prepareLaunch(checkedDraft, launchWallet);
@@ -769,23 +1631,38 @@ function LaunchBuilderFormView({
                 account: launchWallet.account,
                 planHash: prepared.planHash,
               })
-          : model === "classic-v3"
-            ? validatePreparedClassicV3LaunchTransaction({
-                transaction: prepared.transaction,
-                draft: checkedDraft,
-                account: launchWallet.account,
-                planHash: prepared.planHash,
-              })
-            : validatePreparedClassicLaunchTransaction({
-                transaction: prepared.transaction,
-                draft: checkedDraft,
-                account: launchWallet.account,
-                planHash: prepared.planHash,
-              });
+            : model === "classic-v3"
+              ? validatePreparedClassicV3LaunchTransaction({
+                  transaction: prepared.transaction,
+                  draft: checkedDraft,
+                  account: launchWallet.account,
+                  planHash: prepared.planHash,
+                })
+              : validatePreparedClassicLaunchTransaction({
+                  transaction: prepared.transaction,
+                  draft: checkedDraft,
+                  account: launchWallet.account,
+                  planHash: prepared.planHash,
+                });
       setLaunchPhase("confirming");
       const hash = await sendTransaction(validatedTransaction);
-      setSubmittedAccount(launchWallet.account);
-      setTransactionHash(hash);
+      const pendingSubmission: PendingLaunchSubmission = {
+        version: 2,
+        transactionHash: hash,
+        account: launchWallet.account,
+        chainId: launchChainId,
+        model,
+        submittedAtMs: Date.now(),
+      };
+      setSubmissionPersistenceWarning(
+        !writeBrowserPendingLaunch(pendingSubmission),
+      );
+      setCurrentSubmission(pendingSubmission);
+      setTransactionObservation(null);
+      setCurrentDraftSubmissionHash(hash);
+      setSubmittedDraftVersion(draftVersion.current);
+      setSubmissionError("");
+      setSubmissionPhaseFor(pendingSubmission, "receipt");
       setNotice("Confirming launch");
     } catch (caught) {
       setFormError(
@@ -798,28 +1675,218 @@ function LaunchBuilderFormView({
     }
   }
 
-  const launchStatus: ReactNode = formError ? (
-    <p className="form-error" id="launch-form-error" role="alert">
-      {formError}
-    </p>
-  ) : indexedLaunch ? (
+  function retryLaunchConfirmation() {
+    if (!transactionHash || submissionBusy || indexedLaunch) return;
+    setSubmissionError("");
+    setConfirmationRetryKey((current) => current + 1);
+  }
+
+  function returnToModels() {
+    if (confirmedButUnindexed && activeSubmission) {
+      releaseBrowserConfirmedLaunch(activeSubmission);
+      setCurrentSubmission(null);
+      setTransactionObservation(null);
+      setCurrentDraftSubmissionHash("");
+      setSubmittedDraftVersion(null);
+      clearSubmissionPhase();
+      setIndexedLaunchRecord(null);
+      setSuccessOpen(false);
+      setSubmissionError("");
+      setSubmissionPersistenceWarning(false);
+    }
+    onBackToModels();
+  }
+
+  function resetRevertedLaunch() {
+    if (submissionPhase !== "reverted" || !activeSubmission) return;
+    removeBrowserPendingLaunch(activeSubmission);
+    setCurrentSubmission(null);
+    setTransactionObservation(null);
+    setCurrentDraftSubmissionHash("");
+    setSubmittedDraftVersion(null);
+    clearSubmissionPhase();
+    setIndexedLaunchRecord(null);
+    setSuccessOpen(false);
+    setFormError("");
+    setSubmissionError("");
+    setSubmissionPersistenceWarning(false);
+    setDraft((current) => ({
+      ...current,
+      launchSalt: createLaunchSalt(),
+      updatedAt: new Date().toISOString(),
+    }));
+    draftVersion.current += 1;
+  }
+
+  async function discardStaleLaunch() {
+    if (
+      !activeSubmission ||
+      !canDiscardStaleSubmission ||
+      discardingStaleSubmission ||
+      submissionBusy
+    ) {
+      return;
+    }
+
+    setDiscardingStaleSubmission(true);
+    setSubmissionError("");
+    try {
+      const response = await fetch(
+        `/api/transaction-status?hash=${encodeURIComponent(
+          activeSubmission.transactionHash,
+        )}&chainId=${activeSubmission.chainId}`,
+        {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        },
+      );
+      const body: unknown = await response.json();
+      const status =
+        body && typeof body === "object" && !Array.isArray(body)
+          ? String((body as { status?: unknown }).status)
+          : "";
+      if (
+        !response.ok ||
+        !["pending", "confirmed", "reverted", "not-found"].includes(status)
+      ) {
+        throw new Error("The transaction status is temporarily unavailable.");
+      }
+
+      if (status === "not-found") {
+        const latestWallet = currentLaunchContext.current.wallet;
+        if (
+          !latestWallet ||
+          latestWallet.account.toLowerCase() !==
+            activeSubmission.account.toLowerCase()
+        ) {
+          throw new Error(
+            "Reconnect the wallet that submitted this launch before discarding its browser record.",
+          );
+        }
+        removeBrowserPendingLaunch(activeSubmission);
+        setCurrentSubmission(null);
+        setTransactionObservation(null);
+        setCurrentDraftSubmissionHash("");
+        setSubmittedDraftVersion(null);
+        clearSubmissionPhase();
+        setSubmissionPersistenceWarning(false);
+        setIndexedLaunchRecord(null);
+        setSuccessOpen(false);
+        setNotice("Stale launch record removed");
+        return;
+      }
+
+      const observedStatus = status as LaunchReceiptStatus;
+      setTransactionObservation({
+        account: activeSubmission.account,
+        hash: activeSubmission.transactionHash,
+        status: observedStatus,
+      });
+      if (observedStatus === "reverted") {
+        setSubmissionPhaseFor(activeSubmission, "reverted");
+        return;
+      }
+
+      setSubmissionPhaseFor(activeSubmission, "receipt");
+      setConfirmationRetryKey((current) => current + 1);
+    } catch (caught) {
+      setSubmissionError(
+        caught instanceof Error
+          ? caught.message
+          : "The transaction status is temporarily unavailable.",
+      );
+    } finally {
+      setDiscardingStaleSubmission(false);
+    }
+  }
+
+  const submittedExplorer =
+    submittedChainId === 11_155_111
+      ? "https://sepolia.etherscan.io"
+      : "https://etherscan.io";
+  const submissionStatusLabel =
+    submissionPhase === "reverted"
+      ? "Launch reverted"
+      : staleSubmissionNotFound
+        ? "Stored launch not found"
+        : submissionPhase === "receipt-unavailable"
+          ? "Transaction status unavailable"
+          : submissionPhase === "index-unavailable"
+            ? "Token index unavailable"
+        : submissionPhase === "pending-timeout"
+          ? "Transaction still pending"
+          : submissionPhase === "index-timeout"
+            ? "Token is being indexed"
+            : submissionPhase === "indexing"
+              ? "Adding token"
+              : "Confirming transaction";
+  const submissionStatusDetail =
+    staleSubmissionNotFound
+      ? submittingWalletConnected
+        ? "This transaction has not appeared on the configured Ethereum providers for over 24 hours. You can check once more and discard only this browser record."
+        : "Connect the wallet that submitted this launch to resolve its stale browser record."
+      : submissionPhase === "reverted"
+        ? "No token was launched. Review the transaction before trying again."
+        : submissionPhase === "receipt-unavailable"
+          ? "The network could not confirm this transaction status. Try the same transaction again."
+          : submissionPhase === "index-unavailable"
+            ? "The transaction is confirmed, but the token index could not be reached. Try again."
+        : submissionPhase === "pending-timeout"
+          ? "Check the same transaction again before taking another action."
+          : submissionPhase === "index-timeout"
+            ? "The transaction is confirmed. The token record may take a little longer."
+            : "";
+  const controlsLockMessage = !pendingRestoreComplete
+    ? "Checking this browser for an unfinished launch."
+    : launching
+      ? "Token details are locked while the launch transaction is prepared."
+      : unresolvedSubmission
+        ? confirmedButUnindexed
+          ? "This transaction is confirmed and its hash remains saved while the token index catches up. You can safely return to the launch models."
+          : "Token details are locked to the submitted transaction. Check its status before taking another action."
+        : hasSubmittedTransaction
+          ? "This completed launch is locked. View the token or return to the launch models."
+          : "";
+
+  const launchStatus: ReactNode = indexedLaunch ? (
     <p>
       {indexedLaunch.name} <span>·</span> ${indexedLaunch.symbol}
     </p>
   ) : transactionHash ? (
-    <a
-      className="transaction-link"
-      href={`${
-        wallet?.chainId === "0xaa36a7"
-          ? "https://sepolia.etherscan.io"
-          : "https://etherscan.io"
-      }/tx/${transactionHash}`}
-      target="_blank"
-      rel="noreferrer"
-    >
-      Confirming launch
-      <span>{shortenAddress(transactionHash)}</span>
-    </a>
+    <>
+      <a
+        className="transaction-link"
+        href={`${submittedExplorer}/tx/${transactionHash}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {submissionStatusLabel}
+        <span>{shortenAddress(transactionHash)}</span>
+      </a>
+      {submissionStatusDetail ? (
+        <p
+          role={
+            submissionPhase === "reverted" ||
+            submissionPhase === "receipt-unavailable" ||
+            submissionPhase === "index-unavailable"
+              ? "alert"
+              : "status"
+          }
+        >
+          {submissionStatusDetail}
+        </p>
+      ) : null}
+      {submissionPersistenceWarning ? (
+        <p role="alert">
+          Keep this page open until the submitted transaction is confirmed.
+        </p>
+      ) : null}
+      {submissionError ? <p role="alert">{submissionError}</p> : null}
+    </>
+  ) : formError ? (
+    <p className="form-error" id="launch-form-error" role="alert">
+      {formError}
+    </p>
   ) : null;
 
   const launchAction: ReactNode = indexedLaunch ? (
@@ -829,13 +1896,47 @@ function LaunchBuilderFormView({
     >
       View your token
     </Link>
+  ) : transactionHash ? (
+    <button
+      className="primary-button classic-launch-button"
+      type="button"
+      disabled={submissionBusy || discardingStaleSubmission}
+      onClick={
+        canDiscardStaleSubmission
+          ? () => void discardStaleLaunch()
+          : staleSubmissionNotFound
+            ? openWallet
+            : submissionPhase === "reverted"
+              ? resetRevertedLaunch
+              : retryLaunchConfirmation
+      }
+    >
+      {discardingStaleSubmission
+        ? "Checking transaction"
+        : canDiscardStaleSubmission
+          ? "Discard stale record"
+          : staleSubmissionNotFound
+            ? wallet
+              ? "Switch wallet"
+              : "Connect submitting wallet"
+            : submissionPhase === "reverted"
+              ? "Reset launch"
+              : submissionPhase === "pending-timeout" ||
+                  submissionPhase === "index-timeout" ||
+                  submissionPhase === "receipt-unavailable" ||
+                  submissionPhase === "index-unavailable"
+                ? "Check again"
+                : submissionPhase === "indexing"
+                  ? "Adding token"
+                  : "Confirming transaction"}
+    </button>
   ) : (
     <button
       className="primary-button classic-launch-button"
       type="submit"
       disabled={
+        !pendingRestoreComplete ||
         launching ||
-        Boolean(transactionHash) ||
         (model === "classic-v3" && !classicV3LaunchAvailable) ||
         (model === "deep" && !deepLaunchAvailable) ||
         (model === "stock-paired" && !stockPairedLaunchAllowed)
@@ -847,12 +1948,12 @@ function LaunchBuilderFormView({
           ? "Stock-Paired is coming soon"
           : model === "classic-v3" && !classicV3LaunchAvailable
             ? "Classic is not deployed"
-            : launchPhase === "preparing"
-              ? "Preparing launch"
-              : launchPhase === "confirming"
-                ? "Confirm in wallet"
-                : transactionHash
-                  ? "Confirming launch"
+            : !pendingRestoreComplete
+              ? "Checking launch status"
+              : launchPhase === "preparing"
+                ? "Preparing launch"
+                : launchPhase === "confirming"
+                  ? "Confirm in wallet"
                   : wallet
                     ? "Launch token"
                     : "Connect wallet"}
@@ -870,14 +1971,13 @@ function LaunchBuilderFormView({
         <button
           className="launch-model-back"
           type="button"
-          onClick={onBackToModels}
+          disabled={draftLocked && !indexedLaunch && !confirmedButUnindexed}
+          onClick={returnToModels}
         >
           <ArrowLeft aria-hidden="true" size={15} />
           Back
         </button>
-        <div
-          className={`launch-page-title ${launchExperience.formPageTitle}`}
-        >
+        <div className={`launch-page-title ${launchExperience.formPageTitle}`}>
           <span className={launchExperience.formModelName}>{modelName}</span>
           <h1>Create your token</h1>
         </div>
@@ -887,21 +1987,35 @@ function LaunchBuilderFormView({
         className={`classic-launch-sheet ${
           usesExtendedLayout ? extendedLayout.sheet : ""
         }`}
-        aria-busy={launching}
+        aria-busy={!pendingRestoreComplete || launching || submissionBusy}
         aria-describedby={formError ? "launch-form-error" : undefined}
         onSubmit={(event) => {
           event.preventDefault();
           void launchToken();
         }}
       >
-        <div
+        {controlsLockMessage ? (
+          <p
+            className={launchExperience.formLockNotice}
+            id="launch-controls-lock-status"
+            role="status"
+          >
+            {controlsLockMessage}
+          </p>
+        ) : null}
+        <fieldset
           className={`classic-launch-content ${
             usesExtendedLayout ? extendedLayout.content : ""
-          }`}
+          } ${launchExperience.formFieldset}`}
+          disabled={draftLocked}
+          aria-describedby={
+            controlsLockMessage ? "launch-controls-lock-status" : undefined
+          }
         >
+          <legend className="sr-only">Token launch details</legend>
           <TokenStep
             draft={draft}
-            setDraft={setDraft}
+            setDraft={setEditableDraft}
             onEdit={markDraftEdited}
             onImageStateChange={setTokenImageState}
           />
@@ -909,14 +2023,14 @@ function LaunchBuilderFormView({
           {model === "deep" ? (
             <DeepFeeStep
               draft={draft}
-              setDraft={setDraft}
+              setDraft={setEditableDraft}
               onEdit={markDraftEdited}
             />
           ) : model === "classic-v3" ? (
             <EnhancedClassicFeeStep
               draft={draft}
               account={wallet?.account}
-              setDraft={setDraft}
+              setDraft={setEditableDraft}
               onEdit={markDraftEdited}
               settingMaxBuy={settingMaxBuy}
               onMaximumDevBuy={() => void setMaximumDevBuy()}
@@ -925,25 +2039,25 @@ function LaunchBuilderFormView({
             <StockPairedStep
               draft={draft}
               account={wallet?.account}
-              setDraft={setDraft}
+              setDraft={setEditableDraft}
               onEdit={markDraftEdited}
               settingMaxBuy={settingMaxBuy}
               onMaximumBuy={() => void setMaximumDevBuy()}
-              launchAction={launchAction}
-              launchStatus={launchStatus}
+              launchAction={transactionHash ? null : launchAction}
+              launchStatus={transactionHash ? null : launchStatus}
             />
           ) : (
             <FeeStep
               draft={draft}
-              setDraft={setDraft}
+              setDraft={setEditableDraft}
               onEdit={markDraftEdited}
               settingMaxBuy={settingMaxBuy}
               onMaximumDevBuy={() => void setMaximumDevBuy()}
             />
           )}
-        </div>
+        </fieldset>
 
-        {model !== "stock-paired" ? (
+        {model !== "stock-paired" || transactionHash ? (
           <footer
             className={`classic-launch-footer ${
               usesExtendedLayout ? extendedLayout.footer : ""
@@ -962,7 +2076,15 @@ function LaunchBuilderFormView({
             model === "classic-v3" ||
             model === "deep" ||
             model === "stock-paired"
-              ? draft
+              ? launchDraftForSuccessDisplay(
+                  draft,
+                  launchSubmissionUsesCurrentDraft(
+                    transactionHash,
+                    currentDraftSubmissionHash,
+                    draftVersion.current,
+                    submittedDraftVersion,
+                  ),
+                )
               : undefined
           }
           account={submittedAccount}
@@ -1057,15 +2179,11 @@ function LaunchSuccessDialog({
     };
   }, [onClose]);
   let classicConfiguration:
-    | ReturnType<typeof validateClassicV3LaunchDraft>
-    | undefined;
+    ReturnType<typeof validateClassicV3LaunchDraft> | undefined;
   const deepLaunch = draft?.launchModel === "deep";
   try {
     if (draft?.launchModel === "classic-v3" && account) {
-      classicConfiguration = validateClassicV3LaunchDraft(
-        draft,
-        account,
-      );
+      classicConfiguration = validateClassicV3LaunchDraft(draft, account);
     }
   } catch {
     classicConfiguration = undefined;
@@ -2014,9 +3132,7 @@ function StockPairedStep({
   ) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveAssetIndex(
-        (index + 1) % STOCK_PAIRED_ETH_QUOTE_ASSETS.length,
-      );
+      setActiveAssetIndex((index + 1) % STOCK_PAIRED_ETH_QUOTE_ASSETS.length);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveAssetIndex(
@@ -2120,6 +3236,7 @@ function StockPairedStep({
                   type="button"
                   role="option"
                   aria-selected={active}
+                  tabIndex={stockQuoteOptionTabIndex(index, activeAssetIndex)}
                   key={asset.address}
                   onClick={() => selectAsset(index)}
                   onMouseEnter={() => setActiveAssetIndex(index)}

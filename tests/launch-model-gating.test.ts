@@ -8,6 +8,7 @@ import {
   DeepFeeStep,
   DeepPresetStep,
   normalizeDeepDraft,
+  stockQuoteOptionTabIndex,
 } from "../components/launch-builder";
 import { LaunchModelPicker } from "../components/launch-entry";
 import appDeployments from "../contracts/config/app-deployments.v1.json";
@@ -144,6 +145,14 @@ function reviewedDeepBinding(manifest = eligibleDeepManifest()) {
 }
 
 describe("unreleased launch model gating", () => {
+  it("keeps one Stock-Paired quote option in the tab order", () => {
+    expect(
+      Array.from({ length: 6 }, (_, index) =>
+        stockQuoteOptionTabIndex(index, 2),
+      ),
+    ).toEqual([-1, -1, 0, -1, -1, -1]);
+  });
+
   it("shows verified Stock-Paired beside Classic and Deep without Adaptive", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {

@@ -3,8 +3,11 @@ import { parseEther } from "viem";
 
 import {
   buildTokenDetailMetrics,
+  formatPreparedMinimum,
+  formatStockPairedGrossVolume,
   parseDetailPayload,
 } from "../components/token-detail-view";
+import type { PreparedTokenTrade } from "../components/token-trade";
 import type { LauncherToken } from "../lib/tokens";
 
 const token = {
@@ -132,5 +135,69 @@ describe("token detail metrics", () => {
         },
       }),
     ).toThrow("invalid token record");
+  });
+
+  it("uses the validated Stock-Paired USD rate for gross volume and ignores mislabeled subgraph USD", () => {
+    const stockToken = {
+      ...token,
+      launchModel: "stock-paired",
+      quoteAssetSymbol: "SVON",
+      tokenPriceQuoteWad: parseEther("2").toString(),
+      tokenPriceUsdWad: parseEther("6").toString(),
+      grossVolumeEth: undefined,
+      grossVolumeQuote: "18.3",
+      grossVolumeQuoteRaw: parseEther("18.3").toString(),
+      uniswapV4Pool: {
+        source: "official-uniswap-v4-subgraph",
+        indexedBlockNumber: "25630000",
+        indexedBlockHash: `0x${"44".repeat(32)}`,
+        volumeUsdWad: "0",
+        tvlUsdWad: "0",
+        transactionCount: "2",
+        liquidity: "123456789",
+        sqrtPriceX96: "79228162514264337593543950336",
+        feeTierPips: "0",
+      },
+    } satisfies LauncherToken;
+
+    expect(formatStockPairedGrossVolume(stockToken)).toBe("$54.90");
+    expect(
+      buildTokenDetailMetrics(stockToken).find(
+        (metric) => metric.label === "Volume",
+      ),
+    ).toEqual({ label: "Volume", value: "$54.90" });
+  });
+
+  it("shows Stock-Paired gross volume in its quote unit when no validated USD rate is available", () => {
+    const stockToken = {
+      ...token,
+      launchModel: "stock-paired",
+      quoteAssetSymbol: "SVON",
+      tokenPriceQuoteWad: parseEther("2").toString(),
+      tokenPriceUsdWad: undefined,
+      grossVolumeEth: undefined,
+      grossVolumeQuote: "18.3",
+      grossVolumeQuoteRaw: parseEther("18.3").toString(),
+    } satisfies LauncherToken;
+
+    expect(formatStockPairedGrossVolume(stockToken)).toBe("18.3 SVON");
+    expect(
+      buildTokenDetailMetrics(stockToken).find(
+        (metric) => metric.label === "Volume",
+      ),
+    ).toEqual({ label: "Volume", value: "18.3 SVON" });
+  });
+
+  it("labels the canonical Stock-Paired sell output as ETH after unwrap", () => {
+    const prepared = {
+      side: "sell",
+      quote: {
+        amountOutMinimum: parseEther("0.25").toString(),
+      },
+    } as PreparedTokenTrade;
+
+    expect(formatPreparedMinimum(prepared, "STOCK", 18)).toBe(
+      "0.25 ETH",
+    );
   });
 });

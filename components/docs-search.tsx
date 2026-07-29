@@ -1,70 +1,256 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Search } from "lucide-react";
-import { FormEvent, useDeferredValue, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FocusEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 
 import { docsSearchItems } from "@/components/docs-data";
 import styles from "@/components/docs-experience.module.css";
+import { docsNavigateEvent } from "@/components/docs-navigation";
+
+export function getDocsSearchResults(query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return [];
+
+  return docsSearchItems
+    .map((item, index) => {
+      const title = item.title.toLowerCase();
+      const description = item.description.toLowerCase();
+      const titleWords = title.split(/[\s-]+/);
+      const rank =
+        title === normalizedQuery
+          ? 0
+          : title.startsWith(normalizedQuery)
+            ? 1
+            : titleWords.some((word) => word.startsWith(normalizedQuery))
+              ? 2
+              : title.includes(normalizedQuery)
+                ? 3
+                : description.startsWith(normalizedQuery)
+                  ? 4
+                  : description.includes(normalizedQuery)
+                    ? 5
+                    : null;
+      return { index, item, rank };
+    })
+    .filter(
+      (
+        result,
+      ): result is {
+        index: number;
+        item: (typeof docsSearchItems)[number];
+        rank: number;
+      } => result.rank !== null,
+    )
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map(({ item }) => item)
+    .slice(0, 6);
+}
+
+export function nextDocsSearchIndex(
+  current: number,
+  resultCount: number,
+  direction: "next" | "previous",
+) {
+  if (resultCount <= 0) return -1;
+  if (current < 0 || current >= resultCount) {
+    return direction === "next" ? 0 : resultCount - 1;
+  }
+  return direction === "next"
+    ? (current + 1) % resultCount
+    : (current - 1 + resultCount) % resultCount;
+}
 
 export function DocsSearch() {
   const router = useRouter();
+  const pathname = usePathname();
+  const formRef = useRef<HTMLFormElement>(null);
   const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
-  const results = deferredQuery
-    ? docsSearchItems
-        .filter((item) =>
-          `${item.title} ${item.description}`
-            .toLowerCase()
-            .includes(deferredQuery),
-        )
-        .slice(0, 6)
-    : [];
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const normalizedQuery = query.trim().toLowerCase();
+  const results = getDocsSearchResults(normalizedQuery);
+
+  const listboxId = "docs-search-results";
+  const resolvedActiveIndex =
+    isOpen && results.length > 0
+      ? Math.min(Math.max(activeIndex, 0), results.length - 1)
+      : -1;
+
+  useEffect(() => {
+    const dismissOnOutsidePointer = (event: PointerEvent) => {
+      if (!formRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+        setActiveIndex(-1);
+      }
+    };
+
+    document.addEventListener("pointerdown", dismissOnOutsidePointer);
+    return () =>
+      document.removeEventListener("pointerdown", dismissOnOutsidePointer);
+  }, []);
+
+  function dismissResults() {
+    setIsOpen(false);
+    setActiveIndex(-1);
+  }
+
+  function openResults() {
+    if (!query.trim()) return;
+    setIsOpen(true);
+    setActiveIndex((current) => (current >= 0 ? current : 0));
+  }
+
+  function navigateToResult(href: string) {
+    setQuery("");
+    dismissResults();
+
+    if (pathname === "/docs" && href.startsWith("/docs#")) {
+      window.dispatchEvent(
+        new CustomEvent(docsNavigateEvent, { detail: { href } }),
+      );
+      return;
+    }
+    router.push(href);
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const firstResult = results[0];
-    if (firstResult) {
-      setQuery("");
-      router.push(firstResult.href);
+    const result =
+      results[resolvedActiveIndex >= 0 ? resolvedActiveIndex : 0] ?? results[0];
+    if (result) navigateToResult(result.href);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      if (!isOpen) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dismissResults();
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (results.length === 0) return;
+      event.preventDefault();
+      setIsOpen(true);
+      setActiveIndex((current) =>
+        nextDocsSearchIndex(
+          current,
+          results.length,
+          event.key === "ArrowDown" ? "next" : "previous",
+        ),
+      );
+      return;
+    }
+
+    if (event.key === "Home" || event.key === "End") {
+      if (!isOpen || results.length === 0) return;
+      event.preventDefault();
+      setActiveIndex(event.key === "Home" ? 0 : results.length - 1);
+      return;
+    }
+
+    if (event.key === "Enter" && isOpen && resolvedActiveIndex >= 0) {
+      event.preventDefault();
+      const result = results[resolvedActiveIndex];
+      if (result) navigateToResult(result.href);
     }
   }
 
+  function handleBlur(event: FocusEvent<HTMLFormElement>) {
+    const form = event.currentTarget;
+    window.requestAnimationFrame(() => {
+      if (!form.contains(document.activeElement)) dismissResults();
+    });
+  }
+
+  function handleResultClick(
+    event: MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) {
+    if (
+      event.button !== 0 ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    navigateToResult(href);
+  }
+
   return (
-    <form className={styles.search} role="search" onSubmit={submit}>
+    <form
+      className={styles.search}
+      ref={formRef}
+      role="search"
+      onBlur={handleBlur}
+      onSubmit={submit}
+    >
       <Search aria-hidden="true" size={18} strokeWidth={1.8} />
       <label className="sr-only" htmlFor="docs-search">
         Search Programmable docs
       </label>
       <input
         id="docs-search"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-controls={isOpen ? listboxId : undefined}
+        aria-expanded={isOpen}
+        aria-activedescendant={
+          isOpen && resolvedActiveIndex >= 0
+            ? `docs-search-result-${resolvedActiveIndex}`
+            : undefined
+        }
         value={query}
         autoComplete="off"
         placeholder="Search the docs"
-        onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setQuery("");
-            event.currentTarget.blur();
-          }
+        onChange={(event) => {
+          const nextQuery = event.target.value;
+          setQuery(nextQuery);
+          setIsOpen(Boolean(nextQuery.trim()));
+          setActiveIndex(0);
         }}
+        onFocus={openResults}
+        onKeyDown={handleKeyDown}
       />
       <span className="sr-only" role="status" aria-live="polite">
-        {deferredQuery
+        {normalizedQuery
           ? `${results.length} ${
               results.length === 1 ? "result" : "results"
             }`
           : ""}
       </span>
-      {deferredQuery ? (
-        <div className={styles.searchResults}>
+      {isOpen && normalizedQuery ? (
+        <div
+          className={styles.searchResults}
+          id={listboxId}
+          role="listbox"
+          aria-label="Documentation search results"
+        >
           {results.length > 0 ? (
-            results.map((item) => (
+            results.map((item, index) => (
               <Link
+                id={`docs-search-result-${index}`}
                 key={item.href}
                 href={item.href}
-                onClick={() => setQuery("")}
+                role="option"
+                aria-selected={resolvedActiveIndex === index}
+                tabIndex={-1}
+                onClick={(event) => handleResultClick(event, item.href)}
+                onMouseEnter={() => setActiveIndex(index)}
               >
                 <strong>{item.title}</strong>
                 <span>{item.description}</span>

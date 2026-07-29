@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import type { LauncherToken } from "../lib/tokens";
 import type { ExplorePage } from "../lib/onchain/types";
+import { computeOfficialV4PoolId } from "../lib/uniswap/liquidity-launcher-sdk";
 import {
   enrichExplorePageWithOfficialV4Subgraph,
   parseOfficialV4SubgraphResponse,
@@ -92,6 +93,33 @@ function officialResponse(indexedBlockNumber: number | string = 25_629_999) {
   };
 }
 
+function officialPool(input: {
+  token0: `0x${string}`;
+  token1: `0x${string}`;
+  hooks: `0x${string}`;
+}) {
+  return {
+    id: computeOfficialV4PoolId({
+      currency0: input.token0,
+      currency1: input.token1,
+      fee: 0,
+      tickSpacing: 60,
+      hooks: input.hooks,
+    }),
+    token0: { id: input.token0 },
+    token1: { id: input.token1 },
+    hooks: input.hooks,
+    feeTier: "0",
+    tickSpacing: "60",
+    liquidity: "123456789",
+    sqrtPrice: "79228162514264337593543950336",
+    tick: "-120",
+    txCount: "42",
+    volumeUSD: "1234.56789012345678912345",
+    totalValueLockedUSD: "98.7",
+  };
+}
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -155,6 +183,80 @@ describe("official Uniswap v4 subgraph adapter", () => {
     expect(enriched.tokens[0]?.grossVolumeWei).toBe("900");
     expect(enriched.tokens[0]?.activeLiquidity).toBe("700");
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts the recorded quote asset as the Stock-Paired countercurrency", async () => {
+    const quoteAsset =
+      "0x1111111111111111111111111111111111111111" as const;
+    const pool = officialPool({
+      token0: quoteAsset,
+      token1: TOKEN_ADDRESS,
+      hooks: HOOK_ADDRESS,
+    });
+    const stock = canonicalToken({
+      id: "1:stock",
+      launchModel: "stock-paired",
+      quoteAssetAddress: quoteAsset,
+      quoteAssetSymbol: "SVON",
+      poolId: pool.id,
+    });
+    const source = page([stock]);
+
+    const enriched = await enrichExplorePageWithOfficialV4Subgraph(source, {
+      apiKey: "graph-secret",
+      endpoint: OFFICIAL_ENDPOINT,
+      fetcher: async () =>
+        jsonResponse({
+          data: {
+            ...officialResponse().data,
+            pools: [pool],
+          },
+        }),
+    });
+
+    expect(enriched.tokens[0]?.uniswapV4Pool).toMatchObject({
+      source: "official-uniswap-v4-subgraph",
+      volumeUsdWad: "1234567890123456789123",
+    });
+  });
+
+  it("isolates a mismatched token without discarding valid page analytics", async () => {
+    const mismatchedToken =
+      "0x4444444444444444444444444444444444444444" as const;
+    const actualHook =
+      "0x5555555555555555555555555555555555555555" as const;
+    const recordedHook =
+      "0x6666666666666666666666666666666666666666" as const;
+    const mismatchedPool = officialPool({
+      token0: "0x0000000000000000000000000000000000000000",
+      token1: mismatchedToken,
+      hooks: actualHook,
+    });
+    const mismatched = canonicalToken({
+      id: "1:mismatched",
+      tokenAddress: mismatchedToken,
+      hookAddress: recordedHook,
+      poolId: mismatchedPool.id,
+    });
+    const source = page([canonicalToken(), mismatched]);
+
+    const enriched = await enrichExplorePageWithOfficialV4Subgraph(source, {
+      apiKey: "graph-secret",
+      endpoint: OFFICIAL_ENDPOINT,
+      fetcher: async () =>
+        jsonResponse({
+          data: {
+            ...officialResponse().data,
+            pools: [
+              officialResponse().data.pools[0],
+              mismatchedPool,
+            ],
+          },
+        }),
+    });
+
+    expect(enriched.tokens[0]?.uniswapV4Pool).toBeDefined();
+    expect(enriched.tokens[1]?.uniswapV4Pool).toBeUndefined();
   });
 
   it("accepts the documented deployment schema and rejects unsupported extra fields", () => {

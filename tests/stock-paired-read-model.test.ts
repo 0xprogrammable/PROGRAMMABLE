@@ -178,7 +178,7 @@ describe("Stock-Paired read model provenance", () => {
     expect(() => pairStockPairedLaunches(duplicate)).toThrow(/Duplicate/);
   });
 
-  it("merges Stock-Paired tokens without replacing another launch model", () => {
+  it("refreshes a matching Stock-Paired launch without changing token order", () => {
     const token = stockToken();
     expect(mergeStockPairedExploreModel(baseModel(), [token])).toMatchObject({
       status: "ready",
@@ -187,14 +187,59 @@ describe("Stock-Paired read model provenance", () => {
 
     const repeated = baseModel();
     if (repeated.status !== "ready") throw new Error("bad fixture");
-    repeated.tokens = [token];
-    expect(
-      mergeStockPairedExploreModel(repeated, [{ ...token, name: "Refreshed" }]),
-    ).toMatchObject({
+    const classicBefore = {
+      ...token,
+      id: "classic-before",
+      tokenAddress: getAddress(
+        "0x1111111111111111111111111111111111111111",
+      ),
+      launchModel: "classic" as const,
+    };
+    const classicAfter = {
+      ...token,
+      id: "classic-after",
+      tokenAddress: getAddress(
+        "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa",
+      ),
+      launchModel: "classic" as const,
+    };
+    repeated.tokens = [
+      classicBefore,
+      {
+        ...token,
+        tokenPriceQuoteWad: "1",
+        fdvUsdWad: "2",
+        grossVolumeQuoteRaw: "3",
+      },
+      classicAfter,
+    ];
+    const merged = mergeStockPairedExploreModel(repeated, [
+      {
+        ...token,
+        name: "Refreshed",
+        tokenPriceQuoteWad: "101",
+        fdvUsdWad: "202",
+        grossVolumeQuoteRaw: "303",
+      },
+    ]);
+    expect(merged).toMatchObject({
       status: "ready",
-      tokens: [{ name: "Stock Pair", tokenAddress: STOCK_TEST_TOKEN }],
+      tokens: [
+        { id: "classic-before" },
+        {
+          name: "Refreshed",
+          tokenAddress: STOCK_TEST_TOKEN,
+          tokenPriceQuoteWad: "101",
+          fdvUsdWad: "202",
+          grossVolumeQuoteRaw: "303",
+        },
+        { id: "classic-after" },
+      ],
     });
+  });
 
+  it("rejects launch-model and provenance conflicts", () => {
+    const token = stockToken();
     const duplicate = baseModel();
     if (duplicate.status !== "ready") throw new Error("bad fixture");
     duplicate.tokens = [{ ...token, launchModel: "classic" }];

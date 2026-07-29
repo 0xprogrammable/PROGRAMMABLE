@@ -1,14 +1,54 @@
 export const TOKEN_IMAGE_OUTPUT_SIZE = 1_000;
 export const MAX_TOKEN_IMAGE_SOURCE_BYTES = 8_000_000;
-export const MAX_TOKEN_IMAGE_UPLOAD_BYTES = 2_000_000;
+export const MAX_TOKEN_IMAGE_UPLOAD_BYTES = 1_000_000;
+export const PROGRAMMABLE_TOKEN_IMAGE_HOST =
+  "k2uoipt9wchjtz3h.public.blob.vercel-storage.com";
 
 const acceptedTokenImageTypes = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
 ]);
+
 export function canOptimizeTokenImage(source: string) {
-  return source.startsWith("/");
+  return source.startsWith("/") && !source.startsWith("//");
+}
+
+export function isProgrammableTokenImageUrl(source: string) {
+  try {
+    const url = new URL(source);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === PROGRAMMABLE_TOKEN_IMAGE_HOST &&
+      url.port === "" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.pathname.startsWith("/token-images/") &&
+      url.pathname.endsWith(".webp")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function getProgrammableTokenImageAssetName(source: string) {
+  if (!isProgrammableTokenImageUrl(source)) return "";
+  try {
+    const pathname = new URL(source).pathname;
+    const assetName = pathname.slice("/token-images/".length);
+    return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}\.webp$/.test(assetName)
+      ? assetName
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+export function getTokenCardImageSource(source: string) {
+  const assetName = getProgrammableTokenImageAssetName(source);
+  return assetName
+    ? `/api/token-image-proxy/${encodeURIComponent(assetName)}`
+    : source;
 }
 
 export function getTokenImageFileError(file: Pick<File, "size" | "type">) {
@@ -42,7 +82,7 @@ function canvasToWebp(canvas: HTMLCanvasElement) {
         resolve(blob);
       },
       "image/webp",
-      0.9,
+      0.84,
     );
   });
 }

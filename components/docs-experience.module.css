@@ -98,8 +98,13 @@
   border-radius: 11px;
   display: grid;
   gap: 2px;
+  outline: 0;
   padding: 10px 11px;
   transition: background-color 140ms ease;
+}
+
+.searchResults a[aria-selected="true"] {
+  background: var(--accent-soft);
 }
 
 .searchResults strong {
@@ -210,10 +215,6 @@
     0 24px 68px var(--card-shadow-soft);
   min-width: 0;
   padding: clamp(30px, 4vw, 52px);
-}
-
-.content section {
-  scroll-margin-top: calc(var(--header-height) + 24px);
 }
 
 .content section + section {
@@ -603,6 +604,14 @@
     padding: 0 16px;
   }
 
+  .mobileNav summary svg {
+    transition: transform 160ms var(--ease-out);
+  }
+
+  .mobileNav[open] summary svg {
+    transform: rotate(180deg);
+  }
+
   .mobileNav summary::-webkit-details-marker {
     display: none;
   }
@@ -752,6 +761,7 @@
 @media (prefers-reduced-motion: reduce) {
   .modelCard,
   .navGroup a,
+  .mobileNav summary svg,
   .sourceLinks a {
     transition: none;
   }

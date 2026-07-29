@@ -25,6 +25,17 @@ type WalletProviderContract = {
   readUsernameFromProfileValue: (value: string | null) => string;
   getWalletLoginErrorMessage: (errorCode: string) => string;
   getWalletTransactionErrorMessage: (error: unknown) => string;
+  getWalletDisconnectOutcome: (succeeded: boolean) => {
+    dialogOpen: boolean;
+    error: string;
+    sessionSuppressed: boolean;
+  };
+  executeWalletDisconnect: (input: {
+    authenticated: boolean;
+    logout: () => Promise<unknown>;
+    disconnectProviderWallets: () => Promise<boolean>;
+    markAppDisconnected: () => void;
+  }) => Promise<boolean>;
   selectConnectedWallet: <T extends {
     address: string;
     connectedAt: number;
@@ -114,6 +125,146 @@ describe("wallet recovery state", () => {
         new Error("Wallet request failed"),
       ),
     ).toBe("Wallet request failed");
+  });
+
+  it("keeps the visible wallet session and dialog open when disconnect fails", () => {
+    expect(subject.getWalletDisconnectOutcome(false)).toEqual({
+      dialogOpen: true,
+      error: "Unable to disconnect wallet. Try again.",
+      sessionSuppressed: false,
+    });
+    expect(subject.getWalletDisconnectOutcome(true)).toEqual({
+      dialogOpen: false,
+      error: "",
+      sessionSuppressed: true,
+    });
+  });
+
+  it("does not disconnect provider wallets when authenticated logout fails", async () => {
+    const events: string[] = [];
+    const succeeded = await subject.executeWalletDisconnect({
+      authenticated: true,
+      logout: async () => {
+        events.push("logout");
+        throw new Error("logout failed");
+      },
+      disconnectProviderWallets: async () => {
+        events.push("provider cleanup");
+        return true;
+      },
+      markAppDisconnected: () => {
+        events.push("mark disconnected");
+      },
+    });
+
+    expect(succeeded).toBe(false);
+    expect(events).toEqual(["logout"]);
+  });
+
+  it("keeps reconnect blocked until authenticated provider cleanup settles", async () => {
+    const events: string[] = [];
+    let finishCleanup: ((value: boolean) => void) | undefined;
+    const cleanup = new Promise<boolean>((resolve) => {
+      finishCleanup = resolve;
+    });
+
+    let disconnectSettled = false;
+    const disconnect = subject.executeWalletDisconnect({
+      authenticated: true,
+      logout: async () => {
+        events.push("logout");
+      },
+      disconnectProviderWallets: () => {
+        events.push("provider cleanup");
+        return cleanup;
+      },
+      markAppDisconnected: () => {
+        events.push("mark disconnected");
+      },
+    });
+    void disconnect.finally(() => {
+      disconnectSettled = true;
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(disconnectSettled).toBe(false);
+    expect(events).toEqual(["logout", "provider cleanup"]);
+
+    finishCleanup?.(true);
+    const succeeded = await disconnect;
+    expect(succeeded).toBe(true);
+    expect(disconnectSettled).toBe(true);
+    expect(events).toEqual([
+      "logout",
+      "provider cleanup",
+      "mark disconnected",
+    ]);
+  });
+
+  it("completes authenticated logout when best-effort provider cleanup fails", async () => {
+    const events: string[] = [];
+    const succeeded = await subject.executeWalletDisconnect({
+      authenticated: true,
+      logout: async () => {
+        events.push("logout");
+      },
+      disconnectProviderWallets: async () => {
+        events.push("provider cleanup");
+        throw new Error("provider cleanup failed");
+      },
+      markAppDisconnected: () => {
+        events.push("mark disconnected");
+      },
+    });
+
+    expect(succeeded).toBe(true);
+    expect(events).toEqual([
+      "logout",
+      "provider cleanup",
+      "mark disconnected",
+    ]);
+  });
+
+  it("uses provider cleanup as the deterministic boundary without an authenticated session", async () => {
+    const failedEvents: string[] = [];
+    const failed = await subject.executeWalletDisconnect({
+      authenticated: false,
+      logout: async () => {
+        failedEvents.push("logout");
+      },
+      disconnectProviderWallets: async () => {
+        failedEvents.push("provider cleanup");
+        return false;
+      },
+      markAppDisconnected: () => {
+        failedEvents.push("mark disconnected");
+      },
+    });
+
+    expect(failed).toBe(false);
+    expect(failedEvents).toEqual(["provider cleanup"]);
+
+    const succeededEvents: string[] = [];
+    const succeeded = await subject.executeWalletDisconnect({
+      authenticated: false,
+      logout: async () => {
+        succeededEvents.push("logout");
+      },
+      disconnectProviderWallets: async () => {
+        succeededEvents.push("provider cleanup");
+        return true;
+      },
+      markAppDisconnected: () => {
+        succeededEvents.push("mark disconnected");
+      },
+    });
+
+    expect(succeeded).toBe(true);
+    expect(succeededEvents).toEqual([
+      "provider cleanup",
+      "mark disconnected",
+    ]);
   });
 
   it("only exposes a connected wallet to the app after authentication", () => {

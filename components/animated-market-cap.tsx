@@ -68,6 +68,14 @@ export function formatMarketCapMetric(
   );
 }
 
+export function getMarketCapAnimationKey(
+  metric: MarketCapMetric,
+  replayKey: string,
+) {
+  const symbol = metric.kind === "quote" ? metric.symbol : "";
+  return `${replayKey}\u0000${metric.kind}\u0000${symbol}\u0000${metric.value}`;
+}
+
 function formatMarketCapValue(
   kind: MarketCapMetric["kind"],
   target: number,
@@ -96,9 +104,11 @@ export function AnimatedMarketCap({
   replayKey: string;
 }) {
   const valueRef = useRef<HTMLSpanElement>(null);
+  const completedAnimationKeyRef = useRef<string | null>(null);
   const kind = metric.kind;
   const value = metric.value;
   const symbol = metric.kind === "quote" ? metric.symbol : "";
+  const animationKey = getMarketCapAnimationKey(metric, replayKey);
   const finalLabel = formatMarketCapValue(
     kind,
     value,
@@ -110,11 +120,17 @@ export function AnimatedMarketCap({
     const element = valueRef.current;
     if (!element) return;
 
+    if (completedAnimationKeyRef.current === animationKey) {
+      element.textContent = finalLabel;
+      return;
+    }
+
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     if (reducedMotion || value <= 0) {
       element.textContent = finalLabel;
+      completedAnimationKeyRef.current = animationKey;
       return;
     }
 
@@ -141,6 +157,7 @@ export function AnimatedMarketCap({
           animationFrame = window.requestAnimationFrame(tick);
         } else {
           element.textContent = finalLabel;
+          completedAnimationKeyRef.current = animationKey;
         }
       };
 
@@ -152,10 +169,10 @@ export function AnimatedMarketCap({
       window.cancelAnimationFrame(animationFrame);
     };
   }, [
+    animationKey,
     delay,
     finalLabel,
     kind,
-    replayKey,
     symbol,
     value,
   ]);
