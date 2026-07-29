@@ -5,16 +5,27 @@ import {
   getPublicOnchainDeployment,
   readExploreModel,
 } from "../../../../../lib/onchain";
-import { readTokenChartSeries } from "../../../../../lib/onchain/chart";
+import {
+  isTokenChartRange,
+  readTokenChartSeries,
+} from "../../../../../lib/onchain/chart";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   const input = request.nextUrl.searchParams.get("address")?.trim();
+  const requestedRange =
+    request.nextUrl.searchParams.get("range")?.trim().toLowerCase() ?? "all";
   if (!input || !isAddress(input)) {
     return NextResponse.json(
       { error: "Enter a valid Ethereum token address" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  if (!isTokenChartRange(requestedRange)) {
+    return NextResponse.json(
+      { error: "Choose a supported chart range" },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -54,10 +65,12 @@ export async function GET(request: NextRequest) {
       token,
       snapshotBlock: BigInt(model.snapshot.blockNumber),
       ethUsdQuote: model.snapshot.ethUsdQuote,
+      range: requestedRange,
     });
     return NextResponse.json(
       {
         ...series,
+        range: requestedRange,
         snapshotBlock: model.snapshot.blockNumber,
       },
       {

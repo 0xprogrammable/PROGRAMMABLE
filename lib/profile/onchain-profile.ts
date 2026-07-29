@@ -19,7 +19,9 @@ export type ProfileToken = {
   imageUrl?: string;
   marketCapEthWei?: string;
   fdvUsdWad?: string;
-  launchModel?: "classic" | "adaptive" | "deep";
+  marketCapQuoteWad?: string;
+  quoteAssetSymbol?: string;
+  launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
 };
 
 export type ProfilePosition = {
@@ -325,10 +327,21 @@ function parseToken(
     "fdvUsdWad",
     "token USD market cap",
   );
+  const marketCapQuoteWad = readOptionalIntegerString(
+    token,
+    "marketCapQuoteWad",
+    "token quote market cap",
+  );
+  const quoteAssetSymbol =
+    typeof token.quoteAssetSymbol === "string" &&
+    token.quoteAssetSymbol.trim()
+      ? token.quoteAssetSymbol.trim()
+      : undefined;
   const launchModel =
     token.launchModel === "adaptive" ||
     token.launchModel === "classic" ||
-    token.launchModel === "deep"
+    token.launchModel === "deep" ||
+    token.launchModel === "stock-paired"
       ? token.launchModel
       : undefined;
 
@@ -341,6 +354,8 @@ function parseToken(
     ...(imageUrl ? { imageUrl } : {}),
     ...(marketCapEthWei ? { marketCapEthWei } : {}),
     ...(fdvUsdWad ? { fdvUsdWad } : {}),
+    ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),
+    ...(quoteAssetSymbol ? { quoteAssetSymbol } : {}),
     ...(launchModel ? { launchModel } : {}),
     poolId: readHex(token, "poolId", "pool id", 32),
     hookAddress: readAddress(token, "hookAddress", "token hook address"),
@@ -635,6 +650,8 @@ export function mapCreatorProfileResponse(
       imageUrl,
       marketCapEthWei,
       fdvUsdWad,
+      marketCapQuoteWad,
+      quoteAssetSymbol,
       launchModel,
     }) => ({
       address,
@@ -645,6 +662,8 @@ export function mapCreatorProfileResponse(
       ...(imageUrl ? { imageUrl } : {}),
       ...(marketCapEthWei ? { marketCapEthWei } : {}),
       ...(fdvUsdWad ? { fdvUsdWad } : {}),
+      ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),
+      ...(quoteAssetSymbol ? { quoteAssetSymbol } : {}),
       ...(launchModel ? { launchModel } : {}),
     }),
   );

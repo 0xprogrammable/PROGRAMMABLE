@@ -11,8 +11,7 @@ Programmable is an interface for launching tokens whose market behavior is defin
 | Model | Status | Purpose |
 | --- | --- | --- |
 | Classic | Live on Ethereum Mainnet | Fixed supply, permanently locked one-sided liquidity and creator rewards in ETH |
-| Adaptive | In development | A market-cap curve sets the swap fee as the token price moves |
-| Deep | Prepared, not deployed | Creator fees deepen the original permanently locked pool before creator rewards begin |
+| Deep | Release candidate, not deployed | A fixed 0.90% growth fee buys the token and adds both assets to the original permanently locked pool |
 
 Only models with a completed deployment manifest, matching runtime code and verified lifecycle are exposed for production launches.
 
@@ -54,7 +53,7 @@ The public read model pairs canonical launch events, ignores unrecognized shared
 
 The active Classic deployment is recorded in [`contracts/deployments/mainnet-classic-v2.json`](./contracts/deployments/mainnet-classic-v2.json). Its deployment receipts, constructor configuration, runtime code hashes and signed launch, buy, sell and claim lifecycle have been reconciled through two RPC providers. The deployed contracts have exact source matches on Etherscan and Sourcify.
 
-Later contract versions and launch models remain unavailable until their own manifests and lifecycle evidence are complete. A passing local test suite is not a production deployment.
+Deep V3 is not deployed. It remains unavailable in the public launcher until its deployment, source verification, canary lifecycle and production keeper evidence are complete. A passing local test suite is not a production release.
 
 There has been no external smart-contract audit or public security contest. This repository does not promise that a token is immune to abuse or accepted by third-party scanners.
 
@@ -80,9 +79,9 @@ npm run contracts:sepolia:validate
 
 Key references:
 
+- [`docs/uniswap-source-provenance.md`](./docs/uniswap-source-provenance.md)
 - [`contracts/security/MAINNET-READINESS.md`](./contracts/security/MAINNET-READINESS.md)
 - [`contracts/security/CLASSIC-V3.md`](./contracts/security/CLASSIC-V3.md)
-- [`contracts/security/ADAPTIVE-CURVE-V1.md`](./contracts/security/ADAPTIVE-CURVE-V1.md)
-- [`contracts/security/DEEP-FULL-RANGE-V1-TECHNICAL-REVIEW.md`](./contracts/security/DEEP-FULL-RANGE-V1-TECHNICAL-REVIEW.md)
-- [`contracts/release/DEEP-FULL-RANGE-V1.md`](./contracts/release/DEEP-FULL-RANGE-V1.md)
+- [`contracts/security/DEEP-V3.md`](./contracts/security/DEEP-V3.md)
+- [`contracts/release/DEEP-FULL-RANGE-V3.md`](./contracts/release/DEEP-FULL-RANGE-V3.md)
 - [`docs/frontend-transaction-preflight.md`](./docs/frontend-transaction-preflight.md)

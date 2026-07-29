@@ -1,0 +1,317 @@
+import { CommandType } from "@uniswap/universal-router-sdk";
+import {
+  decodeFunctionData,
+  encodeFunctionResult,
+  getAddress,
+  type Address,
+  type Hex,
+} from "viem";
+import { describe, expect, it } from "vitest";
+
+import {
+  stockQuoteRegistryAbi,
+  STOCK_QUOTE_ASSETS,
+} from "../lib/stock-paired";
+import {
+  classicPermit2Abi,
+  classicQuoterAbi,
+  classicTokenAbi,
+  classicUniversalRouterAbi,
+} from "../lib/trade/classic";
+import {
+  createStockPairedPoolKey,
+  prepareStockPairedTrade,
+  type StockPairedTradeDeployment,
+  type StockPairedTradeRuntimeClient,
+} from "../lib/trade/stock-paired";
+import { computeOfficialV4PoolId } from "../lib/uniswap/liquidity-launcher-sdk";
+import {
+  STOCK_TEST_ACCOUNT,
+  STOCK_TEST_RUNTIME,
+  STOCK_TEST_TOKEN,
+  stockTradeDeployment,
+} from "./stock-paired-fixture";
+
+const AMOUNT_IN = 1_000n;
+
+function deployment(): StockPairedTradeDeployment {
+  const candidate = stockTradeDeployment();
+  const poolKey = createStockPairedPoolKey(candidate);
+  return {
+    ...candidate,
+    poolId: computeOfficialV4PoolId(poolKey),
+  };
+}
+
+function request(side: "buy" | "sell") {
+  return {
+    chainId: 1,
+    owner: STOCK_TEST_ACCOUNT,
+    token: STOCK_TEST_TOKEN,
+    side,
+    amountIn: AMOUNT_IN,
+    slippageBps: 100,
+    deadline: 10_900n,
+  } as const;
+}
+
+function runtimeClient(input?: {
+  tokenAllowance?: bigint;
+  permit2Allowance?: bigint;
+  permit2Expiration?: number;
+  runtimeMismatch?: Address;
+}) {
+  const candidate = deployment();
+  const quotedPoolKeys: unknown[] = [];
+  const routerCalldata: Hex[] = [];
+  const inputAssets: Address[] = [];
+  const client: StockPairedTradeRuntimeClient = {
+    async getChainId() {
+      return 1;
+    },
+    async getBlock() {
+      return { timestamp: 10_000n };
+    },
+    async getBalance() {
+      return 10n ** 18n;
+    },
+    async getGasPrice() {
+      return 1n;
+    },
+    async getCode({ address }) {
+      return address.toLowerCase() ===
+        input?.runtimeMismatch?.toLowerCase()
+        ? ("0x6001" as Hex)
+        : STOCK_TEST_RUNTIME;
+    },
+    async estimateGas() {
+      return 300_000n;
+    },
+    async call(args) {
+      if (
+        args.to.toLowerCase() === candidate.quoteRegistry.toLowerCase()
+      ) {
+        const decoded = decodeFunctionData({
+          abi: stockQuoteRegistryAbi,
+          data: args.data,
+        });
+        expect(decoded.functionName).toBe("assertAssetReady");
+        expect(decoded.args[0]).toBe(candidate.quoteAsset);
+        return {
+          data: encodeFunctionResult({
+            abi: stockQuoteRegistryAbi,
+            functionName: "assertAssetReady",
+            result: `0x${"44".repeat(32)}`,
+          }),
+        };
+      }
+      if (
+        args.to.toLowerCase() === candidate.permit2.toLowerCase()
+      ) {
+        return {
+          data: encodeFunctionResult({
+            abi: classicPermit2Abi,
+            functionName: "allowance",
+            result: [
+              input?.permit2Allowance ?? 100_000n,
+              input?.permit2Expiration ?? 50_000,
+              0,
+            ],
+          }),
+        };
+      }
+      if (
+        args.to.toLowerCase() === candidate.v4Quoter.toLowerCase()
+      ) {
+        const decoded = decodeFunctionData({
+          abi: classicQuoterAbi,
+          data: args.data,
+        });
+        expect(decoded.functionName).toBe("quoteExactInputSingle");
+        quotedPoolKeys.push(decoded.args[0].poolKey);
+        return {
+          data: encodeFunctionResult({
+            abi: classicQuoterAbi,
+            functionName: "quoteExactInputSingle",
+            result: [10_000n, 222_000n],
+          }),
+        };
+      }
+      if (
+        args.to.toLowerCase() ===
+        candidate.universalRouter.toLowerCase()
+      ) {
+        routerCalldata.push(args.data);
+        return {};
+      }
+      if (
+        args.to.toLowerCase() === candidate.token.toLowerCase() ||
+        args.to.toLowerCase() === candidate.quoteAsset.toLowerCase()
+      ) {
+        inputAssets.push(getAddress(args.to));
+        const decoded = decodeFunctionData({
+          abi: classicTokenAbi,
+          data: args.data,
+        });
+        if (decoded.functionName === "balanceOf") {
+          return {
+            data: encodeFunctionResult({
+              abi: classicTokenAbi,
+              functionName: "balanceOf",
+              result: 100_000n,
+            }),
+          };
+        }
+        expect(decoded.functionName).toBe("allowance");
+        return {
+          data: encodeFunctionResult({
+            abi: classicTokenAbi,
+            functionName: "allowance",
+            result: input?.tokenAllowance ?? 100_000n,
+          }),
+        };
+      }
+      throw new Error(`Unexpected call to ${args.to}`);
+    },
+  };
+  return { candidate, client, inputAssets, quotedPoolKeys, routerCalldata };
+}
+
+describe("Stock-Paired server trading", () => {
+  it("routes buys and sells through the exact original pool and Router 2.1.1", async () => {
+    const buyRuntime = runtimeClient();
+    const buy = await prepareStockPairedTrade(
+      buyRuntime.client,
+      buyRuntime.candidate,
+      request("buy"),
+    );
+    expect(buy).toMatchObject({
+      status: "ready",
+      launchModel: "stock-paired",
+      side: "buy",
+      inputAsset: STOCK_QUOTE_ASSETS[0].address,
+      transaction: {
+        kind: "swap",
+        to: buyRuntime.candidate.universalRouter,
+        value: "0",
+      },
+      quote: {
+        amountOut: "10000",
+        amountOutMinimum: "9900",
+      },
+    });
+    expect(buyRuntime.quotedPoolKeys).toEqual([
+      createStockPairedPoolKey(buyRuntime.candidate),
+    ]);
+    expect(buyRuntime.inputAssets).toContain(
+      buyRuntime.candidate.quoteAsset,
+    );
+    const buyRoute = decodeFunctionData({
+      abi: classicUniversalRouterAbi,
+      data: buyRuntime.routerCalldata[0],
+    });
+    expect(buyRoute.functionName).toBe("execute");
+    expect(buyRoute.args[0]).toBe(
+      `0x${Number(CommandType.V4_SWAP).toString(16).padStart(2, "0")}`,
+    );
+    expect(buyRoute.args[1]).toHaveLength(1);
+
+    const sellRuntime = runtimeClient();
+    const sell = await prepareStockPairedTrade(
+      sellRuntime.client,
+      sellRuntime.candidate,
+      request("sell"),
+    );
+    expect(sell).toMatchObject({
+      status: "ready",
+      side: "sell",
+      inputAsset: STOCK_TEST_TOKEN,
+      approvalState: "ready",
+      transaction: {
+        kind: "swap",
+        to: sellRuntime.candidate.universalRouter,
+        value: "0",
+      },
+    });
+    expect(sellRuntime.inputAssets).toContain(STOCK_TEST_TOKEN);
+  });
+
+  it("requires the exact ERC20 to Permit2 and Permit2 to Router approvals", async () => {
+    const tokenApprovalRuntime = runtimeClient({
+      tokenAllowance: AMOUNT_IN - 1n,
+    });
+    const tokenApproval = await prepareStockPairedTrade(
+      tokenApprovalRuntime.client,
+      tokenApprovalRuntime.candidate,
+      request("buy"),
+    );
+    expect(tokenApproval).toMatchObject({
+      status: "approval-required",
+      approvalState: "token-to-permit2",
+      transaction: {
+        kind: "token-to-permit2",
+        to: tokenApprovalRuntime.candidate.quoteAsset,
+      },
+    });
+    const tokenApprovalData = decodeFunctionData({
+      abi: classicTokenAbi,
+      data: tokenApproval.transaction.data,
+    });
+    expect(tokenApprovalData.args).toEqual([
+      tokenApprovalRuntime.candidate.permit2,
+      AMOUNT_IN,
+    ]);
+
+    const permit2Runtime = runtimeClient({
+      tokenAllowance: 100_000n,
+      permit2Allowance: AMOUNT_IN - 1n,
+    });
+    const permit2Approval = await prepareStockPairedTrade(
+      permit2Runtime.client,
+      permit2Runtime.candidate,
+      request("sell"),
+    );
+    expect(permit2Approval).toMatchObject({
+      status: "approval-required",
+      approvalState: "permit2-to-router",
+      transaction: {
+        kind: "permit2-to-router",
+        to: permit2Runtime.candidate.permit2,
+      },
+    });
+    const permit2ApprovalData = decodeFunctionData({
+      abi: classicPermit2Abi,
+      data: permit2Approval.transaction.data,
+    });
+    expect(permit2ApprovalData.args?.slice(0, 3)).toEqual([
+      STOCK_TEST_TOKEN,
+      permit2Runtime.candidate.universalRouter,
+      AMOUNT_IN,
+    ]);
+  });
+
+  it("fails closed on another pool or runtime drift", async () => {
+    const wrongPoolRuntime = runtimeClient();
+    await expect(
+      prepareStockPairedTrade(
+        wrongPoolRuntime.client,
+        {
+          ...wrongPoolRuntime.candidate,
+          poolId: `0x${"ff".repeat(32)}`,
+        },
+        request("buy"),
+      ),
+    ).rejects.toThrow(/pool/);
+
+    const driftRuntime = runtimeClient({
+      runtimeMismatch: deployment().hook,
+    });
+    await expect(
+      prepareStockPairedTrade(
+        driftRuntime.client,
+        driftRuntime.candidate,
+        request("buy"),
+      ),
+    ).rejects.toThrow(/runtime/);
+  });
+});

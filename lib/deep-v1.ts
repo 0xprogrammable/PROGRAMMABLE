@@ -231,7 +231,8 @@ export function deepPresetDisclosure() {
     reserve:
       "Unused reserve stays locked in the vault and is not active liquidity.",
     automation:
-      "Automation is not guaranteed. Anyone can trigger eligible work.",
+      "Execution is permissionless and may be delayed. The 30-minute same-pool TWAP is a circuit breaker, not an independent price oracle.",
+    review: "This model has not received an independent external audit.",
   } as const;
 }
 

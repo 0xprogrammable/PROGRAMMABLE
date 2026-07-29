@@ -8,6 +8,7 @@ export default defineConfig([
   globalIgnores([
     ".next/**",
     ".vercel/**",
+    ".codex-temp-programmable-readme-gif/**",
     "node_modules/**",
     "work/**",
     "contracts/lib/**",

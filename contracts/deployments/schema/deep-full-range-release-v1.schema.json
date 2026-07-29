@@ -51,6 +51,7 @@
     "status": {
       "enum": [
         "not-deployed",
+        "deployed-source-and-canary-verified-keeper-pending",
         "deployment-source-and-lifecycle-verified"
       ]
     },
@@ -290,17 +291,10 @@
     },
     "sourceVerification": {
       "type": "object",
-      "required": [
-        "status",
-        "compiler",
-        "contracts"
-      ],
+      "required": ["status", "compiler", "contracts"],
       "properties": {
         "status": {
-          "enum": [
-            "not-submitted",
-            "verified"
-          ]
+          "enum": ["not-submitted", "verified"]
         },
         "compiler": {
           "$ref": "#/definitions/compiler"
@@ -314,7 +308,194 @@
       "type": "object"
     },
     "lifecycleEvidence": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "releaseEligible",
+        "requiredRelease",
+        "independentRpcCount",
+        "canaryToken",
+        "launchTransaction",
+        "evidenceHash"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "not-run",
+            "launch-and-oracle-verified",
+            "verified-current-release"
+          ]
+        },
+        "releaseEligible": {
+          "type": "boolean"
+        },
+        "requiredRelease": {
+          "const": "deep-full-range-v1"
+        },
+        "independentRpcCount": {
+          "const": 2
+        },
+        "canaryToken": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "launchTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "oracleTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "feeProcessCompoundTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperExecutor": {
+          "$ref": "#/definitions/nullableAddress"
+        },
+        "keeperExecutorRuntimeCodeHash": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperExecutorDeploymentTransaction": {
+          "$ref": "#/definitions/nullableHash"
+        },
+        "keeperExecutorDeploymentBlock": {
+          "$ref": "#/definitions/nullableBlock"
+        },
+        "evidenceHash": {
+          "$ref": "#/definitions/nullableHash"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "not-run"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "releaseEligible": {
+                "const": false
+              },
+              "canaryToken": {
+                "type": "null"
+              },
+              "launchTransaction": {
+                "type": "null"
+              },
+              "keeperTransaction": {
+                "type": "null"
+              },
+              "oracleTransaction": {
+                "type": "null"
+              },
+              "feeProcessCompoundTransaction": {
+                "type": "null"
+              },
+              "keeperExecutor": {
+                "type": "null"
+              },
+              "keeperExecutorRuntimeCodeHash": {
+                "type": "null"
+              },
+              "keeperExecutorDeploymentTransaction": {
+                "type": "null"
+              },
+              "keeperExecutorDeploymentBlock": {
+                "type": "null"
+              },
+              "evidenceHash": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "launch-and-oracle-verified"
+              }
+            }
+          },
+          "then": {
+            "required": ["keeperTransaction"],
+            "properties": {
+              "releaseEligible": {
+                "const": false
+              },
+              "canaryToken": {
+                "$ref": "#/definitions/address"
+              },
+              "launchTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "keeperTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "evidenceHash": {
+                "$ref": "#/definitions/hash"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "verified-current-release"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "oracleTransaction",
+              "feeProcessCompoundTransaction",
+              "keeperExecutor",
+              "keeperExecutorRuntimeCodeHash",
+              "keeperExecutorDeploymentTransaction",
+              "keeperExecutorDeploymentBlock"
+            ],
+            "properties": {
+              "releaseEligible": {
+                "const": true
+              },
+              "canaryToken": {
+                "$ref": "#/definitions/address"
+              },
+              "launchTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "oracleTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "feeProcessCompoundTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "keeperExecutor": {
+                "$ref": "#/definitions/address"
+              },
+              "keeperExecutorRuntimeCodeHash": {
+                "$ref": "#/definitions/hash"
+              },
+              "keeperExecutorDeploymentTransaction": {
+                "$ref": "#/definitions/hash"
+              },
+              "keeperExecutorDeploymentBlock": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "evidenceHash": {
+                "$ref": "#/definitions/hash"
+              }
+            }
+          }
+        }
+      ]
     },
     "activation": {
       "type": "object"
@@ -408,10 +589,7 @@
     },
     "dependency": {
       "type": "object",
-      "required": [
-        "address",
-        "runtimeCodeHash"
-      ],
+      "required": ["address", "runtimeCodeHash"],
       "properties": {
         "address": {
           "$ref": "#/definitions/address"
@@ -582,9 +760,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "positionForwarderFactory"
-          ],
+          "required": ["positionForwarderFactory"],
           "properties": {
             "positionForwarderFactory": {
               "$ref": "#/definitions/hash"

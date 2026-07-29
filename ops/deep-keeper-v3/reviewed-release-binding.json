@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "status": "pending-deployment",
+  "manifestPath": "contracts/deployments/mainnet-deep-full-range-v3.json",
+  "model": "deep",
+  "releaseVersion": "deep-full-range-v3",
+  "internalContractRelease": "liquidity-growth-full-range-v3",
+  "sourceCommitment": null,
+  "automationAddress": null,
+  "automationRuntimeCodeHash": null,
+  "automationFqcn": "src/LiquidityGrowthFullRangeAutomationV3.sol:LiquidityGrowthFullRangeAutomationV3",
+  "launcherAddress": null,
+  "launcherRuntimeCodeHash": null,
+  "launcherFqcn": "src/LiquidityGrowthFullRangeLaunchV3.sol:LiquidityGrowthFullRangeLaunchV3",
+  "vaultFactoryAddress": null,
+  "vaultFactoryRuntimeCodeHash": null,
+  "vaultFactoryFqcn": "src/LiquidityGrowthFullRangeVaultFactoryV3.sol:LiquidityGrowthFullRangeVaultFactoryV3",
+  "executorAddress": null,
+  "executorRuntimeCodeHash": null,
+  "executorFqcn": "src/DeepKeeperExecutorV2.sol:DeepKeeperExecutorV2"
+}

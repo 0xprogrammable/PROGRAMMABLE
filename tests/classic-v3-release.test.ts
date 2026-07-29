@@ -10,12 +10,16 @@ import {
 
 const hash = `0x${"11".repeat(32)}`;
 const addresses = {
-  feeSplitVaultFactory: "0x1111111111111111111111111111111111111111",
-  hookFactory: "0x2222222222222222222222222222222222222222",
-  feeHook: "0x3333333333333333333333333333333333333333",
-  launcher: "0x4444444444444444444444444444444444444444",
+  ctoAuthority: "0x1111111111111111111111111111111111111111",
+  rewardVaultFactory: "0x2222222222222222222222222222222222222222",
+  initialBuyVestingWalletFactory:
+    "0x3333333333333333333333333333333333333333",
+  launchPolicy: "0x4444444444444444444444444444444444444444",
+  hookFactory: "0x5555555555555555555555555555555555555555",
+  feeHook: "0x6666666666666666666666666666666666666666",
+  launcher: "0x7777777777777777777777777777777777777777",
   positionForwarderFactory:
-    "0x5555555555555555555555555555555555555555",
+    "0x8888888888888888888888888888888888888888",
 };
 
 function verifiedPair(): {
@@ -26,14 +30,21 @@ function verifiedPair(): {
     app: {
       chainId: 1,
       classicV3Status: "ready",
-      feeSplitVaultFactoryV1: addresses.feeSplitVaultFactory,
+      classicCtoAuthorityV1: addresses.ctoAuthority,
+      classicRewardVaultFactoryV1: addresses.rewardVaultFactory,
+      classicInitialBuyVestingWalletFactoryV1:
+        addresses.initialBuyVestingWalletFactory,
+      classicLaunchPolicyV1: addresses.launchPolicy,
       ethCreatorFeeHookFactoryV3: addresses.hookFactory,
       ethCreatorFeeHookV3: addresses.feeHook,
       memeLaunchV2: addresses.launcher,
       lockedPositionFeeForwarderFactory:
         addresses.positionForwarderFactory,
       runtimeCodeHashes: {
-        feeSplitVaultFactoryV1: hash,
+        classicCtoAuthorityV1: hash,
+        classicRewardVaultFactoryV1: hash,
+        classicInitialBuyVestingWalletFactoryV1: hash,
+        classicLaunchPolicyV1: hash,
         ethCreatorFeeHookFactoryV3: hash,
         ethCreatorFeeHookV3: hash,
         memeLaunchV2: hash,
@@ -53,7 +64,10 @@ function verifiedPair(): {
       hookSalt: `0x${"33".repeat(32)}`,
       addresses,
       runtimeCodeHashes: {
-        feeSplitVaultFactory: hash,
+        ctoAuthority: hash,
+        rewardVaultFactory: hash,
+        initialBuyVestingWalletFactory: hash,
+        launchPolicy: hash,
         hookFactory: hash,
         feeHook: hash,
         launcher: hash,

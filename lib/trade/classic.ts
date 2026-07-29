@@ -6,14 +6,14 @@ import {
 } from "@uniswap/universal-router-sdk";
 import {
   decodeFunctionResult,
-  encodeAbiParameters,
   encodeFunctionData,
   getAddress,
-  keccak256,
   parseAbi,
   type Address,
   type Hex,
 } from "viem";
+
+import { computeOfficialV4PoolId } from "../uniswap/liquidity-launcher-sdk";
 
 export const NATIVE_ETH =
   "0x0000000000000000000000000000000000000000" as Address;
@@ -204,23 +204,7 @@ export function getClassicPoolId(
   deployment: ClassicTradeDeployment,
 ) {
   assertCanonicalClassicPoolKey(poolKey, deployment);
-  return keccak256(
-    encodeAbiParameters(
-      [
-        {
-          type: "tuple",
-          components: [
-            { name: "currency0", type: "address" },
-            { name: "currency1", type: "address" },
-            { name: "fee", type: "uint24" },
-            { name: "tickSpacing", type: "int24" },
-            { name: "hooks", type: "address" },
-          ],
-        },
-      ],
-      [poolKey],
-    ),
-  );
+  return computeOfficialV4PoolId(poolKey);
 }
 
 export function assertCanonicalClassicPoolKey(

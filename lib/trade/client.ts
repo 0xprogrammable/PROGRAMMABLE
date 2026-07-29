@@ -7,6 +7,7 @@ import {
 
 import mainnetDeployments from "../../contracts/dependencies/ethereum-mainnet.json";
 import sepoliaDeployments from "../../contracts/dependencies/ethereum-sepolia.json";
+import { computeOfficialV4PoolId } from "../uniswap/liquidity-launcher-sdk";
 import {
   amountOutMinimum,
   buildClassicPermit2ApprovalTransaction,
@@ -18,6 +19,14 @@ import {
   type ClassicTradeDeployment,
   type ClassicTradeSide,
 } from "./classic";
+import { getConfiguredStockPairedRelease } from "../stock-paired-release";
+import {
+  buildStockPairedPermit2ApprovalTransaction,
+  buildStockPairedSwapTransaction,
+  buildStockPairedTokenApprovalTransaction,
+  createStockPairedPoolKey,
+  type StockPairedTradeDeployment,
+} from "./stock-paired";
 import {
   parsePreparedTransaction,
   type PreparedTradeTransaction,
@@ -25,9 +34,12 @@ import {
 
 export type PreparedTokenTrade = {
   status: "ready" | "approval-required";
+  launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
   chainId: 1 | 11_155_111;
   owner: Address;
   token: Address;
+  quoteAsset?: Address;
+  inputAsset?: Address;
   side: ClassicTradeSide;
   poolKey: ClassicPoolKey;
   approvalState?:
@@ -55,6 +67,8 @@ export type PreparedTradeValidationContext = {
   amountIn: string;
   slippageBps: number;
   deadline: string;
+  launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
+  quoteAsset?: Address;
 };
 
 type CanonicalTradeTransaction = {
@@ -124,6 +138,56 @@ function deploymentForChain(
   };
 }
 
+function stockPairedDeploymentForContext(input: {
+  chainId: 1 | 11_155_111;
+  token: Address;
+  hook: Address;
+  poolId: Hex;
+  quoteAsset: Address;
+}) {
+  if (input.chainId !== 1) {
+    throw new Error("Stock-Paired trading is limited to Ethereum Mainnet");
+  }
+  const release = getConfiguredStockPairedRelease();
+  if (!release) {
+    throw new Error(
+      "Stock-Paired trading is not enabled by a verified release",
+    );
+  }
+  if (
+    release.addresses.feeHook.toLowerCase() !==
+    input.hook.toLowerCase()
+  ) {
+    throw new Error("The Stock-Paired hook does not match the release");
+  }
+  const dependencies = release.officialDependencies;
+  const deployment: StockPairedTradeDeployment = {
+    chainId: 1,
+    poolManager: dependencies.poolManager.address,
+    poolManagerRuntimeCodeHash:
+      dependencies.poolManager.runtimeCodeHash,
+    v4Quoter: dependencies.v4Quoter.address,
+    v4QuoterRuntimeCodeHash: dependencies.v4Quoter.runtimeCodeHash,
+    universalRouter: dependencies.universalRouter.address,
+    universalRouterRuntimeCodeHash:
+      dependencies.universalRouter.runtimeCodeHash,
+    permit2: dependencies.permit2.address,
+    permit2RuntimeCodeHash: dependencies.permit2.runtimeCodeHash,
+    hook: release.addresses.feeHook,
+    hookRuntimeCodeHash: release.runtimeCodeHashes.feeHook,
+    quoteRegistry: release.addresses.quoteRegistry,
+    quoteRegistryRuntimeCodeHash:
+      release.runtimeCodeHashes.quoteRegistry,
+    quoteAsset: input.quoteAsset,
+    quoteAssetRuntimeCodeHash:
+      release.issuerRuntime.tokenRuntimeCodeHash,
+    token: input.token,
+    poolId: input.poolId,
+    release,
+  };
+  return deployment;
+}
+
 function assertCanonicalTransaction(
   actual: PreparedTradeTransaction,
   expected: CanonicalTradeTransaction,
@@ -187,6 +251,9 @@ export function validatePreparedTradeResponse(
   if (context.side !== "buy" && context.side !== "sell") {
     throw new Error("The prepared trade has an invalid side");
   }
+  if (context.launchModel === "adaptive") {
+    throw new Error("Adaptive trading is not supported by this trade path");
+  }
   const expectedAmountIn = positiveIntegerString(
     context.amountIn,
     "input amount",
@@ -227,17 +294,69 @@ export function validatePreparedTradeResponse(
     throw new Error("The prepared trade does not match the requested side");
   }
 
-  const deployment = deploymentForChain(context.chainId, expectedHook);
-  const canonicalPoolKey = createClassicPoolKey(
-    expectedToken,
-    deployment,
-  );
-  if (
-    getClassicPoolId(canonicalPoolKey, deployment).toLowerCase() !==
-    context.poolId.toLowerCase()
-  ) {
+  const isStockPaired = context.launchModel === "stock-paired";
+  const expectedQuoteAsset = isStockPaired
+    ? address(context.quoteAsset, "quote asset")
+    : undefined;
+  const classicDeployment = isStockPaired
+    ? null
+    : deploymentForChain(context.chainId, expectedHook);
+  const stockDeployment =
+    isStockPaired && expectedQuoteAsset
+      ? stockPairedDeploymentForContext({
+          chainId: context.chainId,
+          token: expectedToken,
+          hook: expectedHook,
+          poolId: context.poolId,
+          quoteAsset: expectedQuoteAsset,
+        })
+      : null;
+  const canonicalPoolKey =
+    stockDeployment && expectedQuoteAsset
+      ? createStockPairedPoolKey({
+          token: expectedToken,
+          quoteAsset: expectedQuoteAsset,
+          hook: expectedHook,
+        })
+      : createClassicPoolKey(expectedToken, classicDeployment!);
+  const canonicalPoolId = stockDeployment
+    ? computeOfficialV4PoolId(canonicalPoolKey)
+    : getClassicPoolId(canonicalPoolKey, classicDeployment!);
+  if (canonicalPoolId.toLowerCase() !== context.poolId.toLowerCase()) {
     throw new Error(
       "The token does not match its canonical Programmable pool",
+    );
+  }
+  const expectedInputAsset = isStockPaired
+    ? context.side === "buy"
+      ? expectedQuoteAsset!
+      : expectedToken
+    : context.side === "sell"
+      ? expectedToken
+      : undefined;
+  if (isStockPaired) {
+    if (
+      input.launchModel !== "stock-paired" ||
+      !sameAddress(
+        address(input.quoteAsset, "quote asset"),
+        expectedQuoteAsset!,
+      ) ||
+      !sameAddress(
+        address(input.inputAsset, "trade input asset"),
+        expectedInputAsset!,
+      )
+    ) {
+      throw new Error(
+        "The prepared trade does not match the Stock-Paired assets",
+      );
+    }
+  } else if (
+    input.launchModel === "stock-paired" ||
+    input.quoteAsset !== undefined ||
+    input.inputAsset !== undefined
+  ) {
+    throw new Error(
+      "The prepared trade contains unexpected Stock-Paired fields",
     );
   }
   if (!isRecord(input.poolKey)) {
@@ -340,56 +459,82 @@ export function validatePreparedTradeResponse(
     if (
       input.status !== "approval-required" ||
       input.approvalState !== transaction.kind ||
-      context.side !== "sell"
+      (!isStockPaired && context.side !== "sell")
     ) {
       throw new Error("The token approval state is inconsistent");
     }
     expectedTransaction = tradeEnvelope(
-      buildClassicTokenApprovalTransaction({
-        deployment,
-        token: expectedToken,
-        amountIn,
-      }),
+      stockDeployment && expectedInputAsset
+        ? buildStockPairedTokenApprovalTransaction({
+            deployment: stockDeployment,
+            inputAsset: expectedInputAsset,
+            amountIn,
+          })
+        : buildClassicTokenApprovalTransaction({
+            deployment: classicDeployment!,
+            token: expectedToken,
+            amountIn,
+          }),
       context.chainId,
     );
   } else if (transaction.kind === "permit2-to-router") {
     if (
       input.status !== "approval-required" ||
       input.approvalState !== transaction.kind ||
-      context.side !== "sell"
+      (!isStockPaired && context.side !== "sell")
     ) {
       throw new Error("The Permit2 approval state is inconsistent");
     }
     expectedTransaction = tradeEnvelope(
-      buildClassicPermit2ApprovalTransaction({
-        deployment,
-        token: expectedToken,
-        amountIn,
-        now: referenceNow,
-        deadline,
-      }),
+      stockDeployment && expectedInputAsset
+        ? buildStockPairedPermit2ApprovalTransaction({
+            deployment: stockDeployment,
+            inputAsset: expectedInputAsset,
+            amountIn,
+            now: referenceNow,
+            deadline,
+          })
+        : buildClassicPermit2ApprovalTransaction({
+            deployment: classicDeployment!,
+            token: expectedToken,
+            amountIn,
+            now: referenceNow,
+            deadline,
+          }),
       context.chainId,
     );
   } else {
     if (
       input.status !== "ready" ||
-      (context.side === "sell"
+      (isStockPaired
+        ? input.approvalState !== "ready"
+        : context.side === "sell"
         ? input.approvalState !== "ready"
         : input.approvalState !== undefined)
     ) {
       throw new Error("The swap approval state is inconsistent");
     }
     expectedTransaction = tradeEnvelope(
-      buildClassicSwapTransaction({
-        deployment,
-        poolKey: canonicalPoolKey,
-        side: context.side,
-        amountIn,
-        quotedAmountOut: BigInt(quote.amountOut),
-        slippageBps: quote.slippageBps,
-        now: referenceNow,
-        deadline,
-      }),
+      stockDeployment
+        ? buildStockPairedSwapTransaction({
+            deployment: stockDeployment,
+            side: context.side,
+            amountIn,
+            quotedAmountOut: BigInt(quote.amountOut),
+            slippageBps: quote.slippageBps,
+            now: referenceNow,
+            deadline,
+          })
+        : buildClassicSwapTransaction({
+            deployment: classicDeployment!,
+            poolKey: canonicalPoolKey,
+            side: context.side,
+            amountIn,
+            quotedAmountOut: BigInt(quote.amountOut),
+            slippageBps: quote.slippageBps,
+            now: referenceNow,
+            deadline,
+          }),
       context.chainId,
     );
   }
@@ -397,6 +542,13 @@ export function validatePreparedTradeResponse(
 
   return {
     status: input.status,
+    ...(isStockPaired
+      ? {
+          launchModel: "stock-paired" as const,
+          quoteAsset: expectedQuoteAsset,
+          inputAsset: expectedInputAsset,
+        }
+      : {}),
     chainId: context.chainId,
     owner,
     token,

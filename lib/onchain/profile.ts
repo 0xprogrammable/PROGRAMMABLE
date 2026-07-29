@@ -35,13 +35,18 @@ export function buildCreatorProfile(
       }
       return second.logIndex - first.logIndex;
     });
-  const pools = tokens.map((token) => ({
+  const pools = tokens
+    .filter((token) => token.launchModel !== "stock-paired")
+    .map((token) => ({
     tokenAddress: token.tokenAddress,
     name: token.name,
     symbol: token.symbol,
     poolId: token.poolId,
     totalSwapFeeBps: token.totalSwapFeeBps,
-    launchModel: token.launchModel ?? "classic",
+    launchModel:
+      token.launchModel === "stock-paired"
+        ? "classic"
+        : token.launchModel ?? "classic",
     ...(token.adaptiveCurveHash
       ? { adaptiveCurveHash: token.adaptiveCurveHash }
       : {}),
@@ -49,7 +54,7 @@ export function buildCreatorProfile(
     claimableCreatorFeesEth: token.creatorFeesAccruedEth ?? "0",
     generatedCreatorFeesWei: token.creatorFeesGeneratedWei ?? "0",
     generatedCreatorFeesEth: token.creatorFeesGeneratedEth ?? "0",
-  }));
+    }));
   const claimable = sumStringValues(
     pools.map((pool) => pool.claimableCreatorFeesWei),
   );

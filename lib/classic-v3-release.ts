@@ -19,14 +19,20 @@ export type ClassicV3ReleaseManifest = {
   startingNonce?: number | null;
   hookSalt?: string | null;
   addresses?: {
-    feeSplitVaultFactory?: string | null;
+    ctoAuthority?: string | null;
+    rewardVaultFactory?: string | null;
+    initialBuyVestingWalletFactory?: string | null;
+    launchPolicy?: string | null;
     hookFactory?: string | null;
     feeHook?: string | null;
     launcher?: string | null;
     positionForwarderFactory?: string | null;
   };
   runtimeCodeHashes?: {
-    feeSplitVaultFactory?: string | null;
+    ctoAuthority?: string | null;
+    rewardVaultFactory?: string | null;
+    initialBuyVestingWalletFactory?: string | null;
+    launchPolicy?: string | null;
     hookFactory?: string | null;
     feeHook?: string | null;
     launcher?: string | null;
@@ -97,8 +103,20 @@ export function isClassicV3ReleaseVerified(
 
   const addressesMatch =
     sameAddress(
-      release.addresses?.feeSplitVaultFactory,
-      appManifest.feeSplitVaultFactoryV1,
+      release.addresses?.ctoAuthority,
+      appManifest.classicCtoAuthorityV1,
+    ) &&
+    sameAddress(
+      release.addresses?.rewardVaultFactory,
+      appManifest.classicRewardVaultFactoryV1,
+    ) &&
+    sameAddress(
+      release.addresses?.initialBuyVestingWalletFactory,
+      appManifest.classicInitialBuyVestingWalletFactoryV1,
+    ) &&
+    sameAddress(
+      release.addresses?.launchPolicy,
+      appManifest.classicLaunchPolicyV1,
     ) &&
     sameAddress(
       release.addresses?.hookFactory,
@@ -112,8 +130,20 @@ export function isClassicV3ReleaseVerified(
     );
   const runtimeHashesMatch =
     sameHash(
-      release.runtimeCodeHashes?.feeSplitVaultFactory,
-      appManifest.runtimeCodeHashes?.feeSplitVaultFactoryV1,
+      release.runtimeCodeHashes?.ctoAuthority,
+      appManifest.runtimeCodeHashes?.classicCtoAuthorityV1,
+    ) &&
+    sameHash(
+      release.runtimeCodeHashes?.rewardVaultFactory,
+      appManifest.runtimeCodeHashes?.classicRewardVaultFactoryV1,
+    ) &&
+    sameHash(
+      release.runtimeCodeHashes?.initialBuyVestingWalletFactory,
+      appManifest.runtimeCodeHashes?.classicInitialBuyVestingWalletFactoryV1,
+    ) &&
+    sameHash(
+      release.runtimeCodeHashes?.launchPolicy,
+      appManifest.runtimeCodeHashes?.classicLaunchPolicyV1,
     ) &&
     sameHash(
       release.runtimeCodeHashes?.hookFactory,

@@ -16,9 +16,9 @@ import { mainnet, sepolia } from "viem/chains";
 
 import appDeployments from "@/contracts/config/app-deployments.v1.json";
 import {
+  classicRewardVaultAbi,
+  classicRewardVaultFactoryAbi,
   classicV3HookAbi,
-  feeSplitVaultAbi,
-  feeSplitVaultFactoryAbi,
   type ClassicV3DeploymentManifest,
 } from "@/lib/classic-v3";
 import {
@@ -113,28 +113,27 @@ async function readLaunchLogs(
   return logs;
 }
 
-function beneficiaryEntitlement(
-  totalReceived: bigint,
-  beneficiaries: readonly { beneficiary: Address; shareBps: number }[],
+function prospectiveAllocation(
+  amount: bigint,
+  allocations: readonly { payoutAddress: Address; shareBps: number }[],
   account: Address,
 ) {
-  const index = beneficiaries.findIndex(
-    (item) => item.beneficiary.toLowerCase() === account.toLowerCase(),
-  );
-  if (index < 0) return 0n;
-  if (index !== beneficiaries.length - 1) {
-    return (
-      (totalReceived * BigInt(beneficiaries[index].shareBps)) /
-      10_000n
-    );
+  let allocated = 0n;
+  let accountAmount = 0n;
+  for (let index = 0; index < allocations.length; index += 1) {
+    const allocation =
+      index === allocations.length - 1
+        ? amount - allocated
+        : (amount * BigInt(allocations[index].shareBps)) / 10_000n;
+    allocated += allocation;
+    if (
+      allocations[index].payoutAddress.toLowerCase() ===
+      account.toLowerCase()
+    ) {
+      accountAmount += allocation;
+    }
   }
-  return beneficiaries
-    .slice(0, -1)
-    .reduce(
-      (remaining, item) =>
-        remaining - (totalReceived * BigInt(item.shareBps)) / 10_000n,
-      totalReceived,
-    );
+  return accountAmount;
 }
 
 async function readRewards(account: Address) {
@@ -149,7 +148,9 @@ async function readRewards(account: Address) {
 
   const launcher = getAddress(manifest.memeLaunchV2 as string);
   const hook = getAddress(manifest.ethCreatorFeeHookV3 as string);
-  const vaultFactory = getAddress(manifest.feeSplitVaultFactoryV1 as string);
+  const vaultFactory = getAddress(
+    manifest.classicRewardVaultFactoryV1 as string,
+  );
   const client = createClient();
   await Promise.all([
     assertCodeHash(
@@ -167,7 +168,7 @@ async function readRewards(account: Address) {
     assertCodeHash(
       client,
       vaultFactory,
-      manifest.runtimeCodeHashes?.feeSplitVaultFactoryV1 as string,
+      manifest.runtimeCodeHashes?.classicRewardVaultFactoryV1 as string,
       "Classic reward factory",
     ),
   ]);
@@ -187,29 +188,45 @@ async function readRewards(account: Address) {
     await Promise.all(
       logs.map(async (log) => {
         if (log.removed) return null;
-        const share = await client.readContract({
-          address: getAddress(log.args.rewardVault),
-          abi: feeSplitVaultAbi,
-          functionName: "shareBpsOf",
-          args: [account],
-          blockNumber: snapshotBlock,
-        });
-        return share > 0 ? { log, share } : null;
+        const vaultAddress = getAddress(log.args.rewardVault);
+        const [share, checkpointed, claimed] = await Promise.all([
+          client.readContract({
+            address: vaultAddress,
+            abi: classicRewardVaultAbi,
+            functionName: "shareBpsOf",
+            args: [account],
+            blockNumber: snapshotBlock,
+          }),
+          client.readContract({
+            address: vaultAddress,
+            abi: classicRewardVaultAbi,
+            functionName: "claimable",
+            args: [account],
+            blockNumber: snapshotBlock,
+          }),
+          client.readContract({
+            address: vaultAddress,
+            abi: classicRewardVaultAbi,
+            functionName: "claimedBy",
+            args: [account],
+            blockNumber: snapshotBlock,
+          }),
+        ]);
+        return share > 0 || checkpointed > 0n || claimed > 0n
+          ? { log, share, checkpointed, claimed }
+          : null;
       }),
     )
   ).filter((item) => item !== null);
 
   const rewards = await Promise.all(
-    relevant.map(async ({ log, share }) => {
+    relevant.map(async ({ log, share, checkpointed, claimed }) => {
       const tokenAddress = getAddress(log.args.token);
       const vaultAddress = getAddress(log.args.rewardVault);
       const poolId = log.args.poolId;
       const [
         tokenName,
         tokenSymbol,
-        payoutAddress,
-        claimedBy,
-        totalReceived,
         beneficiaryCount,
         factoryVault,
         disclosure,
@@ -229,33 +246,13 @@ async function readRewards(account: Address) {
         }),
         client.readContract({
           address: vaultAddress,
-          abi: feeSplitVaultAbi,
-          functionName: "payoutAddressOf",
-          args: [account],
-          blockNumber: snapshotBlock,
-        }),
-        client.readContract({
-          address: vaultAddress,
-          abi: feeSplitVaultAbi,
-          functionName: "claimedBy",
-          args: [account],
-          blockNumber: snapshotBlock,
-        }),
-        client.readContract({
-          address: vaultAddress,
-          abi: feeSplitVaultAbi,
-          functionName: "totalCreatorFeesReceived",
-          blockNumber: snapshotBlock,
-        }),
-        client.readContract({
-          address: vaultAddress,
-          abi: feeSplitVaultAbi,
+          abi: classicRewardVaultAbi,
           functionName: "beneficiaryCount",
           blockNumber: snapshotBlock,
         }),
         client.readContract({
           address: vaultFactory,
-          abi: feeSplitVaultFactoryAbi,
+          abi: classicRewardVaultFactoryAbi,
           functionName: "isFactoryVault",
           args: [vaultAddress],
           blockNumber: snapshotBlock,
@@ -288,49 +285,46 @@ async function readRewards(account: Address) {
       ) {
         throw new Error("Classic reward configuration is inconsistent");
       }
-      if (beneficiaryCount < 1n || beneficiaryCount > 8n) {
+      if (beneficiaryCount < 1n || beneficiaryCount > 5n) {
         throw new Error("Classic reward split is outside its bounds");
       }
 
       const beneficiaries = await Promise.all(
         Array.from({ length: Number(beneficiaryCount) }, async (_, index) => {
-          const beneficiary = await client.readContract({
-            address: vaultAddress,
-            abi: feeSplitVaultAbi,
-            functionName: "beneficiaryAt",
-            args: [BigInt(index)],
-            blockNumber: snapshotBlock,
-          });
-          const [beneficiaryShare, beneficiaryPayout] = await Promise.all([
+          const [payoutAddress, allocationShare] = await Promise.all([
             client.readContract({
               address: vaultAddress,
-              abi: feeSplitVaultAbi,
-              functionName: "shareBpsOf",
-              args: [beneficiary],
+              abi: classicRewardVaultAbi,
+              functionName: "beneficiaryAt",
+              args: [BigInt(index)],
               blockNumber: snapshotBlock,
             }),
             client.readContract({
               address: vaultAddress,
-              abi: feeSplitVaultAbi,
-              functionName: "payoutAddressOf",
-              args: [beneficiary],
+              abi: classicRewardVaultAbi,
+              functionName: "shareBpsAt",
+              args: [BigInt(index)],
               blockNumber: snapshotBlock,
             }),
           ]);
           return {
-            beneficiary: getAddress(beneficiary),
-            payoutAddress: getAddress(beneficiaryPayout),
-            shareBps: beneficiaryShare,
+            allocationIndex: index,
+            beneficiary: getAddress(payoutAddress),
+            payoutAddress: getAddress(payoutAddress),
+            shareBps: allocationShare,
           };
         }),
       );
-      const prospectiveTotalReceived = totalReceived + poolConfig[5];
-      const entitlement = beneficiaryEntitlement(
-        prospectiveTotalReceived,
+      const prospective = prospectiveAllocation(
+        poolConfig[5],
         beneficiaries,
         account,
       );
-      const claimable = entitlement > claimedBy ? entitlement - claimedBy : 0n;
+      const claimable = checkpointed + prospective;
+      const ownedAllocations = beneficiaries.filter(
+        (item) =>
+          item.payoutAddress.toLowerCase() === account.toLowerCase(),
+      );
 
       return {
         tokenAddress,
@@ -339,12 +333,13 @@ async function readRewards(account: Address) {
         poolId,
         vaultAddress,
         beneficiary: account,
-        payoutAddress: getAddress(payoutAddress),
+        payoutAddress: account,
         shareBps: share,
+        ownedAllocations,
         claimableWei: claimable.toString(),
         claimableEth: formatUnits(claimable, 18),
-        claimedWei: claimedBy.toString(),
-        claimedEth: formatUnits(claimedBy, 18),
+        claimedWei: claimed.toString(),
+        claimedEth: formatUnits(claimed, 18),
         buySwapFeeBps: disclosure[0],
         sellSwapFeeBps: disclosure[1],
         platformFeeBps: 10 as const,
@@ -475,13 +470,19 @@ export async function POST(request: NextRequest) {
   const account = getAddress(input.account);
   const vaultAddress = getAddress(input.vaultAddress);
   let newPayoutAddress: Address | undefined;
+  let allocationIndex: number | undefined;
   if (input.action === "update-payout") {
     if (
+      typeof input.allocationIndex !== "number" ||
+      !Number.isSafeInteger(input.allocationIndex) ||
+      input.allocationIndex < 0 ||
+      input.allocationIndex >= 5 ||
       typeof input.newPayoutAddress !== "string" ||
       !isAddress(input.newPayoutAddress)
     ) {
-      return json({ error: "Enter a valid payout address" }, 400);
+      return json({ error: "Choose a valid reward allocation and payout address" }, 400);
     }
+    allocationIndex = input.allocationIndex;
     newPayoutAddress = getAddress(input.newPayoutAddress);
   }
 
@@ -496,7 +497,18 @@ export async function POST(request: NextRequest) {
     );
     if (!reward) {
       return json(
-        { error: "Only this vault's immutable beneficiary can continue" },
+        { error: "Only a current or historic payout wallet can continue" },
+        403,
+      );
+    }
+    if (
+      input.action === "update-payout" &&
+      !reward.ownedAllocations.some(
+        (item) => item.allocationIndex === allocationIndex,
+      )
+    ) {
+      return json(
+        { error: "Only the current owner of this reward allocation can change it" },
         403,
       );
     }
@@ -505,6 +517,7 @@ export async function POST(request: NextRequest) {
     }
     const data = encodeClassicV3RewardAction({
       action: input.action,
+      allocationIndex,
       newPayoutAddress,
     });
     const client = createClient();

@@ -13,6 +13,42 @@ export type TokenTone =
   | "sky"
   | "peach";
 
+export type DeepV2IndexedLaunchProvenance = {
+  deepReleaseVersion: "deep-full-range-v2";
+  launcher: `0x${string}`;
+  creator: `0x${string}`;
+  tokenAddress: `0x${string}`;
+  vaultAddress: `0x${string}`;
+  hookAddress: `0x${string}`;
+  poolId: `0x${string}`;
+  launchHash: `0x${string}`;
+  vaultConfigurationHash: `0x${string}`;
+  blockNumber: string;
+  blockHash: `0x${string}`;
+  transactionHash: `0x${string}`;
+  logIndex: number;
+};
+
+export type DeepV3IndexedLaunchProvenance = {
+  deepReleaseVersion: "deep-full-range-v3";
+  launchModel: "deep";
+  launcher: `0x${string}`;
+  creator: `0x${string}`;
+  tokenAddress: `0x${string}`;
+  vaultAddress: `0x${string}`;
+  hookAddress: `0x${string}`;
+  positionRecipient: `0x${string}`;
+  positionTokenId: string;
+  poolId: `0x${string}`;
+  launchHash: `0x${string}`;
+  vaultConfigurationHash: `0x${string}`;
+  blockNumber: string;
+  blockHash: `0x${string}`;
+  transactionHash: `0x${string}`;
+  transactionIndex: number;
+  logIndex: number;
+};
+
 export type LauncherToken = {
   id: string;
   name: string;
@@ -42,6 +78,22 @@ export type LauncherToken = {
   tokenPriceUsdWad?: string;
   marketCapEth?: string;
   marketCapEthWei?: string;
+  quoteAssetAddress?: `0x${string}`;
+  quoteAssetSymbol?: string;
+  quoteAssetName?: string;
+  rewardVaultAddress?: `0x${string}`;
+  tokenPriceQuote?: string;
+  tokenPriceQuoteWad?: string;
+  marketCapQuote?: string;
+  marketCapQuoteWad?: string;
+  grossVolumeQuote?: string;
+  grossVolumeQuoteRaw?: string;
+  creatorFeesGeneratedQuote?: string;
+  creatorFeesGeneratedQuoteRaw?: string;
+  programmableFeesGeneratedQuote?: string;
+  programmableFeesGeneratedQuoteRaw?: string;
+  creatorFeesAccruedQuote?: string;
+  creatorFeesAccruedQuoteRaw?: string;
   fdvUsdWad?: string;
   grossVolumeEth?: string;
   grossVolumeWei?: string;
@@ -51,6 +103,10 @@ export type LauncherToken = {
   launcherFeesGeneratedWei?: string;
   creatorFeesAccruedEth?: string;
   creatorFeesAccruedWei?: string;
+  growthFeesGeneratedEth?: string;
+  growthFeesGeneratedWei?: string;
+  growthFeesAccruedEth?: string;
+  growthFeesAccruedWei?: string;
   swapCount?: number;
   currentTick?: number;
   initialTick?: number;
@@ -64,10 +120,16 @@ export type LauncherToken = {
   creatorFeeBps?: number;
   buyCreatorFeeBps?: number;
   sellCreatorFeeBps?: number;
+  growthFeeBps?: number;
+  programmableFeeBps?: number;
   launcherFeeBps?: number;
   transferTaxBps?: number;
   totalSwapFeeBps: number;
-  launchModel?: "classic" | "adaptive" | "deep";
+  launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
+  deepReleaseVersion?:
+    | "deep-full-range-v1"
+    | "deep-full-range-v2"
+    | "deep-full-range-v3";
   adaptiveCurveHash?: `0x${string}`;
   adaptiveCurvePoints?: {
     fdvIndex: number;
@@ -84,6 +146,10 @@ export type LauncherToken = {
   tokenReserveRaw?: string;
   totalNativeAllocatedToGrowthWei?: string;
   totalNativeAddedToLiquidityWei?: string;
+  totalTokenAddedToLiquidityRaw?: string;
+  totalGrowthEthReceivedWei?: string;
+  totalNativeSwappedWei?: string;
+  totalTokenAcquiredRaw?: string;
   pendingGrowthNativeWei?: string;
   deferredRewardFeesWei?: string;
   growthTargetReached?: boolean;
@@ -92,7 +158,25 @@ export type LauncherToken = {
   nextCompoundTimestamp?: string;
   trustedNativeDepthWei?: string;
   depthCapNativeWei?: string;
+  lockedLiquidity?: string;
+  rollingExposureWei?: string;
+  compoundCount?: string;
+  lastCompoundTimestamp?: string;
   automationGuaranteed?: false;
+  deepV2Provenance?: DeepV2IndexedLaunchProvenance;
+  deepV3Provenance?: DeepV3IndexedLaunchProvenance;
+  uniswapV4Pool?: {
+    source: "official-uniswap-v4-subgraph";
+    indexedBlockNumber: string;
+    indexedBlockHash: `0x${string}`;
+    volumeUsdWad: string;
+    tvlUsdWad: string;
+    transactionCount: string;
+    liquidity: string;
+    sqrtPriceX96: string;
+    tick?: number;
+    feeTierPips: string;
+  };
   liquidityPath: "meme";
   metadataExtraData?: `0x${string}`;
 };
