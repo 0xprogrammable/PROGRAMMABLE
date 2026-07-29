@@ -9,8 +9,25 @@ import {
 } from "./stock-paired-fixture";
 
 describe("Stock-Paired release gate", () => {
-  it("keeps the checked-in undeployed release disabled", () => {
-    expect(resolveVerifiedStockPairedRelease(placeholderManifest)).toBeNull();
+  it("enables the checked-in lifecycle-verified release", () => {
+    expect(resolveVerifiedStockPairedRelease(placeholderManifest)).toMatchObject(
+      {
+        chainId: 1,
+        startBlock: placeholderManifest.startBlock,
+        addresses: {
+          launcher: placeholderManifest.addresses.launcher,
+          ethLaunchCoordinator:
+            placeholderManifest.addresses.ethLaunchCoordinator,
+          treasury: placeholderManifest.addresses.treasury,
+        },
+      },
+    );
+    expect(
+      resolveVerifiedStockPairedRelease({
+        ...placeholderManifest,
+        status: "deployed-source-verified-lifecycle-pending",
+      }),
+    ).toBeNull();
   });
 
   it("accepts only complete deployment, source and lifecycle evidence", () => {
