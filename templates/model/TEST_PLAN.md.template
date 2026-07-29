@@ -1,0 +1,26 @@
+# {{MODEL_NAME}} test plan
+
+## Unit behavior
+
+- Validate every parameter boundary and revert path.
+- Test fee arithmetic and rounding with exact examples.
+- Test each authorized and unauthorized caller.
+
+## Integration lifecycle
+
+- Create the token and pool.
+- Execute both swap directions and exact input/output modes.
+- Exercise fee accrual, custody and claims.
+- Cover external-call and recipient failures.
+
+## Properties
+
+- Add stateful invariants for accounting and immutable configuration.
+- Fuzz all bounded parameters and native/token amount ranges.
+- Test ordering, oracle and liquidity assumptions when applicable.
+
+## Release evidence
+
+- Run against pinned dependencies.
+- Add a mainnet-fork lifecycle before Ethereum release.
+- Record runtime code hashes and source verification after deployment.

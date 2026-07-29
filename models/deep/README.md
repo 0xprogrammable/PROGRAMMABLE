@@ -9,6 +9,10 @@ pool. The liquidity target and later beneficiaries are fixed when the token is l
 
 No Deep contracts have been deployed.
 
+[Model manifest](model.json) ·
+[Model registry](../registry.json) ·
+[Release process](../../RELEASING.md)
+
 ## Intended behavior
 
 - Programmable's disclosed fee share remains separate from the creator fee share.

@@ -1,0 +1,29 @@
+{
+  "$schema": "../schema/model.schema.json",
+  "schemaVersion": 1,
+  "id": "{{MODEL_ID}}",
+  "name": "{{MODEL_NAME}}",
+  "status": "design",
+  "summary": "{{MODEL_SUMMARY}}",
+  "documentation": "models/{{MODEL_ID}}/README.md",
+  "currentRelease": null,
+  "releaseManifest": null,
+  "specification": null,
+  "deployment": null,
+  "security": "models/{{MODEL_ID}}/SECURITY.md",
+  "network": {
+    "name": "Ethereum",
+    "chainId": 1
+  },
+  "contracts": [],
+  "review": {
+    "independentAudit": false,
+    "publicContest": false
+  },
+  "releaseGates": [
+    "Complete the behavior, economics and threat model.",
+    "Implement unit, integration, fuzz and invariant coverage.",
+    "Publish fixed compiler and dependency revisions.",
+    "Complete the Ethereum deployment and verification record."
+  ]
+}

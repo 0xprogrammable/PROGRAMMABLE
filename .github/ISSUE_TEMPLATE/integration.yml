@@ -1,0 +1,57 @@
+name: Integration issue
+description: Report a reproducible problem with routing, indexing, metadata, wallets or the public interface.
+title: ""
+labels:
+  - integration
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not disclose a vulnerability here. Use private vulnerability reporting for security-sensitive findings.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Swap or routing
+        - Token metadata or social links
+        - Explorer or indexer
+        - Wallet connection
+        - Launch interface
+        - Creator rewards
+        - Other integration
+    validations:
+      required: true
+  - type: input
+    id: token
+    attributes:
+      label: Token, pool or transaction
+      description: Add the Ethereum address or transaction when one exists.
+      placeholder: 0x…
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened
+      description: State the observed result and when it occurred.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Give the shortest sequence that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: checkboxes
+    id: disclosure
+    attributes:
+      label: Disclosure check
+      options:
+        - label: This report does not expose an unpatched security vulnerability or private data.
+          required: true

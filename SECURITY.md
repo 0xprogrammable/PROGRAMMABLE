@@ -1,69 +1,70 @@
 # Security
 
-## Status
+## Current status
 
-Security properties are documented per launch model. Classic is currently the only available model. Its contracts have
-unit, integration, fuzz, invariant and regression coverage. They have not received an independent smart-contract audit
-or public security contest. These checks are evidence, not a safety guarantee.
+Security properties are recorded per launch model. Classic is currently the only available model. It has unit,
+integration, fuzz, invariant, regression, static-analysis and coverage checks. It has not received an independent
+smart-contract audit or public security contest.
+
+These checks are evidence, not a safety guarantee.
+
+| Record | Scope |
+| --- | --- |
+| [Classic security properties](docs/security/CLASSIC_PROPERTIES.md) | Trust boundaries, permissions, accounting and invariant evidence |
+| [Operations](docs/OPERATIONS.md) | Automated checks, monitoring status and incident response |
+| [Independent reviews](audits/README.md) | Published external reports, currently none |
+| [Ethereum deployment](deployments/ethereum.json) | Addresses, transactions, runtime hashes and verification status |
 
 ## Report a vulnerability
 
-Please use GitHub's private vulnerability reporting for this repository. Do not open a public issue for an unpatched
-vulnerability and do not include private keys, seed phrases or user data in a report.
+Use [GitHub private vulnerability reporting](https://github.com/0xprogrammable/programmable/security/advisories/new).
+Do not open a public issue or pull request for an unpatched vulnerability.
 
-No public bug bounty is offered at this time.
+Include:
 
-## Security model
+- the affected model release and contract address;
+- impact and required preconditions;
+- a minimal reproduction or transaction;
+- whether funds are at immediate risk; and
+- a safe way to contact you.
 
-The live contracts are non-upgradeable and expose no administrator role, pause function, mint path, blacklist or
-mutable fee recipient. This removes administrative recovery as well as administrative control.
+Never include private keys, seed phrases, credentials or unrelated user data. No public bug bounty is offered at this
+time.
 
-The intended invariants are:
+## Classic control model
 
-- only `PoolManager` may enter the unlock callback;
-- each pool is registered once and bound to the creator recorded at registration;
-- the pool shape is native ETH/token, zero LP fee and tick spacing `200`;
-- the token supply is fixed at one billion tokens;
-- the complete launch supply is placed into one one-sided position, except deterministic rounding dust that is also
-  locked with the position flow;
-- the position forwarder has no operator and a maximum timelock;
-- hook fees are symmetric on the ETH side of buys and sells;
-- the token transfer tax is zero;
-- total accounted native claims equal creator claims plus platform claims;
-- claims cannot be redirected by an unrelated caller; and
-- partial fills that would break exact fee accounting revert.
+The live Classic contracts are non-upgradeable and expose no administrator role, pause function, mint path, blacklist
+or mutable fee allocation. This removes administrative recovery as well as administrative control.
 
-## Return-delta permissions
+The intended properties include:
 
-The hook intentionally enables:
+- only `PoolManager` may enter swap callbacks;
+- each pool is registered once and bound to its recorded creator;
+- the pool shape, hook permissions and public fee disclosure remain fixed;
+- the complete launch supply enters permanent position custody;
+- creator and Programmable claims are accounted separately in native ETH;
+- unrelated callers cannot redirect a claim;
+- token transfers have no tax; and
+- unsupported partial-fill accounting reverts.
 
-- `beforeSwap`
-- `afterSwap`
-- `beforeSwapReturnDelta`
-- `afterSwapReturnDelta`
-- `beforeInitialize`
-
-Return deltas are required because the fee is collected in native ETH without modifying the launched ERC20 transfer
-logic. This permission is high impact: an accounting error can change the amount owed by the swapper or pool.
-
-The implementation checks the pool shape on every relevant callback, allows only registered pools, rejects unexpected
-partial fills, uses checked casts and full-precision arithmetic, and keeps claim accounting inside `PoolManager`. The
-test suite covers both swap directions, exact input and exact output, rounding, reentrancy, unauthorized redirects and
-accounting invariants.
+The detailed property-to-test map is in
+[`docs/security/CLASSIC_PROPERTIES.md`](docs/security/CLASSIC_PROPERTIES.md).
 
 ## Trust assumptions
 
-- Uniswap v4 `PoolManager`, `PositionManager`, liquidity-launcher and UERC20 contracts behave as documented at the
-  pinned revisions.
+- Pinned Uniswap v4, liquidity-launcher and UERC20 contracts behave as documented.
 - Ethereum consensus and native ETH settlement remain available.
-- Integrators use the exact deployed addresses and runtime hashes in [`deployments/ethereum.json`](deployments/ethereum.json).
-- Frontend, RPC, indexer and metadata availability are separate from contract safety and are outside this repository.
+- Integrators use the exact addresses and runtime hashes in
+  [`deployments/ethereum.json`](deployments/ethereum.json).
+- Frontend, wallet, RPC, indexer and metadata availability remain separate from contract safety.
 
 ## Known limitations
 
 - There is no emergency pause or upgrade path.
-- A failed native ETH recipient can block a direct claim until that recipient calls its authorized redirect function.
+- A native ETH recipient that rejects payment can block its direct claim until that recipient uses its authorized
+  redirect function.
 - Swaps that produce unsupported partial-fill accounting revert.
-- Metadata and social links are informational and may not be indexed consistently by third-party services.
+- Public ordering and sandwich risks remain applicable to swaps.
+- Metadata and project links may be indexed inconsistently by third-party services.
 - Permanent lock properties depend on the pinned forwarder and PositionManager semantics described in the
   [Classic model documentation](models/classic/README.md#liquidity-custody).

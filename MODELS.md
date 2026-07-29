@@ -1,37 +1,61 @@
-# Launch models
+# Model library
 
 A launch model defines how a token is created, how its Uniswap v4 pool behaves, how liquidity is held and how fees are
-accounted for.
+accounted for. [`models/registry.json`](models/registry.json) is the canonical machine-readable status record.
 
-| Model | Status | Documentation |
-| --- | --- | --- |
-| Classic | Available | [Read the Classic documentation](models/classic/README.md) |
-| Deep | In development | [Read the Deep design](models/deep/README.md) |
+## Status
+
+| Model | Lifecycle | Ethereum release | Documentation |
+| --- | --- | --- | --- |
+| Classic | **Available** | [`classic-v2`](releases/classic-v2/RELEASE.md) | [Open model](models/classic/README.md) |
+| Deep | **Design** | None | [Open design](models/deep/README.md) |
+
+`Available` means the exact source, parameters, deployment, runtime hashes and security status are public. It does not
+mean that a model has received an independent audit.
 
 ## Classic
 
-Classic launches a fixed-supply token against native ETH. The complete supply enters a locked, one-sided Uniswap v4
-position, and a disclosed fee is collected on the ETH side of swaps.
+<p>
+  <a href="models/classic/README.md">
+    <img
+      src="assets/programmable-model-classic.jpg"
+      alt="A bright watercolor wildflower field representing the Classic launch model"
+      width="100%"
+    />
+  </a>
+</p>
 
-[Behavior, fees, contracts and deployment evidence](models/classic/README.md)
+**Available on Ethereum.** Classic creates a fixed-supply token, initializes its native ETH pool, locks the complete
+launch position and executes the creator's initial buy in one transaction. Its current launch configuration uses a
+`1.00%` disclosed ETH-denominated swap fee.
+
+[Behavior and fees](models/classic/README.md) ·
+[Release record](releases/classic-v2/RELEASE.md) ·
+[Ethereum deployment](deployments/ethereum.json) ·
+[Security properties](docs/security/CLASSIC_PROPERTIES.md)
 
 ## Deep
 
-Deep directs the creator fee share into add-only liquidity for the launch pool until an immutable target is reached.
-After that point, the same share is routed to beneficiaries fixed at launch.
+<p>
+  <a href="models/deep/README.md">
+    <img
+      src="assets/programmable-model-deep.jpg"
+      alt="A dark flower-lined pool representing the Deep launch model"
+      width="100%"
+    />
+  </a>
+</p>
 
-Deep is not deployed and is not available for launch.
+**Design only.** Deep proposes directing the creator fee share into add-only locked liquidity until an immutable target
+is reached. It has no deployed contracts and is not available for launch.
 
-[Design and unresolved release gates](models/deep/README.md)
+[Design and open release gates](models/deep/README.md)
 
-## Release requirements
+## Adding a model
 
-A model is marked `Available` when the repository contains:
+New models start at `design`. They become `candidate` only after source, tests, fixed parameters and security properties
+exist. They become `available` only after the exact Ethereum deployment and runtime evidence are published.
 
-1. the exact hook and supporting contract sources;
-2. tests for permissions, accounting and model-specific invariants;
-3. compiler and dependency versions;
-4. Ethereum addresses, deployment transactions and runtime code hashes; and
-5. its security status, trust assumptions and known limitations.
-
-Open source code makes contract behavior inspectable. It does not replace independent review.
+[Read the release process](RELEASING.md) ·
+[Create a model record](templates/model/README.md.template) ·
+[Submit an external model](BUILDER_PROGRAM.md)

@@ -1,6 +1,8 @@
 name: Contract issue
 description: Report a reproducible, non-security issue in a published launch model.
 title: ""
+labels:
+  - contracts
 body:
   - type: markdown
     attributes:

@@ -1,0 +1,27 @@
+name: Documentation correction
+description: Report an inaccurate, unclear or outdated public record.
+title: ""
+labels:
+  - documentation
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Document
+      description: Link the file and section.
+      placeholder: https://github.com/0xprogrammable/programmable/blob/main/…
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current text or behavior
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: Proposed correction
+      description: Include the supporting contract, transaction or primary source when relevant.
+    validations:
+      required: true

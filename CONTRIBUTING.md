@@ -12,7 +12,13 @@ vulnerabilities publicly.
 
 Read the [Hook Builder Program](BUILDER_PROGRAM.md) before starting. A model submission must include its contracts,
 tests, security assumptions, known limitations, documentation, license declarations and builder beneficiary address.
-The pull request template contains the complete checklist.
+Create the required records with:
+
+```bash
+node scripts/new-model.mjs <model-id> "<Model name>" "<Specific behavior summary>"
+```
+
+The scaffold adds the model at `design` status. The pull request template contains the complete checklist.
 
 A pull request is a public, non-confidential submission. It does not guarantee acceptance, deployment or revenue. An
 external builder participates in model revenue only after Programmable publishes an acceptance record for the exact
@@ -27,9 +33,12 @@ Before opening a pull request:
 
 ```bash
 ./scripts/bootstrap-deps.sh
+node scripts/verify-model-registry.mjs
+node scripts/verify-release-evidence.mjs
 forge fmt --check
-forge build
+forge build --sizes
 FOUNDRY_PROFILE=ci forge test
+forge snapshot --fuzz-seed 0x70726f6772616d6d61626c65 --check .gas-snapshot
 ```
 
 Changing source does not change a contract that is already deployed. A new model or contract revision needs its own

@@ -1,0 +1,39 @@
+name: Ethereum Evidence
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * *"
+  pull_request:
+    paths:
+      - "deployments/**"
+      - "models/**"
+      - "releases/**"
+      - "scripts/verify-mainnet-bytecode.sh"
+      - ".github/workflows/mainnet-evidence.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ethereum-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mainnet-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1
+        with:
+          version: stable
+
+      - name: Verify Ethereum runtime bytecode
+        env:
+          ETHEREUM_RPC_URL: https://ethereum-rpc.publicnode.com
+        run: ./scripts/verify-mainnet-bytecode.sh

@@ -1,0 +1,17 @@
+# {{MODEL_NAME}} security
+
+## Trust assumptions
+
+List every external contract, privileged actor, autonomous service and offchain dependency.
+
+## Invariants
+
+Define properties for accounting, authorization, custody, configuration and failure recovery.
+
+## Ordering and MEV
+
+Document price sensitivity, transaction ordering, oracle use, slippage and front-running assumptions.
+
+## Known limitations
+
+State the boundaries that remain after tests and review. Do not use this file to claim an audit.

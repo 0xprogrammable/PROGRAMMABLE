@@ -1,0 +1,34 @@
+# {{MODEL_NAME}}
+
+**Status:** Design<br>
+**Target network:** Ethereum<br>
+**Model id:** `{{MODEL_ID}}`
+
+{{MODEL_SUMMARY}}
+
+This document describes a proposed model. It is not available for launch and has no production deployment.
+
+## Behavior
+
+Describe the complete lifecycle from token creation through pool initialization, swaps, fee accounting, claims and any
+autonomous action.
+
+## Pool and hook
+
+Record:
+
+- supported currencies and pool shape;
+- hook permissions and return deltas;
+- mutable and immutable parameters;
+- external calls and pinned dependencies; and
+- every address that can move funds or change behavior.
+
+## Economics
+
+Specify fees, rounding, beneficiaries, liquidity custody and every value transfer with worked examples.
+
+## Release gates
+
+List the properties, tests, deployment evidence and independent review required before this model can become available.
+
+See [`SECURITY.md`](SECURITY.md) and [`TEST_PLAN.md`](TEST_PLAN.md).

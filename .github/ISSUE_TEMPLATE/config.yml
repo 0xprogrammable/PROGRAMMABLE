@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Read support routes
+    url: https://github.com/0xprogrammable/programmable/blob/main/SUPPORT.md
+    about: Choose the correct public or private reporting channel.
   - name: Submit a launch model
     url: https://github.com/0xprogrammable/programmable/blob/main/BUILDER_PROGRAM.md
     about: Read the requirements and submit a complete model by pull request.
