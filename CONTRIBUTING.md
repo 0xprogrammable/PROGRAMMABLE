@@ -4,6 +4,7 @@ Programmable publishes independent Uniswap v4 launch models. Start with the rele
 before changing a contract or proposing a new model.
 
 Changes should be small, reviewable and covered by a test that fails before the fix.
+Participation is governed by [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
 
 ## New launch models
 

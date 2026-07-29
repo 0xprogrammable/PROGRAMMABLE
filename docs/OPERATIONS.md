@@ -9,6 +9,7 @@ the interface, but cannot rewrite deployed behavior or remove locked liquidity.
 | --- | --- | --- |
 | Repository verification | Every pull request and push to `main` | Formatting, build, tests, registry and gas snapshot |
 | Security workflow | Every pull request and push to `main` | Slither, coverage floor and workflow lint |
+| Code scanning | Every push to `main` | Publishes Slither SARIF results in GitHub Security |
 | Ethereum bytecode evidence | Daily and on demand | Published runtime code hashes still match Ethereum |
 
 A failed public RPC request can also fail the Ethereum evidence workflow. Investigate provider availability before
