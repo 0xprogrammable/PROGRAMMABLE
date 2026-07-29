@@ -7,7 +7,7 @@ accounted for. [`models/registry.json`](models/registry.json) is the canonical m
 
 | Model | Lifecycle | Ethereum release | Documentation |
 | --- | --- | --- | --- |
-| Classic | **Available** | [`classic-v2`](releases/classic-v2/RELEASE.md) | [Open model](models/classic/README.md) |
+| Classic | **Available** | [`classic-v3`](releases/classic-v3/RELEASE.md) | [Open model](models/classic/README.md) |
 | Deep | **Design** | None | [Open design](models/deep/README.md) |
 
 `Available` means the exact source, parameters, deployment, runtime hashes and security status are public. It does not
@@ -25,12 +25,12 @@ mean that a model has received an independent audit.
   </a>
 </p>
 
-**Available on Ethereum.** Classic creates a fixed-supply token, initializes its native ETH pool, locks the complete
-launch position and executes the creator's initial buy in one transaction. Its current launch configuration uses a
-`1.00%` disclosed ETH-denominated swap fee.
+**Available on Ethereum.** Classic creates a fixed-supply token, initializes its native ETH pool, permanently locks the
+complete launch position and executes the creator's initial buy in one transaction. Creators select separate immutable
+buy and sell fees, direct native ETH rewards to as many as five wallets and may lock or vest the initial buy.
 
 [Behavior and fees](models/classic/README.md) ·
-[Release record](releases/classic-v2/RELEASE.md) ·
+[Release record](releases/classic-v3/RELEASE.md) ·
 [Ethereum deployment](deployments/ethereum.json) ·
 [Security properties](docs/security/CLASSIC_PROPERTIES.md)
 

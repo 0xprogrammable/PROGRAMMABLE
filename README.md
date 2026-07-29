@@ -123,8 +123,10 @@ receive a version-specific acceptance record before release.
 
 ## Security and operations
 
-The live Classic contracts are non-upgradeable and expose no administrator role, pause function, mint path, blacklist
-or mutable fee allocation. Classic has not received an independent smart-contract audit or public security contest.
+The live Classic hook and launcher are non-upgradeable and expose no pause function, mint path, blacklist or
+post-launch fee setter. A disclosed Community Takeover authority can replace future creator-reward recipients only
+after accrued ETH is checkpointed. Classic has not received an independent smart-contract audit or public security
+contest.
 
 | Area | Record |
 | --- | --- |
