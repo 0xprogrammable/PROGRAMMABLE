@@ -130,7 +130,6 @@ or mutable fee allocation. Classic has not received an independent smart-contrac
 | --- | --- |
 | Current security status | [`SECURITY.md`](SECURITY.md) |
 | Classic trust boundaries and invariants | [`docs/security/CLASSIC_PROPERTIES.md`](docs/security/CLASSIC_PROPERTIES.md) |
-| Protocol Revenue Deepener candidate | [`docs/security/PROTOCOL_REVENUE_DEEPENER_V1.md`](docs/security/PROTOCOL_REVENUE_DEEPENER_V1.md) |
 | Automated checks and incident process | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
 | Independent review archive | [`audits/`](audits/) |
 
