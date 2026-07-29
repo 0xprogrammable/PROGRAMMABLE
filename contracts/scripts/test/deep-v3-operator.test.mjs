@@ -933,6 +933,11 @@ test("operator entrypoints are localhost-only, explicit, and V3-only", () => {
   );
   assert.ok(sourceVerifier.includes("assertDeepV3EtherscanBuildInput"));
   assert.ok(sourceVerifier.includes('for (const verifier of ["etherscan", "sourcify"])'));
+  assert.ok(
+    sourceVerifier.includes(
+      "delete verifierEnvironment.ETHERSCAN_API_KEY",
+    ),
+  );
   assert.ok(sourceVerifier.includes("etherscan-exact-sourcify-match"));
   assert.ok(!/PRIVATE_KEY|MNEMONIC|eth_sendRawTransaction/.test(sourceVerifier));
 

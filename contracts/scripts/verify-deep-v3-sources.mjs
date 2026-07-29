@@ -171,6 +171,10 @@ async function main() {
   if (submit) {
     for (const contract of contracts) {
       for (const verifier of ["etherscan", "sourcify"]) {
+        const verifierEnvironment = { ...process.env };
+        if (verifier === "sourcify") {
+          delete verifierEnvironment.ETHERSCAN_API_KEY;
+        }
         const result = spawnSync(
           "forge",
           forgeArguments(
@@ -182,6 +186,7 @@ async function main() {
           {
             cwd: contractsRoot,
             encoding: "utf8",
+            env: verifierEnvironment,
             stdio: "inherit",
           },
         );
