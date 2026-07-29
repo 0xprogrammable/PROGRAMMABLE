@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "model": "stock-paired",
   "internalContractRelease": "stock-paired-v1",
-  "status": "base-infrastructure-deployed-eth-coordinator-pending",
+  "status": "deployed-source-verified-lifecycle-pending",
   "chainId": 1,
   "releaseCommit": "eda6fc90ca8d60507e7e121f81e9a1674aaad68d",
   "sourceCommitment": "0xa38eb2fead47e2dbfda7589ddeb235dd66c5dc26a604e49898a8bf51494b7693",
-  "ethCoordinatorReleaseCommit": null,
-  "ethCoordinatorSourceCommitment": null,
-  "ethCoordinatorNonce": null,
+  "ethCoordinatorReleaseCommit": "600a80981ff3ca4eaf431eb3b9f34aee5cfae9c0",
+  "ethCoordinatorSourceCommitment": "0xb7710bd4419b66207fe34e9f5b3dcade18ae5f105ea57ee766c19ac892ed0123",
+  "ethCoordinatorNonce": 62,
   "startingNonce": 46,
   "candidatePlan": {
     "status": "deployed-and-finalized",
@@ -37,7 +37,7 @@
     "hookFactory": "0xcE9f68963117B1EA87364e5d62AC511D911EBbeD",
     "feeHook": "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc",
     "launcher": "0x195750f33caD5eF2DF857a53226B421297A1e79e",
-    "ethLaunchCoordinator": null,
+    "ethLaunchCoordinator": "0xfa5f17389CA28D071781d59750b32C842ab6A54b",
     "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
   },
   "transactions": {
@@ -47,7 +47,7 @@
     "hookFactory": "0xe54a735d325cb0e08c81304d2989ba0e9d561ea2c970a1d2399897fd3803eb08",
     "feeHook": "0x3978af35fff2ec18a99fa5c58c12a1e2be9348736c476018c43e7a873738c28f",
     "launcher": "0x9b9b0147929190b4d6f5265c4e87f4ca14130bbe9733c04f1c5250d9d6d92631",
-    "ethLaunchCoordinator": null
+    "ethLaunchCoordinator": "0x3e38455f8f96a2c9966bb5cd4a0e039c6f1b2ec85d687870857d2349a4bc8dd8"
   },
   "runtimeCodeHashes": {
     "quoteRegistry": "0x283acfe82cfd8215d70ea0b957c33e70f5caf4a76c9909935f5f17a591222a3a",
@@ -56,7 +56,7 @@
     "hookFactory": "0x6f4fb8e100039d4f9dd488f625b7ecb2e8d4d389b914d9031c6c5e6b228ad79d",
     "feeHook": "0x4da04b13565c195132988b3b96e3c43b9f199c0324f18fee616f888b775a2230",
     "launcher": "0xbd6f60760341db3d4ed31118676ab4342d0868cff42cc6f8205d877086fbce65",
-    "ethLaunchCoordinator": null,
+    "ethLaunchCoordinator": "0xe6cff454f284798017864eefdb9c510c159a1185479d49ba1ad7f0a2d3c7b645",
     "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
   },
   "artifactRuntime": {
@@ -85,6 +85,11 @@
     "launcherTemplate": {
       "bytes": 19186,
       "codeHash": "0xe029c2f197f672d854f5671a729ce7f6fb0136ca31e7f0b93e65d90467896ad5",
+      "note": "Artifact runtime before constructor immutable references are patched"
+    },
+    "ethLaunchCoordinatorTemplate": {
+      "bytes": 7434,
+      "codeHash": "0x1fea7a2002372688500531636ccfd47c59d6aefa98a303672dba7e18fb87013a",
       "note": "Artifact runtime before constructor immutable references are patched"
     }
   },
@@ -180,7 +185,7 @@
     "implementationRuntimeCodeHash": "0x7480293a8fad3f98f01f39aa59cd4e4c30d7fc4e7019e8f6e691eb5a9be53d11"
   },
   "sourceVerification": {
-    "status": "base-infrastructure-verified-coordinator-pending",
+    "status": "verified",
     "compiler": {
       "version": "0.8.26",
       "optimizerEnabled": true,
@@ -262,7 +267,16 @@
       }
     },
     "ethLaunchCoordinator": {
-      "status": "pending"
+      "status": "verified",
+      "encodedConstructorArguments": "0x000000000000000000000000195750f33cad5ef2df857a53226b421297a1e79e000000000000000000000000e592427a0aece92de3edee1f18e0157c058615640000000000000000000000001f98431c8ad98523631ae4a59f267346ea31f984000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4800000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001c000000000000000000000000000000000000000000000000000000000000000060000000000000000000000002d1f7226bd1f780af6b9a49dcc0ae00e8df4bdee000000000000000000000000fedc5f4a6c38211c1338aa411018dfaf26612c08000000000000000000000000ba47214edd2bb43099611b208f75e4b42fdcfedc000000000000000000000000f3e4872e6a4cf365888d93b6146a2baa7348f1a4000000000000000000000000f6b1117ec07684d3958cad8beb1b302bfd21103f00000000000000000000000014c3abf95cb9c93a8b82c1cdcb76d72cb87b2d4c000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000bb80000000000000000000000000000000000000000000000000000000000002710000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000002710",
+      "etherscan": {
+        "status": "exact-match",
+        "url": "https://etherscan.io/address/0xfa5f17389CA28D071781d59750b32C842ab6A54b#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "url": "https://sourcify.dev/server/v2/contract/1/0xfa5f17389CA28D071781d59750b32C842ab6A54b"
+      }
     }
   },
   "lifecycleEvidence": {
@@ -271,7 +285,7 @@
     "independentRpcCount": 2,
     "deploymentTransactionsVerified": true,
     "runtimeBindingsVerified": true,
-    "ethCoordinatorDeploymentVerified": false,
+    "ethCoordinatorDeploymentVerified": true,
     "canaryLaunchTransaction": null,
     "canaryQuoteAsset": null,
     "positionLockVerified": false,

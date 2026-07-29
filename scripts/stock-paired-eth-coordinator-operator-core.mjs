@@ -132,7 +132,7 @@ export function stockPairedEthCoordinatorDigest(value) {
 export function assertStockPairedEthCoordinatorCheckout(
   root,
   releaseCommit,
-  { build = true } = {},
+  { allowDescendant = false, build = true } = {},
 ) {
   if (
     typeof releaseCommit !== "string" ||
@@ -149,7 +149,23 @@ export function assertStockPairedEthCoordinatorCheckout(
     encoding: "utf8",
   }).trim();
   if (head !== releaseCommit) {
-    throw new Error("The checkout is not at the coordinator release commit");
+    if (!allowDescendant) {
+      throw new Error("The checkout is not at the coordinator release commit");
+    }
+    try {
+      execFileSync(
+        "git",
+        ["merge-base", "--is-ancestor", releaseCommit, head],
+        {
+          cwd: root,
+          stdio: "ignore",
+        },
+      );
+    } catch {
+      throw new Error(
+        "The canary checkout does not descend from the coordinator release",
+      );
+    }
   }
   const dirty = execFileSync(
     "git",
