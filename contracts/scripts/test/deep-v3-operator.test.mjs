@@ -872,6 +872,19 @@ test("operator entrypoints are localhost-only, explicit, and V3-only", () => {
   assert.ok(files[0].includes("callResultBytes"));
   assert.ok(files[0].includes("includeTransactionData: false"));
   assert.ok(files[0].includes("calldataBytes"));
+  assert.ok(
+    files.slice(0, 3).every(
+      (source) =>
+        source.includes("window.ethereum?.providers") &&
+        source.includes("item?.isMetaMask") &&
+        source.includes("MetaMask is unavailable"),
+    ),
+  );
+  assert.ok(
+    files.slice(0, 3).every(
+      (source) => !source.includes("ethereum.request("),
+    ),
+  );
   assert.ok(files.every((source) => source.includes("--write")));
   assert.ok(
     files.every(
