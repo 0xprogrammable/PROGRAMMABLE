@@ -13,7 +13,7 @@
       "id": "classic",
       "name": "Classic",
       "status": "available",
-      "summary": "A fixed-supply token with a native ETH Uniswap v4 pool, permanently locked launch liquidity and disclosed ETH-denominated swap fees.",
+      "summary": "A fixed-supply token with independent buy and sell fees, beneficiary-owned ETH rewards, optional initial-buy custody and permanently locked Uniswap v4 liquidity.",
       "manifest": "models/classic/model.json",
       "documentation": "models/classic/README.md"
     },
