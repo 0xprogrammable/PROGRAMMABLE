@@ -21,6 +21,15 @@ const otherPoolId = `0x${"77".repeat(32)}` as `0x${string}`;
 const launchTransactionHash = `0x${"88".repeat(32)}` as `0x${string}`;
 const claimTransactionHash = `0x${"99".repeat(32)}` as `0x${string}`;
 const blockHash = `0x${"aa".repeat(32)}` as `0x${string}`;
+const stockTokenAddress =
+  "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const stockPositionRecipient =
+  "0xcccccccccccccccccccccccccccccccccccccccc";
+const stockHookAddress =
+  "0xdddddddddddddddddddddddddddddddddddddddd";
+const stockPoolId = `0x${"ee".repeat(32)}` as `0x${string}`;
+const stockLaunchTransactionHash =
+  `0x${"ff".repeat(32)}` as `0x${string}`;
 const claimCreatorFeesAbi = parseAbi([
   "function claimCreatorFees(bytes32 poolId) returns (uint256 amount)",
 ]);
@@ -198,6 +207,45 @@ describe("profile API client", () => {
     ]);
     expect(profile.activity.every((item) => item.href === `/token/${tokenAddress}`))
       .toBe(true);
+  });
+
+  it("keeps verified launches that use a model-specific reward route", () => {
+    const response = profileResponse();
+    const stockToken = {
+      id: "1:stock-token",
+      name: "Stock Paired",
+      symbol: "STOCK",
+      tokenAddress: stockTokenAddress,
+      hookAddress: stockHookAddress,
+      poolId: stockPoolId,
+      creatorAddress: account,
+      positionRecipient: stockPositionRecipient,
+      positionTokenId: "43",
+      launchTransactionHash: stockLaunchTransactionHash,
+      launchLogIndex: 4,
+      launchedAt: "2026-07-27T12:00:00.000Z",
+      imageUrl: "https://programmable.family/stock-token.png",
+      marketCapEthWei: "0",
+      fdvUsdWad: "4200000000000000000000",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme",
+      launchModel: "stock-paired",
+    } as const;
+
+    const profile = mapCreatorProfileResponse(
+      {
+        ...response,
+        tokens: [...response.tokens, stockToken],
+      },
+      account,
+    );
+
+    expect(profile.tokens.map((token) => token.symbol)).toEqual([
+      "PRG",
+      "STOCK",
+    ]);
+    expect(profile.claims).toHaveLength(1);
+    expect(profile.positions).toHaveLength(2);
   });
 
   it("keeps the undeployed state explicit and rejects fabricated records", () => {

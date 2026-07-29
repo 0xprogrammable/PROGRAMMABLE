@@ -8,16 +8,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
-  Globe2,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   AnimatedMarketCap,
@@ -25,6 +19,7 @@ import {
 } from "@/components/animated-market-cap";
 import { ScrambleText } from "@/components/scramble-text";
 import { SiteFooter } from "@/components/site-footer";
+import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -47,11 +42,7 @@ type TokenCard = {
   marketCap?: MarketCapMetric;
 };
 
-type TokenSort =
-  | "newest"
-  | "oldest"
-  | "market-cap"
-  | "market-cap-asc";
+type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
 
 type ExplorePayload = {
   status: "ready" | "not-deployed";
@@ -86,8 +77,7 @@ export function preserveExplorePayloadOnRefreshFailure(
     message: string;
   },
 ): ExploreState {
-  return current.phase === "ready" &&
-    current.contentKey === input.contentKey
+  return current.phase === "ready" && current.contentKey === input.contentKey
     ? {
         ...current,
         requestKey: input.requestKey,
@@ -106,8 +96,8 @@ type PaginationItem = number | "start-gap" | "end-gap";
 const TOKENS_PER_PAGE = 10;
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
-const PROGRAMMABLE_TOKEN_ADDRESS =
-  "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
+export const EXPLORE_REFRESH_INTERVAL_MS = 10_000;
+const PROGRAMMABLE_TOKEN_ADDRESS = "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
   "/brand/programmable-token-fallback-01-dawn.webp",
   "/brand/programmable-token-fallback-02-moon.webp",
@@ -122,6 +112,17 @@ const sortOptions: { id: TokenSort; label: string }[] = [
   { id: "market-cap", label: "Highest market cap" },
   { id: "market-cap-asc", label: "Lowest market cap" },
 ];
+
+export function shouldRefreshExplore(input: {
+  visibilityState: DocumentVisibilityState;
+  lastRefreshAt: number;
+  now: number;
+}) {
+  return (
+    input.visibilityState === "visible" &&
+    input.now - input.lastRefreshAt >= EXPLORE_REFRESH_INTERVAL_MS
+  );
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -213,9 +214,7 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
 }
 
 function positiveInteger(value: unknown, fallback: number) {
-  return typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value >= 0
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
     ? value
     : fallback;
 }
@@ -320,7 +319,19 @@ function getFallbackTokenImage(address: string) {
   return fallbackTokenImages[index];
 }
 
-function getMarketCap(token: LauncherToken): MarketCapMetric | undefined {
+export function getMarketCap(
+  token: LauncherToken,
+): MarketCapMetric | undefined {
+  if (
+    token.indexedMarketCapUsdWad &&
+    /^\d+$/.test(token.indexedMarketCapUsdWad)
+  ) {
+    const value = Number(BigInt(token.indexedMarketCapUsdWad)) / 1e18;
+    if (Number.isFinite(value) && value > 0) {
+      return { kind: "usd", value };
+    }
+  }
+
   if (token.fdvUsdWad && /^\d+$/.test(token.fdvUsdWad)) {
     const value = Number(BigInt(token.fdvUsdWad)) / 1e18;
     if (Number.isFinite(value) && value > 0) {
@@ -343,8 +354,9 @@ function getMarketCap(token: LauncherToken): MarketCapMetric | undefined {
     }
   }
 
-  if (!token.marketCapEth) return undefined;
-  const value = Number(token.marketCapEth);
+  const marketCapEth = token.indexedMarketCapEth ?? token.marketCapEth;
+  if (!marketCapEth) return undefined;
+  const value = Number(marketCapEth);
   if (!Number.isFinite(value) || value < 0) return undefined;
 
   return { kind: "eth", value };
@@ -433,7 +445,7 @@ function TelegramBrandIcon() {
 
 function TokenLinkIcon({ kind }: { kind: TokenLinkKind }) {
   if (kind === "website") {
-    return <Globe2 aria-hidden="true" size={22} strokeWidth={1.9} />;
+    return <WebsiteLinkIcon className="token-website-link-icon" />;
   }
   if (kind === "telegram") return <TelegramBrandIcon />;
   return <XBrandIcon />;
@@ -450,7 +462,9 @@ function TokenSocialLink({
 
   return (
     <a
-      className="token-social-link"
+      className={`token-social-link${
+        link.kind === "website" ? " token-social-link-website" : ""
+      }`}
       href={link.url}
       target="_blank"
       rel="noreferrer"
@@ -469,11 +483,13 @@ export function ExploreView() {
   const [sort, setSort] = useState<TokenSort>("market-cap");
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedAddress, setCopiedAddress] = useState("");
+  const [copyError, setCopyError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
   const copyResetTimer = useRef<number | null>(null);
   const activeExploreContentKey = useRef<string | null>(null);
+  const lastExploreRefreshAt = useRef(0);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const contentKey = `${debouncedQuery}\u0000${sort}\u0000${currentPage}`;
   const requestKey = `${contentKey}\u0000${retryKey}\u0000${refreshKey}`;
@@ -502,13 +518,34 @@ export function ExploreView() {
   }, [debouncedQuery, normalizedQuery]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        setRefreshKey((value) => value + 1);
-      }
-    }, 15_000);
+    lastExploreRefreshAt.current = Date.now();
 
-    return () => window.clearInterval(interval);
+    function refreshIfDue() {
+      const now = Date.now();
+      if (
+        !shouldRefreshExplore({
+          visibilityState: document.visibilityState,
+          lastRefreshAt: lastExploreRefreshAt.current,
+          now,
+        })
+      )
+        return;
+      lastExploreRefreshAt.current = now;
+      setRefreshKey((value) => value + 1);
+    }
+
+    const interval = window.setInterval(
+      refreshIfDue,
+      EXPLORE_REFRESH_INTERVAL_MS,
+    );
+    document.addEventListener("visibilitychange", refreshIfDue);
+    window.addEventListener("focus", refreshIfDue);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshIfDue);
+      window.removeEventListener("focus", refreshIfDue);
+    };
   }, []);
 
   useEffect(() => {
@@ -594,26 +631,28 @@ export function ExploreView() {
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
   const paginationItems = getPaginationItems(activePage, pageCount);
-  const busy =
-    state.phase === "loading" || state.requestKey !== requestKey;
+  const busy = state.phase === "loading" || state.requestKey !== requestKey;
   const hasPublicTokens =
     state.phase !== "ready" ||
     state.payload.total > 0 ||
     Boolean(debouncedQuery);
 
   async function copyAddress(address: string) {
+    if (copyResetTimer.current !== null) {
+      window.clearTimeout(copyResetTimer.current);
+    }
+    setCopyError("");
     try {
       await navigator.clipboard.writeText(address);
       setCopiedAddress(address);
-      if (copyResetTimer.current !== null) {
-        window.clearTimeout(copyResetTimer.current);
-      }
       copyResetTimer.current = window.setTimeout(
         () => setCopiedAddress(""),
         1600,
       );
     } catch {
       setCopiedAddress("");
+      setCopyError("Could not copy address");
+      copyResetTimer.current = window.setTimeout(() => setCopyError(""), 2400);
     }
   }
 
@@ -707,9 +746,7 @@ export function ExploreView() {
                   className="token-card-image"
                   src={imageSource}
                   alt={
-                    token.usesFallbackImage
-                      ? ""
-                      : `${token.name} token image`
+                    token.usesFallbackImage ? "" : `${token.name} token image`
                   }
                   fill
                   sizes="(max-width: 360px) 260px, (max-width: 800px) 46vw, 214px"
@@ -849,112 +886,114 @@ export function ExploreView() {
             <div className="token-section-heading">
               <h2 className="sr-only">Tokens</h2>
               <div className="token-toolbar">
-              <label className="token-search">
-                <Search aria-hidden="true" size={17} />
-                <span className="sr-only">
-                  Search tokens by name, ticker or contract address
-                </span>
-                <input
-                  value={query}
-                  placeholder="Search tokens"
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </label>
-
-              <details className="token-filter" ref={filterRef}>
-                <summary>
-                  <SlidersHorizontal aria-hidden="true" size={16} />
-                  <span>Filter</span>
-                  <ChevronDown
-                    className="token-filter-chevron"
-                    aria-hidden="true"
-                    size={15}
-                  />
-                </summary>
-                <div
-                  className="token-filter-menu"
-                  role="group"
-                  aria-label="Sort tokens"
-                >
-                  {sortOptions.map((option) => (
-                    <button
-                      key={option.id}
-                      className={sort === option.id ? "active" : undefined}
-                      type="button"
-                      aria-pressed={sort === option.id}
-                      onClick={() => {
-                        setSort(option.id);
-                        setCurrentPage(1);
-                        filterRef.current?.removeAttribute("open");
-                      }}
-                    >
-                      <span>{option.label}</span>
-                      {sort === option.id ? (
-                        <Check aria-hidden="true" size={15} />
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              </details>
-
-              {state.phase === "ready" &&
-              state.payload.status === "ready" &&
-              state.payload.total > 0 &&
-              cards.length > 0 ? (
-                <nav className="token-pagination" aria-label="Token pages">
-                  <button
-                    type="button"
-                    aria-label="Previous token page"
-                    disabled={activePage === 1 || busy}
-                    onClick={() =>
-                      setCurrentPage((page) => Math.max(1, page - 1))
-                    }
-                  >
-                    <ChevronLeft aria-hidden="true" size={15} />
-                  </button>
-
-                  <div className="token-pagination-pages">
-                    {paginationItems.map((item) =>
-                      typeof item === "number" ? (
-                        <button
-                          key={item}
-                          className={
-                            activePage === item ? "active" : undefined
-                          }
-                          type="button"
-                          aria-label={`Token page ${item}`}
-                          aria-current={
-                            activePage === item ? "page" : undefined
-                          }
-                          disabled={busy}
-                          onClick={() => setCurrentPage(item)}
-                        >
-                          {item}
-                        </button>
-                      ) : (
-                        <span key={item} aria-hidden="true">
-                          …
-                        </span>
-                      ),
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    aria-label="Next token page"
-                    disabled={activePage === pageCount || busy}
-                    onClick={() =>
-                      setCurrentPage((page) => Math.min(pageCount, page + 1))
-                    }
-                  >
-                    <ChevronRight aria-hidden="true" size={15} />
-                  </button>
-
-                  <span className="sr-only" aria-live="polite">
-                    Page {activePage} of {pageCount}
+                <label className="token-search">
+                  <Search aria-hidden="true" size={17} />
+                  <span className="sr-only">
+                    Search tokens by name, ticker or contract address
                   </span>
-                </nav>
-              ) : null}
+                  <input
+                    value={query}
+                    placeholder="Search tokens"
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </label>
+
+                <details className="token-filter" ref={filterRef}>
+                  <summary>
+                    <SlidersHorizontal aria-hidden="true" size={16} />
+                    <span>Filter</span>
+                    <ChevronDown
+                      className="token-filter-chevron"
+                      aria-hidden="true"
+                      size={15}
+                    />
+                  </summary>
+                  <div
+                    className="token-filter-menu"
+                    role="group"
+                    aria-label="Sort tokens"
+                  >
+                    {sortOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        className={sort === option.id ? "active" : undefined}
+                        type="button"
+                        aria-pressed={sort === option.id}
+                        onClick={() => {
+                          setSort(option.id);
+                          setCurrentPage(1);
+                          const filter = filterRef.current;
+                          filter?.removeAttribute("open");
+                          filter?.querySelector("summary")?.focus();
+                        }}
+                      >
+                        <span>{option.label}</span>
+                        {sort === option.id ? (
+                          <Check aria-hidden="true" size={15} />
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+
+                {state.phase === "ready" &&
+                state.payload.status === "ready" &&
+                state.payload.total > 0 &&
+                cards.length > 0 ? (
+                  <nav className="token-pagination" aria-label="Token pages">
+                    <button
+                      type="button"
+                      aria-label="Previous token page"
+                      disabled={activePage === 1 || busy}
+                      onClick={() =>
+                        setCurrentPage((page) => Math.max(1, page - 1))
+                      }
+                    >
+                      <ChevronLeft aria-hidden="true" size={15} />
+                    </button>
+
+                    <div className="token-pagination-pages">
+                      {paginationItems.map((item) =>
+                        typeof item === "number" ? (
+                          <button
+                            key={item}
+                            className={
+                              activePage === item ? "active" : undefined
+                            }
+                            type="button"
+                            aria-label={`Token page ${item}`}
+                            aria-current={
+                              activePage === item ? "page" : undefined
+                            }
+                            disabled={busy}
+                            onClick={() => setCurrentPage(item)}
+                          >
+                            {item}
+                          </button>
+                        ) : (
+                          <span key={item} aria-hidden="true">
+                            …
+                          </span>
+                        ),
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      aria-label="Next token page"
+                      disabled={activePage === pageCount || busy}
+                      onClick={() =>
+                        setCurrentPage((page) => Math.min(pageCount, page + 1))
+                      }
+                    >
+                      <ChevronRight aria-hidden="true" size={15} />
+                    </button>
+
+                    <span className="sr-only" aria-live="polite">
+                      Page {activePage} of {pageCount}
+                    </span>
+                  </nav>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -980,6 +1019,13 @@ export function ExploreView() {
         </section>
       </div>
       <SiteFooter />
+      {copyError ? (
+        <div className="toast-region" aria-live="assertive" aria-atomic="true">
+          <p className="toast" role="alert">
+            {copyError}
+          </p>
+        </div>
+      ) : null}
     </>
   );
 }
