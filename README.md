@@ -1,6 +1,6 @@
 <p align="center">
   <img
-    src="assets/programmable-repository-cover.jpg"
+    src="assets/programmable-repository-cover-animated.gif"
     alt="Programmable mark above a field of watercolor flowers"
     width="100%"
   />
