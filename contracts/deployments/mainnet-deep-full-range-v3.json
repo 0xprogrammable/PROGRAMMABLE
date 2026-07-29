@@ -5,89 +5,164 @@
   "releaseVersion": "deep-full-range-v3",
   "releaseManifest": "contracts/deployments/mainnet-deep-full-range-v3.json",
   "keeperReleaseVersion": "deep-keeper-v3-ops-v2",
-  "status": "not-deployed",
+  "status": "deployed-receipts-verified-source-pending",
   "releaseEligible": false,
   "chainId": 1,
-  "releaseCommit": null,
+  "releaseCommit": "9ddfd79dab6518b2f61729f3a09088b3af2bfdf3",
   "sourceCommitment": "0xc375eef30da88e2402c52f1c54641f44ed447e536055d46563d01cc85868337c",
-  "startBlock": null,
-  "startingNonce": null,
+  "startBlock": 25637608,
+  "startingNonce": 52,
   "transactionCount": 6,
-  "hookSalt": null,
+  "hookSalt": "0x000000000000000000000000000000000000000000000000000000000000189f",
   "candidatePlan": {
-    "status": "not-fixed-refresh-before-signing",
-    "observedAtBlock": null,
-    "deployer": null,
-    "startingNonce": null,
-    "hookSalt": null,
-    "zapPlanner": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
-    "positionPlanner": null,
-    "automation": null,
-    "keeperExecutor": null
+    "status": "receipt-reconstructed",
+    "observedAtBlock": 25637608,
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "startingNonce": 52,
+    "hookSalt": "0x000000000000000000000000000000000000000000000000000000000000189f",
+    "zapPlanner": "0xef26139841De6783510B285128Befd443dCF67C1",
+    "growthVaultFactory": "0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac",
+    "growthVaultImplementation": "0x87b4213070b0eB8286fFAfaf3e340cA94858dC1c",
+    "hookFactory": "0x13d39B677577976b3eAe892CC963d1DFaF74Ff08",
+    "feeHook": "0x864aF5CEaD61068b944e9974638760F1bD2dFaeC",
+    "launcher": "0xDCE5B303cBCD95a199c5d4D2086f4Df61940942d",
+    "positionPlanner": "0x99C3B7766Ea0C8F1F99Fbe6f41C94A15012F2e65",
+    "automation": "0x98143Bf44BCa5E4D0FB9c28d55BC99A4824EB5F8",
+    "keeperExecutor": "0xf973f447a12b01bD75D459144FBD1157E6D4588b"
   },
   "addresses": {
-    "deployer": null,
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
     "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
     "lockedPositionFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
-    "zapPlanner": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
-    "positionPlanner": null,
-    "automation": null,
-    "keeperExecutor": null
+    "zapPlanner": "0xef26139841De6783510B285128Befd443dCF67C1",
+    "growthVaultFactory": "0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac",
+    "growthVaultImplementation": "0x87b4213070b0eB8286fFAfaf3e340cA94858dC1c",
+    "hookFactory": "0x13d39B677577976b3eAe892CC963d1DFaF74Ff08",
+    "feeHook": "0x864aF5CEaD61068b944e9974638760F1bD2dFaeC",
+    "launcher": "0xDCE5B303cBCD95a199c5d4D2086f4Df61940942d",
+    "positionPlanner": "0x99C3B7766Ea0C8F1F99Fbe6f41C94A15012F2e65",
+    "automation": "0x98143Bf44BCa5E4D0FB9c28d55BC99A4824EB5F8",
+    "keeperExecutor": "0xf973f447a12b01bD75D459144FBD1157E6D4588b"
   },
   "transactions": {
-    "zapPlanner": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
-    "positionPlanner": null,
-    "automation": null,
-    "keeperExecutor": null
+    "zapPlanner": "0x3ad41751b2ef5e152249499afbc4ca33e0e17a916a1ff78e7c17c539f26af6ae",
+    "growthVaultFactory": "0x731b42aca7674fc35a1ff5f514a1a81a1951cd7a80790afe16a1cd40d142003d",
+    "growthVaultImplementation": "0x731b42aca7674fc35a1ff5f514a1a81a1951cd7a80790afe16a1cd40d142003d",
+    "hookFactory": "0xa37a09ea897a632c16ec11d2931111ad55a1017b25d5518f842eac6e82b52a89",
+    "feeHook": "0xdcfd46c749b1f8a752bf5a6d5c3d6721c3b0138bacdf07828c232ac17afa5c22",
+    "launcher": "0xebc5ee04fe4816f6a264cb1a3fa1d36fd30ae2dc7fc97e1222289d8860d98d47",
+    "positionPlanner": "0xebc5ee04fe4816f6a264cb1a3fa1d36fd30ae2dc7fc97e1222289d8860d98d47",
+    "automation": "0xebc5ee04fe4816f6a264cb1a3fa1d36fd30ae2dc7fc97e1222289d8860d98d47",
+    "keeperExecutor": "0xbf5a752d1cd5eb89d52afc44ceacabf9018550462d687a9c289245887adeb8b7"
   },
   "deploymentBlocks": {
-    "zapPlanner": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
-    "positionPlanner": null,
-    "automation": null,
-    "keeperExecutor": null
+    "zapPlanner": 25637608,
+    "growthVaultFactory": 25637610,
+    "growthVaultImplementation": 25637610,
+    "hookFactory": 25637611,
+    "feeHook": 25637613,
+    "launcher": 25637615,
+    "positionPlanner": 25637615,
+    "automation": 25637615,
+    "keeperExecutor": 25637617
   },
   "deploymentEvidence": {
-    "zapPlanner": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
-    "positionPlanner": null,
-    "automation": null,
-    "keeperExecutor": null
+    "zapPlanner": {
+      "transactionHash": "0x3ad41751b2ef5e152249499afbc4ca33e0e17a916a1ff78e7c17c539f26af6ae",
+      "blockNumber": 25637608,
+      "blockHash": "0x5338273124511a7c1fed17a417178ca4d3e674bc863792017e8ff5383c3371a5",
+      "receiptStatus": "success",
+      "nonce": 52,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0xd111c325bb4bd846158dd51f8e45140b5ad999ddf43fd088eb54ff1e88cd8a1c"
+    },
+    "growthVaultFactory": {
+      "transactionHash": "0x731b42aca7674fc35a1ff5f514a1a81a1951cd7a80790afe16a1cd40d142003d",
+      "blockNumber": 25637610,
+      "blockHash": "0x976627ae54427c769b13e42a9f1f592d346adb4273f7f3e1fd6baac2f06f4b47",
+      "receiptStatus": "success",
+      "nonce": 53,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0x2a1784e3c77519bdd7878112fecebd8bd8ce2ef715eaad9941f8b1d0741b8f5d"
+    },
+    "growthVaultImplementation": {
+      "transactionHash": "0x731b42aca7674fc35a1ff5f514a1a81a1951cd7a80790afe16a1cd40d142003d",
+      "blockNumber": 25637610,
+      "blockHash": "0x976627ae54427c769b13e42a9f1f592d346adb4273f7f3e1fd6baac2f06f4b47",
+      "receiptStatus": "success"
+    },
+    "hookFactory": {
+      "transactionHash": "0xa37a09ea897a632c16ec11d2931111ad55a1017b25d5518f842eac6e82b52a89",
+      "blockNumber": 25637611,
+      "blockHash": "0x47deabbbac6c273c5924626bfee9898d70dd29ad7067f8d4c159f22e858bc8f2",
+      "receiptStatus": "success",
+      "nonce": 54,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0x7c4e52210854db2707f5c1f08a93546c59ce34a490db8fb7aaf09e5dc0e72668"
+    },
+    "feeHook": {
+      "transactionHash": "0xdcfd46c749b1f8a752bf5a6d5c3d6721c3b0138bacdf07828c232ac17afa5c22",
+      "blockNumber": 25637613,
+      "blockHash": "0x45805ae0d3a3265ca44dd70df3d057514029ab8ebc645a45619f8977847dff56",
+      "receiptStatus": "success",
+      "nonce": 55,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": "0x13d39B677577976b3eAe892CC963d1DFaF74Ff08",
+      "transactionInputHash": "0x2ef63b798b4f29239ff88691468aeed1a41d4460ff0bf89bbf5c2a4d7737821c"
+    },
+    "launcher": {
+      "transactionHash": "0xebc5ee04fe4816f6a264cb1a3fa1d36fd30ae2dc7fc97e1222289d8860d98d47",
+      "blockNumber": 25637615,
+      "blockHash": "0x33986dcbee5f6b9311bdd597ba0b65267dd2969c273268eebe0ea316adc9f9f5",
+      "receiptStatus": "success",
+      "nonce": 56,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0x5dc198c52935c56faa0ebdb6e55907623478bac88a419cc65fc46d8213ca1181"
+    },
+    "positionPlanner": {
+      "transactionHash": "0xebc5ee04fe4816f6a264cb1a3fa1d36fd30ae2dc7fc97e1222289d8860d98d47",
+      "blockNumber": 25637615,
+      "blockHash": "0x33986dcbee5f6b9311bdd597ba0b65267dd2969c273268eebe0ea316adc9f9f5",
+      "receiptStatus": "success"
+    },
+    "automation": {
+      "transactionHash": "0xebc5ee04fe4816f6a264cb1a3fa1d36fd30ae2dc7fc97e1222289d8860d98d47",
+      "blockNumber": 25637615,
+      "blockHash": "0x33986dcbee5f6b9311bdd597ba0b65267dd2969c273268eebe0ea316adc9f9f5",
+      "receiptStatus": "success"
+    },
+    "keeperExecutor": {
+      "transactionHash": "0xbf5a752d1cd5eb89d52afc44ceacabf9018550462d687a9c289245887adeb8b7",
+      "blockNumber": 25637617,
+      "blockHash": "0x1ac5552552e25e60c88634caa475282efe7eb2b28c6e41245759799000616443",
+      "receiptStatus": "success",
+      "nonce": 57,
+      "valueWei": "0",
+      "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+      "to": null,
+      "transactionInputHash": "0x3c4c3aed67154808f06546d2bc9a8c830e80c986a18754fc74032e4913b4cc3e"
+    }
   },
   "runtimeCodeHashes": {
     "lockedPositionFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2",
-    "zapPlanner": null,
-    "growthVaultFactory": null,
-    "growthVaultImplementation": null,
-    "hookFactory": null,
-    "feeHook": null,
-    "launcher": null,
-    "positionPlanner": null,
-    "automation": null,
-    "keeperExecutor": null
+    "zapPlanner": "0x02ed075cf2c449fc737d76a0b6f71bf49dbaeecb10b1fc31874b3485fec80c62",
+    "growthVaultFactory": "0x583f0961dbb8c3cbdaa4e23ad67505b71286934b0e97a80ccdf1a8c89c8b5a37",
+    "growthVaultImplementation": "0x090f63bf600f09655fb7578119522d6435e943ef97335728ac0123115923e3cd",
+    "hookFactory": "0x2ed08636a8749c3f7a2970894b5125e6ade42a5d96a66533f8903c2fc1995d1a",
+    "feeHook": "0x936c0100f28cdfad466ac36e50df51543fe131db9082328ed6f923f2f393c127",
+    "launcher": "0xeba4cddf5a76e5e97488bdfbcd365ba5fc36743277f440bdb880c692ecfaa832",
+    "positionPlanner": "0x7b7881831fd6bd7a753d517d16d9450faed13387acd7933a95bfbbdd01066f22",
+    "automation": "0xea096ef90066bbd84d4496d7b27fa91d46580fdd15498f60245ab723a05a337e",
+    "keeperExecutor": "0x0528fe02f4f16c96c389fe5dd117ae3802d57658e3e86993a4060e27eb24b1a2"
   },
   "artifactRuntime": {
     "zapPlanner": {
@@ -234,10 +309,10 @@
     "status": "review-required",
     "enabled": false,
     "transactionSubmission": false,
-    "keeperExecutor": null,
-    "keeperExecutorRuntimeCodeHash": null,
-    "automation": null,
-    "automationRuntimeCodeHash": null,
+    "keeperExecutor": "0xf973f447a12b01bD75D459144FBD1157E6D4588b",
+    "keeperExecutorRuntimeCodeHash": "0x0528fe02f4f16c96c389fe5dd117ae3802d57658e3e86993a4060e27eb24b1a2",
+    "automation": "0x98143Bf44BCa5E4D0FB9c28d55BC99A4824EB5F8",
+    "automationRuntimeCodeHash": "0xea096ef90066bbd84d4496d7b27fa91d46580fdd15498f60245ab723a05a337e",
     "signerAddress": null,
     "signingBackend": "not-configured",
     "executionPath": "/api/ops/deep-v3-keeper-v2",
@@ -297,18 +372,18 @@
     "reviewedBindingPath": "ops/deep-keeper-v3/reviewed-ops-v2-binding.json"
   },
   "storageSafety": {
-    "status": "not-run",
-    "proxyAdminBeaconSlotsEmpty": false,
+    "status": "verified-empty-eip1967-slots",
+    "proxyAdminBeaconSlotsEmpty": true,
     "contracts": {
-      "zapPlanner": null,
-      "growthVaultFactory": null,
-      "growthVaultImplementation": null,
-      "hookFactory": null,
-      "feeHook": null,
-      "launcher": null,
-      "positionPlanner": null,
-      "automation": null,
-      "keeperExecutor": null
+      "zapPlanner": true,
+      "growthVaultFactory": true,
+      "growthVaultImplementation": true,
+      "hookFactory": true,
+      "feeHook": true,
+      "launcher": true,
+      "positionPlanner": true,
+      "automation": true,
+      "keeperExecutor": true
     }
   },
   "sourceVerification": {
@@ -318,73 +393,149 @@
         "status": "not-submitted",
         "fqcn": "src/LiquidityGrowthZapPlannerV3.sol:LiquidityGrowthZapPlannerV3",
         "constructorArguments": [],
-        "encodedConstructorArguments": null,
-        "etherscan": { "status": "not-submitted", "url": null },
-        "sourcify": { "status": "not-submitted", "url": null }
+        "encodedConstructorArguments": "0x",
+        "etherscan": {
+          "status": "not-submitted",
+          "url": null
+        },
+        "sourcify": {
+          "status": "not-submitted",
+          "url": null
+        }
       },
       "growthVaultFactory": {
         "status": "not-submitted",
         "fqcn": "src/LiquidityGrowthFullRangeVaultFactoryV3.sol:LiquidityGrowthFullRangeVaultFactoryV3",
-        "constructorArguments": [],
-        "encodedConstructorArguments": null,
-        "etherscan": { "status": "not-submitted", "url": null },
-        "sourcify": { "status": "not-submitted", "url": null }
+        "constructorArguments": [
+          "0xef26139841De6783510B285128Befd443dCF67C1"
+        ],
+        "encodedConstructorArguments": "0x000000000000000000000000ef26139841de6783510b285128befd443dcf67c1",
+        "etherscan": {
+          "status": "not-submitted",
+          "url": null
+        },
+        "sourcify": {
+          "status": "not-submitted",
+          "url": null
+        }
       },
       "growthVaultImplementation": {
         "status": "not-submitted",
         "fqcn": "src/LiquidityGrowthFullRangeVaultV3.sol:LiquidityGrowthFullRangeVaultV3",
-        "constructorArguments": [],
-        "encodedConstructorArguments": null,
-        "etherscan": { "status": "not-submitted", "url": null },
-        "sourcify": { "status": "not-submitted", "url": null }
+        "constructorArguments": [
+          "0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac"
+        ],
+        "encodedConstructorArguments": "0x00000000000000000000000014a9f11a7fd6968f3c3369d5ed21363e7ee40aac",
+        "etherscan": {
+          "status": "not-submitted",
+          "url": null
+        },
+        "sourcify": {
+          "status": "not-submitted",
+          "url": null
+        }
       },
       "hookFactory": {
         "status": "not-submitted",
         "fqcn": "src/LiquidityGrowthFeeOracleHookFactoryV2.sol:LiquidityGrowthFeeOracleHookFactoryV2",
         "constructorArguments": [],
-        "encodedConstructorArguments": null,
-        "etherscan": { "status": "not-submitted", "url": null },
-        "sourcify": { "status": "not-submitted", "url": null }
+        "encodedConstructorArguments": "0x",
+        "etherscan": {
+          "status": "not-submitted",
+          "url": null
+        },
+        "sourcify": {
+          "status": "not-submitted",
+          "url": null
+        }
       },
       "feeHook": {
         "status": "not-submitted",
         "fqcn": "src/LiquidityGrowthFeeOracleHookV2.sol:LiquidityGrowthFeeOracleHookV2",
-        "constructorArguments": [],
-        "encodedConstructorArguments": null,
-        "etherscan": { "status": "not-submitted", "url": null },
-        "sourcify": { "status": "not-submitted", "url": null }
+        "constructorArguments": [
+          "0x000000000004444c5dc75cB358380D2e3dE08A90",
+          "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          "0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac",
+          "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+          400
+        ],
+        "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a900000000000000000000000004957f49620aff3adbbe8195a4f633e49cc93376c00000000000000000000000014a9f11a7fd6968f3c3369d5ed21363e7ee40aac000000000000000000000000bd216513d74c8cf14cf4747e6aaa6420ff64ee9e0000000000000000000000000000000000000000000000000000000000000190",
+        "etherscan": {
+          "status": "not-submitted",
+          "url": null
+        },
+        "sourcify": {
+          "status": "not-submitted",
+          "url": null
+        }
       },
       "launcher": {
         "status": "not-submitted",
         "fqcn": "src/LiquidityGrowthFullRangeLaunchV3.sol:LiquidityGrowthFullRangeLaunchV3",
-        "constructorArguments": [],
-        "encodedConstructorArguments": null,
-        "etherscan": { "status": "not-submitted", "url": null },
-        "sourcify": { "status": "not-submitted", "url": null }
+        "constructorArguments": [
+          "0x000000000004444c5dc75cB358380D2e3dE08A90",
+          "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+          "0x000000e200088D55C39a11F609E5F667729ad49b",
+          "0x864aF5CEaD61068b944e9974638760F1bD2dFaeC",
+          "0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac",
+          "0x291a9ff1059d225d02B1659430804486404dB507"
+        ],
+        "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90000000000000000000000000bd216513d74c8cf14cf4747e6aaa6420ff64ee9e000000000000000000000000000000e200088d55c39a11f609e5f667729ad49b000000000000000000000000864af5cead61068b944e9974638760f1bd2dfaec00000000000000000000000014a9f11a7fd6968f3c3369d5ed21363e7ee40aac000000000000000000000000291a9ff1059d225d02b1659430804486404db507",
+        "etherscan": {
+          "status": "not-submitted",
+          "url": null
+        },
+        "sourcify": {
+          "status": "not-submitted",
+          "url": null
+        }
       },
       "positionPlanner": {
         "status": "not-submitted",
         "fqcn": "src/LiquidityGrowthFullRangePositionPlannerV3.sol:LiquidityGrowthFullRangePositionPlannerV3",
         "constructorArguments": [],
-        "encodedConstructorArguments": null,
-        "etherscan": { "status": "not-submitted", "url": null },
-        "sourcify": { "status": "not-submitted", "url": null }
+        "encodedConstructorArguments": "0x",
+        "etherscan": {
+          "status": "not-submitted",
+          "url": null
+        },
+        "sourcify": {
+          "status": "not-submitted",
+          "url": null
+        }
       },
       "automation": {
         "status": "not-submitted",
         "fqcn": "src/LiquidityGrowthFullRangeAutomationV3.sol:LiquidityGrowthFullRangeAutomationV3",
-        "constructorArguments": [],
-        "encodedConstructorArguments": null,
-        "etherscan": { "status": "not-submitted", "url": null },
-        "sourcify": { "status": "not-submitted", "url": null }
+        "constructorArguments": [
+          "0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac",
+          "0xDCE5B303cBCD95a199c5d4D2086f4Df61940942d"
+        ],
+        "encodedConstructorArguments": "0x00000000000000000000000014a9f11a7fd6968f3c3369d5ed21363e7ee40aac000000000000000000000000dce5b303cbcd95a199c5d4d2086f4df61940942d",
+        "etherscan": {
+          "status": "not-submitted",
+          "url": null
+        },
+        "sourcify": {
+          "status": "not-submitted",
+          "url": null
+        }
       },
       "keeperExecutor": {
         "status": "not-submitted",
         "fqcn": "src/DeepKeeperExecutorV2.sol:DeepKeeperExecutorV2",
-        "constructorArguments": [],
-        "encodedConstructorArguments": null,
-        "etherscan": { "status": "not-submitted", "url": null },
-        "sourcify": { "status": "not-submitted", "url": null }
+        "constructorArguments": [
+          "0x98143Bf44BCa5E4D0FB9c28d55BC99A4824EB5F8"
+        ],
+        "encodedConstructorArguments": "0x00000000000000000000000098143bf44bca5e4d0fb9c28d55bc99a4824eb5f8",
+        "etherscan": {
+          "status": "not-submitted",
+          "url": null
+        },
+        "sourcify": {
+          "status": "not-submitted",
+          "url": null
+        }
       }
     }
   },
@@ -431,11 +582,8 @@
     "productionTransactionSubmission": false
   },
   "blockers": [
-    "Deep V3 infrastructure has not been deployed.",
-    "Two independent RPC receipt and runtime proofs are missing.",
     "Exact Etherscan source verification and Sourcify v2 match records are missing.",
     "Current-release canary launch, oracle and atomic compound evidence is missing.",
-    "EIP-1967 storage-slot evidence is missing.",
     "The reviewed keeper binding is not present and transaction submission remains disabled."
   ]
 }
