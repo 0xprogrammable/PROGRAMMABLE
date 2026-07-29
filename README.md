@@ -8,7 +8,7 @@
 
 <h1 align="center">Programmable</h1>
 
-<p align="center">Open source launch models for Uniswap v4 on Ethereum.</p>
+<p align="center">Launch tokens that work the way you imagine.</p>
 
 <p align="center">
   <a href="https://programmable.family">Launch</a> ·
@@ -28,50 +28,64 @@
   </a>
 </p>
 
-Programmable is a launchpad for tokens whose market behavior lives in Uniswap v4. Creators choose a launch model, set
-the token details and launch without writing Solidity.
+Programmable is an interface and open launch-model infrastructure for Uniswap v4. Creators choose a published model,
+set the token details and launch from their wallet without writing Solidity.
 
-This repository contains the contracts behind every published model. Each available release includes its exact source,
-tests, security documentation and Ethereum deployment record.
+Models may be built by Programmable or independent builders. This repository is the public record behind them. It
+contains the contracts, tests, security assumptions and deployment evidence for every release available through the
+interface.
 
-Independent builders can submit complete launch models through the
-[Hook Builder Program](BUILDER_PROGRAM.md). Submissions are reviewed before any model is accepted or released.
+## How it works
 
-## Launch models
+A launch model defines how a token is created, how its Uniswap v4 pool is initialized, how fees are accounted for, how
+liquidity is held and which behaviors belong in the hook. The interface turns those rules into a clear setup flow.
 
-| Model | Pool behavior | Status |
-| --- | --- | --- |
-| [Classic](models/classic/README.md) | Fixed supply, locked one-sided liquidity and creator fees paid in ETH | Available |
-| [Adaptive](models/adaptive/README.md) | An immutable swap-fee curve linked to onchain value | In development |
-| [Deep](models/deep/README.md) | Creator fees build locked main-pool liquidity to a fixed target before beneficiary routing begins | In development |
+Each model is versioned independently. A release keeps its own source, parameters, tests, security notes and Ethereum
+deployment record, so users and integrators can inspect the exact implementation behind a launch.
 
-[`MODELS.md`](MODELS.md) contains the full catalog and release requirements.
+## Model library
 
-## What is published
+[`MODELS.md`](MODELS.md) is the canonical catalog. Detailed documentation lives under [`models/`](models/), with links
+to the exact contracts, tests, specifications and deployment evidence for each release.
 
-Every available model includes:
+Each model has its own directory and release record. Browse the catalog to see what is available and what is still in
+development.
 
-- the hook and supporting contract sources;
-- unit, integration, fuzz and invariant tests;
-- compiler and dependency versions;
-- security assumptions and known limitations; and
-- Ethereum addresses, deployment transactions and runtime code hashes.
+## Build a model
 
-Classic is live on Ethereum. Its [model documentation](models/classic/README.md) links each deployed contract to
-Etherscan. Machine-readable deployment evidence is in
-[`deployments/ethereum.json`](deployments/ethereum.json).
+Programmable is not limited to launch models built by its maintainers. Independent builders can submit complete,
+open-source Uniswap v4 launch models as pull requests.
+
+A submission includes the contracts, tests, documentation, security assumptions and builder beneficiary address. A
+pull request does not guarantee acceptance or deployment. Accepted hook creators receive 0.10% of the trading volume
+from every token launched with that exact model version.
+
+[Read the Hook Builder Program](BUILDER_PROGRAM.md)
+
+## Release standard
+
+A model is marked `Available` only when the repository contains:
+
+1. the exact hook and supporting contract sources;
+2. unit, integration, fuzz and invariant coverage where applicable;
+3. fixed compiler and dependency versions;
+4. security assumptions and known limitations; and
+5. Ethereum addresses, deployment transactions, source verification and runtime code hashes.
+
+Open source publication makes behavior inspectable. It is not a security guarantee.
 
 ## Repository
 
 ```text
-models/              Behavior, economics and security notes for each launch model
-src/                 Exact Solidity sources for deployed contracts
+models/              Model behavior, economics, security notes and acceptance records
+src/                 Exact Solidity sources
 test/                Unit, integration, fuzz, invariant and regression tests
 deployments/         Ethereum addresses, transactions and runtime code hashes
-spec/                Machine-readable contract parameters
+spec/                Machine-readable release parameters
 scripts/             Reproducible dependency bootstrap
+ARCHITECTURE.md       Repository and release structure
 BUILDER_PROGRAM.md    External model submission and participation terms
-SECURITY.md           Repository security policy and current contract status
+SECURITY.md           Security policy and current contract status
 ```
 
 Deployed Solidity sources remain at their original paths so published verification records stay reproducible.
@@ -87,13 +101,14 @@ forge build
 FOUNDRY_PROFILE=ci forge test
 ```
 
-The contracts use Solidity `0.8.26`, Cancun opcodes, optimizer runs set to `1,000`, and disabled CBOR metadata. See
-[`foundry.toml`](foundry.toml) for the complete compiler configuration.
+Current compiler settings are recorded in [`foundry.toml`](foundry.toml). Model-specific parameters and dependency
+versions are recorded under [`spec/`](spec/).
 
 ## Security
 
-Classic has unit, integration, fuzz, invariant and regression coverage. It has not received an independent
-smart-contract audit or public security contest. Read [`SECURITY.md`](SECURITY.md) before integrating.
+Security status is documented per model. The currently available contracts have unit, integration, fuzz, invariant and
+regression coverage, but have not received an independent smart-contract audit or public security contest. Read
+[`SECURITY.md`](SECURITY.md) and the relevant model documentation before integrating.
 
 Report vulnerabilities through
 [GitHub private vulnerability reporting](https://github.com/0xprogrammable/programmable/security/advisories/new).

@@ -3,10 +3,8 @@
 Programmable is organized around independent launch models. Each model defines its own pool rules, hook permissions,
 fee accounting, liquidity custody and security properties.
 
-## Models
-
-- [Classic](models/classic/README.md) is the available fixed-supply launch model.
-- [Adaptive](models/adaptive/README.md) is the fee-curve model in development.
+[`MODELS.md`](MODELS.md) is the canonical catalog. Model-specific behavior belongs in the relevant directory under
+[`models/`](models/) rather than in this document.
 
 ## Release structure
 
