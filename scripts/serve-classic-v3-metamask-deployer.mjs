@@ -637,7 +637,7 @@ function renderHtml(plan) {
     if (inspection.status === "complete") {
       notice(
         inspection.evidence.receiptEvidenceReady
-          ? "All four transactions are finalized and recorded."
+          ? "All seven transactions are finalized and recorded."
           : "All four deployments are verified. Receipt finality evidence is still maturing.",
         "success",
       );
@@ -899,7 +899,7 @@ async function main() {
       `Programmable Classic V3 release console: http://${HOST}:${PORT}`,
     );
     console.log(
-      `Loaded four reviewed transactions. Evidence: ${evidencePath}`,
+      `Loaded seven reviewed transactions. Evidence: ${evidencePath}`,
     );
   });
 }

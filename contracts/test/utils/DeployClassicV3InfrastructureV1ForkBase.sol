@@ -8,6 +8,10 @@ import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPosition
 import { Test } from "forge-std/Test.sol";
 
 import { DeployClassicV3InfrastructureV1 } from "../../script/DeployClassicV3InfrastructureV1.s.sol";
+import {
+    ClassicInitialBuyCustodyConfig,
+    ClassicInitialBuyCustodyMode
+} from "../../src/ClassicInitialBuyVestingWalletV1.sol";
 import { MemeLaunchV2 } from "../../src/MemeLaunchV2.sol";
 
 abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
@@ -29,15 +33,18 @@ abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
             deployment.deployReviewed(DEPLOYER, 0, TREASURY);
 
         assertEq(plan.chainId, block.chainid);
-        assertEq(address(result.feeSplitVaultFactory), plan.feeSplitVaultFactory);
+        assertEq(address(result.ctoAuthority), plan.ctoAuthority);
+        assertEq(address(result.rewardVaultFactory), plan.rewardVaultFactory);
+        assertEq(address(result.initialBuyVestingWalletFactory), plan.initialBuyVestingWalletFactory);
+        assertEq(address(result.launchPolicy), plan.launchPolicy);
         assertEq(address(result.hookFactory), plan.hookFactory);
         assertEq(address(result.feeHook), plan.feeHook);
         assertEq(address(result.launcher), plan.launcher);
         assertEq(result.hookSalt, plan.hookSalt);
         assertEq(result.sourceCommitment, plan.sourceCommitment);
         assertEq(result.sourceCommitment, deployment.deploymentSourceCommitment());
-        assertEq(vm.getNonce(DEPLOYER), 4);
-        assertEq(deployment.predictHook(plan.hookFactory, plan.feeSplitVaultFactory, plan.hookSalt), plan.feeHook);
+        assertEq(vm.getNonce(DEPLOYER), 7);
+        assertEq(deployment.predictHook(plan.hookFactory, plan.rewardVaultFactory, plan.hookSalt), plan.feeHook);
 
         address creator = makeAddr("classicV3DeploymentCreator");
         vm.deal(creator, MIN_INITIAL_BUY);
@@ -84,7 +91,10 @@ abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
                 extraData: bytes('{"v":1,"model":"classic"}')
             }),
             rewardBeneficiaries: beneficiaries,
-            rewardSharesBps: shares
+            rewardSharesBps: shares,
+            initialBuyCustody: ClassicInitialBuyCustodyConfig({
+                mode: ClassicInitialBuyCustodyMode.Unlocked, durationDays: 0, cliffDays: 0
+            })
         });
     }
 }

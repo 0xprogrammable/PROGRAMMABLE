@@ -9,12 +9,15 @@ import {
 
 import {
   CLASSIC_V3_FEE_STEP_BPS,
+  CLASSIC_INITIAL_BUY_MAX_DURATION_DAYS,
+  CLASSIC_INITIAL_BUY_MIN_DURATION_DAYS,
   CLASSIC_V3_MAX_FEE_BPS,
   CLASSIC_V3_MAX_REWARD_BENEFICIARIES,
   CLASSIC_V3_MIN_FEE_BPS,
   PLATFORM_FEE_BPS,
   REWARD_SHARE_BPS,
   type LaunchDraft,
+  type ClassicInitialBuyCustodyMode,
   type RewardSplitDraft,
 } from "./launch";
 import {
@@ -26,16 +29,20 @@ import {
 } from "./launch-transaction";
 
 export const classicV3LaunchAbi = parseAbi([
-  "function launch((string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,bytes32 poolId,bytes32 launchHash) result)",
+  "function launch((string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) result)",
   "function predictTokenAddress(string name,string symbol,address deployer,bytes32 creatorSalt) view returns (address token,bytes32 effectiveGraffiti)",
   "function predictRewardVault(address token,address deployer,address[] beneficiaries,uint16[] sharesBps) view returns (address)",
   "function poolManager() view returns (address)",
   "function positionManager() view returns (address)",
   "function tokenFactory() view returns (address)",
   "function feeHook() view returns (address)",
-  "function feeSplitVaultFactory() view returns (address)",
+  "function rewardVaultFactory() view returns (address)",
+  "function initialBuyVestingWalletFactory() view returns (address)",
+  "function launchPolicy() view returns (address)",
   "function positionForwarderFactory() view returns (address)",
   "function MIN_INITIAL_BUY_WEI() view returns (uint256)",
+  "function MAX_REWARD_BENEFICIARIES() view returns (uint256)",
+  "function REWARD_SHARE_BASIS_POINTS() view returns (uint16)",
 ]);
 
 export const classicV3HookAbi = parseAbi([
@@ -57,24 +64,47 @@ export const classicV3HookFactoryAbi = parseAbi([
   "function isFactoryHook(address hook) view returns (bool)",
 ]);
 
-export const feeSplitVaultFactoryAbi = parseAbi([
+export const classicRewardVaultFactoryAbi = parseAbi([
   "function isFactoryVault(address vault) view returns (bool)",
+  "function ctoAuthority() view returns (address)",
 ]);
 
-export const feeSplitVaultAbi = parseAbi([
+export const classicCtoAuthorityAbi = parseAbi([
+  "function authority() view returns (address)",
+  "function pendingAuthority() view returns (address)",
+]);
+
+export const classicRewardVaultAbi = parseAbi([
   "function feeHook() view returns (address)",
   "function poolId() view returns (bytes32)",
   "function configurationHash() view returns (bytes32)",
+  "function activeConfigurationHash() view returns (bytes32)",
+  "function configurationEpoch() view returns (uint64)",
   "function beneficiaryCount() view returns (uint256)",
   "function beneficiaryAt(uint256 index) view returns (address)",
+  "function shareBpsAt(uint256 index) view returns (uint16)",
   "function shareBpsOf(address beneficiary) view returns (uint16)",
-  "function payoutAddressOf(address beneficiary) view returns (address)",
   "function claimedBy(address beneficiary) view returns (uint256)",
   "function totalCreatorFeesReceived() view returns (uint256)",
   "function totalCreatorFeesClaimed() view returns (uint256)",
   "function claimable(address beneficiary) view returns (uint256)",
-  "function setPayoutAddress(address newPayoutAddress)",
+  "function changePayoutWallet(uint256 allocationIndex,address newPayoutWallet)",
   "function claim() returns (uint256 amount)",
+]);
+
+export const classicInitialBuyVestingWalletFactoryAbi = parseAbi([
+  "function MIN_DURATION_DAYS() view returns (uint16)",
+  "function MAX_DURATION_DAYS() view returns (uint16)",
+]);
+
+export const classicLaunchPolicyAbi = parseAbi([
+  "function MAX_TOKEN_NAME_BYTES() view returns (uint256)",
+  "function MAX_TOKEN_SYMBOL_BYTES() view returns (uint256)",
+  "function MAX_TOKEN_DESCRIPTION_BYTES() view returns (uint256)",
+  "function MAX_METADATA_URL_BYTES() view returns (uint256)",
+  "function MAX_SOCIAL_EXTRA_DATA_BYTES() view returns (uint256)",
+  "function MAX_REWARD_BENEFICIARIES() view returns (uint256)",
+  "function REWARD_SHARE_BASIS_POINTS() view returns (uint16)",
 ]);
 
 export type ClassicV3RewardConfiguration = {
@@ -93,6 +123,14 @@ export type ClassicV3FeeConfiguration = {
 export type ClassicV3LaunchConfiguration = {
   fees: ClassicV3FeeConfiguration;
   rewards: ClassicV3RewardConfiguration;
+  initialBuyCustody: ClassicInitialBuyCustodyConfiguration;
+};
+
+export type ClassicInitialBuyCustodyConfiguration = {
+  mode: ClassicInitialBuyCustodyMode;
+  modeCode: 0 | 1 | 2 | 3;
+  durationDays: number;
+  cliffDays: number;
 };
 
 export type ClassicV3LaunchDisclosure = {
@@ -102,7 +140,79 @@ export type ClassicV3LaunchDisclosure = {
     beneficiary: Address;
     share: string;
   }[];
+  initialBuyCustody: string;
 };
+
+function parseDurationDays(value: string, label: string) {
+  const normalized = value.trim();
+  if (!/^(?:[1-9]\d{0,3})$/.test(normalized)) {
+    throw new LaunchInputError(
+      `${label} must be a whole number from ${CLASSIC_INITIAL_BUY_MIN_DURATION_DAYS} to ${CLASSIC_INITIAL_BUY_MAX_DURATION_DAYS} days`,
+    );
+  }
+  const days = Number(normalized);
+  if (
+    days < CLASSIC_INITIAL_BUY_MIN_DURATION_DAYS ||
+    days > CLASSIC_INITIAL_BUY_MAX_DURATION_DAYS
+  ) {
+    throw new LaunchInputError(
+      `${label} must be from ${CLASSIC_INITIAL_BUY_MIN_DURATION_DAYS} to ${CLASSIC_INITIAL_BUY_MAX_DURATION_DAYS} days`,
+    );
+  }
+  return days;
+}
+
+export function validateClassicInitialBuyCustody(
+  draft: LaunchDraft,
+): ClassicInitialBuyCustodyConfiguration {
+  if (draft.initialBuyCustodyMode === "unlocked") {
+    return {
+      mode: "unlocked",
+      modeCode: 0,
+      durationDays: 0,
+      cliffDays: 0,
+    };
+  }
+
+  const durationDays = parseDurationDays(
+    draft.initialBuyDurationDays,
+    "Initial Buy duration",
+  );
+  if (draft.initialBuyCustodyMode === "fixed-lock") {
+    return {
+      mode: "fixed-lock",
+      modeCode: 1,
+      durationDays,
+      cliffDays: 0,
+    };
+  }
+  if (draft.initialBuyCustodyMode === "linear") {
+    return {
+      mode: "linear",
+      modeCode: 2,
+      durationDays,
+      cliffDays: 0,
+    };
+  }
+  if (draft.initialBuyCustodyMode === "cliff-linear") {
+    const cliffDays = parseDurationDays(
+      draft.initialBuyCliffDays,
+      "Initial Buy cliff",
+    );
+    if (cliffDays >= durationDays) {
+      throw new LaunchInputError(
+        "The Initial Buy cliff must end before the vesting duration",
+      );
+    }
+    return {
+      mode: "cliff-linear",
+      modeCode: 3,
+      durationDays,
+      cliffDays,
+    };
+  }
+  throw new LaunchInputError("Choose how the Initial Buy is held");
+}
 
 export function validateRewardConfiguration(
   draft: LaunchDraft,
@@ -131,15 +241,21 @@ export function validateRewardConfiguration(
 export type ClassicV3DeploymentManifest = {
   chainId: number;
   classicV3Status?: string;
+  classicCtoAuthorityV1?: string | null;
+  classicRewardVaultFactoryV1?: string | null;
+  classicInitialBuyVestingWalletFactoryV1?: string | null;
+  classicLaunchPolicyV1?: string | null;
   ethCreatorFeeHookFactoryV3?: string | null;
   ethCreatorFeeHookV3?: string | null;
-  feeSplitVaultFactoryV1?: string | null;
   memeLaunchV2?: string | null;
   lockedPositionFeeForwarderFactory?: string | null;
   runtimeCodeHashes?: {
+    classicCtoAuthorityV1?: string | null;
+    classicRewardVaultFactoryV1?: string | null;
+    classicInitialBuyVestingWalletFactoryV1?: string | null;
+    classicLaunchPolicyV1?: string | null;
     ethCreatorFeeHookFactoryV3?: string | null;
     ethCreatorFeeHookV3?: string | null;
-    feeSplitVaultFactoryV1?: string | null;
     memeLaunchV2?: string | null;
     lockedPositionFeeForwarderFactory?: string | null;
   };
@@ -242,6 +358,7 @@ export function validateClassicV3LaunchDraft(
   );
 
   const rewards = validateRewardConfiguration(draft, launcherAccount);
+  const initialBuyCustody = validateClassicInitialBuyCustody(draft);
 
   return {
     fees: {
@@ -252,6 +369,7 @@ export function validateClassicV3LaunchDraft(
       platformFeeBps: PLATFORM_FEE_BPS,
     },
     rewards,
+    initialBuyCustody,
   };
 }
 
@@ -287,6 +405,11 @@ export function encodeClassicV3Launch(
         },
         rewardBeneficiaries: configuration.rewards.beneficiaries,
         rewardSharesBps: configuration.rewards.sharesBps,
+        initialBuyCustody: {
+          mode: configuration.initialBuyCustody.modeCode,
+          durationDays: configuration.initialBuyCustody.durationDays,
+          cliffDays: configuration.initialBuyCustody.cliffDays,
+        },
       },
     ],
   });
@@ -307,14 +430,22 @@ export function isClassicV3DeploymentReady(
   return (
     manifest.chainId === expectedChainId &&
     manifest.classicV3Status === "ready" &&
+    validAddress(manifest.classicCtoAuthorityV1) &&
+    validAddress(manifest.classicRewardVaultFactoryV1) &&
+    validAddress(manifest.classicInitialBuyVestingWalletFactoryV1) &&
+    validAddress(manifest.classicLaunchPolicyV1) &&
     validAddress(manifest.ethCreatorFeeHookFactoryV3) &&
     validAddress(manifest.ethCreatorFeeHookV3) &&
-    validAddress(manifest.feeSplitVaultFactoryV1) &&
     validAddress(manifest.memeLaunchV2) &&
     validAddress(manifest.lockedPositionFeeForwarderFactory) &&
+    validHash(manifest.runtimeCodeHashes?.classicCtoAuthorityV1) &&
+    validHash(manifest.runtimeCodeHashes?.classicRewardVaultFactoryV1) &&
+    validHash(
+      manifest.runtimeCodeHashes?.classicInitialBuyVestingWalletFactoryV1,
+    ) &&
+    validHash(manifest.runtimeCodeHashes?.classicLaunchPolicyV1) &&
     validHash(manifest.runtimeCodeHashes?.ethCreatorFeeHookFactoryV3) &&
     validHash(manifest.runtimeCodeHashes?.ethCreatorFeeHookV3) &&
-    validHash(manifest.runtimeCodeHashes?.feeSplitVaultFactoryV1) &&
     validHash(manifest.runtimeCodeHashes?.memeLaunchV2) &&
     validHash(manifest.runtimeCodeHashes?.lockedPositionFeeForwarderFactory) &&
     typeof manifest.deploymentBlocks?.memeLaunchV2 === "number" &&
@@ -354,5 +485,13 @@ export function buildClassicV3LaunchDisclosure(
         ),
       }),
     ),
+    initialBuyCustody:
+      configuration.initialBuyCustody.mode === "unlocked"
+        ? "Available immediately"
+        : configuration.initialBuyCustody.mode === "fixed-lock"
+          ? `Locked for ${configuration.initialBuyCustody.durationDays} days`
+          : configuration.initialBuyCustody.mode === "linear"
+            ? `Vested linearly over ${configuration.initialBuyCustody.durationDays} days`
+            : `${configuration.initialBuyCustody.cliffDays}-day cliff, then vested through day ${configuration.initialBuyCustody.durationDays}`,
   };
 }

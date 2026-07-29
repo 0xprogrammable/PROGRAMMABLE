@@ -17,12 +17,22 @@ import { Deployers } from "@uniswap/v4-core/test/utils/Deployers.sol";
 import { PositionManager } from "@uniswap/v4-periphery/src/PositionManager.sol";
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
+import { ClassicCtoAuthorityV1 } from "../src/ClassicCtoAuthorityV1.sol";
+import {
+    ClassicInitialBuyCustodyConfig,
+    ClassicInitialBuyCustodyMode,
+    ClassicInitialBuyVestingWalletV1
+} from "../src/ClassicInitialBuyVestingWalletV1.sol";
+import { ClassicInitialBuyVestingWalletFactoryV1 } from "../src/ClassicInitialBuyVestingWalletFactoryV1.sol";
+import { ClassicLaunchPolicyV1 } from "../src/ClassicLaunchPolicyV1.sol";
+import { ClassicRewardVaultFactoryV1 } from "../src/ClassicRewardVaultFactoryV1.sol";
+import { ClassicRewardVaultV1 } from "../src/ClassicRewardVaultV1.sol";
 import { EthCreatorFeeHookFactoryV3 } from "../src/EthCreatorFeeHookFactoryV3.sol";
 import { EthCreatorFeeHookV3 } from "../src/EthCreatorFeeHookV3.sol";
 import { FeeSplitVaultFactoryV1 } from "../src/FeeSplitVaultFactoryV1.sol";
-import { FeeSplitVaultV1 } from "../src/FeeSplitVaultV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "../src/LockedPositionFeeForwarderFactoryV1.sol";
 import { MemeLaunchV2 } from "../src/MemeLaunchV2.sol";
+import { IClassicCtoVaultV1 } from "../src/interfaces/IClassicCtoVaultV1.sol";
 import { IClassicFeeHookV3 } from "../src/interfaces/IClassicFeeHookV3.sol";
 
 contract MemeLaunchV2Test is Deployers {
@@ -34,13 +44,17 @@ contract MemeLaunchV2Test is Deployers {
     UERC20Factory internal tokenFactory;
     EthCreatorFeeHookFactoryV3 internal hookFactory;
     EthCreatorFeeHookV3 internal feeHook;
-    FeeSplitVaultFactoryV1 internal vaultFactory;
+    ClassicCtoAuthorityV1 internal ctoAuthority;
+    ClassicRewardVaultFactoryV1 internal vaultFactory;
+    ClassicInitialBuyVestingWalletFactoryV1 internal initialBuyVestingWalletFactory;
+    ClassicLaunchPolicyV1 internal launchPolicy;
     LockedPositionFeeForwarderFactoryV1 internal positionForwarderFactory;
     MemeLaunchV2 internal launcher;
 
     address internal deployer;
     address internal externalBeneficiary;
     address internal treasury;
+    address internal ctoController;
 
     function setUp() public {
         deployCodeTo("PoolManager.sol:PoolManager", abi.encode(address(this)), CANONICAL_POOL_MANAGER);
@@ -54,12 +68,24 @@ contract MemeLaunchV2Test is Deployers {
 
         tokenFactory = new UERC20Factory();
         hookFactory = new EthCreatorFeeHookFactoryV3();
-        vaultFactory = new FeeSplitVaultFactoryV1();
+        ctoController = makeAddr("ctoController");
+        ctoAuthority = new ClassicCtoAuthorityV1(ctoController);
+        vaultFactory = new ClassicRewardVaultFactoryV1(ctoAuthority);
+        initialBuyVestingWalletFactory = new ClassicInitialBuyVestingWalletFactoryV1();
+        launchPolicy = new ClassicLaunchPolicyV1();
         positionForwarderFactory = new LockedPositionFeeForwarderFactoryV1(positionManager);
         treasury = makeAddr("programmableTreasury");
         feeHook = _deployHook();
-        launcher =
-            new MemeLaunchV2(manager, positionManager, tokenFactory, feeHook, vaultFactory, positionForwarderFactory);
+        launcher = new MemeLaunchV2(
+            manager,
+            positionManager,
+            tokenFactory,
+            feeHook,
+            vaultFactory,
+            initialBuyVestingWalletFactory,
+            launchPolicy,
+            positionForwarderFactory
+        );
 
         deployer = makeAddr("deployer");
         externalBeneficiary = makeAddr("externalBeneficiary");
@@ -70,7 +96,7 @@ contract MemeLaunchV2Test is Deployers {
         MemeLaunchV2.LaunchResult memory result =
             _launch(_parameters(bytes32("deployer-only"), _addresses1(deployer), _shares1(10_000)));
         PoolKey memory key = launcher.poolKey(result.token);
-        FeeSplitVaultV1 vault = FeeSplitVaultV1(payable(result.rewardVault));
+        ClassicRewardVaultV1 vault = ClassicRewardVaultV1(payable(result.rewardVault));
         PositionFeesForwarder forwarder = PositionFeesForwarder(payable(result.positionRecipient));
 
         assertEq(result.poolId, PoolId.unwrap(key.toId()));
@@ -98,11 +124,11 @@ contract MemeLaunchV2Test is Deployers {
     function test_externalBeneficiaryNeedsNoAcceptanceAndAloneCanClaim() public {
         MemeLaunchV2.LaunchResult memory result =
             _launch(_parameters(bytes32("external"), _addresses1(externalBeneficiary), _shares1(10_000)));
-        FeeSplitVaultV1 vault = FeeSplitVaultV1(payable(result.rewardVault));
+        ClassicRewardVaultV1 vault = ClassicRewardVaultV1(payable(result.rewardVault));
         uint256 accrued = _creatorAccrued(result.poolId);
 
         vm.prank(deployer);
-        vm.expectRevert(abi.encodeWithSelector(FeeSplitVaultV1.UnauthorizedBeneficiary.selector, deployer));
+        vm.expectRevert(abi.encodeWithSelector(ClassicRewardVaultV1.NoFeesToClaim.selector, deployer));
         vault.claim();
 
         uint256 beforeBalance = externalBeneficiary.balance;
@@ -111,7 +137,7 @@ contract MemeLaunchV2Test is Deployers {
         assertEq(externalBeneficiary.balance, beforeBalance + accrued);
     }
 
-    function test_splitLaunchStoresImmutableUniqueShares() public {
+    function test_splitLaunchStoresUniqueSharesAndDirectionalFees() public {
         address bob = makeAddr("bob");
         address carol = makeAddr("carol");
         MemeLaunchV2.LaunchParameters memory parameters =
@@ -119,7 +145,7 @@ contract MemeLaunchV2Test is Deployers {
         parameters.buySwapFeeBps = 300;
         parameters.sellSwapFeeBps = 900;
         MemeLaunchV2.LaunchResult memory result = _launch(parameters);
-        FeeSplitVaultV1 vault = FeeSplitVaultV1(payable(result.rewardVault));
+        ClassicRewardVaultV1 vault = ClassicRewardVaultV1(payable(result.rewardVault));
 
         assertEq(vault.shareBpsOf(externalBeneficiary), 2000);
         assertEq(vault.shareBpsOf(bob), 3000);
@@ -130,16 +156,16 @@ contract MemeLaunchV2Test is Deployers {
         assertEq(sell, 900);
     }
 
-    function test_supportsEightBeneficiariesAtLaunch() public {
-        address[] memory beneficiaries = new address[](8);
-        uint16[] memory shares = new uint16[](8);
-        for (uint256 index; index < 8; index++) {
+    function test_supportsFiveBeneficiariesAtLaunch() public {
+        address[] memory beneficiaries = new address[](5);
+        uint16[] memory shares = new uint16[](5);
+        for (uint256 index; index < 5; index++) {
             beneficiaries[index] = makeAddr(string.concat("beneficiary", vm.toString(index)));
-            shares[index] = index == 7 ? 3000 : 1000;
+            shares[index] = index == 4 ? 6000 : 1000;
         }
 
-        MemeLaunchV2.LaunchResult memory result = _launch(_parameters(bytes32("eight"), beneficiaries, shares));
-        assertEq(FeeSplitVaultV1(payable(result.rewardVault)).beneficiaryCount(), 8);
+        MemeLaunchV2.LaunchResult memory result = _launch(_parameters(bytes32("five"), beneficiaries, shares));
+        assertEq(ClassicRewardVaultV1(payable(result.rewardVault)).beneficiaryCount(), 5);
     }
 
     function test_rejectsInvalidRewardConfigurationsBeforeTokenCreation() public {
@@ -149,7 +175,9 @@ contract MemeLaunchV2Test is Deployers {
         (address predicted,) =
             launcher.predictTokenAddress(parameters.name, parameters.symbol, deployer, parameters.creatorSalt);
         vm.prank(deployer);
-        vm.expectRevert(abi.encodeWithSelector(MemeLaunchV2.DuplicateRewardBeneficiary.selector, externalBeneficiary));
+        vm.expectRevert(
+            abi.encodeWithSelector(ClassicLaunchPolicyV1.DuplicateRewardBeneficiary.selector, externalBeneficiary)
+        );
         launcher.launch{ value: MIN_INITIAL_BUY_WEI }(parameters);
         assertEq(predicted.code.length, 0);
 
@@ -157,8 +185,59 @@ contract MemeLaunchV2Test is Deployers {
             bytes32("bad-total"), _addresses2(externalBeneficiary, makeAddr("bob")), _shares2(4000, 5000)
         );
         vm.prank(deployer);
-        vm.expectRevert(abi.encodeWithSelector(MemeLaunchV2.InvalidRewardShareTotal.selector, 9000));
+        vm.expectRevert(abi.encodeWithSelector(ClassicLaunchPolicyV1.InvalidRewardShareTotal.selector, 9000));
         launcher.launch{ value: MIN_INITIAL_BUY_WEI }(parameters);
+
+        address[] memory sixBeneficiaries = new address[](6);
+        uint16[] memory sixShares = new uint16[](6);
+        for (uint256 index; index < 6; index++) {
+            sixBeneficiaries[index] = makeAddr(string.concat("tooMany", vm.toString(index)));
+            sixShares[index] = index == 5 ? 5000 : 1000;
+        }
+        parameters = _parameters(bytes32("too-many"), sixBeneficiaries, sixShares);
+        vm.prank(deployer);
+        vm.expectRevert(abi.encodeWithSelector(ClassicLaunchPolicyV1.InvalidBeneficiaryCount.selector, 6));
+        launcher.launch{ value: MIN_INITIAL_BUY_WEI }(parameters);
+    }
+
+    function test_changePayoutWalletKeepsUnclaimedEthWithPreviousWallet() public {
+        address replacement = makeAddr("replacement");
+        MemeLaunchV2.LaunchResult memory result =
+            _launch(_parameters(bytes32("payout-change"), _addresses1(externalBeneficiary), _shares1(10_000)));
+        ClassicRewardVaultV1 vault = ClassicRewardVaultV1(payable(result.rewardVault));
+        uint256 accruedBeforeChange = _creatorAccrued(result.poolId);
+        assertGt(accruedBeforeChange, 0);
+
+        vm.prank(externalBeneficiary);
+        vault.changePayoutWallet(0, replacement);
+
+        assertEq(vault.beneficiaryAt(0), replacement);
+        assertEq(vault.claimable(externalBeneficiary), accruedBeforeChange);
+        assertEq(vault.claimable(replacement), 0);
+
+        vm.prank(externalBeneficiary);
+        assertEq(vault.claim(), accruedBeforeChange);
+        assertEq(externalBeneficiary.balance, accruedBeforeChange);
+    }
+
+    function test_approvedCtoChangesOnlyFutureRewardConfiguration() public {
+        address bob = makeAddr("bob");
+        address ctoRecipient = makeAddr("ctoRecipient");
+        MemeLaunchV2.LaunchResult memory result =
+            _launch(_parameters(bytes32("cto"), _addresses2(externalBeneficiary, bob), _shares2(3000, 7000)));
+        ClassicRewardVaultV1 vault = ClassicRewardVaultV1(payable(result.rewardVault));
+        uint256 accruedBeforeCto = _creatorAccrued(result.poolId);
+        assertGt(accruedBeforeCto, 0);
+
+        vm.prank(ctoController);
+        ctoAuthority.executeCto(
+            IClassicCtoVaultV1(address(vault)), _addresses1(ctoRecipient), _shares1(10_000), keccak256("approved-cto")
+        );
+
+        assertEq(vault.beneficiaryCount(), 1);
+        assertEq(vault.beneficiaryAt(0), ctoRecipient);
+        assertEq(vault.claimable(externalBeneficiary) + vault.claimable(bob), accruedBeforeCto);
+        assertEq(vault.claimable(ctoRecipient), 0);
     }
 
     function test_rejectsInvalidDirectionalFeesAtomically() public {
@@ -182,6 +261,63 @@ contract MemeLaunchV2Test is Deployers {
         MemeLaunchV2.LaunchResult memory result = launcher.launch{ value: largerBuy }(parameters);
         assertEq(result.initialBuyNativeAmount, largerBuy);
         assertGt(result.initialBuyTokenAmount, 0);
+    }
+
+    function test_fixedLockRoutesTheEntireInitialBuyDirectlyIntoAuthenticatedCustody() public {
+        MemeLaunchV2.LaunchParameters memory parameters =
+            _parameters(bytes32("fixed-lock"), _addresses1(deployer), _shares1(10_000));
+        parameters.initialBuyCustody = ClassicInitialBuyCustodyConfig({
+            mode: ClassicInitialBuyCustodyMode.FixedLock, durationDays: 30, cliffDays: 0
+        });
+
+        MemeLaunchV2.LaunchResult memory result = _launch(parameters);
+        ClassicInitialBuyVestingWalletV1 custody = ClassicInitialBuyVestingWalletV1(payable(result.initialBuyCustody));
+
+        assertEq(launcher.initialBuyCustodyOf(result.token), address(custody));
+        assertEq(IERC20(result.token).balanceOf(deployer), 0);
+        assertEq(IERC20(result.token).balanceOf(address(custody)), result.initialBuyTokenAmount);
+        assertEq(custody.owner(), deployer);
+        assertEq(address(custody.initialBuyToken()), result.token);
+        assertEq(custody.start(), block.timestamp + 30 days);
+
+        vm.warp(block.timestamp + 30 days);
+        vm.prank(deployer);
+        custody.release(result.token);
+        assertEq(IERC20(result.token).balanceOf(deployer), result.initialBuyTokenAmount);
+    }
+
+    function test_cliffLinearVestingStartsAtZeroAndUsesTheLaunchWalletForever() public {
+        uint64 launchTimestamp = uint64(block.timestamp);
+        MemeLaunchV2.LaunchParameters memory parameters =
+            _parameters(bytes32("cliff-linear"), _addresses1(deployer), _shares1(10_000));
+        parameters.initialBuyCustody = ClassicInitialBuyCustodyConfig({
+            mode: ClassicInitialBuyCustodyMode.CliffLinearVesting, durationDays: 100, cliffDays: 20
+        });
+
+        MemeLaunchV2.LaunchResult memory result = _launch(parameters);
+        ClassicInitialBuyVestingWalletV1 custody = ClassicInitialBuyVestingWalletV1(payable(result.initialBuyCustody));
+        assertEq(custody.owner(), deployer);
+        assertEq(custody.start(), uint256(launchTimestamp) + 20 days);
+        assertEq(custody.end(), uint256(launchTimestamp) + 100 days);
+        assertEq(custody.releasable(result.token), 0);
+
+        vm.warp(uint256(launchTimestamp) + 60 days);
+        assertEq(custody.releasable(result.token), result.initialBuyTokenAmount / 2);
+    }
+
+    function test_invalidInitialBuyCustodyRevertsBeforeTokenCreation() public {
+        MemeLaunchV2.LaunchParameters memory parameters =
+            _parameters(bytes32("invalid-custody"), _addresses1(deployer), _shares1(10_000));
+        parameters.initialBuyCustody = ClassicInitialBuyCustodyConfig({
+            mode: ClassicInitialBuyCustodyMode.FixedLock, durationDays: 0, cliffDays: 0
+        });
+        (address predicted,) =
+            launcher.predictTokenAddress(parameters.name, parameters.symbol, deployer, parameters.creatorSalt);
+
+        vm.prank(deployer);
+        vm.expectRevert();
+        launcher.launch{ value: MIN_INITIAL_BUY_WEI }(parameters);
+        assertEq(predicted.code.length, 0);
     }
 
     function test_onlyPoolManagerCanCallInitialBuyUnlockCallback() public {
@@ -211,7 +347,7 @@ contract MemeLaunchV2Test is Deployers {
         PoolKey memory key = launcher.poolKey(token);
         bytes32 poolId = PoolId.unwrap(key.toId());
         bytes32 vaultSalt = keccak256(abi.encode("programmable.classic-reward-vault.v1", token, deployer));
-        FeeSplitVaultV1 predeployed = vaultFactory.deploy(
+        ClassicRewardVaultV1 predeployed = vaultFactory.deploy(
             vaultSalt,
             IClassicFeeHookV3(address(feeHook)),
             poolId,
@@ -228,9 +364,9 @@ contract MemeLaunchV2Test is Deployers {
             address(hookFactory),
             hookFactory.REQUIRED_HOOK_FLAGS(),
             type(EthCreatorFeeHookV3).creationCode,
-            abi.encode(manager, treasury, vaultFactory)
+            abi.encode(manager, treasury, FeeSplitVaultFactoryV1(address(vaultFactory)))
         );
-        deployed = hookFactory.deploy(salt, manager, treasury, vaultFactory);
+        deployed = hookFactory.deploy(salt, manager, treasury, FeeSplitVaultFactoryV1(address(vaultFactory)));
     }
 
     function _launch(MemeLaunchV2.LaunchParameters memory parameters)
@@ -247,19 +383,22 @@ contract MemeLaunchV2Test is Deployers {
         returns (MemeLaunchV2.LaunchParameters memory parameters)
     {
         parameters = MemeLaunchV2.LaunchParameters({
-            name: string.concat("Classic V3 ", _hexNibble(uint8(uint256(salt) & 0xf))),
+            name: string.concat("Classic ", _hexNibble(uint8(uint256(salt) & 0xf))),
             symbol: string.concat("CV", _hexNibble(uint8(uint256(salt) & 0xf))),
             buySwapFeeBps: 200,
             sellSwapFeeBps: 700,
             creatorSalt: salt,
             metadata: UERC20Metadata({
-                description: "Classic V3 lifecycle fixture",
+                description: "Classic lifecycle fixture",
                 website: "https://programmable.family",
-                image: "ipfs://classic-v3",
+                image: "ipfs://classic",
                 extraData: bytes("")
             }),
             rewardBeneficiaries: beneficiaries,
-            rewardSharesBps: shares
+            rewardSharesBps: shares,
+            initialBuyCustody: ClassicInitialBuyCustodyConfig({
+                mode: ClassicInitialBuyCustodyMode.Unlocked, durationDays: 0, cliffDays: 0
+            })
         });
     }
 

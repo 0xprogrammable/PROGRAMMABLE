@@ -19,10 +19,18 @@ import { IV4Quoter } from "@uniswap/v4-periphery/src/interfaces/IV4Quoter.sol";
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import { Test } from "forge-std/Test.sol";
 
+import { ClassicCtoAuthorityV1 } from "../src/ClassicCtoAuthorityV1.sol";
+import {
+    ClassicInitialBuyCustodyConfig,
+    ClassicInitialBuyCustodyMode
+} from "../src/ClassicInitialBuyVestingWalletV1.sol";
+import { ClassicInitialBuyVestingWalletFactoryV1 } from "../src/ClassicInitialBuyVestingWalletFactoryV1.sol";
+import { ClassicLaunchPolicyV1 } from "../src/ClassicLaunchPolicyV1.sol";
+import { ClassicRewardVaultFactoryV1 } from "../src/ClassicRewardVaultFactoryV1.sol";
+import { ClassicRewardVaultV1 } from "../src/ClassicRewardVaultV1.sol";
 import { EthCreatorFeeHookFactoryV3 } from "../src/EthCreatorFeeHookFactoryV3.sol";
 import { EthCreatorFeeHookV3 } from "../src/EthCreatorFeeHookV3.sol";
 import { FeeSplitVaultFactoryV1 } from "../src/FeeSplitVaultFactoryV1.sol";
-import { FeeSplitVaultV1 } from "../src/FeeSplitVaultV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "../src/LockedPositionFeeForwarderFactoryV1.sol";
 import { MemeLaunchV2 } from "../src/MemeLaunchV2.sol";
 
@@ -95,21 +103,27 @@ contract ClassicV3MainnetForkTest is Test {
         treasury = makeAddr("forkTreasury");
         _assertOfficialDependencyHashes();
 
-        FeeSplitVaultFactoryV1 vaultFactory = new FeeSplitVaultFactoryV1();
+        ClassicCtoAuthorityV1 ctoAuthority = new ClassicCtoAuthorityV1(makeAddr("forkCtoAuthority"));
+        ClassicRewardVaultFactoryV1 vaultFactory = new ClassicRewardVaultFactoryV1(ctoAuthority);
+        ClassicInitialBuyVestingWalletFactoryV1 initialBuyVestingWalletFactory =
+            new ClassicInitialBuyVestingWalletFactoryV1();
+        ClassicLaunchPolicyV1 launchPolicy = new ClassicLaunchPolicyV1();
         EthCreatorFeeHookFactoryV3 hookFactory = new EthCreatorFeeHookFactoryV3();
         (, bytes32 hookSalt) = HookMiner.find(
             address(hookFactory),
             hookFactory.REQUIRED_HOOK_FLAGS(),
             type(EthCreatorFeeHookV3).creationCode,
-            abi.encode(poolManager, treasury, vaultFactory)
+            abi.encode(poolManager, treasury, FeeSplitVaultFactoryV1(address(vaultFactory)))
         );
-        feeHook = hookFactory.deploy(hookSalt, poolManager, treasury, vaultFactory);
+        feeHook = hookFactory.deploy(hookSalt, poolManager, treasury, FeeSplitVaultFactoryV1(address(vaultFactory)));
         launcher = new MemeLaunchV2(
             poolManager,
             positionManager,
             UERC20Factory(UERC20_FACTORY),
             feeHook,
             vaultFactory,
+            initialBuyVestingWalletFactory,
+            launchPolicy,
             LockedPositionFeeForwarderFactoryV1(POSITION_FORWARDER_FACTORY)
         );
 
@@ -164,9 +178,9 @@ contract ClassicV3MainnetForkTest is Test {
         );
         assertEq(poolManager.balanceOf(address(feeHook), Currency.wrap(result.token).toId()), 0);
 
-        FeeSplitVaultV1 vault = FeeSplitVaultV1(payable(result.rewardVault));
+        ClassicRewardVaultV1 vault = ClassicRewardVaultV1(payable(result.rewardVault));
         vm.prank(deployer);
-        vm.expectRevert(abi.encodeWithSelector(FeeSplitVaultV1.UnauthorizedBeneficiary.selector, deployer));
+        vm.expectRevert(abi.encodeWithSelector(ClassicRewardVaultV1.NoFeesToClaim.selector, deployer));
         vault.claim();
         vm.prank(beneficiaryA);
         uint256 claimA = vault.claim();
@@ -198,19 +212,22 @@ contract ClassicV3MainnetForkTest is Test {
         shares[0] = 2500;
         shares[1] = 7500;
         MemeLaunchV2.LaunchParameters memory parameters = MemeLaunchV2.LaunchParameters({
-            name: "Programmable Classic V3 Fork",
-            symbol: "PCV3F",
+            name: "Programmable Classic Fork",
+            symbol: "PCF",
             buySwapFeeBps: 200,
             sellSwapFeeBps: 800,
-            creatorSalt: keccak256("programmable-classic-v3-mainnet-fork"),
+            creatorSalt: keccak256("programmable-classic-mainnet-fork"),
             metadata: UERC20Metadata({
-                description: "Pinned Classic V3 mainnet fork fixture",
+                description: "Pinned Classic mainnet fork fixture",
                 website: "https://programmable.family",
                 image: "",
                 extraData: ""
             }),
             rewardBeneficiaries: beneficiaries,
-            rewardSharesBps: shares
+            rewardSharesBps: shares,
+            initialBuyCustody: ClassicInitialBuyCustodyConfig({
+                mode: ClassicInitialBuyCustodyMode.Unlocked, durationDays: 0, cliffDays: 0
+            })
         });
         vm.prank(deployer);
         result = launcher.launch{ value: MIN_INITIAL_BUY_WEI }(parameters);

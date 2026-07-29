@@ -5,48 +5,73 @@
   "status": "not-deployed",
   "chainId": 11155111,
   "releaseCommit": null,
-  "sourceCommitment": "0x00c428c40072ee776043903f292fabc66321947d7e1908958b4221235cd7d8c8",
+  "sourceCommitment": "0x19b0bc50cdffb1872a581c4c410a4ebf1acfe4e7ac8ddb334d1696218f3b2b0c",
   "startingNonce": null,
   "hookSalt": null,
   "candidatePlan": {
     "status": "simulation-only-refresh-before-signing",
-    "observedAtBlock": 11368253,
+    "observedAtBlock": 11375415,
     "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
     "startingNonce": 39,
-    "transactionCount": 4,
-    "feeSplitVaultFactory": "0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB",
-    "hookFactory": "0xB7Eb3Ae60EE2f7F2F89DA8D372529919C700e76c",
-    "feeHook": "0xe339d8b8f496cd346517a3C02E5156DFc09060CC",
-    "launcher": "0x5b36779d6B6F571A518725974Fde243a58afFEa2",
-    "hookSalt": "0x0000000000000000000000000000000000000000000000000000000000002914",
-    "estimatedGas": "16955321"
+    "transactionCount": 7,
+    "ctoAuthority": "0x7AEf9a4038FAbb1d477BbFD3A106F81b93EB5aeB",
+    "rewardVaultFactory": "0xB7Eb3Ae60EE2f7F2F89DA8D372529919C700e76c",
+    "initialBuyVestingWalletFactory": "0xF41568B2b4681bDbA4f5e03345597a526973F65c",
+    "launchPolicy": "0x5b36779d6B6F571A518725974Fde243a58afFEa2",
+    "hookFactory": "0xBdAbD708Ff728ca871739d05393EE60F4E63955E",
+    "feeHook": "0xE36D165CD527A282f472aA9049618341129d20Cc",
+    "launcher": "0xDAa2EA44f4cb77781714EC5Aa8144d054272f0e8",
+    "hookSalt": "0x0000000000000000000000000000000000000000000000000000000000001db9",
+    "estimatedGas": "21737178"
   },
   "addresses": {
     "deployer": null,
     "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-    "feeSplitVaultFactory": null,
+    "ctoAuthority": null,
+    "rewardVaultFactory": null,
+    "initialBuyVestingWalletFactory": null,
+    "launchPolicy": null,
     "hookFactory": null,
     "feeHook": null,
     "launcher": null,
     "positionForwarderFactory": "0xaE3C324B742a7576863A546120c4280b7c9E8448"
   },
   "transactions": {
-    "feeSplitVaultFactory": null,
+    "ctoAuthority": null,
+    "rewardVaultFactory": null,
+    "initialBuyVestingWalletFactory": null,
+    "launchPolicy": null,
     "hookFactory": null,
     "feeHook": null,
     "launcher": null
   },
   "runtimeCodeHashes": {
-    "feeSplitVaultFactory": null,
+    "ctoAuthority": null,
+    "rewardVaultFactory": null,
+    "initialBuyVestingWalletFactory": null,
+    "launchPolicy": null,
     "hookFactory": null,
     "feeHook": null,
     "launcher": null,
     "positionForwarderFactory": "0x49e040806b0664b2fa4f41c5abc11241cdb8f847c538c13d6874c32804b74ebc"
   },
   "artifactRuntime": {
-    "feeSplitVaultFactory": {
-      "bytes": 6994,
-      "codeHash": "0x6e0fed3c3598d32458b9c7ce04a97ae3e0cc847e4022e3dec5a14cd1f29c88fc"
+    "ctoAuthority": {
+      "bytes": 1597,
+      "codeHash": "0x7beafb575fba4ffce22da7b3f927df8248eebc6c33e77cb43ed967a91a36984c"
+    },
+    "rewardVaultFactory": {
+      "bytes": 11474,
+      "codeHash": "0x84b44e2f7b8c315b1f802012d8a1f8b1a4281478a2781e32d1cfbe1cc5469916",
+      "note": "Artifact runtime before constructor immutable references are patched"
+    },
+    "initialBuyVestingWalletFactory": {
+      "bytes": 8715,
+      "codeHash": "0x13b7578a8abd0bc0ba724b5815d9bd0aff0d07c2677c00d2577004e8c1f6d5f4"
+    },
+    "launchPolicy": {
+      "bytes": 2100,
+      "codeHash": "0xb6b31b6cf326784774e13f6d60f9b251dde118469a506fa3b1c124c9f11b49be"
     },
     "hookFactory": {
       "bytes": 15702,
@@ -58,8 +83,8 @@
       "note": "Artifact runtime before constructor immutable references are patched"
     },
     "launcherTemplate": {
-      "bytes": 22879,
-      "codeHash": "0x60016675f2ad06642070c452ad7bd6a5b5a8f8afc148600c0273079b4101b7fb",
+      "bytes": 22933,
+      "codeHash": "0xde9d67fe0a5cae202df0dff2a4fe8a2073ab5c240205e849af1e0cfcc5e7adb6",
       "note": "Artifact runtime before constructor immutable references are patched"
     }
   },
@@ -99,7 +124,10 @@
   },
   "sourceVerification": {
     "status": "not-submitted",
-    "feeSplitVaultFactory": null,
+    "ctoAuthority": null,
+    "rewardVaultFactory": null,
+    "initialBuyVestingWalletFactory": null,
+    "launchPolicy": null,
     "hookFactory": null,
     "feeHook": null,
     "launcher": null

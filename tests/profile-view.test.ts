@@ -57,6 +57,13 @@ const claim = {
   href: `/token/${secondAddress}`,
 } satisfies ProfileClaim;
 
+const classicAllocation = {
+  allocationIndex: 0,
+  beneficiary: firstAddress,
+  payoutAddress: firstAddress,
+  shareBps: 10_000,
+};
+
 const classicReward = {
   tokenAddress: secondAddress,
   tokenName: "Second",
@@ -75,13 +82,8 @@ const classicReward = {
   buySwapFeeBps: 100,
   sellSwapFeeBps: 200,
   platformFeeBps: 10,
-  beneficiaries: [
-    {
-      beneficiary: firstAddress,
-      payoutAddress: firstAddress,
-      shareBps: 10_000,
-    },
-  ],
+  ownedAllocations: [classicAllocation],
+  beneficiaries: [classicAllocation],
   launchTransactionHash: `0x${"55".repeat(32)}`,
 } satisfies ClassicV3Reward;
 const secondClassicReward = {
@@ -228,6 +230,20 @@ describe("profile reward grouping", () => {
       ...secondClassicReward,
       beneficiary: secondAddress,
       payoutAddress: secondAddress,
+      ownedAllocations: [
+        {
+          ...classicAllocation,
+          beneficiary: secondAddress,
+          payoutAddress: secondAddress,
+        },
+      ],
+      beneficiaries: [
+        {
+          ...classicAllocation,
+          beneficiary: secondAddress,
+          payoutAddress: secondAddress,
+        },
+      ],
     } satisfies ClassicV3Reward;
     const portfolio = buildProfilePortfolio(
       [],
