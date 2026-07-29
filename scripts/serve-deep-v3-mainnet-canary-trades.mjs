@@ -56,6 +56,8 @@ const PORT = Number(process.env.DEEP_V3_CANARY_TRADE_PORT ?? 4185);
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 4_096;
 const MAX_RPC_BLOCK_LAG = 2;
+const RPC_MIN_INTERVAL_MS = 250;
+const RPC_RETRY_DELAYS_MS = Object.freeze([750, 1_500, 3_000]);
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -69,8 +71,29 @@ const rpcUrls = [
 ].filter(Boolean);
 const interactive = process.argv.includes("--write");
 let preparedLock = null;
+const rpcQueues = new Map();
+const rpcStartedAt = new Map();
 
-async function rpc(url, method, params = []) {
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function rpcLabel(url) {
+  return rpcUrls.indexOf(url) === 0 ? "RPC 1" : "RPC 2";
+}
+
+function retryableRpcError(error) {
+  return (
+    error?.status === 429 ||
+    error?.rpcCode === 429 ||
+    error?.rpcCode === -32005 ||
+    /rate limit|too many requests|capacity/i.test(
+      error?.message ?? "",
+    )
+  );
+}
+
+async function rpcRequest(url, method, params) {
   const response = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -78,13 +101,56 @@ async function rpc(url, method, params = []) {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) {
-    throw new Error(`${method} returned HTTP ${response.status}`);
+    const error = new Error(
+      `${method} returned HTTP ${response.status}`,
+    );
+    error.status = response.status;
+    throw error;
   }
   const payload = await response.json();
   if (payload?.error) {
-    throw new Error(`${method} failed: ${payload.error.message}`);
+    const error = new Error(
+      `${method} failed: ${payload.error.message}`,
+    );
+    error.rpcCode = payload.error.code;
+    throw error;
   }
   return payload?.result;
+}
+
+async function rpc(url, method, params = []) {
+  const previous = rpcQueues.get(url) ?? Promise.resolve();
+  const current = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const startedAt = rpcStartedAt.get(url) ?? 0;
+      const spacing =
+        RPC_MIN_INTERVAL_MS - (Date.now() - startedAt);
+      if (spacing > 0) await wait(spacing);
+      for (
+        let attempt = 0;
+        attempt <= RPC_RETRY_DELAYS_MS.length;
+        attempt += 1
+      ) {
+        rpcStartedAt.set(url, Date.now());
+        try {
+          return await rpcRequest(url, method, params);
+        } catch (error) {
+          if (
+            !retryableRpcError(error) ||
+            attempt === RPC_RETRY_DELAYS_MS.length
+          ) {
+            throw new Error(
+              `${rpcLabel(url)} ${error?.message ?? String(error)}`,
+            );
+          }
+          await wait(RPC_RETRY_DELAYS_MS[attempt]);
+        }
+      }
+      throw new Error(`${rpcLabel(url)} ${method} retry failed`);
+    });
+  rpcQueues.set(url, current.catch(() => undefined));
+  return current;
 }
 
 async function optionalRpc(url, method, params = []) {

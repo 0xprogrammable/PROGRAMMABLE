@@ -996,6 +996,11 @@ test("operator entrypoints are localhost-only, explicit, and V3-only", () => {
     files[2].includes("buildDeepV3DeploymentFeePolicy"),
   );
   assert.ok(files[2].includes('rpc(url, "eth_gasPrice")'));
+  assert.ok(files[2].includes("RPC_MIN_INTERVAL_MS"));
+  assert.ok(files[2].includes("RPC_RETRY_DELAYS_MS"));
+  assert.ok(files[2].includes("rpcQueues"));
+  assert.ok(files[2].includes("RPC 1"));
+  assert.ok(files[2].includes("error?.status === 429"));
   assert.ok(
     files[2].includes(
       'optionalRpc(url, "eth_maxPriorityFeePerGas")',
