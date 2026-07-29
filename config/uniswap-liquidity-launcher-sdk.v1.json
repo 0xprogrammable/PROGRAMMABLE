@@ -1,0 +1,29 @@
+{
+  "packageName": "@uniswap/liquidity-launcher-sdk",
+  "packageVersion": "1.0.1",
+  "packageRepository": "https://github.com/Uniswap/sdks.git",
+  "packageGitHead": "57f126ee4ae5d435938569ad22c489e4a0262ca2",
+  "packageResolved": "https://registry.npmjs.org/@uniswap/liquidity-launcher-sdk/-/liquidity-launcher-sdk-1.0.1.tgz",
+  "packageIntegrity": "sha512-XTHoTSHuqswXaBBnWiNNTnE/73z+TtIpqXgwJfmPNJUh8NUMTbhrXqaJbkVsCyNeJPsXIS/JiLHHDdAYh8jnUw==",
+  "lockRecipientUpstreamCommit": "e4660afe4f820f4a39181c7ea1f9bce6c423499f",
+  "mainnet": {
+    "liquidityLauncher": "0x00004c4ccc709Ef590F7C81102C0689F0263D4e9",
+    "tokenFactory": "0x000000e200088D55C39a11F609E5F667729ad49b",
+    "tokenFactoryKind": "uerc20",
+    "positionManager": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+    "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+  },
+  "lockRecipientBytecodeHashes": {
+    "timelock": "0x86ae215e4056c6fda23e5572f4b20f3f22ca2f6922133c95ad0ce0e8bced7555",
+    "feesForwarder": "0xeae154385d89ee8293b868cadce468df4b64c33995c1340284d1b7dd82267013",
+    "buybackBurn": "0x591c41e1cb988ea96f8bd7ea36b649dd12536119e9c8a706b5d062ddd8c0fc1f"
+  },
+  "poolIdFixture": {
+    "currency0": "0x0000000000000000000000000000000000000000",
+    "currency1": "0x1111111111111111111111111111111111111111",
+    "fee": 0,
+    "tickSpacing": 200,
+    "hooks": "0x2222222222222222222222222222222222222222",
+    "poolId": "0xba7b894ad5dd5fb168dd16ed4258b722b9ca5d0dfdd6d6806ac9c419c69bb00f"
+  }
+}

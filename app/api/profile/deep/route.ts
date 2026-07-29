@@ -26,11 +26,17 @@ import {
 } from "@/lib/deep-v1";
 import {
   getVerifiedDeepRelease,
+  getVerifiedDeepV2Release,
   type DeepLaunchModelRelease,
   type LaunchModelReleaseManifest,
 } from "@/lib/launch-model-gating";
+import { configuredMainnetDeepV3Manifest } from "@/lib/deep-v3-release";
+import { requireIndependentDeepV3RpcUrls } from "@/lib/deep-v3-runtime-binding";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { getOperationalOnchainDeployment } from "@/lib/onchain/config";
+import {
+  resolveVerifiedDeepV3ReadRelease,
+} from "@/lib/onchain/deep-v3-read-model";
 import { readDurableExploreModel } from "@/lib/onchain/durable-model";
 import { sanitizeImageUrl } from "@/lib/onchain/metadata";
 import {
@@ -48,6 +54,17 @@ import {
   validateDeepCandidates,
 } from "@/lib/profile/deep-profile-server";
 import { encodeDeepRewardAction } from "@/lib/profile/deep-rewards";
+import {
+  readDeepV3CreatorProfile,
+} from "@/lib/profile/deep-v3-api.server";
+import type { DeepV3ProfileClient } from "@/lib/profile/deep-v3-profile.server";
+import {
+  deepV2IndexedTokensForAccount,
+  prepareIndexedDeepV2RewardAction,
+  readDeepV2ProfileRewards,
+} from "@/lib/profile/deep-v2-api.server";
+import type { DeepV2ProfileClient } from "@/lib/profile/deep-v2-profile.server";
+import { safeServerErrorSummary } from "@/lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -102,6 +119,38 @@ function createClients() {
       transport: http(rpcUrl, { retryCount: 1, timeout: 12_000 }),
     }),
   );
+}
+
+function asDeepV2Clients(
+  clients: readonly PublicClient[],
+): readonly DeepV2ProfileClient[] {
+  return clients as unknown as readonly DeepV2ProfileClient[];
+}
+
+function createDeepV3Clients(): readonly DeepV3ProfileClient[] {
+  const endpoints = requireIndependentDeepV3RpcUrls(
+    process.env.ETHEREUM_RPC_URL,
+    process.env.ETHEREUM_RPC_URL_B,
+  );
+  return endpoints.map((endpoint) =>
+    createPublicClient({
+      chain: mainnet,
+      batch: { multicall: true },
+      transport: http(endpoint, { retryCount: 1, timeout: 12_000 }),
+    }),
+  ) as unknown as readonly DeepV3ProfileClient[];
+}
+
+async function readVerifiedDurableModel() {
+  const operational = getOperationalOnchainDeployment(environment);
+  if (operational.status !== "ready") {
+    throw new Error("The verified launch registry is unavailable");
+  }
+  const durable = await readDurableExploreModel(operational);
+  if (durable.status !== "ready") {
+    throw new Error("The verified launch registry is unavailable");
+  }
+  return durable.envelope.payload.model;
 }
 
 async function assertCodeHash(
@@ -728,6 +777,7 @@ async function hydrateReward(
 
   return {
     model: "deep" as const,
+    deepReleaseVersion: "deep-full-range-v1" as const,
     tokenAddress,
     tokenName,
     tokenSymbol,
@@ -774,7 +824,7 @@ async function hydrateReward(
   };
 }
 
-async function readRewards(account: Address) {
+async function readV1Rewards(account: Address) {
   const verifiedRelease = release();
   if (!verifiedRelease) {
     return {
@@ -847,7 +897,10 @@ async function readRewards(account: Address) {
   };
 }
 
-async function readLaunchByTransaction(account: Address, transactionHash: Hex) {
+async function readV1LaunchByTransaction(
+  account: Address,
+  transactionHash: Hex,
+) {
   const verifiedRelease = release();
   if (!verifiedRelease) {
     return { status: "not-deployed" as const, launch: null };
@@ -901,8 +954,108 @@ async function readLaunchByTransaction(account: Address, transactionHash: Hex) {
       name: tokenDetails.name,
       symbol: tokenDetails.symbol,
       launchTransactionHash: launch.transactionHash,
+      deepReleaseVersion: "deep-full-range-v1" as const,
     },
   };
+}
+
+async function readRewards(account: Address) {
+  const v1 = await readV1Rewards(account);
+  const verifiedV2 = getVerifiedDeepV2Release(deployment, chain.id);
+  let v2Rewards: Awaited<
+    ReturnType<typeof readDeepV2ProfileRewards>
+  > = [];
+  if (verifiedV2) {
+    const model = await readVerifiedDurableModel();
+    const clients = createClients();
+    v2Rewards = await readDeepV2ProfileRewards({
+      manifest: deployment,
+      chainId: chain.id,
+      account,
+      model,
+      clients: asDeepV2Clients(clients),
+    });
+  }
+  if (v1.status === "not-deployed" && v2Rewards.length === 0) {
+    return v1;
+  }
+  return {
+    status: "ready" as const,
+    account,
+    chainId: chain.id,
+    rewards: [
+      ...(v1.status === "ready" ? v1.rewards : []),
+      ...v2Rewards,
+    ],
+  };
+}
+
+async function readV3CreatorTokens(account: Address) {
+  const release =
+    environment === "production"
+      ? resolveVerifiedDeepV3ReadRelease(
+          configuredMainnetDeepV3Manifest,
+          1,
+        )
+      : null;
+  if (!release) {
+    return {
+      status: "not-deployed" as const,
+      account,
+      chainId: 1 as const,
+      tokens: [],
+    };
+  }
+  const model = await readVerifiedDurableModel();
+  return readDeepV3CreatorProfile({
+    manifest: configuredMainnetDeepV3Manifest,
+    chainId: 1,
+    account,
+    model,
+    clients: createDeepV3Clients(),
+  });
+}
+
+async function readLaunchByTransaction(
+  account: Address,
+  transactionHash: Hex,
+) {
+  if (getVerifiedDeepV2Release(deployment, chain.id)) {
+    const model = await readVerifiedDurableModel();
+    const token = deepV2IndexedTokensForAccount(
+      model,
+      chain.id,
+      account,
+    ).find(
+      (candidate) =>
+        candidate.deepV2Provenance?.transactionHash.toLowerCase() ===
+        transactionHash.toLowerCase(),
+    );
+    if (token) {
+      const clients = createClients();
+      await readDeepV2ProfileRewards({
+        manifest: deployment,
+        chainId: chain.id,
+        account,
+        model: {
+          ...model,
+          tokens: [token],
+        },
+        clients: asDeepV2Clients(clients),
+      });
+      return {
+        status: "ready" as const,
+        launch: {
+          tokenAddress: token.tokenAddress,
+          name: token.name,
+          symbol: token.symbol,
+          launchTransactionHash: transactionHash,
+          deepReleaseVersion: "deep-full-range-v2" as const,
+        },
+      };
+    }
+  }
+  return readV1LaunchByTransaction(account, transactionHash);
 }
 
 export async function GET(request: NextRequest) {
@@ -912,6 +1065,24 @@ export async function GET(request: NextRequest) {
   }
   try {
     const launch = request.nextUrl.searchParams.get("launch")?.trim();
+    const requestedRelease = request.nextUrl.searchParams
+      .get("deepReleaseVersion")
+      ?.trim();
+    if (
+      requestedRelease !== undefined &&
+      requestedRelease !== "deep-full-range-v3"
+    ) {
+      return json({ error: "Unsupported Deep release version" }, 400);
+    }
+    if (requestedRelease === "deep-full-range-v3") {
+      if (launch) {
+        return json(
+          { error: "Choose either a profile or launch lookup" },
+          400,
+        );
+      }
+      return json(await readV3CreatorTokens(getAddress(input)));
+    }
     if (launch) {
       if (!isHex(launch, { strict: true }) || launch.length !== 66) {
         return json({ error: "Enter a valid launch transaction hash" }, 400);
@@ -922,8 +1093,14 @@ export async function GET(request: NextRequest) {
     }
     return json(await readRewards(getAddress(input)));
   } catch (error) {
-    console.error("Deep profile read failed", error);
-    return json({ error: "Deep rewards are temporarily unavailable" }, 503);
+    console.error(
+      "Deep profile read failed",
+      safeServerErrorSummary(error),
+    );
+    return json(
+      { error: "Deep profile data is temporarily unavailable" },
+      503,
+    );
   }
 }
 
@@ -953,6 +1130,8 @@ export async function POST(request: NextRequest) {
     !isAddress(input.account) ||
     typeof input.vaultAddress !== "string" ||
     !isAddress(input.vaultAddress) ||
+    (input.deepReleaseVersion !== "deep-full-range-v1" &&
+      input.deepReleaseVersion !== "deep-full-range-v2") ||
     input.chainId !== chain.id
   ) {
     return json({ error: "The reward request is invalid" }, 400);
@@ -971,6 +1150,50 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (input.deepReleaseVersion === "deep-full-range-v2") {
+      if (!getVerifiedDeepV2Release(deployment, chain.id)) {
+        return json(
+          { error: "Deep V2 is not enabled by a verified release" },
+          409,
+        );
+      }
+      const model = await readVerifiedDurableModel();
+      const clients = createClients();
+      try {
+        return json(
+          await prepareIndexedDeepV2RewardAction({
+            manifest: deployment,
+            chainId: chain.id,
+            account,
+            model,
+            clients: asDeepV2Clients(clients),
+            vaultAddress,
+            action: input.action,
+            newPayoutAddress,
+          }),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Deep V2 action failed";
+        if (
+          message.includes("not an indexed Deep V2 reward") ||
+          message.includes("does not belong")
+        ) {
+          return json(
+            { error: "Only this vault's creator can continue" },
+            403,
+          );
+        }
+        if (
+          message.includes("no Deep V2 rewards") ||
+          message.includes("unchanged")
+        ) {
+          return json({ error: message }, 409);
+        }
+        throw error;
+      }
+    }
+
     const verifiedRelease = release();
     if (!verifiedRelease) {
       return json({ error: "Deep is not deployed yet" }, 409);
@@ -985,6 +1208,12 @@ export async function POST(request: NextRequest) {
     const candidate = candidates.find(
       (item) => item.vaultAddress.toLowerCase() === vaultAddress.toLowerCase(),
     );
+    if (!candidate) {
+      return json(
+        { error: "Only this vault's immutable beneficiary can continue" },
+        403,
+      );
+    }
     const shares = await Promise.all(
       clients.map((client) =>
         client.readContract({
@@ -1094,6 +1323,7 @@ export async function POST(request: NextRequest) {
     return json({
       status: "ready",
       action: input.action,
+      deepReleaseVersion: "deep-full-range-v1",
       account,
       vaultAddress,
       transaction: {

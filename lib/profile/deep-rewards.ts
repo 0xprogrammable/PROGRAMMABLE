@@ -16,6 +16,7 @@ import {
   DEEP_MINIMUM_NATIVE_LIQUIDITY_FOR_COMPLETION_WEI,
 } from "../deep-v1";
 import {
+  isHistoricalDeepV1ManifestEligible,
   isFutureLaunchModelManifestEligible,
   type LaunchModelReleaseManifest,
 } from "../launch-model-gating";
@@ -32,6 +33,7 @@ export type DeepBeneficiary = {
 
 export type DeepReward = {
   model: "deep";
+  deepReleaseVersion: "deep-full-range-v1" | "deep-full-range-v2";
   tokenAddress: Address;
   tokenName: string;
   tokenSymbol: string;
@@ -110,11 +112,16 @@ export function isConfiguredDeepReleaseReady(expectedChainId?: number) {
   const chainId = environment === "rehearsal" ? 11_155_111 : 1;
   return (
     (expectedChainId === undefined || expectedChainId === chainId) &&
-    isFutureLaunchModelManifestEligible(
+    (isHistoricalDeepV1ManifestEligible(
       "deep",
       appDeployments[environment] as unknown as LaunchModelReleaseManifest,
       chainId,
-    )
+    ) ||
+      isFutureLaunchModelManifestEligible(
+        "deep",
+        appDeployments[environment] as unknown as LaunchModelReleaseManifest,
+        chainId,
+      ))
   );
 }
 
@@ -231,6 +238,13 @@ export function parseDeepProfileRewards(
 
   const rewards = record.rewards.map((entry, rewardIndex) => {
     const reward = asRecord(entry, `Deep reward ${rewardIndex + 1}`);
+    const deepReleaseVersion = reward.deepReleaseVersion;
+    if (
+      deepReleaseVersion !== "deep-full-range-v1" &&
+      deepReleaseVersion !== "deep-full-range-v2"
+    ) {
+      throw new Error("Invalid Deep reward release version");
+    }
     const beneficiary = address(reward.beneficiary, "reward beneficiary");
     if (beneficiary.toLowerCase() !== account.toLowerCase()) {
       throw new Error("Deep reward belongs to another beneficiary");
@@ -249,9 +263,12 @@ export function parseDeepProfileRewards(
     const unique = new Set(
       beneficiaries.map((item) => item.beneficiary.toLowerCase()),
     );
+    const validBeneficiaryCount =
+      deepReleaseVersion === "deep-full-range-v2"
+        ? beneficiaries.length === 1
+        : beneficiaries.length >= 1 && beneficiaries.length <= 8;
     if (
-      beneficiaries.length < 1 ||
-      beneficiaries.length > 8 ||
+      !validBeneficiaryCount ||
       unique.size !== beneficiaries.length ||
       beneficiaries.reduce((sum, item) => sum + item.shareBps, 0) !== 10_000
     ) {
@@ -311,7 +328,8 @@ export function parseDeepProfileRewards(
       typeof automationAction !== "number" ||
       !Number.isInteger(automationAction) ||
       automationAction < 0 ||
-      automationAction > 3
+      automationAction >
+        (deepReleaseVersion === "deep-full-range-v2" ? 2 : 3)
     ) {
       throw new Error("Invalid Deep automation action");
     }
@@ -324,6 +342,7 @@ export function parseDeepProfileRewards(
 
     return {
       model: "deep",
+      deepReleaseVersion,
       tokenAddress: address(reward.tokenAddress, "reward token"),
       tokenName: tokenText(reward.tokenName, "reward token name"),
       tokenSymbol: tokenText(reward.tokenSymbol, "reward token symbol"),
@@ -442,6 +461,7 @@ type DeepAction = "claim" | "update-payout";
 
 export type PreparedDeepRewardAction = {
   action: DeepAction;
+  deepReleaseVersion: "deep-full-range-v1" | "deep-full-range-v2";
   account: Address;
   vaultAddress: Address;
   transaction: Extract<
@@ -454,6 +474,7 @@ export function validatePreparedDeepRewardAction(
   value: unknown,
   expected: {
     action: DeepAction;
+    deepReleaseVersion: "deep-full-range-v1" | "deep-full-range-v2";
     account: string;
     vaultAddress: string;
     newPayoutAddress?: string;
@@ -461,7 +482,11 @@ export function validatePreparedDeepRewardAction(
   },
 ): PreparedDeepRewardAction {
   const response = asRecord(value, "Deep reward action");
-  if (response.status !== "ready" || response.action !== expected.action) {
+  if (
+    response.status !== "ready" ||
+    response.action !== expected.action ||
+    response.deepReleaseVersion !== expected.deepReleaseVersion
+  ) {
     throw new Error("Deep reward action is not ready");
   }
   const account = address(response.account, "reward action account");
@@ -506,12 +531,19 @@ export function validatePreparedDeepRewardAction(
   ) {
     throw new Error("Deep payout update does not match the new address");
   }
-  return { action: expected.action, account, vaultAddress, transaction };
+  return {
+    action: expected.action,
+    deepReleaseVersion: expected.deepReleaseVersion,
+    account,
+    vaultAddress,
+    transaction,
+  };
 }
 
 export async function prepareDeepRewardAction(
   input: {
     action: DeepAction;
+    deepReleaseVersion: "deep-full-range-v1" | "deep-full-range-v2";
     account: string;
     vaultAddress: string;
     newPayoutAddress?: string;
@@ -530,6 +562,7 @@ export async function prepareDeepRewardAction(
     },
     body: JSON.stringify({
       action: input.action,
+      deepReleaseVersion: input.deepReleaseVersion,
       account: input.account,
       vaultAddress: input.vaultAddress,
       ...(input.action === "update-payout"

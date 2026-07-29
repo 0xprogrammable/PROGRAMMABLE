@@ -22,6 +22,11 @@ import {
   resolveTradeDeployment,
   type ClassicTradeRuntimeClient,
 } from "../../../../lib/trade/server";
+import {
+  prepareStockPairedTrade,
+  resolveStockPairedTradeDeployment,
+  StockPairedTradeUnavailableError,
+} from "../../../../lib/trade/stock-paired";
 import { safeServerErrorSummary } from "../../../../lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -60,8 +65,21 @@ function runtimeClient(
     getBalance: ({ address }: { address: Address }) =>
       client.getBalance({ address, blockTag: "latest" }),
     getGasPrice: () => client.getGasPrice(),
-    getCode: ({ address }: { address: Address }) =>
-      client.getCode({ address }),
+    getCode: ({
+      address,
+      blockNumber,
+    }: {
+      address: Address;
+      blockNumber?: bigint;
+    }) =>
+      client.getCode({
+        address,
+        ...(blockNumber === undefined
+          ? { blockTag: "latest" as const }
+          : { blockNumber }),
+      }),
+    readContract: (input) =>
+      client.readContract(input as never) as Promise<unknown>,
     estimateGas: (args: {
       account: Address;
       to: Address;
@@ -154,6 +172,53 @@ export async function POST(request: NextRequest) {
       tradeRequest.chainId === 1 ? "production" : "rehearsal",
     );
     const registry = await readExploreModel(registryDeployment);
+    const indexedToken =
+      registry.status === "ready"
+        ? registry.tokens.find(
+            (candidate) =>
+              candidate.tokenAddress.toLowerCase() ===
+              tradeRequest.token.toLowerCase(),
+          )
+        : undefined;
+    if (indexedToken?.launchModel === "stock-paired") {
+      const { deployment } = resolveStockPairedTradeDeployment(
+        tradeRequest.chainId,
+        registry,
+        tradeRequest.token,
+      );
+      const endpoints = tradeRpcEndpoints(tradeRequest.chainId);
+      const preparations = await Promise.allSettled(
+        endpoints.map((endpoint) =>
+          prepareStockPairedTrade(
+            runtimeClient(tradeRequest.chainId, endpoint),
+            deployment,
+            tradeRequest,
+          ),
+        ),
+      );
+      const inputFailure = preparations.find(
+        (
+          result,
+        ): result is PromiseRejectedResult =>
+          result.status === "rejected" &&
+          result.reason instanceof ClassicTradeInputError,
+      );
+      if (inputFailure) throw inputFailure.reason;
+      if (preparations.some((result) => result.status === "rejected")) {
+        throw new ClassicTradeUnavailableError(
+          "The Stock-Paired trade could not be verified across both independent RPCs",
+        );
+      }
+      const [primary, secondary] = preparations.map(
+        (result) =>
+          (
+            result as PromiseFulfilledResult<
+              Awaited<ReturnType<typeof prepareStockPairedTrade>>
+            >
+          ).value,
+      );
+      return json(selectConservativeTradeQuote(primary, secondary));
+    }
     const deployment = resolveTradeDeployment(
       tradeRequest.chainId,
       registry,
@@ -197,11 +262,14 @@ export async function POST(request: NextRequest) {
     if (error instanceof ClassicTradeInputError) {
       return json({ error: error.message }, 400);
     }
-    if (error instanceof ClassicTradeUnavailableError) {
+    if (
+      error instanceof ClassicTradeUnavailableError ||
+      error instanceof StockPairedTradeUnavailableError
+    ) {
       return json({ error: error.message }, 409);
     }
     console.error(
-      "Classic trade preparation failed",
+      "Trade preparation failed",
       safeServerErrorSummary(error),
     );
     return json(

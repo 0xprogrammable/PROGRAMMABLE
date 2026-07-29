@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
 
 import { GET as getTokenList } from "../app/api/indexers/v1/token-list/route";
 import { GET as getIndexerTokens } from "../app/api/indexers/v1/tokens/route";
@@ -69,6 +71,8 @@ describe("public indexer fee disclosure", () => {
       creatorFeeBps: 90,
       buyCreatorFeeBps: 90,
       sellCreatorFeeBps: 90,
+      growthFeeBps: null,
+      programmableFeeBps: 10,
       launcherFeeBps: 10,
       transferTaxBps: 0,
       lpFeePips: 0,
@@ -101,6 +105,120 @@ describe("public indexer fee disclosure", () => {
           },
         },
       ],
+    });
+  });
+
+  it("publishes the complete verified Deep V2 launch provenance", () => {
+    const deepToken: LauncherToken = {
+      ...token,
+      id: "deep",
+      launchModel: "deep",
+      deepReleaseVersion: "deep-full-range-v2",
+      growthVaultAddress:
+        "0x7777777777777777777777777777777777777777",
+      deepV2Provenance: {
+        deepReleaseVersion: "deep-full-range-v2",
+        launcher: "0x8888888888888888888888888888888888888888",
+        creator: token.creatorAddress!,
+        tokenAddress: token.tokenAddress,
+        vaultAddress:
+          "0x7777777777777777777777777777777777777777",
+        hookAddress: token.hookAddress,
+        poolId: token.poolId,
+        launchHash: `0x${"77".repeat(32)}`,
+        vaultConfigurationHash: `0x${"88".repeat(32)}`,
+        blockNumber: "123",
+        blockHash: `0x${"99".repeat(32)}`,
+        transactionHash: token.launchTransactionHash!,
+        logIndex: 5,
+      },
+    };
+
+    expect(serializeIndexerToken(deepToken, 1)).toMatchObject({
+      launch: {
+        model: "deep-v2",
+        deepV2Provenance: deepToken.deepV2Provenance,
+      },
+    });
+  });
+
+  it("publishes Deep V3 growth fees without inventing creator rewards", () => {
+    const deepToken: LauncherToken = {
+      ...token,
+      id: "deep-v3",
+      launchModel: "deep",
+      deepReleaseVersion: "deep-full-range-v3",
+      creatorFeeBps: undefined,
+      buyCreatorFeeBps: undefined,
+      sellCreatorFeeBps: undefined,
+      growthFeeBps: 90,
+      programmableFeeBps: 10,
+      creatorFeesGeneratedWei: "0",
+      creatorFeesAccruedWei: "0",
+      growthFeesGeneratedWei: "900",
+      growthFeesAccruedWei: "90",
+      growthVaultAddress:
+        "0x7777777777777777777777777777777777777777",
+      totalNativeAddedToLiquidityWei: "700",
+      totalTokenAddedToLiquidityRaw: "800",
+      totalGrowthEthReceivedWei: "810",
+      totalNativeSwappedWei: "100",
+      totalTokenAcquiredRaw: "200",
+      pendingGrowthNativeWei: "10",
+      lockedLiquidity: "300",
+      trustedNativeDepthWei: "400",
+      rollingExposureWei: "50",
+      compoundCount: "2",
+      lastCompoundTimestamp: "1000",
+      automationAction: 1,
+      nextCompoundTimestamp: "1300",
+      automationGuaranteed: false,
+      launchTransactionIndex: 2,
+      launchLogIndex: 5,
+      deepV3Provenance: {
+        deepReleaseVersion: "deep-full-range-v3",
+        launchModel: "deep",
+        launcher: "0x8888888888888888888888888888888888888888",
+        creator: token.creatorAddress!,
+        tokenAddress: token.tokenAddress,
+        vaultAddress:
+          "0x7777777777777777777777777777777777777777",
+        hookAddress: token.hookAddress,
+        positionRecipient: token.positionRecipient!,
+        positionTokenId: token.positionTokenId!,
+        poolId: token.poolId,
+        launchHash: `0x${"77".repeat(32)}`,
+        vaultConfigurationHash: `0x${"88".repeat(32)}`,
+        blockNumber: "123",
+        blockHash: `0x${"99".repeat(32)}`,
+        transactionHash: token.launchTransactionHash!,
+        transactionIndex: 2,
+        logIndex: 5,
+      },
+    };
+
+    expect(serializeIndexerToken(deepToken, 1)).toMatchObject({
+      fees: {
+        buyHookFeeBps: 100,
+        sellHookFeeBps: 100,
+        creatorFeeBps: null,
+        buyCreatorFeeBps: null,
+        sellCreatorFeeBps: null,
+        growthFeeBps: 90,
+        programmableFeeBps: 10,
+        launcherFeeBps: 10,
+      },
+      launch: {
+        model: "deep-v3",
+        deepReleaseVersion: "deep-full-range-v3",
+        deepV2Provenance: null,
+        deepV3Provenance: deepToken.deepV3Provenance,
+      },
+      liquidityGrowth: {
+        growthVaultAddress: deepToken.growthVaultAddress,
+        samePoolPermanentLiquidity: true,
+        automationGuaranteed: false,
+      },
     });
   });
 
@@ -159,6 +277,18 @@ describe("public indexer fee disclosure", () => {
     expect(() =>
       serializeIndexerToken({ ...token, creatorFeeBps: 89 }, 1),
     ).toThrow("invalid fee disclosure");
+  });
+
+  it("never relabels an unversioned Deep token as Deep V1", () => {
+    expect(() =>
+      serializeIndexerToken(
+        {
+          ...token,
+          launchModel: "deep",
+        },
+        1,
+      ),
+    ).toThrow("missing an exact Deep release");
   });
 
   it("refuses to infer fee fields that were not read onchain", () => {

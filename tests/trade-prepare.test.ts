@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   decodeFunctionData,
   encodeFunctionResult,
@@ -27,12 +27,62 @@ import {
 } from "../lib/trade/server";
 import type { LaunchModelReleaseManifest } from "../lib/launch-model-gating";
 import type { ExploreReadModel } from "../lib/onchain/types";
+import type { LauncherToken } from "../lib/tokens";
+import { DEEP_V2_MANIFEST_FIXED_POLICY } from "../lib/deep-v2";
 import appDeployments from "../contracts/config/app-deployments.v1.json";
+
+vi.mock("@/ops/deep-keeper-v2/reviewed-release-binding.json", () => ({
+  default: {
+    schemaVersion: 1,
+    status: "reviewed",
+    manifestPath:
+      "contracts/deployments/mainnet-deep-full-range-v2.json",
+    model: "deep",
+    releaseVersion: "deep-full-range-v2",
+    internalContractRelease: "liquidity-growth-full-range-v2",
+    sourceCommitment: `0x${"41".repeat(32)}`,
+    automationAddress:
+      "0x1616161616161616161616161616161616161616",
+    automationRuntimeCodeHash:
+      "0x07ad118d6cc8642c86c03827f276d8b791a65e5c99a3845faf186be720a1455d",
+    automationFqcn:
+      "src/LiquidityGrowthFullRangeAutomationV2.sol:LiquidityGrowthFullRangeAutomationV2",
+    coordinatorAddress:
+      "0x2424242424242424242424242424242424242424",
+    coordinatorRuntimeCodeHash:
+      "0x07ad118d6cc8642c86c03827f276d8b791a65e5c99a3845faf186be720a1455d",
+    coordinatorSourceCommitment: `0x${"47".repeat(32)}`,
+    coordinatorFqcn:
+      "src/DeepKeeperExecutorV1.sol:DeepKeeperExecutorV1",
+  },
+}));
 
 const OWNER = getAddress("0x5555555555555555555555555555555555555555");
 const TOKEN = getAddress("0x69AE118837CFe3BE671f59f3D64bCFB8bf1Dc0e9");
 const REHEARSAL_HOOK = getAddress("0x9F943aCeFc675DDE34F3998069A958Eb726Da0cC");
 const DEEP_HOOK = getAddress("0x48dC3009eC1d3298BBA31f718A9A29d02fC9B0cC");
+const DEEP_V2_HOOK = getAddress(
+  "0x1212121212121212121212121212121212121212",
+);
+const DEEP_V2_LAUNCHER = getAddress(
+  "0x1313131313131313131313131313131313131313",
+);
+const DEEP_V2_FACTORY = getAddress(
+  "0x1414141414141414141414141414141414141414",
+);
+const DEEP_V2_IMPLEMENTATION = getAddress(
+  "0x1515151515151515151515151515151515151515",
+);
+const DEEP_V2_AUTOMATION = getAddress(
+  "0x1616161616161616161616161616161616161616",
+);
+const DEEP_V2_VAULT = getAddress(
+  "0x1717171717171717171717171717171717171717",
+);
+const DEEP_V2_LAUNCH_HASH = `0x${"31".repeat(32)}` as Hex;
+const DEEP_V2_CONFIGURATION_HASH = `0x${"32".repeat(32)}` as Hex;
+const DEEP_V2_BLOCK_HASH = `0x${"33".repeat(32)}` as Hex;
+const DEEP_V2_TRANSACTION_HASH = `0x${"34".repeat(32)}` as Hex;
 const MOCK_RUNTIME_CODE = "0x6000" as Hex;
 const MOCK_RUNTIME_CODE_HASH = keccak256(MOCK_RUNTIME_CODE);
 
@@ -61,6 +111,7 @@ function readyRegistry(
   tokenAddress: Address = TOKEN,
   overrides: Partial<ExploreReadModel & { status: "ready" }> = {},
   deployment: ClassicTradeRelease = rehearsalDeployment(),
+  tokenOverrides: Partial<LauncherToken> = {},
 ): ExploreReadModel {
   return {
     status: "ready",
@@ -79,6 +130,7 @@ function readyRegistry(
         totalSwapFeeBps: 100,
         launchModel: deployment.launchModel,
         liquidityPath: "meme",
+        ...tokenOverrides,
       },
     ],
     snapshot: {
@@ -92,6 +144,45 @@ function readyRegistry(
     launcherFeesAccruedEth: "0",
     ...overrides,
   };
+}
+
+function deepV2CompatibilityDeployment(): ClassicTradeRelease {
+  return {
+    ...rehearsalDeployment(),
+    launchModel: "deep",
+    hook: DEEP_V2_HOOK,
+  };
+}
+
+function deepV2Registry(): ExploreReadModel {
+  const deployment = deepV2CompatibilityDeployment();
+  const poolId = getClassicPoolId(
+    createClassicPoolKey(TOKEN, deployment),
+    deployment,
+  );
+  return readyRegistry(TOKEN, {}, deployment, {
+    creatorAddress: OWNER,
+    growthVaultAddress: DEEP_V2_VAULT,
+    launchHash: DEEP_V2_LAUNCH_HASH,
+    launchBlockNumber: "123",
+    launchTransactionHash: DEEP_V2_TRANSACTION_HASH,
+    launchLogIndex: 4,
+    deepV2Provenance: {
+      deepReleaseVersion: "deep-full-range-v2",
+      launcher: DEEP_V2_LAUNCHER,
+      creator: OWNER,
+      tokenAddress: TOKEN,
+      vaultAddress: DEEP_V2_VAULT,
+      hookAddress: DEEP_V2_HOOK,
+      poolId,
+      launchHash: DEEP_V2_LAUNCH_HASH,
+      vaultConfigurationHash: DEEP_V2_CONFIGURATION_HASH,
+      blockNumber: "123",
+      blockHash: DEEP_V2_BLOCK_HASH,
+      transactionHash: DEEP_V2_TRANSACTION_HASH,
+      logIndex: 4,
+    },
+  });
 }
 
 function eligibleDeepManifest(): LaunchModelReleaseManifest {
@@ -119,6 +210,83 @@ function eligibleDeepManifest(): LaunchModelReleaseManifest {
   manifest.launchModelReleases.deep.runtimeCodeHashes.feeHook =
     MOCK_RUNTIME_CODE_HASH;
   return manifest as LaunchModelReleaseManifest;
+}
+
+function eligibleDeepV2Manifest(): LaunchModelReleaseManifest {
+  const runtimeHashes = {
+    launcher: MOCK_RUNTIME_CODE_HASH,
+    hookFactory: MOCK_RUNTIME_CODE_HASH,
+    feeHook: MOCK_RUNTIME_CODE_HASH,
+    feeSplitVaultFactory: MOCK_RUNTIME_CODE_HASH,
+    rangeSourceFactory: MOCK_RUNTIME_CODE_HASH,
+    growthVaultFactory: MOCK_RUNTIME_CODE_HASH,
+    growthVaultImplementation: MOCK_RUNTIME_CODE_HASH,
+    automation: MOCK_RUNTIME_CODE_HASH,
+    positionPlanner: MOCK_RUNTIME_CODE_HASH,
+    positionForwarderFactory: MOCK_RUNTIME_CODE_HASH,
+  };
+  return {
+    chainId: 11_155_111,
+    status: "ready",
+    launchModelReleases: {
+      deep: {
+        schemaVersion: 2,
+        model: "deep",
+        internalContractRelease: "liquidity-growth-full-range-v2",
+        releaseVersion: "deep-full-range-v2",
+        releaseCommit: "1".repeat(40),
+        sourceCommitment: `0x${"41".repeat(32)}`,
+        releaseManifest:
+          "contracts/deployments/mainnet-deep-full-range-v2.json",
+        status: "deployment-source-and-lifecycle-verified",
+        releaseEligible: true,
+        sourceVerificationStatus: "verified",
+        deploymentVerificationStatus: "verified",
+        launcher: DEEP_V2_LAUNCHER,
+        hookFactory: getAddress(
+          "0x1818181818181818181818181818181818181818",
+        ),
+        feeHook: DEEP_V2_HOOK,
+        feeSplitVaultFactory: getAddress(
+          "0x1919191919191919191919191919191919191919",
+        ),
+        rangeSourceFactory: getAddress(
+          "0x2020202020202020202020202020202020202020",
+        ),
+        growthVaultFactory: DEEP_V2_FACTORY,
+        growthVaultImplementation: DEEP_V2_IMPLEMENTATION,
+        automation: DEEP_V2_AUTOMATION,
+        positionPlanner: getAddress(
+          "0x2121212121212121212121212121212121212121",
+        ),
+        positionForwarderFactory: getAddress(
+          "0x2323232323232323232323232323232323232323",
+        ),
+        startBlock: 100,
+        deploymentBlock: 100,
+        deploymentTransaction: `0x${"42".repeat(32)}`,
+        lifecycleEvidenceHash: `0x${"43".repeat(32)}`,
+        lifecycleStatus: "verified-current-release",
+        lifecycleIndependentRpcCount: 2,
+        lifecycleLaunchTransaction: `0x${"44".repeat(32)}`,
+        lifecycleOracleTransaction: `0x${"45".repeat(32)}`,
+        lifecycleFeeProcessCompoundTransaction: `0x${"46".repeat(32)}`,
+        keeperReleaseVersion: "deep-keeper-v2",
+        keeperCompatibilityStatus: "verified-deep-v2",
+        keeperExecutor: getAddress(
+          "0x2424242424242424242424242424242424242424",
+        ),
+        keeperExecutorRuntimeCodeHash: MOCK_RUNTIME_CODE_HASH,
+        keeperExecutorSourceCommitment: `0x${"47".repeat(32)}`,
+        keeperExecutorDeploymentTransaction: `0x${"48".repeat(32)}`,
+        keeperExecutorDeploymentBlock: 101,
+        keeperExecutorSourceVerificationStatus:
+          "etherscan-and-sourcify-exact-match",
+        fixedPolicy: { ...DEEP_V2_MANIFEST_FIXED_POLICY },
+        runtimeCodeHashes: runtimeHashes,
+      },
+    },
+  };
 }
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -169,6 +337,9 @@ function runtimeClient(input?: {
       return input?.mismatchedCode?.toLowerCase() === address.toLowerCase()
         ? ("0x6001" as Hex)
         : MOCK_RUNTIME_CODE;
+    },
+    async readContract({ address, functionName }) {
+      throw new Error(`Unexpected read ${address}:${functionName}`);
     },
     async estimateGas(args) {
       const deployment = rehearsalDeployment();
@@ -340,6 +511,39 @@ describe("Trade request boundary", () => {
         eligibleDeepManifest(),
       ),
     ).toThrow("verified Programmable pool");
+  });
+
+  it("selects Deep V2 only from exact indexed V2 provenance and an eligible V2 manifest", () => {
+    const deployment = resolveTradeDeployment(
+      11_155_111,
+      deepV2Registry(),
+      TOKEN,
+      eligibleDeepV2Manifest(),
+    );
+    expect(deployment).toMatchObject({
+      launchModel: "deep",
+      deepReleaseVersion: "deep-full-range-v2",
+      hook: DEEP_V2_HOOK,
+      deepV2Release: {
+        launcher: DEEP_V2_LAUNCHER,
+        growthVaultFactory: DEEP_V2_FACTORY,
+      },
+      deepV2Candidate: {
+        tokenAddress: TOKEN,
+        launcher: DEEP_V2_LAUNCHER,
+      },
+    });
+
+    const registry = deepV2Registry();
+    delete registry.tokens[0].deepV2Provenance;
+    expect(() =>
+      resolveTradeDeployment(
+        11_155_111,
+        registry,
+        TOKEN,
+        eligibleDeepV2Manifest(),
+      ),
+    ).toThrow("provenance");
   });
 });
 
@@ -535,6 +739,41 @@ describe("Token trade preparation", () => {
         value: "0",
       },
     });
+  });
+
+  it("checks the V2 launcher and vault factory runtimes before quoting Deep V2", async () => {
+    const registry = deepV2Registry();
+    const deployment = resolveTradeDeployment(
+      11_155_111,
+      registry,
+      TOKEN,
+      eligibleDeepV2Manifest(),
+    );
+    deployment.poolManagerRuntimeCodeHash = MOCK_RUNTIME_CODE_HASH;
+    deployment.v4QuoterRuntimeCodeHash = MOCK_RUNTIME_CODE_HASH;
+    deployment.universalRouterRuntimeCodeHash = MOCK_RUNTIME_CODE_HASH;
+    deployment.permit2RuntimeCodeHash = MOCK_RUNTIME_CODE_HASH;
+    if (!deployment.deepV2Release) {
+      throw new Error("Expected the Deep V2 release");
+    }
+    deployment.deepV2Release.poolManagerRuntimeCodeHash =
+      MOCK_RUNTIME_CODE_HASH;
+    const { client, codeChecks } = runtimeClient();
+    await expect(
+      prepareClassicTrade(
+        client,
+        deployment,
+        parseClassicTradeRequest(request()),
+        registry,
+      ),
+    ).resolves.toMatchObject({
+      status: "ready",
+      poolKey: { hooks: DEEP_V2_HOOK },
+    });
+    expect(codeChecks).toContain(DEEP_V2_LAUNCHER);
+    expect(codeChecks).toContain(DEEP_V2_FACTORY);
+    expect(codeChecks).toContain(DEEP_V2_IMPLEMENTATION);
+    expect(codeChecks).toContain(DEEP_V2_AUTOMATION);
   });
 
   it("rejects a mismatched pinned Deep hook runtime", async () => {

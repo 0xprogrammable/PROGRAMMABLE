@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "model": "deep",
+  "internalRelease": "deep-full-range-v3",
+  "sourceCommit": "7627c46e5370e01186f627aba964615911f38af5",
+  "tool": {
+    "name": "Slither",
+    "version": "0.11.5"
+  },
+  "scope": [
+    "src/DeepKeeperExecutorV2.sol",
+    "src/LiquidityGrowthFeeOracleHookFactoryV2.sol",
+    "src/LiquidityGrowthFeeOracleHookV2.sol",
+    "src/LiquidityGrowthFullRangeAutomationV3.sol",
+    "src/LiquidityGrowthFullRangeLaunchV3.sol",
+    "src/LiquidityGrowthFullRangePolicyV3.sol",
+    "src/LiquidityGrowthFullRangePositionPlannerV3.sol",
+    "src/LiquidityGrowthFullRangeVaultFactoryV3.sol",
+    "src/LiquidityGrowthFullRangeVaultV3.sol",
+    "src/LiquidityGrowthZapPlannerV3.sol",
+    "src/interfaces/ILiquidityGrowthFeeOracleHookV2.sol",
+    "src/libraries/LiquidityGrowthSwapMathV3.sol"
+  ],
+  "command": "slither . --exclude-dependencies --include-paths 'src/(DeepKeeperExecutorV2|LiquidityGrowthFeeOracleHookFactoryV2|LiquidityGrowthFeeOracleHookV2|LiquidityGrowthFullRangeAutomationV3|LiquidityGrowthFullRangeLaunchV3|LiquidityGrowthFullRangePolicyV3|LiquidityGrowthFullRangePositionPlannerV3|LiquidityGrowthFullRangeVaultFactoryV3|LiquidityGrowthFullRangeVaultV3|LiquidityGrowthZapPlannerV3)\\.sol|src/interfaces/ILiquidityGrowthFeeOracleHookV2\\.sol|src/libraries/LiquidityGrowthSwapMathV3\\.sol' --json /tmp/slither-deep-v3-20260729.json --json-types detectors --disable-color",
+  "rawResult": {
+    "success": true,
+    "sha256": "d132b589178fe01da6cb2578c2d18a8f76db19da6e4376ba676c14c788ebfc70",
+    "findingInstances": 77,
+    "impactCounts": {
+      "high": 4,
+      "medium": 27,
+      "low": 17,
+      "informational": 26,
+      "optimization": 3
+    }
+  },
+  "triage": [
+    {
+      "check": "uninitialized-state",
+      "impact": "High",
+      "instances": 4,
+      "disposition": "false-positive",
+      "reason": "Solidity storage is zero-initialized. lastCompoundTimestamp and compoundNonce are updated in _finalizeCompound; _nextExposureRecord and _exposureRecords are updated in _recordExposure. The CI invariant suite exercised 640000 handler calls without an accounting or rolling-cap failure."
+    },
+    {
+      "check": "reentrancy-no-eth",
+      "impact": "Medium",
+      "instances": 1,
+      "disposition": "mitigated",
+      "reason": "compound is protected by ReentrancyGuardTransient. Its external graph is restricted to the immutable hook, PoolManager, planner and factory-created UERC20 token. Balance conservation, transient intent closure and PoolManager delta closure are checked before state finalization."
+    },
+    {
+      "check": "uninitialized-local",
+      "impact": "Medium",
+      "instances": 8,
+      "disposition": "false-positive",
+      "reason": "The reported locals intentionally start at Solidity's zero value or are assigned on every non-reverting try/catch path. Zero is the required accumulator or empty-struct state in each case."
+    },
+    {
+      "check": "unused-return",
+      "impact": "Medium",
+      "instances": 18,
+      "disposition": "accepted-design",
+      "reason": "The omitted tuple fields are deliberately irrelevant to the checked property. The planner success probe intentionally ignores the returned plan, while observe directly returns the library result. Relevant sibling fields are validated at every listed site."
+    },
+    {
+      "check": "calls-loop",
+      "impact": "Low",
+      "instances": 5,
+      "disposition": "accepted-design",
+      "reason": "Automation loops are capped at 32 candidates and isolate failures. The reviewed keeper executor is capped at four candidates, while the initial production operator configuration is one candidate per run."
+    },
+    {
+      "check": "reentrancy-benign",
+      "impact": "Low",
+      "instances": 4,
+      "disposition": "mitigated",
+      "reason": "Launch and compound are transiently non-reentrant. Vault initialization is restricted to its factory and bound to a one-use commitment. Factory and launch writes occur atomically; a failed external call rolls back the complete transaction."
+    },
+    {
+      "check": "reentrancy-events",
+      "impact": "Low",
+      "instances": 3,
+      "disposition": "accepted-design",
+      "reason": "The reported events are emitted only after the external operation completes. They do not authorize later work and a revert removes both state and logs."
+    },
+    {
+      "check": "timestamp",
+      "impact": "Low",
+      "instances": 5,
+      "disposition": "accepted-design",
+      "reason": "Timestamps enforce a user deadline, a five-minute cooldown and a thirty-minute exposure window. They are not used for randomness or price formation. Normal validator skew cannot bypass the material oracle and exposure bounds."
+    },
+    {
+      "check": "assembly",
+      "impact": "Informational",
+      "instances": 4,
+      "disposition": "reviewed",
+      "reason": "Assembly is limited to bounded return-data decoding and four-byte revert-selector extraction. Oversized, malformed and short return data are covered by executor tests."
+    },
+    {
+      "check": "cyclomatic-complexity",
+      "impact": "Informational",
+      "instances": 2,
+      "disposition": "reviewed",
+      "reason": "The two sites are the fixed swap-math state transition and immutable keeper constructor binding checks. Both are covered by unit, fuzz and fork tests."
+    },
+    {
+      "check": "dead-code",
+      "impact": "Informational",
+      "instances": 1,
+      "disposition": "false-positive",
+      "reason": "_recordExposure is called by _finalizeCompound at LiquidityGrowthFullRangeVaultV3.sol line 495."
+    },
+    {
+      "check": "low-level-calls",
+      "impact": "Informational",
+      "instances": 2,
+      "disposition": "accepted-design",
+      "reason": "The calls implement bounded failure isolation. Targets and calldata are selected internally; callers cannot supply arbitrary targets, calldata or value."
+    },
+    {
+      "check": "naming-convention",
+      "impact": "Informational",
+      "instances": 12,
+      "disposition": "non-security",
+      "reason": "The reported names are constants, immutable constant-style fields and interface getters that intentionally mirror public constant getters."
+    },
+    {
+      "check": "pragma",
+      "impact": "Informational",
+      "instances": 1,
+      "disposition": "accepted-design",
+      "reason": "Owned release sources pin Solidity 0.8.26. Dependency pragma ranges differ, but the release compiles the complete graph with solc 0.8.26 and pinned dependency commits."
+    },
+    {
+      "check": "redundant-statements",
+      "impact": "Informational",
+      "instances": 1,
+      "disposition": "non-security",
+      "reason": "The cardinality expression explicitly marks the first returned oracle field as read after tuple decoding. The enforced field is cardinalityNext."
+    },
+    {
+      "check": "too-many-digits",
+      "impact": "Informational",
+      "instances": 1,
+      "disposition": "false-positive",
+      "reason": "The detector points to type(LiquidityGrowthFeeOracleHookV2).creationCode, not to a numeric literal or economic constant."
+    },
+    {
+      "check": "unimplemented-functions",
+      "impact": "Informational",
+      "instances": 1,
+      "disposition": "false-positive",
+      "reason": "LiquidityGrowthFeeOracleHookV2 implements getHookPermissions at line 373. The exact permission bitmap is tested as 0x3AEC."
+    },
+    {
+      "check": "unused-state",
+      "impact": "Informational",
+      "instances": 1,
+      "disposition": "non-security",
+      "reason": "The unused NATIVE constant in LiquidityGrowthFullRangeLaunchV3 is harmless dead weight and is frozen for this evidence snapshot."
+    },
+    {
+      "check": "constable-states",
+      "impact": "Optimization",
+      "instances": 3,
+      "disposition": "false-positive",
+      "reason": "lastCompoundTimestamp and compoundNonce are mutated in _finalizeCompound; _nextExposureRecord is mutated in _recordExposure."
+    }
+  ],
+  "conclusion": {
+    "untriagedInstances": 0,
+    "confirmedHigh": 0,
+    "confirmedMedium": 0,
+    "externalAudit": false,
+    "note": "This is local static analysis and manual triage, not an external audit or a Mainnet deployment attestation."
+  }
+}

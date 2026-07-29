@@ -32,15 +32,22 @@ import {
   isClassicV3ReleaseVerified,
 } from "@/lib/classic-v3-release";
 import {
-  deepAutomationReadAbi,
-  deepGrowthVaultImplementationReadAbi,
-  deepGrowthVaultFactoryReadAbi,
-  deepHookFactoryReadAbi,
-  deepHookReadAbi,
-  deepLaunchAbi,
-  encodeDeepLaunch,
-  validateDeepLaunchDraft,
-} from "@/lib/deep-v1";
+  deepV3LaunchAbi,
+  encodeDeepV3Launch,
+  validateDeepV3LaunchDraft,
+} from "@/lib/deep-v3";
+import { quoteDeepV3InitialBuy } from "@/lib/deep-v3-quote";
+import {
+  getConfiguredDeepV3Release,
+  isConfiguredDeepV3ReleaseReady,
+  type DeepV3ReleaseManifest,
+} from "@/lib/deep-v3-release";
+import {
+  assertDeepV3RuntimeBinding,
+  requireIndependentDeepV3RpcUrls,
+  type DeepV3RuntimeBindingClient,
+  type DeepV3RuntimeRelease,
+} from "@/lib/deep-v3-runtime-binding";
 import {
   buildPlanHash,
   adaptiveCurveHookFactoryAbi,
@@ -55,25 +62,40 @@ import {
   type LaunchPreflightCheck,
   type LaunchPreflightResponse,
   type PreparedLaunchTransaction,
+  type PreparedStockQuoteApprovalTransaction,
   validateMemeLaunchDraft,
   validateAdaptiveLaunchDraft,
 } from "@/lib/launch-transaction";
 import {
   createEmptyDraft,
-  DEEP_GROWTH_TARGET_WEI,
-  DEEP_TOKEN_RESERVE_WHOLE,
   MEME_MIN_INITIAL_BUY_WEI,
   parseOptionalInitialBuyWei,
   parseInitialBuyWei,
   type LaunchDraft,
 } from "@/lib/launch";
 import {
-  getVerifiedDeepRelease,
-  isFutureLaunchModelManifestEligible,
+  encodeStockPairedLaunch,
+  encodeStockQuoteApproval,
+  stockPairedHookAbi,
+  stockPairedHookFactoryAbi,
+  stockPairedLaunchAbi,
+  stockQuoteRegistryAbi,
+  stockQuoteTokenAbi,
+  STOCK_QUOTE_ASSETS,
+  STOCK_PAIRED_CREATOR_FEE_BPS,
+  STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
+  STOCK_PAIRED_PROGRAMMABLE_FEE_BPS,
+  STOCK_PAIRED_TOTAL_SWAP_FEE_BPS,
+  validateStockPairedLaunchDraft,
+} from "@/lib/stock-paired";
+import {
+  getConfiguredStockPairedRelease,
+  type VerifiedStockPairedRelease,
+} from "@/lib/stock-paired-release";
+import {
   resolveImplementedLaunchModel,
   resolveReservedLaunchModel,
   type DeepLaunchModelRelease,
-  type LaunchModelReleaseManifest,
 } from "@/lib/launch-model-gating";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
 
@@ -99,6 +121,8 @@ const selectedManifest =
   appDeployments[launchEnvironment] as ReleaseDeployment;
 const selectedClassicV3Release =
   getConfiguredClassicV3Release(launchEnvironment).releaseManifest;
+const selectedDeepV3Release =
+  getConfiguredDeepV3Release(launchEnvironment);
 
 const client = createPublicClient({
   chain: launchChain,
@@ -112,6 +136,110 @@ const client = createPublicClient({
     },
   ),
 });
+
+function createDeepV3RuntimeBindingClients(): readonly [
+  DeepV3RuntimeBindingClient,
+  DeepV3RuntimeBindingClient,
+] {
+  const [primary, secondary] = requireIndependentDeepV3RpcUrls(
+    launchEnvironment === "rehearsal"
+      ? process.env.SEPOLIA_RPC_URL
+      : process.env.ETHEREUM_RPC_URL,
+    launchEnvironment === "rehearsal"
+      ? process.env.SEPOLIA_RPC_URL_B
+      : process.env.ETHEREUM_RPC_URL_B,
+  );
+  return [primary, secondary].map((endpoint) => {
+    const runtimeClient = createPublicClient({
+      chain: launchChain,
+      transport: http(endpoint, {
+        retryCount: 1,
+        timeout: 12_000,
+      }),
+    });
+    return {
+      getChainId: () => runtimeClient.getChainId(),
+      async getFinalizedBlock() {
+        const block = await runtimeClient.getBlock({
+          blockTag: "finalized",
+        });
+        return { number: block.number, hash: block.hash };
+      },
+      async getBlock({ blockNumber }: { blockNumber: bigint }) {
+        const block = await runtimeClient.getBlock({ blockNumber });
+        return { number: block.number, hash: block.hash };
+      },
+      getCode: ({
+        address,
+        blockNumber,
+      }: {
+        address: Address;
+        blockNumber: bigint;
+      }) => runtimeClient.getCode({ address, blockNumber }),
+      readContract: (input) =>
+        runtimeClient.readContract(input as never) as Promise<unknown>,
+    } satisfies DeepV3RuntimeBindingClient;
+  }) as [
+    DeepV3RuntimeBindingClient,
+    DeepV3RuntimeBindingClient,
+  ];
+}
+
+function deepV3RuntimeRelease(
+  release: DeepV3ReleaseManifest,
+): DeepV3RuntimeRelease {
+  const addresses = release.addresses as Record<string, unknown>;
+  const hashes = release.runtimeCodeHashes as Record<string, unknown>;
+  const dependencies = release.officialDependencies as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const address = (value: unknown) => getAddress(String(value));
+  const hash = (value: unknown) => value as Hex;
+  const dependency = (
+    key: "poolManager" | "positionManager" | "uerc20Factory",
+  ) => ({
+    address: address(dependencies[key]?.address),
+    runtimeCodeHash: hash(dependencies[key]?.runtimeCodeHash),
+  });
+
+  return {
+    chainId: 1,
+    startBlock: release.startBlock as number,
+    addresses: {
+      treasury: address(addresses.treasury),
+      lockedPositionFactory: address(addresses.lockedPositionFactory),
+      zapPlanner: address(addresses.zapPlanner),
+      growthVaultFactory: address(addresses.growthVaultFactory),
+      growthVaultImplementation: address(
+        addresses.growthVaultImplementation,
+      ),
+      hookFactory: address(addresses.hookFactory),
+      feeHook: address(addresses.feeHook),
+      launcher: address(addresses.launcher),
+      positionPlanner: address(addresses.positionPlanner),
+      automation: address(addresses.automation),
+      keeperExecutor: address(addresses.keeperExecutor),
+    },
+    runtimeCodeHashes: {
+      lockedPositionFactory: hash(hashes.lockedPositionFactory),
+      zapPlanner: hash(hashes.zapPlanner),
+      growthVaultFactory: hash(hashes.growthVaultFactory),
+      growthVaultImplementation: hash(hashes.growthVaultImplementation),
+      hookFactory: hash(hashes.hookFactory),
+      feeHook: hash(hashes.feeHook),
+      launcher: hash(hashes.launcher),
+      positionPlanner: hash(hashes.positionPlanner),
+      automation: hash(hashes.automation),
+      keeperExecutor: hash(hashes.keeperExecutor),
+    },
+    officialDependencies: {
+      poolManager: dependency("poolManager"),
+      positionManager: dependency("positionManager"),
+      uerc20Factory: dependency("uerc20Factory"),
+    },
+  };
+}
 
 const officialPoolManager = getAddress(
   selectedDeployments.contracts.poolManager.address,
@@ -202,6 +330,8 @@ function parseDraft(input: unknown): LaunchDraft {
     "tokenTelegram",
     "totalSwapFeePercent",
     "initialBuyEth",
+    "stockQuoteAsset",
+    "initialBuyQuoteAmount",
     "launchSalt",
     "hookSaltNonce",
     "buySwapFeePercent",
@@ -227,11 +357,7 @@ function parseDraft(input: unknown): LaunchDraft {
     );
     if (reservedLaunchModel) {
       if (
-        !isFutureLaunchModelManifestEligible(
-          requestedLaunchModel,
-          selectedManifest,
-          launchChain.id,
-        )
+        !isConfiguredDeepV3ReleaseReady(launchEnvironment)
       ) {
         throw new LaunchInputError(
           "Deep is not enabled by a verified release manifest",
@@ -245,11 +371,7 @@ function parseDraft(input: unknown): LaunchDraft {
   }
   if (
     implementedLaunchModel === "deep" &&
-    !isFutureLaunchModelManifestEligible(
-      "deep",
-      selectedManifest,
-      launchChain.id,
-    )
+    !isConfiguredDeepV3ReleaseReady(launchEnvironment)
   ) {
     throw new LaunchInputError(
       "Deep is not enabled by a verified release manifest",
@@ -1108,548 +1230,23 @@ async function prepareClassicV3Launch(
   });
 }
 
-const DEEP_REQUIRED_HOOK_FLAGS = 0x30ccn;
-
-type VerifiedDeepAddresses = {
-  launcher: Address;
-  hookFactory: Address;
-  feeHook: Address;
-  feeSplitVaultFactory: Address;
-  rangeSourceFactory: Address;
-  growthVaultFactory: Address;
-  growthVaultImplementation: Address;
-  automation: Address;
-  positionPlanner: Address;
-  positionForwarderFactory: Address;
-};
-
-type VerifiedDeepRuntimeHashes = {
-  launcher: Hex;
-  hookFactory: Hex;
-  feeHook: Hex;
-  feeSplitVaultFactory: Hex;
-  rangeSourceFactory: Hex;
-  growthVaultFactory: Hex;
-  growthVaultImplementation: Hex;
-  automation: Hex;
-  positionPlanner: Hex;
-  positionForwarderFactory: Hex;
-};
-
-async function assertDeepInfrastructure(
-  addresses: VerifiedDeepAddresses,
-  codeHashes: VerifiedDeepRuntimeHashes,
-) {
-  await Promise.all([
-    assertRuntimeCodeHash(
-      officialPoolManager,
-      selectedDeployments.contracts.poolManager.runtimeCodeHash as Hex,
-      "Uniswap PoolManager",
-    ),
-    assertRuntimeCodeHash(
-      officialPositionManager,
-      selectedDeployments.contracts.positionManager.runtimeCodeHash as Hex,
-      "Uniswap PositionManager",
-    ),
-    assertRuntimeCodeHash(
-      officialTokenFactory,
-      selectedDeployments.contracts.uerc20Factory.runtimeCodeHash as Hex,
-      "Uniswap UERC20Factory",
-    ),
-    ...(
-      Object.entries(addresses) as [
-        keyof VerifiedDeepAddresses,
-        Address,
-      ][]
-    ).map(([key, address]) =>
-      assertRuntimeCodeHash(
-        address,
-        codeHashes[key],
-        `Deep ${key.replace(/[A-Z]/g, (character) => ` ${character.toLowerCase()}`)}`,
-      ),
-    ),
-  ]);
-
-  const [
-    configuredPoolManager,
-    configuredPositionManager,
-    configuredTokenFactory,
-    configuredHook,
-    configuredFeeSplitVaultFactory,
-    configuredRangeSourceFactory,
-    configuredGrowthVaultFactory,
-    configuredAutomation,
-    configuredPositionPlanner,
-    configuredPositionForwarderFactory,
-    tokenSupply,
-    tokenReserve,
-    growthTarget,
-    minimumInitialBuyWei,
-    initialTick,
-    tickSpacing,
-    lpFeePips,
-    twapWindow,
-    maximumSpotTwapDeviation,
-    maximumHookTickDelta,
-    hookPoolManager,
-    hookTreasury,
-    hookFeeSplitVaultFactory,
-    launcherFeeBps,
-    minimumFeeBps,
-    maximumFeeBps,
-    feeStepBps,
-    transferTaxBps,
-    hookLpFeePips,
-    hookTickSpacing,
-    hookMaximumTickDelta,
-    hookFactoryMask,
-    hookFactoryRequiredFlags,
-    hookRecognizedByFactory,
-    forwarderPositionManager,
-    growthFactoryImplementation,
-    growthFactoryHookFactory,
-    growthFactoryPoolManager,
-    growthFactoryPositionManager,
-    growthFactoryFeeSplitVaultFactory,
-    growthFactoryRangeSourceFactory,
-    growthFactoryForwarderFactory,
-    automationVaultFactory,
-    automationLauncher,
-    automationBatchSize,
-    automationCardinalityTarget,
-    implementationFactory,
-    minimumUtilizationBps,
-    trustedDepthCapBps,
-    maximumCompoundNative,
-    minimumCompoundNative,
-    compoundCooldownSeconds,
-    stressTick,
-  ] = await Promise.all([
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "poolManager",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "positionManager",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "tokenFactory",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "feeHook",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "feeSplitVaultFactory",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "rangeSourceFactory",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "growthVaultFactory",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "automation",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "positionPlanner",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "positionForwarderFactory",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "TOKEN_SUPPLY",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "TOKEN_RESERVE_TARGET",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "GROWTH_TARGET_NATIVE",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "MIN_INITIAL_BUY_WEI",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "INITIAL_TICK",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "TICK_SPACING",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "LP_FEE_PIPS",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "TWAP_WINDOW",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "MAX_SPOT_TWAP_DEVIATION_TICKS",
-    }),
-    client.readContract({
-      address: addresses.launcher,
-      abi: deepLaunchAbi,
-      functionName: "MAX_ABS_TICK_DELTA",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "poolManager",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "launcherFeeRecipient",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "feeSplitVaultFactory",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "LAUNCHER_FEE_BPS",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "MIN_TOTAL_SWAP_FEE_BPS",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "MAX_TOTAL_SWAP_FEE_BPS",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "TOTAL_SWAP_FEE_STEP_BPS",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "TRANSFER_TAX_BPS",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "LP_FEE_PIPS",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "TICK_SPACING",
-    }),
-    client.readContract({
-      address: addresses.feeHook,
-      abi: deepHookReadAbi,
-      functionName: "maxAbsTickDelta",
-    }),
-    client.readContract({
-      address: addresses.hookFactory,
-      abi: deepHookFactoryReadAbi,
-      functionName: "ALL_HOOK_MASK",
-    }),
-    client.readContract({
-      address: addresses.hookFactory,
-      abi: deepHookFactoryReadAbi,
-      functionName: "REQUIRED_HOOK_FLAGS",
-    }),
-    client.readContract({
-      address: addresses.hookFactory,
-      abi: deepHookFactoryReadAbi,
-      functionName: "isFactoryHook",
-      args: [addresses.feeHook],
-    }),
-    client.readContract({
-      address: addresses.positionForwarderFactory,
-      abi: lockedPositionFeeForwarderFactoryAbi,
-      functionName: "positionManager",
-    }),
-    client.readContract({
-      address: addresses.growthVaultFactory,
-      abi: deepGrowthVaultFactoryReadAbi,
-      functionName: "implementation",
-    }),
-    client.readContract({
-      address: addresses.growthVaultFactory,
-      abi: deepGrowthVaultFactoryReadAbi,
-      functionName: "hookFactory",
-    }),
-    client.readContract({
-      address: addresses.growthVaultFactory,
-      abi: deepGrowthVaultFactoryReadAbi,
-      functionName: "poolManager",
-    }),
-    client.readContract({
-      address: addresses.growthVaultFactory,
-      abi: deepGrowthVaultFactoryReadAbi,
-      functionName: "positionManager",
-    }),
-    client.readContract({
-      address: addresses.growthVaultFactory,
-      abi: deepGrowthVaultFactoryReadAbi,
-      functionName: "feeSplitVaultFactory",
-    }),
-    client.readContract({
-      address: addresses.growthVaultFactory,
-      abi: deepGrowthVaultFactoryReadAbi,
-      functionName: "rangeSourceFactory",
-    }),
-    client.readContract({
-      address: addresses.growthVaultFactory,
-      abi: deepGrowthVaultFactoryReadAbi,
-      functionName: "positionForwarderFactory",
-    }),
-    client.readContract({
-      address: addresses.automation,
-      abi: deepAutomationReadAbi,
-      functionName: "vaultFactory",
-    }),
-    client.readContract({
-      address: addresses.automation,
-      abi: deepAutomationReadAbi,
-      functionName: "launcher",
-    }),
-    client.readContract({
-      address: addresses.automation,
-      abi: deepAutomationReadAbi,
-      functionName: "MAX_BATCH_SIZE",
-    }),
-    client.readContract({
-      address: addresses.automation,
-      abi: deepAutomationReadAbi,
-      functionName: "OBSERVATION_CARDINALITY_TARGET",
-    }),
-    client.readContract({
-      address: addresses.growthVaultImplementation,
-      abi: deepGrowthVaultImplementationReadAbi,
-      functionName: "FACTORY",
-    }),
-    client.readContract({
-      address: addresses.growthVaultImplementation,
-      abi: deepGrowthVaultImplementationReadAbi,
-      functionName: "MIN_UTILIZATION_BPS",
-    }),
-    client.readContract({
-      address: addresses.growthVaultImplementation,
-      abi: deepGrowthVaultImplementationReadAbi,
-      functionName: "TRUSTED_DEPTH_CAP_BPS",
-    }),
-    client.readContract({
-      address: addresses.growthVaultImplementation,
-      abi: deepGrowthVaultImplementationReadAbi,
-      functionName: "MAX_COMPOUND_NATIVE",
-    }),
-    client.readContract({
-      address: addresses.growthVaultImplementation,
-      abi: deepGrowthVaultImplementationReadAbi,
-      functionName: "MIN_COMPOUND_NATIVE",
-    }),
-    client.readContract({
-      address: addresses.growthVaultImplementation,
-      abi: deepGrowthVaultImplementationReadAbi,
-      functionName: "COMPOUND_COOLDOWN_SECONDS",
-    }),
-    client.readContract({
-      address: addresses.growthVaultImplementation,
-      abi: deepGrowthVaultImplementationReadAbi,
-      functionName: "STRESS_TICK",
-    }),
-  ]);
-
-  const expectedAddresses = [
-    [configuredPoolManager, officialPoolManager, "PoolManager"],
-    [configuredPositionManager, officialPositionManager, "PositionManager"],
-    [configuredTokenFactory, officialTokenFactory, "UERC20Factory"],
-    [configuredHook, addresses.feeHook, "fee hook"],
-    [
-      configuredFeeSplitVaultFactory,
-      addresses.feeSplitVaultFactory,
-      "reward vault factory",
-    ],
-    [
-      configuredRangeSourceFactory,
-      addresses.rangeSourceFactory,
-      "range source factory",
-    ],
-    [
-      configuredGrowthVaultFactory,
-      addresses.growthVaultFactory,
-      "growth vault factory",
-    ],
-    [configuredAutomation, addresses.automation, "automation"],
-    [configuredPositionPlanner, addresses.positionPlanner, "position planner"],
-    [
-      configuredPositionForwarderFactory,
-      addresses.positionForwarderFactory,
-      "position forwarder factory",
-    ],
-    [hookPoolManager, officialPoolManager, "hook PoolManager"],
-    [hookTreasury, platformTreasury, "treasury"],
-    [
-      hookFeeSplitVaultFactory,
-      addresses.feeSplitVaultFactory,
-      "hook reward vault factory",
-    ],
-    [
-      forwarderPositionManager,
-      officialPositionManager,
-      "position factory PositionManager",
-    ],
-    [
-      growthFactoryImplementation,
-      addresses.growthVaultImplementation,
-      "growth vault implementation",
-    ],
-    [
-      growthFactoryHookFactory,
-      addresses.hookFactory,
-      "growth factory hook factory",
-    ],
-    [
-      growthFactoryPoolManager,
-      officialPoolManager,
-      "growth factory PoolManager",
-    ],
-    [
-      growthFactoryPositionManager,
-      officialPositionManager,
-      "growth factory PositionManager",
-    ],
-    [
-      growthFactoryFeeSplitVaultFactory,
-      addresses.feeSplitVaultFactory,
-      "growth factory reward vault factory",
-    ],
-    [
-      growthFactoryRangeSourceFactory,
-      addresses.rangeSourceFactory,
-      "growth factory range source factory",
-    ],
-    [
-      growthFactoryForwarderFactory,
-      addresses.positionForwarderFactory,
-      "growth factory position factory",
-    ],
-    [
-      automationVaultFactory,
-      addresses.growthVaultFactory,
-      "automation vault factory",
-    ],
-    [automationLauncher, addresses.launcher, "automation launcher"],
-    [
-      implementationFactory,
-      addresses.growthVaultFactory,
-      "growth vault implementation factory",
-    ],
-  ] as const;
-  for (const [actual, expected, label] of expectedAddresses) {
-    if (actual.toLowerCase() !== expected.toLowerCase()) {
-      throw new Error(
-        `The Deep ${label} does not match the release manifest`,
-      );
-    }
-  }
-
-  const oneToken = 10n ** 18n;
-  if (
-    tokenSupply !== 1_000_000_000n * oneToken ||
-    tokenReserve !== BigInt(DEEP_TOKEN_RESERVE_WHOLE) * oneToken ||
-    growthTarget !== DEEP_GROWTH_TARGET_WEI ||
-    minimumInitialBuyWei !== MEME_MIN_INITIAL_BUY_WEI ||
-    initialTick !== 204_200 ||
-    tickSpacing !== 200 ||
-    lpFeePips !== 0 ||
-    twapWindow !== 1_800 ||
-    maximumSpotTwapDeviation !== 600 ||
-    maximumHookTickDelta !== 400 ||
-    launcherFeeBps !== 10 ||
-    minimumFeeBps !== 100 ||
-    maximumFeeBps !== 1_000 ||
-    feeStepBps !== 100 ||
-    transferTaxBps !== 0 ||
-    hookLpFeePips !== 0 ||
-    hookTickSpacing !== 200 ||
-    hookMaximumTickDelta !== 400 ||
-    hookFactoryMask !== HOOK_FLAG_MASK ||
-    hookFactoryRequiredFlags !== DEEP_REQUIRED_HOOK_FLAGS ||
-    !hookRecognizedByFactory ||
-    automationBatchSize !== 32n ||
-    automationCardinalityTarget !== 192 ||
-    minimumUtilizationBps !== 8_500 ||
-    trustedDepthCapBps !== 25 ||
-    maximumCompoundNative !== 250_000_000_000_000_000n ||
-    minimumCompoundNative !== 2_000_000_000_000_000n ||
-    compoundCooldownSeconds !== 1_800n ||
-    stressTick !== 218_000
-  ) {
-    throw new Error(
-      "The Deep economics or safety policy do not match the release manifest",
-    );
-  }
-  if (
-    (BigInt(addresses.feeHook) & HOOK_FLAG_MASK) !==
-    DEEP_REQUIRED_HOOK_FLAGS
-  ) {
-    throw new Error(
-      "The Deep hook callback mask does not match the release manifest",
-    );
-  }
-}
-
 async function prepareDeepLaunch(
   account: Address,
   draft: LaunchDraft,
   connectedWalletCheck: LaunchPreflightCheck,
-  deployment: ReleaseDeployment,
 ) {
-  const configuration = validateDeepLaunchDraft(draft, account);
+  validateDeepV3LaunchDraft(draft, account);
   const initialBuyWei = parseInitialBuyWei(draft.initialBuyEth);
   if (initialBuyWei === null) {
-    throw new LaunchInputError("Enter a valid Dev Buy");
+    throw new LaunchInputError("Enter a valid Initial Buy");
   }
   validateLaunchSalt(draft.launchSalt);
   const tokenCheck: LaunchPreflightCheck = {
     id: "token",
     label: "Deep setup",
     status: "pass",
-    detail: `Fixed 0.05 ETH growth target with ${(configuration.fees.buySwapFeeBps / 100).toFixed(2)}% buy and ${(configuration.fees.sellSwapFeeBps / 100).toFixed(2)}% sell fees`,
+    detail:
+      "Every swap charges 1.00%: 0.90% deepens the original locked pool and 0.10% goes to Programmable",
   };
 
   if (connectedWalletCheck.status !== "pass") {
@@ -1662,9 +1259,7 @@ async function prepareDeepLaunch(
     });
   }
 
-  const deepManifest = deployment as LaunchModelReleaseManifest;
-  const release = getVerifiedDeepRelease(deepManifest, launchChain.id);
-  if (!release) {
+  if (!selectedDeepV3Release || launchChain.id !== 1) {
     return response({
       status: "blocked",
       mode: "deep",
@@ -1684,46 +1279,15 @@ async function prepareDeepLaunch(
     });
   }
 
-  const addresses = {
-    launcher: getAddress(release.launcher as string),
-    hookFactory: getAddress(release.hookFactory as string),
-    feeHook: getAddress(release.feeHook as string),
-    feeSplitVaultFactory: getAddress(
-      release.feeSplitVaultFactory as string,
-    ),
-    rangeSourceFactory: getAddress(release.rangeSourceFactory as string),
-    growthVaultFactory: getAddress(release.growthVaultFactory as string),
-    growthVaultImplementation: getAddress(
-      release.growthVaultImplementation as string,
-    ),
-    automation: getAddress(release.automation as string),
-    positionPlanner: getAddress(release.positionPlanner as string),
-    positionForwarderFactory: getAddress(
-      release.positionForwarderFactory as string,
-    ),
-  } satisfies VerifiedDeepAddresses;
-  const hashes = {
-    launcher: release.runtimeCodeHashes?.launcher as Hex,
-    hookFactory: release.runtimeCodeHashes?.hookFactory as Hex,
-    feeHook: release.runtimeCodeHashes?.feeHook as Hex,
-    feeSplitVaultFactory:
-      release.runtimeCodeHashes?.feeSplitVaultFactory as Hex,
-    rangeSourceFactory:
-      release.runtimeCodeHashes?.rangeSourceFactory as Hex,
-    growthVaultFactory:
-      release.runtimeCodeHashes?.growthVaultFactory as Hex,
-    growthVaultImplementation:
-      release.runtimeCodeHashes?.growthVaultImplementation as Hex,
-    automation: release.runtimeCodeHashes?.automation as Hex,
-    positionPlanner: release.runtimeCodeHashes?.positionPlanner as Hex,
-    positionForwarderFactory:
-      release.runtimeCodeHashes?.positionForwarderFactory as Hex,
-  } satisfies VerifiedDeepRuntimeHashes;
-  await assertDeepInfrastructure(addresses, hashes);
+  const runtimeRelease = deepV3RuntimeRelease(selectedDeepV3Release);
+  await assertDeepV3RuntimeBinding({
+    clients: createDeepV3RuntimeBindingClients(),
+    release: runtimeRelease,
+  });
 
   const [predictedToken] = await client.readContract({
-    address: addresses.launcher,
-    abi: deepLaunchAbi,
+    address: runtimeRelease.addresses.launcher,
+    abi: deepV3LaunchAbi,
     functionName: "predictTokenAddress",
     args: [
       draft.tokenName.trim(),
@@ -1739,11 +1303,21 @@ async function prepareDeepLaunch(
     );
   }
 
+  const [quote, latestBlock] = await Promise.all([
+    quoteDeepV3InitialBuy(initialBuyWei),
+    client.getBlock({ blockTag: "latest" }),
+  ]);
+  const deadline = latestBlock.timestamp + 1_200n;
   const launchBase = {
     kind: "launch" as const,
     chainId: launchChain.id,
-    to: addresses.launcher,
-    data: encodeDeepLaunch(draft, draft.launchSalt, account),
+    to: runtimeRelease.addresses.launcher,
+    data: encodeDeepV3Launch(draft, draft.launchSalt, account, {
+      minimumInitialTokenOut: quote.minimumInitialTokenOut,
+      initialBuySqrtPriceLimitX96:
+        quote.initialBuySqrtPriceLimitX96,
+      deadline,
+    }),
     value: initialBuyWei.toString(),
   };
   const gasLimit = await estimatePreparedTransaction(account, launchBase);
@@ -1760,19 +1334,19 @@ async function prepareDeepLaunch(
         label: "Deep contracts",
         status: "pass",
         detail:
-          "Runtime bytecode, fixed liquidity policy and immutable reward ownership match",
+          "Two independent RPCs agree on every reviewed runtime, dependency and immutable policy",
       },
       {
         id: "simulation",
         label: "Simulation",
         status: "pass",
         detail:
-          "The token, locked reserve, original position and first buy are prepared atomically",
+          "The token, original locked position and protected Initial Buy are prepared atomically",
       },
     ],
     transaction: { ...launchBase, gasLimit: gasLimit.toString() },
     predictedToken,
-    predictedHook: addresses.feeHook,
+    predictedHook: runtimeRelease.addresses.feeHook,
     planHash: buildPlanHash(account, launchBase),
   });
 }
@@ -2140,6 +1714,485 @@ async function prepareAdaptiveLaunch(
   });
 }
 
+async function assertStockPairedInfrastructure(
+  release: VerifiedStockPairedRelease,
+) {
+  const {
+    quoteRegistry,
+    positionPlanner,
+    feeSplitVaultFactory,
+    hookFactory,
+    feeHook,
+    launcher,
+    positionForwarderFactory,
+    treasury,
+  } = release.addresses;
+
+  await Promise.all([
+    assertRuntimeCodeHash(
+      officialPoolManager,
+      selectedDeployments.contracts.poolManager.runtimeCodeHash as Hex,
+      "Uniswap PoolManager",
+    ),
+    assertRuntimeCodeHash(
+      officialPositionManager,
+      selectedDeployments.contracts.positionManager.runtimeCodeHash as Hex,
+      "Uniswap PositionManager",
+    ),
+    assertRuntimeCodeHash(
+      officialTokenFactory,
+      selectedDeployments.contracts.uerc20Factory.runtimeCodeHash as Hex,
+      "Uniswap UERC20Factory",
+    ),
+    ...(
+      [
+        ["quoteRegistry", quoteRegistry, "Stock quote registry"],
+        ["positionPlanner", positionPlanner, "Stock-Paired position planner"],
+        [
+          "feeSplitVaultFactory",
+          feeSplitVaultFactory,
+          "Stock-Paired reward factory",
+        ],
+        ["hookFactory", hookFactory, "Stock-Paired hook factory"],
+        ["feeHook", feeHook, "Stock-Paired hook"],
+        ["launcher", launcher, "Stock-Paired launcher"],
+        [
+          "positionForwarderFactory",
+          positionForwarderFactory,
+          "Locked position factory",
+        ],
+      ] as const
+    ).map(([field, address, label]) =>
+      assertRuntimeCodeHash(
+        address,
+        release.runtimeCodeHashes[field],
+        label,
+      ),
+    ),
+  ]);
+
+  const [
+    launcherPoolManager,
+    launcherPositionManager,
+    launcherTokenFactory,
+    launcherHook,
+    launcherRegistry,
+    launcherPlanner,
+    launcherVaultFactory,
+    launcherPositionFactory,
+    minimumInitialBuy,
+    hookPoolManager,
+    hookTreasury,
+    hookRegistry,
+    hookVaultFactory,
+    totalSwapFeeBps,
+    creatorFeeBps,
+    launcherFeeBps,
+    transferTaxBps,
+    lpFeePips,
+    tickSpacing,
+    factoryRecognizesHook,
+    positionFactoryManager,
+    registryAssetCount,
+  ] = await Promise.all([
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "poolManager",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "positionManager",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "tokenFactory",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "feeHook",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "quoteRegistry",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "positionPlanner",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "feeSplitVaultFactory",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "positionForwarderFactory",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "MIN_INITIAL_BUY_QUOTE_AMOUNT",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "poolManager",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "launcherFeeRecipient",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "quoteRegistry",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "feeSplitVaultFactory",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "TOTAL_SWAP_FEE_BPS",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "CREATOR_FEE_BPS",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "LAUNCHER_FEE_BPS",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "TRANSFER_TAX_BPS",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "LP_FEE_PIPS",
+    }),
+    client.readContract({
+      address: feeHook,
+      abi: stockPairedHookAbi,
+      functionName: "TICK_SPACING",
+    }),
+    client.readContract({
+      address: hookFactory,
+      abi: stockPairedHookFactoryAbi,
+      functionName: "isFactoryHook",
+      args: [feeHook],
+    }),
+    client.readContract({
+      address: positionForwarderFactory,
+      abi: lockedPositionFeeForwarderFactoryAbi,
+      functionName: "positionManager",
+    }),
+    client.readContract({
+      address: quoteRegistry,
+      abi: stockQuoteRegistryAbi,
+      functionName: "assetCount",
+    }),
+  ]);
+
+  const expectedAddresses = [
+    [launcherPoolManager, officialPoolManager, "launcher PoolManager"],
+    [
+      launcherPositionManager,
+      officialPositionManager,
+      "launcher PositionManager",
+    ],
+    [launcherTokenFactory, officialTokenFactory, "launcher UERC20Factory"],
+    [launcherHook, feeHook, "launcher hook"],
+    [launcherRegistry, quoteRegistry, "launcher registry"],
+    [launcherPlanner, positionPlanner, "launcher position planner"],
+    [launcherVaultFactory, feeSplitVaultFactory, "launcher reward factory"],
+    [
+      launcherPositionFactory,
+      positionForwarderFactory,
+      "launcher position factory",
+    ],
+    [hookPoolManager, officialPoolManager, "hook PoolManager"],
+    [hookTreasury, treasury, "hook treasury"],
+    [hookRegistry, quoteRegistry, "hook registry"],
+    [hookVaultFactory, feeSplitVaultFactory, "hook reward factory"],
+    [
+      positionFactoryManager,
+      officialPositionManager,
+      "position factory PositionManager",
+    ],
+  ] as const;
+  for (const [actual, expected, label] of expectedAddresses) {
+    if (actual.toLowerCase() !== expected.toLowerCase()) {
+      throw new Error(`The Stock-Paired ${label} does not match the release`);
+    }
+  }
+  if (
+    minimumInitialBuy !== STOCK_PAIRED_MIN_INITIAL_BUY_RAW ||
+    totalSwapFeeBps !== STOCK_PAIRED_TOTAL_SWAP_FEE_BPS ||
+    creatorFeeBps !== STOCK_PAIRED_CREATOR_FEE_BPS ||
+    launcherFeeBps !== STOCK_PAIRED_PROGRAMMABLE_FEE_BPS ||
+    transferTaxBps !== 0 ||
+    lpFeePips !== 0 ||
+    tickSpacing !== 200 ||
+    !factoryRecognizesHook ||
+    registryAssetCount !== BigInt(STOCK_QUOTE_ASSETS.length) ||
+    (BigInt(feeHook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS
+  ) {
+    throw new Error(
+      "The Stock-Paired economics or hook permissions do not match the release",
+    );
+  }
+
+  const registryAssets = await Promise.all(
+    STOCK_QUOTE_ASSETS.map(async (asset, index) => {
+      const [registered, supported, configurationHash] = await Promise.all([
+        client.readContract({
+          address: quoteRegistry,
+          abi: stockQuoteRegistryAbi,
+          functionName: "assetAt",
+          args: [BigInt(index)],
+        }),
+        client.readContract({
+          address: quoteRegistry,
+          abi: stockQuoteRegistryAbi,
+          functionName: "isSupported",
+          args: [asset.address],
+        }),
+        client.readContract({
+          address: quoteRegistry,
+          abi: stockQuoteRegistryAbi,
+          functionName: "assertAssetReady",
+          args: [asset.address],
+        }),
+      ]);
+      return { asset, registered, supported, configurationHash };
+    }),
+  );
+  for (const entry of registryAssets) {
+    if (
+      entry.registered.toLowerCase() !==
+        entry.asset.address.toLowerCase() ||
+      !entry.supported ||
+      entry.configurationHash ===
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
+    ) {
+      throw new Error(
+        `The ${entry.asset.symbol} registry binding is not ready`,
+      );
+    }
+  }
+}
+
+async function estimateStockQuoteApproval(
+  account: Address,
+  transaction: Omit<
+    PreparedStockQuoteApprovalTransaction,
+    "gasLimit"
+  >,
+) {
+  const balance = await client.getBalance({ address: account });
+  await client.call({
+    account,
+    to: transaction.to,
+    data: transaction.data,
+    value: 0n,
+  });
+  const [estimate, gasPrice] = await Promise.all([
+    client.estimateGas({
+      account,
+      to: transaction.to,
+      data: transaction.data,
+      value: 0n,
+    }),
+    client.getGasPrice(),
+  ]);
+  const gasLimit = (estimate * 120n + 99n) / 100n;
+  if (balance < gasLimit * gasPrice) {
+    throw new LaunchInputError(
+      "The wallet does not have enough ETH for the quote-token approval",
+    );
+  }
+  return gasLimit;
+}
+
+async function prepareStockPairedLaunch(
+  account: Address,
+  draft: LaunchDraft,
+  connectedWalletCheck: LaunchPreflightCheck,
+) {
+  const configuration = validateStockPairedLaunchDraft(draft, account);
+  validateLaunchSalt(draft.launchSalt);
+  const tokenCheck: LaunchPreflightCheck = {
+    id: "token",
+    label: "Token setup",
+    status: "pass",
+    detail: `${configuration.quoteAsset.symbol} quote · 1.00% total fee · ${configuration.rewards.beneficiaries.length} reward recipient${configuration.rewards.beneficiaries.length === 1 ? "" : "s"}`,
+  };
+
+  if (connectedWalletCheck.status !== "pass") {
+    return response({
+      status: "blocked",
+      mode: "stock-paired",
+      title: "Switch the wallet to Ethereum",
+      detail: "Stock-Paired launches are fixed to Ethereum Mainnet",
+      checks: [tokenCheck, connectedWalletCheck],
+    });
+  }
+
+  const release =
+    launchEnvironment === "production"
+      ? getConfiguredStockPairedRelease()
+      : null;
+  if (!release) {
+    return response({
+      status: "blocked",
+      mode: "stock-paired",
+      title: "Stock-Paired is being finalized",
+      detail:
+        "Wallet transactions stay disabled until deployment, source verification and lifecycle evidence are complete",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Stock-Paired contracts",
+          status: "blocked",
+          detail: "No approved Ethereum release is recorded",
+        },
+      ],
+    });
+  }
+
+  await assertStockPairedInfrastructure(release);
+  const { launcher, feeHook } = release.addresses;
+  const [quoteBalance, quoteAllowance, predicted] = await Promise.all([
+    client.readContract({
+      address: configuration.quoteAsset.address,
+      abi: stockQuoteTokenAbi,
+      functionName: "balanceOf",
+      args: [account],
+    }),
+    client.readContract({
+      address: configuration.quoteAsset.address,
+      abi: stockQuoteTokenAbi,
+      functionName: "allowance",
+      args: [account, launcher],
+    }),
+    client.readContract({
+      address: launcher,
+      abi: stockPairedLaunchAbi,
+      functionName: "predictTokenAddress",
+      args: [
+        draft.tokenName.trim(),
+        draft.tokenSymbol.trim(),
+        account,
+        draft.launchSalt,
+      ],
+    }),
+  ]);
+  const [predictedToken] = predicted;
+  if (quoteBalance < configuration.initialBuyQuoteAmount) {
+    throw new LaunchInputError(
+      `The wallet needs at least ${draft.initialBuyQuoteAmount.trim()} ${configuration.quoteAsset.symbol} for the Initial Buy`,
+    );
+  }
+  const existingCode = await client.getCode({ address: predictedToken });
+  if (existingCode && existingCode !== "0x") {
+    throw new LaunchInputError(
+      "This deterministic token address is already in use",
+    );
+  }
+
+  if (quoteAllowance < configuration.initialBuyQuoteAmount) {
+    const approvalBase = {
+      kind: "stock-quote-approval" as const,
+      chainId: 1 as const,
+      to: configuration.quoteAsset.address,
+      data: encodeStockQuoteApproval(
+        launcher,
+        configuration.initialBuyQuoteAmount,
+      ),
+      value: "0",
+    };
+    const gasLimit = await estimateStockQuoteApproval(account, approvalBase);
+    return response({
+      status: "approval-required",
+      mode: "stock-paired",
+      title: "Approve the Initial Buy",
+      detail: `Allow exactly ${draft.initialBuyQuoteAmount.trim()} ${configuration.quoteAsset.symbol}, then the launch will be prepared`,
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Stock-Paired contracts",
+          status: "pass",
+          detail:
+            "Runtime bytecode, quote-asset registry and immutable fee split match",
+        },
+      ],
+      approvalTransaction: {
+        ...approvalBase,
+        gasLimit: gasLimit.toString(),
+      },
+      predictedToken,
+      predictedHook: feeHook,
+      planHash: buildPlanHash(account, approvalBase),
+    });
+  }
+
+  const launchBase = {
+    kind: "launch" as const,
+    chainId: 1 as const,
+    to: launcher,
+    data: encodeStockPairedLaunch(draft, draft.launchSalt, account),
+    value: "0",
+  };
+  const gasLimit = await estimatePreparedTransaction(account, launchBase);
+  return response({
+    status: "ready",
+    mode: "stock-paired",
+    title: "Ready for wallet review",
+    detail: `The exact ${configuration.quoteAsset.symbol}-quoted launch succeeded in a read-only Ethereum simulation`,
+    checks: [
+      tokenCheck,
+      connectedWalletCheck,
+      {
+        id: "contracts",
+        label: "Stock-Paired contracts",
+        status: "pass",
+        detail:
+          "Runtime bytecode, quote asset, fixed fee split and permanent LP custody match",
+      },
+      {
+        id: "simulation",
+        label: "Simulation",
+        status: "pass",
+        detail:
+          "The token, stock-token Initial Buy and locked v4 pool are prepared atomically",
+      },
+    ],
+    transaction: { ...launchBase, gasLimit: gasLimit.toString() },
+    predictedToken,
+    predictedHook: feeHook,
+    planHash: buildPlanHash(account, launchBase),
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
@@ -2189,7 +2242,13 @@ export async function POST(request: NextRequest) {
         account,
         draft,
         connectedWalletCheck,
-        selectedManifest,
+      );
+    }
+    if (draft.launchModel === "stock-paired") {
+      return await prepareStockPairedLaunch(
+        account,
+        draft,
+        connectedWalletCheck,
       );
     }
     return await prepareMemeLaunch(

@@ -19,6 +19,14 @@ import type { ReadyOnchainDeployment } from "./types";
 import { usdValueFromWei } from "./usd";
 
 const MAXIMUM_CHART_POINTS = 80;
+const CHART_RANGE_SECONDS = {
+  "1h": 60n * 60n,
+  "1d": 24n * 60n * 60n,
+  "1w": 7n * 24n * 60n * 60n,
+} as const;
+
+export const TOKEN_CHART_RANGES = ["1h", "1d", "1w", "all"] as const;
+export type TokenChartRange = (typeof TOKEN_CHART_RANGES)[number];
 
 type RawPricePoint = {
   blockNumber: bigint;
@@ -37,6 +45,46 @@ export type TokenChartSeries = {
   points: TokenChartPoint[];
   swapCount: number;
 };
+
+export function isTokenChartRange(
+  value: string | null,
+): value is TokenChartRange {
+  return TOKEN_CHART_RANGES.some((range) => range === value);
+}
+
+/**
+ * Finds the first block inside a requested wall-clock range. Ethereum block
+ * times are not exact, so deriving ranges from a fixed blocks-per-hour
+ * estimate would move the boundary during periods of slower or faster blocks.
+ */
+export async function findChartRangeStartBlock(input: {
+  launchBlock: bigint;
+  snapshotBlock: bigint;
+  range: TokenChartRange;
+  readTimestamp: (blockNumber: bigint) => Promise<bigint>;
+}) {
+  const { launchBlock, snapshotBlock, range, readTimestamp } = input;
+  if (range === "all" || launchBlock >= snapshotBlock) return launchBlock;
+
+  const snapshotTimestamp = await readTimestamp(snapshotBlock);
+  const duration = CHART_RANGE_SECONDS[range];
+  const targetTimestamp =
+    snapshotTimestamp > duration ? snapshotTimestamp - duration : 0n;
+  let lower = launchBlock;
+  let upper = snapshotBlock;
+
+  while (lower < upper) {
+    const midpoint = lower + (upper - lower) / 2n;
+    const timestamp = await readTimestamp(midpoint);
+    if (timestamp < targetTimestamp) {
+      lower = midpoint + 1n;
+    } else {
+      upper = midpoint;
+    }
+  }
+
+  return lower;
+}
 
 function minimum(first: bigint, second: bigint) {
   return first < second ? first : second;
@@ -124,8 +172,15 @@ export async function readTokenChartSeries(input: {
   token: LauncherToken;
   snapshotBlock: bigint;
   ethUsdQuote?: { answer: string; decimals: number };
+  range?: TokenChartRange;
 }): Promise<TokenChartSeries> {
-  const { deployment, token, snapshotBlock, ethUsdQuote } = input;
+  const {
+    deployment,
+    token,
+    snapshotBlock,
+    ethUsdQuote,
+    range = "all",
+  } = input;
   const launchBlock = token.launchBlockNumber
     ? BigInt(token.launchBlockNumber)
     : deployment.deploymentBlock;
@@ -153,12 +208,19 @@ export async function readTokenChartSeries(input: {
       : http(deployment.rpcUrl, {
           retryCount: 2,
           timeout: 12_000,
-        }),
+      }),
+  });
+  const rangeStartBlock = await findChartRangeStartBlock({
+    launchBlock,
+    snapshotBlock,
+    range,
+    readTimestamp: async (blockNumber) =>
+      (await client.getBlock({ blockNumber })).timestamp,
   });
   const rawPoints: RawPricePoint[] = [];
 
   for (
-    let fromBlock = launchBlock;
+    let fromBlock = rangeStartBlock;
     fromBlock <= snapshotBlock;
     fromBlock += deployment.logBlockRange
   ) {

@@ -6,13 +6,26 @@
 
 .back {
   align-items: center;
+  background: var(--glass-72);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   color: var(--text-soft);
   display: inline-flex;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 590;
   gap: 7px;
   margin-bottom: 14px;
-  min-height: 36px;
-  padding: 0 4px;
+  min-height: 42px;
+  padding: 0 13px;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 120ms var(--ease-out);
+}
+
+.back:active {
+  transform: scale(0.97);
 }
 
 .layout {
@@ -886,5 +899,298 @@
   .review,
   .submitted {
     animation: none;
+  }
+}
+
+/* Token detail is a calm market view: identity, history, essentials, trade. */
+.page {
+  max-width: 1240px;
+  padding-bottom: 32px;
+  padding-top: 18px;
+}
+
+.back {
+  font-size: 13px;
+  margin-bottom: 12px;
+  min-height: 38px;
+}
+
+.layout {
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.68fr);
+}
+
+.overview,
+.tradeShell {
+  background: color-mix(in srgb, var(--glass-96) 94%, transparent);
+  border-color: var(--panel-border-soft);
+  box-shadow:
+    0 1px 0 var(--card-shadow),
+    0 18px 50px var(--card-shadow-soft);
+}
+
+.overview {
+  border-radius: 26px;
+  padding: 20px;
+}
+
+.identity {
+  gap: 24px;
+  grid-template-columns: minmax(164px, 190px) minmax(0, 1fr);
+}
+
+.image {
+  border-radius: 20px;
+}
+
+.symbol {
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.name {
+  font-size: clamp(40px, 4vw, 56px);
+  line-height: 0.98;
+  margin-top: 6px;
+}
+
+.addressActions {
+  margin-top: 16px;
+}
+
+.address,
+.explorerLink {
+  background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+  border-color: color-mix(in srgb, var(--border) 84%, transparent);
+  min-height: 40px;
+}
+
+.address {
+  border-radius: 12px;
+  padding: 0 12px;
+}
+
+.address code {
+  font-size: 10.5px;
+}
+
+.explorerLink {
+  width: 40px;
+}
+
+.description {
+  font-size: 15px;
+  line-height: 1.5;
+  margin-top: 20px;
+}
+
+.links {
+  margin-top: 12px;
+}
+
+.metrics {
+  border-bottom: 0;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  margin-top: 18px;
+  padding-top: 0;
+}
+
+.metric {
+  min-height: 72px;
+  padding: 15px;
+}
+
+.metric:first-child {
+  padding-left: 2px;
+}
+
+.metric dt {
+  font-size: 11px;
+}
+
+.metric dd {
+  font-size: 18px;
+  margin-top: 5px;
+}
+
+.tradeShell {
+  border-radius: 26px;
+  padding: 9px;
+  top: calc(var(--header-height) + 16px);
+}
+
+.tradeForm,
+.review,
+.submitted {
+  animation-duration: 160ms;
+  min-height: 322px;
+  padding: 15px;
+}
+
+.tradeHeader {
+  padding: 2px 2px 14px;
+}
+
+.tradeHeader h2,
+.review h2 {
+  font-size: 22px;
+  font-weight: 620;
+}
+
+.sideControl {
+  background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
+  border-radius: 14px;
+  padding: 4px;
+}
+
+.sideButton {
+  border-radius: 10px;
+  min-height: 42px;
+}
+
+.sideIndicator {
+  border-radius: 10px;
+  transition-duration: 180ms;
+}
+
+.amountCard {
+  background: color-mix(in srgb, var(--surface-tint) 78%, transparent);
+  border-radius: 18px;
+  margin-top: 13px;
+  padding: 16px;
+}
+
+.amountHeader {
+  font-size: 11.5px;
+}
+
+.balance {
+  font-family: var(--font-instrument), Arial, sans-serif;
+  font-size: 11px;
+}
+
+.amountInput {
+  font-size: clamp(32px, 3vw, 38px);
+  height: 48px;
+}
+
+.amountMeta {
+  font-size: 11px;
+  margin-top: 7px;
+}
+
+.maxButton {
+  background: transparent;
+  border-radius: 0;
+  min-height: 30px;
+  padding: 0 2px;
+}
+
+.tradeFooter {
+  margin-top: 16px;
+  padding-top: 0;
+}
+
+.statusMessage {
+  min-height: 16px;
+}
+
+.primaryAction,
+.secondaryAction {
+  min-height: 48px;
+}
+
+.review {
+  gap: 13px;
+}
+
+.reviewOutput {
+  border-radius: 16px;
+}
+
+.reviewActions {
+  margin-top: 8px;
+}
+
+@media (max-width: 1020px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tradeShell {
+    max-width: 560px;
+    width: 100%;
+  }
+
+  .tradeForm,
+  .review,
+  .submitted {
+    min-height: 310px;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding-bottom: 96px;
+    padding-top: 12px;
+  }
+
+  .layout {
+    gap: 12px;
+  }
+
+  .overview {
+    padding: 14px;
+  }
+
+  .identity {
+    gap: 15px;
+    grid-template-columns: 92px minmax(0, 1fr);
+  }
+
+  .name {
+    font-size: clamp(30px, 9.6vw, 40px);
+  }
+
+  .address code {
+    font-size: 9px;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 14px;
+  }
+
+  .metric {
+    min-height: 70px;
+    padding: 13px;
+  }
+
+  .tradeShell {
+    max-width: none;
+  }
+
+  .tradeForm,
+  .review,
+  .submitted {
+    min-height: 304px;
+  }
+}
+
+@media (max-width: 430px) {
+  .identity {
+    gap: 13px;
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .symbol {
+    font-size: 13px;
+  }
+
+  .name {
+    font-size: 30px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

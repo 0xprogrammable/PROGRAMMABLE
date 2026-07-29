@@ -1,0 +1,76 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-07-15T22:25:40.000Z",
+  "source": {
+    "repo": "https://github.com/Uniswap/contracts",
+    "commit": "37936185dee7decf681360ec799c124e0e034672"
+  },
+  "records": [
+    {
+      "id": "v4-poolmanager-ethereum",
+      "protocol": "v4",
+      "contract": "PoolManager",
+      "chainId": 1,
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "status": "active",
+      "sourceRepo": "https://github.com/Uniswap/v4-core",
+      "sourceRef": "v4-core@1.0.0",
+      "sourceCodeUrl": "https://github.com/Uniswap/v4-core/blob/main/src/PoolManager.sol"
+    },
+    {
+      "id": "v4-positionmanager-ethereum",
+      "protocol": "v4",
+      "contract": "PositionManager",
+      "chainId": 1,
+      "address": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+      "status": "active",
+      "sourceRepo": "https://github.com/Uniswap/v4-core",
+      "sourceRef": "2656054",
+      "sourceCodeUrl": "https://github.com/Uniswap/v4-periphery/blob/main/src/PositionManager.sol"
+    },
+    {
+      "id": "v4-stateview-ethereum",
+      "protocol": "v4",
+      "contract": "StateView",
+      "chainId": 1,
+      "address": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+      "status": "active",
+      "sourceRepo": "https://github.com/Uniswap/v4-core",
+      "sourceRef": "2656054",
+      "sourceCodeUrl": "https://github.com/Uniswap/v4-periphery/blob/main/src/lens/StateView.sol"
+    },
+    {
+      "id": "v4-v4quoter-ethereum",
+      "protocol": "v4",
+      "contract": "V4Quoter",
+      "chainId": 1,
+      "address": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+      "status": "active",
+      "sourceRepo": "https://github.com/Uniswap/v4-core",
+      "sourceRef": "2656054",
+      "sourceCodeUrl": "https://github.com/Uniswap/v4-periphery/blob/main/src/lens/V4Quoter.sol"
+    },
+    {
+      "id": "permit2-permit2-ethereum",
+      "protocol": "permit2",
+      "contract": "Permit2",
+      "chainId": 1,
+      "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "status": "active",
+      "sourceRepo": "https://github.com/Uniswap/permit2",
+      "sourceRef": "permit2@1.0.0",
+      "sourceCodeUrl": "https://github.com/Uniswap/permit2/blob/main/src/Permit2.sol"
+    },
+    {
+      "id": "universal-router-universalrouter-ethereum",
+      "protocol": "universal-router",
+      "contract": "UniversalRouter",
+      "chainId": 1,
+      "address": "0xd92A36B0000531EF3063dEd4De20A0783308446C",
+      "status": "active",
+      "sourceRepo": "https://github.com/Uniswap/universal-router",
+      "sourceRef": "d2d9c4a",
+      "sourceCodeUrl": "https://github.com/Uniswap/universal-router/blob/main/contracts/UniversalRouter.sol"
+    }
+  ]
+}

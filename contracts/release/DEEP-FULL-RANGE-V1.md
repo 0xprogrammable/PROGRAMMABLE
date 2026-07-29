@@ -67,7 +67,7 @@ fork tests remain pinned to block `25,612,664`.
 Run the complete local package:
 
 ```sh
-npm run contracts:deep-full-range:fork-preflight
+npm run contracts:deep-v1:fork-preflight
 ```
 
 The script checks:
@@ -106,7 +106,7 @@ Before activation, the manifest must contain:
 Then run:
 
 ```sh
-npm run contracts:deep-full-range:manifest:live
+npm run contracts:deep-v1:manifest:live
 ```
 
 The live verifier also reads immutable dependencies and policy values from the
