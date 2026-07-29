@@ -13,6 +13,8 @@ import {
   validateRewardConfiguration,
   type ClassicV3RewardConfiguration,
 } from "./classic-v3";
+import { getConfiguredStockPairedRelease } from "./stock-paired-release";
+import { STOCK_PAIRED_V2_QUOTE_ASSETS } from "./stock-paired-v2";
 import {
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_WEI,
@@ -105,10 +107,15 @@ const STOCK_PAIRED_ETH_QUOTE_SYMBOLS = new Set([
   "TSLAon",
   "AAPLon",
 ]);
+const stockPairedV2ReleaseReady =
+  getConfiguredStockPairedRelease()?.internalContractRelease ===
+  "stock-paired-v2";
 export const STOCK_PAIRED_ETH_QUOTE_ASSETS = Object.freeze(
-  STOCK_QUOTE_ASSETS.filter((asset) =>
-    STOCK_PAIRED_ETH_QUOTE_SYMBOLS.has(asset.symbol),
-  ),
+  stockPairedV2ReleaseReady
+    ? STOCK_PAIRED_V2_QUOTE_ASSETS
+    : STOCK_QUOTE_ASSETS.filter((asset) =>
+        STOCK_PAIRED_ETH_QUOTE_SYMBOLS.has(asset.symbol),
+      ),
 );
 
 export function getStockQuoteAsset(value: string) {
@@ -122,10 +129,13 @@ export function getStockQuoteAsset(value: string) {
 }
 
 export function getStockPairedEthQuoteAsset(value: string) {
-  const asset = getStockQuoteAsset(value);
-  return asset && STOCK_PAIRED_ETH_QUOTE_SYMBOLS.has(asset.symbol)
-    ? asset
-    : null;
+  if (!isAddress(value.trim())) return null;
+  const address = getAddress(value.trim());
+  return (
+    STOCK_PAIRED_ETH_QUOTE_ASSETS.find(
+      (asset) => asset.address.toLowerCase() === address.toLowerCase(),
+    ) ?? null
+  );
 }
 
 export function parseStockInitialBuyEthAmount(value: string) {

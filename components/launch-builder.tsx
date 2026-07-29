@@ -50,7 +50,13 @@ import {
   STOCK_PAIRED_ETH_QUOTE_ASSETS,
   STOCK_PAIRED_MIN_INITIAL_BUY_ETH,
   validateStockPairedLaunchDraft,
+  type StockQuoteAsset,
 } from "@/lib/stock-paired";
+import {
+  getStockPairedV2QuoteAsset,
+  STOCK_PAIRED_V2_QUOTE_ASSETS,
+  type StockPairedV2QuoteAsset,
+} from "@/lib/stock-paired-v2";
 import { isConfiguredStockPairedReleaseReady } from "@/lib/stock-paired-release";
 import {
   MAX_METADATA_URL_BYTES,
@@ -103,6 +109,9 @@ const emptyTokenImageState: TokenImageState = {
   message: "",
 };
 const stockPairedLocalPreview = isStockPairedLocalPreviewEnabled();
+const stockPairedUiQuoteAssets = stockPairedLocalPreview
+  ? STOCK_PAIRED_V2_QUOTE_ASSETS
+  : STOCK_PAIRED_ETH_QUOTE_ASSETS;
 const STOCK_PAIRED_DISPLAY_NAMES: Record<string, string> = {
   NVDAon: "NVIDIA",
   SPYon: "S&P 500",
@@ -118,6 +127,26 @@ function stockPairedDisplayName(symbol: string, fallback: string) {
 
 function stockPairedLogoUrl(symbol: string) {
   return `https://cdn.ondo.finance/tokens/logos/${symbol.toLowerCase()}_160x160.png`;
+}
+
+type StockPairedUiQuoteAsset = StockQuoteAsset | StockPairedV2QuoteAsset;
+
+function stockPairedUiDisplayName(asset: StockPairedUiQuoteAsset) {
+  return "displayName" in asset
+    ? asset.displayName
+    : stockPairedDisplayName(asset.symbol, asset.underlying);
+}
+
+function stockPairedUiLogoUrl(asset: StockPairedUiQuoteAsset) {
+  return "logoUrl" in asset
+    ? asset.logoUrl
+    : stockPairedLogoUrl(asset.symbol);
+}
+
+function getStockPairedUiQuoteAsset(value: string) {
+  return stockPairedLocalPreview
+    ? getStockPairedV2QuoteAsset(value)
+    : getStockPairedEthQuoteAsset(value);
 }
 
 export function findIndexedLaunch(
@@ -318,9 +347,9 @@ export function normalizeDeepDraft(initialDraft: LaunchDraft): LaunchDraft {
 export function normalizeStockPairedDraft(
   initialDraft: LaunchDraft,
 ): LaunchDraft {
-  const fallbackAsset = STOCK_PAIRED_ETH_QUOTE_ASSETS[0];
+  const fallbackAsset = stockPairedUiQuoteAssets[0];
   const selectedAsset =
-    getStockPairedEthQuoteAsset(initialDraft.stockQuoteAsset) ?? fallbackAsset;
+    getStockPairedUiQuoteAsset(initialDraft.stockQuoteAsset) ?? fallbackAsset;
   return {
     ...normalizeClassicV3Draft(initialDraft),
     launchModel: "stock-paired",
@@ -1891,18 +1920,16 @@ function StockPairedStep({
   const assetTriggerRef = useRef<HTMLButtonElement>(null);
   const assetOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selected =
-    getStockPairedEthQuoteAsset(draft.stockQuoteAsset) ??
-    STOCK_PAIRED_ETH_QUOTE_ASSETS[0];
+    getStockPairedUiQuoteAsset(draft.stockQuoteAsset) ??
+    stockPairedUiQuoteAssets[0];
   const selectedIndex = Math.max(
     0,
-    STOCK_PAIRED_ETH_QUOTE_ASSETS.findIndex(
+    stockPairedUiQuoteAssets.findIndex(
       (asset) => asset.address.toLowerCase() === selected.address.toLowerCase(),
     ),
   );
-  const selectedDisplayName = stockPairedDisplayName(
-    selected.symbol,
-    selected.underlying,
-  );
+  const selectedDisplayName = stockPairedUiDisplayName(selected);
+  const selectedLogoUrl = stockPairedUiLogoUrl(selected);
 
   useEffect(() => {
     if (!assetListOpen) return;
@@ -1949,7 +1976,7 @@ function StockPairedStep({
   }
 
   function selectAsset(index: number) {
-    const asset = STOCK_PAIRED_ETH_QUOTE_ASSETS[index];
+    const asset = stockPairedUiQuoteAssets[index];
     if (!asset) return;
     updateStockDraft({ stockQuoteAsset: asset.address });
     closeAssetList();
@@ -1962,20 +1989,20 @@ function StockPairedStep({
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setActiveAssetIndex(
-        (index + 1) % STOCK_PAIRED_ETH_QUOTE_ASSETS.length,
+        (index + 1) % stockPairedUiQuoteAssets.length,
       );
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveAssetIndex(
-        (index - 1 + STOCK_PAIRED_ETH_QUOTE_ASSETS.length) %
-          STOCK_PAIRED_ETH_QUOTE_ASSETS.length,
+        (index - 1 + stockPairedUiQuoteAssets.length) %
+          stockPairedUiQuoteAssets.length,
       );
     } else if (event.key === "Home") {
       event.preventDefault();
       setActiveAssetIndex(0);
     } else if (event.key === "End") {
       event.preventDefault();
-      setActiveAssetIndex(STOCK_PAIRED_ETH_QUOTE_ASSETS.length - 1);
+      setActiveAssetIndex(stockPairedUiQuoteAssets.length - 1);
     } else if (event.key === "Escape") {
       event.preventDefault();
       closeAssetList();
@@ -2026,7 +2053,7 @@ function StockPairedStep({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="stock-quote-trigger-logo"
-            src={stockPairedLogoUrl(selected.symbol)}
+            src={selectedLogoUrl}
             alt=""
             width={48}
             height={48}
@@ -2050,13 +2077,11 @@ function StockPairedStep({
             role="listbox"
             aria-label="Quote asset"
           >
-            {STOCK_PAIRED_ETH_QUOTE_ASSETS.map((asset, index) => {
+            {stockPairedUiQuoteAssets.map((asset, index) => {
               const active =
                 asset.address.toLowerCase() === selected.address.toLowerCase();
-              const displayName = stockPairedDisplayName(
-                asset.symbol,
-                asset.underlying,
-              );
+              const displayName = stockPairedUiDisplayName(asset);
+              const logoUrl = stockPairedUiLogoUrl(asset);
               return (
                 <button
                   ref={(element) => {
@@ -2075,7 +2100,7 @@ function StockPairedStep({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     className="stock-quote-logo"
-                    src={stockPairedLogoUrl(asset.symbol)}
+                    src={logoUrl}
                     alt=""
                     width={40}
                     height={40}
