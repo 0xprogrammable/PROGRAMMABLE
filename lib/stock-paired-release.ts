@@ -443,15 +443,47 @@ export function resolveVerifiedStockPairedV2Release(
   return resolveStockPairedRelease(input, stockPairedV2ReleaseDefinition);
 }
 
+export function getConfiguredStockPairedReleases() {
+  return [
+    resolveVerifiedStockPairedRelease(mainnetReleaseJson),
+    resolveVerifiedStockPairedV2Release(mainnetReleaseV2Json),
+  ].filter(
+    (release): release is VerifiedStockPairedRelease => release !== null,
+  );
+}
+
 export function getConfiguredStockPairedRelease() {
+  return getConfiguredStockPairedReleases().at(-1) ?? null;
+}
+
+export function getConfiguredStockPairedLaunchRelease() {
+  return resolveVerifiedStockPairedV2Release(mainnetReleaseV2Json);
+}
+
+export function findStockPairedReleaseByHook(
+  releases: readonly VerifiedStockPairedRelease[],
+  hook: string,
+) {
+  if (!validAddress(hook)) return null;
   return (
-    resolveVerifiedStockPairedV2Release(mainnetReleaseV2Json) ??
-    resolveVerifiedStockPairedRelease(mainnetReleaseJson)
+    releases.find((release) =>
+      sameAddress(release.addresses.feeHook, hook),
+    ) ?? null
+  );
+}
+
+export function getConfiguredStockPairedReleaseByHook(hook: string) {
+  return findStockPairedReleaseByHook(
+    getConfiguredStockPairedReleases(),
+    hook,
   );
 }
 
 export function isConfiguredStockPairedReleaseReady(
   environment: "production" | "rehearsal",
 ) {
-  return environment === "production" && getConfiguredStockPairedRelease() !== null;
+  return (
+    environment === "production" &&
+    getConfiguredStockPairedLaunchRelease() !== null
+  );
 }

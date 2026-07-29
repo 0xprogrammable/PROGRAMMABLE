@@ -70,13 +70,43 @@ function standardJson(record) {
   return assertStockPairedV2StandardJson(record, JSON.parse(output));
 }
 
-function assertSourceInput(record, localInput, remoteValue) {
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return value.map(canonicalJson);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalJson(entry)]),
+    );
+  }
+  return value;
+}
+
+function compilationSettings(settings) {
+  const { outputSelection: _outputSelection, ...compilation } = settings;
+  if (
+    compilation.libraries &&
+    Object.keys(compilation.libraries).length === 0
+  ) {
+    delete compilation.libraries;
+  }
+  return canonicalJson(compilation);
+}
+
+export function assertStockPairedV2SourceInput(
+  record,
+  localInput,
+  remoteValue,
+) {
   const remoteInput = assertStockPairedV2StandardJson(
     record,
     parseEtherscanSource(remoteValue),
   );
   if (
-    JSON.stringify(remoteInput.settings) !== JSON.stringify(localInput.settings)
+    JSON.stringify(compilationSettings(remoteInput.settings)) !==
+    JSON.stringify(compilationSettings(localInput.settings))
   ) {
     throw new Error(`${record.field} compiler input settings differ`);
   }
@@ -120,7 +150,7 @@ async function etherscanRecord(record, localInput) {
   ) {
     throw new Error(`${record.field} Etherscan metadata does not match`);
   }
-  assertSourceInput(record, localInput, source.SourceCode);
+  assertStockPairedV2SourceInput(record, localInput, source.SourceCode);
   return {
     status: "exact-match",
     url: `https://etherscan.io/address/${record.address}#code`,

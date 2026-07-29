@@ -13,6 +13,7 @@ import {
   STOCK_QUOTE_ASSETS,
   stockFeeSplitVaultAbi,
 } from "../lib/stock-paired";
+import { getConfiguredStockPairedRelease } from "../lib/stock-paired-release";
 import {
   buildStockPairedTokenApprovalTransaction,
 } from "../lib/trade/stock-paired";
@@ -27,6 +28,8 @@ const vault = getAddress(
 );
 
 function response() {
+  const release = getConfiguredStockPairedRelease();
+  if (!release) throw new Error("Stock-Paired release fixture is unavailable");
   return {
     status: "ready",
     account: STOCK_TEST_ACCOUNT,
@@ -38,6 +41,7 @@ function response() {
         tokenAddress: STOCK_TEST_TOKEN,
         tokenName: "Stock Pair",
         tokenSymbol: "PAIR",
+        hookAddress: release.addresses.feeHook,
         poolId: `0x${"ab".repeat(32)}`,
         vaultAddress: vault,
         quoteAsset: STOCK_QUOTE_ASSETS[0].address,

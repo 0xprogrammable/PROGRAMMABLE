@@ -36,12 +36,12 @@ function draft() {
 }
 
 describe("Stock-Paired launch preparation", () => {
-  it("uses the exact seven-asset registry and immutable 1% split", () => {
+  it("keeps the seven-asset V1 registry and launches from all eleven V2 routes", () => {
     expect(STOCK_QUOTE_ASSETS).toHaveLength(7);
     expect(new Set(STOCK_QUOTE_ASSETS.map((asset) => asset.address)).size).toBe(
       7,
     );
-    expect(STOCK_PAIRED_ETH_QUOTE_ASSETS).toHaveLength(6);
+    expect(STOCK_PAIRED_ETH_QUOTE_ASSETS).toHaveLength(11);
     expect(
       validateStockPairedLaunchDraft(draft(), STOCK_TEST_ACCOUNT),
     ).toMatchObject({
@@ -55,6 +55,15 @@ describe("Stock-Paired launch preparation", () => {
         sharesBps: [10_000],
       },
     });
+    expect(
+      validateStockPairedLaunchDraft(
+        {
+          ...draft(),
+          stockQuoteAsset: STOCK_PAIRED_ETH_QUOTE_ASSETS[10].address,
+        },
+        STOCK_TEST_ACCOUNT,
+      ).quoteAsset,
+    ).toBe(STOCK_PAIRED_ETH_QUOTE_ASSETS[10]);
   });
 
   it("encodes one atomic ETH launch with canonical metadata and quote asset", () => {

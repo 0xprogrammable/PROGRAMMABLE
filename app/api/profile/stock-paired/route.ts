@@ -24,12 +24,15 @@ import {
   verifyStockPairedClaimReceipt,
 } from "@/lib/server/stock-paired-claim-receipt";
 import {
-  getStockQuoteAsset,
+  getStockPairedQuoteAssetForRelease,
   stockFeeSplitVaultAbi,
   stockFeeSplitVaultFactoryAbi,
   stockPairedHookAbi,
 } from "@/lib/stock-paired";
-import { getConfiguredStockPairedRelease } from "@/lib/stock-paired-release";
+import {
+  getConfiguredStockPairedReleaseByHook,
+  getConfiguredStockPairedReleases,
+} from "@/lib/stock-paired-release";
 import type { LauncherToken } from "@/lib/tokens";
 import { ClassicTradeInputError } from "@/lib/trade/classic";
 import {
@@ -200,8 +203,15 @@ async function readVaultReward(
   ) {
     return null;
   }
-  const release = getConfiguredStockPairedRelease();
-  const quote = getStockQuoteAsset(token.quoteAssetAddress);
+  const release = getConfiguredStockPairedReleaseByHook(
+    token.hookAddress,
+  );
+  const quote = release
+    ? getStockPairedQuoteAssetForRelease(
+        release,
+        token.quoteAssetAddress,
+      )
+    : null;
   if (!release || !quote) return null;
   const vault = getAddress(token.rewardVaultAddress);
   const [
@@ -404,6 +414,7 @@ async function readVaultReward(
     tokenName: token.name,
     tokenSymbol: token.symbol,
     ...(token.imageUrl ? { imageUrl: token.imageUrl } : {}),
+    hookAddress: release.addresses.feeHook,
     poolId: token.poolId,
     vaultAddress: vault,
     quoteAsset: quote.address,
@@ -479,8 +490,8 @@ async function readRewards(
   account: Address,
   includeEstimates = true,
 ) {
-  const release = getConfiguredStockPairedRelease();
-  if (!release) {
+  const releases = getConfiguredStockPairedReleases();
+  if (releases.length === 0) {
     return {
       status: "not-deployed" as const,
       account,
@@ -496,22 +507,24 @@ async function readRewards(
   const snapshotBlock = BigInt(model.snapshot.blockNumber);
   const rpcClients = clients();
   await Promise.all(
-    rpcClients.flatMap((client) => [
-      assertRuntime(
-        client,
-        release.addresses.feeHook,
-        release.runtimeCodeHashes.feeHook,
-        snapshotBlock,
-        "Stock-Paired hook",
-      ),
-      assertRuntime(
-        client,
-        release.addresses.feeSplitVaultFactory,
-        release.runtimeCodeHashes.feeSplitVaultFactory,
-        snapshotBlock,
-        "Stock-Paired reward-vault factory",
-      ),
-    ]),
+    rpcClients.flatMap((client) =>
+      releases.flatMap((release) => [
+        assertRuntime(
+          client,
+          release.addresses.feeHook,
+          release.runtimeCodeHashes.feeHook,
+          snapshotBlock,
+          `${release.internalContractRelease} hook`,
+        ),
+        assertRuntime(
+          client,
+          release.addresses.feeSplitVaultFactory,
+          release.runtimeCodeHashes.feeSplitVaultFactory,
+          snapshotBlock,
+          `${release.internalContractRelease} reward-vault factory`,
+        ),
+      ]),
+    ),
   );
   const stockTokens = model.tokens.filter(
     (token) => token.launchModel === "stock-paired",

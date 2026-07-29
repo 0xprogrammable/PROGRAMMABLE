@@ -13,7 +13,7 @@ import { mainnet } from "viem/chains";
 
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
-import { getConfiguredStockPairedRelease } from "@/lib/stock-paired-release";
+import { getConfiguredStockPairedReleases } from "@/lib/stock-paired-release";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -65,8 +65,8 @@ export async function GET(request: NextRequest) {
   ) {
     return json({ error: "Invalid Stock-Paired launch lookup" }, 400);
   }
-  const release = getConfiguredStockPairedRelease();
-  if (!release) {
+  const releases = getConfiguredStockPairedReleases();
+  if (releases.length === 0) {
     return json({ status: "not-deployed", launch: null }, 409);
   }
 
@@ -86,7 +86,16 @@ export async function GET(request: NextRequest) {
       ),
     );
     const canonical = receipts[0];
+    const release =
+      canonical.to === null
+        ? null
+        : releases.find(
+            (candidate) =>
+              candidate.addresses.ethLaunchCoordinator.toLowerCase() ===
+              canonical.to?.toLowerCase(),
+          ) ?? null;
     if (
+      !release ||
       receipts.some(
         (receipt) =>
           receipt.status !== "success" ||

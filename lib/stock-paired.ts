@@ -13,8 +13,11 @@ import {
   validateRewardConfiguration,
   type ClassicV3RewardConfiguration,
 } from "./classic-v3";
-import { getConfiguredStockPairedRelease } from "./stock-paired-release";
-import { STOCK_PAIRED_V2_QUOTE_ASSETS } from "./stock-paired-v2";
+import type { VerifiedStockPairedRelease } from "./stock-paired-release";
+import {
+  STOCK_PAIRED_V2_QUOTE_ASSETS,
+  type StockPairedV2QuoteAsset,
+} from "./stock-paired-v2";
 import {
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_WEI,
@@ -107,16 +110,46 @@ const STOCK_PAIRED_ETH_QUOTE_SYMBOLS = new Set([
   "TSLAon",
   "AAPLon",
 ]);
-const stockPairedV2ReleaseReady =
-  getConfiguredStockPairedRelease()?.internalContractRelease ===
-  "stock-paired-v2";
 export const STOCK_PAIRED_ETH_QUOTE_ASSETS = Object.freeze(
-  stockPairedV2ReleaseReady
-    ? STOCK_PAIRED_V2_QUOTE_ASSETS
-    : STOCK_QUOTE_ASSETS.filter((asset) =>
-        STOCK_PAIRED_ETH_QUOTE_SYMBOLS.has(asset.symbol),
-      ),
+  STOCK_PAIRED_V2_QUOTE_ASSETS,
 );
+const STOCK_PAIRED_V1_ETH_QUOTE_ASSETS = Object.freeze(
+  STOCK_QUOTE_ASSETS.filter((asset) =>
+    STOCK_PAIRED_ETH_QUOTE_SYMBOLS.has(asset.symbol),
+  ),
+);
+
+export type AnyStockPairedQuoteAsset =
+  StockQuoteAsset | StockPairedV2QuoteAsset;
+
+export function getStockPairedQuoteAssetsForRelease(
+  release: Pick<VerifiedStockPairedRelease, "internalContractRelease">,
+): readonly AnyStockPairedQuoteAsset[] {
+  return release.internalContractRelease === "stock-paired-v2"
+    ? STOCK_PAIRED_V2_QUOTE_ASSETS
+    : STOCK_QUOTE_ASSETS;
+}
+
+export function getStockPairedEthQuoteAssetsForRelease(
+  release: Pick<VerifiedStockPairedRelease, "internalContractRelease">,
+): readonly AnyStockPairedQuoteAsset[] {
+  return release.internalContractRelease === "stock-paired-v2"
+    ? STOCK_PAIRED_V2_QUOTE_ASSETS
+    : STOCK_PAIRED_V1_ETH_QUOTE_ASSETS;
+}
+
+export function getStockPairedQuoteAssetForRelease(
+  release: Pick<VerifiedStockPairedRelease, "internalContractRelease">,
+  value: string,
+) {
+  if (!isAddress(value.trim())) return null;
+  const address = getAddress(value.trim());
+  return (
+    getStockPairedQuoteAssetsForRelease(release).find(
+      (asset) => asset.address.toLowerCase() === address.toLowerCase(),
+    ) ?? null
+  );
+}
 
 export function getStockQuoteAsset(value: string) {
   if (!isAddress(value.trim())) return null;
