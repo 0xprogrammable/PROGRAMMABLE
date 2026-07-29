@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import { CurrencySettler } from "@openzeppelin/uniswap-hooks/src/utils/CurrencySettler.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { IUnlockCallback } from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import { SqrtPriceMath } from "@uniswap/v4-core/src/libraries/SqrtPriceMath.sol";
 import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import { Currency, CurrencyLibrary } from "@uniswap/v4-core/src/types/Currency.sol";
@@ -53,6 +54,7 @@ abstract contract LiquidityGrowthFullRangeV3Fixture is Deployers, IUnlockCallbac
     PoolKey internal v3Key;
     bytes32 internal v3PoolId;
     address internal v3Treasury;
+    uint256 internal v3InitialTokenDust;
 
     PoolSwapTest.TestSettings internal v3SwapSettings =
         PoolSwapTest.TestSettings({ takeClaims: false, settleUsingBurn: false });
@@ -77,8 +79,19 @@ abstract contract LiquidityGrowthFullRangeV3Fixture is Deployers, IUnlockCallbac
             hooks: v3Hook
         });
         v3PoolId = PoolId.unwrap(v3Key.toId());
+        uint160 initialLowerSqrtPriceX96 = TickMath.getSqrtPriceAtTick(Policy.FULL_RANGE_TICK_LOWER);
+        uint160 initialSqrtPriceX96 = Policy.initialSqrtPriceX96();
+        uint128 initialLiquidity = LiquidityAmounts.getLiquidityForAmount1(
+            initialLowerSqrtPriceX96, initialSqrtPriceX96, Policy.TOKEN_SUPPLY
+        );
+        uint256 initialTokenLiquidity =
+            SqrtPriceMath.getAmount1Delta(initialLowerSqrtPriceX96, initialSqrtPriceX96, initialLiquidity, true);
+        v3InitialTokenDust = Policy.TOKEN_SUPPLY - initialTokenLiquidity;
         v3Vault = v3VaultFactory.deploy(
-            keccak256("programmable.deep.v3.fixture.vault"), ILiquidityGrowthFeeOracleHookV2(address(v3Hook)), v3Key
+            keccak256("programmable.deep.v3.fixture.vault"),
+            ILiquidityGrowthFeeOracleHookV2(address(v3Hook)),
+            v3Key,
+            v3InitialTokenDust
         );
 
         assertEq(v3Hook.registerPool(v3Key, address(v3Vault)), v3PoolId);
@@ -86,9 +99,6 @@ abstract contract LiquidityGrowthFullRangeV3Fixture is Deployers, IUnlockCallbac
 
         v3Token.approve(address(modifyLiquidityRouter), type(uint256).max);
         v3Token.approve(address(swapRouter), type(uint256).max);
-        uint128 initialLiquidity = LiquidityAmounts.getLiquidityForAmount1(
-            TickMath.getSqrtPriceAtTick(Policy.FULL_RANGE_TICK_LOWER), Policy.initialSqrtPriceX96(), Policy.TOKEN_SUPPLY
-        );
         modifyLiquidityRouter.modifyLiquidity(
             v3Key,
             ModifyLiquidityParams({
@@ -99,6 +109,7 @@ abstract contract LiquidityGrowthFullRangeV3Fixture is Deployers, IUnlockCallbac
             }),
             abi.encode(v3Hook.BOOTSTRAP_DOMAIN_TAG())
         );
+        assertTrue(v3Token.transfer(address(v3Vault), v3InitialTokenDust));
 
         manager.unlock(abi.encode(uint8(1), INITIAL_BUY));
         v3Hook.finalizePool(v3Key);

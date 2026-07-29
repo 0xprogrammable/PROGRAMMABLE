@@ -2,6 +2,8 @@
 pragma solidity 0.8.26;
 
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
+import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
+import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 
 import { ILiquidityGrowthFeeOracleHookV2 } from "./interfaces/ILiquidityGrowthFeeOracleHookV2.sol";
@@ -17,6 +19,7 @@ contract LiquidityGrowthFullRangeVaultFactoryV3 {
     LiquidityGrowthZapPlannerV3 public immutable planner;
     mapping(address vault => bytes32 commitment) public initializationCommitment;
     mapping(address vault => bytes32 configurationHash) public configurationHashOf;
+    mapping(address vault => bytes32 bindingHash) public vaultBindingHash;
 
     error ConfigurationHashMissing(address vault);
     error InvalidPlanner(address planner);
@@ -27,8 +30,7 @@ contract LiquidityGrowthFullRangeVaultFactoryV3 {
         address indexed vault,
         address indexed feeHook,
         bytes32 indexed poolId,
-        address planner,
-        bytes32 salt,
+        bytes32 creatorSalt,
         bytes32 configurationHash
     );
 
@@ -40,16 +42,21 @@ contract LiquidityGrowthFullRangeVaultFactoryV3 {
         implementation = address(new LiquidityGrowthFullRangeVaultV3(address(this)));
     }
 
-    function deploy(bytes32 salt, ILiquidityGrowthFeeOracleHookV2 feeHook, PoolKey calldata poolKey)
-        external
-        returns (LiquidityGrowthFullRangeVaultV3 vault)
-    {
-        address predicted = predict(salt);
+    function deploy(
+        bytes32 creatorSalt,
+        ILiquidityGrowthFeeOracleHookV2 feeHook,
+        PoolKey calldata poolKey,
+        uint256 initialTokenDust
+    ) external returns (LiquidityGrowthFullRangeVaultV3 vault) {
+        bytes32 salt = deploymentSalt(creatorSalt, msg.sender, feeHook, poolKey, initialTokenDust);
+        address predicted = _predictDeploymentSalt(salt);
         if (predicted.code.length != 0) {
             revert PredictedVaultAlreadyExists(predicted);
         }
         LiquidityGrowthFullRangeVaultV3.Configuration memory configuration =
-            LiquidityGrowthFullRangeVaultV3.Configuration({ poolKey: poolKey, planner: planner });
+            LiquidityGrowthFullRangeVaultV3.Configuration({
+                poolKey: poolKey, planner: planner, initialTokenDust: initialTokenDust
+            });
         bytes32 commitment = keccak256(abi.encode(feeHook, configuration));
         initializationCommitment[predicted] = commitment;
 
@@ -66,12 +73,46 @@ contract LiquidityGrowthFullRangeVaultFactoryV3 {
             revert ConfigurationHashMissing(deployed);
         }
         configurationHashOf[deployed] = recorded;
-        emit LiquidityGrowthFullRangeVaultDeployedV3(
-            deployed, address(feeHook), vault.poolId(), address(planner), salt, recorded
+        bytes32 rawPoolId = PoolId.unwrap(poolKey.toId());
+        vaultBindingHash[deployed] = keccak256(
+            abi.encode(
+                block.chainid, address(this), deployed, address(feeHook), rawPoolId, Currency.unwrap(poolKey.currency1)
+            )
+        );
+        emit LiquidityGrowthFullRangeVaultDeployedV3(deployed, address(feeHook), rawPoolId, creatorSalt, recorded);
+    }
+
+    function deploymentSalt(
+        bytes32 creatorSalt,
+        address deployer,
+        ILiquidityGrowthFeeOracleHookV2 feeHook,
+        PoolKey calldata poolKey,
+        uint256 initialTokenDust
+    ) public view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                block.chainid,
+                address(this),
+                deployer,
+                creatorSalt,
+                address(feeHook),
+                PoolId.unwrap(poolKey.toId()),
+                initialTokenDust
+            )
         );
     }
 
-    function predict(bytes32 salt) public view returns (address) {
+    function predict(
+        bytes32 creatorSalt,
+        address deployer,
+        ILiquidityGrowthFeeOracleHookV2 feeHook,
+        PoolKey calldata poolKey,
+        uint256 initialTokenDust
+    ) public view returns (address) {
+        return _predictDeploymentSalt(deploymentSalt(creatorSalt, deployer, feeHook, poolKey, initialTokenDust));
+    }
+
+    function _predictDeploymentSalt(bytes32 salt) private view returns (address) {
         return implementation.predictDeterministicAddress(salt, address(this));
     }
 

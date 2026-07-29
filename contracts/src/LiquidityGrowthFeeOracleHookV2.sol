@@ -14,7 +14,6 @@ import { IUnlockCallback } from "@uniswap/v4-core/src/interfaces/callback/IUnloc
 import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
-import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {
     BeforeSwapDelta,
@@ -186,7 +185,7 @@ contract LiquidityGrowthFeeOracleHookV2 is
         ) {
             revert InvalidDependency(address(0));
         }
-        if (maxAbsTickDelta_ <= 0 || maxAbsTickDelta_ > TickMath.MAX_TICK) {
+        if (maxAbsTickDelta_ != Policy.MAX_ABS_OBSERVATION_TICK_DELTA) {
             revert InvalidMaxAbsTickDelta(maxAbsTickDelta_);
         }
         Policy.validateFixedPolicy();
@@ -199,16 +198,19 @@ contract LiquidityGrowthFeeOracleHookV2 is
     function registerPool(PoolKey calldata key, address growthVault) external returns (bytes32 poolId) {
         _validatePoolShape(key);
         address token = Currency.unwrap(key.currency1);
+        poolId = PoolId.unwrap(key.toId());
         address recordedCreator = _recordedTokenCreator(token);
         if (recordedCreator != msg.sender) revert InvalidRegistrar(msg.sender, recordedCreator);
+        bytes32 expectedVaultBinding = keccak256(
+            abi.encode(block.chainid, address(growthVaultFactory), growthVault, address(this), poolId, token)
+        );
         if (
             growthVault == address(0) || growthVault.code.length == 0
-                || growthVaultFactory.configurationHashOf(growthVault) == bytes32(0)
+                || growthVaultFactory.vaultBindingHash(growthVault) != expectedVaultBinding
         ) {
             revert InvalidVault(growthVault);
         }
 
-        poolId = PoolId.unwrap(key.toId());
         if (poolFeeConfig[poolId].lifecycle != LIFECYCLE_UNREGISTERED) revert AlreadyRegistered(poolId);
         poolFeeConfig[poolId] = PoolFeeConfig({
             growthVault: growthVault, registrar: msg.sender, lifecycle: LIFECYCLE_REGISTERED, growthFeesAccrued: 0
@@ -414,7 +416,7 @@ contract LiquidityGrowthFeeOracleHookV2 is
             if (
                 sender != address(positionManager) || params.liquidityDelta <= 0
                     || params.tickLower != Policy.FULL_RANGE_TICK_LOWER || params.tickUpper != Policy.INITIAL_TICK
-                    || _singleTag(hookData) != BOOTSTRAP_DOMAIN_TAG
+                    || params.salt == bytes32(0) || _singleTag(hookData) != BOOTSTRAP_DOMAIN_TAG
             ) {
                 revert InvalidBootstrap(sender, params.tickLower, params.tickUpper, params.liquidityDelta);
             }
@@ -476,6 +478,7 @@ contract LiquidityGrowthFeeOracleHookV2 is
         if (config.lifecycle == LIFECYCLE_INITIAL_POSITION_ADDED) {
             if (
                 sender != config.registrar || !params.zeroForOne || params.amountSpecified >= 0
+                    || _absolute(params.amountSpecified) < Policy.MIN_INITIAL_BUY_WEI
                     || _singleTag(hookData) != LAUNCH_BUY_DOMAIN_TAG
             ) {
                 revert InvalidInitialBuy(sender, params.zeroForOne, params.amountSpecified);
