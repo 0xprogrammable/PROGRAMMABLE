@@ -5,16 +5,85 @@
   "status": "not-deployed",
   "chainId": 1,
   "releaseCommit": null,
-  "sourceCommitment": null,
+  "sourceCommitment": "0x8514bb5b056fbb70d241c18f809dbfd8e99487d41f16ef5266df42150f2cf425",
   "ethCoordinatorReleaseCommit": null,
   "ethCoordinatorSourceCommitment": null,
   "ethCoordinatorNonce": null,
-  "startingNonce": null,
+  "startingNonce": 102,
   "startBlock": null,
-  "addresses": {},
+  "candidatePlan": {
+    "status": "reviewed-not-deployed",
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "startingNonce": 102,
+    "transactionCount": 7,
+    "quoteRegistry": "0xd38Fbc171C1a842dc3F6d10cf5642BAe097D9239",
+    "positionPlanner": "0x93728dF8288fC250294855F6D9dd28F8089E4A3D",
+    "feeSplitVaultFactory": "0x52d70971D6653a754c29385a2a6f241A481952d4",
+    "hookFactory": "0x5C2704C6eEaA2063d7a969BA7E557c87AEb1fBcB",
+    "feeHook": "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
+    "launcher": "0x5eA6Be24838061bA45dbE8D82DE1b267DC240Daf",
+    "ethLaunchCoordinator": "0xFb9E1034df6161088E8F358502B19E7515c30fD2",
+    "hookSalt": "0x0000000000000000000000000000000000000000000000000000000000001260",
+    "estimatedGas": "24062397",
+    "estimatedGasPriceGwei": "0.848936597",
+    "estimatedRequiredEth": "0.020427449424843009"
+  },
+  "addresses": {
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+  },
   "transactions": {},
   "runtimeCodeHashes": {},
-  "officialDependencies": {},
+  "officialDependencies": {
+    "poolManager": {
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "runtimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+    },
+    "positionManager": {
+      "address": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+      "runtimeCodeHash": "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b"
+    },
+    "stateView": {
+      "address": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+      "runtimeCodeHash": "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878"
+    },
+    "v4Quoter": {
+      "address": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+      "runtimeCodeHash": "0x06de58fa119c5deaa7a667fb92d3894e25d9160e62fb82c8d86d43b47eefe441"
+    },
+    "permit2": {
+      "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "runtimeCodeHash": "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131"
+    },
+    "universalRouter": {
+      "address": "0x4C82D1fBFe28C977cBB58D8C7FF8FCF9F70a2cCA",
+      "runtimeCodeHash": "0x70c9ea2b275087aea3d57ae48e2d30e272a07ff5b6c7974bd47c21478b37face"
+    },
+    "uerc20Factory": {
+      "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
+      "runtimeCodeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb"
+    },
+    "positionForwarderFactory": {
+      "address": "0x291a9ff1059d225d02B1659430804486404dB507",
+      "runtimeCodeHash": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
+    },
+    "v3Factory": {
+      "address": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+      "runtimeCodeHash": "0x4d7b8525cd5d14343fa67a732fba5b24cddba11620ca88392f4ec6c52f91fd69"
+    },
+    "v3SwapRouter": {
+      "address": "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+      "runtimeCodeHash": "0xbb90113d2f9a5e9b7feb15a1d1fff06c1ee1575b3f9b1181778ffd0cf633e7ea"
+    },
+    "weth": {
+      "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "runtimeCodeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23"
+    },
+    "usdc": {
+      "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "runtimeCodeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505"
+    }
+  },
   "issuerRuntime": {
     "tokenRuntimeCodeHash": "0x9806c8207a455c012b2799be651ac0146d54866f92db90b502e5e2efa283bee9",
     "beacon": "0x985462c9aa4d6c3ad59ae6e1e9c0c11347ed1598",

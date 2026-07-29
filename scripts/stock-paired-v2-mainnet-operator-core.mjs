@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -14,71 +14,45 @@ import {
   stringToHex,
 } from "viem";
 
-export const STOCK_PAIRED_CHAIN_ID = 1;
-export const STOCK_PAIRED_CHAIN_ID_HEX = "0x1";
-export const STOCK_PAIRED_DEPLOYER =
-  "0x2Bb333d48DFAF1596D9036671d2E43168994249E";
-export const STOCK_PAIRED_TREASURY =
-  "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
-export const STOCK_PAIRED_FINALITY_CONFIRMATIONS = 12;
-export const STOCK_PAIRED_MAX_RUNTIME_BYTES = 24_576;
-export const STOCK_PAIRED_MAX_INITCODE_BYTES = 49_152;
-export const STOCK_PAIRED_REQUIRED_HOOK_FLAGS = 8_396n;
-export const STOCK_PAIRED_HOOK_ADDRESS_MASK = (1n << 14n) - 1n;
-export const STOCK_PAIRED_MAX_FEE_PER_GAS_WEI = 100_000_000_000n;
-export const STOCK_PAIRED_MAX_PRIORITY_FEE_PER_GAS_WEI = 5_000_000_000n;
-export const STOCK_PAIRED_MIN_PRIORITY_FEE_PER_GAS_WEI = 100_000_000n;
-export const STOCK_PAIRED_GAS_PADDING_BPS = 12_000n;
+import {
+  STOCK_PAIRED_CHAIN_ID,
+  STOCK_PAIRED_CHAIN_ID_HEX,
+  STOCK_PAIRED_DEPENDENCIES,
+  STOCK_PAIRED_DEPLOYER,
+  STOCK_PAIRED_HOOK_ADDRESS_MASK,
+  STOCK_PAIRED_MAX_INITCODE_BYTES,
+  STOCK_PAIRED_MAX_RUNTIME_BYTES,
+  STOCK_PAIRED_REQUIRED_HOOK_FLAGS,
+  STOCK_PAIRED_TREASURY,
+  normalizeStockPairedHex,
+  stockPairedQuantity,
+} from "./stock-paired-mainnet-operator-core.mjs";
 
-export const STOCK_PAIRED_DEFAULT_RPC_ENDPOINTS = Object.freeze([
-  "https://ethereum-rpc.publicnode.com",
-  "https://eth.drpc.org",
-]);
-
-export const STOCK_PAIRED_DEPENDENCIES = Object.freeze({
-  poolManager: {
-    address: "0x000000000004444c5dc75cB358380D2e3dE08A90",
+export const STOCK_PAIRED_V2_DEPENDENCIES = Object.freeze({
+  ...STOCK_PAIRED_DEPENDENCIES,
+  v3Factory: {
+    address: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
     runtimeCodeHash:
-      "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+      "0x4d7b8525cd5d14343fa67a732fba5b24cddba11620ca88392f4ec6c52f91fd69",
   },
-  positionManager: {
-    address: "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+  v3SwapRouter: {
+    address: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
     runtimeCodeHash:
-      "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b",
+      "0xbb90113d2f9a5e9b7feb15a1d1fff06c1ee1575b3f9b1181778ffd0cf633e7ea",
   },
-  stateView: {
-    address: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+  weth: {
+    address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     runtimeCodeHash:
-      "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878",
+      "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
   },
-  v4Quoter: {
-    address: "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+  usdc: {
+    address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     runtimeCodeHash:
-      "0x06de58fa119c5deaa7a667fb92d3894e25d9160e62fb82c8d86d43b47eefe441",
-  },
-  permit2: {
-    address: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
-    runtimeCodeHash:
-      "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131",
-  },
-  universalRouter: {
-    address: "0x4C82D1fBFe28C977cBB58D8C7FF8FCF9F70a2cCA",
-    runtimeCodeHash:
-      "0x70c9ea2b275087aea3d57ae48e2d30e272a07ff5b6c7974bd47c21478b37face",
-  },
-  uerc20Factory: {
-    address: "0x000000e200088D55C39a11F609E5F667729ad49b",
-    runtimeCodeHash:
-      "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb",
-  },
-  positionForwarderFactory: {
-    address: "0x291a9ff1059d225d02B1659430804486404dB507",
-    runtimeCodeHash:
-      "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2",
+      "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
   },
 });
 
-export const STOCK_PAIRED_ISSUER_RUNTIME = Object.freeze({
+export const STOCK_PAIRED_V2_ISSUER_RUNTIME = Object.freeze({
   tokenRuntimeCodeHash:
     "0x9806c8207a455c012b2799be651ac0146d54866f92db90b502e5e2efa283bee9",
   beacon: "0x985462C9aA4D6c3Ad59Ae6e1e9c0C11347ED1598",
@@ -87,56 +61,61 @@ export const STOCK_PAIRED_ISSUER_RUNTIME = Object.freeze({
   implementation: "0xebBcb2cEE51c2FeE4062c9C1270dcb98B0b22250",
   implementationRuntimeCodeHash:
     "0x7480293a8fad3f98f01f39aa59cd4e4c30d7fc4e7019e8f6e691eb5a9be53d11",
+  gmTokenManager: "0x2c158BC456e027b2AfFCCadF1BDBD9f5fC4c5C8c",
+  gmTokenManagerRuntimeCodeHash:
+    "0x6d111c0eae4517448b28f089392aef41d2b865ea8420f504e5d57d238fb8e821",
 });
 
-export const STOCK_PAIRED_ASSETS = Object.freeze([
+export const STOCK_PAIRED_V2_ASSETS = Object.freeze([
   ["NVDAon", "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE"],
   ["SPYon", "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08"],
   ["GOOGLon", "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc"],
   ["SLVon", "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4"],
-  ["QQQon", "0x0e397938C1Aa0680954093495B70A9F5e2249aBa"],
   ["TSLAon", "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f"],
   ["AAPLon", "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c"],
+  ["BABAon", "0x41765F0FCddC276309195166C7A62AE522FA09ef"],
+  ["COPXon", "0x423A63dfE8d82CD9C6568C92210AA537d8Ef6885"],
+  ["CRCLon", "0x3632DEa96A953C11dac2f00b4A05a32CD1063fAE"],
+  ["TLTon", "0x992651BFeB9A0DCC4457610E284ba66D86489d4d"],
+  ["USOon", "0x1F5fc5c3c8B0F15c7E21AF623936FF2b210b6415"],
 ]);
 
-export const STOCK_PAIRED_MANIFEST_PATH =
-  "contracts/deployments/mainnet-stock-paired-v1.json";
-export const STOCK_PAIRED_DRY_RUN_PATH =
-  "contracts/broadcast/DeployMainnetStockPairedInfrastructureV1.s.sol/1/dry-run/run-latest.json";
+export const STOCK_PAIRED_V2_STOCK_POOL_FEES = Object.freeze([
+  10_000, 3_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000,
+  10_000,
+]);
 
-export const STOCK_PAIRED_RELEASE_PATHS = Object.freeze([
+export const STOCK_PAIRED_V2_MANIFEST_PATH =
+  "contracts/deployments/mainnet-stock-paired-v2.json";
+export const STOCK_PAIRED_V2_DRY_RUN_PATH =
+  "contracts/broadcast/DeployMainnetStockPairedInfrastructureV2.s.sol/1/dry-run/run-latest.json";
+
+export const STOCK_PAIRED_V2_RELEASE_PATHS = Object.freeze([
   "config/stock-paired-assets.v1.json",
   "contracts/src/interfaces/IQuoteAssetCreatorFeeHookV1.sol",
   "contracts/src/StockQuoteRegistryV1.sol",
+  "contracts/src/StockQuoteRegistryV2.sol",
   "contracts/src/StockPairedPositionPlannerV1.sol",
   "contracts/src/QuoteAssetFeeSplitVaultV1.sol",
   "contracts/src/QuoteAssetFeeSplitVaultFactoryV1.sol",
   "contracts/src/QuoteAssetCreatorFeeHookV1.sol",
   "contracts/src/QuoteAssetCreatorFeeHookFactoryV1.sol",
   "contracts/src/StockPairedLaunchV1.sol",
-  "contracts/script/DeployMainnetStockPairedInfrastructureV1.s.sol",
-  "contracts/test/StockPairedLaunchV1.t.sol",
-  "contracts/test/StockPairedMainnetFork.t.sol",
-  "contracts/test/invariant/StockPairedFeeAccountingInvariant.t.sol",
-  "contracts/test/DeployMainnetStockPairedInfrastructureV1.t.sol",
-  "contracts/scripts/capture-stock-paired-release.mjs",
-  "contracts/scripts/capture-stock-paired-lifecycle.mjs",
-  "contracts/scripts/verify-stock-paired-sources.mjs",
-  "contracts/scripts/test/stock-paired-operator.test.mjs",
-  "contracts/scripts/test/stock-paired-canary.test.mjs",
-  "contracts/security/STOCK-PAIRED-V1.md",
-  "contracts/foundry.toml",
-  "contracts/remappings.txt",
-  "docs/superpowers/specs/2026-07-29-stock-paired-v1-design.md",
+  "contracts/src/StockPairedEthLaunchCoordinatorV1.sol",
+  "contracts/script/DeployMainnetStockPairedInfrastructureV2.s.sol",
+  "contracts/test/DeployMainnetStockPairedInfrastructureV2.t.sol",
+  "contracts/test/StockQuoteRegistryV2.t.sol",
+  "contracts/scripts/test/stock-paired-v2-operator.test.mjs",
+  "contracts/deployments/mainnet-stock-paired-v2.json",
   "scripts/stock-paired-mainnet-operator-core.mjs",
+  "scripts/stock-paired-v2-mainnet-operator-core.mjs",
   "scripts/serve-stock-paired-mainnet-operator.mjs",
-  "scripts/stock-paired-mainnet-canary-core.mjs",
-  "scripts/serve-stock-paired-mainnet-canary.mjs",
+  "package.json",
 ]);
 
 const artifactPaths = Object.freeze({
   quoteRegistry:
-    "contracts/out/StockQuoteRegistryV1.sol/StockQuoteRegistryV1.json",
+    "contracts/out/StockQuoteRegistryV2.sol/StockQuoteRegistryV2.json",
   positionPlanner:
     "contracts/out/StockPairedPositionPlannerV1.sol/StockPairedPositionPlannerV1.json",
   feeSplitVaultFactory:
@@ -146,6 +125,8 @@ const artifactPaths = Object.freeze({
   feeHook:
     "contracts/out/QuoteAssetCreatorFeeHookV1.sol/QuoteAssetCreatorFeeHookV1.json",
   launcher: "contracts/out/StockPairedLaunchV1.sol/StockPairedLaunchV1.json",
+  ethLaunchCoordinator:
+    "contracts/out/StockPairedEthLaunchCoordinatorV1.sol/StockPairedEthLaunchCoordinatorV1.json",
 });
 
 const hookFactoryAbi = parseAbi([
@@ -160,9 +141,11 @@ const registryAbi = parseAbi([
   "function isSupported(address asset) view returns (bool)",
   "function beacon() view returns (address)",
   "function reviewedImplementation() view returns (address)",
+  "function gmTokenManager() view returns (address)",
   "function expectedTokenCodeHash() view returns (bytes32)",
   "function expectedBeaconCodeHash() view returns (bytes32)",
   "function expectedImplementationCodeHash() view returns (bytes32)",
+  "function expectedGMTokenManagerCodeHash() view returns (bytes32)",
 ]);
 const plannerAbi = parseAbi([
   "function TOKEN_SUPPLY() view returns (uint256)",
@@ -198,52 +181,14 @@ const launcherAbi = parseAbi([
   "function TICK_SPACING() view returns (int24)",
   "function LP_FEE_PIPS() view returns (uint24)",
 ]);
-
-export function normalizeStockPairedHex(value) {
-  return String(value ?? "").toLowerCase();
-}
-
-export function stockPairedQuantity(value) {
-  return `0x${BigInt(value).toString(16)}`;
-}
-
-export function assertStockPairedReleaseCheckout(root, releaseCommit) {
-  if (
-    typeof releaseCommit !== "string" ||
-    !/^[0-9a-f]{40}$/.test(releaseCommit)
-  ) {
-    throw new Error(
-      "A full 40-character Stock-Paired release commit is required",
-    );
-  }
-  execFileSync("git", ["cat-file", "-e", `${releaseCommit}^{commit}`], {
-    cwd: root,
-    stdio: "ignore",
-  });
-  const head = execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: root,
-    encoding: "utf8",
-  }).trim();
-  if (head !== releaseCommit) {
-    throw new Error(
-      "The operator checkout is not at the exact Stock-Paired release commit",
-    );
-  }
-  const dirty = execFileSync(
-    "git",
-    [
-      "status",
-      "--porcelain",
-      "--untracked-files=all",
-      "--",
-      ...STOCK_PAIRED_RELEASE_PATHS,
-    ],
-    { cwd: root, encoding: "utf8" },
-  ).trim();
-  if (dirty) {
-    throw new Error("The Stock-Paired release files have uncommitted changes");
-  }
-}
+const coordinatorAbi = parseAbi([
+  "function launcher() view returns (address)",
+  "function v3SwapRouter() view returns (address)",
+  "function v3Factory() view returns (address)",
+  "function weth() view returns (address)",
+  "function usdc() view returns (address)",
+  "function stockPoolFee(address quoteAsset) view returns (uint24)",
+]);
 
 function canonicalAddress(value) {
   return getAddress(String(value).toLowerCase());
@@ -266,13 +211,6 @@ function digest(value) {
   return keccak256(stringToHex(JSON.stringify(stableValue(value))));
 }
 
-export function stockPairedRpcValuesEqual(left, right) {
-  return (
-    JSON.stringify(stableValue(left)).toLowerCase() ===
-    JSON.stringify(stableValue(right)).toLowerCase()
-  );
-}
-
 function artifactBytecode(artifact, label) {
   const value = artifact?.bytecode?.object;
   if (typeof value !== "string" || !/^0x[0-9a-f]+$/i.test(value)) {
@@ -289,15 +227,11 @@ function artifactRuntime(artifact, label) {
   return value;
 }
 
-function hexByteLength(value) {
-  return (value.length - 2) / 2;
-}
-
-export function assertStockPairedArtifactSizeLimits(artifacts) {
+function assertArtifactSizeLimits(artifacts) {
   for (const [field, artifact] of Object.entries(artifacts)) {
     const label = String(artifact?.contractName ?? field);
-    const creationBytes = hexByteLength(artifactBytecode(artifact, label));
-    const runtimeBytes = hexByteLength(artifactRuntime(artifact, label));
+    const creationBytes = (artifactBytecode(artifact, label).length - 2) / 2;
+    const runtimeBytes = (artifactRuntime(artifact, label).length - 2) / 2;
     if (creationBytes > STOCK_PAIRED_MAX_INITCODE_BYTES) {
       throw new Error(`${label} creation bytecode exceeds the EIP-3860 limit`);
     }
@@ -348,10 +282,18 @@ function callCheck(label, target, abi, functionName, expected, args = []) {
   };
 }
 
-export function computeStockPairedSourceCommitment(artifacts) {
+function runtimeDescriptor(artifact, label, immutable) {
+  const runtime = artifactRuntime(artifact, label);
+  return {
+    runtimeBytes: (runtime.length - 2) / 2,
+    runtimeCodeHash: immutable ? null : keccak256(runtime),
+  };
+}
+
+export function computeStockPairedV2SourceCommitment(artifacts) {
   const bytecodeCommitment = encodeHashTuple([
     keccak256(
-      artifactBytecode(artifacts.quoteRegistry, "StockQuoteRegistryV1"),
+      artifactBytecode(artifacts.quoteRegistry, "StockQuoteRegistryV2"),
     ),
     keccak256(
       artifactBytecode(
@@ -375,8 +317,14 @@ export function computeStockPairedSourceCommitment(artifacts) {
       artifactBytecode(artifacts.feeHook, "QuoteAssetCreatorFeeHookV1"),
     ),
     keccak256(artifactBytecode(artifacts.launcher, "StockPairedLaunchV1")),
+    keccak256(
+      artifactBytecode(
+        artifacts.ethLaunchCoordinator,
+        "StockPairedEthLaunchCoordinatorV1",
+      ),
+    ),
   ]);
-  const dependency = STOCK_PAIRED_DEPENDENCIES;
+  const dependency = STOCK_PAIRED_V2_DEPENDENCIES;
   const coreDependencyCommitment = keccak256(
     encodeAbiParameters(
       [
@@ -401,7 +349,7 @@ export function computeStockPairedSourceCommitment(artifacts) {
       ],
     ),
   );
-  const routingDependencyCommitment = keccak256(
+  const v4RoutingDependencyCommitment = keccak256(
     encodeAbiParameters(
       [
         { type: "address" },
@@ -421,6 +369,34 @@ export function computeStockPairedSourceCommitment(artifacts) {
       ],
     ),
   );
+  const v3RoutingDependencyCommitment = keccak256(
+    encodeAbiParameters(
+      [
+        { type: "address" },
+        { type: "bytes32" },
+        { type: "address" },
+        { type: "bytes32" },
+        { type: "address" },
+        { type: "bytes32" },
+        { type: "address" },
+        { type: "bytes32" },
+      ],
+      [
+        canonicalAddress(dependency.v3Factory.address),
+        dependency.v3Factory.runtimeCodeHash,
+        canonicalAddress(dependency.v3SwapRouter.address),
+        dependency.v3SwapRouter.runtimeCodeHash,
+        canonicalAddress(dependency.weth.address),
+        dependency.weth.runtimeCodeHash,
+        canonicalAddress(dependency.usdc.address),
+        dependency.usdc.runtimeCodeHash,
+      ],
+    ),
+  );
+  const routingDependencyCommitment = encodeHashTuple([
+    v4RoutingDependencyCommitment,
+    v3RoutingDependencyCommitment,
+  ]);
   const lockingDependencyCommitment = keccak256(
     encodeAbiParameters(
       [{ type: "address" }, { type: "bytes32" }],
@@ -446,12 +422,13 @@ export function computeStockPairedSourceCommitment(artifacts) {
       ],
     ),
   );
-  const assetAddresses = STOCK_PAIRED_ASSETS.map(([, address]) =>
+  const assetAddresses = STOCK_PAIRED_V2_ASSETS.map(([, address]) =>
     canonicalAddress(address),
   );
-  const symbolHashes = STOCK_PAIRED_ASSETS.map(([symbol]) =>
+  const symbolHashes = STOCK_PAIRED_V2_ASSETS.map(([symbol]) =>
     keccak256(stringToHex(symbol)),
   );
+  const issuer = STOCK_PAIRED_V2_ISSUER_RUNTIME;
   const assetCommitment = keccak256(
     encodeAbiParameters(
       [
@@ -462,15 +439,19 @@ export function computeStockPairedSourceCommitment(artifacts) {
         { type: "bytes32" },
         { type: "address" },
         { type: "bytes32" },
+        { type: "address" },
+        { type: "bytes32" },
       ],
       [
         assetAddresses,
         symbolHashes,
-        STOCK_PAIRED_ISSUER_RUNTIME.tokenRuntimeCodeHash,
-        canonicalAddress(STOCK_PAIRED_ISSUER_RUNTIME.beacon),
-        STOCK_PAIRED_ISSUER_RUNTIME.beaconRuntimeCodeHash,
-        canonicalAddress(STOCK_PAIRED_ISSUER_RUNTIME.implementation),
-        STOCK_PAIRED_ISSUER_RUNTIME.implementationRuntimeCodeHash,
+        issuer.tokenRuntimeCodeHash,
+        canonicalAddress(issuer.beacon),
+        issuer.beaconRuntimeCodeHash,
+        canonicalAddress(issuer.implementation),
+        issuer.implementationRuntimeCodeHash,
+        canonicalAddress(issuer.gmTokenManager),
+        issuer.gmTokenManagerRuntimeCodeHash,
       ],
     ),
   );
@@ -514,7 +495,7 @@ export function computeStockPairedSourceCommitment(artifacts) {
   );
   return encodeHashTuple([
     keccak256(
-      stringToHex("programmable.stock-paired.infrastructure.v1.ethereum"),
+      stringToHex("programmable.stock-paired.infrastructure.v2.ethereum"),
     ),
     bytecodeCommitment,
     dependencyCommitment,
@@ -525,21 +506,21 @@ export function computeStockPairedSourceCommitment(artifacts) {
 
 function assertManifestPins(manifest) {
   if (
-    manifest?.schemaVersion !== 1 ||
+    manifest?.schemaVersion !== 2 ||
     manifest?.model !== "stock-paired" ||
-    manifest?.internalContractRelease !== "stock-paired-v1" ||
+    manifest?.internalContractRelease !== "stock-paired-v2" ||
     manifest?.chainId !== STOCK_PAIRED_CHAIN_ID ||
-    manifest?.candidatePlan?.transactionCount !== 6
+    manifest?.candidatePlan?.transactionCount !== 7
   ) {
-    throw new Error("The Stock-Paired manifest identity is invalid");
+    throw new Error("The Stock-Paired V2 manifest identity is invalid");
   }
   if (
     normalizeStockPairedHex(manifest.addresses?.treasury) !==
     normalizeStockPairedHex(STOCK_PAIRED_TREASURY)
   ) {
-    throw new Error("The Stock-Paired treasury pin drifted");
+    throw new Error("The Stock-Paired V2 treasury pin drifted");
   }
-  for (const [name, expected] of Object.entries(STOCK_PAIRED_DEPENDENCIES)) {
+  for (const [name, expected] of Object.entries(STOCK_PAIRED_V2_DEPENDENCIES)) {
     const actual = manifest.officialDependencies?.[name];
     if (
       normalizeStockPairedHex(actual?.address) !==
@@ -547,28 +528,30 @@ function assertManifestPins(manifest) {
       normalizeStockPairedHex(actual?.runtimeCodeHash) !==
         normalizeStockPairedHex(expected.runtimeCodeHash)
     ) {
-      throw new Error(`The Stock-Paired dependency pin drifted at ${name}`);
+      throw new Error(`The Stock-Paired V2 dependency pin drifted at ${name}`);
     }
   }
-  for (const [field, expected] of Object.entries(STOCK_PAIRED_ISSUER_RUNTIME)) {
+  for (const [field, expected] of Object.entries(
+    STOCK_PAIRED_V2_ISSUER_RUNTIME,
+  )) {
     if (
       normalizeStockPairedHex(manifest.issuerRuntime?.[field]) !==
       normalizeStockPairedHex(expected)
     ) {
-      throw new Error(`The Stock-Paired issuer pin drifted at ${field}`);
+      throw new Error(`The Stock-Paired V2 issuer pin drifted at ${field}`);
     }
   }
   if (
     !Array.isArray(manifest.quoteAssets) ||
-    manifest.quoteAssets.length !== STOCK_PAIRED_ASSETS.length ||
+    manifest.quoteAssets.length !== STOCK_PAIRED_V2_ASSETS.length ||
     manifest.quoteAssets.some(
       (asset, index) =>
-        asset?.symbol !== STOCK_PAIRED_ASSETS[index][0] ||
+        asset?.symbol !== STOCK_PAIRED_V2_ASSETS[index][0] ||
         normalizeStockPairedHex(asset?.address) !==
-          normalizeStockPairedHex(STOCK_PAIRED_ASSETS[index][1]),
+          normalizeStockPairedHex(STOCK_PAIRED_V2_ASSETS[index][1]),
     )
   ) {
-    throw new Error("The Stock-Paired quote-asset allowlist drifted");
+    throw new Error("The Stock-Paired V2 quote-asset allowlist drifted");
   }
 }
 
@@ -577,19 +560,51 @@ function assertCandidateAddress(candidate, field, expected) {
     normalizeStockPairedHex(candidate?.[field]) !==
     normalizeStockPairedHex(expected)
   ) {
-    throw new Error(`The Stock-Paired candidate drifted at ${field}`);
+    throw new Error(`The Stock-Paired V2 candidate drifted at ${field}`);
   }
 }
 
-function runtimeDescriptor(artifact, label, immutable) {
-  const runtime = artifactRuntime(artifact, label);
-  return {
-    runtimeBytes: (runtime.length - 2) / 2,
-    runtimeCodeHash: immutable ? null : keccak256(runtime),
-  };
+export function assertStockPairedV2ReleaseCheckout(root, releaseCommit) {
+  if (
+    typeof releaseCommit !== "string" ||
+    !/^[0-9a-f]{40}$/.test(releaseCommit)
+  ) {
+    throw new Error(
+      "A full 40-character Stock-Paired V2 release commit is required",
+    );
+  }
+  execFileSync("git", ["cat-file", "-e", `${releaseCommit}^{commit}`], {
+    cwd: root,
+    stdio: "ignore",
+  });
+  const head = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
+  if (head !== releaseCommit) {
+    throw new Error(
+      "The operator checkout is not at the exact Stock-Paired V2 release commit",
+    );
+  }
+  const dirty = execFileSync(
+    "git",
+    [
+      "status",
+      "--porcelain",
+      "--untracked-files=all",
+      "--",
+      ...STOCK_PAIRED_V2_RELEASE_PATHS,
+    ],
+    { cwd: root, encoding: "utf8" },
+  ).trim();
+  if (dirty) {
+    throw new Error(
+      "The Stock-Paired V2 release files have uncommitted changes",
+    );
+  }
 }
 
-export async function loadStockPairedReleasePlan(
+export async function loadStockPairedV2ReleasePlan(
   repositoryRoot,
   { releaseCommit = null } = {},
 ) {
@@ -598,13 +613,13 @@ export async function loadStockPairedReleasePlan(
     releaseCommit !== null &&
     (typeof releaseCommit !== "string" || !/^[0-9a-f]{40}$/.test(releaseCommit))
   ) {
-    throw new Error("The Stock-Paired release commit is invalid");
+    throw new Error("The Stock-Paired V2 release commit is invalid");
   }
   const [manifest, dryRun, ...artifactValues] = await Promise.all([
-    readFile(path.join(root, STOCK_PAIRED_MANIFEST_PATH), "utf8").then(
+    readFile(path.join(root, STOCK_PAIRED_V2_MANIFEST_PATH), "utf8").then(
       JSON.parse,
     ),
-    readFile(path.join(root, STOCK_PAIRED_DRY_RUN_PATH), "utf8").then(
+    readFile(path.join(root, STOCK_PAIRED_V2_DRY_RUN_PATH), "utf8").then(
       JSON.parse,
     ),
     ...Object.values(artifactPaths).map((file) =>
@@ -617,18 +632,18 @@ export async function loadStockPairedReleasePlan(
       artifactValues[index],
     ]),
   );
-  assertStockPairedArtifactSizeLimits(artifacts);
+  assertArtifactSizeLimits(artifacts);
   assertManifestPins(manifest);
-  const sourceCommitment = computeStockPairedSourceCommitment(artifacts);
+  const sourceCommitment = computeStockPairedV2SourceCommitment(artifacts);
   if (normalizeStockPairedHex(manifest.sourceCommitment) !== sourceCommitment) {
     throw new Error(
-      "The Stock-Paired artifacts do not match the manifest source commitment",
+      "The Stock-Paired V2 artifacts do not match the manifest source commitment",
     );
   }
   if (
     dryRun.chain !== STOCK_PAIRED_CHAIN_ID ||
     !Array.isArray(dryRun.transactions) ||
-    dryRun.transactions.length !== 6 ||
+    dryRun.transactions.length !== 7 ||
     !Array.isArray(dryRun.receipts) ||
     dryRun.receipts.length !== 0 ||
     !Array.isArray(dryRun.pending) ||
@@ -636,9 +651,18 @@ export async function loadStockPairedReleasePlan(
     dryRun.transactions.some((entry) => entry.hash !== null)
   ) {
     throw new Error(
-      "The Stock-Paired plan must be a six-step, unbroadcast Mainnet simulation",
+      "The Stock-Paired V2 plan must be a seven-step, unbroadcast Mainnet simulation",
     );
   }
+  if (
+    releaseCommit !== null &&
+    String(dryRun.commit ?? "") !== releaseCommit.slice(0, 7)
+  ) {
+    throw new Error(
+      "The Stock-Paired V2 simulation is not bound to the release commit",
+    );
+  }
+
   const entries = dryRun.transactions;
   const expectedTypes = [
     "CREATE",
@@ -647,18 +671,20 @@ export async function loadStockPairedReleasePlan(
     "CREATE",
     "CALL",
     "CREATE",
+    "CREATE",
   ];
   const expectedContracts = [
-    "StockQuoteRegistryV1",
+    "StockQuoteRegistryV2",
     "StockPairedPositionPlannerV1",
     "QuoteAssetFeeSplitVaultFactoryV1",
     "QuoteAssetCreatorFeeHookFactoryV1",
     "QuoteAssetCreatorFeeHookFactoryV1",
     "StockPairedLaunchV1",
+    "StockPairedEthLaunchCoordinatorV1",
   ];
   const startingNonce = Number(BigInt(entries[0]?.transaction?.nonce));
   if (!Number.isSafeInteger(startingNonce) || startingNonce < 0) {
-    throw new Error("The Stock-Paired starting nonce is invalid");
+    throw new Error("The Stock-Paired V2 starting nonce is invalid");
   }
   entries.forEach((entry, index) => {
     const transaction = entry?.transaction ?? {};
@@ -676,10 +702,11 @@ export async function loadStockPairedReleasePlan(
       BigInt(transaction.gas) <= 21_000n
     ) {
       throw new Error(
-        `The Stock-Paired simulation drifted at step ${index + 1}`,
+        `The Stock-Paired V2 simulation drifted at step ${index + 1}`,
       );
     }
   });
+
   const [
     registryEntry,
     plannerEntry,
@@ -687,6 +714,7 @@ export async function loadStockPairedReleasePlan(
     hookFactoryEntry,
     hookEntry,
     launcherEntry,
+    coordinatorEntry,
   ] = entries;
   const quoteRegistry = canonicalAddress(registryEntry.contractAddress);
   const positionPlanner = canonicalAddress(plannerEntry.contractAddress);
@@ -696,7 +724,11 @@ export async function loadStockPairedReleasePlan(
   const hookFactory = canonicalAddress(hookFactoryEntry.contractAddress);
   const feeHook = canonicalAddress(hookEntry.additionalContracts?.[0]?.address);
   const launcher = canonicalAddress(launcherEntry.contractAddress);
-  const createAddresses = [0, 1, 2, 3, 5].map((offset) =>
+  const ethLaunchCoordinator = canonicalAddress(
+    coordinatorEntry.contractAddress,
+  );
+  const createOffsets = [0, 1, 2, 3, 5, 6];
+  const createAddresses = createOffsets.map((offset) =>
     getContractAddress({
       from: STOCK_PAIRED_DEPLOYER,
       nonce: BigInt(startingNonce + offset),
@@ -708,17 +740,19 @@ export async function loadStockPairedReleasePlan(
     feeSplitVaultFactory,
     hookFactory,
     launcher,
+    ethLaunchCoordinator,
   ].forEach((actual, index) => {
     if (
       normalizeStockPairedHex(actual) !==
       normalizeStockPairedHex(createAddresses[index])
     ) {
-      throw new Error("A Stock-Paired CREATE address prediction drifted");
+      throw new Error("A Stock-Paired V2 CREATE address prediction drifted");
     }
   });
+
   const candidate = manifest.candidatePlan;
   if (candidate?.startingNonce !== startingNonce) {
-    throw new Error("The Stock-Paired candidate nonce drifted");
+    throw new Error("The Stock-Paired V2 candidate nonce drifted");
   }
   assertCandidateAddress(candidate, "deployer", STOCK_PAIRED_DEPLOYER);
   assertCandidateAddress(candidate, "quoteRegistry", quoteRegistry);
@@ -731,22 +765,31 @@ export async function loadStockPairedReleasePlan(
   assertCandidateAddress(candidate, "hookFactory", hookFactory);
   assertCandidateAddress(candidate, "feeHook", feeHook);
   assertCandidateAddress(candidate, "launcher", launcher);
+  assertCandidateAddress(
+    candidate,
+    "ethLaunchCoordinator",
+    ethLaunchCoordinator,
+  );
   const hookSalt = String(candidate.hookSalt ?? "");
   if (!/^0x[0-9a-f]{64}$/i.test(hookSalt) || BigInt(hookSalt) === 0n) {
-    throw new Error("The Stock-Paired hook salt is invalid");
+    throw new Error("The Stock-Paired V2 hook salt is invalid");
   }
-  const assetAddresses = STOCK_PAIRED_ASSETS.map(([, address]) =>
+
+  const assetAddresses = STOCK_PAIRED_V2_ASSETS.map(([, address]) =>
     canonicalAddress(address),
   );
-  const symbolHashes = STOCK_PAIRED_ASSETS.map(([symbol]) =>
+  const symbolHashes = STOCK_PAIRED_V2_ASSETS.map(([symbol]) =>
     keccak256(stringToHex(symbol)),
   );
+  const issuer = STOCK_PAIRED_V2_ISSUER_RUNTIME;
   const registryConstructor = encodeAbiParameters(
     [
       { type: "address[]" },
       { type: "bytes32[]" },
       { type: "address" },
       { type: "address" },
+      { type: "address" },
+      { type: "bytes32" },
       { type: "bytes32" },
       { type: "bytes32" },
       { type: "bytes32" },
@@ -754,15 +797,17 @@ export async function loadStockPairedReleasePlan(
     [
       assetAddresses,
       symbolHashes,
-      canonicalAddress(STOCK_PAIRED_ISSUER_RUNTIME.beacon),
-      canonicalAddress(STOCK_PAIRED_ISSUER_RUNTIME.implementation),
-      STOCK_PAIRED_ISSUER_RUNTIME.tokenRuntimeCodeHash,
-      STOCK_PAIRED_ISSUER_RUNTIME.beaconRuntimeCodeHash,
-      STOCK_PAIRED_ISSUER_RUNTIME.implementationRuntimeCodeHash,
+      canonicalAddress(issuer.beacon),
+      canonicalAddress(issuer.implementation),
+      canonicalAddress(issuer.gmTokenManager),
+      issuer.tokenRuntimeCodeHash,
+      issuer.beaconRuntimeCodeHash,
+      issuer.implementationRuntimeCodeHash,
+      issuer.gmTokenManagerRuntimeCodeHash,
     ],
   );
   const expectedRegistryInput =
-    artifactBytecode(artifacts.quoteRegistry, "StockQuoteRegistryV1") +
+    artifactBytecode(artifacts.quoteRegistry, "StockQuoteRegistryV2") +
     registryConstructor.slice(2);
   const exactCreateInputs = [
     expectedRegistryInput,
@@ -783,11 +828,12 @@ export async function loadStockPairedReleasePlan(
         normalizeStockPairedHex(exactCreateInputs[index])
       ) {
         throw new Error(
-          `Stock-Paired creation bytecode drifted at step ${index + 1}`,
+          `Stock-Paired V2 creation bytecode drifted at step ${index + 1}`,
         );
       }
     },
   );
+
   if (
     hookEntry.function !== "deploy(bytes32,address,address,address,address)" ||
     normalizeStockPairedHex(hookEntry.transaction.to) !==
@@ -797,14 +843,14 @@ export async function loadStockPairedReleasePlan(
     hookEntry.additionalContracts[0]?.contractName !==
       "QuoteAssetCreatorFeeHookV1"
   ) {
-    throw new Error("The Stock-Paired CREATE2 hook shape drifted");
+    throw new Error("The Stock-Paired V2 CREATE2 hook shape drifted");
   }
   const expectedHookCall = encodeFunctionData({
     abi: hookFactoryAbi,
     functionName: "deploy",
     args: [
       hookSalt,
-      canonicalAddress(STOCK_PAIRED_DEPENDENCIES.poolManager.address),
+      canonicalAddress(STOCK_PAIRED_V2_DEPENDENCIES.poolManager.address),
       canonicalAddress(STOCK_PAIRED_TREASURY),
       quoteRegistry,
       feeSplitVaultFactory,
@@ -819,7 +865,7 @@ export async function loadStockPairedReleasePlan(
     normalizeStockPairedHex(hookEntry.transaction.input) !==
       normalizeStockPairedHex(expectedHookCall)
   ) {
-    throw new Error("The Stock-Paired hook deployment calldata drifted");
+    throw new Error("The Stock-Paired V2 hook deployment calldata drifted");
   }
   const hookConstructor = encodeAbiParameters(
     [
@@ -829,7 +875,7 @@ export async function loadStockPairedReleasePlan(
       { type: "address" },
     ],
     [
-      canonicalAddress(STOCK_PAIRED_DEPENDENCIES.poolManager.address),
+      canonicalAddress(STOCK_PAIRED_V2_DEPENDENCIES.poolManager.address),
       canonicalAddress(STOCK_PAIRED_TREASURY),
       quoteRegistry,
       feeSplitVaultFactory,
@@ -851,20 +897,21 @@ export async function loadStockPairedReleasePlan(
     (BigInt(feeHook) & STOCK_PAIRED_HOOK_ADDRESS_MASK) !==
       STOCK_PAIRED_REQUIRED_HOOK_FLAGS
   ) {
-    throw new Error("The Stock-Paired hook CREATE2 commitment drifted");
+    throw new Error("The Stock-Paired V2 hook CREATE2 commitment drifted");
   }
+
   const launcherConstructor = encodeAbiParameters(
     Array.from({ length: 8 }, () => ({ type: "address" })),
     [
-      canonicalAddress(STOCK_PAIRED_DEPENDENCIES.poolManager.address),
-      canonicalAddress(STOCK_PAIRED_DEPENDENCIES.positionManager.address),
-      canonicalAddress(STOCK_PAIRED_DEPENDENCIES.uerc20Factory.address),
+      canonicalAddress(STOCK_PAIRED_V2_DEPENDENCIES.poolManager.address),
+      canonicalAddress(STOCK_PAIRED_V2_DEPENDENCIES.positionManager.address),
+      canonicalAddress(STOCK_PAIRED_V2_DEPENDENCIES.uerc20Factory.address),
       feeHook,
       quoteRegistry,
       positionPlanner,
       feeSplitVaultFactory,
       canonicalAddress(
-        STOCK_PAIRED_DEPENDENCIES.positionForwarderFactory.address,
+        STOCK_PAIRED_V2_DEPENDENCIES.positionForwarderFactory.address,
       ),
     ],
   );
@@ -876,22 +923,58 @@ export async function loadStockPairedReleasePlan(
     normalizeStockPairedHex(expectedLauncherInput)
   ) {
     throw new Error(
-      "The Stock-Paired launcher bytecode or constructor arguments drifted",
+      "The Stock-Paired V2 launcher bytecode or constructor arguments drifted",
     );
   }
+
+  const coordinatorConstructor = encodeAbiParameters(
+    [
+      { type: "address" },
+      { type: "address" },
+      { type: "address" },
+      { type: "address" },
+      { type: "address" },
+      { type: "address[]" },
+      { type: "uint24[]" },
+    ],
+    [
+      launcher,
+      canonicalAddress(STOCK_PAIRED_V2_DEPENDENCIES.v3SwapRouter.address),
+      canonicalAddress(STOCK_PAIRED_V2_DEPENDENCIES.v3Factory.address),
+      canonicalAddress(STOCK_PAIRED_V2_DEPENDENCIES.weth.address),
+      canonicalAddress(STOCK_PAIRED_V2_DEPENDENCIES.usdc.address),
+      assetAddresses,
+      STOCK_PAIRED_V2_STOCK_POOL_FEES,
+    ],
+  );
+  const expectedCoordinatorInput =
+    artifactBytecode(
+      artifacts.ethLaunchCoordinator,
+      "StockPairedEthLaunchCoordinatorV1",
+    ) + coordinatorConstructor.slice(2);
+  if (
+    normalizeStockPairedHex(coordinatorEntry.transaction.input) !==
+    normalizeStockPairedHex(expectedCoordinatorInput)
+  ) {
+    throw new Error(
+      "The Stock-Paired V2 coordinator bytecode or constructor arguments drifted",
+    );
+  }
+
   const returnValue = String(dryRun?.returns?.result?.value ?? "");
   if (
     !returnValue.toLowerCase().includes(sourceCommitment.slice(2)) ||
     !returnValue.toLowerCase().includes(hookSalt.slice(2).toLowerCase())
   ) {
     throw new Error(
-      "The Stock-Paired simulation result omits its reviewed commitments",
+      "The Stock-Paired V2 simulation result omits its reviewed commitments",
     );
   }
+
   const runtime = {
     quoteRegistry: runtimeDescriptor(
       artifacts.quoteRegistry,
-      "StockQuoteRegistryV1",
+      "StockQuoteRegistryV2",
       true,
     ),
     positionPlanner: runtimeDescriptor(
@@ -919,6 +1002,11 @@ export async function loadStockPairedReleasePlan(
       "StockPairedLaunchV1",
       true,
     ),
+    ethLaunchCoordinator: runtimeDescriptor(
+      artifacts.ethLaunchCoordinator,
+      "StockPairedEthLaunchCoordinatorV1",
+      true,
+    ),
   };
   const shared = {
     chainId: STOCK_PAIRED_CHAIN_ID_HEX,
@@ -938,12 +1026,13 @@ export async function loadStockPairedReleasePlan(
     reviewedGasLimit: stockPairedQuantity(entry.transaction.gas),
     ...runtime[field],
   });
+
   const transactions = [
     {
       ...baseTransaction(
         registryEntry,
         "quoteRegistry",
-        "Quote asset registry",
+        "Eleven-asset quote registry",
         quoteRegistry,
       ),
       checks: [
@@ -952,28 +1041,56 @@ export async function loadStockPairedReleasePlan(
           quoteRegistry,
           registryAbi,
           "assetCount",
-          uintResult(7),
+          uintResult(11),
         ),
         callCheck(
           "issuer beacon",
           quoteRegistry,
           registryAbi,
           "beacon",
-          addressResult(STOCK_PAIRED_ISSUER_RUNTIME.beacon),
+          addressResult(issuer.beacon),
         ),
         callCheck(
           "issuer implementation",
           quoteRegistry,
           registryAbi,
           "reviewedImplementation",
-          addressResult(STOCK_PAIRED_ISSUER_RUNTIME.implementation),
+          addressResult(issuer.implementation),
+        ),
+        callCheck(
+          "issuer manager",
+          quoteRegistry,
+          registryAbi,
+          "gmTokenManager",
+          addressResult(issuer.gmTokenManager),
         ),
         callCheck(
           "quote token runtime",
           quoteRegistry,
           registryAbi,
           "expectedTokenCodeHash",
-          bytes32Result(STOCK_PAIRED_ISSUER_RUNTIME.tokenRuntimeCodeHash),
+          bytes32Result(issuer.tokenRuntimeCodeHash),
+        ),
+        callCheck(
+          "issuer beacon runtime",
+          quoteRegistry,
+          registryAbi,
+          "expectedBeaconCodeHash",
+          bytes32Result(issuer.beaconRuntimeCodeHash),
+        ),
+        callCheck(
+          "issuer implementation runtime",
+          quoteRegistry,
+          registryAbi,
+          "expectedImplementationCodeHash",
+          bytes32Result(issuer.implementationRuntimeCodeHash),
+        ),
+        callCheck(
+          "issuer manager runtime",
+          quoteRegistry,
+          registryAbi,
+          "expectedGMTokenManagerCodeHash",
+          bytes32Result(issuer.gmTokenManagerRuntimeCodeHash),
         ),
         ...assetAddresses.flatMap((asset, index) => [
           callCheck(
@@ -1081,7 +1198,7 @@ export async function loadStockPairedReleasePlan(
           feeHook,
           hookAbi,
           "poolManager",
-          addressResult(STOCK_PAIRED_DEPENDENCIES.poolManager.address),
+          addressResult(STOCK_PAIRED_V2_DEPENDENCIES.poolManager.address),
         ),
         callCheck(
           "treasury",
@@ -1161,21 +1278,21 @@ export async function loadStockPairedReleasePlan(
           launcher,
           launcherAbi,
           "poolManager",
-          addressResult(STOCK_PAIRED_DEPENDENCIES.poolManager.address),
+          addressResult(STOCK_PAIRED_V2_DEPENDENCIES.poolManager.address),
         ),
         callCheck(
           "PositionManager",
           launcher,
           launcherAbi,
           "positionManager",
-          addressResult(STOCK_PAIRED_DEPENDENCIES.positionManager.address),
+          addressResult(STOCK_PAIRED_V2_DEPENDENCIES.positionManager.address),
         ),
         callCheck(
           "UERC20 factory",
           launcher,
           launcherAbi,
           "tokenFactory",
-          addressResult(STOCK_PAIRED_DEPENDENCIES.uerc20Factory.address),
+          addressResult(STOCK_PAIRED_V2_DEPENDENCIES.uerc20Factory.address),
         ),
         callCheck(
           "fee hook",
@@ -1211,7 +1328,7 @@ export async function loadStockPairedReleasePlan(
           launcherAbi,
           "positionForwarderFactory",
           addressResult(
-            STOCK_PAIRED_DEPENDENCIES.positionForwarderFactory.address,
+            STOCK_PAIRED_V2_DEPENDENCIES.positionForwarderFactory.address,
           ),
         ),
         callCheck(
@@ -1258,7 +1375,63 @@ export async function loadStockPairedReleasePlan(
         ),
       ],
     },
+    {
+      ...baseTransaction(
+        coordinatorEntry,
+        "ethLaunchCoordinator",
+        "ETH launch coordinator",
+        ethLaunchCoordinator,
+      ),
+      checks: [
+        callCheck(
+          "launcher",
+          ethLaunchCoordinator,
+          coordinatorAbi,
+          "launcher",
+          addressResult(launcher),
+        ),
+        callCheck(
+          "V3 SwapRouter",
+          ethLaunchCoordinator,
+          coordinatorAbi,
+          "v3SwapRouter",
+          addressResult(STOCK_PAIRED_V2_DEPENDENCIES.v3SwapRouter.address),
+        ),
+        callCheck(
+          "V3 factory",
+          ethLaunchCoordinator,
+          coordinatorAbi,
+          "v3Factory",
+          addressResult(STOCK_PAIRED_V2_DEPENDENCIES.v3Factory.address),
+        ),
+        callCheck(
+          "WETH",
+          ethLaunchCoordinator,
+          coordinatorAbi,
+          "weth",
+          addressResult(STOCK_PAIRED_V2_DEPENDENCIES.weth.address),
+        ),
+        callCheck(
+          "USDC",
+          ethLaunchCoordinator,
+          coordinatorAbi,
+          "usdc",
+          addressResult(STOCK_PAIRED_V2_DEPENDENCIES.usdc.address),
+        ),
+        ...assetAddresses.map((asset, index) =>
+          callCheck(
+            `asset ${index + 1} route fee`,
+            ethLaunchCoordinator,
+            coordinatorAbi,
+            "stockPoolFee",
+            uintResult(STOCK_PAIRED_V2_STOCK_POOL_FEES[index], "uint24"),
+            [asset],
+          ),
+        ),
+      ],
+    },
   ];
+
   const reviewedGas = transactions.reduce(
     (total, transaction) => total + BigInt(transaction.reviewedGasLimit),
     0n,
@@ -1267,7 +1440,7 @@ export async function loadStockPairedReleasePlan(
     candidate.estimatedGas !== reviewedGas.toString() ||
     candidate.transactionCount !== transactions.length
   ) {
-    throw new Error("The Stock-Paired reviewed gas commitment drifted");
+    throw new Error("The Stock-Paired V2 reviewed gas commitment drifted");
   }
   const planCommitment = {
     chainId: STOCK_PAIRED_CHAIN_ID,
@@ -1286,19 +1459,21 @@ export async function loadStockPairedReleasePlan(
       value: transaction.value,
       calldataHash: transaction.calldataHash,
       reviewedGasLimit: transaction.reviewedGasLimit,
+      runtimeBytes: transaction.runtimeBytes,
+      runtimeCodeHash: transaction.runtimeCodeHash,
+      checks: transaction.checks,
     })),
   };
   return {
-    schemaVersion: 1,
-    release: "stock-paired-v1",
+    schemaVersion: 2,
+    release: "stock-paired-v2",
     network: "Ethereum Mainnet",
     chainId: STOCK_PAIRED_CHAIN_ID,
-    chainIdHex: STOCK_PAIRED_CHAIN_ID_HEX,
     explorer: "https://etherscan.io",
-    releaseCommit,
     deployer: canonicalAddress(STOCK_PAIRED_DEPLOYER),
     treasury: canonicalAddress(STOCK_PAIRED_TREASURY),
     sourceCommitment,
+    releaseCommit,
     simulationCommit: String(dryRun.commit ?? ""),
     simulationTimestamp: dryRun.timestamp,
     simulationDigest: digest(
@@ -1321,440 +1496,8 @@ export async function loadStockPairedReleasePlan(
       hookFactory,
       feeHook,
       launcher,
+      ethLaunchCoordinator,
     },
     transactions,
-  };
-}
-
-export function assertStockPairedSequenceState(plan, state) {
-  const confirmedNonce = Number(BigInt(state.confirmedNonce));
-  const pendingNonce = Number(BigInt(state.pendingNonce));
-  if (
-    confirmedNonce < plan.startingNonce ||
-    confirmedNonce > plan.endingNonce ||
-    pendingNonce < confirmedNonce ||
-    pendingNonce > plan.endingNonce ||
-    !Array.isArray(state.deployments) ||
-    state.deployments.length !== plan.transactions.length
-  ) {
-    throw new Error("The wallet nonce is outside the reviewed release plan");
-  }
-  const completed = confirmedNonce - plan.startingNonce;
-  state.deployments.forEach((deployment, index) => {
-    if (index < completed && !deployment.verified) {
-      throw new Error(
-        "A reviewed nonce confirmed without its expected deployment",
-      );
-    }
-    if (index >= completed && deployment.verified) {
-      throw new Error(
-        "A Stock-Paired contract exists before its reviewed nonce",
-      );
-    }
-  });
-  return completed;
-}
-
-export function stockPairedFeePolicy(state) {
-  const baseFee = BigInt(state.baseFeePerGas);
-  const gasPrice = BigInt(state.gasPrice);
-  let priority =
-    gasPrice > baseFee
-      ? gasPrice - baseFee
-      : STOCK_PAIRED_MIN_PRIORITY_FEE_PER_GAS_WEI;
-  if (priority < STOCK_PAIRED_MIN_PRIORITY_FEE_PER_GAS_WEI) {
-    priority = STOCK_PAIRED_MIN_PRIORITY_FEE_PER_GAS_WEI;
-  }
-  priority = (priority * 125n + 99n) / 100n;
-  const marketBuffer = (gasPrice * 125n + 99n) / 100n;
-  const baseFeeBuffer = baseFee * 2n + priority;
-  const maxFeePerGas =
-    marketBuffer > baseFeeBuffer ? marketBuffer : baseFeeBuffer;
-  if (
-    priority > STOCK_PAIRED_MAX_PRIORITY_FEE_PER_GAS_WEI ||
-    maxFeePerGas > STOCK_PAIRED_MAX_FEE_PER_GAS_WEI
-  ) {
-    throw new Error("Current Mainnet fees exceed the release policy");
-  }
-  return {
-    maxFeePerGas: stockPairedQuantity(maxFeePerGas),
-    maxPriorityFeePerGas: stockPairedQuantity(priority),
-  };
-}
-
-export function stockPairedCostRequirement(plan, state) {
-  const completed = assertStockPairedSequenceState(plan, state);
-  const feePolicy = stockPairedFeePolicy(state);
-  const remainingGas = plan.transactions
-    .slice(completed)
-    .reduce(
-      (total, transaction) => total + BigInt(transaction.reviewedGasLimit),
-      0n,
-    );
-  const requiredBalance = remainingGas * BigInt(feePolicy.maxFeePerGas);
-  const balance = BigInt(state.balance);
-  return {
-    remainingGas: stockPairedQuantity(remainingGas),
-    maxFeePerGas: feePolicy.maxFeePerGas,
-    maxPriorityFeePerGas: feePolicy.maxPriorityFeePerGas,
-    requiredBalance: stockPairedQuantity(requiredBalance),
-    balance: stockPairedQuantity(balance),
-    shortfall:
-      balance < requiredBalance
-        ? stockPairedQuantity(requiredBalance - balance)
-        : "0x0",
-    sufficient: balance >= requiredBalance,
-  };
-}
-
-export function prepareStockPairedDeploymentTransaction(
-  plan,
-  state,
-  simulations,
-) {
-  const completed = assertStockPairedSequenceState(plan, state);
-  if (state.confirmedNonce !== state.pendingNonce) {
-    throw new Error(
-      "Another transaction is pending from the deployment wallet",
-    );
-  }
-  if (completed === plan.transactions.length) return null;
-  if (!Array.isArray(simulations) || simulations.length !== 2) {
-    throw new Error("Two independent live simulations are required");
-  }
-  const transaction = plan.transactions[completed];
-  const estimates = simulations.map((simulation) => {
-    if (
-      normalizeStockPairedHex(simulation.callResult) !==
-      normalizeStockPairedHex(simulations[0].callResult)
-    ) {
-      throw new Error("Independent Mainnet simulations disagree");
-    }
-    const estimate = BigInt(simulation.estimatedGas);
-    if (estimate <= 21_000n) {
-      throw new Error("A Mainnet RPC returned an invalid gas estimate");
-    }
-    return estimate;
-  });
-  const highEstimate =
-    estimates[0] > estimates[1] ? estimates[0] : estimates[1];
-  const lowEstimate = estimates[0] < estimates[1] ? estimates[0] : estimates[1];
-  if (highEstimate * 100n > lowEstimate * 105n) {
-    throw new Error("Independent gas estimates differ by more than 5%");
-  }
-  const paddedGas =
-    (highEstimate * STOCK_PAIRED_GAS_PADDING_BPS + 9_999n) / 10_000n;
-  if (paddedGas > BigInt(transaction.reviewedGasLimit)) {
-    throw new Error(`${transaction.label} exceeds its reviewed gas ceiling`);
-  }
-  const cost = stockPairedCostRequirement(plan, state);
-  if (!cost.sufficient) {
-    throw new Error(
-      "The deployment wallet balance is below the remaining release gas ceiling",
-    );
-  }
-  const request = {
-    from: plan.deployer,
-    chainId: STOCK_PAIRED_CHAIN_ID_HEX,
-    nonce: transaction.nonce,
-    value: "0x0",
-    data: transaction.data,
-    gas: stockPairedQuantity(paddedGas),
-    maxFeePerGas: cost.maxFeePerGas,
-    maxPriorityFeePerGas: cost.maxPriorityFeePerGas,
-    type: "0x2",
-  };
-  if (transaction.to) request.to = transaction.to;
-  const preparedDigest = digest({
-    planDigest: plan.planDigest,
-    index: completed,
-    request,
-  });
-  return {
-    index: completed,
-    field: transaction.field,
-    label: transaction.label,
-    address: transaction.address,
-    calldataHash: transaction.calldataHash,
-    liveEstimatedGas: stockPairedQuantity(highEstimate),
-    gasLimit: request.gas,
-    requiredBalance: cost.requiredBalance,
-    preparedDigest,
-    request,
-  };
-}
-
-function normalizedTransaction(transaction) {
-  if (!transaction) return null;
-  return {
-    hash: normalizeStockPairedHex(transaction.hash),
-    from: normalizeStockPairedHex(transaction.from),
-    to: transaction.to ? normalizeStockPairedHex(transaction.to) : null,
-    nonce: stockPairedQuantity(transaction.nonce),
-    value: stockPairedQuantity(transaction.value),
-    input: normalizeStockPairedHex(transaction.input),
-    chainId: transaction.chainId
-      ? stockPairedQuantity(transaction.chainId)
-      : null,
-    gas: stockPairedQuantity(transaction.gas),
-    maxFeePerGas: transaction.maxFeePerGas
-      ? stockPairedQuantity(transaction.maxFeePerGas)
-      : null,
-    maxPriorityFeePerGas: transaction.maxPriorityFeePerGas
-      ? stockPairedQuantity(transaction.maxPriorityFeePerGas)
-      : null,
-    blockNumber: transaction.blockNumber
-      ? stockPairedQuantity(transaction.blockNumber)
-      : null,
-    blockHash: transaction.blockHash
-      ? normalizeStockPairedHex(transaction.blockHash)
-      : null,
-  };
-}
-
-function normalizedReceipt(receipt) {
-  if (!receipt) return null;
-  return {
-    transactionHash: normalizeStockPairedHex(receipt.transactionHash),
-    status: stockPairedQuantity(receipt.status),
-    from: normalizeStockPairedHex(receipt.from),
-    to: receipt.to ? normalizeStockPairedHex(receipt.to) : null,
-    contractAddress: receipt.contractAddress
-      ? normalizeStockPairedHex(receipt.contractAddress)
-      : null,
-    blockNumber: stockPairedQuantity(receipt.blockNumber),
-    blockHash: normalizeStockPairedHex(receipt.blockHash),
-    transactionIndex: stockPairedQuantity(receipt.transactionIndex),
-    gasUsed: stockPairedQuantity(receipt.gasUsed),
-    effectiveGasPrice: receipt.effectiveGasPrice
-      ? stockPairedQuantity(receipt.effectiveGasPrice)
-      : null,
-  };
-}
-
-export function validateStockPairedDeploymentTransactionRecord(
-  plan,
-  index,
-  transaction,
-  receipt,
-) {
-  if (
-    !Number.isInteger(index) ||
-    index < 0 ||
-    index >= plan.transactions.length
-  ) {
-    throw new Error("The Stock-Paired transaction index is invalid");
-  }
-  const expected = plan.transactions[index];
-  const actual = normalizedTransaction(transaction);
-  if (!actual || !/^0x[0-9a-f]{64}$/.test(actual.hash)) {
-    throw new Error("The transaction is not visible on both Mainnet RPCs");
-  }
-  if (
-    actual.from !== normalizeStockPairedHex(plan.deployer) ||
-    actual.to !== (expected.to ? normalizeStockPairedHex(expected.to) : null) ||
-    actual.nonce !== expected.nonce ||
-    actual.value !== "0x0" ||
-    actual.input !== normalizeStockPairedHex(expected.data) ||
-    actual.chainId !== STOCK_PAIRED_CHAIN_ID_HEX ||
-    BigInt(actual.gas) > BigInt(expected.reviewedGasLimit) ||
-    actual.maxFeePerGas === null ||
-    BigInt(actual.maxFeePerGas) > STOCK_PAIRED_MAX_FEE_PER_GAS_WEI ||
-    actual.maxPriorityFeePerGas === null ||
-    BigInt(actual.maxPriorityFeePerGas) >
-      STOCK_PAIRED_MAX_PRIORITY_FEE_PER_GAS_WEI
-  ) {
-    throw new Error(
-      `${expected.label} does not match the reviewed transaction`,
-    );
-  }
-  const actualReceipt = normalizedReceipt(receipt);
-  if (!actualReceipt) {
-    return { status: "pending", transaction: actual, receipt: null };
-  }
-  if (
-    actualReceipt.transactionHash !== actual.hash ||
-    actualReceipt.status !== "0x1" ||
-    actualReceipt.from !== normalizeStockPairedHex(plan.deployer) ||
-    actualReceipt.to !==
-      (expected.to ? normalizeStockPairedHex(expected.to) : null) ||
-    actualReceipt.blockNumber !== actual.blockNumber ||
-    actualReceipt.blockHash !== actual.blockHash
-  ) {
-    throw new Error(`${expected.label} receipt does not match`);
-  }
-  const expectedContractAddress =
-    expected.transactionType === "CREATE"
-      ? normalizeStockPairedHex(expected.address)
-      : null;
-  if (actualReceipt.contractAddress !== expectedContractAddress) {
-    throw new Error(`${expected.label} created an unexpected contract address`);
-  }
-  return {
-    status: "confirmed",
-    transaction: actual,
-    receipt: actualReceipt,
-  };
-}
-
-export function createStockPairedReleaseEvidence(plan, now = new Date()) {
-  return {
-    schemaVersion: 1,
-    release: plan.release,
-    chainId: plan.chainId,
-    deployer: plan.deployer,
-    treasury: plan.treasury,
-    sourceCommitment: plan.sourceCommitment,
-    releaseCommit: plan.releaseCommit,
-    planDigest: plan.planDigest,
-    simulationDigest: plan.simulationDigest,
-    startingNonce: plan.startingNonce,
-    endingNonce: plan.endingNonce,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-    finalityConfirmations: STOCK_PAIRED_FINALITY_CONFIRMATIONS,
-    transactions: plan.transactions.map((transaction, index) => ({
-      index,
-      field: transaction.field,
-      address: transaction.address,
-      nonce: transaction.nonce,
-      calldataHash: transaction.calldataHash,
-      reviewedGasLimit: transaction.reviewedGasLimit,
-      txHash: null,
-      status: "not-submitted",
-      confirmations: 0,
-      transaction: null,
-      receipt: null,
-      deploymentVerified: false,
-      runtimeCodeHash: null,
-    })),
-    receiptEvidenceReady: false,
-  };
-}
-
-export function mergeStockPairedEvidenceRecord(
-  evidence,
-  plan,
-  index,
-  record,
-  latestBlock,
-  deployment,
-  now = new Date(),
-) {
-  if (
-    evidence.planDigest !== plan.planDigest ||
-    evidence.sourceCommitment !== plan.sourceCommitment
-  ) {
-    throw new Error("The release evidence belongs to another plan");
-  }
-  const current = evidence.transactions[index];
-  if (
-    !current ||
-    current.calldataHash !== plan.transactions[index].calldataHash ||
-    (current.txHash && current.txHash !== record.transaction.hash)
-  ) {
-    throw new Error("The release evidence transaction shape drifted");
-  }
-  let confirmations = 0;
-  let status = record.status;
-  if (record.receipt) {
-    confirmations =
-      Number(BigInt(latestBlock) - BigInt(record.receipt.blockNumber)) + 1;
-    if (confirmations < 1) {
-      throw new Error("The receipt is ahead of the reconciled Mainnet head");
-    }
-    if (
-      confirmations >= STOCK_PAIRED_FINALITY_CONFIRMATIONS &&
-      deployment?.verified
-    ) {
-      status = "finalized";
-    }
-  }
-  evidence.transactions[index] = {
-    ...current,
-    txHash: record.transaction.hash,
-    status,
-    confirmations,
-    transaction: record.transaction,
-    receipt: record.receipt,
-    deploymentVerified: Boolean(deployment?.verified),
-    runtimeCodeHash: deployment?.runtimeCodeHash ?? null,
-  };
-  evidence.updatedAt = now.toISOString();
-  evidence.receiptEvidenceReady = evidence.transactions.every(
-    (entry) =>
-      entry.status === "finalized" &&
-      entry.deploymentVerified &&
-      entry.receipt?.status === "0x1" &&
-      /^0x[0-9a-f]{64}$/.test(entry.runtimeCodeHash ?? ""),
-  );
-  return evidence;
-}
-
-export async function readStockPairedReleaseEvidence(filePath, plan) {
-  try {
-    const evidence = JSON.parse(await readFile(filePath, "utf8"));
-    if (
-      evidence.schemaVersion !== 1 ||
-      evidence.release !== plan.release ||
-      evidence.planDigest !== plan.planDigest ||
-      evidence.releaseCommit !== plan.releaseCommit ||
-      evidence.sourceCommitment !== plan.sourceCommitment ||
-      !Array.isArray(evidence.transactions) ||
-      evidence.transactions.length !== plan.transactions.length
-    ) {
-      throw new Error("The local Stock-Paired evidence is for another plan");
-    }
-    return evidence;
-  } catch (error) {
-    if (error?.code === "ENOENT") {
-      return createStockPairedReleaseEvidence(plan);
-    }
-    throw error;
-  }
-}
-
-export async function writeStockPairedReleaseEvidence(filePath, evidence) {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.${process.pid}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(evidence, null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  await rename(temporary, filePath);
-}
-
-export function publicStockPairedPlan(plan) {
-  return {
-    schemaVersion: plan.schemaVersion,
-    release: plan.release,
-    network: plan.network,
-    chainId: plan.chainId,
-    explorer: plan.explorer,
-    deployer: plan.deployer,
-    treasury: plan.treasury,
-    sourceCommitment: plan.sourceCommitment,
-    releaseCommit: plan.releaseCommit,
-    simulationCommit: plan.simulationCommit,
-    simulationTimestamp: plan.simulationTimestamp,
-    simulationDigest: plan.simulationDigest,
-    planDigest: plan.planDigest,
-    startingNonce: plan.startingNonce,
-    endingNonce: plan.endingNonce,
-    hookSalt: plan.hookSalt,
-    reviewedGas: plan.reviewedGas,
-    addresses: plan.addresses,
-    transactions: plan.transactions.map((transaction) => ({
-      index: plan.transactions.indexOf(transaction),
-      field: transaction.field,
-      label: transaction.label,
-      transactionType: transaction.transactionType,
-      address: transaction.address,
-      to: transaction.to,
-      nonce: transaction.nonce,
-      value: transaction.value,
-      calldataHash: transaction.calldataHash,
-      reviewedGasLimit: transaction.reviewedGasLimit,
-    })),
   };
 }
