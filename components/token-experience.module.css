@@ -37,7 +37,7 @@
 .emptyState {
   backdrop-filter: blur(22px) saturate(1.05);
   background: color-mix(in srgb, var(--glass-96) 94%, transparent);
-  border: 1px solid var(--panel-border-soft);
+  border: 1px solid var(--panel-border);
   box-shadow:
     0 1px 0 var(--card-shadow),
     0 22px 64px var(--card-shadow-soft);
@@ -123,7 +123,8 @@
 
 .address code {
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10.5px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -207,7 +208,7 @@
 
 .metric dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
 }
 
@@ -246,18 +247,20 @@
 .deepSummaryHeading span,
 .deepSummary p {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .deepSummaryHeading strong {
   color: var(--text);
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
   font-weight: 630;
 }
 
 .deepSummaryHeading > span {
   color: var(--text-soft);
   font-family: var(--font-plex-mono), monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .deepProgress {
@@ -281,7 +284,7 @@
 }
 
 .tradeShell {
-  align-self: stretch;
+  align-self: start;
   border-radius: 30px;
   display: flex;
   min-width: 0;
@@ -301,7 +304,7 @@
   animation: token-panel-enter 180ms var(--ease-out) both;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  min-height: 0;
 }
 
 .tradeHeader {
@@ -322,12 +325,12 @@
 
 .tradeHeader span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .sideControl {
   background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border: 1px solid var(--border-strong);
   border-radius: 16px;
   display: grid;
   gap: 4px;
@@ -356,7 +359,7 @@
 
 .sideIndicator {
   background: var(--canvas);
-  border: 1px solid color-mix(in srgb, var(--border-strong) 70%, transparent);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
   bottom: 4px;
   box-shadow: 0 4px 14px var(--card-shadow);
@@ -377,7 +380,7 @@
 
 .amountCard {
   background: color-mix(in srgb, var(--surface-tint) 78%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border: 1px solid var(--border-strong);
   border-radius: 21px;
   margin-top: 16px;
   min-height: 166px;
@@ -393,7 +396,7 @@
 
 .amountHeader {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   gap: 12px;
   min-height: 34px;
 }
@@ -407,7 +410,8 @@
 
 .balance {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   max-width: 166px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -417,12 +421,13 @@
 .maxButton {
   appearance: none;
   background: color-mix(in srgb, var(--accent) 9%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--accent-strong) 36%, var(--border-strong));
   border-radius: 9px;
   box-shadow: none;
   color: var(--accent-strong);
   flex: none;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   min-height: 44px;
   min-width: 44px;
@@ -466,7 +471,7 @@
 .asset {
   align-items: center;
   background: var(--canvas);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
   display: inline-flex;
   font-size: 12px;
@@ -482,7 +487,8 @@
 
 .amountMeta {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   margin-top: 5px;
   min-height: 20px;
 }
@@ -500,7 +506,7 @@
 
 .statusMessage {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   min-height: 17px;
 }
 
@@ -535,7 +541,7 @@
 
 .secondaryAction {
   background: var(--surface-soft);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   color: var(--text);
 }
 
@@ -551,14 +557,14 @@
 
 .reviewOutput {
   background: color-mix(in srgb, var(--surface-tint) 78%, transparent);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 18px;
   padding: 16px;
 }
 
 .reviewOutput span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .reviewOutput strong {
@@ -587,7 +593,7 @@
 
 .reviewDetails dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .reviewDetails dd {
@@ -626,7 +632,8 @@
 
 .submitted code {
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .transactionLink {
@@ -721,7 +728,7 @@
 .primaryAction:focus-visible,
 .secondaryAction:focus-visible,
 .retry:focus-visible {
-  outline: 2px solid var(--accent-strong);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -749,7 +756,7 @@
 .maxButton:not(:disabled):active,
 .primaryAction:not(:disabled):active,
 .secondaryAction:not(:disabled):active {
-  transform: scale(0.97);
+  transform: scale(0.96);
 }
 
 @media (max-width: 1020px) {
@@ -822,7 +829,7 @@
   }
 
   .address code {
-    font-size: 9px;
+    font-size: 12px;
   }
 
   .description {

@@ -90,7 +90,7 @@
 .address {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   margin-top: 9px;
@@ -186,7 +186,7 @@
 
 .formHelp {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
   margin-top: 7px;
 }
@@ -197,45 +197,53 @@
 
 .connectCard {
   align-items: center;
-  border-radius: 26px;
+  border-radius: 28px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  margin: clamp(34px, 8svh, 74px) auto 0;
-  max-width: 620px;
-  min-height: 270px;
-  padding: 36px 30px;
+  margin: clamp(42px, 10svh, 92px) auto 0;
+  max-width: 580px;
+  min-height: 340px;
+  padding: 42px 32px;
   text-align: center;
 }
 
+.connectMark {
+  filter: drop-shadow(0 14px 30px rgba(142, 68, 109, 0.1));
+  height: 82px;
+  margin-bottom: 24px;
+  object-fit: contain;
+  width: 82px;
+}
+
 .connectCard h1 {
-  font-size: clamp(38px, 4.2vw, 50px);
-  font-weight: 570;
-  letter-spacing: -0.045em;
+  font-size: clamp(38px, 4vw, 48px);
+  font-weight: 580;
+  letter-spacing: -0.048em;
   line-height: 1;
 }
 
 .connectCard p {
   color: var(--text-soft);
-  font-size: 15px;
+  font-size: 15.5px;
   line-height: 1.5;
-  margin-top: 12px;
+  margin-top: 13px;
   max-width: 400px;
 }
 
 .connectButton {
   align-items: center;
   background: var(--accent);
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 42%, transparent);
   border-radius: 14px;
   color: var(--accent-ink);
   display: inline-flex;
   font-size: 14px;
   font-weight: 680;
   justify-content: center;
-  margin-top: 22px;
-  min-height: 46px;
-  padding: 0 18px;
+  margin-top: 24px;
+  min-height: 48px;
+  padding: 0 20px;
 }
 
 .portfolio {
@@ -290,7 +298,7 @@
 
 .portfolioStat span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 560;
 }
 
@@ -317,7 +325,7 @@
 
 .portfolioTotal small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -385,7 +393,7 @@
 .ledgerHeader {
   align-items: center;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 620;
   letter-spacing: 0.045em;
   min-height: 46px;
@@ -493,7 +501,7 @@
   align-items: center;
   color: var(--muted);
   display: flex;
-  font-size: 10.5px;
+  font-size: 12px;
   gap: 8px;
   margin-top: 5px;
   min-width: 0;
@@ -508,7 +516,7 @@
 .modelLabel {
   color: var(--accent-strong);
   flex: none;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 620;
 }
 
@@ -521,7 +529,7 @@
 .tokenAddress {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   margin-top: 5px;
   overflow: hidden;
@@ -542,7 +550,7 @@
   height: 44px;
   justify-content: center;
   line-height: 1;
-  min-width: 76px;
+  min-width: 94px;
   padding: 0 15px;
   white-space: nowrap;
 }
@@ -562,7 +570,7 @@
 .metric span {
   color: var(--muted);
   display: none;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 560;
 }
 
@@ -579,7 +587,7 @@
 
 .metric small {
   color: var(--muted);
-  font-size: 9.5px;
+  font-size: 12px;
   margin-top: 3px;
 }
 
@@ -611,7 +619,7 @@
 
 .claimButton {
   background: var(--accent);
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent-strong) 42%, transparent);
   color: var(--accent-ink);
 }
 
@@ -624,7 +632,7 @@
 .rowError {
   align-items: center;
   display: flex;
-  font-size: 11px;
+  font-size: 12px;
   gap: 8px;
   justify-content: flex-end;
   line-height: 1.4;
@@ -656,7 +664,7 @@
   color: var(--text-soft);
   cursor: default;
   display: flex;
-  font-size: 11px;
+  font-size: 12px;
   gap: 8px;
   justify-content: space-between;
   list-style: none;
@@ -688,7 +696,7 @@
 .rewardSettings > summary small {
   color: var(--muted);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 9px;
+  font-size: 12px;
   margin-left: auto;
   max-width: 150px;
   overflow: hidden;
@@ -734,7 +742,7 @@
 
 .rewardTerms dt {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .rewardTerms dd {
@@ -753,7 +761,7 @@
 .payoutLabel,
 .splitLabel {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 620;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -769,7 +777,7 @@
 .payoutRow a {
   color: var(--text-soft);
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .secondaryAction {
@@ -781,7 +789,7 @@
   background: transparent;
   border: 0;
   color: var(--accent-strong);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   min-height: 44px;
   padding: 0 4px;
@@ -801,7 +809,7 @@
 .splitItem {
   align-items: center;
   display: grid;
-  font-size: 10px;
+  font-size: 12px;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 }
@@ -946,7 +954,7 @@
 .openToken:active,
 .textAction:active,
 .retryButton:active {
-  transform: scale(0.985);
+  transform: scale(0.96);
 }
 
 @media (max-width: 980px) {
@@ -1181,7 +1189,7 @@
 
   .openToken {
     flex: 1 1 auto;
-    font-size: 11px;
+    font-size: 12px;
     height: 46px;
     padding: 0 11px;
   }
@@ -1227,7 +1235,7 @@
   }
 
   .address {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .rewardTerms {

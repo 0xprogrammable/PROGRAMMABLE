@@ -25,6 +25,7 @@ import {
 } from "@/components/token-trade";
 import { TokenPriceChart } from "@/components/token-price-chart";
 import { useWallet } from "@/components/wallet-provider";
+import { canOptimizeTokenImage } from "@/lib/token-image";
 import { validatePreparedTradeResponse } from "@/lib/trade/client";
 import {
   type LauncherToken,
@@ -895,7 +896,7 @@ function TokenDetailContent({
         Explore
       </Link>
 
-      <main className={styles.layout}>
+      <div className={styles.layout}>
         <section className={styles.overview}>
           <div className={styles.identity}>
             <div className={styles.image}>
@@ -909,7 +910,7 @@ function TokenDetailContent({
                 fill
                 priority
                 sizes="(max-width: 800px) 100vw, 420px"
-                unoptimized={!imageUrl.startsWith("/")}
+                unoptimized={!canOptimizeTokenImage(imageUrl)}
               />
             </div>
 
@@ -1137,7 +1138,7 @@ function TokenDetailContent({
             </div>
           )}
         </aside>
-      </main>
+      </div>
     </div>
   );
 }

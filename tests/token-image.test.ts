@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canOptimizeTokenImage,
   getTokenImageFileError,
   hasValidTokenImageSignature,
 } from "../lib/token-image";
@@ -40,5 +41,17 @@ describe("token image policy", () => {
 
     await expect(hasValidTokenImageSignature(webp)).resolves.toBe(true);
     await expect(hasValidTokenImageSignature(fake)).resolves.toBe(false);
+  });
+
+  it("optimizes only local token images", () => {
+    expect(canOptimizeTokenImage("/brand/token.webp")).toBe(true);
+    expect(
+      canOptimizeTokenImage(
+        "https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/token-images/example.webp",
+      ),
+    ).toBe(false);
+    expect(
+      canOptimizeTokenImage("https://programmable.family/token.webp"),
+    ).toBe(false);
   });
 });

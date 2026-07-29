@@ -26,6 +26,7 @@ import {
 } from "@/components/animated-market-cap";
 import { ScrambleText } from "@/components/scramble-text";
 import { SiteFooter } from "@/components/site-footer";
+import { canOptimizeTokenImage } from "@/lib/token-image";
 import {
   type LauncherToken,
   type TokenLink,
@@ -593,7 +594,7 @@ export function ExploreView() {
                   }
                   fill
                   sizes="(max-width: 360px) 260px, (max-width: 800px) 46vw, 214px"
-                  unoptimized={!token.imageUrl.startsWith("/")}
+                  unoptimized={!canOptimizeTokenImage(token.imageUrl)}
                 />
               </span>
 
@@ -619,7 +620,7 @@ export function ExploreView() {
                 {token.marketCap ? (
                   <span className="token-card-market-cap">
                     <AnimatedMarketCap
-                      delay={index * 24}
+                      delay={index * 18}
                       metric={token.marketCap}
                       replayKey={`${activePage}:${sort}:${deferredQuery}`}
                     />
@@ -697,7 +698,7 @@ export function ExploreView() {
           <p>
             <ScrambleText
               text="Launch tokens that work the way you imagine"
-              duration={1100}
+              duration={640}
             />
           </p>
           <button

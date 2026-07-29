@@ -170,7 +170,7 @@ describe("unreleased launch model gating", () => {
     )?.[0];
     expect(stockButton).toContain("disabled");
     expect(html).toContain(
-      "Every cycle uses trading fees to add ETH and tokens",
+      "Trading fees automatically deepen the original locked Uniswap",
     );
     expect(html).not.toMatch(/adaptive/i);
     expect(html).not.toContain("LiquidityGrowth");
@@ -217,7 +217,7 @@ describe("unreleased launch model gating", () => {
       }),
     );
 
-    expect(html).toContain("Initial Buy");
+    expect(html).toContain("Initial buy");
     expect(html).toContain("ETH added when the token launches");
     expect(html).not.toContain(">Max<");
     expect(html).not.toContain("Deep fee");

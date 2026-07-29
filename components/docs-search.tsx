@@ -50,6 +50,13 @@ export function DocsSearch() {
           }
         }}
       />
+      <span className="sr-only" role="status" aria-live="polite">
+        {deferredQuery
+          ? `${results.length} ${
+              results.length === 1 ? "result" : "results"
+            }`
+          : ""}
+      </span>
       {deferredQuery ? (
         <div className={styles.searchResults}>
           {results.length > 0 ? (

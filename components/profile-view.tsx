@@ -49,6 +49,7 @@ import {
   type StockPairedReward,
 } from "@/lib/profile/stock-paired-rewards";
 import { prepareCreatorClaim } from "@/lib/profile/creator-claim";
+import { canOptimizeTokenImage } from "@/lib/token-image";
 import {
   getProfileStorageKey,
   getProfileUsernameError,
@@ -942,8 +943,16 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     return (
       <div className={`${styles.page} page-width`}>
         <section className={styles.connectCard}>
+          <Image
+            className={styles.connectMark}
+            src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+            alt=""
+            width={96}
+            height={96}
+            sizes="82px"
+          />
           <h1>Connect your wallet</h1>
-          <p>View your tokens and claim creator rewards</p>
+          <p>Your launches and creator rewards, in one place.</p>
           <button
             className={styles.connectButton}
             type="button"
@@ -999,7 +1008,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                   <span className={styles.fieldLabel}>Profile image</span>
                   <input
                     ref={fileInputRef}
-                    className="sr-only"
+                    hidden
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
                     onChange={selectAvatar}
@@ -1861,7 +1870,7 @@ function ProfilePortfolioRow({
   const formattedStockReward =
     stockPairedClaimable > 0n && stockQuoteSymbol
       ? `${new Intl.NumberFormat("en-US", {
-          maximumSignificantDigits: 7,
+        maximumSignificantDigits: 5,
         }).format(Number(formatUnits(stockPairedClaimable, 18)))} ${
           stockQuoteSymbol
         }`
@@ -1883,7 +1892,7 @@ function ProfilePortfolioRow({
               alt={`${token.name} token image`}
               fill
               sizes="58px"
-              unoptimized={!tokenImage.startsWith("/")}
+              unoptimized={!canOptimizeTokenImage(tokenImage)}
             />
           </span>
           <span className={styles.tokenCopy}>
@@ -2019,7 +2028,7 @@ function ProfilePortfolioRow({
             ) : null,
           )}
           <Link className={styles.openToken} href={token.href}>
-            View
+            View token
           </Link>
         </div>
       </div>
