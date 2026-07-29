@@ -946,3 +946,68 @@ html[data-theme="light"] {
     transition: none;
   }
 }
+
+/* Compact global navigation */
+
+.header-inner {
+  max-width: 1360px;
+}
+
+.desktop-nav {
+  backdrop-filter: blur(16px);
+  background: color-mix(in srgb, var(--glass-88) 88%, transparent);
+  border: 1px solid var(--header-border);
+  border-radius: 15px;
+  box-shadow:
+    0 1px 0 var(--card-shadow),
+    0 8px 24px var(--card-shadow-soft);
+  gap: 2px;
+  padding: 3px;
+}
+
+.desktop-nav a {
+  border-radius: 11px;
+  font-size: 14px;
+  min-height: 38px;
+  padding: 0 14px;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.desktop-nav a::after {
+  display: none;
+}
+
+.desktop-nav a.active {
+  background: var(--surface-raised);
+  box-shadow:
+    0 1px 2px var(--card-shadow),
+    inset 0 0 0 1px color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.animated-market-cap {
+  display: inline-grid;
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5ch;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .desktop-nav a:not(.active):hover {
+    background: var(--surface-soft);
+    color: var(--text);
+  }
+}
+
+@media (max-width: 800px) {
+  .mobile-nav {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-nav a {
+    transition: none;
+  }
+}
