@@ -3,6 +3,7 @@
 Evidence date: 2026-07-29
 Public model: Deep
 Internal release: `deep-full-range-v3`
+Contract source commit: `1d6b6fc4aaaaf7c7e6e5d3068a08a5e83181c671`
 Replacement source commitment: `0x902cc5e0737e604164e8962bcbdc536eb5df7a1aa508ee322736b2fd394fd440`
 
 ## Result
