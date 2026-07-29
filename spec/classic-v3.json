@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "release": "classic-v3",
+  "chainId": 1,
+  "token": {
+    "standard": "UERC20",
+    "decimals": 18,
+    "fixedSupply": "1000000000000000000000000000",
+    "transferTaxBps": 0
+  },
+  "launch": {
+    "minimumInitialBuyWei": "600000000000000",
+    "initialTick": 204200,
+    "tickSpacing": 200,
+    "lpFeePips": 0
+  },
+  "fees": {
+    "buySwapFeeBps": {
+      "minimum": 100,
+      "maximum": 1000,
+      "step": 100
+    },
+    "sellSwapFeeBps": {
+      "minimum": 100,
+      "maximum": 1000,
+      "step": 100
+    },
+    "programmableFeeBps": 10,
+    "creatorFeeCalculation": "directionalSwapFeeBps - programmableFeeBps"
+  },
+  "rewards": {
+    "currency": "native ETH",
+    "minimumBeneficiaries": 1,
+    "maximumBeneficiaries": 5,
+    "sharesTotalBps": 10000,
+    "claimAuthorization": "beneficiary-only",
+    "payoutWalletChanges": "beneficiary-controlled for future rewards after checkpoint",
+    "communityTakeover": "authority-approved replacement for future rewards after checkpoint"
+  },
+  "initialBuyCustody": {
+    "modes": [
+      "unlocked",
+      "fixed-lock",
+      "linear-vesting",
+      "cliff-plus-linear-vesting"
+    ],
+    "minimumDurationDays": 1,
+    "maximumDurationDays": 3650
+  },
+  "metadataLimits": {
+    "tokenNameBytes": 48,
+    "tokenSymbolBytes": 12,
+    "descriptionBytes": 280,
+    "urlBytes": 2048,
+    "socialExtraDataBytes": 1200
+  },
+  "positionLock": {
+    "operator": "0x0000000000000000000000000000000000000000",
+    "timelockBlock": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+  }
+}
