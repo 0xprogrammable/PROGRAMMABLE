@@ -184,19 +184,34 @@ function positiveAmount(value, label) {
 export function buildStockPairedEthCanaryIdentity({
   releaseCommit,
   creator = STOCK_PAIRED_DEPLOYER,
+  name = "Stock Paired ETH Canary",
+  symbol = "SPETH",
 }) {
   if (!/^[0-9a-f]{40}$/.test(releaseCommit ?? "")) {
     throw new Error("A full ETH coordinator release commit is required");
   }
+  if (
+    typeof name !== "string" ||
+    name.length < 1 ||
+    name.length > 64 ||
+    typeof symbol !== "string" ||
+    !/^[A-Z0-9]{1,12}$/.test(symbol)
+  ) {
+    throw new Error("The ETH canary token identity is invalid");
+  }
   const account = validAddress(creator);
+  const identitySuffix =
+    name === "Stock Paired ETH Canary" && symbol === "SPETH"
+      ? ""
+      : `:${name}:${symbol}`;
   const creatorSalt = keccak256(
     stringToHex(
-      `programmable.stock-paired.eth-canary.v1:${releaseCommit}:${account}`,
+      `programmable.stock-paired.eth-canary.v1:${releaseCommit}:${account}${identitySuffix}`,
     ),
   );
   return Object.freeze({
-    name: "Stock Paired ETH Canary",
-    symbol: "SPETH",
+    name,
+    symbol,
     creatorSalt,
     metadata: Object.freeze({
       description:

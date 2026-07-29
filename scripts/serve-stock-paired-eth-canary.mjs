@@ -37,6 +37,7 @@ import {
   STOCK_PAIRED_ETH_COORDINATOR_DEPENDENCIES,
   assertStockPairedEthCoordinatorCheckout,
 } from "./stock-paired-eth-coordinator-operator-core.mjs";
+import { STOCK_PAIRED_V2_DEPENDENCIES } from "./stock-paired-v2-mainnet-operator-core.mjs";
 import {
   STOCK_PAIRED_ETH_CANARY_ASSET,
   STOCK_PAIRED_ETH_CANARY_DEADLINE_SECONDS,
@@ -67,7 +68,15 @@ import {
 } from "./stock-paired-eth-canary-core.mjs";
 
 const HOST = "127.0.0.1";
-const PORT = Number(process.env.STOCK_PAIRED_ETH_CANARY_PORT ?? 4191);
+const releaseVersion =
+  process.env.STOCK_PAIRED_RELEASE_VERSION?.trim().toLowerCase() || "v1";
+if (releaseVersion !== "v1" && releaseVersion !== "v2") {
+  throw new Error("STOCK_PAIRED_RELEASE_VERSION must be v1 or v2");
+}
+const isV2 = releaseVersion === "v2";
+const PORT = Number(
+  process.env.STOCK_PAIRED_ETH_CANARY_PORT ?? (isV2 ? 4193 : 4191),
+);
 const REQUEST_TIMEOUT_MS = 15_000;
 const RPC_MAX_ATTEMPTS = 4;
 const RPC_RETRY_BASE_MS = 250;
@@ -75,7 +84,9 @@ const MAX_REQUEST_BYTES = 4_096;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = path.join(
   root,
-  "contracts/deployments/mainnet-stock-paired-v1.json",
+  isV2
+    ? "contracts/deployments/mainnet-stock-paired-v2.json"
+    : "contracts/deployments/mainnet-stock-paired-v1.json",
 );
 const evidencePath = path.resolve(
   process.env.STOCK_PAIRED_ETH_CANARY_EVIDENCE_PATH ??
@@ -83,6 +94,11 @@ const evidencePath = path.resolve(
 );
 const coordinatorReleaseCommit =
   process.env.STOCK_PAIRED_ETH_COORDINATOR_RELEASE_COMMIT?.trim() || null;
+const canaryName =
+  process.env.STOCK_PAIRED_ETH_CANARY_NAME?.trim() ||
+  "Stock Paired ETH Canary";
+const canarySymbol =
+  process.env.STOCK_PAIRED_ETH_CANARY_SYMBOL?.trim().toUpperCase() || "SPETH";
 const interactive = process.argv.includes("--write");
 const rpcUrls = [
   process.env.STOCK_PAIRED_RPC_A ?? "https://ethereum-rpc.publicnode.com",
@@ -892,7 +908,16 @@ async function verifyReleaseRuntimes(manifest, blockTag) {
     "ethLaunchCoordinator",
   ];
   const dependencies = [
-    ...Object.values(STOCK_PAIRED_ETH_COORDINATOR_DEPENDENCIES),
+    ...Object.values(
+      isV2
+        ? {
+            v3SwapRouter: STOCK_PAIRED_V2_DEPENDENCIES.v3SwapRouter,
+            v3Factory: STOCK_PAIRED_V2_DEPENDENCIES.v3Factory,
+            weth: STOCK_PAIRED_V2_DEPENDENCIES.weth,
+            usdc: STOCK_PAIRED_V2_DEPENDENCIES.usdc,
+          }
+        : STOCK_PAIRED_ETH_COORDINATOR_DEPENDENCIES,
+    ),
     STOCK_PAIRED_DEPENDENCIES.poolManager,
     STOCK_PAIRED_DEPENDENCIES.positionManager,
     STOCK_PAIRED_DEPENDENCIES.v4Quoter,
@@ -1737,6 +1762,8 @@ async function main() {
   assertManifest(manifest);
   const identity = buildStockPairedEthCanaryIdentity({
     releaseCommit: coordinatorReleaseCommit,
+    name: canaryName,
+    symbol: canarySymbol,
   });
   const first = await inspect(manifest, identity);
   if (!interactive) {
