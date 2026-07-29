@@ -6,9 +6,11 @@ Classic is the only available launch model. Its current Ethereum release has uni
 regression and Mainnet-fork coverage. All seven release contracts are Etherscan exact matches and Sourcify matches.
 Classic has not received an independent smart-contract audit or public security contest.
 
-Stock-Paired is a deployed candidate, not an available launch model. Its lifecycle canary passed on Mainnet and all
-seven contracts have Sourcify matches. One contract has an Etherscan Exact Match; the other six currently have Similar
-Matches. Stock-Paired also has no independent audit or public security contest.
+Stock-Paired is active in the production interface, while its public model registry remains `candidate` until the
+version-bound source and release records are on the default branch, the release verifier records the mixed explorer
+state and the routing review is complete. Its lifecycle canary passed on Mainnet and all seven contracts have exact
+Sourcify matches. Etherscan shows one Exact Match and six Similar Matches. Stock-Paired has no independent audit or
+public security contest.
 
 These records are evidence, not a safety guarantee.
 

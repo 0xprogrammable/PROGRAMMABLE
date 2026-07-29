@@ -47,13 +47,15 @@ buy and sell fees, direct native ETH rewards to as many as five wallets and may 
   </a>
 </p>
 
-**Deployed candidate. Not available for public launch.** Stock-Paired creates a fixed-supply token with one reviewed
-Ondo tokenized stock or ETF asset as the quote side of a permanently locked Uniswap v4 pool. Its 1.00% swap fee is
-accounted in the selected quote asset: 0.90% for the creator configuration and 0.10% for Programmable.
+**Production interface active. Repository release record pending.** Stock-Paired creates a fixed-supply token with one
+reviewed Ondo tokenized stock or ETF asset as the quote side of a permanently locked Uniswap v4 pool. Its 1.00% swap
+fee is accounted in the selected quote asset: 0.90% for the creator configuration and 0.10% for Programmable.
 
-The launched token is not a share and has no claim on the selected quote asset. The current candidate passed a
-Mainnet lifecycle canary, but six of its seven contracts still show an Etherscan Similar Match. Public activation
-remains gated.
+The launched token is not a share and has no claim on the selected quote asset. The deployed release passed its
+Mainnet lifecycle canary and production interface checks. Its public registry remains `candidate` until the
+version-bound source and release records are on the default branch, the release verifier records the mixed explorer
+state and the routing review is complete. Sourcify reports exact matches for all seven contracts; Etherscan shows one
+Exact Match and six Similar Matches.
 
 [Behavior, assets and deployment state](models/stock-paired/README.md) ·
 [Security properties](docs/security/STOCK_PAIRED_PROPERTIES.md)

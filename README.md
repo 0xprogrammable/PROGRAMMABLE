@@ -93,8 +93,9 @@ flowchart LR
     candidate --> design
 ```
 
-Only `available` models appear as production launch options. `design` and `candidate` records are public so incomplete
-work cannot be mistaken for a deployed product. The complete gate is documented in [`RELEASING.md`](RELEASING.md).
+`available` is the repository's final publication state. Production activation does not replace the required source,
+deployment and security records. Any model activated before those records reach `available` is identified in its model
+documentation. The complete gate is documented in [`RELEASING.md`](RELEASING.md).
 
 ## Build a launch model
 
@@ -132,7 +133,7 @@ contest.
 | --- | --- |
 | Current security status | [`SECURITY.md`](SECURITY.md) |
 | Classic trust boundaries and invariants | [`docs/security/CLASSIC_PROPERTIES.md`](docs/security/CLASSIC_PROPERTIES.md) |
-| Stock-Paired candidate properties and gates | [`docs/security/STOCK_PAIRED_PROPERTIES.md`](docs/security/STOCK_PAIRED_PROPERTIES.md) |
+| Stock-Paired properties and publication gates | [`docs/security/STOCK_PAIRED_PROPERTIES.md`](docs/security/STOCK_PAIRED_PROPERTIES.md) |
 | Automated checks and incident process | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
 | Independent review archive | [`audits/`](audits/) |
 

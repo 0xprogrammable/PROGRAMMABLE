@@ -57,9 +57,8 @@
     "publicContest": false
   },
   "releaseGates": [
-    "Capture an Etherscan Exact Match for all seven deployed contracts.",
-    "Publish the version-bound specification, deployment record and release evidence on the default branch.",
-    "Complete the Uniswap routing review and repeat the supported-route checks.",
-    "Activate the exact release in the production interface and pass the production launch, trade and claim smoke test."
+    "Publish the exact deployed source, version-bound specification, deployment record and release evidence on the default branch.",
+    "Record all seven exact Sourcify matches and the one Etherscan Exact Match plus six Similar Matches in the available-release evidence and validator.",
+    "Complete the Uniswap routing review and repeat the supported-route checks."
   ]
 }

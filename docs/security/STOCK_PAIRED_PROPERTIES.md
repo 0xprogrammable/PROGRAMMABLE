@@ -97,8 +97,11 @@ The deployed candidate passed:
 - an ETH-first Mainnet canary with buy, sell, creator claim and Programmable claim; and
 - permanent launch-position custody checks.
 
+The production interface activated the exact deployed release on 30 July 2026. Health, the public launch gate,
+Explore, Profile, receipt lookup and wrong-chain preflight rejection passed production checks.
+
 The exact candidate source and test tree is fixed at
-[`cdd102b`](https://github.com/0xprogrammable/programmable/tree/cdd102bed3d7556ab276ad381f54cbf6de8b2eab/contracts).
+[`stock-paired-v2`](https://github.com/0xprogrammable/programmable/tree/stock-paired-v2/contracts).
 The Mainnet evidence is linked from the [model record](../../models/stock-paired/README.md).
 
 ## Manual review boundaries
@@ -108,7 +111,8 @@ The Mainnet evidence is linked from the [model record](../../models/stock-paired
 - A registry check can block future launches after issuer or runtime drift, but cannot repair an existing pool.
 - Pinned v3 routes can become illiquid or economically unusable after deployment.
 - A broken router, RPC, indexer or metadata service can affect access and visibility without changing pool state.
-- Similar Match verification is not accepted as the final Etherscan source record.
+- Sourcify reports exact matches for all seven contracts; Etherscan shows one Exact Match and six Similar Matches.
+- The Uniswap routing review is pending.
 - No independent audit or public security contest has been completed.
 
 Stock-Paired remains a `candidate` until every release gate in

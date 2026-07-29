@@ -2,7 +2,7 @@
 
 **Status:** Candidate<br>
 **Deployment:** Ethereum Mainnet<br>
-**Availability:** Not available for public launch
+**Public interface:** Active since 30 July 2026
 
 Stock-Paired creates a new fixed-supply token and pairs it with one reviewed Ondo tokenized stock or ETF asset in a
 Uniswap v4 pool. The complete launch position is placed in permanent custody.
@@ -13,7 +13,8 @@ controls.
 
 [Model manifest](model.json) ·
 [Security properties](../../docs/security/STOCK_PAIRED_PROPERTIES.md) ·
-[Immutable candidate source](https://github.com/0xprogrammable/programmable/tree/cdd102bed3d7556ab276ad381f54cbf6de8b2eab/contracts)
+[Immutable deployed source](https://github.com/0xprogrammable/programmable/tree/stock-paired-v2/contracts) ·
+[Launch Stock-Paired](https://programmable.family/launch)
 
 ## Fixed behavior
 
@@ -68,6 +69,12 @@ The candidate lifecycle was exercised against the deployed contracts on two inde
 [Canary token](https://etherscan.io/address/0x369f5fa21942560c42Ba9FDb8a156F5C962BD2eC) ·
 [Pinned deployment evidence](https://github.com/0xprogrammable/programmable/blob/cdd102bed3d7556ab276ad381f54cbf6de8b2eab/contracts/deployments/mainnet-stock-paired-v2.json)
 
+The production interface was activated on 30 July 2026 in Vercel deployment
+`dpl_AiPs87jtBK71mY3obSoq8tRCQirb` at
+[app commit `d384e76`](https://github.com/0xprogrammable/programmable/commit/d384e76db1b52d9ae6e4c4143f57b0c92efd7d1b).
+Health, the public launch gate, Explore, Profile, receipt lookup and wrong-chain preflight rejection were checked on
+`programmable.family`. The Mainnet canary above remains the onchain lifecycle evidence.
+
 ## Verification state
 
 Checked on 30 July 2026:
@@ -82,14 +89,16 @@ Checked on 30 July 2026:
 | Launcher | [`0x5eA6…0Daf`](https://etherscan.io/address/0x5eA6Be24838061bA45dbE8D82DE1b267DC240Daf#code) | Similar Match |
 | ETH coordinator | [`0xFb9E…0fD2`](https://etherscan.io/address/0xFb9E1034df6161088E8F358502B19E7515c30fD2#code) | Similar Match |
 
-Sourcify reports source matches for all seven contracts. An Uniswap routing review was submitted on 29 July 2026 and
-is pending. The contracts have not received an independent audit or public security contest.
+Sourcify reports exact source matches for all seven contracts. Etherscan shows one Exact Match and six Similar Matches.
+An Uniswap routing review was submitted on 29 July 2026 and is pending. The contracts have not received an independent
+audit or public security contest.
 
 ## Remaining gates
 
-Stock-Paired stays unavailable in the public interface until:
+The production interface is active. The public registry remains `candidate` until:
 
-1. all seven contracts have an Etherscan Exact Match;
-2. the version-bound specification, release manifest and deployment record are on the default branch;
-3. the Uniswap routing review and route checks are complete; and
-4. the exact release passes a production launch, trade and claim smoke test.
+1. the exact deployed source, version-bound specification, release manifest and deployment record are on the default
+   branch;
+2. the release evidence and validator record all seven exact Sourcify matches alongside the one Etherscan Exact Match
+   and six Similar Matches; and
+3. the Uniswap routing review is complete and the supported routes are checked again.
