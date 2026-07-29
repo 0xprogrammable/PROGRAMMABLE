@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { readFile, rename, writeFile } from "node:fs/promises";
@@ -15,7 +17,7 @@ import {
   parseAbi,
   toHex,
 } from "viem";
-import { sepolia } from "viem/chains";
+import { mainnet, sepolia } from "viem/chains";
 
 import {
   loadClassicV3ReleasePlan,
@@ -28,9 +30,15 @@ const { CommandType, RoutePlanner } = require(
   "@uniswap/universal-router-sdk",
 );
 
+const IS_MAINNET =
+  process.env.CLASSIC_V3_LIFECYCLE_NETWORK === "mainnet";
+const NETWORK_KEY = IS_MAINNET ? "mainnet" : "sepolia";
+const NETWORK_NAME = IS_MAINNET ? "Ethereum Mainnet" : "Sepolia";
+const CHAIN = IS_MAINNET ? mainnet : sepolia;
 const HOST = "127.0.0.1";
 const PORT = Number(
-  process.env.PROGRAMMABLE_CLASSIC_V3_CANARY_PORT ?? 4177,
+  process.env.PROGRAMMABLE_CLASSIC_V3_CANARY_PORT ??
+    (IS_MAINNET ? 4178 : 4177),
 );
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 4_096;
@@ -40,18 +48,21 @@ const releaseEvidencePath = path.resolve(
   process.env.CLASSIC_V3_RELEASE_EVIDENCE_PATH ??
     path.join(
       repositoryRoot,
-      "tmp/classic-v3-sepolia-release-evidence.json",
+      `tmp/classic-v3-${NETWORK_KEY}-release-evidence.json`,
     ),
 );
 const lifecycleEvidencePath = path.resolve(
   process.env.CLASSIC_V3_LIFECYCLE_EVIDENCE_PATH ??
     path.join(
       repositoryRoot,
-      "tmp/classic-v3-sepolia-lifecycle-evidence.json",
+      `tmp/classic-v3-${NETWORK_KEY}-lifecycle-evidence.json`,
     ),
 );
 
-const plan = await loadClassicV3ReleasePlan(repositoryRoot, "sepolia");
+const plan = await loadClassicV3ReleasePlan(
+  repositoryRoot,
+  NETWORK_KEY,
+);
 const releaseEvidence = await readClassicV3Evidence(
   releaseEvidencePath,
   plan,
@@ -69,7 +80,7 @@ const byContractName = Object.fromEntries(
   ]),
 );
 const ACCOUNT = getAddress(plan.expectedAccount);
-const TREASURY = getAddress(plan.treasury);
+const TREASURY = getAddress(plan.launcherFeeRecipient);
 const LAUNCHER = getAddress(byContractName.MemeLaunchV2.address);
 const FEE_HOOK = getAddress(byContractName.EthCreatorFeeHookV3.address);
 const POSITION_MANAGER = getAddress(
@@ -82,14 +93,20 @@ const UNIVERSAL_ROUTER = getAddress(
 const V4_QUOTER = getAddress(plan.dependencies.v4Quoter.address);
 const ZERO_ADDRESS =
   "0x0000000000000000000000000000000000000000";
-const TOKEN_NAME = "Classic Sepolia Canary";
-const TOKEN_SYMBOL = "CSC";
+const TOKEN_NAME = IS_MAINNET
+  ? "Programmable Classic Canary"
+  : "Classic Sepolia Canary";
+const TOKEN_SYMBOL = IS_MAINNET ? "PCC" : "CSC";
 const CREATOR_SALT = keccak256(
-  toHex("programmable-classic-v3-sepolia-canary-2026-07-29"),
+  toHex(
+    `programmable-classic-v3-${NETWORK_KEY}-canary-2026-07-29`,
+  ),
 );
 const INITIAL_BUY_WEI = 600_000_000_000_000n;
 const BUY_AMOUNT_WEI = 100_000_000_000_000n;
 const TREASURY_GAS_FUNDING_WEI = 200_000_000_000_000n;
+const BUY_SWAP_FEE_BPS = IS_MAINNET ? 100 : 200;
+const SELL_SWAP_FEE_BPS = IS_MAINNET ? 200 : 700;
 const UINT160_MAX = (1n << 160n) - 1n;
 const UINT256_MAX = (1n << 256n) - 1n;
 const RPC_ENDPOINTS = [
@@ -98,19 +115,25 @@ const RPC_ENDPOINTS = [
 ].map(
   (endpoint, index) =>
     endpoint ?? plan.defaultRpcEndpoints?.[index] ?? [
-      "https://sepolia.drpc.org",
-      "https://sepolia.gateway.tenderly.co",
+      IS_MAINNET
+        ? "https://ethereum-rpc.publicnode.com"
+        : "https://sepolia.drpc.org",
+      IS_MAINNET
+        ? "https://eth-mainnet.public.blastapi.io"
+        : "https://ethereum-sepolia-rpc.publicnode.com",
     ][index],
 );
 if (
   RPC_ENDPOINTS.length !== 2 ||
   RPC_ENDPOINTS[0] === RPC_ENDPOINTS[1]
 ) {
-  throw new Error("Two independent Sepolia RPC endpoints are required");
+  throw new Error(
+    `Two independent ${NETWORK_NAME} RPC endpoints are required`,
+  );
 }
 const clients = RPC_ENDPOINTS.map((endpoint) =>
   createPublicClient({
-    chain: sepolia,
+    chain: CHAIN,
     transport: http(endpoint, {
       retryCount: 4,
       retryDelay: 500,
@@ -219,11 +242,11 @@ const launchData = encodeFunctionData({
     {
       name: TOKEN_NAME,
       symbol: TOKEN_SYMBOL,
-      buySwapFeeBps: 200,
-      sellSwapFeeBps: 700,
+      buySwapFeeBps: BUY_SWAP_FEE_BPS,
+      sellSwapFeeBps: SELL_SWAP_FEE_BPS,
       creatorSalt: CREATOR_SALT,
       metadata: {
-        description: "Programmable Classic Sepolia lifecycle canary.",
+        description: `Programmable Classic ${NETWORK_NAME} lifecycle canary.`,
         website: "https://programmable.family",
         image:
           "https://programmable.family/brand/programmable-token-fallback-01-dawn.webp",
@@ -247,7 +270,7 @@ const ACTION_KEYS = [
   "routerApproval",
   "sell",
   "creatorClaim",
-  "treasuryFunding",
+  ...(IS_MAINNET ? [] : ["treasuryFunding"]),
   "launcherClaim",
 ];
 
@@ -256,8 +279,8 @@ function initialEvidence() {
     schemaVersion: 1,
     status: "not-started",
     release: "classic-v3",
-    network: "sepolia",
-    chainId: sepolia.id,
+    network: NETWORK_KEY,
+    chainId: CHAIN.id,
     releaseCommit: plan.simulationCommit,
     infrastructurePlanDigest: plan.planDigest,
     account: ACCOUNT,
@@ -272,8 +295,8 @@ function initialEvidence() {
     configuration: {
       name: TOKEN_NAME,
       symbol: TOKEN_SYMBOL,
-      buySwapFeeBps: 200,
-      sellSwapFeeBps: 700,
+      buySwapFeeBps: BUY_SWAP_FEE_BPS,
+      sellSwapFeeBps: SELL_SWAP_FEE_BPS,
       initialBuyWei: INITIAL_BUY_WEI.toString(),
       separateBuyWei: BUY_AMOUNT_WEI.toString(),
       beneficiaries: [ACCOUNT],
@@ -300,7 +323,7 @@ async function readEvidence() {
     );
     if (
       parsed.schemaVersion !== 1 ||
-      parsed.chainId !== sepolia.id ||
+      parsed.chainId !== CHAIN.id ||
       parsed.infrastructurePlanDigest !== plan.planDigest ||
       parsed.token?.toLowerCase() !== PREDICTED_TOKEN.toLowerCase()
     ) {
@@ -376,7 +399,7 @@ async function quoteExactInput(zeroForOne, amountIn) {
     ),
   );
   if (quotes[0][0] !== quotes[1][0]) {
-    throw new Error("Independent Sepolia quotes disagree");
+    throw new Error(`Independent ${NETWORK_NAME} quotes disagree`);
   }
   return quotes[0][0];
 }
@@ -400,7 +423,7 @@ async function buildAction(evidence) {
       value: INITIAL_BUY_WEI,
       data: launchData,
       detail:
-        "Launch with 2.00% buy fees, 7.00% sell fees, one reward wallet and an unlocked Initial Buy.",
+        `Launch with ${(BUY_SWAP_FEE_BPS / 100).toFixed(2)}% buy fees, ${(SELL_SWAP_FEE_BPS / 100).toFixed(2)}% sell fees, one reward wallet and an unlocked Initial Buy.`,
     };
   }
   if (key === "buy") {
@@ -548,7 +571,9 @@ async function readAccountState(account) {
     states[0].pendingNonce !== states[1].pendingNonce ||
     states[0].balance !== states[1].balance
   ) {
-    throw new Error("Independent Sepolia RPCs disagree on account state");
+    throw new Error(
+      `Independent ${NETWORK_NAME} RPCs disagree on account state`,
+    );
   }
   return states[0];
 }
@@ -598,7 +623,7 @@ async function prepareNextAction() {
   const requiredBalance = action.value + gas * gasPrice;
   if (state.balance < requiredBalance) {
     throw new Error(
-      `Required wallet needs ${requiredBalance} wei for this Sepolia step`,
+      `Required wallet needs ${requiredBalance} wei for this ${NETWORK_NAME} step`,
     );
   }
   const prepared = {
@@ -699,7 +724,9 @@ async function recordReceipt(actionKey, transactionHash) {
     reference.receipt.blockHash !== secondary.receipt.blockHash ||
     reference.transaction.input !== secondary.transaction.input
   ) {
-    throw new Error("Independent Sepolia receipt evidence disagrees");
+    throw new Error(
+      `Independent ${NETWORK_NAME} receipt evidence disagrees`,
+    );
   }
   const transaction = reference.transaction;
   const receipt = reference.receipt;
@@ -724,8 +751,8 @@ async function recordReceipt(actionKey, transactionHash) {
       result.rewardVault.toLowerCase() !==
         PREDICTED_VAULT.toLowerCase() ||
       result.poolId.toLowerCase() !== POOL_ID.toLowerCase() ||
-      result.buySwapFeeBps !== 200 ||
-      result.sellSwapFeeBps !== 700
+      result.buySwapFeeBps !== BUY_SWAP_FEE_BPS ||
+      result.sellSwapFeeBps !== SELL_SWAP_FEE_BPS
     ) {
       throw new Error("The launch event differs from the reviewed canary");
     }
@@ -954,7 +981,9 @@ async function verifyLifecycle() {
     }),
   );
   if (JSON.stringify(observations[0]) !== JSON.stringify(observations[1])) {
-    throw new Error("Independent Sepolia lifecycle observations disagree");
+    throw new Error(
+      `Independent ${NETWORK_NAME} lifecycle observations disagree`,
+    );
   }
   const state = observations[0];
   const valid =
@@ -973,8 +1002,8 @@ async function verifyLifecycle() {
     state.feeConfig.rewardVault.toLowerCase() ===
       PREDICTED_VAULT.toLowerCase() &&
     state.feeConfig.registrar.toLowerCase() === LAUNCHER.toLowerCase() &&
-    state.feeConfig.buySwapFeeBps === 200 &&
-    state.feeConfig.sellSwapFeeBps === 700 &&
+    state.feeConfig.buySwapFeeBps === BUY_SWAP_FEE_BPS &&
+    state.feeConfig.sellSwapFeeBps === SELL_SWAP_FEE_BPS &&
     state.feeConfig.registered === true &&
     state.feeConfig.creatorFeesAccrued === "0" &&
     state.launcherFeesAccrued === "0" &&
@@ -1033,7 +1062,7 @@ function renderHtml() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Programmable · Classic Sepolia lifecycle</title>
+  <title>Programmable · Classic ${NETWORK_NAME} lifecycle</title>
   <style>
     :root { color-scheme:light; --pink:#d282ad; --ink:#241f23; --muted:#796f76; --line:#eadfe5; --paper:#fffdfd; --wash:#faf5f8; --good:#28785a; --bad:#a63b55; font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
     * { box-sizing:border-box; }
@@ -1062,21 +1091,21 @@ function renderHtml() {
 </head>
 <body>
 <main>
-  <h1>Classic Sepolia lifecycle</h1>
-  <p>Eight explicit test transactions verify launch, a real v4 buy and sell, beneficiary-owned ETH rewards and the Programmable treasury claim.</p>
+  <h1>Classic ${NETWORK_NAME} lifecycle</h1>
+  <p>${ACTION_KEYS.length} explicit test transactions verify launch, a real v4 buy and sell, beneficiary-owned ETH rewards and the Programmable revenue-wallet claim.</p>
   <section class="panel">
     <div class="facts">
-      <div class="fact"><span>Progress</span><strong id="progress">0 / 8</strong></div>
+      <div class="fact"><span>Progress</span><strong id="progress">0 / ${ACTION_KEYS.length}</strong></div>
       <div class="fact"><span>Required wallet</span><code id="wallet">Not connected</code></div>
       <div class="fact"><span>Token</span><code>${PREDICTED_TOKEN}</code></div>
     </div>
     <div class="step">
       <small id="eyebrow">Connect MetaMask</small>
       <h2 id="title">Ready for the canary</h2>
-      <p id="detail">The page prepares only the next reviewed Sepolia step.</p>
+      <p id="detail">The page prepares only the next reviewed ${NETWORK_NAME} step.</p>
     </div>
     <div class="actions">
-      <button id="switch">Switch to Sepolia</button>
+      <button id="switch">Switch to ${NETWORK_NAME}</button>
       <button id="connect">Connect MetaMask</button>
       <button id="send" class="primary" disabled>Prepare next step</button>
     </div>
@@ -1084,7 +1113,7 @@ function renderHtml() {
   </section>
 </main>
 <script>
-  const expectedChainId = "${toHex(sepolia.id)}";
+  const expectedChainId = "${toHex(CHAIN.id)}";
   const byId = (id) => document.getElementById(id);
   const ui = { progress:byId("progress"), wallet:byId("wallet"), eyebrow:byId("eyebrow"), title:byId("title"), detail:byId("detail"), switch:byId("switch"), connect:byId("connect"), send:byId("send"), notice:byId("notice") };
   let provider;
@@ -1104,9 +1133,9 @@ function renderHtml() {
     if(!payload.action){
       ui.eyebrow.textContent="Verified";
       ui.title.textContent="Classic lifecycle complete";
-      ui.detail.textContent="All signed Sepolia steps and final onchain bindings passed.";
+      ui.detail.textContent="All signed ${NETWORK_NAME} steps and final onchain bindings passed.";
       ui.send.textContent="Complete";
-      message("The release can now be promoted into the Sepolia application manifest.","good");
+      message("The release can now be promoted into the ${NETWORK_NAME} application manifest.","good");
     }else{
       ui.eyebrow.textContent="Next step";
       ui.title.textContent=payload.action.label;
@@ -1114,11 +1143,11 @@ function renderHtml() {
       ui.wallet.textContent=payload.action.requiredAccount;
       ui.send.textContent=payload.action.label;
       if(account&&account.toLowerCase()!==payload.action.requiredAccount.toLowerCase()) message("Select the required wallet shown above.","bad");
-      else message("This exact Sepolia call passed two independent simulations.","good");
+      else message("This exact ${NETWORK_NAME} call passed two independent simulations.","good");
     }
     buttons();
   }
-  async function ensureNetwork(){ if(String(await request("eth_chainId")).toLowerCase()!==expectedChainId) throw new Error("Switch MetaMask to Sepolia"); }
+  async function ensureNetwork(){ if(String(await request("eth_chainId")).toLowerCase()!==expectedChainId) throw new Error("Switch MetaMask to ${NETWORK_NAME}"); }
   async function selected(){ const accounts=await request("eth_accounts"); account=String(accounts[0]||""); if(!account) throw new Error("Connect MetaMask"); return account; }
   async function connect(){
     if(busy)return; busy=true; buttons();
@@ -1128,7 +1157,7 @@ function renderHtml() {
   }
   async function switchNetwork(){
     if(busy)return; busy=true; buttons();
-    try{ provider=metamask(); if(!provider)throw new Error("MetaMask is not available"); await request("wallet_switchEthereumChain",[{chainId:expectedChainId}]); if((await request("eth_accounts")).length){await selected();await load();} message("Sepolia selected.","good"); }
+    try{ provider=metamask(); if(!provider)throw new Error("MetaMask is not available"); await request("wallet_switchEthereumChain",[{chainId:expectedChainId}]); if((await request("eth_accounts")).length){await selected();await load();} message("${NETWORK_NAME} selected.","good"); }
     catch(error){message(error?.message||String(error),"bad");}
     finally{busy=false;buttons();}
   }
@@ -1152,7 +1181,7 @@ function renderHtml() {
       if(account.toLowerCase()!==fresh.action.requiredAccount.toLowerCase())throw new Error("Select "+fresh.action.requiredAccount+" in MetaMask");
       message("Review "+fresh.action.label+" in MetaMask.");
       const hash=await request("eth_sendTransaction",[fresh.action.request]);
-      message("Transaction submitted. Waiting for both Sepolia RPCs.");
+      message("Transaction submitted. Waiting for both ${NETWORK_NAME} RPCs.");
       await record(fresh.action.key,hash);
       await load();
     }catch(error){message(error?.message||String(error),"bad");}
@@ -1251,7 +1280,7 @@ const server = createServer(async (request, response) => {
 
 server.listen(PORT, HOST, () => {
   console.log(
-    `Programmable Classic Sepolia lifecycle: http://${HOST}:${PORT}`,
+    `Programmable Classic ${NETWORK_NAME} lifecycle: http://${HOST}:${PORT}`,
   );
   console.log(`Predicted token: ${PREDICTED_TOKEN}`);
   console.log(`Reward vault: ${PREDICTED_VAULT}`);

@@ -94,6 +94,8 @@ function readyRelease(): ClassicV3ReleaseManifest {
       launcher,
       positionForwarderFactory:
         "0x8888888888888888888888888888888888888888",
+      launcherFeeRecipient:
+        "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
     },
     runtimeCodeHashes: {
       ctoAuthority: hash,
@@ -114,13 +116,13 @@ function readyRelease(): ClassicV3ReleaseManifest {
 }
 
 describe("Classic V3 launch configuration", () => {
-  it("keeps the current release hard-gated until real deployment data exists", () => {
+  it("enables the checked-in verified Mainnet release", () => {
     expect(
       isClassicV3DeploymentReady(
         appDeployments.production as unknown as ClassicV3DeploymentManifest,
         1,
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(isClassicV3DeploymentReady(readyManifest(), 1)).toBe(true);
     expect(
       isClassicV3DeploymentReady(

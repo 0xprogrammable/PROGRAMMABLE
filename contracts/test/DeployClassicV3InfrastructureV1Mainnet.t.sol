@@ -5,7 +5,8 @@ import { DeployClassicV3InfrastructureV1 } from "../script/DeployClassicV3Infras
 import { DeployClassicV3InfrastructureV1ForkBase } from "./utils/DeployClassicV3InfrastructureV1ForkBase.sol";
 
 contract DeployClassicV3InfrastructureV1MainnetTest is DeployClassicV3InfrastructureV1ForkBase {
-    uint256 internal constant SNAPSHOT_BLOCK = 25_630_943;
+    uint256 internal constant SNAPSHOT_BLOCK = 25_639_000;
+    address internal constant LAUNCHER_FEE_RECIPIENT = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
 
     function setUp() public {
         _selectFork("ETHEREUM_RPC_URL", "https://eth.drpc.org", SNAPSHOT_BLOCK);
@@ -13,22 +14,27 @@ contract DeployClassicV3InfrastructureV1MainnetTest is DeployClassicV3Infrastruc
 
     function test_mainnetDependenciesPlanDeploymentAndOfficialLaunchAreExact() public {
         deployment.validateOfficialDependencies();
+        assertEq(deployment.expectedLauncherFeeRecipient(), LAUNCHER_FEE_RECIPIENT);
         _assertDeterministicDeploymentAndLaunch();
     }
 
-    function test_rejectsStaleNonceWrongTreasuryAndUnsupportedChain() public {
+    function test_rejectsStaleNonceWrongLauncherFeeRecipientAndUnsupportedChain() public {
         vm.expectRevert(
             abi.encodeWithSelector(
                 DeployClassicV3InfrastructureV1.UnexpectedNonce.selector, DEPLOYER, uint64(0), uint64(1)
             )
         );
-        deployment.deployReviewed(DEPLOYER, 1, TREASURY);
+        deployment.deployReviewed(DEPLOYER, 1, LAUNCHER_FEE_RECIPIENT);
 
-        address wrongTreasury = makeAddr("wrongClassicV3Treasury");
+        address wrongRecipient = makeAddr("wrongClassicV3LauncherFeeRecipient");
         vm.expectRevert(
-            abi.encodeWithSelector(DeployClassicV3InfrastructureV1.UnexpectedTreasury.selector, wrongTreasury, TREASURY)
+            abi.encodeWithSelector(
+                DeployClassicV3InfrastructureV1.UnexpectedLauncherFeeRecipient.selector,
+                wrongRecipient,
+                LAUNCHER_FEE_RECIPIENT
+            )
         );
-        deployment.deployReviewed(DEPLOYER, 0, wrongTreasury);
+        deployment.deployReviewed(DEPLOYER, 0, wrongRecipient);
 
         vm.chainId(8453);
         vm.expectRevert(abi.encodeWithSelector(DeployClassicV3InfrastructureV1.UnexpectedChain.selector, 8453));

@@ -1,7 +1,8 @@
 # Classic security properties
 
 This document defines the security boundary of the configurable Classic launch
-lifecycle. It describes the local candidate, not a deployed release.
+lifecycle deployed on Ethereum. Its seven contracts are verified on Etherscan and
+Sourcify and bound to the production app manifest by runtime code hash.
 
 ## Scope
 
@@ -31,7 +32,7 @@ flowchart LR
   launcher --> reward["Reward vault"]
   launcher --> custody["Optional Initial Buy custody"]
   pool --> hook["Directional-fee hook"]
-  hook --> treasury["Programmable treasury"]
+  hook --> revenue["Programmable revenue wallet"]
   hook --> reward
   reward --> beneficiaries["Reward beneficiaries"]
   cto["Disclosed CTO authority"] -->|future rewards only| reward
@@ -62,9 +63,11 @@ flowchart LR
   custody or the locked position.
 - Uses a two-step authority transfer.
 
-### Programmable treasury
+### Programmable revenue wallet
 
 - Receives the disclosed 0.10 percentage-point share of each swap fee.
+- The Ethereum release binds this role directly to
+  `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`.
 - Has no privileged creator-reward claim path.
 - Has no token, pool or liquidity control.
 
@@ -167,20 +170,21 @@ increase observed while redeeming the hook's PoolManager claim is recorded.
 - A successful local rehearsal is not deployment, source verification, canary evidence
   or production activation.
 
-## Release gates
-
-Before any production activation:
+## Recorded release evidence
 
 1. Build the exact pinned source tree and record the source commitment.
 2. Refresh the deterministic deployment plan against the live deployment-wallet nonce.
-3. Deploy and verify all seven candidate contracts on Sepolia.
-4. Complete a launch, buy, sell, beneficiary claim, payout-wallet change, CTO and each
-   custody schedule on Sepolia.
+3. Confirm the source-verification evidence for all seven release contracts.
+4. Confirm the launch, buy, sell, creator claim and Programmable claim lifecycle.
 5. Verify runtime hashes and constructor bindings through two independent RPC endpoints.
 6. Deploy and verify the same source commitment on Ethereum.
 7. Complete a low-value Ethereum canary lifecycle.
-8. Write exact addresses, runtime hashes and deployment block into the app manifest.
+8. Write exact addresses, runtime hashes and deployment blocks into the app manifest.
 9. Confirm the app preflight gate before exposing the configurable Classic UI.
+
+All nine release gates are represented in
+`contracts/deployments/mainnet-classic-v3.json` and checked by
+`contracts/scripts/verify-classic-v3-release-manifest.mjs`.
 
 ## Local evidence commands
 

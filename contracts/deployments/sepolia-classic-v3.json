@@ -311,7 +311,7 @@
     "status": "verified-current-release",
     "releaseEligible": true,
     "checkedAt": "2026-07-29T13:52:53.342Z",
-    "verifier": "scripts/serve-classic-v3-sepolia-canary.mjs",
+    "verifier": "scripts/serve-classic-v3-lifecycle-canary.mjs",
     "independentRpcCount": 2,
     "deploymentTransactionsVerified": true,
     "runtimeBindingsVerified": true,
