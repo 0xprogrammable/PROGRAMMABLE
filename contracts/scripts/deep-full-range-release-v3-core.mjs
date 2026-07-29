@@ -817,7 +817,20 @@ export function assertDeepV3EtherscanStandardJsonMatches(
     throw new Error("Expected standard JSON input is unavailable");
   }
   assertPinnedDeepV3CompilerSettings(expectedInput.settings);
-  if (!sameJson(observed.settings, expectedInput.settings)) {
+  const normalizedSettings = (settings) => {
+    const compiled = { ...settings };
+    delete compiled.outputSelection;
+    return {
+      ...compiled,
+      libraries: compiled.libraries ?? {},
+    };
+  };
+  if (
+    !sameJson(
+      normalizedSettings(observed.settings),
+      normalizedSettings(expectedInput.settings),
+    )
+  ) {
     throw new Error("Etherscan compiler settings differ from the local input");
   }
   if (

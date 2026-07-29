@@ -544,6 +544,31 @@ test("Etherscan double-brace standard JSON is parsed without weakening the compa
   );
 });
 
+test("Etherscan output-selection normalization preserves compile-critical checks", () => {
+  const expected = standardJson("launcher");
+  const observed = structuredClone(expected);
+  delete observed.settings.libraries;
+  observed.settings.outputSelection = {
+    "*": {
+      "*": [
+        "evm.bytecode",
+        "evm.deployedBytecode",
+        "devdoc",
+        "userdoc",
+        "metadata",
+        "abi",
+      ],
+    },
+  };
+  assert.deepEqual(
+    assertDeepV3EtherscanStandardJsonMatches(
+      JSON.stringify(observed),
+      expected,
+    ),
+    observed,
+  );
+});
+
 test("Etherscan source comments and compiler setting drift fail closed", () => {
   const expected = standardJson("launcher");
   const sourceDrift = structuredClone(expected);
@@ -570,7 +595,7 @@ test("Etherscan source comments and compiler setting drift fail closed", () => {
   );
 });
 
-test("placeholder manifest is schema-valid, policy-exact and fail-closed", () => {
+test("release manifest is schema-valid, policy-exact and fail-closed", () => {
   const schema = JSON.parse(
     readFileSync(path.join(root, DEEP_V3_SCHEMA_PATH), "utf8"),
   );
@@ -650,11 +675,15 @@ test("placeholder manifest is schema-valid, policy-exact and fail-closed", () =>
   const assessment = assessDeepV3LiveManifest(manifest, root);
   assert.equal(assessment.ready, false);
   assert.ok(assessment.reasons.includes("final release status"));
-  assert.ok(assessment.reasons.includes("six deployment receipts"));
-  assert.ok(
+  assert.equal(
+    assessment.reasons.includes("six deployment receipts"),
+    !String(manifest.status).startsWith("deployed-"),
+  );
+  assert.equal(
     assessment.reasons.includes(
       "Etherscan exact and Sourcify match verification",
     ),
+    manifest.sourceVerification.status !== "verified",
   );
   assert.ok(assessment.reasons.includes("current-release canary evidence"));
   assert.ok(assessment.reasons.includes("keeper reviewed and active"));
