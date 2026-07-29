@@ -24,9 +24,11 @@ import { ILiquidityGrowthFullRangeVaultFactoryV3 } from "../src/interfaces/ILiqu
 
 contract DeepV3FeeMockVaultFactory is ILiquidityGrowthFullRangeVaultFactoryV3 {
     mapping(address vault => bytes32 configurationHash) public configurationHashOf;
+    mapping(address vault => bytes32 bindingHash) public vaultBindingHash;
 
-    function register(address vault) external {
+    function register(address vault, address hook, bytes32 poolId, address token) external {
         configurationHashOf[vault] = keccak256(abi.encode(block.chainid, address(this), vault));
+        vaultBindingHash[vault] = keccak256(abi.encode(block.chainid, address(this), vault, hook, poolId, token));
     }
 }
 
@@ -65,7 +67,6 @@ contract LiquidityGrowthFullRangeV3FeeAccountingTest is Deployers, IUnlockCallba
         treasury = makeAddr("deepV3Treasury");
         vaultFactory = new DeepV3FeeMockVaultFactory();
         growthVault = new DeepV3FeeMockVault();
-        vaultFactory.register(address(growthVault));
         hookFactory = new LiquidityGrowthFeeOracleHookFactoryV2();
         hook = _deployHook();
 
@@ -82,6 +83,7 @@ contract LiquidityGrowthFullRangeV3FeeAccountingTest is Deployers, IUnlockCallba
             hooks: hook
         });
         poolId = PoolId.unwrap(deepKey.toId());
+        vaultFactory.register(address(growthVault), address(hook), poolId, address(token));
         assertEq(hook.registerPool(deepKey, address(growthVault)), poolId);
         assertEq(manager.initialize(deepKey, Policy.initialSqrtPriceX96()), Policy.INITIAL_TICK);
 

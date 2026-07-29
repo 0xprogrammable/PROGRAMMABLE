@@ -127,6 +127,7 @@ contract LiquidityGrowthZapPlannerV3 {
             hook.TOTAL_HOOK_FEE_BPS() != Policy.TOTAL_HOOK_FEE_BPS
                 || hook.PROGRAMMABLE_FEE_BPS() != Policy.PROGRAMMABLE_FEE_BPS
                 || hook.GROWTH_FEE_BPS() != Policy.GROWTH_FEE_BPS
+                || hook.maxAbsTickDelta() != Policy.MAX_ABS_OBSERVATION_TICK_DELTA
         ) {
             revert InvalidHook(hookAddress);
         }

@@ -8,6 +8,7 @@ import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPosition
 
 interface ILiquidityGrowthFullRangeVaultFactoryV3 {
     function configurationHashOf(address vault) external view returns (bytes32);
+    function vaultBindingHash(address vault) external view returns (bytes32);
 }
 
 /// @title ILiquidityGrowthFeeOracleHookV2

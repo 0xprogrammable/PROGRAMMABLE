@@ -27,9 +27,11 @@ import { ILiquidityGrowthFullRangeVaultFactoryV3 } from "../src/interfaces/ILiqu
 
 contract DeepV3PermissionVaultFactory is ILiquidityGrowthFullRangeVaultFactoryV3 {
     mapping(address vault => bytes32 configurationHash) public configurationHashOf;
+    mapping(address vault => bytes32 bindingHash) public vaultBindingHash;
 
-    function register(address vault) external {
+    function register(address vault, address hook, bytes32 poolId, address token) external {
         configurationHashOf[vault] = keccak256(abi.encode(block.chainid, address(this), vault));
+        vaultBindingHash[vault] = keccak256(abi.encode(block.chainid, address(this), vault, hook, poolId, token));
     }
 }
 
@@ -199,7 +201,6 @@ contract LiquidityGrowthFeeOracleHookV2PermissionsTest is Deployers, IUnlockCall
         treasury = makeAddr("deepV3PermissionTreasury");
         vaultFactory = new DeepV3PermissionVaultFactory();
         growthVault = new DeepV3PermissionVault(manager);
-        vaultFactory.register(address(growthVault));
         hookFactory = new LiquidityGrowthFeeOracleHookFactoryV2();
         hook = _deployHook();
 
@@ -217,6 +218,7 @@ contract LiquidityGrowthFeeOracleHookV2PermissionsTest is Deployers, IUnlockCall
             hooks: hook
         });
         poolId = PoolId.unwrap(deepKey.toId());
+        vaultFactory.register(address(growthVault), address(hook), poolId, address(token));
         assertEq(hook.registerPool(deepKey, address(growthVault)), poolId);
         assertEq(manager.initialize(deepKey, Policy.initialSqrtPriceX96()), Policy.INITIAL_TICK);
     }
@@ -290,6 +292,78 @@ contract LiquidityGrowthFeeOracleHookV2PermissionsTest is Deployers, IUnlockCall
             IPositionManager(address(modifyLiquidityRouter)),
             Policy.MAX_ABS_OBSERVATION_TICK_DELTA
         );
+    }
+
+    function test_factoryRejectsEveryNonCanonicalOracleTickLimit() public {
+        int24[3] memory invalidLimits =
+            [Policy.MAX_ABS_OBSERVATION_TICK_DELTA - 1, Policy.MAX_ABS_OBSERVATION_TICK_DELTA + 1, TickMath.MAX_TICK];
+
+        for (uint256 index; index < invalidLimits.length; ++index) {
+            int24 invalidLimit = invalidLimits[index];
+            bytes memory constructorArgs = abi.encode(
+                manager,
+                treasury,
+                ILiquidityGrowthFullRangeVaultFactoryV3(address(vaultFactory)),
+                IPositionManager(address(modifyLiquidityRouter)),
+                invalidLimit
+            );
+            (, bytes32 invalidSalt) = HookMiner.find(
+                address(hookFactory),
+                hookFactory.REQUIRED_HOOK_FLAGS(),
+                type(LiquidityGrowthFeeOracleHookV2).creationCode,
+                constructorArgs
+            );
+
+            vm.expectRevert();
+            hookFactory.deploy(
+                invalidSalt,
+                manager,
+                treasury,
+                vaultFactory,
+                IPositionManager(address(modifyLiquidityRouter)),
+                invalidLimit
+            );
+        }
+    }
+
+    function test_registerPoolRejectsFactoryVaultBoundToDifferentPool() public {
+        DeepV3PermissionToken otherToken = new DeepV3PermissionToken(address(this));
+        DeepV3PermissionVault otherVault = new DeepV3PermissionVault(manager);
+        PoolKey memory otherKey = PoolKey({
+            currency0: CurrencyLibrary.ADDRESS_ZERO,
+            currency1: Currency.wrap(address(otherToken)),
+            fee: Policy.LP_FEE_PIPS,
+            tickSpacing: Policy.TICK_SPACING,
+            hooks: hook
+        });
+
+        vaultFactory.register(address(otherVault), address(hook), poolId, address(token));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(LiquidityGrowthFeeOracleHookV2.InvalidVault.selector, address(otherVault))
+        );
+        hook.registerPool(otherKey, address(otherVault));
+    }
+
+    function test_zeroBootstrapSaltRevertsWithoutAdvancingLifecycle() public {
+        bytes32 bootstrapTag = hook.BOOTSTRAP_DOMAIN_TAG();
+        vm.expectRevert();
+        _bootstrapWithSalt(bytes32(0), bootstrapTag);
+
+        (,, uint8 lifecycle,) = hook.poolFeeConfig(poolId);
+        assertEq(lifecycle, hook.LIFECYCLE_INITIALIZED());
+        assertEq(hook.initialPositionSaltByPool(poolId), bytes32(0));
+    }
+
+    function test_initialBuyBelowMinimumRevertsWithoutAdvancingLifecycle() public {
+        _bootstrap();
+        uint256 insufficientInitialBuy = Policy.MIN_INITIAL_BUY_WEI - 1;
+
+        vm.expectRevert();
+        manager.unlock(abi.encode(insufficientInitialBuy));
+
+        (,, uint8 lifecycle,) = hook.poolFeeConfig(poolId);
+        assertEq(lifecycle, hook.LIFECYCLE_INITIAL_POSITION_ADDED());
     }
 
     function test_onlyOneCanonicalBootstrapPositionCanBeAdded() public {
@@ -457,13 +531,17 @@ contract LiquidityGrowthFeeOracleHookV2PermissionsTest is Deployers, IUnlockCall
     }
 
     function _bootstrapWithTag(bytes32 bootstrapTag) private {
+        _bootstrapWithSalt(bytes32(uint256(1)), bootstrapTag);
+    }
+
+    function _bootstrapWithSalt(bytes32 salt, bytes32 bootstrapTag) private {
         modifyLiquidityRouter.modifyLiquidity(
             deepKey,
             ModifyLiquidityParams({
                 tickLower: Policy.FULL_RANGE_TICK_LOWER,
                 tickUpper: Policy.INITIAL_TICK,
                 liquidityDelta: int256(1000 ether),
-                salt: bytes32(uint256(1))
+                salt: salt
             }),
             abi.encode(bootstrapTag)
         );

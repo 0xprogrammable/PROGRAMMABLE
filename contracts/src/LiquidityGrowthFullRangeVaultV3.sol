@@ -59,6 +59,7 @@ contract LiquidityGrowthFullRangeVaultV3 is IUnlockCallback, ReentrancyGuardTran
     struct Configuration {
         PoolKey poolKey;
         LiquidityGrowthZapPlannerV3 planner;
+        uint256 initialTokenDust;
     }
 
     struct CompoundResult {
@@ -93,6 +94,7 @@ contract LiquidityGrowthFullRangeVaultV3 is IUnlockCallback, ReentrancyGuardTran
     bool public initialized;
 
     uint256 public pendingGrowthNative;
+    uint256 public initialTokenDust;
     uint256 public accountedTokenDust;
     uint256 public totalGrowthETHReceived;
     uint256 public totalNativeSwapped;
@@ -186,6 +188,8 @@ contract LiquidityGrowthFullRangeVaultV3 is IUnlockCallback, ReentrancyGuardTran
                 || feeHook_.TOTAL_HOOK_FEE_BPS() != Policy.TOTAL_HOOK_FEE_BPS
                 || feeHook_.PROGRAMMABLE_FEE_BPS() != Policy.PROGRAMMABLE_FEE_BPS
                 || feeHook_.GROWTH_FEE_BPS() != Policy.GROWTH_FEE_BPS
+                || feeHook_.maxAbsTickDelta() != Policy.MAX_ABS_OBSERVATION_TICK_DELTA
+                || configuration.initialTokenDust >= Policy.TOKEN_SUPPLY
         ) {
             revert InvalidConfiguration(address(feeHook_));
         }
@@ -195,6 +199,8 @@ contract LiquidityGrowthFullRangeVaultV3 is IUnlockCallback, ReentrancyGuardTran
         poolManager = manager;
         positionManager = positionManager_;
         planner = configuration.planner;
+        initialTokenDust = configuration.initialTokenDust;
+        accountedTokenDust = configuration.initialTokenDust;
         _poolKey = configuration.poolKey;
         poolId = PoolId.unwrap(configuration.poolKey.toId());
         token = token_;
@@ -208,7 +214,8 @@ contract LiquidityGrowthFullRangeVaultV3 is IUnlockCallback, ReentrancyGuardTran
                 address(positionManager_),
                 address(configuration.planner),
                 poolId,
-                token_
+                token_,
+                configuration.initialTokenDust
             )
         );
     }

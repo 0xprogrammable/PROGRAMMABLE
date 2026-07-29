@@ -33,6 +33,21 @@ contract LiquidityGrowthFullRangeV3Test is LiquidityGrowthFullRangeV3Fixture {
         assertTrue(v3VaultFactory.isFactoryVault(address(v3Vault)));
         assertNotEq(v3Vault.configurationHash(), bytes32(0));
         assertEq(v3VaultFactory.configurationHashOf(address(v3Vault)), v3Vault.configurationHash());
+        assertEq(v3Vault.initialTokenDust(), v3InitialTokenDust);
+        assertEq(v3Vault.accountedTokenDust(), v3InitialTokenDust);
+        assertEq(
+            v3VaultFactory.vaultBindingHash(address(v3Vault)),
+            keccak256(
+                abi.encode(
+                    block.chainid,
+                    address(v3VaultFactory),
+                    address(v3Vault),
+                    address(v3Hook),
+                    v3PoolId,
+                    address(v3Token)
+                )
+            )
+        );
         assertEq(v3Hook.initialPositionSaltByPool(v3PoolId), INITIAL_POSITION_SALT);
     }
 

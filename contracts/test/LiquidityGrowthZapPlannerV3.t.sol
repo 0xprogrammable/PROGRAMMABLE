@@ -29,9 +29,11 @@ import { LiquidityGrowthSwapMathV3 } from "../src/libraries/LiquidityGrowthSwapM
 
 contract DeepV3PlannerVaultFactory is ILiquidityGrowthFullRangeVaultFactoryV3 {
     mapping(address vault => bytes32 configurationHash) public configurationHashOf;
+    mapping(address vault => bytes32 bindingHash) public vaultBindingHash;
 
-    function register(address vault) external {
+    function register(address vault, address hook, bytes32 poolId, address token) external {
         configurationHashOf[vault] = keccak256(abi.encode(block.chainid, address(this), vault));
+        vaultBindingHash[vault] = keccak256(abi.encode(block.chainid, address(this), vault, hook, poolId, token));
     }
 }
 
@@ -138,7 +140,6 @@ contract LiquidityGrowthZapPlannerV3Test is Deployers, IUnlockCallback {
         treasury = makeAddr("deepV3PlannerTreasury");
         vaultFactory = new DeepV3PlannerVaultFactory();
         growthVault = new DeepV3PlannerVault(manager);
-        vaultFactory.register(address(growthVault));
         hookFactory = new LiquidityGrowthFeeOracleHookFactoryV2();
         hook = _deployHook();
         planner = new LiquidityGrowthZapPlannerV3();
@@ -157,6 +158,7 @@ contract LiquidityGrowthZapPlannerV3Test is Deployers, IUnlockCallback {
             hooks: hook
         });
         poolId = PoolId.unwrap(deepKey.toId());
+        vaultFactory.register(address(growthVault), address(hook), poolId, address(token));
         hook.registerPool(deepKey, address(growthVault));
         manager.initialize(deepKey, Policy.initialSqrtPriceX96());
         modifyLiquidityRouter.modifyLiquidity(
