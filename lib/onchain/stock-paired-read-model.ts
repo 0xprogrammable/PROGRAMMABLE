@@ -756,6 +756,46 @@ export async function readStockPairedExploreModel(
   return tokenSets[0];
 }
 
+function isSameStockPairedLaunch(
+  existing: LauncherToken,
+  incoming: LauncherToken,
+) {
+  return (
+    existing.launchModel === "stock-paired" &&
+    incoming.launchModel === "stock-paired" &&
+    existing.launchHash !== undefined &&
+    incoming.launchHash !== undefined &&
+    existing.launchTransactionHash !== undefined &&
+    incoming.launchTransactionHash !== undefined &&
+    existing.creatorAddress !== undefined &&
+    incoming.creatorAddress !== undefined &&
+    existing.positionRecipient !== undefined &&
+    incoming.positionRecipient !== undefined &&
+    existing.positionTokenId !== undefined &&
+    incoming.positionTokenId !== undefined &&
+    existing.rewardVaultAddress !== undefined &&
+    incoming.rewardVaultAddress !== undefined &&
+    existing.quoteAssetAddress !== undefined &&
+    incoming.quoteAssetAddress !== undefined &&
+    sameHex(existing.tokenAddress, incoming.tokenAddress) &&
+    sameHex(existing.hookAddress, incoming.hookAddress) &&
+    sameHex(existing.poolId, incoming.poolId) &&
+    sameHex(existing.launchHash, incoming.launchHash) &&
+    sameHex(
+      existing.launchTransactionHash,
+      incoming.launchTransactionHash,
+    ) &&
+    sameHex(existing.creatorAddress, incoming.creatorAddress) &&
+    sameHex(existing.positionRecipient, incoming.positionRecipient) &&
+    existing.positionTokenId === incoming.positionTokenId &&
+    sameHex(existing.rewardVaultAddress, incoming.rewardVaultAddress) &&
+    sameHex(existing.quoteAssetAddress, incoming.quoteAssetAddress) &&
+    existing.launchBlockNumber === incoming.launchBlockNumber &&
+    existing.launchTransactionIndex === incoming.launchTransactionIndex &&
+    existing.launchLogIndex === incoming.launchLogIndex
+  );
+}
+
 export function mergeStockPairedExploreModel<T extends ExploreReadModel>(
   model: T,
   stockTokens: readonly LauncherToken[],
@@ -765,12 +805,14 @@ export function mergeStockPairedExploreModel<T extends ExploreReadModel>(
     model.tokens.map((token) => [token.tokenAddress.toLowerCase(), token]),
   );
   for (const token of stockTokens) {
-    if (tokens.has(token.tokenAddress.toLowerCase())) {
+    const key = token.tokenAddress.toLowerCase();
+    const existing = tokens.get(key);
+    if (existing && !isSameStockPairedLaunch(existing, token)) {
       throw new Error(
         `Duplicate token across launch models: ${token.tokenAddress}`,
       );
     }
-    tokens.set(token.tokenAddress.toLowerCase(), token);
+    if (!existing) tokens.set(key, token);
   }
   return { ...model, tokens: [...tokens.values()] } as T;
 }

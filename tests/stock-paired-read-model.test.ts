@@ -103,9 +103,16 @@ function stockToken(): LauncherToken {
     ),
     poolId: STOCK_TEST_POOL_ID,
     creatorAddress: STOCK_TEST_ACCOUNT,
+    positionRecipient,
+    positionTokenId: "7",
     rewardVaultAddress: vault,
     quoteAssetAddress: STOCK_QUOTE_ASSETS[0].address,
     quoteAssetSymbol: STOCK_QUOTE_ASSETS[0].symbol,
+    launchHash,
+    launchBlockNumber: "123",
+    launchTransactionHash: transactionHash,
+    launchTransactionIndex: 1,
+    launchLogIndex: 2,
     launchedAt: "2026-07-29T00:00:00.000Z",
     totalSwapFeeBps: 100,
     launchModel: "stock-paired",
@@ -178,11 +185,32 @@ describe("Stock-Paired read model provenance", () => {
       tokens: [{ launchModel: "stock-paired", tokenAddress: STOCK_TEST_TOKEN }],
     });
 
+    const repeated = baseModel();
+    if (repeated.status !== "ready") throw new Error("bad fixture");
+    repeated.tokens = [token];
+    expect(
+      mergeStockPairedExploreModel(repeated, [{ ...token, name: "Refreshed" }]),
+    ).toMatchObject({
+      status: "ready",
+      tokens: [{ name: "Stock Pair", tokenAddress: STOCK_TEST_TOKEN }],
+    });
+
     const duplicate = baseModel();
     if (duplicate.status !== "ready") throw new Error("bad fixture");
     duplicate.tokens = [{ ...token, launchModel: "classic" }];
     expect(() =>
       mergeStockPairedExploreModel(duplicate, [token]),
+    ).toThrow(/Duplicate token/);
+
+    const conflictingStockLaunch = baseModel();
+    if (conflictingStockLaunch.status !== "ready") {
+      throw new Error("bad fixture");
+    }
+    conflictingStockLaunch.tokens = [token];
+    expect(() =>
+      mergeStockPairedExploreModel(conflictingStockLaunch, [
+        { ...token, launchHash: `0x${"ff".repeat(32)}` },
+      ]),
     ).toThrow(/Duplicate token/);
   });
 });
