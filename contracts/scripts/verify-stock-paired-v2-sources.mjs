@@ -85,7 +85,8 @@ function canonicalJson(value) {
 }
 
 function compilationSettings(settings) {
-  const { outputSelection: _outputSelection, ...compilation } = settings;
+  const compilation = { ...settings };
+  delete compilation.outputSelection;
   if (
     compilation.libraries &&
     Object.keys(compilation.libraries).length === 0

@@ -1604,9 +1604,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             actionAccount,
             source: "stock-paired",
             stateKey,
-            action,
+            action: action === "claim-as-eth" ? "claim" : action,
             confirmedMessage:
-              action === "claim"
+              action === "claim" || action === "claim-as-eth"
                 ? "Claim confirmed"
                 : "Payout address updated",
             revertedMessage: "The reward transaction reverted onchain",
