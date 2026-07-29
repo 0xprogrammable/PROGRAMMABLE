@@ -51,7 +51,7 @@ Passing CI, a local fork or a testnet deployment does not satisfy this gate.
 
 ## GitHub release
 
-Release tags use the model's technical release identifier, such as `classic-v2`. The release page contains:
+Release tags use the model's technical release identifier, such as `classic-v3`. The release page contains:
 
 - a concise behavior summary;
 - links to the model, security and deployment records;
