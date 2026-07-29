@@ -28,6 +28,7 @@ interface ILiquidityGrowthFeeOracleHookV2 {
     function maxAbsTickDelta() external view returns (int24);
     function launcherFeesAccrued() external view returns (uint256);
     function totalNativeFeesAccrued() external view returns (uint256);
+    function initialPositionSaltByPool(bytes32 poolId) external view returns (bytes32);
 
     function poolFeeConfig(bytes32 poolId)
         external
