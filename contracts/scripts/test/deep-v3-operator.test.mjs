@@ -43,13 +43,22 @@ import {
   writeDeepV3LifecycleFiles,
 } from "../deep-v3-lifecycle-write.mjs";
 import {
+  DEEP_V3_CANARY_BATCH_BUY_AMOUNT_WEI,
+  DEEP_V3_CANARY_BATCH_CYCLES,
+  DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI,
+  DEEP_V3_CANARY_BATCH_EXPECTED_GROSS_VOLUME_WEI,
+  DEEP_V3_CANARY_BATCH_MAX_NATIVE_DEBT_WEI,
+  DEEP_V3_CANARY_BATCH_MINIMUM_REFUND_WEI,
+  DEEP_V3_TRADE_GAS_CEILINGS,
   DEEP_V3_TRADE_MAX_NATIVE_VOLUME_WEI,
   assertDeepV3CanaryRequote,
   buildDeepV3CanaryTradePoolKey,
+  prepareDeepV3CanaryBatchCandidate,
   deepV3GrowthFeeForGross,
   deepV3MinimumGrossVolumeForGrowth,
   deepV3TradePermit2Abi,
   deepV3TradeTokenAbi,
+  finalizeDeepV3CanaryTradeAction,
   getDeepV3CanaryTradePoolId,
   prepareDeepV3CanaryTradeCandidate,
   reconcileDeepV3CanaryTradeSnapshots,
@@ -806,6 +815,97 @@ test("canary trades enforce bounded volume and reject stale quotes", () => {
         quotedAmountOut: 29_000_000_000_000_000n,
       }),
     /volume bounds/,
+  );
+});
+
+test("builds one bounded same-pool synthetic canary batch", () => {
+  const state = tradeState({
+    hookGrowthFees: "5400000000000",
+  });
+  const candidate = prepareDeepV3CanaryBatchCandidate({
+    manifest: tradeManifest,
+    state,
+    capturedAtMs: 1_000_000,
+    nowMs: 1_000_010,
+  });
+  assert.equal(candidate.side, "batch");
+  assert.equal(candidate.transaction.kind, "batch");
+  assert.equal(
+    candidate.transaction.to.toLowerCase(),
+    tradeManifest.officialDependencies.universalRouter.address.toLowerCase(),
+  );
+  assert.equal(
+    candidate.transaction.value,
+    DEEP_V3_CANARY_BATCH_MAX_NATIVE_DEBT_WEI,
+  );
+  assert.equal(candidate.batchBuyAmount, DEEP_V3_CANARY_BATCH_BUY_AMOUNT_WEI);
+  assert.equal(candidate.batchCycles, DEEP_V3_CANARY_BATCH_CYCLES);
+  assert.equal(
+    candidate.expectedFees.growthFee,
+    DEEP_V3_CANARY_BATCH_EXPECTED_GROWTH_WEI,
+  );
+  assert.equal(
+    candidate.expectedFees.grossNative,
+    DEEP_V3_CANARY_BATCH_EXPECTED_GROSS_VOLUME_WEI,
+  );
+  assert.equal(
+    candidate.quote.amountOutMinimum,
+    DEEP_V3_CANARY_BATCH_MINIMUM_REFUND_WEI,
+  );
+  const call = decodeFunctionData({
+    abi: [
+      {
+        type: "function",
+        name: "execute",
+        stateMutability: "payable",
+        inputs: [
+          { name: "commands", type: "bytes" },
+          { name: "inputs", type: "bytes[]" },
+          { name: "deadline", type: "uint256" },
+        ],
+        outputs: [],
+      },
+    ],
+    data: candidate.transaction.data,
+  });
+  assert.equal(call.functionName, "execute");
+  assert.equal(call.args[0], "0x1004");
+  assert.equal(call.args[1].length, 2);
+  const liveForkEstimate = 2_086_204n;
+  const finalized = finalizeDeepV3CanaryTradeAction({
+    candidate,
+    state: {
+      ...state,
+      balance: "6194400813638393",
+    },
+    simulations: [
+      { callResult: "0x", estimatedGas: liveForkEstimate },
+      { callResult: "0x", estimatedGas: liveForkEstimate },
+    ],
+    feePolicy: {
+      maxFeePerGas: 158_415_000n,
+      maxPriorityFeePerGas: 10_000_000n,
+    },
+  });
+  assert.equal(finalized.gasLimit, 2_503_445n);
+  assert.ok(
+    finalized.gasLimit < DEEP_V3_TRADE_GAS_CEILINGS.batch,
+  );
+  assert.ok(
+    finalized.minimumBalanceRequired <
+      6_194_400_813_638_393n,
+  );
+  assert.throws(
+    () =>
+      prepareDeepV3CanaryBatchCandidate({
+        manifest: tradeManifest,
+        state: tradeState({
+          hookGrowthFees: "1000000000000000",
+        }),
+        capturedAtMs: 1_000_000,
+        nowMs: 1_000_010,
+      }),
+    /smaller canary action/,
   );
 });
 

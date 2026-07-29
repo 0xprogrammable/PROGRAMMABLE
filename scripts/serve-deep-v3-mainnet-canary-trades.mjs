@@ -48,6 +48,7 @@ import {
   prepareDeepV3CanaryTradeCandidate,
   publicDeepV3CanaryTradeAction,
   reconcileDeepV3CanaryTradeSnapshots,
+  prepareDeepV3CanaryBatchCandidate,
 } from "./deep-v3-canary-trade-core.mjs";
 
 const HOST = "127.0.0.1";
@@ -691,17 +692,53 @@ function parseAmount(value) {
 }
 
 async function prepareInput(manifest, identity, input, capturedAtMs) {
+  const batch = input?.side === "batch";
   if (
     !input ||
-    (input.side !== "buy" && input.side !== "sell") ||
+    (input.side !== "buy" &&
+      input.side !== "sell" &&
+      !batch) ||
     Object.keys(input).some(
       (field) => field !== "side" && field !== "amount",
-    )
+    ) ||
+    (batch && Object.hasOwn(input, "amount"))
   ) {
     throw new Error("The canary trade request is invalid");
   }
-  const amountIn = parseAmount(input.amount);
+  const amountIn = batch ? null : parseAmount(input.amount);
   const { block, state } = await inspect(manifest, identity);
+  if (batch) {
+    const candidate = prepareDeepV3CanaryBatchCandidate({
+      manifest,
+      state,
+      capturedAtMs,
+      nowMs: Date.now(),
+    });
+    const request = {
+      from: getAddress(account),
+      to: candidate.transaction.to,
+      nonce: deepV3Quantity(state.confirmedNonce),
+      value: deepV3Quantity(candidate.transaction.value),
+      data: candidate.transaction.data,
+    };
+    const simulations = await Promise.all(
+      rpcUrls.map((url) => simulate(url, request)),
+    );
+    const prepared = finalizeDeepV3CanaryTradeAction({
+      candidate,
+      state,
+      simulations,
+      feePolicy: buildDeepV3DeploymentFeePolicy(
+        block.feeSnapshots,
+      ),
+    });
+    return {
+      prepared,
+      state,
+      block,
+      input: { side: "batch" },
+    };
+  }
   const quotes = await Promise.all(
     rpcUrls.map((url) =>
       quoteAndAllowances(
@@ -882,9 +919,9 @@ function html(manifest) {
 <body><main><h1>Deep canary trades</h1><p>One reviewed action at a time. Every quote uses the original PoolId and two independent Mainnet RPCs. Nothing is submitted by this server.</p>
 <section class="card"><div class="row"><button id="wallet">Connect exact wallet</button><button id="refresh">Refresh state</button></div><div id="walletStatus" class="notice">Wallet not connected.</div></section>
 <section class="card"><h2>Fee progress</h2><div class="grid"><div class="fact"><span>Growth available</span><strong id="available">—</strong></div><div class="fact"><span>Growth remaining</span><strong id="remaining">—</strong></div><div class="fact"><span>Minimum gross volume</span><strong id="volume">—</strong></div></div><div class="fact" style="margin-top:10px"><span>Original PoolId</span><code id="pool">—</code></div></section>
-<section class="card"><h2>Prepare one action</h2><div class="row side"><button id="buy" class="selected">Buy with ETH</button><button id="sell">Sell token</button></div><input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.005"><button id="prepare" class="primary">Prepare exact action</button><div id="notice" class="notice">Choose a side and amount. The 0.0001–0.025 ETH native-volume bound applies to every trade.</div></section>
+<section class="card"><h2>Prepare one action</h2><div class="row side"><button id="batch" class="selected">Synthetic canary batch</button><button id="buy">Buy with ETH</button><button id="sell">Sell token</button></div><input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.005" hidden><button id="prepare" class="primary">Prepare exact action</button><div id="notice" class="notice">The batch creates only disclosed release-canary traffic in the exact original pool. It is never presented as organic volume.</div></section>
 <section id="review" class="card review"><h2>Review</h2><div class="grid"><div class="fact"><span>Action</span><strong id="action">—</strong></div><div class="fact"><span>Transaction value</span><strong id="value">—</strong></div><div class="fact"><span>Maximum debit</span><strong id="debit">—</strong></div><div class="fact"><span>Expected growth fee</span><strong id="growth">—</strong></div><div class="fact"><span>Quote impact</span><strong id="impact">—</strong></div><div class="fact"><span>Target</span><code id="target">—</code></div></div><div class="fact" style="margin-top:10px"><span>Calldata hash</span><code id="calldata">—</code></div><label class="confirm"><input id="ack" type="checkbox">I reviewed this exact action, value, pool and wallet.</label><button id="submit" class="primary" disabled>Confirm in wallet</button><div id="submitStatus" class="notice">No transaction submitted.</div></section>
-</main><script>const CONFIG=${config};let side="buy";let prepared=null;let wallet=null;const $=id=>document.getElementById(id);const eth=v=>(Number(BigInt(v))/1e18).toFixed(6).replace(/0+$/,"").replace(/\\.$/,"")+" ETH";function provider(){const candidates=window.ethereum?.providers;return Array.isArray(candidates)?candidates.find(item=>item?.isMetaMask)||null:window.ethereum?.isMetaMask?window.ethereum:null}async function request(method,params=[]){const injected=provider();if(!injected)throw new Error("MetaMask is unavailable");return injected.request({method,params})}function exactWallet(){if(!wallet||wallet.toLowerCase()!==CONFIG.account.toLowerCase())throw new Error("Connect the exact reviewed canary wallet");}async function connect(){const chain=await request("eth_chainId");if(chain.toLowerCase()!==CONFIG.chainId)throw new Error("Switch MetaMask to Ethereum Mainnet");const accounts=await request("eth_requestAccounts");wallet=accounts[0];exactWallet();$("walletStatus").className="notice success";$("walletStatus").textContent="Connected "+wallet;}async function state(){const response=await fetch("/state",{cache:"no-store"});const body=await response.json();if(!response.ok)throw new Error(body.error);$("available").textContent=eth(body.availableGrowthWei);$("remaining").textContent=eth(body.remainingGrowthWei);$("volume").textContent=eth(body.minimumRemainingGrossVolumeWei);$("pool").textContent=body.poolId;if(body.readyToCompound)$("notice").textContent="The compound threshold is ready. Further canary trades are blocked.";}function choose(next){side=next;$("buy").classList.toggle("selected",side==="buy");$("sell").classList.toggle("selected",side==="sell");prepared=null;$("review").classList.remove("open");}async function prepare(){exactWallet();$("notice").className="notice";$("notice").textContent="Reading two RPCs and quoting the exact pool…";const response=await fetch("/prepare",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({side,amount:$("amount").value})});const body=await response.json();if(!response.ok)throw new Error(body.error);prepared=body;$("action").textContent=body.action;$("value").textContent=eth(body.request.value);$("debit").textContent=eth(body.maximumDebitWei);$("growth").textContent=eth(body.expectedGrowthFeeWei);$("impact").textContent=body.quoteImpactBps+" bps";$("target").textContent=body.request.to;$("calldata").textContent=body.calldataHash;$("ack").checked=false;$("submit").disabled=true;$("review").classList.add("open");$("notice").textContent="Prepared at block "+body.quoteBlockNumber+". Review before signing.";}async function submit(){exactWallet();if(!prepared||!$("ack").checked)throw new Error("Review and acknowledge the exact action");$("submitStatus").className="notice";$("submitStatus").textContent="Re-quoting the latest agreed state…";const response=await fetch("/revalidate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({preparedDigest:prepared.preparedDigest})});const body=await response.json();if(!response.ok)throw new Error(body.error);const hash=await request("eth_sendTransaction",[prepared.request]);$("submitStatus").className="notice success";$("submitStatus").textContent="Submitted "+hash+". Wait for confirmation, then refresh manually.";prepared=null;$("submit").disabled=true;}$("wallet").onclick=()=>connect().catch(error=>{$("walletStatus").className="notice error";$("walletStatus").textContent=error.message});$("refresh").onclick=()=>state().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});$("buy").onclick=()=>choose("buy");$("sell").onclick=()=>choose("sell");$("prepare").onclick=()=>prepare().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});$("ack").onchange=()=>{$("submit").disabled=!$("ack").checked};$("submit").onclick=()=>submit().catch(error=>{$("submitStatus").className="notice error";$("submitStatus").textContent=error.message});state().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});</script></body></html>`;
+</main><script>const CONFIG=${config};let side="batch";let prepared=null;let wallet=null;const $=id=>document.getElementById(id);const eth=v=>(Number(BigInt(v))/1e18).toFixed(6).replace(/0+$/,"").replace(/\\.$/,"")+" ETH";function provider(){const candidates=window.ethereum?.providers;return Array.isArray(candidates)?candidates.find(item=>item?.isMetaMask)||null:window.ethereum?.isMetaMask?window.ethereum:null}async function request(method,params=[]){const injected=provider();if(!injected)throw new Error("MetaMask is unavailable");return injected.request({method,params})}function exactWallet(){if(!wallet||wallet.toLowerCase()!==CONFIG.account.toLowerCase())throw new Error("Connect the exact reviewed canary wallet");}async function connect(){const chain=await request("eth_chainId");if(chain.toLowerCase()!==CONFIG.chainId)throw new Error("Switch MetaMask to Ethereum Mainnet");const accounts=await request("eth_requestAccounts");wallet=accounts[0];exactWallet();$("walletStatus").className="notice success";$("walletStatus").textContent="Connected "+wallet;}async function state(){const response=await fetch("/state",{cache:"no-store"});const body=await response.json();if(!response.ok)throw new Error(body.error);$("available").textContent=eth(body.availableGrowthWei);$("remaining").textContent=eth(body.remainingGrowthWei);$("volume").textContent=eth(body.minimumRemainingGrossVolumeWei);$("pool").textContent=body.poolId;if(body.readyToCompound)$("notice").textContent="The compound threshold is ready. Further canary trades are blocked.";}function choose(next){side=next;$("batch").classList.toggle("selected",side==="batch");$("buy").classList.toggle("selected",side==="buy");$("sell").classList.toggle("selected",side==="sell");$("amount").hidden=side==="batch";prepared=null;$("review").classList.remove("open");$("notice").textContent=side==="batch"?"The batch creates only disclosed release-canary traffic in the exact original pool. It is never presented as organic volume.":"Choose an amount inside the 0.0001–0.025 ETH native-volume bound.";}async function prepare(){exactWallet();$("notice").className="notice";$("notice").textContent="Reading two RPCs and simulating the exact pool action…";const payload=side==="batch"?{side}:{side,amount:$("amount").value};const response=await fetch("/prepare",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});const body=await response.json();if(!response.ok)throw new Error(body.error);prepared=body;$("action").textContent=body.action;$("value").textContent=eth(body.request.value);$("debit").textContent=eth(body.maximumDebitWei);$("growth").textContent=eth(body.expectedGrowthFeeWei);$("impact").textContent=body.side==="batch"?"Bounded batch":body.quoteImpactBps+" bps";$("target").textContent=body.request.to;$("calldata").textContent=body.calldataHash;$("ack").checked=false;$("submit").disabled=true;$("review").classList.add("open");$("notice").textContent="Prepared at block "+body.quoteBlockNumber+". Review before signing.";}async function submit(){exactWallet();if(!prepared||!$("ack").checked)throw new Error("Review and acknowledge the exact action");$("submitStatus").className="notice";$("submitStatus").textContent="Re-quoting the latest agreed state…";const response=await fetch("/revalidate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({preparedDigest:prepared.preparedDigest})});const body=await response.json();if(!response.ok)throw new Error(body.error);const hash=await request("eth_sendTransaction",[prepared.request]);$("submitStatus").className="notice success";$("submitStatus").textContent="Submitted "+hash+". Wait for confirmation, then refresh manually.";prepared=null;$("submit").disabled=true;}$("wallet").onclick=()=>connect().catch(error=>{$("walletStatus").className="notice error";$("walletStatus").textContent=error.message});$("refresh").onclick=()=>state().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});$("batch").onclick=()=>choose("batch");$("buy").onclick=()=>choose("buy");$("sell").onclick=()=>choose("sell");$("prepare").onclick=()=>prepare().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});$("ack").onchange=()=>{$("submit").disabled=!$("ack").checked};$("submit").onclick=()=>submit().catch(error=>{$("submitStatus").className="notice error";$("submitStatus").textContent=error.message});state().catch(error=>{$("notice").className="notice error";$("notice").textContent=error.message});</script></body></html>`;
 }
 
 async function main() {
