@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/0xprogrammable/programmable/blob/main/models/schema/model.schema.json",
+  "title": "Programmable launch model manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "status",
+    "summary",
+    "documentation",
+    "currentRelease",
+    "releaseManifest",
+    "specification",
+    "deployment",
+    "security",
+    "network",
+    "contracts",
+    "review",
+    "releaseGates"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "design",
+        "candidate",
+        "available",
+        "retired"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 20
+    },
+    "documentation": {
+      "type": "string"
+    },
+    "currentRelease": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "releaseManifest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "specification": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "deployment": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "security": {
+      "type": "string"
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "chainId"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "chainId": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "deploymentKey",
+          "name",
+          "address"
+        ],
+        "properties": {
+          "deploymentKey": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$"
+          }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "independentAudit",
+        "publicContest"
+      ],
+      "properties": {
+        "independentAudit": {
+          "type": "boolean"
+        },
+        "publicContest": {
+          "type": "boolean"
+        }
+      }
+    },
+    "releaseGates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -4,7 +4,10 @@
 /broadcast/
 /cache/
 /lib/
+/lcov.info
 /out/
+/.venv/
+/*.dot
 
 .DS_Store
 .env

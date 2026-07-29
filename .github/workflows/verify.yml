@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1
@@ -29,6 +31,15 @@ jobs:
 
       - name: Bootstrap pinned dependencies
         run: ./scripts/bootstrap-deps.sh
+
+      - name: Verify model registry
+        run: node scripts/verify-model-registry.mjs
+
+      - name: Verify release evidence
+        run: node scripts/verify-release-evidence.mjs
+
+      - name: Check documentation links
+        run: node scripts/check-documentation-links.mjs
 
       - name: Check formatting
         run: forge fmt --check
@@ -40,3 +51,6 @@ jobs:
         env:
           FOUNDRY_PROFILE: ci
         run: forge test
+
+      - name: Check gas snapshot
+        run: forge snapshot --fuzz-seed 0x70726f6772616d6d61626c65 --check .gas-snapshot

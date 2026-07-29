@@ -6,7 +6,7 @@
     />
     <img
       src="assets/programmable-repository-cover-animated.gif"
-      alt="Programmable mark above a watercolor field moving gently in the wind"
+      alt="The Programmable mark above a watercolor field moving gently in the wind"
       width="100%"
     />
   </picture>
@@ -21,168 +21,117 @@
 </p>
 
 <p align="center">
-  <a href="https://programmable.family"><strong>Launch a token</strong></a> ·
-  <a href="MODELS.md">Model library</a> ·
+  <a href="https://programmable.family"><strong>Launch</strong></a> ·
+  <a href="MODELS.md">Models</a> ·
   <a href="BUILDER_PROGRAM.md">Build a model</a> ·
-  <a href="deployments/ethereum.json">Ethereum contracts</a> ·
+  <a href="deployments/ethereum.json">Ethereum</a> ·
   <a href="SECURITY.md">Security</a> ·
   <a href="https://x.com/0xProgrammable">X</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/0xprogrammable/programmable/actions/workflows/verify.yml">
-    <img
-      src="https://github.com/0xprogrammable/programmable/actions/workflows/verify.yml/badge.svg"
-      alt="Repository checks"
-    />
+    <img src="https://github.com/0xprogrammable/programmable/actions/workflows/verify.yml/badge.svg" alt="Build and test status" />
+  </a>
+  <a href="https://github.com/0xprogrammable/programmable/actions/workflows/security.yml">
+    <img src="https://github.com/0xprogrammable/programmable/actions/workflows/security.yml/badge.svg" alt="Security checks status" />
+  </a>
+  <a href="https://github.com/0xprogrammable/programmable/actions/workflows/mainnet-evidence.yml">
+    <img src="https://github.com/0xprogrammable/programmable/actions/workflows/mainnet-evidence.yml/badge.svg" alt="Ethereum evidence status" />
   </a>
 </p>
 
-Programmable turns versioned Uniswap v4 contracts into simple launch flows. A creator chooses a published model, sets
-the token details and launches from a wallet without writing Solidity.
+Programmable turns versioned Uniswap v4 contracts into launch flows that do not require a creator to write Solidity.
+Each model defines the token, pool, fee accounting, liquidity custody and hook behavior as one reviewable release.
 
-This repository is the public record behind the interface. It contains the exact contracts, tests, fixed parameters,
-security assumptions and Ethereum deployment evidence for every model marked **Available**.
+This repository is the public record behind the interface. A model is marked **Available** only when its exact source,
+tests, parameters, Ethereum deployment and security status are published here.
 
-> A launch model defines the token, pool shape, fee accounting, liquidity custody and hook behavior as one versioned
-> release. It is more than a frontend preset.
-
-## From an idea to a v4 pool
+## One interface, independent models
 
 ```mermaid
 flowchart LR
-    idea["Choose a launch model"] --> setup["Set the token details"]
-    setup --> wallet["Sign from the wallet"]
-    wallet --> launch["Token + Uniswap v4 pool"]
-    launch --> behavior["Published pool behavior"]
-    launch --> record["Source + tests + deployment record"]
+    creator["Creator"] --> interface["Programmable"]
+    interface --> registry["Choose an available model"]
+    registry --> wallet["Review and sign"]
+    wallet --> pool["Token + Uniswap v4 pool"]
+    registry --> evidence["Source + tests + release evidence"]
 ```
 
-The interface handles the setup. The selected model determines what happens onchain. Published releases stay
-independently inspectable even as the model library grows.
+The interface handles setup. The selected model determines the onchain behavior. Adding a new model does not silently
+change a model that has already been deployed.
 
-## Launch models
-
-### Classic
-
-<p>
-  <a href="models/classic/README.md">
-    <img
-      src="assets/programmable-model-classic.jpg"
-      alt="Watercolor wildflower field representing the Classic launch model"
-      width="100%"
-    />
-  </a>
+<p align="center">
+  <a href="MODELS.md"><strong>Explore the model library →</strong></a>
 </p>
 
-**Available on Ethereum.** Classic creates a fixed-supply token, initializes its native ETH pool, locks the complete
-launch position and executes the creator's initial buy in one transaction.
+## The public record
 
-| Property | Current release |
-| --- | --- |
-| Token supply | 1 billion fixed-supply UERC20 |
-| Pool | Native ETH/token on Uniswap v4 |
-| Launch liquidity | Complete token supply in a locked, one-sided position |
-| Total swap fee | `1.00%` |
-| Fee allocation | `0.90%` creator · `0.10%` Programmable |
-| Token transfer tax | None |
-| Separate ETH liquidity deposit | None |
+| Record | What it establishes | Canonical path |
+| --- | --- | --- |
+| Model registry | Current lifecycle status and documentation | [`models/registry.json`](models/registry.json) |
+| Model manifest | Release, network, contracts and review state | [`models/<model>/model.json`](models/) |
+| Contract source | Hook, launcher and custody behavior | [`src/`](src/) |
+| Test evidence | Unit, integration, fuzz, invariant and regression coverage | [`test/`](test/) |
+| Fixed parameters | Compiler, dependencies and model settings | [`spec/`](spec/) |
+| Release manifest | Evidence bound to one technical release | [`releases/`](releases/) |
+| Ethereum deployment | Addresses, transactions, runtime hashes and explorer status | [`deployments/ethereum.json`](deployments/ethereum.json) |
+| Security record | Trust boundaries, known limitations and review status | [`SECURITY.md`](SECURITY.md) |
 
-[Read the complete Classic model documentation](models/classic/README.md)
-
-### Deep
-
-<p>
-  <a href="models/deep/README.md">
-    <img
-      src="assets/programmable-model-deep.jpg"
-      alt="A deep flower-lined pool representing the Deep launch model"
-      width="100%"
-    />
-  </a>
-</p>
-
-**In development. Not available for launch.** Deep is designed to direct the creator fee share into add-only,
-locked liquidity in the launch pool until an immutable target is reached. Later fees would then follow the beneficiary
-allocation fixed at launch.
-
-Deep has no deployed contracts. TWAP bounds, atomic launch binding, accounting invariants and a complete mainnet-fork
-lifecycle remain release gates.
-
-[Read the Deep design and unresolved release gates](models/deep/README.md)
-
-The [model library](MODELS.md) is the canonical status page. A model is presented as available only after its exact
-release evidence is public.
-
-## Evidence before availability
-
-Every available model has a complete release record:
-
-- **Contract source:** exact launcher, hook and custody behavior in [`src/`](src/).
-- **Tests:** unit, integration, fuzz, invariant and regression coverage in [`test/`](test/).
-- **Fixed parameters:** compiler, dependencies and launch settings in
-  [`spec/classic-v2.json`](spec/classic-v2.json).
-- **Ethereum deployment:** addresses, transactions and runtime code hashes in
-  [`deployments/ethereum.json`](deployments/ethereum.json).
-- **Security status:** permissions, assumptions and known limitations in [`SECURITY.md`](SECURITY.md).
+The registry is machine-checked in CI. Available releases are checked for consistent identifiers, evidence paths,
+addresses and runtime hashes. A scheduled workflow compares every published runtime hash with Ethereum.
 
 Open source code makes behavior inspectable. It is not a security guarantee.
 
-### Current Ethereum contracts
+## Release lifecycle
 
-| Contract | Verified address |
-| --- | --- |
-| Classic launcher | [`0xD240…E6bAd`](https://etherscan.io/address/0xD240D06f8586eB799f20056054e5b527405E6bAd#code) |
-| Creator fee hook | [`0x025a…b20CC`](https://etherscan.io/address/0x025a386eAa79f6067d29848FD05ccC71bEAb20CC#code) |
-| Hook factory | [`0xD405…5fd67`](https://etherscan.io/address/0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67#code) |
-| Position forwarder factory | [`0x291a…4dB507`](https://etherscan.io/address/0x291a9ff1059d225d02B1659430804486404dB507#code) |
+```mermaid
+flowchart LR
+    design["Design<br/>behavior and open risks"] --> candidate["Candidate<br/>source and complete tests"]
+    candidate --> available["Available<br/>verified Ethereum release"]
+    available --> retired["Retired<br/>closed to new launches"]
+    candidate --> design
+```
 
-The deployment record includes the corresponding transaction hashes, runtime bytecode hashes and source-verification
-status.
+Only `available` models appear as production launch options. `design` and `candidate` records are public so incomplete
+work cannot be mistaken for a deployed product. The complete gate is documented in [`RELEASING.md`](RELEASING.md).
 
-## Build the next model
+## Build a launch model
 
 <p>
   <a href="BUILDER_PROGRAM.md">
     <img
       src="assets/programmable-builder-ecosystem.jpg"
-      alt="Connected watercolor gardens representing independent hook builders contributing launch models"
+      alt="Connected watercolor gardens representing independent builders contributing launch models"
       width="100%"
     />
   </a>
 </p>
 
-Programmable is not limited to models built by its maintainers. Independent builders can submit complete open-source
-Uniswap v4 launch models as pull requests.
+Independent builders can submit complete open-source launch models as pull requests. A submission needs the contracts,
+full launch path, tests, security properties, fixed dependencies and a machine-readable model record.
 
-1. **Build the complete model.** Include the hook, supporting contracts and full launch path.
-2. **Prove its behavior.** Add tests, fixed dependencies, security assumptions and known limitations.
-3. **Submit it for review.** A pull request is public and does not guarantee acceptance or deployment.
+```bash
+node scripts/new-model.mjs <model-id> "<Model name>" "<Specific behavior summary>"
+```
 
-For an accepted external-builder model with a published total swap fee of `1.00%`, the allocation is:
-
-| Recipient | Share of swap volume |
-| --- | ---: |
-| Token creator | `0.80%` |
-| Hook builder | `0.10%` |
-| Programmable | `0.10%` |
-
-The builder share is included in the published fee rather than added on top. It applies only to the exact accepted
-model version recorded in the repository.
+Submission is public and does not guarantee review, acceptance, deployment, volume or revenue. Accepted external models
+receive a version-specific acceptance record before release.
 
 [Read the Hook Builder Program](BUILDER_PROGRAM.md) ·
-[Open the submission checklist](.github/PULL_REQUEST_TEMPLATE.md)
+[Read the contribution guide](CONTRIBUTING.md)
 
-## Security
+## Security and operations
 
-Classic is the only model currently available. Its live contracts are non-upgradeable and expose no administrator
-role, pause function, mint path, blacklist or mutable fee recipient. The locked position forwarder has no operator and
-uses the maximum timelock.
+The live Classic contracts are non-upgradeable and expose no administrator role, pause function, mint path, blacklist
+or mutable fee allocation. Classic has not received an independent smart-contract audit or public security contest.
 
-Classic has unit, integration, fuzz, invariant and regression coverage. It has not received an independent
-smart-contract audit or public security contest.
-
-[Read the security model and known limitations](SECURITY.md)
+| Area | Record |
+| --- | --- |
+| Current security status | [`SECURITY.md`](SECURITY.md) |
+| Classic trust boundaries and invariants | [`docs/security/CLASSIC_PROPERTIES.md`](docs/security/CLASSIC_PROPERTIES.md) |
+| Automated checks and incident process | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
+| Independent review archive | [`audits/`](audits/) |
 
 Report vulnerabilities through
 [GitHub private vulnerability reporting](https://github.com/0xprogrammable/programmable/security/advisories/new).
@@ -191,33 +140,36 @@ Do not publish an unpatched vulnerability in an issue or pull request.
 ## Repository map
 
 ```text
-models/              Behavior, economics, security notes and release status
-src/                 Exact Solidity sources
-test/                Unit, integration, fuzz, invariant and regression tests
-deployments/         Ethereum addresses, transactions and runtime code hashes
-spec/                Machine-readable release parameters
-scripts/             Reproducible dependency bootstrap
-ARCHITECTURE.md       Repository and release structure
-BUILDER_PROGRAM.md    External model submission and participation terms
-SECURITY.md           Security policy and current contract status
+models/          Registry, model manifests and model documentation
+src/             Exact Solidity source
+test/            Unit, integration, fuzz, invariant and regression tests
+spec/            Machine-readable release parameters
+releases/        Version-bound evidence manifests
+deployments/     Ethereum addresses, transactions and runtime hashes
+docs/            Security properties and operational records
+scripts/         Reproducible verification and model scaffolding
+templates/       Required structure for new model submissions
+assets/          Programmable repository artwork
 ```
 
 Deployed Solidity files retain their original paths and contract names so verified source and immutable bytecode remain
-directly traceable to this repository.
+traceable to this repository.
 
-## Build and verify
-
-The bootstrap script checks out every upstream dependency at a fixed commit.
+## Verify locally
 
 ```bash
 ./scripts/bootstrap-deps.sh
+node scripts/verify-model-registry.mjs
+node scripts/verify-release-evidence.mjs
 forge fmt --check
 forge build --sizes
 FOUNDRY_PROFILE=ci forge test
+forge snapshot --fuzz-seed 0x70726f6772616d6d61626c65 --check .gas-snapshot
+./scripts/verify-mainnet-bytecode.sh
 ```
 
-Compiler settings are recorded in [`foundry.toml`](foundry.toml). Model-specific parameters and dependency revisions
-are recorded under [`spec/`](spec/).
+Compiler settings are in [`foundry.toml`](foundry.toml). Upstream dependencies are checked out at fixed commits by the
+bootstrap script.
 
 ## License
 

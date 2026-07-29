@@ -1,0 +1,33 @@
+{
+  "$schema": "../../models/schema/release.schema.json",
+  "schemaVersion": 1,
+  "release": "classic-v2",
+  "model": "classic",
+  "status": "available",
+  "network": {
+    "name": "Ethereum",
+    "chainId": 1
+  },
+  "sourcePublicationCommit": "e5e9866314ea8f0e6c73cce1d6d72d20a6b988d0",
+  "compiler": {
+    "solc": "0.8.26",
+    "evmVersion": "cancun",
+    "optimizerRuns": 1000
+  },
+  "evidence": {
+    "specification": "spec/classic-v2.json",
+    "deployment": "deployments/ethereum.json",
+    "security": "SECURITY.md",
+    "tests": [
+      "test/MemeLaunchV1.t.sol",
+      "test/EthCreatorFeeHookV2.t.sol",
+      "test/invariant/EthCreatorFeeHookV2Invariant.t.sol",
+      "test/security/ClassicMemeLaunchSecurityRegression.t.sol"
+    ]
+  },
+  "review": {
+    "independentAudit": false,
+    "publicContest": false,
+    "sourceVerification": "Etherscan exact match and Sourcify match"
+  }
+}

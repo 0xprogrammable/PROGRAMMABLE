@@ -8,8 +8,10 @@ Classic launches a fixed-supply token, initializes its Uniswap v4 pool, locks th
 creator's initial buy in one transaction.
 
 [Launch Classic](https://programmable.family) ·
+[Model manifest](model.json) ·
+[Release record](../../releases/classic-v2/RELEASE.md) ·
 [Deployment record](../../deployments/ethereum.json) ·
-[Security status](../../SECURITY.md)
+[Security properties](../../docs/security/CLASSIC_PROPERTIES.md)
 
 ## Launch flow
 
@@ -92,4 +94,5 @@ Transactions and runtime code hashes are recorded in
 
 Classic has unit, integration, fuzz, invariant and regression coverage. It has not received an independent
 smart-contract audit or public security contest. The full trust model and known limitations are in
-[`SECURITY.md`](../../SECURITY.md).
+[`SECURITY.md`](../../SECURITY.md), with the property-to-test map in
+[`docs/security/CLASSIC_PROPERTIES.md`](../../docs/security/CLASSIC_PROPERTIES.md).

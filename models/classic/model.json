@@ -1,0 +1,45 @@
+{
+  "$schema": "../schema/model.schema.json",
+  "schemaVersion": 1,
+  "id": "classic",
+  "name": "Classic",
+  "status": "available",
+  "summary": "A fixed-supply token with a native ETH Uniswap v4 pool, permanently locked launch liquidity and disclosed ETH-denominated swap fees.",
+  "documentation": "models/classic/README.md",
+  "currentRelease": "classic-v2",
+  "releaseManifest": "releases/classic-v2/manifest.json",
+  "specification": "spec/classic-v2.json",
+  "deployment": "deployments/ethereum.json",
+  "security": "SECURITY.md",
+  "network": {
+    "name": "Ethereum",
+    "chainId": 1
+  },
+  "contracts": [
+    {
+      "deploymentKey": "launcher",
+      "name": "MemeLaunchV1",
+      "address": "0xD240D06f8586eB799f20056054e5b527405E6bAd"
+    },
+    {
+      "deploymentKey": "feeHook",
+      "name": "EthCreatorFeeHookV2",
+      "address": "0x025a386eAa79f6067d29848FD05ccC71bEAb20CC"
+    },
+    {
+      "deploymentKey": "hookFactory",
+      "name": "EthCreatorFeeHookFactoryV2",
+      "address": "0xD405D8d88D7E4Dae4e1dAdce9A458234D9A5fd67"
+    },
+    {
+      "deploymentKey": "positionForwarderFactory",
+      "name": "LockedPositionFeeForwarderFactoryV1",
+      "address": "0x291a9ff1059d225d02B1659430804486404dB507"
+    }
+  ],
+  "review": {
+    "independentAudit": false,
+    "publicContest": false
+  },
+  "releaseGates": []
+}

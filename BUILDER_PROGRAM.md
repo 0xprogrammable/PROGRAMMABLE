@@ -5,6 +5,12 @@ Programmable accepts complete, open-source Uniswap v4 launch models from indepen
 Submit a model by forking this repository and opening a pull request. The pull request must contain the implementation,
 tests and documentation needed to review the model as a complete release candidate.
 
+Create the model records first:
+
+```bash
+node scripts/new-model.mjs <model-id> "<Model name>" "<Specific behavior summary>"
+```
+
 ## What to submit
 
 A model submission must include:
@@ -13,6 +19,7 @@ A model submission must include:
 - unit and integration tests for the complete launch path;
 - fuzz and invariant tests for permissions, accounting and model-specific properties;
 - a model document under `models/<model-name>/README.md`;
+- a machine-readable model manifest and security property record;
 - fixed compiler and dependency versions;
 - all hook permissions, return deltas, external calls and privileged roles;
 - fee calculations, rounding behavior and supported pool shape;
@@ -24,6 +31,9 @@ Keep each model isolated:
 
 ```text
 models/<model-name>/README.md     Behavior, economics and security assumptions
+models/<model-name>/model.json    Status, release links and contract identities
+models/<model-name>/SECURITY.md   Permissions, invariants and known limitations
+models/<model-name>/TEST_PLAN.md  Required unit, fuzz, invariant and fork evidence
 src/<ModelContracts>.sol         Hook and supporting contracts
 test/<Model>.t.sol               Unit and integration tests
 test/invariant/<Model>.t.sol     Stateful invariants
