@@ -30,6 +30,7 @@ import {
   normalizeStockPairedHex,
   stockPairedFeePolicy,
   stockPairedQuantity,
+  stockPairedRpcValuesEqual,
 } from "./stock-paired-mainnet-operator-core.mjs";
 import {
   STOCK_PAIRED_ETH_COORDINATOR_DEPENDENCIES,
@@ -124,10 +125,7 @@ async function pair(method, params, label = method) {
   const results = await Promise.all(
     rpcUrls.map((url) => rpc(url, method, params)),
   );
-  if (
-    JSON.stringify(results[0]).toLowerCase() !==
-    JSON.stringify(results[1]).toLowerCase()
-  ) {
+  if (!stockPairedRpcValuesEqual(results[0], results[1])) {
     throw new Error(`Independent Mainnet RPCs disagree on ${label}`);
   }
   return results[0];
@@ -1107,7 +1105,10 @@ async function main() {
     throw new Error("STOCK_PAIRED_ETH_COORDINATOR_RELEASE_COMMIT is required");
   }
   if (interactive) {
-    assertStockPairedEthCoordinatorCheckout(root, coordinatorReleaseCommit);
+    assertStockPairedEthCoordinatorCheckout(root, coordinatorReleaseCommit, {
+      allowDescendant: true,
+      build: false,
+    });
   }
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   assertManifest(manifest);

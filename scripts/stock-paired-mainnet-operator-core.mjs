@@ -265,6 +265,13 @@ function digest(value) {
   return keccak256(stringToHex(JSON.stringify(stableValue(value))));
 }
 
+export function stockPairedRpcValuesEqual(left, right) {
+  return (
+    JSON.stringify(stableValue(left)).toLowerCase() ===
+    JSON.stringify(stableValue(right)).toLowerCase()
+  );
+}
+
 function artifactBytecode(artifact, label) {
   const value = artifact?.bytecode?.object;
   if (typeof value !== "string" || !/^0x[0-9a-f]+$/i.test(value)) {
@@ -291,14 +298,10 @@ export function assertStockPairedArtifactSizeLimits(artifacts) {
     const creationBytes = hexByteLength(artifactBytecode(artifact, label));
     const runtimeBytes = hexByteLength(artifactRuntime(artifact, label));
     if (creationBytes > STOCK_PAIRED_MAX_INITCODE_BYTES) {
-      throw new Error(
-        `${label} creation bytecode exceeds the EIP-3860 limit`,
-      );
+      throw new Error(`${label} creation bytecode exceeds the EIP-3860 limit`);
     }
     if (runtimeBytes > STOCK_PAIRED_MAX_RUNTIME_BYTES) {
-      throw new Error(
-        `${label} runtime bytecode exceeds the EIP-170 limit`,
-      );
+      throw new Error(`${label} runtime bytecode exceeds the EIP-170 limit`);
     }
   }
 }

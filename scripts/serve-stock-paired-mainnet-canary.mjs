@@ -49,6 +49,7 @@ import {
   normalizeStockPairedHex,
   stockPairedFeePolicy,
   stockPairedQuantity,
+  stockPairedRpcValuesEqual,
 } from "./stock-paired-mainnet-operator-core.mjs";
 
 const HOST = "127.0.0.1";
@@ -132,10 +133,7 @@ async function pair(method, params, urls, label = method) {
   const results = await Promise.all(
     urls.map((url) => rpc(url, method, params)),
   );
-  if (
-    JSON.stringify(results[0]).toLowerCase() !==
-    JSON.stringify(results[1]).toLowerCase()
-  ) {
+  if (!stockPairedRpcValuesEqual(results[0], results[1])) {
     throw new Error(`Independent Mainnet RPCs disagree on ${label}`);
   }
   return results[0];

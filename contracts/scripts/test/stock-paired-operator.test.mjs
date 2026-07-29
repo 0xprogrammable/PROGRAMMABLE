@@ -13,6 +13,7 @@ import {
   loadStockPairedReleasePlan,
   mergeStockPairedEvidenceRecord,
   prepareStockPairedDeploymentTransaction,
+  stockPairedRpcValuesEqual,
   validateStockPairedDeploymentTransactionRecord,
 } from "../../../scripts/stock-paired-mainnet-operator-core.mjs";
 
@@ -23,6 +24,39 @@ const blockHash =
   "0x2222222222222222222222222222222222222222222222222222222222222222";
 const runtimeCodeHash =
   "0x3333333333333333333333333333333333333333333333333333333333333333";
+
+test("compares RPC payloads independent of provider JSON key order", () => {
+  const left = {
+    hash: blockHash,
+    withdrawals: [
+      {
+        address: STOCK_PAIRED_DEPLOYER,
+        amount: "0x1",
+        index: "0x2",
+        validatorIndex: "0x3",
+      },
+    ],
+  };
+  const right = {
+    withdrawals: [
+      {
+        index: "0x2",
+        validatorIndex: "0x3",
+        address: STOCK_PAIRED_DEPLOYER.toLowerCase(),
+        amount: "0x1",
+      },
+    ],
+    hash: blockHash.toUpperCase(),
+  };
+  assert.equal(stockPairedRpcValuesEqual(left, right), true);
+  assert.equal(
+    stockPairedRpcValuesEqual(left, {
+      ...right,
+      hash: "0x4444444444444444444444444444444444444444444444444444444444444444",
+    }),
+    false,
+  );
+});
 
 function undeployedState(plan) {
   return {
