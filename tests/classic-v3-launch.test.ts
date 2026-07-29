@@ -116,13 +116,13 @@ function readyRelease(): ClassicV3ReleaseManifest {
 }
 
 describe("Classic V3 launch configuration", () => {
-  it("keeps the current release hard-gated until real deployment data exists", () => {
+  it("enables the checked-in verified Mainnet release", () => {
     expect(
       isClassicV3DeploymentReady(
         appDeployments.production as unknown as ClassicV3DeploymentManifest,
         1,
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(isClassicV3DeploymentReady(readyManifest(), 1)).toBe(true);
     expect(
       isClassicV3DeploymentReady(

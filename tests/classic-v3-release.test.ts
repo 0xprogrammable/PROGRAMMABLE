@@ -86,14 +86,14 @@ function verifiedPair(): {
 }
 
 describe("Classic verified release gate", () => {
-  it("keeps the checked-in production release disabled", () => {
+  it("accepts the checked-in verified production release", () => {
     expect(
       isClassicV3ReleaseVerified(
         appDeployments.production as unknown as ClassicV3DeploymentManifest,
         mainnetRelease as unknown as ClassicV3ReleaseManifest,
         1,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("accepts only matching source- and lifecycle-verified manifests", () => {
