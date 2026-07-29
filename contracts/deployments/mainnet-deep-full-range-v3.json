@@ -5,7 +5,7 @@
   "releaseVersion": "deep-full-range-v3",
   "releaseManifest": "contracts/deployments/mainnet-deep-full-range-v3.json",
   "keeperReleaseVersion": "deep-keeper-v3-ops-v2",
-  "status": "deployed-receipts-verified-source-pending",
+  "status": "deployed-source-verified-lifecycle-pending",
   "releaseEligible": false,
   "chainId": 1,
   "releaseCommit": "9ddfd79dab6518b2f61729f3a09088b3af2bfdf3",
@@ -387,70 +387,70 @@
     }
   },
   "sourceVerification": {
-    "status": "not-submitted",
+    "status": "verified",
     "contracts": {
       "zapPlanner": {
-        "status": "not-submitted",
+        "status": "etherscan-exact-sourcify-match",
         "fqcn": "src/LiquidityGrowthZapPlannerV3.sol:LiquidityGrowthZapPlannerV3",
         "constructorArguments": [],
         "encodedConstructorArguments": "0x",
         "etherscan": {
-          "status": "not-submitted",
-          "url": null
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xef26139841De6783510B285128Befd443dCF67C1#code"
         },
         "sourcify": {
-          "status": "not-submitted",
-          "url": null
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0xef26139841De6783510B285128Befd443dCF67C1"
         }
       },
       "growthVaultFactory": {
-        "status": "not-submitted",
+        "status": "etherscan-exact-sourcify-match",
         "fqcn": "src/LiquidityGrowthFullRangeVaultFactoryV3.sol:LiquidityGrowthFullRangeVaultFactoryV3",
         "constructorArguments": [
           "0xef26139841De6783510B285128Befd443dCF67C1"
         ],
         "encodedConstructorArguments": "0x000000000000000000000000ef26139841de6783510b285128befd443dcf67c1",
         "etherscan": {
-          "status": "not-submitted",
-          "url": null
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac#code"
         },
         "sourcify": {
-          "status": "not-submitted",
-          "url": null
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac"
         }
       },
       "growthVaultImplementation": {
-        "status": "not-submitted",
+        "status": "etherscan-exact-sourcify-match",
         "fqcn": "src/LiquidityGrowthFullRangeVaultV3.sol:LiquidityGrowthFullRangeVaultV3",
         "constructorArguments": [
           "0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac"
         ],
         "encodedConstructorArguments": "0x00000000000000000000000014a9f11a7fd6968f3c3369d5ed21363e7ee40aac",
         "etherscan": {
-          "status": "not-submitted",
-          "url": null
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x87b4213070b0eB8286fFAfaf3e340cA94858dC1c#code"
         },
         "sourcify": {
-          "status": "not-submitted",
-          "url": null
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x87b4213070b0eB8286fFAfaf3e340cA94858dC1c"
         }
       },
       "hookFactory": {
-        "status": "not-submitted",
+        "status": "etherscan-exact-sourcify-match",
         "fqcn": "src/LiquidityGrowthFeeOracleHookFactoryV2.sol:LiquidityGrowthFeeOracleHookFactoryV2",
         "constructorArguments": [],
         "encodedConstructorArguments": "0x",
         "etherscan": {
-          "status": "not-submitted",
-          "url": null
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x13d39B677577976b3eAe892CC963d1DFaF74Ff08#code"
         },
         "sourcify": {
-          "status": "not-submitted",
-          "url": null
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x13d39B677577976b3eAe892CC963d1DFaF74Ff08"
         }
       },
       "feeHook": {
-        "status": "not-submitted",
+        "status": "etherscan-exact-sourcify-match",
         "fqcn": "src/LiquidityGrowthFeeOracleHookV2.sol:LiquidityGrowthFeeOracleHookV2",
         "constructorArguments": [
           "0x000000000004444c5dc75cB358380D2e3dE08A90",
@@ -461,16 +461,16 @@
         ],
         "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a900000000000000000000000004957f49620aff3adbbe8195a4f633e49cc93376c00000000000000000000000014a9f11a7fd6968f3c3369d5ed21363e7ee40aac000000000000000000000000bd216513d74c8cf14cf4747e6aaa6420ff64ee9e0000000000000000000000000000000000000000000000000000000000000190",
         "etherscan": {
-          "status": "not-submitted",
-          "url": null
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x864aF5CEaD61068b944e9974638760F1bD2dFaeC#code"
         },
         "sourcify": {
-          "status": "not-submitted",
-          "url": null
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x864aF5CEaD61068b944e9974638760F1bD2dFaeC"
         }
       },
       "launcher": {
-        "status": "not-submitted",
+        "status": "etherscan-exact-sourcify-match",
         "fqcn": "src/LiquidityGrowthFullRangeLaunchV3.sol:LiquidityGrowthFullRangeLaunchV3",
         "constructorArguments": [
           "0x000000000004444c5dc75cB358380D2e3dE08A90",
@@ -482,30 +482,30 @@
         ],
         "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90000000000000000000000000bd216513d74c8cf14cf4747e6aaa6420ff64ee9e000000000000000000000000000000e200088d55c39a11f609e5f667729ad49b000000000000000000000000864af5cead61068b944e9974638760f1bd2dfaec00000000000000000000000014a9f11a7fd6968f3c3369d5ed21363e7ee40aac000000000000000000000000291a9ff1059d225d02b1659430804486404db507",
         "etherscan": {
-          "status": "not-submitted",
-          "url": null
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xDCE5B303cBCD95a199c5d4D2086f4Df61940942d#code"
         },
         "sourcify": {
-          "status": "not-submitted",
-          "url": null
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0xDCE5B303cBCD95a199c5d4D2086f4Df61940942d"
         }
       },
       "positionPlanner": {
-        "status": "not-submitted",
+        "status": "etherscan-exact-sourcify-match",
         "fqcn": "src/LiquidityGrowthFullRangePositionPlannerV3.sol:LiquidityGrowthFullRangePositionPlannerV3",
         "constructorArguments": [],
         "encodedConstructorArguments": "0x",
         "etherscan": {
-          "status": "not-submitted",
-          "url": null
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x99C3B7766Ea0C8F1F99Fbe6f41C94A15012F2e65#code"
         },
         "sourcify": {
-          "status": "not-submitted",
-          "url": null
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x99C3B7766Ea0C8F1F99Fbe6f41C94A15012F2e65"
         }
       },
       "automation": {
-        "status": "not-submitted",
+        "status": "etherscan-exact-sourcify-match",
         "fqcn": "src/LiquidityGrowthFullRangeAutomationV3.sol:LiquidityGrowthFullRangeAutomationV3",
         "constructorArguments": [
           "0x14A9F11A7fD6968f3C3369D5ED21363e7eE40aac",
@@ -513,28 +513,28 @@
         ],
         "encodedConstructorArguments": "0x00000000000000000000000014a9f11a7fd6968f3c3369d5ed21363e7ee40aac000000000000000000000000dce5b303cbcd95a199c5d4d2086f4df61940942d",
         "etherscan": {
-          "status": "not-submitted",
-          "url": null
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0x98143Bf44BCa5E4D0FB9c28d55BC99A4824EB5F8#code"
         },
         "sourcify": {
-          "status": "not-submitted",
-          "url": null
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x98143Bf44BCa5E4D0FB9c28d55BC99A4824EB5F8"
         }
       },
       "keeperExecutor": {
-        "status": "not-submitted",
+        "status": "etherscan-exact-sourcify-match",
         "fqcn": "src/DeepKeeperExecutorV2.sol:DeepKeeperExecutorV2",
         "constructorArguments": [
           "0x98143Bf44BCa5E4D0FB9c28d55BC99A4824EB5F8"
         ],
         "encodedConstructorArguments": "0x00000000000000000000000098143bf44bca5e4d0fb9c28d55bc99a4824eb5f8",
         "etherscan": {
-          "status": "not-submitted",
-          "url": null
+          "status": "exact-match",
+          "url": "https://etherscan.io/address/0xf973f447a12b01bD75D459144FBD1157E6D4588b#code"
         },
         "sourcify": {
-          "status": "not-submitted",
-          "url": null
+          "status": "match",
+          "url": "https://sourcify.dev/server/v2/contract/1/0xf973f447a12b01bD75D459144FBD1157E6D4588b"
         }
       }
     }
@@ -582,7 +582,6 @@
     "productionTransactionSubmission": false
   },
   "blockers": [
-    "Exact Etherscan source verification and Sourcify v2 match records are missing.",
     "Current-release canary launch, oracle and atomic compound evidence is missing.",
     "The reviewed keeper binding is not present and transaction submission remains disabled."
   ]
