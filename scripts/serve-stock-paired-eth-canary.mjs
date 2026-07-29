@@ -44,6 +44,7 @@ import {
   STOCK_PAIRED_ETH_CANARY_ROUTE_POOLS,
   STOCK_PAIRED_ETH_CANARY_TRADE_AMOUNT,
   assertStockPairedEthCanaryRouteSafety,
+  assertStockPairedEthCanaryRevalidation,
   buildStockPairedEthCanaryIdentity,
   buildStockPairedEthCanaryLaunch,
   buildStockPairedEthCanarySwap,
@@ -1160,6 +1161,60 @@ async function recordSubmission(manifest, identity, input) {
   };
 }
 
+async function revalidatePreparation(manifest, identity, preparedDigest) {
+  const locked = preparations.get(preparedDigest);
+  if (!locked) {
+    throw new Error("The ETH canary preparation expired");
+  }
+  const state = await inspect(manifest, identity);
+  if (
+    state.status !== "ready" ||
+    !state.prepared ||
+    state.prepared.step !== locked.step ||
+    state.prepared.requiredAccount.toLowerCase() !==
+      locked.requiredAccount.toLowerCase() ||
+    state.evidence.steps[locked.step]?.txHash
+  ) {
+    throw new Error("The ETH canary lifecycle advanced");
+  }
+  const block = await safeBlock();
+  const request = {
+    from: locked.request.from,
+    to: locked.request.to,
+    value: locked.request.value,
+    data: locked.request.data,
+  };
+  const nonceStates = await Promise.all(
+    rpcUrls.map(async (url) => {
+      const [confirmed, pending, balance] = await Promise.all([
+        rpc(url, "eth_getTransactionCount", [locked.requiredAccount, "latest"]),
+        rpc(url, "eth_getTransactionCount", [
+          locked.requiredAccount,
+          "pending",
+        ]),
+        rpc(url, "eth_getBalance", [locked.requiredAccount, block.tag]),
+      ]);
+      return { confirmed, pending, balance };
+    }),
+  );
+  const simulations = await Promise.all(
+    rpcUrls.map(async (url) => {
+      const [callResult, estimatedGas] = await Promise.all([
+        rpc(url, "eth_call", [request, "pending"]),
+        rpc(url, "eth_estimateGas", [request, "pending"]),
+      ]);
+      return { callResult, estimatedGas };
+    }),
+  );
+  assertStockPairedEthCanaryRevalidation({
+    prepared: locked,
+    nonceStates,
+    simulations,
+    baseFeePerGas: block.baseFeePerGas,
+  });
+  return locked;
+}
+
 function publicState(state) {
   return {
     status: state.status,
@@ -1269,15 +1324,7 @@ async function main() {
       }
       if (request.method === "POST" && request.url === "/revalidate") {
         const input = await readBody(request);
-        const state = await inspect(manifest, identity);
-        if (
-          !state.prepared ||
-          state.prepared.preparedDigest !== input.preparedDigest
-        ) {
-          throw new Error("The ETH canary preparation expired");
-        }
-        preparations.clear();
-        preparations.set(state.prepared.preparedDigest, state.prepared);
+        await revalidatePreparation(manifest, identity, input.preparedDigest);
         json(response, 200, { status: "ready" });
         return;
       }
