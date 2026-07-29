@@ -254,6 +254,7 @@ function stableValue(value) {
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.keys(value)
+        .filter((key) => key !== "blockTimestamp")
         .sort()
         .map((key) => [key, stableValue(value[key])]),
     );

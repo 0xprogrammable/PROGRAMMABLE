@@ -27,7 +27,9 @@ const runtimeCodeHash =
 
 test("compares RPC payloads independent of provider JSON key order", () => {
   const left = {
+    blockTimestamp: "0x1234",
     hash: blockHash,
+    logs: [{ blockTimestamp: "0x1234", data: "0x01" }],
     withdrawals: [
       {
         address: STOCK_PAIRED_DEPLOYER,
@@ -38,6 +40,7 @@ test("compares RPC payloads independent of provider JSON key order", () => {
     ],
   };
   const right = {
+    logs: [{ data: "0x01" }],
     withdrawals: [
       {
         index: "0x2",

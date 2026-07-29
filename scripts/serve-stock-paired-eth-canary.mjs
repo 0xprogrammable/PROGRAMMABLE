@@ -7,6 +7,7 @@ import path from "node:path";
 
 import {
   decodeFunctionResult,
+  encodeEventTopics,
   encodeFunctionData,
   getAddress,
   keccak256,
@@ -54,6 +55,7 @@ import {
   encodeStockPairedEthCanaryV3Quote,
   encodeStockPairedEthCanaryV4Quote,
   parseStockPairedEthCanaryLaunchReceipt,
+  stockPairedEthCanaryCoordinatorEvent,
   stockPairedEthCanaryErc20Abi,
   stockPairedEthCanaryPermit2Abi,
 } from "./stock-paired-eth-canary-core.mjs";
@@ -288,6 +290,121 @@ async function writeEvidence(evidence) {
     mode: 0o600,
   });
   await rename(temporary, evidencePath);
+}
+
+async function recoverConfirmedLaunch(manifest, evidence, prediction, block) {
+  if (evidence.steps.launch || evidence.launchResult) return;
+  const code = await pair(
+    "eth_getCode",
+    [prediction.token, block.tag],
+    "predicted canary token",
+  );
+  if (code === "0x") return;
+
+  const deploymentReceipt = await pair(
+    "eth_getTransactionReceipt",
+    [manifest.transactions.ethLaunchCoordinator],
+    "coordinator deployment receipt",
+  );
+  if (
+    !deploymentReceipt ||
+    normalizeStockPairedHex(deploymentReceipt.status) !== "0x1"
+  ) {
+    throw new Error("The coordinator deployment receipt is unavailable");
+  }
+  const fromBlock = BigInt(deploymentReceipt.blockNumber);
+  if (block.number < fromBlock || block.number - fromBlock > 2_048n) {
+    throw new Error("The missing canary launch is outside the recovery window");
+  }
+  const topics = encodeEventTopics({
+    abi: [stockPairedEthCanaryCoordinatorEvent],
+    eventName: "StockPairedEthTokenLaunched",
+    args: {
+      creator: STOCK_PAIRED_DEPLOYER,
+      token: prediction.token,
+      quoteAsset: STOCK_PAIRED_ETH_CANARY_ASSET.address,
+    },
+  });
+  const logs = [];
+  for (let start = fromBlock; start <= block.number; start += 10n) {
+    const end = start + 9n < block.number ? start + 9n : block.number;
+    const chunk = await pair(
+      "eth_getLogs",
+      [
+        {
+          address: manifest.addresses.ethLaunchCoordinator,
+          fromBlock: stockPairedQuantity(start),
+          toBlock: stockPairedQuantity(end),
+          topics,
+        },
+      ],
+      "canary launch recovery logs",
+    );
+    logs.push(...chunk);
+  }
+  if (logs.length !== 1) {
+    throw new Error("The confirmed canary launch could not be recovered");
+  }
+
+  const [transaction, receipt] = await Promise.all([
+    pair(
+      "eth_getTransactionByHash",
+      [logs[0].transactionHash],
+      "recovered launch transaction",
+    ),
+    pair(
+      "eth_getTransactionReceipt",
+      [logs[0].transactionHash],
+      "recovered launch receipt",
+    ),
+  ]);
+  if (
+    !transaction ||
+    !receipt ||
+    normalizeStockPairedHex(receipt.status) !== "0x1" ||
+    normalizeStockPairedHex(transaction.from) !==
+      normalizeStockPairedHex(STOCK_PAIRED_DEPLOYER) ||
+    normalizeStockPairedHex(transaction.to) !==
+      normalizeStockPairedHex(manifest.addresses.ethLaunchCoordinator) ||
+    BigInt(transaction.value) !== STOCK_PAIRED_ETH_CANARY_INITIAL_BUY ||
+    normalizeStockPairedHex(transaction.blockHash) !==
+      normalizeStockPairedHex(receipt.blockHash)
+  ) {
+    throw new Error("The recovered canary launch transaction is inconsistent");
+  }
+  const result = parseStockPairedEthCanaryLaunchReceipt(receipt, {
+    coordinator: manifest.addresses.ethLaunchCoordinator,
+    launcher: manifest.addresses.launcher,
+  });
+  if (result.token.toLowerCase() !== prediction.token.toLowerCase()) {
+    throw new Error("The recovered canary token differs from its prediction");
+  }
+  await inspectLock(manifest, result, block.tag);
+  evidence.launchResult = result;
+  evidence.steps.launch = {
+    txHash: normalizeStockPairedHex(transaction.hash),
+    preparedDigest: keccak256(
+      new TextEncoder().encode(
+        `recovered:${normalizeStockPairedHex(transaction.hash)}`,
+      ),
+    ),
+    request: {
+      from: getAddress(transaction.from),
+      to: getAddress(transaction.to),
+      value: stockPairedQuantity(BigInt(transaction.value)),
+      data: normalizeStockPairedHex(transaction.input),
+      nonce: stockPairedQuantity(BigInt(transaction.nonce)),
+    },
+    before: { recovered: true },
+    confirmed: true,
+    recovered: true,
+    blockNumber: Number(BigInt(receipt.blockNumber)),
+    blockHash: receipt.blockHash,
+    gasUsed: BigInt(receipt.gasUsed).toString(),
+    effectiveGasPrice: BigInt(receipt.effectiveGasPrice).toString(),
+    effects: { ...result, positionLockVerified: true },
+  };
+  await writeEvidence(evidence);
 }
 
 function assertManifest(manifest) {
@@ -964,6 +1081,7 @@ async function inspect(manifest, identity) {
   }
   evidence.predictedToken = prediction.token;
   await writeEvidence(evidence);
+  await recoverConfirmedLaunch(manifest, evidence, prediction, block);
   await refreshPending(manifest, evidence, block);
   const pending = Object.entries(evidence.steps).find(
     ([, record]) => record.txHash && !record.confirmed,
