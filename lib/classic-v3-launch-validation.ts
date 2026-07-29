@@ -87,7 +87,12 @@ function parametersMatch(
     received.rewardSharesBps.length === expected.rewardSharesBps.length &&
     received.rewardSharesBps.every(
       (share, index) => share === expected.rewardSharesBps[index],
-    )
+    ) &&
+    received.initialBuyCustody.mode === expected.initialBuyCustody.mode &&
+    received.initialBuyCustody.durationDays ===
+      expected.initialBuyCustody.durationDays &&
+    received.initialBuyCustody.cliffDays ===
+      expected.initialBuyCustody.cliffDays
   );
 }
 
@@ -128,7 +133,7 @@ export function validatePreparedClassicV3LaunchTransactionAgainstManifest(
   const initialBuy = parseInitialBuyWei(input.draft.initialBuyEth);
   if (initialBuy === null || transaction.value !== initialBuy.toString()) {
     throw new Error(
-      "The prepared Dev Buy does not match the current token setup",
+      "The prepared Initial Buy does not match the current token setup",
     );
   }
   const gasLimit = BigInt(transaction.gasLimit);

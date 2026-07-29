@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { encodeFunctionData } from "viem";
 
-import { feeSplitVaultAbi } from "../lib/classic-v3";
+import { classicRewardVaultAbi } from "../lib/classic-v3";
 import {
   parseClassicV3ProfileRewards,
   validatePreparedClassicV3RewardAction,
@@ -28,7 +28,7 @@ function rewardResponse() {
         poolId,
         vaultAddress: vault,
         beneficiary: account,
-        payoutAddress: payout,
+        payoutAddress: account,
         shareBps: 6000,
         claimableWei: "100000000000000000",
         claimableEth: "0.1",
@@ -39,11 +39,13 @@ function rewardResponse() {
         platformFeeBps: 10,
         beneficiaries: [
           {
+            allocationIndex: 0,
             beneficiary: account,
-            payoutAddress: payout,
+            payoutAddress: account,
             shareBps: 6000,
           },
           {
+            allocationIndex: 1,
             beneficiary: other,
             payoutAddress: other,
             shareBps: 4000,
@@ -62,7 +64,7 @@ describe("Classic V3 profile rewards", () => {
     if (profile.status !== "ready") return;
     expect(profile.rewards[0]).toMatchObject({
       beneficiary: account,
-      payoutAddress: payout,
+      payoutAddress: account,
       shareBps: 6000,
       buySwapFeeBps: 300,
       sellSwapFeeBps: 700,
@@ -73,12 +75,20 @@ describe("Classic V3 profile rewards", () => {
     ).toThrow("does not match");
   });
 
-  it("rejects duplicate immutable beneficiaries and invalid totals", () => {
-    const duplicated = rewardResponse();
-    duplicated.rewards[0].beneficiaries[1].beneficiary = account;
+  it("accepts consolidated wallets but rejects invalid allocation indexes", () => {
+    const consolidated = rewardResponse();
+    consolidated.rewards[0].beneficiaries[1].beneficiary = account;
+    consolidated.rewards[0].beneficiaries[1].payoutAddress = account;
+    consolidated.rewards[0].shareBps = 10_000;
+    expect(
+      parseClassicV3ProfileRewards(consolidated, account),
+    ).toMatchObject({ status: "ready" });
+
+    const invalid = rewardResponse();
+    invalid.rewards[0].beneficiaries[1].allocationIndex = 0;
     expect(() =>
-      parseClassicV3ProfileRewards(duplicated, account),
-    ).toThrow("immutable reward split");
+      parseClassicV3ProfileRewards(invalid, account),
+    ).toThrow("current reward allocation");
   });
 
   it("accepts only beneficiary-originated claim calldata", () => {
@@ -88,7 +98,7 @@ describe("Classic V3 profile rewards", () => {
       from: account,
       to: vault,
       data: encodeFunctionData({
-        abi: feeSplitVaultAbi,
+        abi: classicRewardVaultAbi,
         functionName: "claim",
       }),
       value: "0",
@@ -137,9 +147,9 @@ describe("Classic V3 profile rewards", () => {
       from: account,
       to: vault,
       data: encodeFunctionData({
-        abi: feeSplitVaultAbi,
-        functionName: "setPayoutAddress",
-        args: [payout],
+        abi: classicRewardVaultAbi,
+        functionName: "changePayoutWallet",
+        args: [0n, payout],
       }),
       value: "0",
       gasLimit: "80000",
@@ -158,6 +168,7 @@ describe("Classic V3 profile rewards", () => {
           account,
           vaultAddress: vault,
           newPayoutAddress: payout,
+          allocationIndex: 0,
           chainId: 1,
         },
       ).transaction.from,

@@ -9,7 +9,7 @@ import {
   type Hex,
 } from "viem";
 
-import { feeSplitVaultAbi } from "../classic-v3";
+import { classicRewardVaultAbi } from "../classic-v3";
 import { isConfiguredClassicV3ReleaseReady } from "../classic-v3-release";
 import {
   parsePreparedTransaction,
@@ -17,6 +17,7 @@ import {
 } from "../prepared-transaction";
 
 export type ClassicV3Beneficiary = {
+  allocationIndex: number;
   beneficiary: Address;
   payoutAddress: Address;
   shareBps: number;
@@ -31,6 +32,7 @@ export type ClassicV3Reward = {
   beneficiary: Address;
   payoutAddress: Address;
   shareBps: number;
+  ownedAllocations: readonly ClassicV3Beneficiary[];
   claimableWei: string;
   claimableEth: string;
   claimedWei: string;
@@ -128,6 +130,18 @@ function bps(value: unknown, label: string, allowZero = false) {
   return value;
 }
 
+function allocationIndex(value: unknown, label: string) {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 0 ||
+    value >= 5
+  ) {
+    throw new Error(`Invalid ${label}`);
+  }
+  return value;
+}
+
 export function parseClassicV3ProfileRewards(
   value: unknown,
   requestedAccount: string,
@@ -165,26 +179,41 @@ export function parseClassicV3ProfileRewards(
     }
     const beneficiaries = reward.beneficiaries.map((entry, index) => {
       const item = asRecord(entry, `reward recipient ${index + 1}`);
+      const payoutAddress = address(item.payoutAddress, "payout address");
+      const beneficiary = address(item.beneficiary, "reward beneficiary");
+      if (beneficiary.toLowerCase() !== payoutAddress.toLowerCase()) {
+        throw new Error("Invalid current reward allocation");
+      }
       return {
-        beneficiary: address(item.beneficiary, "immutable beneficiary"),
-        payoutAddress: address(item.payoutAddress, "payout address"),
+        allocationIndex: allocationIndex(
+          item.allocationIndex,
+          "reward allocation index",
+        ),
+        beneficiary,
+        payoutAddress,
         shareBps: bps(item.shareBps, "reward share"),
       };
     });
-    const unique = new Set(
-      beneficiaries.map((item) => item.beneficiary.toLowerCase()),
+    const indexes = new Set(
+      beneficiaries.map((item) => item.allocationIndex),
     );
     if (
-      unique.size !== beneficiaries.length ||
+      beneficiaries.length < 1 ||
+      beneficiaries.length > 5 ||
+      indexes.size !== beneficiaries.length ||
+      beneficiaries.some((item, index) => item.allocationIndex !== index) ||
       beneficiaries.reduce((sum, item) => sum + item.shareBps, 0) !== 10_000
     ) {
-      throw new Error("Invalid immutable reward split");
+      throw new Error("Invalid current reward allocation");
     }
-    const shareBps = bps(reward.shareBps, "beneficiary share");
-    const ownEntry = beneficiaries.find(
-      (item) => item.beneficiary.toLowerCase() === account.toLowerCase(),
+    const ownedAllocations = beneficiaries.filter(
+      (item) => item.payoutAddress.toLowerCase() === account.toLowerCase(),
     );
-    if (!ownEntry || ownEntry.shareBps !== shareBps) {
+    const shareBps = bps(reward.shareBps, "beneficiary share", true);
+    if (
+      ownedAllocations.reduce((sum, item) => sum + item.shareBps, 0) !==
+      shareBps
+    ) {
       throw new Error("Classic beneficiary share does not match");
     }
     const claimableWei = uintString(reward.claimableWei, "claimable rewards");
@@ -214,6 +243,7 @@ export function parseClassicV3ProfileRewards(
       beneficiary,
       payoutAddress: address(reward.payoutAddress, "reward payout address"),
       shareBps,
+      ownedAllocations,
       claimableWei,
       claimableEth: reward.claimableEth as string,
       claimedWei,
@@ -283,6 +313,7 @@ export function validatePreparedClassicV3RewardAction(
     account: string;
     vaultAddress: string;
     newPayoutAddress?: string;
+    allocationIndex?: number;
     chainId: number;
   },
 ): PreparedClassicV3RewardAction {
@@ -316,7 +347,7 @@ export function validatePreparedClassicV3RewardAction(
     throw new Error("Classic reward transaction is not canonical");
   }
   const decoded = decodeFunctionData({
-    abi: feeSplitVaultAbi,
+    abi: classicRewardVaultAbi,
     data: transaction.data,
   });
   if (expected.action === "claim") {
@@ -325,10 +356,15 @@ export function validatePreparedClassicV3RewardAction(
     }
   } else {
     if (
-      decoded.functionName !== "setPayoutAddress" ||
+      expected.allocationIndex === undefined ||
+      !Number.isSafeInteger(expected.allocationIndex) ||
+      expected.allocationIndex < 0 ||
+      expected.allocationIndex >= 5 ||
       !expected.newPayoutAddress ||
       !isAddress(expected.newPayoutAddress) ||
-      decoded.args[0].toLowerCase() !==
+      decoded.functionName !== "changePayoutWallet" ||
+      decoded.args[0] !== BigInt(expected.allocationIndex) ||
+      decoded.args[1].toLowerCase() !==
         getAddress(expected.newPayoutAddress).toLowerCase()
     ) {
       throw new Error("Classic payout update does not match the new address");
@@ -343,6 +379,7 @@ export async function prepareClassicV3RewardAction(
     account: string;
     vaultAddress: string;
     newPayoutAddress?: string;
+    allocationIndex?: number;
     chainId: number;
   },
   signal?: AbortSignal,
@@ -361,7 +398,10 @@ export async function prepareClassicV3RewardAction(
       account: input.account,
       vaultAddress: input.vaultAddress,
       ...(input.action === "update-payout"
-        ? { newPayoutAddress: input.newPayoutAddress }
+        ? {
+            allocationIndex: input.allocationIndex,
+            newPayoutAddress: input.newPayoutAddress,
+          }
         : {}),
       chainId: input.chainId,
     }),
@@ -384,16 +424,20 @@ export async function prepareClassicV3RewardAction(
 
 export function encodeClassicV3RewardAction(input: {
   action: ClassicV3Action;
+  allocationIndex?: number;
   newPayoutAddress?: Address;
 }) {
   return input.action === "claim"
     ? encodeFunctionData({
-        abi: feeSplitVaultAbi,
+        abi: classicRewardVaultAbi,
         functionName: "claim",
       })
     : encodeFunctionData({
-        abi: feeSplitVaultAbi,
-        functionName: "setPayoutAddress",
-        args: [input.newPayoutAddress as Address],
+        abi: classicRewardVaultAbi,
+        functionName: "changePayoutWallet",
+        args: [
+          BigInt(input.allocationIndex as number),
+          input.newPayoutAddress as Address,
+        ],
       });
 }
