@@ -1,10 +1,8 @@
 import { getAddress } from "viem";
 import { describe, expect, it } from "vitest";
 
-import {
-  STOCK_PAIRED_ETH_QUOTE_ASSETS,
-  STOCK_QUOTE_ASSETS,
-} from "../lib/stock-paired";
+import { STOCK_QUOTE_ASSETS } from "../lib/stock-paired";
+import { STOCK_PAIRED_V2_QUOTE_ASSETS } from "../lib/stock-paired-v2";
 import {
   encodeStockPairedV3Path,
   getStockPairedEthRoute,
@@ -14,7 +12,7 @@ import {
 } from "../lib/trade/stock-paired-route";
 
 describe("Stock-Paired ETH routes", () => {
-  it.each(STOCK_PAIRED_ETH_QUOTE_ASSETS)(
+  it.each(STOCK_PAIRED_V2_QUOTE_ASSETS)(
     "pins a contiguous ETH route for $symbol",
     ({ address }) => {
       const route = getStockPairedEthRoute(address);
