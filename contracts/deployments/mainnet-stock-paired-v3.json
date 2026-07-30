@@ -104,8 +104,8 @@
     "finalActivationPricing": {
       "status": "verified-current-release",
       "evidencePath": "contracts/deployments/evidence/stock-paired-v3-final-pricing.json",
-      "evidenceSha256": "sha256:17266580ca74fa775fa6b8d6d85316101bb7428ad51f53749b387fb6d41b70ab",
-      "verifiedAt": "2026-07-30T02:49:31.000Z"
+      "evidenceSha256": "sha256:b69a7237a421b18152a9499af2ceef6d2b0ff28ad1731469a4530c32522e056a",
+      "verifiedAt": "2026-07-30T03:19:54.000Z"
     },
     "disclosure": "Starts near Classic's 1.355657760817103798 ETH initial FDV. The exact USD value moves with ETH and the selected quote asset."
   },
@@ -308,8 +308,8 @@
     "observedAtBlock": 25642871
   },
   "activation": {
-    "publicLaunchesEnabled": false,
-    "reason": "Lifecycle verified; public activation requires a separate explicit release commit"
+    "publicLaunchesEnabled": true,
+    "reason": "All release gates passed; public V3 launches are enabled only on Ethereum Mainnet"
   },
   "officialDependencies": {
     "poolManager": {

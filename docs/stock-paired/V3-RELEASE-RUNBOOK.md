@@ -180,6 +180,36 @@ Activation is a separate commit after all four gates are checked:
 3. source verification
 4. lifecycle canary
 
-Run the full app tests, production build and rendered desktop/mobile QA before
-changing `activation.publicLaunchesEnabled` to `true`. Confirm the production
-domain serves the exact activated commit.
+The lifecycle capture must first have written
+`status: deployment-source-and-lifecycle-verified`,
+`lifecycleEvidence.status: verified-current-release` and
+`lifecycleEvidence.releaseEligible: true`. Capture fresh pricing immediately
+before the activation review. The activation branch must descend from
+production RC `fca1e1895363543c4c4d0f7c1d838c891f906c20` with its reviewed V3
+release files unchanged. Then run the dry gate:
+
+```bash
+npm run contracts:stock-paired-v3:activation:check
+```
+
+This fails closed unless deployment receipts and runtimes match, the three V3
+sources are exact Etherscan matches with full Sourcify matches, the full
+two-RPC lifecycle is release-eligible, and pricing evidence is current. It
+does not edit files. After reviewing the result, create the local activation
+diff with:
+
+```bash
+npm run contracts:stock-paired-v3:activation:write
+```
+
+The write command changes only:
+
+- `lib/stock-paired-access.ts`
+- `contracts/deployments/mainnet-stock-paired-v3.json`
+- `contracts/deployments/evidence/stock-paired-v3-mainnet-release.json`
+
+It does not deploy, submit transactions, publish or move funds. Run the focused
+tests, typecheck, production build and rendered desktop/mobile QA before
+committing. Confirm the eventual production domain serves the exact activated
+commit. Stock-Paired launch preparation must remain unavailable on rehearsal
+and every chain other than Ethereum Mainnet.

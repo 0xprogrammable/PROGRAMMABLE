@@ -1,19 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  STOCK_PAIRED_NEW_LAUNCHES_ENABLED,
   isStockPairedDevAccount,
   isStockPairedPublicLaunchEnabled,
 } from "../lib/stock-paired-access";
 
 describe("Stock-Paired access", () => {
-  it("keeps public launches closed while V3 is being prepared", () => {
+  it("binds the reviewed switch to V3 on Ethereum Mainnet only", () => {
     const release = {
       internalContractRelease: "stock-paired-v3",
       chainId: 1,
     };
     expect(
       isStockPairedPublicLaunchEnabled("production", release),
-    ).toBe(false);
+    ).toBe(STOCK_PAIRED_NEW_LAUNCHES_ENABLED);
     expect(
       isStockPairedPublicLaunchEnabled("rehearsal", release),
     ).toBe(false);
@@ -36,12 +37,12 @@ describe("Stock-Paired access", () => {
     }
   });
 
-  it("keeps the approved development wallet blocked during the pause", () => {
+  it("never gives an unreviewed wallet privileged access", () => {
     expect(
       isStockPairedDevAccount(
         "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
       ),
-    ).toBe(false);
+    ).toBe(STOCK_PAIRED_NEW_LAUNCHES_ENABLED);
     expect(
       isStockPairedDevAccount(
         "0x1111111111111111111111111111111111111111",

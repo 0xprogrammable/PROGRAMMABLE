@@ -18,7 +18,7 @@ const OBSERVED = JSON.parse(
     "utf8",
   ),
 );
-const NOW = 1_785_380_000;
+const NOW = OBSERVED.retrievedAt + 5;
 
 function freshFixture() {
   const fixture = structuredClone(OBSERVED);

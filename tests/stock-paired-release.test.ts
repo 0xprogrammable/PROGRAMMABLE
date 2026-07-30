@@ -200,7 +200,7 @@ describe("Stock-Paired release gate", () => {
     ).toBeNull();
   });
 
-  it("enables the checked-in expanded registry only after all release gates pass", () => {
+  it("enables the checked-in V3 registry after all release gates pass", () => {
     expect(
       resolveVerifiedStockPairedV2Release(placeholderV2Manifest),
     ).toMatchObject({
@@ -218,11 +218,26 @@ describe("Stock-Paired release gate", () => {
         },
       },
     });
-    expect(resolveVerifiedStockPairedV3Release(placeholderV3Manifest)).toBeNull();
-    expect(getConfiguredStockPairedLaunchRelease()).toBeNull();
-    expect(isConfiguredStockPairedReleaseReady("production")).toBe(false);
+    expect(
+      resolveVerifiedStockPairedV3Release(placeholderV3Manifest),
+    ).toMatchObject({
+      internalContractRelease: "stock-paired-v3",
+      chainId: 1,
+      addresses: {
+        positionPlanner: placeholderV3Manifest.addresses.positionPlanner,
+        launcher: placeholderV3Manifest.addresses.launcher,
+        ethLaunchCoordinator:
+          placeholderV3Manifest.addresses.ethLaunchCoordinator,
+      },
+    });
+    expect(getConfiguredStockPairedLaunchRelease()).toMatchObject({
+      internalContractRelease: "stock-paired-v3",
+      chainId: 1,
+    });
+    expect(isConfiguredStockPairedReleaseReady("production")).toBe(true);
+    expect(isConfiguredStockPairedReleaseReady("rehearsal")).toBe(false);
     expect(getConfiguredStockPairedRelease()).toMatchObject({
-      internalContractRelease: "stock-paired-v2",
+      internalContractRelease: "stock-paired-v3",
     });
   });
 

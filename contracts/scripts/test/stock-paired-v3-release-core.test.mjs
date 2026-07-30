@@ -39,7 +39,7 @@ test("rejects unknown release selectors", () => {
   );
 });
 
-test("records exact V3 sources while keeping public launches paused", () => {
+test("records exact V3 sources and the separately gated public activation", () => {
   const manifest = JSON.parse(
     readFileSync(STOCK_PAIRED_V3_MANIFEST_PATH, "utf8"),
   );
@@ -53,12 +53,12 @@ test("records exact V3 sources while keeping public launches paused", () => {
 
   assert.equal(
     manifest.status,
-    "deployed-runtime-and-source-verified-public-canary-pending",
+    "deployment-source-and-lifecycle-verified",
   );
   assert.equal(manifest.sourceVerification.status, "verified");
-  assert.equal(manifest.activation.publicLaunchesEnabled, false);
-  assert.equal(manifest.lifecycleEvidence.releaseEligible, false);
-  assert.equal(evidence.publicLaunchesEnabled, false);
+  assert.equal(manifest.activation.publicLaunchesEnabled, true);
+  assert.equal(manifest.lifecycleEvidence.releaseEligible, true);
+  assert.equal(evidence.publicLaunchesEnabled, true);
 
   for (const field of fields) {
     const source = manifest.sourceVerification[field];

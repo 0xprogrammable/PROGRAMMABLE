@@ -14,6 +14,7 @@ const readyV3Release = {
 
 async function loadPublicSurface(
   release: typeof readyV3Release | null,
+  enabled = false,
 ) {
   vi.resetModules();
   vi.doMock("@/lib/stock-paired-release", async (importOriginal) => {
@@ -24,6 +25,25 @@ async function loadPublicSurface(
     return {
       ...original,
       getConfiguredStockPairedLaunchRelease: () => release,
+    };
+  });
+  vi.doMock("@/lib/stock-paired-access", async (importOriginal) => {
+    const original =
+      await importOriginal<
+        typeof import("../lib/stock-paired-access")
+      >();
+    return {
+      ...original,
+      isStockPairedPublicLaunchEnabled: (
+        environment: "production" | "rehearsal",
+        candidate: typeof readyV3Release | null,
+      ) =>
+        Boolean(
+          enabled &&
+            environment === "production" &&
+            candidate?.internalContractRelease === "stock-paired-v3" &&
+            candidate.chainId === 1,
+        ),
     };
   });
 
@@ -55,6 +75,7 @@ function publicPreflightRequest() {
 
 afterEach(() => {
   vi.doUnmock("@/lib/stock-paired-release");
+  vi.doUnmock("@/lib/stock-paired-access");
   vi.resetModules();
 });
 
@@ -90,6 +111,55 @@ describe.sequential("Stock-Paired public activation", () => {
     expect(result.status).toBe(403);
     await expect(result.json()).resolves.toEqual({
       error: "Stock-Paired is coming soon",
+    });
+  });
+
+  it("opens the Stock-Paired UX only for the verified Mainnet release", async () => {
+    const { LaunchPage, POST } = await loadPublicSurface(
+      readyV3Release,
+      true,
+    );
+    const html = renderToStaticMarkup(createElement(LaunchPage));
+    const stockButton = html.match(
+      /<button[^>]*data-launch-model-option="stock-paired"[^>]*>/,
+    )?.[0];
+
+    expect(stockButton).not.toContain("disabled");
+    expect(html).not.toContain("Stock-Paired</strong><span>Coming soon");
+
+    const result = await POST(publicPreflightRequest());
+    expect(result.status).toBe(200);
+    await expect(result.json()).resolves.toMatchObject({
+      status: "blocked",
+      mode: "stock-paired",
+      title: "Switch the wallet to Ethereum",
+      checks: [
+        { id: "token", status: "pass" },
+        { id: "wallet", status: "blocked" },
+      ],
+    });
+  });
+
+  it("ships the checked-in release open while keeping non-Mainnet wallets blocked", async () => {
+    vi.resetModules();
+    const [{ default: LaunchPage }, { POST }] = await Promise.all([
+      import("../app/launch/page"),
+      import("../app/api/launch/preflight/route"),
+    ]);
+    const html = renderToStaticMarkup(createElement(LaunchPage));
+    const stockButton = html.match(
+      /<button[^>]*data-launch-model-option="stock-paired"[^>]*>/,
+    )?.[0];
+
+    expect(stockButton).not.toContain("disabled");
+    expect(html).not.toContain("Stock-Paired</strong><span>Coming soon");
+
+    const result = await POST(publicPreflightRequest());
+    expect(result.status).toBe(200);
+    await expect(result.json()).resolves.toMatchObject({
+      status: "blocked",
+      mode: "stock-paired",
+      title: "Switch the wallet to Ethereum",
     });
   });
 });

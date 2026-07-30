@@ -1,8 +1,10 @@
 # Stock-Paired V3 release
 
 Stock-Paired V3 changes the starting-price policy without changing the
-user-facing model name. New launches remain unavailable until every release
-gate below has passed and a separate activation change is reviewed.
+user-facing model name. This checkout records the separate public activation
+after every release gate below passed. Launch preparation remains restricted to
+Ethereum Mainnet; production remains unchanged until this exact commit is
+separately deployed.
 
 ## Price policy
 
@@ -106,8 +108,30 @@ are true:
 - lifecycle evidence is current and release-eligible
 - the launch coordinator is bound to the verified V3 launcher
 
-Public launch access remains hard-disabled even after those checks. It requires
-one final activation change after the release evidence is reviewed.
+Public launch access stays hard-disabled until those checks pass and the
+separate activation change is reviewed. The exact dry gate is pinned to
+production RC
+`fca1e1895363543c4c4d0f7c1d838c891f906c20`:
+
+```bash
+npm run contracts:stock-paired-v3:activation:check
+```
+
+Only after that command passes may
+`npm run contracts:stock-paired-v3:activation:write` create the local
+three-file activation diff. Neither command deploys or publishes. The app gate
+continues to require the `stock-paired-v3` release and Ethereum Mainnet, so the
+public model name remains Stock-Paired and no rehearsal-chain launch UX opens.
+
+## Activation record
+
+The current checkout records `activation.publicLaunchesEnabled: true`, the
+matching deployment-evidence flag and the application switch. The activation
+pricing snapshot was captured from two independent Mainnet RPCs at block
+25,642,933 and is bound by payload SHA-256
+`b69a7237a421b18152a9499af2ceef6d2b0ff28ad1731469a4530c32522e056a`.
+This is source evidence for a release commit, not proof that the commit has
+been pushed, deployed or served by the production domain.
 
 ## Rollback
 
