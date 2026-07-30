@@ -23,6 +23,7 @@
 /outputs/qa/
 /artifacts/
 /.codex-temp-programmable-readme-gif/
+/.worktrees/
 *.tsbuildinfo
 
 # Local publishing masters and article drafts
