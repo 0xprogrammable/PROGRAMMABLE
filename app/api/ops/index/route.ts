@@ -10,8 +10,10 @@ import {
 import { writePortfolioHistorySnapshot } from "../../../../lib/profile/portfolio-history-storage.server";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 90;
 export const runtime = "nodejs";
+
+const INDEX_READ_ATTEMPTS = 2;
 
 function isAuthorized(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -47,7 +49,27 @@ export async function GET(request: NextRequest) {
         "The verified production release is not operationally eligible",
       );
     }
-    const model = await readLiveExploreModel(deployment);
+    let model: Awaited<ReturnType<typeof readLiveExploreModel>> | null =
+      null;
+    let lastReadError: unknown;
+    for (let attempt = 1; attempt <= INDEX_READ_ATTEMPTS; attempt += 1) {
+      try {
+        model = await readLiveExploreModel(deployment);
+        break;
+      } catch (error) {
+        lastReadError = error;
+        if (attempt < INDEX_READ_ATTEMPTS) {
+          console.warn("Programmable index read will retry", {
+            attempt,
+            errorName:
+              error instanceof Error ? error.name : "UnknownIndexError",
+          });
+        }
+      }
+    }
+    if (!model) {
+      throw lastReadError ?? new Error("Index read failed");
+    }
     if (model.status !== "ready") {
       throw new Error("The live Explore model is not ready");
     }
