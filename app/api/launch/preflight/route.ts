@@ -115,6 +115,10 @@ import {
 } from "@/lib/stock-paired-release";
 import { isStockPairedPublicLaunchEnabled } from "@/lib/stock-paired-access";
 import {
+  assessStockPairedRuntimeFdv,
+  STOCK_PAIRED_RUNTIME_FDV_PROBE_WEI,
+} from "@/lib/stock-paired-runtime-fdv";
+import {
   resolveImplementedLaunchModel,
   resolveReservedLaunchModel,
   type DeepLaunchModelRelease,
@@ -2352,6 +2356,37 @@ async function quoteStockPairedExternalRoute(
   return { amountOut, gasEstimate };
 }
 
+async function assertStockPairedRuntimeFdv(
+  account: Address,
+  quoteAsset: Address,
+  targetQuoteAmountWad: string,
+) {
+  let routeQuoteAmount: bigint;
+  try {
+    const quote = await quoteStockPairedExternalRoute(
+      account,
+      quoteAsset,
+      STOCK_PAIRED_RUNTIME_FDV_PROBE_WEI,
+      "buy",
+    );
+    routeQuoteAmount = quote.amountOut;
+  } catch {
+    throw new LaunchInputError(
+      "Current Stock-Paired launch pricing could not be verified from the reviewed ETH route",
+    );
+  }
+
+  const assessment = assessStockPairedRuntimeFdv({
+    targetQuoteAmountWad,
+    routeQuoteAmount,
+  });
+  if (!assessment.withinPolicy) {
+    throw new LaunchInputError(
+      "New Stock-Paired launches are paused because the current starting FDV is outside the reviewed range",
+    );
+  }
+}
+
 async function findStockPairedCurrency0Salt({
   account,
   coordinator,
@@ -2452,6 +2487,19 @@ async function prepareStockPairedLaunch(
   }
 
   await assertStockPairedInfrastructure(release);
+  if (
+    release.internalContractRelease !== "stock-paired-v3" ||
+    !("targetQuoteAmountWad" in configuration.quoteAsset)
+  ) {
+    throw new LaunchInputError(
+      "The current Stock-Paired starting FDV policy is not available",
+    );
+  }
+  await assertStockPairedRuntimeFdv(
+    account,
+    configuration.quoteAsset.address,
+    configuration.quoteAsset.targetQuoteAmountWad,
+  );
   const { ethLaunchCoordinator, feeHook } = release.addresses;
   const predicted = await client.readContract({
     address: ethLaunchCoordinator,
