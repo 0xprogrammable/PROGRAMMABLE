@@ -17,6 +17,11 @@ export type ProgrammableIndexerToken = {
     protocol: "uniswap-v4";
     poolId: LauncherToken["poolId"];
     hookAddress: LauncherToken["hookAddress"];
+    tokenAddress: LauncherToken["tokenAddress"];
+    quoteAssetAddress: LauncherToken["quoteAssetAddress"] | null;
+    quoteAssetSymbol: LauncherToken["quoteAssetSymbol"] | null;
+    quoteAssetName: LauncherToken["quoteAssetName"] | null;
+    quoteIsCurrency0: LauncherToken["quoteIsCurrency0"] | null;
     positionRecipient: LauncherToken["positionRecipient"] | null;
     positionTokenId: LauncherToken["positionTokenId"] | null;
     tokenLiquidityAmountRaw:
@@ -28,7 +33,8 @@ export type ProgrammableIndexerToken = {
   };
   fees: {
     model: "uniswap-v4-custom-accounting";
-    currency: "ETH";
+    currency: string;
+    currencyAddress: `0x${string}` | null;
     buyHookFeeBps: number;
     sellHookFeeBps: number;
     creatorFeeBps: number | null;
@@ -42,7 +48,13 @@ export type ProgrammableIndexerToken = {
     launcherFeeIncludedInHookFee: true;
   };
   launch: {
-    model: "classic" | "deep-v1" | "deep-v2" | "deep-v3";
+    /**
+     * Backwards-compatible display identifier. Integrators should prefer
+     * modelId and modelVersion for durable launch-model classification.
+     */
+    model: string;
+    modelId: NonNullable<LauncherToken["launchModel"]>;
+    modelVersion: string | null;
     deepReleaseVersion:
       | "deep-full-range-v1"
       | "deep-full-range-v2"
@@ -110,6 +122,37 @@ function indexerLinks(token: LauncherToken): IndexerLinks {
   return Object.fromEntries(
     (token.links ?? []).map((link) => [link.kind, link.url]),
   );
+}
+
+function launchIdentity(token: LauncherToken) {
+  const modelId = token.launchModel ?? "classic";
+  const modelVersion =
+    token.launchModel === "deep"
+      ? token.deepReleaseVersion ?? null
+      : token.launchModel === "stock-paired"
+        ? token.launchModelVersion ?? null
+        : null;
+
+  if (token.launchModel === "stock-paired" && modelVersion === null) {
+    throw new Error(
+      `Token ${token.tokenAddress} is missing an exact Stock-Paired release`,
+    );
+  }
+
+  const model =
+    token.launchModel === "deep"
+      ? token.deepReleaseVersion === "deep-full-range-v3"
+        ? "deep-v3"
+        : token.deepReleaseVersion === "deep-full-range-v2"
+          ? "deep-v2"
+          : "deep-v1"
+      : modelId;
+
+  return {
+    model,
+    modelId,
+    modelVersion,
+  };
 }
 
 function serializeLiquidityGrowth(
@@ -248,6 +291,25 @@ export function serializeIndexerToken(
   const growthFeeBps = isDeepV3 ? token.growthFeeBps ?? null : null;
   const programmableFeeBps =
     token.programmableFeeBps ?? launcherFeeBps;
+  const launch = launchIdentity(token);
+  const isStockPaired = token.launchModel === "stock-paired";
+  const quoteAssetAddress = token.quoteAssetAddress ?? null;
+  const quoteAssetSymbol = token.quoteAssetSymbol ?? null;
+  const quoteAssetName = token.quoteAssetName ?? null;
+  const quoteIsCurrency0 = token.quoteIsCurrency0 ?? null;
+  if (
+    isStockPaired &&
+    (!quoteAssetAddress ||
+      !quoteAssetSymbol ||
+      !quoteAssetName ||
+      quoteIsCurrency0 === null ||
+      quoteIsCurrency0 !==
+        (BigInt(quoteAssetAddress) < BigInt(token.tokenAddress)))
+  ) {
+    throw new Error(
+      `Token ${token.tokenAddress} is missing Stock-Paired pool identity`,
+    );
+  }
   if (
     buyHookFeeBps === undefined ||
     sellHookFeeBps === undefined ||
@@ -351,6 +413,11 @@ export function serializeIndexerToken(
       protocol: "uniswap-v4",
       poolId: token.poolId,
       hookAddress: token.hookAddress,
+      tokenAddress: token.tokenAddress,
+      quoteAssetAddress,
+      quoteAssetSymbol,
+      quoteAssetName,
+      quoteIsCurrency0,
       positionRecipient: token.positionRecipient ?? null,
       positionTokenId: token.positionTokenId ?? null,
       tokenLiquidityAmountRaw:
@@ -359,7 +426,8 @@ export function serializeIndexerToken(
     },
     fees: {
       model: "uniswap-v4-custom-accounting",
-      currency: "ETH",
+      currency: quoteAssetSymbol ?? "ETH",
+      currencyAddress: quoteAssetAddress,
       buyHookFeeBps,
       sellHookFeeBps,
       creatorFeeBps:
@@ -378,14 +446,7 @@ export function serializeIndexerToken(
       launcherFeeIncludedInHookFee: true,
     },
     launch: {
-      model:
-        token.launchModel === "deep"
-          ? isDeepV3
-            ? "deep-v3"
-            : isDeepV2
-              ? "deep-v2"
-              : "deep-v1"
-          : "classic",
+      ...launch,
       deepReleaseVersion:
         token.launchModel === "deep"
           ? token.deepReleaseVersion!
@@ -414,6 +475,20 @@ export function buildIndexerFeed(
       serializeIndexerToken(token, chainId),
     ),
   };
+}
+
+export function findIndexerToken(
+  model: ExploreReadModel,
+  chainId: number,
+  address: string,
+) {
+  const normalizedAddress = address.toLowerCase();
+  const token = model.tokens.find(
+    (candidate) =>
+      candidate.tokenAddress.toLowerCase() === normalizedAddress,
+  );
+
+  return token ? serializeIndexerToken(token, chainId) : null;
 }
 
 export function buildUniswapTokenList(
@@ -454,8 +529,19 @@ export function buildUniswapTokenList(
             model:
               token.launchModel === "deep"
                 ? "v4-deep-liquidity"
-                : "v4-custom-accounting",
+                : token.launchModel === "stock-paired"
+                  ? "v4-stock-paired"
+                  : "v4-custom-accounting",
+            launchModel: serialized.launch.modelId,
+            launchModelVersion: serialized.launch.modelVersion,
             poolId: token.poolId,
+            quoteAssetAddress:
+              serialized.canonicalPool.quoteAssetAddress,
+            quoteAssetSymbol:
+              serialized.canonicalPool.quoteAssetSymbol,
+            quoteAssetName: serialized.canonicalPool.quoteAssetName,
+            quoteIsCurrency0:
+              serialized.canonicalPool.quoteIsCurrency0,
             positionRecipient: token.positionRecipient ?? null,
             positionTokenId: token.positionTokenId ?? null,
             tokenLiquidityAmountRaw:

@@ -79,6 +79,7 @@ export type LauncherToken = {
   quoteAssetAddress?: `0x${string}`;
   quoteAssetSymbol?: string;
   quoteAssetName?: string;
+  quoteIsCurrency0?: boolean;
   rewardVaultAddress?: `0x${string}`;
   tokenPriceQuote?: string;
   tokenPriceQuoteWad?: string;
@@ -124,6 +125,7 @@ export type LauncherToken = {
   transferTaxBps?: number;
   totalSwapFeeBps: number;
   launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
+  launchModelVersion?: "stock-paired-v1" | "stock-paired-v2";
   deepReleaseVersion?:
     "deep-full-range-v1" | "deep-full-range-v2" | "deep-full-range-v3";
   adaptiveCurveHash?: `0x${string}`;

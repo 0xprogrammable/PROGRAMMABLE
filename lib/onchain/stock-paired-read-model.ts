@@ -591,6 +591,7 @@ async function hydrateToken(
     quoteAssetAddress: quote.address,
     quoteAssetSymbol: quote.symbol,
     quoteAssetName: quote.name,
+    quoteIsCurrency0,
     tokenPriceQuote: formatUnits(tokenPriceQuoteWad, 18),
     tokenPriceQuoteWad: tokenPriceQuoteWad.toString(),
     marketCapQuote: formatUnits(marketCapQuoteWad, 18),
@@ -623,6 +624,7 @@ async function hydrateToken(
     transferTaxBps,
     totalSwapFeeBps: STOCK_PAIRED_TOTAL_SWAP_FEE_BPS,
     launchModel: "stock-paired",
+    launchModelVersion: release.internalContractRelease,
     liquidityPath: "meme",
     metadataExtraData: extraData,
   };

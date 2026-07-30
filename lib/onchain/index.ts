@@ -15,6 +15,7 @@ export { readIndependentRpcHealth } from "./rpc-health";
 export {
   buildIndexerFeed,
   buildUniswapTokenList,
+  findIndexerToken,
   serializeIndexerToken,
 } from "./indexer-feed";
 export { buildCreatorProfile } from "./profile";
