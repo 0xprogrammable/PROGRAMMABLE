@@ -126,6 +126,7 @@ export type LauncherToken = {
   totalSwapFeeBps: number;
   launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
   launchModelVersion?:
+    | "classic-v3"
     | "stock-paired-v1"
     | "stock-paired-v2"
     | "stock-paired-v3";

@@ -21,6 +21,7 @@ import {
   parseClassicTradeRequest,
   prepareClassicTrade,
   resolveClassicTradeDeployment,
+  resolveClassicV3TradeDeployment,
   resolveTradeDeployment,
   type ClassicTradeRelease,
   type ClassicTradeRuntimeClient,
@@ -493,6 +494,21 @@ describe("Trade request boundary", () => {
         TOKEN,
       ),
     ).toThrow("eligible verified release");
+  });
+
+  it("routes indexed Classic V3 launches through the verified V3 hook", () => {
+    const deployment = resolveClassicV3TradeDeployment(1);
+    const registry = readyRegistry(TOKEN, {}, deployment, {
+      launchModelVersion: "classic-v3",
+    });
+
+    expect(resolveTradeDeployment(1, registry, TOKEN)).toMatchObject({
+      chainId: 1,
+      launchModel: "classic",
+      hook: deployment.hook,
+      hookRuntimeCodeHash: deployment.hookRuntimeCodeHash,
+    });
+    expect(deployment.hook).not.toBe(resolveClassicTradeDeployment(1).hook);
   });
 
   it("rejects a Deep registry record with the wrong release hook", () => {
