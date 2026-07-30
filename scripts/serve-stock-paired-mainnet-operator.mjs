@@ -13,6 +13,7 @@ import {
   STOCK_PAIRED_DEPENDENCIES,
   STOCK_PAIRED_DEPLOYER,
   STOCK_PAIRED_ISSUER_RUNTIME,
+  assertStockPairedPreparedRefresh,
   assertStockPairedReleaseCheckout,
   assertStockPairedSequenceState,
   loadStockPairedReleasePlan,
@@ -26,16 +27,49 @@ import {
   validateStockPairedDeploymentTransactionRecord,
   writeStockPairedReleaseEvidence,
 } from "./stock-paired-mainnet-operator-core.mjs";
+import {
+  STOCK_PAIRED_V2_ASSETS,
+  STOCK_PAIRED_V2_DEPENDENCIES,
+  STOCK_PAIRED_V2_ISSUER_RUNTIME,
+  assertStockPairedV2ReleaseCheckout,
+  loadStockPairedV2ReleasePlan,
+} from "./stock-paired-v2-mainnet-operator-core.mjs";
 
 const HOST = "127.0.0.1";
-const PORT = Number(process.env.STOCK_PAIRED_OPERATOR_PORT ?? 4188);
+const releaseVersion =
+  process.env.STOCK_PAIRED_RELEASE_VERSION?.trim().toLowerCase() || "v1";
+if (releaseVersion !== "v1" && releaseVersion !== "v2") {
+  throw new Error("STOCK_PAIRED_RELEASE_VERSION must be v1 or v2");
+}
+const isV2 = releaseVersion === "v2";
+const releaseAssets = isV2 ? STOCK_PAIRED_V2_ASSETS : STOCK_PAIRED_ASSETS;
+const releaseDependencies = isV2
+  ? STOCK_PAIRED_V2_DEPENDENCIES
+  : STOCK_PAIRED_DEPENDENCIES;
+const releaseIssuerRuntime = isV2
+  ? STOCK_PAIRED_V2_ISSUER_RUNTIME
+  : STOCK_PAIRED_ISSUER_RUNTIME;
+const releasePlanLoader = isV2
+  ? loadStockPairedV2ReleasePlan
+  : loadStockPairedReleasePlan;
+const releaseCheckoutAssertion = isV2
+  ? assertStockPairedV2ReleaseCheckout
+  : assertStockPairedReleaseCheckout;
+const PORT = Number(
+  process.env.STOCK_PAIRED_OPERATOR_PORT ?? (isV2 ? 4192 : 4188),
+);
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 4_096;
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..");
 const evidencePath = path.resolve(
   process.env.STOCK_PAIRED_RELEASE_EVIDENCE_PATH ??
-    path.join(repositoryRoot, "tmp/stock-paired-mainnet-release-evidence.json"),
+    path.join(
+      repositoryRoot,
+      isV2
+        ? "tmp/stock-paired-v2-mainnet-release-evidence.json"
+        : "tmp/stock-paired-mainnet-release-evidence.json",
+    ),
 );
 const interactive = process.argv.includes("--write");
 const releaseCommit = process.env.STOCK_PAIRED_RELEASE_COMMIT?.trim() || null;
@@ -45,6 +79,9 @@ const erc20MetadataAbi = parseAbi([
 ]);
 const beaconAbi = parseAbi([
   "function implementation() view returns (address)",
+]);
+const gmTokenManagerAbi = parseAbi([
+  "function gmTokenAccepted(address token) view returns (bool)",
 ]);
 
 function configuredRpcEndpoints() {
@@ -103,7 +140,7 @@ async function assertCodeHash(endpoint, label, address, expectedHash) {
 
 async function verifyDependencyPins(endpoint) {
   const dependencies = await Promise.all(
-    Object.entries(STOCK_PAIRED_DEPENDENCIES).map(([name, dependency]) =>
+    Object.entries(releaseDependencies).map(([name, dependency]) =>
       assertCodeHash(
         endpoint,
         `Official dependency ${name}`,
@@ -116,21 +153,31 @@ async function verifyDependencyPins(endpoint) {
     assertCodeHash(
       endpoint,
       "Ondo beacon",
-      STOCK_PAIRED_ISSUER_RUNTIME.beacon,
-      STOCK_PAIRED_ISSUER_RUNTIME.beaconRuntimeCodeHash,
+      releaseIssuerRuntime.beacon,
+      releaseIssuerRuntime.beaconRuntimeCodeHash,
     ),
     assertCodeHash(
       endpoint,
       "Ondo implementation",
-      STOCK_PAIRED_ISSUER_RUNTIME.implementation,
-      STOCK_PAIRED_ISSUER_RUNTIME.implementationRuntimeCodeHash,
+      releaseIssuerRuntime.implementation,
+      releaseIssuerRuntime.implementationRuntimeCodeHash,
     ),
-    ...STOCK_PAIRED_ASSETS.map(([symbol, address]) =>
+    ...(isV2
+      ? [
+          assertCodeHash(
+            endpoint,
+            "Ondo GM token manager",
+            releaseIssuerRuntime.gmTokenManager,
+            releaseIssuerRuntime.gmTokenManagerRuntimeCodeHash,
+          ),
+        ]
+      : []),
+    ...releaseAssets.map(([symbol, address]) =>
       assertCodeHash(
         endpoint,
         `${symbol} quote asset`,
         address,
-        STOCK_PAIRED_ISSUER_RUNTIME.tokenRuntimeCodeHash,
+        releaseIssuerRuntime.tokenRuntimeCodeHash,
       ),
     ),
   ]);
@@ -140,19 +187,19 @@ async function verifyDependencyPins(endpoint) {
   });
   const actualImplementation = await rpc(endpoint, "eth_call", [
     {
-      to: STOCK_PAIRED_ISSUER_RUNTIME.beacon,
+      to: releaseIssuerRuntime.beacon,
       data: implementationCall,
     },
     "latest",
   ]);
-  const expectedImplementation = `0x${"0".repeat(24)}${STOCK_PAIRED_ISSUER_RUNTIME.implementation.slice(2).toLowerCase()}`;
+  const expectedImplementation = `0x${"0".repeat(24)}${releaseIssuerRuntime.implementation.slice(2).toLowerCase()}`;
   if (
     normalizeStockPairedHex(actualImplementation) !== expectedImplementation
   ) {
     throw new Error("The Ondo beacon implementation changed");
   }
   await Promise.all(
-    STOCK_PAIRED_ASSETS.flatMap(([symbol, address]) => [
+    releaseAssets.flatMap(([symbol, address]) => [
       rpc(endpoint, "eth_call", [
         {
           to: address,
@@ -191,6 +238,27 @@ async function verifyDependencyPins(endpoint) {
           throw new Error(`${symbol} returned unexpected decimals`);
         }
       }),
+      ...(isV2
+        ? [
+            rpc(endpoint, "eth_call", [
+              {
+                to: releaseIssuerRuntime.gmTokenManager,
+                data: encodeFunctionData({
+                  abi: gmTokenManagerAbi,
+                  functionName: "gmTokenAccepted",
+                  args: [address],
+                }),
+              },
+              "latest",
+            ]).then((result) => {
+              if (BigInt(result) !== 1n) {
+                throw new Error(
+                  `${symbol} is not accepted by the reviewed issuer manager`,
+                );
+              }
+            }),
+          ]
+        : []),
     ]),
   );
   return { dependencies, issuer };
@@ -483,7 +551,7 @@ async function recordTransaction(plan, endpoints, index, hash) {
     throw new Error("The transaction hash is invalid");
   }
   let records;
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
       records = await Promise.all(
         endpoints.map((endpoint) =>
@@ -492,7 +560,7 @@ async function recordTransaction(plan, endpoints, index, hash) {
       );
       break;
     } catch (error) {
-      if (attempt === 11) throw error;
+      if (attempt === 59) throw error;
       await new Promise((resolve) => setTimeout(resolve, 1_000));
     }
   }
@@ -567,19 +635,19 @@ function renderHtml(plan) {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Programmable · Stock-Paired release</title>
 <style>:root{color-scheme:light;--ink:#242024;--muted:#756d73;--line:#eadfe5;--pink:#d880b1;--paper:#fffdfd;--wash:#faf4f8;--bad:#a93655;--good:#27755a}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#f8e6f1 0,transparent 30%),var(--paper);color:var(--ink);font:15px/1.45 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(980px,calc(100% - 28px));margin:auto;padding:36px 0 52px}header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}h1{margin:0;font-size:clamp(32px,6vw,52px);letter-spacing:-.05em}h2{margin:0 0 10px;font-size:18px}p{margin:7px 0;color:var(--muted)}button{border:1px solid var(--line);border-radius:999px;background:#fff;padding:11px 16px;font:inherit;font-weight:650;cursor:pointer}button.primary{background:var(--pink);border-color:var(--pink);color:#fff}button:disabled{opacity:.4;cursor:not-allowed}.bar{display:flex;gap:10px;flex-wrap:wrap}.card{margin-top:20px;padding:20px;border:1px solid var(--line);border-radius:22px;background:rgba(255,255,255,.9);box-shadow:0 20px 60px rgba(80,30,58,.06)}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.fact{min-width:0;padding:12px;border-radius:14px;background:var(--wash)}.fact span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}.fact code,.fact strong{display:block;margin-top:4px;overflow-wrap:anywhere}code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}.notice{margin-top:14px;padding:12px;border-radius:13px;background:var(--wash);color:var(--muted)}.notice.error{background:#fff0f3;color:var(--bad)}.notice.success{background:#effaf5;color:var(--good)}.review{display:none}.review.open{display:block}label{display:flex;gap:9px;margin:16px 0;color:var(--muted)}input{margin-top:4px;accent-color:var(--pink)}ol{padding:0;list-style:none;display:grid;gap:8px}li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:14px}.step{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--wash);font-weight:700}.status{font-size:12px;color:var(--muted)}footer{margin-top:16px;color:var(--muted);font-size:12px}@media(max-width:720px){header{display:block}.bar{margin-top:14px}.grid{grid-template-columns:1fr}li{grid-template-columns:28px minmax(0,1fr)}.status{grid-column:2}}</style></head>
-<body><main><header><div><h1>Stock-Paired release</h1><p>Six exact zero-value Mainnet transactions. Your wallet remains the only signer.</p></div><div class="bar"><button id="switch">Switch to Mainnet</button><button id="connect" class="primary">Connect wallet</button></div></header>
+<body><main><header><div><h1>Stock-Paired ${isV2 ? "V2 " : ""}release</h1><p>${plan.transactions.length} exact zero-value Mainnet transactions. Your wallet remains the only signer.</p></div><div class="bar"><button id="switch">Switch to Mainnet</button><button id="connect" class="primary">Connect wallet</button></div></header>
 <section class="card"><h2>Reviewed infrastructure</h2><div class="grid"><div class="fact"><span>Required account</span><code>${plan.deployer}</code></div><div class="fact"><span>Source commitment</span><code>${plan.sourceCommitment}</code></div><div class="fact"><span>Nonce range</span><strong>${plan.startingNonce}–${plan.endingNonce - 1}</strong></div></div><ol id="transactions"></ol><div class="bar"><button id="refresh">Refresh live checks</button><button id="prepare" class="primary" disabled>Review next transaction</button></div><div id="notice" class="notice">Connect the exact deployment account.</div></section>
 <section id="review" class="card review"><h2 id="title">Review transaction</h2><div class="grid"><div class="fact"><span>ETH value</span><strong>0 ETH</strong></div><div class="fact"><span>Nonce</span><strong id="nonce"></strong></div><div class="fact"><span>Target or created address</span><code id="target"></code></div><div class="fact"><span>Calldata hash</span><code id="calldata"></code></div><div class="fact"><span>Gas limit</span><code id="gas"></code></div><div class="fact"><span>Remaining release gas ceiling</span><code id="debit"></code></div></div><label><input id="ack" type="checkbox"><span>I checked the zero ETH value, nonce, address, calldata hash and gas limit.</span></label><button id="send" class="primary" disabled>Open wallet for this transaction</button></section>
 <footer>No private key is read or stored. The server cannot sign. Every wallet request requires this page and your explicit confirmation.</footer></main>
-<script>const config=${configuration};let account=null,busy=false,inspection=null,locked=null;const byId=id=>document.getElementById(id);const el={switch:byId("switch"),connect:byId("connect"),refresh:byId("refresh"),prepare:byId("prepare"),review:byId("review"),title:byId("title"),nonce:byId("nonce"),target:byId("target"),calldata:byId("calldata"),gas:byId("gas"),debit:byId("debit"),ack:byId("ack"),send:byId("send"),notice:byId("notice"),transactions:byId("transactions")};function notice(message,type=""){el.notice.textContent=message;el.notice.className="notice "+type}function provider(){const candidates=window.ethereum?.providers;return Array.isArray(candidates)?candidates.find(item=>item?.isMetaMask)||window.ethereum:window.ethereum}async function wallet(method,params=[]){const injected=provider();if(!injected)throw new Error("No browser wallet was found");return injected.request({method,params})}function buttons(){el.prepare.disabled=busy||!account||inspection?.status!=="ready";el.send.disabled=busy||!locked||!el.ack.checked;el.refresh.disabled=busy||!account;el.connect.disabled=busy;el.switch.disabled=busy}function render(value){inspection=value;el.transactions.innerHTML=config.transactions.map((tx,index)=>{const evidence=value.evidence.transactions[index];const status=evidence.status==="finalized"?"Finalized":index<value.completed?"Confirmed":index===value.completed&&value.status==="ready"?"Next":"Waiting";return '<li><span class="step">'+(index+1)+'</span><span><strong>'+tx.label+'</strong><br><code>'+tx.address+'</code></span><span class="status">'+status+'</span></li>'}).join("");if(value.status==="complete")notice(value.evidence.receiptEvidenceReady?"Infrastructure is finalized on both RPCs.":"All six contracts are confirmed. Waiting for 12-block finality.","success");else if(value.status==="ready")notice(value.completed+" of 6 confirmed. "+value.prepared.label+" is the exact next step.");else notice(value.blockingReason||"The release is blocked by live checks.","error");buttons()}async function ensure(){const chain=await wallet("eth_chainId");if(chain!=="0x1")throw new Error("Switch the wallet to Ethereum Mainnet");const accounts=await wallet("eth_accounts");if(!accounts.length||accounts[0].toLowerCase()!==config.deployer.toLowerCase())throw new Error("Connect the exact reviewed deployment account");account=accounts[0]}async function state(){const response=await fetch("/state",{cache:"no-store"}),body=await response.json();if(!response.ok)throw new Error(body.error||"Live checks failed");return body}async function refresh(){if(busy)return;busy=true;buttons();try{await ensure();locked=null;el.review.classList.remove("open");el.ack.checked=false;render(await state())}catch(error){notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}async function prepare(){if(busy)return;busy=true;buttons();try{await ensure();const value=await state();render(value);if(value.status!=="ready"||!value.prepared)throw new Error("No transaction is ready");locked=value.prepared;el.title.textContent="Review · "+locked.label;el.nonce.textContent=String(Number(BigInt(locked.request.nonce)));el.target.textContent=locked.request.to||locked.address;el.calldata.textContent=locked.calldataHash;el.gas.textContent=String(Number(BigInt(locked.gasLimit)));el.debit.textContent=String(Number(BigInt(locked.requiredBalance)))+" wei";el.review.classList.add("open");notice("Review the exact transaction before opening your wallet.")}catch(error){notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}async function send(){if(busy||!locked||!el.ack.checked)return;busy=true;buttons();const prepared=locked;try{await ensure();const response=await fetch("/revalidate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({preparedDigest:prepared.preparedDigest})}),body=await response.json();if(!response.ok)throw new Error(body.error||"The preparation expired");notice("Review the exact request in your wallet.");const hash=await wallet("eth_sendTransaction",[prepared.request]);const recorded=await fetch("/record",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({index:prepared.index,hash})}),recordBody=await recorded.json();if(!recorded.ok)throw new Error(recordBody.error||"The transaction could not be recorded");locked=null;el.ack.checked=false;el.review.classList.remove("open");notice("Submitted "+hash+". Wait for confirmation, then refresh.","success")}catch(error){notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}el.switch.onclick=()=>wallet("wallet_switchEthereumChain",[{chainId:"0x1"}]).then(refresh).catch(error=>notice(error?.message||String(error),"error"));el.connect.onclick=()=>wallet("eth_requestAccounts").then(accounts=>{account=accounts[0]||null;return refresh()}).catch(error=>notice(error?.message||String(error),"error"));el.refresh.onclick=refresh;el.prepare.onclick=prepare;el.ack.onchange=buttons;el.send.onclick=send;buttons();</script></body></html>`;
+<script>const config=${configuration};let account=null,busy=false,inspection=null,locked=null;const byId=id=>document.getElementById(id);const el={switch:byId("switch"),connect:byId("connect"),refresh:byId("refresh"),prepare:byId("prepare"),review:byId("review"),title:byId("title"),nonce:byId("nonce"),target:byId("target"),calldata:byId("calldata"),gas:byId("gas"),debit:byId("debit"),ack:byId("ack"),send:byId("send"),notice:byId("notice"),transactions:byId("transactions")};function notice(message,type=""){el.notice.textContent=message;el.notice.className="notice "+type}function provider(){const candidates=window.ethereum?.providers;return Array.isArray(candidates)?candidates.find(item=>item?.isMetaMask)||window.ethereum:window.ethereum}async function wallet(method,params=[]){const injected=provider();if(!injected)throw new Error("No browser wallet was found");return injected.request({method,params})}function buttons(){el.prepare.disabled=busy||!account||inspection?.status!=="ready";el.send.disabled=busy||!locked||!el.ack.checked;el.refresh.disabled=busy||!account;el.connect.disabled=busy;el.switch.disabled=busy}function render(value){inspection=value;el.transactions.innerHTML=config.transactions.map((tx,index)=>{const evidence=value.evidence.transactions[index];const status=evidence.status==="finalized"?"Finalized":index<value.completed?"Confirmed":index===value.completed&&value.status==="ready"?"Next":"Waiting";return '<li><span class="step">'+(index+1)+'</span><span><strong>'+tx.label+'</strong><br><code>'+tx.address+'</code></span><span class="status">'+status+'</span></li>'}).join("");if(value.status==="complete")notice(value.evidence.receiptEvidenceReady?"Infrastructure is finalized on both RPCs.":"All "+config.transactions.length+" contracts are confirmed. Waiting for 12-block finality.","success");else if(value.status==="ready")notice(value.completed+" of "+config.transactions.length+" confirmed. "+value.prepared.label+" is the exact next step.");else notice(value.blockingReason||"The release is blocked by live checks.","error");buttons()}async function ensure(){const chain=await wallet("eth_chainId");if(chain!=="0x1")throw new Error("Switch the wallet to Ethereum Mainnet");const accounts=await wallet("eth_accounts");if(!accounts.length||accounts[0].toLowerCase()!==config.deployer.toLowerCase())throw new Error("Connect the exact reviewed deployment account");account=accounts[0]}async function state(){const response=await fetch("/state",{cache:"no-store"}),body=await response.json();if(!response.ok)throw new Error(body.error||"Live checks failed");return body}async function refresh(){if(busy)return;busy=true;buttons();try{await ensure();locked=null;el.review.classList.remove("open");el.ack.checked=false;render(await state())}catch(error){notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}async function prepare(){if(busy)return;busy=true;buttons();try{await ensure();const value=await state();render(value);if(value.status!=="ready"||!value.prepared)throw new Error("No transaction is ready");locked=value.prepared;el.title.textContent="Review · "+locked.label;el.nonce.textContent=String(Number(BigInt(locked.request.nonce)));el.target.textContent=locked.request.to||locked.address;el.calldata.textContent=locked.calldataHash;el.gas.textContent=String(Number(BigInt(locked.gasLimit)));el.debit.textContent=String(Number(BigInt(locked.requiredBalance)))+" wei";el.review.classList.add("open");notice("Review the exact transaction before opening your wallet.")}catch(error){notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}async function send(){if(busy||!locked||!el.ack.checked)return;busy=true;buttons();let prepared=locked;try{await ensure();const reviewed={planDigest:config.planDigest,index:prepared.index,field:prepared.field,address:prepared.address,calldataHash:prepared.calldataHash,nonce:prepared.request.nonce,value:prepared.request.value};const response=await fetch("/revalidate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({reviewed})}),body=await response.json();if(!response.ok)throw new Error(body.error||"The preparation expired");prepared=body.prepared;notice("Review the exact request in your wallet.");const hash=await wallet("eth_sendTransaction",[prepared.request]);const recorded=await fetch("/record",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({index:prepared.index,hash})}),recordBody=await recorded.json();if(!recorded.ok)throw new Error(recordBody.error||"The transaction could not be recorded");locked=null;el.ack.checked=false;el.review.classList.remove("open");notice("Submitted "+hash+". Wait for confirmation, then refresh.","success")}catch(error){notice(error?.message||String(error),"error")}finally{busy=false;buttons()}}el.switch.onclick=()=>wallet("wallet_switchEthereumChain",[{chainId:"0x1"}]).then(refresh).catch(error=>notice(error?.message||String(error),"error"));el.connect.onclick=()=>wallet("eth_requestAccounts").then(accounts=>{account=accounts[0]||null;return refresh()}).catch(error=>notice(error?.message||String(error),"error"));el.refresh.onclick=refresh;el.prepare.onclick=prepare;el.ack.onchange=buttons;el.send.onclick=send;buttons();</script></body></html>`;
 }
 
 async function main() {
   const endpoints = configuredRpcEndpoints();
   if (interactive) {
-    assertStockPairedReleaseCheckout(repositoryRoot, releaseCommit);
+    releaseCheckoutAssertion(repositoryRoot, releaseCommit);
   }
-  const plan = await loadStockPairedReleasePlan(repositoryRoot, {
+  const plan = await releasePlanLoader(repositoryRoot, {
     releaseCommit,
   });
   const firstInspection = await inspect(plan, endpoints);
@@ -633,15 +701,16 @@ async function main() {
       try {
         const body = await readBody(request);
         const current = await inspect(plan, endpoints);
-        if (
-          current.status !== "ready" ||
-          !current.prepared ||
-          body.preparedDigest !== current.prepared.preparedDigest
-        ) {
+        if (current.status !== "ready" || !current.prepared) {
           throw new Error("The reviewed preparation expired");
         }
+        const prepared = assertStockPairedPreparedRefresh(
+          plan,
+          body.reviewed,
+          current.prepared,
+        );
         sendJson(response, 200, {
-          preparedDigest: current.prepared.preparedDigest,
+          prepared,
         });
       } catch (error) {
         sendJson(response, 409, {

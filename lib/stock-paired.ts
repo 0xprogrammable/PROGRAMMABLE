@@ -1,8 +1,12 @@
 import {
+  encodeAbiParameters,
   encodeFunctionData,
   getAddress,
   isAddress,
+  isHex,
+  keccak256,
   parseAbi,
+  parseAbiParameters,
   parseUnits,
   type Address,
   type Hex,
@@ -13,6 +17,15 @@ import {
   validateRewardConfiguration,
   type ClassicV3RewardConfiguration,
 } from "./classic-v3";
+import type { VerifiedStockPairedRelease } from "./stock-paired-release";
+import {
+  STOCK_PAIRED_V2_QUOTE_ASSETS,
+  type StockPairedV2QuoteAsset,
+} from "./stock-paired-v2";
+import {
+  STOCK_PAIRED_V3_QUOTE_ASSETS,
+  type StockPairedV3QuoteAsset,
+} from "./stock-paired-v3";
 import {
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_WEI,
@@ -34,6 +47,44 @@ export const STOCK_PAIRED_DEFAULT_INITIAL_BUY_ETH = "0.01";
 export const STOCK_PAIRED_TOTAL_SWAP_FEE_BPS = 100;
 export const STOCK_PAIRED_CREATOR_FEE_BPS = 90;
 export const STOCK_PAIRED_PROGRAMMABLE_FEE_BPS = 10;
+export const STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS = 256;
+
+const stockPairedCurrency0SaltParameters = parseAbiParameters(
+  "string domain, bytes32 baseSalt, uint256 attempt",
+);
+const STOCK_PAIRED_CURRENCY0_SALT_DOMAIN =
+  "programmable.stock-paired.currency0.v1";
+
+export function isStockPairedLaunchedTokenCurrency0(
+  launchedToken: Address,
+  quoteAsset: Address,
+) {
+  return BigInt(launchedToken) < BigInt(quoteAsset);
+}
+
+export function deriveStockPairedCurrency0Salt(
+  baseSalt: Hex,
+  attempt: number,
+) {
+  if (
+    !isHex(baseSalt, { strict: true }) ||
+    baseSalt.length !== 66 ||
+    !Number.isSafeInteger(attempt) ||
+    attempt < 0 ||
+    attempt >= STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS
+  ) {
+    throw new LaunchInputError(
+      "The Stock-Paired launch identifier is invalid",
+    );
+  }
+  return keccak256(
+    encodeAbiParameters(stockPairedCurrency0SaltParameters, [
+      STOCK_PAIRED_CURRENCY0_SALT_DOMAIN,
+      baseSalt,
+      BigInt(attempt),
+    ]),
+  );
+}
 
 export type StockQuoteAsset = {
   symbol: string;
@@ -106,10 +157,55 @@ const STOCK_PAIRED_ETH_QUOTE_SYMBOLS = new Set([
   "AAPLon",
 ]);
 export const STOCK_PAIRED_ETH_QUOTE_ASSETS = Object.freeze(
+  STOCK_PAIRED_V3_QUOTE_ASSETS,
+);
+const STOCK_PAIRED_V1_ETH_QUOTE_ASSETS = Object.freeze(
   STOCK_QUOTE_ASSETS.filter((asset) =>
     STOCK_PAIRED_ETH_QUOTE_SYMBOLS.has(asset.symbol),
   ),
 );
+
+export type AnyStockPairedQuoteAsset =
+  | StockQuoteAsset
+  | StockPairedV2QuoteAsset
+  | StockPairedV3QuoteAsset;
+
+export function getStockPairedQuoteAssetsForRelease(
+  release: Pick<VerifiedStockPairedRelease, "internalContractRelease">,
+): readonly AnyStockPairedQuoteAsset[] {
+  if (release.internalContractRelease === "stock-paired-v3") {
+    return STOCK_PAIRED_V3_QUOTE_ASSETS;
+  }
+  if (release.internalContractRelease === "stock-paired-v2") {
+    return STOCK_PAIRED_V2_QUOTE_ASSETS;
+  }
+  return STOCK_QUOTE_ASSETS;
+}
+
+export function getStockPairedEthQuoteAssetsForRelease(
+  release: Pick<VerifiedStockPairedRelease, "internalContractRelease">,
+): readonly AnyStockPairedQuoteAsset[] {
+  if (release.internalContractRelease === "stock-paired-v3") {
+    return STOCK_PAIRED_V3_QUOTE_ASSETS;
+  }
+  if (release.internalContractRelease === "stock-paired-v2") {
+    return STOCK_PAIRED_V2_QUOTE_ASSETS;
+  }
+  return STOCK_PAIRED_V1_ETH_QUOTE_ASSETS;
+}
+
+export function getStockPairedQuoteAssetForRelease(
+  release: Pick<VerifiedStockPairedRelease, "internalContractRelease">,
+  value: string,
+) {
+  if (!isAddress(value.trim())) return null;
+  const address = getAddress(value.trim());
+  return (
+    getStockPairedQuoteAssetsForRelease(release).find(
+      (asset) => asset.address.toLowerCase() === address.toLowerCase(),
+    ) ?? null
+  );
+}
 
 export function getStockQuoteAsset(value: string) {
   if (!isAddress(value.trim())) return null;
@@ -122,10 +218,13 @@ export function getStockQuoteAsset(value: string) {
 }
 
 export function getStockPairedEthQuoteAsset(value: string) {
-  const asset = getStockQuoteAsset(value);
-  return asset && STOCK_PAIRED_ETH_QUOTE_SYMBOLS.has(asset.symbol)
-    ? asset
-    : null;
+  if (!isAddress(value.trim())) return null;
+  const address = getAddress(value.trim());
+  return (
+    STOCK_PAIRED_ETH_QUOTE_ASSETS.find(
+      (asset) => asset.address.toLowerCase() === address.toLowerCase(),
+    ) ?? null
+  );
 }
 
 export function parseStockInitialBuyEthAmount(value: string) {
@@ -146,7 +245,7 @@ export function parseStockInitialBuyEthAmount(value: string) {
 }
 
 export type StockPairedLaunchConfiguration = {
-  quoteAsset: StockQuoteAsset;
+  quoteAsset: AnyStockPairedQuoteAsset;
   initialBuyEthAmount: bigint;
   rewards: ClassicV3RewardConfiguration;
   totalSwapFeeBps: typeof STOCK_PAIRED_TOTAL_SWAP_FEE_BPS;
@@ -249,6 +348,7 @@ export const stockQuoteRegistryAbi = parseAbi([
 ]);
 
 export const stockFeeSplitVaultAbi = parseAbi([
+  "event BeneficiaryFeesClaimed(address indexed beneficiary,address indexed payoutAddress,address indexed quoteAsset,uint256 amount,uint256 beneficiaryTotalClaimed,uint256 vaultTotalReceived)",
   "function feeHook() view returns (address)",
   "function poolId() view returns (bytes32)",
   "function quoteAsset() view returns (address)",

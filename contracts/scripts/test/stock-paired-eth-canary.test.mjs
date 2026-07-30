@@ -65,6 +65,20 @@ test("builds a deterministic ETH-first launch without a stock approval", () => {
   ]);
 });
 
+test("allows an explicit short canary identity without changing the default", () => {
+  const identity = buildStockPairedEthCanaryIdentity({
+    releaseCommit,
+    name: "Test",
+    symbol: "TEST",
+  });
+  assert.equal(identity.name, "Test");
+  assert.equal(identity.symbol, "TEST");
+  assert.notEqual(
+    identity.creatorSalt,
+    buildStockPairedEthCanaryIdentity({ releaseCommit }).creatorSalt,
+  );
+});
+
 test("uses exact WETH USDC stock paths in both directions", () => {
   const buy = stockPairedEthCanaryV3Path("buy").toLowerCase();
   const sell = stockPairedEthCanaryV3Path("sell").toLowerCase();

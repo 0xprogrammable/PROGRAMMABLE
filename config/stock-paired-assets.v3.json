@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 3,
+  "chainId": 1,
+  "network": "ethereum-mainnet",
+  "issuer": "Ondo Global Markets",
+  "model": "stock-paired",
+  "internalContractRelease": "stock-paired-v3",
+  "priceCalibration": {
+    "method": "pinned-pool-midpoint-with-independent-underlying-cross-check",
+    "blockNumber": 25642460,
+    "blockHash": "0xefb6c45e3523ffc588d4c498cd6fd5ab528371f293eebc70375857a53fe12718",
+    "blockTimestamp": 1785375887,
+    "maximumInitialFdvDeviationBps": 500,
+    "maximumReferenceDriftBps": 300,
+    "maximumTickRoundingDeviationBps": 100,
+    "maximumActivationEvidenceAgeSeconds": 900,
+    "oracleClaim": false
+  },
+  "launchPolicy": {
+    "targetInitialFdvEth": "1.355657760817103798",
+    "tickSpacing": 200,
+    "minimumInitialBuyQuoteAmount": "10000000000000000",
+    "minimumInitialBuyEthWei": "600000000000000",
+    "totalSwapFeeBps": 100,
+    "creatorFeeBps": 90,
+    "launcherFeeBps": 10,
+    "transferTaxBps": 0,
+    "lpFeePips": 0,
+    "disclosure": "Starts near Classic's 1.355657760817103798 ETH initial FDV. The exact USD value moves with ETH and the selected quote asset."
+  },
+  "assets": [
+    {
+      "symbol": "NVDAon",
+      "name": "NVIDIA (Ondo Tokenized)",
+      "displayName": "NVIDIA",
+      "underlying": "NVIDIA",
+      "address": "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/nvdaon",
+      "logoUrl": "https://cdn.ondo.finance/tokens/logos/nvdaon_160x160.png",
+      "initialAbsoluteTick": 181200,
+      "targetQuoteAmountWad": "13522423984475316997",
+      "route": {
+        "stockPoolFee": 10000,
+        "pool": "0xf5294094bce435bfbd0ec488be5c462aaf32bc7a",
+        "poolRuntimeCodeHash": "0x0c488df5bd90182f1e19b3c300eab4f99ab3c68d756250fd22589441b7c67e06"
+      }
+    },
+    {
+      "symbol": "SPYon",
+      "name": "SPDR S&P 500 ETF (Ondo Tokenized)",
+      "displayName": "S&P 500",
+      "underlying": "SPDR S&P 500 ETF",
+      "address": "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/spyon",
+      "logoUrl": "https://cdn.ondo.finance/tokens/logos/spyon_160x160.png",
+      "initialAbsoluteTick": 194600,
+      "targetQuoteAmountWad": "3514038942016415531",
+      "route": {
+        "stockPoolFee": 3000,
+        "pool": "0x5638bbde046ec2efc7c8f3fd8dc5a9a1016f7eeb",
+        "poolRuntimeCodeHash": "0x9ce9b74c4e3e51f9bcf2ad9d28f09df179f96f7d17e423aa9207a69dc1558252"
+      }
+    },
+    {
+      "symbol": "GOOGLon",
+      "name": "Alphabet Class A (Ondo Tokenized)",
+      "displayName": "Alphabet",
+      "underlying": "Alphabet Class A",
+      "address": "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/googlon",
+      "logoUrl": "https://cdn.ondo.finance/tokens/logos/googlon_160x160.png",
+      "initialAbsoluteTick": 186800,
+      "targetQuoteAmountWad": "7757914703760533694",
+      "route": {
+        "stockPoolFee": 10000,
+        "pool": "0x39fcb1935f6ccb0a106d05eb928205c59646af57",
+        "poolRuntimeCodeHash": "0x1d93fa3dcce7502a231f47d3c9fcf22545d604735365a13d2b5823abd5ec85ee"
+      }
+    },
+    {
+      "symbol": "SLVon",
+      "name": "iShares Silver Trust (Ondo Tokenized)",
+      "displayName": "Silver",
+      "underlying": "iShares Silver Trust",
+      "address": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/slvon",
+      "logoUrl": "https://cdn.ondo.finance/tokens/logos/slvon_160x160.png",
+      "initialAbsoluteTick": 168200,
+      "targetQuoteAmountWad": "49504169414249928797",
+      "route": {
+        "stockPoolFee": 10000,
+        "pool": "0xeeb8f880ead7281a301ef2e6791a6bbe790603ed",
+        "poolRuntimeCodeHash": "0x78981bb1657e3a587ec8a74460e263f638f051511c62431b090277d38698ea79"
+      }
+    },
+    {
+      "symbol": "TSLAon",
+      "name": "Tesla (Ondo Tokenized)",
+      "displayName": "Tesla",
+      "underlying": "Tesla",
+      "address": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/tslaon",
+      "logoUrl": "https://cdn.ondo.finance/tokens/logos/tslaon_160x160.png",
+      "initialAbsoluteTick": 185600,
+      "targetQuoteAmountWad": "8768084165474772643",
+      "route": {
+        "stockPoolFee": 10000,
+        "pool": "0x31227b50eccdc9c589826aa2d9e7c5619b1895da",
+        "poolRuntimeCodeHash": "0x8924e50b838c5e1ee3ec68c18a41e29c4d1403a03384f900c5659184e00d03d9"
+      }
+    },
+    {
+      "symbol": "AAPLon",
+      "name": "Apple (Ondo Tokenized)",
+      "displayName": "Apple",
+      "underlying": "Apple",
+      "address": "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c",
+      "ondoAssetUrl": "https://app.ondo.finance/assets/aaplon",
+      "logoUrl": "https://cdn.ondo.finance/tokens/logos/aaplon_160x160.png",
+      "initialAbsoluteTick": 187000,
+      "targetQuoteAmountWad": "7599929078251473378",
+      "route": {
+        "stockPoolFee": 10000,
+        "pool": "0xad82c9eb065a5cfed71db087e4a52c8a09c69921",
+        "poolRuntimeCodeHash": "0x1ef0d1ec03b74d0240a743a2ac44941fad4401a3600a219afdc25f6b3d816b2a"
+      }
+    }
+  ],
+  "excludedCandidates": [
+    {
+      "symbol": "QQQon",
+      "reason": "No approved Stock-Paired V3 start tick or ETH launch route"
+    }
+  ]
+}

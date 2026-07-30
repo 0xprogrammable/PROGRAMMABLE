@@ -5,17 +5,17 @@ import {
   parseExploreSort,
   readExploreModel,
 } from "../../../lib/onchain";
-import { enrichExplorePageWithOfficialV4Subgraph } from "../../../lib/onchain/uniswap-v4-subgraph";
+import {
+  enrichExplorePageWithOfficialV4Subgraph,
+  OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS,
+} from "../../../lib/onchain/uniswap-v4-subgraph";
+import type { ExplorePage } from "../../../lib/onchain/types";
+import type { LauncherToken } from "../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const EXPLORE_QUERY_PARAMETERS = new Set([
-  "limit",
-  "page",
-  "q",
-  "sort",
-]);
+const EXPLORE_QUERY_PARAMETERS = new Set(["limit", "page", "q", "sort"]);
 
 function hasCanonicalQueryShape(search: URLSearchParams) {
   const seen = new Set<string>();
@@ -34,6 +34,15 @@ function integerQuery(value: string | null, fallback: number) {
   return Number.isSafeInteger(parsed) ? parsed : fallback;
 }
 
+function tokenIdentity(token: LauncherToken) {
+  return [
+    token.id,
+    token.tokenAddress.toLowerCase(),
+    token.hookAddress.toLowerCase(),
+    token.poolId.toLowerCase(),
+  ].join(":");
+}
+
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
   if (!hasCanonicalQueryShape(search)) {
@@ -45,21 +54,54 @@ export async function GET(request: NextRequest) {
 
   try {
     const model = await readExploreModel();
-    const response =
-      await enrichExplorePageWithOfficialV4Subgraph(
-        paginateExplore(model, {
-          query: search.get("q") ?? "",
-          sort: parseExploreSort(search.get("sort")),
-          page: integerQuery(search.get("page"), 1),
-          pageSize: integerQuery(search.get("limit"), 6),
-        }),
+    const options = {
+      query: search.get("q") ?? "",
+      sort: parseExploreSort(search.get("sort")),
+      page: integerQuery(search.get("page"), 1),
+      pageSize: integerQuery(search.get("limit"), 6),
+    } as const;
+    const completeCandidate = paginateExplore(model, {
+      ...options,
+      page: 1,
+      pageSize: OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS,
+    });
+
+    let response: ExplorePage;
+    if (
+      completeCandidate.total <=
+      OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS
+    ) {
+      const enrichedCandidate =
+        await enrichExplorePageWithOfficialV4Subgraph(
+          completeCandidate,
+        );
+      const enrichedByIdentity = new Map(
+        enrichedCandidate.tokens.map((token) => [
+          tokenIdentity(token),
+          token,
+        ]),
       );
+      response = paginateExplore(
+        {
+          ...model,
+          tokens: model.tokens.map(
+            (token) =>
+              enrichedByIdentity.get(tokenIdentity(token)) ?? token,
+          ),
+        },
+        options,
+      );
+    } else {
+      response = await enrichExplorePageWithOfficialV4Subgraph(
+        paginateExplore(model, options),
+      );
+    }
 
     return NextResponse.json(response, {
       headers: {
         "Cache-Control":
           response.status === "ready"
-            ? "public, max-age=0, s-maxage=15, stale-while-revalidate=30"
+            ? "public, max-age=0, s-maxage=10, stale-while-revalidate=10"
             : "public, max-age=0, s-maxage=60",
       },
     });

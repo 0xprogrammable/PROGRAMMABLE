@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 import { createStockPairedDraft } from "../lib/launch";
 import { buildPlanHash } from "../lib/launch-transaction";
 import {
+  deriveStockPairedCurrency0Salt,
   encodeStockPairedEthLaunch,
+  isStockPairedLaunchedTokenCurrency0,
+  STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS,
   STOCK_PAIRED_ETH_QUOTE_ASSETS,
   STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI,
   STOCK_QUOTE_ASSETS,
@@ -36,7 +39,37 @@ function draft() {
 }
 
 describe("Stock-Paired launch preparation", () => {
-  it("uses the exact seven-asset registry and immutable 1% split", () => {
+  it("derives bounded deterministic salts and identifies canonical currency0 ordering", () => {
+    const first = deriveStockPairedCurrency0Salt(salt, 0);
+    const second = deriveStockPairedCurrency0Salt(salt, 1);
+
+    expect(first).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(first).not.toBe(second);
+    expect(deriveStockPairedCurrency0Salt(salt, 0)).toBe(first);
+    expect(deriveStockPairedCurrency0Salt(salt, 10)).toBe(
+      "0xb9b89e2d571d77231f42538fd14ae242941f6d11e1aeb6c145456a8ac827c79a",
+    );
+    expect(
+      isStockPairedLaunchedTokenCurrency0(
+        "0x1000000000000000000000000000000000000000",
+        "0x2000000000000000000000000000000000000000",
+      ),
+    ).toBe(true);
+    expect(
+      isStockPairedLaunchedTokenCurrency0(
+        "0x3000000000000000000000000000000000000000",
+        "0x2000000000000000000000000000000000000000",
+      ),
+    ).toBe(false);
+    expect(() =>
+      deriveStockPairedCurrency0Salt(
+        salt,
+        STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS,
+      ),
+    ).toThrow(/identifier/);
+  });
+
+  it("keeps V1 history and prepares V3 launches from six reviewed routes", () => {
     expect(STOCK_QUOTE_ASSETS).toHaveLength(7);
     expect(new Set(STOCK_QUOTE_ASSETS.map((asset) => asset.address)).size).toBe(
       7,
@@ -55,6 +88,15 @@ describe("Stock-Paired launch preparation", () => {
         sharesBps: [10_000],
       },
     });
+    expect(
+      validateStockPairedLaunchDraft(
+        {
+          ...draft(),
+          stockQuoteAsset: STOCK_PAIRED_ETH_QUOTE_ASSETS[5].address,
+        },
+        STOCK_TEST_ACCOUNT,
+      ).quoteAsset,
+    ).toBe(STOCK_PAIRED_ETH_QUOTE_ASSETS[5]);
   });
 
   it("encodes one atomic ETH launch with canonical metadata and quote asset", () => {

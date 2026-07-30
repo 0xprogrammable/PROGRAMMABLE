@@ -23,6 +23,10 @@ import mainnetDeployments from "@/contracts/dependencies/ethereum-mainnet.json";
 import sepoliaDeployments from "@/contracts/dependencies/ethereum-sepolia.json";
 import { isClassicDeploymentReady } from "@/lib/launch-deployment";
 import {
+  classicCtoAuthorityAbi,
+  classicInitialBuyVestingWalletFactoryAbi,
+  classicLaunchPolicyAbi,
+  classicRewardVaultFactoryAbi,
   classicV3HookAbi,
   classicV3HookFactoryAbi,
   classicV3LaunchAbi,
@@ -59,6 +63,11 @@ import {
   ethCreatorFeeHookAbi,
   ethCreatorFeeHookFactoryAbi,
   LaunchInputError,
+  MAX_METADATA_URL_BYTES,
+  MAX_SOCIAL_EXTRA_DATA_BYTES,
+  MAX_TOKEN_DESCRIPTION_BYTES,
+  MAX_TOKEN_NAME_BYTES,
+  MAX_TOKEN_SYMBOL_BYTES,
   lockedPositionFeeForwarderFactoryAbi,
   memeLaunchAbi,
   type LaunchPreflightCheck,
@@ -75,15 +84,18 @@ import {
   type LaunchDraft,
 } from "@/lib/launch";
 import {
+  deriveStockPairedCurrency0Salt,
   encodeStockPairedEthLaunch,
+  getStockPairedEthQuoteAssetsForRelease,
+  getStockPairedQuoteAssetsForRelease,
+  isStockPairedLaunchedTokenCurrency0,
   stockPairedEthLaunchCoordinatorAbi,
   stockPairedHookAbi,
   stockPairedHookFactoryAbi,
   stockPairedLaunchAbi,
   stockQuoteRegistryAbi,
-  STOCK_QUOTE_ASSETS,
-  STOCK_PAIRED_ETH_QUOTE_ASSETS,
   STOCK_PAIRED_CREATOR_FEE_BPS,
+  STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS,
   STOCK_PAIRED_MIN_INITIAL_BUY,
   STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
   STOCK_PAIRED_PROGRAMMABLE_FEE_BPS,
@@ -98,13 +110,10 @@ import {
   stockPairedV3QuoterAbi,
 } from "@/lib/trade/stock-paired-route";
 import {
-  getConfiguredStockPairedRelease,
+  getConfiguredStockPairedLaunchRelease,
   type VerifiedStockPairedRelease,
 } from "@/lib/stock-paired-release";
-import {
-  isStockPairedDevAccount,
-  isStockPairedLocalPreviewEnabled,
-} from "@/lib/stock-paired-access";
+import { isStockPairedPublicLaunchEnabled } from "@/lib/stock-paired-access";
 import {
   resolveImplementedLaunchModel,
   resolveReservedLaunchModel,
@@ -118,6 +127,7 @@ export const runtime = "nodejs";
 const MAX_REQUEST_BYTES = 50_000;
 const REQUIRED_FEE_HOOK_FLAGS = 8_396n;
 const HOOK_FLAG_MASK = (1n << 14n) - 1n;
+const STOCK_PAIRED_CURRENCY0_SEARCH_BATCH_SIZE = 64;
 
 const launchEnvironment =
   process.env.PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -131,6 +141,15 @@ const selectedManifest = appDeployments[launchEnvironment] as ReleaseDeployment;
 const selectedClassicV3Release =
   getConfiguredClassicV3Release(launchEnvironment).releaseManifest;
 const selectedDeepV3Release = getConfiguredDeepV3Release(launchEnvironment);
+const selectedStockPairedRelease =
+  launchEnvironment === "production"
+    ? getConfiguredStockPairedLaunchRelease()
+    : null;
+const stockPairedPublicLaunchEnabled =
+  isStockPairedPublicLaunchEnabled(
+    launchEnvironment,
+    selectedStockPairedRelease,
+  );
 
 const client = createPublicClient({
   chain: launchChain,
@@ -254,6 +273,9 @@ const officialTokenFactory = getAddress(
   selectedDeployments.contracts.uerc20Factory.address,
 );
 const platformTreasury = getAddress(deploymentInputs.platform.treasury);
+const classicCtoAuthorityAccount = getAddress(
+  "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+);
 
 type ReleaseDeployment = {
   chainId: number;
@@ -262,6 +284,10 @@ type ReleaseDeployment = {
     "not-deployed" | "ready" | "requires-redeploy" | "lifecycle-pending";
   adaptiveLaunchStatus: "not-deployed" | "ready" | "requires-redeploy";
   classicV3Status?: "not-deployed" | "ready" | "requires-redeploy";
+  classicCtoAuthorityV1?: string | null;
+  classicRewardVaultFactoryV1?: string | null;
+  classicInitialBuyVestingWalletFactoryV1?: string | null;
+  classicLaunchPolicyV1?: string | null;
   ethCreatorFeeHookFactory: string | null;
   ethCreatorFeeHook: string | null;
   memeLaunch: string | null;
@@ -269,7 +295,6 @@ type ReleaseDeployment = {
   adaptiveCurveLaunch: string | null;
   ethCreatorFeeHookFactoryV3?: string | null;
   ethCreatorFeeHookV3?: string | null;
-  feeSplitVaultFactoryV1?: string | null;
   memeLaunchV2?: string | null;
   lockedPositionFeeForwarderFactory: string | null;
   runtimeCodeHashes: {
@@ -278,9 +303,12 @@ type ReleaseDeployment = {
     memeLaunch: string | null;
     adaptiveCurveFeeHookFactory: string | null;
     adaptiveCurveLaunch: string | null;
+    classicCtoAuthorityV1?: string | null;
+    classicRewardVaultFactoryV1?: string | null;
+    classicInitialBuyVestingWalletFactoryV1?: string | null;
+    classicLaunchPolicyV1?: string | null;
     ethCreatorFeeHookFactoryV3?: string | null;
     ethCreatorFeeHookV3?: string | null;
-    feeSplitVaultFactoryV1?: string | null;
     memeLaunchV2?: string | null;
     lockedPositionFeeForwarderFactory: string | null;
   };
@@ -337,6 +365,8 @@ function parseDraft(input: unknown): LaunchDraft {
     "buySwapFeePercent",
     "sellSwapFeePercent",
     "rewardExternalAddress",
+    "initialBuyDurationDays",
+    "initialBuyCliffDays",
     "updatedAt",
   ] as const;
 
@@ -381,8 +411,16 @@ function parseDraft(input: unknown): LaunchDraft {
   ) {
     draft.rewardDestinationMode = raw.rewardDestinationMode;
   }
+  if (
+    raw.initialBuyCustodyMode === "unlocked" ||
+    raw.initialBuyCustodyMode === "fixed-lock" ||
+    raw.initialBuyCustodyMode === "linear" ||
+    raw.initialBuyCustodyMode === "cliff-linear"
+  ) {
+    draft.initialBuyCustodyMode = raw.initialBuyCustodyMode;
+  }
   if (Array.isArray(raw.rewardSplits)) {
-    draft.rewardSplits = raw.rewardSplits.slice(0, 8).map((value) => {
+    draft.rewardSplits = raw.rewardSplits.slice(0, 5).map((value) => {
       if (!value || typeof value !== "object" || Array.isArray(value)) {
         throw new LaunchInputError("The reward split is invalid");
       }
@@ -693,7 +731,7 @@ async function prepareMemeLaunch(
   const totalSwapFeeBps = validateMemeLaunchDraft(draft);
   const initialBuyWei = parseInitialBuyWei(draft.initialBuyEth);
   if (initialBuyWei === null) {
-    throw new LaunchInputError("Enter a valid Dev Buy");
+    throw new LaunchInputError("Enter a valid Initial Buy");
   }
   validateLaunchSalt(draft.launchSalt);
 
@@ -855,11 +893,17 @@ async function assertClassicV3Infrastructure(
   hook: Address,
   hookFactory: Address,
   vaultFactory: Address,
+  ctoAuthority: Address,
+  initialBuyVestingWalletFactory: Address,
+  launchPolicy: Address,
   positionForwarderFactory: Address,
   codeHashes: {
+    classicCtoAuthorityV1: Hex;
+    classicRewardVaultFactoryV1: Hex;
+    classicInitialBuyVestingWalletFactoryV1: Hex;
+    classicLaunchPolicyV1: Hex;
     ethCreatorFeeHookFactoryV3: Hex;
     ethCreatorFeeHookV3: Hex;
-    feeSplitVaultFactoryV1: Hex;
     memeLaunchV2: Hex;
     lockedPositionFeeForwarderFactory: Hex;
   },
@@ -888,8 +932,23 @@ async function assertClassicV3Infrastructure(
     assertRuntimeCodeHash(hook, codeHashes.ethCreatorFeeHookV3, "Classic hook"),
     assertRuntimeCodeHash(
       vaultFactory,
-      codeHashes.feeSplitVaultFactoryV1,
+      codeHashes.classicRewardVaultFactoryV1,
       "Classic reward factory",
+    ),
+    assertRuntimeCodeHash(
+      ctoAuthority,
+      codeHashes.classicCtoAuthorityV1,
+      "Classic CTO authority",
+    ),
+    assertRuntimeCodeHash(
+      initialBuyVestingWalletFactory,
+      codeHashes.classicInitialBuyVestingWalletFactoryV1,
+      "Classic Initial Buy custody factory",
+    ),
+    assertRuntimeCodeHash(
+      launchPolicy,
+      codeHashes.classicLaunchPolicyV1,
+      "Classic launch policy",
     ),
     assertRuntimeCodeHash(
       positionForwarderFactory,
@@ -947,7 +1006,7 @@ async function assertClassicV3Infrastructure(
     client.readContract({
       address: launcher,
       abi: classicV3LaunchAbi,
-      functionName: "feeSplitVaultFactory",
+      functionName: "rewardVaultFactory",
     }),
     client.readContract({
       address: launcher,
@@ -1021,6 +1080,99 @@ async function assertClassicV3Infrastructure(
       functionName: "positionManager",
     }),
   ]);
+  const [
+    configuredInitialBuyVestingWalletFactory,
+    configuredLaunchPolicy,
+    configuredCtoAuthority,
+    configuredCtoAuthorityAccount,
+    minimumCustodyDurationDays,
+    maximumCustodyDurationDays,
+    maximumTokenNameBytes,
+    maximumTokenSymbolBytes,
+    maximumTokenDescriptionBytes,
+    maximumMetadataUrlBytes,
+    maximumSocialExtraDataBytes,
+    maximumPolicyRewardBeneficiaries,
+    policyRewardShareBasisPoints,
+    maximumLauncherRewardBeneficiaries,
+    launcherRewardShareBasisPoints,
+  ] = await Promise.all([
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "initialBuyVestingWalletFactory",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "launchPolicy",
+    }),
+    client.readContract({
+      address: vaultFactory,
+      abi: classicRewardVaultFactoryAbi,
+      functionName: "ctoAuthority",
+    }),
+    client.readContract({
+      address: ctoAuthority,
+      abi: classicCtoAuthorityAbi,
+      functionName: "authority",
+    }),
+    client.readContract({
+      address: initialBuyVestingWalletFactory,
+      abi: classicInitialBuyVestingWalletFactoryAbi,
+      functionName: "MIN_DURATION_DAYS",
+    }),
+    client.readContract({
+      address: initialBuyVestingWalletFactory,
+      abi: classicInitialBuyVestingWalletFactoryAbi,
+      functionName: "MAX_DURATION_DAYS",
+    }),
+    client.readContract({
+      address: launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_TOKEN_NAME_BYTES",
+    }),
+    client.readContract({
+      address: launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_TOKEN_SYMBOL_BYTES",
+    }),
+    client.readContract({
+      address: launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_TOKEN_DESCRIPTION_BYTES",
+    }),
+    client.readContract({
+      address: launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_METADATA_URL_BYTES",
+    }),
+    client.readContract({
+      address: launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_SOCIAL_EXTRA_DATA_BYTES",
+    }),
+    client.readContract({
+      address: launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_REWARD_BENEFICIARIES",
+    }),
+    client.readContract({
+      address: launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "REWARD_SHARE_BASIS_POINTS",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "MAX_REWARD_BENEFICIARIES",
+    }),
+    client.readContract({
+      address: launcher,
+      abi: classicV3LaunchAbi,
+      functionName: "REWARD_SHARE_BASIS_POINTS",
+    }),
+  ]);
 
   const expectedAddresses = [
     [configuredPoolManager, officialPoolManager, "PoolManager"],
@@ -1028,6 +1180,18 @@ async function assertClassicV3Infrastructure(
     [configuredTokenFactory, officialTokenFactory, "UERC20Factory"],
     [configuredHook, hook, "fee hook"],
     [configuredVaultFactory, vaultFactory, "reward factory"],
+    [
+      configuredInitialBuyVestingWalletFactory,
+      initialBuyVestingWalletFactory,
+      "Initial Buy custody factory",
+    ],
+    [configuredLaunchPolicy, launchPolicy, "launch policy"],
+    [configuredCtoAuthority, ctoAuthority, "CTO authority"],
+    [
+      configuredCtoAuthorityAccount,
+      classicCtoAuthorityAccount,
+      "CTO authority account",
+    ],
     [configuredForwarderFactory, positionForwarderFactory, "position factory"],
     [hookPoolManager, officialPoolManager, "hook PoolManager"],
     [hookTreasury, platformTreasury, "treasury"],
@@ -1055,6 +1219,17 @@ async function assertClassicV3Infrastructure(
     lpFeePips !== 0 ||
     tickSpacing !== 200 ||
     minimumInitialBuyWei !== MEME_MIN_INITIAL_BUY_WEI ||
+    minimumCustodyDurationDays !== 1 ||
+    maximumCustodyDurationDays !== 3_650 ||
+    maximumTokenNameBytes !== BigInt(MAX_TOKEN_NAME_BYTES) ||
+    maximumTokenSymbolBytes !== BigInt(MAX_TOKEN_SYMBOL_BYTES) ||
+    maximumTokenDescriptionBytes !== BigInt(MAX_TOKEN_DESCRIPTION_BYTES) ||
+    maximumMetadataUrlBytes !== BigInt(MAX_METADATA_URL_BYTES) ||
+    maximumSocialExtraDataBytes !== BigInt(MAX_SOCIAL_EXTRA_DATA_BYTES) ||
+    maximumPolicyRewardBeneficiaries !== 5n ||
+    policyRewardShareBasisPoints !== 10_000 ||
+    maximumLauncherRewardBeneficiaries !== 5n ||
+    launcherRewardShareBasisPoints !== 10_000 ||
     (BigInt(hook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS
   ) {
     throw new Error("The Classic economics do not match the release manifest");
@@ -1077,7 +1252,7 @@ async function prepareClassicV3Launch(
     id: "token",
     label: "Token setup",
     status: "pass",
-    detail: `Immutable ${(configuration.fees.buySwapFeeBps / 100).toFixed(2)}% buy and ${(configuration.fees.sellSwapFeeBps / 100).toFixed(2)}% sell fees with ${configuration.rewards.beneficiaries.length} reward recipient${configuration.rewards.beneficiaries.length === 1 ? "" : "s"}`,
+    detail: `Immutable ${(configuration.fees.buySwapFeeBps / 100).toFixed(2)}% buy and ${(configuration.fees.sellSwapFeeBps / 100).toFixed(2)}% sell fees with ${configuration.rewards.beneficiaries.length} reward recipient${configuration.rewards.beneficiaries.length === 1 ? "" : "s"} and ${configuration.initialBuyCustody.mode === "unlocked" ? "an unlocked Initial Buy" : "Initial Buy custody"}`,
   };
 
   if (connectedWalletCheck.status !== "pass") {
@@ -1120,7 +1295,18 @@ async function prepareClassicV3Launch(
   const hookFactory = getAddress(
     deployment.ethCreatorFeeHookFactoryV3 as string,
   );
-  const vaultFactory = getAddress(deployment.feeSplitVaultFactoryV1 as string);
+  const vaultFactory = getAddress(
+    deployment.classicRewardVaultFactoryV1 as string,
+  );
+  const ctoAuthority = getAddress(
+    deployment.classicCtoAuthorityV1 as string,
+  );
+  const initialBuyVestingWalletFactory = getAddress(
+    deployment.classicInitialBuyVestingWalletFactoryV1 as string,
+  );
+  const launchPolicy = getAddress(
+    deployment.classicLaunchPolicyV1 as string,
+  );
   const positionForwarderFactory = getAddress(
     deployment.lockedPositionFeeForwarderFactory as string,
   );
@@ -1129,14 +1315,24 @@ async function prepareClassicV3Launch(
     hook,
     hookFactory,
     vaultFactory,
+    ctoAuthority,
+    initialBuyVestingWalletFactory,
+    launchPolicy,
     positionForwarderFactory,
     {
-      ethCreatorFeeHookFactoryV3: deployment.runtimeCodeHashes
-        .ethCreatorFeeHookFactoryV3 as Hex,
-      ethCreatorFeeHookV3: deployment.runtimeCodeHashes
-        .ethCreatorFeeHookV3 as Hex,
-      feeSplitVaultFactoryV1: deployment.runtimeCodeHashes
-        .feeSplitVaultFactoryV1 as Hex,
+      classicCtoAuthorityV1:
+        deployment.runtimeCodeHashes.classicCtoAuthorityV1 as Hex,
+      classicRewardVaultFactoryV1:
+        deployment.runtimeCodeHashes.classicRewardVaultFactoryV1 as Hex,
+      classicInitialBuyVestingWalletFactoryV1:
+        deployment.runtimeCodeHashes
+          .classicInitialBuyVestingWalletFactoryV1 as Hex,
+      classicLaunchPolicyV1:
+        deployment.runtimeCodeHashes.classicLaunchPolicyV1 as Hex,
+      ethCreatorFeeHookFactoryV3:
+        deployment.runtimeCodeHashes.ethCreatorFeeHookFactoryV3 as Hex,
+      ethCreatorFeeHookV3:
+        deployment.runtimeCodeHashes.ethCreatorFeeHookV3 as Hex,
       memeLaunchV2: deployment.runtimeCodeHashes.memeLaunchV2 as Hex,
       lockedPositionFeeForwarderFactory: deployment.runtimeCodeHashes
         .lockedPositionFeeForwarderFactory as Hex,
@@ -1700,9 +1896,11 @@ async function assertStockPairedInfrastructure(
     positionForwarderFactory,
     treasury,
   } = release.addresses;
+  const quoteAssets = getStockPairedQuoteAssetsForRelease(release);
+  const ethQuoteAssets = getStockPairedEthQuoteAssetsForRelease(release);
   const routePools = [
     ...new Map(
-      STOCK_PAIRED_ETH_QUOTE_ASSETS.flatMap((asset) =>
+      ethQuoteAssets.flatMap((asset) =>
         getStockPairedEthRoute(asset.address).buyHops.map(
           (hop) => [hop.pool.toLowerCase(), hop] as const,
         ),
@@ -2005,7 +2203,7 @@ async function assertStockPairedInfrastructure(
     lpFeePips !== 0 ||
     tickSpacing !== 200 ||
     !factoryRecognizesHook ||
-    registryAssetCount !== BigInt(STOCK_QUOTE_ASSETS.length) ||
+    registryAssetCount !== BigInt(quoteAssets.length) ||
     (BigInt(feeHook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS
   ) {
     throw new Error(
@@ -2014,7 +2212,7 @@ async function assertStockPairedInfrastructure(
   }
 
   const registryAssets = await Promise.all(
-    STOCK_QUOTE_ASSETS.map(async (asset, index) => {
+    quoteAssets.map(async (asset, index) => {
       const [registered, supported, configurationHash] = await Promise.all([
         client.readContract({
           address: quoteRegistry,
@@ -2057,7 +2255,7 @@ async function assertStockPairedInfrastructure(
   }
 
   const coordinatorRoutes = await Promise.all(
-    STOCK_PAIRED_ETH_QUOTE_ASSETS.map(async (asset) => {
+    ethQuoteAssets.map(async (asset) => {
       const route = getStockPairedEthRoute(asset.address);
       const [routeFee, routePath] = await Promise.all([
         client.readContract({
@@ -2091,19 +2289,19 @@ async function assertStockPairedInfrastructure(
     }
   }
   const routedAddresses = new Set(
-    STOCK_PAIRED_ETH_QUOTE_ASSETS.map((asset) => asset.address.toLowerCase()),
+    ethQuoteAssets.map((asset) => asset.address.toLowerCase()),
   );
   const unroutedFees = await Promise.all(
-    STOCK_QUOTE_ASSETS.filter(
-      (asset) => !routedAddresses.has(asset.address.toLowerCase()),
-    ).map((asset) =>
-      client.readContract({
-        address: ethLaunchCoordinator,
-        abi: stockPairedEthLaunchCoordinatorAbi,
-        functionName: "stockPoolFee",
-        args: [asset.address],
-      }),
-    ),
+    quoteAssets
+      .filter((asset) => !routedAddresses.has(asset.address.toLowerCase()))
+      .map((asset) =>
+        client.readContract({
+          address: ethLaunchCoordinator,
+          abi: stockPairedEthLaunchCoordinatorAbi,
+          functionName: "stockPoolFee",
+          args: [asset.address],
+        }),
+      ),
   );
   if (unroutedFees.some((fee) => fee !== 0)) {
     throw new Error(
@@ -2154,6 +2352,60 @@ async function quoteStockPairedExternalRoute(
   return { amountOut, gasEstimate };
 }
 
+async function findStockPairedCurrency0Salt({
+  account,
+  coordinator,
+  name,
+  symbol,
+  quoteAsset,
+  baseSalt,
+}: {
+  account: Address;
+  coordinator: Address;
+  name: string;
+  symbol: string;
+  quoteAsset: Address;
+  baseSalt: Hex;
+}) {
+  for (
+    let offset = 0;
+    offset < STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS;
+    offset += STOCK_PAIRED_CURRENCY0_SEARCH_BATCH_SIZE
+  ) {
+    const salts = Array.from(
+      {
+        length: Math.min(
+          STOCK_PAIRED_CURRENCY0_SEARCH_BATCH_SIZE,
+          STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS - offset,
+        ),
+      },
+      (_, index) =>
+        deriveStockPairedCurrency0Salt(baseSalt, offset + index),
+    );
+    const predictions = await client.multicall({
+      allowFailure: false,
+      contracts: salts.map((creatorSalt) => ({
+        address: coordinator,
+        abi: stockPairedEthLaunchCoordinatorAbi,
+        functionName: "predictTokenAddress",
+        args: [name, symbol, account, creatorSalt],
+      })),
+    });
+    const candidateIndex = predictions.findIndex(([token]) =>
+      isStockPairedLaunchedTokenCurrency0(getAddress(token), quoteAsset),
+    );
+    if (candidateIndex !== -1) {
+      return {
+        creatorSalt: salts[candidateIndex],
+        token: getAddress(predictions[candidateIndex][0]),
+      };
+    }
+  }
+  throw new LaunchInputError(
+    "A compatible Stock-Paired token address could not be prepared. Try the launch again",
+  );
+}
+
 async function prepareStockPairedLaunch(
   account: Address,
   draft: LaunchDraft,
@@ -2178,10 +2430,7 @@ async function prepareStockPairedLaunch(
     });
   }
 
-  const release =
-    launchEnvironment === "production"
-      ? getConfiguredStockPairedRelease()
-      : null;
+  const release = selectedStockPairedRelease;
   if (!release) {
     return response({
       status: "blocked",
@@ -2204,18 +2453,56 @@ async function prepareStockPairedLaunch(
 
   await assertStockPairedInfrastructure(release);
   const { ethLaunchCoordinator, feeHook } = release.addresses;
-  const [predicted, block, forwardQuote] = await Promise.all([
-    client.readContract({
-      address: ethLaunchCoordinator,
-      abi: stockPairedEthLaunchCoordinatorAbi,
-      functionName: "predictTokenAddress",
-      args: [
-        draft.tokenName.trim(),
-        draft.tokenSymbol.trim(),
-        account,
-        draft.launchSalt,
+  const predicted = await client.readContract({
+    address: ethLaunchCoordinator,
+    abi: stockPairedEthLaunchCoordinatorAbi,
+    functionName: "predictTokenAddress",
+    args: [
+      draft.tokenName.trim(),
+      draft.tokenSymbol.trim(),
+      account,
+      draft.launchSalt,
+    ],
+  });
+  const [predictedToken] = predicted;
+  if (
+    !isStockPairedLaunchedTokenCurrency0(
+      predictedToken,
+      configuration.quoteAsset.address,
+    )
+  ) {
+    const canonical = await findStockPairedCurrency0Salt({
+      account,
+      coordinator: ethLaunchCoordinator,
+      name: draft.tokenName.trim(),
+      symbol: draft.tokenSymbol.trim(),
+      quoteAsset: configuration.quoteAsset.address,
+      baseSalt: draft.launchSalt,
+    });
+    return response({
+      status: "blocked",
+      mode: "stock-paired",
+      title: "Token address prepared",
+      detail:
+        "Checking the launch with the canonical Uniswap v4 currency order",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Pool compatibility",
+          status: "pass",
+          detail:
+            "The launched token is currency0 for broad indexer compatibility",
+        },
       ],
-    }),
+      predictedToken: canonical.token,
+      predictedHook: feeHook,
+      draftPatch: { launchSalt: canonical.creatorSalt },
+    });
+  }
+
+  const [block, forwardQuote] = await Promise.all([
     client.getBlock(),
     quoteStockPairedExternalRoute(
       account,
@@ -2224,7 +2511,6 @@ async function prepareStockPairedLaunch(
       "buy",
     ),
   ]);
-  const [predictedToken] = predicted;
   if (forwardQuote.amountOut < STOCK_PAIRED_MIN_INITIAL_BUY_RAW) {
     throw new LaunchInputError(
       `Increase the Initial Buy so it routes to at least ${STOCK_PAIRED_MIN_INITIAL_BUY} ${configuration.quoteAsset.symbol}`,
@@ -2283,6 +2569,7 @@ async function prepareStockPairedLaunch(
     simulated.token.toLowerCase() !== predictedToken.toLowerCase() ||
     simulated.quoteAsset.toLowerCase() !==
       configuration.quoteAsset.address.toLowerCase() ||
+    simulated.quoteIsCurrency0 ||
     simulated.initialBuyQuoteAmount < minimumQuoteAmountOut ||
     simulated.initialBuyTokenAmount <= 0n
   ) {
@@ -2380,10 +2667,7 @@ export async function POST(request: NextRequest) {
       return await prepareDeepLaunch(account, draft, connectedWalletCheck);
     }
     if (draft.launchModel === "stock-paired") {
-      if (
-        !isStockPairedLocalPreviewEnabled() &&
-        !isStockPairedDevAccount(account)
-      ) {
+      if (!stockPairedPublicLaunchEnabled) {
         return errorResponse("Stock-Paired is coming soon", 403);
       }
       return await prepareStockPairedLaunch(

@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 3,
+  "model": "stock-paired",
+  "internalContractRelease": "stock-paired-v3",
+  "status": "not-deployed",
+  "chainId": 1,
+  "releaseCommit": null,
+  "sourceCommitment": null,
+  "ethCoordinatorReleaseCommit": null,
+  "ethCoordinatorSourceCommitment": null,
+  "startingNonce": null,
+  "ethCoordinatorNonce": null,
+  "startBlock": null,
+  "addresses": {
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "quoteRegistry": "0xd38Fbc171C1a842dc3F6d10cf5642BAe097D9239",
+    "positionPlanner": null,
+    "feeSplitVaultFactory": "0x52d70971D6653a754c29385a2a6f241A481952d4",
+    "hookFactory": "0x5C2704C6eEaA2063d7a969BA7E557c87AEb1fBcB",
+    "feeHook": "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
+    "launcher": null,
+    "ethLaunchCoordinator": null,
+    "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
+  },
+  "transactions": {
+    "quoteRegistry": "0x7582e88767f8bd015ae9d2e20ecb3ffc3c3b7b6f5cc7a2fa5fccd86e212a8106",
+    "positionPlanner": null,
+    "feeSplitVaultFactory": "0x27b50bc07a7c4f8a3a8cd8f7f40ec3249c41d5a5d637efccca4af8a4857b6710",
+    "hookFactory": "0xf0c324b923027cd3f18384a9d20d761e54b0ac9d776e50c631ca3d248d2a6e29",
+    "feeHook": "0x5437eae1e9ca8871d769796448677694ac1c5cb16c20745d79448e4c25943e06",
+    "launcher": null,
+    "ethLaunchCoordinator": null
+  },
+  "runtimeCodeHashes": {
+    "quoteRegistry": "0xdc64e2b2eb251347649c527f3d143b1a2d41312b90c6718f13c3ff7ea07f7e4f",
+    "positionPlanner": null,
+    "feeSplitVaultFactory": "0x14a1e46cbb829712c7ba64ce018537aed9385d6116b939ef3d355fa2fdc0f2b6",
+    "hookFactory": "0x6f4fb8e100039d4f9dd488f625b7ecb2e8d4d389b914d9031c6c5e6b228ad79d",
+    "feeHook": "0x3e292c9ddc64cc3a9c45f79d9d239ab2b8196f10efbdbc74b4f9b37dba53981d",
+    "launcher": null,
+    "ethLaunchCoordinator": null,
+    "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
+  },
+  "reusedFromRelease": {
+    "internalContractRelease": "stock-paired-v2",
+    "components": [
+      "quoteRegistry",
+      "feeSplitVaultFactory",
+      "hookFactory",
+      "feeHook",
+      "positionForwarderFactory"
+    ]
+  },
+  "pricePolicy": {
+    "status": "reviewed-not-deployed",
+    "targetInitialFdvEth": "1.355657760817103798",
+    "tickSpacing": 200,
+    "calibrationBlockNumber": 25642460,
+    "calibrationBlockHash": "0xefb6c45e3523ffc588d4c498cd6fd5ab528371f293eebc70375857a53fe12718",
+    "maximumInitialFdvDeviationBps": 500,
+    "maximumReferenceDriftBps": 300,
+    "maximumTickRoundingDeviationBps": 100,
+    "maximumActivationEvidenceAgeSeconds": 900,
+    "quoteTicks": [
+      { "symbol": "NVDAon", "address": "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE", "initialAbsoluteTick": 181200, "targetQuoteAmountWad": "13522423984475316997" },
+      { "symbol": "SPYon", "address": "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08", "initialAbsoluteTick": 194600, "targetQuoteAmountWad": "3514038942016415531" },
+      { "symbol": "GOOGLon", "address": "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc", "initialAbsoluteTick": 186800, "targetQuoteAmountWad": "7757914703760533694" },
+      { "symbol": "SLVon", "address": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4", "initialAbsoluteTick": 168200, "targetQuoteAmountWad": "49504169414249928797" },
+      { "symbol": "TSLAon", "address": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f", "initialAbsoluteTick": 185600, "targetQuoteAmountWad": "8768084165474772643" },
+      { "symbol": "AAPLon", "address": "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c", "initialAbsoluteTick": 187000, "targetQuoteAmountWad": "7599929078251473378" }
+    ],
+    "finalActivationPricing": {
+      "status": "not-captured",
+      "evidencePath": "contracts/deployments/evidence/stock-paired-v3-final-pricing.json",
+      "evidenceSha256": null,
+      "verifiedAt": null
+    },
+    "disclosure": "Starts near Classic's 1.355657760817103798 ETH initial FDV. The exact USD value moves with ETH and the selected quote asset."
+  },
+  "quoteAssets": [
+    { "symbol": "NVDAon", "address": "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE" },
+    { "symbol": "SPYon", "address": "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08" },
+    { "symbol": "GOOGLon", "address": "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc" },
+    { "symbol": "SLVon", "address": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4" },
+    { "symbol": "TSLAon", "address": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f" },
+    { "symbol": "AAPLon", "address": "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c" }
+  ],
+  "sourceVerification": {
+    "status": "not-submitted"
+  },
+  "lifecycleEvidence": {
+    "status": "not-captured",
+    "releaseEligible": false
+  },
+  "activation": {
+    "publicLaunchesEnabled": false,
+    "reason": "Deployment, runtime, source and lifecycle evidence are incomplete"
+  }
+}

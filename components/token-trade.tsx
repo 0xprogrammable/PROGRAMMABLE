@@ -605,7 +605,11 @@ export function TokenTrade({
         ))}
       </div>
 
-      <div className={styles.amountCard}>
+      <div
+        className={`${styles.amountCard} ${
+          amountInvalid ? styles.amountCardInvalid : ""
+        }`}
+      >
         <div className={styles.amountHeader}>
           <label htmlFor={amountInputId}>
             {side === "buy" ? "You pay" : "You sell"}
@@ -632,7 +636,7 @@ export function TokenTrade({
             id={amountInputId}
             inputMode="decimal"
             autoComplete="off"
-            aria-invalid={amountInvalid}
+            aria-invalid={amountInvalid || undefined}
             aria-describedby={amountInvalid ? amountErrorId : undefined}
             value={amount}
             onChange={(event) => {

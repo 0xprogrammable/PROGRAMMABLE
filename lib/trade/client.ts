@@ -19,7 +19,7 @@ import {
   type ClassicTradeDeployment,
   type ClassicTradeSide,
 } from "./classic";
-import { getConfiguredStockPairedRelease } from "../stock-paired-release";
+import { getConfiguredStockPairedReleaseByHook } from "../stock-paired-release";
 import {
   buildStockPairedPermit2ApprovalTransaction,
   buildStockPairedSwapTransaction,
@@ -152,7 +152,7 @@ function stockPairedDeploymentForContext(input: {
   if (input.chainId !== 1) {
     throw new Error("Stock-Paired trading is limited to Ethereum Mainnet");
   }
-  const release = getConfiguredStockPairedRelease();
+  const release = getConfiguredStockPairedReleaseByHook(input.hook);
   if (!release) {
     throw new Error(
       "Stock-Paired trading is not enabled by a verified release",

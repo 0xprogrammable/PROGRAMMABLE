@@ -1,14 +1,18 @@
 import "server-only";
 
+import { formatUnits } from "viem";
+
 import type { LauncherToken } from "../tokens";
 import { computeOfficialV4PoolId } from "../uniswap/liquidity-launcher-sdk";
+import { marketCapNativeWadFromSqrtPriceX96 } from "./math";
 import type { ExplorePage } from "./types";
+import { usdValueFromWei } from "./usd";
 
 const OFFICIAL_MAINNET_V4_SUBGRAPH_URL =
   "https://gateway.thegraph.com/api/subgraphs/id/DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
 const OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT =
   "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK";
-const MAXIMUM_POOL_IDS = 24;
+export const OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS = 24;
 const MAXIMUM_RESPONSE_BYTES = 128 * 1024;
 const DEFAULT_TIMEOUT_MS = 2_500;
 const SERVER_CACHE_TTL_MS = 15_000;
@@ -19,8 +23,7 @@ const CIRCUIT_OPEN_MS = 10_000;
 // Roughly 13 minutes at Mainnet's target block time. Older analytics are
 // omitted instead of being presented beside a substantially newer RPC view.
 const MAXIMUM_SUBGRAPH_LAG_BLOCKS = 64n;
-const NATIVE_CURRENCY_ADDRESS =
-  "0x0000000000000000000000000000000000000000";
+const NATIVE_CURRENCY_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 const POOL_ANALYTICS_QUERY = `
   query ProgrammableExplorePools($poolIds: [ID!]!, $first: Int!) {
@@ -54,10 +57,7 @@ const POOL_ANALYTICS_QUERY = `
   }
 `;
 
-type Fetcher = (
-  input: string,
-  init?: RequestInit,
-) => Promise<Response>;
+type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
 
 type ParsedPool = {
   id: `0x${string}`;
@@ -89,10 +89,7 @@ type EnrichmentOptions = {
 };
 
 type FetcherState = {
-  cache: Map<
-    string,
-    { expiresAt: number; response: ParsedResponse }
-  >;
+  cache: Map<string, { expiresAt: number; response: ParsedResponse }>;
   inFlight: Map<string, Promise<ParsedResponse>>;
   consecutiveFailures: number;
   openUntil: number;
@@ -113,10 +110,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   );
 }
 
-function hasOnlyKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-) {
+function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]) {
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
   return (
@@ -125,10 +119,7 @@ function hasOnlyKeys(
   );
 }
 
-function strictUnsignedInteger(
-  value: unknown,
-  maximumDigits = 78,
-): string {
+function strictUnsignedInteger(value: unknown, maximumDigits = 78): string {
   if (
     typeof value !== "string" ||
     !/^(0|[1-9]\d*)$/.test(value) ||
@@ -140,11 +131,7 @@ function strictUnsignedInteger(
 }
 
 function strictBlockNumber(value: unknown): bigint {
-  if (
-    typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value >= 0
-  ) {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
     return BigInt(value);
   }
   if (
@@ -158,20 +145,14 @@ function strictBlockNumber(value: unknown): bigint {
 }
 
 function strictAddress(value: unknown): `0x${string}` {
-  if (
-    typeof value !== "string" ||
-    !/^0x[0-9a-fA-F]{40}$/.test(value)
-  ) {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value)) {
     return invalidResponse();
   }
   return value.toLowerCase() as `0x${string}`;
 }
 
 function strictBytes32(value: unknown): `0x${string}` {
-  if (
-    typeof value !== "string" ||
-    !/^0x[0-9a-fA-F]{64}$/.test(value)
-  ) {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
     return invalidResponse();
   }
   return value.toLowerCase() as `0x${string}`;
@@ -187,11 +168,7 @@ function strictTick(value: unknown): number | undefined {
     return invalidResponse();
   }
   const parsed = Number(value);
-  if (
-    !Number.isSafeInteger(parsed) ||
-    parsed < -887_272 ||
-    parsed > 887_272
-  ) {
+  if (!Number.isSafeInteger(parsed) || parsed < -887_272 || parsed > 887_272) {
     return invalidResponse();
   }
   return parsed;
@@ -313,20 +290,17 @@ export function parseOfficialV4SubgraphResponse(
       "deployment",
       "hasIndexingErrors",
     ]) ||
-    value.data._meta.deployment !==
-      OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT ||
+    value.data._meta.deployment !== OFFICIAL_MAINNET_V4_SUBGRAPH_DEPLOYMENT ||
     value.data._meta.hasIndexingErrors !== false ||
     !isRecord(value.data._meta.block) ||
     !hasOnlyKeys(value.data._meta.block, ["number", "hash"]) ||
     !Array.isArray(value.data.pools) ||
-    value.data.pools.length > MAXIMUM_POOL_IDS
+    value.data.pools.length > OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS
   ) {
     return invalidResponse();
   }
 
-  const indexedBlockNumber = strictBlockNumber(
-    value.data._meta.block.number,
-  );
+  const indexedBlockNumber = strictBlockNumber(value.data._meta.block.number);
   const pools = value.data.pools.map(parsePool);
   const uniquePoolIds = new Set(pools.map((pool) => pool.id));
   if (uniquePoolIds.size !== pools.length) {
@@ -361,9 +335,7 @@ function validEndpoint(value: string) {
 
 function validApiKey(value: string) {
   return (
-    value.length >= 8 &&
-    value.length <= 256 &&
-    /^[A-Za-z0-9_-]+$/.test(value)
+    value.length >= 8 && value.length <= 256 && /^[A-Za-z0-9_-]+$/.test(value)
   );
 }
 
@@ -381,7 +353,7 @@ function canonicalPoolIds(tokens: readonly LauncherToken[]) {
     if (!/^0x[0-9a-f]{64}$/.test(poolId) || seen.has(poolId)) continue;
     seen.add(poolId);
     poolIds.push(poolId);
-    if (poolIds.length === MAXIMUM_POOL_IDS) break;
+    if (poolIds.length === OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS) break;
   }
   return poolIds;
 }
@@ -446,7 +418,7 @@ async function fetchPoolAnalytics(input: {
         query: POOL_ANALYTICS_QUERY,
         variables: {
           poolIds: input.poolIds,
-          first: MAXIMUM_POOL_IDS,
+          first: OFFICIAL_V4_SUBGRAPH_MAXIMUM_POOL_IDS,
         },
       }),
       cache: "no-store",
@@ -581,9 +553,59 @@ function snapshotIsCompatible(
   return (
     distance <= MAXIMUM_SUBGRAPH_LAG_BLOCKS &&
     (indexed !== canonical ||
-      indexedBlockHash.toLowerCase() ===
-        canonicalBlockHash.toLowerCase())
+      indexedBlockHash.toLowerCase() === canonicalBlockHash.toLowerCase())
   );
+}
+
+function indexedMarketCap(
+  token: LauncherToken,
+  pool: ParsedPool,
+  page: ExplorePage,
+  indexedBlockNumber: string,
+): Pick<
+  LauncherToken,
+  | "indexedMarketCapEth"
+  | "indexedMarketCapEthWei"
+  | "indexedMarketCapUsdWad"
+  | "indexedValuationBlockNumber"
+> {
+  if (
+    token.launchModel === "stock-paired" ||
+    pool.token0 !== NATIVE_CURRENCY_ADDRESS ||
+    !token.totalSupplyRaw ||
+    !/^(0|[1-9]\d*)$/.test(token.totalSupplyRaw)
+  ) {
+    return {};
+  }
+
+  try {
+    const marketCapWei = marketCapNativeWadFromSqrtPriceX96(
+      BigInt(token.totalSupplyRaw),
+      BigInt(pool.sqrtPriceX96),
+    );
+    if (marketCapWei <= 0n) return {};
+
+    const quote = page.snapshot?.ethUsdQuote;
+    const marketCapUsdWad =
+      quote && /^(0|[1-9]\d*)$/.test(quote.answer)
+        ? usdValueFromWei(
+            marketCapWei.toString(),
+            BigInt(quote.answer),
+            quote.decimals,
+          )
+        : undefined;
+
+    return {
+      indexedMarketCapEth: formatUnits(marketCapWei, 18),
+      indexedMarketCapEthWei: marketCapWei.toString(),
+      ...(marketCapUsdWad === undefined
+        ? {}
+        : { indexedMarketCapUsdWad: marketCapUsdWad }),
+      indexedValuationBlockNumber: indexedBlockNumber,
+    };
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -646,6 +668,7 @@ export async function enrichExplorePageWithOfficialV4Subgraph(
       }
       return {
         ...token,
+        ...indexedMarketCap(token, pool, page, response.indexedBlockNumber),
         uniswapV4Pool: {
           source: "official-uniswap-v4-subgraph" as const,
           indexedBlockNumber: response.indexedBlockNumber,

@@ -8,11 +8,14 @@ import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPosition
 import { Test } from "forge-std/Test.sol";
 
 import { DeployClassicV3InfrastructureV1 } from "../../script/DeployClassicV3InfrastructureV1.s.sol";
+import {
+    ClassicInitialBuyCustodyConfig,
+    ClassicInitialBuyCustodyMode
+} from "../../src/ClassicInitialBuyVestingWalletV1.sol";
 import { MemeLaunchV2 } from "../../src/MemeLaunchV2.sol";
 
 abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
     address internal constant DEPLOYER = 0xA11Ce00000000000000000000000000000000003;
-    address internal constant TREASURY = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     uint256 internal constant MIN_INITIAL_BUY = 0.0006 ether;
 
     DeployClassicV3InfrastructureV1 internal deployment;
@@ -25,19 +28,23 @@ abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
 
     function _assertDeterministicDeploymentAndLaunch() internal {
         DeployClassicV3InfrastructureV1.DeploymentPlan memory plan = deployment.deploymentPlan(DEPLOYER, 0);
+        address launcherFeeRecipient = deployment.expectedLauncherFeeRecipient();
         DeployClassicV3InfrastructureV1.DeploymentResult memory result =
-            deployment.deployReviewed(DEPLOYER, 0, TREASURY);
+            deployment.deployReviewed(DEPLOYER, 0, launcherFeeRecipient);
 
         assertEq(plan.chainId, block.chainid);
-        assertEq(address(result.feeSplitVaultFactory), plan.feeSplitVaultFactory);
+        assertEq(address(result.ctoAuthority), plan.ctoAuthority);
+        assertEq(address(result.rewardVaultFactory), plan.rewardVaultFactory);
+        assertEq(address(result.initialBuyVestingWalletFactory), plan.initialBuyVestingWalletFactory);
+        assertEq(address(result.launchPolicy), plan.launchPolicy);
         assertEq(address(result.hookFactory), plan.hookFactory);
         assertEq(address(result.feeHook), plan.feeHook);
         assertEq(address(result.launcher), plan.launcher);
         assertEq(result.hookSalt, plan.hookSalt);
         assertEq(result.sourceCommitment, plan.sourceCommitment);
         assertEq(result.sourceCommitment, deployment.deploymentSourceCommitment());
-        assertEq(vm.getNonce(DEPLOYER), 4);
-        assertEq(deployment.predictHook(plan.hookFactory, plan.feeSplitVaultFactory, plan.hookSalt), plan.feeHook);
+        assertEq(vm.getNonce(DEPLOYER), 7);
+        assertEq(deployment.predictHook(plan.hookFactory, plan.rewardVaultFactory, plan.hookSalt), plan.feeHook);
 
         address creator = makeAddr("classicV3DeploymentCreator");
         vm.deal(creator, MIN_INITIAL_BUY);
@@ -61,7 +68,7 @@ abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
         (address rewardVault,,,, bool registered,) = result.feeHook.poolFeeConfig(launchResult.poolId);
         assertTrue(registered);
         assertEq(rewardVault, launchResult.rewardVault);
-        assertEq(result.feeHook.launcherFeeRecipient(), TREASURY);
+        assertEq(result.feeHook.launcherFeeRecipient(), launcherFeeRecipient);
         assertEq(result.feeHook.TRANSFER_TAX_BPS(), 0);
         assertEq(result.feeHook.LP_FEE_PIPS(), 0);
     }
@@ -84,7 +91,10 @@ abstract contract DeployClassicV3InfrastructureV1ForkBase is Test {
                 extraData: bytes('{"v":1,"model":"classic"}')
             }),
             rewardBeneficiaries: beneficiaries,
-            rewardSharesBps: shares
+            rewardSharesBps: shares,
+            initialBuyCustody: ClassicInitialBuyCustodyConfig({
+                mode: ClassicInitialBuyCustodyMode.Unlocked, durationDays: 0, cliffDays: 0
+            })
         });
     }
 }

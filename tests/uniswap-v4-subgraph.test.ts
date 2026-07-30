@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { parseEther } from "viem";
 
 vi.mock("server-only", () => ({}));
 
@@ -12,12 +13,9 @@ import {
 
 const POOL_ID =
   "0x1a1d489ab64459031dd616d24b823600e804f04164fd47f3c158a6338c77fc42" as const;
-const TOKEN_ADDRESS =
-  "0x2222222222222222222222222222222222222222" as const;
-const HOOK_ADDRESS =
-  "0x3333333333333333333333333333333333333333" as const;
-const OFFICIAL_DEPLOYMENT =
-  "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK";
+const TOKEN_ADDRESS = "0x2222222222222222222222222222222222222222" as const;
+const HOOK_ADDRESS = "0x3333333333333333333333333333333333333333" as const;
+const OFFICIAL_DEPLOYMENT = "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK";
 const OFFICIAL_ENDPOINT =
   "https://gateway.thegraph.com/api/subgraphs/id/DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
 
@@ -185,9 +183,43 @@ describe("official Uniswap v4 subgraph adapter", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("adds an indexed display valuation from the compatible official pool snapshot", async () => {
+    const source = page([
+      canonicalToken({
+        totalSupply: "1000",
+        totalSupplyRaw: parseEther("1000").toString(),
+        tokenDecimals: 18,
+        fdvUsdWad: parseEther("1").toString(),
+      }),
+    ]);
+    if (source.snapshot) {
+      source.snapshot.ethUsdQuote = {
+        feedAddress: "0x1111111111111111111111111111111111111111",
+        roundId: "1",
+        answer: "350000000000",
+        decimals: 8,
+        updatedAt: "1",
+      };
+    }
+    const fetcher = vi.fn(async () => jsonResponse(officialResponse()));
+
+    const enriched = await enrichExplorePageWithOfficialV4Subgraph(source, {
+      apiKey: "graph-secret",
+      endpoint: OFFICIAL_ENDPOINT,
+      fetcher,
+    });
+
+    expect(enriched.tokens[0]).toMatchObject({
+      fdvUsdWad: parseEther("1").toString(),
+      indexedMarketCapEth: "1000",
+      indexedMarketCapEthWei: parseEther("1000").toString(),
+      indexedMarketCapUsdWad: parseEther("3500000").toString(),
+      indexedValuationBlockNumber: "25629999",
+    });
+  });
+
   it("accepts the recorded quote asset as the Stock-Paired countercurrency", async () => {
-    const quoteAsset =
-      "0x1111111111111111111111111111111111111111" as const;
+    const quoteAsset = "0x1111111111111111111111111111111111111111" as const;
     const pool = officialPool({
       token0: quoteAsset,
       token1: TOKEN_ADDRESS,
@@ -223,10 +255,8 @@ describe("official Uniswap v4 subgraph adapter", () => {
   it("isolates a mismatched token without discarding valid page analytics", async () => {
     const mismatchedToken =
       "0x4444444444444444444444444444444444444444" as const;
-    const actualHook =
-      "0x5555555555555555555555555555555555555555" as const;
-    const recordedHook =
-      "0x6666666666666666666666666666666666666666" as const;
+    const actualHook = "0x5555555555555555555555555555555555555555" as const;
+    const recordedHook = "0x6666666666666666666666666666666666666666" as const;
     const mismatchedPool = officialPool({
       token0: "0x0000000000000000000000000000000000000000",
       token1: mismatchedToken,
@@ -247,10 +277,7 @@ describe("official Uniswap v4 subgraph adapter", () => {
         jsonResponse({
           data: {
             ...officialResponse().data,
-            pools: [
-              officialResponse().data.pools[0],
-              mismatchedPool,
-            ],
+            pools: [officialResponse().data.pools[0], mismatchedPool],
           },
         }),
     });
@@ -371,7 +398,9 @@ describe("official Uniswap v4 subgraph adapter", () => {
           jsonResponse({
             data: {
               ...officialResponse().data,
-              pools: [{ ...officialResponse().data.pools[0], hooks: TOKEN_ADDRESS }],
+              pools: [
+                { ...officialResponse().data.pools[0], hooks: TOKEN_ADDRESS },
+              ],
             },
           }),
       }),
@@ -411,8 +440,10 @@ describe("official Uniswap v4 subgraph adapter", () => {
     const second = enrichExplorePageWithOfficialV4Subgraph(page(), options);
     releaseFetch?.();
     const [firstResult, secondResult] = await Promise.all([first, second]);
-    const cachedResult =
-      await enrichExplorePageWithOfficialV4Subgraph(page(), options);
+    const cachedResult = await enrichExplorePageWithOfficialV4Subgraph(
+      page(),
+      options,
+    );
 
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(firstResult.tokens[0]?.uniswapV4Pool).toBeDefined();
@@ -477,8 +508,10 @@ describe("official Uniswap v4 subgraph adapter", () => {
 
       shouldFail = false;
       await vi.advanceTimersByTimeAsync(10_001);
-      const recovered =
-        await enrichExplorePageWithOfficialV4Subgraph(page(), options);
+      const recovered = await enrichExplorePageWithOfficialV4Subgraph(
+        page(),
+        options,
+      );
 
       expect(fetcher).toHaveBeenCalledTimes(4);
       expect(recovered.tokens[0]?.uniswapV4Pool).toBeDefined();
@@ -498,17 +531,14 @@ describe("official Uniswap v4 subgraph adapter", () => {
         return jsonResponse(response);
       },
     });
-    expect(exact.tokens[0]?.uniswapV4Pool?.indexedBlockNumber).toBe(
-      "25630000",
-    );
+    expect(exact.tokens[0]?.uniswapV4Pool?.indexedBlockNumber).toBe("25630000");
 
     const conflictingExactPage = page();
     await expect(
       enrichExplorePageWithOfficialV4Subgraph(conflictingExactPage, {
         apiKey: "graph-secret",
         endpoint: OFFICIAL_ENDPOINT,
-        fetcher: async () =>
-          jsonResponse(officialResponse("25630000")),
+        fetcher: async () => jsonResponse(officialResponse("25630000")),
       }),
     ).resolves.toBe(conflictingExactPage);
 
@@ -518,20 +548,20 @@ describe("official Uniswap v4 subgraph adapter", () => {
       endpoint: OFFICIAL_ENDPOINT,
       fetcher: async () => jsonResponse(officialResponse("25629936")),
     });
-    expect(near.tokens[0]?.uniswapV4Pool?.indexedBlockNumber).toBe(
-      "25629936",
-    );
+    expect(near.tokens[0]?.uniswapV4Pool?.indexedBlockNumber).toBe("25629936");
 
     const nearAheadPage = page();
-    const nearAhead =
-      await enrichExplorePageWithOfficialV4Subgraph(nearAheadPage, {
+    const nearAhead = await enrichExplorePageWithOfficialV4Subgraph(
+      nearAheadPage,
+      {
         apiKey: "graph-secret",
         endpoint: OFFICIAL_ENDPOINT,
         fetcher: async () => jsonResponse(officialResponse("25630001")),
-      });
-    expect(
-      nearAhead.tokens[0]?.uniswapV4Pool?.indexedBlockNumber,
-    ).toBe("25630001");
+      },
+    );
+    expect(nearAhead.tokens[0]?.uniswapV4Pool?.indexedBlockNumber).toBe(
+      "25630001",
+    );
 
     const farAheadPage = page();
     await expect(
