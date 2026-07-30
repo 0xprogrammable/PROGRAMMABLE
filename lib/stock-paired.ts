@@ -1,8 +1,12 @@
 import {
+  encodeAbiParameters,
   encodeFunctionData,
   getAddress,
   isAddress,
+  isHex,
+  keccak256,
   parseAbi,
+  parseAbiParameters,
   parseUnits,
   type Address,
   type Hex,
@@ -39,6 +43,44 @@ export const STOCK_PAIRED_DEFAULT_INITIAL_BUY_ETH = "0.01";
 export const STOCK_PAIRED_TOTAL_SWAP_FEE_BPS = 100;
 export const STOCK_PAIRED_CREATOR_FEE_BPS = 90;
 export const STOCK_PAIRED_PROGRAMMABLE_FEE_BPS = 10;
+export const STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS = 256;
+
+const stockPairedCurrency0SaltParameters = parseAbiParameters(
+  "string domain, bytes32 baseSalt, uint256 attempt",
+);
+const STOCK_PAIRED_CURRENCY0_SALT_DOMAIN =
+  "programmable.stock-paired.currency0.v1";
+
+export function isStockPairedLaunchedTokenCurrency0(
+  launchedToken: Address,
+  quoteAsset: Address,
+) {
+  return BigInt(launchedToken) < BigInt(quoteAsset);
+}
+
+export function deriveStockPairedCurrency0Salt(
+  baseSalt: Hex,
+  attempt: number,
+) {
+  if (
+    !isHex(baseSalt, { strict: true }) ||
+    baseSalt.length !== 66 ||
+    !Number.isSafeInteger(attempt) ||
+    attempt < 0 ||
+    attempt >= STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS
+  ) {
+    throw new LaunchInputError(
+      "The Stock-Paired launch identifier is invalid",
+    );
+  }
+  return keccak256(
+    encodeAbiParameters(stockPairedCurrency0SaltParameters, [
+      STOCK_PAIRED_CURRENCY0_SALT_DOMAIN,
+      baseSalt,
+      BigInt(attempt),
+    ]),
+  );
+}
 
 export type StockQuoteAsset = {
   symbol: string;
