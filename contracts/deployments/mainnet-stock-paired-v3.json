@@ -2,7 +2,7 @@
   "schemaVersion": 3,
   "model": "stock-paired",
   "internalContractRelease": "stock-paired-v3",
-  "status": "deployed-runtime-and-source-verified-public-canary-pending",
+  "status": "deployment-source-and-lifecycle-verified",
   "chainId": 1,
   "releaseCommit": "8fd9ffa8364f28afb1481409ead61d800a3da789",
   "sourceCommitment": "0xda537415a9678c414240ba9849011acef0aeee36bc938cc4597a0a78f0e74f66",
@@ -283,16 +283,33 @@
     }
   },
   "lifecycleEvidence": {
-    "status": "deployment-verified-public-canary-pending",
-    "releaseEligible": false,
+    "status": "verified-current-release",
+    "releaseEligible": true,
     "independentRpcCount": 2,
     "deploymentTransactionsVerified": true,
     "runtimeBindingsVerified": true,
-    "ethCoordinatorDeploymentVerified": true
+    "ethCoordinatorDeploymentVerified": true,
+    "canaryLaunchTransaction": "0xbe52bd2bb71159a1f6ab085cb7c7d5eb4f0583608b8adaf7d62f283be6693b19",
+    "canaryQuoteAsset": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4",
+    "positionLockVerified": true,
+    "buyAndSellVerified": true,
+    "ethFirstLaunchVerified": true,
+    "ethBuyAndSellVerified": true,
+    "creatorClaimVerified": true,
+    "launcherClaimVerified": true,
+    "canaryToken": "0x2C348590Cb56Fcc5984F035D57bdb01e32c945D5",
+    "canaryPoolId": "0xedbc1872069e415b9b4eeed0a6a367c1318ba09694f26f5ab99b514fb3ffe77a",
+    "canaryPositionRecipient": "0x8Dde76ecE7B6a028b870D50641EB0CdB28A72393",
+    "canaryPositionTokenId": "355004",
+    "buyTransaction": "0x3d6fe04a0e49961b4bbb53902e5576c2a308467bfe53746b354f7886ce2c8cf4",
+    "sellTransaction": "0x659dc481394827b548278b6af4ef8a72c88790be039f83801ba2275738697c6e",
+    "creatorClaimTransaction": "0x0ed5d66ff27d333c80a422a945f53350b77865e9f780f9bf232b6a9055d2111d",
+    "launcherClaimTransaction": "0xde66d9938e417d5529db45a854235231bcc9baf72742ac9ded645f386e0cc71b",
+    "observedAtBlock": 25642871
   },
   "activation": {
     "publicLaunchesEnabled": false,
-    "reason": "Public lifecycle evidence is incomplete"
+    "reason": "Lifecycle verified; public activation requires a separate explicit release commit"
   },
   "officialDependencies": {
     "poolManager": {
