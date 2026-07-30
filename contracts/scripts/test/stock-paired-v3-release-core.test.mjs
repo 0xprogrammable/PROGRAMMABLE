@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -36,4 +37,42 @@ test("rejects unknown release selectors", () => {
     () => stockPairedReleaseDescriptor("latest"),
     /must be v1, v2 or v3/,
   );
+});
+
+test("records exact V3 sources while keeping public launches paused", () => {
+  const manifest = JSON.parse(
+    readFileSync(STOCK_PAIRED_V3_MANIFEST_PATH, "utf8"),
+  );
+  const evidence = JSON.parse(
+    readFileSync(
+      "contracts/deployments/evidence/stock-paired-v3-mainnet-release.json",
+      "utf8",
+    ),
+  );
+  const fields = ["positionPlanner", "launcher", "ethLaunchCoordinator"];
+
+  assert.equal(
+    manifest.status,
+    "deployed-runtime-and-source-verified-public-canary-pending",
+  );
+  assert.equal(manifest.sourceVerification.status, "verified");
+  assert.equal(manifest.activation.publicLaunchesEnabled, false);
+  assert.equal(manifest.lifecycleEvidence.releaseEligible, false);
+  assert.equal(evidence.publicLaunchesEnabled, false);
+
+  for (const field of fields) {
+    const source = manifest.sourceVerification[field];
+    const captured = evidence.sourceVerification.contracts[field];
+    assert.equal(source.status, "verified");
+    assert.equal(source.etherscan.status, "exact-match");
+    assert.equal(source.etherscan.similarMatch, null);
+    assert.equal(source.sourcify.status, "match");
+    assert.equal(source.sourcify.creationMatch, "match");
+    assert.equal(source.sourcify.runtimeMatch, "match");
+    assert.equal(source.address, captured.address);
+    assert.equal(source.etherscan.url, captured.url);
+    assert.equal(source.sourcify.url, captured.sourcify.url);
+    assert.equal(captured.status, "exact-match");
+    assert.match(source.etherscan.submissionGuid, /^[a-z0-9]+$/);
+  }
 });
