@@ -31,7 +31,7 @@ import type { LauncherToken } from "../lib/tokens";
 import { DEEP_V2_MANIFEST_FIXED_POLICY } from "../lib/deep-v2";
 import appDeployments from "../contracts/config/app-deployments.v1.json";
 
-vi.mock("@/ops/deep-keeper-v2/reviewed-release-binding.json", () => ({
+vi.mock("@/config/deep-v2-release-binding.json", () => ({
   default: {
     schemaVersion: 1,
     status: "reviewed",

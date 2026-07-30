@@ -1,6 +1,6 @@
 import { isAddress, isHex } from "viem";
 
-import reviewedReleaseBindingJson from "@/ops/deep-keeper-v2/reviewed-release-binding.json";
+import reviewedReleaseBindingJson from "@/config/deep-v2-release-binding.json";
 
 import {
   DEEP_V2_INTERNAL_CONTRACT_RELEASE,

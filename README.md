@@ -12,7 +12,7 @@ Programmable is an interface for launching tokens whose market behavior is defin
 | --- | --- | --- |
 | Classic | Live on Ethereum Mainnet | Fixed supply, permanently locked one-sided liquidity and creator rewards in ETH |
 | Stock-Paired | Coming soon | Fixed supply traded against an allowlisted Ondo tokenized stock or ETF quote asset |
-| Deep | Release candidate, not deployed | A fixed 0.90% growth fee buys the token and adds both assets to the original permanently locked pool |
+| Deep | Design only, unavailable | A proposed growth-fee model for adding both assets to the original permanently locked pool |
 
 Only models with a completed deployment manifest, matching runtime code and verified lifecycle are exposed for production launches.
 
@@ -73,7 +73,7 @@ Their public indexer records preserve the quote asset, v4 pool ordering, hook,
 fees and exact release. New launches stay closed while the V3 starting-price
 release is prepared and verified.
 
-Deep V3 is not deployed. It remains unavailable in the public launcher until its deployment, source verification, canary lifecycle and production keeper evidence are complete. A passing local test suite is not a production release.
+Deep V3 is not deployed. Its automated keeper has been removed, and the model remains unavailable while its execution design is reconsidered. A passing local test suite is not a production release.
 
 There has been no external smart-contract audit or public security contest. This repository does not promise that a token is immune to abuse or accepted by third-party scanners.
 

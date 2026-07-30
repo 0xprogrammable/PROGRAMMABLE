@@ -142,7 +142,7 @@ describe("Deep V3 launch boundary", () => {
       summary:
         "The growth fee buys the token and adds both assets to the original permanently locked pool.",
       automation:
-        "The first cycle waits for the 30-minute oracle. Automation checks on a five-minute cadence. Safety, gas economics, and transaction inclusion may defer execution.",
+        "Automated execution has been removed. Deep remains unavailable while its execution model is redesigned.",
       rewards:
         "Deep does not pay creator rewards. The full 0.90% growth fee remains committed to locked liquidity.",
       protocolFees:

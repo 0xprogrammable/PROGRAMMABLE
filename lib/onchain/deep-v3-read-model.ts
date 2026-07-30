@@ -11,7 +11,7 @@ import {
   type Hex,
 } from "viem";
 
-import opsV2SourceBinding from "../../ops/deep-keeper-v3/ops-v2-source-binding.json";
+import opsV2SourceBinding from "../../config/deep-v3-source-binding.json";
 import {
   DEEP_V3_INTERNAL_CONTRACT_RELEASE,
   DEEP_V3_KEEPER_RELEASE_VERSION as APP_DEEP_V3_KEEPER_RELEASE_VERSION,
