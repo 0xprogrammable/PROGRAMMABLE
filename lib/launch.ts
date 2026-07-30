@@ -1,4 +1,4 @@
-import { parseEther } from "viem";
+import { formatEther, parseEther } from "viem";
 
 export const PLATFORM_FEE_BPS = 10;
 export const CLASSIC_TOTAL_SWAP_FEE_PERCENT = "1";
@@ -14,6 +14,12 @@ export const MEME_MIN_INITIAL_BUY_WEI = 600_000_000_000_000n;
 export const MEME_MIN_INITIAL_BUY_ETH = "0.0006";
 export const MEME_MIN_INITIAL_BUY_ETH_LABEL =
   `${MEME_MIN_INITIAL_BUY_ETH} ETH`;
+const MEME_MIN_USABLE_TICK = -887_200;
+const MEME_INITIAL_SQRT_PRICE = 1.0001 ** (MEME_INITIAL_TICK / 2);
+const MEME_MIN_SQRT_PRICE = 1.0001 ** (MEME_MIN_USABLE_TICK / 2);
+const MEME_INITIAL_LIQUIDITY =
+  MEME_TOKEN_SUPPLY_WHOLE /
+  (MEME_INITIAL_SQRT_PRICE - MEME_MIN_SQRT_PRICE);
 export const ADAPTIVE_MIN_FDV_INDEX = -887_272;
 export const ADAPTIVE_MAX_FDV_INDEX = 887_272;
 export const ADAPTIVE_MIN_FEE_BPS = 100;
@@ -49,6 +55,13 @@ export type ClassicInitialBuyCustodyMode =
   | "fixed-lock"
   | "linear"
   | "cliff-linear";
+
+export type ClassicInitialBuyPreview = {
+  grossEthAmount: number;
+  poolEthAmount: number;
+  tokenAmount: number;
+  supplyPercent: number;
+};
 
 export type AdaptiveCurvePointDraft = {
   fdvIndex: number;
@@ -246,6 +259,58 @@ export function parseInitialBuyWei(value: string | null | undefined) {
   } catch {
     return null;
   }
+}
+
+export function getClassicInitialBuyPreview(
+  initialBuyEth: string,
+  buyFeePercent: string,
+): ClassicInitialBuyPreview | null {
+  const initialBuyWei = parseInitialBuyWei(initialBuyEth);
+  const normalizedFeePercent = Number(buyFeePercent.trim());
+
+  if (
+    initialBuyWei === null ||
+    !Number.isInteger(normalizedFeePercent) ||
+    normalizedFeePercent < 1 ||
+    normalizedFeePercent > 10
+  ) {
+    return null;
+  }
+
+  const grossEthAmount = Number(formatEther(initialBuyWei));
+  const poolEthAmount = grossEthAmount * (1 - normalizedFeePercent / 100);
+
+  if (
+    !Number.isFinite(grossEthAmount) ||
+    !Number.isFinite(poolEthAmount) ||
+    poolEthAmount <= 0
+  ) {
+    return null;
+  }
+
+  const nextSqrtPrice =
+    (MEME_INITIAL_LIQUIDITY * MEME_INITIAL_SQRT_PRICE) /
+    (MEME_INITIAL_LIQUIDITY +
+      poolEthAmount * MEME_INITIAL_SQRT_PRICE);
+  const tokenAmount = Math.max(
+    0,
+    Math.min(
+      MEME_TOKEN_SUPPLY_WHOLE,
+      MEME_INITIAL_LIQUIDITY *
+        (MEME_INITIAL_SQRT_PRICE - nextSqrtPrice),
+    ),
+  );
+
+  if (!Number.isFinite(tokenAmount) || tokenAmount <= 0) {
+    return null;
+  }
+
+  return {
+    grossEthAmount,
+    poolEthAmount,
+    tokenAmount,
+    supplyPercent: (tokenAmount / MEME_TOKEN_SUPPLY_WHOLE) * 100,
+  };
 }
 
 export function parseOptionalInitialBuyWei(value: string | null | undefined) {

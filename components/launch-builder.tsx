@@ -77,6 +77,7 @@ import {
   createDeepDraft,
   createEmptyDraft,
   createStockPairedDraft,
+  getClassicInitialBuyPreview,
   maximumClassicDevBuyWei,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
@@ -2971,6 +2972,16 @@ const initialBuyAccessOptions: readonly LaunchSelectOption<
   { value: "cliff-linear", label: "Cliff, then linear vesting" },
 ];
 
+const compactInitialBuyTokenFormatter = new Intl.NumberFormat("en-US", {
+  compactDisplay: "short",
+  maximumFractionDigits: 2,
+  notation: "compact",
+});
+
+const initialBuySupplyFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 2,
+});
+
 function EnhancedClassicFeeStep({
   draft,
   setDraft,
@@ -3005,12 +3016,19 @@ function EnhancedClassicFeeStep({
     return Number.isFinite(share) ? total + share : total;
   }, 0);
   const splitIsComplete = Math.abs(splitTotal - 100) < 0.001;
+  const initialBuyPreview = getClassicInitialBuyPreview(
+    draft.initialBuyEth,
+    draft.buySwapFeePercent,
+  );
+  const initialBuyTokenLabel = draft.tokenSymbol.trim()
+    ? `$${draft.tokenSymbol.trim().toUpperCase()}`
+    : "tokens";
   const rewardNote =
     draft.rewardDestinationMode === "launcher"
-      ? "Rewards go to the launch wallet"
+      ? "Paid to the launch wallet"
       : draft.rewardDestinationMode === "external"
-        ? "Rewards go to one wallet"
-        : "Each wallet claims its own share";
+        ? "Paid to the selected wallet"
+        : "Each recipient claims their share";
 
   return (
     <section className="classic-v3-settings" aria-labelledby="classic-v3-fees">
@@ -3042,12 +3060,20 @@ function EnhancedClassicFeeStep({
                       updateClassicV3Draft({ [key]: value })
                     }
                   />
-                  <small>
-                    {Number.isFinite(creatorFeeBps)
-                      ? formatClassicV3Percent(creatorFeeBps)
-                      : "—"}{" "}
-                    creator <span>·</span> 0.10% Programmable
-                  </small>
+                  <dl className="classic-v3-fee-breakdown">
+                    <div>
+                      <dt>Creator</dt>
+                      <dd>
+                        {Number.isFinite(creatorFeeBps)
+                          ? formatClassicV3Percent(creatorFeeBps)
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Programmable</dt>
+                      <dd>0.10%</dd>
+                    </div>
+                  </dl>
                 </div>
               );
             })}
@@ -3079,7 +3105,7 @@ function EnhancedClassicFeeStep({
               </button>
             ))}
           </div>
-          <small className="classic-v3-reward-note">{rewardNote}</small>
+          <p className="classic-v3-reward-note">{rewardNote}</p>
         </fieldset>
       </div>
 
@@ -3186,11 +3212,14 @@ function EnhancedClassicFeeStep({
       </div>
 
       <div className="classic-v3-initial-buy">
-        <label className="meme-dev-buy" htmlFor="classic-v3-dev-buy">
-          <span>
+        <div className="meme-dev-buy">
+          <label
+            className="classic-v3-amount-label"
+            htmlFor="classic-v3-dev-buy"
+          >
             <strong>Amount</strong>
             <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
-          </span>
+          </label>
           <span className="meme-dev-buy-input">
             <input
               id="classic-v3-dev-buy"
@@ -3215,7 +3244,29 @@ function EnhancedClassicFeeStep({
             </button>
             <span>ETH</span>
           </span>
-        </label>
+          <div
+            className="classic-v3-buy-preview"
+            role="status"
+            aria-live="polite"
+          >
+            <span>
+              <small>Estimated tokens</small>
+              <strong>
+                {initialBuyPreview
+                  ? `≈ ${compactInitialBuyTokenFormatter.format(initialBuyPreview.tokenAmount)} ${initialBuyTokenLabel}`
+                  : "—"}
+              </strong>
+            </span>
+            <span>
+              <small>Share of supply</small>
+              <strong>
+                {initialBuyPreview
+                  ? `≈ ${initialBuySupplyFormatter.format(initialBuyPreview.supplyPercent)}%`
+                  : "—"}
+              </strong>
+            </span>
+          </div>
+        </div>
 
         <fieldset
           className="classic-v3-custody"
