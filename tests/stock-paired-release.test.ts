@@ -9,6 +9,7 @@ import {
 } from "../lib/stock-paired";
 import {
   findStockPairedReleaseByHook,
+  findStockPairedReleaseByHookAndVersion,
   getConfiguredStockPairedLaunchRelease,
   getConfiguredStockPairedRelease,
   isConfiguredStockPairedReleaseReady,
@@ -473,6 +474,42 @@ describe("Stock-Paired release gate", () => {
       findStockPairedReleaseByHook(
         [v1, v2],
         "0x9999999999999999999999999999999999999999",
+      ),
+    ).toBeNull();
+  });
+
+  it("uses the release version to disambiguate a shared hook", () => {
+    const v2 = resolveVerifiedStockPairedV2Release(placeholderV2Manifest);
+    const v3 = resolveVerifiedStockPairedV3Release(placeholderV3Manifest);
+    if (!v2 || !v3) throw new Error("release fixtures are invalid");
+
+    expect(v2.addresses.feeHook).toBe(v3.addresses.feeHook);
+    expect(
+      findStockPairedReleaseByHookAndVersion(
+        [v2, v3],
+        v3.addresses.feeHook,
+        "stock-paired-v2",
+      ),
+    ).toMatchObject({ internalContractRelease: "stock-paired-v2" });
+    expect(
+      findStockPairedReleaseByHookAndVersion(
+        [v2, v3],
+        v3.addresses.feeHook,
+        "stock-paired-v3",
+      ),
+    ).toMatchObject({ internalContractRelease: "stock-paired-v3" });
+    expect(
+      findStockPairedReleaseByHookAndVersion(
+        [v2, v3],
+        v3.addresses.feeHook,
+        undefined,
+      ),
+    ).toBeNull();
+    expect(
+      findStockPairedReleaseByHookAndVersion(
+        [v2, v3],
+        v3.addresses.feeHook,
+        "stock-paired-v4",
       ),
     ).toBeNull();
   });

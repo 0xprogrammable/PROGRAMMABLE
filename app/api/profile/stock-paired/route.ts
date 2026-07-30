@@ -30,7 +30,7 @@ import {
   stockPairedHookAbi,
 } from "@/lib/stock-paired";
 import {
-  getConfiguredStockPairedReleaseByHook,
+  getConfiguredStockPairedReleaseByHookAndVersion,
   getConfiguredStockPairedReleases,
 } from "@/lib/stock-paired-release";
 import type { LauncherToken } from "@/lib/tokens";
@@ -203,8 +203,9 @@ async function readVaultReward(
   ) {
     return null;
   }
-  const release = getConfiguredStockPairedReleaseByHook(
+  const release = getConfiguredStockPairedReleaseByHookAndVersion(
     token.hookAddress,
+    token.launchModelVersion,
   );
   const quote = release
     ? getStockPairedQuoteAssetForRelease(

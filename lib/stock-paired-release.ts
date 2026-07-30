@@ -701,8 +701,40 @@ export function findStockPairedReleaseByHook(
   );
 }
 
+export function findStockPairedReleaseByHookAndVersion(
+  releases: readonly VerifiedStockPairedRelease[],
+  hook: string,
+  version: unknown,
+) {
+  if (
+    !validAddress(hook) ||
+    (version !== STOCK_PAIRED_INTERNAL_RELEASE &&
+      version !== STOCK_PAIRED_V2_INTERNAL_RELEASE &&
+      version !== STOCK_PAIRED_V3_INTERNAL_RELEASE)
+  ) {
+    return null;
+  }
+  const matches = releases.filter(
+    (release) =>
+      release.internalContractRelease === version &&
+      sameAddress(release.addresses.feeHook, hook),
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
 export function getConfiguredStockPairedReleaseByHook(hook: string) {
   return findStockPairedReleaseByHook(getConfiguredStockPairedReleases(), hook);
+}
+
+export function getConfiguredStockPairedReleaseByHookAndVersion(
+  hook: string,
+  version: unknown,
+) {
+  return findStockPairedReleaseByHookAndVersion(
+    getConfiguredStockPairedReleases(),
+    hook,
+    version,
+  );
 }
 
 export function isConfiguredStockPairedReleaseReady(
