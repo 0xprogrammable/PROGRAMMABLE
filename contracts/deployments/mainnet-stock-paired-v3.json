@@ -104,8 +104,8 @@
     "finalActivationPricing": {
       "status": "verified-current-release",
       "evidencePath": "contracts/deployments/evidence/stock-paired-v3-final-pricing.json",
-      "evidenceSha256": "sha256:27bd130b95b708bf6d8e365682f02bcf7df47d631c0f119a695d5a0d61c64bc6",
-      "verifiedAt": "2026-07-30T03:39:13.000Z"
+      "evidenceSha256": "sha256:b334c2d2f17e5208a23f8bdfb6621f2140b8a9035f6eeca0bfda4f8be9c12578",
+      "verifiedAt": "2026-07-30T13:36:21.000Z"
     },
     "disclosure": "Starts near Classic's 1.355657760817103798 ETH initial FDV. The exact USD value moves with ETH and the selected quote asset."
   },

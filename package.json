@@ -77,6 +77,8 @@
     "contracts:stock-paired-v3:activation:check": "node scripts/prepare-stock-paired-v3-public-activation.mjs",
     "contracts:stock-paired-v3:activation:write": "node scripts/prepare-stock-paired-v3-public-activation.mjs --write",
     "contracts:stock-paired-v3:activation:test": "node --test scripts/test/stock-paired-v3-public-activation.test.mjs",
+    "contracts:stock-paired-v3:monitor": "node contracts/scripts/monitor-stock-paired-v3.mjs",
+    "contracts:stock-paired-v3:monitor:test": "node --test contracts/scripts/test/stock-paired-v3-monitor.test.mjs",
     "contracts:stock-paired:operator:test": "cd contracts && forge build --force script/DeployMainnetStockPairedInfrastructureV1.s.sol src/StockPairedEthLaunchCoordinatorV1.sol && cd .. && node --test contracts/scripts/test/stock-paired-operator.test.mjs contracts/scripts/test/stock-paired-eth-coordinator-operator.test.mjs contracts/scripts/test/stock-paired-canary.test.mjs contracts/scripts/test/stock-paired-eth-canary.test.mjs",
     "contracts:stock-paired:eth-coordinator:check": "node scripts/serve-stock-paired-eth-coordinator.mjs",
     "contracts:stock-paired:eth-coordinator": "node scripts/serve-stock-paired-eth-coordinator.mjs --write",

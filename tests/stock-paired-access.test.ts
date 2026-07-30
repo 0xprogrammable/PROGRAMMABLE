@@ -18,6 +18,12 @@ describe("Stock-Paired access", () => {
     expect(
       isStockPairedPublicLaunchEnabled("rehearsal", release),
     ).toBe(false);
+    expect(
+      isStockPairedPublicLaunchEnabled("production", {
+        ...release,
+        chainId: 8453,
+      }),
+    ).toBe(false);
   });
 
   it("fails closed for missing and historical releases", () => {
