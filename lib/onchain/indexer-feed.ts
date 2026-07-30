@@ -129,7 +129,8 @@ function launchIdentity(token: LauncherToken) {
   const modelVersion =
     token.launchModel === "deep"
       ? token.deepReleaseVersion ?? null
-      : token.launchModel === "stock-paired"
+      : token.launchModel === "stock-paired" ||
+          token.launchModelVersion === "classic-v3"
         ? token.launchModelVersion ?? null
         : null;
 
@@ -317,8 +318,7 @@ export function serializeIndexerToken(
     transferTaxBps === undefined ||
     programmableFeeBps === undefined ||
     (!isDeepV3 &&
-      (creatorFeeBps === undefined ||
-        buyCreatorFeeBps === null ||
+      (buyCreatorFeeBps === null ||
         sellCreatorFeeBps === null)) ||
     (isDeepV3 && growthFeeBps === null)
   ) {

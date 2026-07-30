@@ -1275,7 +1275,7 @@ export function TokenDetailView({ address }: { address: string }) {
     activeState.phase === "loading"
       ? "Loading token"
       : activeState.phase === "not-found"
-        ? "This token was not launched through Programmable"
+        ? "This token is not in the Programmable launch index yet"
         : activeState.phase === "not-deployed"
           ? "No verified launch data is available"
           : activeState.message;

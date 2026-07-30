@@ -13,6 +13,10 @@ import mainnetDeployments from "../../contracts/dependencies/ethereum-mainnet.js
 import sepoliaDeployments from "../../contracts/dependencies/ethereum-sepolia.json";
 import mainnetDeepV3Manifest from "../../contracts/deployments/mainnet-deep-full-range-v3.json";
 import {
+  getConfiguredClassicV3Release,
+  isClassicV3ReleaseVerified,
+} from "../classic-v3-release";
+import {
   NATIVE_ETH,
   amountOutMinimum,
   assertClassicDeadline,
@@ -287,6 +291,50 @@ export function resolveClassicTradeDeployment(
   return deployment;
 }
 
+export function resolveClassicV3TradeDeployment(
+  chainId: number,
+): ClassicTradeRelease {
+  const official = getPinnedOfficialTradeStack(chainId);
+  const environment =
+    chainId === 1
+      ? "production"
+      : chainId === 11_155_111
+        ? "rehearsal"
+        : null;
+  if (!environment) {
+    throw new ClassicTradeUnavailableError(
+      `Classic V3 trading is not supported on chain ${chainId}`,
+    );
+  }
+  const { appManifest, releaseManifest } =
+    getConfiguredClassicV3Release(environment);
+  if (!isClassicV3ReleaseVerified(appManifest, releaseManifest, chainId)) {
+    throw new ClassicTradeUnavailableError(
+      `Classic V3 trading has no verified release on chain ${chainId}`,
+    );
+  }
+  const hookRuntimeCodeHash =
+    appManifest.runtimeCodeHashes?.ethCreatorFeeHookV3;
+  if (
+    typeof appManifest.ethCreatorFeeHookV3 !== "string" ||
+    typeof hookRuntimeCodeHash !== "string" ||
+    !isHex(hookRuntimeCodeHash) ||
+    hookRuntimeCodeHash.length !== 66
+  ) {
+    throw new ClassicTradeUnavailableError(
+      `Classic V3 trading has no pinned hook release on chain ${chainId}`,
+    );
+  }
+  const deployment: ClassicTradeRelease = {
+    ...official,
+    launchModel: "classic",
+    hook: getAddress(appManifest.ethCreatorFeeHookV3),
+    hookRuntimeCodeHash,
+  };
+  assertClassicTradeDeployment(deployment);
+  return deployment;
+}
+
 function verifiedIndexedToken(
   model: ExploreReadModel,
   chainId: number,
@@ -342,7 +390,10 @@ export function resolveTradeDeployment(
     );
   }
   if (launchModel === "classic") {
-    const deployment = resolveClassicTradeDeployment(chainId);
+    const deployment =
+      verified.launchModelVersion === "classic-v3"
+        ? resolveClassicV3TradeDeployment(chainId)
+        : resolveClassicTradeDeployment(chainId);
     assertVerifiedTradeToken(model, deployment, token);
     return deployment;
   }
