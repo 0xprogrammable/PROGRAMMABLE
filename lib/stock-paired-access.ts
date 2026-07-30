@@ -2,10 +2,13 @@ const STOCK_PAIRED_DEV_ACCOUNTS = new Set([
   "0x2bb333d48dfaf1596d9036671d2e43168994249e",
 ]);
 
+export const STOCK_PAIRED_NEW_LAUNCHES_ENABLED = false;
+
 export function isStockPairedDevAccount(
   account: string | null | undefined,
 ) {
   return Boolean(
+    STOCK_PAIRED_NEW_LAUNCHES_ENABLED &&
     account &&
       /^0x[a-fA-F0-9]{40}$/.test(account) &&
       STOCK_PAIRED_DEV_ACCOUNTS.has(account.toLowerCase()),
@@ -14,6 +17,7 @@ export function isStockPairedDevAccount(
 
 export function isStockPairedLocalPreviewEnabled() {
   return (
+    STOCK_PAIRED_NEW_LAUNCHES_ENABLED &&
     process.env.NODE_ENV !== "production" &&
     process.env.NEXT_PUBLIC_STOCK_PAIRED_UI_PREVIEW === "true"
   );
