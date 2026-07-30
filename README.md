@@ -24,8 +24,10 @@ The current public launch flow creates a fixed supply of 1,000,000,000 tokens th
 - The complete launch allocation enters one permanently locked, one-sided Uniswap v4 position
 - Launching has no protocol fee or liquidity deposit
 - The creator makes an initial buy of at least 0.0006 ETH and pays Ethereum gas
-- The public interface currently uses a fixed 1.00% swap fee
-- The creator receives 0.90% and Programmable receives 0.10%
+- Buy and sell fees are set separately from 1% to 10% in whole percentage points
+- Programmable receives 0.10%; the remainder goes to the configured creator-reward recipients
+- Creator rewards can go to one wallet or a fixed split of up to five wallets
+- Initial Buy tokens can remain unlocked, use a fixed lock, vest linearly or vest after a cliff
 - The fee applies only in the canonical hooked pool, not to ordinary ERC-20 transfers
 
 The 0.10% Programmable share is deducted from the selected swap fee. It is not added on top.
@@ -66,7 +68,7 @@ The public read model pairs canonical launch events, ignores unrecognized shared
 
 ## Release status
 
-The active Classic deployment is recorded in [`contracts/deployments/mainnet-classic-v2.json`](./contracts/deployments/mainnet-classic-v2.json). Its deployment receipts, constructor configuration, runtime code hashes and signed launch, buy, sell and claim lifecycle have been reconciled through two RPC providers. The deployed contracts have exact source matches on Etherscan and Sourcify.
+The active Classic deployment is recorded in [`contracts/deployments/mainnet-classic-v3.json`](./contracts/deployments/mainnet-classic-v3.json). Its deployment receipts, constructor configuration, runtime code hashes and signed launch, buy, sell and claim lifecycle have been reconciled through two RPC providers. The deployed contracts have exact source matches on Etherscan and Sourcify.
 
 The V1 and V2 Stock-Paired deployments remain immutable historical releases.
 Their public indexer records preserve the quote asset, v4 pool ordering, hook,

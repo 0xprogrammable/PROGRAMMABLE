@@ -149,11 +149,11 @@ describe("Docs navigation state", () => {
     expect(getDocsSearchResults("")).toEqual([]);
   });
 
-  it("describes launch-model availability without implying a public release", () => {
+  it("keeps hidden models out of search and describes Stock-Paired accurately", () => {
     const deepResults = getDocsSearchResults("deep");
     const stockResults = getDocsSearchResults("stock");
 
-    expect(deepResults[0]?.description).toContain("unreleased");
+    expect(deepResults).toEqual([]);
     expect(stockResults[0]?.description).toContain("restricted");
   });
 

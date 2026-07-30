@@ -6,7 +6,6 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import launchExperience from "@/components/launch-experience.module.css";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
-import { isConfiguredDeepV3ReleaseReady } from "@/lib/deep-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
 import type { LaunchModel } from "@/lib/launch";
 
@@ -16,8 +15,6 @@ const launchEnvironment =
     : "production";
 const classicV3LaunchAvailable =
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
-const deepLaunchAvailable =
-  isConfiguredDeepV3ReleaseReady(launchEnvironment);
 
 function loadLaunchForm() {
   return import("@/components/launch-builder");
@@ -73,7 +70,6 @@ export function LaunchExperience({
     if (
       !model ||
       (model === "classic-v3" && !classicV3LaunchAvailable) ||
-      (model === "deep" && !deepLaunchAvailable) ||
       (model === "stock-paired" && !stockPairedPublicLaunchEnabled)
     ) {
       return;
@@ -243,57 +239,6 @@ export function LaunchModelPicker({
           </span>
         </button>
 
-        <button
-          className={`launch-model-card launch-model-card-deep ${launchExperience.modelCard}`}
-          data-launch-model-option="deep"
-          data-launch-model-available={deepLaunchAvailable}
-          type="button"
-          disabled={!deepLaunchAvailable}
-          aria-describedby="launch-model-deep-description"
-          onPointerEnter={deepLaunchAvailable ? preloadAvailableForm : undefined}
-          onFocus={deepLaunchAvailable ? preloadAvailableForm : undefined}
-          onClick={() => onChoose("deep")}
-        >
-          <span
-            className={`launch-model-art launch-model-art-deep ${launchExperience.modelArt}`}
-            aria-hidden="true"
-          >
-            <Image
-              src="/brand/programmable-deep-liquidity-teaser-v1-1774x887.webp"
-              alt=""
-              fill
-              sizes="(max-width: 520px) calc(100vw - 28px), (max-width: 800px) calc(100vw - 48px), 500px"
-            />
-          </span>
-
-          <span
-            className={`launch-model-card-body ${launchExperience.modelBody}`}
-          >
-            <span
-              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-            >
-              <strong>Deep</strong>
-              {!deepLaunchAvailable ? (
-                <small data-status="pending">Coming soon</small>
-              ) : null}
-            </span>
-            <span
-              className={`launch-model-description ${launchExperience.modelDescription}`}
-              id="launch-model-deep-description"
-            >
-              Trading fees automatically deepen the original locked Uniswap
-              v4 pool.
-            </span>
-            {deepLaunchAvailable ? (
-              <span
-                className={`launch-model-action ${launchExperience.modelAction}`}
-              >
-                Launch
-                <ArrowRight aria-hidden="true" size={16} />
-              </span>
-            ) : null}
-          </span>
-        </button>
       </div>
     </div>
   );

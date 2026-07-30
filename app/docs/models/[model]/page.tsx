@@ -5,12 +5,10 @@ import { ExternalLink } from "lucide-react";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
 
-type ModelSlug = "classic" | "deep" | "stock-paired";
+type ModelSlug = "classic" | "stock-paired";
 
 const classicEvidenceCommit =
   "1fb9558af4f0248de75d5c7983f80036e32f47cb";
-const deepSourceCommit =
-  "db4599b7e3280c381a500c6f738ec2a2c244ca35";
 const stockPairedEvidenceCommit =
   "ef2bbb51336a20aa2886dad0232f61495e8f2911";
 
@@ -22,11 +20,6 @@ const modelMetadata: Record<
     title: "Classic",
     description:
       "Configure buy and sell fees, creator rewards and Initial Buy custody for a fixed-supply Uniswap v4 token.",
-  },
-  deep: {
-    title: "Deep",
-    description:
-      "An unreleased model designed to turn its fee share into permanently pool-bound liquidity.",
   },
   "stock-paired": {
     title: "Stock-Paired",
@@ -376,157 +369,6 @@ function ClassicDocs() {
   );
 }
 
-function DeepDocs() {
-  return (
-    <DocsShell
-      currentPath="/docs/models/deep"
-      kicker="Launch model · In development"
-      title="Deep"
-      description="A fixed-supply launch designed to turn trading fees into permanently pool-bound liquidity."
-    >
-      <section>
-        <span className={styles.sectionEyebrow}>Release status</span>
-        <h2>Documented, not publicly launchable</h2>
-        <p className={styles.lead}>
-          Deep is still behind the production release gate. Its contracts,
-          source verification, launch lifecycle and live automation evidence
-          must all match before the Launch page can enable it.
-        </p>
-        <div className={styles.callout}>
-          <strong>Coming soon means no Mainnet launch is available.</strong>
-          <p>
-            Tests, simulations and a completed interface do not change that
-            status.
-          </p>
-        </div>
-      </section>
-
-      <section>
-        <span className={styles.sectionEyebrow}>Model</span>
-        <h2>Trading fees return to the original pool</h2>
-        <div className={styles.flow}>
-          <div className={styles.flowItem}>
-            <span>Swap</span>
-            <strong>A trade pays the fixed 1.00% hook fee in ETH</strong>
-          </div>
-          <div className={styles.flowItem}>
-            <span>Growth share</span>
-            <strong>0.90% accrues inside the pool&apos;s growth vault</strong>
-          </div>
-          <div className={styles.flowItem}>
-            <span>Compound</span>
-            <strong>Bounded ETH buys tokens in the original pool</strong>
-          </div>
-          <div className={styles.flowItem}>
-            <span>Liquidity</span>
-            <strong>ETH and tokens enter permanent full-range liquidity</strong>
-          </div>
-        </div>
-        <p>
-          The remaining 0.10% accrues to the Programmable treasury. Deep has no
-          creator reward, payout address, rescue path or liquidity-removal
-          control.
-        </p>
-      </section>
-
-      <section>
-        <span className={styles.sectionEyebrow}>Automation</span>
-        <h2>Five minutes is the earliest eligible retry</h2>
-        <p>
-          After release, an offchain executor would pay gas and check eligible
-          pools. When a vault has enough accounted fees and its safety checks
-          pass, it could compound no more than once in an eligible five-minute
-          window. A failed or ineligible cycle would be skipped and checked
-          again later.
-        </p>
-        <div className={styles.factGrid}>
-          <div className={styles.fact}>
-            <span>Minimum interval</span>
-            <strong>5 minutes after a successful compound</strong>
-          </div>
-          <div className={styles.fact}>
-            <span>Minimum pending growth</span>
-            <strong>0.002 ETH</strong>
-          </div>
-          <div className={styles.fact}>
-            <span>Per-cycle maximum</span>
-            <strong>0.25 ETH before tighter depth limits</strong>
-          </div>
-          <div className={styles.fact}>
-            <span>Oracle history</span>
-            <strong>30-minute pool observations required</strong>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <span className={styles.sectionEyebrow}>Protection</span>
-        <h2>Growth is bounded by live pool conditions</h2>
-        <ul className={styles.contentList}>
-          <li>
-            Spot, short-window and long-window pool prices must remain within
-            fixed deviation limits.
-          </li>
-          <li>
-            The internal buy must stay within the per-cycle price-impact limit.
-          </li>
-          <li>
-            The growth budget is capped by accounted ETH and permanent,
-            factory-proven pool depth.
-          </li>
-          <li>
-            The swap and liquidity addition happen atomically. A failed
-            compound changes neither accounting nor liquidity.
-          </li>
-        </ul>
-      </section>
-
-      <section>
-        <span className={styles.sectionEyebrow}>Boundaries</span>
-        <h2>What deeper liquidity does not solve</h2>
-        <ul className={styles.contentList}>
-          <li>It does not guarantee demand or prevent the token price falling.</li>
-          <li>It does not remove all manipulation, MEV or execution risk.</li>
-          <li>
-            An offchain executor is required. Smart contracts do not wake
-            themselves every five minutes.
-          </li>
-          <li>
-            Uniswap protocol fees, if enabled for the pool, are separate from
-            the fixed Programmable hook fee.
-          </li>
-        </ul>
-        <div className={styles.sourceLinks}>
-          <a
-            href={`https://github.com/0xprogrammable/programmable/blob/${deepSourceCommit}/docs/superpowers/specs/2026-07-29-deep-eth-buy-and-lock-design.md`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Design specification
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
-            href={`https://github.com/0xprogrammable/programmable/blob/${deepSourceCommit}/contracts/security/DEEP-V3.md`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Security notes
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
-            href={`https://github.com/0xprogrammable/programmable/blob/${deepSourceCommit}/contracts/deployments/mainnet-deep-full-range-v3.json`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Release status
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-        </div>
-      </section>
-    </DocsShell>
-  );
-}
-
 function StockPairedDocs() {
   const launcher = "0x195750f33caD5eF2DF857a53226B421297A1e79e";
   const hook = "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc";
@@ -750,6 +592,5 @@ export default async function ModelDocsPage({
   if (!isModelSlug(model)) notFound();
 
   if (model === "classic") return <ClassicDocs />;
-  if (model === "deep") return <DeepDocs />;
   return <StockPairedDocs />;
 }
