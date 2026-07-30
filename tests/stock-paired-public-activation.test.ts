@@ -140,7 +140,7 @@ describe.sequential("Stock-Paired public activation", () => {
     });
   });
 
-  it("ships the checked-in release open while keeping non-Mainnet wallets blocked", async () => {
+  it("ships the checked-in release closed while Stock-Paired is coming soon", async () => {
     vi.resetModules();
     const [{ default: LaunchPage }, { POST }] = await Promise.all([
       import("../app/launch/page"),
@@ -151,15 +151,13 @@ describe.sequential("Stock-Paired public activation", () => {
       /<button[^>]*data-launch-model-option="stock-paired"[^>]*>/,
     )?.[0];
 
-    expect(stockButton).not.toContain("disabled");
-    expect(html).not.toContain("Stock-Paired</strong><span>Coming soon");
+    expect(stockButton).toContain("disabled");
+    expect(html).toContain("Coming soon");
 
     const result = await POST(publicPreflightRequest());
-    expect(result.status).toBe(200);
-    await expect(result.json()).resolves.toMatchObject({
-      status: "blocked",
-      mode: "stock-paired",
-      title: "Switch the wallet to Ethereum",
+    expect(result.status).toBe(403);
+    await expect(result.json()).resolves.toEqual({
+      error: "Stock-Paired is coming soon",
     });
   });
 });
