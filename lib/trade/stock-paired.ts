@@ -26,7 +26,7 @@ import {
   stockQuoteRegistryAbi,
 } from "../stock-paired";
 import {
-  getConfiguredStockPairedReleaseByHook,
+  getConfiguredStockPairedReleaseByHookAndVersion,
   type VerifiedStockPairedRelease,
 } from "../stock-paired-release";
 import type { ExploreReadModel } from "../onchain/types";
@@ -216,8 +216,9 @@ export function resolveStockPairedTradeDeployment(
     );
   }
   const verifiedToken = verifiedStockToken(model, token);
-  const release = getConfiguredStockPairedReleaseByHook(
+  const release = getConfiguredStockPairedReleaseByHookAndVersion(
     verifiedToken.hookAddress,
+    verifiedToken.launchModelVersion,
   );
   if (!release) {
     throw new ClassicTradeUnavailableError(
