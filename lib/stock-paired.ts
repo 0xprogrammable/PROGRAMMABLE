@@ -52,6 +52,18 @@ export const STOCK_PAIRED_PROGRAMMABLE_FEE_BPS = 10;
 export const STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS = 256;
 export const STOCK_PAIRED_LEGACY_INITIAL_ABSOLUTE_TICK = 191_200;
 
+export function stockPairedRegistryContainsReleaseAssets(
+  registryAssetCount: bigint,
+  releaseAssetCount: number,
+) {
+  return (
+    registryAssetCount >= 0n &&
+    Number.isSafeInteger(releaseAssetCount) &&
+    releaseAssetCount > 0 &&
+    registryAssetCount >= BigInt(releaseAssetCount)
+  );
+}
+
 const stockPairedCurrency0SaltParameters = parseAbiParameters(
   "string domain, bytes32 baseSalt, uint256 attempt",
 );
