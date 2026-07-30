@@ -6545,6 +6545,35 @@ html[data-theme="dark"] .theme-toggle-sun {
   .classic-token-main .two-column-fields {
     grid-template-columns: 1fr;
   }
+
+  .stock-paired-section,
+  .stock-quote-select,
+  .stock-paired-controls,
+  .stock-paired-controls .stock-paired-fee-card,
+  .stock-paired-controls .stock-paired-initial-buy,
+  .stock-paired-launch-action {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .launch-page[data-launch-model="stock-paired"]
+    .stock-paired-controls
+    .stock-paired-initial-buy {
+    align-items: stretch;
+    gap: 7px;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 11px;
+  }
+
+  .stock-paired-initial-buy-copy {
+    grid-template-columns: 1fr auto;
+  }
+
+  .stock-paired-initial-buy-copy small {
+    text-align: right;
+  }
 }
 
 .classic-v3-settings {
