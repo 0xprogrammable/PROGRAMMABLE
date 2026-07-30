@@ -7,7 +7,7 @@ export type StockPairedPublicLaunchRelease = {
   chainId: number;
 };
 
-export const STOCK_PAIRED_NEW_LAUNCHES_ENABLED = true;
+export const STOCK_PAIRED_NEW_LAUNCHES_ENABLED = false;
 
 export function isStockPairedDevAccount(
   account: string | null | undefined,
