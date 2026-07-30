@@ -2365,30 +2365,47 @@ async function assertStockPairedRuntimeFdv(
   quoteAsset: Address,
   targetQuoteAmountWad: string,
 ) {
-  let routeQuoteAmount: bigint;
-  try {
-    const quote = await quoteStockPairedExternalRoute(
-      account,
-      quoteAsset,
-      STOCK_PAIRED_RUNTIME_FDV_PROBE_WEI,
-      "buy",
-    );
-    routeQuoteAmount = quote.amountOut;
-  } catch {
-    throw new LaunchInputError(
-      "Current Stock-Paired launch pricing could not be verified from the reviewed ETH route",
-    );
+  const readAssessment = async () => {
+    let routeQuoteAmount: bigint;
+    try {
+      const quote = await quoteStockPairedExternalRoute(
+        account,
+        quoteAsset,
+        STOCK_PAIRED_RUNTIME_FDV_PROBE_WEI,
+        "buy",
+      );
+      routeQuoteAmount = quote.amountOut;
+    } catch {
+      throw new LaunchInputError(
+        "Current Stock-Paired launch pricing could not be verified from the reviewed ETH route",
+      );
+    }
+
+    return assessStockPairedRuntimeFdv({
+      targetQuoteAmountWad,
+      routeQuoteAmount,
+    });
+  };
+
+  const initialAssessment = await readAssessment();
+  if (initialAssessment.withinPolicy) {
+    return;
   }
 
-  const assessment = assessStockPairedRuntimeFdv({
-    targetQuoteAmountWad,
-    routeQuoteAmount,
-  });
-  if (!assessment.withinPolicy) {
-    throw new LaunchInputError(
-      "New Stock-Paired launches are paused because the current starting FDV is outside the reviewed range",
-    );
+  // A stale RPC response or a just-mined route update must not pause a safe
+  // launch. After an outlier, require two fresh in-policy quotes in a row.
+  const retryAssessment = await readAssessment();
+  const confirmationAssessment = await readAssessment();
+  if (
+    retryAssessment.withinPolicy &&
+    confirmationAssessment.withinPolicy
+  ) {
+    return;
   }
+
+  throw new LaunchInputError(
+    "New Stock-Paired launches are paused because the current starting FDV is outside the reviewed range",
+  );
 }
 
 async function findStockPairedCurrency0Salt({
