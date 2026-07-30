@@ -18,7 +18,6 @@ export const docsNavigation = [
     label: "Launch models",
     items: [
       { href: "/docs/models/classic", label: "Classic" },
-      { href: "/docs/models/deep", label: "Deep" },
       { href: "/docs/models/stock-paired", label: "Stock-Paired" },
     ],
   },
@@ -60,12 +59,6 @@ export const docsSearchItems: DocsSearchItem[] = [
     description:
       "Directional swap fees, ETH creator rewards and Initial Buy custody.",
     href: "/docs/models/classic",
-  },
-  {
-    title: "Deep",
-    description:
-      "An unreleased model designed to return trading fees to locked liquidity.",
-    href: "/docs/models/deep",
   },
   {
     title: "Stock-Paired",

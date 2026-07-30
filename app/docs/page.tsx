@@ -40,9 +40,9 @@ export default function DocsPage() {
         <div className={styles.callout}>
           <strong>Release status is part of the product.</strong>
           <p>
-            Classic is available for public launches. Deep is documented but
-            not deployed. Stock-Paired has a verified Mainnet deployment but
-            remains restricted in the interface.
+            Classic is available for public launches. Stock-Paired has a
+            verified Mainnet deployment but remains restricted in the
+            interface.
           </p>
         </div>
 
@@ -60,21 +60,6 @@ export default function DocsPage() {
             </p>
             <span className={styles.modelLink}>
               Read Classic
-              <ArrowRight aria-hidden="true" size={14} />
-            </span>
-          </Link>
-
-          <Link className={styles.modelCard} href="/docs/models/deep">
-            <span className={styles.modelCardHeader}>
-              <strong>Deep</strong>
-              <span className={styles.status}>In development</span>
-            </span>
-            <p>
-              Designed to use its fee share to buy the token and add
-              permanently pool-bound liquidity.
-            </p>
-            <span className={styles.modelLink}>
-              Read Deep
               <ArrowRight aria-hidden="true" size={14} />
             </span>
           </Link>
@@ -185,10 +170,8 @@ export default function DocsPage() {
           under the current configuration.
         </p>
         <p>
-          Stock-Paired rewards accrue in its selected quote token. Deep is
-          designed without creator rewards because its 0.90% model share is
-          reserved for liquidity growth. Profile shows the claims available to
-          the connected wallet.
+          Stock-Paired rewards accrue in its selected quote token. Profile
+          shows the claims available to the connected wallet.
         </p>
         <div className={styles.callout}>
           <strong>Claiming cannot change the launch economics.</strong>
