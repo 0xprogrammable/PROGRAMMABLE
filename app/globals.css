@@ -6593,21 +6593,48 @@ html[data-theme="dark"] .theme-toggle-sun {
 .classic-v3-split-row label > span:first-child,
 .profile-v3-payout > span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 640;
 }
 
-.classic-v3-fee-control > small,
 .classic-v3-reward-note {
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.35;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.classic-v3-fee-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.classic-v3-fee-breakdown > div {
+  align-items: baseline;
+  display: inline-flex;
+  gap: 5px;
+  min-width: 0;
   white-space: nowrap;
 }
 
-.classic-v3-fee-control > small span {
-  color: var(--border-strong);
-  margin: 0 3px;
+.classic-v3-fee-breakdown dt,
+.classic-v3-fee-breakdown dd {
+  margin: 0;
+}
+
+.classic-v3-fee-breakdown dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.classic-v3-fee-breakdown dd {
+  color: var(--text-soft);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
 }
 
 .classic-v3-fees legend,
@@ -6765,7 +6792,7 @@ html[data-theme="dark"] .theme-toggle-sun {
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 650;
   padding: 0 10px;
   white-space: nowrap;
@@ -6865,9 +6892,62 @@ html[data-theme="dark"] .theme-toggle-sun {
   background: var(--surface-soft);
   border: 1px solid var(--border);
   border-radius: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(190px, 246px);
+  column-gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(190px, 230px);
   margin: 0;
   padding: 13px;
+  row-gap: 12px;
+}
+
+.classic-v3-amount-label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.classic-v3-amount-label strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.classic-v3-amount-label small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.classic-v3-buy-preview {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 11px;
+}
+
+.classic-v3-buy-preview > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.classic-v3-buy-preview small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.classic-v3-buy-preview strong {
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .classic-v3-initial-buy .meme-dev-buy-input button {
@@ -6903,7 +6983,7 @@ html[data-theme="dark"] .theme-toggle-sun {
 .classic-v3-custody legend,
 .classic-v3-custody label > span:first-child {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -7274,8 +7354,12 @@ html[data-theme="dark"] .theme-toggle-sun {
   }
 
   .classic-v3-reward-mode button {
-    font-size: 12px;
+    font-size: 12.5px;
     padding-inline: 4px;
+  }
+
+  .classic-v3-buy-preview {
+    grid-template-columns: 1fr;
   }
 
 }

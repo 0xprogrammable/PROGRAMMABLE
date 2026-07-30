@@ -5,6 +5,7 @@ import {
   buildLaunchSummary,
   buildPlainTextPlan,
   createEmptyDraft,
+  getClassicInitialBuyPreview,
   getDraftAssetLabel,
   getInitialBuyEthLabel,
   getMemeFeeBreakdown,
@@ -91,6 +92,30 @@ describe("Classic launch plan", () => {
         gasPriceWei: 2n,
       }),
     ).toBe(0n);
+  });
+
+  it("previews the initial buy output and share of the fixed supply", () => {
+    const minimumBuy = getClassicInitialBuyPreview("0.0006", "1");
+    const largerBuy = getClassicInitialBuyPreview("0.03", "1");
+
+    expect(minimumBuy).not.toBeNull();
+    expect(minimumBuy?.poolEthAmount).toBeCloseTo(0.000594, 12);
+    expect(minimumBuy?.tokenAmount).toBeCloseTo(437_971.7816, 3);
+    expect(minimumBuy?.supplyPercent).toBeCloseTo(0.043797, 5);
+    expect(largerBuy?.tokenAmount).toBeCloseTo(21_438_505.518, 2);
+    expect(largerBuy?.supplyPercent).toBeCloseTo(2.143851, 5);
+  });
+
+  it("accounts for the selected buy fee in the initial buy preview", () => {
+    const onePercentFee = getClassicInitialBuyPreview("0.03", "1");
+    const tenPercentFee = getClassicInitialBuyPreview("0.03", "10");
+
+    expect(tenPercentFee?.tokenAmount).toBeLessThan(
+      onePercentFee?.tokenAmount ?? 0,
+    );
+    expect(getClassicInitialBuyPreview("0.0005", "1")).toBeNull();
+    expect(getClassicInitialBuyPreview("0.03", "1.5")).toBeNull();
+    expect(getClassicInitialBuyPreview("0.03", "11")).toBeNull();
   });
 
   it("copies the selected Dev Buy into the launch summary", () => {
