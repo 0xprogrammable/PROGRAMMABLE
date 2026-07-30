@@ -29,7 +29,6 @@ import launchExperience from "@/components/launch-experience.module.css";
 import { validatePreparedClassicLaunchTransaction } from "@/lib/classic-launch-validation";
 import { validatePreparedClassicV3LaunchTransaction } from "@/lib/classic-v3-launch-validation";
 import {
-  buildClassicV3LaunchDisclosure,
   formatClassicV3Percent,
   validateClassicV3LaunchDraft,
 } from "@/lib/classic-v3";
@@ -2059,7 +2058,6 @@ function LaunchBuilderFormView({
           ) : model === "classic-v3" ? (
             <EnhancedClassicFeeStep
               draft={draft}
-              account={wallet?.account}
               setDraft={setEditableDraft}
               onEdit={markDraftEdited}
               settingMaxBuy={settingMaxBuy}
@@ -2307,6 +2305,179 @@ function LaunchSuccessDialog({
           View your token
         </Link>
       </section>
+    </div>
+  );
+}
+
+type LaunchSelectOption<Value extends string> = Readonly<{
+  value: Value;
+  label: string;
+}>;
+
+function LaunchSelect<Value extends string>({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+  placement = "bottom",
+  columns = 1,
+}: {
+  id: string;
+  label: string;
+  value: Value;
+  options: readonly LaunchSelectOption<Value>[];
+  onChange: (value: Value) => void;
+  placement?: "top" | "bottom";
+  columns?: 1 | 2;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === value),
+  );
+  const [activeIndex, setActiveIndex] = useState(selectedIndex);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const selected = options[selectedIndex] ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !rootRef.current?.contains(event.target)
+      ) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    optionRefs.current[activeIndex]?.focus();
+  }, [activeIndex, open]);
+
+  function openMenu(index = selectedIndex) {
+    setActiveIndex(index);
+    setOpen(true);
+  }
+
+  function closeMenu({ restoreFocus = true } = {}) {
+    setOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    }
+  }
+
+  function selectOption(index: number) {
+    const option = options[index];
+    if (!option) return;
+    onChange(option.value);
+    closeMenu();
+  }
+
+  function onOptionKeyDown(
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((index + 1) % options.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index - 1 + options.length) % options.length);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setActiveIndex(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setActiveIndex(options.length - 1);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeMenu();
+    } else if (event.key === "Tab") {
+      setOpen(false);
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectOption(index);
+    }
+  }
+
+  return (
+    <div
+      className={`launch-select${open ? " is-open" : ""}`}
+      data-placement={placement}
+      ref={rootRef}
+    >
+      <button
+        ref={triggerRef}
+        className="launch-select-trigger"
+        type="button"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={`${id}-listbox`}
+        onClick={() =>
+          open
+            ? closeMenu({ restoreFocus: false })
+            : openMenu(selectedIndex)
+        }
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            openMenu(selectedIndex);
+          } else if (event.key === "Escape" && open) {
+            event.preventDefault();
+            closeMenu();
+          }
+        }}
+      >
+        <span>{selected?.label ?? value}</span>
+        <ChevronDown aria-hidden="true" size={17} strokeWidth={1.9} />
+      </button>
+
+      {open ? (
+        <div
+          id={`${id}-listbox`}
+          className="launch-select-menu"
+          data-columns={columns}
+          role="listbox"
+          aria-label={label}
+        >
+          {options.map((option, index) => {
+            const selectedOption = option.value === value;
+            return (
+              <button
+                ref={(element) => {
+                  optionRefs.current[index] = element;
+                }}
+                className="launch-select-option"
+                data-active={activeIndex === index ? "true" : "false"}
+                type="button"
+                role="option"
+                aria-selected={selectedOption}
+                tabIndex={activeIndex === index ? 0 : -1}
+                key={option.value}
+                onClick={() => selectOption(index)}
+                onMouseEnter={() => setActiveIndex(index)}
+                onKeyDown={(event) => onOptionKeyDown(event, index)}
+              >
+                <span>{option.label}</span>
+                {selectedOption ? (
+                  <Check aria-hidden="true" size={15} strokeWidth={2.2} />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2611,7 +2782,7 @@ function TokenStep({
           </div>
 
           <label className="field classic-description-field">
-            <span>Description (optional)</span>
+            <span>Description</span>
             <textarea
               value={draft.tokenDescription}
               maxLength={MAX_TOKEN_DESCRIPTION_BYTES}
@@ -2630,60 +2801,60 @@ function TokenStep({
             />
             <small>{descriptionRemaining} left</small>
           </label>
+
+          <div className="classic-link-fields">
+            <label className="field">
+              <span>Website</span>
+              <input
+                type="text"
+                inputMode="url"
+                value={draft.tokenWebsite}
+                maxLength={MAX_METADATA_URL_BYTES}
+                placeholder="project.com"
+                spellCheck={false}
+                autoComplete="url"
+                onBlur={normalizeWebsite}
+                onChange={(event) =>
+                  updateTokenDraft({ tokenWebsite: event.target.value })
+                }
+              />
+            </label>
+
+            <label className="field">
+              <span>X</span>
+              <input
+                type="text"
+                inputMode="url"
+                value={draft.tokenX}
+                maxLength={MAX_SOCIAL_URL_BYTES}
+                placeholder="@project or post URL"
+                spellCheck={false}
+                autoComplete="off"
+                onBlur={() => normalizeSocial("x")}
+                onChange={(event) =>
+                  updateTokenDraft({ tokenX: event.target.value })
+                }
+              />
+            </label>
+
+            <label className="field">
+              <span>Telegram</span>
+              <input
+                type="text"
+                inputMode="url"
+                value={draft.tokenTelegram}
+                maxLength={MAX_SOCIAL_URL_BYTES}
+                placeholder="@project or t.me/project"
+                spellCheck={false}
+                autoComplete="off"
+                onBlur={() => normalizeSocial("telegram")}
+                onChange={(event) =>
+                  updateTokenDraft({ tokenTelegram: event.target.value })
+                }
+              />
+            </label>
+          </div>
         </div>
-      </div>
-
-      <div className="classic-link-fields">
-        <label className="field">
-          <span>Website (optional)</span>
-          <input
-            type="text"
-            inputMode="url"
-            value={draft.tokenWebsite}
-            maxLength={MAX_METADATA_URL_BYTES}
-            placeholder="project.com"
-            spellCheck={false}
-            autoComplete="url"
-            onBlur={normalizeWebsite}
-            onChange={(event) =>
-              updateTokenDraft({ tokenWebsite: event.target.value })
-            }
-          />
-        </label>
-
-        <label className="field">
-          <span>X link (optional)</span>
-          <input
-            type="text"
-            inputMode="url"
-            value={draft.tokenX}
-            maxLength={MAX_SOCIAL_URL_BYTES}
-            placeholder="@project or x.com/project/status/…"
-            spellCheck={false}
-            autoComplete="off"
-            onBlur={() => normalizeSocial("x")}
-            onChange={(event) =>
-              updateTokenDraft({ tokenX: event.target.value })
-            }
-          />
-        </label>
-
-        <label className="field">
-          <span>Telegram (optional)</span>
-          <input
-            type="text"
-            inputMode="url"
-            value={draft.tokenTelegram}
-            maxLength={MAX_SOCIAL_URL_BYTES}
-            placeholder="@project or t.me/project"
-            spellCheck={false}
-            autoComplete="off"
-            onBlur={() => normalizeSocial("telegram")}
-            onChange={(event) =>
-              updateTokenDraft({ tokenTelegram: event.target.value })
-            }
-          />
-        </label>
       </div>
     </section>
   );
@@ -2783,16 +2954,31 @@ export function DeepFeeStep({
   );
 }
 
+const classicFeeOptions: readonly LaunchSelectOption<string>[] = Array.from(
+  { length: 10 },
+  (_, index) => ({
+    value: String(index + 1),
+    label: `${index + 1}.00%`,
+  }),
+);
+
+const initialBuyAccessOptions: readonly LaunchSelectOption<
+  LaunchDraft["initialBuyCustodyMode"]
+>[] = [
+  { value: "unlocked", label: "Available immediately" },
+  { value: "fixed-lock", label: "Fixed lock" },
+  { value: "linear", label: "Linear vesting" },
+  { value: "cliff-linear", label: "Cliff, then linear vesting" },
+];
+
 function EnhancedClassicFeeStep({
   draft,
-  account,
   setDraft,
   onEdit,
   settingMaxBuy,
   onMaximumDevBuy,
 }: {
   draft: LaunchDraft;
-  account?: string;
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onEdit: () => void;
   settingMaxBuy: boolean;
@@ -2821,24 +3007,15 @@ function EnhancedClassicFeeStep({
   const splitIsComplete = Math.abs(splitTotal - 100) < 0.001;
   const rewardNote =
     draft.rewardDestinationMode === "launcher"
-      ? "The connected wallet owns all creator rewards"
+      ? "Rewards go to the launch wallet"
       : draft.rewardDestinationMode === "external"
-        ? "The selected wallet owns all creator rewards"
-        : "Each recipient owns and claims its share";
-  let disclosure: ReturnType<typeof buildClassicV3LaunchDisclosure> | undefined;
-  try {
-    if (account) {
-      disclosure = buildClassicV3LaunchDisclosure(draft, account);
-    }
-  } catch {
-    disclosure = undefined;
-  }
+        ? "Rewards go to one wallet"
+        : "Each wallet claims its own share";
 
   return (
     <section className="classic-v3-settings" aria-labelledby="classic-v3-fees">
       <div className="classic-section-heading">
         <h2 id="classic-v3-fees">Fees and rewards</h2>
-        <p>Fixed when the token launches</p>
       </div>
 
       <div className="classic-v3-core">
@@ -2853,29 +3030,25 @@ function EnhancedClassicFeeStep({
               const totalFeeBps = Number(draft[key]) * 100;
               const creatorFeeBps = Math.max(0, totalFeeBps - PLATFORM_FEE_BPS);
               return (
-                <label className="classic-v3-fee-control" key={direction}>
+                <div className="classic-v3-fee-control" key={direction}>
                   <span>{direction === "buy" ? "Buy fee" : "Sell fee"}</span>
-                  <select
-                    aria-label={`${direction === "buy" ? "Buy" : "Sell"} fee`}
+                  <LaunchSelect
+                    id={`classic-${direction}-fee`}
+                    label={`${direction === "buy" ? "Buy" : "Sell"} fee`}
                     value={draft[key]}
-                    onChange={(event) =>
-                      updateClassicV3Draft({ [key]: event.target.value })
+                    options={classicFeeOptions}
+                    columns={2}
+                    onChange={(value) =>
+                      updateClassicV3Draft({ [key]: value })
                     }
-                  >
-                    {Array.from({ length: 10 }, (_, index) => (
-                      <option value={String(index + 1)} key={index + 1}>
-                        {index + 1}.00%
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <small>
-                    Creator{" "}
                     {Number.isFinite(creatorFeeBps)
                       ? formatClassicV3Percent(creatorFeeBps)
                       : "—"}{" "}
-                    <span>·</span> Programmable 0.10%
+                    creator <span>·</span> 0.10% Programmable
                   </small>
-                </label>
+                </div>
               );
             })}
           </div>
@@ -2924,7 +3097,7 @@ function EnhancedClassicFeeStep({
               })
             }
           />
-          <small>Only this wallet can claim or change its payout address</small>
+          <small>Only this wallet can claim or update its payout address</small>
         </label>
       ) : null}
 
@@ -3008,46 +3181,14 @@ function EnhancedClassicFeeStep({
         </div>
       ) : null}
 
-      <div className="classic-v3-disclosure" role="note">
-        <strong>Locked at launch</strong>
-        {disclosure ? (
-          <>
-            <dl>
-              <div>
-                <dt>Buy</dt>
-                <dd>{disclosure.buyFee}</dd>
-              </div>
-              <div>
-                <dt>Sell</dt>
-                <dd>{disclosure.sellFee}</dd>
-              </div>
-            </dl>
-            <ul>
-              {disclosure.rewards.map((reward) => (
-                <li key={reward.beneficiary}>
-                  <span>{shortenAddress(reward.beneficiary)}</span>
-                  <strong>{reward.share}</strong>
-                </li>
-              ))}
-            </ul>
-            <p>
-              Fee rates and split percentages are fixed. Each current payout
-              wallet controls its allocation. Approved CTO changes affect
-              future rewards only.
-            </p>
-          </>
-        ) : (
-          <p>
-            Complete the reward setup to review every immutable term before
-            signing.
-          </p>
-        )}
+      <div className="classic-v3-subsection-heading">
+        <h3>Initial buy</h3>
       </div>
 
       <div className="classic-v3-initial-buy">
         <label className="meme-dev-buy" htmlFor="classic-v3-dev-buy">
           <span>
-            <strong>Initial buy</strong>
+            <strong>Amount</strong>
             <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
           </span>
           <span className="meme-dev-buy-input">
@@ -3076,28 +3217,33 @@ function EnhancedClassicFeeStep({
           </span>
         </label>
 
-        <fieldset className="classic-v3-custody">
-          <legend>Initial Buy custody</legend>
+        <fieldset
+          className="classic-v3-custody"
+          data-mode={draft.initialBuyCustodyMode}
+        >
+          <legend className="sr-only">Initial buy access</legend>
           <label>
-            <span>Availability</span>
-            <select
+            <span>Token access</span>
+            <LaunchSelect
+              id="classic-initial-buy-access"
+              label="Initial buy token access"
               value={draft.initialBuyCustodyMode}
-              onChange={(event) =>
+              options={initialBuyAccessOptions}
+              placement="top"
+              onChange={(value) =>
                 updateClassicV3Draft({
-                  initialBuyCustodyMode: event.target
-                    .value as LaunchDraft["initialBuyCustodyMode"],
+                  initialBuyCustodyMode: value,
                 })
               }
-            >
-              <option value="unlocked">Available immediately</option>
-              <option value="fixed-lock">Fixed lock</option>
-              <option value="linear">Linear vesting</option>
-              <option value="cliff-linear">Cliff and linear vesting</option>
-            </select>
+            />
           </label>
           {draft.initialBuyCustodyMode !== "unlocked" ? (
             <label>
-              <span>Total duration</span>
+              <span>
+                {draft.initialBuyCustodyMode === "fixed-lock"
+                  ? "Lock period"
+                  : "Vesting period"}
+              </span>
               <span className="classic-v3-days-input">
                 <input
                   inputMode="numeric"
@@ -3131,10 +3277,6 @@ function EnhancedClassicFeeStep({
               </span>
             </label>
           ) : null}
-          <small>
-            {disclosure?.initialBuyCustody ??
-              "Choose when the launch wallet can access the Initial Buy"}
-          </small>
         </fieldset>
       </div>
     </section>

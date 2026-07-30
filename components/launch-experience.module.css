@@ -295,7 +295,7 @@
 .formPage :global(.field input),
 .formPage :global(.field textarea),
 .formPage :global(.meme-dev-buy-input),
-.formPage :global(.classic-v3-fee-control select),
+.formPage :global(.launch-select-trigger),
 .formPage :global(.classic-v3-address-field input),
 .formPage :global(.classic-v3-split-row input) {
   transition:
@@ -329,9 +329,9 @@
 }
 
 .formPage :global(.classic-link-fields) {
-  gap: 12px;
-  margin-left: 178px;
-  margin-top: 13px;
+  gap: 10px;
+  margin-left: 0;
+  margin-top: 11px;
 }
 
 .formPage :global(.classic-fee-section),
@@ -366,8 +366,8 @@
   backdrop-filter: blur(18px);
   background: color-mix(in srgb, var(--glass-90) 82%, transparent);
   border-color: var(--panel-border-soft);
-  min-height: 76px;
-  padding-inline: 28px;
+  min-height: 54px;
+  padding: 2px 28px;
 }
 
 .formPage :global(.classic-launch-button) {
@@ -377,21 +377,20 @@
 }
 
 .formPage :global(.classic-v3-core) {
-  gap: 26px;
-  grid-template-columns: minmax(270px, 0.82fr) minmax(410px, 1.18fr);
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .formPage :global(.classic-v3-settings) {
-  column-gap: 22px;
-  grid-template-columns: minmax(0, 1fr) minmax(270px, 320px);
-  row-gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 13px;
 }
 
 .formPage :global(.classic-v3-settings > .classic-section-heading),
 .formPage :global(.classic-v3-core),
 .formPage :global(.classic-v3-address-field),
 .formPage :global(.classic-v3-split),
-.formPage :global(.classic-v3-disclosure),
+.formPage :global(.classic-v3-subsection-heading),
 .formPage :global(.classic-v3-initial-buy) {
   grid-column: 1 / -1;
 }
@@ -408,9 +407,6 @@
   grid-template-columns: 1fr;
 }
 
-.formPage
-  :global(.classic-v3-settings)
-  > :global(.classic-v3-disclosure),
 .formPage
   :global(.classic-v3-settings)
   > :global(.classic-v3-initial-buy) {
@@ -436,13 +432,6 @@
   background: var(--accent-wash);
   box-shadow: none;
   color: var(--accent-strong);
-}
-
-.formPage :global(.classic-v3-disclosure) {
-  background: transparent;
-  border-left: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
-  border-radius: 0;
-  padding: 3px 0 3px 14px;
 }
 
 .formPage :global(.deep-preset) {
@@ -547,7 +536,7 @@
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-link-fields),
 .formPage[data-launch-model="deep"] :global(.classic-link-fields) {
-  margin-left: 158px;
+  margin-left: 0;
   margin-top: 9px;
 }
 
@@ -588,6 +577,15 @@
 
   .modelCard:not(:disabled):hover .modelAction svg {
     transform: translateX(3px);
+  }
+
+  .formPage :global(.launch-select-trigger:hover) {
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--control-border));
+  }
+
+  .formPage :global(.launch-select-option:hover) {
+    background: var(--accent-wash);
+    color: var(--text);
   }
 }
 
@@ -636,7 +634,7 @@
   }
 
   .formPage :global(.classic-link-fields) {
-    margin-left: 178px;
+    margin-left: 0;
   }
 
   .formPage :global(.classic-v3-core) {
@@ -647,7 +645,6 @@
     grid-template-columns: 1fr;
   }
 
-  .formPage :global(.classic-v3-disclosure),
   .formPage :global(.classic-v3-initial-buy),
   .formPage :global(.classic-v3-settings > .classic-fee-layout) {
     grid-column: 1;
@@ -867,7 +864,6 @@
 
   .formPage :global(.classic-fee-layout),
   .formPage :global(.classic-v3-fee-grid),
-  .formPage :global(.classic-v3-reward-mode > div),
   .formPage :global(.deep-preset-stats) {
     grid-template-columns: 1fr;
   }
