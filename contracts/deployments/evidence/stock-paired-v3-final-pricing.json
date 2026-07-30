@@ -7,26 +7,26 @@
     "calculationVersion": "tick-fdv-v1",
     "rpcAgreement": {
       "sampledHead": {
-        "number": 25642933,
-        "hash": "0xb1a6a7f98a410a8b64f3cc23c2178c172568406803ed1b5cdaf49ae2f78760df",
-        "timestamp": 1785381563
+        "number": 25643030,
+        "hash": "0x9aef6550233770fc0678f4df436ec08de7c1e0f6a68ba200341239bff466194a",
+        "timestamp": 1785382727
       },
       "providers": [
         {
           "providerId": "ethereum-rpc.publicnode.com",
           "chainId": 1,
-          "sampledBlockNumber": 25642933,
-          "sampledBlockHash": "0xb1a6a7f98a410a8b64f3cc23c2178c172568406803ed1b5cdaf49ae2f78760df",
-          "reportedHeadNumber": 25642935,
-          "observationSetHash": "0xa2ccaa9ef45be9505a5095e1b2267c70d9c5bcffa52d31dd90db9903d790925b"
+          "sampledBlockNumber": 25643030,
+          "sampledBlockHash": "0x9aef6550233770fc0678f4df436ec08de7c1e0f6a68ba200341239bff466194a",
+          "reportedHeadNumber": 25643032,
+          "observationSetHash": "0xb1d46bda4173d3d76d80bea5c50ad50a72c28af906db1672e3e404abd44da1e2"
         },
         {
           "providerId": "eth.drpc.org",
           "chainId": 1,
-          "sampledBlockNumber": 25642933,
-          "sampledBlockHash": "0xb1a6a7f98a410a8b64f3cc23c2178c172568406803ed1b5cdaf49ae2f78760df",
-          "reportedHeadNumber": 25642935,
-          "observationSetHash": "0xa2ccaa9ef45be9505a5095e1b2267c70d9c5bcffa52d31dd90db9903d790925b"
+          "sampledBlockNumber": 25643030,
+          "sampledBlockHash": "0x9aef6550233770fc0678f4df436ec08de7c1e0f6a68ba200341239bff466194a",
+          "reportedHeadNumber": 25643032,
+          "observationSetHash": "0xb1d46bda4173d3d76d80bea5c50ad50a72c28af906db1672e3e404abd44da1e2"
         }
       ]
     },
@@ -44,7 +44,7 @@
     },
     "marketSession": {
       "state": "closed",
-      "observedAt": 1785381585,
+      "observedAt": 1785382740,
       "timeZone": "America/New_York",
       "lastEligibleTradingSessionClosedAt": 1785369600,
       "nextEligibleTradingSessionOpensAt": 1785398400,
@@ -69,7 +69,7 @@
       "token0Decimals": 6,
       "token1Decimals": 18,
       "runtimeCodeHash": "0xa981b66c747a3d9fa29d7e200d5faaa2826960523d0e5a0df8148e8868c480b4",
-      "sqrtPriceX96": "1812408999752923884103043953146411"
+      "sqrtPriceX96": "1813531059804898591079396199447087"
     },
     "assets": [
       {
@@ -96,15 +96,15 @@
           "marketState": "closed",
           "priceUsdWad": "190010000000000000000",
           "asOf": 1785370500,
-          "retrievedAt": 1785381585,
+          "retrievedAt": 1785382740,
           "referenceId": "finance:NVDA:2026-07-30T00:15:00Z"
         },
         "derived": {
           "tickSqrtPriceX96": "9212304827741815476690072",
           "tickQuoteFdvWad": "13520023064276052820",
-          "routeQuotePerEthWad": "9927796697511682712",
-          "independentQuotePerEthWad": "10057042592565655538",
-          "impliedFdvEthWei": "1361835206362025010"
+          "routeQuotePerEthWad": "9915515531550178553",
+          "independentQuotePerEthWad": "10044601543164213609",
+          "impliedFdvEthWei": "1363521949136854444"
         }
       },
       {
@@ -121,7 +121,7 @@
           "token0Decimals": 6,
           "token1Decimals": 18,
           "runtimeCodeHash": "0x9ce9b74c4e3e51f9bcf2ad9d28f09df179f96f7d17e423aa9207a69dc1558252",
-          "sqrtPriceX96": "2916672552357869513832364143970049"
+          "sqrtPriceX96": "2916659489935457247806403173376439"
         },
         "independentReference": {
           "provider": "openai-finance",
@@ -131,15 +131,15 @@
           "marketState": "closed",
           "priceUsdWad": "729460000000000000000",
           "asOf": 1785370500,
-          "retrievedAt": 1785381585,
+          "retrievedAt": 1785382740,
           "referenceId": "finance:SPY:2026-07-30T00:15:00Z"
         },
         "derived": {
           "tickSqrtPriceX96": "4714173313173465756139773",
           "tickQuoteFdvWad": "3540396661305328988",
-          "routeQuotePerEthWad": "2589780337644550754",
-          "independentQuotePerEthWad": "2619662028093932784",
-          "impliedFdvEthWei": "1367064460967133583"
+          "routeQuotePerEthWad": "2586553485675609123",
+          "independentQuotePerEthWad": "2616421379125150423",
+          "impliedFdvEthWei": "1368769940738563745"
         }
       },
       {
@@ -166,15 +166,15 @@
           "marketState": "closed",
           "priceUsdWad": "336710000000000000000",
           "asOf": 1785370500,
-          "retrievedAt": 1785381585,
+          "retrievedAt": 1785382740,
           "referenceId": "finance:GOOGL:2026-07-30T00:15:00Z"
         },
         "derived": {
           "tickSqrtPriceX96": "6962607679468676520282677",
           "tickQuoteFdvWad": "7722975943643816421",
-          "routeQuotePerEthWad": "5700174002882246244",
-          "independentQuotePerEthWad": "5675324947323810426",
-          "impliedFdvEthWei": "1354866700514538146"
+          "routeQuotePerEthWad": "5693122611211786830",
+          "independentQuotePerEthWad": "5668304295140127195",
+          "impliedFdvEthWei": "1356544812232662117"
         }
       },
       {
@@ -201,15 +201,15 @@
           "marketState": "closed",
           "priceUsdWad": "51770000000000000000",
           "asOf": 1785370500,
-          "retrievedAt": 1785381585,
+          "retrievedAt": 1785382740,
           "referenceId": "finance:SLV:2026-07-30T00:15:00Z"
         },
         "derived": {
           "tickSqrtPriceX96": "17645972561664955685685170",
           "tickQuoteFdvWad": "49605751312209836038",
-          "routeQuotePerEthWad": "36472889248909164266",
-          "independentQuotePerEthWad": "36912085435839293196",
-          "impliedFdvEthWei": "1360071887194773061"
+          "routeQuotePerEthWad": "36427770516162180844",
+          "independentQuotePerEthWad": "36866423396110338575",
+          "impliedFdvEthWei": "1361756445956550706"
         }
       },
       {
@@ -236,15 +236,15 @@
           "marketState": "closed",
           "priceUsdWad": "298320000000000000000",
           "asOf": 1785370500,
-          "retrievedAt": 1785381585,
+          "retrievedAt": 1785382740,
           "referenceId": "finance:TSLA:2026-07-30T00:15:00Z"
         },
         "derived": {
           "tickSqrtPriceX96": "7393129115375123816015169",
           "tickQuoteFdvWad": "8707578819134800530",
-          "routeQuotePerEthWad": "6462844497254805035",
-          "independentQuotePerEthWad": "6405667280146822904",
-          "impliedFdvEthWei": "1347329155580562358"
+          "routeQuotePerEthWad": "6454849645197240853",
+          "independentQuotePerEthWad": "6397743159079619965",
+          "impliedFdvEthWei": "1348997931441162643"
         }
       },
       {
@@ -271,21 +271,21 @@
           "marketState": "closed",
           "priceUsdWad": "338190000000000000000",
           "asOf": 1785370500,
-          "retrievedAt": 1785381585,
+          "retrievedAt": 1785382740,
           "referenceId": "finance:AAPL:2026-07-30T00:15:00Z"
         },
         "derived": {
           "tickSqrtPriceX96": "6893332021954032884083235",
           "tickQuoteFdvWad": "7570058343489581718",
-          "routeQuotePerEthWad": "5599683047968502533",
-          "independentQuotePerEthWad": "5650488373439191604",
-          "impliedFdvEthWei": "1351872646834164582"
+          "routeQuotePerEthWad": "5592755968482561870",
+          "independentQuotePerEthWad": "5643498445301848747",
+          "impliedFdvEthWei": "1353547050175247611"
         }
       }
     ]
   },
   "attestation": {
     "canonicalization": "RFC8785-JCS",
-    "payloadSha256": "sha256:b69a7237a421b18152a9499af2ceef6d2b0ff28ad1731469a4530c32522e056a"
+    "payloadSha256": "sha256:27bd130b95b708bf6d8e365682f02bcf7df47d631c0f119a695d5a0d61c64bc6"
   }
 }
