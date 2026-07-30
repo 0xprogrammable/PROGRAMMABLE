@@ -46,6 +46,11 @@ import type {
 } from "./types";
 import { readDurableExploreModel } from "./durable-model";
 import {
+  isClassicV3ExploreReleaseReady,
+  mergeClassicV3ExploreModel,
+  readClassicV3ExploreModel,
+} from "./classic-v3-read-model";
+import {
   isDeepExploreReleaseReady,
   mergeDeepExploreModel,
   readDeepExploreModel,
@@ -770,6 +775,12 @@ async function readReadyRegistryModel(
     throw new Error("The Classic registry has no confirmed snapshot");
   }
   const snapshotBlockNumber = registry.snapshot.blockNumber;
+  if (isClassicV3ExploreReleaseReady(config)) {
+    registry = mergeClassicV3ExploreModel(
+      registry,
+      await readClassicV3ExploreModel(config, snapshotBlockNumber),
+    );
+  }
   if (isDeepExploreReleaseReady(config)) {
     registry = mergeDeepExploreModel(
       registry,
@@ -852,6 +863,9 @@ export async function readExploreModel(
     isStockPairedExploreReleaseReady(config)
       ? "stock-paired-ready"
       : "stock-paired-off",
+    isClassicV3ExploreReleaseReady(config)
+      ? "classic-v3-ready"
+      : "classic-v3-off",
   ].join(":");
   if (
     cachedRead &&
@@ -866,6 +880,15 @@ export async function readExploreModel(
       const durable = await readDurableExploreModel(config);
       if (durable.status === "ready") {
         let model = durable.envelope.payload.model;
+        if (model.snapshot && isClassicV3ExploreReleaseReady(config)) {
+          model = mergeClassicV3ExploreModel(
+            model,
+            await readClassicV3ExploreModel(
+              config,
+              model.snapshot.blockNumber,
+            ),
+          );
+        }
         if (
           model.snapshot &&
           isStockPairedExploreReleaseReady(config)

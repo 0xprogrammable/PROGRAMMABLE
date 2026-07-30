@@ -58,6 +58,7 @@ export const classicV3HookAbi = parseAbi([
   "function TICK_SPACING() view returns (int24)",
   "function feeDisclosure(bytes32 poolId) view returns (uint16 buySwapFeeBps,uint16 sellSwapFeeBps,uint16 buyCreatorFeeBps,uint16 sellCreatorFeeBps,uint16 launcherFeeBps,uint16 transferTaxBps,uint24 lpFeePips,address rewardVault)",
   "function poolFeeConfig(bytes32 poolId) view returns (address rewardVault,address registrar,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bool registered,uint256 creatorFeesAccrued)",
+  "function launcherFeesAccrued() view returns (uint256)",
 ]);
 
 export const classicV3HookFactoryAbi = parseAbi([
