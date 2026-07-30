@@ -269,6 +269,29 @@ describe("durable onchain snapshot replacement", () => {
       }),
     ).toBe(false);
   });
+
+  it("preserves a validated snapshot when it is stale", () => {
+    const value = envelope("programmable-durable-index-v1");
+    value.payload.generatedAt = new Date(Date.now() - 120_000).toISOString();
+    value.contentHash = keccak256(
+      toBytes(JSON.stringify(value.payload)),
+    );
+
+    const result = validateDurableExploreEnvelope(
+      value,
+      deployment,
+      60_000,
+    );
+
+    expect(result).toMatchObject({
+      status: "unavailable",
+      reason: "stale",
+      envelope: value,
+    });
+    if (result.status === "unavailable" && result.reason === "stale") {
+      expect(result.ageMs).toBeGreaterThanOrEqual(120_000);
+    }
+  });
 });
 
 describe("durable Deep release binding", () => {
