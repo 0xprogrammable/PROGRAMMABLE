@@ -879,19 +879,7 @@ export async function readExploreModel(
     if (config.environment === "production") {
       const durable = await readDurableExploreModel(config);
       if (durable.status === "ready") {
-        let model = durable.envelope.payload.model;
-        if (
-          model.snapshot &&
-          isStockPairedExploreReleaseReady(config)
-        ) {
-          model = mergeStockPairedExploreModel(
-            model,
-            await readStockPairedExploreModel(
-              config,
-              model.snapshot.blockNumber,
-            ),
-          );
-        }
+        const model = durable.envelope.payload.model;
         try {
           return await enrichExploreModelWithUsd(model, config);
         } catch (error) {
