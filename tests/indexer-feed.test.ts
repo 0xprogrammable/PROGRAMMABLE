@@ -378,7 +378,11 @@ describe("public indexer fee disclosure", () => {
   });
 
   it("keeps the production feed fail-closed before V2 is ready", async () => {
-    const response = await getIndexerTokens();
+    const response = await getIndexerTokens(
+      new Request(
+        "https://programmable.family/api/indexers/v1/tokens",
+      ),
+    );
 
     expect(response.status).toBe(200);
     expect(response.headers.get("access-control-allow-origin")).toBe(
@@ -388,6 +392,22 @@ describe("public indexer fee disclosure", () => {
       status: "not-deployed",
       chainId: 1,
       tokens: [],
+    });
+  });
+
+  it("rejects an invalid direct token lookup without reading chain state", async () => {
+    const response = await getIndexerTokens(
+      new Request(
+        "https://programmable.family/api/indexers/v1/tokens?address=oil",
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "*",
+    );
+    expect(await response.json()).toEqual({
+      error: "Invalid token address",
     });
   });
 

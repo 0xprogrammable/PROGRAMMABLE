@@ -6,7 +6,7 @@ the production read model.
 ## Endpoints
 
 - `GET /api/indexers/v1/tokens`
-- `GET /api/indexers/v1/tokens/{contractAddress}`
+- `GET /api/indexers/v1/tokens?address={contractAddress}`
 - `GET /api/indexers/v1/token-list`
 
 These endpoints are intended for indexers, wallets and trading applications.
