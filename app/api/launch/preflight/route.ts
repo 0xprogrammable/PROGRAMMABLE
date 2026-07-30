@@ -84,15 +84,18 @@ import {
   type LaunchDraft,
 } from "@/lib/launch";
 import {
+  deriveStockPairedCurrency0Salt,
   encodeStockPairedEthLaunch,
   getStockPairedEthQuoteAssetsForRelease,
   getStockPairedQuoteAssetsForRelease,
+  isStockPairedLaunchedTokenCurrency0,
   stockPairedEthLaunchCoordinatorAbi,
   stockPairedHookAbi,
   stockPairedHookFactoryAbi,
   stockPairedLaunchAbi,
   stockQuoteRegistryAbi,
   STOCK_PAIRED_CREATOR_FEE_BPS,
+  STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS,
   STOCK_PAIRED_MIN_INITIAL_BUY,
   STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
   STOCK_PAIRED_PROGRAMMABLE_FEE_BPS,
@@ -124,6 +127,7 @@ export const runtime = "nodejs";
 const MAX_REQUEST_BYTES = 50_000;
 const REQUIRED_FEE_HOOK_FLAGS = 8_396n;
 const HOOK_FLAG_MASK = (1n << 14n) - 1n;
+const STOCK_PAIRED_CURRENCY0_SEARCH_BATCH_SIZE = 64;
 
 const launchEnvironment =
   process.env.PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -2348,6 +2352,60 @@ async function quoteStockPairedExternalRoute(
   return { amountOut, gasEstimate };
 }
 
+async function findStockPairedCurrency0Salt({
+  account,
+  coordinator,
+  name,
+  symbol,
+  quoteAsset,
+  baseSalt,
+}: {
+  account: Address;
+  coordinator: Address;
+  name: string;
+  symbol: string;
+  quoteAsset: Address;
+  baseSalt: Hex;
+}) {
+  for (
+    let offset = 0;
+    offset < STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS;
+    offset += STOCK_PAIRED_CURRENCY0_SEARCH_BATCH_SIZE
+  ) {
+    const salts = Array.from(
+      {
+        length: Math.min(
+          STOCK_PAIRED_CURRENCY0_SEARCH_BATCH_SIZE,
+          STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS - offset,
+        ),
+      },
+      (_, index) =>
+        deriveStockPairedCurrency0Salt(baseSalt, offset + index),
+    );
+    const predictions = await client.multicall({
+      allowFailure: false,
+      contracts: salts.map((creatorSalt) => ({
+        address: coordinator,
+        abi: stockPairedEthLaunchCoordinatorAbi,
+        functionName: "predictTokenAddress",
+        args: [name, symbol, account, creatorSalt],
+      })),
+    });
+    const candidateIndex = predictions.findIndex(([token]) =>
+      isStockPairedLaunchedTokenCurrency0(getAddress(token), quoteAsset),
+    );
+    if (candidateIndex !== -1) {
+      return {
+        creatorSalt: salts[candidateIndex],
+        token: getAddress(predictions[candidateIndex][0]),
+      };
+    }
+  }
+  throw new LaunchInputError(
+    "A compatible Stock-Paired token address could not be prepared. Try the launch again",
+  );
+}
+
 async function prepareStockPairedLaunch(
   account: Address,
   draft: LaunchDraft,
@@ -2395,18 +2453,56 @@ async function prepareStockPairedLaunch(
 
   await assertStockPairedInfrastructure(release);
   const { ethLaunchCoordinator, feeHook } = release.addresses;
-  const [predicted, block, forwardQuote] = await Promise.all([
-    client.readContract({
-      address: ethLaunchCoordinator,
-      abi: stockPairedEthLaunchCoordinatorAbi,
-      functionName: "predictTokenAddress",
-      args: [
-        draft.tokenName.trim(),
-        draft.tokenSymbol.trim(),
-        account,
-        draft.launchSalt,
+  const predicted = await client.readContract({
+    address: ethLaunchCoordinator,
+    abi: stockPairedEthLaunchCoordinatorAbi,
+    functionName: "predictTokenAddress",
+    args: [
+      draft.tokenName.trim(),
+      draft.tokenSymbol.trim(),
+      account,
+      draft.launchSalt,
+    ],
+  });
+  const [predictedToken] = predicted;
+  if (
+    !isStockPairedLaunchedTokenCurrency0(
+      predictedToken,
+      configuration.quoteAsset.address,
+    )
+  ) {
+    const canonical = await findStockPairedCurrency0Salt({
+      account,
+      coordinator: ethLaunchCoordinator,
+      name: draft.tokenName.trim(),
+      symbol: draft.tokenSymbol.trim(),
+      quoteAsset: configuration.quoteAsset.address,
+      baseSalt: draft.launchSalt,
+    });
+    return response({
+      status: "blocked",
+      mode: "stock-paired",
+      title: "Token address prepared",
+      detail:
+        "Checking the launch with the canonical Uniswap v4 currency order",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Pool compatibility",
+          status: "pass",
+          detail:
+            "The launched token is currency0 for broad indexer compatibility",
+        },
       ],
-    }),
+      predictedToken: canonical.token,
+      predictedHook: feeHook,
+      draftPatch: { launchSalt: canonical.creatorSalt },
+    });
+  }
+
+  const [block, forwardQuote] = await Promise.all([
     client.getBlock(),
     quoteStockPairedExternalRoute(
       account,
@@ -2415,7 +2511,6 @@ async function prepareStockPairedLaunch(
       "buy",
     ),
   ]);
-  const [predictedToken] = predicted;
   if (forwardQuote.amountOut < STOCK_PAIRED_MIN_INITIAL_BUY_RAW) {
     throw new LaunchInputError(
       `Increase the Initial Buy so it routes to at least ${STOCK_PAIRED_MIN_INITIAL_BUY} ${configuration.quoteAsset.symbol}`,
@@ -2474,6 +2569,7 @@ async function prepareStockPairedLaunch(
     simulated.token.toLowerCase() !== predictedToken.toLowerCase() ||
     simulated.quoteAsset.toLowerCase() !==
       configuration.quoteAsset.address.toLowerCase() ||
+    simulated.quoteIsCurrency0 ||
     simulated.initialBuyQuoteAmount < minimumQuoteAmountOut ||
     simulated.initialBuyTokenAmount <= 0n
   ) {

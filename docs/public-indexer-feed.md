@@ -20,8 +20,9 @@ the hook, fee disclosure and launch provenance.
 version is required.
 
 Stock-Paired records also disclose the quote-asset address, symbol and its
-currency ordering in the v4 pool. Fees are denominated in that quote asset,
-not ETH.
+currency ordering in the v4 pool. Public launches select the launched token as
+`currency0`; the quote asset is therefore `currency1`. Fees are denominated in
+that quote asset, not ETH.
 
 Third-party platforms control their own ingestion and refresh schedules.
 Publishing a record here does not guarantee that another platform will display

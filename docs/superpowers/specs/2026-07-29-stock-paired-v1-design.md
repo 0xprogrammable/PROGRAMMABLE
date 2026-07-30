@@ -53,7 +53,14 @@ The pool sorts currencies by address. If the stock token is `currency0`, its
 initial tick is `+191200` and the launched token occupies the lower one-sided
 range. If the stock token is `currency1`, the initial tick is `-191200` and the
 launched token occupies the upper one-sided range. This keeps the same economic
-orientation without mining token addresses.
+orientation at the contract level regardless of token address.
+
+The contract remains symmetric and supports both orientations. The public
+application adds a compatibility policy: before wallet review it derives a
+fresh deterministic launch salt until the launched token is `currency0`, then
+checks the same ordering again in the complete onchain simulation. This avoids
+depending on third-party indexers correctly handling a launched token in
+`currency1` while preserving the contract's economic behavior.
 
 ## Reused Uniswap components
 

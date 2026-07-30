@@ -49,6 +49,7 @@ the selected quote asset before purchasing the launched token.
 - The creator receives 0.90% and Programmable receives 0.10% in the quote asset
 - The full launch allocation enters a permanently locked one-sided v4 position
 - The hook supports either v4 currency ordering and discloses that ordering onchain
+- Public launches deterministically select the launched token as `currency0` for broad indexer compatibility
 
 ## Application
 
