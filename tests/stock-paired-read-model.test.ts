@@ -6,7 +6,11 @@ import {
   pairStockPairedLaunches,
 } from "../lib/onchain/stock-paired-read-model";
 import type { ExploreReadModel } from "../lib/onchain/types";
-import { STOCK_QUOTE_ASSETS } from "../lib/stock-paired";
+import {
+  getStockPairedExpectedInitialTickForRelease,
+  STOCK_QUOTE_ASSETS,
+} from "../lib/stock-paired";
+import { STOCK_PAIRED_V3_QUOTE_ASSETS } from "../lib/stock-paired-v3";
 import type { LauncherToken } from "../lib/tokens";
 import {
   STOCK_TEST_ACCOUNT,
@@ -137,6 +141,66 @@ function baseModel(): ExploreReadModel {
 }
 
 describe("Stock-Paired read model provenance", () => {
+  it("uses each V3 quote asset's release-pinned launch tick", () => {
+    const release = {
+      ...stockPairedReleaseFixture(),
+      internalContractRelease: "stock-paired-v3" as const,
+    };
+    const silver = STOCK_PAIRED_V3_QUOTE_ASSETS.find(
+      ({ symbol }) => symbol === "SLVon",
+    );
+    expect(silver).toBeDefined();
+    expect(
+      getStockPairedExpectedInitialTickForRelease(
+        release,
+        silver!.address,
+        false,
+      ),
+    ).toBe(-168_200);
+    expect(
+      getStockPairedExpectedInitialTickForRelease(
+        release,
+        silver!.address,
+        true,
+      ),
+    ).toBe(168_200);
+  });
+
+  it("preserves the fixed launch tick for V1 and V2 releases", () => {
+    const v1 = stockPairedReleaseFixture();
+    const v2 = {
+      ...v1,
+      internalContractRelease: "stock-paired-v2" as const,
+    };
+    expect(
+      getStockPairedExpectedInitialTickForRelease(
+        v1,
+        STOCK_QUOTE_ASSETS[0].address,
+        false,
+      ),
+    ).toBe(-191_200);
+    expect(
+      getStockPairedExpectedInitialTickForRelease(
+        v2,
+        STOCK_QUOTE_ASSETS[0].address,
+        true,
+      ),
+    ).toBe(191_200);
+  });
+
+  it("fails closed when the quote asset is outside the release registry", () => {
+    expect(
+      getStockPairedExpectedInitialTickForRelease(
+        {
+          ...stockPairedReleaseFixture(),
+          internalContractRelease: "stock-paired-v3",
+        },
+        STOCK_TEST_TOKEN,
+        false,
+      ),
+    ).toBeNull();
+  });
+
   it("pairs the three launch records only when provenance is exact", () => {
     expect(pairStockPairedLaunches(events())).toMatchObject([
       {

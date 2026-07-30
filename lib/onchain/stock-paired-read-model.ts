@@ -12,6 +12,7 @@ import {
 import { mainnet } from "viem/chains";
 
 import {
+  getStockPairedExpectedInitialTickForRelease,
   getStockPairedQuoteAssetForRelease,
   STOCK_PAIRED_CREATOR_FEE_BPS,
   STOCK_PAIRED_PROGRAMMABLE_FEE_BPS,
@@ -519,7 +520,12 @@ async function hydrateToken(
     disclosedLpFeePips,
     disclosedVault,
   ] = disclosure;
-  const expectedInitialTick = quoteIsCurrency0 ? 191_200 : -191_200;
+  const expectedInitialTick =
+    getStockPairedExpectedInitialTickForRelease(
+      release,
+      quote.address,
+      quoteIsCurrency0,
+    );
 
   if (
     getAddress(recordedCreator) !== release.addresses.launcher ||
@@ -540,6 +546,7 @@ async function hydrateToken(
     disclosedLpFeePips !== 0 ||
     lpFeePips !== 0 ||
     liquidity.lpFeePips !== 0 ||
+    expectedInitialTick === null ||
     liquidity.initialTick !== expectedInitialTick ||
     initialBuy.quoteAmount <= 0n ||
     initialBuy.tokenAmount <= 0n ||

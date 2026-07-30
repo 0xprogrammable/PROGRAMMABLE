@@ -48,6 +48,7 @@ export const STOCK_PAIRED_TOTAL_SWAP_FEE_BPS = 100;
 export const STOCK_PAIRED_CREATOR_FEE_BPS = 90;
 export const STOCK_PAIRED_PROGRAMMABLE_FEE_BPS = 10;
 export const STOCK_PAIRED_CURRENCY0_SEARCH_ATTEMPTS = 256;
+export const STOCK_PAIRED_LEGACY_INITIAL_ABSOLUTE_TICK = 191_200;
 
 const stockPairedCurrency0SaltParameters = parseAbiParameters(
   "string domain, bytes32 baseSalt, uint256 attempt",
@@ -205,6 +206,28 @@ export function getStockPairedQuoteAssetForRelease(
       (asset) => asset.address.toLowerCase() === address.toLowerCase(),
     ) ?? null
   );
+}
+
+export function getStockPairedExpectedInitialTickForRelease(
+  release: Pick<VerifiedStockPairedRelease, "internalContractRelease">,
+  quoteAsset: string,
+  quoteIsCurrency0: boolean,
+): number | null {
+  const asset = getStockPairedQuoteAssetForRelease(release, quoteAsset);
+  if (!asset) return null;
+  const initialAbsoluteTick =
+    release.internalContractRelease === "stock-paired-v3" &&
+    "initialAbsoluteTick" in asset
+      ? asset.initialAbsoluteTick
+      : STOCK_PAIRED_LEGACY_INITIAL_ABSOLUTE_TICK;
+  if (
+    typeof initialAbsoluteTick !== "number" ||
+    !Number.isSafeInteger(initialAbsoluteTick) ||
+    initialAbsoluteTick <= 0
+  ) {
+    return null;
+  }
+  return quoteIsCurrency0 ? initialAbsoluteTick : -initialAbsoluteTick;
 }
 
 export function getStockQuoteAsset(value: string) {
