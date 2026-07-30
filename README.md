@@ -11,6 +11,7 @@ Programmable is an interface for launching tokens whose market behavior is defin
 | Model | Status | Purpose |
 | --- | --- | --- |
 | Classic | Live on Ethereum Mainnet | Fixed supply, permanently locked one-sided liquidity and creator rewards in ETH |
+| Stock-Paired | Live on Ethereum Mainnet | Fixed supply traded against an allowlisted Ondo tokenized stock or ETF quote asset |
 | Deep | Release candidate, not deployed | A fixed 0.90% growth fee buys the token and adds both assets to the original permanently locked pool |
 
 Only models with a completed deployment manifest, matching runtime code and verified lifecycle are exposed for production launches.
@@ -37,6 +38,18 @@ Token metadata uses the official UERC20 v2.0.0 format:
 
 Optional X and Telegram links are encoded as versioned UTF-8 JSON in `extraData`.
 
+## Stock-Paired
+
+Stock-Paired launches use an allowlisted Ondo tokenized stock or ETF as the
+canonical v4 pool's quote asset. An initial ETH buy is routed through USDC and
+the selected quote asset before purchasing the launched token.
+
+- The launched token remains a separate fixed-supply ERC-20
+- The pool charges a fixed 1.00% hook fee
+- The creator receives 0.90% and Programmable receives 0.10% in the quote asset
+- The full launch allocation enters a permanently locked one-sided v4 position
+- The hook supports either v4 currency ordering and discloses that ordering onchain
+
 ## Application
 
 - Explore lists launches emitted by the verified production launcher
@@ -46,12 +59,15 @@ Optional X and Telegram links are encoded as versioned UTF-8 JSON in `extraData`
 - Trading uses the official v4 quoter, Universal Router and Permit2
 - Production reads require two independent RPC providers to agree on confirmed chain state
 - Launch and trading preparation fail closed when deployment or runtime checks do not match
+- Public indexer metadata is available through `/api/indexers/v1/tokens`
 
 The public read model pairs canonical launch events, ignores unrecognized shared-hook events and hydrates token state from the official StateView at one confirmed snapshot block.
 
 ## Release status
 
 The active Classic deployment is recorded in [`contracts/deployments/mainnet-classic-v2.json`](./contracts/deployments/mainnet-classic-v2.json). Its deployment receipts, constructor configuration, runtime code hashes and signed launch, buy, sell and claim lifecycle have been reconciled through two RPC providers. The deployed contracts have exact source matches on Etherscan and Sourcify.
+
+The active Stock-Paired deployment is recorded in [`contracts/deployments/mainnet-stock-paired-v2.json`](./contracts/deployments/mainnet-stock-paired-v2.json). Its public indexer records preserve the quote asset, v4 pool ordering, hook, fees and exact Stock-Paired release.
 
 Deep V3 is not deployed. It remains unavailable in the public launcher until its deployment, source verification, canary lifecycle and production keeper evidence are complete. A passing local test suite is not a production release.
 
@@ -85,3 +101,4 @@ Key references:
 - [`contracts/security/DEEP-V3.md`](./contracts/security/DEEP-V3.md)
 - [`contracts/release/DEEP-FULL-RANGE-V3.md`](./contracts/release/DEEP-FULL-RANGE-V3.md)
 - [`docs/frontend-transaction-preflight.md`](./docs/frontend-transaction-preflight.md)
+- [`docs/public-indexer-feed.md`](./docs/public-indexer-feed.md)
