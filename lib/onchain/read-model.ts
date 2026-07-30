@@ -880,15 +880,6 @@ export async function readExploreModel(
       const durable = await readDurableExploreModel(config);
       if (durable.status === "ready") {
         let model = durable.envelope.payload.model;
-        if (model.snapshot && isClassicV3ExploreReleaseReady(config)) {
-          model = mergeClassicV3ExploreModel(
-            model,
-            await readClassicV3ExploreModel(
-              config,
-              model.snapshot.blockNumber,
-            ),
-          );
-        }
         if (
           model.snapshot &&
           isStockPairedExploreReleaseReady(config)
