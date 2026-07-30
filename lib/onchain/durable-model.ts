@@ -155,7 +155,14 @@ export type DurableExploreRead =
     }
   | {
       status: "unavailable";
-      reason: "not-configured" | "missing" | "invalid" | "stale";
+      reason: "stale";
+      detail: string;
+      envelope: DurableExploreEnvelope;
+      ageMs: number;
+    }
+  | {
+      status: "unavailable";
+      reason: "not-configured" | "missing" | "invalid";
       detail: string;
     };
 
@@ -771,6 +778,8 @@ export function validateDurableExploreEnvelope(
       status: "unavailable",
       reason: "stale",
       detail: `The durable index is ${Math.floor(ageMs / 1_000)} seconds old`,
+      envelope: value as unknown as DurableExploreEnvelope,
+      ageMs,
     };
   }
   return {

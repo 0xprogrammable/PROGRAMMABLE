@@ -98,7 +98,7 @@ describe("onchain deployment manifest boundary", () => {
   it("never permits a zero log block range", () => {
     vi.stubEnv("PROGRAMMABLE_LOG_BLOCK_RANGE", "0");
     expect(getOnchainDeployment("production").logBlockRange).toBe(
-      10_000n,
+      5_000n,
     );
 
     vi.stubEnv("PROGRAMMABLE_LOG_BLOCK_RANGE", "1");

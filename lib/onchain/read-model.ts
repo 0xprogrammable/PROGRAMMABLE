@@ -4,6 +4,7 @@ import {
   getAddress,
   http,
   keccak256,
+  ResponseBodyTooLargeError,
   type Address,
   type Hex,
   type PublicClient,
@@ -197,59 +198,73 @@ async function indexVerifiedEvents(
   const volumes = new Map<string, FeeVolume>();
   const creatorClaims: CreatorClaimEventRecord[] = [];
 
-  for (
-    let fromBlock = config.deploymentBlock;
-    fromBlock <= toBlock;
-    fromBlock += config.logBlockRange
-  ) {
+  let fromBlock = config.deploymentBlock;
+  let logBlockRange = config.logBlockRange;
+  while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
-      fromBlock + config.logBlockRange - 1n,
+      fromBlock + logBlockRange - 1n,
     );
+    const readLogs = () =>
+      Promise.all([
+        client.getLogs({
+          address: config.launcher,
+          event: memeTokenLaunchedEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: config.launcher,
+          event: memeLiquidityConfiguredEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: config.launcher,
+          event: memeCreatorInitialBuyEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: config.feeHook,
+          event: nativeSwapFeesAccruedEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+        client.getLogs({
+          address: config.feeHook,
+          event: creatorFeesClaimedEvent,
+          fromBlock,
+          toBlock: rangeEnd,
+          strict: true,
+        }),
+      ]);
+    let logs: Awaited<ReturnType<typeof readLogs>>;
+    try {
+      logs = await readLogs();
+    } catch (error) {
+      if (error instanceof ResponseBodyTooLargeError && rangeEnd > fromBlock) {
+        logBlockRange = logBlockRange > 1n ? logBlockRange / 2n : 1n;
+        console.warn("Explore log range reduced after oversized RPC response", {
+          fromBlock: fromBlock.toString(),
+          attemptedToBlock: rangeEnd.toString(),
+          nextRange: logBlockRange.toString(),
+        });
+        continue;
+      }
+      throw error;
+    }
     const [
       launchLogs,
       liquidityLogs,
       initialBuyLogs,
       feeLogs,
       claimLogs,
-    ] =
-      await Promise.all([
-      client.getLogs({
-        address: config.launcher,
-        event: memeTokenLaunchedEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      }),
-      client.getLogs({
-        address: config.launcher,
-        event: memeLiquidityConfiguredEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      }),
-      client.getLogs({
-        address: config.launcher,
-        event: memeCreatorInitialBuyEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      }),
-      client.getLogs({
-        address: config.feeHook,
-        event: nativeSwapFeesAccruedEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      }),
-      client.getLogs({
-        address: config.feeHook,
-        event: creatorFeesClaimedEvent,
-        fromBlock,
-        toBlock: rangeEnd,
-        strict: true,
-      }),
-    ]);
+    ] = logs;
 
     for (const log of launchLogs) {
       if (log.removed || log.blockNumber === null) continue;
@@ -331,6 +346,7 @@ async function indexVerifiedEvents(
         logIndex: log.logIndex,
       });
     }
+    fromBlock = rangeEnd + 1n;
   }
 
   return {
@@ -878,7 +894,17 @@ export async function readExploreModel(
   const value = (async () => {
     if (config.environment === "production") {
       const durable = await readDurableExploreModel(config);
-      if (durable.status === "ready") {
+      if (
+        durable.status === "ready" ||
+        (durable.status === "unavailable" &&
+          durable.reason === "stale")
+      ) {
+        if (durable.status === "unavailable") {
+          console.warn("Serving the last verified Explore index", {
+            reason: durable.reason,
+            ageSeconds: Math.floor(durable.ageMs / 1_000),
+          });
+        }
         const model = durable.envelope.payload.model;
         try {
           return await enrichExploreModelWithUsd(model, config);

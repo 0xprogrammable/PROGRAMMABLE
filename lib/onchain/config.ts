@@ -124,7 +124,7 @@ function resolveOnchainDeployment(
     ),
     logBlockRange: positiveBigInt(
       process.env.PROGRAMMABLE_LOG_BLOCK_RANGE,
-      10_000n,
+      5_000n,
       1n,
       100_000n,
     ),
