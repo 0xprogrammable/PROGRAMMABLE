@@ -99,6 +99,7 @@ npm run contracts:sepolia:validate
 
 Key references:
 
+- [`docs/PROJECT-STRUCTURE.md`](./docs/PROJECT-STRUCTURE.md)
 - [`docs/uniswap-source-provenance.md`](./docs/uniswap-source-provenance.md)
 - [`contracts/security/MAINNET-READINESS.md`](./contracts/security/MAINNET-READINESS.md)
 - [`contracts/security/CLASSIC-V3.md`](./contracts/security/CLASSIC-V3.md)
