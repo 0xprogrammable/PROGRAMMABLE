@@ -18,7 +18,7 @@ import {
 } from "../lib/profile/deep-v2-rewards";
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/ops/deep-keeper-v2/reviewed-release-binding.json", () => ({
+vi.mock("@/config/deep-v2-release-binding.json", () => ({
   default: {
     schemaVersion: 1,
     status: "reviewed",

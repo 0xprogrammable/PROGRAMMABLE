@@ -5,7 +5,7 @@ import {
   type Hex,
 } from "viem";
 
-import opsV2SourceBinding from "../ops/deep-keeper-v3/ops-v2-source-binding.json";
+import opsV2SourceBinding from "../config/deep-v3-source-binding.json";
 import {
   DEEP_V3_FIXED_POLICY,
   DEEP_V3_LOCKED_POSITION_FACTORY,

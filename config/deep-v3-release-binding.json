@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "status": "removed",
+  "manifestPath": "contracts/deployments/mainnet-deep-full-range-v3.json",
+  "model": "deep",
+  "releaseVersion": "deep-full-range-v3",
+  "internalContractRelease": "liquidity-growth-full-range-v3"
+}

@@ -1,8 +1,8 @@
 import { getAddress, isAddress, isHex } from "viem";
 
 import mainnetReleaseManifest from "../contracts/deployments/mainnet-deep-full-range-v3.json";
-import opsV2SourceBinding from "../ops/deep-keeper-v3/ops-v2-source-binding.json";
-import reviewedReleaseBinding from "../ops/deep-keeper-v3/reviewed-ops-v2-binding.json";
+import reviewedReleaseBinding from "../config/deep-v3-release-binding.json";
+import opsV2SourceBinding from "../config/deep-v3-source-binding.json";
 import {
   DEEP_V3_INTERNAL_CONTRACT_RELEASE,
   DEEP_V3_KEEPER_RELEASE_VERSION,
@@ -642,11 +642,10 @@ export function getVerifiedDeepV3Release(
 }
 
 export function getConfiguredDeepV3Release(
-  environment: "production" | "rehearsal",
-) {
-  return environment === "production"
-    ? getVerifiedDeepV3Release(mainnetReleaseManifest, 1)
-    : null;
+  _environment: "production" | "rehearsal",
+): DeepV3ReleaseManifest | null {
+  void _environment;
+  return null;
 }
 
 export function isConfiguredDeepV3ReleaseReady(
