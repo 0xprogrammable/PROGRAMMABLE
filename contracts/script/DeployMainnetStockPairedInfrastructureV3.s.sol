@@ -335,6 +335,7 @@ contract DeployMainnetStockPairedInfrastructureV3 is Script {
         bytes32[] memory symbols = _symbolHashes();
         for (uint256 index; index < registryAssets.length; index++) {
             address asset = registryAssets[index];
+            _assertAddress(keccak256(abi.encode("quoteRegistry.assetAt", index)), QUOTE_REGISTRY.assetAt(index), asset);
             if (!QUOTE_REGISTRY.isSupported(asset)) {
                 revert UnexpectedAddress(keccak256(abi.encode("quoteRegistry.support", asset)), address(0), asset);
             }
@@ -875,23 +876,33 @@ contract DeployMainnetStockPairedInfrastructureV3 is Script {
     }
 
     function _registryAssets() private pure returns (address[] memory values) {
-        values = new address[](6);
+        values = new address[](11);
         values[0] = 0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE;
         values[1] = 0xFeDC5f4a6c38211c1338aa411018DFAf26612c08;
         values[2] = 0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc;
         values[3] = 0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4;
         values[4] = 0xf6b1117ec07684D3958caD8BEb1b302bfD21103f;
         values[5] = 0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c;
+        values[6] = 0x41765F0FCddC276309195166C7A62AE522FA09ef;
+        values[7] = 0x423A63dfE8d82CD9C6568C92210AA537d8Ef6885;
+        values[8] = 0x3632DEa96A953C11dac2f00b4A05a32CD1063fAE;
+        values[9] = 0x992651BFeB9A0DCC4457610E284ba66D86489d4d;
+        values[10] = 0x1F5fc5c3c8B0F15c7E21AF623936FF2b210b6415;
     }
 
     function _symbolHashes() private pure returns (bytes32[] memory values) {
-        values = new bytes32[](6);
+        values = new bytes32[](11);
         values[0] = keccak256("NVDAon");
         values[1] = keccak256("SPYon");
         values[2] = keccak256("GOOGLon");
         values[3] = keccak256("SLVon");
         values[4] = keccak256("TSLAon");
         values[5] = keccak256("AAPLon");
+        values[6] = keccak256("BABAon");
+        values[7] = keccak256("COPXon");
+        values[8] = keccak256("CRCLon");
+        values[9] = keccak256("TLTon");
+        values[10] = keccak256("USOon");
     }
 
     function _assertVacant(address target) private view {
