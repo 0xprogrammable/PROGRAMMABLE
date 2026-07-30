@@ -4,10 +4,6 @@
     {
       "path": "/api/ops/index",
       "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/ops/deep-v3-keeper-v2",
-      "schedule": "*/5 * * * *"
     }
   ]
 }
