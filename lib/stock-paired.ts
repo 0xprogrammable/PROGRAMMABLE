@@ -28,7 +28,6 @@ import {
 } from "./stock-paired-v3";
 import {
   MEME_MIN_INITIAL_BUY_ETH,
-  MEME_MIN_INITIAL_BUY_WEI,
   type LaunchDraft,
 } from "./launch";
 import {
@@ -41,8 +40,11 @@ import {
 
 export const STOCK_PAIRED_MIN_INITIAL_BUY_RAW = 10_000_000_000_000_000n;
 export const STOCK_PAIRED_MIN_INITIAL_BUY = "0.01";
-export const STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI = MEME_MIN_INITIAL_BUY_WEI;
-export const STOCK_PAIRED_MIN_INITIAL_BUY_ETH = MEME_MIN_INITIAL_BUY_ETH;
+export const STOCK_PAIRED_MIN_INITIAL_BUY_ETH = "0.005";
+export const STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI = parseUnits(
+  STOCK_PAIRED_MIN_INITIAL_BUY_ETH,
+  18,
+);
 export const STOCK_PAIRED_DEFAULT_INITIAL_BUY_ETH = "0.01";
 export const STOCK_PAIRED_TOTAL_SWAP_FEE_BPS = 100;
 export const STOCK_PAIRED_CREATOR_FEE_BPS = 90;
