@@ -7,6 +7,8 @@ const contractsDirectory = path.resolve(
   "..",
 );
 
+const endpointAttemptTimeoutMs = 90_000;
+
 const chains = [
   {
     name: "Ethereum mainnet",
@@ -60,6 +62,7 @@ for (const chain of chains) {
           [chain.environmentKey]: endpoint,
         },
         stdio: "inherit",
+        timeout: endpointAttemptTimeoutMs,
       },
     );
 
@@ -72,13 +75,21 @@ for (const chain of chains) {
       break;
     }
 
+    if (result.error?.code === "ETIMEDOUT") {
+      console.warn(
+        `${chain.name} fork tests timed out with ${endpointLabel} after ${endpointAttemptTimeoutMs / 1_000} seconds`,
+      );
+    }
+
     console.warn(
       `${chain.name} fork tests failed with ${endpointLabel}; trying the next endpoint`,
     );
   }
 
   if (!passed) {
-    console.error(`${chain.name} fork tests failed on every configured endpoint`);
+    console.error(
+      `${chain.name} fork tests failed on every configured endpoint`,
+    );
     process.exit(1);
   }
 }
