@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "internalContractRelease": "stock-paired-v3",
+  "releaseCommit": "8fd9ffa8364f28afb1481409ead61d800a3da789",
+  "sourceCommitment": "0xda537415a9678c414240ba9849011acef0aeee36bc938cc4597a0a78f0e74f66",
+  "observedBlock": 25642802,
+  "observedBlockHash": "0x5db9e783e9e0d1f3e35bdbc7ffdeb17263f684ad5c929e4cb2d98d367666de05",
+  "independentRpcCount": 2,
+  "receipts": {
+    "positionPlanner": {
+      "transactionHash": "0x964496e1195937a03eb83f2d645bcede69e785b6800ac221e5b8111ca523335e",
+      "blockNumber": 25642745,
+      "blockHash": "0xd57e0dffeb36eca4428dc1daa17122ca6e54eb5b30053b2c99105a620a059d89",
+      "contractAddress": "0x92555fb6d357f95fdBc5AAAEC55912626297782D",
+      "runtimeCodeHash": "0xef25e869b9e820ed3c776a832d640f4463e339ff8a68c65550ee9d9c3a418e5a",
+      "runtimeBytes": 8506,
+      "nonce": 126
+    },
+    "launcher": {
+      "transactionHash": "0x23a97b6cd91ad6e03f429e36f3d782b712d6a4821390709b854392a8a6e39abc",
+      "blockNumber": 25642749,
+      "blockHash": "0x21c77dcb094874b5f20dd5f8562da69334317442a0034724545aa1970fa9bb6d",
+      "contractAddress": "0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c",
+      "runtimeCodeHash": "0xa392a2a24b0a2ac124b9f132eb1488589bbabe91e82323da12151ee42af87573",
+      "runtimeBytes": 20723,
+      "nonce": 127
+    },
+    "ethLaunchCoordinator": {
+      "transactionHash": "0xc176bb2a4070ad3ae3262ccac24e18f8a277c760c35096ccf564f9cf7dea4c04",
+      "blockNumber": 25642755,
+      "blockHash": "0x8c3553747287385e7f68ac0475704be07462d39ee68777da2dfa31cfd5e5dee0",
+      "contractAddress": "0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2",
+      "runtimeCodeHash": "0xc687b0c5680a31dd27b2265f60a0aa4992bd30fab9aea3acf6b0bd3842c49d63",
+      "runtimeBytes": 7434,
+      "nonce": 128
+    }
+  },
+  "runtimeBindingsVerified": true,
+  "publicLaunchesEnabled": false
+}

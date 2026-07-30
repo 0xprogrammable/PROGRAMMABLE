@@ -2,44 +2,44 @@
   "schemaVersion": 3,
   "model": "stock-paired",
   "internalContractRelease": "stock-paired-v3",
-  "status": "not-deployed",
+  "status": "deployed-runtime-verified-source-and-public-canary-pending",
   "chainId": 1,
-  "releaseCommit": null,
-  "sourceCommitment": null,
-  "ethCoordinatorReleaseCommit": null,
-  "ethCoordinatorSourceCommitment": null,
-  "startingNonce": null,
-  "ethCoordinatorNonce": null,
-  "startBlock": null,
+  "releaseCommit": "8fd9ffa8364f28afb1481409ead61d800a3da789",
+  "sourceCommitment": "0xda537415a9678c414240ba9849011acef0aeee36bc938cc4597a0a78f0e74f66",
+  "ethCoordinatorReleaseCommit": "8fd9ffa8364f28afb1481409ead61d800a3da789",
+  "ethCoordinatorSourceCommitment": "0xda537415a9678c414240ba9849011acef0aeee36bc938cc4597a0a78f0e74f66",
+  "startingNonce": 126,
+  "ethCoordinatorNonce": 128,
+  "startBlock": 25642745,
   "addresses": {
     "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
     "treasury": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
     "quoteRegistry": "0xd38Fbc171C1a842dc3F6d10cf5642BAe097D9239",
-    "positionPlanner": null,
+    "positionPlanner": "0x92555fb6d357f95fdBc5AAAEC55912626297782D",
     "feeSplitVaultFactory": "0x52d70971D6653a754c29385a2a6f241A481952d4",
     "hookFactory": "0x5C2704C6eEaA2063d7a969BA7E557c87AEb1fBcB",
     "feeHook": "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
-    "launcher": null,
-    "ethLaunchCoordinator": null,
+    "launcher": "0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c",
+    "ethLaunchCoordinator": "0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2",
     "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507"
   },
   "transactions": {
     "quoteRegistry": "0x7582e88767f8bd015ae9d2e20ecb3ffc3c3b7b6f5cc7a2fa5fccd86e212a8106",
-    "positionPlanner": null,
+    "positionPlanner": "0x964496e1195937a03eb83f2d645bcede69e785b6800ac221e5b8111ca523335e",
     "feeSplitVaultFactory": "0x27b50bc07a7c4f8a3a8cd8f7f40ec3249c41d5a5d637efccca4af8a4857b6710",
     "hookFactory": "0xf0c324b923027cd3f18384a9d20d761e54b0ac9d776e50c631ca3d248d2a6e29",
     "feeHook": "0x5437eae1e9ca8871d769796448677694ac1c5cb16c20745d79448e4c25943e06",
-    "launcher": null,
-    "ethLaunchCoordinator": null
+    "launcher": "0x23a97b6cd91ad6e03f429e36f3d782b712d6a4821390709b854392a8a6e39abc",
+    "ethLaunchCoordinator": "0xc176bb2a4070ad3ae3262ccac24e18f8a277c760c35096ccf564f9cf7dea4c04"
   },
   "runtimeCodeHashes": {
     "quoteRegistry": "0xdc64e2b2eb251347649c527f3d143b1a2d41312b90c6718f13c3ff7ea07f7e4f",
-    "positionPlanner": null,
+    "positionPlanner": "0xef25e869b9e820ed3c776a832d640f4463e339ff8a68c65550ee9d9c3a418e5a",
     "feeSplitVaultFactory": "0x14a1e46cbb829712c7ba64ce018537aed9385d6116b939ef3d355fa2fdc0f2b6",
     "hookFactory": "0x6f4fb8e100039d4f9dd488f625b7ecb2e8d4d389b914d9031c6c5e6b228ad79d",
     "feeHook": "0x3e292c9ddc64cc3a9c45f79d9d239ab2b8196f10efbdbc74b4f9b37dba53981d",
-    "launcher": null,
-    "ethLaunchCoordinator": null,
+    "launcher": "0xa392a2a24b0a2ac124b9f132eb1488589bbabe91e82323da12151ee42af87573",
+    "ethLaunchCoordinator": "0xc687b0c5680a31dd27b2265f60a0aa4992bd30fab9aea3acf6b0bd3842c49d63",
     "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
   },
   "reusedFromRelease": {
@@ -53,7 +53,7 @@
     ]
   },
   "pricePolicy": {
-    "status": "reviewed-not-deployed",
+    "status": "reviewed-current-release",
     "targetInitialFdvEth": "1.355657760817103798",
     "tickSpacing": 200,
     "calibrationBlockNumber": 25642460,
@@ -63,12 +63,42 @@
     "maximumTickRoundingDeviationBps": 100,
     "maximumActivationEvidenceAgeSeconds": 900,
     "quoteTicks": [
-      { "symbol": "NVDAon", "address": "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE", "initialAbsoluteTick": 181200, "targetQuoteAmountWad": "13522423984475316997" },
-      { "symbol": "SPYon", "address": "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08", "initialAbsoluteTick": 194600, "targetQuoteAmountWad": "3514038942016415531" },
-      { "symbol": "GOOGLon", "address": "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc", "initialAbsoluteTick": 186800, "targetQuoteAmountWad": "7757914703760533694" },
-      { "symbol": "SLVon", "address": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4", "initialAbsoluteTick": 168200, "targetQuoteAmountWad": "49504169414249928797" },
-      { "symbol": "TSLAon", "address": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f", "initialAbsoluteTick": 185600, "targetQuoteAmountWad": "8768084165474772643" },
-      { "symbol": "AAPLon", "address": "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c", "initialAbsoluteTick": 187000, "targetQuoteAmountWad": "7599929078251473378" }
+      {
+        "symbol": "NVDAon",
+        "address": "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE",
+        "initialAbsoluteTick": 181200,
+        "targetQuoteAmountWad": "13522423984475316997"
+      },
+      {
+        "symbol": "SPYon",
+        "address": "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08",
+        "initialAbsoluteTick": 194600,
+        "targetQuoteAmountWad": "3514038942016415531"
+      },
+      {
+        "symbol": "GOOGLon",
+        "address": "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc",
+        "initialAbsoluteTick": 186800,
+        "targetQuoteAmountWad": "7757914703760533694"
+      },
+      {
+        "symbol": "SLVon",
+        "address": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4",
+        "initialAbsoluteTick": 168200,
+        "targetQuoteAmountWad": "49504169414249928797"
+      },
+      {
+        "symbol": "TSLAon",
+        "address": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f",
+        "initialAbsoluteTick": 185600,
+        "targetQuoteAmountWad": "8768084165474772643"
+      },
+      {
+        "symbol": "AAPLon",
+        "address": "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c",
+        "initialAbsoluteTick": 187000,
+        "targetQuoteAmountWad": "7599929078251473378"
+      }
     ],
     "finalActivationPricing": {
       "status": "not-captured",
@@ -79,22 +109,200 @@
     "disclosure": "Starts near Classic's 1.355657760817103798 ETH initial FDV. The exact USD value moves with ETH and the selected quote asset."
   },
   "quoteAssets": [
-    { "symbol": "NVDAon", "address": "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE" },
-    { "symbol": "SPYon", "address": "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08" },
-    { "symbol": "GOOGLon", "address": "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc" },
-    { "symbol": "SLVon", "address": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4" },
-    { "symbol": "TSLAon", "address": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f" },
-    { "symbol": "AAPLon", "address": "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c" }
+    {
+      "symbol": "NVDAon",
+      "address": "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE"
+    },
+    {
+      "symbol": "SPYon",
+      "address": "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08"
+    },
+    {
+      "symbol": "GOOGLon",
+      "address": "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc"
+    },
+    {
+      "symbol": "SLVon",
+      "address": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4"
+    },
+    {
+      "symbol": "TSLAon",
+      "address": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f"
+    },
+    {
+      "symbol": "AAPLon",
+      "address": "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c"
+    }
   ],
   "sourceVerification": {
-    "status": "not-submitted"
+    "quoteRegistry": {
+      "status": "verified",
+      "address": "0xd38Fbc171C1a842dc3F6d10cf5642BAe097D9239",
+      "fqcn": "src/StockQuoteRegistryV2.sol:StockQuoteRegistryV2",
+      "encodedConstructorArguments": "0x000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000002a0000000000000000000000000985462c9aa4d6c3ad59ae6e1e9c0c11347ed1598000000000000000000000000ebbcb2cee51c2fee4062c9c1270dcb98b0b222500000000000000000000000002c158bc456e027b2affccadf1bdbd9f5fc4c5c8c9806c8207a455c012b2799be651ac0146d54866f92db90b502e5e2efa283bee9feff50d5e739b863fc9e0db874d5558375a3e2c81bc20c24923a685263d639bd7480293a8fad3f98f01f39aa59cd4e4c30d7fc4e7019e8f6e691eb5a9be53d116d111c0eae4517448b28f089392aef41d2b865ea8420f504e5d57d238fb8e821000000000000000000000000000000000000000000000000000000000000000b0000000000000000000000002d1f7226bd1f780af6b9a49dcc0ae00e8df4bdee000000000000000000000000fedc5f4a6c38211c1338aa411018dfaf26612c08000000000000000000000000ba47214edd2bb43099611b208f75e4b42fdcfedc000000000000000000000000f3e4872e6a4cf365888d93b6146a2baa7348f1a4000000000000000000000000f6b1117ec07684d3958cad8beb1b302bfd21103f00000000000000000000000014c3abf95cb9c93a8b82c1cdcb76d72cb87b2d4c00000000000000000000000041765f0fcddc276309195166c7a62ae522fa09ef000000000000000000000000423a63dfe8d82cd9c6568c92210aa537d8ef68850000000000000000000000003632dea96a953c11dac2f00b4a05a32cd1063fae000000000000000000000000992651bfeb9a0dcc4457610e284ba66d86489d4d0000000000000000000000001f5fc5c3c8b0f15c7e21af623936ff2b210b6415000000000000000000000000000000000000000000000000000000000000000b57093d9f3ca0882077640c62a489e053e5749c3330202ccab4778cdfd3b835090f2d68b28bf0992fd5ee8946838aecb65d87542a0dfc46fd2dc6ce365f4fa242e1b19e26ad8db710a24a7a4837aaa1084fc3c3ce46d123d1b8d92a4f9a312ad23068806970c0e2b1976c4410346d9abc723550d1142d2497401e27a3aa3a7ff8f8a528fd051180e5bc8bdeae1d77bf2910d9f0714525357bcebc05ac8d28a18aff62f95729d1adb0ba39cf6b487049b04c7df0a1d19c0abca7490c2bde32610afc3be15a166a58da3ad0cbc55355f19266cd51b38408a311f2a1809e22234d7ce98d0e02739c75b64ecae3433d71c5e397d58f87c69a3d420311ce68e8a107fd3f922e600caeccb2a129f52d4eb0039d8602bc12adf76b4734414eab46f398b3a95eb07a3dd094c743b4c9ffd151018b99ba9aaa400150b49f7b0e392891fff24e0b247b16b3854de8245ad42db78a8ad372e722eecafe376cdc8b70b8a3b29a",
+      "constructorArgumentHash": "0x4561929b32778cc3b1035c96cdbc088264a4231e600537f23a6f9e0f9a7f8a57",
+      "etherscan": {
+        "status": "exact-match",
+        "url": "https://etherscan.io/address/0xd38Fbc171C1a842dc3F6d10cf5642BAe097D9239#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "verifiedAt": "2026-07-29T19:42:06Z",
+        "url": "https://sourcify.dev/server/v2/contract/1/0xd38Fbc171C1a842dc3F6d10cf5642BAe097D9239"
+      }
+    },
+    "feeSplitVaultFactory": {
+      "status": "verified",
+      "address": "0x52d70971D6653a754c29385a2a6f241A481952d4",
+      "fqcn": "src/QuoteAssetFeeSplitVaultFactoryV1.sol:QuoteAssetFeeSplitVaultFactoryV1",
+      "encodedConstructorArguments": "0x",
+      "constructorArgumentHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "etherscan": {
+        "status": "similar-match",
+        "matchedAddress": "0xD430d9162c153AFDf9E4CACA6D2317E72a044441",
+        "url": "https://etherscan.io/address/0x52d70971D6653a754c29385a2a6f241A481952d4#code",
+        "matchedUrl": "https://etherscan.io/address/0xD430d9162c153AFDf9E4CACA6D2317E72a044441#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "verifiedAt": "2026-07-29T19:42:36Z",
+        "url": "https://sourcify.dev/server/v2/contract/1/0x52d70971D6653a754c29385a2a6f241A481952d4"
+      }
+    },
+    "hookFactory": {
+      "status": "verified",
+      "address": "0x5C2704C6eEaA2063d7a969BA7E557c87AEb1fBcB",
+      "fqcn": "src/QuoteAssetCreatorFeeHookFactoryV1.sol:QuoteAssetCreatorFeeHookFactoryV1",
+      "encodedConstructorArguments": "0x",
+      "constructorArgumentHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "etherscan": {
+        "status": "similar-match",
+        "matchedAddress": "0xcE9f68963117B1EA87364e5d62AC511D911EBbeD",
+        "url": "https://etherscan.io/address/0x5C2704C6eEaA2063d7a969BA7E557c87AEb1fBcB#code",
+        "matchedUrl": "https://etherscan.io/address/0xcE9f68963117B1EA87364e5d62AC511D911EBbeD#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "verifiedAt": "2026-07-29T19:42:38Z",
+        "url": "https://sourcify.dev/server/v2/contract/1/0x5C2704C6eEaA2063d7a969BA7E557c87AEb1fBcB"
+      }
+    },
+    "feeHook": {
+      "status": "verified",
+      "address": "0x90c67C1E866f86526F0e338459cD435E1F23A0cc",
+      "fqcn": "src/QuoteAssetCreatorFeeHookV1.sol:QuoteAssetCreatorFeeHookV1",
+      "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a900000000000000000000000004957f49620aff3adbbe8195a4f633e49cc93376c000000000000000000000000d38fbc171c1a842dc3f6d10cf5642bae097d923900000000000000000000000052d70971d6653a754c29385a2a6f241a481952d4",
+      "constructorArgumentHash": "0xef7f7f31926498c98ea1ca1ba6e55f51a3e01c806394000ee9735ce63a4c253c",
+      "etherscan": {
+        "status": "similar-match",
+        "matchedAddress": "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc",
+        "url": "https://etherscan.io/address/0x90c67C1E866f86526F0e338459cD435E1F23A0cc#code",
+        "matchedUrl": "https://etherscan.io/address/0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc#code"
+      },
+      "sourcify": {
+        "status": "match",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "verifiedAt": "2026-07-29T19:42:38Z",
+        "url": "https://sourcify.dev/server/v2/contract/1/0x90c67C1E866f86526F0e338459cD435E1F23A0cc"
+      }
+    },
+    "status": "pending-new-v3-sources",
+    "positionPlanner": {
+      "status": "pending",
+      "address": "0x92555fb6d357f95fdBc5AAAEC55912626297782D",
+      "fqcn": "src/StockPairedPositionPlannerV3.sol:StockPairedPositionPlannerV3"
+    },
+    "launcher": {
+      "status": "pending",
+      "address": "0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c",
+      "fqcn": "src/StockPairedLaunchV3.sol:StockPairedLaunchV3"
+    },
+    "ethLaunchCoordinator": {
+      "status": "pending",
+      "address": "0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2",
+      "fqcn": "src/StockPairedEthLaunchCoordinatorV3.sol:StockPairedEthLaunchCoordinatorV3"
+    }
   },
   "lifecycleEvidence": {
-    "status": "not-captured",
-    "releaseEligible": false
+    "status": "deployment-verified-public-canary-pending",
+    "releaseEligible": false,
+    "independentRpcCount": 2,
+    "deploymentTransactionsVerified": true,
+    "runtimeBindingsVerified": true,
+    "ethCoordinatorDeploymentVerified": true
   },
   "activation": {
     "publicLaunchesEnabled": false,
-    "reason": "Deployment, runtime, source and lifecycle evidence are incomplete"
+    "reason": "Source and public lifecycle evidence are incomplete"
+  },
+  "officialDependencies": {
+    "poolManager": {
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "runtimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+    },
+    "positionManager": {
+      "address": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+      "runtimeCodeHash": "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b"
+    },
+    "stateView": {
+      "address": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+      "runtimeCodeHash": "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878"
+    },
+    "v4Quoter": {
+      "address": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+      "runtimeCodeHash": "0x06de58fa119c5deaa7a667fb92d3894e25d9160e62fb82c8d86d43b47eefe441"
+    },
+    "permit2": {
+      "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "runtimeCodeHash": "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131"
+    },
+    "universalRouter": {
+      "address": "0x4C82D1fBFe28C977cBB58D8C7FF8FCF9F70a2cCA",
+      "runtimeCodeHash": "0x70c9ea2b275087aea3d57ae48e2d30e272a07ff5b6c7974bd47c21478b37face"
+    },
+    "uerc20Factory": {
+      "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
+      "runtimeCodeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb"
+    },
+    "positionForwarderFactory": {
+      "address": "0x291a9ff1059d225d02B1659430804486404dB507",
+      "runtimeCodeHash": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
+    },
+    "v3Factory": {
+      "address": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+      "runtimeCodeHash": "0x4d7b8525cd5d14343fa67a732fba5b24cddba11620ca88392f4ec6c52f91fd69"
+    },
+    "v3SwapRouter": {
+      "address": "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+      "runtimeCodeHash": "0xbb90113d2f9a5e9b7feb15a1d1fff06c1ee1575b3f9b1181778ffd0cf633e7ea"
+    },
+    "v3Quoter": {
+      "address": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+      "runtimeCodeHash": "0x06148f47d0f41a68d3bc970030a7150e5d608cfbc28d372440a2e41ce543d92b"
+    },
+    "weth": {
+      "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "runtimeCodeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23"
+    },
+    "usdc": {
+      "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "runtimeCodeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505"
+    }
+  },
+  "issuerRuntime": {
+    "tokenRuntimeCodeHash": "0x9806c8207a455c012b2799be651ac0146d54866f92db90b502e5e2efa283bee9",
+    "beacon": "0x985462c9aa4d6c3ad59ae6e1e9c0c11347ed1598",
+    "beaconRuntimeCodeHash": "0xfeff50d5e739b863fc9e0db874d5558375a3e2c81bc20c24923a685263d639bd",
+    "implementation": "0xebBcb2cEE51c2FeE4062c9C1270dcb98B0b22250",
+    "implementationRuntimeCodeHash": "0x7480293a8fad3f98f01f39aa59cd4e4c30d7fc4e7019e8f6e691eb5a9be53d11",
+    "gmTokenManager": "0x2c158bc456e027b2affccadf1bdbd9f5fc4c5c8c",
+    "gmTokenManagerRuntimeCodeHash": "0x6d111c0eae4517448b28f089392aef41d2b865ea8420f504e5d57d238fb8e821"
   }
 }
