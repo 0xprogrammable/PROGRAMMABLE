@@ -62,6 +62,7 @@
     "maximumReferenceDriftBps": 300,
     "maximumTickRoundingDeviationBps": 100,
     "maximumActivationEvidenceAgeSeconds": 900,
+    "maximumClosedMarketReferenceAgeSeconds": 14400,
     "quoteTicks": [
       {
         "symbol": "NVDAon",
@@ -101,10 +102,10 @@
       }
     ],
     "finalActivationPricing": {
-      "status": "not-captured",
+      "status": "verified-current-release",
       "evidencePath": "contracts/deployments/evidence/stock-paired-v3-final-pricing.json",
-      "evidenceSha256": null,
-      "verifiedAt": null
+      "evidenceSha256": "sha256:17266580ca74fa775fa6b8d6d85316101bb7428ad51f53749b387fb6d41b70ab",
+      "verifiedAt": "2026-07-30T02:49:31.000Z"
     },
     "disclosure": "Starts near Classic's 1.355657760817103798 ETH initial FDV. The exact USD value moves with ETH and the selected quote asset."
   },

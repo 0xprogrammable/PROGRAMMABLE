@@ -1,9 +1,291 @@
 {
   "schema": "stock-paired-v3-final-pricing-v2",
-  "status": "not-captured",
-  "payload": null,
+  "status": "reviewed-current-release",
+  "payload": {
+    "chainId": 1,
+    "internalContractRelease": "stock-paired-v3",
+    "calculationVersion": "tick-fdv-v1",
+    "rpcAgreement": {
+      "sampledHead": {
+        "number": 25642781,
+        "hash": "0xb5afd47dffb33ebd6cd39e5ffec246cc7533df1b1342d98ba658bc234780044a",
+        "timestamp": 1785379739
+      },
+      "providers": [
+        {
+          "providerId": "ethereum-rpc.publicnode.com",
+          "chainId": 1,
+          "sampledBlockNumber": 25642781,
+          "sampledBlockHash": "0xb5afd47dffb33ebd6cd39e5ffec246cc7533df1b1342d98ba658bc234780044a",
+          "reportedHeadNumber": 25642783,
+          "observationSetHash": "0xf5a48a0c58bc171da14c29cfa7773a35c3f7574f3f5339515acd4d57a3451bac"
+        },
+        {
+          "providerId": "eth.drpc.org",
+          "chainId": 1,
+          "sampledBlockNumber": 25642781,
+          "sampledBlockHash": "0xb5afd47dffb33ebd6cd39e5ffec246cc7533df1b1342d98ba658bc234780044a",
+          "reportedHeadNumber": 25642783,
+          "observationSetHash": "0xf5a48a0c58bc171da14c29cfa7773a35c3f7574f3f5339515acd4d57a3451bac"
+        }
+      ]
+    },
+    "pricingPolicy": {
+      "targetInitialFdvEthWei": "1355657760817103798",
+      "launchedTokenSupply": "1000000000000000000000000000",
+      "launchedTokenDecimals": 18,
+      "quoteTokenDecimals": 18,
+      "maximumInitialFdvDeviationBps": 500,
+      "maximumReferenceDriftBps": 300,
+      "maximumTickRoundingDeviationBps": 100,
+      "maximumEvidenceAgeSeconds": 900,
+      "maximumClosedMarketReferenceAgeSeconds": 14400,
+      "maximumHeadLagBlocks": 25
+    },
+    "marketSession": {
+      "state": "closed",
+      "observedAt": 1785379718,
+      "timeZone": "America/New_York",
+      "lastEligibleTradingSessionClosedAt": 1785369600,
+      "nextEligibleTradingSessionOpensAt": 1785398400,
+      "scheduleSources": [
+        {
+          "venue": "NASDAQ",
+          "url": "https://www.nasdaq.com/markets",
+          "referenceId": "nasdaq:market-hours:2026-07-30"
+        },
+        {
+          "venue": "NYSE Arca",
+          "url": "https://www.nyse.com/trade/hours-calendars",
+          "referenceId": "nyse-arca:hours-calendar:2026-07-30"
+        }
+      ]
+    },
+    "ethUsdRoute": {
+      "pool": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+      "fee": 500,
+      "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "token1": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "token0Decimals": 6,
+      "token1Decimals": 18,
+      "runtimeCodeHash": "0xa981b66c747a3d9fa29d7e200d5faaa2826960523d0e5a0df8148e8868c480b4",
+      "sqrtPriceX96": "1811743103939312575607080432380646"
+    },
+    "assets": [
+      {
+        "symbol": "NVDAon",
+        "token": "0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE",
+        "tokenDecimals": 18,
+        "initialAbsoluteTick": 181200,
+        "targetQuoteAmountWad": "13522423984475316997",
+        "route": {
+          "pool": "0xf5294094bce435bfbd0ec488be5c462aaf32bc7a",
+          "fee": 10000,
+          "token0": "0x2d1f7226bd1f780af6b9a49dcc0ae00e8df4bdee",
+          "token1": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "token0Decimals": 18,
+          "token1Decimals": 6,
+          "runtimeCodeHash": "0x0c488df5bd90182f1e19b3c300eab4f99ab3c68d756250fd22589441b7c67e06",
+          "sqrtPriceX96": "1099199494266237923555083"
+        },
+        "independentReference": {
+          "provider": "openai-finance",
+          "instrument": "NASDAQ:NVDA",
+          "currency": "USD",
+          "venue": "NASDAQ",
+          "marketState": "closed",
+          "priceUsdWad": "190010000000000000000",
+          "asOf": 1785370500,
+          "retrievedAt": 1785379718,
+          "referenceId": "finance:NVDA:2026-07-30T00:15:00Z"
+        },
+        "derived": {
+          "tickSqrtPriceX96": "9212304827741815476690072",
+          "tickQuoteFdvWad": "13520023064276052820",
+          "routeQuotePerEthWad": "9935095848412404431",
+          "independentQuotePerEthWad": "10064436768104778065",
+          "impliedFdvEthWei": "1360834688518531800"
+        }
+      },
+      {
+        "symbol": "SPYon",
+        "token": "0xFeDC5f4a6c38211c1338aa411018DFAf26612c08",
+        "tokenDecimals": 18,
+        "initialAbsoluteTick": 194600,
+        "targetQuoteAmountWad": "3514038942016415531",
+        "route": {
+          "pool": "0x5638bbde046ec2efc7c8f3fd8dc5a9a1016f7eeb",
+          "fee": 3000,
+          "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "token1": "0xfedc5f4a6c38211c1338aa411018dfaf26612c08",
+          "token0Decimals": 6,
+          "token1Decimals": 18,
+          "runtimeCodeHash": "0x9ce9b74c4e3e51f9bcf2ad9d28f09df179f96f7d17e423aa9207a69dc1558252",
+          "sqrtPriceX96": "2916672552357869513832364143970049"
+        },
+        "independentReference": {
+          "provider": "openai-finance",
+          "instrument": "NYSEARCA:SPY",
+          "currency": "USD",
+          "venue": "NYSE Arca",
+          "marketState": "closed",
+          "priceUsdWad": "729460000000000000000",
+          "asOf": 1785370500,
+          "retrievedAt": 1785379718,
+          "referenceId": "finance:SPY:2026-07-30T00:15:00Z"
+        },
+        "derived": {
+          "tickSqrtPriceX96": "4714173313173465756139773",
+          "tickQuoteFdvWad": "3540396661305328988",
+          "routeQuotePerEthWad": "2591684405390914612",
+          "independentQuotePerEthWad": "2621588065565745730",
+          "impliedFdvEthWei": "1366060101276612085"
+        }
+      },
+      {
+        "symbol": "GOOGLon",
+        "token": "0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc",
+        "tokenDecimals": 18,
+        "initialAbsoluteTick": 186800,
+        "targetQuoteAmountWad": "7757914703760533694",
+        "route": {
+          "pool": "0x39fcb1935f6ccb0a106d05eb928205c59646af57",
+          "fee": 10000,
+          "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "token1": "0xba47214edd2bb43099611b208f75e4b42fdcfedc",
+          "token0Decimals": 6,
+          "token1Decimals": 18,
+          "runtimeCodeHash": "0x1d93fa3dcce7502a231f47d3c9fcf22545d604735365a13d2b5823abd5ec85ee",
+          "sqrtPriceX96": "4327133225226020160341490391972508"
+        },
+        "independentReference": {
+          "provider": "openai-finance",
+          "instrument": "NASDAQ:GOOGL",
+          "currency": "USD",
+          "venue": "NASDAQ",
+          "marketState": "closed",
+          "priceUsdWad": "336710000000000000000",
+          "asOf": 1785370500,
+          "retrievedAt": 1785379718,
+          "referenceId": "finance:GOOGL:2026-07-30T00:15:00Z"
+        },
+        "derived": {
+          "tickSqrtPriceX96": "6962607679468676520282677",
+          "tickQuoteFdvWad": "7722975943643816421",
+          "routeQuotePerEthWad": "5704364905604683818",
+          "independentQuotePerEthWad": "5679497580432980547",
+          "impliedFdvEthWei": "1353871302317247594"
+        }
+      },
+      {
+        "symbol": "SLVon",
+        "token": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4",
+        "tokenDecimals": 18,
+        "initialAbsoluteTick": 168200,
+        "targetQuoteAmountWad": "49504169414249928797",
+        "route": {
+          "pool": "0xeeb8f880ead7281a301ef2e6791a6bbe790603ed",
+          "fee": 10000,
+          "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "token1": "0xf3e4872e6a4cf365888d93b6146a2baa7348f1a4",
+          "token0Decimals": 6,
+          "token1Decimals": 18,
+          "runtimeCodeHash": "0x78981bb1657e3a587ec8a74460e263f638f051511c62431b090277d38698ea79",
+          "sqrtPriceX96": "10945653592221523849946223026171125"
+        },
+        "independentReference": {
+          "provider": "openai-finance",
+          "instrument": "NYSEARCA:SLV",
+          "currency": "USD",
+          "venue": "NYSE Arca",
+          "marketState": "closed",
+          "priceUsdWad": "51770000000000000000",
+          "asOf": 1785370500,
+          "retrievedAt": 1785379718,
+          "referenceId": "finance:SLV:2026-07-30T00:15:00Z"
+        },
+        "derived": {
+          "tickSqrtPriceX96": "17645972561664955685685170",
+          "tickQuoteFdvWad": "49605751312209836038",
+          "routeQuotePerEthWad": "36499773135011836809",
+          "independentQuotePerEthWad": "36939224073934496431",
+          "impliedFdvEthWei": "1359070127058578743"
+        }
+      },
+      {
+        "symbol": "TSLAon",
+        "token": "0xf6b1117ec07684D3958caD8BEb1b302bfD21103f",
+        "tokenDecimals": 18,
+        "initialAbsoluteTick": 185600,
+        "targetQuoteAmountWad": "8768084165474772643",
+        "route": {
+          "pool": "0x31227b50eccdc9c589826aa2d9e7c5619b1895da",
+          "fee": 10000,
+          "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "token1": "0xf6b1117ec07684d3958cad8beb1b302bfd21103f",
+          "token0Decimals": 6,
+          "token1Decimals": 18,
+          "runtimeCodeHash": "0x8924e50b838c5e1ee3ec68c18a41e29c4d1403a03384f900c5659184e00d03d9",
+          "sqrtPriceX96": "4607528850678726361842183205840206"
+        },
+        "independentReference": {
+          "provider": "openai-finance",
+          "instrument": "NASDAQ:TSLA",
+          "currency": "USD",
+          "venue": "NASDAQ",
+          "marketState": "closed",
+          "priceUsdWad": "298320000000000000000",
+          "asOf": 1785370500,
+          "retrievedAt": 1785379718,
+          "referenceId": "finance:TSLA:2026-07-30T00:15:00Z"
+        },
+        "derived": {
+          "tickSqrtPriceX96": "7393129115375123816015169",
+          "tickQuoteFdvWad": "8707578819134800530",
+          "routeQuotePerEthWad": "6467596133360043310",
+          "independentQuotePerEthWad": "6410376878209938590",
+          "impliedFdvEthWei": "1346339295093097006"
+        }
+      },
+      {
+        "symbol": "AAPLon",
+        "token": "0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c",
+        "tokenDecimals": 18,
+        "initialAbsoluteTick": 187000,
+        "targetQuoteAmountWad": "7599929078251473378",
+        "route": {
+          "pool": "0xad82c9eb065a5cfed71db087e4a52c8a09c69921",
+          "fee": 10000,
+          "token0": "0x14c3abf95cb9c93a8b82c1cdcb76d72cb87b2d4c",
+          "token1": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "token0Decimals": 18,
+          "token1Decimals": 6,
+          "runtimeCodeHash": "0x1ef0d1ec03b74d0240a743a2ac44941fad4401a3600a219afdc25f6b3d816b2a",
+          "sqrtPriceX96": "1463596069436387980672637"
+        },
+        "independentReference": {
+          "provider": "openai-finance",
+          "instrument": "NASDAQ:AAPL",
+          "currency": "USD",
+          "venue": "NASDAQ",
+          "marketState": "closed",
+          "priceUsdWad": "338190000000000000000",
+          "asOf": 1785370500,
+          "retrievedAt": 1785379718,
+          "referenceId": "finance:AAPL:2026-07-30T00:15:00Z"
+        },
+        "derived": {
+          "tickSqrtPriceX96": "6893332021954032884083235",
+          "tickQuoteFdvWad": "7570058343489581718",
+          "routeQuotePerEthWad": "5603800067364516141",
+          "independentQuotePerEthWad": "5654642746111916024",
+          "impliedFdvEthWei": "1350879448318683985"
+        }
+      }
+    ]
+  },
   "attestation": {
     "canonicalization": "RFC8785-JCS",
-    "payloadSha256": null
+    "payloadSha256": "sha256:17266580ca74fa775fa6b8d6d85316101bb7428ad51f53749b387fb6d41b70ab"
   }
 }

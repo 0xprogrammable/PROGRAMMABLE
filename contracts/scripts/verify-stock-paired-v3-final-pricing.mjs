@@ -24,6 +24,17 @@ const Q32_MINUS_ONE = (1n << 32n) - 1n;
 const BPS = 10_000n;
 const TOKEN_SUPPLY = 1_000_000_000n * WAD;
 const MAX_HEAD_LAG_BLOCKS = 25;
+const MARKET_TIME_ZONE = "America/New_York";
+const MARKET_SCHEDULE_SOURCES = new Map([
+  [
+    "NASDAQ",
+    "https://www.nasdaq.com/markets",
+  ],
+  [
+    "NYSE Arca",
+    "https://www.nyse.com/trade/hours-calendars",
+  ],
+]);
 const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const USDC = "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const WETH_USDC_POOL = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640";
@@ -259,10 +270,92 @@ function verifyPolicy(payload, config) {
       config.priceCalibration.maximumTickRoundingDeviationBps ||
     policy.maximumEvidenceAgeSeconds !==
       config.priceCalibration.maximumActivationEvidenceAgeSeconds ||
+    policy.maximumClosedMarketReferenceAgeSeconds !==
+      config.priceCalibration.maximumClosedMarketReferenceAgeSeconds ||
     policy.maximumHeadLagBlocks !== MAX_HEAD_LAG_BLOCKS
   ) {
     fail("pricing policy differs from the reviewed activation policy");
   }
+}
+
+function verifyMarketSession(payload, now) {
+  const session = payload.marketSession;
+  const policy = payload.pricingPolicy;
+  if (
+    !session ||
+    !["open", "closed"].includes(session.state) ||
+    session.timeZone !== MARKET_TIME_ZONE
+  ) {
+    fail("market-session evidence is missing or invalid");
+  }
+  const observedAt = requireInteger(
+    session.observedAt,
+    "marketSession.observedAt",
+    1,
+  );
+  if (
+    observedAt > now ||
+    now - observedAt > policy.maximumEvidenceAgeSeconds
+  ) {
+    fail("market-session observation is stale or future-dated");
+  }
+  if (
+    !Array.isArray(session.scheduleSources) ||
+    session.scheduleSources.length !== MARKET_SCHEDULE_SOURCES.size
+  ) {
+    fail("market-session schedule sources are incomplete");
+  }
+  const seenVenues = new Set();
+  for (const source of session.scheduleSources) {
+    const expectedUrl = MARKET_SCHEDULE_SOURCES.get(source?.venue);
+    if (
+      !expectedUrl ||
+      source.url !== expectedUrl ||
+      typeof source.referenceId !== "string" ||
+      source.referenceId.length < 1 ||
+      seenVenues.has(source.venue)
+    ) {
+      fail("market-session schedule source is invalid");
+    }
+    seenVenues.add(source.venue);
+  }
+  if (session.state === "open") {
+    if (
+      session.lastEligibleTradingSessionClosedAt !== null ||
+      session.nextEligibleTradingSessionOpensAt !== null
+    ) {
+      fail("open market-session evidence contains closed-session bounds");
+    }
+    return {
+      state: "open",
+      maximumReferenceAgeSeconds: policy.maximumEvidenceAgeSeconds,
+      venues: seenVenues,
+    };
+  }
+  const lastClose = requireInteger(
+    session.lastEligibleTradingSessionClosedAt,
+    "marketSession.lastEligibleTradingSessionClosedAt",
+    1,
+  );
+  const nextOpen = requireInteger(
+    session.nextEligibleTradingSessionOpensAt,
+    "marketSession.nextEligibleTradingSessionOpensAt",
+    lastClose + 1,
+  );
+  if (
+    lastClose > observedAt ||
+    observedAt >= nextOpen ||
+    now >= nextOpen ||
+    now - lastClose > policy.maximumClosedMarketReferenceAgeSeconds
+  ) {
+    fail("closed market-session bounds do not cover the current capture");
+  }
+  return {
+    state: "closed",
+    maximumReferenceAgeSeconds:
+      policy.maximumClosedMarketReferenceAgeSeconds,
+    venues: seenVenues,
+  };
 }
 
 export function verifyEvidence({ config, manifest, evidence, now }) {
@@ -284,6 +377,7 @@ export function verifyEvidence({ config, manifest, evidence, now }) {
   }
   verifyPolicy(payload, config);
   verifyRpcAgreement(payload, now);
+  const marketSession = verifyMarketSession(payload, now);
 
   const payloadHash = hashCanonicalPayload(payload);
   if (
@@ -377,7 +471,10 @@ export function verifyEvidence({ config, manifest, evidence, now }) {
       reference.instrument.length < 1 ||
       typeof reference.referenceId !== "string" ||
       reference.referenceId.length < 1 ||
-      reference.currency !== "USD"
+      reference.currency !== "USD" ||
+      reference.marketState !== marketSession.state ||
+      typeof reference.venue !== "string" ||
+      !marketSession.venues.has(reference.venue)
     ) {
       fail(`${expected.symbol} independent reference is incomplete`);
     }
@@ -390,7 +487,7 @@ export function verifyEvidence({ config, manifest, evidence, now }) {
     if (
       asOf > now ||
       retrievedAt > now ||
-      now - asOf > payload.pricingPolicy.maximumEvidenceAgeSeconds ||
+      now - asOf > marketSession.maximumReferenceAgeSeconds ||
       now - retrievedAt > payload.pricingPolicy.maximumEvidenceAgeSeconds
     ) {
       fail(`${expected.symbol} independent reference is stale or future-dated`);

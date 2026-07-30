@@ -14,6 +14,7 @@
     "maximumReferenceDriftBps": 300,
     "maximumTickRoundingDeviationBps": 100,
     "maximumActivationEvidenceAgeSeconds": 900,
+    "maximumClosedMarketReferenceAgeSeconds": 14400,
     "oracleClaim": false
   },
   "launchPolicy": {
