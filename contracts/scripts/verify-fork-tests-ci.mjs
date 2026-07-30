@@ -7,12 +7,14 @@ const contractsDirectory = path.resolve(
   "..",
 );
 
+const endpointAttemptTimeoutMs = 90_000;
+
 const chains = [
   {
     name: "Ethereum mainnet",
     environmentKey: "ETHEREUM_RPC_URL",
     testGlob:
-      "test/{AdaptiveCurveLaunchMainnetFork.t.sol,AdaptiveCurveMainnetFork.t.sol,ClassicV3MainnetFork.t.sol,DeployClassicV3InfrastructureV1Mainnet.t.sol,DeployMainnetAdaptiveInfrastructureV1.t.sol,DeployMainnetDeepFullRangeInfrastructureV1.t.sol,DeployMainnetDeepFullRangeInfrastructureV2.t.sol,DeployMainnetDeepFullRangeInfrastructureV2Security.t.sol,DeployMainnetDeepFullRangeInfrastructureV3.t.sol,DeployMainnetDeepFullRangeInfrastructureV3Security.t.sol,DeployMainnetDeepKeeperExecutorV1.t.sol,DeployMainnetMemeInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV2.t.sol,DeployMainnetStockPairedInfrastructureV1.t.sol,EthereumDeploymentSnapshot.t.sol,LiquidityGrowthFullRangeMainnetFork.t.sol,LiquidityGrowthFullRangeV2MainnetFork.t.sol,LiquidityGrowthFullRangeV3MainnetFork.t.sol,LiquidityGrowthVaultMainnetFork.t.sol,MainnetMemeLifecycleFork.t.sol,StockPairedMainnetFork.t.sol}",
+      "test/{AdaptiveCurveLaunchMainnetFork.t.sol,AdaptiveCurveMainnetFork.t.sol,ClassicV3MainnetFork.t.sol,DeepV3CanaryBatchMainnetFork.t.sol,DeployClassicV3InfrastructureV1Mainnet.t.sol,DeployMainnetAdaptiveInfrastructureV1.t.sol,DeployMainnetDeepFullRangeInfrastructureV1.t.sol,DeployMainnetDeepFullRangeInfrastructureV2.t.sol,DeployMainnetDeepFullRangeInfrastructureV2Security.t.sol,DeployMainnetDeepFullRangeInfrastructureV3.t.sol,DeployMainnetDeepFullRangeInfrastructureV3Security.t.sol,DeployMainnetDeepKeeperExecutorV1.t.sol,DeployMainnetMemeInfrastructureV1.t.sol,DeployMainnetMemeInfrastructureV2.t.sol,DeployMainnetStockPairedInfrastructureV1.t.sol,DeployMainnetStockPairedInfrastructureV2.t.sol,DeployMainnetStockPairedInfrastructureV3.t.sol,EthereumDeploymentSnapshot.t.sol,LiquidityGrowthFullRangeMainnetFork.t.sol,LiquidityGrowthFullRangeV2MainnetFork.t.sol,LiquidityGrowthFullRangeV3MainnetFork.t.sol,LiquidityGrowthVaultMainnetFork.t.sol,MainnetMemeLifecycleFork.t.sol,StockPairedMainnetFork.t.sol,StockPairedV2DeployedMainnetFork.t.sol,StockPairedV3MainnetFork.t.sol}",
     publicEndpoints: [
       "https://eth-mainnet.public.blastapi.io",
       "https://rpc.mevblocker.io",
@@ -60,6 +62,7 @@ for (const chain of chains) {
           [chain.environmentKey]: endpoint,
         },
         stdio: "inherit",
+        timeout: endpointAttemptTimeoutMs,
       },
     );
 
@@ -72,13 +75,21 @@ for (const chain of chains) {
       break;
     }
 
+    if (result.error?.code === "ETIMEDOUT") {
+      console.warn(
+        `${chain.name} fork tests timed out with ${endpointLabel} after ${endpointAttemptTimeoutMs / 1_000} seconds`,
+      );
+    }
+
     console.warn(
       `${chain.name} fork tests failed with ${endpointLabel}; trying the next endpoint`,
     );
   }
 
   if (!passed) {
-    console.error(`${chain.name} fork tests failed on every configured endpoint`);
+    console.error(
+      `${chain.name} fork tests failed on every configured endpoint`,
+    );
     process.exit(1);
   }
 }
