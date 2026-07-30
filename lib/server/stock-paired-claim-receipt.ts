@@ -23,21 +23,40 @@ export async function verifyStockPairedClaimReceipt(input: {
   quoteAsset: Address;
   minimumAmount: bigint;
 }) {
-  let receipts;
-  try {
-    receipts = await Promise.all(
-      input.rpcClients.map((client) =>
+  const receiptResults = await Promise.allSettled(
+    input.rpcClients.map((client) =>
         client.getTransactionReceipt({
           hash: input.transactionHash,
         }),
-      ),
-    );
-  } catch {
+    ),
+  );
+  const receipts = receiptResults.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+  if (receipts.length < 2) {
     throw new StockPairedClaimReceiptError(
       "The claim is not visible on both Ethereum RPCs yet",
     );
   }
-  const canonical = receipts[0];
+  const receiptKey = (receipt: (typeof receipts)[number]) =>
+    [
+      receipt.blockHash.toLowerCase(),
+      receipt.blockNumber.toString(),
+      receipt.transactionIndex.toString(),
+      receipt.status,
+      receipt.to?.toLowerCase() ?? "",
+      receipt.from.toLowerCase(),
+    ].join(":");
+  const canonical = receipts.find(
+    (candidate) =>
+      receipts.filter((receipt) => receiptKey(receipt) === receiptKey(candidate))
+        .length >= 2,
+  );
+  if (!canonical) {
+    throw new StockPairedClaimReceiptError(
+      "Independent Ethereum RPCs disagree on the claim receipt",
+    );
+  }
   const releases = getConfiguredStockPairedReleases();
   const earliestStartBlock = releases.reduce(
     (earliest, release) =>
@@ -48,16 +67,10 @@ export async function verifyStockPairedClaimReceipt(input: {
   );
   if (
     releases.length === 0 ||
-    receipts.some(
-      (receipt) =>
-        receipt.status !== "success" ||
-        !receipt.to ||
-        receipt.to.toLowerCase() !== input.vaultAddress.toLowerCase() ||
-        receipt.from.toLowerCase() !== input.account.toLowerCase() ||
-        receipt.blockHash.toLowerCase() !== canonical.blockHash.toLowerCase() ||
-        receipt.blockNumber !== canonical.blockNumber ||
-        receipt.transactionIndex !== canonical.transactionIndex,
-    ) ||
+    canonical.status !== "success" ||
+    !canonical.to ||
+    canonical.to.toLowerCase() !== input.vaultAddress.toLowerCase() ||
+    canonical.from.toLowerCase() !== input.account.toLowerCase() ||
     canonical.blockNumber < earliestStartBlock
   ) {
     throw new StockPairedClaimReceiptError(

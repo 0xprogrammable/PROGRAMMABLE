@@ -3074,20 +3074,22 @@ function ProfilePortfolioRow({
           chainId={chainId}
         />
       ))}
-      {stockPairedClaims.flatMap(
-        ({ reward, claimState, ethState }) => [
+      {stockPairedClaims.map(({ reward, claimState, ethState }) => {
+        const visibleState =
+          [claimState, ethState].find((state) => actionPending(state)) ??
+          [claimState, ethState].find(
+            (state) => state?.status === "confirmed",
+          ) ??
+          claimState ??
+          ethState;
+        return (
           <ProfileActionState
-            key={`${reward.vaultAddress}:stock-state`}
-            state={claimState}
+            key={`${reward.vaultAddress}:stock-paired-state`}
+            state={visibleState}
             chainId={chainId}
-          />,
-          <ProfileActionState
-            key={`${reward.vaultAddress}:eth-state`}
-            state={ethState}
-            chainId={chainId}
-          />,
-        ],
-      )}
+          />
+        );
+      })}
 
       {deepV3Token ? (
         <DeepV3GrowthState token={deepV3Token} />

@@ -79,6 +79,29 @@ describe("Stock-Paired claim receipt verification", () => {
     ).resolves.toBe(1_000n);
   });
 
+  it("accepts two matching receipts when another RPC is unavailable", async () => {
+    const candidate = receipt();
+    const clients = [
+      { getTransactionReceipt: async () => candidate },
+      { getTransactionReceipt: async () => candidate },
+      {
+        getTransactionReceipt: async () => {
+          throw new Error("RPC unavailable");
+        },
+      },
+    ] as unknown as readonly PublicClient[];
+    await expect(
+      verifyStockPairedClaimReceipt({
+        rpcClients: clients,
+        transactionHash,
+        account: STOCK_TEST_ACCOUNT,
+        vaultAddress: vault,
+        quoteAsset: STOCK_QUOTE_ASSETS[0].address,
+        minimumAmount: 1_000n,
+      }),
+    ).resolves.toBe(1_000n);
+  });
+
   it("rejects a claim paid to another wallet", async () => {
     await expect(
       verifyStockPairedClaimReceipt({
