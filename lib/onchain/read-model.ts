@@ -878,7 +878,10 @@ export async function readExploreModel(
   const value = (async () => {
     if (config.environment === "production") {
       const durable = await readDurableExploreModel(config);
-      if (durable.status === "ready") {
+      if (
+        durable.status === "ready" &&
+        !isStockPairedExploreReleaseReady(config)
+      ) {
         const model = durable.envelope.payload.model;
         try {
           return await enrichExploreModelWithUsd(model, config);
@@ -887,10 +890,16 @@ export async function readExploreModel(
           return model;
         }
       }
-      console.warn("Durable Explore index unavailable; using live RPCs", {
-        reason: durable.reason,
-        detail: durable.detail,
-      });
+      if (durable.status === "ready") {
+        console.info(
+          "Stock-Paired is active; using confirmed live launch events",
+        );
+      } else {
+        console.warn("Durable Explore index unavailable; using live RPCs", {
+          reason: durable.reason,
+          detail: durable.detail,
+        });
+      }
     }
     const model = await readReadyRegistryModel(config);
     try {
