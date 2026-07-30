@@ -7,13 +7,13 @@ import { createStockPairedDraft } from "../lib/launch";
 import { STOCK_PAIRED_ETH_QUOTE_ASSETS } from "../lib/stock-paired";
 
 const publicAccount = "0x1111111111111111111111111111111111111111";
-const readyV2Release = {
-  internalContractRelease: "stock-paired-v2",
+const readyV3Release = {
+  internalContractRelease: "stock-paired-v3",
   chainId: 1,
 };
 
 async function loadPublicSurface(
-  release: typeof readyV2Release | null,
+  release: typeof readyV3Release | null,
 ) {
   vi.resetModules();
   vi.doMock("@/lib/stock-paired-release", async (importOriginal) => {
@@ -59,27 +59,24 @@ afterEach(() => {
 });
 
 describe.sequential("Stock-Paired public activation", () => {
-  it("allows a public wallet in both UI and preflight when V2 is ready", async () => {
-    const { LaunchPage, POST } = await loadPublicSurface(readyV2Release);
+  it("keeps UI and preflight closed before the explicit V3 activation", async () => {
+    const { LaunchPage, POST } = await loadPublicSurface(readyV3Release);
     const html = renderToStaticMarkup(createElement(LaunchPage));
     const stockButton = html.match(
       /<button[^>]*data-launch-model-option="stock-paired"[^>]*>/,
     )?.[0];
 
-    expect(stockButton).not.toContain("disabled");
-    expect(html).toContain(">Launch<");
-    expect(html).not.toContain("Stock-Paired</strong><small");
+    expect(stockButton).toContain("disabled");
+    expect(html).toContain("Coming soon");
 
     const result = await POST(publicPreflightRequest());
-    expect(result.status).toBe(200);
-    await expect(result.json()).resolves.toMatchObject({
-      status: "blocked",
-      mode: "stock-paired",
-      title: "Switch the wallet to Ethereum",
+    expect(result.status).toBe(403);
+    await expect(result.json()).resolves.toEqual({
+      error: "Stock-Paired is coming soon",
     });
   });
 
-  it("keeps UI and preflight closed when V2 is not ready", async () => {
+  it("also stays closed without a verified V3 release", async () => {
     const { LaunchPage, POST } = await loadPublicSurface(null);
     const html = renderToStaticMarkup(createElement(LaunchPage));
     const stockButton = html.match(

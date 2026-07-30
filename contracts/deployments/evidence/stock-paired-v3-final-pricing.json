@@ -1,0 +1,9 @@
+{
+  "schema": "stock-paired-v3-final-pricing-v2",
+  "status": "not-captured",
+  "payload": null,
+  "attestation": {
+    "canonicalization": "RFC8785-JCS",
+    "payloadSha256": null
+  }
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import placeholderManifest from "../contracts/deployments/mainnet-stock-paired-v1.json";
 import placeholderV2Manifest from "../contracts/deployments/mainnet-stock-paired-v2.json";
+import placeholderV3Manifest from "../contracts/deployments/mainnet-stock-paired-v3.json";
 import {
   getStockPairedQuoteAssetForRelease,
   getStockPairedQuoteAssetsForRelease,
@@ -13,8 +14,13 @@ import {
   isConfiguredStockPairedReleaseReady,
   resolveVerifiedStockPairedRelease,
   resolveVerifiedStockPairedV2Release,
+  resolveVerifiedStockPairedV3Release,
 } from "../lib/stock-paired-release";
 import { STOCK_PAIRED_V2_QUOTE_ASSETS } from "../lib/stock-paired-v2";
+import {
+  STOCK_PAIRED_V3_CONFIG,
+  STOCK_PAIRED_V3_QUOTE_ASSETS,
+} from "../lib/stock-paired-v3";
 import { stockPairedManifestFixture } from "./stock-paired-fixture";
 
 const EXPECTED_ONDO_GM_TOKEN_MANAGER =
@@ -143,6 +149,34 @@ function stockPairedV2ManifestFixture() {
   };
 }
 
+function stockPairedV3ManifestFixture() {
+  const v2 = stockPairedV2ManifestFixture();
+  return {
+    ...v2,
+    schemaVersion: 3,
+    internalContractRelease: "stock-paired-v3",
+    quoteAssets: STOCK_PAIRED_V3_QUOTE_ASSETS.map(({ symbol, address }) => ({
+      symbol,
+      address,
+    })),
+    pricePolicy: {
+      ...placeholderV3Manifest.pricePolicy,
+      status: "reviewed-current-release",
+      finalActivationPricing: {
+        ...placeholderV3Manifest.pricePolicy.finalActivationPricing,
+        status: "verified-current-release",
+        evidenceSha256:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        verifiedAt: "2026-07-30T00:00:00.000Z",
+      },
+    },
+    lifecycleEvidence: {
+      ...v2.lifecycleEvidence,
+      canaryQuoteAsset: STOCK_PAIRED_V3_QUOTE_ASSETS[0].address,
+    },
+  };
+}
+
 describe("Stock-Paired release gate", () => {
   it("enables the checked-in lifecycle-verified release", () => {
     expect(
@@ -184,10 +218,9 @@ describe("Stock-Paired release gate", () => {
         },
       },
     });
-    expect(getConfiguredStockPairedLaunchRelease()).toMatchObject({
-      internalContractRelease: "stock-paired-v2",
-    });
-    expect(isConfiguredStockPairedReleaseReady("production")).toBe(true);
+    expect(resolveVerifiedStockPairedV3Release(placeholderV3Manifest)).toBeNull();
+    expect(getConfiguredStockPairedLaunchRelease()).toBeNull();
+    expect(isConfiguredStockPairedReleaseReady("production")).toBe(false);
     expect(getConfiguredStockPairedRelease()).toMatchObject({
       internalContractRelease: "stock-paired-v2",
     });
@@ -228,6 +261,33 @@ describe("Stock-Paired release gate", () => {
         },
       }),
     ).toBeNull();
+  });
+
+  it("requires the exact V3 quote and start-tick policy", () => {
+    const manifest = stockPairedV3ManifestFixture();
+    expect(resolveVerifiedStockPairedV3Release(manifest)).toMatchObject({
+      internalContractRelease: "stock-paired-v3",
+      chainId: 1,
+    });
+
+    const changedTick = structuredClone(manifest);
+    changedTick.pricePolicy.quoteTicks[0].initialAbsoluteTick +=
+      STOCK_PAIRED_V3_CONFIG.tickSpacing;
+    expect(resolveVerifiedStockPairedV3Release(changedTick)).toBeNull();
+
+    const missingFinalPricing = structuredClone(manifest);
+    missingFinalPricing.pricePolicy.finalActivationPricing.status =
+      "not-captured";
+    expect(
+      resolveVerifiedStockPairedV3Release(missingFinalPricing),
+    ).toBeNull();
+
+    const addedQuote = structuredClone(manifest);
+    addedQuote.quoteAssets.push({
+      symbol: "QQQon",
+      address: "0x0e397938C1Aa0680954093495B70A9F5e2249aBa",
+    });
+    expect(resolveVerifiedStockPairedV3Release(addedQuote)).toBeNull();
   });
 
   it("requires seven exact Sourcify matches and one exact plus six readable similar Etherscan records", () => {
