@@ -2,6 +2,11 @@ const STOCK_PAIRED_DEV_ACCOUNTS = new Set([
   "0x2bb333d48dfaf1596d9036671d2e43168994249e",
 ]);
 
+export type StockPairedPublicLaunchRelease = {
+  internalContractRelease: string;
+  chainId: number;
+};
+
 export const STOCK_PAIRED_NEW_LAUNCHES_ENABLED = false;
 
 export function isStockPairedDevAccount(
@@ -9,9 +14,21 @@ export function isStockPairedDevAccount(
 ) {
   return Boolean(
     STOCK_PAIRED_NEW_LAUNCHES_ENABLED &&
-    account &&
+      account &&
       /^0x[a-fA-F0-9]{40}$/.test(account) &&
       STOCK_PAIRED_DEV_ACCOUNTS.has(account.toLowerCase()),
+  );
+}
+
+export function isStockPairedPublicLaunchEnabled(
+  environment: "production" | "rehearsal",
+  release: StockPairedPublicLaunchRelease | null,
+) {
+  return Boolean(
+    STOCK_PAIRED_NEW_LAUNCHES_ENABLED &&
+      environment === "production" &&
+      release?.internalContractRelease === "stock-paired-v3" &&
+      release.chainId === 1,
   );
 }
 

@@ -27,7 +27,7 @@ export function RouteTransition({ children }: { children: ReactNode }) {
   return (
     <div
       className={`route-transition${isDocsPath ? " route-transition-docs" : ""}`}
-      key={isDocsPath ? "docs" : pathname}
+      key={pathname}
       ref={contentRef}
     >
       {children}

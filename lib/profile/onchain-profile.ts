@@ -282,10 +282,6 @@ function sameAddress(first: string, second: string) {
   return first.toLowerCase() === second.toLowerCase();
 }
 
-function sameHex(first: string, second: string) {
-  return first.toLowerCase() === second.toLowerCase();
-}
-
 function tokenHref(address: Address) {
   return `/token/${address}`;
 }
@@ -519,11 +515,13 @@ export function mapCreatorProfileResponse(
     );
   }
 
+  const poolByPoolId = new Map(
+    pools.map((pool) => [pool.poolId.toLowerCase(), pool]),
+  );
   for (const token of tokens) {
-    const pool = pools.find((candidate) =>
-      sameHex(candidate.poolId, token.poolId),
-    );
-    if (!pool || !sameAddress(pool.tokenAddress, token.address)) {
+    const pool = poolByPoolId.get(token.poolId.toLowerCase());
+    if (!pool) continue;
+    if (!sameAddress(pool.tokenAddress, token.address)) {
       throw new ProfileResponseError(
         "Profile token does not match its verified pool",
       );

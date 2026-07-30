@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  EXPLORE_REFRESH_INTERVAL_MS,
+  getMarketCap,
   loadExplorePayload,
   preserveExplorePayloadOnRefreshFailure,
+  shouldRefreshExplore,
 } from "../components/explore-view";
+import type { LauncherToken } from "../lib/tokens";
 
 const payload = {
   status: "ready" as const,
@@ -20,6 +24,49 @@ afterEach(() => {
 });
 
 describe("Explore refresh state", () => {
+  it("refreshes only visible Explore content after the freshness interval", () => {
+    expect(EXPLORE_REFRESH_INTERVAL_MS).toBe(10_000);
+    expect(
+      shouldRefreshExplore({
+        visibilityState: "hidden",
+        lastRefreshAt: 0,
+        now: 20_000,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRefreshExplore({
+        visibilityState: "visible",
+        lastRefreshAt: 5_000,
+        now: 14_999,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRefreshExplore({
+        visibilityState: "visible",
+        lastRefreshAt: 5_000,
+        now: 15_000,
+      }),
+    ).toBe(true);
+  });
+
+  it("prefers a compatible indexed market cap over the older canonical snapshot", () => {
+    const token = {
+      id: "1:test",
+      name: "Test",
+      symbol: "TEST",
+      tokenAddress: "0x1111111111111111111111111111111111111111",
+      hookAddress: "0x2222222222222222222222222222222222222222",
+      poolId: `0x${"33".repeat(32)}`,
+      launchedAt: "2026-07-29T00:00:00.000Z",
+      fdvUsdWad: "100000000000000000000",
+      indexedMarketCapUsdWad: "125000000000000000000",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme",
+    } satisfies LauncherToken;
+
+    expect(getMarketCap(token)).toEqual({ kind: "usd", value: 125 });
+  });
+
   it("keeps the last valid page when a background refresh fails", () => {
     expect(
       preserveExplorePayloadOnRefreshFailure(

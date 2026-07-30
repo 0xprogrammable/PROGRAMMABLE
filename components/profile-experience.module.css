@@ -80,9 +80,10 @@
   font-size: clamp(32px, 3vw, 40px);
   font-weight: 570;
   letter-spacing: -0.045em;
-  line-height: 1;
+  line-height: 1.08;
   min-width: 0;
   overflow: hidden;
+  padding-bottom: 0.06em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -606,6 +607,34 @@
 
 .actions:empty {
   display: none;
+}
+
+.stockClaimActions {
+  align-items: flex-end;
+  display: grid;
+  gap: 5px;
+}
+
+.stockClaimEstimate {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  padding: 0 2px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.stockClaimButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.stockClaimButtons .claimButton,
+.stockClaimButtons .secondaryAction {
+  min-width: 98px;
+  padding-inline: 13px;
 }
 
 .claimButton,
@@ -1185,6 +1214,26 @@
     justify-content: stretch;
     padding-left: 0;
     padding-top: 13px;
+  }
+
+  .stockClaimActions {
+    align-items: stretch;
+    flex: 1 1 100%;
+  }
+
+  .stockClaimEstimate {
+    text-align: left;
+  }
+
+  .stockClaimButtons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stockClaimButtons .claimButton,
+  .stockClaimButtons .secondaryAction {
+    min-width: 0;
+    width: 100%;
   }
 
   .openToken {

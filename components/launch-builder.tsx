@@ -41,10 +41,7 @@ import {
 import { validatePreparedDeepV3LaunchTransaction } from "@/lib/deep-v3-launch-validation";
 import { isConfiguredDeepV3ReleaseReady } from "@/lib/deep-v3-release";
 import { validatePreparedStockPairedLaunchTransaction } from "@/lib/stock-paired-launch-validation";
-import {
-  isStockPairedDevAccount,
-  isStockPairedLocalPreviewEnabled,
-} from "@/lib/stock-paired-access";
+import { isStockPairedLocalPreviewEnabled } from "@/lib/stock-paired-access";
 import {
   STOCK_PAIRED_DEFAULT_INITIAL_BUY_ETH,
   getStockPairedEthQuoteAsset,
@@ -52,8 +49,13 @@ import {
   STOCK_PAIRED_ETH_QUOTE_ASSETS,
   STOCK_PAIRED_MIN_INITIAL_BUY_ETH,
   validateStockPairedLaunchDraft,
+  type StockQuoteAsset,
 } from "@/lib/stock-paired";
-import { isConfiguredStockPairedReleaseReady } from "@/lib/stock-paired-release";
+import {
+  getStockPairedV2QuoteAsset,
+  STOCK_PAIRED_V2_QUOTE_ASSETS,
+  type StockPairedV2QuoteAsset,
+} from "@/lib/stock-paired-v2";
 import {
   MAX_METADATA_URL_BYTES,
   MAX_SOCIAL_URL_BYTES,
@@ -69,6 +71,7 @@ import {
   type LaunchPreflightResponse,
 } from "@/lib/launch-transaction";
 import {
+  CLASSIC_V3_MAX_REWARD_BENEFICIARIES,
   CLASSIC_TOTAL_SWAP_FEE_BPS,
   CLASSIC_TOTAL_SWAP_FEE_PERCENT,
   createClassicV3Draft,
@@ -157,6 +160,9 @@ const emptyTokenImageState: TokenImageState = {
   message: "",
 };
 const stockPairedLocalPreview = isStockPairedLocalPreviewEnabled();
+const stockPairedUiQuoteAssets = stockPairedLocalPreview
+  ? STOCK_PAIRED_V2_QUOTE_ASSETS
+  : STOCK_PAIRED_ETH_QUOTE_ASSETS;
 const STOCK_PAIRED_DISPLAY_NAMES: Record<string, string> = {
   NVDAon: "NVIDIA",
   SPYon: "S&P 500",
@@ -623,6 +629,26 @@ function stockPairedLogoUrl(symbol: string) {
   return `https://cdn.ondo.finance/tokens/logos/${symbol.toLowerCase()}_160x160.png`;
 }
 
+type StockPairedUiQuoteAsset = StockQuoteAsset | StockPairedV2QuoteAsset;
+
+function stockPairedUiDisplayName(asset: StockPairedUiQuoteAsset) {
+  return "displayName" in asset
+    ? asset.displayName
+    : stockPairedDisplayName(asset.symbol, asset.underlying);
+}
+
+function stockPairedUiLogoUrl(asset: StockPairedUiQuoteAsset) {
+  return "logoUrl" in asset
+    ? asset.logoUrl
+    : stockPairedLogoUrl(asset.symbol);
+}
+
+function getStockPairedUiQuoteAsset(value: string) {
+  return stockPairedLocalPreview
+    ? getStockPairedV2QuoteAsset(value)
+    : getStockPairedEthQuoteAsset(value);
+}
+
 export function findIndexedLaunch(
   value: unknown,
   transactionHash: string,
@@ -802,6 +828,10 @@ function normalizeClassicV3Draft(initialDraft: LaunchDraft): LaunchDraft {
     buySwapFeePercent: initialDraft.buySwapFeePercent || "1",
     sellSwapFeePercent: initialDraft.sellSwapFeePercent || "1",
     rewardDestinationMode: initialDraft.rewardDestinationMode || "launcher",
+    initialBuyCustodyMode:
+      initialDraft.initialBuyCustodyMode || "unlocked",
+    initialBuyDurationDays: initialDraft.initialBuyDurationDays || "30",
+    initialBuyCliffDays: initialDraft.initialBuyCliffDays || "7",
   };
 }
 
@@ -821,9 +851,9 @@ export function normalizeDeepDraft(initialDraft: LaunchDraft): LaunchDraft {
 export function normalizeStockPairedDraft(
   initialDraft: LaunchDraft,
 ): LaunchDraft {
-  const fallbackAsset = STOCK_PAIRED_ETH_QUOTE_ASSETS[0];
+  const fallbackAsset = stockPairedUiQuoteAssets[0];
   const selectedAsset =
-    getStockPairedEthQuoteAsset(initialDraft.stockQuoteAsset) ?? fallbackAsset;
+    getStockPairedUiQuoteAsset(initialDraft.stockQuoteAsset) ?? fallbackAsset;
   return {
     ...normalizeClassicV3Draft(initialDraft),
     launchModel: "stock-paired",
@@ -849,13 +879,10 @@ const launchEnvironment =
 const launchChainId =
   launchEnvironment === "rehearsal" ? (11_155_111 as const) : (1 as const);
 const classicV3LaunchAvailable =
+  (process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_CLASSIC_V3_UI_PREVIEW === "true") ||
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
 const deepLaunchAvailable = isConfiguredDeepV3ReleaseReady(launchEnvironment);
-const stockPairedLaunchAvailable =
-  (process.env.NODE_ENV !== "production" &&
-    process.env.NEXT_PUBLIC_STOCK_PAIRED_UI_PREVIEW === "true") ||
-  isConfiguredStockPairedReleaseReady(launchEnvironment);
-
 function browserPendingLaunchStorages(): PendingLaunchStorage[] {
   if (typeof window === "undefined") return [];
   const storages: PendingLaunchStorage[] = [];
@@ -1004,9 +1031,11 @@ function createLaunchSalt() {
 export function LaunchBuilderForm({
   model,
   onBackToModels,
+  stockPairedPublicLaunchEnabled,
 }: {
   model: LaunchModel;
   onBackToModels: () => void;
+  stockPairedPublicLaunchEnabled: boolean;
 }) {
   const initialDraft =
     model === "deep"
@@ -1022,6 +1051,7 @@ export function LaunchBuilderForm({
       model={model}
       initialDraft={initialDraft}
       onBackToModels={onBackToModels}
+      stockPairedPublicLaunchEnabled={stockPairedPublicLaunchEnabled}
     />
   );
 }
@@ -1030,10 +1060,12 @@ function LaunchBuilderFormView({
   model,
   initialDraft,
   onBackToModels,
+  stockPairedPublicLaunchEnabled,
 }: {
   model: LaunchModel;
   initialDraft: LaunchDraft;
   onBackToModels: () => void;
+  stockPairedPublicLaunchEnabled: boolean;
 }) {
   const { wallet, openWallet, readNativeBalance, sendTransaction } =
     useWallet();
@@ -1145,9 +1177,7 @@ function LaunchBuilderFormView({
       : model === "stock-paired"
         ? "Stock-Paired"
         : "Classic";
-  const stockPairedLaunchAllowed =
-    stockPairedLaunchAvailable &&
-    (stockPairedLocalPreview || isStockPairedDevAccount(wallet?.account));
+  const stockPairedLaunchAllowed = stockPairedPublicLaunchEnabled;
   const submittingWalletConnected = Boolean(
     activeSubmission &&
       wallet &&
@@ -2260,6 +2290,17 @@ function LaunchSuccessDialog({
               <dt>Reward owners</dt>
               <dd>{classicConfiguration.rewards.beneficiaries.length}</dd>
             </div>
+            <div>
+              <dt>Initial Buy</dt>
+              <dd>
+                {classicConfiguration.initialBuyCustody.mode === "unlocked"
+                  ? "Unlocked"
+                  : classicConfiguration.initialBuyCustody.mode ===
+                      "fixed-lock"
+                    ? `${classicConfiguration.initialBuyCustody.durationDays}d lock`
+                    : `${classicConfiguration.initialBuyCustody.durationDays}d vest`}
+              </dd>
+            </div>
           </dl>
         ) : null}
         <Link ref={viewLinkRef} className="primary-button" href={launch.href}>
@@ -2939,7 +2980,8 @@ function EnhancedClassicFeeStep({
               ) : null}
             </div>
           ))}
-          {draft.rewardSplits.length < 8 ? (
+          {draft.rewardSplits.length <
+          CLASSIC_V3_MAX_REWARD_BENEFICIARIES ? (
             <button
               className="secondary-button classic-v3-add-recipient"
               type="button"
@@ -2989,8 +3031,9 @@ function EnhancedClassicFeeStep({
               ))}
             </ul>
             <p>
-              Fee rates, beneficiaries and shares cannot change. Each
-              beneficiary alone can claim or update its payout address.
+              Fee rates and split percentages are fixed. Each current payout
+              wallet controls its allocation. Approved CTO changes affect
+              future rewards only.
             </p>
           </>
         ) : (
@@ -3001,7 +3044,7 @@ function EnhancedClassicFeeStep({
         )}
       </div>
 
-      <div className="classic-fee-layout">
+      <div className="classic-v3-initial-buy">
         <label className="meme-dev-buy" htmlFor="classic-v3-dev-buy">
           <span>
             <strong>Initial buy</strong>
@@ -3032,6 +3075,67 @@ function EnhancedClassicFeeStep({
             <span>ETH</span>
           </span>
         </label>
+
+        <fieldset className="classic-v3-custody">
+          <legend>Initial Buy custody</legend>
+          <label>
+            <span>Availability</span>
+            <select
+              value={draft.initialBuyCustodyMode}
+              onChange={(event) =>
+                updateClassicV3Draft({
+                  initialBuyCustodyMode: event.target
+                    .value as LaunchDraft["initialBuyCustodyMode"],
+                })
+              }
+            >
+              <option value="unlocked">Available immediately</option>
+              <option value="fixed-lock">Fixed lock</option>
+              <option value="linear">Linear vesting</option>
+              <option value="cliff-linear">Cliff and linear vesting</option>
+            </select>
+          </label>
+          {draft.initialBuyCustodyMode !== "unlocked" ? (
+            <label>
+              <span>Total duration</span>
+              <span className="classic-v3-days-input">
+                <input
+                  inputMode="numeric"
+                  value={draft.initialBuyDurationDays}
+                  maxLength={4}
+                  onChange={(event) =>
+                    updateClassicV3Draft({
+                      initialBuyDurationDays: event.target.value,
+                    })
+                  }
+                />
+                <span>days</span>
+              </span>
+            </label>
+          ) : null}
+          {draft.initialBuyCustodyMode === "cliff-linear" ? (
+            <label>
+              <span>Cliff</span>
+              <span className="classic-v3-days-input">
+                <input
+                  inputMode="numeric"
+                  value={draft.initialBuyCliffDays}
+                  maxLength={4}
+                  onChange={(event) =>
+                    updateClassicV3Draft({
+                      initialBuyCliffDays: event.target.value,
+                    })
+                  }
+                />
+                <span>days</span>
+              </span>
+            </label>
+          ) : null}
+          <small>
+            {disclosure?.initialBuyCustody ??
+              "Choose when the launch wallet can access the Initial Buy"}
+          </small>
+        </fieldset>
       </div>
     </section>
   );
@@ -3062,18 +3166,16 @@ function StockPairedStep({
   const assetTriggerRef = useRef<HTMLButtonElement>(null);
   const assetOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selected =
-    getStockPairedEthQuoteAsset(draft.stockQuoteAsset) ??
-    STOCK_PAIRED_ETH_QUOTE_ASSETS[0];
+    getStockPairedUiQuoteAsset(draft.stockQuoteAsset) ??
+    stockPairedUiQuoteAssets[0];
   const selectedIndex = Math.max(
     0,
-    STOCK_PAIRED_ETH_QUOTE_ASSETS.findIndex(
+    stockPairedUiQuoteAssets.findIndex(
       (asset) => asset.address.toLowerCase() === selected.address.toLowerCase(),
     ),
   );
-  const selectedDisplayName = stockPairedDisplayName(
-    selected.symbol,
-    selected.underlying,
-  );
+  const selectedDisplayName = stockPairedUiDisplayName(selected);
+  const selectedLogoUrl = stockPairedUiLogoUrl(selected);
 
   useEffect(() => {
     if (!assetListOpen) return;
@@ -3120,7 +3222,7 @@ function StockPairedStep({
   }
 
   function selectAsset(index: number) {
-    const asset = STOCK_PAIRED_ETH_QUOTE_ASSETS[index];
+    const asset = stockPairedUiQuoteAssets[index];
     if (!asset) return;
     updateStockDraft({ stockQuoteAsset: asset.address });
     closeAssetList();
@@ -3132,19 +3234,21 @@ function StockPairedStep({
   ) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveAssetIndex((index + 1) % STOCK_PAIRED_ETH_QUOTE_ASSETS.length);
+      setActiveAssetIndex(
+        (index + 1) % stockPairedUiQuoteAssets.length,
+      );
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveAssetIndex(
-        (index - 1 + STOCK_PAIRED_ETH_QUOTE_ASSETS.length) %
-          STOCK_PAIRED_ETH_QUOTE_ASSETS.length,
+        (index - 1 + stockPairedUiQuoteAssets.length) %
+          stockPairedUiQuoteAssets.length,
       );
     } else if (event.key === "Home") {
       event.preventDefault();
       setActiveAssetIndex(0);
     } else if (event.key === "End") {
       event.preventDefault();
-      setActiveAssetIndex(STOCK_PAIRED_ETH_QUOTE_ASSETS.length - 1);
+      setActiveAssetIndex(stockPairedUiQuoteAssets.length - 1);
     } else if (event.key === "Escape") {
       event.preventDefault();
       closeAssetList();
@@ -3195,7 +3299,7 @@ function StockPairedStep({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="stock-quote-trigger-logo"
-            src={stockPairedLogoUrl(selected.symbol)}
+            src={selectedLogoUrl}
             alt=""
             width={48}
             height={48}
@@ -3219,13 +3323,11 @@ function StockPairedStep({
             role="listbox"
             aria-label="Quote asset"
           >
-            {STOCK_PAIRED_ETH_QUOTE_ASSETS.map((asset, index) => {
+            {stockPairedUiQuoteAssets.map((asset, index) => {
               const active =
                 asset.address.toLowerCase() === selected.address.toLowerCase();
-              const displayName = stockPairedDisplayName(
-                asset.symbol,
-                asset.underlying,
-              );
+              const displayName = stockPairedUiDisplayName(asset);
+              const logoUrl = stockPairedUiLogoUrl(asset);
               return (
                 <button
                   ref={(element) => {
@@ -3245,7 +3347,7 @@ function StockPairedStep({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     className="stock-quote-logo"
-                    src={stockPairedLogoUrl(asset.symbol)}
+                    src={logoUrl}
                     alt=""
                     width={40}
                     height={40}

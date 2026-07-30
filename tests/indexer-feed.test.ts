@@ -7,6 +7,7 @@ import { GET as getIndexerTokens } from "../app/api/indexers/v1/tokens/route";
 import {
   buildIndexerFeed,
   buildUniswapTokenList,
+  findIndexerToken,
   serializeIndexerToken,
 } from "../lib/onchain/indexer-feed";
 import type { ExploreReadModel } from "../lib/onchain/types";
@@ -66,6 +67,7 @@ describe("public indexer fee disclosure", () => {
     expect(result.fees).toEqual({
       model: "uniswap-v4-custom-accounting",
       currency: "ETH",
+      currencyAddress: null,
       buyHookFeeBps: 100,
       sellHookFeeBps: 100,
       creatorFeeBps: 90,
@@ -137,6 +139,8 @@ describe("public indexer fee disclosure", () => {
     expect(serializeIndexerToken(deepToken, 1)).toMatchObject({
       launch: {
         model: "deep-v2",
+        modelId: "deep",
+        modelVersion: "deep-full-range-v2",
         deepV2Provenance: deepToken.deepV2Provenance,
       },
     });
@@ -210,6 +214,8 @@ describe("public indexer fee disclosure", () => {
       },
       launch: {
         model: "deep-v3",
+        modelId: "deep",
+        modelVersion: "deep-full-range-v3",
         deepReleaseVersion: "deep-full-range-v3",
         deepV2Provenance: null,
         deepV3Provenance: deepToken.deepV3Provenance,
@@ -244,6 +250,8 @@ describe("public indexer fee disclosure", () => {
           },
           hook: token.hookAddress,
           model: "v4-custom-accounting",
+          launchModel: "classic",
+          launchModelVersion: null,
           poolId: token.poolId,
           positionRecipient: token.positionRecipient,
           positionTokenId: token.positionTokenId,
@@ -279,6 +287,75 @@ describe("public indexer fee disclosure", () => {
     ).toThrow("invalid fee disclosure");
   });
 
+  it("discloses Stock-Paired identity, quote asset and pool ordering", () => {
+    const stockToken: LauncherToken = {
+      ...token,
+      id: "stock-paired",
+      tokenAddress:
+        "0x65CBe55386e4bB35FCA4365dF64179B1e07bb6ab",
+      launchModel: "stock-paired",
+      launchModelVersion: "stock-paired-v2",
+      quoteAssetAddress:
+        "0x1F5fc5c3c8B0F15c7E21AF623936FF2b210b6415",
+      quoteAssetSymbol: "USOon",
+      quoteAssetName: "United States Oil Fund (Ondo Tokenized)",
+      quoteIsCurrency0: true,
+    };
+
+    expect(serializeIndexerToken(stockToken, 1)).toMatchObject({
+      canonicalPool: {
+        tokenAddress: stockToken.tokenAddress,
+        quoteAssetAddress: stockToken.quoteAssetAddress,
+        quoteAssetSymbol: "USOon",
+        quoteAssetName: "United States Oil Fund (Ondo Tokenized)",
+        quoteIsCurrency0: true,
+      },
+      fees: {
+        currency: "USOon",
+        currencyAddress: stockToken.quoteAssetAddress,
+      },
+      launch: {
+        model: "stock-paired",
+        modelId: "stock-paired",
+        modelVersion: "stock-paired-v2",
+      },
+    });
+  });
+
+  it("fails closed when Stock-Paired pool identity is incomplete", () => {
+    expect(() =>
+      serializeIndexerToken(
+        {
+          ...token,
+          launchModel: "stock-paired",
+          launchModelVersion: "stock-paired-v2",
+        },
+        1,
+      ),
+    ).toThrow("missing Stock-Paired pool identity");
+  });
+
+  it("supports direct lookup by contract address", () => {
+    expect(
+      findIndexerToken(
+        readyModel,
+        1,
+        token.tokenAddress.toLowerCase(),
+      ),
+    ).toMatchObject({
+      address: token.tokenAddress,
+      name: token.name,
+      symbol: token.symbol,
+    });
+    expect(
+      findIndexerToken(
+        readyModel,
+        1,
+        "0x9999999999999999999999999999999999999999",
+      ),
+    ).toBeNull();
+  });
+
   it("never relabels an unversioned Deep token as Deep V1", () => {
     expect(() =>
       serializeIndexerToken(
@@ -301,7 +378,11 @@ describe("public indexer fee disclosure", () => {
   });
 
   it("keeps the production feed fail-closed before V2 is ready", async () => {
-    const response = await getIndexerTokens();
+    const response = await getIndexerTokens(
+      new Request(
+        "https://programmable.family/api/indexers/v1/tokens",
+      ),
+    );
 
     expect(response.status).toBe(200);
     expect(response.headers.get("access-control-allow-origin")).toBe(
@@ -311,6 +392,22 @@ describe("public indexer fee disclosure", () => {
       status: "not-deployed",
       chainId: 1,
       tokens: [],
+    });
+  });
+
+  it("rejects an invalid direct token lookup without reading chain state", async () => {
+    const response = await getIndexerTokens(
+      new Request(
+        "https://programmable.family/api/indexers/v1/tokens?address=oil",
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "*",
+    );
+    expect(await response.json()).toEqual({
+      error: "Invalid token address",
     });
   });
 

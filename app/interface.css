@@ -218,10 +218,15 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .app-frame > main,
-.site-header,
 .mobile-nav {
   position: relative;
   z-index: 1;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .route-transition {
@@ -338,7 +343,7 @@ html[data-theme="dark"] .atmosphere-particle-six {
 
 .header-social-link,
 .theme-toggle {
-  color: var(--accent-strong);
+  color: var(--brand-pink);
 }
 
 .desktop-nav {

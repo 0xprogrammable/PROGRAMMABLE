@@ -4,6 +4,8 @@ import {
   formatUnits,
   getAddress,
   http,
+  parseAbiItem,
+  type AbiEvent,
   type Address,
   type Hex,
 } from "viem";
@@ -11,9 +13,16 @@ import { mainnet, sepolia } from "viem/chains";
 
 import mainnetDependencies from "../../contracts/dependencies/ethereum-mainnet.json";
 import sepoliaDependencies from "../../contracts/dependencies/ethereum-sepolia.json";
+import mainnetClassicV3 from "../../contracts/deployments/mainnet-classic-v3.json";
+import sepoliaClassicV3 from "../../contracts/deployments/sepolia-classic-v3.json";
+import { deepNativeSwapFeesAccruedEvent } from "../deep-v1";
 import type { LauncherToken } from "../tokens";
 
-import { poolManagerSwapEvent } from "./abis";
+import {
+  nativeSwapFeesAccruedEvent,
+  poolManagerSwapEvent,
+} from "./abis";
+import { deepV3NativeSwapFeesAccruedEvent } from "./deep-v3-explore";
 import { nativePriceWadFromSqrtPriceX96 } from "./math";
 import type { ReadyOnchainDeployment } from "./types";
 import { usdValueFromWei } from "./usd";
@@ -25,8 +34,21 @@ const CHART_RANGE_SECONDS = {
   "1w": 7n * 24n * 60n * 60n,
 } as const;
 
+const classicV3NativeSwapFeesAccruedEvent = parseAbiItem(
+  "event NativeSwapFeesAccrued(bytes32 indexed poolId,address indexed swapSender,bool indexed isBuy,uint16 appliedTotalSwapFeeBps,uint256 grossNativeAmount,uint256 creatorFee,uint256 launcherFee)",
+);
+const adaptiveNativeSwapFeesAccruedEvent = parseAbiItem(
+  "event NativeSwapFeesAccrued(bytes32 indexed poolId,address indexed swapSender,int24 fdvIndex,uint16 totalSwapFeeBps,uint256 grossNativeAmount,uint256 creatorFee,uint256 launcherFee)",
+);
+
 export const TOKEN_CHART_RANGES = ["1h", "1d", "1w", "all"] as const;
 export type TokenChartRange = (typeof TOKEN_CHART_RANGES)[number];
+export type FeeVolumeEventKind =
+  | "classic"
+  | "classic-v3"
+  | "adaptive"
+  | "deep-v1-v2"
+  | "deep-v3";
 
 type RawPricePoint = {
   blockNumber: bigint;
@@ -44,6 +66,9 @@ export type TokenChartSeries = {
   status: "ready" | "insufficient-history";
   points: TokenChartPoint[];
   swapCount: number;
+  volumeWei: string;
+  volumeEth: string;
+  volumeUsdWad?: string;
 };
 
 export function isTokenChartRange(
@@ -119,7 +144,10 @@ export function collapsePricePointsByBlock(points: RawPricePoint[]) {
  * points. This bounds the response and rendering work for heavily traded
  * pools without changing the underlying onchain values.
  */
-export function samplePricePoints<T>(points: T[], limit = MAXIMUM_CHART_POINTS) {
+export function samplePricePoints<T>(
+  points: T[],
+  limit = MAXIMUM_CHART_POINTS,
+) {
   if (limit < 2) throw new RangeError("Chart point limit must be at least 2");
   if (points.length <= limit) return points;
 
@@ -129,6 +157,53 @@ export function samplePricePoints<T>(points: T[], limit = MAXIMUM_CHART_POINTS) 
     sampled.push(points[Math.round((index * lastIndex) / (limit - 1))]);
   }
   return sampled;
+}
+
+function absoluteNativeAmount(amount: bigint) {
+  return amount < 0n ? -amount : amount;
+}
+
+export function sumGrossNativeVolume(amounts: readonly bigint[]) {
+  return amounts.reduce(
+    (total, amount) => total + absoluteNativeAmount(amount),
+    0n,
+  );
+}
+
+export function feeVolumeEventKindForToken(
+  token: LauncherToken,
+  chainId: 1 | 11_155_111,
+): FeeVolumeEventKind {
+  if (token.launchModel === "deep") {
+    return token.deepReleaseVersion === "deep-full-range-v3"
+      ? "deep-v3"
+      : "deep-v1-v2";
+  }
+  if (token.launchModel === "adaptive") return "adaptive";
+
+  const classicV3Hook =
+    chainId === 1
+      ? mainnetClassicV3.addresses.feeHook
+      : sepoliaClassicV3.addresses.feeHook;
+  return token.hookAddress.toLowerCase() === classicV3Hook.toLowerCase()
+    ? "classic-v3"
+    : "classic";
+}
+
+function feeVolumeEventForToken(
+  token: LauncherToken,
+  chainId: 1 | 11_155_111,
+): AbiEvent {
+  const kind = feeVolumeEventKindForToken(token, chainId);
+  if (kind === "classic-v3") return classicV3NativeSwapFeesAccruedEvent;
+  if (kind === "adaptive") return adaptiveNativeSwapFeesAccruedEvent;
+  if (kind === "deep-v1-v2") return deepNativeSwapFeesAccruedEvent;
+  if (kind === "deep-v3") return deepV3NativeSwapFeesAccruedEvent;
+  return nativeSwapFeesAccruedEvent;
+}
+
+function validNativeVolume(value: string | undefined) {
+  return value && /^\d+$/.test(value) ? BigInt(value) : undefined;
 }
 
 function appendSnapshotPoint(
@@ -156,9 +231,7 @@ function appendSnapshotPoint(
   const snapshotPoint: TokenChartPoint = {
     blockNumber,
     priceEth: formatUnits(BigInt(token.tokenPriceEthWei), 18),
-    ...(priceUsdWad
-      ? { priceUsd: formatUnits(BigInt(priceUsdWad), 18) }
-      : {}),
+    ...(priceUsdWad ? { priceUsd: formatUnits(BigInt(priceUsdWad), 18) } : {}),
   };
   const lastPoint = points.at(-1);
   if (lastPoint?.blockNumber === blockNumber) {
@@ -182,7 +255,13 @@ export async function readTokenChartSeries(input: {
     range = "all",
   } = input;
   if (token.launchModel === "stock-paired") {
-    return { status: "insufficient-history", points: [], swapCount: 0 };
+    return {
+      status: "insufficient-history",
+      points: [],
+      swapCount: 0,
+      volumeWei: "0",
+      volumeEth: "0",
+    };
   }
   const launchBlock = token.launchBlockNumber
     ? BigInt(token.launchBlockNumber)
@@ -192,7 +271,13 @@ export async function readTokenChartSeries(input: {
     typeof token.tokenDecimals !== "number" ||
     !Number.isInteger(token.tokenDecimals)
   ) {
-    return { status: "insufficient-history", points: [], swapCount: 0 };
+    return {
+      status: "insufficient-history",
+      points: [],
+      swapCount: 0,
+      volumeWei: "0",
+      volumeEth: "0",
+    };
   }
 
   const client = createPublicClient({
@@ -211,7 +296,7 @@ export async function readTokenChartSeries(input: {
       : http(deployment.rpcUrl, {
           retryCount: 2,
           timeout: 12_000,
-      }),
+        }),
   });
   const rangeStartBlock = await findChartRangeStartBlock({
     launchBlock,
@@ -221,6 +306,11 @@ export async function readTokenChartSeries(input: {
       (await client.getBlock({ blockNumber })).timestamp,
   });
   const rawPoints: RawPricePoint[] = [];
+  const indexedAllTimeVolume =
+    range === "all" ? validNativeVolume(token.grossVolumeWei) : undefined;
+  let volumeWei = indexedAllTimeVolume ?? 0n;
+  const shouldReadFeeVolume = indexedAllTimeVolume === undefined;
+  const feeVolumeEvent = feeVolumeEventForToken(token, deployment.chainId);
 
   for (
     let fromBlock = rangeStartBlock;
@@ -231,14 +321,26 @@ export async function readTokenChartSeries(input: {
       snapshotBlock,
       fromBlock + deployment.logBlockRange - 1n,
     );
-    const logs = await client.getLogs({
-      address: poolManagerAddress(deployment.chainId),
-      event: poolManagerSwapEvent,
-      args: { id: token.poolId as Hex },
-      fromBlock,
-      toBlock,
-      strict: true,
-    });
+    const [logs, feeLogs] = await Promise.all([
+      client.getLogs({
+        address: poolManagerAddress(deployment.chainId),
+        event: poolManagerSwapEvent,
+        args: { id: token.poolId as Hex },
+        fromBlock,
+        toBlock,
+        strict: true,
+      }),
+      shouldReadFeeVolume
+        ? client.getLogs({
+            address: getAddress(token.hookAddress),
+            event: feeVolumeEvent,
+            args: { poolId: token.poolId as Hex },
+            fromBlock,
+            toBlock,
+            strict: true,
+          })
+        : Promise.resolve([]),
+    ]);
 
     for (const log of logs) {
       if (log.removed || log.blockNumber === null) continue;
@@ -248,11 +350,21 @@ export async function readTokenChartSeries(input: {
         sqrtPriceX96: log.args.sqrtPriceX96,
       });
     }
+    for (const log of feeLogs) {
+      if (log.removed) continue;
+      const args = log.args;
+      if (
+        args &&
+        typeof args === "object" &&
+        "grossNativeAmount" in args &&
+        typeof args.grossNativeAmount === "bigint"
+      ) {
+        volumeWei += args.grossNativeAmount;
+      }
+    }
   }
 
-  const sampled = samplePricePoints(
-    collapsePricePointsByBlock(rawPoints),
-  );
+  const sampled = samplePricePoints(collapsePricePointsByBlock(rawPoints));
   const points = sampled.map((point): TokenChartPoint => {
     const priceEthWei = nativePriceWadFromSqrtPriceX96(
       point.sqrtPriceX96,
@@ -279,11 +391,20 @@ export async function readTokenChartSeries(input: {
     snapshotBlock,
     ethUsdQuote,
   );
+  const volumeUsdWad = ethUsdQuote
+    ? usdValueFromWei(
+        volumeWei.toString(),
+        BigInt(ethUsdQuote.answer),
+        ethUsdQuote.decimals,
+      )
+    : undefined;
 
   return {
-    status:
-      completedPoints.length >= 2 ? "ready" : "insufficient-history",
+    status: completedPoints.length >= 2 ? "ready" : "insufficient-history",
     points: completedPoints,
     swapCount: rawPoints.length,
+    volumeWei: volumeWei.toString(),
+    volumeEth: formatUnits(volumeWei, 18),
+    ...(volumeUsdWad === undefined ? {} : { volumeUsdWad }),
   };
 }

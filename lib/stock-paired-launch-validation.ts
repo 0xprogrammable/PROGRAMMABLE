@@ -18,7 +18,7 @@ import {
   validateStockPairedLaunchDraft,
 } from "./stock-paired";
 import {
-  getConfiguredStockPairedRelease,
+  getConfiguredStockPairedLaunchRelease,
   type VerifiedStockPairedRelease,
 } from "./stock-paired-release";
 
@@ -75,7 +75,7 @@ function assertPlanHash(
 }
 
 function releaseOrThrow() {
-  const release = getConfiguredStockPairedRelease();
+  const release = getConfiguredStockPairedLaunchRelease();
   if (!release) {
     throw new Error(
       "Stock-Paired is not enabled by a verified release manifest",

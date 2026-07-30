@@ -12,14 +12,14 @@ import {
 import { mainnet } from "viem/chains";
 
 import {
-  getStockQuoteAsset,
+  getStockPairedQuoteAssetForRelease,
   STOCK_PAIRED_CREATOR_FEE_BPS,
   STOCK_PAIRED_PROGRAMMABLE_FEE_BPS,
   STOCK_PAIRED_TOTAL_SWAP_FEE_BPS,
   stockPairedHookAbi,
 } from "../stock-paired";
 import {
-  getConfiguredStockPairedRelease,
+  getConfiguredStockPairedReleases,
   type VerifiedStockPairedRelease,
 } from "../stock-paired-release";
 import type { LauncherToken } from "../tokens";
@@ -409,7 +409,10 @@ async function hydrateToken(
   snapshotBlock: bigint,
 ): Promise<LauncherToken> {
   const { launch, ethLaunch, liquidity, initialBuy } = record;
-  const quote = getStockQuoteAsset(launch.quoteAsset);
+  const quote = getStockPairedQuoteAssetForRelease(
+    release,
+    launch.quoteAsset,
+  );
   if (!quote) {
     throw new Error(`Unsupported quote asset in launch ${launch.token}`);
   }
@@ -588,6 +591,7 @@ async function hydrateToken(
     quoteAssetAddress: quote.address,
     quoteAssetSymbol: quote.symbol,
     quoteAssetName: quote.name,
+    quoteIsCurrency0,
     tokenPriceQuote: formatUnits(tokenPriceQuoteWad, 18),
     tokenPriceQuoteWad: tokenPriceQuoteWad.toString(),
     marketCapQuote: formatUnits(marketCapQuoteWad, 18),
@@ -620,6 +624,7 @@ async function hydrateToken(
     transferTaxBps,
     totalSwapFeeBps: STOCK_PAIRED_TOTAL_SWAP_FEE_BPS,
     launchModel: "stock-paired",
+    launchModelVersion: release.internalContractRelease,
     liquidityPath: "meme",
     metadataExtraData: extraData,
   };
@@ -631,7 +636,7 @@ export function isStockPairedExploreReleaseReady(
   return (
     config.environment === "production" &&
     config.chainId === 1 &&
-    getConfiguredStockPairedRelease() !== null
+    getConfiguredStockPairedReleases().length > 0
   );
 }
 
@@ -639,16 +644,19 @@ export async function readStockPairedExploreModel(
   config: ReadyOnchainDeployment,
   snapshotBlockNumber: string,
 ): Promise<LauncherToken[]> {
-  const release = getConfiguredStockPairedRelease();
+  const releases = getConfiguredStockPairedReleases();
   if (
-    !release ||
+    releases.length === 0 ||
     !isStockPairedExploreReleaseReady(config) ||
     !/^(?:0|[1-9]\d*)$/.test(snapshotBlockNumber)
   ) {
     return [];
   }
   const toBlock = BigInt(snapshotBlockNumber);
-  if (toBlock < BigInt(release.startBlock)) return [];
+  const activeReleases = releases.filter(
+    (release) => toBlock >= BigInt(release.startBlock),
+  );
+  if (activeReleases.length === 0) return [];
 
   const clients = [
     clientFor(config.rpcUrl),
@@ -658,136 +666,154 @@ export async function readStockPairedExploreModel(
     clients.flatMap((candidate) => [
       assertRuntime(
         candidate,
-        release.addresses.launcher,
-        release.runtimeCodeHashes.launcher,
-        toBlock,
-        "Stock-Paired launcher",
-      ),
-      assertRuntime(
-        candidate,
-        release.addresses.ethLaunchCoordinator,
-        release.runtimeCodeHashes.ethLaunchCoordinator,
-        toBlock,
-        "Stock-Paired ETH launch coordinator",
-      ),
-      assertRuntime(
-        candidate,
-        release.addresses.feeHook,
-        release.runtimeCodeHashes.feeHook,
-        toBlock,
-        "Stock-Paired hook",
-      ),
-      assertRuntime(
-        candidate,
-        release.addresses.quoteRegistry,
-        release.runtimeCodeHashes.quoteRegistry,
-        toBlock,
-        "Stock-Paired quote registry",
-      ),
-      assertRuntime(
-        candidate,
-        release.addresses.feeSplitVaultFactory,
-        release.runtimeCodeHashes.feeSplitVaultFactory,
-        toBlock,
-        "Stock-Paired reward-vault factory",
-      ),
-      assertRuntime(
-        candidate,
         config.stateView,
         config.stateViewRuntimeCodeHash,
         toBlock,
         "Uniswap StateView",
       ),
+      ...activeReleases.flatMap((release) => [
+        assertRuntime(
+          candidate,
+          release.addresses.launcher,
+          release.runtimeCodeHashes.launcher,
+          toBlock,
+          `${release.internalContractRelease} launcher`,
+        ),
+        assertRuntime(
+          candidate,
+          release.addresses.ethLaunchCoordinator,
+          release.runtimeCodeHashes.ethLaunchCoordinator,
+          toBlock,
+          `${release.internalContractRelease} ETH launch coordinator`,
+        ),
+        assertRuntime(
+          candidate,
+          release.addresses.feeHook,
+          release.runtimeCodeHashes.feeHook,
+          toBlock,
+          `${release.internalContractRelease} hook`,
+        ),
+        assertRuntime(
+          candidate,
+          release.addresses.quoteRegistry,
+          release.runtimeCodeHashes.quoteRegistry,
+          toBlock,
+          `${release.internalContractRelease} quote registry`,
+        ),
+        assertRuntime(
+          candidate,
+          release.addresses.feeSplitVaultFactory,
+          release.runtimeCodeHashes.feeSplitVaultFactory,
+          toBlock,
+          `${release.internalContractRelease} reward-vault factory`,
+        ),
+      ]),
     ]),
   );
 
-  const eventSets = await Promise.all(
-    clients.map((candidate) =>
-      readEvents(candidate, config, release, toBlock),
-    ),
-  );
-  const fingerprint = eventFingerprint(eventSets[0]);
-  if (
-    eventSets.some(
-      (candidate) => eventFingerprint(candidate) !== fingerprint,
-    )
-  ) {
-    throw new Error(
-      "Independent RPCs disagree on Stock-Paired launch events",
-    );
-  }
+  const tokenGroups = await Promise.all(
+    activeReleases.map(async (release) => {
+      const eventSets = await Promise.all(
+        clients.map((candidate) =>
+          readEvents(candidate, config, release, toBlock),
+        ),
+      );
+      const fingerprint = eventFingerprint(eventSets[0]);
+      if (
+        eventSets.some(
+          (candidate) => eventFingerprint(candidate) !== fingerprint,
+        )
+      ) {
+        throw new Error(
+          `Independent RPCs disagree on ${release.internalContractRelease} launch events`,
+        );
+      }
 
-  const records = pairStockPairedLaunches(eventSets[0]);
-  const timestamps = new Map<string, bigint>();
-  await Promise.all(
-    [...new Set(records.map(({ launch }) => launch.blockNumber.toString()))].map(
-      async (blockNumber) => {
-        const block = await clients[0].getBlock({
-          blockNumber: BigInt(blockNumber),
-        });
-        timestamps.set(blockNumber, block.timestamp);
-      },
-    ),
-  );
-  const tokenSets = await Promise.all(
-    clients.map((candidate) =>
-      Promise.all(
-        records.map((record) =>
-          hydrateToken(
-            candidate,
-            config,
-            release,
-            record,
-            eventSets[0].volumes.get(record.launch.poolId.toLowerCase()) ??
-              EMPTY_VOLUME,
-            timestamps.get(record.launch.blockNumber.toString()) ?? 0n,
-            toBlock,
+      const records = pairStockPairedLaunches(eventSets[0]);
+      const timestamps = new Map<string, bigint>();
+      await Promise.all(
+        [
+          ...new Set(
+            records.map(({ launch }) => launch.blockNumber.toString()),
+          ),
+        ].map(async (blockNumber) => {
+          const block = await clients[0].getBlock({
+            blockNumber: BigInt(blockNumber),
+          });
+          timestamps.set(blockNumber, block.timestamp);
+        }),
+      );
+      const tokenSets = await Promise.all(
+        clients.map((candidate) =>
+          Promise.all(
+            records.map((record) =>
+              hydrateToken(
+                candidate,
+                config,
+                release,
+                record,
+                eventSets[0].volumes.get(
+                  record.launch.poolId.toLowerCase(),
+                ) ?? EMPTY_VOLUME,
+                timestamps.get(record.launch.blockNumber.toString()) ?? 0n,
+                toBlock,
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
-  const tokenFingerprint = JSON.stringify(tokenSets[0]);
-  if (
-    tokenSets.some(
-      (candidate) => JSON.stringify(candidate) !== tokenFingerprint,
-    )
-  ) {
-    throw new Error(
-      "Independent RPCs disagree on Stock-Paired token state",
-    );
-  }
-  const quoteAssetPrices = new Map<string, bigint | null>();
-  await Promise.all(
-    [
-      ...new Set(
-        tokenSets[0]
-          .map((token) => token.quoteAssetAddress?.toLowerCase())
-          .filter((address): address is string => Boolean(address)),
-      ),
-    ].map(async (address) => {
-      const quoteAsset = getAddress(address);
-      quoteAssetPrices.set(
-        address,
-        await readStockQuoteAssetUsdWad({
-          clients,
-          quoteAsset,
-          expectedQuoteAssetRuntimeCodeHash:
-            release.issuerRuntime.tokenRuntimeCodeHash,
-          blockNumber: toBlock,
+      );
+      const tokenFingerprint = JSON.stringify(tokenSets[0]);
+      if (
+        tokenSets.some(
+          (candidate) => JSON.stringify(candidate) !== tokenFingerprint,
+        )
+      ) {
+        throw new Error(
+          `Independent RPCs disagree on ${release.internalContractRelease} token state`,
+        );
+      }
+      const quoteAssetPrices = new Map<string, bigint | null>();
+      await Promise.all(
+        [
+          ...new Set(
+            tokenSets[0]
+              .map((token) => token.quoteAssetAddress?.toLowerCase())
+              .filter((address): address is string => Boolean(address)),
+          ),
+        ].map(async (address) => {
+          quoteAssetPrices.set(
+            address,
+            await readStockQuoteAssetUsdWad({
+              clients,
+              quoteAsset: getAddress(address),
+              expectedQuoteAssetRuntimeCodeHash:
+                release.issuerRuntime.tokenRuntimeCodeHash,
+              blockNumber: toBlock,
+            }),
+          );
         }),
+      );
+
+      return tokenSets[0].map((token) =>
+        enrichStockPairedTokenWithUsd(
+          token,
+          token.quoteAssetAddress
+            ? (quoteAssetPrices.get(
+                token.quoteAssetAddress.toLowerCase(),
+              ) ?? null)
+            : null,
+        ),
       );
     }),
   );
-
-  return tokenSets[0].map((token) =>
-    enrichStockPairedTokenWithUsd(
-      token,
-      token.quoteAssetAddress
-        ? (quoteAssetPrices.get(token.quoteAssetAddress.toLowerCase()) ?? null)
-        : null,
-    ),
-  );
+  const tokens = tokenGroups.flat();
+  if (
+    new Set(tokens.map((token) => token.tokenAddress.toLowerCase())).size !==
+    tokens.length
+  ) {
+    throw new Error("Duplicate token across Stock-Paired releases");
+  }
+  return tokens;
 }
 
 function isSameStockPairedLaunch(

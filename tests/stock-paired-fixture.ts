@@ -96,6 +96,7 @@ const officialDependencies = {
 
 export function stockPairedReleaseFixture(): VerifiedStockPairedRelease {
   return {
+    internalContractRelease: "stock-paired-v1",
     chainId: 1,
     releaseCommit: "1".repeat(40),
     sourceCommitment: `0x${"12".repeat(32)}`,
