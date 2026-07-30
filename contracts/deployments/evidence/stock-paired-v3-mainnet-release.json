@@ -36,5 +36,55 @@
     }
   },
   "runtimeBindingsVerified": true,
+  "sourceVerification": {
+    "compilerVersion": "0.8.26",
+    "optimizer": true,
+    "optimizerRuns": 1000,
+    "evmVersion": "cancun",
+    "contracts": {
+      "positionPlanner": {
+        "status": "exact-match",
+        "address": "0x92555fb6d357f95fdBc5AAAEC55912626297782D",
+        "submissionGuid": "nwqu6ufhxqecym3qnfnwzs12sjehbjvc5rttjiwtrxzn43dmt8",
+        "url": "https://etherscan.io/address/0x92555fb6d357f95fdBc5AAAEC55912626297782D#code",
+        "similarMatch": null,
+        "sourcify": {
+          "status": "match",
+          "creationMatch": "match",
+          "runtimeMatch": "match",
+          "verifiedAt": "2026-07-30T02:57:20Z",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x92555fb6d357f95fdBc5AAAEC55912626297782D"
+        }
+      },
+      "launcher": {
+        "status": "exact-match",
+        "address": "0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c",
+        "submissionGuid": "cwpurflrcaujm835lx1hbtq6yp7gtzfry7d5aesw7wcg1wmene",
+        "url": "https://etherscan.io/address/0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c#code",
+        "similarMatch": null,
+        "sourcify": {
+          "status": "match",
+          "creationMatch": "match",
+          "runtimeMatch": "match",
+          "verifiedAt": "2026-07-30T02:58:10Z",
+          "url": "https://sourcify.dev/server/v2/contract/1/0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c"
+        }
+      },
+      "ethLaunchCoordinator": {
+        "status": "exact-match",
+        "address": "0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2",
+        "submissionGuid": "jltvdiehn38wy4udkewyvxx5bgga633ttfptxtuvshrpncxzmp",
+        "url": "https://etherscan.io/address/0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2#code",
+        "similarMatch": null,
+        "sourcify": {
+          "status": "match",
+          "creationMatch": "match",
+          "runtimeMatch": "match",
+          "verifiedAt": "2026-07-30T02:59:23Z",
+          "url": "https://sourcify.dev/server/v2/contract/1/0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2"
+        }
+      }
+    }
+  },
   "publicLaunchesEnabled": false
 }
