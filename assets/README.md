@@ -5,6 +5,7 @@
 | `programmable-repository-cover-animated.gif` | Motion cover for GitHub surfaces that support animated images |
 | `programmable-repository-cover.jpg` | Static cover and reduced-motion fallback |
 | `programmable-model-classic.jpg` | Classic model artwork |
+| `programmable-model-stock-paired.webp` | Stock-Paired candidate artwork |
 | `programmable-model-deep.jpg` | Deep design artwork |
 | `programmable-builder-ecosystem.jpg` | Hook Builder Program artwork |
 

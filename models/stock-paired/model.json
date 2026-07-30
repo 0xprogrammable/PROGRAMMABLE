@@ -1,0 +1,64 @@
+{
+  "$schema": "../schema/model.schema.json",
+  "schemaVersion": 1,
+  "id": "stock-paired",
+  "name": "Stock-Paired",
+  "status": "candidate",
+  "summary": "A fixed-supply token paired with one reviewed tokenized stock or ETF quote asset, with quote-asset rewards and permanently locked Uniswap v4 launch liquidity.",
+  "documentation": "models/stock-paired/README.md",
+  "currentRelease": null,
+  "releaseManifest": null,
+  "specification": null,
+  "deployment": null,
+  "security": "docs/security/STOCK_PAIRED_PROPERTIES.md",
+  "network": {
+    "name": "Ethereum",
+    "chainId": 1
+  },
+  "contracts": [
+    {
+      "deploymentKey": "quoteRegistry",
+      "name": "StockQuoteRegistryV2",
+      "address": "0xd38Fbc171C1a842dc3F6d10cf5642BAe097D9239"
+    },
+    {
+      "deploymentKey": "positionPlanner",
+      "name": "StockPairedPositionPlannerV1",
+      "address": "0x93728dF8288fC250294855F6D9dd28F8089E4A3D"
+    },
+    {
+      "deploymentKey": "feeSplitVaultFactory",
+      "name": "QuoteAssetFeeSplitVaultFactoryV1",
+      "address": "0x52d70971D6653a754c29385a2a6f241A481952d4"
+    },
+    {
+      "deploymentKey": "hookFactory",
+      "name": "QuoteAssetCreatorFeeHookFactoryV1",
+      "address": "0x5C2704C6eEaA2063d7a969BA7E557c87AEb1fBcB"
+    },
+    {
+      "deploymentKey": "feeHook",
+      "name": "QuoteAssetCreatorFeeHookV1",
+      "address": "0x90c67C1E866f86526F0e338459cD435E1F23A0cc"
+    },
+    {
+      "deploymentKey": "launcher",
+      "name": "StockPairedLaunchV1",
+      "address": "0x5eA6Be24838061bA45dbE8D82DE1b267DC240Daf"
+    },
+    {
+      "deploymentKey": "ethLaunchCoordinator",
+      "name": "StockPairedEthLaunchCoordinatorV1",
+      "address": "0xFb9E1034df6161088E8F358502B19E7515c30fD2"
+    }
+  ],
+  "review": {
+    "independentAudit": false,
+    "publicContest": false
+  },
+  "releaseGates": [
+    "Publish the exact deployed source, version-bound specification, deployment record and release evidence on the default branch.",
+    "Record all seven exact Sourcify matches and the one Etherscan Exact Match plus six Similar Matches in the available-release evidence and validator.",
+    "Complete the Uniswap routing review and repeat the supported-route checks."
+  ]
+}

@@ -8,6 +8,7 @@ accounted for. [`models/registry.json`](models/registry.json) is the canonical m
 | Model | Lifecycle | Ethereum release | Documentation |
 | --- | --- | --- | --- |
 | Classic | **Available** | [`classic-v3`](releases/classic-v3/RELEASE.md) | [Open model](models/classic/README.md) |
+| Stock-Paired | **Candidate** | Deployed candidate | [Open candidate](models/stock-paired/README.md) |
 | Deep | **Design** | None | [Open design](models/deep/README.md) |
 
 `Available` means the exact source, parameters, deployment, runtime hashes and security status are public. It does not
@@ -34,6 +35,31 @@ buy and sell fees, direct native ETH rewards to as many as five wallets and may 
 [Ethereum deployment](deployments/ethereum.json) ·
 [Security properties](docs/security/CLASSIC_PROPERTIES.md)
 
+## Stock-Paired
+
+<p>
+  <a href="models/stock-paired/README.md">
+    <img
+      src="assets/programmable-model-stock-paired.webp"
+      alt="A watercolor flower arch reflected in a quiet pool representing the Stock-Paired launch model"
+      width="100%"
+    />
+  </a>
+</p>
+
+**Production interface active. Repository release record pending.** Stock-Paired creates a fixed-supply token with one
+reviewed Ondo tokenized stock or ETF asset as the quote side of a permanently locked Uniswap v4 pool. Its 1.00% swap
+fee is accounted in the selected quote asset: 0.90% for the creator configuration and 0.10% for Programmable.
+
+The launched token is not a share and has no claim on the selected quote asset. The deployed release passed its
+Mainnet lifecycle canary and production interface checks. Its public registry remains `candidate` until the
+version-bound source and release records are on the default branch, the release verifier records the mixed explorer
+state and the routing review is complete. Sourcify reports exact matches for all seven contracts; Etherscan shows one
+Exact Match and six Similar Matches.
+
+[Behavior, assets and deployment state](models/stock-paired/README.md) ·
+[Security properties](docs/security/STOCK_PAIRED_PROPERTIES.md)
+
 ## Deep
 
 <p>
@@ -54,7 +80,8 @@ is reached. It has no deployed contracts and is not available for launch.
 ## Adding a model
 
 New models start at `design`. They become `candidate` only after source, tests, fixed parameters and security properties
-exist. They become `available` only after the exact Ethereum deployment and runtime evidence are published.
+exist. They become `available` only after the exact Ethereum deployment, runtime evidence and public activation checks
+are published.
 
 [Read the release process](RELEASING.md) ·
 [Create a model record](templates/model/README.md.template) ·
