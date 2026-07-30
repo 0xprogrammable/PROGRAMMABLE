@@ -225,8 +225,8 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-stock-description"
             >
-              Pair a token with a reviewed Ondo Global Markets asset in a
-              Uniswap v4 pool.
+              Launch a token on Ethereum with a tokenized stock, ETF, or
+              commodity as its quote asset on Uniswap v4.
             </span>
             {stockPairedPublicLaunchEnabled ? (
               <span
