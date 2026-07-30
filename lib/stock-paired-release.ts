@@ -2,11 +2,17 @@ import { getAddress, isAddress, isHex, type Address, type Hex } from "viem";
 
 import mainnetReleaseJson from "../contracts/deployments/mainnet-stock-paired-v1.json";
 import mainnetReleaseV2Json from "../contracts/deployments/mainnet-stock-paired-v2.json";
+import mainnetReleaseV3Json from "../contracts/deployments/mainnet-stock-paired-v3.json";
 import stockAssetsV1Json from "../config/stock-paired-assets.v1.json";
 import { STOCK_PAIRED_V2_QUOTE_ASSETS } from "./stock-paired-v2";
+import {
+  STOCK_PAIRED_V3_CONFIG,
+  STOCK_PAIRED_V3_QUOTE_ASSETS,
+} from "./stock-paired-v3";
 
 export const STOCK_PAIRED_INTERNAL_RELEASE = "stock-paired-v1" as const;
 export const STOCK_PAIRED_V2_INTERNAL_RELEASE = "stock-paired-v2" as const;
+export const STOCK_PAIRED_V3_INTERNAL_RELEASE = "stock-paired-v3" as const;
 
 const runtimeFields = [
   "quoteRegistry",
@@ -68,13 +74,17 @@ type DeployedField = (typeof deployedFields)[number];
 type OfficialDependencyField = (typeof officialDependencyFields)[number];
 type StockPairedInternalRelease =
   | typeof STOCK_PAIRED_INTERNAL_RELEASE
-  | typeof STOCK_PAIRED_V2_INTERNAL_RELEASE;
+  | typeof STOCK_PAIRED_V2_INTERNAL_RELEASE
+  | typeof STOCK_PAIRED_V3_INTERNAL_RELEASE;
 type ExpectedQuoteAsset = { symbol: string; address: string };
 
 const EXPECTED_V1_QUOTE_ASSETS = (
   stockAssetsV1Json as { assets: ExpectedQuoteAsset[] }
 ).assets;
 const EXPECTED_V2_QUOTE_ASSETS = STOCK_PAIRED_V2_QUOTE_ASSETS.map(
+  ({ symbol, address }) => ({ symbol, address }),
+);
+const EXPECTED_V3_QUOTE_ASSETS = STOCK_PAIRED_V3_QUOTE_ASSETS.map(
   ({ symbol, address }) => ({ symbol, address }),
 );
 
@@ -110,6 +120,7 @@ export type StockPairedReleaseManifest = {
     gmTokenManagerRuntimeCodeHash?: unknown;
   };
   quoteAssets?: unknown;
+  pricePolicy?: unknown;
   sourceVerification?: {
     status?: unknown;
     quoteRegistry?: unknown;
@@ -249,6 +260,7 @@ function sourcifyContractUrlMatches(value: unknown, address: unknown) {
 function verifiedV2SourceRecords(
   sourceVerification: StockPairedReleaseManifest["sourceVerification"],
   addresses: StockPairedReleaseManifest["addresses"],
+  requiredExactEtherscanMatches: number | null = 1,
 ) {
   if (sourceVerification?.status !== "verified" || !addresses) return false;
   let exactEtherscanMatches = 0;
@@ -308,7 +320,10 @@ function verifiedV2SourceRecords(
       return false;
     }
   }
-  return exactEtherscanMatches === 1;
+  return (
+    requiredExactEtherscanMatches === null ||
+    exactEtherscanMatches === requiredExactEtherscanMatches
+  );
 }
 
 function exactQuoteAssets(
@@ -335,12 +350,95 @@ function exactQuoteAssets(
   });
 }
 
+function exactV3PricePolicy(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const policy = value as {
+    status?: unknown;
+    targetInitialFdvEth?: unknown;
+    tickSpacing?: unknown;
+    calibrationBlockNumber?: unknown;
+    calibrationBlockHash?: unknown;
+    maximumReferenceDriftBps?: unknown;
+    maximumTickRoundingDeviationBps?: unknown;
+    maximumInitialFdvDeviationBps?: unknown;
+    maximumActivationEvidenceAgeSeconds?: unknown;
+    finalActivationPricing?: unknown;
+    quoteTicks?: unknown;
+  };
+  if (
+    policy.status !== "reviewed-current-release" ||
+    policy.targetInitialFdvEth !==
+      STOCK_PAIRED_V3_CONFIG.targetInitialFdvEth ||
+    policy.tickSpacing !== STOCK_PAIRED_V3_CONFIG.tickSpacing ||
+    policy.calibrationBlockNumber !==
+      STOCK_PAIRED_V3_CONFIG.calibration.blockNumber ||
+    policy.calibrationBlockHash !==
+      STOCK_PAIRED_V3_CONFIG.calibration.blockHash ||
+    policy.maximumReferenceDriftBps !==
+      STOCK_PAIRED_V3_CONFIG.calibration.maximumReferenceDriftBps ||
+    policy.maximumTickRoundingDeviationBps !==
+      STOCK_PAIRED_V3_CONFIG.calibration.maximumTickRoundingDeviationBps ||
+    policy.maximumInitialFdvDeviationBps !==
+      STOCK_PAIRED_V3_CONFIG.calibration.maximumInitialFdvDeviationBps ||
+    policy.maximumActivationEvidenceAgeSeconds !==
+      STOCK_PAIRED_V3_CONFIG.calibration.maximumActivationEvidenceAgeSeconds ||
+    !policy.finalActivationPricing ||
+    typeof policy.finalActivationPricing !== "object" ||
+    Array.isArray(policy.finalActivationPricing) ||
+    !Array.isArray(policy.quoteTicks) ||
+    policy.quoteTicks.length !== STOCK_PAIRED_V3_QUOTE_ASSETS.length
+  ) {
+    return false;
+  }
+  const finalActivationPricing = policy.finalActivationPricing as {
+    status?: unknown;
+    evidencePath?: unknown;
+    evidenceSha256?: unknown;
+    verifiedAt?: unknown;
+  };
+  if (
+    finalActivationPricing.status !== "verified-current-release" ||
+    finalActivationPricing.evidencePath !==
+      "contracts/deployments/evidence/stock-paired-v3-final-pricing.json" ||
+    typeof finalActivationPricing.evidenceSha256 !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/.test(finalActivationPricing.evidenceSha256) ||
+    typeof finalActivationPricing.verifiedAt !== "string" ||
+    Number.isNaN(Date.parse(finalActivationPricing.verifiedAt))
+  ) {
+    return false;
+  }
+  return policy.quoteTicks.every((candidate, index) => {
+    if (
+      !candidate ||
+      typeof candidate !== "object" ||
+      Array.isArray(candidate)
+    ) {
+      return false;
+    }
+    const record = candidate as {
+      symbol?: unknown;
+      address?: unknown;
+      initialAbsoluteTick?: unknown;
+      targetQuoteAmountWad?: unknown;
+    };
+    const expected = STOCK_PAIRED_V3_QUOTE_ASSETS[index];
+    return (
+      record.symbol === expected.symbol &&
+      sameAddress(record.address, expected.address) &&
+      record.initialAbsoluteTick === expected.initialAbsoluteTick &&
+      record.targetQuoteAmountWad === expected.targetQuoteAmountWad
+    );
+  });
+}
+
 type StockPairedReleaseDefinition = {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   internalContractRelease: StockPairedInternalRelease;
   quoteAssets: readonly ExpectedQuoteAsset[];
   requiresGMTokenManager: boolean;
   allowsReadableSimilarMatches: boolean;
+  requiresV3PricePolicy: boolean;
+  requiredExactEtherscanMatches: number | null;
 };
 
 const stockPairedV1ReleaseDefinition: StockPairedReleaseDefinition = {
@@ -349,6 +447,8 @@ const stockPairedV1ReleaseDefinition: StockPairedReleaseDefinition = {
   quoteAssets: EXPECTED_V1_QUOTE_ASSETS,
   requiresGMTokenManager: false,
   allowsReadableSimilarMatches: false,
+  requiresV3PricePolicy: false,
+  requiredExactEtherscanMatches: null,
 };
 
 const stockPairedV2ReleaseDefinition: StockPairedReleaseDefinition = {
@@ -357,6 +457,18 @@ const stockPairedV2ReleaseDefinition: StockPairedReleaseDefinition = {
   quoteAssets: EXPECTED_V2_QUOTE_ASSETS,
   requiresGMTokenManager: true,
   allowsReadableSimilarMatches: true,
+  requiresV3PricePolicy: false,
+  requiredExactEtherscanMatches: 1,
+};
+
+const stockPairedV3ReleaseDefinition: StockPairedReleaseDefinition = {
+  schemaVersion: 3,
+  internalContractRelease: STOCK_PAIRED_V3_INTERNAL_RELEASE,
+  quoteAssets: EXPECTED_V3_QUOTE_ASSETS,
+  requiresGMTokenManager: true,
+  allowsReadableSimilarMatches: true,
+  requiresV3PricePolicy: true,
+  requiredExactEtherscanMatches: null,
 };
 
 function validIssuerManager(
@@ -419,6 +531,8 @@ function resolveStockPairedRelease(
     ) ||
     !validIssuerManager(release, definition.requiresGMTokenManager) ||
     !exactQuoteAssets(release.quoteAssets, definition.quoteAssets) ||
+    (definition.requiresV3PricePolicy &&
+      !exactV3PricePolicy(release.pricePolicy)) ||
     sourceVerification?.status !== "verified" ||
     release.lifecycleEvidence?.status !== "verified-current-release" ||
     release.lifecycleEvidence.releaseEligible !== true ||
@@ -475,7 +589,11 @@ function resolveStockPairedRelease(
     return null;
   }
   const sourcesVerified = definition.allowsReadableSimilarMatches
-    ? verifiedV2SourceRecords(sourceVerification, addresses)
+    ? verifiedV2SourceRecords(
+        sourceVerification,
+        addresses,
+        definition.requiredExactEtherscanMatches,
+      )
     : deployedFields.every((field) =>
         verifiedExplorerRecord(sourceVerification[field]),
       );
@@ -548,10 +666,17 @@ export function resolveVerifiedStockPairedV2Release(
   return resolveStockPairedRelease(input, stockPairedV2ReleaseDefinition);
 }
 
+export function resolveVerifiedStockPairedV3Release(
+  input: unknown = mainnetReleaseV3Json,
+) {
+  return resolveStockPairedRelease(input, stockPairedV3ReleaseDefinition);
+}
+
 export function getConfiguredStockPairedReleases() {
   return [
     resolveVerifiedStockPairedRelease(mainnetReleaseJson),
     resolveVerifiedStockPairedV2Release(mainnetReleaseV2Json),
+    resolveVerifiedStockPairedV3Release(mainnetReleaseV3Json),
   ].filter(
     (release): release is VerifiedStockPairedRelease => release !== null,
   );
@@ -562,7 +687,7 @@ export function getConfiguredStockPairedRelease() {
 }
 
 export function getConfiguredStockPairedLaunchRelease() {
-  return resolveVerifiedStockPairedV2Release(mainnetReleaseV2Json);
+  return resolveVerifiedStockPairedV3Release(mainnetReleaseV3Json);
 }
 
 export function findStockPairedReleaseByHook(

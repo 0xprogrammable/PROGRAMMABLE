@@ -11,7 +11,7 @@ Programmable is an interface for launching tokens whose market behavior is defin
 | Model | Status | Purpose |
 | --- | --- | --- |
 | Classic | Live on Ethereum Mainnet | Fixed supply, permanently locked one-sided liquidity and creator rewards in ETH |
-| Stock-Paired | Live on Ethereum Mainnet | Fixed supply traded against an allowlisted Ondo tokenized stock or ETF quote asset |
+| Stock-Paired | Coming soon | Fixed supply traded against an allowlisted Ondo tokenized stock or ETF quote asset |
 | Deep | Release candidate, not deployed | A fixed 0.90% growth fee buys the token and adds both assets to the original permanently locked pool |
 
 Only models with a completed deployment manifest, matching runtime code and verified lifecycle are exposed for production launches.
@@ -68,7 +68,10 @@ The public read model pairs canonical launch events, ignores unrecognized shared
 
 The active Classic deployment is recorded in [`contracts/deployments/mainnet-classic-v2.json`](./contracts/deployments/mainnet-classic-v2.json). Its deployment receipts, constructor configuration, runtime code hashes and signed launch, buy, sell and claim lifecycle have been reconciled through two RPC providers. The deployed contracts have exact source matches on Etherscan and Sourcify.
 
-The active Stock-Paired deployment is recorded in [`contracts/deployments/mainnet-stock-paired-v2.json`](./contracts/deployments/mainnet-stock-paired-v2.json). Its public indexer records preserve the quote asset, v4 pool ordering, hook, fees and exact Stock-Paired release.
+The V1 and V2 Stock-Paired deployments remain immutable historical releases.
+Their public indexer records preserve the quote asset, v4 pool ordering, hook,
+fees and exact release. New launches stay closed while the V3 starting-price
+release is prepared and verified.
 
 Deep V3 is not deployed. It remains unavailable in the public launcher until its deployment, source verification, canary lifecycle and production keeper evidence are complete. A passing local test suite is not a production release.
 

@@ -3,21 +3,21 @@ import { describe, expect, it } from "vitest";
 import { isStockPairedPublicLaunchEnabled } from "../lib/stock-paired-access";
 
 describe("Stock-Paired public access", () => {
-  it("allows a verified Mainnet V2 release without a wallet allowlist", () => {
+  it("keeps public launches closed while the V3 release is being prepared", () => {
     const release = {
-      internalContractRelease: "stock-paired-v2",
+      internalContractRelease: "stock-paired-v3",
       chainId: 1,
     };
 
     expect(
       isStockPairedPublicLaunchEnabled("production", release),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isStockPairedPublicLaunchEnabled("rehearsal", release),
     ).toBe(false);
   });
 
-  it("fails closed without the verified V2 release", () => {
+  it("fails closed for missing and historical releases", () => {
     expect(
       isStockPairedPublicLaunchEnabled("production", null),
     ).toBe(false);
@@ -30,7 +30,7 @@ describe("Stock-Paired public access", () => {
     expect(
       isStockPairedPublicLaunchEnabled("production", {
         internalContractRelease: "stock-paired-v2",
-        chainId: 11_155_111,
+        chainId: 1,
       }),
     ).toBe(false);
   });

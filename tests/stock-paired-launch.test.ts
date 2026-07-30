@@ -69,12 +69,12 @@ describe("Stock-Paired launch preparation", () => {
     ).toThrow(/identifier/);
   });
 
-  it("keeps the seven-asset V1 registry and launches from all eleven V2 routes", () => {
+  it("keeps V1 history and prepares V3 launches from six reviewed routes", () => {
     expect(STOCK_QUOTE_ASSETS).toHaveLength(7);
     expect(new Set(STOCK_QUOTE_ASSETS.map((asset) => asset.address)).size).toBe(
       7,
     );
-    expect(STOCK_PAIRED_ETH_QUOTE_ASSETS).toHaveLength(11);
+    expect(STOCK_PAIRED_ETH_QUOTE_ASSETS).toHaveLength(6);
     expect(
       validateStockPairedLaunchDraft(draft(), STOCK_TEST_ACCOUNT),
     ).toMatchObject({
@@ -92,11 +92,11 @@ describe("Stock-Paired launch preparation", () => {
       validateStockPairedLaunchDraft(
         {
           ...draft(),
-          stockQuoteAsset: STOCK_PAIRED_ETH_QUOTE_ASSETS[10].address,
+          stockQuoteAsset: STOCK_PAIRED_ETH_QUOTE_ASSETS[5].address,
         },
         STOCK_TEST_ACCOUNT,
       ).quoteAsset,
-    ).toBe(STOCK_PAIRED_ETH_QUOTE_ASSETS[10]);
+    ).toBe(STOCK_PAIRED_ETH_QUOTE_ASSETS[5]);
   });
 
   it("encodes one atomic ETH launch with canonical metadata and quote asset", () => {

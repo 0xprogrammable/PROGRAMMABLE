@@ -125,7 +125,10 @@ export type LauncherToken = {
   transferTaxBps?: number;
   totalSwapFeeBps: number;
   launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
-  launchModelVersion?: "stock-paired-v1" | "stock-paired-v2";
+  launchModelVersion?:
+    | "stock-paired-v1"
+    | "stock-paired-v2"
+    | "stock-paired-v3";
   deepReleaseVersion?:
     "deep-full-range-v1" | "deep-full-range-v2" | "deep-full-range-v3";
   adaptiveCurveHash?: `0x${string}`;

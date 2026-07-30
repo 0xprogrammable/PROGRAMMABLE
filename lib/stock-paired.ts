@@ -23,6 +23,10 @@ import {
   type StockPairedV2QuoteAsset,
 } from "./stock-paired-v2";
 import {
+  STOCK_PAIRED_V3_QUOTE_ASSETS,
+  type StockPairedV3QuoteAsset,
+} from "./stock-paired-v3";
+import {
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_WEI,
   type LaunchDraft,
@@ -153,7 +157,7 @@ const STOCK_PAIRED_ETH_QUOTE_SYMBOLS = new Set([
   "AAPLon",
 ]);
 export const STOCK_PAIRED_ETH_QUOTE_ASSETS = Object.freeze(
-  STOCK_PAIRED_V2_QUOTE_ASSETS,
+  STOCK_PAIRED_V3_QUOTE_ASSETS,
 );
 const STOCK_PAIRED_V1_ETH_QUOTE_ASSETS = Object.freeze(
   STOCK_QUOTE_ASSETS.filter((asset) =>
@@ -162,22 +166,32 @@ const STOCK_PAIRED_V1_ETH_QUOTE_ASSETS = Object.freeze(
 );
 
 export type AnyStockPairedQuoteAsset =
-  StockQuoteAsset | StockPairedV2QuoteAsset;
+  | StockQuoteAsset
+  | StockPairedV2QuoteAsset
+  | StockPairedV3QuoteAsset;
 
 export function getStockPairedQuoteAssetsForRelease(
   release: Pick<VerifiedStockPairedRelease, "internalContractRelease">,
 ): readonly AnyStockPairedQuoteAsset[] {
-  return release.internalContractRelease === "stock-paired-v2"
-    ? STOCK_PAIRED_V2_QUOTE_ASSETS
-    : STOCK_QUOTE_ASSETS;
+  if (release.internalContractRelease === "stock-paired-v3") {
+    return STOCK_PAIRED_V3_QUOTE_ASSETS;
+  }
+  if (release.internalContractRelease === "stock-paired-v2") {
+    return STOCK_PAIRED_V2_QUOTE_ASSETS;
+  }
+  return STOCK_QUOTE_ASSETS;
 }
 
 export function getStockPairedEthQuoteAssetsForRelease(
   release: Pick<VerifiedStockPairedRelease, "internalContractRelease">,
 ): readonly AnyStockPairedQuoteAsset[] {
-  return release.internalContractRelease === "stock-paired-v2"
-    ? STOCK_PAIRED_V2_QUOTE_ASSETS
-    : STOCK_PAIRED_V1_ETH_QUOTE_ASSETS;
+  if (release.internalContractRelease === "stock-paired-v3") {
+    return STOCK_PAIRED_V3_QUOTE_ASSETS;
+  }
+  if (release.internalContractRelease === "stock-paired-v2") {
+    return STOCK_PAIRED_V2_QUOTE_ASSETS;
+  }
+  return STOCK_PAIRED_V1_ETH_QUOTE_ASSETS;
 }
 
 export function getStockPairedQuoteAssetForRelease(
@@ -231,7 +245,7 @@ export function parseStockInitialBuyEthAmount(value: string) {
 }
 
 export type StockPairedLaunchConfiguration = {
-  quoteAsset: StockQuoteAsset;
+  quoteAsset: AnyStockPairedQuoteAsset;
   initialBuyEthAmount: bigint;
   rewards: ClassicV3RewardConfiguration;
   totalSwapFeeBps: typeof STOCK_PAIRED_TOTAL_SWAP_FEE_BPS;
