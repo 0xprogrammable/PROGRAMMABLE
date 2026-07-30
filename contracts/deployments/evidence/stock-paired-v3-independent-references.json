@@ -1,0 +1,105 @@
+{
+  "schema": "stock-paired-v3-independent-references-v1",
+  "status": "reviewed",
+  "retrievedAt": 1785379718,
+  "providerMetadata": {
+    "providerId": "openai-finance",
+    "retrievalChannel": "web.finance",
+    "currency": "USD",
+    "latestTradeTime": "2026-07-30T00:15:00Z",
+    "note": "The latest available trades were captured after the official extended session closed. The explicit closed-market policy applies."
+  },
+  "marketSession": {
+    "state": "closed",
+    "observedAt": 1785379718,
+    "timeZone": "America/New_York",
+    "lastEligibleTradingSessionClosedAt": 1785369600,
+    "nextEligibleTradingSessionOpensAt": 1785398400,
+    "scheduleSources": [
+      {
+        "venue": "NASDAQ",
+        "url": "https://www.nasdaq.com/markets",
+        "referenceId": "nasdaq:market-hours:2026-07-30"
+      },
+      {
+        "venue": "NYSE Arca",
+        "url": "https://www.nyse.com/trade/hours-calendars",
+        "referenceId": "nyse-arca:hours-calendar:2026-07-30"
+      }
+    ]
+  },
+  "assets": [
+    {
+      "symbol": "NVDAon",
+      "provider": "openai-finance",
+      "instrument": "NASDAQ:NVDA",
+      "venue": "NASDAQ",
+      "marketState": "closed",
+      "currency": "USD",
+      "priceUsdWad": "190010000000000000000",
+      "asOf": 1785370500,
+      "retrievedAt": 1785379718,
+      "referenceId": "finance:NVDA:2026-07-30T00:15:00Z"
+    },
+    {
+      "symbol": "SPYon",
+      "provider": "openai-finance",
+      "instrument": "NYSEARCA:SPY",
+      "venue": "NYSE Arca",
+      "marketState": "closed",
+      "currency": "USD",
+      "priceUsdWad": "729460000000000000000",
+      "asOf": 1785370500,
+      "retrievedAt": 1785379718,
+      "referenceId": "finance:SPY:2026-07-30T00:15:00Z"
+    },
+    {
+      "symbol": "GOOGLon",
+      "provider": "openai-finance",
+      "instrument": "NASDAQ:GOOGL",
+      "venue": "NASDAQ",
+      "marketState": "closed",
+      "currency": "USD",
+      "priceUsdWad": "336710000000000000000",
+      "asOf": 1785370500,
+      "retrievedAt": 1785379718,
+      "referenceId": "finance:GOOGL:2026-07-30T00:15:00Z"
+    },
+    {
+      "symbol": "SLVon",
+      "provider": "openai-finance",
+      "instrument": "NYSEARCA:SLV",
+      "venue": "NYSE Arca",
+      "marketState": "closed",
+      "currency": "USD",
+      "priceUsdWad": "51770000000000000000",
+      "asOf": 1785370500,
+      "retrievedAt": 1785379718,
+      "referenceId": "finance:SLV:2026-07-30T00:15:00Z"
+    },
+    {
+      "symbol": "TSLAon",
+      "provider": "openai-finance",
+      "instrument": "NASDAQ:TSLA",
+      "venue": "NASDAQ",
+      "marketState": "closed",
+      "currency": "USD",
+      "priceUsdWad": "298320000000000000000",
+      "asOf": 1785370500,
+      "retrievedAt": 1785379718,
+      "referenceId": "finance:TSLA:2026-07-30T00:15:00Z"
+    },
+    {
+      "symbol": "AAPLon",
+      "provider": "openai-finance",
+      "instrument": "NASDAQ:AAPL",
+      "venue": "NASDAQ",
+      "marketState": "closed",
+      "currency": "USD",
+      "priceUsdWad": "338190000000000000000",
+      "asOf": 1785370500,
+      "retrievedAt": 1785379718,
+      "referenceId": "finance:AAPL:2026-07-30T00:15:00Z"
+    }
+  ]
+}

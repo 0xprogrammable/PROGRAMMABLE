@@ -79,6 +79,14 @@ A 20% move in the quote asset relative to ETH therefore moves the ETH-denominate
 
 For activation, the selected tick must remain within 100 basis points of the target using the pinned calculation. Immediately before production activation, the current quote/ETH ratio must also place every configured tick within 500 basis points of the Classic target. The current quote midpoint must independently remain within 300 basis points of the underlying reference. Missing, stale, or conflicting data and any threshold breach block activation.
 
+RPC observations, reference retrieval and market-session status expire after 15
+minutes. When the relevant US trading sessions are open, the underlying price
+also expires after 15 minutes. When they are closed, the last trade may be up
+to four hours old only if the capture freshly binds the official NASDAQ and
+NYSE Arca schedule sources, the prior extended-session close and the next
+eligible open. The closed-session exception fails automatically at the next
+open; it is not a general stale-price override.
+
 New launches should be paused in the interface when runtime monitoring finds a current implied ETH FDV more than 500 basis points from the Classic target. This interface pause does not disable direct contract calls.
 
 A later dynamic release should use fresh, authenticated issuer or oracle prices with explicit staleness and deviation bounds. It must not derive the launch tick from a raw spot quote in a thin pool.

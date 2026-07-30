@@ -21,8 +21,11 @@ fresh quote-to-ETH midpoint and an independent underlying-derived midpoint for
 every asset. The verifier recomputes the ETH FDV implied by each immutable tick.
 All six must remain within 500 basis points of the Classic target, and every
 route midpoint must remain within 300 basis points of its independent
-reference. Evidence older than 15 minutes, missing data, conflicting data or
-any threshold breach blocks activation.
+reference. RPC state, market-session status and reference retrieval must be
+newer than 15 minutes. While the relevant US sessions are closed, a last-trade
+price may be up to four hours old only when the capture freshly proves that the
+current time falls between the official extended-session close and next open.
+Missing data, conflicting data or any threshold breach blocks activation.
 
 The activation artifact binds two distinct Ethereum RPC observations of the
 same block and raw pool state. It pins every pool address, fee, runtime code
@@ -59,6 +62,32 @@ Only V3 may become the destination for new Stock-Paired launches.
    `npm run contracts:stock-paired-v3:price-gate`. This must happen no more
    than 15 minutes before the activation review.
 9. Keep public launches disabled. Activation is a separate, reviewable change.
+
+### Pricing capture
+
+The capture command reads exactly two Ethereum RPCs and the reviewed
+independent-reference file:
+
+```bash
+ETHEREUM_RPC_URL=https://rpc-a.example \
+ETHEREUM_RPC_URL_B=https://rpc-b.example \
+npm run contracts:stock-paired-v3:price-capture
+```
+
+The two URLs must be independently operated. The reference file is
+`contracts/deployments/evidence/stock-paired-v3-independent-references.json`.
+It must contain exactly NVDA, SPY, GOOGL, SLV, TSLA and AAPL in release order,
+with the provider, venue, instrument, USD price, trade time, retrieval time and
+provider reference ID for each observation. Retrieval and market-session
+observation must be within the 15-minute window. During a freshly proven closed
+session, the last trade alone may be up to four hours old. The gate also binds
+the official NASDAQ and NYSE Arca schedule sources, the prior extended-session
+close and next eligible open. It fails automatically at that next open.
+
+The command is a dry run by default. After reviewing its output, add `--write`
+through `npm run contracts:stock-paired-v3:price-capture:write` to commit the
+canonical evidence hash to the local release manifest. Writing evidence does
+not deploy, sign or activate anything.
 
 ## Fail-closed activation gate
 

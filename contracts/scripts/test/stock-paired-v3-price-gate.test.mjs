@@ -29,6 +29,14 @@ const QUOTE_SQRT = {
   TSLAon: "4606653194514317023717169536081316",
   AAPLon: "1463596069436387980672637",
 };
+const VENUE = {
+  NVDAon: "NASDAQ",
+  SPYon: "NYSE Arca",
+  GOOGLon: "NASDAQ",
+  SLVon: "NYSE Arca",
+  TSLAon: "NASDAQ",
+  AAPLon: "NASDAQ",
+};
 
 function priceWad(route, base, quote) {
   const sqrt = BigInt(route.sqrtPriceX96);
@@ -113,6 +121,8 @@ function fixture() {
         provider: "independent-market-data",
         instrument: asset.underlying,
         currency: "USD",
+        venue: VENUE[asset.symbol],
+        marketState: "open",
         priceUsdWad: referenceUsdWad.toString(),
         asOf: NOW - 10,
         retrievedAt: NOW - 5,
@@ -172,7 +182,27 @@ function fixture() {
           maximumReferenceDriftBps: 300,
           maximumTickRoundingDeviationBps: 100,
           maximumEvidenceAgeSeconds: 900,
+          maximumClosedMarketReferenceAgeSeconds: 14_400,
           maximumHeadLagBlocks: 25,
+        },
+        marketSession: {
+          state: "open",
+          observedAt: NOW - 5,
+          timeZone: "America/New_York",
+          lastEligibleTradingSessionClosedAt: null,
+          nextEligibleTradingSessionOpensAt: null,
+          scheduleSources: [
+            {
+              venue: "NASDAQ",
+              url: "https://www.nasdaq.com/markets",
+              referenceId: "nasdaq-hours-fixture",
+            },
+            {
+              venue: "NYSE Arca",
+              url: "https://www.nyse.com/trade/hours-calendars",
+              referenceId: "nyse-arca-hours-fixture",
+            },
+          ],
         },
         ethUsdRoute,
         assets,
@@ -212,6 +242,45 @@ test("passes an exact six-asset activation artifact", () => {
   const result = verify(fixture());
   assert.equal(result.status, "pass");
   assert.equal(result.results.length, 6);
+});
+
+test("accepts bounded last-trade prices only during a freshly proven closed session", () => {
+  const candidate = mutate((value) => {
+    value.evidence.payload.marketSession = {
+      state: "closed",
+      observedAt: NOW - 5,
+      timeZone: "America/New_York",
+      lastEligibleTradingSessionClosedAt: NOW - 9_000,
+      nextEligibleTradingSessionOpensAt: NOW + 18_000,
+      scheduleSources:
+        value.evidence.payload.marketSession.scheduleSources,
+    };
+    for (const asset of value.evidence.payload.assets) {
+      asset.independentReference.marketState = "closed";
+      asset.independentReference.asOf = NOW - 8_500;
+      asset.independentReference.retrievedAt = NOW - 5;
+    }
+  });
+  assert.equal(verify(candidate).status, "pass");
+
+  const expired = mutate((value) => {
+    value.evidence.payload.marketSession = {
+      state: "closed",
+      observedAt: NOW - 5,
+      timeZone: "America/New_York",
+      lastEligibleTradingSessionClosedAt: NOW - 14_401,
+      nextEligibleTradingSessionOpensAt: NOW + 18_000,
+      scheduleSources:
+        value.evidence.payload.marketSession.scheduleSources,
+    };
+    for (const asset of value.evidence.payload.assets) {
+      asset.independentReference.marketState = "closed";
+    }
+  });
+  assert.throws(
+    () => verify(expired),
+    /closed market-session bounds/,
+  );
 });
 
 test("matches canonical TickMath fixtures", () => {
