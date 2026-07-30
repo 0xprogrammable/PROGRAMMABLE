@@ -158,34 +158,27 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("shows verified Stock-Paired beside Classic and Deep without Adaptive", () => {
+  it("shows only Classic and Stock-Paired in the public model picker", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
       }),
     );
 
-    expect(html.match(/data-launch-model-option=/g)).toHaveLength(3);
+    expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
     expect(html).toContain('data-launch-model-option="classic"');
-    expect(html).toContain('data-launch-model-option="deep"');
     expect(html).toContain('data-launch-model-option="stock-paired"');
     expect(html).toContain("<strong>Classic</strong>");
-    expect(html).toContain("<strong>Deep</strong>");
     expect(html).toContain("<strong>Stock-Paired</strong>");
     expect(html).toContain("Coming soon");
-    expect(html).toContain(
-      'aria-describedby="launch-model-deep-description"',
-    );
     expect(html).not.toContain("launch-model-classic-details");
     expect(html).not.toContain("launch-model-stock-details");
-    expect(html).not.toContain("launch-model-deep-details");
     const stockButton = html.match(
       /<button[^>]*data-launch-model-option="stock-paired"[^>]*>/,
     )?.[0];
     expect(stockButton).toContain("disabled");
-    expect(html).toContain(
-      "Trading fees automatically deepen the original locked Uniswap",
-    );
+    expect(html).not.toContain('data-launch-model-option="deep"');
+    expect(html).not.toContain("<strong>Deep</strong>");
     expect(html).not.toMatch(/adaptive/i);
     expect(html).not.toContain("LiquidityGrowth");
     expect(html).not.toContain("Liquidity Growth");
