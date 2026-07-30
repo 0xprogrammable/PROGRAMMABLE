@@ -187,10 +187,10 @@ describe("Stock-Paired launch preparation", () => {
     ).toThrow(/supported ETH-routed quote assets/);
     expect(() =>
       validateStockPairedLaunchDraft(
-        { ...draft(), initialBuyEth: "0.0005" },
+        { ...draft(), initialBuyEth: "0.004999999999999999" },
         STOCK_TEST_ACCOUNT,
       ),
-    ).toThrow(/at least 0.0006 ETH/);
-    expect(STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI).toBe(parseEther("0.0006"));
+    ).toThrow(/at least 0.005 ETH/);
+    expect(STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI).toBe(parseEther("0.005"));
   });
 });
