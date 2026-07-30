@@ -432,7 +432,7 @@ describe("unreleased launch model gating", () => {
     });
   });
 
-  it("keeps paused Stock-Paired preflight closed", async () => {
+  it("keeps an active Stock-Paired launch bound to Ethereum Mainnet", async () => {
     const request = new NextRequest("http://localhost/api/launch/preflight", {
       method: "POST",
       body: JSON.stringify({
@@ -450,9 +450,15 @@ describe("unreleased launch model gating", () => {
     });
 
     const result = await POST(request);
-    expect(result.status).toBe(403);
-    await expect(result.json()).resolves.toEqual({
-      error: "Stock-Paired is coming soon",
+    expect(result.status).toBe(200);
+    await expect(result.json()).resolves.toMatchObject({
+      status: "blocked",
+      mode: "stock-paired",
+      title: "Switch the wallet to Ethereum",
+      checks: [
+        { id: "token", status: "pass" },
+        { id: "wallet", status: "blocked" },
+      ],
     });
   });
 });
