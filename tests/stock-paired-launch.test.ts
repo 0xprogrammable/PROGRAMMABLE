@@ -11,6 +11,7 @@ import {
   STOCK_PAIRED_ETH_QUOTE_ASSETS,
   STOCK_PAIRED_MIN_INITIAL_BUY_ETH_WEI,
   STOCK_QUOTE_ASSETS,
+  stockPairedRegistryContainsReleaseAssets,
   stockPairedEthLaunchCoordinatorAbi,
   validateStockPairedLaunchDraft,
 } from "../lib/stock-paired";
@@ -39,6 +40,13 @@ function draft() {
 }
 
 describe("Stock-Paired launch preparation", () => {
+  it("accepts an append-only registry containing more assets than the active release", () => {
+    expect(stockPairedRegistryContainsReleaseAssets(11n, 6)).toBe(true);
+    expect(stockPairedRegistryContainsReleaseAssets(6n, 6)).toBe(true);
+    expect(stockPairedRegistryContainsReleaseAssets(5n, 6)).toBe(false);
+    expect(stockPairedRegistryContainsReleaseAssets(11n, 0)).toBe(false);
+  });
+
   it("derives bounded deterministic salts and identifies canonical currency0 ordering", () => {
     const first = deriveStockPairedCurrency0Salt(salt, 0);
     const second = deriveStockPairedCurrency0Salt(salt, 1);

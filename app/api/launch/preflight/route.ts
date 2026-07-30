@@ -100,6 +100,7 @@ import {
   STOCK_PAIRED_MIN_INITIAL_BUY_RAW,
   STOCK_PAIRED_PROGRAMMABLE_FEE_BPS,
   STOCK_PAIRED_TOTAL_SWAP_FEE_BPS,
+  stockPairedRegistryContainsReleaseAssets,
   validateStockPairedLaunchDraft,
 } from "@/lib/stock-paired";
 import {
@@ -2207,7 +2208,10 @@ async function assertStockPairedInfrastructure(
     lpFeePips !== 0 ||
     tickSpacing !== 200 ||
     !factoryRecognizesHook ||
-    registryAssetCount !== BigInt(quoteAssets.length) ||
+    !stockPairedRegistryContainsReleaseAssets(
+      registryAssetCount,
+      quoteAssets.length,
+    ) ||
     (BigInt(feeHook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS
   ) {
     throw new Error(
