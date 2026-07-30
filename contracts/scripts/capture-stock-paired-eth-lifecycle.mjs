@@ -12,6 +12,10 @@ import {
 } from "../../scripts/stock-paired-mainnet-operator-core.mjs";
 import { assertStockPairedEthCoordinatorCheckout } from "../../scripts/stock-paired-eth-coordinator-operator-core.mjs";
 import {
+  assertStockPairedV3ReleaseCheckout,
+  stockPairedReleaseDescriptor,
+} from "../../scripts/stock-paired-v3-release-core.mjs";
+import {
   STOCK_PAIRED_ETH_CANARY_ASSET,
   STOCK_PAIRED_ETH_CANARY_ROUTE_POOLS,
 } from "../../scripts/stock-paired-eth-canary-core.mjs";
@@ -25,9 +29,12 @@ import {
 } from "../../scripts/stock-paired-mainnet-canary-core.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
+const releaseVersion =
+  process.env.STOCK_PAIRED_RELEASE_VERSION?.trim().toLowerCase() || "v1";
+const release = stockPairedReleaseDescriptor(releaseVersion);
 const manifestPath = path.join(
   root,
-  "contracts/deployments/mainnet-stock-paired-v1.json",
+  release.manifestPath,
 );
 const evidencePath = path.resolve(
   process.env.STOCK_PAIRED_ETH_CANARY_EVIDENCE_PATH ??
@@ -331,10 +338,16 @@ async function main() {
   if (!releaseCommit || !/^[0-9a-f]{40}$/.test(releaseCommit)) {
     throw new Error("STOCK_PAIRED_ETH_COORDINATOR_RELEASE_COMMIT is required");
   }
-  assertStockPairedEthCoordinatorCheckout(root, releaseCommit, {
-    allowDescendant: true,
-    build: false,
-  });
+  if (release.v3) {
+    assertStockPairedV3ReleaseCheckout(root, releaseCommit, {
+      allowDescendant: true,
+    });
+  } else {
+    assertStockPairedEthCoordinatorCheckout(root, releaseCommit, {
+      allowDescendant: true,
+      build: false,
+    });
+  }
   const [manifest, evidence] = await Promise.all([
     readFile(manifestPath, "utf8").then(JSON.parse),
     readFile(evidencePath, "utf8").then(JSON.parse),

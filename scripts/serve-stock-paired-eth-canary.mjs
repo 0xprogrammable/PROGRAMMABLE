@@ -39,6 +39,10 @@ import {
 } from "./stock-paired-eth-coordinator-operator-core.mjs";
 import { STOCK_PAIRED_V2_DEPENDENCIES } from "./stock-paired-v2-mainnet-operator-core.mjs";
 import {
+  assertStockPairedV3ReleaseCheckout,
+  stockPairedReleaseDescriptor,
+} from "./stock-paired-v3-release-core.mjs";
+import {
   STOCK_PAIRED_ETH_CANARY_ASSET,
   STOCK_PAIRED_ETH_CANARY_DEADLINE_SECONDS,
   STOCK_PAIRED_ETH_CANARY_INITIAL_BUY,
@@ -70,12 +74,11 @@ import {
 const HOST = "127.0.0.1";
 const releaseVersion =
   process.env.STOCK_PAIRED_RELEASE_VERSION?.trim().toLowerCase() || "v1";
-if (releaseVersion !== "v1" && releaseVersion !== "v2") {
-  throw new Error("STOCK_PAIRED_RELEASE_VERSION must be v1 or v2");
-}
-const isV2 = releaseVersion === "v2";
+const release = stockPairedReleaseDescriptor(releaseVersion);
+const isV3 = release.v3;
+const isExpandedRelease = release.expanded;
 const PORT = Number(
-  process.env.STOCK_PAIRED_ETH_CANARY_PORT ?? (isV2 ? 4193 : 4191),
+  process.env.STOCK_PAIRED_ETH_CANARY_PORT ?? release.defaultCanaryPort,
 );
 const REQUEST_TIMEOUT_MS = 15_000;
 const RPC_MAX_ATTEMPTS = 4;
@@ -84,9 +87,7 @@ const MAX_REQUEST_BYTES = 4_096;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = path.join(
   root,
-  isV2
-    ? "contracts/deployments/mainnet-stock-paired-v2.json"
-    : "contracts/deployments/mainnet-stock-paired-v1.json",
+  release.manifestPath,
 );
 const evidencePath = path.resolve(
   process.env.STOCK_PAIRED_ETH_CANARY_EVIDENCE_PATH ??
@@ -889,16 +890,20 @@ function assertManifest(manifest) {
   const coordinatorSourceVerified =
     coordinatorSourceStatus === "verified" ||
     coordinatorSourceStatus === "sourcify-verified";
+  const deploymentCaptured =
+    isV3 &&
+    typeof manifest?.status === "string" &&
+    manifest.status.startsWith("deployed-");
   if (
     manifest?.chainId !== 1 ||
     manifest?.ethCoordinatorReleaseCommit !== coordinatorReleaseCommit ||
-    !sourceVerified ||
+    (!sourceVerified && !deploymentCaptured) ||
     requiredRuntimeFields.some(
       (field) =>
         !/^0x[0-9a-f]{40}$/i.test(manifest.addresses?.[field] ?? "") ||
         !/^0x[0-9a-f]{64}$/i.test(manifest.runtimeCodeHashes?.[field] ?? ""),
     ) ||
-    !coordinatorSourceVerified
+    (!coordinatorSourceVerified && !deploymentCaptured)
   ) {
     throw new Error(
       "Deploy and source-verify the exact ETH coordinator release first",
@@ -918,7 +923,7 @@ async function verifyReleaseRuntimes(manifest, blockTag) {
   ];
   const dependencies = [
     ...Object.values(
-      isV2
+      isExpandedRelease
         ? {
             v3SwapRouter: STOCK_PAIRED_V2_DEPENDENCIES.v3SwapRouter,
             v3Factory: STOCK_PAIRED_V2_DEPENDENCIES.v3Factory,
@@ -1762,10 +1767,16 @@ async function main() {
     throw new Error("STOCK_PAIRED_ETH_COORDINATOR_RELEASE_COMMIT is required");
   }
   if (interactive) {
-    assertStockPairedEthCoordinatorCheckout(root, coordinatorReleaseCommit, {
-      allowDescendant: true,
-      build: false,
-    });
+    if (isV3) {
+      assertStockPairedV3ReleaseCheckout(root, coordinatorReleaseCommit, {
+        allowDescendant: true,
+      });
+    } else {
+      assertStockPairedEthCoordinatorCheckout(root, coordinatorReleaseCommit, {
+        allowDescendant: true,
+        build: false,
+      });
+    }
   }
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   assertManifest(manifest);
