@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/ops/index-v2",
-      "schedule": "*/2 * * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }

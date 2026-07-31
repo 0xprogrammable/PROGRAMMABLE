@@ -10,7 +10,7 @@ import {
 import { writePortfolioHistorySnapshot } from "../../../../lib/profile/portfolio-history-storage.server";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 90;
+export const maxDuration = 300;
 export const runtime = "nodejs";
 
 const INDEX_READ_ATTEMPTS = 1;
