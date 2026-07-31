@@ -78,6 +78,9 @@ const ZERO_FEE_VOLUME: FeeVolume = {
   swapCount: 0,
 };
 
+const TOKEN_HYDRATION_BATCH_SIZE = 12;
+const BLOCK_TIMESTAMP_BATCH_SIZE = 24;
+
 type FeeDisclosure = readonly [
   buySwapFeeBps: number,
   sellSwapFeeBps: number,
@@ -148,6 +151,22 @@ function createOnchainClient(
 
 function minimum(first: bigint, second: bigint) {
   return first < second ? first : second;
+}
+
+async function mapInBatches<Input, Output>(
+  values: readonly Input[],
+  batchSize: number,
+  mapper: (value: Input) => Promise<Output>,
+) {
+  const output: Output[] = [];
+  for (let index = 0; index < values.length; index += batchSize) {
+    output.push(
+      ...(await Promise.all(
+        values.slice(index, index + batchSize).map(mapper),
+      )),
+    );
+  }
+  return output;
 }
 
 async function assertRuntimeCode(
@@ -707,17 +726,21 @@ async function readReadyModel(
     ),
   ].map(BigInt);
   const blockTimestamps = new Map<string, bigint>();
-  await Promise.all(
-    blockNumbers.map(async (blockNumber) => {
+  await mapInBatches(
+    blockNumbers,
+    BLOCK_TIMESTAMP_BATCH_SIZE,
+    async (blockNumber) => {
       const block = await client.getBlock({ blockNumber });
       blockTimestamps.set(blockNumber.toString(), block.timestamp);
-    }),
+    },
   );
 
   const tokenSets = await Promise.all(
     clients.map((candidate) =>
-      Promise.all(
-        verified.map((launch) =>
+      mapInBatches(
+        verified,
+        TOKEN_HYDRATION_BATCH_SIZE,
+        (launch) =>
           hydrateVerifiedToken(
             candidate,
             config,
@@ -727,7 +750,6 @@ async function readReadyModel(
             blockTimestamps.get(launch.blockNumber.toString()) ?? 0n,
             toBlock,
           ),
-        ),
       ),
     ),
   );
