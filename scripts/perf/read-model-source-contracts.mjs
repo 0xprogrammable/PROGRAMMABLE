@@ -451,10 +451,10 @@ export function evaluateReadModelSourceContracts(
     "RPC timeout matches the load profile",
   );
 
-  const indexRoute = source("app/api/ops/index/route.ts");
+  const projectorRoute = source("app/api/ops/projector/route.ts");
   check(
     "source-hosting-deadline",
-    indexRoute.includes(
+    projectorRoute.includes(
       `export const maxDuration = ${profile.projector.hostingDeadlineMs / 1_000};`,
     ),
     "hosting deadline leaves the required projector reserve",
