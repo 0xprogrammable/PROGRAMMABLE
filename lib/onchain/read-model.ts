@@ -613,11 +613,15 @@ async function readReadyModel(
       ? [createOnchainClient(config, config.rpcUrlSecondary)]
       : []),
   ];
-  const chainStates = await Promise.all(
-    clients.map(async (candidate) => ({
-      chainId: await candidate.getChainId(),
-      head: await candidate.getBlockNumber(),
-    })),
+  const chainStates = await withReadStage("chain-heads", () =>
+    mapInBatches(
+      clients,
+      RPC_PROVENANCE_BATCH_SIZE,
+      async (candidate) => ({
+        chainId: await candidate.getChainId(),
+        head: await candidate.getBlockNumber(),
+      }),
+    ),
   );
   if (chainStates.some((state) => state.chainId !== config.chainId)) {
     throw new Error("RPC chain does not match the deployment manifest");
@@ -629,9 +633,12 @@ async function readReadyModel(
   );
   const toBlock =
     head > config.confirmations ? head - config.confirmations : 0n;
-  const snapshotBlocks = await Promise.all(
-    clients.map((candidate) =>
-      candidate.getBlock({ blockNumber: toBlock }),
+  const snapshotBlocks = await withReadStage("snapshot-blocks", () =>
+    mapInBatches(
+      clients,
+      RPC_PROVENANCE_BATCH_SIZE,
+      (candidate) =>
+        candidate.getBlock({ blockNumber: toBlock }),
     ),
   );
   const snapshotBlock = snapshotBlocks[0];
@@ -666,52 +673,65 @@ async function readReadyModel(
     };
   }
 
-  await Promise.all(
-    clients.flatMap((candidate) => [
-      assertRuntimeCode(
-        candidate,
-        config.launcher,
-        config.launcherRuntimeCodeHash,
-        toBlock,
-        "Launcher",
-      ),
-      assertRuntimeCode(
-        candidate,
-        config.feeHook,
-        config.feeHookRuntimeCodeHash,
-        toBlock,
-        "Creator fee hook",
-      ),
-      assertRuntimeCode(
-        candidate,
-        config.stateView,
-        config.stateViewRuntimeCodeHash,
-        toBlock,
-        "Uniswap StateView",
-      ),
-    ]),
-  );
-
-  const [indexedEventSets, launcherFeeValues] = await Promise.all([
+  await withReadStage("runtime-code", () =>
     mapInBatches(
       clients,
       RPC_PROVENANCE_BATCH_SIZE,
       (candidate) =>
-        withReadStage("classic-events", () =>
-          indexVerifiedEvents(candidate, config, toBlock),
+        mapInBatches(
+          [
+            {
+              address: config.launcher,
+              expectedHash: config.launcherRuntimeCodeHash,
+              label: "Launcher",
+            },
+            {
+              address: config.feeHook,
+              expectedHash: config.feeHookRuntimeCodeHash,
+              label: "Creator fee hook",
+            },
+            {
+              address: config.stateView,
+              expectedHash: config.stateViewRuntimeCodeHash,
+              label: "Uniswap StateView",
+            },
+          ],
+          1,
+          ({ address, expectedHash, label }) =>
+            assertRuntimeCode(
+              candidate,
+              address,
+              expectedHash,
+              toBlock,
+              label,
+            ),
         ),
     ),
-    Promise.all(
-      clients.map((candidate) =>
-        candidate.readContract({
-          address: config.feeHook,
-          abi: creatorFeeHookReadAbi,
-          functionName: "launcherFeesAccrued",
-          blockNumber: toBlock,
-        }),
+  );
+
+  const indexedEventSets = await mapInBatches(
+    clients,
+    RPC_PROVENANCE_BATCH_SIZE,
+    (candidate) =>
+      withReadStage("classic-events", () =>
+        indexVerifiedEvents(candidate, config, toBlock),
       ),
-    ),
-  ]);
+  );
+  const launcherFeeValues = await withReadStage(
+    "launcher-fee-accounting",
+    () =>
+      mapInBatches(
+        clients,
+        RPC_PROVENANCE_BATCH_SIZE,
+        (candidate) =>
+          candidate.readContract({
+            address: config.feeHook,
+            abi: creatorFeeHookReadAbi,
+            functionName: "launcherFeesAccrued",
+            blockNumber: toBlock,
+          }),
+      ),
+  );
   const eventFingerprint = indexedEventsFingerprint(indexedEventSets[0]);
   if (
     indexedEventSets.some(
