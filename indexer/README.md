@@ -41,13 +41,12 @@ From this directory:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm identity:verify-live-baseline
 pnpm codegen
 pnpm typecheck
 pnpm test
 ```
 
-Those four validation commands require no production credentials. The test
+Those three validation commands require no production credentials. The test
 suite uses Envio's typed `createTestIndexer()` simulations. Dynamic-registration
 fixtures extend the simulated head by the configured 12-block lag so that the
 factory block is finalized.
@@ -94,12 +93,13 @@ that the deployment passed the production gates below.
 
 ## Deployment identity
 
-`pnpm identity` generates the complete identity for the files in the current
-checkout after `SOURCE_COMMIT` has been pinned to the exact reviewed canonical
-`production` commit. It fails closed while that value is pending.
-`pnpm identity:verify-live-baseline` reconstructs the currently live baseline
-from its immutable Git commit and fails if any commitment differs. It is
-historical evidence, not the identity for this pending release.
+The runtime validates the complete identity supplied through the eight
+`ENVIO_*` environment variables above and fails closed when any commitment is
+missing or malformed. Artifact generation, historical baseline reproduction,
+and Envio deployment evidence are owned by the canonical
+[`programmable-indexer`](https://github.com/0xprogrammable/programmable-indexer)
+repository so a clean product checkout never depends on Git objects from a
+different repository.
 
 The four artifact commitments are SHA-256 hashes of the exact bytes in
 `config.yaml`, `schema.graphql`, `src/EventHandlers.ts`, and
@@ -111,12 +111,10 @@ The four artifact commitments are SHA-256 hashes of the exact bytes in
 4. Join them with `\n`, append one final `\n`, and hash those bytes with
    SHA-256.
 
-The script also requires the exact 19-contract Classic V2/V3 and Stock-Paired
-V1/V2/V3 scope in both the ABI registry and Ethereum chain registry. Any
-unreviewed contract fails validation. Use `--format env` to render
-the eight `ENVIO_*` values required by the fail-closed runtime identity. The
-command only reads local files and Git objects; it never deploys or contacts
-Envio.
+The product release binding remains pinned to the last activated Envio
+identity until a new indexer deployment has been reviewed, backfilled,
+reconciled, and explicitly promoted. A candidate source checkout or passing
+local test must not update that binding.
 
 ## Production status
 
