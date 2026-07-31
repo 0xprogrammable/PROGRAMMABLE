@@ -18,7 +18,7 @@ import {
 } from "envio";
 import type { AbiEvent } from "viem";
 
-import { deploymentLabelFromEnvironment } from "./lib/deployment-identity.js";
+import { deploymentIdentityFromEnvironment } from "./lib/deployment-identity.js";
 import { launchEntityId, poolEntityId } from "./lib/ids.js";
 import {
   canonicalPayloadJson,
@@ -50,7 +50,6 @@ type RecordedOccurrence = {
 const CHAIN_ID = 1;
 const INDEXER_STATE_ID = "ethereum-mainnet";
 const SCHEMA_VERSION = "1";
-const DEPLOYMENT_IDENTITY = deploymentLabelFromEnvironment();
 
 const DYNAMIC_VAULT_CONTRACTS = new Set([
   "ClassicV3RewardVault",
@@ -221,6 +220,7 @@ async function updateIndexerState(
   context: EvmOnEventContext,
   provenance: EventProvenance,
 ): Promise<void> {
+  const deploymentIdentity = deploymentIdentityFromEnvironment();
   const current = await context.IndexerState.get(INDEXER_STATE_ID);
   const currentOccurrence =
     current === undefined
@@ -237,7 +237,7 @@ async function updateIndexerState(
   context.IndexerState.set({
     id: INDEXER_STATE_ID,
     schemaVersion: SCHEMA_VERSION,
-    deployment: DEPLOYMENT_IDENTITY,
+    ...deploymentIdentity,
     chainId: provenance.chainId,
     progressBlock: provenance.blockNumber,
     progressBlockHash: provenance.blockHash,

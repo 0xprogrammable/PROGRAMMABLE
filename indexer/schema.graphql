@@ -2,6 +2,13 @@ type IndexerState {
   id: ID!
   schemaVersion: String!
   deployment: String!
+  sourceCommit: String!
+  configSha256: String!
+  schemaSha256: String!
+  handlerSha256: String!
+  sourceRegistrySha256: String!
+  eventSetSha256: String!
+  eventCount: Int!
   chainId: Int!
   progressBlock: BigInt! @index
   progressBlockHash: String!

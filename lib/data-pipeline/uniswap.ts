@@ -21,11 +21,13 @@ import {
   boundedJsonRequest,
   type DataPipelineFetcher,
 } from "./request";
+import { getDataPipelineReleaseBinding } from "./release-binding.server";
 
+const RELEASE_BINDING = getDataPipelineReleaseBinding();
 export const OFFICIAL_V4_SUBGRAPH_ID =
-  "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
+  RELEASE_BINDING.uniswapV4Subgraph.subgraphId;
 export const OFFICIAL_V4_SUBGRAPH_DEPLOYMENT =
-  "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK";
+  RELEASE_BINDING.uniswapV4Subgraph.deployment;
 const OFFICIAL_V4_SUBGRAPH_GATEWAY_BASE_URL =
   "https://gateway.thegraph.com";
 

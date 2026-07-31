@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "chainId": 1,
+  "startBlock": 25624130,
+  "confirmations": 12,
+  "envio": {
+    "deploymentLabel": "production-1e7c381",
+    "schemaVersion": "1",
+    "sourceCommit": "1e7c38125714e2f485f8be0c665b12e7d7fb1809",
+    "configSha256": "0x378e3a799c762cb31107792c7123f5f90b54b5826884c398995e7465176fe1c2",
+    "schemaSha256": "0x3217def060af2d1053ec3bca854187ff547fb43d91b113bc87a9f3285489362d",
+    "handlerSha256": "0x241e18c3eda104b96eec4142826459c41c39cbce0474322634b5ea161d2fdf3e",
+    "sourceRegistrySha256": "0x552e941d2ad7fea1184bf1efb97f840bdce9835c647b76f753f1326c6afe211f",
+    "eventSetSha256": "0x7481d6fa986d706e46b9834e40574dd84f21be80b041d35e7d47dbfa59d69243",
+    "eventCount": 51
+  },
+  "uniswapV4Subgraph": {
+    "subgraphId": "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G",
+    "deployment": "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK"
+  },
+  "sources": [
+    {
+      "contractName": "ClassicV2Hook",
+      "address": "0x025a386eaa79f6067d29848fd05ccc71beab20cc",
+      "startBlock": 25624130,
+      "runtimeCodeHash": "0x274e29fb8d19f0607533ac7582827db0236ab546bb393d52049229b2ffe74381"
+    },
+    {
+      "contractName": "ClassicV2Launcher",
+      "address": "0xd240d06f8586eb799f20056054e5b527405e6bad",
+      "startBlock": 25624131,
+      "runtimeCodeHash": "0xd229555c79c61874549a1991c43df172104e1db3087ba8fca8804675b7440d36"
+    },
+    {
+      "contractName": "ClassicV3RewardVaultFactory",
+      "address": "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
+      "startBlock": 25639538,
+      "runtimeCodeHash": "0x874ec76f396807bfcbbdd88cc2fd534f10201242ad0479a05fe5d2ee937616ee"
+    },
+    {
+      "contractName": "ClassicV3VestingWalletFactory",
+      "address": "0xde21b9c0cc0afdb9be20e8236113f066bb8c66f4",
+      "startBlock": 25639564,
+      "runtimeCodeHash": "0x13b7578a8abd0bc0ba724b5815d9bd0aff0d07c2677c00d2577004e8c1f6d5f4"
+    },
+    {
+      "contractName": "ClassicV3Hook",
+      "address": "0x35fe236ea82f7cf525c9719d7df8f49f94d720cc",
+      "startBlock": 25639591,
+      "runtimeCodeHash": "0x3eba781023d3146ed9b502ac5b402d39cea4c34a14f64c878cb9ea62149590f1"
+    },
+    {
+      "contractName": "ClassicV3Launcher",
+      "address": "0xc3bd04aac2fb2ba58efd7eb673e544e0b80de770",
+      "startBlock": 25639596,
+      "runtimeCodeHash": "0x9cc9723456c471d90ac838c02fa4fc47ed4b7e82c85358e71deec978c48d2dc8"
+    },
+    {
+      "contractName": "StockV1Launcher",
+      "address": "0x195750f33cad5ef2df857a53226b421297a1e79e",
+      "startBlock": 25637469,
+      "runtimeCodeHash": "0xbd6f60760341db3d4ed31118676ab4342d0868cff42cc6f8205d877086fbce65"
+    },
+    {
+      "contractName": "StockV1EthCoordinator",
+      "address": "0xfa5f17389ca28d071781d59750b32c842ab6a54b",
+      "startBlock": 25637469,
+      "runtimeCodeHash": "0xe6cff454f284798017864eefdb9c510c159a1185479d49ba1ad7f0a2d3c7b645"
+    },
+    {
+      "contractName": "StockV1Hook",
+      "address": "0x7773d183fe7b60d4f1885047fa42b815a62fe0cc",
+      "startBlock": 25637469,
+      "runtimeCodeHash": "0x4da04b13565c195132988b3b96e3c43b9f199c0324f18fee616f888b775a2230"
+    },
+    {
+      "contractName": "StockV1RewardVaultFactory",
+      "address": "0xd430d9162c153afdf9e4caca6d2317e72a044441",
+      "startBlock": 25637469,
+      "runtimeCodeHash": "0x14a1e46cbb829712c7ba64ce018537aed9385d6116b939ef3d355fa2fdc0f2b6"
+    },
+    {
+      "contractName": "StockV2Launcher",
+      "address": "0x5ea6be24838061ba45dbe8d82de1b267dc240daf",
+      "startBlock": 25640338,
+      "runtimeCodeHash": "0xeee5fbf395266fade461c8d3af1316bb2ce7efa1fb16e64c8d05edf71af0986d"
+    },
+    {
+      "contractName": "StockV2EthCoordinator",
+      "address": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+      "startBlock": 25640338,
+      "runtimeCodeHash": "0xd8ce52c763197fe20bc992aa2d4a78bf77063905d1e18fba38d014c2e77683ad"
+    },
+    {
+      "contractName": "StockV2V3Hook",
+      "address": "0x90c67c1e866f86526f0e338459cd435e1f23a0cc",
+      "startBlock": 25640338,
+      "runtimeCodeHash": "0x3e292c9ddc64cc3a9c45f79d9d239ab2b8196f10efbdbc74b4f9b37dba53981d"
+    },
+    {
+      "contractName": "StockV2V3RewardVaultFactory",
+      "address": "0x52d70971d6653a754c29385a2a6f241a481952d4",
+      "startBlock": 25640338,
+      "runtimeCodeHash": "0x14a1e46cbb829712c7ba64ce018537aed9385d6116b939ef3d355fa2fdc0f2b6"
+    },
+    {
+      "contractName": "StockV3Launcher",
+      "address": "0x0573879f72d8ee8b0e5a4ec5e8bcdb2fcab9e51c",
+      "startBlock": 25642745,
+      "runtimeCodeHash": "0xa392a2a24b0a2ac124b9f132eb1488589bbabe91e82323da12151ee42af87573"
+    },
+    {
+      "contractName": "StockV3EthCoordinator",
+      "address": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "startBlock": 25642745,
+      "runtimeCodeHash": "0xc687b0c5680a31dd27b2265f60a0aa4992bd30fab9aea3acf6b0bd3842c49d63"
+    }
+  ],
+  "releases": [
+    {
+      "model": "classic",
+      "releaseVersion": "classic-v2",
+      "activationBlock": 25624131,
+      "sourceContracts": ["ClassicV2Hook", "ClassicV2Launcher"],
+      "dynamicContracts": []
+    },
+    {
+      "model": "classic",
+      "releaseVersion": "classic-v3",
+      "activationBlock": 25639596,
+      "sourceContracts": [
+        "ClassicV3RewardVaultFactory",
+        "ClassicV3VestingWalletFactory",
+        "ClassicV3Hook",
+        "ClassicV3Launcher"
+      ],
+      "dynamicContracts": ["ClassicV3RewardVault"]
+    },
+    {
+      "model": "stock-paired",
+      "releaseVersion": "stock-paired-v1",
+      "activationBlock": 25637469,
+      "sourceContracts": [
+        "StockV1Launcher",
+        "StockV1EthCoordinator",
+        "StockV1Hook",
+        "StockV1RewardVaultFactory"
+      ],
+      "dynamicContracts": ["StockV1RewardVault"]
+    },
+    {
+      "model": "stock-paired",
+      "releaseVersion": "stock-paired-v2",
+      "activationBlock": 25640338,
+      "sourceContracts": [
+        "StockV2Launcher",
+        "StockV2EthCoordinator",
+        "StockV2V3Hook",
+        "StockV2V3RewardVaultFactory"
+      ],
+      "dynamicContracts": ["StockV2V3RewardVault"]
+    },
+    {
+      "model": "stock-paired",
+      "releaseVersion": "stock-paired-v3",
+      "activationBlock": 25642745,
+      "sourceContracts": [
+        "StockV3Launcher",
+        "StockV3EthCoordinator",
+        "StockV2V3Hook",
+        "StockV2V3RewardVaultFactory"
+      ],
+      "dynamicContracts": ["StockV2V3RewardVault"]
+    }
+  ]
+}

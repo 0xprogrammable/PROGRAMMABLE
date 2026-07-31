@@ -19,13 +19,14 @@ import {
   validationError,
 } from "./errors";
 import { decodeManifestEvent } from "./event-manifest";
+import { getDataPipelineReleaseBinding } from "./release-binding.server";
 import {
   boundedJsonRequest,
   type DataPipelineFetcher,
 } from "./request";
 
 const CANDIDATE_QUERY = `
-  query ProgrammableCandidate($candidateId: ID!) {
+  query ProgrammableCandidate($candidateId: String!) {
     ChainEvent_by_pk(id: $candidateId) {
       id
       downstreamLogicalId
@@ -50,12 +51,71 @@ const CANDIDATE_QUERY = `
   }
 `;
 
+const CANDIDATES_AFTER_QUERY = `
+  query ProgrammableCandidatesAfter(
+    $afterBlock: numeric!
+    $afterLogIndex: Int!
+    $first: Int!
+  ) {
+    ChainEvent(
+      where: {
+        _or: [
+          { blockNumber: { _gt: $afterBlock } }
+          {
+            _and: [
+              { blockNumber: { _eq: $afterBlock } }
+              { blockGlobalLogIndex: { _gt: $afterLogIndex } }
+            ]
+          }
+        ]
+      }
+      order_by: [{ blockNumber: asc }, { blockGlobalLogIndex: asc }]
+      limit: $first
+    ) {
+      id
+      downstreamLogicalId
+      receiptLogOrdinal
+      chainId
+      blockNumber
+      blockHash
+      blockTimestamp
+      transactionHash
+      transactionIndex
+      blockGlobalLogIndex
+      sourceAddress
+      contractName
+      eventName
+      model
+      releaseVersion
+      topics
+      data
+      decodedPayload
+      payloadHash
+    }
+  }
+`;
+
 const PROGRESS_QUERY = `
-  query ProgrammableIndexerProgress($stateId: ID!) {
+  query ProgrammableIndexerProgress($stateId: String!) {
+    _meta(where: { chainId: { _eq: 1 } }) {
+      chainId
+      progressBlock
+      bufferBlock
+      sourceBlock
+      isReady
+      eventsProcessed
+    }
     IndexerState_by_pk(id: $stateId) {
       id
       schemaVersion
       deployment
+      sourceCommit
+      configSha256
+      schemaSha256
+      handlerSha256
+      sourceRegistrySha256
+      eventSetSha256
+      eventCount
       chainId
       progressBlock
       progressBlockHash
@@ -68,168 +128,99 @@ const PROGRESS_QUERY = `
 
 const INDEXER_STATE_ID = "ethereum-mainnet";
 const SCHEMA_VERSION = "1";
+const RELEASE_BINDING = getDataPipelineReleaseBinding();
 
-const STATIC_SOURCES = new Map<
-  string,
-  {
-    contractName: string;
-    startBlock: bigint;
-    model: "classic" | "stock-paired";
-    releaseVersion:
-      | "classic-v2"
-      | "classic-v3"
-      | "stock-paired-v1"
-      | "stock-paired-v2"
-      | "stock-paired-v3";
+type ReviewedModel = "classic" | "stock-paired";
+type ReviewedReleaseVersion =
+  | "classic-v2"
+  | "classic-v3"
+  | "stock-paired-v1"
+  | "stock-paired-v2"
+  | "stock-paired-v3";
+type ReviewedRelease = {
+  model: ReviewedModel;
+  releaseVersion: ReviewedReleaseVersion;
+  sourceContracts: readonly string[];
+  dynamicContracts: readonly string[];
+  startBlock: bigint;
+};
+
+function reviewedModel(value: string): ReviewedModel {
+  if (value !== "classic" && value !== "stock-paired") {
+    throw new Error("Unsupported data pipeline model binding");
   }
->([
-  [
-    "0x025a386eaa79f6067d29848fd05ccc71beab20cc",
-    {
-      contractName: "ClassicV2Hook",
-      startBlock: 25_624_130n,
-      model: "classic",
-      releaseVersion: "classic-v2",
-    },
-  ],
-  [
-    "0xd240d06f8586eb799f20056054e5b527405e6bad",
-    {
-      contractName: "ClassicV2Launcher",
-      startBlock: 25_624_131n,
-      model: "classic",
-      releaseVersion: "classic-v2",
-    },
-  ],
-  [
-    "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
-    {
-      contractName: "ClassicV3RewardVaultFactory",
-      startBlock: 25_639_538n,
-      model: "classic",
-      releaseVersion: "classic-v3",
-    },
-  ],
-  [
-    "0xde21b9c0cc0afdb9be20e8236113f066bb8c66f4",
-    {
-      contractName: "ClassicV3VestingWalletFactory",
-      startBlock: 25_639_564n,
-      model: "classic",
-      releaseVersion: "classic-v3",
-    },
-  ],
-  [
-    "0x35fe236ea82f7cf525c9719d7df8f49f94d720cc",
-    {
-      contractName: "ClassicV3Hook",
-      startBlock: 25_639_591n,
-      model: "classic",
-      releaseVersion: "classic-v3",
-    },
-  ],
-  [
-    "0xc3bd04aac2fb2ba58efd7eb673e544e0b80de770",
-    {
-      contractName: "ClassicV3Launcher",
-      startBlock: 25_639_596n,
-      model: "classic",
-      releaseVersion: "classic-v3",
-    },
-  ],
-  [
-    "0x195750f33cad5ef2df857a53226b421297a1e79e",
-    {
-      contractName: "StockV1Launcher",
-      startBlock: 25_637_469n,
-      model: "stock-paired",
-      releaseVersion: "stock-paired-v1",
-    },
-  ],
-  [
-    "0xfa5f17389ca28d071781d59750b32c842ab6a54b",
-    {
-      contractName: "StockV1EthCoordinator",
-      startBlock: 25_637_469n,
-      model: "stock-paired",
-      releaseVersion: "stock-paired-v1",
-    },
-  ],
-  [
-    "0x7773d183fe7b60d4f1885047fa42b815a62fe0cc",
-    {
-      contractName: "StockV1Hook",
-      startBlock: 25_637_469n,
-      model: "stock-paired",
-      releaseVersion: "stock-paired-v1",
-    },
-  ],
-  [
-    "0xd430d9162c153afdf9e4caca6d2317e72a044441",
-    {
-      contractName: "StockV1RewardVaultFactory",
-      startBlock: 25_637_469n,
-      model: "stock-paired",
-      releaseVersion: "stock-paired-v1",
-    },
-  ],
-  [
-    "0x5ea6be24838061ba45dbe8d82de1b267dc240daf",
-    {
-      contractName: "StockV2Launcher",
-      startBlock: 25_640_338n,
-      model: "stock-paired",
-      releaseVersion: "stock-paired-v2",
-    },
-  ],
-  [
-    "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
-    {
-      contractName: "StockV2EthCoordinator",
-      startBlock: 25_640_338n,
-      model: "stock-paired",
-      releaseVersion: "stock-paired-v2",
-    },
-  ],
-  [
-    "0x0573879f72d8ee8b0e5a4ec5e8bcdb2fcab9e51c",
-    {
-      contractName: "StockV3Launcher",
-      startBlock: 25_642_745n,
-      model: "stock-paired",
-      releaseVersion: "stock-paired-v3",
-    },
-  ],
-  [
-    "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
-    {
-      contractName: "StockV3EthCoordinator",
-      startBlock: 25_642_745n,
-      model: "stock-paired",
-      releaseVersion: "stock-paired-v3",
-    },
-  ],
-]);
+  return value;
+}
 
-const SHARED_STOCK_SOURCES = new Map<
-  string,
-  { contractName: string; startBlock: bigint }
->([
-  [
-    "0x90c67c1e866f86526f0e338459cd435e1f23a0cc",
-    { contractName: "StockV2V3Hook", startBlock: 25_640_338n },
-  ],
-  [
-    "0x52d70971d6653a754c29385a2a6f241a481952d4",
-    {
-      contractName: "StockV2V3RewardVaultFactory",
-      startBlock: 25_640_338n,
-    },
-  ],
-]);
+function reviewedReleaseVersion(value: string): ReviewedReleaseVersion {
+  if (
+    ![
+      "classic-v2",
+      "classic-v3",
+      "stock-paired-v1",
+      "stock-paired-v2",
+      "stock-paired-v3",
+    ].includes(value)
+  ) {
+    throw new Error("Unsupported data pipeline release binding");
+  }
+  return value as ReviewedReleaseVersion;
+}
+
+const REVIEWED_RELEASES: readonly ReviewedRelease[] =
+  RELEASE_BINDING.releases.map((release) => {
+    const sourceStarts = release.sourceContracts.map((contractName) => {
+      const source = RELEASE_BINDING.sources.find(
+        (candidate) => candidate.contractName === contractName,
+      );
+      if (!source) throw new Error("Incomplete data pipeline source binding");
+      return BigInt(source.startBlock);
+    });
+    return {
+      model: reviewedModel(release.model),
+      releaseVersion: reviewedReleaseVersion(release.releaseVersion),
+      sourceContracts: release.sourceContracts,
+      dynamicContracts: release.dynamicContracts,
+      startBlock: sourceStarts.reduce(
+        (minimum, current) => (current < minimum ? current : minimum),
+        sourceStarts[0],
+      ),
+    };
+  });
+
+const REVIEWED_STATIC_SOURCES = new Map(
+  RELEASE_BINDING.sources.map((source) => {
+    const releases = REVIEWED_RELEASES.filter((release) =>
+      release.sourceContracts.includes(source.contractName),
+    );
+    if (releases.length === 0) {
+      throw new Error("Orphaned data pipeline source binding");
+    }
+    return [
+      source.address,
+      {
+        contractName: source.contractName,
+        startBlock: BigInt(source.startBlock),
+        releases,
+      },
+    ] as const;
+  }),
+);
+
+const REVIEWED_DYNAMIC_SOURCES = new Map<string, ReviewedRelease[]>();
+for (const release of REVIEWED_RELEASES) {
+  for (const contractName of release.dynamicContracts) {
+    const releases = REVIEWED_DYNAMIC_SOURCES.get(contractName) ?? [];
+    releases.push(release);
+    REVIEWED_DYNAMIC_SOURCES.set(contractName, releases);
+  }
+}
 
 const CANDIDATE_PATTERN =
   /^1:(0x[0-9a-f]{64}):(0x[0-9a-f]{64}):(0|[1-9]\d*)$/;
+const GRAPHQL_INT_MAXIMUM = 0x7fff_ffff;
+const DEFAULT_CANDIDATE_PAGE_LIMIT = 25;
+const MAXIMUM_CANDIDATE_PAGE_LIMIT = 32;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return (
@@ -290,6 +281,43 @@ export type EnvioCandidate = {
   payloadHash: HexBytes32;
 };
 
+export type EnvioCandidateCursor = {
+  blockNumber: string;
+  blockGlobalLogIndex: number;
+};
+
+function canonicalCandidateCursor(
+  value: EnvioCandidateCursor,
+): EnvioCandidateCursor {
+  let blockNumber: string;
+  try {
+    blockNumber = parseNonnegativeIntegerText(value?.blockNumber);
+  } catch {
+    throw invalidInput("envio", "candidate-cursor");
+  }
+  if (
+    !Number.isSafeInteger(value?.blockGlobalLogIndex) ||
+    value.blockGlobalLogIndex < -1 ||
+    value.blockGlobalLogIndex > GRAPHQL_INT_MAXIMUM
+  ) {
+    throw invalidInput("envio", "candidate-cursor");
+  }
+  return { blockNumber, blockGlobalLogIndex: value.blockGlobalLogIndex };
+}
+
+function placementAfter(
+  candidate: Pick<EnvioCandidate, "blockNumber" | "blockGlobalLogIndex">,
+  cursor: EnvioCandidateCursor,
+) {
+  const candidateBlock = BigInt(candidate.blockNumber);
+  const cursorBlock = BigInt(cursor.blockNumber);
+  return (
+    candidateBlock > cursorBlock ||
+    (candidateBlock === cursorBlock &&
+      candidate.blockGlobalLogIndex > cursor.blockGlobalLogIndex)
+  );
+}
+
 function validateSource(input: {
   sourceAddress: HexAddress;
   contractName: string;
@@ -297,46 +325,46 @@ function validateSource(input: {
   model: string;
   releaseVersion: string;
 }) {
-  const source = STATIC_SOURCES.get(input.sourceAddress);
+  const source = REVIEWED_STATIC_SOURCES.get(input.sourceAddress);
   if (source) {
     if (
       source.contractName !== input.contractName ||
-      input.blockNumber < source.startBlock ||
-      source.model !== input.model ||
-      source.releaseVersion !== input.releaseVersion
+      input.blockNumber < source.startBlock
     ) {
       throw validationError("envio", "source-provenance");
     }
-    return;
-  }
-  const shared = SHARED_STOCK_SOURCES.get(input.sourceAddress);
-  if (shared) {
-    if (
-      shared.contractName !== input.contractName ||
-      input.blockNumber < shared.startBlock ||
-      input.model !== "stock-paired" ||
-      !["stock-paired-v2", "stock-paired-v3", "unresolved"].includes(
-        input.releaseVersion,
-      )
-    ) {
-      throw validationError("envio", "shared-source-provenance");
+    const exact = source.releases.some(
+      (release) =>
+        release.model === input.model &&
+        release.releaseVersion === input.releaseVersion,
+    );
+    const unresolved =
+      input.releaseVersion === "unresolved" &&
+      source.releases.length > 1 &&
+      source.releases.every((release) => release.model === input.model);
+    if (!exact && !unresolved) {
+      throw validationError("envio", "source-release-provenance");
     }
     return;
   }
-  const dynamicValid =
-    (input.contractName === "ClassicV3RewardVault" &&
-      input.model === "classic" &&
-      input.releaseVersion === "classic-v3") ||
-    (input.contractName === "StockV1RewardVault" &&
-      input.model === "stock-paired" &&
-      input.releaseVersion === "stock-paired-v1") ||
-    (input.contractName === "StockV2V3RewardVault" &&
-      input.model === "stock-paired" &&
-      ["stock-paired-v2", "stock-paired-v3", "unresolved"].includes(
-        input.releaseVersion,
-      ));
-  if (!dynamicValid || input.blockNumber < 25_624_130n) {
+
+  const dynamicReleases = REVIEWED_DYNAMIC_SOURCES.get(input.contractName);
+  if (!dynamicReleases) {
     throw validationError("envio", "dynamic-source-provenance");
+  }
+  const exact = dynamicReleases.some(
+    (release) =>
+      release.model === input.model &&
+      release.releaseVersion === input.releaseVersion &&
+      input.blockNumber >= release.startBlock,
+  );
+  const unresolved =
+    input.releaseVersion === "unresolved" &&
+    dynamicReleases.length > 1 &&
+    dynamicReleases.every((release) => release.model === input.model) &&
+    dynamicReleases.some((release) => input.blockNumber >= release.startBlock);
+  if (!exact && !unresolved) {
+    throw validationError("envio", "dynamic-source-release-provenance");
   }
 }
 
@@ -383,7 +411,7 @@ function parseCandidate(
   const transactionHash = canonicalBytes32(value.transactionHash);
   const blockGlobalLogIndex = strictSafeInteger(
     value.blockGlobalLogIndex,
-    0xffff_ffff,
+    GRAPHQL_INT_MAXIMUM,
   );
   if (
     match[1] !== blockHash ||
@@ -471,7 +499,10 @@ function parseCandidate(
     blockHash,
     blockTimestamp: parseNonnegativeIntegerText(value.blockTimestamp),
     transactionHash,
-    transactionIndex: strictSafeInteger(value.transactionIndex, 0xffff_ffff),
+    transactionIndex: strictSafeInteger(
+      value.transactionIndex,
+      GRAPHQL_INT_MAXIMUM,
+    ),
     blockGlobalLogIndex,
     sourceAddress,
     contractName,
@@ -489,20 +520,35 @@ export type EnvioProgress = {
   deployment: string;
   schemaVersion: "1";
   progressBlock: string;
-  progressBlockHash: HexBytes32;
-  progressTimestamp: string;
-  progressTransactionHash: HexBytes32;
-  progressOccurrenceId: string;
+  bufferBlock: string;
+  sourceBlock: string;
+  eventsProcessed: string;
+  lastHandledEventBlock: string;
+  lastHandledEventBlockHash: HexBytes32;
+  lastHandledEventTimestamp: string;
+  lastHandledEventTransactionHash: HexBytes32;
+  lastHandledEventOccurrenceId: string;
   requiredBlock: string;
   lagBlocks: string;
   isReady: boolean;
 };
 
-function parseProgress(value: unknown, requiredBlock: string): EnvioProgress {
+function parseProgress(
+  metaValue: unknown,
+  value: unknown,
+  requiredBlock: string,
+): EnvioProgress {
   const keys = [
     "id",
     "schemaVersion",
     "deployment",
+    "sourceCommit",
+    "configSha256",
+    "schemaSha256",
+    "handlerSha256",
+    "sourceRegistrySha256",
+    "eventSetSha256",
+    "eventCount",
     "chainId",
     "progressBlock",
     "progressBlockHash",
@@ -516,12 +562,48 @@ function parseProgress(value: unknown, requiredBlock: string): EnvioProgress {
     value.id !== INDEXER_STATE_ID ||
     value.schemaVersion !== SCHEMA_VERSION ||
     value.chainId !== 1 ||
-    typeof value.deployment !== "string" ||
-    !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(value.deployment)
+    value.deployment !== RELEASE_BINDING.envio.deploymentLabel ||
+    value.sourceCommit !== RELEASE_BINDING.envio.sourceCommit ||
+    value.configSha256 !== RELEASE_BINDING.envio.configSha256 ||
+    value.schemaSha256 !== RELEASE_BINDING.envio.schemaSha256 ||
+    value.handlerSha256 !== RELEASE_BINDING.envio.handlerSha256 ||
+    value.sourceRegistrySha256 !==
+      RELEASE_BINDING.envio.sourceRegistrySha256 ||
+    value.eventSetSha256 !== RELEASE_BINDING.envio.eventSetSha256 ||
+    value.eventCount !== RELEASE_BINDING.envio.eventCount ||
+    !Array.isArray(metaValue) ||
+    metaValue.length !== 1 ||
+    !isRecord(metaValue[0]) ||
+    !onlyKeys(metaValue[0], [
+      "chainId",
+      "progressBlock",
+      "bufferBlock",
+      "sourceBlock",
+      "isReady",
+      "eventsProcessed",
+    ])
   ) {
     throw validationError("envio", "progress");
   }
-  const progressBlock = parseNonnegativeIntegerText(value.progressBlock);
+  const meta = metaValue[0];
+  const officialProgress = strictSafeInteger(meta.progressBlock);
+  const bufferBlock = strictSafeInteger(meta.bufferBlock);
+  const sourceBlock = strictSafeInteger(meta.sourceBlock);
+  const eventsProcessed = strictSafeInteger(meta.eventsProcessed);
+  if (
+    meta.chainId !== 1 ||
+    typeof meta.isReady !== "boolean" ||
+    officialProgress > bufferBlock ||
+    bufferBlock > sourceBlock
+  ) {
+    throw validationError("envio", "progress-meta");
+  }
+  const lastHandledEventBlock = parseNonnegativeIntegerText(
+    value.progressBlock,
+  );
+  if (BigInt(lastHandledEventBlock) > BigInt(officialProgress)) {
+    throw validationError("envio", "progress-order");
+  }
   const canonicalRequired = parseNonnegativeIntegerText(requiredBlock);
   const progressOccurrenceId = strictString(
     value.progressOccurrenceId,
@@ -542,26 +624,32 @@ function parseProgress(value: unknown, requiredBlock: string): EnvioProgress {
   ) {
     throw validationError("envio", "progress-occurrence-identity");
   }
-  const progress = BigInt(progressBlock);
+  const progress = BigInt(officialProgress);
   const required = BigInt(canonicalRequired);
   return {
     chainId: 1,
-    deployment: value.deployment,
+    deployment: RELEASE_BINDING.envio.deploymentLabel,
     schemaVersion: "1",
-    progressBlock,
-    progressBlockHash,
-    progressTimestamp: parseNonnegativeIntegerText(value.progressTimestamp),
-    progressTransactionHash,
-    progressOccurrenceId,
+    progressBlock: String(officialProgress),
+    bufferBlock: String(bufferBlock),
+    sourceBlock: String(sourceBlock),
+    eventsProcessed: String(eventsProcessed),
+    lastHandledEventBlock,
+    lastHandledEventBlockHash: progressBlockHash,
+    lastHandledEventTimestamp: parseNonnegativeIntegerText(
+      value.progressTimestamp,
+    ),
+    lastHandledEventTransactionHash: progressTransactionHash,
+    lastHandledEventOccurrenceId: progressOccurrenceId,
     requiredBlock: canonicalRequired,
     lagBlocks: (required > progress ? required - progress : 0n).toString(),
-    isReady: progress >= required,
+    isReady: meta.isReady && progress >= required,
   };
 }
 
 export function createEnvioClient(options: {
   endpoint: string;
-  token: string;
+  token?: string;
   fetcher?: DataPipelineFetcher;
   circuit?: CircuitBreaker;
 }) {
@@ -569,7 +657,7 @@ export function createEnvioClient(options: {
     PROGRAMMABLE_ENVIO_GRAPHQL_URL: options.endpoint,
     PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN: options.token,
   });
-  if (!config.envio.endpoint || !config.envio.token) {
+  if (!config.envio.endpoint) {
     throw invalidInput("config", "envio-config");
   }
   const circuit =
@@ -581,7 +669,9 @@ export function createEnvioClient(options: {
       timeoutMs: config.envio.timeoutMs,
       maximumBodyBytes: config.envio.maximumBodyBytes,
       fetcher: options.fetcher,
-      headers: { authorization: `Bearer ${config.envio.token!}` },
+      headers: config.envio.token
+        ? { authorization: `Bearer ${config.envio.token}` }
+        : undefined,
       body,
     });
 
@@ -617,6 +707,65 @@ export function createEnvioClient(options: {
       });
     },
 
+    async readCandidatesAfter(input: {
+      cursor: EnvioCandidateCursor;
+      limit?: number;
+    }): Promise<EnvioCandidate[]> {
+      const cursor = canonicalCandidateCursor(input?.cursor);
+      const limit = input?.limit ?? DEFAULT_CANDIDATE_PAGE_LIMIT;
+      if (
+        !Number.isSafeInteger(limit) ||
+        limit < 1 ||
+        limit > MAXIMUM_CANDIDATE_PAGE_LIMIT
+      ) {
+        throw invalidInput("envio", "candidate-page-limit");
+      }
+      return circuit.execute(async () => {
+        const response = await request({
+          query: CANDIDATES_AFTER_QUERY,
+          variables: {
+            afterBlock: cursor.blockNumber,
+            afterLogIndex: cursor.blockGlobalLogIndex,
+            first: limit,
+          },
+        });
+        if (
+          !isRecord(response) ||
+          !onlyKeys(response, ["data"]) ||
+          !isRecord(response.data) ||
+          !onlyKeys(response.data, ["ChainEvent"]) ||
+          !Array.isArray(response.data.ChainEvent) ||
+          response.data.ChainEvent.length > limit
+        ) {
+          throw validationError("envio", "candidate-page-response");
+        }
+        try {
+          const result: EnvioCandidate[] = [];
+          let previous = cursor;
+          for (const row of response.data.ChainEvent) {
+            if (!isRecord(row) || typeof row.id !== "string") {
+              throw validationError("envio", "candidate-page-row");
+            }
+            const parsed = parseCandidate(row, row.id);
+            if (!placementAfter(parsed, previous)) {
+              throw validationError("envio", "candidate-page-order");
+            }
+            result.push(parsed);
+            previous = {
+              blockNumber: parsed.blockNumber,
+              blockGlobalLogIndex: parsed.blockGlobalLogIndex,
+            };
+          }
+          return result;
+        } catch (error) {
+          if (error instanceof DataPipelineError) {
+            throw validationError("envio", "candidate-page-response");
+          }
+          throw error;
+        }
+      });
+    },
+
     async readProgress(input: {
       requiredBlock: string;
     }): Promise<EnvioProgress> {
@@ -630,13 +779,14 @@ export function createEnvioClient(options: {
           !isRecord(response) ||
           !onlyKeys(response, ["data"]) ||
           !isRecord(response.data) ||
-          !onlyKeys(response.data, ["IndexerState_by_pk"]) ||
+          !onlyKeys(response.data, ["_meta", "IndexerState_by_pk"]) ||
           response.data.IndexerState_by_pk === null
         ) {
           throw validationError("envio", "progress-response");
         }
         try {
           return parseProgress(
+            response.data._meta,
             response.data.IndexerState_by_pk,
             requiredBlock,
           );

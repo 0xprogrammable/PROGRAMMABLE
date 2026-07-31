@@ -13,6 +13,7 @@ vi.mock("server-only", () => ({}));
 import { createEnvioClient } from "../../lib/data-pipeline/envio";
 import { DataPipelineError } from "../../lib/data-pipeline/errors";
 import { canonicalPayloadJson } from "../../indexer/src/lib/payload-hash";
+import releaseBinding from "../../config/data-pipeline-release.v1.json";
 
 const BLOCK_HASH = `0x${"11".repeat(32)}`;
 const TRANSACTION_HASH = `0x${"22".repeat(32)}`;
@@ -79,11 +80,66 @@ function candidate(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function placedCandidate(input: {
+  blockNumber: string;
+  blockGlobalLogIndex: number;
+  blockHash: Hex;
+  transactionHash: Hex;
+}) {
+  return candidate({
+    id: `1:${input.blockHash}:${input.transactionHash}:${input.blockGlobalLogIndex}`,
+    blockNumber: input.blockNumber,
+    blockHash: input.blockHash,
+    transactionHash: input.transactionHash,
+    blockGlobalLogIndex: input.blockGlobalLogIndex,
+  });
+}
+
 function json(body: unknown) {
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+}
+
+function progressPayload(input: {
+  meta?: Record<string, unknown>;
+  state?: Record<string, unknown>;
+} = {}) {
+  return {
+    data: {
+      _meta: [
+        {
+          chainId: 1,
+          progressBlock: 25_650_010,
+          bufferBlock: 25_650_010,
+          sourceBlock: 25_650_022,
+          isReady: true,
+          eventsProcessed: 51_234,
+          ...input.meta,
+        },
+      ],
+      IndexerState_by_pk: {
+        id: "ethereum-mainnet",
+        schemaVersion: "1",
+        deployment: "production-1e7c381",
+        sourceCommit: releaseBinding.envio.sourceCommit,
+        configSha256: releaseBinding.envio.configSha256,
+        schemaSha256: releaseBinding.envio.schemaSha256,
+        handlerSha256: releaseBinding.envio.handlerSha256,
+        sourceRegistrySha256: releaseBinding.envio.sourceRegistrySha256,
+        eventSetSha256: releaseBinding.envio.eventSetSha256,
+        eventCount: releaseBinding.envio.eventCount,
+        chainId: 1,
+        progressBlock: "25650000",
+        progressBlockHash: BLOCK_HASH,
+        progressTimestamp: "1785480000",
+        progressTransactionHash: TRANSACTION_HASH,
+        progressOccurrenceId: CANDIDATE_ID,
+        ...input.state,
+      },
+    },
+  };
 }
 
 describe("Envio candidate adapter", () => {
@@ -94,6 +150,8 @@ describe("Envio candidate adapter", () => {
         variables: Record<string, unknown>;
       };
       expect(request.query).toContain("ChainEvent_by_pk");
+      expect(request.query).toContain("$candidateId: String!");
+      expect(request.query).not.toContain("$candidateId: ID!");
       expect(request.variables).toEqual({ candidateId: CANDIDATE_ID });
       expect(init?.headers).toMatchObject({
         authorization: "Bearer envio-secret",
@@ -141,6 +199,22 @@ describe("Envio candidate adapter", () => {
     expect(result).not.toHaveProperty("verified");
     expect(result).not.toHaveProperty("rewardAuthority");
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports an Envio public endpoint without sending an Authorization header", async () => {
+    let authorization: string | null = "not-read";
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async (_url, init) => {
+        authorization = new Headers(init?.headers).get("authorization");
+        return json({ data: { ChainEvent_by_pk: candidate() } });
+      },
+    });
+
+    await expect(client.readCandidate(CANDIDATE_ID)).resolves.toMatchObject({
+      candidateId: CANDIDATE_ID,
+    });
+    expect(authorization).toBeNull();
   });
 
   it("returns null only when the exact candidate id is absent", async () => {
@@ -204,8 +278,137 @@ describe("Envio candidate adapter", () => {
   });
 });
 
+describe("Envio candidate cursor adapter", () => {
+  const SECOND_BLOCK_HASH = `0x${"77".repeat(32)}` as const;
+  const SECOND_TRANSACTION_HASH = `0x${"88".repeat(32)}` as const;
+
+  it("reads a bounded, strictly ordered page after an exclusive cursor", async () => {
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as {
+        query: string;
+        variables: Record<string, unknown>;
+      };
+      expect(request.query).toContain("query ProgrammableCandidatesAfter");
+      expect(request.query).toContain("$afterBlock: numeric!");
+      expect(request.query).toContain("blockGlobalLogIndex: asc");
+      expect(request.variables).toEqual({
+        afterBlock: "25624130",
+        afterLogIndex: -1,
+        first: 2,
+      });
+      expect(new Headers(init?.headers).get("authorization")).toBe(
+        "Bearer envio-secret",
+      );
+      return json({
+        data: {
+          ChainEvent: [
+            candidate(),
+            placedCandidate({
+              blockNumber: "25624132",
+              blockGlobalLogIndex: 0,
+              blockHash: SECOND_BLOCK_HASH,
+              transactionHash: SECOND_TRANSACTION_HASH,
+            }),
+          ],
+        },
+      });
+    });
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      token: "envio-secret",
+      fetcher,
+    });
+
+    const page = await client.readCandidatesAfter({
+      cursor: { blockNumber: "25624130", blockGlobalLogIndex: -1 },
+      limit: 2,
+    });
+
+    expect(page.map((row) => row.candidateId)).toEqual([
+      CANDIDATE_ID,
+      `1:${SECOND_BLOCK_HASH}:${SECOND_TRANSACTION_HASH}:0`,
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [{ blockNumber: "-1", blockGlobalLogIndex: -1 }, 10],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: -2 }, 10],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: 1.5 }, 10],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: 2_147_483_648 }, 10],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: -1 }, 0],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: -1 }, 33],
+  ])("rejects an invalid cursor or limit before fetching", async (cursor, limit) => {
+    const fetcher = vi.fn();
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher,
+    });
+
+    await expect(
+      client.readCandidatesAfter({ cursor, limit }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rejects a row at or before the exclusive cursor", async () => {
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () =>
+        json({ data: { ChainEvent: [candidate()] } }),
+    });
+
+    await expect(
+      client.readCandidatesAfter({
+        cursor: { blockNumber: "25624131", blockGlobalLogIndex: 7 },
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it("rejects duplicate or non-ascending candidate placement", async () => {
+    const second = placedCandidate({
+      blockNumber: "25624132",
+      blockGlobalLogIndex: 0,
+      blockHash: SECOND_BLOCK_HASH,
+      transactionHash: SECOND_TRANSACTION_HASH,
+    });
+    for (const rows of [[second, second], [second, candidate()]]) {
+      const client = createEnvioClient({
+        endpoint: "https://envio.example/graphql",
+        fetcher: async () => json({ data: { ChainEvent: rows } }),
+      });
+
+      await expect(
+        client.readCandidatesAfter({
+          cursor: { blockNumber: "25624130", blockGlobalLogIndex: -1 },
+        }),
+      ).rejects.toMatchObject({ code: "validation_failed" });
+    }
+  });
+
+  it("rejects malformed page envelopes and oversized responses", async () => {
+    for (const response of [
+      { data: { ChainEvent: null } },
+      { data: { ChainEvent: [candidate(), candidate()] } },
+      { data: { ChainEvent: [], unexpected: true } },
+    ]) {
+      const client = createEnvioClient({
+        endpoint: "https://envio.example/graphql",
+        fetcher: async () => json(response),
+      });
+
+      await expect(
+        client.readCandidatesAfter({
+          cursor: { blockNumber: "25624130", blockGlobalLogIndex: -1 },
+          limit: 1,
+        }),
+      ).rejects.toMatchObject({ code: "validation_failed" });
+    }
+  });
+});
+
 describe("Envio progress adapter", () => {
-  it("derives readiness and lag from strict indexer progress", async () => {
+  it("derives readiness from official _meta while retaining the last handled event identity", async () => {
     const client = createEnvioClient({
       endpoint: "https://envio.example/graphql",
       token: "envio-secret",
@@ -214,23 +417,12 @@ describe("Envio progress adapter", () => {
           query: string;
           variables: Record<string, unknown>;
         };
+        expect(request.query).toContain("_meta");
+        expect(request.query).toContain("sourceBlock");
         expect(request.query).toContain("IndexerState_by_pk");
+        expect(request.query).toContain("$stateId: String!");
         expect(request.variables).toEqual({ stateId: "ethereum-mainnet" });
-        return json({
-          data: {
-            IndexerState_by_pk: {
-              id: "ethereum-mainnet",
-              schemaVersion: "1",
-              deployment: "programmable-production",
-              chainId: 1,
-              progressBlock: "25650000",
-              progressBlockHash: BLOCK_HASH,
-              progressTimestamp: "1785480000",
-              progressTransactionHash: TRANSACTION_HASH,
-              progressOccurrenceId: CANDIDATE_ID,
-            },
-          },
-        });
+        return json(progressPayload());
       },
     });
 
@@ -238,16 +430,20 @@ describe("Envio progress adapter", () => {
       client.readProgress({ requiredBlock: "25650002" }),
     ).resolves.toEqual({
       chainId: 1,
-      deployment: "programmable-production",
+      deployment: "production-1e7c381",
       schemaVersion: "1",
-      progressBlock: "25650000",
-      progressBlockHash: BLOCK_HASH,
-      progressTimestamp: "1785480000",
-      progressTransactionHash: TRANSACTION_HASH,
-      progressOccurrenceId: CANDIDATE_ID,
+      progressBlock: "25650010",
+      bufferBlock: "25650010",
+      sourceBlock: "25650022",
+      eventsProcessed: "51234",
+      lastHandledEventBlock: "25650000",
+      lastHandledEventBlockHash: BLOCK_HASH,
+      lastHandledEventTimestamp: "1785480000",
+      lastHandledEventTransactionHash: TRANSACTION_HASH,
+      lastHandledEventOccurrenceId: CANDIDATE_ID,
       requiredBlock: "25650002",
-      lagBlocks: "2",
-      isReady: false,
+      lagBlocks: "0",
+      isReady: true,
     });
   });
 
@@ -263,22 +459,7 @@ describe("Envio progress adapter", () => {
         endpoint: "https://envio.example/graphql",
         token: "envio-secret",
         fetcher: async () =>
-          json({
-            data: {
-              IndexerState_by_pk: {
-                id: "ethereum-mainnet",
-                schemaVersion: "1",
-                deployment: "programmable-production",
-                chainId: 1,
-                progressBlock: "25650000",
-                progressBlockHash: BLOCK_HASH,
-                progressTimestamp: "1785480000",
-                progressTransactionHash: TRANSACTION_HASH,
-                progressOccurrenceId: CANDIDATE_ID,
-                ...override,
-              },
-            },
-          }),
+          json(progressPayload({ state: override })),
       });
       await expect(
         client.readProgress({ requiredBlock: "25650002" }),
@@ -300,21 +481,7 @@ describe("Envio progress adapter", () => {
         endpoint: "https://envio.example/graphql",
         token: "envio-secret",
         fetcher: async () =>
-          json({
-            data: {
-              IndexerState_by_pk: {
-                id: "ethereum-mainnet",
-                schemaVersion: "1",
-                deployment: "programmable-production",
-                chainId: 1,
-                progressBlock: "25650000",
-                progressBlockHash: BLOCK_HASH,
-                progressTimestamp: "1785480000",
-                progressTransactionHash: TRANSACTION_HASH,
-                progressOccurrenceId: override.progressOccurrenceId,
-              },
-            },
-          }),
+          json(progressPayload({ state: override })),
       });
 
       await expect(
@@ -322,4 +489,84 @@ describe("Envio progress adapter", () => {
       ).rejects.toMatchObject({ code: "validation_failed" });
     },
   );
+
+  it.each([
+    ["chain", { chainId: 10 }],
+    ["progress after buffer", { progressBlock: 25_650_011 }],
+    ["buffer after source", { bufferBlock: 25_650_023 }],
+    ["negative progress", { progressBlock: -1 }],
+    ["negative event count", { eventsProcessed: -1 }],
+  ])("rejects invalid official _meta %s", async (_name, meta) => {
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () => json(progressPayload({ meta })),
+    });
+
+    await expect(
+      client.readProgress({ requiredBlock: "25650002" }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it("rejects a last handled event beyond official Envio progress", async () => {
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () =>
+        json(progressPayload({ state: { progressBlock: "25650011" } })),
+    });
+
+    await expect(
+      client.readProgress({ requiredBlock: "25650002" }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it("fails closed on an unexpected deployment label", async () => {
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () =>
+        json(progressPayload({ state: { deployment: "production-other" } })),
+    });
+
+    await expect(
+      client.readProgress({ requiredBlock: "25650002" }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it.each([
+    ["source commit", { sourceCommit: "f".repeat(40) }],
+    ["config hash", { configSha256: `0x${"ff".repeat(32)}` }],
+    ["schema hash", { schemaSha256: `0x${"ff".repeat(32)}` }],
+    ["handler hash", { handlerSha256: `0x${"ff".repeat(32)}` }],
+    [
+      "source registry hash",
+      { sourceRegistrySha256: `0x${"ff".repeat(32)}` },
+    ],
+    ["event set hash", { eventSetSha256: `0x${"ff".repeat(32)}` }],
+    ["event count", { eventCount: 50 }],
+  ])("fails closed on an unexpected deployment %s", async (_name, state) => {
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () => json(progressPayload({ state })),
+    });
+
+    await expect(
+      client.readProgress({ requiredBlock: "25650002" }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it("reports official lag and readiness without treating a syncing indexer as malformed", async () => {
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () =>
+        json(progressPayload({ meta: { isReady: false } })),
+    });
+
+    await expect(
+      client.readProgress({ requiredBlock: "25650015" }),
+    ).resolves.toMatchObject({
+      progressBlock: "25650010",
+      requiredBlock: "25650015",
+      lagBlocks: "5",
+      isReady: false,
+    });
+  });
 });

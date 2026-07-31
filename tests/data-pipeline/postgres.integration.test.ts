@@ -162,23 +162,23 @@ describe.skipIf(!localDatabaseUrl)(
         `select
            pg_catalog.to_regnamespace('programmable_private')::text as schema_name,
            pg_catalog.to_regrole('programmable_api_reader')::text as reader_role,
-           pg_catalog.to_regclass('programmable_private.v_recent_launches')::text as launch_view,
+           pg_catalog.to_regclass('programmable_private.recent_launches_v1')::text as launch_view,
            pg_catalog.to_regprocedure(
-             'programmable_private.api_recent_launches(integer)'
+             'programmable_private.get_recent_launches_v1(bigint,integer,bigint,bytea,bytea)'
            )::text as recent_function,
            pg_catalog.to_regprocedure(
-             'programmable_private.api_launch_by_token(bigint,bytea)'
+             'programmable_private.get_launch_by_token_v1(bigint,bytea)'
            )::text as token_function`,
       )) as unknown as Record<string, unknown>[];
       expect(rows).toEqual([
         {
           schema_name: "programmable_private",
           reader_role: "programmable_api_reader",
-          launch_view: "programmable_private.v_recent_launches",
+          launch_view: "programmable_private.recent_launches_v1",
           recent_function:
-            "programmable_private.api_recent_launches(integer)",
+            "programmable_private.get_recent_launches_v1(bigint,integer,bigint,bytea,bytea)",
           token_function:
-            "programmable_private.api_launch_by_token(bigint,bytea)",
+            "programmable_private.get_launch_by_token_v1(bigint,bytea)",
         },
       ]);
     });
@@ -217,9 +217,9 @@ describe.skipIf(!localDatabaseUrl)(
     it("reads every approved adapter function and view through the runtime role", async () => {
       const model = required(readModel, "Postgres read model");
 
-      await expect(model.recentLaunches({ limit: 1 })).resolves.toEqual(
-        expect.any(Array),
-      );
+      await expect(
+        model.recentLaunches({ chainId: "1", limit: 1 }),
+      ).resolves.toEqual(expect.any(Array));
       await expect(
         model.launchByToken({ chainId: "1", token: TOKEN }),
       ).resolves.toSatisfy((value) => value === null || value.token === TOKEN);
@@ -253,10 +253,7 @@ describe.skipIf(!localDatabaseUrl)(
       ).resolves.toEqual(expect.any(Array));
       await expect(model.health()).resolves.toMatchObject({
         checkpoints: expect.any(Array),
-        parity: {
-          matchingRecords: expect.any(String),
-          mismatchingRecords: expect.any(String),
-        },
+        parity: expect.any(Array),
         circuits: expect.any(Array),
       });
     });

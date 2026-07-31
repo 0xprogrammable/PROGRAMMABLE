@@ -3,6 +3,7 @@ import "server-only";
 export type DataPipelineDependency =
   | "config"
   | "envio"
+  | "rpc"
   | "postgres"
   | "uniswap"
   | "blob";

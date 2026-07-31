@@ -231,6 +231,148 @@ function text(
   return value;
 }
 
+function descriptiveText(
+  value: unknown,
+  maximumBytes: number,
+  operation: string,
+): string {
+  if (
+    typeof value !== "string" ||
+    Buffer.byteLength(value, "utf8") < 1 ||
+    Buffer.byteLength(value, "utf8") > maximumBytes ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    throw validationError("postgres", operation);
+  }
+  return value;
+}
+
+function nullableDescriptiveText(
+  value: unknown,
+  maximumBytes: number,
+  operation: string,
+): string | null {
+  return value === null
+    ? null
+    : descriptiveText(value, maximumBytes, operation);
+}
+
+function decimalText(value: unknown, operation: string): string {
+  const candidate =
+    typeof value === "bigint"
+      ? value.toString()
+      : typeof value === "number" && Number.isFinite(value)
+        ? String(value)
+        : value;
+  if (
+    typeof candidate !== "string" ||
+    candidate.length < 1 ||
+    candidate.length > 160 ||
+    !/^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(candidate)
+  ) {
+    throw validationError("postgres", operation);
+  }
+  return candidate;
+}
+
+function nullableDecimalText(
+  value: unknown,
+  operation: string,
+): string | null {
+  return value === null ? null : decimalText(value, operation);
+}
+
+function boundedInteger(
+  value: unknown,
+  maximum: number,
+  operation: string,
+): number {
+  let parsed: bigint;
+  try {
+    if (typeof value === "number" && Number.isSafeInteger(value)) {
+      parsed = BigInt(value);
+    } else if (typeof value === "bigint") {
+      parsed = value;
+    } else {
+      parsed = BigInt(parseNonnegativeIntegerText(value));
+    }
+  } catch {
+    throw validationError("postgres", operation);
+  }
+  if (parsed < 0n || parsed > BigInt(maximum)) {
+    throw validationError("postgres", operation);
+  }
+  return Number(parsed);
+}
+
+function httpsUrl(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length < 9 ||
+    value.length > 512
+  ) {
+    throw validationError("postgres", "project-link-url");
+  }
+  try {
+    const parsed = new URL(value);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.hostname.length === 0 ||
+      parsed.username.length > 0 ||
+      parsed.password.length > 0
+    ) {
+      throw new Error("invalid URL");
+    }
+  } catch {
+    throw validationError("postgres", "project-link-url");
+  }
+  return value;
+}
+
+export type ProjectLink = {
+  kind: string;
+  url: string;
+  displayOrder: number;
+};
+
+function projectLinks(value: unknown): ProjectLink[] {
+  if (!Array.isArray(value) || value.length > 32) {
+    throw validationError("postgres", "project-links");
+  }
+  const seenKinds = new Set<string>();
+  let previousOrder = -1;
+  return value.map((entry) => {
+    if (
+      entry === null ||
+      typeof entry !== "object" ||
+      Array.isArray(entry) ||
+      Object.getPrototypeOf(entry) !== Object.prototype ||
+      Object.keys(entry).sort().join(",") !== "displayOrder,kind,url"
+    ) {
+      throw validationError("postgres", "project-link");
+    }
+    const row = entry as Record<string, unknown>;
+    if (
+      typeof row.kind !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u.test(row.kind)
+    ) {
+      throw validationError("postgres", "project-link-kind");
+    }
+    const kind = row.kind;
+    const displayOrder = boundedInteger(
+      row.displayOrder,
+      1_000,
+      "project-link-order",
+    );
+    if (seenKinds.has(kind) || displayOrder < previousOrder) {
+      throw validationError("postgres", "project-link-order");
+    }
+    seenKinds.add(kind);
+    previousOrder = displayOrder;
+    return { kind, url: httpsUrl(row.url), displayOrder };
+  });
+}
+
 function nullableBps(value: unknown): number | null {
   if (value === null) return null;
   if (
@@ -246,42 +388,122 @@ function nullableBps(value: unknown): number | null {
 
 export type IndexedLaunch = {
   chainId: string;
+  releaseVersion: string;
+  modelVersion: string;
   token: HexAddress;
   creator: HexAddress;
-  quoteAsset: HexAddress | null;
-  hook: HexAddress;
-  rewardVault: HexAddress | null;
+  launchTransactionHash: HexBytes32;
   poolId: HexBytes32 | null;
+  rewardVault: HexAddress | null;
+  launchHash: HexBytes32;
+  tokenName: string;
+  tokenSymbol: string;
+  totalSupply: string;
+  launchBlockTimestamp: string;
+  launchTransactionIndex: number;
+  launchReceiptLogOrdinal: number;
+  currency0: HexAddress;
+  currency1: HexAddress;
+  hook: HexAddress;
+  quoteAsset: HexAddress | null;
+  poolKeyFee: string;
+  tickSpacing: number;
   totalSwapFeeBps: number | null;
   buySwapFeeBps: number | null;
   sellSwapFeeBps: number | null;
-  releaseVersion: string;
-  modelVersion: string;
-  launchHash: HexBytes32;
-  launchTransactionHash: HexBytes32;
-  launchBlockTimestamp: string;
+  creatorFeeBps: number | null;
+  launcherFeeBps: number | null;
+  transferTaxBps: number | null;
+  lpFeePips: string;
+  project: {
+    name: string | null;
+    description: string | null;
+    logoReference: string | null;
+    revision: string;
+    createdAt: string;
+    links: ProjectLink[];
+  } | null;
   promotedBlockNumber: string;
   promotedBlockHash: HexBytes32;
   verifiedAt: string;
 };
 
 function parseLaunch(row: DatabaseRow): IndexedLaunch {
+  const links = projectLinks(row.project_links);
+  const hasMetadata = row.project_metadata_revision !== null;
+  if (
+    hasMetadata !== (row.project_metadata_created_at !== null) ||
+    (!hasMetadata &&
+      (row.project_name !== null ||
+        row.project_description !== null ||
+        row.project_logo_reference !== null ||
+        links.length > 0))
+  ) {
+    throw validationError("postgres", "project-metadata");
+  }
   return {
     chainId: integerText(row.chain_id),
+    releaseVersion: text(row.release_id),
+    modelVersion: text(row.model_id),
     token: address(row.token),
     creator: address(row.creator),
-    quoteAsset: nullableAddress(row.quote_asset),
-    hook: address(row.hook),
-    rewardVault: nullableAddress(row.reward_vault),
+    launchTransactionHash: bytes32(row.launch_transaction_hash),
     poolId: nullableBytes32(row.pool_id),
+    rewardVault: nullableAddress(row.reward_vault),
+    launchHash: bytes32(row.launch_hash),
+    tokenName: descriptiveText(row.token_name, 128, "token-name"),
+    tokenSymbol: descriptiveText(row.token_symbol, 32, "token-symbol"),
+    totalSupply: uintText(row.total_supply),
+    launchBlockTimestamp: timestamp(row.launch_block_timestamp),
+    launchTransactionIndex: boundedInteger(
+      row.launch_transaction_index,
+      0x7fff_ffff,
+      "launch-transaction-index",
+    ),
+    launchReceiptLogOrdinal: boundedInteger(
+      row.launch_receipt_log_ordinal,
+      10_000,
+      "launch-receipt-log-ordinal",
+    ),
+    currency0: address(row.currency0),
+    currency1: address(row.currency1),
+    hook: address(row.hook),
+    quoteAsset: nullableAddress(row.quote_asset),
+    poolKeyFee: integerText(row.pool_key_fee),
+    tickSpacing: boundedInteger(
+      row.tick_spacing,
+      0x7fff_ffff,
+      "tick-spacing",
+    ),
     totalSwapFeeBps: nullableBps(row.total_swap_fee_bps),
     buySwapFeeBps: nullableBps(row.buy_swap_fee_bps),
     sellSwapFeeBps: nullableBps(row.sell_swap_fee_bps),
-    releaseVersion: text(row.release_version),
-    modelVersion: text(row.model_version),
-    launchHash: bytes32(row.launch_hash),
-    launchTransactionHash: bytes32(row.launch_transaction_hash),
-    launchBlockTimestamp: timestamp(row.launch_block_timestamp),
+    creatorFeeBps: nullableBps(row.creator_fee_bps),
+    launcherFeeBps: nullableBps(row.launcher_fee_bps),
+    transferTaxBps: nullableBps(row.transfer_tax_bps),
+    lpFeePips: integerText(row.lp_fee_pips),
+    project: hasMetadata
+      ? {
+          name: nullableDescriptiveText(
+            row.project_name,
+            128,
+            "project-name",
+          ),
+          description: nullableDescriptiveText(
+            row.project_description,
+            2_000,
+            "project-description",
+          ),
+          logoReference: nullableDescriptiveText(
+            row.project_logo_reference,
+            512,
+            "project-logo",
+          ),
+          revision: integerText(row.project_metadata_revision),
+          createdAt: timestamp(row.project_metadata_created_at),
+          links,
+        }
+      : null,
     promotedBlockNumber: integerText(row.promoted_block_number),
     promotedBlockHash: bytes32(row.promoted_block_hash),
     verifiedAt: timestamp(row.verified_at),
@@ -292,6 +514,8 @@ export type AccountRewardSummary = {
   chainId: string;
   account: HexAddress;
   vault: HexAddress;
+  poolId: HexBytes32;
+  hook: HexAddress;
   quoteAsset: HexAddress | null;
   entitled: string;
   claimed: string;
@@ -303,36 +527,168 @@ export type AccountRewardSummary = {
   verifiedAt: string;
 };
 
-function parseReward(row: DatabaseRow): AccountRewardSummary {
+function parseReward(
+  row: DatabaseRow,
+): AccountRewardSummary {
   return {
     chainId: integerText(row.chain_id),
     account: address(row.account),
     vault: address(row.vault),
+    poolId: bytes32(row.pool_id),
+    hook: address(row.hook),
     quoteAsset: nullableAddress(row.quote_asset),
     entitled: uintText(row.entitled),
-    claimed: uintText(row.claimed),
-    claimable: uintText(row.claimable),
-    releaseVersion: text(row.release_version),
-    modelVersion: text(row.model_version),
+    claimed: uintText(row.claimed_total),
+    claimable: uintText(row.claimable_accrued),
+    releaseVersion: text(row.release_id),
+    modelVersion: text(row.model_id),
     promotedBlockNumber: integerText(row.promoted_block_number),
     promotedBlockHash: bytes32(row.promoted_block_hash),
     verifiedAt: timestamp(row.verified_at),
   };
 }
 
-export type VaultHistoryRow = {
+function assertScope(condition: boolean, operation: string): asserts condition {
+  if (!condition) throw validationError("postgres", operation);
+}
+
+export type MarketSnapshot = {
   chainId: string;
-  vault: HexAddress;
-  poolId: HexBytes32;
-  hook: HexAddress;
-  quoteAsset: HexAddress | null;
-  configurationEpoch: string;
-  configurationHash: HexBytes32;
-  activeConfigurationHash: HexBytes32 | null;
-  effectiveFromBlock: string;
-  effectiveToBlock: string | null;
   releaseVersion: string;
   modelVersion: string;
+  token: HexAddress;
+  poolId: HexBytes32;
+  sourceDeploymentCommitment: HexBytes32;
+  sourceSchemaCommitment: HexBytes32;
+  blockNumber: string;
+  blockHash: HexBytes32;
+  sqrtPriceX96: string;
+  liquidity: string;
+  marketVolumeToken0: string;
+  marketVolumeToken1: string;
+  marketVolumeUsd: string | null;
+  hookGrossVolume: string | null;
+  observedAt: string;
+  reconciliationEvidenceCommitment: HexBytes32;
+  reconciledAt: string;
+};
+
+function parseMarketSnapshot(row: DatabaseRow): MarketSnapshot {
+  return {
+    chainId: integerText(row.chain_id),
+    releaseVersion: text(row.release_id),
+    modelVersion: text(row.model_id),
+    token: address(row.token),
+    poolId: bytes32(row.pool_id),
+    sourceDeploymentCommitment: bytes32(
+      row.source_deployment_commitment,
+    ),
+    sourceSchemaCommitment: bytes32(row.source_schema_commitment),
+    blockNumber: integerText(row.block_number),
+    blockHash: bytes32(row.block_hash),
+    sqrtPriceX96: uintText(row.sqrt_price_x96),
+    liquidity: uintText(row.liquidity),
+    marketVolumeToken0: decimalText(
+      row.market_volume_token0,
+      "market-volume-token0",
+    ),
+    marketVolumeToken1: decimalText(
+      row.market_volume_token1,
+      "market-volume-token1",
+    ),
+    marketVolumeUsd: nullableDecimalText(
+      row.market_volume_usd,
+      "market-volume-usd",
+    ),
+    hookGrossVolume:
+      row.hook_gross_volume === null
+        ? null
+        : uintText(row.hook_gross_volume),
+    observedAt: timestamp(row.observed_at),
+    reconciliationEvidenceCommitment: bytes32(
+      row.reconciliation_evidence_commitment,
+    ),
+    reconciledAt: timestamp(row.reconciled_at),
+  };
+}
+
+export type MarketCandle = {
+  chainId: string;
+  releaseVersion: string;
+  modelVersion: string;
+  token: HexAddress;
+  poolId: HexBytes32;
+  sourceDeploymentCommitment: HexBytes32;
+  sourceSchemaCommitment: HexBytes32;
+  sourceBlockNumber: string;
+  sourceBlockHash: HexBytes32;
+  interval: "hour" | "day";
+  periodStart: string;
+  periodEnd: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volumeToken0: string;
+  volumeToken1: string;
+  volumeUsd: string | null;
+  reconciliationEvidenceCommitment: HexBytes32;
+  reconciledAt: string;
+};
+
+function parseMarketCandle(row: DatabaseRow): MarketCandle {
+  if (row.interval !== "hour" && row.interval !== "day") {
+    throw validationError("postgres", "market-interval");
+  }
+  const periodStart = timestamp(row.period_start);
+  const periodEnd = timestamp(row.period_end);
+  if (Date.parse(periodEnd) <= Date.parse(periodStart)) {
+    throw validationError("postgres", "market-period");
+  }
+  return {
+    chainId: integerText(row.chain_id),
+    releaseVersion: text(row.release_id),
+    modelVersion: text(row.model_id),
+    token: address(row.token),
+    poolId: bytes32(row.pool_id),
+    sourceDeploymentCommitment: bytes32(
+      row.source_deployment_commitment,
+    ),
+    sourceSchemaCommitment: bytes32(row.source_schema_commitment),
+    sourceBlockNumber: integerText(row.source_block_number),
+    sourceBlockHash: bytes32(row.source_block_hash),
+    interval: row.interval,
+    periodStart,
+    periodEnd,
+    open: decimalText(row.open, "market-open"),
+    high: decimalText(row.high, "market-high"),
+    low: decimalText(row.low, "market-low"),
+    close: decimalText(row.close, "market-close"),
+    volumeToken0: decimalText(row.volume_token0, "market-volume-token0"),
+    volumeToken1: decimalText(row.volume_token1, "market-volume-token1"),
+    volumeUsd: nullableDecimalText(row.volume_usd, "market-volume-usd"),
+    reconciliationEvidenceCommitment: bytes32(
+      row.reconciliation_evidence_commitment,
+    ),
+    reconciledAt: timestamp(row.reconciled_at),
+  };
+}
+
+export type VaultHistoryRow = {
+  chainId: string;
+  releaseVersion: string;
+  modelVersion: string;
+  vault: HexAddress;
+  poolId: HexBytes32;
+  quoteAsset: HexAddress | null;
+  configurationHash: HexBytes32;
+  configurationEpoch: string;
+  allocationIndex: number;
+  beneficiary: HexAddress;
+  payoutAddress: HexAddress;
+  shareBps: number;
+  effectiveFromBlock: string;
+  effectiveToBlock: string | null;
   promotedBlockNumber: string;
   promotedBlockHash: HexBytes32;
   verifiedAt: string;
@@ -341,31 +697,40 @@ export type VaultHistoryRow = {
 function parseVaultHistory(row: DatabaseRow): VaultHistoryRow {
   return {
     chainId: integerText(row.chain_id),
+    releaseVersion: text(row.release_id),
+    modelVersion: text(row.model_id),
     vault: address(row.vault),
     poolId: bytes32(row.pool_id),
-    hook: address(row.hook),
-    quoteAsset: nullableAddress(row.quote_asset),
-    configurationEpoch: integerText(row.configuration_epoch),
+    quoteAsset:
+      row.quote_asset === undefined
+        ? null
+        : nullableAddress(row.quote_asset),
     configurationHash: bytes32(row.configuration_hash),
-    activeConfigurationHash: nullableBytes32(row.active_configuration_hash),
+    configurationEpoch: integerText(row.configuration_epoch),
+    allocationIndex: boundedInteger(
+      row.allocation_index,
+      0x7fff_ffff,
+      "allocation-index",
+    ),
+    beneficiary: address(row.beneficiary),
+    payoutAddress: address(row.payout_address),
+    shareBps: boundedInteger(row.share_bps, 10_000, "share-bps"),
     effectiveFromBlock: integerText(row.effective_from_block),
     effectiveToBlock:
       row.effective_to_block === null
         ? null
         : integerText(row.effective_to_block),
-    releaseVersion: text(row.release_version),
-    modelVersion: text(row.model_version),
     promotedBlockNumber: integerText(row.promoted_block_number),
     promotedBlockHash: bytes32(row.promoted_block_hash),
     verifiedAt: timestamp(row.verified_at),
   };
 }
 
-function pagination(limit: number, offset = 0) {
+function pagination(limit: number, offset = 0, maximumLimit = 100) {
   if (
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
-    limit > 100 ||
+    limit > maximumLimit ||
     !Number.isSafeInteger(offset) ||
     offset < 0 ||
     offset > 10_000
@@ -395,6 +760,17 @@ function inputBytes32(value: string): HexBytes32 {
   } catch {
     throw invalidInput("postgres", "bytes32");
   }
+}
+
+function inputTimestamp(value: string, operation: string): Date {
+  if (typeof value !== "string") {
+    throw invalidInput("postgres", operation);
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString() !== value) {
+    throw invalidInput("postgres", operation);
+  }
+  return parsed;
 }
 
 async function withTimeout<T>(operation: Promise<T>): Promise<T> {
@@ -467,15 +843,74 @@ export function createPostgresReadModel(input: {
 
   return Object.freeze({
     async recentLaunches(options: {
+      chainId: string;
       limit: number;
+      cursor?: {
+        blockNumber: string;
+        transactionHash: string;
+        token: string;
+      };
     }): Promise<IndexedLaunch[]> {
+      const chainId = chain(options.chainId);
       const page = pagination(options.limit);
+      const cursor = options.cursor
+        ? {
+            blockNumber: parseNonnegativeIntegerText(
+              options.cursor.blockNumber,
+            ),
+            transactionHash: inputBytes32(
+              options.cursor.transactionHash,
+            ),
+            token: inputAddress(options.cursor.token),
+          }
+        : null;
       return run(async (transaction) => {
         const rows = await transaction.query(
-          "select * from programmable_private.api_recent_launches($1)",
-          [page.limit],
+          "select * from programmable_private.get_recent_launches_v1($1, $2, $3, $4, $5)",
+          [
+            chainId,
+            page.limit,
+            cursor?.blockNumber ?? null,
+            cursor ? hexToBytes(cursor.transactionHash) : null,
+            cursor ? hexToBytes(cursor.token) : null,
+          ],
         );
-        return rows.map(parseLaunch);
+        const launches = rows.map((row) => {
+          const launch = parseLaunch(row);
+          assertScope(launch.chainId === chainId, "recent-launch-scope");
+          if (cursor) {
+            const block = BigInt(launch.promotedBlockNumber);
+            const cursorBlock = BigInt(cursor.blockNumber);
+            assertScope(
+              block < cursorBlock ||
+                (block === cursorBlock &&
+                  launch.launchTransactionHash < cursor.transactionHash) ||
+                (block === cursorBlock &&
+                  launch.launchTransactionHash === cursor.transactionHash &&
+                  launch.token > cursor.token),
+              "recent-launch-cursor",
+            );
+          }
+          return launch;
+        });
+        for (let index = 1; index < launches.length; index += 1) {
+          const previous = launches[index - 1]!;
+          const current = launches[index]!;
+          const previousBlock = BigInt(previous.promotedBlockNumber);
+          const currentBlock = BigInt(current.promotedBlockNumber);
+          assertScope(
+            currentBlock < previousBlock ||
+              (currentBlock === previousBlock &&
+                current.launchTransactionHash <
+                  previous.launchTransactionHash) ||
+              (currentBlock === previousBlock &&
+                current.launchTransactionHash ===
+                  previous.launchTransactionHash &&
+                current.token > previous.token),
+            "recent-launch-order",
+          );
+        }
+        return launches;
       });
     },
 
@@ -487,11 +922,17 @@ export function createPostgresReadModel(input: {
       const token = inputAddress(options.token);
       return run(async (transaction) => {
         const rows = await transaction.query(
-          "select * from programmable_private.api_launch_by_token($1, $2)",
+          "select * from programmable_private.get_launch_by_token_v1($1, $2)",
           [chainId, hexToBytes(token)],
         );
         if (rows.length > 1) throw validationError("postgres", "launch");
-        return rows[0] ? parseLaunch(rows[0]) : null;
+        if (!rows[0]) return null;
+        const launch = parseLaunch(rows[0]);
+        assertScope(
+          launch.chainId === chainId && launch.token === token,
+          "launch-token-scope",
+        );
+        return launch;
       });
     },
 
@@ -516,7 +957,7 @@ export function createPostgresReadModel(input: {
         ];
         const launches = await transaction.query(
           `select *
-           from programmable_private.v_launches_by_creator
+           from programmable_private.launches_by_creator_v1
            where chain_id = $1 and creator = $2
            order by launch_block_timestamp desc, promoted_block_number desc, token
            limit $3 offset $4`,
@@ -524,16 +965,109 @@ export function createPostgresReadModel(input: {
         );
         const rewards = await transaction.query(
           `select *
-           from programmable_private.v_account_reward_summaries
-           where chain_id = $1 and account = $2
-           order by promoted_block_number desc, vault
+           from programmable_private.get_account_reward_summary_v1($1, $2)
            limit $3 offset $4`,
           values,
         );
         return {
-          launches: launches.map(parseLaunch),
-          rewards: rewards.map(parseReward),
+          launches: launches.map((row) => {
+            const launch = parseLaunch(row);
+            assertScope(
+              launch.chainId === chainId && launch.creator === account,
+              "creator-launch-scope",
+            );
+            return launch;
+          }),
+          rewards: rewards.map((row) => {
+            const reward = parseReward(row);
+            assertScope(
+              reward.chainId === chainId && reward.account === account,
+              "account-reward-scope",
+            );
+            return reward;
+          }),
         };
+      });
+    },
+
+    async marketSnapshot(options: {
+      chainId: string;
+      token: string;
+    }): Promise<MarketSnapshot | null> {
+      const chainId = chain(options.chainId);
+      const token = inputAddress(options.token);
+      return run(async (transaction) => {
+        const rows = await transaction.query(
+          `select *
+           from programmable_private.market_snapshots_v1
+           where chain_id = $1 and token = $2
+           order by block_number desc, observed_at desc
+           limit 1`,
+          [chainId, hexToBytes(token)],
+        );
+        if (rows.length > 1) {
+          throw validationError("postgres", "market-snapshot");
+        }
+        if (!rows[0]) return null;
+        const snapshot = parseMarketSnapshot(rows[0]);
+        assertScope(
+          snapshot.chainId === chainId && snapshot.token === token,
+          "market-snapshot-scope",
+        );
+        return snapshot;
+      });
+    },
+
+    async marketCandles(options: {
+      chainId: string;
+      token: string;
+      interval: "hour" | "day";
+      from: string;
+      to: string;
+      limit: number;
+    }): Promise<MarketCandle[]> {
+      const chainId = chain(options.chainId);
+      const token = inputAddress(options.token);
+      if (options.interval !== "hour" && options.interval !== "day") {
+        throw invalidInput("postgres", "market-interval");
+      }
+      const from = inputTimestamp(options.from, "market-from");
+      const to = inputTimestamp(options.to, "market-to");
+      if (to <= from) throw invalidInput("postgres", "market-period");
+      const page = pagination(options.limit, 0, 1_000);
+      return run(async (transaction) => {
+        const rows = await transaction.query(
+          `select *
+           from programmable_private.market_candles_v1
+           where chain_id = $1
+             and token = $2
+             and interval = $3
+             and period_start >= $4
+             and period_start < $5
+           order by period_start asc, source_block_number asc
+           limit $6`,
+          [
+            chainId,
+            hexToBytes(token),
+            options.interval,
+            from,
+            to,
+            page.limit,
+          ],
+        );
+        return rows.map((row) => {
+          const candle = parseMarketCandle(row);
+          const periodStart = new Date(candle.periodStart);
+          assertScope(
+            candle.chainId === chainId &&
+              candle.token === token &&
+              candle.interval === options.interval &&
+              periodStart >= from &&
+              periodStart < to,
+            "market-candle-scope",
+          );
+          return candle;
+        });
       });
     },
 
@@ -543,7 +1077,7 @@ export function createPostgresReadModel(input: {
       limit: number;
     }): Promise<VaultHistoryRow[]> {
       return vaultHistory(
-        "v_classic_v3_vault_history",
+        "classic_v3_vault_history_v1",
         options,
       );
     },
@@ -554,7 +1088,7 @@ export function createPostgresReadModel(input: {
       limit: number;
     }): Promise<VaultHistoryRow[]> {
       return vaultHistory(
-        "v_stock_paired_vault_history",
+        "stock_paired_vault_history_v1",
         options,
       );
     },
@@ -570,45 +1104,51 @@ export function createPostgresReadModel(input: {
       return run(async (transaction) => {
         const rows = await transaction.query(
           `select *
-           from programmable_private.v_launch_lookup
-           where chain_id = $1 and transaction_hash = $2
+           from programmable_private.launch_lookup_v1
+           where chain_id = $1 and launch_transaction_hash = $2
            order by promoted_block_number desc, token
            limit $3`,
           [chainId, hexToBytes(transactionHash), page.limit],
         );
-        return rows.map((row) => ({
-          chainId: integerText(row.chain_id),
-          token: address(row.token),
-          account: address(row.account),
-          transactionHash: bytes32(row.transaction_hash),
-          releaseVersion: text(row.release_version),
-          modelVersion: text(row.model_version),
-          launchHash: bytes32(row.launch_hash),
-          promotedBlockNumber: integerText(row.promoted_block_number),
-          promotedBlockHash: bytes32(row.promoted_block_hash),
-          verifiedAt: timestamp(row.verified_at),
-        }));
+        return rows.map((row) => {
+          const result = {
+            chainId: integerText(row.chain_id),
+            token: address(row.token),
+            creator: address(row.creator),
+            transactionHash: bytes32(row.launch_transaction_hash),
+            poolId: nullableBytes32(row.pool_id),
+            rewardVault: nullableAddress(row.reward_vault),
+            releaseVersion: text(row.release_id),
+            modelVersion: text(row.model_id),
+            promotedBlockNumber: integerText(row.promoted_block_number),
+            promotedBlockHash: bytes32(row.promoted_block_hash),
+          };
+          assertScope(
+            result.chainId === chainId &&
+              result.transactionHash === transactionHash,
+            "launch-lookup-scope",
+          );
+          return result;
+        });
       });
     },
 
     async health() {
       return run(async (transaction) => {
         const checkpoints = await transaction.query(
-          "select * from programmable_private.v_checkpoint_summary order by chain_id, release_version, source_group, projector_version",
+          "select * from programmable_private.checkpoint_summary_v1 order by chain_id, release_id, source_group, projector_version",
         );
         const parity = await transaction.query(
-          "select * from programmable_private.v_parity_summary",
+          "select * from programmable_private.parity_summary_v1 order by route_key, chain_id, release_id, model_id",
         );
         const circuits = await transaction.query(
-          "select * from programmable_private.v_health_summary order by circuit_name, chain_id, release_version",
+          "select * from programmable_private.health_summary_v1 order by dependency",
         );
-        if (parity.length !== 1) {
-          throw validationError("postgres", "parity-health");
-        }
         return {
           checkpoints: checkpoints.map((row) => ({
             chainId: integerText(row.chain_id),
-            releaseVersion: text(row.release_version),
+            releaseVersion: text(row.release_id),
+            modelVersion: text(row.model_id),
             sourceGroup: text(
               row.source_group,
               /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/,
@@ -617,47 +1157,41 @@ export function createPostgresReadModel(input: {
               row.projector_version,
               /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/,
             ),
+            epochId: descriptiveText(row.epoch_id, 64, "epoch-id"),
+            pointerGeneration: integerText(row.pointer_generation),
             leaseGeneration: integerText(row.lease_generation),
+            checkpointGeneration: integerText(row.checkpoint_generation),
             reorgGeneration: integerText(row.reorg_generation),
             blockNumber: integerText(row.block_number),
             blockHash: bytes32(row.block_hash),
-            safeBlockNumber: integerText(row.safe_block_number),
-            safeBlockHash: bytes32(row.safe_block_hash),
-            safeHeadObservedAt: timestamp(row.safe_head_observed_at),
-            updatedAt: timestamp(row.updated_at),
+            createdAt: timestamp(row.created_at),
           })),
-          parity: {
-            matchingRecords: integerText(parity[0]!.matching_records),
-            mismatchingRecords: integerText(parity[0]!.mismatching_records),
-            lastComparedAt: nullableTimestamp(parity[0]!.last_compared_at),
-          },
-          circuits: circuits.map((row) => ({
-            circuitName: text(
-              row.circuit_name,
+          parity: parity.map((row) => ({
+            routeKey: text(
+              row.route_key,
               /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/,
             ),
-            chainId:
-              row.chain_id === null ? null : integerText(row.chain_id),
-            releaseVersion:
-              row.release_version === null
-                ? null
-                : text(row.release_version),
-            state: text(row.state, /^(closed|open|half-open)$/),
-            consecutiveFailures: integerText(row.consecutive_failures),
-            lastSuccessAt: nullableTimestamp(row.last_success_at),
-            lastFailureAt: nullableTimestamp(row.last_failure_at),
-            checkpointBlock:
-              row.checkpoint_block === null
-                ? null
-                : integerText(row.checkpoint_block),
-            safeBlockNumber:
-              row.safe_block_number === null
-                ? null
-                : integerText(row.safe_block_number),
-            safeHeadObservedAt: nullableTimestamp(
-              row.safe_head_observed_at,
+            chainId: integerText(row.chain_id),
+            releaseVersion: text(row.release_id),
+            modelVersion: text(row.model_id),
+            comparisonCount: integerText(row.comparison_count),
+            matchingCount: integerText(row.matching_count),
+            mismatchCount: integerText(row.mismatch_count),
+            lastComparedAt: nullableTimestamp(row.last_compared_at),
+            lastResolvedAt: nullableTimestamp(row.last_resolved_at),
+          })),
+          circuits: circuits.map((row) => ({
+            dependency: text(
+              row.dependency,
+              /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/,
             ),
-            updatedAt: timestamp(row.updated_at),
+            state: text(
+              row.circuit_status,
+              /^(closed|open|half_open|frozen)$/,
+            ),
+            observedAt: timestamp(row.observed_at),
+            failureCount: integerText(row.failure_count),
+            retryAfter: nullableTimestamp(row.retry_after),
           })),
         };
       });
@@ -669,8 +1203,8 @@ export function createPostgresReadModel(input: {
 
   async function vaultHistory(
     view:
-      | "v_classic_v3_vault_history"
-      | "v_stock_paired_vault_history",
+      | "classic_v3_vault_history_v1"
+      | "stock_paired_vault_history_v1",
     options: { chainId: string; vault: string; limit: number },
   ): Promise<VaultHistoryRow[]> {
     const chainId = chain(options.chainId);
@@ -685,7 +1219,14 @@ export function createPostgresReadModel(input: {
          limit $3`,
         [chainId, hexToBytes(vault), page.limit],
       );
-      return rows.map(parseVaultHistory);
+      return rows.map((row) => {
+        const history = parseVaultHistory(row);
+        assertScope(
+          history.chainId === chainId && history.vault === vault,
+          "vault-history-scope",
+        );
+        return history;
+      });
     });
   }
 }

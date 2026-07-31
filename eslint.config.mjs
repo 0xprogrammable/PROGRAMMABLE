@@ -15,5 +15,7 @@ export default defineConfig([
     "contracts/out/**",
     "contracts/cache/**",
     "contracts/broadcast/**",
+    "indexer/.envio/**",
+    "indexer/envio-env.d.ts",
   ]),
 ]);

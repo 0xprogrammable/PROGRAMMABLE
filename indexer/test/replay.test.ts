@@ -4,7 +4,7 @@ import path from "node:path";
 import { createTestIndexer } from "envio";
 import { parse } from "yaml";
 import { parseAbiItem } from "viem";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   canonicalPayloadJson,
@@ -288,9 +288,21 @@ describe("replay and occurrence behavior", () => {
     );
   });
 
-  it("persists the reviewed deployment label from the worker environment", async () => {
-    const previousLabel = process.env.ENVIO_DEPLOYMENT_LABEL;
-    process.env.ENVIO_DEPLOYMENT_LABEL = "production-reviewed-2026-07-31";
+  it("persists the complete reviewed deployment identity from the worker environment", async () => {
+    const sourceCommit = "1".repeat(40);
+    const configSha256 = `0x${"22".repeat(32)}`;
+    const schemaSha256 = `0x${"33".repeat(32)}`;
+    const handlerSha256 = `0x${"44".repeat(32)}`;
+    const sourceRegistrySha256 = `0x${"55".repeat(32)}`;
+    const eventSetSha256 = `0x${"66".repeat(32)}`;
+    vi.stubEnv("ENVIO_DEPLOYMENT_LABEL", "production-reviewed-2026-07-31");
+    vi.stubEnv("ENVIO_SOURCE_COMMIT", sourceCommit);
+    vi.stubEnv("ENVIO_CONFIG_SHA256", configSha256);
+    vi.stubEnv("ENVIO_SCHEMA_SHA256", schemaSha256);
+    vi.stubEnv("ENVIO_HANDLER_SHA256", handlerSha256);
+    vi.stubEnv("ENVIO_SOURCE_REGISTRY_SHA256", sourceRegistrySha256);
+    vi.stubEnv("ENVIO_EVENT_SET_SHA256", eventSetSha256);
+    vi.stubEnv("ENVIO_EVENT_COUNT", "51");
 
     try {
       const indexer = createTestIndexer();
@@ -325,15 +337,19 @@ describe("replay and occurrence behavior", () => {
       });
 
       expect(
-        (await indexer.IndexerState.getOrThrow("ethereum-mainnet"))
-          .deployment,
-      ).toBe("production-reviewed-2026-07-31");
+        await indexer.IndexerState.getOrThrow("ethereum-mainnet"),
+      ).toMatchObject({
+        deployment: "production-reviewed-2026-07-31",
+        sourceCommit,
+        configSha256,
+        schemaSha256,
+        handlerSha256,
+        sourceRegistrySha256,
+        eventSetSha256,
+        eventCount: 51,
+      });
     } finally {
-      if (previousLabel === undefined) {
-        delete process.env.ENVIO_DEPLOYMENT_LABEL;
-      } else {
-        process.env.ENVIO_DEPLOYMENT_LABEL = previousLabel;
-      }
+      vi.unstubAllEnvs();
     }
   });
 });
@@ -341,23 +357,61 @@ describe("replay and occurrence behavior", () => {
 describe("checked-in manifest fixtures", () => {
   it("pins every configured address and inclusive source cutoff to its deployment manifest", () => {
     const projectRoot = path.resolve(process.cwd(), "..");
-    const readJson = (relativePath: string) =>
+    const readJson = <T,>(relativePath: string) =>
       JSON.parse(
         readFileSync(path.join(projectRoot, relativePath), "utf8"),
-      ) as Record<string, any>;
-    const classicV2 = readJson(
+      ) as T;
+    const classicV2 = readJson<{
+      addresses: { feeHook: string; memeLauncher: string };
+      transactions: {
+        feeHook: { blockNumber: number };
+        memeLauncher: { blockNumber: number };
+      };
+    }>(
       "contracts/deployments/mainnet-classic-v2.json",
     );
-    const classicV3 = readJson(
+    const classicV3 = readJson<{
+      addresses: {
+        rewardVaultFactory: string;
+        initialBuyVestingWalletFactory: string;
+        feeHook: string;
+        launcher: string;
+      };
+      deploymentBlocks: {
+        rewardVaultFactory: number;
+        initialBuyVestingWalletFactory: number;
+        feeHook: number;
+        launcher: number;
+      };
+    }>(
       "contracts/deployments/mainnet-classic-v3.json",
     );
-    const stockV1 = readJson(
+    const stockV1 = readJson<{
+      addresses: {
+        launcher: string;
+        ethLaunchCoordinator: string;
+        feeHook: string;
+        feeSplitVaultFactory: string;
+      };
+      startBlock: number;
+    }>(
       "contracts/deployments/mainnet-stock-paired-v1.json",
     );
-    const stockV2 = readJson(
+    const stockV2 = readJson<{
+      addresses: {
+        launcher: string;
+        ethLaunchCoordinator: string;
+        feeHook: string;
+        feeSplitVaultFactory: string;
+      };
+      startBlock: number;
+    }>(
       "contracts/deployments/mainnet-stock-paired-v2.json",
     );
-    const stockV3 = readJson(
+    const stockV3 = readJson<{
+      addresses: { launcher: string; ethLaunchCoordinator: string };
+      startBlock: number;
+    }>(
       "contracts/deployments/mainnet-stock-paired-v3.json",
     );
 
