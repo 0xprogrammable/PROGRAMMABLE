@@ -820,6 +820,22 @@ describe("read-model performance contract", () => {
       evidenceRequired: true,
       commitmentsReady: true,
     });
+    const publicFeedEnvironment = `${exactFalse.replace(
+      "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED=\"false\"",
+      "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED=\"true\"",
+    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL}"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="${RUNTIME_RPC_ENVIRONMENT.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL}"`;
+    expect(
+      deployPolicy.evaluateReadModelDeployPolicy(publicFeedEnvironment, {
+        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+          ENDPOINT_COMMITMENTS.alchemy,
+        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+          ENDPOINT_COMMITMENTS.quicknode,
+      }),
+    ).toMatchObject({
+      mode: "indexed-or-shadow",
+      evidenceRequired: true,
+      commitmentsReady: true,
+    });
     expect(
       deployPolicy.evaluateReadModelDeployPolicy(indexedEnvironment, {
         PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
