@@ -48,9 +48,23 @@ describe("Classic V3 handlers", () => {
               },
             },
             {
+              contract: "ClassicV3RewardVault",
+              event: "CreatorFeesCheckpointed",
+              srcAddress: VAULT,
+              logIndex: 41,
+              block,
+              transaction,
+              params: {
+                poolId: POOL_ID,
+                configurationEpoch: 1n,
+                amount: 9_007_199_254_740_993n,
+                totalCreatorFeesReceived: 90_071_992_547_409_931n,
+              },
+            },
+            {
               contract: "ClassicV3Launcher",
               event: "MemeLiquidityConfiguredV2",
-              logIndex: 41,
+              logIndex: 42,
               block,
               transaction,
               params: {
@@ -68,7 +82,7 @@ describe("Classic V3 handlers", () => {
             {
               contract: "ClassicV3Launcher",
               event: "MemeCreatorInitialBuyV2",
-              logIndex: 42,
+              logIndex: 43,
               block,
               transaction,
               params: {
@@ -83,7 +97,7 @@ describe("Classic V3 handlers", () => {
             {
               contract: "ClassicV3Launcher",
               event: "MemeCreatorInitialBuyCustodyV2",
-              logIndex: 43,
+              logIndex: 44,
               block,
               transaction,
               params: {
@@ -100,7 +114,7 @@ describe("Classic V3 handlers", () => {
             {
               contract: "ClassicV3Launcher",
               event: "MemeTokenLaunchedV2",
-              logIndex: 44,
+              logIndex: 45,
               block,
               transaction,
               params: {
@@ -129,6 +143,15 @@ describe("Classic V3 handlers", () => {
     expect((await indexer.RewardVault.getOrThrow(VAULT)).releaseVersion).toBe(
       "classic-v3",
     );
+    expect((await indexer.RewardCheckpoint.getAll())[0]).toMatchObject({
+      vault: VAULT,
+      poolId: POOL_ID,
+      configurationEpoch: 1n,
+      amount: 9_007_199_254_740_993n,
+      totalCreatorFeesReceived: 90_071_992_547_409_931n,
+      downstreamLogicalId: undefined,
+      receiptLogOrdinal: undefined,
+    });
     const custody = (await indexer.InitialBuyCustody.getAll())[0];
     expect(custody?.mode).toBe(2);
     expect(custody?.mode).not.toBe(2n);
@@ -139,5 +162,62 @@ describe("Classic V3 handlers", () => {
         )
       ).isComplete,
     ).toBe(true);
+  });
+
+  it("marks a vault configuration mismatch as invalid provenance", async () => {
+    const indexer = createTestIndexer();
+
+    await indexer.process({
+      chains: {
+        1: {
+          startBlock: BLOCK_NUMBER,
+          endBlock: BLOCK_NUMBER + 12,
+          simulate: [
+            {
+              contract: "ClassicV3Launcher",
+              event: "MemeTokenLaunchedV2",
+              logIndex: 60,
+              block,
+              transaction,
+              params: {
+                deployer: DEPLOYER,
+                token: TOKEN,
+                poolId: POOL_ID,
+                feeHook: HOOK,
+                rewardVault: VAULT,
+                positionRecipient: POSITION_RECIPIENT,
+                positionTokenId: 42n,
+                buySwapFeeBps: 100n,
+                sellSwapFeeBps: 200n,
+                rewardConfigurationHash: CONFIGURATION_HASH,
+                launchHash: LAUNCH_HASH,
+              },
+            },
+            {
+              contract: "ClassicV3RewardVaultFactory",
+              event: "ClassicRewardVaultDeployed",
+              logIndex: 61,
+              block,
+              transaction,
+              params: {
+                vault: VAULT,
+                poolId: POOL_ID,
+                feeHook: HOOK,
+                salt: CONFIGURATION_HASH,
+                configurationHash: CUSTODY_CONFIGURATION_HASH,
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(
+      (
+        await indexer.Launch.getOrThrow(
+          `1:classic-v3:${LAUNCH_HASH}`,
+        )
+      ).provenanceValid,
+    ).toBe(false);
   });
 });

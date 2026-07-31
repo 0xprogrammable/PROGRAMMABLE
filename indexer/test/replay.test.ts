@@ -102,6 +102,47 @@ describe("replay and occurrence behavior", () => {
     });
   });
 
+  it("rejects a duplicate candidate occurrence with conflicting payload facts", async () => {
+    const indexer = createTestIndexer();
+    const event = {
+      contract: "ClassicV2Hook" as const,
+      event: "NativeSwapFeesAccrued" as const,
+      logIndex: 59,
+      block: {
+        number: BLOCK_NUMBER,
+        timestamp: 1_800_000_030,
+        hash: FIRST_BLOCK_HASH,
+      },
+      transaction: { hash: TRANSACTION_HASH, transactionIndex: 1 },
+      params: {
+        poolId: POOL_ID,
+        swapSender: SWAP_SENDER,
+        grossNativeAmount: 10n,
+        creatorFee: 1n,
+        launcherFee: 1n,
+      },
+    };
+
+    await expect(
+      indexer.process({
+        chains: {
+          1: {
+            simulate: [
+              event,
+              {
+                ...event,
+                params: {
+                  ...event.params,
+                  grossNativeAmount: 11n,
+                },
+              },
+            ],
+          },
+        },
+      }),
+    ).rejects.toThrow(/worker exited with code 1/i);
+  });
+
   it("retains two fork candidates when a transaction is re-mined at a new global log index", async () => {
     const indexer = createTestIndexer();
     const params = {
@@ -158,6 +199,67 @@ describe("replay and occurrence behavior", () => {
     expect(candidates.every(({ downstreamLogicalId }) => downstreamLogicalId === undefined))
       .toBe(true);
     expect(candidates[0]?.id).not.toBe(candidates[1]?.id);
+  });
+
+  it("tracks health progress by chain placement rather than transaction-hash sorting", async () => {
+    const indexer = createTestIndexer();
+    const earlierTransactionHash =
+      "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    const laterTransactionHash =
+      "0x0000000000000000000000000000000000000000000000000000000000000001";
+    const params = {
+      poolId: POOL_ID,
+      swapSender: SWAP_SENDER,
+      grossNativeAmount: 10n,
+      creatorFee: 1n,
+      launcherFee: 1n,
+    };
+
+    await indexer.process({
+      chains: {
+        1: {
+          simulate: [
+            {
+              contract: "ClassicV2Hook",
+              event: "NativeSwapFeesAccrued",
+              logIndex: 60,
+              block: {
+                number: BLOCK_NUMBER,
+                timestamp: 1_800_000_030,
+                hash: FIRST_BLOCK_HASH,
+              },
+              transaction: {
+                hash: earlierTransactionHash,
+                transactionIndex: 1,
+              },
+              params,
+            },
+            {
+              contract: "ClassicV2Hook",
+              event: "NativeSwapFeesAccrued",
+              logIndex: 61,
+              block: {
+                number: BLOCK_NUMBER,
+                timestamp: 1_800_000_030,
+                hash: FIRST_BLOCK_HASH,
+              },
+              transaction: {
+                hash: laterTransactionHash,
+                transactionIndex: 2,
+              },
+              params,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(
+      (await indexer.IndexerState.getOrThrow("ethereum-mainnet"))
+        .progressOccurrenceId,
+    ).toBe(
+      `1:${FIRST_BLOCK_HASH}:${laterTransactionHash}:61`,
+    );
   });
 });
 
