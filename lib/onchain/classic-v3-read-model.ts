@@ -2,9 +2,11 @@ import {
   createPublicClient,
   formatUnits,
   getAddress,
+  HttpRequestError,
   http,
   keccak256,
   parseAbiItem,
+  ResponseBodyTooLargeError,
   type Address,
   type Hex,
   type PublicClient,
@@ -83,8 +85,29 @@ const EMPTY_VOLUME: FeeVolume = {
   swapCount: 0,
 };
 
+const RPC_PROVENANCE_BATCH_SIZE = 1;
+const TOKEN_HYDRATION_BATCH_SIZE = 6;
+const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
+const MINIMUM_LOG_BLOCK_RANGE = 100n;
+
 function minimum(left: bigint, right: bigint) {
   return left < right ? left : right;
+}
+
+async function mapInBatches<Input, Output>(
+  values: readonly Input[],
+  batchSize: number,
+  mapper: (value: Input) => Promise<Output>,
+) {
+  const output: Output[] = [];
+  for (let index = 0; index < values.length; index += batchSize) {
+    output.push(
+      ...(await Promise.all(
+        values.slice(index, index + batchSize).map(mapper),
+      )),
+    );
+  }
+  return output;
 }
 
 function sameHex(left: string, right: string) {
@@ -95,7 +118,7 @@ function clientFor(config: ReadyOnchainDeployment, endpoint: string) {
   return createPublicClient({
     chain: config.chainId === 1 ? mainnet : sepolia,
     batch: { multicall: true },
-    transport: http(endpoint, { retryCount: 2, timeout: 12_000 }),
+    transport: http(endpoint, { retryCount: 1, timeout: 10_000 }),
   });
 }
 
@@ -153,31 +176,59 @@ async function readEvents(
 ) {
   const launches: LaunchRecord[] = [];
   const volumes = new Map<string, FeeVolume>();
-  for (
-    let fromBlock = release.startBlock;
-    fromBlock <= toBlock;
-    fromBlock += config.logBlockRange
-  ) {
+  let fromBlock = release.startBlock;
+  let logBlockRange = config.logBlockRange;
+  while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
-      fromBlock + config.logBlockRange - 1n,
+      fromBlock + logBlockRange - 1n,
     );
-    const [launchLogs, feeLogs] = await Promise.all([
-      client.getLogs({
+    const readLogs = async () => {
+      const launchLogs = await client.getLogs({
         address: release.launcher,
         event: launchedEvent,
         fromBlock,
         toBlock: rangeEnd,
         strict: true,
-      }),
-      client.getLogs({
+      });
+      const feeLogs = await client.getLogs({
         address: release.hook,
         event: feeEvent,
         fromBlock,
         toBlock: rangeEnd,
         strict: true,
-      }),
-    ]);
+      });
+      return [launchLogs, feeLogs] as const;
+    };
+    let logs: Awaited<ReturnType<typeof readLogs>>;
+    try {
+      logs = await readLogs();
+    } catch (error) {
+      if (
+        (error instanceof HttpRequestError ||
+          error instanceof ResponseBodyTooLargeError) &&
+        logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
+        rangeEnd > fromBlock
+      ) {
+        const reducedRange = logBlockRange / 2n;
+        logBlockRange =
+          reducedRange < MINIMUM_LOG_BLOCK_RANGE
+            ? MINIMUM_LOG_BLOCK_RANGE
+            : reducedRange;
+        console.warn(
+          "Classic V3 log range reduced after RPC rejection",
+          {
+            fromBlock: fromBlock.toString(),
+            attemptedToBlock: rangeEnd.toString(),
+            nextRange: logBlockRange.toString(),
+            errorName: error.name,
+          },
+        );
+        continue;
+      }
+      throw error;
+    }
+    const [launchLogs, feeLogs] = logs;
     for (const log of launchLogs) {
       if (log.removed || log.blockNumber === null) continue;
       launches.push({
@@ -208,6 +259,7 @@ async function readEvents(
       current.swapCount += 1;
       volumes.set(key, current);
     }
+    fromBlock = rangeEnd + 1n;
   }
   return { launches, volumes };
 }
@@ -407,27 +459,60 @@ export async function readClassicV3ExploreModel(
       ? [clientFor(config, config.rpcUrlSecondary)]
       : []),
   ];
-  await Promise.all(
-    clients.flatMap((client) => [
-      assertRuntime(client, release.launcher, release.launcherRuntimeCodeHash, toBlock, "Classic V3 launcher"),
-      assertRuntime(client, release.hook, release.hookRuntimeCodeHash, toBlock, "Classic V3 hook"),
-      assertRuntime(client, release.rewardVaultFactory, release.rewardVaultFactoryRuntimeCodeHash, toBlock, "Classic V3 reward vault factory"),
-      assertRuntime(client, config.stateView, config.stateViewRuntimeCodeHash, toBlock, "Uniswap StateView"),
-    ]),
+  await mapInBatches(
+    clients,
+    RPC_PROVENANCE_BATCH_SIZE,
+    (client) =>
+      mapInBatches(
+        [
+          {
+            address: release.launcher,
+            expectedHash: release.launcherRuntimeCodeHash,
+            label: "Classic V3 launcher",
+          },
+          {
+            address: release.hook,
+            expectedHash: release.hookRuntimeCodeHash,
+            label: "Classic V3 hook",
+          },
+          {
+            address: release.rewardVaultFactory,
+            expectedHash: release.rewardVaultFactoryRuntimeCodeHash,
+            label: "Classic V3 reward vault factory",
+          },
+          {
+            address: config.stateView,
+            expectedHash: config.stateViewRuntimeCodeHash,
+            label: "Uniswap StateView",
+          },
+        ],
+        1,
+        ({ address, expectedHash, label }) =>
+          assertRuntime(
+            client,
+            address,
+            expectedHash,
+            toBlock,
+            label,
+          ),
+      ),
   );
-  const [eventSets, launcherFees] = await Promise.all([
-    Promise.all(clients.map((client) => readEvents(client, config, release, toBlock))),
-    Promise.all(
-      clients.map((client) =>
+  const eventSets = await mapInBatches(
+    clients,
+    RPC_PROVENANCE_BATCH_SIZE,
+    (client) => readEvents(client, config, release, toBlock),
+  );
+  const launcherFees = await mapInBatches(
+    clients,
+    RPC_PROVENANCE_BATCH_SIZE,
+    (client) =>
         client.readContract({
           address: release.hook,
           abi: classicV3HookAbi,
           functionName: "launcherFeesAccrued",
           blockNumber: toBlock,
         }),
-      ),
-    ),
-  ]);
+  );
   const fingerprint = eventFingerprint(eventSets[0]);
   if (
     eventSets.some((candidate) => eventFingerprint(candidate) !== fingerprint) ||
@@ -438,18 +523,26 @@ export async function readClassicV3ExploreModel(
   const { launches, volumes } = eventSets[0];
   assertUniqueLaunches(launches, release);
   const timestamps = new Map<string, bigint>();
-  await Promise.all(
+  await mapInBatches(
     [...new Set(launches.map((launch) => launch.blockNumber.toString()))].map(
-      async (blockNumber) => {
-        const block = await clients[0].getBlock({ blockNumber: BigInt(blockNumber) });
-        timestamps.set(blockNumber, block.timestamp);
-      },
+      (blockNumber) => blockNumber,
     ),
+    BLOCK_TIMESTAMP_BATCH_SIZE,
+    async (blockNumber) => {
+      const block = await clients[0].getBlock({
+        blockNumber: BigInt(blockNumber),
+      });
+      timestamps.set(blockNumber, block.timestamp);
+    },
   );
-  const tokenSets = await Promise.all(
-    clients.map((client) =>
-      Promise.all(
-        launches.map((launch) =>
+  const tokenSets = await mapInBatches(
+    clients,
+    RPC_PROVENANCE_BATCH_SIZE,
+    (client) =>
+      mapInBatches(
+        launches,
+        TOKEN_HYDRATION_BATCH_SIZE,
+        (launch) =>
           hydrateToken(
             client,
             config,
@@ -459,9 +552,7 @@ export async function readClassicV3ExploreModel(
             timestamps.get(launch.blockNumber.toString()) ?? 0n,
             toBlock,
           ),
-        ),
       ),
-    ),
   );
   const tokenFingerprint = JSON.stringify(tokenSets[0]);
   if (tokenSets.some((candidate) => JSON.stringify(candidate) !== tokenFingerprint)) {
