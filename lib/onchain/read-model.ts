@@ -2,6 +2,7 @@ import {
   createPublicClient,
   formatUnits,
   getAddress,
+  HttpRequestError,
   http,
   keccak256,
   ResponseBodyTooLargeError,
@@ -81,6 +82,7 @@ const ZERO_FEE_VOLUME: FeeVolume = {
 const TOKEN_HYDRATION_BATCH_SIZE = 12;
 const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
 const RPC_PROVENANCE_BATCH_SIZE = 1;
+const MINIMUM_LOG_BLOCK_RANGE = 100n;
 
 type FeeDisclosure = readonly [
   buySwapFeeBps: number,
@@ -144,8 +146,8 @@ function createOnchainClient(
     chain: config.chainId === 1 ? mainnet : sepolia,
     batch: { multicall: true },
     transport: http(rpcUrl, {
-      retryCount: 2,
-      timeout: 12_000,
+      retryCount: 1,
+      timeout: 10_000,
     }),
   });
 }
@@ -168,6 +170,19 @@ async function mapInBatches<Input, Output>(
     );
   }
   return output;
+}
+
+async function withReadStage<Output>(
+  stage: string,
+  read: () => Promise<Output>,
+) {
+  try {
+    return await read();
+  } catch (cause) {
+    const error = new Error(`Explore read failed at ${stage}`, { cause });
+    error.name = `ExploreReadStage:${stage}`;
+    throw error;
+  }
 }
 
 async function assertRuntimeCode(
@@ -225,54 +240,70 @@ async function indexVerifiedEvents(
       toBlock,
       fromBlock + logBlockRange - 1n,
     );
-    const readLogs = () =>
-      Promise.all([
-        client.getLogs({
-          address: config.launcher,
-          event: memeTokenLaunchedEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.launcher,
-          event: memeLiquidityConfiguredEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.launcher,
-          event: memeCreatorInitialBuyEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.feeHook,
-          event: nativeSwapFeesAccruedEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-        client.getLogs({
-          address: config.feeHook,
-          event: creatorFeesClaimedEvent,
-          fromBlock,
-          toBlock: rangeEnd,
-          strict: true,
-        }),
-      ]);
+    const readLogs = async () => {
+      const launchLogs = await client.getLogs({
+        address: config.launcher,
+        event: memeTokenLaunchedEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      });
+      const liquidityLogs = await client.getLogs({
+        address: config.launcher,
+        event: memeLiquidityConfiguredEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      });
+      const initialBuyLogs = await client.getLogs({
+        address: config.launcher,
+        event: memeCreatorInitialBuyEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      });
+      const feeLogs = await client.getLogs({
+        address: config.feeHook,
+        event: nativeSwapFeesAccruedEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      });
+      const claimLogs = await client.getLogs({
+        address: config.feeHook,
+        event: creatorFeesClaimedEvent,
+        fromBlock,
+        toBlock: rangeEnd,
+        strict: true,
+      });
+      return [
+        launchLogs,
+        liquidityLogs,
+        initialBuyLogs,
+        feeLogs,
+        claimLogs,
+      ] as const;
+    };
     let logs: Awaited<ReturnType<typeof readLogs>>;
     try {
       logs = await readLogs();
     } catch (error) {
-      if (error instanceof ResponseBodyTooLargeError && rangeEnd > fromBlock) {
-        logBlockRange = logBlockRange > 1n ? logBlockRange / 2n : 1n;
-        console.warn("Explore log range reduced after oversized RPC response", {
+      if (
+        (error instanceof ResponseBodyTooLargeError ||
+          error instanceof HttpRequestError) &&
+        logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
+        rangeEnd > fromBlock
+      ) {
+        const reducedRange = logBlockRange / 2n;
+        logBlockRange =
+          reducedRange < MINIMUM_LOG_BLOCK_RANGE
+            ? MINIMUM_LOG_BLOCK_RANGE
+            : reducedRange;
+        console.warn("Explore log range reduced after RPC rejection", {
           fromBlock: fromBlock.toString(),
           attemptedToBlock: rangeEnd.toString(),
           nextRange: logBlockRange.toString(),
+          errorName: error.name,
         });
         continue;
       }
@@ -665,7 +696,10 @@ async function readReadyModel(
     mapInBatches(
       clients,
       RPC_PROVENANCE_BATCH_SIZE,
-      (candidate) => indexVerifiedEvents(candidate, config, toBlock),
+      (candidate) =>
+        withReadStage("classic-events", () =>
+          indexVerifiedEvents(candidate, config, toBlock),
+        ),
     ),
     Promise.all(
       clients.map((candidate) =>
@@ -727,33 +761,37 @@ async function readReadyModel(
     ),
   ].map(BigInt);
   const blockTimestamps = new Map<string, bigint>();
-  await mapInBatches(
-    blockNumbers,
-    BLOCK_TIMESTAMP_BATCH_SIZE,
-    async (blockNumber) => {
-      const block = await client.getBlock({ blockNumber });
-      blockTimestamps.set(blockNumber.toString(), block.timestamp);
-    },
+  await withReadStage("block-timestamps", () =>
+    mapInBatches(
+      blockNumbers,
+      BLOCK_TIMESTAMP_BATCH_SIZE,
+      async (blockNumber) => {
+        const block = await client.getBlock({ blockNumber });
+        blockTimestamps.set(blockNumber.toString(), block.timestamp);
+      },
+    ),
   );
 
-  const tokenSets = await mapInBatches(
-    clients,
-    RPC_PROVENANCE_BATCH_SIZE,
-    (candidate) =>
-      mapInBatches(
-        verified,
-        TOKEN_HYDRATION_BATCH_SIZE,
-        (launch) =>
-          hydrateVerifiedToken(
-            candidate,
-            config,
-            launch,
-            volumes.get(launch.poolId.toLowerCase()) ??
-              ZERO_FEE_VOLUME,
-            blockTimestamps.get(launch.blockNumber.toString()) ?? 0n,
-            toBlock,
-          ),
-      ),
+  const tokenSets = await withReadStage("classic-token-state", () =>
+    mapInBatches(
+      clients,
+      RPC_PROVENANCE_BATCH_SIZE,
+      (candidate) =>
+        mapInBatches(
+          verified,
+          TOKEN_HYDRATION_BATCH_SIZE,
+          (launch) =>
+            hydrateVerifiedToken(
+              candidate,
+              config,
+              launch,
+              volumes.get(launch.poolId.toLowerCase()) ??
+                ZERO_FEE_VOLUME,
+              blockTimestamps.get(launch.blockNumber.toString()) ?? 0n,
+              toBlock,
+            ),
+        ),
+    ),
   );
   const tokenFingerprint = JSON.stringify(tokenSets[0]);
   if (
