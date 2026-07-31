@@ -18,7 +18,8 @@ function isAuthorized(request: NextRequest): boolean {
   const authorization = request.headers.get("authorization");
   if (
     typeof secret !== "string" ||
-    secret.length === 0 ||
+    secret.length < 32 ||
+    secret.length > 1_024 ||
     !authorization?.startsWith("Bearer ")
   ) {
     return false;

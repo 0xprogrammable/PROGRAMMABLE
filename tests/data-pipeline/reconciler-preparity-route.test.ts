@@ -15,7 +15,7 @@ import { NextRequest } from "next/server";
 
 import { POST } from "../../app/api/ops/reconcile-preparity/route";
 
-const SECRET = "reconciler-test-secret";
+const SECRET = "reconciler-test-secret-32-characters";
 const BODY = {
   chainId: "1",
   releaseId: "classic-v3",
@@ -62,6 +62,11 @@ describe("reconciler pre-parity ops route", () => {
 
     const wrongResponse = await POST(request(BODY, `${SECRET}-wrong`));
     expect(wrongResponse.status).toBe(401);
+
+    process.env.CRON_SECRET = "too-short";
+    const weakSecretResponse = await POST(request(BODY, "too-short"));
+    expect(weakSecretResponse.status).toBe(401);
+
     expect(runConfigured).not.toHaveBeenCalled();
   });
 
