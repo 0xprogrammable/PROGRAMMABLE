@@ -12,10 +12,15 @@ const postgresMocks = vi.hoisted(() => ({
   createPostgresReadModel: vi.fn(),
 }));
 
-vi.mock("../../lib/data-pipeline/postgres", () => ({
-  createPostgresExecutor: postgresMocks.createPostgresExecutor,
-  createPostgresReadModel: postgresMocks.createPostgresReadModel,
-}));
+vi.mock("../../lib/data-pipeline/postgres", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../lib/data-pipeline/postgres")>();
+  return {
+    ...actual,
+    createPostgresExecutor: postgresMocks.createPostgresExecutor,
+    createPostgresReadModel: postgresMocks.createPostgresReadModel,
+  };
+});
 
 import { DataPipelineError } from "../../lib/data-pipeline/errors";
 import {
@@ -61,11 +66,23 @@ describe("server read-model singleton", () => {
     postgresMocks.createPostgresReadModel.mockReset();
     postgresMocks.query.mockReset();
     postgresMocks.transaction.mockReset();
-    postgresMocks.query.mockImplementation(async (text: string) =>
-      text === "select current_role::text as current_role"
-        ? [{ current_role: "programmable_api_reader" }]
-        : [],
-    );
+    postgresMocks.query.mockImplementation(async (text: string) => {
+      if (text === "select session_user::text as session_user") {
+        return [{ session_user: "programmable_api_reader_login" }];
+      }
+      if (
+        text ===
+        "select session_user::text as session_user, current_role::text as current_role"
+      ) {
+        return [
+          {
+            session_user: "programmable_api_reader_login",
+            current_role: "programmable_api_reader",
+          },
+        ];
+      }
+      return [];
+    });
     postgresMocks.transaction.mockImplementation(
       async (
         work: (transaction: {
@@ -150,14 +167,58 @@ describe("server read-model singleton", () => {
     expect(postgresMocks.transaction).toHaveBeenCalledTimes(1);
     expect(postgresMocks.query.mock.calls.map((call) => call[0])).toEqual([
       "set transaction isolation level repeatable read, read only",
+      "select session_user::text as session_user",
       "set local role programmable_api_reader",
+      "select session_user::text as session_user, current_role::text as current_role",
       "set local statement_timeout = '1000ms'",
       "set local lock_timeout = '250ms'",
       "set local idle_in_transaction_session_timeout = '2000ms'",
-      "select current_role::text as current_role",
       "select 'payload'::text as value",
     ]);
   });
+
+  it.each([
+    "postgres",
+    "service_role",
+    "programmable_projector_login",
+    "arbitrary_reader_member",
+  ])(
+    "rejects the %s login even if it could assume the reader capability",
+    async (sessionUser) => {
+      enableRemoteReadModel();
+      postgresMocks.query.mockImplementation(async (text: string) => {
+        if (text === "select session_user::text as session_user") {
+          return [{ session_user: sessionUser }];
+        }
+        if (
+          text ===
+          "select session_user::text as session_user, current_role::text as current_role"
+        ) {
+          return [
+            {
+              session_user: sessionUser,
+              current_role: "programmable_api_reader",
+            },
+          ];
+        }
+        return [];
+      });
+
+      const model = await getServerReadModel();
+      if (!model) throw new Error("expected read model");
+
+      await expect(
+        model.repeatableReadSnapshot(async () => "unreachable"),
+      ).rejects.toMatchObject({
+        dependency: "postgres",
+        code: "validation_failed",
+        safeMetadata: { operation: "runtime-login-role" },
+      });
+      expect(postgresMocks.query).not.toHaveBeenCalledWith(
+        "set local role programmable_api_reader",
+      );
+    },
+  );
 
   it("keeps readiness and payload on the same snapshot when committed state changes between reads", async () => {
     enableRemoteReadModel();
@@ -170,8 +231,19 @@ describe("server read-model singleton", () => {
         snapshotParity = committedParity;
         return [];
       }
-      if (text === "select current_role::text as current_role") {
-        return [{ current_role: "programmable_api_reader" }];
+      if (text === "select session_user::text as session_user") {
+        return [{ session_user: "programmable_api_reader_login" }];
+      }
+      if (
+        text ===
+        "select session_user::text as session_user, current_role::text as current_role"
+      ) {
+        return [
+          {
+            session_user: "programmable_api_reader_login",
+            current_role: "programmable_api_reader",
+          },
+        ];
       }
       if (text === "select parity") return [{ parity: snapshotParity }];
       return [];

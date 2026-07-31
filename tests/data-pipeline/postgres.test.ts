@@ -104,6 +104,9 @@ class FakeExecutor implements PostgresExecutor {
       text: string,
       values: readonly PostgresParameter[],
     ) => Promise<readonly Record<string, unknown>[]>,
+    private readonly sessionUser = "programmable_api_reader_login",
+    private readonly capabilityRole = "programmable_api_reader",
+    private readonly postSetSessionUser = sessionUser,
   ) {}
 
   async transaction<T>(
@@ -115,10 +118,19 @@ class FakeExecutor implements PostgresExecutor {
         values: readonly PostgresParameter[] = [],
       ) => {
         this.queries.push({ text, values });
-        if (/select current_role/i.test(text)) {
+        if (
+          text ===
+          "select session_user::text as session_user, current_role::text as current_role"
+        ) {
           return [
-            { current_role: "programmable_api_reader" },
+            {
+              session_user: this.postSetSessionUser,
+              current_role: this.capabilityRole,
+            },
           ] as unknown as Row[];
+        }
+        if (text === "select session_user::text as session_user") {
+          return [{ session_user: this.sessionUser }] as unknown as Row[];
         }
         return (await this.responder(text, values)) as Row[];
       },
@@ -193,12 +205,13 @@ describe("private Postgres read-model adapter", () => {
         verifiedAt: "2026-07-31T08:01:00.000Z",
       }),
     ]);
-    expect(executor.queries.slice(0, 5).map((query) => query.text)).toEqual([
+    expect(executor.queries.slice(0, 6).map((query) => query.text)).toEqual([
+      "select session_user::text as session_user",
       "set local role programmable_api_reader",
+      "select session_user::text as session_user, current_role::text as current_role",
       "set local statement_timeout = '1000ms'",
       "set local lock_timeout = '250ms'",
       "set local idle_in_transaction_session_timeout = '2000ms'",
-      "select current_role::text as current_role",
     ]);
     const dataQuery = executor.queries.at(-1)!;
     expect(dataQuery.text).toContain(
@@ -206,6 +219,67 @@ describe("private Postgres read-model adapter", () => {
     );
     expect(dataQuery.values).toEqual(["1", 25, null, null, null]);
   });
+
+  it.each([
+    "postgres",
+    "service_role",
+    "programmable_projector_login",
+    "arbitrary_reader_member",
+  ])(
+    "rejects the %s login before it can assume the API-reader capability",
+    async (sessionUser) => {
+      const executor = new FakeExecutor(async () => [], sessionUser);
+      const readModel = createPostgresReadModel({ executor });
+
+      await expect(
+        readModel.recentLaunches({ chainId: "1", limit: 1 }),
+      ).rejects.toMatchObject({
+        dependency: "postgres",
+        code: "validation_failed",
+        safeMetadata: { operation: "runtime-login-role" },
+      });
+      expect(executor.queries.map(({ text }) => text)).toEqual([
+        "select session_user::text as session_user",
+      ]);
+    },
+  );
+
+  it.each([
+    {
+      label: "a changed session identity",
+      capabilityRole: "programmable_api_reader",
+      postSetSessionUser: "postgres",
+    },
+    {
+      label: "the wrong capability role",
+      capabilityRole: "programmable_projector",
+      postSetSessionUser: "programmable_api_reader_login",
+    },
+  ])(
+    "rejects $label after SET ROLE",
+    async ({ capabilityRole, postSetSessionUser }) => {
+      const executor = new FakeExecutor(
+        async () => [],
+        "programmable_api_reader_login",
+        capabilityRole,
+        postSetSessionUser,
+      );
+      const readModel = createPostgresReadModel({ executor });
+
+      await expect(
+        readModel.recentLaunches({ chainId: "1", limit: 1 }),
+      ).rejects.toMatchObject({
+        dependency: "postgres",
+        code: "validation_failed",
+        safeMetadata: { operation: "runtime-role" },
+      });
+      expect(executor.queries.map(({ text }) => text)).toEqual([
+        "select session_user::text as session_user",
+        "set local role programmable_api_reader",
+        "select session_user::text as session_user, current_role::text as current_role",
+      ]);
+    },
+  );
 
   it("parameterizes token, creator, account, limits, and offsets without base-table or write SQL", async () => {
     const executor = new FakeExecutor(async (text) => {
@@ -240,7 +314,7 @@ describe("private Postgres read-model adapter", () => {
 
     const dataQueries = executor.queries.filter(
       ({ text }) =>
-        !/^set local/i.test(text) && !/select current_role/i.test(text),
+        !/^set local/i.test(text) && !/select session_user/i.test(text),
     );
     expect(dataQueries).toHaveLength(3);
     for (const query of dataQueries) {
@@ -341,7 +415,7 @@ describe("private Postgres read-model adapter", () => {
     const dataSql = executor.queries
       .filter(
         ({ text }) =>
-          !/^set local/i.test(text) && !/select current_role/i.test(text),
+          !/^set local/i.test(text) && !/select session_user/i.test(text),
       )
       .map(({ text }) => text)
       .join("\n");

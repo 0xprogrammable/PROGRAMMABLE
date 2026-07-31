@@ -84,8 +84,10 @@ describe.skipIf(!localDatabaseUrl)(
     let admin: ReturnType<typeof postgres> | undefined;
     let executor: PostgresExecutor | undefined;
     let readModel: ReturnType<typeof createPostgresReadModel> | undefined;
-    const roleName = `programmable_adapter_${process.pid}_${randomBytes(4).toString("hex")}`;
+    const roleName = "programmable_api_reader_login";
+    const attackerRoleName = `programmable_adapter_${process.pid}_${randomBytes(4).toString("hex")}`;
     const rolePassword = randomBytes(24).toString("hex");
+    const attackerRolePassword = randomBytes(24).toString("hex");
 
     beforeAll(async () => {
       const adminUrl = required(localDatabaseUrl, "local database URL");
@@ -114,13 +116,17 @@ describe.skipIf(!localDatabaseUrl)(
         );
       }
 
-      // Both values are generated from strict lowercase alphanumeric alphabets.
-      // Keeping this role-DDL outside the adapter avoids granting DDL to runtime code.
+      // Passwords are generated from strict lowercase alphanumeric alphabets and
+      // exist only for this loopback test database. Runtime credentials remain
+      // outside migrations and application code.
       await admin.unsafe(
-        `create role "${roleName}" login noinherit password '${rolePassword}'`,
+        `alter role "${roleName}" password '${rolePassword}'`,
       );
       await admin.unsafe(
-        `grant programmable_api_reader to "${roleName}"`,
+        `create role "${attackerRoleName}" login noinherit password '${attackerRolePassword}'`,
+      );
+      await admin.unsafe(
+        `grant programmable_api_reader to "${attackerRoleName}"`,
       );
 
       executor = createPostgresExecutor({
@@ -143,10 +149,11 @@ describe.skipIf(!localDatabaseUrl)(
       await admin.unsafe(
         `select pg_catalog.pg_terminate_backend(pid)
          from pg_catalog.pg_stat_activity
-         where usename = $1 and pid <> pg_catalog.pg_backend_pid()`,
-        [roleName],
+         where usename = any($1::text[]) and pid <> pg_catalog.pg_backend_pid()`,
+        [[roleName, attackerRoleName]],
       );
-      await admin.unsafe(`drop role if exists "${roleName}"`);
+      await admin.unsafe(`alter role "${roleName}" password null`);
+      await admin.unsafe(`drop role if exists "${attackerRoleName}"`);
       await admin.end({ timeout: 5 });
     }, 30_000);
 
@@ -184,7 +191,7 @@ describe.skipIf(!localDatabaseUrl)(
       ]);
     });
 
-    it("sets the task login to programmable_api_reader only inside its transaction", async () => {
+    it("sets the approved login to programmable_api_reader only inside its transaction", async () => {
       const rows = await required(executor, "runtime executor").transaction(
         async (transaction) => {
           const before = await transaction.query<{
@@ -213,6 +220,42 @@ describe.skipIf(!localDatabaseUrl)(
           current_role: "programmable_api_reader",
         },
       ]);
+    });
+
+    it("rejects privileged and arbitrary member logins even when they can assume the reader role", async () => {
+      const adminUrl = required(localDatabaseUrl, "local database URL");
+      const candidates = [
+        adminUrl,
+        runtimeConnectionString(
+          adminUrl,
+          attackerRoleName,
+          attackerRolePassword,
+        ),
+      ];
+
+      for (const connectionString of candidates) {
+        const wrongExecutor = createPostgresExecutor({
+          connectionString,
+          maxConnections: 1,
+          connectTimeoutMs: 3_000,
+          idleTimeoutMs: 5_000,
+          allowInsecureLoopback: true,
+        });
+        try {
+          const wrongModel = createPostgresReadModel({
+            executor: wrongExecutor,
+          });
+          await expect(
+            wrongModel.recentLaunches({ chainId: "1", limit: 1 }),
+          ).rejects.toMatchObject({
+            dependency: "postgres",
+            code: "validation_failed",
+            safeMetadata: { operation: "runtime-login-role" },
+          });
+        } finally {
+          await wrongExecutor.close();
+        }
+      }
     });
 
     it("reads every approved adapter function and view through the runtime role", async () => {

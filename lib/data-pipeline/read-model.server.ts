@@ -6,11 +6,11 @@ import {
   DataPipelineError,
   dataPipelineError,
   invalidInput,
-  validationError,
 } from "./errors";
 import {
   createPostgresExecutor,
   createPostgresReadModel,
+  establishPostgresApiReaderRole,
   type PostgresExecutor,
   type PostgresTransaction,
 } from "./postgres";
@@ -65,21 +65,12 @@ function createServerReadModel(executor: PostgresExecutor): ServerReadModel {
             await transaction.query(
               "set transaction isolation level repeatable read, read only",
             );
-            await transaction.query("set local role programmable_api_reader");
+            await establishPostgresApiReaderRole(transaction);
             await transaction.query("set local statement_timeout = '1000ms'");
             await transaction.query("set local lock_timeout = '250ms'");
             await transaction.query(
               "set local idle_in_transaction_session_timeout = '2000ms'",
             );
-            const roleRows = await transaction.query<{
-              current_role: unknown;
-            }>("select current_role::text as current_role");
-            if (
-              roleRows.length !== 1 ||
-              roleRows[0]?.current_role !== "programmable_api_reader"
-            ) {
-              throw validationError("postgres", "runtime-role");
-            }
             return work(transaction);
           });
         } catch (error) {

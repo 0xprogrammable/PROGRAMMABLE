@@ -804,6 +804,44 @@ function inputTimestamp(value: string, operation: string): Date {
   return parsed;
 }
 
+const API_READER_LOGIN_ROLE = "programmable_api_reader_login";
+const API_READER_CAPABILITY_ROLE = "programmable_api_reader";
+
+/**
+ * Establishes the narrow API-reader capability from the one approved login.
+ * Checking only current_role is insufficient because a privileged or
+ * accidentally configured session could SET ROLE and silently widen the
+ * application's database credential boundary.
+ */
+export async function establishPostgresApiReaderRole(
+  transaction: PostgresTransaction,
+): Promise<void> {
+  const loginRows = await transaction.query<{ session_user: unknown }>(
+    "select session_user::text as session_user",
+  );
+  if (
+    loginRows.length !== 1 ||
+    loginRows[0]?.session_user !== API_READER_LOGIN_ROLE
+  ) {
+    throw validationError("postgres", "runtime-login-role");
+  }
+
+  await transaction.query(`set local role ${API_READER_CAPABILITY_ROLE}`);
+  const roleRows = await transaction.query<{
+    session_user: unknown;
+    current_role: unknown;
+  }>(
+    "select session_user::text as session_user, current_role::text as current_role",
+  );
+  if (
+    roleRows.length !== 1 ||
+    roleRows[0]?.session_user !== API_READER_LOGIN_ROLE ||
+    roleRows[0]?.current_role !== API_READER_CAPABILITY_ROLE
+  ) {
+    throw validationError("postgres", "runtime-role");
+  }
+}
+
 export function createPostgresReadModel(input: {
   executor: PostgresExecutor;
   circuit?: CircuitBreaker;
@@ -817,9 +855,7 @@ export function createPostgresReadModel(input: {
     return circuit.execute(async () => {
       try {
         return await input.executor.transaction(async (transaction) => {
-          await transaction.query(
-            "set local role programmable_api_reader",
-          );
+          await establishPostgresApiReaderRole(transaction);
           await transaction.query(
             "set local statement_timeout = '1000ms'",
           );
@@ -827,15 +863,6 @@ export function createPostgresReadModel(input: {
           await transaction.query(
             "set local idle_in_transaction_session_timeout = '2000ms'",
           );
-          const roleRows = await transaction.query<{
-            current_role: unknown;
-          }>("select current_role::text as current_role");
-          if (
-            roleRows.length !== 1 ||
-            roleRows[0]?.current_role !== "programmable_api_reader"
-          ) {
-            throw validationError("postgres", "runtime-role");
-          }
           return work(transaction);
         });
       } catch (error) {
