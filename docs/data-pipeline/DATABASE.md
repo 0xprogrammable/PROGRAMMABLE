@@ -52,8 +52,8 @@ node supabase/tests/codec/verify-production-provider-evidence-v2.ts
 supabase db lint --local --level warning
 ```
 
-`supabase db reset` must begin from an empty local database and apply the nine
-versioned migrations in order. The explicit test path keeps the real
+`supabase db reset` must begin from an empty local database and apply every
+versioned migration in order. The explicit test path keeps the real
 two-session scripts out of the pgTAP runner; it runs only the suites in
 `supabase/tests/database/`.
 
