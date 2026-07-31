@@ -529,10 +529,14 @@ describe("Envio candidate cursor adapter", () => {
       };
       expect(request.query).toContain("query ProgrammableCandidatesAfter");
       expect(request.query).toContain("$afterBlock: numeric!");
+      expect(request.query).toContain("$afterCandidateId: String!");
       expect(request.query).toContain("blockGlobalLogIndex: asc");
+      expect(request.query).toContain("{ id: { _gt: $afterCandidateId } }");
+      expect(request.query).toContain("id: asc");
       expect(request.variables).toEqual({
         afterBlock: "25624130",
         afterLogIndex: -1,
+        afterCandidateId: "",
         first: 2,
       });
       expect(new Headers(init?.headers).get("authorization")).toBe(
@@ -559,7 +563,11 @@ describe("Envio candidate cursor adapter", () => {
     });
 
     const page = await client.readCandidatesAfter({
-      cursor: { blockNumber: "25624130", blockGlobalLogIndex: -1 },
+      cursor: {
+        blockNumber: "25624130",
+        blockGlobalLogIndex: -1,
+        candidateId: "",
+      },
       limit: 2,
     });
 
@@ -571,12 +579,28 @@ describe("Envio candidate cursor adapter", () => {
   });
 
   it.each([
-    [{ blockNumber: "-1", blockGlobalLogIndex: -1 }, 10],
-    [{ blockNumber: "25624130", blockGlobalLogIndex: -2 }, 10],
-    [{ blockNumber: "25624130", blockGlobalLogIndex: 1.5 }, 10],
-    [{ blockNumber: "25624130", blockGlobalLogIndex: 2_147_483_648 }, 10],
-    [{ blockNumber: "25624130", blockGlobalLogIndex: -1 }, 0],
-    [{ blockNumber: "25624130", blockGlobalLogIndex: -1 }, 33],
+    [{ blockNumber: "-1", blockGlobalLogIndex: -1, candidateId: "" }, 10],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: -2, candidateId: "" }, 10],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: 1.5, candidateId: "" }, 10],
+    [
+      {
+        blockNumber: "25624130",
+        blockGlobalLogIndex: 2_147_483_648,
+        candidateId: "",
+      },
+      10,
+    ],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: 0, candidateId: "" }, 10],
+    [
+      {
+        blockNumber: "25624130",
+        blockGlobalLogIndex: 0,
+        candidateId: "not-a-candidate-id",
+      },
+      10,
+    ],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: -1, candidateId: "" }, 0],
+    [{ blockNumber: "25624130", blockGlobalLogIndex: -1, candidateId: "" }, 33],
   ])("rejects an invalid cursor or limit before fetching", async (cursor, limit) => {
     const fetcher = vi.fn();
     const client = createEnvioClient({
@@ -599,7 +623,87 @@ describe("Envio candidate cursor adapter", () => {
 
     await expect(
       client.readCandidatesAfter({
-        cursor: { blockNumber: "25624131", blockGlobalLogIndex: 7 },
+        cursor: {
+          blockNumber: "25624131",
+          blockGlobalLogIndex: 7,
+          candidateId: CANDIDATE_ID,
+        },
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it("uses candidate identity as a stable-snapshot tie breaker", async () => {
+    const forkReplacement = placedCandidate({
+      blockNumber: "25624131",
+      blockGlobalLogIndex: 7,
+      blockHash: SECOND_BLOCK_HASH,
+      transactionHash: SECOND_TRANSACTION_HASH,
+    });
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () =>
+        json({ data: { ChainEvent: [forkReplacement] } }),
+    });
+
+    await expect(
+      client.readCandidatesAfter({
+        cursor: {
+          blockNumber: "25624131",
+          blockGlobalLogIndex: 7,
+          candidateId: CANDIDATE_ID,
+        },
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        candidateId:
+          `1:${SECOND_BLOCK_HASH}:${SECOND_TRANSACTION_HASH}:7`,
+      }),
+    ]);
+  });
+
+  it("snapshots cursor fields before validating and requesting a page", async () => {
+    let ordinalReads = 0;
+    const cursor = {
+      blockNumber: "25624130",
+      get blockGlobalLogIndex() {
+        ordinalReads += 1;
+        return ordinalReads === 1 ? -1 : 0;
+      },
+      candidateId: "",
+    };
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async (_url, init) => {
+        const request = JSON.parse(String(init?.body)) as {
+          variables: Record<string, unknown>;
+        };
+        expect(request.variables).toMatchObject({
+          afterBlock: "25624130",
+          afterLogIndex: -1,
+          afterCandidateId: "",
+        });
+        return json({ data: { ChainEvent: [] } });
+      },
+    });
+
+    await expect(client.readCandidatesAfter({ cursor })).resolves.toEqual([]);
+    expect(ordinalReads).toBe(1);
+  });
+
+  it("rejects a lexical predecessor at the same block and log position", async () => {
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () => json({ data: { ChainEvent: [candidate()] } }),
+    });
+
+    await expect(
+      client.readCandidatesAfter({
+        cursor: {
+          blockNumber: "25624131",
+          blockGlobalLogIndex: 7,
+          candidateId:
+            `1:${SECOND_BLOCK_HASH}:${SECOND_TRANSACTION_HASH}:7`,
+        },
       }),
     ).rejects.toMatchObject({ code: "validation_failed" });
   });
@@ -619,7 +723,11 @@ describe("Envio candidate cursor adapter", () => {
 
       await expect(
         client.readCandidatesAfter({
-          cursor: { blockNumber: "25624130", blockGlobalLogIndex: -1 },
+          cursor: {
+            blockNumber: "25624130",
+            blockGlobalLogIndex: -1,
+            candidateId: "",
+          },
         }),
       ).rejects.toMatchObject({ code: "validation_failed" });
     }
@@ -638,7 +746,11 @@ describe("Envio candidate cursor adapter", () => {
 
       await expect(
         client.readCandidatesAfter({
-          cursor: { blockNumber: "25624130", blockGlobalLogIndex: -1 },
+          cursor: {
+            blockNumber: "25624130",
+            blockGlobalLogIndex: -1,
+            candidateId: "",
+          },
           limit: 1,
         }),
       ).rejects.toMatchObject({ code: "validation_failed" });

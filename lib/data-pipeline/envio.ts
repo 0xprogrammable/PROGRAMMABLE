@@ -55,6 +55,7 @@ const CANDIDATES_AFTER_QUERY = `
   query ProgrammableCandidatesAfter(
     $afterBlock: numeric!
     $afterLogIndex: Int!
+    $afterCandidateId: String!
     $first: Int!
   ) {
     ChainEvent(
@@ -67,9 +68,20 @@ const CANDIDATES_AFTER_QUERY = `
               { blockGlobalLogIndex: { _gt: $afterLogIndex } }
             ]
           }
+          {
+            _and: [
+              { blockNumber: { _eq: $afterBlock } }
+              { blockGlobalLogIndex: { _eq: $afterLogIndex } }
+              { id: { _gt: $afterCandidateId } }
+            ]
+          }
         ]
       }
-      order_by: [{ blockNumber: asc }, { blockGlobalLogIndex: asc }]
+      order_by: [
+        { blockNumber: asc }
+        { blockGlobalLogIndex: asc }
+        { id: asc }
+      ]
       limit: $first
     ) {
       id
@@ -274,29 +286,53 @@ export type EnvioCandidate = {
 export type EnvioCandidateCursor = {
   blockNumber: string;
   blockGlobalLogIndex: number;
+  candidateId: string;
 };
 
 function canonicalCandidateCursor(
   value: EnvioCandidateCursor,
 ): EnvioCandidateCursor {
+  const inputBlockNumber = value?.blockNumber;
+  const blockGlobalLogIndex = value?.blockGlobalLogIndex;
+  const candidateId = value?.candidateId;
   let blockNumber: string;
   try {
-    blockNumber = parseNonnegativeIntegerText(value?.blockNumber);
+    blockNumber = parseNonnegativeIntegerText(inputBlockNumber);
   } catch {
     throw invalidInput("envio", "candidate-cursor");
   }
   if (
-    !Number.isSafeInteger(value?.blockGlobalLogIndex) ||
-    value.blockGlobalLogIndex < -1 ||
-    value.blockGlobalLogIndex > GRAPHQL_INT_MAXIMUM
+    !Number.isSafeInteger(blockGlobalLogIndex) ||
+    blockGlobalLogIndex < -1 ||
+    blockGlobalLogIndex > GRAPHQL_INT_MAXIMUM
   ) {
     throw invalidInput("envio", "candidate-cursor");
   }
-  return { blockNumber, blockGlobalLogIndex: value.blockGlobalLogIndex };
+  const candidateMatch =
+    typeof candidateId === "string"
+      ? CANDIDATE_PATTERN.exec(candidateId)
+      : null;
+  const isGenesisCursor =
+    blockGlobalLogIndex === -1 && candidateId === "";
+  const isPlacedCursor =
+    blockGlobalLogIndex >= 0 &&
+    candidateMatch !== null &&
+    BigInt(candidateMatch[3]) === BigInt(blockGlobalLogIndex);
+  if (!isGenesisCursor && !isPlacedCursor) {
+    throw invalidInput("envio", "candidate-cursor");
+  }
+  return {
+    blockNumber,
+    blockGlobalLogIndex,
+    candidateId,
+  };
 }
 
 function placementAfter(
-  candidate: Pick<EnvioCandidate, "blockNumber" | "blockGlobalLogIndex">,
+  candidate: Pick<
+    EnvioCandidate,
+    "blockNumber" | "blockGlobalLogIndex" | "candidateId"
+  >,
   cursor: EnvioCandidateCursor,
 ) {
   const candidateBlock = BigInt(candidate.blockNumber);
@@ -304,7 +340,9 @@ function placementAfter(
   return (
     candidateBlock > cursorBlock ||
     (candidateBlock === cursorBlock &&
-      candidate.blockGlobalLogIndex > cursor.blockGlobalLogIndex)
+      (candidate.blockGlobalLogIndex > cursor.blockGlobalLogIndex ||
+        (candidate.blockGlobalLogIndex === cursor.blockGlobalLogIndex &&
+          candidate.candidateId > cursor.candidateId)))
   );
 }
 
@@ -716,6 +754,7 @@ export function createEnvioClient(options: {
           variables: {
             afterBlock: cursor.blockNumber,
             afterLogIndex: cursor.blockGlobalLogIndex,
+            afterCandidateId: cursor.candidateId,
             first: limit,
           },
         });
@@ -744,6 +783,7 @@ export function createEnvioClient(options: {
             previous = {
               blockNumber: parsed.blockNumber,
               blockGlobalLogIndex: parsed.blockGlobalLogIndex,
+              candidateId: parsed.candidateId,
             };
           }
           return result;
