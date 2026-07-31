@@ -554,16 +554,22 @@ hash, never `latest`.
 
 ### Historical getter path
 
-The preferred method sends every `eth_call` independently to both RPCs with
-the EIP-1898 block parameter:
+The verifier first attempts the complete getter set below independently against
+both RPCs with the EIP-1898 block parameter:
 
 ```json
 { "blockHash": "<canonical creation block hash>", "requireCanonical": true }
 ```
 
-Both RPCs must return the same normalized values. If either RPC cannot serve
-that historical hash, the verifier uses the transaction-input path below; it
-does not downgrade to an unpinned `latest` or single-RPC call.
+When that snapshot represents the initial allocation under the source-specific
+rules below, call the applicable factory `predict(...)` against both RPCs with
+the same block parameter and recovered initial arrays. This path is selected
+only when both RPCs serve the complete getter and prediction set and return the
+same normalized values. If either RPC cannot serve that historical hash or any
+required call, or the snapshot cannot itself supply the initial allocation,
+the verifier selects the transaction-input path below. It does not downgrade
+to an unpinned `latest`, mix authority paths, or use a single-RPC result as
+authority.
 
 For `ClassicRewardVaultV1`, read:
 
@@ -583,11 +589,15 @@ poolId() returns (bytes32)
 Also read
 `ClassicRewardVaultFactoryV1.configurationHashOf(address vault)`. When
 `configurationEpoch() == 1`, the ordered `beneficiaryAt` and `shareBpsAt`
-arrays are the initial allocation. If a later transaction in the creation
-block already advanced the epoch, recover the initial arrays from calldata,
-then replay later canonical `PayoutWalletChanged` or
-`CtoRewardConfigurationActivated` occurrences in transaction/log order and
-require the result to equal the creation-block getter snapshot.
+arrays are the initial allocation and `historical_getters` may be the selected
+recovery method. If a later transaction in the creation block already advanced
+the epoch, the getter snapshot is not initial-seed authority: select the
+applicable calldata recovery method, recover the initial arrays from that
+calldata, then replay later canonical `PayoutWalletChanged` or
+`CtoRewardConfigurationActivated` occurrences in transaction/receipt-log order.
+When both RPCs served the complete getter snapshot, require the replay result
+to equal it as conditional enrichment. This does not change the calldata
+recovery method or mix getter-derived values into the initial seed.
 
 For `QuoteAssetFeeSplitVaultV1`, read:
 
@@ -609,6 +619,17 @@ Stock-Paired beneficiaries and shares are immutable; payout addresses may
 change. At the creation block, each initial payout address must equal its
 beneficiary unless a later canonical `PayoutAddressUpdated` occurrence in that
 same block explains the end-of-block value.
+
+Provider equality alone does not verify a `historical_getters` seed. Recompute
+the configuration commitments below from the returned ordered allocation and
+dependencies, and require them to equal both RPCs' vault and factory getters
+and every applicable dual-RPC-canonical event commitment. For Classic epoch
+one, the recomputed active-configuration commitment must also equal both
+`activeConfigurationHash()` results. All getter dependencies must agree with
+the manifest and canonical factory, launcher, and hook event fields. Finally,
+both RPCs' exact-block factory `predict(...)` results must equal each other,
+the local CREATE2 result, and the vault emitted by the canonical factory
+occurrence. Any mismatch rejects this path.
 
 ### Transaction-input path
 
@@ -663,8 +684,11 @@ Stock V3 salt =
 For a direct factory transaction use its decoded `salt`. Rebuild the exact
 factory `initCode`, compute
 `keccak256(0xff ++ factory ++ salt ++ keccak256(initCode))[12:]`, and require
-that address to equal the emitted vault. The locally rebuilt address must also
-equal both RPCs' exact-block `predict(...)` result.
+that address to equal the emitted vault. The init code uses the
+manifest-pinned release artifact and immutable constructor dependencies plus
+the decoded allocation and canonical event fields. This local computation is
+required for every transaction-input recovery and does not depend on an
+`eth_call` to the factory's exact-block `predict(...)`.
 
 Recompute and verify the constructor commitments:
 
@@ -688,18 +712,50 @@ Stock configurationHash =
   ))
 ```
 
-The result must match both RPCs' vault and factory getters, the deterministic
-CREATE2 prediction from the factory inputs, and the emitted vault address. For
-Classic it must also match the factory event and launcher
-`rewardConfigurationHash`; for Stock-Paired it must match the hook
-`PoolRegistered.rewardConfigurationHash`.
+For the transaction-input path, the following evidence is sufficient seed
+authority:
+
+1. both RPCs return the identical top-level transaction fields and identical
+   successful receipt required above, including the canonical factory
+   occurrence;
+2. the manifest-pinned destination and exact selector decode without trailing
+   or non-canonical input, and the decoded ordered allocation passes every
+   bound and invariant above;
+3. the locally rebuilt release-specific init code and CREATE2 computation
+   produce the emitted vault address; and
+4. all related dual-RPC-canonical events agree with the decoded and recomputed
+   values. For Classic, the factory and launcher events must agree on vault,
+   pool, and hook; the factory `configurationHash` and launcher
+   `rewardConfigurationHash` must equal the local commitment; and the
+   factory-event salt must equal the salt locally derived from the launcher
+   inputs. For Stock-Paired, the factory, launcher, and hook `PoolRegistered`
+   occurrences must agree on vault, pool, hook, quote asset, and
+   `PoolRegistered.rewardConfigurationHash`. A direct factory deployment
+   requires its canonical factory occurrence and local CREATE2/commitment
+   agreement but remains ineligible as a public launch without the launcher
+   and hook occurrences.
+
+The local configuration commitment must equal every applicable canonical
+event commitment and the locally derived CREATE2 address must equal the
+emitted vault. No historical getter or exact-block `predict(...)` call is a
+prerequisite for this calldata authority.
+
+Historical getters and `predict(...)` are conditional enrichment for a
+calldata-recovered seed. Compare them only when both RPCs serve the complete
+exact-creation-block set and return identical normalized results. A served
+comparison that disagrees with the local values quarantines the seed. If
+either RPC cannot serve the complete set, record the enrichment as unavailable
+and do not require, compare, or trust the other RPC's partial result.
 
 The seed record retains:
 
 ```text
 chain_id
 factory_event_logical_identity
+factory_event_receipt_log_ordinal
 factory_occurrence_block_hash
+factory_occurrence_block_global_log_index
+factory_envio_candidate_id
 creation_block_number
 creation_transaction_index
 vault
@@ -713,7 +769,15 @@ ordered_shares_bps
 allocation_hash
 configuration_hash
 active_configuration_hash
-getter_block_hash
+local_init_code_hash
+local_create2_address
+canonical_event_occurrence_ids
+historical_enrichment_status = matched|unavailable
+getter_block_hash = <canonical_creation_block_hash>|null
+getter_result_hash_a = <hash>|null
+getter_result_hash_b = <hash>|null
+predict_result_hash_a = <hash>|null
+predict_result_hash_b = <hash>|null
 rpc_a_result_hash
 rpc_b_result_hash
 verification_run_id
@@ -723,33 +787,79 @@ verified_at
 `active_configuration_hash` is the Classic epoch-one commitment; it is `null`
 for the immutable Stock-Paired allocation.
 
-No seed is verified before finality. A getter/calldata, RPC, CREATE2, event, or
-commitment mismatch quarantines the seed and its launch/reward projections.
-If the creation occurrence is orphaned, append an orphaned seed status and
-recover a new seed against the newly canonical occurrence, even when the
-logical transaction hash and log index are unchanged.
+`rpc_a_result_hash` and `rpc_b_result_hash` commit to the selected authority
+path: the complete normalized historical snapshot for `historical_getters`, or
+the normalized transaction and successful receipt for a calldata path.
+Historical-enrichment fields are nullable only when the status is
+`unavailable`.
+
+No seed is verified before finality. A mismatch in the selected authority
+path, dual-RPC evidence, local CREATE2 result, canonical events, commitments,
+or a fully served historical enrichment quarantines the seed and its
+launch/reward projections. Historical-state unavailability alone does not
+quarantine a calldata-authorized seed. If the creation occurrence is orphaned,
+append an orphaned seed status and recover a new seed against the newly
+canonical occurrence, even when the logical transaction hash and receipt-local
+log ordinal are unchanged.
 
 ## Candidate identity, occurrence, and release assignment
 
-Every event entity uses:
+JSON-RPC `logIndex` is block-global, not transaction-receipt-local. It can
+change when the same transaction is re-mined after a different number of
+preceding block logs. Envio handlers cannot obtain a receipt-local ordinal
+without a network read, so they do not create the application identity.
+
+Every Envio event entity instead uses the fork-specific candidate identity:
 
 ```text
-id = "<chain_id>:<lowercase_transaction_hash>:<log_index>"
+candidate_id =
+  "<chain_id>:<lowercase_block_hash>:<lowercase_transaction_hash>:<block_global_log_index>"
 ```
 
-This is the logical identity. A transaction can be re-mined at a different
-placement, so each Envio candidate also uses the fork-occurrence key:
+The candidate stores the source address, block number/hash, transaction
+hash/index, block-global `logIndex`, topics, data, decoded payload, event type,
+and release hint as lowercase `0x`-prefixed hex strings where applicable. It
+is only upstream evidence.
+
+The projector fetches the transaction receipt independently from both RPCs and
+normalizes all receipt fields and the complete ordered log array. It rejects
+or defers the candidate unless:
+
+- both complete normalized receipts are byte-for-byte equal and successful;
+- their transaction hash, block number/hash, and transaction index equal the
+  candidate placement;
+- exactly one receipt log has the candidate's block-global `logIndex`; and
+- that receipt log's address, topics, and data exactly equal the candidate.
+
+The zero-based position of that exact log in the equal `receipt.logs` arrays is
+the `receipt_log_ordinal`. Only the projector then creates:
 
 ```text
+logical_id =
+  "<chain_id>:<lowercase_transaction_hash>:<receipt_log_ordinal>"
+
 occurrence_id =
-  "<chain_id>:<lowercase_transaction_hash>:<log_index>:<lowercase_block_hash>"
+  "<chain_id>:<lowercase_transaction_hash>:<receipt_log_ordinal>:<lowercase_block_hash>"
 ```
 
+The application stores strict 20-byte addresses and 32-byte hashes as
+Supabase `bytea`, preserving leading zeroes; the shared server codec rejects
+missing prefixes, malformed digits, odd lengths, and incorrect typed widths.
+Fixed-width addresses, hashes, and four-byte selectors may not be empty.
+Variable-length raw event data accepts exactly `0x` as the canonical encoding
+of zero bytes, including for indexed-only events such as
+`QuoteAssetFeeSplitVaultV1.PayoutAddressUpdated`.
 The application stores logical identities separately from occurrences. The
 occurrence key is unique and retains block number/hash, transaction index,
-source address, event type, raw topics/data, decoded payload, payload hash, and
-release version. Different block hashes for the same logical identity are
-retained, not overwritten.
+receipt-local ordinal, block-global `logIndex`, Envio candidate ID, source
+address, event type, raw topics/data, decoded payload, payload hash, and
+release version.
+
+When the same transaction is re-mined, a different block hash or block-global
+`logIndex` produces a new Envio candidate. If both equal receipts place the
+same log at the same receipt-local ordinal, it maps to the same logical
+identity and a new occurrence. Different block hashes for one logical identity
+are retained, not overwritten.
 
 Only an occurrence whose receipt, exact log, block, and successful status match
 on both RPCs at or below the safe head is canonical. At most one occurrence per
@@ -757,8 +867,8 @@ logical identity may be current-canonical. A changed payload on a re-mined
 occurrence is preserved and raises a high-severity reorg finding; after
 dual-RPC agreement the old placement becomes orphaned, the new placement
 becomes canonical, and only the new occurrence enters the fold. Different
-content for the same full occurrence key is an integrity conflict and freezes
-promotion.
+content or block-global `logIndex` for the same full occurrence key is an
+integrity conflict and freezes promotion.
 
 Static address and inclusive start block assign the release before decoding.
 The shared Stock-Paired V2/V3 hook and vault factory use related launcher,
@@ -791,8 +901,10 @@ conflicting duplicates.
 - Launcher `rewardVault` must match the corresponding factory event and hook
   registration before reward history is promoted.
 - The initial ordered reward allocation must have a verified seed tied to the
-  canonical factory occurrence and must satisfy the getter/calldata,
-  commitment, and CREATE2 checks above.
+  canonical factory occurrence and must satisfy its selected authority path,
+  commitment, local CREATE2, and canonical-event checks above. Historical
+  getter/prediction enrichment is not required when either RPC cannot serve
+  the complete exact-block set.
 - Hook registration and fee disclosure must match the recorded pool and
   canonical PoolKey.
 

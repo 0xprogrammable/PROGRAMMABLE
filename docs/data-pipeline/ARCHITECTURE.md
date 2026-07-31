@@ -18,9 +18,10 @@ specific to those models stay on their current path.
 
 The system has three distinct data authorities:
 
-1. Ethereum logs and manifest-pinned runtime state are authoritative for
+1. Canonical Ethereum transactions, including calldata, their successful
+   receipts and logs, and manifest-pinned runtime state are authoritative for
    Programmable launches, configuration, fees, rewards, payouts, and claims.
-   Envio HyperIndex makes those records available quickly, but its records are
+   Envio HyperIndex makes log records available quickly, but its records are
    candidates until the application verifies and promotes them.
 2. The pinned Uniswap v4 subgraph is the only approved offchain analytics
    source for this migration. Ethereum remains authoritative. The subgraph
@@ -28,7 +29,9 @@ The system has three distinct data authorities:
    pool, or supply transaction calldata.
 3. Supabase Postgres owns application metadata, profile data, the immutable
    application event ledger, verified projections, reconciliation results, and
-   checkpoints. Browser roles have no direct table access.
+   checkpoints. Browser roles have no direct table access. Browser- or
+   API-supplied metadata is descriptive only and cannot establish or override
+   an Ethereum fact.
 
 Launch, trade, claim, payout-update, and reward-conversion preparation remains
 manifest-derived, revalidated by two independent RPCs, and simulated before a
@@ -132,10 +135,21 @@ state. The factory event in the application ledger is the durable evidence.
 Initial reward beneficiaries and shares are constructor inputs, not indexed
 events. Envio handlers do not attempt to recover them and retain the same
 no-network-effects rule. After an occurrence reaches the safe head, a separate
-server-only seed verifier reads both RPCs at the exact creation block hash or,
-when historical getters are unavailable, verifies and decodes the identical
-transaction input returned by both RPCs. The source-specific methods, selectors,
-getter sets, commitments, and fallback rules are defined in
+server-only seed verifier first attempts the complete exact-creation-block
+getter snapshot against both RPCs. Only when that snapshot itself supplies the
+initial allocation does the verifier call factory `predict(...)` with those
+arrays and permit `historical_getters` as the recovery method. When either RPC
+cannot serve the complete set, or the snapshot reflects a later configuration
+and cannot supply the initial allocation, the verifier instead requires
+identical transaction input and a successful receipt from both RPCs, decodes
+only the manifest-pinned destination and selector, locally rebuilds the
+release-pinned factory init code, CREATE2 address, and configuration
+commitments, and requires agreement with the dual-RPC-canonical factory,
+launcher, and hook events. That calldata-and-event proof is sufficient without
+any exact-block getter or `predict(...)` call. Historical getter and prediction
+comparisons are conditional enrichment only when both RPCs can serve the
+complete set. The source-specific methods, selectors, getter sets,
+commitments, and fallback rules are defined in
 [EVENT-SOURCES.md](./EVENT-SOURCES.md).
 
 ### 2. Safe head
@@ -159,31 +173,67 @@ The projector records both observed heads, the safe-head number and hash, RPC
 endpoint identifiers (never URLs or credentials), and the observation time in
 each projection run.
 
-### 3. Immutable logical identities and fork occurrences
+### 3. Candidate matching, logical identities, and fork occurrences
 
-The immutable logical event identity remains:
+Ethereum JSON-RPC `logIndex` is block-global. It can change when the same
+transaction is re-mined after a different number of preceding logs, so it is
+placement metadata and never part of the application logical identity.
+
+Envio cannot derive a receipt-local ordinal without an RPC read, which is
+forbidden in handlers. Its deterministic candidate key is therefore
+fork-specific:
 
 ```text
-(chain_id, transaction_hash, log_index)
+(chain_id, block_hash, transaction_hash, block_global_log_index)
 ```
 
-It identifies one logical receipt-log position but is not a database primary
-key for chain placement: the same transaction can be re-mined with the same log
-index at a different block. The append-only ledger therefore uses two layers:
+For every candidate, the projector obtains the transaction receipt from both
+RPCs. It proceeds only when the complete normalized receipts are equal and
+successful, their block hash/number and transaction index match the candidate,
+and exactly one receipt log has the candidate's block-global `logIndex`,
+address, topics, and data. The zero-based array position of that exact log in
+`receipt.logs` is `receipt_log_ordinal`.
+
+Only that downstream dual-RPC step creates the immutable application identity:
+
+```text
+(chain_id, transaction_hash, receipt_log_ordinal)
+```
+
+It identifies one logical position inside the transaction receipt but is not a
+database primary key for chain placement. The append-only ledger therefore
+uses two layers:
 
 ```text
 chain_event_identity
-  primary key (chain_id, transaction_hash, log_index)
+  primary key (chain_id, transaction_hash, receipt_log_ordinal)
 
 chain_event_occurrence
-  primary key (chain_id, transaction_hash, log_index, block_hash)
-  foreign key (chain_id, transaction_hash, log_index)
+  primary key (
+    chain_id, transaction_hash, receipt_log_ordinal, block_hash
+  )
+  foreign key (chain_id, transaction_hash, receipt_log_ordinal)
 ```
 
-Addresses and hashes are stored as lowercase hex. Each occurrence retains:
+Envio entity addresses and hashes remain canonical lowercase `0x`-prefixed hex
+strings. At the server boundary one shared codec requires the prefix, even
+hex length, and the exact width for each typed value; preserves leading zero
+bytes; and rejects malformed, odd-length, overlong, or underlong input.
+Supabase stores addresses as strict 20-byte `bytea` and transaction, block,
+topic, payload, configuration, and launch hashes as strict 32-byte `bytea`
+where applicable, and method selectors as strict 4-byte `bytea`; fixed-width
+values may never be empty. Variable event data remains `bytea` and explicitly
+accepts canonical `0x` as zero bytes for indexed-only events, while rejecting a
+missing prefix, non-hex digits, or an odd number of digits. API/provider
+adapters encode database bytes back to canonical lowercase hex; database
+comparison never depends on text casing.
+
+Each occurrence retains:
 
 - block number and block hash;
 - transaction index;
+- the RPC block-global `logIndex`;
+- the Envio fork-specific candidate key;
 - source address;
 - event type;
 - ordered topics and raw data;
@@ -193,21 +243,23 @@ Addresses and hashes are stored as lowercase hex. Each occurrence retains:
 - first-seen Envio cursor; and
 - first verification run ID.
 
-Two occurrences of one logical identity may have different placement or
-payload because execution after re-mining can observe different block context.
-Both are retained. The same occurrence key with different block number,
-transaction index, source, event type, topics, data, or payload hash is a hard
-integrity conflict and is never overwritten.
+Two occurrences of one logical identity may have a different block-global
+`logIndex`, placement, or payload because execution after re-mining can observe
+different block context. Both are retained. The same occurrence key with
+different block number, transaction index, block-global `logIndex`, source,
+event type, topics, data, or payload hash is a hard integrity conflict and is
+never overwritten.
 
 Canonicality is not mutated into either raw row.
 `chain_event_occurrence_status_history` appends `observed`, `canonical`,
 `orphaned`, `superseded`, or `conflicted` decisions and the complete two-RPC
 receipt/block evidence. To select `canonical`, both RPCs must return the same
 successful receipt, block hash/number, transaction index, and log at the
-logical log index; that block must be at or below the safe head. A database
-constraint permits at most one current canonical occurrence for a logical
-identity. RPC disagreement or two competing canonical placements freezes
-advancement.
+stored receipt-local ordinal, and that log must still equal the stored
+block-global `logIndex`, address, topics, and data. The block must be at or
+below the safe head. A database constraint permits at most one current
+canonical occurrence for a logical identity. RPC disagreement or two
+competing canonical placements freezes advancement.
 
 A re-mined occurrence with a changed payload produces a high-severity reorg
 finding, not a destructive update to the old row. Once both RPCs agree on the
@@ -236,16 +288,19 @@ Projection code is a deterministic fold over only the current canonical
 occurrence for each logical identity, ordered by:
 
 ```text
-block_number, transaction_index, log_index
+block_number, transaction_index, receipt_log_ordinal
 ```
 
 An occurrence that is merely observed, superseded, conflicted, or orphaned is
 never folded. Reward-allocation projections additionally require a verified
 seed record tied to the same canonical factory occurrence. Seed provenance
-stores the creation occurrence key, recovery method, method selector, input
-hash, normalized allocation hash, both RPC result hashes, exact block
-number/hash, getter set or decoded calldata path, configuration commitments,
-verification run, and finality time.
+stores the creation logical identity and occurrence key, receipt-local ordinal,
+block-global `logIndex`, Envio candidate ID, recovery method, method selector,
+input hash, normalized allocation hash, both RPC transaction/receipt evidence
+hashes, exact block number/hash, the getter set or decoded calldata path, local
+init-code and CREATE2 results, configuration commitments, canonical event
+references, nullable dual-RPC historical-enrichment results, verification run,
+and finality time.
 
 The projection transaction writes derived rows, reconciliation results, and
 the checkpoint atomically. An API route never discovers or inserts a vault,
@@ -257,13 +312,15 @@ The reconciler performs six independent comparisons:
 
 1. Envio candidate identities and payload hashes against dual-RPC logs.
 2. Every occurrence placement and status against both RPC receipts and blocks.
-3. Initial reward seeds against historical getters or verified transaction
-   calldata, factory/vault commitments, and the canonical creation occurrence.
+3. Initial reward seeds against either a complete dual-RPC historical snapshot
+   or the sufficient transaction-calldata, local CREATE2/commitment, and
+   canonical-event proof.
 4. Projection aggregates against a fresh fold of canonical occurrences.
 5. Existing DTOs from the indexed resolver against the legacy Blob/RPC
    resolver.
 6. Reward allocations reconstructed from the seed plus later canonical
-   payout/configuration events against exact-block vault getters.
+   payout/configuration events, enriched by exact-block vault getters only
+   when both RPCs serve the complete comparison snapshot.
 
 Reconciliation results are append-only and name the source range, release
 version, compared counts, mismatch identities, run version, and timestamps.
