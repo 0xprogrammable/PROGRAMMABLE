@@ -1,6 +1,7 @@
 import "server-only";
 
 import { dataPipelineError } from "./errors";
+import { validatedPostgresConnectionString } from "./postgres-connection.server";
 
 export const INDEXED_ROUTE_FLAG_NAMES = [
   "INDEXED_EXPLORE_LIST_READS_ENABLED",
@@ -91,17 +92,7 @@ function parseHttpsUrl(value: string | undefined): string | undefined {
 function parseDatabaseUrl(value: string | undefined): string | undefined {
   if (value === undefined || value === "") return undefined;
   try {
-    const url = new URL(value);
-    if (
-      url.protocol !== "postgresql:" ||
-      url.username === "" ||
-      url.password === "" ||
-      url.hostname === "" ||
-      url.hash !== ""
-    ) {
-      return invalidConfig();
-    }
-    return value;
+    return validatedPostgresConnectionString(value);
   } catch {
     return invalidConfig();
   }

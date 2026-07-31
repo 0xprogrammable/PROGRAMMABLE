@@ -20,6 +20,7 @@ import {
   invalidInput,
   validationError,
 } from "./errors";
+import { validatedPostgresConnectionString } from "./postgres-connection.server";
 
 export type PostgresParameter =
   | null
@@ -91,13 +92,9 @@ export function createPostgresExecutor(input: {
   idleTimeoutMs?: number;
   postgresFactory?: PostgresFactory;
 }): PostgresExecutor {
-  if (
-    !/^postgresql:\/\/[^/\s]+\/[^?\s]+(?:\?[^\s#]*)?$/.test(
-      input.connectionString,
-    )
-  ) {
-    throw invalidInput("postgres", "connection-string");
-  }
+  const connectionString = validatedPostgresConnectionString(
+    input.connectionString,
+  );
   const options = postgresDriverOptions({
     maxConnections: input.maxConnections ?? 2,
     connectTimeoutMs: input.connectTimeoutMs ?? 1_000,
@@ -111,7 +108,7 @@ export function createPostgresExecutor(input: {
         driverOptions,
       ) as unknown as Sql<NoCustomPostgresTypes>);
   const sql = factory(
-    input.connectionString,
+    connectionString,
     options,
   );
 
