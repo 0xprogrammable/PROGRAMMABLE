@@ -49,14 +49,14 @@
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
-  padding: 26px;
+  padding: 28px;
 }
 
 .identity {
   align-items: center;
   display: grid;
-  gap: 24px;
-  grid-template-columns: 126px minmax(0, 1fr);
+  gap: 22px;
+  grid-template-columns: 122px minmax(0, 1fr);
 }
 
 .image {
@@ -140,18 +140,29 @@
   width: 44px;
 }
 
+.tokenMeta {
+  align-items: flex-end;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-top: 20px;
+  min-width: 0;
+}
+
 .description {
   color: var(--text-soft);
   font-size: 14.5px;
   line-height: 1.55;
-  margin-top: 20px;
+  margin: 0;
   max-width: 68ch;
 }
 
 .links {
+  align-items: center;
   display: flex;
+  flex: none;
   gap: 7px;
-  margin-top: 13px;
+  margin: 0;
 }
 
 .socialLink {
@@ -180,26 +191,21 @@
 }
 
 .metrics {
-  border-top: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: color-mix(in srgb, var(--border) 84%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 18px;
   display: grid;
+  gap: 1px;
   grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
-  margin: 20px 0 0;
+  margin: 22px 0 0;
+  overflow: hidden;
   padding: 0;
 }
 
 .metric {
-  border-right: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: color-mix(in srgb, var(--glass-96) 94%, transparent);
   min-width: 0;
-  padding: 17px;
-}
-
-.metric:first-child {
-  padding-left: 2px;
-}
-
-.metric:last-child {
-  border-right: 0;
-  padding-right: 2px;
+  padding: 15px 17px 16px;
 }
 
 .metric dt {
@@ -280,7 +286,7 @@
 }
 
 .tradeShell {
-  align-self: start;
+  align-self: stretch;
   border-radius: 30px;
   display: flex;
   min-width: 0;
@@ -291,6 +297,7 @@
 }
 
 .tradeShell > * {
+  flex: 1;
   width: 100%;
 }
 
@@ -300,7 +307,7 @@
   animation: token-panel-enter 180ms var(--ease-out) both;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: 100%;
 }
 
 .tradeHeader {
@@ -385,11 +392,7 @@
 }
 
 .amountCardInvalid {
-  border-color: color-mix(
-    in srgb,
-    var(--danger) 48%,
-    var(--border-strong)
-  );
+  border-color: color-mix(in srgb, var(--danger) 48%, var(--border-strong));
 }
 
 .amountHeader,
@@ -406,11 +409,19 @@
   min-height: 44px;
 }
 
+.amountHeader > span:first-child {
+  flex: none;
+  white-space: nowrap;
+}
+
 .balanceRow {
   align-items: center;
   display: flex;
+  flex: 1;
   gap: 8px;
+  justify-content: flex-end;
   min-width: 0;
+  overflow: hidden;
 }
 
 .balance {
@@ -418,6 +429,7 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   max-width: 166px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -425,9 +437,8 @@
 
 .maxButton {
   appearance: none;
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  border: 1px solid
-    color-mix(in srgb, var(--accent-strong) 36%, var(--border-strong));
+  background: transparent;
+  border: 0;
   border-radius: 9px;
   box-shadow: none;
   color: var(--accent-strong);
@@ -442,7 +453,6 @@
 
 .maxButton:disabled {
   background: transparent;
-  border-color: transparent;
   color: var(--dim);
 }
 
@@ -511,6 +521,46 @@
   min-height: 16px;
 }
 
+.tradeFacts {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.tradeFacts > div {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 12px 1px;
+}
+
+.tradeFacts > div + div {
+  border-left: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  padding-left: 14px;
+}
+
+.tradeFacts dt,
+.tradeFacts dd {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.tradeFacts dt {
+  color: var(--muted);
+}
+
+.tradeFacts dd {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  margin: 0;
+}
+
 .error {
   background: color-mix(in srgb, var(--danger) 9%, transparent);
   border: 1px solid color-mix(in srgb, var(--danger) 18%, transparent);
@@ -526,6 +576,10 @@
   color: var(--muted);
   font-size: 12px;
   min-height: 17px;
+}
+
+.statusMessage:empty {
+  display: none;
 }
 
 .tradeFooter {
@@ -728,7 +782,7 @@
   }
 
   .maxButton:not(:disabled):hover {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    background: color-mix(in srgb, var(--accent) 11%, transparent);
   }
 
   .primaryAction:not(:disabled):hover {
@@ -791,6 +845,7 @@
   }
 
   .tradeShell {
+    align-self: auto;
     display: block;
     max-width: none;
     position: static;
@@ -799,6 +854,7 @@
   .tradeForm,
   .review,
   .submitted {
+    height: auto;
     min-height: 320px;
   }
 }
@@ -858,37 +914,37 @@
     font-size: 12px;
   }
 
-  .description {
-    font-size: 14px;
+  .tokenMeta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 11px;
     margin-top: 17px;
   }
 
+  .description {
+    font-size: 14px;
+  }
+
   .links {
-    margin-top: 11px;
+    margin: 0;
   }
 
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 14px;
+    margin-top: 17px;
   }
 
   .metric {
-    border-bottom: 1px solid var(--border);
     min-height: 72px;
-    padding: 13px;
+    padding: 13px 14px;
   }
 
-  .metric:first-child {
-    padding-left: 2px;
+  .metrics[data-count="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .metric:nth-child(2n) {
-    border-right: 0;
-    padding-right: 2px;
-  }
-
-  .metric:nth-last-child(-n + 2) {
-    border-bottom: 0;
+  .metrics:not([data-count="3"]) .metric:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 
   .metric dd {
@@ -903,6 +959,7 @@
   .tradeForm,
   .review,
   .submitted {
+    height: auto;
     min-height: 0;
   }
 
@@ -926,12 +983,44 @@
     font-size: clamp(27px, 8.5vw, 32px);
   }
 
+  .overview,
+  .tradeShell {
+    padding: 14px;
+  }
+
+  .metrics[data-count="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .metric {
+    padding-inline: 10px;
+  }
+
+  .metric dt {
+    font-size: 11px;
+  }
+
+  .metric dd {
+    font-size: 16px;
+  }
+
   .balance {
-    max-width: 132px;
+    max-width: 142px;
   }
 
   .amountInput {
     font-size: 32px;
+  }
+}
+
+@media (max-width: 360px) {
+  .name {
+    font-size: clamp(24px, 7.8vw, 27px);
+    letter-spacing: -0.04em;
+  }
+
+  .balance {
+    max-width: 112px;
   }
 }
 

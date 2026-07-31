@@ -63,6 +63,14 @@ export function getPriceHistoryEmptyMessage(
     : "Price history appears after confirmed trades";
 }
 
+export function shouldRenderPriceHistory(input: {
+  loading: boolean;
+  hasChart: boolean;
+  range: ChartRange;
+}) {
+  return input.loading || input.hasChart || input.range !== "all";
+}
+
 const CHART_RANGES: ReadonlyArray<{
   value: ChartRange;
   label: string;
@@ -199,6 +207,7 @@ export function TokenPriceChart({
       : request?.key === requestKey
         ? request.failed
         : false;
+  const loading = !payload && !failed;
 
   useEffect(() => {
     if (launchModel === "stock-paired") {
@@ -377,10 +386,20 @@ export function TokenPriceChart({
     }
   }
 
+  if (
+    !shouldRenderPriceHistory({
+      loading,
+      hasChart: Boolean(chart),
+      range,
+    })
+  ) {
+    return null;
+  }
+
   return (
     <section
       className={styles.shell}
-      aria-busy={!payload && !failed}
+      aria-busy={loading}
       aria-label={`${tokenName} price history`}
     >
       <span
@@ -393,11 +412,11 @@ export function TokenPriceChart({
       </span>
       <div className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Price history</p>
+          <p className={styles.eyebrow}>Price</p>
           <p className={styles.value}>
             {chart
               ? formatPrice(activePoint?.value ?? chart.current, chart.unit)
-              : launchModel === "stock-paired"
+              : !loading || launchModel === "stock-paired"
                 ? "Unavailable"
                 : "Onchain"}
           </p>
@@ -429,7 +448,7 @@ export function TokenPriceChart({
         ) : null}
       </div>
 
-      {!payload && !failed ? (
+      {loading ? (
         <div className={styles.placeholder} aria-hidden="true">
           <span className={styles.loadingLine} />
         </div>
@@ -442,6 +461,7 @@ export function TokenPriceChart({
             role="slider"
             tabIndex={0}
             aria-label={`${tokenName} price point`}
+            aria-orientation="horizontal"
             aria-valuemin={0}
             aria-valuemax={chart.points.length - 1}
             aria-valuenow={activeIndex ?? chart.points.length - 1}
@@ -528,8 +548,8 @@ export function TokenPriceChart({
           </svg>
         </div>
       ) : (
-        <div className={styles.placeholder} aria-hidden="true">
-          {emptyMessage}
+        <div className={styles.placeholder}>
+          <p>{emptyMessage}</p>
         </div>
       )}
     </section>

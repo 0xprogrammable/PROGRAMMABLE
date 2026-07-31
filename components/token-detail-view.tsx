@@ -630,7 +630,7 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
   if (metrics.length === 0) return null;
 
   return (
-    <dl className={styles.metrics}>
+    <dl className={styles.metrics} data-count={metrics.length}>
       {metrics.map((metric) => (
         <div className={styles.metric} key={metric.label}>
           <dt>{metric.label}</dt>
@@ -982,32 +982,42 @@ function TokenDetailContent({
             </div>
           </div>
 
-          {token.description?.trim() ? (
-            <p className={styles.description}>{token.description.trim()}</p>
-          ) : null}
+          {token.description?.trim() ||
+          (token.links && token.links.length > 0) ? (
+            <div className={styles.tokenMeta}>
+              {token.description?.trim() ? (
+                <p className={styles.description}>{token.description.trim()}</p>
+              ) : null}
 
-          {token.links && token.links.length > 0 ? (
-            <div className={styles.links} aria-label={`${token.name} links`}>
-              {token.links.map((link) => {
-                const label = getLinkLabel(link.kind);
-                return (
-                  <a
-                    className={`${styles.socialLink} ${
-                      link.kind === "website" ? styles.websiteLink : ""
-                    }`}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`${token.name} on ${label}`}
-                    title={label}
-                    key={`${link.kind}:${link.url}`}
-                  >
-                    <TokenLinkIcon kind={link.kind} />
-                  </a>
-                );
-              })}
+              {token.links && token.links.length > 0 ? (
+                <div
+                  className={styles.links}
+                  aria-label={`${token.name} links`}
+                >
+                  {token.links.map((link) => {
+                    const label = getLinkLabel(link.kind);
+                    return (
+                      <a
+                        className={`${styles.socialLink} ${
+                          link.kind === "website" ? styles.websiteLink : ""
+                        }`}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`${token.name} on ${label}`}
+                        title={label}
+                        key={`${link.kind}:${link.url}`}
+                      >
+                        <TokenLinkIcon kind={link.kind} />
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           ) : null}
+
+          <MetricGrid metrics={metrics} />
 
           <TokenPriceChart
             tokenAddress={token.tokenAddress}
@@ -1017,8 +1027,6 @@ function TokenDetailContent({
             onMarketCapChange={setHoveredMarketCap}
             onVolumeChange={setChartVolume}
           />
-
-          <MetricGrid metrics={metrics} />
 
           {token.launchModel === "deep" &&
           token.growthTargetNativeWei &&

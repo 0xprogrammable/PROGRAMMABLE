@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   getChartPointIndex,
   getPriceHistoryEmptyMessage,
+  shouldRenderPriceHistory,
 } from "../components/token-price-chart";
 
 const root = process.cwd();
@@ -19,7 +20,10 @@ function collectCssFiles(directory: string): string[] {
 
 describe("interaction accessibility", () => {
   it("keeps the default arrow cursor policy across app controls", () => {
-    const css = [...collectCssFiles(join(root, "app")), ...collectCssFiles(join(root, "components"))]
+    const css = [
+      ...collectCssFiles(join(root, "app")),
+      ...collectCssFiles(join(root, "components")),
+    ]
       .map((path) => readFileSync(path, "utf8"))
       .join("\n");
 
@@ -47,7 +51,9 @@ describe("interaction accessibility", () => {
     expect(source).toContain('role="group"');
     expect(source).toContain('aria-label="Wallet actions"');
     expect(source).toContain("event.relatedTarget instanceof Node");
-    expect(source).toContain("event.currentTarget.contains(event.relatedTarget)");
+    expect(source).toContain(
+      "event.currentTarget.contains(event.relatedTarget)",
+    );
   });
 
   it("dismisses the wallet disclosure with Escape and outside pointer input", () => {
@@ -66,9 +72,7 @@ describe("interaction accessibility", () => {
   it("keeps the sticky header and its wallet disclosure above page content", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
-    expect(css).not.toContain(
-      ".app-frame > main,\n.site-header,\n.mobile-nav",
-    );
+    expect(css).not.toContain(".app-frame > main,\n.site-header,\n.mobile-nav");
     expect(css).toMatch(
       /\.site-header\s*\{[^}]*position:\s*sticky;[^}]*z-index:\s*50;/s,
     );
@@ -125,13 +129,28 @@ describe("interaction accessibility", () => {
   });
 
   it("does not promise unsupported Stock-Paired chart history", () => {
-    expect(
-      getPriceHistoryEmptyMessage("stock-paired", false),
-    ).toBe(
+    expect(getPriceHistoryEmptyMessage("stock-paired", false)).toBe(
       "Historical price data is not available for Stock-Paired tokens",
     );
+    expect(getPriceHistoryEmptyMessage("classic", false)).toBe(
+      "Price history appears after confirmed trades",
+    );
+  });
+
+  it("keeps range controls available after selecting an empty chart window", () => {
     expect(
-      getPriceHistoryEmptyMessage("classic", false),
-    ).toBe("Price history appears after confirmed trades");
+      shouldRenderPriceHistory({
+        loading: false,
+        hasChart: false,
+        range: "all",
+      }),
+    ).toBe(false);
+    expect(
+      shouldRenderPriceHistory({
+        loading: false,
+        hasChart: false,
+        range: "1h",
+      }),
+    ).toBe(true);
   });
 });
