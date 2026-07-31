@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { rootCertificates } from "node:tls";
 
 vi.mock("server-only", () => ({}));
 
@@ -45,6 +46,9 @@ describe("data-pipeline configuration", () => {
       INDEXED_READ_LIVE_FALLBACK_ENABLED: "false",
       PROGRAMMABLE_POSTGRES_MAX_CONNECTIONS: "4",
       PROGRAMMABLE_POSTGRES_CONNECT_TIMEOUT_MS: "900",
+      PROGRAMMABLE_API_READER_DATABASE_URL:
+        "postgres://postgres.project:password@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=verify-full",
+      PROGRAMMABLE_POSTGRES_SSL_CA_PEM: rootCertificates[0],
       PROGRAMMABLE_ENVIO_GRAPHQL_URL: "https://envio.example/graphql",
       PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL: "https://gateway.thegraph.com",
     });
@@ -53,6 +57,7 @@ describe("data-pipeline configuration", () => {
     expect(config.flags.INDEXED_READ_LIVE_FALLBACK_ENABLED).toBe(false);
     expect(config.postgres.maxConnections).toBe(4);
     expect(config.postgres.connectTimeoutMs).toBe(900);
+    expect(config.postgres.sslCaPem).toBe(rootCertificates[0]);
     expect(config.envio.endpoint).toBe("https://envio.example/graphql");
     expect(config.uniswap.gatewayBaseUrl).toBe(
       "https://gateway.thegraph.com",
@@ -72,6 +77,22 @@ describe("data-pipeline configuration", () => {
       loadDataPipelineConfig({
         PROGRAMMABLE_ENVIO_GRAPHQL_URL:
           "https://secret:password@envio.example/graphql",
+      }),
+    ).toThrowError(DataPipelineError);
+    expect(() =>
+      loadDataPipelineConfig({
+        PROGRAMMABLE_POSTGRES_SSL_CA_PEM: "not-a-certificate",
+      }),
+    ).toThrowError(DataPipelineError);
+    expect(() =>
+      loadDataPipelineConfig({
+        PROGRAMMABLE_POSTGRES_SSL_CA_PEM: rootCertificates[0],
+      }),
+    ).toThrowError(DataPipelineError);
+    expect(() =>
+      loadDataPipelineConfig({
+        PROGRAMMABLE_API_READER_DATABASE_URL:
+          "postgres://postgres.project:password@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=verify-full",
       }),
     ).toThrowError(DataPipelineError);
   });
@@ -175,6 +196,12 @@ describe("data-pipeline configuration", () => {
     expect(thrown).toBeInstanceOf(DataPipelineError);
     expect(String(thrown)).not.toContain(secret);
     expect(JSON.stringify(thrown)).not.toContain(secret);
+    expect(() =>
+      loadDataPipelineConfig({
+        NEXT_PUBLIC_PROGRAMMABLE_POSTGRES_SSL_CA_PEM:
+          rootCertificates[0],
+      }),
+    ).toThrowError(DataPipelineError);
   });
 });
 

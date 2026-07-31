@@ -20,7 +20,10 @@ import {
   invalidInput,
   validationError,
 } from "./errors";
-import { validatedPostgresConnectionString } from "./postgres-connection.server";
+import {
+  validatedPostgresConnectionTarget,
+  validatedPostgresSslCa,
+} from "./postgres-connection.server";
 
 export type PostgresParameter =
   | null
@@ -57,7 +60,14 @@ export function postgresDriverOptions(
   settings: DriverSettings,
 ): Pick<
   Options<NoCustomPostgresTypes>,
-  "prepare" | "max" | "connect_timeout" | "idle_timeout"
+  | "prepare"
+  | "max"
+  | "connect_timeout"
+  | "idle_timeout"
+  | "fetch_types"
+  | "max_lifetime"
+  | "onnotice"
+  | "connection"
 > {
   if (
     !Number.isSafeInteger(settings.maxConnections) ||
@@ -77,6 +87,12 @@ export function postgresDriverOptions(
     max: settings.maxConnections,
     connect_timeout: Math.max(1, Math.ceil(settings.connectTimeoutMs / 1_000)),
     idle_timeout: Math.max(1, Math.ceil(settings.idleTimeoutMs / 1_000)),
+    fetch_types: false,
+    max_lifetime: 300,
+    onnotice: () => undefined,
+    connection: {
+      application_name: "programmable-read-model",
+    },
   };
 }
 
@@ -90,16 +106,34 @@ export function createPostgresExecutor(input: {
   maxConnections?: number;
   connectTimeoutMs?: number;
   idleTimeoutMs?: number;
+  sslCaPem?: string;
+  allowInsecureLoopback?: boolean;
   postgresFactory?: PostgresFactory;
 }): PostgresExecutor {
-  const connectionString = validatedPostgresConnectionString(
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+    throw invalidInput("postgres", "tls-override");
+  }
+  const target = validatedPostgresConnectionTarget(
     input.connectionString,
   );
-  const options = postgresDriverOptions({
-    maxConnections: input.maxConnections ?? 2,
-    connectTimeoutMs: input.connectTimeoutMs ?? 1_000,
-    idleTimeoutMs: input.idleTimeoutMs ?? 5_000,
-  });
+  const verifiedTls =
+    !target.isLoopback || target.sslMode === "verify-full";
+  if (!verifiedTls && input.allowInsecureLoopback !== true) {
+    throw invalidInput("postgres", "loopback-tls");
+  }
+  const options: Options<NoCustomPostgresTypes> = {
+    ...postgresDriverOptions({
+      maxConnections: input.maxConnections ?? 2,
+      connectTimeoutMs: input.connectTimeoutMs ?? 1_000,
+      idleTimeoutMs: input.idleTimeoutMs ?? 5_000,
+    }),
+    ssl: verifiedTls
+      ? {
+          ca: validatedPostgresSslCa(input.sslCaPem),
+          rejectUnauthorized: true,
+        }
+      : false,
+  };
   const factory: PostgresFactory =
     input.postgresFactory ??
     ((connectionString, driverOptions) =>
@@ -108,7 +142,7 @@ export function createPostgresExecutor(input: {
         driverOptions,
       ) as unknown as Sql<NoCustomPostgresTypes>);
   const sql = factory(
-    connectionString,
+    target.connectionString,
     options,
   );
 
@@ -770,29 +804,6 @@ function inputTimestamp(value: string, operation: string): Date {
   return parsed;
 }
 
-async function withTimeout<T>(operation: Promise<T>): Promise<T> {
-  let handle: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    handle = setTimeout(
-      () =>
-        reject(
-          dataPipelineError({
-            dependency: "postgres",
-            code: "timeout",
-            retryable: true,
-            countsTowardCircuit: true,
-          }),
-        ),
-      1_000,
-    );
-  });
-  try {
-    return await Promise.race([operation, timeout]);
-  } finally {
-    if (handle !== undefined) clearTimeout(handle);
-  }
-}
-
 export function createPostgresReadModel(input: {
   executor: PostgresExecutor;
   circuit?: CircuitBreaker;
@@ -805,27 +816,28 @@ export function createPostgresReadModel(input: {
   ): Promise<T> {
     return circuit.execute(async () => {
       try {
-        return await withTimeout(
-          input.executor.transaction(async (transaction) => {
-            await transaction.query(
-              "set local role programmable_api_reader",
-            );
-            await transaction.query(
-              "set local statement_timeout = '1000ms'",
-            );
-            await transaction.query("set local lock_timeout = '250ms'");
-            const roleRows = await transaction.query<{
-              current_role: unknown;
-            }>("select current_role::text as current_role");
-            if (
-              roleRows.length !== 1 ||
-              roleRows[0]?.current_role !== "programmable_api_reader"
-            ) {
-              throw validationError("postgres", "runtime-role");
-            }
-            return work(transaction);
-          }),
-        );
+        return await input.executor.transaction(async (transaction) => {
+          await transaction.query(
+            "set local role programmable_api_reader",
+          );
+          await transaction.query(
+            "set local statement_timeout = '1000ms'",
+          );
+          await transaction.query("set local lock_timeout = '250ms'");
+          await transaction.query(
+            "set local idle_in_transaction_session_timeout = '2000ms'",
+          );
+          const roleRows = await transaction.query<{
+            current_role: unknown;
+          }>("select current_role::text as current_role");
+          if (
+            roleRows.length !== 1 ||
+            roleRows[0]?.current_role !== "programmable_api_reader"
+          ) {
+            throw validationError("postgres", "runtime-role");
+          }
+          return work(transaction);
+        });
       } catch (error) {
         if (error instanceof DataPipelineError) throw error;
         throw dataPipelineError({

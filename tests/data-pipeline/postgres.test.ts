@@ -139,8 +139,26 @@ describe("private Postgres read-model adapter", () => {
       max: 3,
       connect_timeout: 1,
       idle_timeout: 5,
+      fetch_types: false,
+      connection: {
+        application_name: "programmable-read-model",
+      },
     });
   });
+
+  it("does not return a synthetic timeout while a transaction continues", async () => {
+    const executor = new FakeExecutor(async (text) => {
+      if (text.includes("get_recent_launches_v1")) {
+        await new Promise((resolve) => setTimeout(resolve, 1_050));
+      }
+      return [];
+    });
+    const readModel = createPostgresReadModel({ executor });
+
+    await expect(
+      readModel.recentLaunches({ chainId: "1", limit: 1 }),
+    ).resolves.toEqual([]);
+  }, 5_000);
 
   it("sets only the API-reader role and returns bytea/bigint-safe eligible launches", async () => {
     const executor = new FakeExecutor(async (text) =>
@@ -175,10 +193,11 @@ describe("private Postgres read-model adapter", () => {
         verifiedAt: "2026-07-31T08:01:00.000Z",
       }),
     ]);
-    expect(executor.queries.slice(0, 4).map((query) => query.text)).toEqual([
+    expect(executor.queries.slice(0, 5).map((query) => query.text)).toEqual([
       "set local role programmable_api_reader",
       "set local statement_timeout = '1000ms'",
       "set local lock_timeout = '250ms'",
+      "set local idle_in_transaction_session_timeout = '2000ms'",
       "select current_role::text as current_role",
     ]);
     const dataQuery = executor.queries.at(-1)!;

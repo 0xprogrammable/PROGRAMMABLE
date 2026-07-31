@@ -1,20 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
+import { rootCertificates } from "node:tls";
 
 vi.mock("server-only", () => ({}));
 
-import { validatedPostgresConnectionString } from "../../lib/data-pipeline/postgres-connection.server";
+import {
+  validatedPostgresConnectionString,
+  validatedPostgresSslCa,
+} from "../../lib/data-pipeline/postgres-connection.server";
 import { DataPipelineError } from "../../lib/data-pipeline/errors";
+import { createPostgresExecutor } from "../../lib/data-pipeline/postgres";
+
+const TEST_CA = rootCertificates[0]!;
 
 describe("Postgres connection boundary", () => {
   it("requires certificate and hostname verification for every remote database", () => {
     const verified =
-      "postgresql://reader:password@db.example/postgres?sslmode=verify-full";
+      "postgresql://reader:password@db.example:5432/postgres?sslmode=verify-full";
     const encodedCredential =
-      "postgresql://reader:p%40ssword@db.example/postgres?sslmode=verify-full";
+      "postgresql://reader:p%40ssword@db.example:5432/postgres?sslmode=verify-full";
+    const officialPooler =
+      "postgres://postgres.project:password@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=verify-full";
 
     expect(validatedPostgresConnectionString(verified)).toBe(verified);
     expect(validatedPostgresConnectionString(encodedCredential)).toBe(
       encodedCredential,
+    );
+    expect(validatedPostgresConnectionString(officialPooler)).toBe(
+      officialPooler,
     );
     for (const connectionString of [
       "postgresql://reader:password@db.example/postgres",
@@ -31,6 +43,9 @@ describe("Postgres connection boundary", () => {
       "postgresql://reader:s3cr3t@127.000.000.001/postgres",
       "postgresql://reader:s3cr3t@localhost.example/postgres",
       "postgresql://postgres:postgres@[::1]:54322/postgres",
+      "postgresql://reader:password@db.example/postgres?sslmode=verify-full",
+      "postgresql://reader:password@DB.example:5432/postgres?sslmode=verify-full",
+      "postgresql://reader:password@d\u0131.example:5432/postgres?sslmode=verify-full",
     ]) {
       expect(() =>
         validatedPostgresConnectionString(connectionString),
@@ -65,7 +80,6 @@ describe("Postgres connection boundary", () => {
     expect(JSON.stringify(thrown)).not.toContain(secret);
 
     for (const connectionString of [
-      "postgres://reader:password@db.example/postgres?sslmode=verify-full",
       "postgresql://db.example/postgres?sslmode=verify-full",
       "postgresql://reader:password@/postgres?sslmode=verify-full",
       "postgresql://reader:password@db.example/?sslmode=verify-full",
@@ -74,6 +88,93 @@ describe("Postgres connection boundary", () => {
       expect(() =>
         validatedPostgresConnectionString(connectionString),
       ).toThrowError(DataPipelineError);
+    }
+  });
+
+  it("requires a real CA and pins verified TLS for a remote pooler", async () => {
+    const connectionString =
+      "postgres://postgres.project:password@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=verify-full";
+    const factory = vi.fn((_url: string, options: unknown) =>
+      ({
+        begin: vi.fn(),
+        end: vi.fn(async () => undefined),
+        options,
+      }) as never,
+    );
+
+    expect(() =>
+      createPostgresExecutor({ connectionString, postgresFactory: factory }),
+    ).toThrowError(DataPipelineError);
+    expect(factory).not.toHaveBeenCalled();
+
+    const executor = createPostgresExecutor({
+      connectionString,
+      sslCaPem: TEST_CA,
+      postgresFactory: factory,
+    });
+    const options = factory.mock.calls[0]?.[1];
+    expect(options).toMatchObject({
+      ssl: { ca: TEST_CA, rejectUnauthorized: true },
+      fetch_types: false,
+      connection: {
+        application_name: "programmable-read-model",
+      },
+    });
+    expect(options).not.toMatchObject({
+      connection: {
+        statement_timeout: expect.anything(),
+      },
+    });
+    await executor.close();
+  });
+
+  it("rejects a global TLS bypass even when the connection has its own CA", () => {
+    vi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0");
+    try {
+      expect(() =>
+        createPostgresExecutor({
+          connectionString:
+            "postgres://postgres.project:password@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=verify-full",
+          sslCaPem: TEST_CA,
+          postgresFactory: vi.fn(() => ({}) as never),
+        }),
+      ).toThrowError(DataPipelineError);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("requires an explicit opt-in before allowing plaintext loopback", () => {
+    const connectionString =
+      "postgresql://postgres:postgres@127.0.0.1:54322/postgres?sslmode=disable";
+    const factory = vi.fn(() =>
+      ({ begin: vi.fn(), end: vi.fn(async () => undefined) }) as never,
+    );
+
+    expect(() =>
+      createPostgresExecutor({ connectionString, postgresFactory: factory }),
+    ).toThrowError(DataPipelineError);
+    expect(factory).not.toHaveBeenCalled();
+
+    expect(() =>
+      createPostgresExecutor({
+        connectionString,
+        allowInsecureLoopback: true,
+        postgresFactory: factory,
+      }),
+    ).not.toThrow();
+  });
+
+  it("validates a CA certificate without accepting keys or arbitrary PEM", () => {
+    expect(validatedPostgresSslCa(TEST_CA)).toBe(TEST_CA);
+    for (const value of [
+      undefined,
+      "not-a-certificate",
+      "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----",
+    ]) {
+      expect(() => validatedPostgresSslCa(value)).toThrowError(
+        DataPipelineError,
+      );
     }
   });
 });

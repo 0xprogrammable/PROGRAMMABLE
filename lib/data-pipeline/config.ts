@@ -1,7 +1,11 @@
 import "server-only";
 
 import { dataPipelineError } from "./errors";
-import { validatedPostgresConnectionString } from "./postgres-connection.server";
+import {
+  validatedPostgresConnectionTarget,
+  validatedPostgresConnectionString,
+  validatedPostgresSslCa,
+} from "./postgres-connection.server";
 
 export const INDEXED_ROUTE_FLAG_NAMES = [
   "INDEXED_EXPLORE_LIST_READS_ENABLED",
@@ -31,6 +35,7 @@ const BROWSER_FORBIDDEN_NAMES = [
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN",
   "NEXT_PUBLIC_PROGRAMMABLE_API_READER_DATABASE_URL",
+  "NEXT_PUBLIC_PROGRAMMABLE_POSTGRES_SSL_CA_PEM",
   "NEXT_PUBLIC_PROGRAMMABLE_UNISWAP_GRAPH_API_KEY",
   "NEXT_PUBLIC_PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
@@ -98,6 +103,15 @@ function parseDatabaseUrl(value: string | undefined): string | undefined {
   }
 }
 
+function parsePostgresSslCa(value: string | undefined): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  try {
+    return validatedPostgresSslCa(value);
+  } catch {
+    return invalidConfig();
+  }
+}
+
 function optionalSecret(value: string | undefined): string | undefined {
   if (value === undefined || value === "") return undefined;
   if (
@@ -120,6 +134,7 @@ export type DataPipelineConfig = {
   };
   postgres: {
     connectionString?: string;
+    sslCaPem?: string;
     maxConnections: number;
     connectTimeoutMs: number;
     idleTimeoutMs: number;
@@ -198,6 +213,21 @@ export function loadDataPipelineConfig(
   ) {
     invalidConfig();
   }
+  const postgresConnectionString = parseDatabaseUrl(
+    env.PROGRAMMABLE_API_READER_DATABASE_URL,
+  );
+  const postgresSslCaPem = parsePostgresSslCa(
+    env.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
+  );
+  if (!postgresConnectionString && postgresSslCaPem) invalidConfig();
+  if (postgresConnectionString) {
+    const target = validatedPostgresConnectionTarget(
+      postgresConnectionString,
+    );
+    const requiresCa =
+      !target.isLoopback || target.sslMode === "verify-full";
+    if (requiresCa && !postgresSslCaPem) invalidConfig();
+  }
 
   return Object.freeze({
     flags: Object.freeze(flags),
@@ -213,9 +243,8 @@ export function loadDataPipelineConfig(
       ),
     }),
     postgres: Object.freeze({
-      connectionString: parseDatabaseUrl(
-        env.PROGRAMMABLE_API_READER_DATABASE_URL,
-      ),
+      connectionString: postgresConnectionString,
+      sslCaPem: postgresSslCaPem,
       maxConnections: parseInteger(
         env.PROGRAMMABLE_POSTGRES_MAX_CONNECTIONS,
         2,

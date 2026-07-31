@@ -132,6 +132,7 @@ describe.skipIf(!localDatabaseUrl)(
         maxConnections: 1,
         connectTimeoutMs: 3_000,
         idleTimeoutMs: 5_000,
+        allowInsecureLoopback: true,
       });
       readModel = createPostgresReadModel({ executor });
     }, 30_000);

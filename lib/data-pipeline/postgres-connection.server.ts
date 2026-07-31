@@ -1,9 +1,11 @@
 import "server-only";
 
+import { X509Certificate } from "node:crypto";
+
 import { invalidInput } from "./errors";
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
-const POSTGRESQL_PREFIX = "postgresql://";
+const POSTGRES_PREFIXES = ["postgresql://", "postgres://"] as const;
 
 function invalidConnectionString(): never {
   throw invalidInput("postgres", "connection-string");
@@ -39,16 +41,21 @@ function isCanonicalDnsName(hostname: string): boolean {
     (label) =>
       label.length >= 1 &&
       label.length <= 63 &&
-      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/iu.test(label),
+      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
   );
 }
 
-function validateRawAuthority(value: string): void {
-  if (!value.startsWith(POSTGRESQL_PREFIX)) {
-    return invalidConnectionString();
-  }
+function validateRawAuthority(value: string): {
+  prefix: (typeof POSTGRES_PREFIXES)[number];
+  hostname: string;
+  port: string;
+} {
+  const prefix = POSTGRES_PREFIXES.find((candidate) =>
+    value.startsWith(candidate),
+  );
+  if (!prefix) return invalidConnectionString();
 
-  const remainder = value.slice(POSTGRESQL_PREFIX.length);
+  const remainder = value.slice(prefix.length);
   const boundary = remainder.search(/[/?#]/u);
   if (boundary <= 0) return invalidConnectionString();
 
@@ -98,14 +105,26 @@ function validateRawAuthority(value: string): void {
   }
 
   if (
-    rawPort !== undefined &&
-    (!/^[1-9]\d{0,4}$/u.test(rawPort) || Number(rawPort) > 65_535)
+    rawPort === undefined ||
+    !/^[1-9]\d{0,4}$/.test(rawPort) ||
+    Number(rawPort) > 65_535
   ) {
     return invalidConnectionString();
   }
+  return { prefix, hostname: rawHostname, port: rawPort };
 }
 
-export function validatedPostgresConnectionString(value: unknown): string {
+export type PostgresConnectionTarget = {
+  connectionString: string;
+  hostname: string;
+  port: number;
+  isLoopback: boolean;
+  sslMode?: "disable" | "verify-full";
+};
+
+export function validatedPostgresConnectionTarget(
+  value: unknown,
+): PostgresConnectionTarget {
   if (
     typeof value !== "string" ||
     value.length < 1 ||
@@ -115,7 +134,7 @@ export function validatedPostgresConnectionString(value: unknown): string {
     return invalidConnectionString();
   }
 
-  validateRawAuthority(value);
+  const authority = validateRawAuthority(value);
 
   let url: URL;
   try {
@@ -125,13 +144,16 @@ export function validatedPostgresConnectionString(value: unknown): string {
   }
 
   if (
-    url.protocol !== "postgresql:" ||
+    (url.protocol !== "postgresql:" && url.protocol !== "postgres:") ||
+    `${url.protocol}//` !== authority.prefix ||
     url.username === "" ||
     url.password === "" ||
     url.hostname === "" ||
     url.pathname === "" ||
     url.pathname === "/" ||
-    url.hash !== ""
+    url.hash !== "" ||
+    url.hostname !== authority.hostname ||
+    url.port !== authority.port
   ) {
     return invalidConnectionString();
   }
@@ -153,10 +175,45 @@ export function validatedPostgresConnectionString(value: unknown): string {
     ) {
       return invalidConnectionString();
     }
-    return value;
+    return {
+      connectionString: value,
+      hostname: url.hostname,
+      port: Number(authority.port),
+      isLoopback: true,
+      sslMode: sslModes[0] as "disable" | "verify-full" | undefined,
+    };
   }
 
   if (sslModes.length !== 1 || sslModes[0] !== "verify-full") {
+    return invalidConnectionString();
+  }
+  return {
+    connectionString: value,
+    hostname: url.hostname,
+    port: Number(authority.port),
+    isLoopback: false,
+    sslMode: "verify-full",
+  };
+}
+
+export function validatedPostgresConnectionString(value: unknown): string {
+  return validatedPostgresConnectionTarget(value).connectionString;
+}
+
+export function validatedPostgresSslCa(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length < 256 ||
+    value.length > 32_768 ||
+    !/^-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\r?\n?$/.test(
+      value,
+    )
+  ) {
+    return invalidConnectionString();
+  }
+  try {
+    new X509Certificate(value);
+  } catch {
     return invalidConnectionString();
   }
   return value;
