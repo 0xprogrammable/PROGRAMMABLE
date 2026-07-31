@@ -2,9 +2,11 @@ import {
   createPublicClient,
   formatUnits,
   getAddress,
+  HttpRequestError,
   http,
   keccak256,
   parseAbiItem,
+  ResponseBodyTooLargeError,
   type Address,
   type Hex,
   type PublicClient,
@@ -122,9 +124,30 @@ const EMPTY_VOLUME: StockVolume = {
 };
 const Q192 = 1n << 192n;
 const WAD = 10n ** 18n;
+const RPC_PROVENANCE_BATCH_SIZE = 1;
+const TOKEN_HYDRATION_BATCH_SIZE = 6;
+const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
+const QUOTE_PRICE_BATCH_SIZE = 2;
+const MINIMUM_LOG_BLOCK_RANGE = 100n;
 
 function minimum(left: bigint, right: bigint) {
   return left < right ? left : right;
+}
+
+async function mapInBatches<Input, Output>(
+  values: readonly Input[],
+  batchSize: number,
+  mapper: (value: Input) => Promise<Output>,
+) {
+  const output: Output[] = [];
+  for (let index = 0; index < values.length; index += batchSize) {
+    output.push(
+      ...(await Promise.all(
+        values.slice(index, index + batchSize).map(mapper),
+      )),
+    );
+  }
+  return output;
 }
 
 function sameHex(left: string, right: string) {
@@ -135,7 +158,7 @@ function clientFor(endpoint: string) {
   return createPublicClient({
     chain: mainnet,
     batch: { multicall: true },
-    transport: http(endpoint, { retryCount: 1, timeout: 12_000 }),
+    transport: http(endpoint, { retryCount: 1, timeout: 10_000 }),
   });
 }
 
@@ -187,17 +210,15 @@ async function readEvents(
   const initialBuys: StockInitialBuy[] = [];
   const volumes = new Map<string, StockVolume>();
 
-  for (
-    let fromBlock = BigInt(release.startBlock);
-    fromBlock <= toBlock;
-    fromBlock += config.logBlockRange
-  ) {
+  let fromBlock = BigInt(release.startBlock);
+  let logBlockRange = config.logBlockRange;
+  while (fromBlock <= toBlock) {
     const rangeEnd = minimum(
       toBlock,
-      fromBlock + config.logBlockRange - 1n,
+      fromBlock + logBlockRange - 1n,
     );
-    const [launchLogs, ethLaunchLogs, liquidityLogs, initialBuyLogs, feeLogs] =
-      await Promise.all([
+    const readLogs = () =>
+      Promise.all([
         client.getLogs({
           address: release.addresses.launcher,
           event: launchedEvent,
@@ -234,6 +255,42 @@ async function readEvents(
           strict: true,
         }),
       ]);
+    let logs: Awaited<ReturnType<typeof readLogs>>;
+    try {
+      logs = await readLogs();
+    } catch (error) {
+      if (
+        (error instanceof HttpRequestError ||
+          error instanceof ResponseBodyTooLargeError) &&
+        logBlockRange > MINIMUM_LOG_BLOCK_RANGE &&
+        rangeEnd > fromBlock
+      ) {
+        const reducedRange = logBlockRange / 2n;
+        logBlockRange =
+          reducedRange < MINIMUM_LOG_BLOCK_RANGE
+            ? MINIMUM_LOG_BLOCK_RANGE
+            : reducedRange;
+        console.warn(
+          "Stock-Paired log range reduced after RPC rejection",
+          {
+            release: release.internalContractRelease,
+            fromBlock: fromBlock.toString(),
+            attemptedToBlock: rangeEnd.toString(),
+            nextRange: logBlockRange.toString(),
+            errorName: error.name,
+          },
+        );
+        continue;
+      }
+      throw error;
+    }
+    const [
+      launchLogs,
+      ethLaunchLogs,
+      liquidityLogs,
+      initialBuyLogs,
+      feeLogs,
+    ] = logs;
 
     for (const log of launchLogs) {
       if (log.removed || log.blockNumber === null) continue;
@@ -309,6 +366,7 @@ async function readEvents(
       current.swapCount += 1;
       volumes.set(key, current);
     }
+    fromBlock = rangeEnd + 1n;
   }
 
   return { launches, ethLaunches, liquidities, initialBuys, volumes };
@@ -669,61 +727,68 @@ export async function readStockPairedExploreModel(
     clientFor(config.rpcUrl),
     ...(config.rpcUrlSecondary ? [clientFor(config.rpcUrlSecondary)] : []),
   ];
-  await Promise.all(
-    clients.flatMap((candidate) => [
-      assertRuntime(
-        candidate,
-        config.stateView,
-        config.stateViewRuntimeCodeHash,
-        toBlock,
-        "Uniswap StateView",
+  await mapInBatches(
+    clients,
+    RPC_PROVENANCE_BATCH_SIZE,
+    (candidate) =>
+      mapInBatches(
+        [
+          {
+            address: config.stateView,
+            expectedHash: config.stateViewRuntimeCodeHash,
+            label: "Uniswap StateView",
+          },
+          ...activeReleases.flatMap((release) => [
+            {
+              address: release.addresses.launcher,
+              expectedHash: release.runtimeCodeHashes.launcher,
+              label: `${release.internalContractRelease} launcher`,
+            },
+            {
+              address: release.addresses.ethLaunchCoordinator,
+              expectedHash:
+                release.runtimeCodeHashes.ethLaunchCoordinator,
+              label: `${release.internalContractRelease} ETH launch coordinator`,
+            },
+            {
+              address: release.addresses.feeHook,
+              expectedHash: release.runtimeCodeHashes.feeHook,
+              label: `${release.internalContractRelease} hook`,
+            },
+            {
+              address: release.addresses.quoteRegistry,
+              expectedHash: release.runtimeCodeHashes.quoteRegistry,
+              label: `${release.internalContractRelease} quote registry`,
+            },
+            {
+              address: release.addresses.feeSplitVaultFactory,
+              expectedHash:
+                release.runtimeCodeHashes.feeSplitVaultFactory,
+              label: `${release.internalContractRelease} reward-vault factory`,
+            },
+          ]),
+        ],
+        1,
+        ({ address, expectedHash, label }) =>
+          assertRuntime(
+            candidate,
+            address,
+            expectedHash,
+            toBlock,
+            label,
+          ),
       ),
-      ...activeReleases.flatMap((release) => [
-        assertRuntime(
-          candidate,
-          release.addresses.launcher,
-          release.runtimeCodeHashes.launcher,
-          toBlock,
-          `${release.internalContractRelease} launcher`,
-        ),
-        assertRuntime(
-          candidate,
-          release.addresses.ethLaunchCoordinator,
-          release.runtimeCodeHashes.ethLaunchCoordinator,
-          toBlock,
-          `${release.internalContractRelease} ETH launch coordinator`,
-        ),
-        assertRuntime(
-          candidate,
-          release.addresses.feeHook,
-          release.runtimeCodeHashes.feeHook,
-          toBlock,
-          `${release.internalContractRelease} hook`,
-        ),
-        assertRuntime(
-          candidate,
-          release.addresses.quoteRegistry,
-          release.runtimeCodeHashes.quoteRegistry,
-          toBlock,
-          `${release.internalContractRelease} quote registry`,
-        ),
-        assertRuntime(
-          candidate,
-          release.addresses.feeSplitVaultFactory,
-          release.runtimeCodeHashes.feeSplitVaultFactory,
-          toBlock,
-          `${release.internalContractRelease} reward-vault factory`,
-        ),
-      ]),
-    ]),
   );
 
-  const tokenGroups = await Promise.all(
-    activeReleases.map(async (release) => {
-      const eventSets = await Promise.all(
-        clients.map((candidate) =>
+  const tokenGroups = await mapInBatches(
+    activeReleases,
+    1,
+    async (release) => {
+      const eventSets = await mapInBatches(
+        clients,
+        RPC_PROVENANCE_BATCH_SIZE,
+        (candidate) =>
           readEvents(candidate, config, release, toBlock),
-        ),
       );
       const fingerprint = eventFingerprint(eventSets[0]);
       if (
@@ -738,22 +803,28 @@ export async function readStockPairedExploreModel(
 
       const records = pairStockPairedLaunches(eventSets[0]);
       const timestamps = new Map<string, bigint>();
-      await Promise.all(
+      await mapInBatches(
         [
           ...new Set(
             records.map(({ launch }) => launch.blockNumber.toString()),
           ),
-        ].map(async (blockNumber) => {
+        ],
+        BLOCK_TIMESTAMP_BATCH_SIZE,
+        async (blockNumber) => {
           const block = await clients[0].getBlock({
             blockNumber: BigInt(blockNumber),
           });
           timestamps.set(blockNumber, block.timestamp);
-        }),
+        },
       );
-      const tokenSets = await Promise.all(
-        clients.map((candidate) =>
-          Promise.all(
-            records.map((record) =>
+      const tokenSets = await mapInBatches(
+        clients,
+        RPC_PROVENANCE_BATCH_SIZE,
+        (candidate) =>
+          mapInBatches(
+            records,
+            TOKEN_HYDRATION_BATCH_SIZE,
+            (record) =>
               hydrateToken(
                 candidate,
                 config,
@@ -765,9 +836,7 @@ export async function readStockPairedExploreModel(
                 timestamps.get(record.launch.blockNumber.toString()) ?? 0n,
                 toBlock,
               ),
-            ),
           ),
-        ),
       );
       const tokenFingerprint = JSON.stringify(tokenSets[0]);
       if (
@@ -780,14 +849,16 @@ export async function readStockPairedExploreModel(
         );
       }
       const quoteAssetPrices = new Map<string, bigint | null>();
-      await Promise.all(
+      await mapInBatches(
         [
           ...new Set(
             tokenSets[0]
               .map((token) => token.quoteAssetAddress?.toLowerCase())
               .filter((address): address is string => Boolean(address)),
           ),
-        ].map(async (address) => {
+        ],
+        QUOTE_PRICE_BATCH_SIZE,
+        async (address) => {
           quoteAssetPrices.set(
             address,
             await readStockQuoteAssetUsdWad({
@@ -798,7 +869,7 @@ export async function readStockPairedExploreModel(
               blockNumber: toBlock,
             }),
           );
-        }),
+        },
       );
 
       return tokenSets[0].map((token) =>
@@ -811,7 +882,7 @@ export async function readStockPairedExploreModel(
             : null,
         ),
       );
-    }),
+    },
   );
   const tokens = tokenGroups.flat();
   if (
