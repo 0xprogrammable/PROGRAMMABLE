@@ -8,7 +8,7 @@ The release bundle keeps two questions separate.
 
 ### Dataset cardinality
 
-The runtime capture must contain every eligible launch returned by the private performance dataset. The gate requires at least 200 unique launches and accepts at most 400 for this profile. The current production expectation is 260.
+The runtime capture must contain every eligible launch returned by the private performance dataset. The gate requires at least 200 unique launches and accepts at most 400 for this profile. Do not hard-code the current production count: freeze the complete inventory immediately before each release, record its anchor and digest, and require every frozen launch plus any later eligible arrivals.
 
 Every launch must belong to exactly one of these releases, and every release must have at least one launch:
 
