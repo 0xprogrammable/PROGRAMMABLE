@@ -1,0 +1,362 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
+
+import { BaseHook } from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
+import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
+import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import { Currency, CurrencyLibrary } from "@uniswap/v4-core/src/types/Currency.sol";
+import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { ModifyLiquidityParams, SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import { Deployers } from "@uniswap/v4-core/test/utils/Deployers.sol";
+import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
+import { PoolSwapTest } from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
+import { MockERC20 } from "solmate/src/test/utils/mocks/MockERC20.sol";
+
+import { EthFirstMoverFeeHookV1 } from "../src/EthFirstMoverFeeHookV1.sol";
+import { FeeSplitVaultFactoryV1 } from "../src/FeeSplitVaultFactoryV1.sol";
+import { FeeSplitVaultV1 } from "../src/FeeSplitVaultV1.sol";
+import { ClaimState, TickerClaimV1 } from "../src/libraries/TickerClaimV1.sol";
+import { IClassicFeeHookV3 } from "../src/interfaces/IClassicFeeHookV3.sol";
+
+contract FirstMoverToken is MockERC20 {
+    address public immutable creator;
+
+    constructor(address creator_, string memory name_, string memory symbol_) MockERC20(name_, symbol_, 18) {
+        creator = creator_;
+    }
+}
+
+/// @dev Registry behaviour end to end: claiming, confirming, lapsing, derivative detection and tribute routing.
+contract EthFirstMoverFeeHookV1Test is Deployers {
+    uint16 internal constant FEE_BPS = 1000;
+    uint256 internal constant BASIS_POINTS = 10_000;
+
+    FeeSplitVaultFactoryV1 internal vaultFactory;
+    EthFirstMoverFeeHookV1 internal hook;
+
+    address internal treasury;
+    address internal builder;
+    address internal alice;
+    address internal bob;
+
+    uint256 internal saltCounter;
+
+    PoolSwapTest.TestSettings internal settings =
+        PoolSwapTest.TestSettings({ takeClaims: false, settleUsingBurn: false });
+
+    struct Launch {
+        FirstMoverToken token;
+        PoolKey key;
+        bytes32 poolId;
+        FeeSplitVaultV1 vault;
+    }
+
+    function setUp() public {
+        deployFreshManagerAndRouters();
+        vm.deal(address(this), 100_000 ether);
+        vm.roll(1_000_000);
+
+        treasury = makeAddr("programmableTreasury");
+        builder = makeAddr("hookBuilder");
+        alice = makeAddr("alice");
+        bob = makeAddr("bob");
+
+        vaultFactory = new FeeSplitVaultFactoryV1();
+        hook = _deployHook();
+    }
+
+    // --- Normalization --------------------------------------------------------------------------------------------
+
+    function test_symbolNormalizationFoldsCase() public view {
+        bytes32 upper = hook.symbolHashOf("PEPE");
+        assertEq(hook.symbolHashOf("pepe"), upper);
+        assertEq(hook.symbolHashOf("Pepe"), upper);
+        assertEq(hook.symbolHashOf("pEpE"), upper);
+        assertTrue(hook.symbolHashOf("PEPE2") != upper, "a different symbol is a different ticker");
+    }
+
+    // --- Claiming -------------------------------------------------------------------------------------------------
+
+    function test_firstRegistrationTakesAProvisionalClaim() public {
+        Launch memory first = _launch("PEPE");
+        bytes32 symbolHash = hook.symbolHashOf("PEPE");
+
+        (bytes32 poolId,, bool confirmed, ClaimState state) = hook.tickerDisclosure(symbolHash);
+        assertEq(poolId, first.poolId);
+        assertFalse(confirmed, "registration alone does not earn the ticker");
+        assertTrue(state == ClaimState.Provisional);
+        assertFalse(hook.isOriginal(first.poolId), "not original until confirmed");
+    }
+
+    function test_claimIsEarnedByTradingNotByRegistering() public {
+        Launch memory first = _launch("PEPE");
+        bytes32 symbolHash = hook.symbolHashOf("PEPE");
+
+        _buy(first, 2 ether);
+
+        (,, bool confirmed, ClaimState state) = hook.tickerDisclosure(symbolHash);
+        assertTrue(confirmed, "enough volume earns the claim");
+        assertTrue(state == ClaimState.Confirmed);
+        assertTrue(hook.isOriginal(first.poolId));
+    }
+
+    function test_confirmedClaimNeverLapses() public {
+        Launch memory first = _launch("PEPE");
+        _buy(first, 2 ether);
+
+        vm.roll(block.number + hook.GRACE_BLOCKS() * 10);
+        assertTrue(hook.claimState(hook.symbolHashOf("PEPE")) == ClaimState.Confirmed);
+        assertTrue(hook.isOriginal(first.poolId));
+    }
+
+    function test_unearnedClaimLapsesAndFreesTheTicker() public {
+        Launch memory squatter = _launch("PEPE");
+        bytes32 symbolHash = hook.symbolHashOf("PEPE");
+
+        vm.roll(block.number + hook.GRACE_BLOCKS());
+        assertTrue(hook.claimState(symbolHash) == ClaimState.Lapsed, "a ticker nobody traded frees up");
+
+        Launch memory second = _launch("PEPE");
+        (bytes32 poolId,,,) = hook.tickerDisclosure(symbolHash);
+        assertEq(poolId, second.poolId, "the lapsed ticker is takeable");
+        assertFalse(hook.isOriginal(squatter.poolId));
+    }
+
+    // --- Derivatives ----------------------------------------------------------------------------------------------
+
+    function test_copyIsRecordedAsDerivativeNotRejected() public {
+        Launch memory original = _launch("PEPE");
+        _buy(original, 2 ether);
+
+        Launch memory copycat = _launch("pepe");
+
+        (bytes32 originalPoolId, bool tributeActive) = hook.derivativeOf(copycat.poolId);
+        assertEq(originalPoolId, original.poolId, "case-folded symbols are the same ticker");
+        assertTrue(tributeActive);
+        assertFalse(hook.isOriginal(copycat.poolId));
+        assertTrue(hook.isOriginal(original.poolId));
+    }
+
+    function test_differentSymbolsDoNotCollide() public {
+        Launch memory pepe = _launch("PEPE");
+        _buy(pepe, 2 ether);
+
+        Launch memory wojak = _launch("WOJAK");
+        (, bool tributeActive) = hook.derivativeOf(wojak.poolId);
+        assertFalse(tributeActive, "an unrelated ticker owes nothing");
+        assertTrue(hook.isOriginal(wojak.poolId) == false, "still provisional until traded");
+
+        _buy(wojak, 2 ether);
+        assertTrue(hook.isOriginal(wojak.poolId));
+    }
+
+    // --- Tribute --------------------------------------------------------------------------------------------------
+
+    function test_tributeRoutesToTheOriginalsVault() public {
+        Launch memory original = _launch("PEPE");
+        _buy(original, 2 ether);
+        uint256 originalBefore = _creatorAccrued(original.poolId);
+
+        Launch memory copycat = _launch("PEPE");
+        uint256 gross = 1 ether;
+        _buy(copycat, gross);
+
+        (uint256 creatorFee,,) = hook.quoteGrossFees(gross, FEE_BPS);
+        (uint256 retained, uint256 tribute) = TickerClaimV1.splitTribute(creatorFee, hook.TRIBUTE_SHARE_BPS());
+
+        assertGt(tribute, 0, "a copy pays the original");
+        assertEq(_creatorAccrued(copycat.poolId), retained, "the copy keeps the remainder");
+        assertEq(_creatorAccrued(original.poolId) - originalBefore, tribute, "the original receives it without acting");
+    }
+
+    /// @dev The trader is charged exactly the same on a derivative as on any other pool. Tribute moves value between
+    ///      creators; it never reaches the swapper, the launcher share or the builder share.
+    function test_tributeIsInvisibleToTheTrader() public {
+        Launch memory original = _launch("PEPE");
+        _buy(original, 2 ether);
+
+        Launch memory copycat = _launch("PEPE");
+        uint256 launcherBefore = hook.launcherFeesAccrued();
+        uint256 builderBefore = hook.builderFeesAccrued();
+        uint256 totalBefore = hook.totalNativeFeesAccrued();
+
+        uint256 gross = 1 ether;
+        _buy(copycat, gross);
+
+        (uint256 creatorFee, uint256 launcherFee, uint256 builderFee) = hook.quoteGrossFees(gross, FEE_BPS);
+        assertEq(hook.launcherFeesAccrued() - launcherBefore, launcherFee, "launcher share untouched");
+        assertEq(hook.builderFeesAccrued() - builderBefore, builderFee, "builder share untouched");
+        assertEq(
+            hook.totalNativeFeesAccrued() - totalBefore,
+            creatorFee + launcherFee + builderFee,
+            "the total taken from the swap is unchanged"
+        );
+    }
+
+    function test_noTributeWhileTheOriginalIsOnlyProvisional() public {
+        Launch memory provisional = _launch("PEPE");
+        Launch memory copycat = _launch("PEPE");
+
+        (, bool tributeActive) = hook.derivativeOf(copycat.poolId);
+        assertFalse(tributeActive, "an unearned claim collects nothing");
+
+        uint256 gross = 1 ether;
+        uint256 originalBefore = _creatorAccrued(provisional.poolId);
+        _buy(copycat, gross);
+
+        (uint256 creatorFee,,) = hook.quoteGrossFees(gross, FEE_BPS);
+        assertEq(_creatorAccrued(copycat.poolId), creatorFee, "the copy keeps its whole share");
+        assertEq(_creatorAccrued(provisional.poolId), originalBefore);
+    }
+
+    function test_tributeStopsIfTheOriginalsClaimLapses() public {
+        Launch memory provisional = _launch("PEPE");
+        Launch memory copycat = _launch("PEPE");
+        provisional;
+
+        vm.roll(block.number + hook.GRACE_BLOCKS());
+
+        (, bool tributeActive) = hook.derivativeOf(copycat.poolId);
+        assertFalse(tributeActive, "a lapsed original releases its derivatives");
+
+        uint256 gross = 1 ether;
+        _buy(copycat, gross);
+        (uint256 creatorFee,,) = hook.quoteGrossFees(gross, FEE_BPS);
+        assertEq(_creatorAccrued(copycat.poolId), creatorFee);
+    }
+
+    /// @dev A derivative can never confirm the ticker it copies, however much it trades.
+    function test_derivativeCannotTakeTheTicker() public {
+        Launch memory original = _launch("PEPE");
+        _buy(original, 2 ether);
+
+        Launch memory copycat = _launch("PEPE");
+        _buy(copycat, 4 ether);
+
+        (bytes32 poolId,,,) = hook.tickerDisclosure(hook.symbolHashOf("PEPE"));
+        assertEq(poolId, original.poolId, "the original keeps the ticker");
+        assertFalse(hook.isOriginal(copycat.poolId));
+    }
+
+    // --- Guards ---------------------------------------------------------------------------------------------------
+
+    function test_rejectsNonCreatorRegistrar() public {
+        FirstMoverToken token = new FirstMoverToken(address(this), "Ghost", "GHOST");
+        (PoolKey memory key, bytes32 id) = _keyFor(token);
+        FeeSplitVaultV1 v = _deployVault(id, _nextSalt());
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(EthFirstMoverFeeHookV1.InvalidRegistrar.selector, alice, address(this)));
+        hook.registerPool(key, address(v), FEE_BPS, FEE_BPS);
+    }
+
+    function test_onlyPoolManagerCanCallHookCallbacks() public {
+        Launch memory first = _launch("PEPE");
+        SwapParams memory params =
+            SwapParams({ zeroForOne: true, amountSpecified: -int256(0.01 ether), sqrtPriceLimitX96: MIN_PRICE_LIMIT });
+
+        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        hook.beforeInitialize(address(this), first.key, SQRT_PRICE_1_1);
+
+        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        hook.beforeSwap(address(this), first.key, params, "");
+
+        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        hook.afterSwap(address(this), first.key, params, BalanceDelta.wrap(0), "");
+
+        vm.expectRevert(BaseHook.NotPoolManager.selector);
+        hook.unlockCallback("");
+    }
+
+    function test_onlyBuilderCanClaimTheBuilderShare() public {
+        Launch memory first = _launch("PEPE");
+        _buy(first, 1 ether);
+
+        uint256 accrued = hook.builderFeesAccrued();
+        assertGt(accrued, 0);
+
+        vm.prank(treasury);
+        vm.expectRevert(
+            abi.encodeWithSelector(EthFirstMoverFeeHookV1.UnauthorizedFeeRedirect.selector, treasury, builder)
+        );
+        hook.claimBuilderFees();
+
+        vm.prank(builder);
+        hook.claimBuilderFees();
+        assertEq(builder.balance, accrued);
+    }
+
+    // --- Helpers --------------------------------------------------------------------------------------------------
+
+    function _deployHook() private returns (EthFirstMoverFeeHookV1 deployed) {
+        uint160 flags = uint160(
+            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+                | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
+        );
+        bytes memory args = abi.encode(manager, treasury, builder, vaultFactory);
+        (address expected, bytes32 salt) =
+            HookMiner.find(address(this), flags, type(EthFirstMoverFeeHookV1).creationCode, args);
+
+        deployed = new EthFirstMoverFeeHookV1{ salt: salt }(manager, treasury, builder, vaultFactory);
+        assertEq(address(deployed), expected, "mined hook address mismatch");
+    }
+
+    function _nextSalt() private returns (bytes32) {
+        return bytes32(++saltCounter);
+    }
+
+    function _keyFor(FirstMoverToken token) private view returns (PoolKey memory key, bytes32 id) {
+        key = PoolKey({
+            currency0: CurrencyLibrary.ADDRESS_ZERO,
+            currency1: Currency.wrap(address(token)),
+            fee: hook.LP_FEE_PIPS(),
+            tickSpacing: hook.TICK_SPACING(),
+            hooks: hook
+        });
+        id = PoolId.unwrap(key.toId());
+    }
+
+    function _deployVault(bytes32 id, bytes32 salt) private returns (FeeSplitVaultV1) {
+        address[] memory beneficiaries = new address[](1);
+        beneficiaries[0] = alice;
+        uint16[] memory shares = new uint16[](1);
+        shares[0] = 10_000;
+        return vaultFactory.deploy(salt, IClassicFeeHookV3(address(hook)), id, beneficiaries, shares);
+    }
+
+    /// @dev Deploys a token with `symbol`, registers, initializes and funds its pool.
+    function _launch(string memory symbol) private returns (Launch memory launch) {
+        FirstMoverToken token = new FirstMoverToken(address(this), symbol, symbol);
+        token.mint(address(this), 10_000_000 ether);
+        token.approve(address(modifyLiquidityRouter), type(uint256).max);
+        token.approve(address(swapRouter), type(uint256).max);
+
+        (PoolKey memory key, bytes32 id) = _keyFor(token);
+        FeeSplitVaultV1 vault = _deployVault(id, _nextSalt());
+        hook.registerPool(key, address(vault), FEE_BPS, FEE_BPS);
+        manager.initialize(key, SQRT_PRICE_1_1);
+
+        modifyLiquidityRouter.modifyLiquidity{ value: 500 ether }(
+            key,
+            ModifyLiquidityParams({ tickLower: -12_000, tickUpper: 12_000, liquidityDelta: 20 ether, salt: 0 }),
+            ZERO_BYTES
+        );
+
+        launch = Launch({ token: token, key: key, poolId: id, vault: vault });
+    }
+
+    function _buy(Launch memory launch, uint256 ethIn) private returns (BalanceDelta) {
+        return swapRouter.swap{ value: ethIn }(
+            launch.key,
+            SwapParams({ zeroForOne: true, amountSpecified: -int256(ethIn), sqrtPriceLimitX96: MIN_PRICE_LIMIT }),
+            settings,
+            ""
+        );
+    }
+
+    function _creatorAccrued(bytes32 poolId) private view returns (uint256 accrued) {
+        (,,,,,,,, accrued,) = hook.poolFeeConfig(poolId);
+    }
+}
