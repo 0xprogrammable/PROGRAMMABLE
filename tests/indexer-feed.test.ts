@@ -2,6 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+const routeMocks = vi.hoisted(() => ({
+  readIndexedFeedSnapshot: vi.fn(),
+}));
+
+vi.mock(
+  "../app/api/indexers/v1/read-indexed-feed.server",
+  () => ({
+    readIndexedFeedSnapshot: routeMocks.readIndexedFeedSnapshot,
+  }),
+);
+
 import { GET as getTokenList } from "../app/api/indexers/v1/token-list/route";
 import { GET as getIndexerTokens } from "../app/api/indexers/v1/tokens/route";
 import {
@@ -59,6 +70,19 @@ const readyModel: ExploreReadModel = {
   launcherFeesAccruedWei: "0",
   launcherFeesAccruedEth: "0",
 };
+
+function indexedFeedSnapshot() {
+  return {
+    chainId: 1 as const,
+    model: readyModel as ExploreReadModel & { status: "ready" },
+    capturedAt: "2026-07-27T12:00:00.000Z",
+    snapshotCommitment: `0x${"77".repeat(32)}` as const,
+    sourceCommitment: `0x${"88".repeat(32)}` as const,
+    projectionLag: 2,
+    reconciledAt: "2026-07-27T12:00:01.000Z",
+    releaseVersions: ["classic-v2"] as const,
+  };
+}
 
 describe("public indexer fee disclosure", () => {
   it("declares zero transfer tax and deducts the launcher share", () => {
@@ -377,7 +401,10 @@ describe("public indexer fee disclosure", () => {
     ).toThrow("missing onchain fee disclosure");
   });
 
-  it("keeps the production feed fail-closed before V2 is ready", async () => {
+  it("serves the unchanged feed ABI from the indexed snapshot", async () => {
+    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce(
+      indexedFeedSnapshot(),
+    );
     const response = await getIndexerTokens(
       new Request(
         "https://programmable.family/api/indexers/v1/tokens",
@@ -388,11 +415,118 @@ describe("public indexer fee disclosure", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe(
       "*",
     );
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "indexed",
+    );
+    expect(response.headers.get("x-programmable-projection-block")).toBe(
+      readyModel.snapshot?.blockNumber,
+    );
+    expect(response.headers.get("x-programmable-projection-hash")).toBe(
+      readyModel.snapshot?.blockHash,
+    );
+    expect(response.headers.get("x-programmable-projection-lag")).toBe(
+      "2",
+    );
+    expect(
+      response.headers.get("x-programmable-snapshot-commitment"),
+    ).toBe(`0x${"77".repeat(32)}`);
+    expect(response.headers.get("x-programmable-source-commitment")).toBe(
+      `0x${"88".repeat(32)}`,
+    );
     expect(await response.json()).toMatchObject({
-      status: "not-deployed",
+      schemaVersion: "programmable-indexer-v1",
+      status: "ready",
       chainId: 1,
-      tokens: [],
+      snapshot: readyModel.snapshot,
+      tokens: [
+        {
+          schemaVersion: "programmable-token-v1",
+          address: token.tokenAddress,
+        },
+      ],
     });
+  });
+
+  it.each([
+    "snapshot-unavailable",
+    "projection-lag",
+    "reconciliation-incomplete",
+  ])("fails closed with no-store when indexed data is %s", async () => {
+    routeMocks.readIndexedFeedSnapshot.mockRejectedValueOnce(
+      new Error("Indexed feed is not ready"),
+    );
+
+    const response = await getIndexerTokens(
+      new Request("https://programmable.family/api/indexers/v1/tokens"),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-programmable-read-source")).toBeNull();
+    expect(await response.json()).toEqual({
+      error: "Indexer data is temporarily unavailable",
+    });
+  });
+
+  it("serves direct token lookup from the same indexed snapshot", async () => {
+    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce(
+      indexedFeedSnapshot(),
+    );
+
+    const response = await getIndexerTokens(
+      new Request(
+        `https://programmable.family/api/indexers/v1/token?address=${token.tokenAddress}`,
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "indexed",
+    );
+    expect(await response.json()).toMatchObject({
+      schemaVersion: "programmable-token-v1",
+      address: token.tokenAddress,
+      name: token.name,
+      symbol: token.symbol,
+    });
+  });
+
+  it("keeps the direct-token 404 cache contract after an exact indexed lookup", async () => {
+    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce(
+      indexedFeedSnapshot(),
+    );
+
+    const response = await getIndexerTokens(
+      new Request(
+        "https://programmable.family/api/indexers/v1/token?address=0x9999999999999999999999999999999999999999",
+      ),
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+    );
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "indexed",
+    );
+    expect(await response.json()).toEqual({
+      error: "Programmable token not found",
+    });
+  });
+
+  it("fails closed when provenance headers are not canonical", async () => {
+    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce({
+      ...indexedFeedSnapshot(),
+      releaseVersions: ["stock-paired-v1", "classic-v2"],
+    });
+
+    const response = await getIndexerTokens(
+      new Request("https://programmable.family/api/indexers/v1/tokens"),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-programmable-read-source")).toBeNull();
   });
 
   it("rejects an invalid direct token lookup without reading chain state", async () => {
@@ -411,17 +545,65 @@ describe("public indexer fee disclosure", () => {
     });
   });
 
-  it("does not expose an invalid empty production token list", async () => {
+  it("does not expose an unavailable indexed token list", async () => {
+    routeMocks.readIndexedFeedSnapshot.mockRejectedValueOnce(
+      new Error("Indexed feed is not ready"),
+    );
     const response = await getTokenList();
 
     expect(response.status).toBe(503);
     expect(response.headers.get("access-control-allow-origin")).toBe(
       "*",
     );
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({
-      status: "not-deployed",
+      error: "Token list is temporarily unavailable",
+    });
+  });
+
+  it("keeps the exact cached first-launch response for a ready empty snapshot", async () => {
+    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce({
+      ...indexedFeedSnapshot(),
+      model: {
+        ...readyModel,
+        tokens: [],
+      },
+    });
+
+    const response = await getTokenList();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=0, s-maxage=60",
+    );
+    expect(response.headers.get("retry-after")).toBe("60");
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "indexed",
+    );
+    expect(await response.json()).toEqual({
+      status: "ready",
       error:
         "The token list will be available after the first verified launch",
+    });
+  });
+
+  it("binds the token-list timestamp and provenance to the indexed snapshot", async () => {
+    routeMocks.readIndexedFeedSnapshot.mockResolvedValueOnce(
+      indexedFeedSnapshot(),
+    );
+
+    const response = await getTokenList();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "indexed",
+    );
+    expect(body.timestamp).toBe("2026-07-27T12:00:00.000Z");
+    expect(body.tokens).toHaveLength(1);
+    expect(body.tokens[0]).toMatchObject({
+      address: token.tokenAddress,
+      symbol: token.symbol,
     });
   });
 });
