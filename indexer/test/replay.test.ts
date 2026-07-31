@@ -199,6 +199,17 @@ describe("replay and occurrence behavior", () => {
     expect(candidates.every(({ downstreamLogicalId }) => downstreamLogicalId === undefined))
       .toBe(true);
     expect(candidates[0]?.id).not.toBe(candidates[1]?.id);
+    expect(await indexer.FeeAccrual.getAll()).toHaveLength(2);
+    expect(await indexer.PoolFeeTotals.getOrThrow(`1:${POOL_ID}`)).toMatchObject({
+      grossAmount: 20n,
+      creatorFees: 2n,
+      launcherFees: 2n,
+      swapCount: 2n,
+    });
+    expect(
+      (await indexer.IndexerState.getOrThrow("ethereum-mainnet"))
+        .progressOccurrenceId,
+    ).toBe(`1:${SECOND_BLOCK_HASH}:${TRANSACTION_HASH}:8`);
   });
 
   it("tracks health progress by chain placement rather than transaction-hash sorting", async () => {
@@ -249,6 +260,21 @@ describe("replay and occurrence behavior", () => {
               },
               params,
             },
+            {
+              contract: "ClassicV2Hook",
+              event: "NativeSwapFeesAccrued",
+              logIndex: 62,
+              block: {
+                number: BLOCK_NUMBER,
+                timestamp: 1_800_000_030,
+                hash: FIRST_BLOCK_HASH,
+              },
+              transaction: {
+                hash: laterTransactionHash,
+                transactionIndex: 2,
+              },
+              params,
+            },
           ],
         },
       },
@@ -258,8 +284,57 @@ describe("replay and occurrence behavior", () => {
       (await indexer.IndexerState.getOrThrow("ethereum-mainnet"))
         .progressOccurrenceId,
     ).toBe(
-      `1:${FIRST_BLOCK_HASH}:${laterTransactionHash}:61`,
+      `1:${FIRST_BLOCK_HASH}:${laterTransactionHash}:62`,
     );
+  });
+
+  it("persists the reviewed deployment label from the worker environment", async () => {
+    const previousLabel = process.env.ENVIO_DEPLOYMENT_LABEL;
+    process.env.ENVIO_DEPLOYMENT_LABEL = "production-reviewed-2026-07-31";
+
+    try {
+      const indexer = createTestIndexer();
+      await indexer.process({
+        chains: {
+          1: {
+            simulate: [
+              {
+                contract: "ClassicV2Hook",
+                event: "NativeSwapFeesAccrued",
+                logIndex: 62,
+                block: {
+                  number: BLOCK_NUMBER,
+                  timestamp: 1_800_000_030,
+                  hash: FIRST_BLOCK_HASH,
+                },
+                transaction: {
+                  hash: TRANSACTION_HASH,
+                  transactionIndex: 1,
+                },
+                params: {
+                  poolId: POOL_ID,
+                  swapSender: SWAP_SENDER,
+                  grossNativeAmount: 10n,
+                  creatorFee: 1n,
+                  launcherFee: 1n,
+                },
+              },
+            ],
+          },
+        },
+      });
+
+      expect(
+        (await indexer.IndexerState.getOrThrow("ethereum-mainnet"))
+          .deployment,
+      ).toBe("production-reviewed-2026-07-31");
+    } finally {
+      if (previousLabel === undefined) {
+        delete process.env.ENVIO_DEPLOYMENT_LABEL;
+      } else {
+        process.env.ENVIO_DEPLOYMENT_LABEL = previousLabel;
+      }
+    }
   });
 });
 
@@ -356,7 +431,11 @@ describe("checked-in manifest fixtures", () => {
   it("pins HyperIndex to 3.2.1", () => {
     const packageJson = JSON.parse(
       readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
-    ) as { dependencies: { envio: string } };
+    ) as {
+      dependencies: { envio: string };
+      packageManager: string;
+    };
     expect(packageJson.dependencies.envio).toBe("3.2.1");
+    expect(packageJson.packageManager).toBe("pnpm@10.32.0");
   });
 });

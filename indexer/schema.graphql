@@ -71,6 +71,9 @@ type Launch {
   hasInitialBuyEvent: Boolean!
   hasCustodyEvent: Boolean!
   hasCoordinatorEvent: Boolean!
+  hasPoolRegistrationEvent: Boolean!
+  hasPoolFeeDisclosureEvent: Boolean!
+  hasRewardVaultFactoryEvent: Boolean!
   provenanceValid: Boolean!
   isComplete: Boolean!
   updatedBlock: BigInt! @index

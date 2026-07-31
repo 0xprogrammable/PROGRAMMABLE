@@ -47,9 +47,28 @@ const v3LaunchEvents = [
     },
   },
   {
+    contract: "StockV2V3Hook" as const,
+    event: "PoolFeeDisclosure" as const,
+    logIndex: 51,
+    block,
+    transaction,
+    params: {
+      poolId: POOL_ID,
+      token: TOKEN,
+      quoteAsset: QUOTE,
+      rewardVault: VAULT,
+      buySwapFeeBps: 100n,
+      sellSwapFeeBps: 200n,
+      creatorFeeBps: 90n,
+      launcherFeeBps: 10n,
+      transferTaxBps: 0n,
+      lpFeePips: 3_000n,
+    },
+  },
+  {
     contract: "StockV2V3RewardVaultFactory" as const,
     event: "QuoteAssetFeeSplitVaultDeployed" as const,
-    logIndex: 51,
+    logIndex: 52,
     block,
     transaction,
     params: {
@@ -62,7 +81,7 @@ const v3LaunchEvents = [
   {
     contract: "StockV2V3Hook" as const,
     event: "QuoteSwapFeesAccrued" as const,
-    logIndex: 52,
+    logIndex: 53,
     block,
     transaction,
     params: {
@@ -78,7 +97,7 @@ const v3LaunchEvents = [
   {
     contract: "StockV3Launcher" as const,
     event: "StockPairedLiquidityConfigured" as const,
-    logIndex: 53,
+    logIndex: 54,
     block,
     transaction,
     params: {
@@ -97,7 +116,7 @@ const v3LaunchEvents = [
   {
     contract: "StockV3Launcher" as const,
     event: "StockPairedCreatorInitialBuy" as const,
-    logIndex: 54,
+    logIndex: 55,
     block,
     transaction,
     params: {
@@ -113,7 +132,7 @@ const v3LaunchEvents = [
   {
     contract: "StockV3Launcher" as const,
     event: "StockPairedTokenLaunched" as const,
-    logIndex: 55,
+    logIndex: 56,
     block,
     transaction,
     params: {
@@ -131,7 +150,7 @@ const v3LaunchEvents = [
     contract: "StockV2V3RewardVault" as const,
     event: "BeneficiaryFeesClaimed" as const,
     srcAddress: VAULT,
-    logIndex: 56,
+    logIndex: 57,
     block,
     transaction,
     params: {
@@ -175,6 +194,8 @@ describe("Stock-Paired handlers", () => {
     ).toMatchObject({
       rewardConfigurationHash: REWARD_CONFIGURATION_HASH,
       quoteConfigurationHash: QUOTE_CONFIGURATION_HASH,
+      provenanceValid: true,
+      isComplete: true,
     });
     expect(await indexer.RewardVault.getOrThrow(VAULT)).toMatchObject({
       releaseVersion: "stock-paired-v3",
@@ -267,7 +288,7 @@ describe("Stock-Paired handlers", () => {
       event.event === "PoolRegistered"
         ? {
             ...event,
-            logIndex: 57,
+            logIndex: 58,
             params: {
               ...event.params,
               rewardVault: MISMATCHED_VAULT,
@@ -295,6 +316,56 @@ describe("Stock-Paired handlers", () => {
       isComplete: false,
     });
   });
+
+  it.each([
+    ["before", 52],
+    ["after", 58],
+  ])(
+    "invalidates a conflicting same-pool factory vault emitted %s the launcher",
+    async (_order, factoryLogIndex) => {
+      const indexer = createTestIndexer();
+      const events = v3LaunchEvents
+        .filter((event) => event.contract !== "StockV2V3RewardVault")
+        .map((event) =>
+          event.contract === "StockV2V3RewardVaultFactory"
+            ? {
+                ...event,
+                logIndex: factoryLogIndex,
+                params: {
+                  ...event.params,
+                  vault: MISMATCHED_VAULT,
+                },
+              }
+            : event,
+        );
+
+      await indexer.process({
+        chains: {
+          1: {
+            startBlock: BLOCK_NUMBER,
+            endBlock: BLOCK_NUMBER + 12,
+            simulate: events,
+          },
+        },
+      });
+
+      expect(
+        await indexer.RewardVault.getOrThrow(MISMATCHED_VAULT),
+      ).toMatchObject({
+        poolId: POOL_ID,
+        hook: SHARED_HOOK,
+        quoteAsset: QUOTE,
+      });
+      expect(
+        await indexer.Launch.getOrThrow(
+          `1:stock-paired-v3:${LAUNCH_HASH}`,
+        ),
+      ).toMatchObject({
+        provenanceValid: false,
+        isComplete: false,
+      });
+    },
+  );
 
   it("keeps mismatched quote provenance incomplete", async () => {
     const indexer = createTestIndexer();

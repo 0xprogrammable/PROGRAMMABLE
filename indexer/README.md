@@ -34,7 +34,7 @@ systems. Beneficiary seed hydration is a separate block-pinned dual-RPC worker.
 Requirements:
 
 - Node.js 22 or newer
-- pnpm 11.13.1
+- pnpm 10.32.0
 - Docker for a full local Envio stack
 
 From this directory:
@@ -74,8 +74,17 @@ reproducible code generation and installs.
 - Envio rollback removes orphaned current-state effects transactionally.
 
 The singleton `IndexerState` reports schema, chain, deployment label, and the
-latest processed candidate. Its checked-in deployment label is deliberately
-`development-unverified`.
+latest processed candidate. The server reads its label from
+`ENVIO_DEPLOYMENT_LABEL` at startup. Missing, empty, malformed, or longer than
+64-character values fail closed to `development-unverified`; accepted labels
+use lowercase ASCII letters, digits, `.`, `_`, and `-`, beginning with a letter
+or digit.
+
+Keep the default for local and unreviewed deployments. A production promotion
+can set an explicit immutable reviewed label such as
+`production-reviewed-2026-07-31` in the Envio deployment environment without a
+code edit. Setting a label records identity only; it is not proof that the
+deployment passed the production gates below.
 
 ## Production status
 
