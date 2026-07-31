@@ -17,12 +17,20 @@
   },
   "dependencies": {
     "envio": "3.2.1",
-    "viem": "2.46.2"
+    "viem": "2.55.10"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
     "typescript": "6.0.3",
     "vitest": "4.1.0",
     "yaml": "2.8.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "0.28.1",
+      "express": "4.22.2",
+      "react-dom": "19.2.5",
+      "viem": "2.55.10"
+    }
   }
 }
