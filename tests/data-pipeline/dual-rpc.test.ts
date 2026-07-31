@@ -36,6 +36,7 @@ import {
   type CandidateRpcReceipt,
 } from "../../lib/data-pipeline/dual-rpc";
 import type { EnvioCandidate } from "../../lib/data-pipeline/envio";
+import { rpcProviderCommitment } from "../../lib/data-pipeline/rpc-provider-commitments";
 
 const BLOCK_HASH = `0x${"11".repeat(32)}` as const;
 const SAFE_BLOCK_HASH = `0x${"22".repeat(32)}` as const;
@@ -133,10 +134,15 @@ function client(
 }
 
 function provider(identity: string, rpcClient: CandidateRpcClient) {
+  const endpointOrigin = `https://${identity}.example`;
   return {
     identity,
     vendorGroup: identity.split("-")[0]!,
-    endpointOrigin: `https://${identity}.example`,
+    endpointCommitment: rpcProviderCommitment("endpoint", endpointOrigin),
+    endpointOriginCommitment: rpcProviderCommitment(
+      "origin",
+      endpointOrigin,
+    ),
     client: rpcClient,
   };
 }
@@ -202,10 +208,6 @@ describe("dual-RPC Envio candidate verification", () => {
       chainId: 1,
       providerIdentities: ["alchemy-mainnet", "quicknode-mainnet"],
       providerVendorGroups: ["alchemy", "quicknode"],
-      providerOrigins: [
-        "https://alchemy-mainnet.example",
-        "https://quicknode-mainnet.example",
-      ],
       providerHeads: [PROVIDER_HEAD.toString(), PROVIDER_HEAD.toString()],
       safeBlockNumber: SAFE_BLOCK.toString(),
       safeBlockHash: SAFE_BLOCK_HASH,
@@ -226,6 +228,21 @@ describe("dual-RPC Envio candidate verification", () => {
     expect(result.receiptCommitment).toMatch(/^0x[0-9a-f]{64}$/);
     expect(result.rawLogCommitment).toMatch(/^0x[0-9a-f]{64}$/);
     expect(result.sourceCodeHash).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(result.providerEndpointCommitments).toEqual([
+      rpcProviderCommitment(
+        "endpoint",
+        "https://alchemy-mainnet.example",
+      ),
+      rpcProviderCommitment(
+        "endpoint",
+        "https://quicknode-mainnet.example",
+      ),
+    ]);
+    expect(result.providerOriginCommitments).toEqual([
+      rpcProviderCommitment("origin", "https://alchemy-mainnet.example"),
+      rpcProviderCommitment("origin", "https://quicknode-mainnet.example"),
+    ]);
+    expect(JSON.stringify(result)).not.toContain(".example");
   });
 
   it("rejects duplicate providers, wrong chains, and candidates above the shared safe head", async () => {
@@ -235,6 +252,20 @@ describe("dual-RPC Envio candidate verification", () => {
         providers: [
           provider("same", client()),
           provider("same", client()),
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+
+    const committedEndpoint = provider("alchemy-primary", client());
+    await expect(
+      verifyEnvioCandidateWithDualRpc({
+        candidate: candidate(),
+        providers: [
+          committedEndpoint,
+          {
+            ...provider("quicknode-secondary", client()),
+            endpointCommitment: committedEndpoint.endpointCommitment,
+          },
         ],
       }),
     ).rejects.toMatchObject({ code: "invalid_input" });
@@ -266,7 +297,7 @@ describe("dual-RPC Envio candidate verification", () => {
     ).rejects.toMatchObject({ code: "validation_failed" });
   });
 
-  it("rejects the same client, origin, or vendor group under different labels", async () => {
+  it("rejects the same client, endpoint origin commitment, or vendor group under different labels", async () => {
     const sharedClient = client();
     const first = provider("alchemy-primary", sharedClient);
     const second = provider("quicknode-secondary", sharedClient);
@@ -281,10 +312,10 @@ describe("dual-RPC Envio candidate verification", () => {
       verifyEnvioCandidateWithDualRpc({
         candidate: candidate(),
         providers: [
-          provider("alchemy-primary", client()),
+          first,
           {
             ...provider("quicknode-secondary", client()),
-            endpointOrigin: "https://alchemy-primary.example",
+            endpointOriginCommitment: first.endpointOriginCommitment,
           },
         ],
       }),

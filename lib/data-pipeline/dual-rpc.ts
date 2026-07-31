@@ -18,6 +18,7 @@ import {
 } from "./errors";
 import type { EnvioCandidate } from "./envio";
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
+import { assertProductionDualRpcProviders } from "./rpc-providers.server";
 
 export type CandidateRpcBlock = {
   number: bigint | null;
@@ -62,7 +63,8 @@ export type CandidateRpcClient = {
 export type CandidateRpcProvider = {
   identity: string;
   vendorGroup: string;
-  endpointOrigin: string;
+  endpointCommitment: HexBytes32;
+  endpointOriginCommitment: HexBytes32;
   client: CandidateRpcClient;
 };
 
@@ -89,7 +91,8 @@ export type DualRpcCandidateEvidence = {
   factoryOccurrenceFingerprint: HexBytes32 | null;
   providerIdentities: readonly [string, string];
   providerVendorGroups: readonly [string, string];
-  providerOrigins: readonly [string, string];
+  providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
+  providerOriginCommitments: readonly [HexBytes32, HexBytes32];
   providerHeads: readonly [string, string];
   safeBlockNumber: string;
   safeBlockHash: HexBytes32;
@@ -107,7 +110,8 @@ export type DualRpcCandidateBatchEvidence = {
   chainId: 1;
   providerIdentities: readonly [string, string];
   providerVendorGroups: readonly [string, string];
-  providerOrigins: readonly [string, string];
+  providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
+  providerOriginCommitments: readonly [HexBytes32, HexBytes32];
   providerHeads: readonly [string, string];
   safeBlockNumber: string;
   safeBlockHash: HexBytes32;
@@ -308,29 +312,6 @@ function providerIdentity(value: unknown) {
     throw invalidInput("rpc", "provider-identity");
   }
   return value;
-}
-
-function providerOrigin(value: unknown) {
-  if (typeof value !== "string") {
-    throw invalidInput("rpc", "provider-origin");
-  }
-  try {
-    const parsed = new URL(value);
-    if (
-      parsed.protocol !== "https:" ||
-      parsed.username !== "" ||
-      parsed.password !== "" ||
-      parsed.pathname !== "/" ||
-      parsed.search !== "" ||
-      parsed.hash !== "" ||
-      parsed.origin !== value
-    ) {
-      throw new Error("invalid origin");
-    }
-    return parsed.origin;
-  } catch {
-    throw invalidInput("rpc", "provider-origin");
-  }
 }
 
 function rpcExecutionPolicy(
@@ -605,16 +586,32 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
     sleep?: (milliseconds: number) => Promise<void>;
   };
 }): Promise<DualRpcCandidateBatchEvidence> {
+  assertProductionDualRpcProviders(input.providers);
   const firstIdentity = providerIdentity(input.providers?.[0]?.identity);
   const secondIdentity = providerIdentity(input.providers?.[1]?.identity);
   const firstVendor = providerIdentity(input.providers?.[0]?.vendorGroup);
   const secondVendor = providerIdentity(input.providers?.[1]?.vendorGroup);
-  const firstOrigin = providerOrigin(input.providers?.[0]?.endpointOrigin);
-  const secondOrigin = providerOrigin(input.providers?.[1]?.endpointOrigin);
+  const firstEndpointCommitment = rpcBytes32(
+    input.providers?.[0]?.endpointCommitment,
+    "provider-endpoint-commitment",
+  );
+  const secondEndpointCommitment = rpcBytes32(
+    input.providers?.[1]?.endpointCommitment,
+    "provider-endpoint-commitment",
+  );
+  const firstOriginCommitment = rpcBytes32(
+    input.providers?.[0]?.endpointOriginCommitment,
+    "provider-origin-commitment",
+  );
+  const secondOriginCommitment = rpcBytes32(
+    input.providers?.[1]?.endpointOriginCommitment,
+    "provider-origin-commitment",
+  );
   if (
     firstIdentity === secondIdentity ||
     firstVendor === secondVendor ||
-    firstOrigin === secondOrigin
+    firstEndpointCommitment === secondEndpointCommitment ||
+    firstOriginCommitment === secondOriginCommitment
   ) {
     throw invalidInput("rpc", "provider-independence");
   }
@@ -789,7 +786,14 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
 
     const providerIdentities = [firstIdentity, secondIdentity] as const;
     const providerVendorGroups = [firstVendor, secondVendor] as const;
-    const providerOrigins = [firstOrigin, secondOrigin] as const;
+    const providerEndpointCommitments = [
+      firstEndpointCommitment,
+      secondEndpointCommitment,
+    ] as const;
+    const providerOriginCommitments = [
+      firstOriginCommitment,
+      secondOriginCommitment,
+    ] as const;
     const providerHeads = [
       states[0].head.toString(),
       states[1].head.toString(),
@@ -875,7 +879,8 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
         factoryOccurrenceFingerprint,
         providerIdentities,
         providerVendorGroups,
-        providerOrigins,
+        providerEndpointCommitments,
+        providerOriginCommitments,
         providerHeads,
         safeBlockNumber: safeBlockNumber.toString(),
         safeBlockHash: safe[0].hash,
@@ -894,7 +899,8 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
       chainId: 1,
       providerIdentities,
       providerVendorGroups,
-      providerOrigins,
+      providerEndpointCommitments,
+      providerOriginCommitments,
       providerHeads,
       safeBlockNumber: safeBlockNumber.toString(),
       safeBlockHash: safe[0].hash,
