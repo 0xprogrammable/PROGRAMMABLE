@@ -104,7 +104,7 @@ jobs:
           {
             echo "## Read-model release policy"
             echo
-            echo "Legacy-only: all six indexed route flags and shadow comparison are exactly false."
+            echo "Legacy-only: every indexed route flag and shadow comparison are exactly false."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture staged read-model evidence
