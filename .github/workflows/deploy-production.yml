@@ -50,17 +50,27 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
+      - name: Resolve read-model release policy
+        id: read-model-policy
+        env:
+          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+        run: >-
+          npm run perf:read-model:deploy-policy --
+          --env-file .vercel/.env.production.local
+          --github-output "$GITHUB_OUTPUT"
+
       - name: Build production deployment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel build --prod --token="$VERCEL_TOKEN"
 
-      - name: Deploy production build
+      - name: Stage production build without assigning domains
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          deployment_url="$(vercel deploy --prebuilt --prod --archive=tgz --token="$VERCEL_TOKEN")"
+          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --token="$VERCEL_TOKEN")"
           case "$deployment_url" in
             https://*) ;;
             *)
@@ -70,13 +80,77 @@ jobs:
           esac
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
 
-      - name: Verify deployment and production domain
+      - name: Resolve exact staged deployment
+        id: staged-deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+        run: >-
+          npm run perf:read-model:staged-deployment --
+          --target-url "$DEPLOYMENT_URL"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Verify staged deployment
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
           curl --fail --silent --show-error \
             --retry 12 --retry-all-errors --retry-delay 5 \
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
+
+      - name: Record legacy-only read path
+        if: steps.read-model-policy.outputs.evidence_required == 'false'
+        run: |
+          {
+            echo "## Read-model release policy"
+            echo
+            echo "Legacy-only: all six indexed route flags and shadow comparison are exactly false."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture staged read-model evidence
+        id: read-model-capture
+        if: steps.read-model-policy.outputs.evidence_required == 'true'
+        env:
+          PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN: ${{ secrets.PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN }}
+          PROGRAMMABLE_SHADOW_PROBE_TOKEN: ${{ secrets.PROGRAMMABLE_SHADOW_PROBE_TOKEN }}
+          PROGRAMMABLE_READ_MODEL_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          PROGRAMMABLE_READ_MODEL_VERCEL_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+        run: >-
+          npm run perf:read-model:capture --
+          --target-url "$PROGRAMMABLE_READ_MODEL_TARGET_URL"
+          --deployment-id "$PROGRAMMABLE_READ_MODEL_VERCEL_DEPLOYMENT_ID"
+          --output-directory "$RUNNER_TEMP/read-model-release-evidence"
+          --kind production-canary
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Preserve staged read-model evidence
+        if: steps.read-model-policy.outputs.evidence_required == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: read-model-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.read-model-capture.outputs.evidence_directory }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Gate indexed or shadow read path
+        if: steps.read-model-policy.outputs.evidence_required == 'true'
+        env:
+          PROGRAMMABLE_READ_MODEL_PERF_EVIDENCE_PATH: ${{ steps.read-model-capture.outputs.evidence_path }}
+          PROGRAMMABLE_READ_MODEL_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          PROGRAMMABLE_READ_MODEL_VERCEL_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npm run perf:read-model:gate
+
+      - name: Promote verified staged deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+        run: vercel promote "$DEPLOYMENT_URL" --yes --token="$VERCEL_TOKEN"
+
+      - name: Verify production domain
+        run: |
           curl --fail --silent --show-error \
             --retry 12 --retry-all-errors --retry-delay 5 \
             --max-time 30 "https://programmable.family/" > /dev/null
@@ -91,4 +165,5 @@ jobs:
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Deployment: $DEPLOYMENT_URL"
             echo "- Domain: https://programmable.family"
+            echo "- Read model: ${{ steps.read-model-policy.outputs.mode }}"
           } >> "$GITHUB_STEP_SUMMARY"
