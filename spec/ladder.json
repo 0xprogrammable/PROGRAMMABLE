@@ -57,7 +57,7 @@
     "solmate": null
   },
   "builder": {
-    "githubIdentity": null,
-    "beneficiaryAddress": null
+    "githubIdentity": "locallaunchsc-cloud",
+    "beneficiaryAddress": "0xC180590a43bB72C123bD457dABf1730C9aA6712A"
   }
 }
