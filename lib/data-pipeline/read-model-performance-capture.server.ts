@@ -15,6 +15,7 @@ import {
 import {
   createEnvioClient,
   type EnvioCandidate,
+  type EnvioCandidateCursor,
 } from "./envio";
 import {
   DataPipelineError,
@@ -31,21 +32,26 @@ import { createProductionDualRpcProviders } from "./rpc-providers.server";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-const PROFILE_ID = "read-model-smoke-v1" as const;
+const SMOKE_PROFILE_ID = "read-model-smoke-v1" as const;
+const RELEASE_PROFILE_ID = "read-model-release-v1" as const;
 const PROJECTOR_LOGIN_ROLE = "programmable_projector_login" as const;
 const PROJECTOR_CAPABILITY_ROLE = "programmable_projector" as const;
 const API_READER_LOGIN_ROLE = "programmable_api_reader_login" as const;
 const API_READER_CAPABILITY_ROLE = "programmable_api_reader" as const;
 const PERMISSION_DENIED_SQLSTATE = "42501" as const;
 const HARD_DEADLINE_MS = 75_000;
-const MAX_CALLS_PER_PROVIDER = 42;
+const SMOKE_REQUIRED_CANDIDATE_COUNT = 8;
+const RELEASE_REQUIRED_CANDIDATE_COUNT = 32;
+const SMOKE_MAX_CALLS_PER_PROVIDER = 42;
+const RELEASE_MAX_CALLS_PER_PROVIDER = 128;
 const REQUIRED_KEY_COUNT = 100;
 const REQUIRED_MODEL_LAUNCH_COUNT = 32;
-const REQUIRED_CANDIDATE_COUNT = 8;
-const MINIMUM_ELIGIBLE_LAUNCH_COUNT = 200;
+const RELEASE_TOKEN_KEY_COUNT = 264;
+const RELEASE_MINIMUM_ELIGIBLE_LAUNCH_COUNT = 264;
+const MAXIMUM_ELIGIBLE_LAUNCH_COUNT = 400;
 const ZERO_ADDRESS = `0x${"00".repeat(20)}`;
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
-const REQUEST_KEYS = Object.freeze([
+const SMOKE_REQUEST_KEYS = Object.freeze([
   "schemaVersion",
   "profileId",
   "gitHead",
@@ -53,16 +59,44 @@ const REQUEST_KEYS = Object.freeze([
   "vercelDeploymentId",
   "captureNonce",
 ] as const);
+const RELEASE_REQUEST_KEYS = Object.freeze([
+  ...SMOKE_REQUEST_KEYS,
+  "issuedAtMs",
+] as const);
 const CANDIDATE_ID_PATTERN =
   /^1:(0x[0-9a-f]{64}):(0x[0-9a-f]{64}):(?:0|[1-9]\d*)$/u;
 
+type CaptureContract = Readonly<{
+  profileId: typeof SMOKE_PROFILE_ID | typeof RELEASE_PROFILE_ID;
+  candidateCount: 8 | 32;
+  maximumCallsPerProvider: 42 | 128;
+  minimumEligibleLaunches: 200 | 264;
+  tokenKeyCount: 100 | 264;
+}>;
+
+const SMOKE_CAPTURE_CONTRACT: CaptureContract = Object.freeze({
+  profileId: SMOKE_PROFILE_ID,
+  candidateCount: SMOKE_REQUIRED_CANDIDATE_COUNT,
+  maximumCallsPerProvider: SMOKE_MAX_CALLS_PER_PROVIDER,
+  minimumEligibleLaunches: 200,
+  tokenKeyCount: REQUIRED_KEY_COUNT,
+});
+const RELEASE_CAPTURE_CONTRACT: CaptureContract = Object.freeze({
+  profileId: RELEASE_PROFILE_ID,
+  candidateCount: RELEASE_REQUIRED_CANDIDATE_COUNT,
+  maximumCallsPerProvider: RELEASE_MAX_CALLS_PER_PROVIDER,
+  minimumEligibleLaunches: RELEASE_MINIMUM_ELIGIBLE_LAUNCH_COUNT,
+  tokenKeyCount: RELEASE_TOKEN_KEY_COUNT,
+});
+
 type PerformanceCaptureRequest = Readonly<{
-  schemaVersion: 1;
-  profileId: typeof PROFILE_ID;
+  schemaVersion: 1 | 2;
+  profileId: CaptureContract["profileId"];
   gitHead: string;
   targetUrl: string;
   vercelDeploymentId: string;
   captureNonce: HexBytes32;
+  issuedAtMs?: number;
 }>;
 
 type DatasetCounts = Readonly<{
@@ -222,7 +256,24 @@ export function parseReadModelPerformanceCaptureRequest(
   value: unknown,
   env: Environment = process.env,
 ): PerformanceCaptureRequest {
-  if (!isRecord(value) || !onlyKeys(value, REQUEST_KEYS)) {
+  if (!isRecord(value)) {
+    return captureInputFailure();
+  }
+  const contract =
+    value.profileId === SMOKE_PROFILE_ID
+      ? SMOKE_CAPTURE_CONTRACT
+      : value.profileId === RELEASE_PROFILE_ID
+        ? RELEASE_CAPTURE_CONTRACT
+        : null;
+  if (
+    contract === null ||
+    !onlyKeys(
+      value,
+      contract === SMOKE_CAPTURE_CONTRACT
+        ? SMOKE_REQUEST_KEYS
+        : RELEASE_REQUEST_KEYS,
+    )
+  ) {
     return captureInputFailure();
   }
   const gitHead = exactString(value.gitHead, /^[0-9a-f]{40}$/u, 40);
@@ -249,8 +300,8 @@ export function parseReadModelPerformanceCaptureRequest(
     return captureInputFailure();
   }
   if (
-    value.schemaVersion !== 1 ||
-    value.profileId !== PROFILE_ID ||
+    value.schemaVersion !==
+      (contract === SMOKE_CAPTURE_CONTRACT ? 1 : 2) ||
     gitHead !== env.VERCEL_GIT_COMMIT_SHA ||
     targetUrl !== expectedTargetUrl ||
     parsedTarget.toString() !== targetUrl ||
@@ -267,13 +318,27 @@ export function parseReadModelPerformanceCaptureRequest(
   } catch {
     return captureInputFailure();
   }
+  let issuedAtMs: number | undefined;
+  if (contract === RELEASE_CAPTURE_CONTRACT) {
+    issuedAtMs = value.issuedAtMs as number;
+    const nowMs = Date.now();
+    if (
+      !Number.isSafeInteger(issuedAtMs) ||
+      issuedAtMs < 1 ||
+      issuedAtMs > nowMs + 30_000 ||
+      nowMs - issuedAtMs > 60_000
+    ) {
+      return captureInputFailure();
+    }
+  }
   return Object.freeze({
-    schemaVersion: 1,
-    profileId: PROFILE_ID,
+    schemaVersion: contract === SMOKE_CAPTURE_CONTRACT ? 1 : 2,
+    profileId: contract.profileId,
     gitHead,
     targetUrl,
     vercelDeploymentId: deploymentId,
     captureNonce,
+    ...(issuedAtMs === undefined ? {} : { issuedAtMs }),
   });
 }
 
@@ -311,8 +376,9 @@ function exactTimestamp(value: unknown): string {
 function exactAddresses(
   value: unknown,
   operation: string,
+  expectedCount: number,
 ): readonly HexAddress[] {
-  if (!Array.isArray(value) || value.length !== REQUIRED_KEY_COUNT) {
+  if (!Array.isArray(value) || value.length !== expectedCount) {
     return captureValidationFailure(operation);
   }
   let addresses: HexAddress[];
@@ -323,7 +389,7 @@ function exactAddresses(
   }
   if (
     addresses.some((address) => address === ZERO_ADDRESS) ||
-    new Set(addresses).size !== REQUIRED_KEY_COUNT ||
+    new Set(addresses).size !== expectedCount ||
     addresses.some(
       (address, index) => index > 0 && address <= addresses[index - 1]!,
     )
@@ -371,8 +437,11 @@ function exactLaunches(
   return Object.freeze(launches);
 }
 
-function exactCandidateIds(value: unknown): readonly string[] {
-  if (!Array.isArray(value) || value.length !== REQUIRED_CANDIDATE_COUNT) {
+function exactCandidateIds(
+  value: unknown,
+  expectedCount: number,
+): readonly string[] {
+  if (!Array.isArray(value) || value.length !== expectedCount) {
     return captureValidationFailure("performance-candidate-ids");
   }
   const ids = value.map((entry) => {
@@ -381,7 +450,7 @@ function exactCandidateIds(value: unknown): readonly string[] {
     }
     return entry;
   });
-  if (new Set(ids).size !== REQUIRED_CANDIDATE_COUNT) {
+  if (new Set(ids).size !== expectedCount) {
     return captureValidationFailure("performance-candidate-ids");
   }
   return Object.freeze(ids);
@@ -523,7 +592,10 @@ function exactAccountEvidence(
   return Object.freeze(evidence);
 }
 
-function validateDatasetSeed(value: unknown): PerformanceDatasetSeed {
+function validateDatasetSeed(
+  value: unknown,
+  contract: CaptureContract,
+): PerformanceDatasetSeed {
   if (
     !isRecord(value) ||
     !onlyKeys(value, [
@@ -556,10 +628,10 @@ function validateDatasetSeed(value: unknown): PerformanceDatasetSeed {
   }
   const launches = safeCount(
     value.counts.launches,
-    MINIMUM_ELIGIBLE_LAUNCH_COUNT,
+    contract.minimumEligibleLaunches,
     "performance-launch-count",
   );
-  if (launches > 400) {
+  if (launches > MAXIMUM_ELIGIBLE_LAUNCH_COUNT) {
     return captureValidationFailure("performance-launch-count");
   }
   const counts = Object.freeze({
@@ -627,10 +699,12 @@ function validateDatasetSeed(value: unknown): PerformanceDatasetSeed {
     tokenAddresses: exactAddresses(
       value.keys.tokenAddresses,
       "performance-token-keys",
+      contract.tokenKeyCount,
     ),
     accountAddresses: exactAddresses(
       value.keys.accountAddresses,
       "performance-account-keys",
+      REQUIRED_KEY_COUNT,
     ),
     classicLaunches: exactLaunches(
       value.keys.classicLaunches,
@@ -640,7 +714,10 @@ function validateDatasetSeed(value: unknown): PerformanceDatasetSeed {
       value.keys.stockLaunches,
       "performance-stock-launch-keys",
     ),
-    candidateIds: exactCandidateIds(value.keys.candidateIds),
+    candidateIds: exactCandidateIds(
+      value.keys.candidateIds,
+      contract.candidateCount,
+    ),
   });
   return Object.freeze({
     generatedAt: exactTimestamp(value.generatedAt),
@@ -867,20 +944,20 @@ export async function readPerformanceDataset(
     const row = rows[0]!;
     const launchCount = safeCount(
       row.launch_count,
-      MINIMUM_ELIGIBLE_LAUNCH_COUNT,
+      SMOKE_CAPTURE_CONTRACT.minimumEligibleLaunches,
       "performance-launch-count",
     );
     if (
       safeCount(
         row.eligible_launch_count,
-        MINIMUM_ELIGIBLE_LAUNCH_COUNT,
+        SMOKE_CAPTURE_CONTRACT.minimumEligibleLaunches,
         "performance-eligible-launch-count",
       ) !== launchCount ||
       safeCount(
         row.candidate_count,
-        REQUIRED_CANDIDATE_COUNT,
+        SMOKE_CAPTURE_CONTRACT.candidateCount,
         "performance-candidate-count",
-      ) !== REQUIRED_CANDIDATE_COUNT
+      ) !== SMOKE_CAPTURE_CONTRACT.candidateCount
     ) {
       return captureValidationFailure("performance-dataset-counts");
     }
@@ -907,7 +984,7 @@ export async function readPerformanceDataset(
         stockLaunches: row.stock_launches,
         candidateIds: row.candidate_ids,
       },
-    });
+    }, SMOKE_CAPTURE_CONTRACT);
     const readerEvidence = await readApiReaderDenialEvidence(readerExecutor);
     return Object.freeze({
       dataset,
@@ -938,6 +1015,7 @@ export async function readPerformanceDataset(
 async function runProductionRpcTrace(input: {
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   env: Environment;
+  contract: CaptureContract;
   work: () => Promise<unknown>;
 }): Promise<RpcTraceCapture> {
   void input.providers;
@@ -946,7 +1024,7 @@ async function runProductionRpcTrace(input: {
   if (
     !isRecord(result) ||
     !Array.isArray(result.candidates) ||
-    result.candidates.length !== REQUIRED_CANDIDATE_COUNT ||
+    result.candidates.length !== input.contract.candidateCount ||
     !isRecord(result.executionTrace)
   ) {
     return captureValidationFailure("performance-native-rpc-trace");
@@ -986,6 +1064,7 @@ function validateTrace(
   trace: RpcTraceCapture,
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider],
   expectedCandidateIds: readonly string[],
+  contract: CaptureContract,
 ): RpcTraceCapture {
   const startedAtMs = safeTraceInteger(
     trace.startedAtMs,
@@ -1005,14 +1084,14 @@ function validateTrace(
   if (
     completedAtMs < startedAtMs ||
     completedAtMs - startedAtMs !== elapsedMs ||
-    trace.candidateBatchSize !== REQUIRED_CANDIDATE_COUNT ||
+    trace.candidateBatchSize !== contract.candidateCount ||
     trace.hardDeadlineMs !== HARD_DEADLINE_MS ||
-    trace.maxCallsPerProvider !== MAX_CALLS_PER_PROVIDER ||
+    trace.maxCallsPerProvider !== contract.maximumCallsPerProvider ||
     !Array.isArray(trace.providerCallCounts) ||
     trace.providerCallCounts.length !== 2 ||
     !Array.isArray(trace.calls) ||
     !Array.isArray(trace.candidateEvidence) ||
-    trace.candidateEvidence.length !== REQUIRED_CANDIDATE_COUNT ||
+    trace.candidateEvidence.length !== contract.candidateCount ||
     providers.length !== 2
   ) {
     return captureValidationFailure("performance-rpc-trace");
@@ -1056,14 +1135,14 @@ function validateTrace(
   const expectedSuccessCounts = Object.freeze({
     getChainId: 1,
     getBlockNumber: 1,
-    getBlock: 9,
-    getTransactionReceipt: 8,
-    getBytecode: 8,
+    getBlock: contract.candidateCount + 1,
+    getTransactionReceipt: contract.candidateCount,
+    getBytecode: contract.candidateCount,
   });
   for (const [index, provider] of providers.entries()) {
     const count = safeTraceInteger(
       trace.providerCallCounts[index],
-      MAX_CALLS_PER_PROVIDER,
+      contract.maximumCallsPerProvider,
       "performance-rpc-count",
     );
     if (count < 1) return captureValidationFailure("performance-rpc-count");
@@ -1129,18 +1208,18 @@ function validateTrace(
   });
   if (
     new Set(candidateEvidence.map(({ candidateId }) => candidateId)).size !==
-      REQUIRED_CANDIDATE_COUNT ||
+      contract.candidateCount ||
     new Set(
       candidateEvidence.map(({ candidateBlockNumber }) => candidateBlockNumber),
-    ).size !== REQUIRED_CANDIDATE_COUNT ||
+    ).size !== contract.candidateCount ||
     new Set(candidateEvidence.map(({ transactionHash }) => transactionHash))
-      .size !== REQUIRED_CANDIDATE_COUNT ||
+      .size !== contract.candidateCount ||
     new Set(
       candidateEvidence.map(
         ({ candidateBlockNumber, sourceAddress }) =>
           `${candidateBlockNumber}:${sourceAddress}`,
       ),
-    ).size !== REQUIRED_CANDIDATE_COUNT ||
+    ).size !== contract.candidateCount ||
     candidateEvidence.some(
       ({ candidateBlockNumber }, index) =>
         index > 0 &&
@@ -1153,9 +1232,9 @@ function validateTrace(
   return Object.freeze({
     startedAtMs,
     completedAtMs,
-    candidateBatchSize: REQUIRED_CANDIDATE_COUNT,
+    candidateBatchSize: contract.candidateCount,
     hardDeadlineMs: HARD_DEADLINE_MS,
-    maxCallsPerProvider: MAX_CALLS_PER_PROVIDER,
+    maxCallsPerProvider: contract.maximumCallsPerProvider,
     elapsedMs,
     providerCallCounts: Object.freeze(counts),
     calls: Object.freeze(calls),
@@ -1163,7 +1242,10 @@ function validateTrace(
   });
 }
 
-async function withDeadline<T>(work: () => Promise<T>): Promise<T> {
+async function withDeadline<T>(
+  hardDeadlineMs: number,
+  work: () => Promise<T>,
+): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -1179,7 +1261,7 @@ async function withDeadline<T>(work: () => Promise<T>): Promise<T> {
                 countsTowardCircuit: true,
               }),
             ),
-          HARD_DEADLINE_MS,
+          hardDeadlineMs,
         );
       }),
     ]);
@@ -1204,6 +1286,61 @@ const DEFAULT_DEPENDENCIES: PerformanceCaptureDependencies = Object.freeze({
   runRpcTrace: runProductionRpcTrace,
 });
 
+async function readReleaseCandidates(
+  envio: ReturnType<typeof createEnvioClient>,
+): Promise<readonly EnvioCandidate[]> {
+  const selected: EnvioCandidate[] = [];
+  const seenBlocks = new Set<string>();
+  let cursor: EnvioCandidateCursor = Object.freeze({
+    blockNumber: "0",
+    blockGlobalLogIndex: -1,
+    candidateId: "",
+  });
+  for (let pageIndex = 0; pageIndex < 16; pageIndex += 1) {
+    const page = await envio.readCandidatesAfter({ cursor, limit: 32 });
+    if (page.length === 0) break;
+    for (const candidate of page) {
+      if (!seenBlocks.has(candidate.blockNumber)) {
+        seenBlocks.add(candidate.blockNumber);
+        selected.push(candidate);
+      }
+      if (selected.length === RELEASE_CAPTURE_CONTRACT.candidateCount) {
+        return Object.freeze(selected);
+      }
+    }
+    const last = page.at(-1)!;
+    cursor = Object.freeze({
+      blockNumber: last.blockNumber,
+      blockGlobalLogIndex: last.blockGlobalLogIndex,
+      candidateId: last.candidateId,
+    });
+    if (page.length < 32) break;
+  }
+  return captureValidationFailure("performance-release-candidate-corpus");
+}
+
+function releaseDataset(
+  seed: PerformanceDatasetSeed,
+  candidates: readonly EnvioCandidate[],
+): PerformanceDatasetSeed {
+  const tokenAddresses = [...new Set(
+    seed.eligibleLaunches.map(({ tokenAddress }) => tokenAddress),
+  )]
+    .sort()
+    .slice(0, RELEASE_CAPTURE_CONTRACT.tokenKeyCount);
+  return validateDatasetSeed(
+    {
+      ...seed,
+      keys: {
+        ...seed.keys,
+        tokenAddresses,
+        candidateIds: candidates.map(({ candidateId }) => candidateId),
+      },
+    },
+    RELEASE_CAPTURE_CONTRACT,
+  );
+}
+
 export async function captureReadModelPerformance(
   requestBody: unknown,
   options: Readonly<{
@@ -1214,11 +1351,21 @@ export async function captureReadModelPerformance(
   const env = options.env ?? process.env;
   const dependencies = options.dependencies ?? DEFAULT_DEPENDENCIES;
   const request = parseReadModelPerformanceCaptureRequest(requestBody, env);
+  const contract =
+    request.profileId === RELEASE_PROFILE_ID
+      ? RELEASE_CAPTURE_CONTRACT
+      : SMOKE_CAPTURE_CONTRACT;
   const capturedDataset = await dependencies.readDataset(env);
-  const dataset = validateDatasetSeed(capturedDataset.dataset);
   const accessEvidence = validateAccessEvidence(
     capturedDataset.accessEvidence,
   );
+  let dataset: PerformanceDatasetSeed | undefined;
+  if (contract === SMOKE_CAPTURE_CONTRACT) {
+    dataset = validateDatasetSeed(
+      capturedDataset.dataset,
+      SMOKE_CAPTURE_CONTRACT,
+    );
+  }
   const envioConfig = loadDataPipelineConfig(env).envio;
   if (!envioConfig.endpoint) return captureInputFailure();
   const envio = dependencies.createEnvio({
@@ -1228,21 +1375,28 @@ export async function captureReadModelPerformance(
   const providers = dependencies.createProviders(env);
   const deadlineStartedAt = Date.now();
 
-  const trace = await withDeadline(async () => {
-    const candidates = await Promise.all(
-      dataset.keys.candidateIds.map((candidateId) =>
-        envio.readCandidate(candidateId),
-      ),
-    );
-    const freshCandidates = candidates.map((candidate, index) => {
-      if (
-        candidate === null ||
-        candidate.candidateId !== dataset.keys.candidateIds[index]
-      ) {
-        return captureValidationFailure("performance-envio-candidate");
-      }
-      return candidate;
-    }) as EnvioCandidate[];
+  const trace = await withDeadline(HARD_DEADLINE_MS, async () => {
+    let freshCandidates: readonly EnvioCandidate[];
+    if (contract === RELEASE_CAPTURE_CONTRACT) {
+      const candidates = await readReleaseCandidates(envio);
+      dataset = releaseDataset(capturedDataset.dataset, candidates);
+      freshCandidates = candidates;
+    } else {
+      const candidates = await Promise.all(
+        dataset!.keys.candidateIds.map((candidateId) =>
+          envio.readCandidate(candidateId),
+        ),
+      );
+      freshCandidates = candidates.map((candidate, index) => {
+        if (
+          candidate === null ||
+          candidate.candidateId !== dataset!.keys.candidateIds[index]
+        ) {
+          return captureValidationFailure("performance-envio-candidate");
+        }
+        return candidate;
+      });
+    }
     const remaining = HARD_DEADLINE_MS - (Date.now() - deadlineStartedAt);
     if (remaining < 10) {
       return captureValidationFailure("performance-rpc-deadline");
@@ -1250,13 +1404,14 @@ export async function captureReadModelPerformance(
     const rpcTrace = await dependencies.runRpcTrace({
       providers,
       env,
+      contract,
       work: async () => {
         return dependencies.verifyBatch({
           candidates: freshCandidates,
           providers,
           rpcPolicy: {
             hardDeadlineMs: remaining,
-            maxCallsPerProvider: MAX_CALLS_PER_PROVIDER,
+            maxCallsPerProvider: contract.maximumCallsPerProvider,
           },
         });
       },
@@ -1266,34 +1421,35 @@ export async function captureReadModelPerformance(
   const validatedTrace = validateTrace(
     trace,
     providers,
-    dataset.keys.candidateIds,
+    dataset!.keys.candidateIds,
+    contract,
   );
   return Object.freeze({
     schemaVersion: 1 as const,
     captureNonce: request.captureNonce,
     datasetManifest: Object.freeze({
       schemaVersion: 1 as const,
-      profileId: PROFILE_ID,
-      generatedAt: dataset.generatedAt,
-      counts: dataset.counts,
-      releaseCounts: dataset.releaseCounts,
-      eligibleLaunches: dataset.eligibleLaunches,
-      accountEvidence: dataset.accountEvidence,
-      keys: dataset.keys,
+      profileId: contract.profileId,
+      generatedAt: dataset!.generatedAt,
+      counts: dataset!.counts,
+      releaseCounts: dataset!.releaseCounts,
+      eligibleLaunches: dataset!.eligibleLaunches,
+      accountEvidence: dataset!.accountEvidence,
+      keys: dataset!.keys,
       accessEvidence,
     }),
     rpcTrace: Object.freeze({
       schemaVersion: 1 as const,
-      profileId: PROFILE_ID,
+      profileId: contract.profileId,
       gitHead: request.gitHead,
       targetUrl: request.targetUrl,
       vercelDeploymentId: request.vercelDeploymentId,
       captureNonce: request.captureNonce,
       startedAtMs: validatedTrace.startedAtMs,
       completedAtMs: validatedTrace.completedAtMs,
-      candidateBatchSize: REQUIRED_CANDIDATE_COUNT,
+      candidateBatchSize: contract.candidateCount,
       hardDeadlineMs: HARD_DEADLINE_MS,
-      maxCallsPerProvider: MAX_CALLS_PER_PROVIDER,
+      maxCallsPerProvider: contract.maximumCallsPerProvider,
       elapsedMs: validatedTrace.elapsedMs,
       providerCallCounts: validatedTrace.providerCallCounts,
       calls: validatedTrace.calls,

@@ -11,6 +11,7 @@ import {
 } from "./read-model-gate-core.mjs";
 import {
   verifyLiveCacheAndKeyContracts,
+  verifyLiveRollbackTarget,
   verifyLiveVercelBinding,
 } from "./read-model-live-verifier.mjs";
 import { expectedProductionProviderBindings } from "./read-model-provider-binding.mjs";
@@ -78,7 +79,7 @@ async function main() {
   const profile = parseReadModelLoadProfile(
     JSON.parse(
       readFileSync(
-        resolve(rootDirectory, "config/read-model-load-profile.v1.json"),
+        resolve(rootDirectory, "config/read-model-release-profile.v1.json"),
         "utf8",
       ),
     ),
@@ -112,13 +113,21 @@ async function main() {
     rootDirectory,
     profile,
   );
-  const [vercelResult, cacheResult] = await Promise.all([
+  const [vercelResult, rollbackResult, cacheResult] = await Promise.all([
     verifyLiveVercelBinding({
       evidence: bundle.evidence,
       gitHead,
       token: process.env.VERCEL_TOKEN,
       teamId: process.env.VERCEL_ORG_ID,
       projectId: process.env.VERCEL_PROJECT_ID,
+    }),
+    verifyLiveRollbackTarget({
+      stagedDeploymentId: bundle.evidence.target.vercelDeploymentId,
+      token: process.env.VERCEL_TOKEN,
+      teamId: process.env.VERCEL_ORG_ID,
+      projectId: process.env.VERCEL_PROJECT_ID,
+      productionDomain:
+        process.env.PROGRAMMABLE_PRODUCTION_DOMAIN ?? "programmable.family",
     }),
     verifyLiveCacheAndKeyContracts({
       profile,
@@ -138,6 +147,7 @@ async function main() {
     ...evidenceResult.failures,
     ...sourceResult.failures,
     ...vercelResult.failures,
+    ...rollbackResult.failures,
     ...cacheResult.failures,
   ];
   output(
@@ -156,6 +166,7 @@ async function main() {
         ...evidenceResult.checks,
         ...sourceResult.checks,
         ...vercelResult.checks,
+        ...rollbackResult.checks,
         ...cacheResult.checks,
       ],
       failures,

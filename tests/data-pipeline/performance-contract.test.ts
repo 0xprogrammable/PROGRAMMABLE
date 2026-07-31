@@ -68,8 +68,12 @@ function readJson(path: string) {
   return JSON.parse(readFileSync(resolve(process.cwd(), path), "utf8"));
 }
 
-function profileFixture() {
-  return readJson("config/read-model-load-profile.v1.json");
+function profileFixture(release = false) {
+  return readJson(
+    release
+      ? "config/read-model-release-profile.v1.json"
+      : "config/read-model-load-profile.v1.json",
+  );
 }
 
 function expectedProviders() {
@@ -103,18 +107,23 @@ function candidateFixture(index: number) {
   };
 }
 
-const CANDIDATE_EVIDENCE = Array.from({ length: 8 }, (_, index) =>
-  candidateFixture(index + 1),
-);
-
-function rawRpcTrace(capturedAtMs: number) {
+function rawRpcTrace(
+  capturedAtMs: number,
+  profile = profileFixture(),
+) {
+  const candidateCount = profile.datasetCoverage.candidateSampleCount;
+  const elapsedMs = candidateCount === 32 ? 300 : 100;
+  const candidateEvidence = Array.from(
+    { length: candidateCount },
+    (_, index) => candidateFixture(index + 1),
+  );
   const calls = expectedProviders().flatMap((provider) => {
     const operations = [
       "getChainId",
       "getBlockNumber",
-      ...Array.from({ length: 9 }, () => "getBlock"),
-      ...Array.from({ length: 8 }, () => "getTransactionReceipt"),
-      ...Array.from({ length: 8 }, () => "getBytecode"),
+      ...Array.from({ length: candidateCount + 1 }, () => "getBlock"),
+      ...Array.from({ length: candidateCount }, () => "getTransactionReceipt"),
+      ...Array.from({ length: candidateCount }, () => "getBytecode"),
     ];
     return operations.map((operation, index) => ({
       providerIdentity: provider.identity,
@@ -133,19 +142,19 @@ function rawRpcTrace(capturedAtMs: number) {
   });
   return {
     schemaVersion: 1,
-    profileId: "read-model-smoke-v1",
+    profileId: profile.profileId,
     gitHead: GIT_HEAD,
     targetUrl: TARGET_URL,
     vercelDeploymentId: DEPLOYMENT_ID,
     captureNonce: CAPTURE_NONCE,
     startedAtMs: capturedAtMs - 125_000,
-    completedAtMs: capturedAtMs - 124_900,
-    candidateBatchSize: 8,
+    completedAtMs: capturedAtMs - 125_000 + elapsedMs,
+    candidateBatchSize: candidateCount,
     hardDeadlineMs: 75_000,
-    maxCallsPerProvider: 42,
-    elapsedMs: 100,
-    providerCallCounts: [27, 27],
-    candidateEvidence: CANDIDATE_EVIDENCE,
+    maxCallsPerProvider: profile.projector.rpc.maxCallsPerProviderPerRun,
+    elapsedMs,
+    providerCallCounts: [3 + candidateCount * 3, 3 + candidateCount * 3],
+    candidateEvidence,
     calls,
   };
 }
@@ -229,22 +238,26 @@ function rawHttpSamples(
   });
 }
 
-function createBundle() {
+function createBundle(release = false) {
   const directory = mkdtempSync(join(tmpdir(), "read-model-gate-"));
   temporaryDirectories.push(directory);
-  const profile = profileFixture();
+  const profile = profileFixture(release);
   const capturedAtMs = Date.now();
   const address = (value: number) =>
     `0x${value.toString(16).padStart(40, "0")}`;
-  const eligibleLaunches = Array.from({ length: 260 }, (_, index) => {
+  const launchCount = release ? 264 : 260;
+  const classicEnd = release ? 212 : 208;
+  const stockV1End = classicEnd + 1;
+  const stockV2End = stockV1End + 8;
+  const eligibleLaunches = Array.from({ length: launchCount }, (_, index) => {
     const releaseVersion =
       index < 27
         ? "classic-v2"
-        : index < 208
+        : index < classicEnd
           ? "classic-v3"
-          : index < 209
+          : index < stockV1End
             ? "stock-paired-v1"
-            : index < 217
+            : index < stockV2End
               ? "stock-paired-v2"
               : "stock-paired-v3";
     return {
@@ -261,7 +274,10 @@ function createBundle() {
     launch.releaseVersion.startsWith("stock-paired-"),
   );
   const keys = {
-    tokenAddresses: Array.from({ length: 100 }, (_, index) => address(index + 1)),
+    tokenAddresses: Array.from(
+      { length: profile.datasetCoverage.tokenSampleCount },
+      (_, index) => address(index + 1),
+    ),
     accountAddresses: Array.from(
       { length: 100 },
       (_, index) => address(index + 1_001),
@@ -272,23 +288,26 @@ function createBundle() {
     stockLaunches: eligibleStockLaunches
       .slice(0, 32)
       .map(({ account, transactionHash }) => ({ account, transactionHash })),
-    candidateIds: CANDIDATE_EVIDENCE.map(({ candidateId }) => candidateId),
+    candidateIds: Array.from(
+      { length: profile.datasetCoverage.candidateSampleCount },
+      (_, index) => candidateFixture(index + 1).candidateId,
+    ),
   };
   const datasetManifest = {
     schemaVersion: 1,
     profileId: profile.profileId,
     generatedAt: new Date(capturedAtMs - 130_000).toISOString(),
     counts: {
-      launches: 260,
-      chainEvents: 780,
-      marketSnapshots: 260,
-      marketCandles: 260,
+      launches: launchCount,
+      chainEvents: launchCount * 3,
+      marketSnapshots: launchCount,
+      marketCandles: launchCount,
       accounts: 100,
-      rewardRows: 260,
+      rewardRows: launchCount,
     },
     releaseCounts: {
       "classic-v2": 27,
-      "classic-v3": 181,
+      "classic-v3": release ? 185 : 181,
       "stock-paired-v1": 1,
       "stock-paired-v2": 8,
       "stock-paired-v3": 43,
@@ -322,7 +341,7 @@ function createBundle() {
     httpSamples: `${rawHttpSamples(profile, keys, eligibleLaunches, capturedAtMs)
       .map((sample) => JSON.stringify(sample))
       .join("\n")}\n`,
-    rpcTrace: `${JSON.stringify(rawRpcTrace(capturedAtMs))}\n`,
+    rpcTrace: `${JSON.stringify(rawRpcTrace(capturedAtMs, profile))}\n`,
   };
   for (const key of Object.keys(files) as (keyof typeof files)[]) {
     writeFileSync(join(directory, files[key]), contents[key]);
@@ -383,9 +402,9 @@ function rewriteHttpSamples(
   writeFileSync(fixture.evidencePath, `${JSON.stringify(fixture.evidence)}\n`);
 }
 
-function loadBundle(evidencePath: string) {
+function loadBundle(evidencePath: string, release = false) {
   return gateCore.loadReadModelReleaseEvidence({
-    profile: profileFixture(),
+    profile: profileFixture(release),
     evidencePath,
   });
 }
@@ -470,6 +489,48 @@ describe("read-model performance contract", () => {
       callsPerProvider: 81,
       durationMs: 121_200,
     });
+  });
+
+  it("gates the 32-candidate release ceiling against the full 264-launch corpus", () => {
+    const profile = gateCore.parseReadModelLoadProfile(profileFixture(true));
+    expect(profile.projector).toMatchObject({
+      smokeCandidateBatchSize: 8,
+      maximumCandidateBatchSize: 32,
+      hardDeadlineMs: 75_000,
+    });
+    expect(gateCore.projectorCallsPerProviderPerAttempt(profile, 32)).toBe(99);
+    expect(profile.projector.rpc).toMatchObject({
+      maxCallsPerProviderPerRun: 128,
+      maxAggregateCallsPerRun: 256,
+    });
+    expect(
+      sourceContracts.evaluateReadModelSourceContracts(process.cwd(), profile)
+        .ok,
+    ).toBe(true);
+
+    const fixture = createBundle(true);
+    const result = gateCore.evaluateReadModelReleaseEvidence(
+      loadBundle(fixture.evidencePath, true),
+      { gitHead: GIT_HEAD, expectedProviders: expectedProviders() },
+    );
+    expect(result.failures).toEqual([]);
+    expect(result.releaseEvidenceAccepted).toBe(true);
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "release-corpus-cycles",
+          status: "pass",
+        }),
+        expect.objectContaining({
+          id: "projector-runtime-policy",
+          status: "pass",
+        }),
+        expect.objectContaining({
+          id: "rpc-provider-trace",
+          status: "pass",
+        }),
+      ]),
+    );
   });
 
   it("accepts only digested raw evidence bound to the exact release", () => {
@@ -913,6 +974,22 @@ describe("read-model performance contract", () => {
     const fetchImpl = async (input: URL | RequestInfo) => {
       const url = new URL(String(input));
       if (url.hostname === "api.vercel.com") {
+        if (url.pathname === "/v6/deployments") {
+          return new Response(
+            JSON.stringify({
+              deployments: [
+                {
+                  id: `dpl_${"B".repeat(24)}`,
+                  projectId: "prj_test",
+                  readyState: "READY",
+                  target: "production",
+                  alias: ["programmable.family"],
+                },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
         return new Response(
           JSON.stringify({
             id: DEPLOYMENT_ID,
@@ -994,6 +1071,43 @@ describe("read-model performance contract", () => {
       fetchImpl,
     });
     expect(vercel.ok).toBe(true);
+    const rollback = await liveVerifier.verifyLiveRollbackTarget({
+      stagedDeploymentId: DEPLOYMENT_ID,
+      token: "token",
+      teamId: "team",
+      projectId: "prj_test",
+      productionDomain: "programmable.family",
+      fetchImpl,
+    });
+    expect(rollback).toMatchObject({
+      ok: true,
+      rollbackDeploymentId: `dpl_${"B".repeat(24)}`,
+    });
+    const noRollback = await liveVerifier.verifyLiveRollbackTarget({
+      stagedDeploymentId: DEPLOYMENT_ID,
+      token: "token",
+      teamId: "team",
+      projectId: "prj_test",
+      productionDomain: "programmable.family",
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            deployments: [
+              {
+                id: DEPLOYMENT_ID,
+                projectId: "prj_test",
+                readyState: "READY",
+                target: "production",
+                alias: ["programmable.family"],
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    });
+    expect(noRollback.failures).toContainEqual(
+      expect.objectContaining({ id: "vercel-rollback-target" }),
+    );
     const cache = await liveVerifier.verifyLiveCacheAndKeyContracts({
       profile: fixture.profile,
       evidence: fixture.evidence,
@@ -1054,7 +1168,41 @@ describe("read-model performance contract", () => {
       profile,
     );
     expect(result.ok).toBe(true);
-    expect(result.checks).toHaveLength(25);
+    expect(result.checks).toHaveLength(33);
+
+    const dualRpcPath = "lib/data-pipeline/dual-rpc.ts";
+    const dualRpcSource = readFileSync(resolve(process.cwd(), dualRpcPath), "utf8");
+    const formattingOnly = dualRpcSource
+      .replace(
+        "const DEFAULT_RPC_CONCURRENCY = 4;",
+        "const DEFAULT_RPC_CONCURRENCY\n  =\n  4;",
+      )
+      .replace(
+        "executionTrace: Object.freeze({",
+        "executionTrace :\n          Object.freeze ( {",
+      );
+    expect(formattingOnly).not.toBe(dualRpcSource);
+    expect(
+      sourceContracts.evaluateReadModelSourceContracts(process.cwd(), profile, {
+        sourceOverrides: { [dualRpcPath]: formattingOnly },
+      }).ok,
+    ).toBe(true);
+
+    const semanticDrift = sourceContracts.evaluateReadModelSourceContracts(
+      process.cwd(),
+      profile,
+      {
+        sourceOverrides: {
+          [dualRpcPath]: dualRpcSource.replace(
+            "const DEFAULT_RPC_CONCURRENCY = 4;",
+            "const DEFAULT_RPC_CONCURRENCY = 5;",
+          ),
+        },
+      },
+    );
+    expect(
+      semanticDrift.failures.map((failure: { id: string }) => failure.id),
+    ).toContain("source-rpc-concurrency");
     const packageJson = readJson("package.json");
     expect(packageJson.scripts["perf:read-model:smoke"]).toContain(
       "read-model-smoke.mjs",
@@ -1091,5 +1239,50 @@ describe("read-model performance contract", () => {
     expect(captureSource).not.toContain("x-programmable-shadow-probe-token");
     expect(captureSource).not.toContain('"dataset-manifest"');
     expect(captureSource).not.toContain('"rpc-trace"');
+  });
+
+  it("pins distributed release-probe failure and replay semantics", () => {
+    const profile = gateCore.parseReadModelLoadProfile(profileFixture());
+    const coordinatorPath = "lib/data-pipeline/route-coordinator.server.ts";
+    const noncePath = "lib/data-pipeline/release-probe-nonce.server.ts";
+    const readinessPath = "lib/data-pipeline/public-route-readiness.server.ts";
+    const coordinator = readFileSync(
+      resolve(process.cwd(), coordinatorPath),
+      "utf8",
+    );
+    const nonceConsumer = readFileSync(resolve(process.cwd(), noncePath), "utf8");
+    const readiness = readFileSync(resolve(process.cwd(), readinessPath), "utf8");
+    const drift = sourceContracts.evaluateReadModelSourceContracts(
+      process.cwd(),
+      profile,
+      {
+        sourceOverrides: {
+          [coordinatorPath]: coordinator
+            .replace(
+              "const RELEASE_PROBE_MAX_AGE_MS = 5 * 60 * 1_000;",
+              "const RELEASE_PROBE_MAX_AGE_MS = 15 * 60 * 1_000;",
+            )
+            .replace("provenanceHeaders({ source: result.source })", "discardedHeaders({ source: result.source })"),
+          [noncePath]: nonceConsumer.replace(
+            'const RELEASE_PROBE_LOGIN = "programmable_release_probe_nonce_login";',
+            'const RELEASE_PROBE_LOGIN = "shared_runtime_login";',
+          ),
+          [readinessPath]: readiness
+            .replace("status: 503,", "status: 500,")
+            .replace("if (releaseProbe) {", "if (true) {"),
+        },
+      },
+    );
+    expect(
+      drift.failures.map((failure: { id: string }) => failure.id),
+    ).toEqual(
+      expect.arrayContaining([
+        "source-release-probe-freshness",
+        "source-release-probe-distributed-replay",
+        "source-release-probe-private-failure",
+        "source-release-probe-replay-validation",
+        "source-release-probe-selected-provenance",
+      ]),
+    );
   });
 });

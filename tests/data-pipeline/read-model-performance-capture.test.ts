@@ -72,6 +72,19 @@ function body(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function releaseBody(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 2,
+    profileId: "read-model-release-v1",
+    gitHead,
+    targetUrl,
+    vercelDeploymentId,
+    captureNonce: `0x${"34".repeat(32)}`,
+    issuedAtMs: Date.now(),
+    ...overrides,
+  };
+}
+
 function dataset() {
   const releaseCounts = {
     "classic-v2": 50,
@@ -130,11 +143,180 @@ function dataset() {
   };
 }
 
+function releaseDataset() {
+  const seed = dataset();
+  const releaseCounts = {
+    "classic-v2": 60,
+    "classic-v3": 104,
+    "stock-paired-v1": 34,
+    "stock-paired-v2": 33,
+    "stock-paired-v3": 33,
+  };
+  let identityCursor = 0;
+  const eligibleLaunches = Object.entries(releaseCounts).flatMap(
+    ([releaseVersion, count]) =>
+      Array.from({ length: count }, (_, index) => {
+        const identity = identityCursor + index + 1;
+        return {
+          account: address(identity + 1_000),
+          transactionHash: transactionHash(identity),
+          tokenAddress: address(identity),
+          releaseVersion,
+        };
+      }).map((launch, index, launches) => {
+        if (index === launches.length - 1) identityCursor += launches.length;
+        return launch;
+      }),
+  );
+  return {
+    ...seed,
+    counts: {
+      ...seed.counts,
+      launches: 264,
+      chainEvents: 792,
+      marketSnapshots: 264,
+      marketCandles: 264,
+      rewardRows: 300,
+    },
+    releaseCounts,
+    eligibleLaunches,
+  };
+}
+
+function releaseCandidate(index: number) {
+  const candidateBlockHash = `0x${(index + 1)
+    .toString(16)
+    .padStart(64, "0")}` as `0x${string}`;
+  const candidateTransactionHash = `0x${(index + 101)
+    .toString(16)
+    .padStart(64, "0")}` as `0x${string}`;
+  return {
+    candidateId: `1:${candidateBlockHash}:${candidateTransactionHash}:0`,
+    blockNumber: String(1_000 + index),
+    blockHash: candidateBlockHash,
+    transactionHash: candidateTransactionHash,
+    blockGlobalLogIndex: 0,
+    sourceAddress: address(index + 1),
+  };
+}
+
 describe("read-model performance capture binding", () => {
   it("binds the request to the exact staged Vercel deployment", () => {
     expect(
       parseReadModelPerformanceCaptureRequest(body(), environment()),
     ).toEqual(body());
+  });
+
+  it("binds a fresh release request to the exact staged deployment", () => {
+    const request = releaseBody();
+    expect(
+      parseReadModelPerformanceCaptureRequest(request, environment()),
+    ).toEqual(request);
+    expect(() =>
+      parseReadModelPerformanceCaptureRequest(
+        { ...request, issuedAtMs: Date.now() - 60_001 },
+        environment(),
+      ),
+    ).toThrow();
+  });
+
+  it("captures the real 32-candidate release ceiling with a 128-call provider budget", async () => {
+    const seed = releaseDataset();
+    const candidates = Array.from({ length: 32 }, (_, index) =>
+      releaseCandidate(index),
+    );
+    const readCandidatesAfter = vi.fn(async () => candidates);
+    const providers = [
+      {
+        identity: "alchemy-provider",
+        vendorGroup: "alchemy",
+        endpointCommitment: bytes32("a"),
+        endpointOriginCommitment: bytes32("b"),
+      },
+      {
+        identity: "quicknode-provider",
+        vendorGroup: "quicknode",
+        endpointCommitment: bytes32("c"),
+        endpointOriginCommitment: bytes32("d"),
+      },
+    ];
+    const calls = providers.flatMap((provider, providerIndex) =>
+      [
+        ["getChainId", 1],
+        ["getBlockNumber", 1],
+        ["getBlock", 33],
+        ["getTransactionReceipt", 32],
+        ["getBytecode", 32],
+      ].flatMap(([operation, count]) =>
+        Array.from({ length: count as number }, (_, index) => ({
+          providerIdentity: provider.identity,
+          providerVendorGroup: provider.vendorGroup,
+          providerEndpointCommitment: provider.endpointCommitment,
+          providerOriginCommitment: provider.endpointOriginCommitment,
+          operation,
+          attempt: 1,
+          startedOffsetMs: providerIndex * 100 + index,
+          durationMs: 1,
+          outcome: "success" as const,
+        })),
+      ),
+    );
+    const runRpcTrace = vi.fn(async ({ work }) => {
+      await work();
+      return {
+        startedAtMs: 2_000,
+        completedAtMs: 2_250,
+        candidateBatchSize: 32,
+        hardDeadlineMs: 75_000,
+        maxCallsPerProvider: 128,
+        elapsedMs: 250,
+        calls,
+        providerCallCounts: [99, 99],
+        candidateEvidence: candidates.map((candidate) => ({
+          candidateId: candidate.candidateId,
+          candidateBlockNumber: candidate.blockNumber,
+          candidateBlockHash: candidate.blockHash,
+          transactionHash: candidate.transactionHash,
+          sourceAddress: candidate.sourceAddress,
+        })),
+      };
+    });
+    const verifyBatch = vi.fn(async () => ({ candidates }));
+    const dependencies = {
+      readDataset: vi.fn(async () => ({ dataset: seed, accessEvidence })),
+      createEnvio: vi.fn(() => ({ readCandidatesAfter })),
+      createProviders: vi.fn(() => providers),
+      verifyBatch,
+      runRpcTrace,
+    } as never;
+    const request = releaseBody();
+
+    const result = await captureReadModelPerformance(request, {
+      env: environment(),
+      dependencies,
+    });
+
+    expect(readCandidatesAfter).toHaveBeenCalledWith({
+      cursor: { blockNumber: "0", blockGlobalLogIndex: -1, candidateId: "" },
+      limit: 32,
+    });
+    expect(verifyBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates,
+        rpcPolicy: {
+          hardDeadlineMs: expect.any(Number),
+          maxCallsPerProvider: 128,
+        },
+      }),
+    );
+    expect(result.rpcTrace).toMatchObject({
+      profileId: "read-model-release-v1",
+      candidateBatchSize: 32,
+      maxCallsPerProvider: 128,
+      providerCallCounts: [99, 99],
+    });
+    expect(result.datasetManifest.keys.tokenAddresses).toHaveLength(264);
+    expect(result.datasetManifest.keys.candidateIds).toHaveLength(32);
   });
 
   it.each([

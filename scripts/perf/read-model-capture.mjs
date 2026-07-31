@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import {
   appendFileSync,
   mkdirSync,
@@ -411,6 +411,21 @@ function exactKeys(value, expected, subject) {
 
 async function runtimeEvidence(input) {
   const startedAtMs = Date.now();
+  const requestBody = JSON.stringify({
+    schemaVersion: 2,
+    profileId: input.profile.profileId,
+    gitHead: input.gitHead,
+    targetUrl: input.targetUrl.toString(),
+    vercelDeploymentId: input.deploymentId,
+    captureNonce: input.captureNonce,
+    issuedAtMs: startedAtMs,
+  });
+  const releaseSignature = createHmac(
+    "sha256",
+    input.performanceProbeToken,
+  )
+    .update(requestBody, "utf8")
+    .digest("hex");
   const response = await fetch(
     new URL(RUNTIME_CAPTURE_PATH, input.targetUrl),
     {
@@ -420,15 +435,9 @@ async function runtimeEvidence(input) {
         "Content-Type": "application/json",
         "x-programmable-performance-probe": "1",
         "x-programmable-performance-probe-token": input.performanceProbeToken,
+        "x-programmable-release-capture-signature": `v1=${releaseSignature}`,
       },
-      body: JSON.stringify({
-        schemaVersion: 1,
-        profileId: input.profile.profileId,
-        gitHead: input.gitHead,
-        targetUrl: input.targetUrl.toString(),
-        vercelDeploymentId: input.deploymentId,
-        captureNonce: input.captureNonce,
-      }),
+      body: requestBody,
       redirect: "error",
       signal: AbortSignal.timeout(input.profile.projector.hostingDeadlineMs),
     },
@@ -528,7 +537,7 @@ const args = argumentsFrom(process.argv.slice(2));
 const profile = parseReadModelLoadProfile(
   JSON.parse(
     readFileSync(
-      resolve(rootDirectory, "config/read-model-load-profile.v1.json"),
+      resolve(rootDirectory, "config/read-model-release-profile.v1.json"),
       "utf8",
     ),
   ),

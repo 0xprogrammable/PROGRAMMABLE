@@ -71,8 +71,38 @@ const GIT_SHA = /^[0-9a-f]{40}$/u;
 const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]{20,80}$/u;
 const ARTIFACT_FILE = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 const MAX_ARTIFACT_BYTES = 32 * 1024 * 1024;
-const REQUIRED_DATASET_KEY_COUNT = 100;
-const REQUIRED_CANDIDATE_KEY_COUNT = 8;
+const SMOKE_PROFILE_ID = "read-model-smoke-v1";
+const RELEASE_PROFILE_ID = "read-model-release-v1";
+const PROFILE_CONTRACTS = Object.freeze({
+  [SMOKE_PROFILE_ID]: Object.freeze({
+    tokenKeyCount: 100,
+    accountKeyCount: 100,
+    candidateCount: 8,
+    minimumEligibleLaunches: 200,
+    expectedDataset: Object.freeze({
+      launches: 200,
+      chainEvents: 600,
+      marketSnapshots: 200,
+      marketCandles: 200,
+      accounts: 100,
+      rewardRows: 200,
+    }),
+  }),
+  [RELEASE_PROFILE_ID]: Object.freeze({
+    tokenKeyCount: 264,
+    accountKeyCount: 100,
+    candidateCount: 32,
+    minimumEligibleLaunches: 264,
+    expectedDataset: Object.freeze({
+      launches: 264,
+      chainEvents: 792,
+      marketSnapshots: 264,
+      marketCandles: 264,
+      accounts: 100,
+      rewardRows: 264,
+    }),
+  }),
+});
 const REQUIRED_RELEASE_VERSIONS = Object.freeze([
   "classic-v2",
   "classic-v3",
@@ -80,15 +110,6 @@ const REQUIRED_RELEASE_VERSIONS = Object.freeze([
   "stock-paired-v2",
   "stock-paired-v3",
 ]);
-
-const EXPECTED_DATASET = Object.freeze({
-  launches: 200,
-  chainEvents: 600,
-  marketSnapshots: 200,
-  marketCandles: 200,
-  accounts: 100,
-  rewardRows: 200,
-});
 
 const EXPECTED_CACHE_CONTRACTS = Object.freeze({
   exploreList:
@@ -254,9 +275,14 @@ export function parseReadModelLoadProfile(value) {
     "profile",
   );
   if (input.schemaVersion !== 1) fail("profile.schemaVersion", "expected 1");
-  if (input.profileId !== "read-model-smoke-v1") {
-    fail("profile.profileId", "expected read-model-smoke-v1");
+  const contract = PROFILE_CONTRACTS[input.profileId];
+  if (!contract) {
+    fail(
+      "profile.profileId",
+      "expected read-model-smoke-v1 or read-model-release-v1",
+    );
   }
+  const releaseProfile = input.profileId === RELEASE_PROFILE_ID;
 
   const scope = exactKeys(
     input.scope,
@@ -301,8 +327,8 @@ export function parseReadModelLoadProfile(value) {
   }
 
   const dataset = parseDataset(input.dataset, "profile.dataset");
-  if (!sameRecord(dataset, EXPECTED_DATASET, DATASET_KEYS)) {
-    fail("profile.dataset", "does not match the v1 smoke dataset");
+  if (!sameRecord(dataset, contract.expectedDataset, DATASET_KEYS)) {
+    fail("profile.dataset", "does not match the profile dataset floor");
   }
 
   const datasetCoverage = exactKeys(
@@ -356,17 +382,18 @@ export function parseReadModelLoadProfile(value) {
       datasetCoverage.requiredReleaseVersions,
       "profile.datasetCoverage.requiredReleaseVersions",
     ).join(",") !== REQUIRED_RELEASE_VERSIONS.join(",") ||
-    datasetCoverage.minimumEligibleLaunches !== 200 ||
+    datasetCoverage.minimumEligibleLaunches !==
+      contract.minimumEligibleLaunches ||
     datasetCoverage.maximumEligibleLaunches !== 400 ||
     datasetCoverage.maximumClassicLookupLaunches !== 300 ||
     datasetCoverage.maximumStockLookupLaunches !== 100 ||
     datasetCoverage.minimumClassicLookupLaunches !== 32 ||
     datasetCoverage.minimumStockLookupLaunches !== 32 ||
-    datasetCoverage.tokenSampleCount !== REQUIRED_DATASET_KEY_COUNT ||
-    datasetCoverage.accountSampleCount !== REQUIRED_DATASET_KEY_COUNT ||
+    datasetCoverage.tokenSampleCount !== contract.tokenKeyCount ||
+    datasetCoverage.accountSampleCount !== contract.accountKeyCount ||
     datasetCoverage.classicLaunchSampleCount !== 32 ||
     datasetCoverage.stockLaunchSampleCount !== 32 ||
-    datasetCoverage.candidateSampleCount !== REQUIRED_CANDIDATE_KEY_COUNT ||
+    datasetCoverage.candidateSampleCount !== contract.candidateCount ||
     !sameRecord(
       minimumRowsPerLaunch,
       {
@@ -478,8 +505,8 @@ export function parseReadModelLoadProfile(value) {
     load.probeTimeoutMs !== 30_000 ||
     load.maximumErrorRateBps !== 0 ||
     load.maximumCacheHitRateBps !== 0 ||
-    load.minimumDistinctTokenKeys !== REQUIRED_DATASET_KEY_COUNT ||
-    load.minimumDistinctAccountKeys !== REQUIRED_DATASET_KEY_COUNT ||
+    load.minimumDistinctTokenKeys !== contract.tokenKeyCount ||
+    load.minimumDistinctAccountKeys !== contract.accountKeyCount ||
     load.minimumDistinctClassicLaunchKeys !== 32 ||
     load.minimumDistinctStockLaunchKeys !== 32
   ) {
@@ -512,7 +539,8 @@ export function parseReadModelLoadProfile(value) {
     projector.hardDeadlineMs !== 75_000 ||
     projector.minimumReserveMs !== 15_000 ||
     projector.smokeCandidateBatchSize !== 8 ||
-    projector.maximumCandidateBatchSize !== 8 ||
+    projector.maximumCandidateBatchSize !==
+      (releaseProfile ? 32 : 8) ||
     projector.hostingDeadlineMs - projector.hardDeadlineMs <
       projector.minimumReserveMs
   ) {
@@ -556,14 +584,18 @@ export function parseReadModelLoadProfile(value) {
   );
   const theoretical = projectorWorstCaseRetryContract(
     input,
-    projector.smokeCandidateBatchSize,
+    projector.maximumCandidateBatchSize,
+  );
+  const releaseFirstAttempt = projectorCallsPerProviderPerAttempt(
+    input,
+    projector.maximumCandidateBatchSize,
   );
   if (
     rpc.smokeFirstAttemptCallsPerProvider !== firstAttempt ||
     rpc.theoreticalWorstCaseCallsPerProvider !== theoretical.callsPerProvider ||
     rpc.theoreticalWorstCaseDurationMs !== theoretical.durationMs ||
     rpc.maxCallsPerProviderPerRun !==
-      firstAttempt + rpc.globalRetryAllowancePerProvider ||
+      releaseFirstAttempt + rpc.globalRetryAllowancePerProvider ||
     rpc.maxAggregateCallsPerRun !==
       rpc.maxCallsPerProviderPerRun * rpc.providerCount ||
     theoretical.durationMs <= projector.hardDeadlineMs
@@ -748,7 +780,9 @@ function parseLaunchSample(value, path) {
   return `${account.toLowerCase()}:${transactionHash.toLowerCase()}`;
 }
 
-function parseDatasetManifest(value) {
+function parseDatasetManifest(value, profile) {
+  const contract = PROFILE_CONTRACTS[profile.profileId];
+  if (!contract) fail("datasetManifest.profileId", "unknown profile");
   const input = exactKeys(
     value,
     [
@@ -863,20 +897,20 @@ function parseDatasetManifest(value) {
   const tokenSamples = parseAddressList(
     keys.tokenAddresses,
     "datasetManifest.keys.tokenAddresses",
-    REQUIRED_DATASET_KEY_COUNT,
+    contract.tokenKeyCount,
   );
   const accountSamples = parseAddressList(
     keys.accountAddresses,
     "datasetManifest.keys.accountAddresses",
-    REQUIRED_DATASET_KEY_COUNT,
+    contract.accountKeyCount,
   );
   if (
     !Array.isArray(input.accountEvidence) ||
-    input.accountEvidence.length !== REQUIRED_DATASET_KEY_COUNT
+    input.accountEvidence.length !== contract.accountKeyCount
   ) {
     fail(
       "datasetManifest.accountEvidence",
-      `expected exactly ${REQUIRED_DATASET_KEY_COUNT} attested accounts`,
+      `expected exactly ${contract.accountKeyCount} attested accounts`,
     );
   }
   const accountEvidence = input.accountEvidence.map((value, index) => {
@@ -897,7 +931,7 @@ function parseDatasetManifest(value) {
   });
   const evidenceAccounts = accountEvidence.map((entry) => entry.account);
   if (
-    new Set(evidenceAccounts).size !== REQUIRED_DATASET_KEY_COUNT ||
+    new Set(evidenceAccounts).size !== contract.accountKeyCount ||
     accountSamples.some((account) => !evidenceAccounts.includes(account)) ||
     accountEvidence.reduce((total, entry) => total + entry.profileRows, 0) >
       counts.accounts ||
@@ -984,11 +1018,11 @@ function parseDatasetManifest(value) {
   }
   if (
     !Array.isArray(keys.candidateIds) ||
-    keys.candidateIds.length !== REQUIRED_CANDIDATE_KEY_COUNT
+    keys.candidateIds.length !== contract.candidateCount
   ) {
     fail(
       "datasetManifest.keys.candidateIds",
-      `expected exactly ${REQUIRED_CANDIDATE_KEY_COUNT} candidate keys`,
+      `expected exactly ${contract.candidateCount} candidate keys`,
     );
   }
   const candidateIds = keys.candidateIds.map((candidateId, index) =>
@@ -996,7 +1030,7 @@ function parseDatasetManifest(value) {
   );
   if (
     candidateIds.some((candidateId) => !CANDIDATE_ID.test(candidateId)) ||
-    new Set(candidateIds).size !== REQUIRED_CANDIDATE_KEY_COUNT
+    new Set(candidateIds).size !== contract.candidateCount
   ) {
     fail(
       "datasetManifest.keys.candidateIds",
@@ -1107,7 +1141,9 @@ function parseJsonLines(bytes, path) {
   });
 }
 
-function parseRpcTrace(value) {
+function parseRpcTrace(value, profile) {
+  const contract = PROFILE_CONTRACTS[profile.profileId];
+  if (!contract) fail("rpcTrace.profileId", "unknown profile");
   const input = exactKeys(
     value,
     [
@@ -1159,11 +1195,11 @@ function parseRpcTrace(value) {
   );
   if (
     !Array.isArray(input.candidateEvidence) ||
-    input.candidateEvidence.length !== REQUIRED_CANDIDATE_KEY_COUNT
+    input.candidateEvidence.length !== contract.candidateCount
   ) {
     fail(
       "rpcTrace.candidateEvidence",
-      `expected exactly ${REQUIRED_CANDIDATE_KEY_COUNT} verified candidates`,
+      `expected exactly ${contract.candidateCount} verified candidates`,
     );
   }
   const candidateEvidence = input.candidateEvidence.map((value, index) => {
@@ -1221,17 +1257,17 @@ function parseRpcTrace(value) {
   );
   if (
     new Set(candidateEvidence.map((candidate) => candidate.candidateId)).size !==
-      REQUIRED_CANDIDATE_KEY_COUNT ||
+      contract.candidateCount ||
     new Set(candidateEvidence.map((candidate) => candidate.candidateBlockNumber))
-      .size !== REQUIRED_CANDIDATE_KEY_COUNT ||
+      .size !== contract.candidateCount ||
     new Set(candidateEvidence.map((candidate) => candidate.transactionHash)).size !==
-      REQUIRED_CANDIDATE_KEY_COUNT ||
+      contract.candidateCount ||
     new Set(
       candidateEvidence.map(
         (candidate) =>
           `${candidate.candidateBlockNumber}:${candidate.sourceAddress}`,
       ),
-    ).size !== REQUIRED_CANDIDATE_KEY_COUNT ||
+    ).size !== contract.candidateCount ||
     candidateBlockNumbers.some(
       (blockNumber, index) =>
         index > 0 && blockNumber <= candidateBlockNumbers[index - 1],
@@ -1305,6 +1341,7 @@ export function loadReadModelReleaseEvidence(input) {
   }
   const datasetManifest = parseDatasetManifest(
     JSON.parse(artifacts.datasetManifest.bytes.toString("utf8")),
+    profile,
   );
   const httpSamples = parseJsonLines(
     artifacts.httpSamples.bytes,
@@ -1312,6 +1349,7 @@ export function loadReadModelReleaseEvidence(input) {
   ).map(parseHttpSample);
   const rpcTrace = parseRpcTrace(
     JSON.parse(artifacts.rpcTrace.bytes.toString("utf8")),
+    profile,
   );
   return {
     profile,
@@ -1352,6 +1390,10 @@ function observedMaximumConcurrency(samples) {
 
 export function evaluateReadModelReleaseEvidence(bundle, input) {
   const { profile, evidence, datasetManifest, httpSamples, rpcTrace } = bundle;
+  const releaseProfile = profile.profileId === RELEASE_PROFILE_ID;
+  const requiredCandidateBatchSize = releaseProfile
+    ? profile.projector.maximumCandidateBatchSize
+    : profile.projector.smokeCandidateBatchSize;
   const checks = [];
   const failures = [];
   const check = (id, condition, detail) => {
@@ -1443,6 +1485,18 @@ export function evaluateReadModelReleaseEvidence(bundle, input) {
       datasetManifest.keys.candidateIds.length ===
         coverage.candidateSampleCount,
     `${coverage.tokenSampleCount} token, ${coverage.accountSampleCount} account, ${coverage.classicLaunchSampleCount} Classic, ${coverage.stockLaunchSampleCount} Stock and ${coverage.candidateSampleCount} candidate keys`,
+  );
+  check(
+    "release-corpus-cycles",
+    !releaseProfile ||
+      (datasetManifest.eligibleLaunches.length >= 264 &&
+        Math.ceil(
+          datasetManifest.keys.tokenAddresses.length /
+            profile.projector.maximumCandidateBatchSize,
+        ) >= 9),
+    releaseProfile
+      ? `${datasetManifest.keys.tokenAddresses.length} real launch tokens require at least nine 32-row cycles`
+      : "smoke profile keeps corpus-cycle enforcement disabled",
   );
   check(
     "projector-only-corpus",
@@ -1664,7 +1718,7 @@ export function evaluateReadModelReleaseEvidence(bundle, input) {
 
   check(
     "projector-runtime-policy",
-    rpcTrace.candidateBatchSize === profile.projector.smokeCandidateBatchSize &&
+    rpcTrace.candidateBatchSize === requiredCandidateBatchSize &&
       rpcTrace.candidateEvidence.length === rpcTrace.candidateBatchSize &&
       rpcTrace.candidateEvidence.every(
         (candidate, index) =>
@@ -1710,9 +1764,10 @@ export function evaluateReadModelReleaseEvidence(bundle, input) {
       ) &&
       successfulOperationCounts.getChainId === 1 &&
       successfulOperationCounts.getBlockNumber === 1 &&
-      successfulOperationCounts.getBlock === 9 &&
-      successfulOperationCounts.getTransactionReceipt === 8 &&
-      successfulOperationCounts.getBytecode === 8
+      successfulOperationCounts.getBlock === requiredCandidateBatchSize + 1 &&
+      successfulOperationCounts.getTransactionReceipt ===
+        requiredCandidateBatchSize &&
+      successfulOperationCounts.getBytecode === requiredCandidateBatchSize
     );
   });
   const aggregateCalls = rpcTrace.providerCallCounts.reduce(

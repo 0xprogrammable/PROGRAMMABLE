@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -10,6 +10,10 @@ export const maxDuration = 90;
 export const runtime = "nodejs";
 
 const MAXIMUM_BODY_BYTES = 4_096;
+const RELEASE_PROFILE_ID = "read-model-release-v1";
+const RELEASE_RATE_LIMIT_MS = 30_000;
+const RELEASE_REPLAY_TTL_MS = 60_000;
+const releaseCaptures = new Map<string, number>();
 const PRIVATE_NO_STORE = Object.freeze({
   "Cache-Control": "private, no-store",
 });
@@ -43,6 +47,71 @@ function errorResponse(error: string, status: number) {
   );
 }
 
+function releaseCaptureAuthorization(
+  request: NextRequest,
+  rawBody: string,
+  body: unknown,
+): "not-release" | "authorized" | "unauthorized" | "rate-limited" {
+  if (
+    body === null ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Reflect.get(body, "profileId") !== RELEASE_PROFILE_ID
+  ) {
+    return "not-release";
+  }
+  const secret = process.env.PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN;
+  const supplied = request.headers.get(
+    "x-programmable-release-capture-signature",
+  );
+  if (
+    typeof secret !== "string" ||
+    secret.length < 32 ||
+    secret.length > 1_024 ||
+    typeof supplied !== "string" ||
+    !/^v1=[0-9a-f]{64}$/u.test(supplied)
+  ) {
+    return "unauthorized";
+  }
+  const expected = Buffer.from(
+    createHmac("sha256", secret).update(rawBody, "utf8").digest("hex"),
+    "hex",
+  );
+  const provided = Buffer.from(supplied.slice(3), "hex");
+  if (
+    expected.length !== provided.length ||
+    !timingSafeEqual(expected, provided)
+  ) {
+    return "unauthorized";
+  }
+  const nonce = Reflect.get(body, "captureNonce");
+  const deploymentId = Reflect.get(body, "vercelDeploymentId");
+  if (
+    typeof nonce !== "string" ||
+    !/^0x[0-9a-f]{64}$/u.test(nonce) ||
+    typeof deploymentId !== "string" ||
+    !/^dpl_[A-Za-z0-9]{20,128}$/u.test(deploymentId)
+  ) {
+    return "unauthorized";
+  }
+  const nowMs = Date.now();
+  for (const [key, capturedAtMs] of releaseCaptures) {
+    if (nowMs - capturedAtMs > RELEASE_REPLAY_TTL_MS) {
+      releaseCaptures.delete(key);
+    }
+  }
+  if (
+    releaseCaptures.has(`nonce:${nonce}`) ||
+    nowMs - (releaseCaptures.get(`deployment:${deploymentId}`) ?? 0) <
+      RELEASE_RATE_LIMIT_MS
+  ) {
+    return "rate-limited";
+  }
+  releaseCaptures.set(`nonce:${nonce}`, nowMs);
+  releaseCaptures.set(`deployment:${deploymentId}`, nowMs);
+  return "authorized";
+}
+
 export async function POST(request: NextRequest) {
   if (!isAuthorized(request)) return errorResponse("Unauthorized", 401);
   const contentType = request.headers.get("content-type") ?? "";
@@ -71,6 +140,19 @@ export async function POST(request: NextRequest) {
     body = JSON.parse(rawBody);
   } catch {
     return errorResponse("Invalid JSON", 400);
+  }
+  const releaseAuthorization = releaseCaptureAuthorization(
+    request,
+    rawBody,
+    body,
+  );
+  if (releaseAuthorization === "unauthorized") {
+    return errorResponse("Unauthorized", 401);
+  }
+  if (releaseAuthorization === "rate-limited") {
+    const response = errorResponse("Release capture rate limited", 429);
+    response.headers.set("Retry-After", "30");
+    return response;
   }
 
   const startedAt = Date.now();

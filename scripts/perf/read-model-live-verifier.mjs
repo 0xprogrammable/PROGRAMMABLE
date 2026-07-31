@@ -114,6 +114,95 @@ export async function verifyLiveVercelBinding(input) {
   };
 }
 
+function deploymentAliases(deployment) {
+  const values = [deployment?.alias, deployment?.aliases].flatMap((value) =>
+    Array.isArray(value) ? value : value === undefined ? [] : [value],
+  );
+  return new Set(
+    values.flatMap((value) => {
+      if (typeof value === "string") return [value.toLowerCase()];
+      if (value && typeof value === "object") {
+        const candidate = value.alias ?? value.domain;
+        return typeof candidate === "string"
+          ? [candidate.toLowerCase()]
+          : [];
+      }
+      return [];
+    }),
+  );
+}
+
+export async function verifyLiveRollbackTarget(input) {
+  if (!input.token || !input.teamId || !input.projectId) {
+    throw new Error(
+      "VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID are required",
+    );
+  }
+  const productionDomain = (
+    input.productionDomain ?? "programmable.family"
+  ).toLowerCase();
+  if (!/^[a-z0-9.-]+$/u.test(productionDomain)) {
+    throw new Error("production rollback domain is invalid");
+  }
+  const endpoint = new URL("/v6/deployments", "https://api.vercel.com");
+  endpoint.searchParams.set("teamId", input.teamId);
+  endpoint.searchParams.set("projectId", input.projectId);
+  endpoint.searchParams.set("target", "production");
+  endpoint.searchParams.set("state", "READY");
+  endpoint.searchParams.set("limit", "20");
+  const response = await boundedFetch(
+    input.fetchImpl ?? fetch,
+    endpoint,
+    { headers: { Authorization: `Bearer ${input.token}` } },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `Vercel rollback lookup failed with HTTP ${response.status}`,
+    );
+  }
+  const payload = safeJson(await response.text(), "Vercel rollback lookup");
+  const deployments = Array.isArray(payload?.deployments)
+    ? payload.deployments
+    : [];
+  const rollbackTarget = deployments.find(
+    (deployment) =>
+      deployment?.id !== input.stagedDeploymentId &&
+      deployment?.readyState === "READY" &&
+      deployment?.target === "production" &&
+      (deployment?.projectId === input.projectId ||
+        deployment?.project?.id === input.projectId) &&
+      deploymentAliases(deployment).has(productionDomain),
+  );
+  const checks = [
+    {
+      id: "vercel-rollback-target",
+      condition: Boolean(rollbackTarget),
+      detail:
+        "the current production domain has a distinct READY deployment available for rollback",
+    },
+    {
+      id: "vercel-rollback-project",
+      condition:
+        rollbackTarget?.projectId === input.projectId ||
+        rollbackTarget?.project?.id === input.projectId,
+      detail: "the rollback deployment belongs to the configured Vercel project",
+    },
+  ];
+  return {
+    ok: checks.every((check) => check.condition),
+    rollbackDeploymentId:
+      typeof rollbackTarget?.id === "string" ? rollbackTarget.id : null,
+    checks: checks.map(({ id, condition, detail }) => ({
+      id,
+      status: condition ? "pass" : "fail",
+      detail,
+    })),
+    failures: checks
+      .filter((check) => !check.condition)
+      .map(({ id, detail }) => ({ id, detail })),
+  };
+}
+
 async function requestJson(fetchImpl, targetUrl, path, expectedCacheControl) {
   const url = new URL(path, targetUrl);
   const response = await boundedFetch(
