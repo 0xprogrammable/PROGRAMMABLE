@@ -17,6 +17,7 @@ import { mainnet } from "viem/chains";
 import {
   getOnchainDeployment,
   readExploreModel,
+  type ExploreReadModel,
 } from "@/lib/onchain";
 import {
   ActionLookupError,
@@ -24,6 +25,7 @@ import {
   lookupActionReward,
   type ActionRewardLookup,
 } from "@/lib/data-pipeline/action-lookup";
+import { indexedLaunchLookupEnabled } from "@/lib/data-pipeline/route-activation.server";
 import {
   coordinatePublicRouteRead,
   PUBLIC_INDEXED_ROUTE_READS,
@@ -627,29 +629,17 @@ async function sharedStockActionClients() {
 
 async function readStockActionReward(
   account: Address,
-  vaultAddress: Address,
+  token: LauncherToken,
 ): Promise<{
-  indexedReward: ActionRewardLookup;
   reward: NonNullable<Awaited<ReturnType<typeof readVaultReward>>>;
   rpcClients: PublicClient[];
 }> {
-  const indexedReward = await lookupActionReward({
-    chainId: 1,
-    account,
-    vaultAddress,
-  });
   if (
-    indexedReward.modelVersion !== "stock-paired" ||
-    !indexedReward.releaseVersion.startsWith("stock-paired-") ||
-    indexedReward.token.rewardVaultAddress?.toLowerCase() !==
-      vaultAddress.toLowerCase() ||
-    !indexedReward.quoteAssetAddress
+    token.launchModel !== "stock-paired" ||
+    !token.rewardVaultAddress ||
+    !token.quoteAssetAddress
   ) {
-    throw new Error("The indexed Stock-Paired reward identity is invalid");
-  }
-  const token = actionTokenAsExploreModel(indexedReward.token).tokens[0];
-  if (!token) {
-    throw new Error("The indexed Stock-Paired token is unavailable");
+    throw new Error("The Stock-Paired reward identity is invalid");
   }
   const release = getConfiguredStockPairedReleaseByHookAndVersion(
     token.hookAddress,
@@ -706,7 +696,6 @@ async function readStockActionReward(
     throw new Error("Independent RPCs disagree on Stock-Paired rewards");
   }
   return {
-    indexedReward,
     reward: verified[0]!.reward,
     rpcClients: verified.map((candidate) => candidate.client),
   };
@@ -832,8 +821,47 @@ export async function POST(request: NextRequest) {
   try {
     const account = getAddress(input.account);
     const vaultAddress = getAddress(input.vaultAddress);
-    const { indexedReward, reward, rpcClients } =
-      await readStockActionReward(account, vaultAddress);
+    let registry: ExploreReadModel;
+    if (indexedLaunchLookupEnabled()) {
+      const indexedReward: ActionRewardLookup = await lookupActionReward({
+        chainId: 1,
+        account,
+        vaultAddress,
+      });
+      if (
+        indexedReward.modelVersion !== "stock-paired" ||
+        !indexedReward.releaseVersion.startsWith("stock-paired-") ||
+        indexedReward.token.rewardVaultAddress?.toLowerCase() !==
+          vaultAddress.toLowerCase() ||
+        !indexedReward.quoteAssetAddress
+      ) {
+        throw new Error("The indexed Stock-Paired reward identity is invalid");
+      }
+      registry = actionTokenAsExploreModel(indexedReward.token);
+    } else {
+      registry = await readExploreModel(
+        getOnchainDeployment("production"),
+      );
+      if (registry.status !== "ready") {
+        return json({ error: "Stock-Paired rewards are not deployed" }, 409);
+      }
+    }
+    const token = registry.tokens.find(
+      (candidate) =>
+        candidate.launchModel === "stock-paired" &&
+        candidate.rewardVaultAddress?.toLowerCase() ===
+          vaultAddress.toLowerCase(),
+    );
+    if (!token) {
+      return json(
+        { error: "This wallet is not a beneficiary of that reward vault" },
+        403,
+      );
+    }
+    const { reward, rpcClients } = await readStockActionReward(
+      account,
+      token,
+    );
     if (isClaim && BigInt(reward.claimableRaw) === 0n) {
       return json({ error: "No Stock-Paired rewards are claimable" }, 409);
     }
@@ -864,7 +892,6 @@ export async function POST(request: NextRequest) {
         quoteAsset: reward.quoteAsset,
         minimumAmount: amountIn,
       });
-      const registry = actionTokenAsExploreModel(indexedReward.token);
       const { deployment, verifiedToken } =
         resolveStockPairedTradeDeployment(
           1,

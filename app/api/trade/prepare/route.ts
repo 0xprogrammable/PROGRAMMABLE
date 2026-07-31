@@ -12,6 +12,11 @@ import {
   actionTokenAsExploreModel,
   lookupActionTokenByAddress,
 } from "../../../../lib/data-pipeline/action-lookup";
+import { indexedLaunchLookupEnabled } from "../../../../lib/data-pipeline/route-activation.server";
+import {
+  getOnchainDeployment,
+  readExploreModel,
+} from "../../../../lib/onchain";
 import {
   ClassicTradeInputError,
 } from "../../../../lib/trade/classic";
@@ -153,12 +158,23 @@ export async function POST(request: NextRequest) {
               `Classic trading is not supported on chain ${tradeRequest.chainId}`,
             );
           })();
-    const indexedLaunch = await lookupActionTokenByAddress({
-      chainId: actionChainId,
-      token: tradeRequest.token,
-    });
-    const registry = actionTokenAsExploreModel(indexedLaunch);
-    const indexedToken = registry.tokens[0];
+    const registry = indexedLaunchLookupEnabled()
+      ? actionTokenAsExploreModel(
+          await lookupActionTokenByAddress({
+            chainId: actionChainId,
+            token: tradeRequest.token,
+          }),
+        )
+      : await readExploreModel(
+          getOnchainDeployment(
+            tradeRequest.chainId === 1 ? "production" : "rehearsal",
+          ),
+        );
+    const indexedToken = registry.tokens.find(
+      (candidate) =>
+        candidate.tokenAddress.toLowerCase() ===
+        tradeRequest.token.toLowerCase(),
+    );
     if (indexedToken?.launchModel === "stock-paired") {
       const { deployment } = resolveStockPairedTradeDeployment(
         tradeRequest.chainId,

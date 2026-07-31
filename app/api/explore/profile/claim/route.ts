@@ -6,6 +6,8 @@ import {
   getAddress,
   http,
   keccak256,
+  type Address,
+  type Hex,
   type PublicClient,
 } from "viem";
 import { mainnet, sepolia } from "viem/chains";
@@ -16,6 +18,7 @@ import {
   buildPreparedCreatorClaim,
   getOnchainDeployment,
   parseCreatorClaimRequest,
+  readExploreModel,
 } from "../../../../../lib/onchain";
 import { creatorFeeHookReadAbi } from "../../../../../lib/onchain/abis";
 import {
@@ -23,17 +26,47 @@ import {
   lookupActionTokenByPoolId,
   type ActionTokenLookup,
 } from "../../../../../lib/data-pipeline/action-lookup";
+import { indexedLaunchLookupEnabled } from "../../../../../lib/data-pipeline/route-activation.server";
 import {
   errorChainIncludesData,
   safeServerErrorSummary,
 } from "../../../../../lib/server/safe-error";
 import { creatorClaimRpcProviders } from "../../../../../lib/server/action-rpc-quorum.server";
+import { computeOfficialV4PoolId } from "../../../../../lib/uniswap/liquidity-launcher-sdk";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_REQUEST_BYTES = 2_048;
 const NO_FEES_TO_CLAIM_SELECTOR = "0x846d8c5c";
+const NATIVE_ETH = "0x0000000000000000000000000000000000000000" as Address;
+
+type CreatorClaimTokenIdentity = Readonly<{
+  tokenAddress: Address;
+  hookAddress: Address;
+  poolId: Hex;
+  creatorAddress: Address;
+  totalSwapFeeBps: number;
+  buySwapFeeBps: number;
+  sellSwapFeeBps: number;
+  creatorFeeBps: number;
+  launcherFeeBps: number;
+  transferTaxBps: number;
+  lpFeePips: number;
+}>;
+
+function canonicalClaimPoolId(
+  tokenAddress: Address,
+  hookAddress: Address,
+) {
+  return computeOfficialV4PoolId({
+    currency0: NATIVE_ETH,
+    currency1: tokenAddress,
+    fee: 0,
+    tickSpacing: 200,
+    hooks: hookAddress,
+  });
+}
 
 function maximum(left: bigint, right: bigint) {
   return left > right ? left : right;
@@ -81,7 +114,7 @@ async function sharedVerifiedBlock(clients: readonly PublicClient[]) {
 async function readCurrentClaimState(input: {
   client: PublicClient;
   deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>;
-  token: ActionTokenLookup;
+  token: CreatorClaimTokenIdentity;
   blockNumber: bigint;
 }) {
   const { client, deployment, token, blockNumber } = input;
@@ -139,6 +172,102 @@ async function readCurrentClaimState(input: {
     );
   }
   return { claimable };
+}
+
+function indexedClaimToken(
+  token: ActionTokenLookup,
+  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>,
+): CreatorClaimTokenIdentity {
+  if (
+    token.releaseVersion !== "classic-v2" ||
+    token.modelVersion !== "classic" ||
+    token.hookAddress.toLowerCase() !== deployment.feeHook.toLowerCase() ||
+    canonicalClaimPoolId(token.tokenAddress, token.hookAddress).toLowerCase() !==
+      token.poolId.toLowerCase() ||
+    token.creatorFeeBps === null
+  ) {
+    throw new CreatorClaimUnavailableError(
+      "noncanonical-hook",
+      "The pool does not use the canonical creator fee hook",
+    );
+  }
+  return {
+    tokenAddress: token.tokenAddress,
+    hookAddress: token.hookAddress,
+    poolId: token.poolId,
+    creatorAddress: token.creatorAddress,
+    totalSwapFeeBps: token.totalSwapFeeBps,
+    buySwapFeeBps: token.buySwapFeeBps,
+    sellSwapFeeBps: token.sellSwapFeeBps,
+    creatorFeeBps: token.creatorFeeBps,
+    launcherFeeBps: token.launcherFeeBps,
+    transferTaxBps: token.transferTaxBps,
+    lpFeePips: token.lpFeePips,
+  };
+}
+
+async function legacyClaimToken(
+  request: ReturnType<typeof parseCreatorClaimRequest>,
+  deployment: Extract<ReturnType<typeof getOnchainDeployment>, { status: "ready" }>,
+): Promise<CreatorClaimTokenIdentity> {
+  const model = await readExploreModel(deployment);
+  if (model.status !== "ready" || model.snapshot.chainId !== deployment.chainId) {
+    throw new CreatorClaimUnavailableError(
+      "registry-unavailable",
+      "The verified Programmable launch registry is unavailable",
+    );
+  }
+  const token = model.tokens.find(
+    (candidate) =>
+      candidate.poolId.toLowerCase() === request.poolId.toLowerCase(),
+  );
+  if (!token) {
+    throw new CreatorClaimUnavailableError(
+      "unknown-pool",
+      "This pool is not a verified Programmable launch",
+    );
+  }
+  const feeValues = [
+    token.buyHookFeeBps,
+    token.sellHookFeeBps,
+    token.creatorFeeBps,
+    token.launcherFeeBps,
+    token.transferTaxBps,
+    token.lpFeePips,
+  ];
+  if (
+    token.launchModel !== "classic" ||
+    token.hookAddress.toLowerCase() !== deployment.feeHook.toLowerCase() ||
+    !token.creatorAddress ||
+    canonicalClaimPoolId(
+      getAddress(token.tokenAddress),
+      getAddress(token.hookAddress),
+    ).toLowerCase() !== request.poolId.toLowerCase() ||
+    feeValues.some(
+      (value) =>
+        typeof value !== "number" ||
+        !Number.isSafeInteger(value) ||
+        value < 0,
+    )
+  ) {
+    throw new CreatorClaimUnavailableError(
+      "noncanonical-hook",
+      "The pool does not use the canonical creator fee hook",
+    );
+  }
+  return {
+    tokenAddress: getAddress(token.tokenAddress),
+    hookAddress: getAddress(token.hookAddress),
+    poolId: request.poolId,
+    creatorAddress: getAddress(token.creatorAddress),
+    totalSwapFeeBps: token.totalSwapFeeBps,
+    buySwapFeeBps: token.buyHookFeeBps!,
+    sellSwapFeeBps: token.sellHookFeeBps!,
+    creatorFeeBps: token.creatorFeeBps!,
+    launcherFeeBps: token.launcherFeeBps!,
+    transferTaxBps: token.transferTaxBps!,
+    lpFeePips: token.lpFeePips!,
+  };
 }
 
 function json(body: unknown, status = 200) {
@@ -226,20 +355,15 @@ export async function POST(request: NextRequest) {
         `Switch to chain ${deployment.chainId}`,
       );
     }
-    const token = await lookupActionTokenByPoolId({
-      chainId: deployment.chainId,
-      poolId: claimRequest.poolId,
-    });
-    if (
-      token.releaseVersion !== "classic-v2" ||
-      token.modelVersion !== "classic" ||
-      token.hookAddress.toLowerCase() !== deployment.feeHook.toLowerCase()
-    ) {
-      throw new CreatorClaimUnavailableError(
-        "noncanonical-hook",
-        "The pool does not use the canonical creator fee hook",
-      );
-    }
+    const token = indexedLaunchLookupEnabled()
+      ? indexedClaimToken(
+          await lookupActionTokenByPoolId({
+            chainId: deployment.chainId,
+            poolId: claimRequest.poolId,
+          }),
+          deployment,
+        )
+      : await legacyClaimToken(claimRequest, deployment);
     if (
       token.creatorAddress.toLowerCase() !== claimRequest.account.toLowerCase()
     ) {

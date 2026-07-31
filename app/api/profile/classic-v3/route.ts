@@ -30,6 +30,7 @@ import {
   lookupActionReward,
   type ActionRewardLookup,
 } from "@/lib/data-pipeline/action-lookup";
+import { indexedLaunchLookupEnabled } from "@/lib/data-pipeline/route-activation.server";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { encodeClassicV3RewardAction } from "@/lib/profile/classic-v3-rewards";
 import { classicV3ActionRpcProviders } from "@/lib/server/action-rpc-quorum.server";
@@ -46,6 +47,17 @@ export const runtime = "nodejs";
 const MAX_REQUEST_BYTES = 2_048;
 const LOG_RANGE = 10_000n;
 const CONFIRMATIONS = 12n;
+type ClassicActionRewardIdentity = Readonly<{
+  vaultAddress: Address;
+  poolId: Hex;
+  buySwapFeeBps: number;
+  sellSwapFeeBps: number;
+  buyCreatorFeeBps: number | null;
+  sellCreatorFeeBps: number | null;
+  launcherFeeBps: number;
+  transferTaxBps: number;
+  lpFeePips: number;
+}>;
 const classicV3LaunchEvent = parseAbiItem(
   "event MemeTokenLaunchedV2(address indexed deployer,address indexed token,bytes32 indexed poolId,address feeHook,address rewardVault,address positionRecipient,uint256 positionTokenId,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 rewardConfigurationHash,bytes32 launchHash)",
 );
@@ -200,7 +212,7 @@ function prospectiveAllocation(
 
 async function readClassicActionState(input: {
   client: PublicClient;
-  reward: ActionRewardLookup;
+  reward: ClassicActionRewardIdentity;
   account: Address;
   blockNumber: bigint;
   allocationIndex?: number;
@@ -320,15 +332,21 @@ async function readClassicActionState(input: {
     poolConfig[0].toLowerCase() !== reward.vaultAddress.toLowerCase() ||
     getAddress(poolConfig[1]).toLowerCase() !== launcher.toLowerCase() ||
     !poolConfig[4] ||
-    Number(disclosure[0]) !== reward.token.buySwapFeeBps ||
-    Number(disclosure[1]) !== reward.token.sellSwapFeeBps ||
-    Number(disclosure[2]) !== reward.token.buyCreatorFeeBps ||
-    Number(disclosure[3]) !== reward.token.sellCreatorFeeBps ||
-    Number(disclosure[4]) !== reward.token.launcherFeeBps ||
-    Number(disclosure[5]) !== reward.token.transferTaxBps ||
-    Number(disclosure[6]) !== reward.token.lpFeePips ||
-    Number(poolConfig[2]) !== reward.token.buySwapFeeBps ||
-    Number(poolConfig[3]) !== reward.token.sellSwapFeeBps
+    Number(disclosure[0]) !== reward.buySwapFeeBps ||
+    Number(disclosure[1]) !== reward.sellSwapFeeBps ||
+    (reward.buyCreatorFeeBps !== null &&
+      Number(disclosure[2]) !== reward.buyCreatorFeeBps) ||
+    (reward.sellCreatorFeeBps !== null &&
+      Number(disclosure[3]) !== reward.sellCreatorFeeBps) ||
+    Number(disclosure[2]) + Number(disclosure[4]) !==
+      Number(disclosure[0]) ||
+    Number(disclosure[3]) + Number(disclosure[4]) !==
+      Number(disclosure[1]) ||
+    Number(disclosure[4]) !== reward.launcherFeeBps ||
+    Number(disclosure[5]) !== reward.transferTaxBps ||
+    Number(disclosure[6]) !== reward.lpFeePips ||
+    Number(poolConfig[2]) !== reward.buySwapFeeBps ||
+    Number(poolConfig[3]) !== reward.sellSwapFeeBps
   ) {
     throw new Error("Classic reward provenance does not match the indexed launch");
   }
@@ -798,23 +816,63 @@ export async function POST(request: NextRequest) {
     if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
       return json({ error: "Classic is not deployed yet" }, 409);
     }
-    const reward = await lookupActionReward({
-      chainId: chain.id,
-      account,
-      vaultAddress,
-    });
-    if (
-      reward.releaseVersion !== "classic-v3" ||
-      reward.modelVersion !== "classic" ||
-      reward.token.rewardVaultAddress?.toLowerCase() !==
-        vaultAddress.toLowerCase() ||
-      reward.hookAddress.toLowerCase() !==
-        getAddress(manifest.ethCreatorFeeHookV3 as string).toLowerCase()
-    ) {
-      return json(
-        { error: "Only a current or historic payout wallet can continue" },
-        403,
+    let reward: ClassicActionRewardIdentity;
+    if (indexedLaunchLookupEnabled()) {
+      const indexedReward: ActionRewardLookup = await lookupActionReward({
+        chainId: chain.id,
+        account,
+        vaultAddress,
+      });
+      if (
+        indexedReward.releaseVersion !== "classic-v3" ||
+        indexedReward.modelVersion !== "classic" ||
+        indexedReward.token.rewardVaultAddress?.toLowerCase() !==
+          vaultAddress.toLowerCase() ||
+        indexedReward.hookAddress.toLowerCase() !==
+          getAddress(manifest.ethCreatorFeeHookV3 as string).toLowerCase()
+      ) {
+        return json(
+          { error: "Only a current or historic payout wallet can continue" },
+          403,
+        );
+      }
+      reward = {
+        vaultAddress: indexedReward.vaultAddress,
+        poolId: indexedReward.poolId,
+        buySwapFeeBps: indexedReward.token.buySwapFeeBps,
+        sellSwapFeeBps: indexedReward.token.sellSwapFeeBps,
+        buyCreatorFeeBps: indexedReward.token.buyCreatorFeeBps,
+        sellCreatorFeeBps: indexedReward.token.sellCreatorFeeBps,
+        launcherFeeBps: indexedReward.token.launcherFeeBps,
+        transferTaxBps: indexedReward.token.transferTaxBps,
+        lpFeePips: indexedReward.token.lpFeePips,
+      };
+    } else {
+      const profile = await readRewards(account);
+      if (profile.status !== "ready") {
+        return json({ error: "Classic is not deployed yet" }, 409);
+      }
+      const legacyReward = profile.rewards.find(
+        (candidate) =>
+          candidate.vaultAddress.toLowerCase() === vaultAddress.toLowerCase(),
       );
+      if (!legacyReward) {
+        return json(
+          { error: "Only a current or historic payout wallet can continue" },
+          403,
+        );
+      }
+      reward = {
+        vaultAddress: legacyReward.vaultAddress,
+        poolId: legacyReward.poolId,
+        buySwapFeeBps: legacyReward.buySwapFeeBps,
+        sellSwapFeeBps: legacyReward.sellSwapFeeBps,
+        buyCreatorFeeBps: null,
+        sellCreatorFeeBps: null,
+        launcherFeeBps: legacyReward.platformFeeBps,
+        transferTaxBps: 0,
+        lpFeePips: 0,
+      };
     }
     const clients = createActionClients();
     const blockNumber = await sharedActionBlock(clients);
