@@ -64,4 +64,9 @@ over tokens deployed elsewhere.
 **Storage growth.** One claim record per distinct symbol ever registered, never pruned. Bounded by launches, and
 lapsed claims are overwritten rather than accumulating.
 
+**Overflow found by fuzzing.** `splitTribute` originally computed tribute with a plain multiplication, which
+overflows on fee amounts near the `uint256` maximum. No real fee reaches that magnitude, but it made this the only
+fee calculation in the repository that could revert on a large input. It now uses `FullMath.mulDiv`, consistent with
+every other fee path. Found by `testFuzz_splitNeverReverts`.
+
 **No audit.** This model has not completed an external audit or a public security contest.

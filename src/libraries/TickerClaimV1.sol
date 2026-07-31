@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
+
 /// @notice The lifecycle of one ticker claim.
 /// @dev A claim is provisional when first taken and becomes permanent only once the pool proves real trading.
 ///      Provisional claims lapse if they are never confirmed, so a ticker cannot be held by registering and walking
@@ -114,13 +116,17 @@ library TickerClaimV1 {
     /// @dev Rounding favours the derivative's own creator, so tribute can never exceed the fee it is drawn from.
     ///      Only the creator share is touched; the launcher and builder amounts are computed elsewhere and are not
     ///      arguments here, which makes it structurally impossible for this function to reduce them.
+    ///
+    ///      Uses `FullMath.mulDiv` for its 512-bit intermediate, matching every other fee calculation in the
+    ///      repository. A plain multiplication overflows on fee amounts far above anything reachable with real ETH,
+    ///      but the arithmetic here should not be the one place in the codebase that can revert on a large input.
     function splitTribute(uint256 creatorFee, uint16 tributeShareBps)
         internal
         pure
         returns (uint256 retained, uint256 tribute)
     {
         if (creatorFee == 0 || tributeShareBps == 0) return (creatorFee, 0);
-        tribute = (creatorFee * tributeShareBps) / BASIS_POINTS;
+        tribute = FullMath.mulDiv(creatorFee, tributeShareBps, BASIS_POINTS);
         retained = creatorFee - tribute;
     }
 }
