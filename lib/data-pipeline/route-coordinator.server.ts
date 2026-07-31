@@ -1,6 +1,7 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { performance } from "node:perf_hooks";
 
 import { provenanceHeaders, type ReadProvenance } from "./cache";
 import { canonicalBytes32, parseNonnegativeIntegerText } from "./codecs";
@@ -73,6 +74,15 @@ const VALIDATED_RECORD_SCOPE_EVIDENCE = Symbol(
   "programmable.validated-record-scope-evidence",
 );
 const VALIDATED_RECORD_SCOPE_EVIDENCE_INSTANCES = new WeakSet<object>();
+
+const AUTHORIZED_RELEASE_PROBE = Symbol(
+  "programmable.authorized-release-probe",
+);
+const AUTHORIZED_RELEASE_PROBE_INSTANCES = new WeakSet<object>();
+
+export type AuthorizedReleaseProbe = Readonly<{
+  readonly [AUTHORIZED_RELEASE_PROBE]: true;
+}>;
 
 export type ValidatedRecordScopeEvidence = Readonly<{
   recordCount: number;
@@ -175,6 +185,8 @@ export type CoordinatedRouteRead = {
   indexedSnapshot: (
     transaction: PostgresTransaction,
   ) => Promise<IndexedRouteSnapshot>;
+  /** Present only after server-side probe-token authorization. */
+  releaseProbe?: AuthorizedReleaseProbe;
   comparisonSchema?: RouteComparisonSchema;
   recordComparison?: (event: RouteComparisonEvent) => void | Promise<void>;
   /**
@@ -223,6 +235,12 @@ const SHARED_CACHE_HEADERS = [
   "CDN-Cache-Control",
   "Surrogate-Control",
   "Age",
+] as const;
+
+const RELEASE_PROBE_HEADERS = [
+  "x-programmable-shadow-overhead-ms",
+  "x-programmable-shadow-parity",
+  "x-programmable-live-fallback",
 ] as const;
 
 const MAX_COMPARISON_BODY_BYTES = 512 * 1024;
@@ -480,6 +498,68 @@ export function validatedRecordScopeEvidence<T>(
   return Object.freeze(evidence);
 }
 
+function validReleaseProbeToken(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    Buffer.byteLength(value, "utf8") >= 32 &&
+    Buffer.byteLength(value, "utf8") <= 512 &&
+    /^[A-Za-z0-9._~+/=-]+$/u.test(value)
+  );
+}
+
+/**
+ * Converts the exact internal probe headers into an unforgeable in-process
+ * capability. The capability stores no token and must never be serialized.
+ */
+export function authorizeRouteReleaseProbe(
+  headers: Headers,
+): AuthorizedReleaseProbe | null {
+  if (headers.get("x-programmable-shadow-probe") !== "1") return null;
+
+  const expectedToken = process.env.PROGRAMMABLE_SHADOW_PROBE_TOKEN;
+  if (!validReleaseProbeToken(expectedToken)) {
+    throw invalidInput("config", "release-probe-token");
+  }
+  const supplied = headers.get("x-programmable-shadow-probe-token");
+  if (!validReleaseProbeToken(supplied)) return null;
+
+  const expectedDigest = createHash("sha256")
+    .update(expectedToken, "utf8")
+    .digest();
+  const suppliedDigest = createHash("sha256").update(supplied, "utf8").digest();
+  if (!timingSafeEqual(expectedDigest, suppliedDigest)) return null;
+
+  const capability = {} as AuthorizedReleaseProbe;
+  Object.defineProperty(capability, AUTHORIZED_RELEASE_PROBE, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  AUTHORIZED_RELEASE_PROBE_INSTANCES.add(capability);
+  return Object.freeze(capability);
+}
+
+function validatedReleaseProbe(
+  value: AuthorizedReleaseProbe | undefined,
+): AuthorizedReleaseProbe | null {
+  if (value === undefined) return null;
+  if (
+    !value ||
+    typeof value !== "object" ||
+    value[AUTHORIZED_RELEASE_PROBE] !== true ||
+    !AUTHORIZED_RELEASE_PROBE_INSTANCES.has(value) ||
+    !Object.isFrozen(value)
+  ) {
+    throw invalidInput("config", "release-probe-capability");
+  }
+  return value;
+}
+
+function hasReleaseProbeHeaders(response: Response): boolean {
+  return RELEASE_PROBE_HEADERS.some((name) => response.headers.has(name));
+}
+
 function validResponse(value: unknown): value is Response {
   return value instanceof Response;
 }
@@ -488,7 +568,8 @@ function validateLegacyResult(value: LegacyRouteResult): LegacyRouteResult {
   if (
     !value ||
     !validResponse(value.response) ||
-    (value.source !== "rpc" && value.source !== "blob")
+    (value.source !== "rpc" && value.source !== "blob") ||
+    hasReleaseProbeHeaders(value.response)
   ) {
     throw new ComparisonReadError("invalid-result");
   }
@@ -499,7 +580,12 @@ function validateIndexedResult(
   value: IndexedRouteResult,
   identity: ValidatedRouteIdentity,
 ): IndexedRouteResult {
-  if (!value || !validResponse(value.response) || value.source !== "indexed") {
+  if (
+    !value ||
+    !validResponse(value.response) ||
+    value.source !== "indexed" ||
+    hasReleaseProbeHeaders(value.response)
+  ) {
     throw new ComparisonReadError("invalid-result");
   }
   try {
@@ -1000,6 +1086,51 @@ function copiedResponse(response: Response, headers: Headers): Response {
   });
 }
 
+type ReleaseProbeObservation = Readonly<{
+  shadowOverheadMs?: number;
+  shadowParity?: "match" | "mismatch";
+  liveFallback?: boolean;
+}>;
+
+function releaseProbeResponse(
+  response: Response,
+  capability: AuthorizedReleaseProbe,
+  observation: ReleaseProbeObservation,
+): Response {
+  if (!AUTHORIZED_RELEASE_PROBE_INSTANCES.has(capability)) {
+    throw invalidInput("config", "release-probe-capability");
+  }
+  const headers = new Headers(response.headers);
+  for (const name of RELEASE_PROBE_HEADERS) headers.delete(name);
+  for (const name of SHARED_CACHE_HEADERS) headers.delete(name);
+  // Vercel must add the cache observation itself after the application returns.
+  headers.delete("X-Vercel-Cache");
+  headers.set("Cache-Control", "private, no-store");
+
+  if (observation.shadowOverheadMs !== undefined) {
+    if (
+      !Number.isSafeInteger(observation.shadowOverheadMs) ||
+      observation.shadowOverheadMs < 0
+    ) {
+      throw invalidInput("config", "release-probe-overhead");
+    }
+    headers.set(
+      "x-programmable-shadow-overhead-ms",
+      String(observation.shadowOverheadMs),
+    );
+  }
+  if (observation.shadowParity !== undefined) {
+    headers.set("x-programmable-shadow-parity", observation.shadowParity);
+  }
+  if (observation.liveFallback !== undefined) {
+    headers.set(
+      "x-programmable-live-fallback",
+      observation.liveFallback ? "true" : "false",
+    );
+  }
+  return copiedResponse(response, headers);
+}
+
 function withoutProjectionHeaders(response: Response): Headers {
   const headers = new Headers(response.headers);
   for (const name of PROJECTION_HEADERS) headers.delete(name);
@@ -1116,70 +1247,26 @@ function comparisonReason(
     : "invalid-response";
 }
 
-async function runShadowComparison(
+async function recordedComparison(
+  input: CoordinatedRouteRead,
+  event: RouteComparisonEvent,
+): Promise<RouteComparisonEvent> {
+  await safeRecord(input, event);
+  return event;
+}
+
+async function compareShadowResults(
   input: CoordinatedRouteRead,
   identity: ValidatedRouteIdentity,
-  readModel: ServerReadModel,
+  readiness: RouteReadiness,
   legacy: LegacyRouteResult,
-): Promise<void> {
-  let snapshot: IndexedRouteSnapshot;
-  let readiness: RouteReadiness;
-  try {
-    snapshot = await readModel.repeatableReadSnapshot(input.indexedSnapshot);
-    readiness = validateSnapshotReadiness(snapshot, identity);
-  } catch (error) {
-    await safeRecord(
-      input,
-      incomparableEvent(
-        input,
-        identity,
-        error instanceof ComparisonReadError
-          ? error.reason
-          : "readiness-unavailable",
-      ),
-    );
-    return;
-  }
-  if (readiness.some((member) => member.eligibility !== "eligible")) {
-    await safeRecord(
-      input,
-      incomparableEvent(input, identity, "model-ineligible", readiness),
-    );
-    return;
-  }
-
-  if (!snapshot.indexed) {
-    await safeRecord(
-      input,
-      incomparableEvent(input, identity, "indexed-unavailable", readiness),
-    );
-    return;
-  }
-
-  let indexed: IndexedRouteResult;
-  try {
-    indexed = validateIndexedResult(snapshot.indexed, identity);
-  } catch (error) {
-    await safeRecord(
-      input,
-      incomparableEvent(
-        input,
-        identity,
-        error instanceof ComparisonReadError
-          ? error.reason
-          : "indexed-unavailable",
-        readiness,
-      ),
-    );
-    return;
-  }
-
+  indexed: IndexedRouteResult,
+): Promise<RouteComparisonEvent> {
   if (!legacy.checkpoint || !indexed.comparisonCheckpoint) {
-    await safeRecord(
+    return recordedComparison(
       input,
       incomparableEvent(input, identity, "checkpoint-missing", readiness),
     );
-    return;
   }
 
   let legacyCheckpoint: RouteCheckpoint;
@@ -1188,21 +1275,19 @@ async function runShadowComparison(
     legacyCheckpoint = canonicalCheckpoint(legacy.checkpoint);
     indexedCheckpoint = canonicalCheckpoint(indexed.comparisonCheckpoint);
   } catch {
-    await safeRecord(
+    return recordedComparison(
       input,
       incomparableEvent(input, identity, "invalid-result", readiness),
     );
-    return;
   }
   if (
     legacyCheckpoint.blockNumber !== indexedCheckpoint.blockNumber ||
     legacyCheckpoint.blockHash !== indexedCheckpoint.blockHash
   ) {
-    await safeRecord(
+    return recordedComparison(
       input,
       incomparableEvent(input, identity, "checkpoint-mismatch", readiness),
     );
-    return;
   }
 
   try {
@@ -1223,7 +1308,7 @@ async function runShadowComparison(
       },
       input.comparisonSchema,
     );
-    await safeRecord(
+    return recordedComparison(
       input,
       Object.freeze({
         ...comparison,
@@ -1235,11 +1320,145 @@ async function runShadowComparison(
       }),
     );
   } catch (error) {
-    await safeRecord(
+    return recordedComparison(
       input,
       incomparableEvent(input, identity, comparisonReason(error), readiness),
     );
   }
+}
+
+async function runShadowComparison(
+  input: CoordinatedRouteRead,
+  identity: ValidatedRouteIdentity,
+  readModel: ServerReadModel,
+  legacy: LegacyRouteResult,
+): Promise<RouteComparisonEvent> {
+  let snapshot: IndexedRouteSnapshot;
+  let readiness: RouteReadiness;
+  try {
+    snapshot = await readModel.repeatableReadSnapshot(input.indexedSnapshot);
+    readiness = validateSnapshotReadiness(snapshot, identity);
+  } catch (error) {
+    return recordedComparison(
+      input,
+      incomparableEvent(
+        input,
+        identity,
+        error instanceof ComparisonReadError
+          ? error.reason
+          : "readiness-unavailable",
+      ),
+    );
+  }
+  if (readiness.some((member) => member.eligibility !== "eligible")) {
+    return recordedComparison(
+      input,
+      incomparableEvent(input, identity, "model-ineligible", readiness),
+    );
+  }
+
+  if (!snapshot.indexed) {
+    return recordedComparison(
+      input,
+      incomparableEvent(input, identity, "indexed-unavailable", readiness),
+    );
+  }
+
+  let indexed: IndexedRouteResult;
+  try {
+    indexed = validateIndexedResult(snapshot.indexed, identity);
+  } catch (error) {
+    return recordedComparison(
+      input,
+      incomparableEvent(
+        input,
+        identity,
+        error instanceof ComparisonReadError
+          ? error.reason
+          : "indexed-unavailable",
+        readiness,
+      ),
+    );
+  }
+  return compareShadowResults(input, identity, readiness, legacy, indexed);
+}
+
+async function runSynchronousShadowProbe(
+  input: CoordinatedRouteRead,
+  identity: ValidatedRouteIdentity,
+  readModel: ServerReadModel,
+  legacy: LegacyRouteResult,
+  capability: AuthorizedReleaseProbe,
+): Promise<Response> {
+  const startedAt = performance.now();
+  let observedEvent: RouteComparisonEvent | undefined;
+
+  let comparisonResponse: Response | undefined;
+  try {
+    comparisonResponse = legacy.response.clone();
+  } catch {
+    const event = incomparableEvent(input, identity, "invalid-response");
+    observedEvent = event;
+    await safeRecord(input, event);
+  }
+  if (comparisonResponse) {
+    observedEvent = await runShadowComparison(input, identity, readModel, {
+      ...legacy,
+      response: comparisonResponse,
+    });
+  }
+
+  const elapsed = Math.ceil(performance.now() - startedAt);
+  const parity =
+    observedEvent?.kind === "match" || observedEvent?.kind === "mismatch"
+      ? observedEvent.kind
+      : undefined;
+  return releaseProbeResponse(legacy.response, capability, {
+    shadowOverheadMs: Math.max(0, elapsed),
+    ...(parity ? { shadowParity: parity } : {}),
+  });
+}
+
+async function runSynchronousLiveProbe(
+  input: CoordinatedRouteRead,
+  identity: ValidatedRouteIdentity,
+  readiness: RouteReadiness,
+  indexed: IndexedRouteResult,
+  selectedResponse: Response,
+  capability: AuthorizedReleaseProbe,
+): Promise<Response> {
+  const startedAt = performance.now();
+  let observedEvent: RouteComparisonEvent | undefined;
+
+  try {
+    const legacy = validateLegacyResult(await input.legacy());
+    observedEvent = await compareShadowResults(
+      input,
+      identity,
+      readiness,
+      legacy,
+      indexed,
+    );
+  } catch (error) {
+    observedEvent = incomparableEvent(
+      input,
+      identity,
+      comparisonReason(error),
+      readiness,
+    );
+    await safeRecord(input, observedEvent);
+  }
+
+  const elapsed = Math.ceil(performance.now() - startedAt);
+  const parity =
+    observedEvent?.kind === "match" || observedEvent?.kind === "mismatch"
+      ? observedEvent.kind
+      : undefined;
+  return releaseProbeResponse(selectedResponse, capability, {
+    shadowOverheadMs: Math.max(0, elapsed),
+    ...(parity ? { shadowParity: parity } : {}),
+    liveFallback: false,
+  });
 }
 
 function scheduleShadowRead(
@@ -1292,23 +1511,52 @@ function scheduleShadowRead(
 async function fallbackOrUnavailable(
   input: CoordinatedRouteRead,
   fallbackEnabled: boolean,
-): Promise<Response> {
-  if (!fallbackEnabled) return unavailableResponse();
-  try {
-    return fallbackResponse(validateLegacyResult(await input.legacy()));
-  } catch {
-    return unavailableResponse();
+): Promise<Readonly<{ response: Response; usedFallback: boolean }>> {
+  if (!fallbackEnabled) {
+    return Object.freeze({
+      response: unavailableResponse(),
+      usedFallback: false,
+    });
   }
+  try {
+    return Object.freeze({
+      response: fallbackResponse(validateLegacyResult(await input.legacy())),
+      usedFallback: true,
+    });
+  } catch {
+    return Object.freeze({
+      response: unavailableResponse(),
+      usedFallback: false,
+    });
+  }
+}
+
+async function liveFallbackOrUnavailable(
+  input: CoordinatedRouteRead,
+  fallbackEnabled: boolean,
+  releaseProbe: AuthorizedReleaseProbe | null,
+): Promise<Response> {
+  const outcome = await fallbackOrUnavailable(input, fallbackEnabled);
+  if (!releaseProbe) return outcome.response;
+  return releaseProbeResponse(
+    outcome.response,
+    releaseProbe,
+    outcome.usedFallback ? { liveFallback: true } : {},
+  );
 }
 
 export async function coordinateRouteRead(
   input: CoordinatedRouteRead,
 ): Promise<Response> {
   const identity = validateIdentity(input);
+  const releaseProbe = validatedReleaseProbe(input.releaseProbe);
   const config = loadDataPipelineConfig();
   const routeEnabled = config.flags[ROUTE_FLAGS[identity.route]];
   if (!routeEnabled) {
-    return validateLegacyResult(await input.legacy()).response;
+    const legacy = validateLegacyResult(await input.legacy()).response;
+    return releaseProbe
+      ? releaseProbeResponse(legacy, releaseProbe, {})
+      : legacy;
   }
 
   // Configuration errors are intentionally not converted into a fallback.
@@ -1317,10 +1565,19 @@ export async function coordinateRouteRead(
   if (!readModel) throw invalidInput("config", "indexed-read-model");
 
   if (config.flags.INDEXED_READ_SHADOW_COMPARE_ENABLED) {
-    if (!input.scheduleShadowComparison) {
+    if (!releaseProbe && !input.scheduleShadowComparison) {
       throw invalidInput("config", "shadow-scheduler");
     }
     const legacy = validateLegacyResult(await input.legacy());
+    if (releaseProbe) {
+      return runSynchronousShadowProbe(
+        input,
+        identity,
+        readModel,
+        legacy,
+        releaseProbe,
+      );
+    }
     scheduleShadowRead(input, identity, readModel, legacy);
     return legacy.response;
   }
@@ -1331,35 +1588,51 @@ export async function coordinateRouteRead(
     snapshot = await readModel.repeatableReadSnapshot(input.indexedSnapshot);
     readiness = validateSnapshotReadiness(snapshot, identity);
   } catch {
-    return fallbackOrUnavailable(
+    return liveFallbackOrUnavailable(
       input,
       config.flags.INDEXED_READ_LIVE_FALLBACK_ENABLED,
+      releaseProbe,
     );
   }
   const readyVersions = currentReadinessVersions(readiness);
   if (!readyVersions) {
-    return fallbackOrUnavailable(
+    return liveFallbackOrUnavailable(
       input,
       config.flags.INDEXED_READ_LIVE_FALLBACK_ENABLED,
+      releaseProbe,
     );
   }
   if (!snapshot.indexed) {
-    return fallbackOrUnavailable(
+    return liveFallbackOrUnavailable(
       input,
       config.flags.INDEXED_READ_LIVE_FALLBACK_ENABLED,
+      releaseProbe,
     );
   }
 
+  let indexed: IndexedRouteResult;
+  let response: Response;
   try {
-    const indexed = validateIndexedResult(snapshot.indexed, identity);
+    indexed = validateIndexedResult(snapshot.indexed, identity);
     if (!sameScopedProjectionVersions(readyVersions, indexed.versions)) {
       throw new ComparisonReadError("checkpoint-mismatch");
     }
-    return indexedResponse(indexed, identity.scope);
+    response = indexedResponse(indexed, identity.scope);
   } catch {
-    return fallbackOrUnavailable(
+    return liveFallbackOrUnavailable(
       input,
       config.flags.INDEXED_READ_LIVE_FALLBACK_ENABLED,
+      releaseProbe,
     );
   }
+
+  if (!releaseProbe) return response;
+  return runSynchronousLiveProbe(
+    input,
+    identity,
+    readiness,
+    indexed,
+    response,
+    releaseProbe,
+  );
 }
