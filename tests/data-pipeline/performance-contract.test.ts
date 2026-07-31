@@ -880,6 +880,42 @@ describe("read-model performance contract", () => {
       mode: "indexed-or-shadow",
       evidenceRequired: true,
       commitmentsReady: true,
+      runtimeProviderBinding: "verified",
+    });
+    const sensitiveRuntimeEnvironment = `${exactFalse.replace(
+      "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"false\"",
+      "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"[sensitive]\"",
+    )}\nPROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL="[sensitive]"\nPROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL="[sensitive]"`;
+    expect(
+      deployPolicy.evaluateReadModelDeployPolicy(
+        sensitiveRuntimeEnvironment,
+        {
+          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+            ENDPOINT_COMMITMENTS.alchemy,
+          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+            ENDPOINT_COMMITMENTS.quicknode,
+        },
+      ),
+    ).toMatchObject({
+      mode: "indexed-or-shadow",
+      evidenceRequired: true,
+      commitmentsReady: true,
+      runtimeProviderBinding: "deferred-stage",
+    });
+    expect(
+      deployPolicy.evaluateReadModelDeployPolicy(
+        `${sensitiveRuntimeEnvironment}\nETHEREUM_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/abcdefgh"`,
+        {
+          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+            ENDPOINT_COMMITMENTS.alchemy,
+          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT:
+            ENDPOINT_COMMITMENTS.quicknode,
+        },
+      ),
+    ).toMatchObject({
+      evidenceRequired: true,
+      commitmentsReady: false,
+      runtimeProviderBinding: "unverified",
     });
     const publicFeedEnvironment = `${exactFalse.replace(
       "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED=\"false\"",

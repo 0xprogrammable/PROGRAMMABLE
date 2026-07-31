@@ -27,6 +27,7 @@ const RUNTIME_RPC_URL_NAMES = Object.freeze([
   "ETHEREUM_RPC_URL",
   "ETHEREUM_RPC_URL_B",
 ]);
+const VERCEL_SENSITIVE_PLACEHOLDER = /^\[[A-Za-z]{1,32}\]$/u;
 
 function decodeDotenvValue(value, name) {
   const trimmed = value.trim();
@@ -74,26 +75,48 @@ export function evaluateReadModelDeployPolicy(contents, environment = {}) {
       )
     : [];
   let runtimeCommitmentsMatch = !evidenceRequired;
+  let runtimeProviderBinding = evidenceRequired ? "unverified" : "not-required";
   if (evidenceRequired && invalidCommitments.length === 0) {
     try {
       const runtimeEnvironment = readSelectedDotenvValues(
         contents,
         RUNTIME_RPC_URL_NAMES,
       );
-      const runtimeBindings = runtimeProductionProviderBindingsFromUrls(
-        runtimeEnvironment,
+      const configuredRuntimeValues = Object.values(runtimeEnvironment).filter(
+        (value) => value !== undefined && value !== "",
       );
-      runtimeCommitmentsMatch = runtimeBindings.every(
-        (binding) =>
-          binding.endpointCommitment ===
-          environment[
-            binding.vendorGroup === "alchemy"
-              ? COMMITMENT_NAMES[0]
-              : COMMITMENT_NAMES[1]
-          ],
-      );
+      const sensitiveValuesDeferred =
+        configuredRuntimeValues.length >= 2 &&
+        configuredRuntimeValues.every((value) =>
+          VERCEL_SENSITIVE_PLACEHOLDER.test(value),
+        );
+      if (sensitiveValuesDeferred) {
+        // Vercel deliberately replaces Sensitive environment values during
+        // `vercel pull`. The staged runtime capture recomputes both endpoint
+        // commitments from the real URLs and the release gate compares them
+        // with the pinned GitHub environment variables before promotion.
+        runtimeCommitmentsMatch = true;
+        runtimeProviderBinding = "deferred-stage";
+      } else {
+        const runtimeBindings = runtimeProductionProviderBindingsFromUrls(
+          runtimeEnvironment,
+        );
+        runtimeCommitmentsMatch = runtimeBindings.every(
+          (binding) =>
+            binding.endpointCommitment ===
+            environment[
+              binding.vendorGroup === "alchemy"
+                ? COMMITMENT_NAMES[0]
+                : COMMITMENT_NAMES[1]
+            ],
+        );
+        runtimeProviderBinding = runtimeCommitmentsMatch
+          ? "verified"
+          : "unverified";
+      }
     } catch {
       runtimeCommitmentsMatch = false;
+      runtimeProviderBinding = "unverified";
     }
   }
   return Object.freeze({
@@ -102,6 +125,7 @@ export function evaluateReadModelDeployPolicy(contents, environment = {}) {
     nonLegacyFlags,
     commitmentsReady:
       invalidCommitments.length === 0 && runtimeCommitmentsMatch,
+    runtimeProviderBinding,
     invalidCommitmentNames:
       invalidCommitments.length > 0
         ? invalidCommitments
@@ -146,6 +170,7 @@ function main() {
         RELEASE_GATED_FLAG_NAMES.length - result.nonLegacyFlags.length,
       gatedFlags: result.nonLegacyFlags,
       commitmentsReady: result.commitmentsReady,
+      runtimeProviderBinding: result.runtimeProviderBinding,
     })}\n`,
   );
   if (!result.commitmentsReady) {
