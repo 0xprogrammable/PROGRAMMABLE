@@ -48,6 +48,8 @@ describe("data-pipeline configuration", () => {
       PROGRAMMABLE_POSTGRES_CONNECT_TIMEOUT_MS: "900",
       PROGRAMMABLE_API_READER_DATABASE_URL:
         "postgres://postgres.project:password@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=verify-full",
+      PROGRAMMABLE_RELEASE_PROBE_DATABASE_URL:
+        "postgres://probe.project:password@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=verify-full",
       PROGRAMMABLE_POSTGRES_SSL_CA_PEM: rootCertificates[0],
       PROGRAMMABLE_ENVIO_GRAPHQL_URL: "https://envio.example/graphql",
       PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL: "https://gateway.thegraph.com",
@@ -58,6 +60,9 @@ describe("data-pipeline configuration", () => {
     expect(config.postgres.maxConnections).toBe(4);
     expect(config.postgres.connectTimeoutMs).toBe(900);
     expect(config.postgres.sslCaPem).toBe(rootCertificates[0]);
+    expect(config.postgres.releaseProbeConnectionString).toContain(
+      "probe.project",
+    );
     expect(config.envio.endpoint).toBe("https://envio.example/graphql");
     expect(config.uniswap.gatewayBaseUrl).toBe(
       "https://gateway.thegraph.com",
@@ -66,6 +71,17 @@ describe("data-pipeline configuration", () => {
     expect(() =>
       loadDataPipelineConfig({
         INDEXED_EXPLORE_LIST_READS_ENABLED: "1",
+      }),
+    ).toThrowError(DataPipelineError);
+    expect(() =>
+      loadDataPipelineConfig({
+        NEXT_PUBLIC_PROGRAMMABLE_RELEASE_PROBE_DATABASE_URL:
+          "postgres://probe:secret@example.invalid:5432/db?sslmode=verify-full",
+      }),
+    ).toThrowError(DataPipelineError);
+    expect(() =>
+      loadDataPipelineConfig({
+        NEXT_PUBLIC_PROGRAMMABLE_SHADOW_PROBE_TOKEN: "x".repeat(48),
       }),
     ).toThrowError(DataPipelineError);
     expect(() =>

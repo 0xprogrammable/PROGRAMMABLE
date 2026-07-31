@@ -6,13 +6,31 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   buildCreatorProfile: vi.fn(),
   coordinatePublicRouteRead: vi.fn(),
-  publicRouteSearchParams: vi.fn(
-    (value: URLSearchParams, headers: Headers) => {
+  preparePublicRouteRequest: vi.fn(
+    async (value: URLSearchParams, headers: Headers, _route: string) => {
+      void _route;
       const search = new URLSearchParams(value);
-      if (headers.get("x-programmable-shadow-probe") === "1") {
+      if (headers.get("x-programmable-shadow-probe") === "error") {
+        return {
+          searchParams: search,
+          probeFailure: Response.json(
+            { error: "release_probe_temporarily_unavailable" },
+            {
+              status: 503,
+              headers: { "Cache-Control": "private, no-store" },
+            },
+          ),
+        };
+      }
+      const authorized =
+        headers.get("x-programmable-shadow-probe") === "1";
+      if (authorized) {
         search.delete("__read_model_probe");
       }
-      return search;
+      return {
+        searchParams: search,
+        ...(authorized ? { releaseProbe: Object.freeze({}) } : {}),
+      };
     },
   ),
   readExploreModel: vi.fn(),
@@ -38,7 +56,7 @@ vi.mock("../lib/data-pipeline/public-route-readiness.server", () => ({
   coordinatePublicRouteRead: mocks.coordinatePublicRouteRead,
   PUBLIC_DISCOVERY_ROUTE_SCOPES: fixtures.discoveryScope,
   STOCK_PAIRED_ROUTE_SCOPES: fixtures.stockScope,
-  publicRouteSearchParams: mocks.publicRouteSearchParams,
+  preparePublicRouteRequest: mocks.preparePublicRouteRequest,
   publicSnapshotCheckpoint: (value: unknown) => value ?? undefined,
 }));
 
@@ -126,9 +144,12 @@ describe("public route coordinator wiring", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.publicRouteSearchParams).toHaveBeenCalledTimes(1);
+    expect(mocks.preparePublicRouteRequest).toHaveBeenCalledTimes(1);
     expect(mocks.coordinatePublicRouteRead).toHaveBeenCalledWith(
-      expect.objectContaining({ route: "launch-lookup" }),
+      expect.objectContaining({
+        route: "launch-lookup",
+        releaseProbe: expect.any(Object),
+      }),
     );
   });
 
@@ -140,6 +161,19 @@ describe("public route coordinator wiring", () => {
     );
 
     expect(response.status).toBe(400);
+    expect(mocks.coordinatePublicRouteRead).not.toHaveBeenCalled();
+  });
+
+  it("returns the private probe failure before route validation or coordination", async () => {
+    const response = await stockLaunchLookup(
+      new NextRequest(
+        `http://localhost/api/explore/launch/stock-paired?__read_model_probe=release-1`,
+        { headers: { "x-programmable-shadow-probe": "error" } },
+      ),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(mocks.coordinatePublicRouteRead).not.toHaveBeenCalled();
   });
 });

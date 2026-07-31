@@ -1,15 +1,33 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+
+const nonceConsumerMocks = vi.hoisted(() => {
+  const consumed = new Set<string>();
+  return {
+    consumed,
+    consumeReleaseProbeNonce: vi.fn(async (input: { route: string; nonce: string }) => {
+      const key = `${input.route}:${input.nonce}`;
+      if (consumed.has(key)) return false;
+      consumed.add(key);
+      return true;
+    }),
+  };
+});
+
+vi.mock("@/lib/data-pipeline/release-probe-nonce.server", () => ({
+  consumeReleaseProbeNonce: nonceConsumerMocks.consumeReleaseProbeNonce,
+}));
 
 import {
   CLASSIC_V3_ROUTE_SCOPE,
   PUBLIC_DISCOVERY_ROUTE_SCOPES,
-  publicRouteSearchParams,
+  preparePublicRouteRequest,
   readExactPublicRouteSnapshot,
   readExactRouteSnapshotReadiness,
 } from "@/lib/data-pipeline/public-route-readiness.server";
 import type { PostgresTransaction } from "@/lib/data-pipeline/postgres";
+import { signRouteReleaseProbe } from "@/lib/data-pipeline/route-coordinator.server";
 
 const HASH_A = `0x${"11".repeat(32)}` as const;
 const HASH_B = `0x${"22".repeat(32)}` as const;
@@ -66,26 +84,160 @@ function transaction(rows: readonly Record<string, unknown>[]) {
 }
 
 describe("exact public route readiness", () => {
-  it("removes an internal cache nonce only for the authorized probe", () => {
+  beforeEach(() => {
+    nonceConsumerMocks.consumed.clear();
+    nonceConsumerMocks.consumeReleaseProbeNonce.mockClear();
+  });
+
+  it("removes an internal cache nonce only for the authorized probe", async () => {
     const token = "p".repeat(48);
+    const nonce = `${Date.now()}-${"ab".repeat(32)}-1`;
     vi.stubEnv("PROGRAMMABLE_SHADOW_PROBE_TOKEN", token);
     try {
       const input = new URLSearchParams(
-        `address=${ADDRESS}&__read_model_probe=sample-1`,
+        `address=${ADDRESS}&__read_model_probe=${nonce}`,
       );
-      const authorized = publicRouteSearchParams(
+      const authorized = await preparePublicRouteRequest(
         input,
         new Headers({
           "x-programmable-shadow-probe": "1",
-          "x-programmable-shadow-probe-token": token,
+          "x-programmable-shadow-probe-signature": signRouteReleaseProbe({
+            route: "explore-token",
+            nonce,
+            secret: token,
+          }),
         }),
+        "explore-token",
       );
-      const unauthenticated = publicRouteSearchParams(input, new Headers());
+      const unauthenticated = await preparePublicRouteRequest(
+        input,
+        new Headers(),
+        "explore-token",
+      );
 
-      expect(authorized.has("__read_model_probe")).toBe(false);
-      expect(authorized.get("address")).toBe(ADDRESS);
-      expect(unauthenticated.get("__read_model_probe")).toBe("sample-1");
-      expect(input.get("__read_model_probe")).toBe("sample-1");
+      expect(authorized.searchParams.has("__read_model_probe")).toBe(false);
+      expect(authorized.searchParams.get("address")).toBe(ADDRESS);
+      expect(authorized.releaseProbe).toBeDefined();
+      expect(
+        unauthenticated.searchParams.get("__read_model_probe"),
+      ).toBe(nonce);
+      expect(unauthenticated.releaseProbe).toBeUndefined();
+      expect(input.get("__read_model_probe")).toBe(nonce);
+      expect(nonceConsumerMocks.consumeReleaseProbeNonce).toHaveBeenCalledTimes(
+        1,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("returns a private fail-closed response when distributed nonce consumption is unavailable", async () => {
+    const token = "r".repeat(48);
+    const nonce = `${Date.now()}-${"ef".repeat(32)}-5`;
+    vi.stubEnv("PROGRAMMABLE_SHADOW_PROBE_TOKEN", token);
+    nonceConsumerMocks.consumeReleaseProbeNonce.mockRejectedValueOnce(
+      new Error("database unavailable"),
+    );
+
+    const prepared = await preparePublicRouteRequest(
+      new URLSearchParams(`__read_model_probe=${nonce}`),
+      new Headers({
+        "x-programmable-shadow-probe": "1",
+        "x-programmable-shadow-probe-signature": signRouteReleaseProbe({
+          route: "explore-token",
+          nonce,
+          secret: token,
+        }),
+      }),
+      "explore-token",
+    );
+
+    expect(prepared.releaseProbe).toBeUndefined();
+    expect(prepared.searchParams.get("__read_model_probe")).toBe(nonce);
+    expect(prepared.probeFailure?.status).toBe(503);
+    expect(prepared.probeFailure?.headers.get("Cache-Control")).toBe(
+      "private, no-store",
+    );
+  });
+
+  it("leaves malformed probe parameters to ordinary route validation without a database read", async () => {
+    const prepared = await preparePublicRouteRequest(
+      new URLSearchParams("__read_model_probe=malformed"),
+      new Headers({
+        "x-programmable-shadow-probe": "1",
+        "x-programmable-shadow-probe-signature": "a".repeat(64),
+      }),
+      "explore-token",
+    );
+
+    expect(prepared.releaseProbe).toBeUndefined();
+    expect(prepared.probeFailure).toBeUndefined();
+    expect(prepared.searchParams.get("__read_model_probe")).toBe("malformed");
+    expect(nonceConsumerMocks.consumeReleaseProbeNonce).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicated reserved nonces without a database read", async () => {
+    const nonce = `${Date.now()}-${"fa".repeat(32)}-6`;
+    const prepared = await preparePublicRouteRequest(
+      new URLSearchParams(
+        `__read_model_probe=${nonce}&__read_model_probe=${nonce}`,
+      ),
+      new Headers({
+        "x-programmable-shadow-probe": "1",
+        "x-programmable-shadow-probe-signature": "a".repeat(64),
+      }),
+      "explore-token",
+    );
+
+    expect(prepared.releaseProbe).toBeUndefined();
+    expect(prepared.searchParams.getAll("__read_model_probe")).toEqual([
+      nonce,
+      nonce,
+    ]);
+    expect(nonceConsumerMocks.consumeReleaseProbeNonce).not.toHaveBeenCalled();
+  });
+
+  it("rejects stale, globally replayed and incorrectly authenticated probe nonces", async () => {
+    const token = "q".repeat(48);
+    const now = Date.now();
+    const freshNonce = `${now}-${"bc".repeat(32)}-2`;
+    const staleNonce = `${now - 5 * 60 * 1_000 - 1}-${"cd".repeat(32)}-3`;
+    vi.stubEnv("PROGRAMMABLE_SHADOW_PROBE_TOKEN", token);
+    try {
+      const signedHeaders = (nonce: string, secret = token) =>
+        new Headers({
+          "x-programmable-shadow-probe": "1",
+          "x-programmable-shadow-probe-signature": signRouteReleaseProbe({
+            route: "explore-token",
+            nonce,
+            secret,
+          }),
+        });
+      const prepare = (
+        nonce: string,
+        requestHeaders = signedHeaders(nonce),
+      ) =>
+        preparePublicRouteRequest(
+          new URLSearchParams(`__read_model_probe=${nonce}`),
+          requestHeaders,
+          "explore-token",
+        );
+
+      expect((await prepare(freshNonce)).releaseProbe).toBeDefined();
+      expect((await prepare(freshNonce)).releaseProbe).toBeUndefined();
+      expect((await prepare(freshNonce)).searchParams.get("__read_model_probe")).toBe(
+        freshNonce,
+      );
+      expect((await prepare(staleNonce)).releaseProbe).toBeUndefined();
+      expect(
+        (await prepare(
+          `${now}-${"de".repeat(32)}-4`,
+          signedHeaders(
+            `${now}-${"de".repeat(32)}-4`,
+            "x".repeat(48),
+          ),
+        )).releaseProbe,
+      ).toBeUndefined();
     } finally {
       vi.unstubAllEnvs();
     }

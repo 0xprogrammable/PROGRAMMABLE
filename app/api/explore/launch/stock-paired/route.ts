@@ -17,7 +17,7 @@ import { getConfiguredStockPairedReleases } from "@/lib/stock-paired-release";
 import {
   coordinatePublicRouteRead,
   PUBLIC_INDEXED_ROUTE_READS,
-  publicRouteSearchParams,
+  preparePublicRouteRequest,
   STOCK_PAIRED_ROUTE_SCOPES,
 } from "@/lib/data-pipeline/public-route-readiness.server";
 
@@ -52,10 +52,8 @@ function endpoints() {
 }
 
 async function readLegacyLaunchLookup(request: NextRequest) {
-  const search = publicRouteSearchParams(
-    request.nextUrl.searchParams,
-    request.headers,
-  );
+  const search = new URLSearchParams(request.nextUrl.searchParams);
+  search.delete("__read_model_probe");
   if (
     [...search.keys()].some(
       (key) => key !== "account" && key !== "transaction",
@@ -244,10 +242,13 @@ async function readLegacyLaunchLookup(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const search = publicRouteSearchParams(
+  const routeRequest = await preparePublicRouteRequest(
     request.nextUrl.searchParams,
     request.headers,
+    "launch-lookup",
   );
+  if (routeRequest.probeFailure) return routeRequest.probeFailure;
+  const search = routeRequest.searchParams;
   if (
     [...search.keys()].some(
       (key) => key !== "account" && key !== "transaction",
@@ -271,7 +272,9 @@ export async function GET(request: NextRequest) {
     return await coordinatePublicRouteRead({
       route: "launch-lookup",
       scope: STOCK_PAIRED_ROUTE_SCOPES,
-      requestHeaders: request.headers,
+      ...(routeRequest.releaseProbe
+        ? { releaseProbe: routeRequest.releaseProbe }
+        : {}),
       indexed: (readTransaction) =>
         PUBLIC_INDEXED_ROUTE_READS.launchLookup(readTransaction, {
           chainId: 1,

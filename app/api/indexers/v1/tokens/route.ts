@@ -4,7 +4,10 @@ import { NextResponse } from "next/server";
 import {
   buildIndexerFeed,
   findIndexerToken,
+  getPublicOnchainDeployment,
+  readExploreModel,
 } from "../../../../../lib/onchain";
+import { indexedPublicIndexerFeedEnabled } from "../../../../../lib/data-pipeline/route-activation.server";
 import { readIndexedFeedSnapshot } from "../read-indexed-feed.server";
 import {
   indexedFeedHeaders,
@@ -13,6 +16,12 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const LEGACY_PUBLIC_HEADERS = Object.freeze({
+  "Access-Control-Allow-Origin": "*",
+  "Cache-Control":
+    "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+});
 
 export async function GET(request: Request) {
   const address = new URL(request.url).searchParams.get("address");
@@ -28,6 +37,39 @@ export async function GET(request: Request) {
   }
 
   try {
+    if (!indexedPublicIndexerFeedEnabled()) {
+      const deployment = getPublicOnchainDeployment();
+      const model = await readExploreModel(deployment);
+      if (address) {
+        const token = findIndexerToken(
+          model,
+          deployment.chainId,
+          getAddress(address),
+        );
+        if (!token) {
+          return NextResponse.json(
+            { error: "Programmable token not found" },
+            { status: 404, headers: LEGACY_PUBLIC_HEADERS },
+          );
+        }
+        return NextResponse.json(token, {
+          headers: LEGACY_PUBLIC_HEADERS,
+        });
+      }
+      return NextResponse.json(
+        buildIndexerFeed(model, deployment.chainId),
+        {
+          headers: {
+            ...LEGACY_PUBLIC_HEADERS,
+            "Cache-Control":
+              model.status === "ready"
+                ? LEGACY_PUBLIC_HEADERS["Cache-Control"]
+                : "public, max-age=0, s-maxage=60",
+          },
+        },
+      );
+    }
+
     const snapshot = await readIndexedFeedSnapshot();
 
     if (address) {

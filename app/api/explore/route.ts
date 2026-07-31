@@ -15,7 +15,7 @@ import {
   coordinatePublicRouteRead,
   PUBLIC_INDEXED_ROUTE_READS,
   PUBLIC_DISCOVERY_ROUTE_SCOPES,
-  publicRouteSearchParams,
+  preparePublicRouteRequest,
   publicSnapshotCheckpoint,
 } from "../../../lib/data-pipeline/public-route-readiness.server";
 
@@ -51,10 +51,13 @@ function tokenIdentity(token: LauncherToken) {
 }
 
 export async function GET(request: NextRequest) {
-  const search = publicRouteSearchParams(
+  const routeRequest = await preparePublicRouteRequest(
     request.nextUrl.searchParams,
     request.headers,
+    "explore-list",
   );
+  if (routeRequest.probeFailure) return routeRequest.probeFailure;
+  const search = routeRequest.searchParams;
   if (!hasCanonicalQueryShape(search)) {
     return NextResponse.json(
       { error: "Unsupported query parameters" },
@@ -72,7 +75,9 @@ export async function GET(request: NextRequest) {
     return await coordinatePublicRouteRead({
       route: "explore-list",
       scope: PUBLIC_DISCOVERY_ROUTE_SCOPES,
-      requestHeaders: request.headers,
+      ...(routeRequest.releaseProbe
+        ? { releaseProbe: routeRequest.releaseProbe }
+        : {}),
       indexed: (transaction) =>
         PUBLIC_INDEXED_ROUTE_READS.explore(transaction, {
           chainId: 1,

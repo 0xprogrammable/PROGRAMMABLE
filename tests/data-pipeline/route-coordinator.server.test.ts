@@ -8,8 +8,25 @@ const readModelMocks = vi.hoisted(() => ({
   transactionQuery: vi.fn(),
 }));
 
+const nonceConsumerMocks = vi.hoisted(() => {
+  const consumed = new Set<string>();
+  return {
+    consumed,
+    consumeReleaseProbeNonce: vi.fn(async (input: { route: string; nonce: string }) => {
+      const key = `${input.route}:${input.nonce}`;
+      if (consumed.has(key)) return false;
+      consumed.add(key);
+      return true;
+    }),
+  };
+});
+
 vi.mock("../../lib/data-pipeline/read-model.server", () => ({
   getServerReadModel: readModelMocks.getServerReadModel,
+}));
+
+vi.mock("../../lib/data-pipeline/release-probe-nonce.server", () => ({
+  consumeReleaseProbeNonce: nonceConsumerMocks.consumeReleaseProbeNonce,
 }));
 
 import { DataPipelineError } from "../../lib/data-pipeline/errors";
@@ -20,6 +37,7 @@ import {
   compareRouteResponses,
   coordinateRouteRead,
   hashCanonicalRouteResponse,
+  signRouteReleaseProbe,
   validatedRecordScopeEvidence,
   type CoordinatedRouteRead,
   type IndexedRouteResult,
@@ -34,6 +52,7 @@ const OTHER_BLOCK_HASH = `0x${"cd".repeat(32)}`;
 const ADDRESS = `0x${"aB".repeat(20)}`;
 const TRANSACTION_HASH = `0x${"Cd".repeat(32)}`;
 const RELEASE_PROBE_TOKEN = "p".repeat(48);
+let releaseProbeSequence = 0;
 const CLASSIC_SCOPE = [
   { model: "classic" as const, releaseVersion: "classic-v3" as const },
 ] as const;
@@ -67,18 +86,36 @@ function clearCoordinatorEnvironment() {
 }
 
 function releaseProbeHeaders(
+  nonce: string,
   token = RELEASE_PROBE_TOKEN,
   marker = "1",
+  route: "explore-token" | "explore-list" = "explore-token",
 ): Headers {
   return new Headers({
     "x-programmable-shadow-probe": marker,
-    "x-programmable-shadow-probe-token": token,
+    "x-programmable-shadow-probe-signature": signRouteReleaseProbe({
+      route,
+      nonce,
+      secret: token,
+    }),
   });
 }
 
-function authorizedTestReleaseProbe() {
+function releaseProbeNonce(issuedAt = Date.now()) {
+  releaseProbeSequence += 1;
+  return `${issuedAt}-${releaseProbeSequence.toString(16).padStart(64, "0")}-${releaseProbeSequence}`;
+}
+
+async function authorizedTestReleaseProbe(
+  nonce = releaseProbeNonce(),
+  route: "explore-token" | "explore-list" = "explore-token",
+) {
   vi.stubEnv("PROGRAMMABLE_SHADOW_PROBE_TOKEN", RELEASE_PROBE_TOKEN);
-  return authorizeRouteReleaseProbe(releaseProbeHeaders());
+  return authorizeRouteReleaseProbe(
+    releaseProbeHeaders(nonce, RELEASE_PROBE_TOKEN, "1", route),
+    nonce,
+    route,
+  );
 }
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
@@ -212,25 +249,131 @@ function baseInput(overrides: Record<string, unknown> = {}) {
 }
 
 describe("release-probe authorization", () => {
-  it("creates a non-serializable capability only for the exact probe headers", () => {
+  beforeEach(() => {
+    nonceConsumerMocks.consumed.clear();
+    nonceConsumerMocks.consumeReleaseProbeNonce.mockClear();
+  });
+
+  it("creates a non-serializable capability only for the exact probe headers", async () => {
     vi.stubEnv("PROGRAMMABLE_SHADOW_PROBE_TOKEN", RELEASE_PROBE_TOKEN);
-    const authorized = authorizeRouteReleaseProbe(releaseProbeHeaders());
+    const nonce = releaseProbeNonce();
+    const authorized = await authorizeRouteReleaseProbe(
+      releaseProbeHeaders(nonce),
+      nonce,
+      "explore-token",
+    );
     expect(authorized).not.toBeNull();
     expect(JSON.stringify(authorized)).toBe("{}");
     expect(
-      authorizeRouteReleaseProbe(releaseProbeHeaders("x".repeat(48))),
+      await authorizeRouteReleaseProbe(
+        releaseProbeHeaders(releaseProbeNonce(), "x".repeat(48)),
+        releaseProbeNonce(),
+        "explore-token",
+      ),
     ).toBeNull();
-    expect(authorizeRouteReleaseProbe(new Headers())).toBeNull();
     expect(
-      authorizeRouteReleaseProbe(releaseProbeHeaders(undefined, "0")),
+      await authorizeRouteReleaseProbe(
+        new Headers(),
+        releaseProbeNonce(),
+        "explore-token",
+      ),
+    ).toBeNull();
+    const wrongMarkerNonce = releaseProbeNonce();
+    expect(
+      await authorizeRouteReleaseProbe(
+        releaseProbeHeaders(
+          wrongMarkerNonce,
+          RELEASE_PROBE_TOKEN,
+          "0",
+        ),
+        wrongMarkerNonce,
+        "explore-token",
+      ),
     ).toBeNull();
   });
 
-  it("fails closed for an unsafe expected probe secret", () => {
+  it("fails closed for an unsafe expected probe secret", async () => {
     vi.stubEnv("PROGRAMMABLE_SHADOW_PROBE_TOKEN", "short");
-    expect(() =>
-      authorizeRouteReleaseProbe(releaseProbeHeaders("short")),
-    ).toThrow(DataPipelineError);
+    await expect(
+      authorizeRouteReleaseProbe(
+        new Headers({
+          "x-programmable-shadow-probe": "1",
+          "x-programmable-shadow-probe-signature": "a".repeat(64),
+        }),
+        releaseProbeNonce(),
+        "explore-token",
+      ),
+    ).rejects.toBeInstanceOf(DataPipelineError);
+  });
+
+  it("rejects stale and globally reused nonces before creating another capability", async () => {
+    vi.stubEnv("PROGRAMMABLE_SHADOW_PROBE_TOKEN", RELEASE_PROBE_TOKEN);
+    const nonce = releaseProbeNonce();
+    expect(
+      await authorizeRouteReleaseProbe(
+        releaseProbeHeaders(nonce),
+        nonce,
+        "explore-token",
+      ),
+    ).not.toBeNull();
+    expect(
+      await authorizeRouteReleaseProbe(
+        releaseProbeHeaders(nonce),
+        nonce,
+        "explore-token",
+      ),
+    ).toBeNull();
+    const staleNonce = releaseProbeNonce(
+      Date.now() - 5 * 60 * 1_000 - 1,
+    );
+    expect(
+      await authorizeRouteReleaseProbe(
+        releaseProbeHeaders(staleNonce),
+        staleNonce,
+        "explore-token",
+      ),
+    ).toBeNull();
+  });
+
+  it("binds signatures and capabilities to one route and rejects bearer-token auth", async () => {
+    vi.stubEnv("PROGRAMMABLE_SHADOW_PROBE_TOKEN", RELEASE_PROBE_TOKEN);
+    const wrongRouteNonce = releaseProbeNonce();
+    expect(
+      await authorizeRouteReleaseProbe(
+        releaseProbeHeaders(wrongRouteNonce),
+        wrongRouteNonce,
+        "explore-list",
+      ),
+    ).toBeNull();
+
+    const bearerNonce = releaseProbeNonce();
+    expect(
+      await authorizeRouteReleaseProbe(
+        new Headers({
+          "x-programmable-shadow-probe": "1",
+          "x-programmable-shadow-probe-token": RELEASE_PROBE_TOKEN,
+          "x-programmable-shadow-probe-signature": signRouteReleaseProbe({
+            route: "explore-token",
+            nonce: bearerNonce,
+            secret: RELEASE_PROBE_TOKEN,
+          }),
+        }),
+        bearerNonce,
+        "explore-token",
+      ),
+    ).toBeNull();
+
+    const capability = await authorizedTestReleaseProbe();
+    if (!capability) throw new Error("expected release probe");
+    await expect(
+      coordinateRouteRead(
+        baseInput({
+          route: "explore-list",
+          scope: ALL_REVIEWED_ROUTE_SCOPES,
+          releaseProbe: capability,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(DataPipelineError);
   });
 });
 
@@ -349,8 +492,8 @@ describe("route shadow and fallback coordinator", () => {
     expect(input.indexed).not.toHaveBeenCalled();
   });
 
-  it("keeps a disabled-route release probe private and omits observations", async () => {
-    const releaseProbe = authorizedTestReleaseProbe();
+  it("measures a disabled route only for a private authenticated probe", async () => {
+    const releaseProbe = await authorizedTestReleaseProbe();
     if (!releaseProbe) throw new Error("expected release probe");
     const input = baseInput({
       releaseProbe,
@@ -374,9 +517,18 @@ describe("route shadow and fallback coordinator", () => {
     expect(result.headers.get("Cache-Control")).toBe("private, no-store");
     expect(result.headers.get("X-Vercel-Cache")).toBeNull();
     expect(result.headers.get("Vercel-CDN-Cache-Control")).toBeNull();
-    expect(result.headers.get("x-programmable-shadow-overhead-ms")).toBeNull();
-    expect(result.headers.get("x-programmable-shadow-parity")).toBeNull();
-    expect(result.headers.get("x-programmable-live-fallback")).toBeNull();
+    expect(result.headers.get("X-Programmable-Read-Source")).toBe("rpc");
+    expect(result.headers.get("x-programmable-shadow-overhead-ms")).toMatch(
+      /^\d+$/,
+    );
+    expect(result.headers.get("x-programmable-shadow-parity")).toBe(
+      "mismatch",
+    );
+    expect(result.headers.get("x-programmable-live-fallback")).toBe("false");
+    expect(readModelMocks.getServerReadModel).toHaveBeenCalledWith({
+      required: true,
+    });
+    expect(readModelMocks.repeatableReadSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it("runs both paths in shadow mode, records a normalized match, and returns legacy byte-for-byte", async () => {
@@ -435,7 +587,7 @@ describe("route shadow and fallback coordinator", () => {
   it("runs a synchronous authorized shadow probe and reports measured parity without using the scheduler", async () => {
     vi.stubEnv("INDEXED_EXPLORE_TOKEN_READS_ENABLED", "true");
     vi.stubEnv("INDEXED_READ_SHADOW_COMPARE_ENABLED", "true");
-    const releaseProbe = authorizedTestReleaseProbe();
+    const releaseProbe = await authorizedTestReleaseProbe();
     if (!releaseProbe) throw new Error("expected release probe");
     const legacyResponse = jsonResponse(
       { address: ADDRESS, amount: "09" },
@@ -458,12 +610,13 @@ describe("route shadow and fallback coordinator", () => {
     expect(result).not.toBe(legacyResponse);
     expect(result.status).toBe(202);
     expect(result.headers.get("X-Legacy")).toBe("preserved");
+    expect(result.headers.get("X-Programmable-Read-Source")).toBe("rpc");
     expect(result.headers.get("Cache-Control")).toBe("private, no-store");
     expect(result.headers.get("x-programmable-shadow-overhead-ms")).toMatch(
       /^\d+$/,
     );
     expect(result.headers.get("x-programmable-shadow-parity")).toBe("match");
-    expect(result.headers.get("x-programmable-live-fallback")).toBeNull();
+    expect(result.headers.get("x-programmable-live-fallback")).toBe("false");
     await expect(result.json()).resolves.toEqual({
       address: ADDRESS,
       amount: "09",
@@ -473,10 +626,10 @@ describe("route shadow and fallback coordinator", () => {
     expect(input.indexed).toHaveBeenCalledTimes(1);
   });
 
-  it("omits parity instead of inventing a result when an authorized shadow probe is incomparable", async () => {
+  it("reports incomparable when an authorized shadow probe cannot establish parity", async () => {
     vi.stubEnv("INDEXED_EXPLORE_TOKEN_READS_ENABLED", "true");
     vi.stubEnv("INDEXED_READ_SHADOW_COMPARE_ENABLED", "true");
-    const releaseProbe = authorizedTestReleaseProbe();
+    const releaseProbe = await authorizedTestReleaseProbe();
     if (!releaseProbe) throw new Error("expected release probe");
     const input = baseInput({
       releaseProbe,
@@ -496,7 +649,9 @@ describe("route shadow and fallback coordinator", () => {
     expect(result.headers.get("x-programmable-shadow-overhead-ms")).toMatch(
       /^\d+$/,
     );
-    expect(result.headers.get("x-programmable-shadow-parity")).toBeNull();
+    expect(result.headers.get("x-programmable-shadow-parity")).toBe(
+      "incomparable",
+    );
   });
 
   it("marks different checkpoints incomparable without exposing response bodies", async () => {
@@ -595,7 +750,7 @@ describe("route shadow and fallback coordinator", () => {
 
   it("reports indexed serving and fallback only to an authorized live probe", async () => {
     vi.stubEnv("INDEXED_EXPLORE_TOKEN_READS_ENABLED", "true");
-    const releaseProbe = authorizedTestReleaseProbe();
+    const releaseProbe = await authorizedTestReleaseProbe();
     if (!releaseProbe) throw new Error("expected release probe");
 
     const indexedInput = baseInput({ releaseProbe });
@@ -613,8 +768,10 @@ describe("route shadow and fallback coordinator", () => {
       "match",
     );
 
+    const fallbackProbe = await authorizedTestReleaseProbe();
+    if (!fallbackProbe) throw new Error("expected fallback release probe");
     const fallbackInput = baseInput({
-      releaseProbe,
+      releaseProbe: fallbackProbe,
       readiness: vi.fn(async () => [
         {
           ...CLASSIC_SCOPE[0],
@@ -632,9 +789,13 @@ describe("route shadow and fallback coordinator", () => {
     );
 
     vi.stubEnv("INDEXED_READ_LIVE_FALLBACK_ENABLED", "false");
+    const unavailableProbe = await authorizedTestReleaseProbe();
+    if (!unavailableProbe) {
+      throw new Error("expected unavailable release probe");
+    }
     const unavailableResponse = await coordinateRouteRead(
       baseInput({
-        releaseProbe,
+        releaseProbe: unavailableProbe,
         readiness: vi.fn(async () => [
           {
             ...CLASSIC_SCOPE[0],
@@ -647,12 +808,18 @@ describe("route shadow and fallback coordinator", () => {
     expect(unavailableResponse.status).toBe(503);
     expect(
       unavailableResponse.headers.get("x-programmable-live-fallback"),
-    ).toBeNull();
+    ).toBe("false");
+    expect(
+      unavailableResponse.headers.get("x-programmable-shadow-parity"),
+    ).toBe("incomparable");
+    expect(
+      unavailableResponse.headers.get("x-programmable-shadow-overhead-ms"),
+    ).toMatch(/^\d+$/);
   });
 
   it("keeps the indexed response selected when a live probe detects a mismatch", async () => {
     vi.stubEnv("INDEXED_EXPLORE_TOKEN_READS_ENABLED", "true");
-    const releaseProbe = authorizedTestReleaseProbe();
+    const releaseProbe = await authorizedTestReleaseProbe();
     if (!releaseProbe) throw new Error("expected release probe");
     const input = baseInput({
       releaseProbe,
@@ -673,9 +840,9 @@ describe("route shadow and fallback coordinator", () => {
     await expect(result.json()).resolves.toEqual({ source: "indexed" });
   });
 
-  it("keeps the indexed response selected and omits parity when live comparison fails", async () => {
+  it("keeps the indexed response selected and reports incomparable when live comparison fails", async () => {
     vi.stubEnv("INDEXED_EXPLORE_TOKEN_READS_ENABLED", "true");
-    const releaseProbe = authorizedTestReleaseProbe();
+    const releaseProbe = await authorizedTestReleaseProbe();
     if (!releaseProbe) throw new Error("expected release probe");
     const input = baseInput({
       releaseProbe,
@@ -694,7 +861,9 @@ describe("route shadow and fallback coordinator", () => {
     expect(result.headers.get("x-programmable-shadow-overhead-ms")).toMatch(
       /^\d+$/,
     );
-    expect(result.headers.get("x-programmable-shadow-parity")).toBeNull();
+    expect(result.headers.get("x-programmable-shadow-parity")).toBe(
+      "incomparable",
+    );
     expect(result.headers.get("x-programmable-live-fallback")).toBe("false");
     await expect(result.json()).resolves.toEqual({ source: "indexed" });
   });

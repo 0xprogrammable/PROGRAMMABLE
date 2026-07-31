@@ -29,7 +29,7 @@ import { indexedLaunchLookupEnabled } from "@/lib/data-pipeline/route-activation
 import {
   coordinatePublicRouteRead,
   PUBLIC_INDEXED_ROUTE_READS,
-  publicRouteSearchParams,
+  preparePublicRouteRequest,
   publicSnapshotCheckpoint,
   STOCK_PAIRED_ROUTE_SCOPES,
 } from "@/lib/data-pipeline/public-route-readiness.server";
@@ -702,10 +702,13 @@ async function readStockActionReward(
 }
 
 export async function GET(request: NextRequest) {
-  const search = publicRouteSearchParams(
+  const routeRequest = await preparePublicRouteRequest(
     request.nextUrl.searchParams,
     request.headers,
+    "creator-profile",
   );
+  if (routeRequest.probeFailure) return routeRequest.probeFailure;
+  const search = routeRequest.searchParams;
   if (
     [...search.keys()].some((key) => key !== "account") ||
     search.getAll("account").length !== 1
@@ -721,7 +724,9 @@ export async function GET(request: NextRequest) {
     return await coordinatePublicRouteRead({
       route: "creator-profile",
       scope: STOCK_PAIRED_ROUTE_SCOPES,
-      requestHeaders: request.headers,
+      ...(routeRequest.releaseProbe
+        ? { releaseProbe: routeRequest.releaseProbe }
+        : {}),
       indexed: (transaction) =>
         PUBLIC_INDEXED_ROUTE_READS.stockPairedProfile(transaction, {
           chainId: 1,

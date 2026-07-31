@@ -41,6 +41,7 @@ const FLAG_NAMES = [
   "INDEXED_CREATOR_PROFILE_READS_ENABLED",
   "INDEXED_CLASSIC_V3_PROFILE_READS_ENABLED",
   "INDEXED_LAUNCH_LOOKUP_ENABLED",
+  "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED",
   "INDEXED_READ_SHADOW_COMPARE_ENABLED",
 ] as const;
 
@@ -123,6 +124,18 @@ describe("server read-model singleton", () => {
       DataPipelineError,
     );
     expect(postgresMocks.createPostgresExecutor).not.toHaveBeenCalled();
+  });
+
+  it("constructs the private reader for an authenticated probe while route flags stay off", async () => {
+    await expect(getServerReadModel()).resolves.toBeNull();
+    vi.stubEnv("PROGRAMMABLE_API_READER_DATABASE_URL", REMOTE_DATABASE_URL);
+    vi.stubEnv("PROGRAMMABLE_POSTGRES_SSL_CA_PEM", rootCertificates[0]!);
+
+    const model = await getServerReadModel({ required: true });
+
+    expect(model).not.toBeNull();
+    expect(postgresMocks.createPostgresExecutor).toHaveBeenCalledTimes(1);
+    expect(postgresMocks.createPostgresReadModel).toHaveBeenCalledTimes(1);
   });
 
   it("shares one global promise and one bounded pool across concurrent callers", async () => {

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 import { provenanceHeaders, type ReadProvenance } from "./cache";
@@ -8,6 +8,7 @@ import { canonicalBytes32, parseNonnegativeIntegerText } from "./codecs";
 import { loadDataPipelineConfig, type DataPipelineFlagName } from "./config";
 import { invalidInput } from "./errors";
 import { getServerReadModel, type ServerReadModel } from "./read-model.server";
+import { consumeReleaseProbeNonce } from "./release-probe-nonce.server";
 import type { PostgresTransaction } from "./postgres";
 
 export const INDEXED_ROUTE_KEYS = [
@@ -78,10 +79,22 @@ const VALIDATED_RECORD_SCOPE_EVIDENCE_INSTANCES = new WeakSet<object>();
 const AUTHORIZED_RELEASE_PROBE = Symbol(
   "programmable.authorized-release-probe",
 );
+const AUTHORIZED_RELEASE_PROBE_ROUTE = Symbol(
+  "programmable.authorized-release-probe-route",
+);
 const AUTHORIZED_RELEASE_PROBE_INSTANCES = new WeakSet<object>();
+const CONSUMED_RELEASE_PROBE_INSTANCES = new WeakSet<object>();
+
+const RELEASE_PROBE_NONCE =
+  /^(?<issuedAt>[1-9]\d{12})-(?<capture>[0-9a-f]{64})-(?<sequence>0|[1-9]\d{0,9})$/;
+const RELEASE_PROBE_MAX_AGE_MS = 5 * 60 * 1_000;
+const RELEASE_PROBE_MAX_FUTURE_SKEW_MS = 30 * 1_000;
+const RELEASE_PROBE_SIGNATURE = /^[0-9a-f]{64}$/;
+const RELEASE_PROBE_SIGNATURE_VERSION = "programmable-release-probe-v1";
 
 export type AuthorizedReleaseProbe = Readonly<{
   readonly [AUTHORIZED_RELEASE_PROBE]: true;
+  readonly [AUTHORIZED_RELEASE_PROBE_ROUTE]: IndexedRouteKey;
 }>;
 
 export type ValidatedRecordScopeEvidence = Readonly<{
@@ -238,6 +251,9 @@ const SHARED_CACHE_HEADERS = [
 ] as const;
 
 const RELEASE_PROBE_HEADERS = [
+  "x-programmable-shadow-probe",
+  "x-programmable-shadow-probe-signature",
+  "x-programmable-shadow-probe-token",
   "x-programmable-shadow-overhead-ms",
   "x-programmable-shadow-parity",
   "x-programmable-live-fallback",
@@ -507,31 +523,98 @@ function validReleaseProbeToken(value: unknown): value is string {
   );
 }
 
+function releaseProbeSignaturePayload(
+  route: IndexedRouteKey,
+  nonce: string,
+): string {
+  return `${RELEASE_PROBE_SIGNATURE_VERSION}\n${route}\n${nonce}`;
+}
+
+/**
+ * Shared by private release tooling and tests. The secret never crosses the
+ * wire; only this route-bound HMAC is sent with the request.
+ */
+export function signRouteReleaseProbe(input: {
+  route: IndexedRouteKey;
+  nonce: string;
+  secret: string;
+}): string {
+  if (!supportedRoute(input.route)) {
+    throw invalidInput("config", "release-probe-route");
+  }
+  const route = input.route;
+  if (!RELEASE_PROBE_NONCE.test(input.nonce)) {
+    throw invalidInput("config", "release-probe-nonce");
+  }
+  if (!validReleaseProbeToken(input.secret)) {
+    throw invalidInput("config", "release-probe-token");
+  }
+  return createHmac("sha256", input.secret)
+    .update(releaseProbeSignaturePayload(route, input.nonce), "utf8")
+    .digest("hex");
+}
+
 /**
  * Converts the exact internal probe headers into an unforgeable in-process
- * capability. The capability stores no token and must never be serialized.
+ * capability after a distributed, atomic nonce consume. The capability stores
+ * no token and must never be serialized.
  */
-export function authorizeRouteReleaseProbe(
+export async function authorizeRouteReleaseProbe(
   headers: Headers,
-): AuthorizedReleaseProbe | null {
+  nonce: string,
+  route: IndexedRouteKey,
+): Promise<AuthorizedReleaseProbe | null> {
   if (headers.get("x-programmable-shadow-probe") !== "1") return null;
+  if (headers.has("x-programmable-shadow-probe-token")) return null;
+  const supplied = headers.get("x-programmable-shadow-probe-signature");
+  if (!supplied || !RELEASE_PROBE_SIGNATURE.test(supplied)) return null;
+  const match = RELEASE_PROBE_NONCE.exec(nonce);
+  if (!match?.groups) return null;
 
   const expectedToken = process.env.PROGRAMMABLE_SHADOW_PROBE_TOKEN;
+  if (expectedToken === undefined || expectedToken === "") return null;
   if (!validReleaseProbeToken(expectedToken)) {
     throw invalidInput("config", "release-probe-token");
   }
-  const supplied = headers.get("x-programmable-shadow-probe-token");
-  if (!validReleaseProbeToken(supplied)) return null;
-
-  const expectedDigest = createHash("sha256")
-    .update(expectedToken, "utf8")
-    .digest();
-  const suppliedDigest = createHash("sha256").update(supplied, "utf8").digest();
+  const expected = signRouteReleaseProbe({
+    route,
+    nonce,
+    secret: expectedToken,
+  });
+  const expectedDigest = Buffer.from(expected, "hex");
+  const suppliedDigest = Buffer.from(supplied, "hex");
   if (!timingSafeEqual(expectedDigest, suppliedDigest)) return null;
+
+  const now = Date.now();
+  const issuedAt = Number(match.groups.issuedAt);
+  if (
+    !Number.isSafeInteger(issuedAt) ||
+    issuedAt < now - RELEASE_PROBE_MAX_AGE_MS ||
+    issuedAt > now + RELEASE_PROBE_MAX_FUTURE_SKEW_MS
+  ) {
+    return null;
+  }
+  const expiresAt = issuedAt + RELEASE_PROBE_MAX_AGE_MS;
+  if (
+    !(await consumeReleaseProbeNonce({
+      route,
+      nonce,
+      issuedAt: new Date(issuedAt),
+      expiresAt: new Date(expiresAt),
+    }))
+  ) {
+    return null;
+  }
 
   const capability = {} as AuthorizedReleaseProbe;
   Object.defineProperty(capability, AUTHORIZED_RELEASE_PROBE, {
     value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  Object.defineProperty(capability, AUTHORIZED_RELEASE_PROBE_ROUTE, {
+    value: route,
     enumerable: false,
     configurable: false,
     writable: false,
@@ -542,17 +625,21 @@ export function authorizeRouteReleaseProbe(
 
 function validatedReleaseProbe(
   value: AuthorizedReleaseProbe | undefined,
+  route: IndexedRouteKey,
 ): AuthorizedReleaseProbe | null {
   if (value === undefined) return null;
   if (
     !value ||
     typeof value !== "object" ||
     value[AUTHORIZED_RELEASE_PROBE] !== true ||
+    value[AUTHORIZED_RELEASE_PROBE_ROUTE] !== route ||
     !AUTHORIZED_RELEASE_PROBE_INSTANCES.has(value) ||
+    CONSUMED_RELEASE_PROBE_INSTANCES.has(value) ||
     !Object.isFrozen(value)
   ) {
     throw invalidInput("config", "release-probe-capability");
   }
+  CONSUMED_RELEASE_PROBE_INSTANCES.add(value);
   return value;
 }
 
@@ -1087,9 +1174,9 @@ function copiedResponse(response: Response, headers: Headers): Response {
 }
 
 type ReleaseProbeObservation = Readonly<{
-  shadowOverheadMs?: number;
-  shadowParity?: "match" | "mismatch";
-  liveFallback?: boolean;
+  shadowOverheadMs: number;
+  shadowParity: "match" | "mismatch" | "incomparable";
+  liveFallback: boolean;
 }>;
 
 function releaseProbeResponse(
@@ -1107,27 +1194,21 @@ function releaseProbeResponse(
   headers.delete("X-Vercel-Cache");
   headers.set("Cache-Control", "private, no-store");
 
-  if (observation.shadowOverheadMs !== undefined) {
-    if (
-      !Number.isSafeInteger(observation.shadowOverheadMs) ||
-      observation.shadowOverheadMs < 0
-    ) {
-      throw invalidInput("config", "release-probe-overhead");
-    }
-    headers.set(
-      "x-programmable-shadow-overhead-ms",
-      String(observation.shadowOverheadMs),
-    );
+  if (
+    !Number.isSafeInteger(observation.shadowOverheadMs) ||
+    observation.shadowOverheadMs < 0
+  ) {
+    throw invalidInput("config", "release-probe-overhead");
   }
-  if (observation.shadowParity !== undefined) {
-    headers.set("x-programmable-shadow-parity", observation.shadowParity);
-  }
-  if (observation.liveFallback !== undefined) {
-    headers.set(
-      "x-programmable-live-fallback",
-      observation.liveFallback ? "true" : "false",
-    );
-  }
+  headers.set(
+    "x-programmable-shadow-overhead-ms",
+    String(observation.shadowOverheadMs),
+  );
+  headers.set("x-programmable-shadow-parity", observation.shadowParity);
+  headers.set(
+    "x-programmable-live-fallback",
+    observation.liveFallback ? "true" : "false",
+  );
   return copiedResponse(response, headers);
 }
 
@@ -1412,10 +1493,11 @@ async function runSynchronousShadowProbe(
   const parity =
     observedEvent?.kind === "match" || observedEvent?.kind === "mismatch"
       ? observedEvent.kind
-      : undefined;
-  return releaseProbeResponse(legacy.response, capability, {
+      : "incomparable";
+  return releaseProbeResponse(fallbackResponse(legacy), capability, {
     shadowOverheadMs: Math.max(0, elapsed),
-    ...(parity ? { shadowParity: parity } : {}),
+    shadowParity: parity,
+    liveFallback: false,
   });
 }
 
@@ -1453,10 +1535,10 @@ async function runSynchronousLiveProbe(
   const parity =
     observedEvent?.kind === "match" || observedEvent?.kind === "mismatch"
       ? observedEvent.kind
-      : undefined;
+      : "incomparable";
   return releaseProbeResponse(selectedResponse, capability, {
     shadowOverheadMs: Math.max(0, elapsed),
-    ...(parity ? { shadowParity: parity } : {}),
+    shadowParity: parity,
     liveFallback: false,
   });
 }
@@ -1536,12 +1618,18 @@ async function liveFallbackOrUnavailable(
   fallbackEnabled: boolean,
   releaseProbe: AuthorizedReleaseProbe | null,
 ): Promise<Response> {
+  const startedAt = performance.now();
   const outcome = await fallbackOrUnavailable(input, fallbackEnabled);
   if (!releaseProbe) return outcome.response;
+  const elapsed = Math.ceil(performance.now() - startedAt);
   return releaseProbeResponse(
     outcome.response,
     releaseProbe,
-    outcome.usedFallback ? { liveFallback: true } : {},
+    {
+      shadowOverheadMs: Math.max(0, elapsed),
+      shadowParity: "incomparable",
+      liveFallback: outcome.usedFallback,
+    },
   );
 }
 
@@ -1549,20 +1637,28 @@ export async function coordinateRouteRead(
   input: CoordinatedRouteRead,
 ): Promise<Response> {
   const identity = validateIdentity(input);
-  const releaseProbe = validatedReleaseProbe(input.releaseProbe);
+  const releaseProbe = validatedReleaseProbe(input.releaseProbe, identity.route);
   const config = loadDataPipelineConfig();
   const routeEnabled = config.flags[ROUTE_FLAGS[identity.route]];
-  if (!routeEnabled) {
-    const legacy = validateLegacyResult(await input.legacy()).response;
-    return releaseProbe
-      ? releaseProbeResponse(legacy, releaseProbe, {})
-      : legacy;
+  if (!routeEnabled && !releaseProbe) {
+    return validateLegacyResult(await input.legacy()).response;
   }
 
   // Configuration errors are intentionally not converted into a fallback.
   // Enabling an indexed route without its database must fail closed.
-  const readModel = await getServerReadModel();
+  const readModel = await getServerReadModel({ required: Boolean(releaseProbe) });
   if (!readModel) throw invalidInput("config", "indexed-read-model");
+
+  if (!routeEnabled) {
+    const legacy = validateLegacyResult(await input.legacy());
+    return runSynchronousShadowProbe(
+      input,
+      identity,
+      readModel,
+      legacy,
+      releaseProbe!,
+    );
+  }
 
   if (config.flags.INDEXED_READ_SHADOW_COMPARE_ENABLED) {
     if (!releaseProbe && !input.scheduleShadowComparison) {

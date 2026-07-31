@@ -7,6 +7,7 @@ import {
   authorizeRouteReleaseProbe,
   coordinateRouteRead,
   validatedRecordScopeEvidence,
+  type AuthorizedReleaseProbe,
   type CoordinatedRouteRead,
   type IndexedRouteResult,
   type IndexedProjectionVersion,
@@ -29,28 +30,52 @@ import type {
 } from "./route-adapters.server";
 
 const SHADOW_PROBE_QUERY_PARAMETER = "__read_model_probe";
-const SHADOW_PROBE_NONCE = /^[A-Za-z0-9._:-]{1,128}$/;
 
 /**
- * Removes the cache-busting nonce only after the secret request headers have
- * been converted into the coordinator's unforgeable capability. Invalid,
- * duplicated and unauthenticated values remain visible to normal route query
- * validation.
+ * Converts one fresh, authenticated cache nonce into an unforgeable capability
+ * only after the private database consumes it atomically. Invalid, duplicated,
+ * stale, replayed and unauthenticated values remain visible to normal route
+ * query validation and can never reach the indexed read path.
  */
-export function publicRouteSearchParams(
+export async function preparePublicRouteRequest(
   search: URLSearchParams,
   headers: Headers,
-): URLSearchParams {
+  route: IndexedRouteKey,
+): Promise<Readonly<{
+  searchParams: URLSearchParams;
+  releaseProbe?: AuthorizedReleaseProbe;
+  probeFailure?: Response;
+}>> {
   const canonical = new URLSearchParams(search);
   const nonces = canonical.getAll(SHADOW_PROBE_QUERY_PARAMETER);
-  if (
-    nonces.length === 1 &&
-    SHADOW_PROBE_NONCE.test(nonces[0]!) &&
-    authorizeRouteReleaseProbe(headers)
-  ) {
+  let releaseProbe: AuthorizedReleaseProbe | null = null;
+  try {
+    releaseProbe =
+      nonces.length === 1
+        ? await authorizeRouteReleaseProbe(headers, nonces[0]!, route)
+        : null;
+  } catch {
+    return Object.freeze({
+      searchParams: canonical,
+      probeFailure: Response.json(
+        { error: "release_probe_temporarily_unavailable" },
+        {
+          status: 503,
+          headers: {
+            "Cache-Control": "private, no-store",
+            "Retry-After": "1",
+          },
+        },
+      ),
+    });
+  }
+  if (releaseProbe) {
     canonical.delete(SHADOW_PROBE_QUERY_PARAMETER);
   }
-  return canonical;
+  return Object.freeze({
+    searchParams: canonical,
+    ...(releaseProbe ? { releaseProbe } : {}),
+  });
 }
 
 export const PUBLIC_INDEXED_ROUTE_READS =
@@ -574,7 +599,7 @@ export async function readExactPublicRouteSnapshot(input: {
 export type PublicRouteReadInput = Readonly<{
   route: IndexedRouteKey;
   scope: readonly ReviewedRouteScope[];
-  requestHeaders?: Headers;
+  releaseProbe?: AuthorizedReleaseProbe;
   legacy: CoordinatedRouteRead["legacy"];
   indexed: (
     transaction: PostgresTransaction,
@@ -601,13 +626,10 @@ export function publicSnapshotCheckpoint(
 export async function coordinatePublicRouteRead(
   input: PublicRouteReadInput,
 ): Promise<Response> {
-  const releaseProbe = input.requestHeaders
-    ? authorizeRouteReleaseProbe(input.requestHeaders)
-    : null;
   return coordinateRouteRead({
     route: input.route,
     scope: input.scope,
-    ...(releaseProbe ? { releaseProbe } : {}),
+    ...(input.releaseProbe ? { releaseProbe: input.releaseProbe } : {}),
     legacy: input.legacy,
     indexedSnapshot: (transaction) =>
       readExactPublicRouteSnapshot({

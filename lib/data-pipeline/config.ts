@@ -14,6 +14,7 @@ export const INDEXED_ROUTE_FLAG_NAMES = [
   "INDEXED_CREATOR_PROFILE_READS_ENABLED",
   "INDEXED_CLASSIC_V3_PROFILE_READS_ENABLED",
   "INDEXED_LAUNCH_LOOKUP_ENABLED",
+  "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED",
 ] as const;
 
 export const INDEXED_CONTROL_FLAG_NAMES = [
@@ -35,11 +36,13 @@ const BROWSER_FORBIDDEN_NAMES = [
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN",
   "NEXT_PUBLIC_PROGRAMMABLE_API_READER_DATABASE_URL",
+  "NEXT_PUBLIC_PROGRAMMABLE_RELEASE_PROBE_DATABASE_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_POSTGRES_SSL_CA_PEM",
   "NEXT_PUBLIC_PROGRAMMABLE_UNISWAP_GRAPH_API_KEY",
   "NEXT_PUBLIC_PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
+  "NEXT_PUBLIC_PROGRAMMABLE_SHADOW_PROBE_TOKEN",
 ] as const;
 
 function invalidConfig(): never {
@@ -134,6 +137,7 @@ export type DataPipelineConfig = {
   };
   postgres: {
     connectionString?: string;
+    releaseProbeConnectionString?: string;
     sslCaPem?: string;
     maxConnections: number;
     connectTimeoutMs: number;
@@ -181,6 +185,10 @@ export function loadDataPipelineConfig(
       env.INDEXED_LAUNCH_LOOKUP_ENABLED,
       false,
     ),
+    INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED: parseBoolean(
+      env.INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED,
+      false,
+    ),
     INDEXED_READ_SHADOW_COMPARE_ENABLED: parseBoolean(
       env.INDEXED_READ_SHADOW_COMPARE_ENABLED,
       false,
@@ -216,13 +224,26 @@ export function loadDataPipelineConfig(
   const postgresConnectionString = parseDatabaseUrl(
     env.PROGRAMMABLE_API_READER_DATABASE_URL,
   );
+  const releaseProbeConnectionString = parseDatabaseUrl(
+    env.PROGRAMMABLE_RELEASE_PROBE_DATABASE_URL,
+  );
   const postgresSslCaPem = parsePostgresSslCa(
     env.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
   );
-  if (!postgresConnectionString && postgresSslCaPem) invalidConfig();
-  if (postgresConnectionString) {
+  if (
+    !postgresConnectionString &&
+    !releaseProbeConnectionString &&
+    postgresSslCaPem
+  ) {
+    invalidConfig();
+  }
+  for (const connectionString of [
+    postgresConnectionString,
+    releaseProbeConnectionString,
+  ]) {
+    if (!connectionString) continue;
     const target = validatedPostgresConnectionTarget(
-      postgresConnectionString,
+      connectionString,
     );
     const requiresCa =
       !target.isLoopback || target.sslMode === "verify-full";
@@ -244,6 +265,7 @@ export function loadDataPipelineConfig(
     }),
     postgres: Object.freeze({
       connectionString: postgresConnectionString,
+      releaseProbeConnectionString,
       sslCaPem: postgresSslCaPem,
       maxConnections: parseInteger(
         env.PROGRAMMABLE_POSTGRES_MAX_CONNECTIONS,

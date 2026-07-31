@@ -10,7 +10,7 @@ import {
   coordinatePublicRouteRead,
   PUBLIC_INDEXED_ROUTE_READS,
   PUBLIC_DISCOVERY_ROUTE_SCOPES,
-  publicRouteSearchParams,
+  preparePublicRouteRequest,
   publicSnapshotCheckpoint,
 } from "../../../../lib/data-pipeline/public-route-readiness.server";
 
@@ -18,10 +18,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const search = publicRouteSearchParams(
+  const routeRequest = await preparePublicRouteRequest(
     request.nextUrl.searchParams,
     request.headers,
+    "explore-token",
   );
+  if (routeRequest.probeFailure) return routeRequest.probeFailure;
+  const search = routeRequest.searchParams;
   if (
     [...search.keys()].some((key) => key !== "address") ||
     search.getAll("address").length !== 1
@@ -44,7 +47,9 @@ export async function GET(request: NextRequest) {
     return await coordinatePublicRouteRead({
       route: "explore-token",
       scope: PUBLIC_DISCOVERY_ROUTE_SCOPES,
-      requestHeaders: request.headers,
+      ...(routeRequest.releaseProbe
+        ? { releaseProbe: routeRequest.releaseProbe }
+        : {}),
       indexed: (transaction) =>
         PUBLIC_INDEXED_ROUTE_READS.tokenDetail(transaction, {
           chainId: 1,

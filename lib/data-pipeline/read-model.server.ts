@@ -31,6 +31,9 @@ export type ServerReadModel = BaseServerReadModel & {
 const READ_MODEL_SINGLETON = Symbol.for(
   "programmable.data-pipeline.server-read-model.v1",
 );
+const REQUIRED_READ_MODEL_SINGLETON = Symbol.for(
+  "programmable.data-pipeline.server-read-model.required.v1",
+);
 
 type SymbolRegistry = {
   [key: symbol]: Promise<ServerReadModel | null> | undefined;
@@ -87,9 +90,9 @@ function createServerReadModel(executor: PostgresExecutor): ServerReadModel {
   });
 }
 
-function constructServerReadModel(): ServerReadModel | null {
+function constructServerReadModel(required: boolean): ServerReadModel | null {
   const config = loadDataPipelineConfig();
-  if (!requiresReadModel(config)) return null;
+  if (!required && !requiresReadModel(config)) return null;
 
   const connectionString = config.postgres.connectionString;
   if (!connectionString) {
@@ -126,12 +129,24 @@ function constructServerReadModel(): ServerReadModel | null {
  * Returns the one process-wide read model. The promise itself is shared so
  * concurrent cold-start requests cannot create competing Postgres pools.
  */
-export function getServerReadModel(): Promise<ServerReadModel | null> {
+export function getServerReadModel(
+  options: Readonly<{ required?: boolean }> = {},
+): Promise<ServerReadModel | null> {
   const state = registry();
+  if (options.required) {
+    const required = state[REQUIRED_READ_MODEL_SINGLETON];
+    if (required) return required;
+    const ordinary = state[READ_MODEL_SINGLETON];
+    const created = Promise.resolve(ordinary)
+      .then((existing) => existing ?? constructServerReadModel(true));
+    state[REQUIRED_READ_MODEL_SINGLETON] = created;
+    state[READ_MODEL_SINGLETON] = created;
+    return created;
+  }
   const existing = state[READ_MODEL_SINGLETON];
   if (existing) return existing;
 
-  const created = Promise.resolve().then(constructServerReadModel);
+  const created = Promise.resolve().then(() => constructServerReadModel(false));
   state[READ_MODEL_SINGLETON] = created;
   return created;
 }
@@ -144,9 +159,11 @@ export async function resetServerReadModelForTests(): Promise<void> {
 
   const state = registry();
   const existing = state[READ_MODEL_SINGLETON];
+  const required = state[REQUIRED_READ_MODEL_SINGLETON];
   delete state[READ_MODEL_SINGLETON];
-  if (!existing) return;
+  delete state[REQUIRED_READ_MODEL_SINGLETON];
+  if (!existing && !required) return;
 
-  const model = await existing.catch(() => null);
+  const model = await (required ?? existing)!.catch(() => null);
   if (model) await model.close();
 }

@@ -1,10 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
 const routeMocks = vi.hoisted(() => ({
   readIndexedFeedSnapshot: vi.fn(),
+  readExploreModel: vi.fn(),
+  getPublicOnchainDeployment: vi.fn(() => ({ chainId: 1 })),
 }));
+
+vi.mock("../lib/onchain", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/onchain")>();
+  return {
+    ...actual,
+    readExploreModel: routeMocks.readExploreModel,
+    getPublicOnchainDeployment: routeMocks.getPublicOnchainDeployment,
+  };
+});
 
 vi.mock(
   "../app/api/indexers/v1/read-indexed-feed.server",
@@ -70,6 +81,11 @@ const readyModel: ExploreReadModel = {
   launcherFeesAccruedWei: "0",
   launcherFeesAccruedEth: "0",
 };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv("INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED", "true");
+});
 
 function indexedFeedSnapshot() {
   return {
@@ -445,6 +461,36 @@ describe("public indexer fee disclosure", () => {
         },
       ],
     });
+  });
+
+  it("keeps the public feed on the legacy reader while its dedicated flag is off", async () => {
+    vi.stubEnv("INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED", "false");
+    vi.stubEnv("INDEXED_EXPLORE_LIST_READS_ENABLED", "true");
+    vi.stubEnv("INDEXED_LAUNCH_LOOKUP_ENABLED", "true");
+    routeMocks.readExploreModel.mockResolvedValueOnce(readyModel);
+
+    const response = await getIndexerTokens(
+      new Request("https://programmable.family/api/indexers/v1/tokens"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.readExploreModel).toHaveBeenCalledTimes(1);
+    expect(routeMocks.readIndexedFeedSnapshot).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-read-source")).toBeNull();
+  });
+
+  it("keeps the public token list on the legacy reader while its dedicated flag is off", async () => {
+    vi.stubEnv("INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED", "false");
+    vi.stubEnv("INDEXED_EXPLORE_LIST_READS_ENABLED", "true");
+    vi.stubEnv("INDEXED_LAUNCH_LOOKUP_ENABLED", "true");
+    routeMocks.readExploreModel.mockResolvedValueOnce(readyModel);
+
+    const response = await getTokenList();
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.readExploreModel).toHaveBeenCalledTimes(1);
+    expect(routeMocks.readIndexedFeedSnapshot).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-read-source")).toBeNull();
   });
 
   it.each([
