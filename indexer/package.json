@@ -11,6 +11,8 @@
     "codegen": "envio codegen",
     "dev": "envio dev",
     "start": "envio start",
+    "identity": "node scripts/deployment-identity.mjs",
+    "identity:verify-live-baseline": "node scripts/deployment-identity.mjs --verify deployment-identity.live-baseline.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

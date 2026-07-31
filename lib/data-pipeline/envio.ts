@@ -316,29 +316,19 @@ function strictSafeInteger(value: unknown, maximum = Number.MAX_SAFE_INTEGER) {
   return value;
 }
 
-function strictUint32(value: unknown): number {
-  let canonical: string;
-  if (typeof value === "number" && Number.isSafeInteger(value)) {
-    canonical = String(value);
-  } else if (typeof value === "bigint" && value >= 0n) {
-    canonical = value.toString();
-  } else {
-    try {
-      canonical = parseNonnegativeIntegerText(value);
-    } catch {
-      throw validationError("envio", "placement");
-    }
+function strictUint32Decimal(value: unknown, operation: string) {
+  if (typeof value !== "string" || !/^(0|[1-9]\d*)$/.test(value)) {
+    throw validationError("envio", operation);
   }
-  const parsed = Number(canonical);
-  if (!Number.isSafeInteger(parsed) || parsed > UINT32_MAXIMUM) {
-    throw validationError("envio", "placement");
+  const parsed = BigInt(value);
+  if (parsed > BigInt(UINT32_MAXIMUM)) {
+    throw validationError("envio", operation);
   }
-  return parsed;
+  return Number(parsed);
 }
 
-function graphqlUint32OrGenesis(value: number): number | string {
-  if (value === -1) return value;
-  return value <= 0x7fff_ffff ? value : String(value);
+function graphqlUint32OrGenesis(value: number): string {
+  return String(value);
 }
 
 function strictString(value: unknown, pattern: RegExp, operation: string) {
@@ -572,7 +562,10 @@ function parseCandidate(
   const blockNumber = parseNonnegativeIntegerText(value.blockNumber);
   const blockHash = canonicalBytes32(value.blockHash);
   const transactionHash = canonicalBytes32(value.transactionHash);
-  const blockGlobalLogIndex = strictUint32(value.blockGlobalLogIndex);
+  const blockGlobalLogIndex = strictUint32Decimal(
+    value.blockGlobalLogIndex,
+    "block-global-log-index",
+  );
   if (
     match[1] !== blockHash ||
     match[2] !== transactionHash ||
@@ -659,7 +652,10 @@ function parseCandidate(
     blockHash,
     blockTimestamp: parseNonnegativeIntegerText(value.blockTimestamp),
     transactionHash,
-    transactionIndex: strictUint32(value.transactionIndex),
+    transactionIndex: strictUint32Decimal(
+      value.transactionIndex,
+      "transaction-index",
+    ),
     blockGlobalLogIndex,
     sourceAddress,
     contractName,

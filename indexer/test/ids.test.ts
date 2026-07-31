@@ -40,6 +40,29 @@ describe("candidateOccurrenceId", () => {
     expect(reMined).not.toBe(first);
   });
 
+  it("preserves the complete uint32 log-index domain", () => {
+    const common = {
+      chainId: 1,
+      blockHash: `0x${"11".repeat(32)}`,
+      transactionHash: `0x${"22".repeat(32)}`,
+    };
+
+    expect(
+      candidateOccurrenceId({
+        ...common,
+        blockGlobalLogIndex: 0xffff_ffff,
+      }),
+    ).toBe(
+      `${common.chainId}:${common.blockHash}:${common.transactionHash}:4294967295`,
+    );
+    expect(() =>
+      candidateOccurrenceId({
+        ...common,
+        blockGlobalLogIndex: 0x1_0000_0000,
+      }),
+    ).toThrow(/unsigned 32-bit integer/i);
+  });
+
   it("rejects malformed hashes and invalid block-global indexes", () => {
     expect(() =>
       candidateOccurrenceId({

@@ -258,8 +258,8 @@ type CandidatePlacement = {
   readonly blockNumber: bigint;
   readonly blockHash: string;
   readonly transactionHash: string;
-  readonly transactionIndex: number;
-  readonly blockGlobalLogIndex: number;
+  readonly transactionIndex: bigint;
+  readonly blockGlobalLogIndex: bigint;
 };
 
 function comparePlacement(
@@ -1449,8 +1449,8 @@ function immutableFields(occurrence: RecordedOccurrence): {
   blockHash: string;
   blockTimestamp: bigint;
   transactionHash: string;
-  transactionIndex: number;
-  blockGlobalLogIndex: number;
+  transactionIndex: bigint;
+  blockGlobalLogIndex: bigint;
   sourceAddress: string;
   model: string;
   releaseVersion: string;

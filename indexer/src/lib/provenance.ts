@@ -11,21 +11,29 @@ export type EventProvenance = {
   blockHash: string;
   blockTimestamp: bigint;
   transactionHash: string;
-  transactionIndex: number;
-  blockGlobalLogIndex: number;
+  transactionIndex: bigint;
+  blockGlobalLogIndex: bigint;
   sourceAddress: string;
 };
 
 export function eventProvenance(event: EvmEvent): EventProvenance {
   const blockHash = event.block.hash.toLowerCase();
   const transactionHash = event.transaction.hash.toLowerCase();
+  const transactionIndex = uint32Number(
+    event.transaction.transactionIndex,
+    "transaction index",
+  );
+  const blockGlobalLogIndex = uint32Number(
+    event.logIndex,
+    "block-global log index",
+  );
 
   return {
     id: candidateOccurrenceId({
       chainId: event.chainId,
       blockHash,
       transactionHash,
-      blockGlobalLogIndex: event.logIndex,
+      blockGlobalLogIndex,
     }),
     downstreamLogicalId: undefined,
     receiptLogOrdinal: undefined,
@@ -34,10 +42,17 @@ export function eventProvenance(event: EvmEvent): EventProvenance {
     blockHash,
     blockTimestamp: BigInt(event.block.timestamp),
     transactionHash,
-    transactionIndex: event.transaction.transactionIndex,
-    blockGlobalLogIndex: event.logIndex,
+    transactionIndex: BigInt(transactionIndex),
+    blockGlobalLogIndex: BigInt(blockGlobalLogIndex),
     sourceAddress: lowerAddress(event.srcAddress),
   };
+}
+
+function uint32Number(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value < 0 || value > 0xffff_ffff) {
+    throw new RangeError(`${name} must be an unsigned 32-bit integer`);
+  }
+  return value;
 }
 
 export function lower(value: string): string {

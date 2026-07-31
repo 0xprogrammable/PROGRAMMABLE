@@ -37,7 +37,7 @@ export function candidateOccurrenceId(
       : identityOrChainId;
 
   assertNonNegativeInteger("chainId", identity.chainId);
-  assertNonNegativeInteger(
+  assertUint32(
     "block-global log index",
     identity.blockGlobalLogIndex,
   );
@@ -73,7 +73,7 @@ export function downstreamLogicalId(
       "receipt-local ordinal must be supplied by the downstream verifier",
     );
   }
-  assertNonNegativeInteger("receipt-local ordinal", receiptLogOrdinal);
+  assertUint32("receipt-local ordinal", receiptLogOrdinal);
   assertHash("transaction hash", transactionHash);
 
   return [chainId, transactionHash.toLowerCase(), receiptLogOrdinal].join(":");
@@ -96,6 +96,12 @@ export function poolEntityId(chainId: number, poolId: string): string {
 function assertNonNegativeInteger(name: string, value: number): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`);
+  }
+}
+
+function assertUint32(name: string, value: number): void {
+  if (!Number.isSafeInteger(value) || value < 0 || value > 0xffff_ffff) {
+    throw new RangeError(`${name} must be an unsigned 32-bit integer`);
   }
 }
 

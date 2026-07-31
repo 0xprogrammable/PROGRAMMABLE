@@ -6,8 +6,8 @@ active Programmable releases on Ethereum Mainnet:
 - Classic V2 and Classic V3
 - Stock-Paired V1, V2 and V3
 
-Classic V1, Adaptive and Deep are intentionally out of scope. Source addresses
-and inclusive start blocks are pinned to the checked-in deployment manifests.
+All other releases are intentionally out of scope. Source addresses and
+inclusive start blocks are pinned to the checked-in deployment manifests.
 Shared Stock V2/V3 hook and vault-factory events are attributed only after an
 indexed `poolId` relation identifies the release.
 
@@ -41,6 +41,7 @@ From this directory:
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm identity:verify-live-baseline
 pnpm codegen
 pnpm typecheck
 pnpm test
@@ -68,6 +69,8 @@ reproducible code generation and installs.
 - Lowercase addresses and hashes.
 - Exact bigint accounting; no floating-point arithmetic.
 - Deterministic payload hashes over reconstructed event topics and data.
+- Full uint32 transaction, block-global log, and receipt-local ordinal domains;
+  Envio stores them as exact `BigInt` values rather than GraphQL `Int`.
 - Canonical zero-byte event data (`0x`) is valid for indexed-only events.
 - Duplicate candidate delivery does not increment aggregate fee totals twice.
 - Factory events register reward vaults in the same block.
@@ -88,6 +91,32 @@ can set an explicit immutable reviewed label such as
 `production-reviewed-2026-07-31` together with commitments computed from the
 exact deployed commit. These fields record identity only; they are not proof
 that the deployment passed the production gates below.
+
+## Deployment identity
+
+`pnpm identity` generates the complete identity for the files in the current
+checkout after `SOURCE_COMMIT` has been pinned to the exact reviewed canonical
+`production` commit. It fails closed while that value is pending.
+`pnpm identity:verify-live-baseline` reconstructs the currently live baseline
+from its immutable Git commit and fails if any commitment differs. It is
+historical evidence, not the identity for this pending release.
+
+The four artifact commitments are SHA-256 hashes of the exact bytes in
+`config.yaml`, `schema.graphql`, `src/EventHandlers.ts`, and
+`src/lib/release-map.ts`. The event-set commitment is generated separately:
+
+1. Read every `contracts[].events[].event` signature from `config.yaml`.
+2. Keep repeated signatures when different contracts emit the same event.
+3. Sort the UTF-8 signatures bytewise.
+4. Join them with `\n`, append one final `\n`, and hash those bytes with
+   SHA-256.
+
+The script also requires the exact 19-contract Classic V2/V3 and Stock-Paired
+V1/V2/V3 scope in both the ABI registry and Ethereum chain registry. Any
+unreviewed contract fails validation. Use `--format env` to render
+the eight `ENVIO_*` values required by the fail-closed runtime identity. The
+command only reads local files and Git objects; it never deploys or contacts
+Envio.
 
 ## Production status
 

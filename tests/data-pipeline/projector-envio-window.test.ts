@@ -57,8 +57,8 @@ function row(blockNumber: string, logIndex: number) {
     blockHash,
     blockTimestamp: "1785480000",
     transactionHash,
-    transactionIndex: 0,
-    blockGlobalLogIndex: logIndex,
+    transactionIndex: "0",
+    blockGlobalLogIndex: String(logIndex),
     sourceAddress: "0xd240d06f8586eb799f20056054e5b527405e6bad",
     contractName: "ClassicV2Launcher",
     eventName: "MemeTokenLaunched",
@@ -81,7 +81,7 @@ describe("Envio frozen projector windows", () => {
       expect(body.query).toContain("blockNumber: { _lte: $throughBlock }");
       expect(body.variables).toEqual({
         afterBlock: "25650000",
-        afterLogIndex: 3,
+        afterLogIndex: "3",
         afterCandidateId: `1:0x${"11".repeat(32)}:0x${"22".repeat(32)}:3`,
         throughBlock: "25650100",
         first: 25,

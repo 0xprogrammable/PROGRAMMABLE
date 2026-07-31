@@ -20,14 +20,14 @@ type IndexerState {
 type ChainEvent {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   contractName: String! @index
   eventName: String! @index
@@ -131,14 +131,14 @@ type PoolFeeConfig {
 type FeeAccrual {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   model: String! @index
   releaseVersion: String! @index
@@ -180,26 +180,26 @@ type RewardVault {
   releaseVersion: String! @index
   factoryOccurrenceId: String!
   downstreamLogicalId: String
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   payloadHash: String!
   sourceAddress: String!
   blockNumber: BigInt! @index
   blockHash: String!
   transactionHash: String!
-  blockGlobalLogIndex: Int!
+  blockGlobalLogIndex: BigInt!
 }
 
 type RewardCheckpoint {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   model: String! @index
   releaseVersion: String! @index
@@ -214,14 +214,14 @@ type RewardCheckpoint {
 type BeneficiaryClaim {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   model: String! @index
   releaseVersion: String! @index
@@ -238,14 +238,14 @@ type BeneficiaryClaim {
 type CreatorFeeClaim {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   model: String! @index
   releaseVersion: String! @index
@@ -262,14 +262,14 @@ type CreatorFeeClaim {
 type LauncherFeeClaim {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   model: String! @index
   releaseVersion: String! @index
@@ -284,14 +284,14 @@ type LauncherFeeClaim {
 type PayoutChange {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   model: String! @index
   releaseVersion: String! @index
@@ -311,14 +311,14 @@ type PayoutChange {
 type RewardConfigurationChange {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   model: String! @index
   releaseVersion: String! @index
@@ -337,14 +337,14 @@ type RewardConfigurationChange {
 type InitialBuyCustody {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   model: String! @index
   releaseVersion: String! @index
@@ -362,14 +362,14 @@ type InitialBuyCustody {
 type VestingWallet {
   id: ID!
   downstreamLogicalId: String @index
-  receiptLogOrdinal: Int
+  receiptLogOrdinal: BigInt
   chainId: Int!
   blockNumber: BigInt! @index
   blockHash: String!
   blockTimestamp: BigInt!
   transactionHash: String! @index
-  transactionIndex: Int!
-  blockGlobalLogIndex: Int!
+  transactionIndex: BigInt!
+  blockGlobalLogIndex: BigInt!
   sourceAddress: String! @index
   model: String! @index
   releaseVersion: String! @index

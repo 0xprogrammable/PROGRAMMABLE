@@ -158,8 +158,8 @@ function candidate(overrides: Record<string, unknown> = {}) {
     blockHash: BLOCK_HASH,
     blockTimestamp: "1785480000",
     transactionHash: TRANSACTION_HASH,
-    transactionIndex: 3,
-    blockGlobalLogIndex: 7,
+    transactionIndex: "3",
+    blockGlobalLogIndex: "7",
     sourceAddress: SOURCE,
     contractName: "ClassicV2Launcher",
     eventName: "MemeTokenLaunched",
@@ -183,8 +183,8 @@ function dynamicCandidate(overrides: Record<string, unknown> = {}) {
     blockHash: BLOCK_HASH,
     blockTimestamp: "1785481000",
     transactionHash: TRANSACTION_HASH,
-    transactionIndex: 4,
-    blockGlobalLogIndex: 8,
+    transactionIndex: "4",
+    blockGlobalLogIndex: "8",
     sourceAddress: DYNAMIC_SOURCE,
     contractName: "ClassicV3RewardVault",
     eventName: "CreatorFeesCheckpointed",
@@ -217,8 +217,8 @@ function sharedStaticCandidates() {
       blockHash: BLOCK_HASH,
       blockTimestamp: "1785482000",
       transactionHash: TRANSACTION_HASH,
-      transactionIndex: 5,
-      blockGlobalLogIndex: 9,
+      transactionIndex: "5",
+      blockGlobalLogIndex: "9",
       sourceAddress: SHARED_HOOK_SOURCE,
       contractName: "StockV2V3Hook",
       eventName: "PoolRegistered",
@@ -235,8 +235,8 @@ function sharedStaticCandidates() {
       blockHash: BLOCK_HASH,
       blockTimestamp: "1785482000",
       transactionHash: TRANSACTION_HASH,
-      transactionIndex: 5,
-      blockGlobalLogIndex: 10,
+      transactionIndex: "5",
+      blockGlobalLogIndex: "10",
       sourceAddress: SHARED_FACTORY_SOURCE,
       contractName: "StockV2V3RewardVaultFactory",
       eventName: "QuoteAssetFeeSplitVaultDeployed",
@@ -258,7 +258,7 @@ function placedCandidate(input: {
     blockNumber: input.blockNumber,
     blockHash: input.blockHash,
     transactionHash: input.transactionHash,
-    blockGlobalLogIndex: input.blockGlobalLogIndex,
+    blockGlobalLogIndex: String(input.blockGlobalLogIndex),
   });
 }
 
@@ -394,6 +394,47 @@ describe("Envio candidate adapter", () => {
     await expect(client.readCandidate(CANDIDATE_ID)).resolves.toBeNull();
   });
 
+  it("accepts canonical decimal uint32 placement values without narrowing", async () => {
+    const maximum = 4_294_967_295;
+    const maximumCandidateId = `1:${BLOCK_HASH}:${TRANSACTION_HASH}:${maximum}`;
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () =>
+        json({
+          data: {
+            ChainEvent_by_pk: candidate({
+              id: maximumCandidateId,
+              transactionIndex: String(maximum),
+              blockGlobalLogIndex: String(maximum),
+            }),
+          },
+        }),
+    });
+
+    await expect(client.readCandidate(maximumCandidateId)).resolves.toMatchObject({
+      transactionIndex: maximum,
+      blockGlobalLogIndex: maximum,
+    });
+  });
+
+  it.each([
+    ["numeric JSON value", { transactionIndex: 3 }],
+    ["noncanonical decimal", { transactionIndex: "03" }],
+    ["transaction overflow", { transactionIndex: "4294967296" }],
+    ["log-index overflow", { blockGlobalLogIndex: "4294967296" }],
+  ])("rejects malformed BigInt %s", async (_name, override) => {
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () =>
+        json({ data: { ChainEvent_by_pk: candidate(override) } }),
+    });
+
+    await expect(client.readCandidate(CANDIDATE_ID)).rejects.toMatchObject({
+      dependency: "envio",
+      code: "validation_failed",
+    });
+  });
+
   it("accepts known dynamic vault events only as release-neutral candidates", async () => {
     const accepted = createEnvioClient({
       endpoint: "https://envio.example/graphql",
@@ -469,7 +510,7 @@ describe("Envio candidate adapter", () => {
   it.each([
     ["fork identity", { id: `1:${"0x" + "99".repeat(32)}:${TRANSACTION_HASH}:7` }],
     ["block hash", { blockHash: `0x${"99".repeat(32)}` }],
-    ["global log index", { blockGlobalLogIndex: 8 }],
+    ["global log index", { blockGlobalLogIndex: "8" }],
     ["source cutoff", { blockNumber: "25624130" }],
     ["source contract", { contractName: "ClassicV2Hook" }],
     ["release hint", { releaseVersion: "classic-v3" }],
@@ -529,13 +570,14 @@ describe("Envio candidate cursor adapter", () => {
       };
       expect(request.query).toContain("query ProgrammableCandidatesAfter");
       expect(request.query).toContain("$afterBlock: numeric!");
+      expect(request.query).toContain("$afterLogIndex: numeric!");
       expect(request.query).toContain("$afterCandidateId: String!");
       expect(request.query).toContain("blockGlobalLogIndex: asc");
       expect(request.query).toContain("{ id: { _gt: $afterCandidateId } }");
       expect(request.query).toContain("id: asc");
       expect(request.variables).toEqual({
         afterBlock: "25624130",
-        afterLogIndex: -1,
+        afterLogIndex: "-1",
         afterCandidateId: "",
         first: 2,
       });
@@ -585,7 +627,7 @@ describe("Envio candidate cursor adapter", () => {
     [
       {
         blockNumber: "25624130",
-        blockGlobalLogIndex: 2_147_483_648,
+        blockGlobalLogIndex: 4_294_967_296,
         candidateId: "",
       },
       10,
@@ -679,7 +721,7 @@ describe("Envio candidate cursor adapter", () => {
         };
         expect(request.variables).toMatchObject({
           afterBlock: "25624130",
-          afterLogIndex: -1,
+          afterLogIndex: "-1",
           afterCandidateId: "",
         });
         return json({ data: { ChainEvent: [] } });

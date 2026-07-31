@@ -193,9 +193,9 @@ describe("replay and occurrence behavior", () => {
     expect(
       candidates
         .map(({ blockGlobalLogIndex }) => blockGlobalLogIndex)
-        .sort((left, right) => left - right),
+        .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0)),
     )
-      .toEqual([8, 60]);
+      .toEqual([8n, 60n]);
     expect(candidates.every(({ downstreamLogicalId }) => downstreamLogicalId === undefined))
       .toBe(true);
     expect(candidates[0]?.id).not.toBe(candidates[1]?.id);
