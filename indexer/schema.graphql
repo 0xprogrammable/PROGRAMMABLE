@@ -1,0 +1,372 @@
+type IndexerState {
+  id: ID!
+  schemaVersion: String!
+  deployment: String!
+  chainId: Int!
+  progressBlock: BigInt! @index
+  progressBlockHash: String!
+  progressTimestamp: BigInt!
+  progressTransactionHash: String!
+  progressOccurrenceId: String!
+}
+
+type ChainEvent {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  contractName: String! @index
+  eventName: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  topics: [String!]!
+  data: String!
+  decodedPayload: String!
+  payloadHash: String!
+}
+
+type Launch {
+  id: ID!
+  chainId: Int!
+  model: String! @index
+  releaseVersion: String! @index
+  launchHash: String! @index
+  token: String @index
+  creator: String @index
+  quoteAsset: String @index
+  poolId: String @index
+  hook: String
+  rewardVault: String @index
+  positionRecipient: String
+  positionTokenId: BigInt
+  totalSwapFeeBps: Int
+  buySwapFeeBps: Int
+  sellSwapFeeBps: Int
+  rewardConfigurationHash: String
+  quoteConfigurationHash: String
+  totalSupply: BigInt
+  tokenLiquidityAmount: BigInt
+  lockedTokenDust: BigInt
+  initialTick: Int
+  tickLower: Int
+  tickUpper: Int
+  lpFeePips: Int
+  initialBuyQuoteAmount: BigInt
+  initialBuyTokenAmount: BigInt
+  initialBuyEthAmount: BigInt
+  launchOccurrenceId: String
+  liquidityOccurrenceId: String
+  initialBuyOccurrenceId: String
+  custodyOccurrenceId: String
+  coordinatorOccurrenceId: String
+  hasLaunchEvent: Boolean!
+  hasLiquidityEvent: Boolean!
+  hasInitialBuyEvent: Boolean!
+  hasCustodyEvent: Boolean!
+  hasCoordinatorEvent: Boolean!
+  provenanceValid: Boolean!
+  isComplete: Boolean!
+  updatedBlock: BigInt! @index
+}
+
+type PoolRelease {
+  id: ID!
+  chainId: Int!
+  launchId: String!
+  model: String! @index
+  releaseVersion: String! @index
+  token: String! @index
+  quoteAsset: String
+  hook: String!
+  rewardVault: String
+  blockNumber: BigInt! @index
+}
+
+type PoolFeeConfig {
+  id: ID!
+  chainId: Int!
+  poolId: String! @index
+  token: String @index
+  creator: String @index
+  quoteAsset: String @index
+  rewardVault: String @index
+  registrar: String
+  model: String! @index
+  releaseVersion: String! @index
+  totalSwapFeeBps: Int
+  buySwapFeeBps: Int
+  sellSwapFeeBps: Int
+  buyCreatorFeeBps: Int
+  sellCreatorFeeBps: Int
+  creatorFeeBps: Int
+  launcherFeeBps: Int
+  transferTaxBps: Int
+  lpFeePips: Int
+  quoteIsCurrency0: Boolean
+  rewardConfigurationHash: String
+  quoteConfigurationHash: String
+  registrationOccurrenceId: String
+  disclosureOccurrenceId: String
+  provenanceValid: Boolean!
+  blockNumber: BigInt! @index
+}
+
+type FeeAccrual {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  payloadHash: String!
+  poolId: String! @index
+  swapSender: String!
+  quoteAsset: String
+  isBuy: Boolean
+  appliedTotalSwapFeeBps: Int
+  grossAmount: BigInt!
+  creatorFee: BigInt!
+  launcherFee: BigInt!
+}
+
+type PoolFeeTotals {
+  id: ID!
+  chainId: Int!
+  poolId: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  grossAmount: BigInt!
+  creatorFees: BigInt!
+  launcherFees: BigInt!
+  swapCount: BigInt!
+  lastOccurrenceId: String!
+  blockNumber: BigInt! @index
+}
+
+type RewardVault {
+  id: ID!
+  chainId: Int!
+  vault: String! @index
+  poolId: String! @index
+  hook: String!
+  quoteAsset: String
+  salt: String
+  configurationHash: String
+  model: String! @index
+  releaseVersion: String! @index
+  factoryOccurrenceId: String!
+  downstreamLogicalId: String
+  receiptLogOrdinal: Int
+  payloadHash: String!
+  sourceAddress: String!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  transactionHash: String!
+  blockGlobalLogIndex: Int!
+}
+
+type RewardCheckpoint {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  payloadHash: String!
+  vault: String! @index
+  poolId: String! @index
+  configurationEpoch: BigInt!
+  amount: BigInt!
+  totalCreatorFeesReceived: BigInt!
+}
+
+type BeneficiaryClaim {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  payloadHash: String!
+  vault: String! @index
+  beneficiary: String! @index
+  payoutAddress: String
+  quoteAsset: String
+  amount: BigInt!
+  beneficiaryTotalClaimed: BigInt!
+  vaultTotalReceived: BigInt!
+}
+
+type CreatorFeeClaim {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  payloadHash: String!
+  poolId: String! @index
+  creator: String
+  rewardVault: String @index
+  recipient: String
+  quoteAsset: String
+  caller: String!
+  amount: BigInt!
+}
+
+type LauncherFeeClaim {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  payloadHash: String!
+  treasury: String!
+  recipient: String!
+  quoteAsset: String
+  caller: String!
+  amount: BigInt!
+}
+
+type PayoutChange {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  payloadHash: String!
+  vault: String! @index
+  poolId: String @index
+  beneficiary: String @index
+  allocationIndex: BigInt
+  previousPayoutAddress: String!
+  newPayoutAddress: String!
+  shareBps: Int
+  configurationEpoch: BigInt
+  activeConfigurationHash: String
+  effectiveTotalCreatorFeesReceived: BigInt
+}
+
+type RewardConfigurationChange {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  payloadHash: String!
+  vault: String! @index
+  poolId: String! @index
+  approvalReference: String!
+  configurationEpoch: BigInt!
+  previousConfigurationHash: String!
+  newConfigurationHash: String!
+  beneficiaries: [String!]!
+  sharesBps: [Int!]!
+  effectiveTotalCreatorFeesReceived: BigInt!
+}
+
+type InitialBuyCustody {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  payloadHash: String!
+  launchHash: String! @index
+  deployer: String! @index
+  token: String! @index
+  custody: String!
+  mode: Int!
+  durationDays: Int!
+  cliffDays: Int!
+  configurationHash: String!
+}
+
+type VestingWallet {
+  id: ID!
+  downstreamLogicalId: String @index
+  receiptLogOrdinal: Int
+  chainId: Int!
+  blockNumber: BigInt! @index
+  blockHash: String!
+  blockTimestamp: BigInt!
+  transactionHash: String! @index
+  transactionIndex: Int!
+  blockGlobalLogIndex: Int!
+  sourceAddress: String! @index
+  model: String! @index
+  releaseVersion: String! @index
+  payloadHash: String!
+  wallet: String! @index
+  token: String! @index
+  beneficiary: String! @index
+  salt: String!
+  configurationHash: String!
+}
