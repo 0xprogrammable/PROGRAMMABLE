@@ -79,7 +79,8 @@ const ZERO_FEE_VOLUME: FeeVolume = {
 };
 
 const TOKEN_HYDRATION_BATCH_SIZE = 12;
-const BLOCK_TIMESTAMP_BATCH_SIZE = 24;
+const BLOCK_TIMESTAMP_BATCH_SIZE = 4;
+const RPC_PROVENANCE_BATCH_SIZE = 1;
 
 type FeeDisclosure = readonly [
   buySwapFeeBps: number,
@@ -661,10 +662,10 @@ async function readReadyModel(
   );
 
   const [indexedEventSets, launcherFeeValues] = await Promise.all([
-    Promise.all(
-      clients.map((candidate) =>
-        indexVerifiedEvents(candidate, config, toBlock),
-      ),
+    mapInBatches(
+      clients,
+      RPC_PROVENANCE_BATCH_SIZE,
+      (candidate) => indexVerifiedEvents(candidate, config, toBlock),
     ),
     Promise.all(
       clients.map((candidate) =>
@@ -735,8 +736,10 @@ async function readReadyModel(
     },
   );
 
-  const tokenSets = await Promise.all(
-    clients.map((candidate) =>
+  const tokenSets = await mapInBatches(
+    clients,
+    RPC_PROVENANCE_BATCH_SIZE,
+    (candidate) =>
       mapInBatches(
         verified,
         TOKEN_HYDRATION_BATCH_SIZE,
@@ -751,7 +754,6 @@ async function readReadyModel(
             toBlock,
           ),
       ),
-    ),
   );
   const tokenFingerprint = JSON.stringify(tokenSets[0]);
   if (
