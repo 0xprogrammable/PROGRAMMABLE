@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+import * as dataPipelineConfig from "../../lib/data-pipeline/config";
 import {
   OFFICIAL_V4_SUBGRAPH_DEPLOYMENT,
   OFFICIAL_V4_SUBGRAPH_ID,
@@ -131,6 +132,104 @@ function dayCandle(id: string, time: number) {
 }
 
 describe("pinned Uniswap v4 analytics adapter", () => {
+  it("rejects a custom production gateway before it can receive the API key", () => {
+    const fetcher = vi.fn(async () => json({}));
+    let thrown: unknown;
+    vi.stubEnv("VERCEL_ENV", "production");
+    try {
+      createUniswapAnalyticsClient({
+        gatewayBaseUrl: "https://graph-gateway.example",
+        apiKey: "graph-secret",
+        fetcher,
+      });
+    } catch (error) {
+      thrown = error;
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(thrown).toMatchObject({
+      dependency: "config",
+      code: "invalid_config",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("enforces the production gateway boundary even if config policy becomes permissive", () => {
+    const permissiveConfig = dataPipelineConfig.loadDataPipelineConfig({
+      PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL:
+        "https://graph-gateway.example",
+      PROGRAMMABLE_UNISWAP_GRAPH_API_KEY: "graph-secret",
+    });
+    const configSpy = vi
+      .spyOn(dataPipelineConfig, "loadDataPipelineConfig")
+      .mockReturnValue(permissiveConfig);
+    const fetcher = vi.fn(async () => json({}));
+    let thrown: unknown;
+    vi.stubEnv("VERCEL_ENV", "production");
+    try {
+      createUniswapAnalyticsClient({
+        gatewayBaseUrl: "https://graph-gateway.example",
+        apiKey: "graph-secret",
+        fetcher,
+      });
+    } catch (error) {
+      thrown = error;
+    } finally {
+      configSpy.mockRestore();
+      vi.unstubAllEnvs();
+    }
+
+    expect(thrown).toMatchObject({
+      dependency: "config",
+      code: "invalid_config",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("allows the exact official gateway in production", async () => {
+    const fetcher = vi.fn(async () =>
+      json({ data: { _meta: meta(), pool: pool() } }),
+    );
+    vi.stubEnv("VERCEL_ENV", "production");
+    try {
+      const client = createUniswapAnalyticsClient({
+        gatewayBaseUrl: "https://gateway.thegraph.com",
+        apiKey: "graph-secret",
+        fetcher,
+      });
+      await expect(
+        client.readPoolSnapshot({ poolKey: POOL_KEY, block: BLOCK }),
+      ).resolves.toMatchObject({ status: "ready" });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("keeps custom gateways available outside production", async () => {
+    const fetcher = vi.fn(async (url: string) => {
+      expect(url).toBe(
+        `https://graph-gateway.example/api/subgraphs/id/${OFFICIAL_V4_SUBGRAPH_ID}`,
+      );
+      return json({ data: { _meta: meta(), pool: pool() } });
+    });
+    vi.stubEnv("VERCEL_ENV", "preview");
+    try {
+      const client = createUniswapAnalyticsClient({
+        gatewayBaseUrl: "https://graph-gateway.example",
+        apiKey: "graph-secret",
+        fetcher,
+      });
+      await expect(
+        client.readPoolSnapshot({ poolKey: POOL_KEY, block: BLOCK }),
+      ).resolves.toMatchObject({ status: "ready" });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it("uses the fixed subgraph and exact block Pool contract", async () => {
     const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe(

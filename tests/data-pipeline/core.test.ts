@@ -98,6 +98,19 @@ describe("data-pipeline configuration", () => {
     expect(config.flags.INDEXED_READ_REQUIRE_PARITY_ENABLED).toBe(false);
   });
 
+  it("rejects disabled parity when the trusted process environment is production", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    try {
+      expect(() =>
+        loadDataPipelineConfig({
+          INDEXED_READ_REQUIRE_PARITY_ENABLED: "false",
+        }),
+      ).toThrowError(DataPipelineError);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("accepts only the official Graph gateway base in production", () => {
     expect(
       loadDataPipelineConfig({
@@ -132,6 +145,20 @@ describe("data-pipeline configuration", () => {
     expect(config.uniswap.gatewayBaseUrl).toBe(
       "https://graph-proxy.example/custom-base",
     );
+  });
+
+  it("rejects a custom Graph gateway when the trusted process environment is production", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    try {
+      expect(() =>
+        loadDataPipelineConfig({
+          PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL:
+            "https://graph-proxy.example",
+        }),
+      ).toThrowError(DataPipelineError);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("rejects browser-prefixed credential paths without echoing a secret", () => {

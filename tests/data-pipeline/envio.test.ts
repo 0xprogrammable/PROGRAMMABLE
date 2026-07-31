@@ -12,6 +12,7 @@ vi.mock("server-only", () => ({}));
 
 import { createEnvioClient } from "../../lib/data-pipeline/envio";
 import { DataPipelineError } from "../../lib/data-pipeline/errors";
+import { canonicalPayloadJson } from "../../indexer/src/lib/payload-hash";
 
 const BLOCK_HASH = `0x${"11".repeat(32)}`;
 const TRANSACTION_HASH = `0x${"22".repeat(32)}`;
@@ -51,16 +52,7 @@ const PAYLOAD_HASH = keccak256(
     [EVENT_TOPICS, EVENT_DATA],
   ),
 );
-const DECODED_PAYLOAD = JSON.stringify({
-  token: EVENT_ARGS.token,
-  creator: EVENT_ARGS.creator,
-  poolId: EVENT_ARGS.poolId,
-  feeHook: EVENT_ARGS.feeHook,
-  positionRecipient: EVENT_ARGS.positionRecipient,
-  positionTokenId: EVENT_ARGS.positionTokenId.toString(),
-  totalSwapFeeBps: Number(EVENT_ARGS.totalSwapFeeBps),
-  launchHash: EVENT_ARGS.launchHash,
-});
+const DECODED_PAYLOAD = canonicalPayloadJson(EVENT_ARGS);
 
 function candidate(overrides: Record<string, unknown> = {}) {
   return {
@@ -141,7 +133,7 @@ describe("Envio candidate adapter", () => {
           "0x5555555555555555555555555555555555555555",
         positionTokenId: "42",
         token: "0x2222222222222222222222222222222222222222",
-        totalSwapFeeBps: 100,
+        totalSwapFeeBps: "100",
       },
       payloadHash: PAYLOAD_HASH,
     });

@@ -26,6 +26,8 @@ export const OFFICIAL_V4_SUBGRAPH_ID =
   "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G";
 export const OFFICIAL_V4_SUBGRAPH_DEPLOYMENT =
   "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK";
+const OFFICIAL_V4_SUBGRAPH_GATEWAY_BASE_URL =
+  "https://gateway.thegraph.com";
 
 // Conservative query spans keep each fixed subgraph request bounded before
 // entity pagination: six hours of swaps, 31 days of hourly candles, and one
@@ -846,6 +848,20 @@ export function createUniswapAnalyticsClient(options: {
     maximumEntities: number;
   };
 }) {
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL_ENV === "production";
+  if (
+    isProduction &&
+    options.gatewayBaseUrl !== OFFICIAL_V4_SUBGRAPH_GATEWAY_BASE_URL
+  ) {
+    throw dataPipelineError({
+      dependency: "config",
+      code: "invalid_config",
+      retryable: false,
+      countsTowardCircuit: false,
+    });
+  }
   const config = loadDataPipelineConfig({
     PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL: options.gatewayBaseUrl,
     PROGRAMMABLE_UNISWAP_GRAPH_API_KEY: options.apiKey,

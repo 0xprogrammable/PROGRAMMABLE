@@ -5,6 +5,7 @@ import {
   parseAbiItem,
   toEventSelector,
   type AbiEvent,
+  type AbiParameter,
   type Hex,
 } from "viem";
 
@@ -126,29 +127,196 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   );
 }
 
-export function canonicalizeEventPayload(value: unknown): CanonicalValue {
-  if (typeof value === "bigint") return value.toString();
-  if (
-    value === null ||
-    typeof value === "boolean" ||
-    typeof value === "number"
-  ) {
-    return value;
+type CanonicalizationSource = "local-decode" | "provider";
+
+function canonicalInteger(
+  value: unknown,
+  signed: boolean,
+  source: CanonicalizationSource,
+): string {
+  if (source === "local-decode") {
+    if (typeof value === "bigint") return value.toString();
+    if (typeof value === "number" && Number.isSafeInteger(value)) {
+      return value.toString();
+    }
+    throw new TypeError("decoded ABI integer is not an exact integer");
   }
-  if (typeof value === "string") {
-    return /^0x(?:[0-9a-fA-F]{2})*$/u.test(value)
-      ? value.toLowerCase()
-      : value;
+
+  const pattern = signed
+    ? /^(?:0|[1-9]\d*|-[1-9]\d*)$/u
+    : /^(?:0|[1-9]\d*)$/u;
+  if (typeof value !== "string" || !pattern.test(value)) {
+    throw new TypeError("provider ABI integer is not a canonical decimal string");
   }
-  if (Array.isArray(value)) return value.map(canonicalizeEventPayload);
-  if (isPlainRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, item]) => [key, canonicalizeEventPayload(item)]),
+  return value;
+}
+
+function canonicalHex(
+  value: unknown,
+  pattern: RegExp,
+  source: CanonicalizationSource,
+): string {
+  if (typeof value !== "string" || !pattern.test(value)) {
+    throw new TypeError("ABI hexadecimal value has invalid width");
+  }
+  const lowercase = value.toLowerCase();
+  if (source === "provider" && value !== lowercase) {
+    throw new TypeError("provider ABI hexadecimal value is not lowercase");
+  }
+  return lowercase;
+}
+
+function arrayItemParameter(
+  parameter: AbiParameter,
+  itemType: string,
+): AbiParameter {
+  return { ...parameter, type: itemType } as AbiParameter;
+}
+
+function canonicalizeAbiValue(
+  parameter: AbiParameter,
+  value: unknown,
+  source: CanonicalizationSource,
+): CanonicalValue {
+  const array = /^(.*)\[([0-9]*)\]$/u.exec(parameter.type);
+  if (array) {
+    if (!Array.isArray(value)) {
+      throw new TypeError("ABI array value is not an array");
+    }
+    if (array[2] !== "" && value.length !== Number(array[2])) {
+      throw new TypeError("ABI fixed array length does not match");
+    }
+    const item = arrayItemParameter(parameter, array[1]);
+    return value.map((entry) =>
+      canonicalizeAbiValue(item, entry, source),
     );
   }
-  throw new TypeError("event payload contains a non-canonical value");
+
+  if (/^uint(?:[0-9]+)?$/u.test(parameter.type)) {
+    return canonicalInteger(value, false, source);
+  }
+  if (/^int(?:[0-9]+)?$/u.test(parameter.type)) {
+    return canonicalInteger(value, true, source);
+  }
+  if (parameter.type === "address") {
+    return canonicalHex(value, /^0x[0-9a-fA-F]{40}$/u, source);
+  }
+  if (parameter.type === "bytes") {
+    return canonicalHex(value, /^0x(?:[0-9a-fA-F]{2})*$/u, source);
+  }
+  const fixedBytes = /^bytes([1-9]|[12][0-9]|3[0-2])$/u.exec(
+    parameter.type,
+  );
+  if (fixedBytes) {
+    return canonicalHex(
+      value,
+      new RegExp(`^0x[0-9a-fA-F]{${Number(fixedBytes[1]) * 2}}$`, "u"),
+      source,
+    );
+  }
+  if (parameter.type === "bool") {
+    if (typeof value !== "boolean") {
+      throw new TypeError("ABI bool value is not a boolean");
+    }
+    return value;
+  }
+  if (parameter.type === "string") {
+    if (typeof value !== "string") {
+      throw new TypeError("ABI string value is not a string");
+    }
+    return value;
+  }
+  if (parameter.type === "tuple") {
+    if (!("components" in parameter) || !parameter.components) {
+      throw new TypeError("ABI tuple is missing components");
+    }
+    const components = parameter.components;
+    const hasNamedComponents = components.every(
+      (component) => component.name !== undefined && component.name !== "",
+    );
+    if (!hasNamedComponents) {
+      if (!Array.isArray(value) || value.length !== components.length) {
+        throw new TypeError("unnamed ABI tuple must be a positional array");
+      }
+      return components.map((component, index) =>
+        canonicalizeAbiValue(component, value[index], source),
+      );
+    }
+    if (!isPlainRecord(value)) {
+      throw new TypeError("named ABI tuple must be an object");
+    }
+    return canonicalizeNamedAbiValues(components, value, source);
+  }
+
+  throw new TypeError(`unsupported ABI parameter type: ${parameter.type}`);
+}
+
+function canonicalizeNamedAbiValues(
+  parameters: readonly AbiParameter[],
+  value: Record<string, unknown>,
+  source: CanonicalizationSource,
+): Record<string, CanonicalValue> {
+  if (
+    parameters.some(
+      (parameter) => parameter.name === undefined || parameter.name === "",
+    )
+  ) {
+    throw new TypeError("event and named tuple ABI parameters must be named");
+  }
+  const namedParameters = parameters as readonly (AbiParameter & {
+    name: string;
+  })[];
+  const expectedKeys = namedParameters
+    .map((parameter) => parameter.name)
+    .sort((left, right) => left.localeCompare(right));
+  const actualKeys = Object.keys(value);
+  const sortedActualKeys = [...actualKeys].sort((left, right) =>
+    left.localeCompare(right),
+  );
+  if (
+    actualKeys.length !== expectedKeys.length ||
+    sortedActualKeys.some((key, index) => key !== expectedKeys[index]) ||
+    (source === "provider" &&
+      actualKeys.some((key, index) => key !== expectedKeys[index]))
+  ) {
+    throw new TypeError("ABI object keys do not match canonical parameter keys");
+  }
+
+  return Object.fromEntries(
+    namedParameters
+      .map(
+        (parameter) =>
+          [
+            parameter.name,
+            canonicalizeAbiValue(
+              parameter,
+              value[parameter.name],
+              source,
+            ),
+          ] as const,
+      )
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+export function canonicalizeAbiEventArguments(
+  parameters: readonly AbiParameter[],
+  value: unknown,
+): Record<string, CanonicalValue> {
+  if (!isPlainRecord(value)) {
+    throw new TypeError("decoded event arguments must be an object");
+  }
+  return canonicalizeNamedAbiValues(parameters, value, "local-decode");
+}
+
+function validateProviderEventArguments(
+  parameters: readonly AbiParameter[],
+  value: unknown,
+): Record<string, CanonicalValue> {
+  if (!isPlainRecord(value)) {
+    throw new TypeError("provider event arguments must be an object");
+  }
+  return canonicalizeNamedAbiValues(parameters, value, "provider");
 }
 
 const EVENT_ABIS = new Map<string, ReadonlyMap<string, AbiEvent>>();
@@ -204,11 +372,15 @@ export function decodeManifestEvent(input: {
     throw new TypeError("event ABI decode did not return named arguments");
   }
 
-  const localPayload = canonicalizeEventPayload(decoded.args);
-  const providerPayload = canonicalizeEventPayload(input.providerPayload);
+  const localPayload = canonicalizeAbiEventArguments(
+    event.inputs,
+    decoded.args,
+  );
+  const providerPayload = validateProviderEventArguments(
+    event.inputs,
+    input.providerPayload,
+  );
   if (
-    !isPlainRecord(localPayload) ||
-    !isPlainRecord(providerPayload) ||
     JSON.stringify(localPayload) !== JSON.stringify(providerPayload)
   ) {
     throw new TypeError("provider event payload does not match local decode");

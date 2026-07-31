@@ -188,7 +188,10 @@ export function loadDataPipelineConfig(
   } satisfies Record<DataPipelineFlagName, boolean>;
 
   const isProduction =
-    env.NODE_ENV === "production" || env.VERCEL_ENV === "production";
+    env.NODE_ENV === "production" ||
+    env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL_ENV === "production";
   if (isProduction && !flags.INDEXED_READ_REQUIRE_PARITY_ENABLED) {
     invalidConfig();
   }

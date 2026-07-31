@@ -15,9 +15,10 @@ vi.mock("server-only", () => ({}));
 
 import {
   PROGRAMMABLE_EVENT_SIGNATURES,
-  canonicalizeEventPayload,
+  canonicalizeAbiEventArguments,
   decodeManifestEvent,
 } from "../../lib/data-pipeline/event-manifest";
+import { canonicalPayloadJson } from "../../indexer/src/lib/payload-hash";
 
 function configuredEventSignatures() {
   const yaml = readFileSync(
@@ -82,16 +83,9 @@ const LAUNCH_ARGS = {
   launchHash: `0x${"66".repeat(32)}`,
 } as const;
 const LAUNCH_EVENT = encodeEvent(LAUNCH_SIGNATURE, LAUNCH_ARGS);
-const LAUNCH_PROVIDER_PAYLOAD = {
-  token: LAUNCH_ARGS.token,
-  totalSwapFeeBps: 100,
-  positionTokenId: "42",
-  positionRecipient: LAUNCH_ARGS.positionRecipient,
-  poolId: LAUNCH_ARGS.poolId,
-  launchHash: LAUNCH_ARGS.launchHash,
-  feeHook: LAUNCH_ARGS.feeHook,
-  creator: LAUNCH_ARGS.creator,
-};
+const LAUNCH_PROVIDER_PAYLOAD = JSON.parse(
+  canonicalPayloadJson(LAUNCH_ARGS),
+) as Record<string, unknown>;
 
 describe("Programmable runtime event manifest", () => {
   it("exactly covers every contract/event pair configured by the indexer", () => {
@@ -117,7 +111,7 @@ describe("Programmable runtime event manifest", () => {
       positionRecipient: LAUNCH_ARGS.positionRecipient,
       positionTokenId: "42",
       token: LAUNCH_ARGS.token,
-      totalSwapFeeBps: 100,
+      totalSwapFeeBps: "100",
     });
   });
 
@@ -138,10 +132,9 @@ describe("Programmable runtime event manifest", () => {
       effectiveTotalCreatorFeesReceived: 123_456_789n,
     } as const;
     const encoded = encodeEvent(signature, args);
-    const providerPayload = canonicalizeEventPayload({
-      ...args,
-      sharesBps: [6_000, 4_000],
-    });
+    const providerPayload = JSON.parse(
+      canonicalPayloadJson(args),
+    ) as Record<string, unknown>;
 
     expect(
       decodeManifestEvent({
@@ -156,8 +149,118 @@ describe("Programmable runtime event manifest", () => {
       configurationEpoch: "7",
       effectiveTotalCreatorFeesReceived: "123456789",
       poolId: `0x${"aa".repeat(32)}`,
-      sharesBps: [6000, 4000],
+      sharesBps: ["6000", "4000"],
     });
+  });
+
+  it("canonicalizes signed int24 and uint24 fields as decimal strings", () => {
+    const signature =
+      "MemeLiquidityConfigured(address indexed token, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)";
+    const args = {
+      token: "0x1111111111111111111111111111111111111111",
+      totalSupply: 1_000_000_000n,
+      tokenLiquidityAmount: 999_999_999n,
+      lockedTokenDust: 1n,
+      initialTick: -120n,
+      tickLower: -887_220n,
+      tickUpper: 887_220n,
+      lpFeePips: 10_000n,
+      launchHash: `0x${"EE".repeat(32)}`,
+    } as const;
+    const encoded = encodeEvent(signature, args);
+    const providerPayload = JSON.parse(
+      canonicalPayloadJson(args),
+    ) as Record<string, unknown>;
+
+    expect(
+      decodeManifestEvent({
+        contractName: "ClassicV2Launcher",
+        eventName: "MemeLiquidityConfigured",
+        topics: encoded.topics,
+        data: encoded.data,
+        providerPayload,
+      }),
+    ).toMatchObject({
+      initialTick: "-120",
+      lpFeePips: "10000",
+      tickLower: "-887220",
+      tickUpper: "887220",
+    });
+  });
+
+  it("canonicalizes uint8 and uint16 fields as decimal strings", () => {
+    const signature =
+      "MemeCreatorInitialBuyCustodyV2(address indexed deployer, address indexed token, address indexed custody, uint8 mode, uint16 durationDays, uint16 cliffDays, bytes32 configurationHash, bytes32 launchHash)";
+    const args = {
+      deployer: "0x1111111111111111111111111111111111111111",
+      token: "0x2222222222222222222222222222222222222222",
+      custody: "0x3333333333333333333333333333333333333333",
+      mode: 2n,
+      durationDays: 365n,
+      cliffDays: 30n,
+      configurationHash: `0x${"44".repeat(32)}`,
+      launchHash: `0x${"55".repeat(32)}`,
+    } as const;
+    const encoded = encodeEvent(signature, args);
+    const providerPayload = JSON.parse(
+      canonicalPayloadJson(args),
+    ) as Record<string, unknown>;
+
+    expect(
+      decodeManifestEvent({
+        contractName: "ClassicV3Launcher",
+        eventName: "MemeCreatorInitialBuyCustodyV2",
+        topics: encoded.topics,
+        data: encoded.data,
+        providerPayload,
+      }),
+    ).toMatchObject({ mode: "2", durationDays: "365", cliffDays: "30" });
+  });
+
+  it("recursively canonicalizes tuple arrays and nested integer arrays", () => {
+    const abi = parseAbiItem(
+      "event Nested((uint8 level, int24 delta, address target)[] rules, uint16[][] weights)",
+    ) as AbiEvent;
+
+    expect(
+      canonicalizeAbiEventArguments(abi.inputs, {
+        rules: [
+          {
+            target: "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            level: 2,
+            delta: -17,
+          },
+        ],
+        weights: [
+          [1, 2],
+          [3],
+        ],
+      }),
+    ).toEqual({
+      rules: [
+        {
+          delta: "-17",
+          level: "2",
+          target: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        },
+      ],
+      weights: [["1", "2"], ["3"]],
+    });
+  });
+
+  it("rejects a provider number where Envio emits a decimal string", () => {
+    expect(() =>
+      decodeManifestEvent({
+        contractName: "ClassicV2Launcher",
+        eventName: "MemeTokenLaunched",
+        topics: LAUNCH_EVENT.topics,
+        data: LAUNCH_EVENT.data,
+        providerPayload: {
+          ...LAUNCH_PROVIDER_PAYLOAD,
+          totalSwapFeeBps: 100,
+        },
+      }),
+    ).toThrow();
   });
 
   const mismatchCases: Array<
@@ -190,7 +293,7 @@ describe("Programmable runtime event manifest", () => {
       {
         providerPayload: {
           ...LAUNCH_PROVIDER_PAYLOAD,
-          totalSwapFeeBps: 101,
+          totalSwapFeeBps: "101",
         },
       },
     ],
