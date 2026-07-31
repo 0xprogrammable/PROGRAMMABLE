@@ -135,6 +135,24 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
     },
     getBytecode: ({ address, blockNumber }) =>
       client.getBytecode({ address, blockNumber }),
+    async getLogs({ addresses, fromBlock, toBlock }) {
+      const logs = await client.getLogs({
+        address: [...addresses],
+        fromBlock,
+        toBlock,
+      });
+      return logs.map((log) => ({
+        address: log.address,
+        blockNumber: log.blockNumber,
+        blockHash: log.blockHash,
+        transactionHash: log.transactionHash,
+        transactionIndex: log.transactionIndex,
+        logIndex: log.logIndex,
+        removed: log.removed ?? false,
+        topics: log.topics as readonly Hex[],
+        data: log.data,
+      }));
+    },
   });
 }
 

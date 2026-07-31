@@ -16,8 +16,20 @@ import {
   invalidInput,
   validationError,
 } from "./errors";
-import type { EnvioCandidate } from "./envio";
+import type { EnvioCandidate, EnvioCandidateCursor } from "./envio";
+import { manifestEventSelectors } from "./event-manifest";
+import {
+  canonicalCoverageLog,
+  canonicalUint32DecimalText,
+  coverageLogPlacementKey,
+  type CanonicalCoverageLog,
+} from "./provider-evidence";
+import {
+  canonicalDynamicSourceLineages,
+  type VerifiedDynamicSourceLineage,
+} from "./projector-identities";
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
+import { runtimeBytecodeEvidence } from "./runtime-bytecode";
 import { assertProductionDualRpcProviders } from "./rpc-providers.server";
 
 export type CandidateRpcBlock = {
@@ -58,6 +70,11 @@ export type CandidateRpcClient = {
     address: HexAddress;
     blockNumber: bigint;
   }): Promise<Hex | undefined>;
+  getLogs?(input: {
+    addresses: readonly HexAddress[];
+    fromBlock: bigint;
+    toBlock: bigint;
+  }): Promise<readonly CandidateRpcLog[]>;
 };
 
 export type CandidateRpcProvider = {
@@ -74,7 +91,7 @@ export type DualRpcCandidateEvidence = {
   sourceAddress: HexAddress;
   contractName: string;
   eventName: string;
-  sourceKind: "static" | "dynamic-unresolved";
+  sourceKind: "static" | "dynamic-unresolved" | "dynamic-attested";
   model: "classic" | "stock-paired" | "unresolved";
   releaseVersion: string;
   payloadHash: HexBytes32;
@@ -94,6 +111,10 @@ export type DualRpcCandidateEvidence = {
   receiptCommitment: HexBytes32;
   sourceCodeHash: HexBytes32;
   receiptLogOrdinal: number;
+  dynamicSourceAttestationId?: string;
+  normalizedRuntimeCodeHash?: HexBytes32;
+  immutableReferencesCommitment?: HexBytes32;
+  runtimeByteLength?: string;
 };
 
 export type DualRpcCandidateBatchEvidence = {
@@ -108,6 +129,24 @@ export type DualRpcCandidateBatchEvidence = {
   candidates: readonly DualRpcCandidateEvidence[];
 };
 
+export type DualRpcCandidateWindowEvidence =
+  DualRpcCandidateBatchEvidence & {
+    coveredCandidateCount: number;
+    coverage: {
+      fromBlockNumber: string;
+      throughBlockNumber: string;
+      throughBlockGlobalLogIndex: string;
+      providerLogCommitments: readonly [HexBytes32, HexBytes32];
+    };
+  };
+
+export type DualRpcSafeHeadEvidence = Readonly<{
+  providerHeads: readonly [string, string];
+  safeBlockNumber: string;
+  safeBlockHash: HexBytes32;
+  cursorBlockHash: HexBytes32;
+}>;
+
 const RELEASE_BINDING = getDataPipelineReleaseBinding();
 const PROVIDER_IDENTITY_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const CANDIDATE_ID_PATTERN =
@@ -115,6 +154,10 @@ const CANDIDATE_ID_PATTERN =
 const DEFAULT_RPC_CONCURRENCY = 4;
 const DEFAULT_RPC_ATTEMPTS = 3;
 const DEFAULT_RPC_BACKOFF_MS = 50;
+const DEFAULT_RPC_DEADLINE_MS = 75_000;
+const DEFAULT_MAXIMUM_PROVIDER_CALLS = 48;
+const DEFAULT_COVERAGE_BLOCK_SPAN = 500;
+const DEFAULT_COVERAGE_MAXIMUM_REQUESTS = 64;
 
 function safeInteger(value: unknown, operation: string) {
   if (
@@ -304,19 +347,22 @@ function providerIdentity(value: unknown) {
   return value;
 }
 
-function rpcExecutionPolicy(
-  input:
-    | {
-        maxConcurrency?: number;
-        maxAttempts?: number;
-        baseBackoffMs?: number;
-        sleep?: (milliseconds: number) => Promise<void>;
-      }
-    | undefined,
-) {
+type RpcExecutionPolicyInput = {
+  maxConcurrency?: number;
+  maxAttempts?: number;
+  baseBackoffMs?: number;
+  sleep?: (milliseconds: number) => Promise<void>;
+  deadlineMs?: number;
+  maxProviderCalls?: number;
+};
+
+function rpcExecutionPolicy(input: RpcExecutionPolicyInput | undefined) {
   const maxConcurrency = input?.maxConcurrency ?? DEFAULT_RPC_CONCURRENCY;
   const maxAttempts = input?.maxAttempts ?? DEFAULT_RPC_ATTEMPTS;
   const baseBackoffMs = input?.baseBackoffMs ?? DEFAULT_RPC_BACKOFF_MS;
+  const deadlineMs = input?.deadlineMs ?? DEFAULT_RPC_DEADLINE_MS;
+  const maxProviderCalls =
+    input?.maxProviderCalls ?? DEFAULT_MAXIMUM_PROVIDER_CALLS;
   if (
     !Number.isSafeInteger(maxConcurrency) ||
     maxConcurrency < 1 ||
@@ -327,6 +373,12 @@ function rpcExecutionPolicy(
     !Number.isSafeInteger(baseBackoffMs) ||
     baseBackoffMs < 0 ||
     baseBackoffMs > 1_000 ||
+    !Number.isSafeInteger(deadlineMs) ||
+    deadlineMs < 10 ||
+    deadlineMs > DEFAULT_RPC_DEADLINE_MS ||
+    !Number.isSafeInteger(maxProviderCalls) ||
+    maxProviderCalls < 1 ||
+    maxProviderCalls > 128 ||
     (input?.sleep !== undefined && typeof input.sleep !== "function")
   ) {
     throw invalidInput("rpc", "execution-policy");
@@ -335,11 +387,51 @@ function rpcExecutionPolicy(
     maxConcurrency,
     maxAttempts,
     baseBackoffMs,
+    deadlineMs,
+    deadlineAt: Date.now() + deadlineMs,
+    maxProviderCalls,
     sleep:
       input?.sleep ??
       ((milliseconds: number) =>
         new Promise<void>((resolve) => setTimeout(resolve, milliseconds))),
   };
+}
+
+async function withinRpcDeadline<T>(
+  operation: () => Promise<T>,
+  policy: ReturnType<typeof rpcExecutionPolicy>,
+): Promise<T> {
+  const remaining = policy.deadlineAt - Date.now();
+  if (remaining <= 0) {
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "timeout",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(
+              dataPipelineError({
+                dependency: "rpc",
+                code: "timeout",
+                retryable: true,
+                countsTowardCircuit: true,
+              }),
+            ),
+          remaining,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 async function retryRpc<T>(
@@ -349,7 +441,7 @@ async function retryRpc<T>(
   let lastError: unknown;
   for (let attempt = 0; attempt < policy.maxAttempts; attempt += 1) {
     try {
-      return await operation();
+      return await withinRpcDeadline(operation, policy);
     } catch (error) {
       lastError = error;
       if (attempt + 1 < policy.maxAttempts) {
@@ -383,7 +475,11 @@ async function boundedRpcMap<Input, Output>(
   return output;
 }
 
-function validateCandidateBoundary(candidate: EnvioCandidate) {
+function validateCandidateBoundary(
+  candidate: EnvioCandidate,
+  dynamicSources: ReadonlyMap<HexAddress, VerifiedDynamicSourceLineage>,
+  requireDynamicLineage: boolean,
+) {
   if (candidate === null || typeof candidate !== "object") {
     throw invalidInput("rpc", "candidate");
   }
@@ -451,8 +547,9 @@ function validateCandidateBoundary(candidate: EnvioCandidate) {
   const staticSource = RELEASE_BINDING.sources.find(
     (source) => source.address === sourceAddress,
   );
-  let sourceKind: "static" | "dynamic-unresolved";
+  let sourceKind: "static" | "dynamic-unresolved" | "dynamic-attested";
   let expectedRuntimeCodeHash: HexBytes32 | null;
+  let dynamicSourceLineage: VerifiedDynamicSourceLineage | undefined;
   if (staticSource) {
     if (
       staticSource.contractName !== candidate.contractName ||
@@ -499,8 +596,29 @@ function validateCandidateBoundary(candidate: EnvioCandidate) {
     ) {
       throw validationError("rpc", "dynamic-source-lineage");
     }
-    sourceKind = "dynamic-unresolved";
-    expectedRuntimeCodeHash = null;
+    dynamicSourceLineage = dynamicSources.get(sourceAddress);
+    if (requireDynamicLineage && !dynamicSourceLineage) {
+      throw validationError("rpc", "dynamic-source-lineage");
+    }
+    if (dynamicSourceLineage) {
+      const parentBeforeChild =
+        BigInt(dynamicSourceLineage.factoryBlockNumber) < blockNumber ||
+        (BigInt(dynamicSourceLineage.factoryBlockNumber) === blockNumber &&
+          BigInt(dynamicSourceLineage.factoryBlockGlobalLogIndex) <
+            BigInt(logIndex));
+      if (
+        dynamicSourceLineage.contractName !== candidate.contractName ||
+        !parentBeforeChild
+      ) {
+        throw validationError("rpc", "dynamic-source-lineage");
+      }
+      sourceKind = "dynamic-attested";
+      expectedRuntimeCodeHash =
+        dynamicSourceLineage.expectedExactRuntimeCodeHash;
+    } else {
+      sourceKind = "dynamic-unresolved";
+      expectedRuntimeCodeHash = null;
+    }
   }
   return {
     candidate: {
@@ -516,18 +634,125 @@ function validateCandidateBoundary(candidate: EnvioCandidate) {
     timestamp,
     sourceKind,
     expectedRuntimeCodeHash,
+    dynamicSourceLineage,
   };
+}
+
+export async function readDualRpcSafeHead(input: {
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  cursor: { blockNumber: string; blockHash: HexBytes32 };
+  rpcPolicy?: RpcExecutionPolicyInput;
+}): Promise<DualRpcSafeHeadEvidence> {
+  assertProductionDualRpcProviders(input.providers);
+  const firstIdentity = providerIdentity(input.providers?.[0]?.identity);
+  const secondIdentity = providerIdentity(input.providers?.[1]?.identity);
+  const firstVendor = providerIdentity(input.providers?.[0]?.vendorGroup);
+  const secondVendor = providerIdentity(input.providers?.[1]?.vendorGroup);
+  if (
+    firstIdentity === secondIdentity ||
+    firstVendor === secondVendor ||
+    input.providers[0].client === input.providers[1].client
+  ) {
+    throw invalidInput("rpc", "provider-independence");
+  }
+  let cursorBlockNumber: bigint;
+  let expectedCursorHash: HexBytes32;
+  try {
+    cursorBlockNumber = BigInt(
+      parseNonnegativeIntegerText(input.cursor.blockNumber),
+    );
+    expectedCursorHash = canonicalBytes32(input.cursor.blockHash);
+  } catch {
+    throw invalidInput("rpc", "safe-head-cursor");
+  }
+  const policy = rpcExecutionPolicy(input.rpcPolicy);
+  if (4 > policy.maxProviderCalls) {
+    throw invalidInput("rpc", "provider-call-budget");
+  }
+  try {
+    const states = await Promise.all(
+      input.providers.map(async ({ client }) => {
+        const [chainId, head] = await Promise.all([
+          retryRpc(() => client.getChainId(), policy),
+          retryRpc(() => client.getBlockNumber(), policy),
+        ]);
+        if (
+          chainId !== RELEASE_BINDING.chainId ||
+          typeof head !== "bigint" ||
+          head < BigInt(RELEASE_BINDING.confirmations)
+        ) {
+          throw validationError("rpc", "safe-head-state");
+        }
+        return { client, head };
+      }),
+    );
+    const lowestHead =
+      states[0]!.head < states[1]!.head
+        ? states[0]!.head
+        : states[1]!.head;
+    const safeBlockNumber =
+      lowestHead - BigInt(RELEASE_BINDING.confirmations);
+    if (cursorBlockNumber > safeBlockNumber) {
+      throw validationError("rpc", "safe-head-cursor-finality");
+    }
+    const blocks = await Promise.all(
+      states.map(async ({ client }) => {
+        const [safe, cursor] = await Promise.all([
+          retryRpc(() => client.getBlock({ blockNumber: safeBlockNumber }), policy),
+          safeBlockNumber === cursorBlockNumber
+            ? retryRpc(
+                () => client.getBlock({ blockNumber: safeBlockNumber }),
+                policy,
+              )
+            : retryRpc(
+                () => client.getBlock({ blockNumber: cursorBlockNumber }),
+                policy,
+              ),
+        ]);
+        return {
+          safe: canonicalBlock(safe, safeBlockNumber, "safe-head-block"),
+          cursor: canonicalBlock(
+            cursor,
+            cursorBlockNumber,
+            "safe-head-cursor-block",
+          ),
+        };
+      }),
+    );
+    if (
+      blocks[0]!.safe.hash !== blocks[1]!.safe.hash ||
+      blocks[0]!.safe.timestamp !== blocks[1]!.safe.timestamp ||
+      blocks[0]!.cursor.hash !== blocks[1]!.cursor.hash ||
+      blocks[0]!.cursor.hash !== expectedCursorHash
+    ) {
+      throw validationError("rpc", "safe-head-agreement");
+    }
+    return Object.freeze({
+      providerHeads: Object.freeze([
+        states[0]!.head.toString(),
+        states[1]!.head.toString(),
+      ]) as readonly [string, string],
+      safeBlockNumber: safeBlockNumber.toString(),
+      safeBlockHash: blocks[0]!.safe.hash,
+      cursorBlockHash: blocks[0]!.cursor.hash,
+    });
+  } catch (error) {
+    if (error instanceof DataPipelineError) throw error;
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "dependency_unavailable",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
 }
 
 export async function verifyEnvioCandidateBatchWithDualRpc(input: {
   candidates: readonly EnvioCandidate[];
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
-  rpcPolicy?: {
-    maxConcurrency?: number;
-    maxAttempts?: number;
-    baseBackoffMs?: number;
-    sleep?: (milliseconds: number) => Promise<void>;
-  };
+  rpcPolicy?: RpcExecutionPolicyInput;
+  dynamicSources?: readonly VerifiedDynamicSourceLineage[];
+  requireDynamicLineage?: boolean;
 }): Promise<DualRpcCandidateBatchEvidence> {
   assertProductionDualRpcProviders(input.providers);
   const firstIdentity = providerIdentity(input.providers?.[0]?.identity);
@@ -566,9 +791,11 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
     throw invalidInput("rpc", "provider-client");
   }
   const policy = rpcExecutionPolicy(input.rpcPolicy);
+  const dynamicSources = canonicalDynamicSourceLineages(
+    input.dynamicSources,
+  );
   if (
     !Array.isArray(input.candidates) ||
-    input.candidates.length < 1 ||
     input.candidates.length > 32
   ) {
     throw invalidInput("rpc", "candidate-batch");
@@ -577,7 +804,11 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
   let previousBlock = -1n;
   let previousLogIndex = -1;
   const candidates = input.candidates.map((candidate) => {
-    const validated = validateCandidateBoundary(candidate);
+    const validated = validateCandidateBoundary(
+      candidate,
+      dynamicSources,
+      input.requireDynamicLineage === true,
+    );
     const { blockNumber } = validated;
     const logIndex = safeInteger(
       validated.candidate.blockGlobalLogIndex,
@@ -595,6 +826,23 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
     previousLogIndex = logIndex;
     return validated;
   });
+  const estimatedCallsPerProvider =
+    2 +
+    new Set(candidates.map(({ blockNumber }) => blockNumber.toString()))
+      .size +
+    1 +
+    new Set(
+      candidates.map(({ candidate }) => candidate.transactionHash),
+    ).size +
+    new Set(
+      candidates.map(
+        ({ candidate, blockNumber }) =>
+          `${blockNumber}:${candidate.sourceAddress}`,
+      ),
+    ).size;
+  if (estimatedCallsPerProvider > policy.maxProviderCalls) {
+    throw invalidInput("rpc", "provider-call-budget");
+  }
 
   try {
     const states = await Promise.all(
@@ -723,6 +971,7 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
       timestamp,
       sourceKind,
       expectedRuntimeCodeHash,
+      dynamicSourceLineage,
     }) => {
       const blocks = providerData.map((data) =>
         canonicalBlock(
@@ -777,6 +1026,28 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
       ) {
         throw validationError("rpc", "source-code-release");
       }
+      let dynamicRuntimeEvidence:
+        | ReturnType<typeof runtimeBytecodeEvidence>
+        | undefined;
+      if (dynamicSourceLineage) {
+        dynamicRuntimeEvidence = runtimeBytecodeEvidence({
+          runtimeBytecode: code[0],
+          expectedByteLength: Number(
+            dynamicSourceLineage.expectedRuntimeByteLength,
+          ),
+          immutableReferences: dynamicSourceLineage.immutableReferences,
+        });
+        if (
+          dynamicRuntimeEvidence.exactRuntimeCodeHash !==
+            dynamicSourceLineage.expectedExactRuntimeCodeHash ||
+          dynamicRuntimeEvidence.normalizedRuntimeCodeHash !==
+            dynamicSourceLineage.expectedNormalizedRuntimeCodeHash ||
+          dynamicRuntimeEvidence.immutableReferencesCommitment !==
+            dynamicSourceLineage.expectedImmutableReferencesCommitment
+        ) {
+          throw validationError("rpc", "dynamic-runtime-template");
+        }
+      }
       const rawLogCommitment = keccak256(
         encodeAbiParameters(
           [{ type: "address" }, { type: "bytes32[]" }, { type: "bytes" }],
@@ -795,8 +1066,11 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
         contractName: candidate.contractName,
         eventName: candidate.eventName,
         sourceKind,
-        model: candidate.releaseHint.model,
-        releaseVersion: candidate.releaseHint.releaseVersion,
+        model:
+          dynamicSourceLineage?.model ?? candidate.releaseHint.model,
+        releaseVersion:
+          dynamicSourceLineage?.releaseVersion ??
+          candidate.releaseHint.releaseVersion,
         payloadHash: candidate.payloadHash,
         rawLogCommitment,
         providerIdentities,
@@ -814,6 +1088,19 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
         receiptCommitment: canonicalReceipts[0].commitment,
         sourceCodeHash,
         receiptLogOrdinal: canonicalReceipts[0].selectedOrdinal,
+        ...(dynamicSourceLineage && dynamicRuntimeEvidence
+          ? {
+              dynamicSourceAttestationId:
+                dynamicSourceLineage.attestationId,
+              normalizedRuntimeCodeHash:
+                dynamicRuntimeEvidence.normalizedRuntimeCodeHash,
+              immutableReferencesCommitment:
+                dynamicRuntimeEvidence.immutableReferencesCommitment,
+              runtimeByteLength: String(
+                dynamicRuntimeEvidence.runtimeByteLength,
+              ),
+            }
+          : {}),
       } satisfies DualRpcCandidateEvidence;
     });
 
@@ -842,17 +1129,325 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
 export async function verifyEnvioCandidateWithDualRpc(input: {
   candidate: EnvioCandidate;
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
-  rpcPolicy?: {
-    maxConcurrency?: number;
-    maxAttempts?: number;
-    baseBackoffMs?: number;
-    sleep?: (milliseconds: number) => Promise<void>;
-  };
+  rpcPolicy?: RpcExecutionPolicyInput;
+  dynamicSources?: readonly VerifiedDynamicSourceLineage[];
+  requireDynamicLineage?: boolean;
 }): Promise<DualRpcCandidateEvidence> {
   const result = await verifyEnvioCandidateBatchWithDualRpc({
     candidates: [input.candidate],
     providers: input.providers,
     rpcPolicy: input.rpcPolicy,
+    dynamicSources: input.dynamicSources,
+    requireDynamicLineage: input.requireDynamicLineage,
   });
   return result.candidates[0]!;
+}
+
+function coverageCursor(
+  value: EnvioCandidateCursor,
+  operation: string,
+  allowUpperSentinel = false,
+) {
+  if (value === null || typeof value !== "object") {
+    throw invalidInput("rpc", operation);
+  }
+  let blockNumber: string;
+  try {
+    blockNumber = parseNonnegativeIntegerText(value.blockNumber);
+  } catch {
+    throw invalidInput("rpc", operation);
+  }
+  const logIndex = value.blockGlobalLogIndex;
+  if (logIndex === -1 && value.candidateId === "") {
+    return { blockNumber, blockGlobalLogIndex: -1, candidateId: "" };
+  }
+  const blockGlobalLogIndex = Number(
+    canonicalUint32DecimalText(logIndex, operation),
+  );
+  if (
+    allowUpperSentinel &&
+    blockGlobalLogIndex === 0xffff_ffff &&
+    value.candidateId === ""
+  ) {
+    return { blockNumber, blockGlobalLogIndex, candidateId: "" };
+  }
+  if (
+    typeof value.candidateId !== "string" ||
+    !CANDIDATE_ID_PATTERN.test(value.candidateId)
+  ) {
+    throw invalidInput("rpc", operation);
+  }
+  return { blockNumber, blockGlobalLogIndex, candidateId: value.candidateId };
+}
+
+function comparePlacement(
+  left: { blockNumber: string; blockGlobalLogIndex: number },
+  right: { blockNumber: string; blockGlobalLogIndex: number },
+) {
+  const block = BigInt(left.blockNumber) - BigInt(right.blockNumber);
+  if (block !== 0n) return block < 0n ? -1 : 1;
+  return left.blockGlobalLogIndex - right.blockGlobalLogIndex;
+}
+
+function canonicalCandidateCoverageLog(candidate: EnvioCandidate) {
+  return canonicalCoverageLog({
+    address: candidate.sourceAddress,
+    blockNumber: BigInt(candidate.blockNumber),
+    blockHash: candidate.blockHash,
+    transactionHash: candidate.transactionHash,
+    transactionIndex: candidate.transactionIndex,
+    logIndex: candidate.blockGlobalLogIndex,
+    removed: false,
+    topics: candidate.orderedTopics,
+    data: candidate.rawData,
+  });
+}
+
+function coverageCommitment(logs: readonly CanonicalCoverageLog[]) {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: "bytes32[]" }],
+      [logs.map(({ commitment }) => commitment)],
+    ),
+  );
+}
+
+/**
+ * Verifies that Envio supplied every reviewed event in a frozen cursor window.
+ * Receipt checks prove included candidates; independent getLogs scans also
+ * prove that no reviewed event was omitted before the cursor advances.
+ */
+export async function verifyEnvioCandidateWindowWithDualRpc(input: {
+  candidates: readonly EnvioCandidate[];
+  cursor: EnvioCandidateCursor;
+  through: EnvioCandidateCursor;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  rpcPolicy?: RpcExecutionPolicyInput;
+  coveragePolicy?: {
+    maximumBlockSpan?: number;
+    maximumRequests?: number;
+  };
+  dynamicSources?: readonly VerifiedDynamicSourceLineage[];
+}): Promise<DualRpcCandidateWindowEvidence> {
+  const windowStartedAt = Date.now();
+  const cursor = coverageCursor(input.cursor, "coverage-cursor");
+  const through = coverageCursor(
+    input.through,
+    "coverage-through",
+    true,
+  );
+  if (comparePlacement(cursor, through) >= 0) {
+    throw invalidInput("rpc", "coverage-window");
+  }
+  const maximumBlockSpan =
+    input.coveragePolicy?.maximumBlockSpan ?? DEFAULT_COVERAGE_BLOCK_SPAN;
+  const maximumRequests =
+    input.coveragePolicy?.maximumRequests ??
+    DEFAULT_COVERAGE_MAXIMUM_REQUESTS;
+  if (
+    !Number.isSafeInteger(maximumBlockSpan) ||
+    maximumBlockSpan < 1 ||
+    maximumBlockSpan > 2_000 ||
+    !Number.isSafeInteger(maximumRequests) ||
+    maximumRequests < 1 ||
+    maximumRequests > 128
+  ) {
+    throw invalidInput("rpc", "coverage-policy");
+  }
+  if (!Array.isArray(input.candidates)) {
+    throw invalidInput("rpc", "coverage-candidates");
+  }
+  const lastCandidate = input.candidates[input.candidates.length - 1];
+  if (lastCandidate) {
+    if (
+      comparePlacement(
+        {
+          blockNumber: lastCandidate.blockNumber,
+          blockGlobalLogIndex: lastCandidate.blockGlobalLogIndex,
+        },
+        through,
+      ) !== 0 ||
+      lastCandidate.candidateId !== through.candidateId
+    ) {
+      throw invalidInput("rpc", "coverage-through-candidate");
+    }
+  } else if (
+    through.blockGlobalLogIndex !== 0xffff_ffff ||
+    through.candidateId !== ""
+  ) {
+    throw invalidInput("rpc", "coverage-empty-through");
+  }
+
+  const batch = await verifyEnvioCandidateBatchWithDualRpc({
+    candidates: input.candidates,
+    providers: input.providers,
+    rpcPolicy: input.rpcPolicy,
+    dynamicSources: input.dynamicSources,
+    requireDynamicLineage: true,
+  });
+  if (BigInt(through.blockNumber) > BigInt(batch.safeBlockNumber)) {
+    throw validationError("rpc", "coverage-finality");
+  }
+
+  const dynamicSources = canonicalDynamicSourceLineages(
+    input.dynamicSources,
+  );
+  const sources = RELEASE_BINDING.sources
+    .filter(({ startBlock }) => BigInt(startBlock) <= BigInt(through.blockNumber))
+    .map(({ address, contractName }) => ({
+      address: rpcAddress(address, "coverage-source"),
+      selectors: new Set(
+        manifestEventSelectors(contractName).map((selector) =>
+          rpcBytes32(selector, "coverage-selector"),
+        ),
+      ),
+    }))
+    .concat(
+      [...dynamicSources.values()].map(({ sourceAddress, contractName }) => ({
+        address: sourceAddress,
+        selectors: new Set(
+          manifestEventSelectors(contractName).map((selector) =>
+            rpcBytes32(selector, "coverage-selector"),
+          ),
+        ),
+      })),
+    );
+  const selectorsByAddress = new Map(
+    sources.map(({ address, selectors }) => [address, selectors] as const),
+  );
+  const addresses = sources.map(({ address }) => address);
+  const fromBlock = BigInt(cursor.blockNumber);
+  const toBlock = BigInt(through.blockNumber);
+  const span = BigInt(maximumBlockSpan);
+  const ranges: { fromBlock: bigint; toBlock: bigint }[] = [];
+  for (let start = fromBlock; start <= toBlock; start += span) {
+    ranges.push({
+      fromBlock: start,
+      toBlock: start + span - 1n < toBlock ? start + span - 1n : toBlock,
+    });
+  }
+  if (ranges.length > maximumRequests) {
+    throw invalidInput("rpc", "coverage-request-budget");
+  }
+  const remainingDeadlineMs =
+    (input.rpcPolicy?.deadlineMs ?? DEFAULT_RPC_DEADLINE_MS) -
+    (Date.now() - windowStartedAt);
+  if (remainingDeadlineMs < 10) {
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "timeout",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
+  const coveragePolicy = rpcExecutionPolicy({
+    ...input.rpcPolicy,
+    deadlineMs: remainingDeadlineMs,
+  });
+  if (
+    ranges.length +
+      2 +
+      new Set(input.candidates.map(({ blockNumber }) => blockNumber)).size +
+      1 +
+      new Set(input.candidates.map(({ transactionHash }) => transactionHash))
+        .size +
+      new Set(
+        input.candidates.map(
+          ({ blockNumber, sourceAddress }) => `${blockNumber}:${sourceAddress}`,
+        ),
+      ).size >
+    coveragePolicy.maxProviderCalls
+  ) {
+    throw invalidInput("rpc", "provider-call-budget");
+  }
+
+  try {
+    const providerLogs = await Promise.all(
+      input.providers.map(async ({ client }) => {
+        if (typeof client.getLogs !== "function") {
+          throw invalidInput("rpc", "coverage-get-logs");
+        }
+        const pages = await boundedRpcMap(
+          ranges,
+          coveragePolicy.maxConcurrency,
+          (range) =>
+            retryRpc(
+              () => client.getLogs!({ addresses, ...range }),
+              coveragePolicy,
+            ),
+        );
+        const seen = new Set<string>();
+        const logs: CanonicalCoverageLog[] = [];
+        for (const page of pages) {
+          if (!Array.isArray(page) || page.length > 10_000) {
+            throw validationError("rpc", "coverage-page");
+          }
+          for (const rawLog of page) {
+            const log = canonicalCoverageLog(rawLog);
+            const selectors = selectorsByAddress.get(log.address);
+            if (!selectors || !selectors.has(log.topics[0]!)) continue;
+            const placement = {
+              blockNumber: log.blockNumber,
+              blockGlobalLogIndex: Number(log.blockGlobalLogIndex),
+            };
+            if (
+              comparePlacement(placement, cursor) <= 0 ||
+              comparePlacement(placement, through) > 0
+            ) {
+              continue;
+            }
+            const key = coverageLogPlacementKey(log);
+            if (seen.has(key)) {
+              throw validationError("rpc", "coverage-duplicate");
+            }
+            seen.add(key);
+            logs.push(log);
+          }
+        }
+        logs.sort((left, right) =>
+          comparePlacement(
+            {
+              blockNumber: left.blockNumber,
+              blockGlobalLogIndex: Number(left.blockGlobalLogIndex),
+            },
+            {
+              blockNumber: right.blockNumber,
+              blockGlobalLogIndex: Number(right.blockGlobalLogIndex),
+            },
+          ),
+        );
+        return logs;
+      }),
+    );
+    const expected = input.candidates.map(canonicalCandidateCoverageLog);
+    const expectedCommitment = coverageCommitment(expected);
+    const commitments = providerLogs.map(coverageCommitment) as [
+      HexBytes32,
+      HexBytes32,
+    ];
+    if (
+      commitments[0] !== commitments[1] ||
+      commitments[0] !== expectedCommitment
+    ) {
+      throw validationError("rpc", "coverage-agreement");
+    }
+    return Object.freeze({
+      ...batch,
+      coveredCandidateCount: expected.length,
+      coverage: Object.freeze({
+        fromBlockNumber: cursor.blockNumber,
+        throughBlockNumber: through.blockNumber,
+        throughBlockGlobalLogIndex: String(through.blockGlobalLogIndex),
+        providerLogCommitments: Object.freeze(commitments),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof DataPipelineError) throw error;
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "dependency_unavailable",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
 }

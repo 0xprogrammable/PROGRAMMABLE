@@ -388,3 +388,15 @@ export function decodeManifestEvent(input: {
 
   return localPayload as Record<string, CanonicalValue>;
 }
+
+export function manifestEventSelectors(
+  contractName: string,
+): readonly Hex[] {
+  const events = EVENT_ABIS.get(contractName);
+  if (!events) throw new TypeError("contract is not in the runtime event manifest");
+  return Object.freeze(
+    [...events.values()]
+      .map((event) => toEventSelector(event))
+      .sort((left, right) => left.localeCompare(right)),
+  );
+}

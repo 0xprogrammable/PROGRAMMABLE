@@ -54,7 +54,7 @@ const CANDIDATE_QUERY = `
 const CANDIDATES_AFTER_QUERY = `
   query ProgrammableCandidatesAfter(
     $afterBlock: numeric!
-    $afterLogIndex: Int!
+    $afterLogIndex: numeric!
     $afterCandidateId: String!
     $first: Int!
   ) {
@@ -73,6 +73,68 @@ const CANDIDATES_AFTER_QUERY = `
               { blockNumber: { _eq: $afterBlock } }
               { blockGlobalLogIndex: { _eq: $afterLogIndex } }
               { id: { _gt: $afterCandidateId } }
+            ]
+          }
+        ]
+      }
+      order_by: [
+        { blockNumber: asc }
+        { blockGlobalLogIndex: asc }
+        { id: asc }
+      ]
+      limit: $first
+    ) {
+      id
+      downstreamLogicalId
+      receiptLogOrdinal
+      chainId
+      blockNumber
+      blockHash
+      blockTimestamp
+      transactionHash
+      transactionIndex
+      blockGlobalLogIndex
+      sourceAddress
+      contractName
+      eventName
+      model
+      releaseVersion
+      topics
+      data
+      decodedPayload
+      payloadHash
+    }
+  }
+`;
+
+const CANDIDATES_WINDOW_QUERY = `
+  query ProgrammableCandidatesWindow(
+    $afterBlock: numeric!
+    $afterLogIndex: numeric!
+    $afterCandidateId: String!
+    $throughBlock: numeric!
+    $first: Int!
+  ) {
+    ChainEvent(
+      where: {
+        _and: [
+          { blockNumber: { _lte: $throughBlock } }
+          {
+            _or: [
+              { blockNumber: { _gt: $afterBlock } }
+              {
+                _and: [
+                  { blockNumber: { _eq: $afterBlock } }
+                  { blockGlobalLogIndex: { _gt: $afterLogIndex } }
+                ]
+              }
+              {
+                _and: [
+                  { blockNumber: { _eq: $afterBlock } }
+                  { blockGlobalLogIndex: { _eq: $afterLogIndex } }
+                  { id: { _gt: $afterCandidateId } }
+                ]
+              }
             ]
           }
         ]
@@ -220,7 +282,7 @@ for (const release of REVIEWED_RELEASES) {
 
 const CANDIDATE_PATTERN =
   /^1:(0x[0-9a-f]{64}):(0x[0-9a-f]{64}):(0|[1-9]\d*)$/;
-const GRAPHQL_INT_MAXIMUM = 0x7fff_ffff;
+const UINT32_MAXIMUM = 0xffff_ffff;
 const DEFAULT_CANDIDATE_PAGE_LIMIT = 25;
 const MAXIMUM_CANDIDATE_PAGE_LIMIT = 32;
 
@@ -252,6 +314,31 @@ function strictSafeInteger(value: unknown, maximum = Number.MAX_SAFE_INTEGER) {
     throw validationError("envio", "placement");
   }
   return value;
+}
+
+function strictUint32(value: unknown): number {
+  let canonical: string;
+  if (typeof value === "number" && Number.isSafeInteger(value)) {
+    canonical = String(value);
+  } else if (typeof value === "bigint" && value >= 0n) {
+    canonical = value.toString();
+  } else {
+    try {
+      canonical = parseNonnegativeIntegerText(value);
+    } catch {
+      throw validationError("envio", "placement");
+    }
+  }
+  const parsed = Number(canonical);
+  if (!Number.isSafeInteger(parsed) || parsed > UINT32_MAXIMUM) {
+    throw validationError("envio", "placement");
+  }
+  return parsed;
+}
+
+function graphqlUint32OrGenesis(value: number): number | string {
+  if (value === -1) return value;
+  return value <= 0x7fff_ffff ? value : String(value);
 }
 
 function strictString(value: unknown, pattern: RegExp, operation: string) {
@@ -304,7 +391,7 @@ function canonicalCandidateCursor(
   if (
     !Number.isSafeInteger(blockGlobalLogIndex) ||
     blockGlobalLogIndex < -1 ||
-    blockGlobalLogIndex > GRAPHQL_INT_MAXIMUM
+    blockGlobalLogIndex > UINT32_MAXIMUM
   ) {
     throw invalidInput("envio", "candidate-cursor");
   }
@@ -344,6 +431,54 @@ function placementAfter(
         (candidate.blockGlobalLogIndex === cursor.blockGlobalLogIndex &&
           candidate.candidateId > cursor.candidateId)))
   );
+}
+
+function parseCandidatePage(input: {
+  response: unknown;
+  cursor: EnvioCandidateCursor;
+  limit: number;
+  throughBlock?: string;
+}): EnvioCandidate[] {
+  const { response, cursor, limit, throughBlock } = input;
+  if (
+    !isRecord(response) ||
+    !onlyKeys(response, ["data"]) ||
+    !isRecord(response.data) ||
+    !onlyKeys(response.data, ["ChainEvent"]) ||
+    !Array.isArray(response.data.ChainEvent) ||
+    response.data.ChainEvent.length > limit
+  ) {
+    throw validationError("envio", "candidate-page-response");
+  }
+  try {
+    const result: EnvioCandidate[] = [];
+    let previous = cursor;
+    for (const row of response.data.ChainEvent) {
+      if (!isRecord(row) || typeof row.id !== "string") {
+        throw validationError("envio", "candidate-page-row");
+      }
+      const parsed = parseCandidate(row, row.id);
+      if (
+        !placementAfter(parsed, previous) ||
+        (throughBlock !== undefined &&
+          BigInt(parsed.blockNumber) > BigInt(throughBlock))
+      ) {
+        throw validationError("envio", "candidate-page-order");
+      }
+      result.push(parsed);
+      previous = {
+        blockNumber: parsed.blockNumber,
+        blockGlobalLogIndex: parsed.blockGlobalLogIndex,
+        candidateId: parsed.candidateId,
+      };
+    }
+    return result;
+  } catch (error) {
+    if (error instanceof DataPipelineError) {
+      throw validationError("envio", "candidate-page-response");
+    }
+    throw error;
+  }
 }
 
 function validateSource(input: {
@@ -437,10 +572,7 @@ function parseCandidate(
   const blockNumber = parseNonnegativeIntegerText(value.blockNumber);
   const blockHash = canonicalBytes32(value.blockHash);
   const transactionHash = canonicalBytes32(value.transactionHash);
-  const blockGlobalLogIndex = strictSafeInteger(
-    value.blockGlobalLogIndex,
-    GRAPHQL_INT_MAXIMUM,
-  );
+  const blockGlobalLogIndex = strictUint32(value.blockGlobalLogIndex);
   if (
     match[1] !== blockHash ||
     match[2] !== transactionHash ||
@@ -527,10 +659,7 @@ function parseCandidate(
     blockHash,
     blockTimestamp: parseNonnegativeIntegerText(value.blockTimestamp),
     transactionHash,
-    transactionIndex: strictSafeInteger(
-      value.transactionIndex,
-      GRAPHQL_INT_MAXIMUM,
-    ),
+    transactionIndex: strictUint32(value.transactionIndex),
     blockGlobalLogIndex,
     sourceAddress,
     contractName,
@@ -753,46 +882,57 @@ export function createEnvioClient(options: {
           query: CANDIDATES_AFTER_QUERY,
           variables: {
             afterBlock: cursor.blockNumber,
-            afterLogIndex: cursor.blockGlobalLogIndex,
+            afterLogIndex: graphqlUint32OrGenesis(
+              cursor.blockGlobalLogIndex,
+            ),
             afterCandidateId: cursor.candidateId,
             first: limit,
           },
         });
-        if (
-          !isRecord(response) ||
-          !onlyKeys(response, ["data"]) ||
-          !isRecord(response.data) ||
-          !onlyKeys(response.data, ["ChainEvent"]) ||
-          !Array.isArray(response.data.ChainEvent) ||
-          response.data.ChainEvent.length > limit
-        ) {
-          throw validationError("envio", "candidate-page-response");
-        }
-        try {
-          const result: EnvioCandidate[] = [];
-          let previous = cursor;
-          for (const row of response.data.ChainEvent) {
-            if (!isRecord(row) || typeof row.id !== "string") {
-              throw validationError("envio", "candidate-page-row");
-            }
-            const parsed = parseCandidate(row, row.id);
-            if (!placementAfter(parsed, previous)) {
-              throw validationError("envio", "candidate-page-order");
-            }
-            result.push(parsed);
-            previous = {
-              blockNumber: parsed.blockNumber,
-              blockGlobalLogIndex: parsed.blockGlobalLogIndex,
-              candidateId: parsed.candidateId,
-            };
-          }
-          return result;
-        } catch (error) {
-          if (error instanceof DataPipelineError) {
-            throw validationError("envio", "candidate-page-response");
-          }
-          throw error;
-        }
+        return parseCandidatePage({ response, cursor, limit });
+      });
+    },
+
+    async readCandidatesWindow(input: {
+      cursor: EnvioCandidateCursor;
+      throughBlock: string;
+      limit?: number;
+    }): Promise<EnvioCandidate[]> {
+      const cursor = canonicalCandidateCursor(input?.cursor);
+      let throughBlock: string;
+      try {
+        throughBlock = parseNonnegativeIntegerText(input?.throughBlock);
+      } catch {
+        throw invalidInput("envio", "candidate-window");
+      }
+      const limit = input?.limit ?? DEFAULT_CANDIDATE_PAGE_LIMIT;
+      if (
+        BigInt(throughBlock) < BigInt(cursor.blockNumber) ||
+        !Number.isSafeInteger(limit) ||
+        limit < 1 ||
+        limit > MAXIMUM_CANDIDATE_PAGE_LIMIT
+      ) {
+        throw invalidInput("envio", "candidate-window");
+      }
+      return circuit.execute(async () => {
+        const response = await request({
+          query: CANDIDATES_WINDOW_QUERY,
+          variables: {
+            afterBlock: cursor.blockNumber,
+            afterLogIndex: graphqlUint32OrGenesis(
+              cursor.blockGlobalLogIndex,
+            ),
+            afterCandidateId: cursor.candidateId,
+            throughBlock,
+            first: limit,
+          },
+        });
+        return parseCandidatePage({
+          response,
+          cursor,
+          limit,
+          throughBlock,
+        });
       });
     },
 
