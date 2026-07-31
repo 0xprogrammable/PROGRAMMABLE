@@ -86,7 +86,8 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
         uint256 creatorFeesAccrued;
     }
 
-    /// @dev Ascending unlock ticks. Only the first `trancheCount` entries are meaningful.
+    /// @dev Descending unlock ticks: a lower tick is a higher token price. Only the first `trancheCount` entries
+    ///      are meaningful.
     struct LadderTicks {
         int24 tick0;
         int24 tick1;
@@ -95,7 +96,8 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
         int24 tick4;
     }
 
-    /// @dev Most recent block at which the pool was observed below each tranche's tick. Zero means never breached
+    /// @dev Most recent block at which the pool was observed above each tranche's tick, meaning below its target
+    ///      price. Zero means never breached
     ///      since the anchor. Packed into one slot; uint48 covers block heights for the life of the chain.
     struct LadderBreaches {
         uint48 breach0;
@@ -136,7 +138,7 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
     error NoFeesToClaim();
     error PartialFillUnsupported(uint256 expectedNativePoolAmount, uint256 actualNativePoolAmount);
     error PoolNotRegistered(bytes32 poolId);
-    error TicksMustAscend(uint8 index, int24 previousTick, int24 unlockTick);
+    error TicksMustDescend(uint8 index, int24 previousTick, int24 unlockTick);
     error TickNotOnSpacing(uint8 index, int24 unlockTick);
     error TickOutOfRange(uint8 index, int24 unlockTick);
     error TrancheCountOutOfRange(uint256 count);
@@ -211,7 +213,9 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
     }
 
     /// @notice Registers one native ETH/token pool with immutable directional fees, reward vault and ladder terms.
-    /// @param unlockTicks Ascending ticks, aligned to the pool's tick spacing. One to five entries.
+    /// @param unlockTicks Descending ticks, aligned to the pool's tick spacing. One to five entries. These pools
+    ///        pair a token against native ETH as `currency0`, so the tick falls as the token's ETH price rises and a
+    ///        higher price target is a lower tick.
     /// @param dwellBlocks Consecutive blocks a tranche's tick must hold before that tranche releases.
     function registerPool(
         PoolKey calldata key,
@@ -563,13 +567,13 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
         return "";
     }
 
-    /// @dev Stamps the current block against every tranche whose tick the pool now sits below.
+    /// @dev Stamps the current block against every tranche whose target price the pool now sits below.
     ///
-    ///      Unlock ticks ascend, so the set of breached tranches is always a suffix of the ladder: if the pool is
-    ///      below tranche i it is below every tranche above i. One ordered pass therefore settles the whole ladder,
-    ///      and the packed breach record is written at most once per swap.
+    ///      Unlock ticks descend, so the set of breached tranches is always a suffix of the ladder: if the pool is
+    ///      below tranche i's price it is below every target above i. One ordered pass therefore settles the whole
+    ///      ladder, and the packed breach record is written at most once per swap.
     ///
-    ///      A pool whose tick is at or above every tranche writes nothing.
+    ///      A pool at or above every target price writes nothing.
     function _observeLadder(bytes32 poolId) private {
         PoolFeeConfig storage config = poolFeeConfig[poolId];
         uint8 trancheCount = config.trancheCount;
@@ -583,7 +587,7 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
         bool dirty;
 
         for (uint8 i = 0; i < trancheCount; ++i) {
-            if (currentTick >= _tickAt(ticks, i)) continue;
+            if (currentTick <= _tickAt(ticks, i)) continue;
             // From here up, every tranche is breached.
             for (uint8 j = i; j < trancheCount; ++j) {
                 _setBreach(breaches, j, currentBlock);
@@ -709,7 +713,8 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
     }
 
     /// @dev Ticks must align to the pool's spacing so that a tranche's threshold is a price the pool can actually
-    ///      settle on, rather than one that rounds unpredictably.
+    ///      settle on, rather than one that rounds unpredictably. They must strictly descend, because a lower tick
+    ///      is a higher token price in a native-ETH pool.
     function _validateLadder(int24[] calldata unlockTicks, uint32 dwellBlocks) private pure {
         uint256 count = unlockTicks.length;
         if (count == 0 || count > MAX_TRANCHES) revert TrancheCountOutOfRange(count);
@@ -724,7 +729,7 @@ contract EthLadderFeeHookV1 is BaseHook, IUnlockCallback, ReentrancyGuardTransie
                 revert TickOutOfRange(i, unlockTick);
             }
             if (unlockTick % TICK_SPACING != 0) revert TickNotOnSpacing(i, unlockTick);
-            if (i != 0 && unlockTick <= previousTick) revert TicksMustAscend(i, previousTick, unlockTick);
+            if (i != 0 && unlockTick >= previousTick) revert TicksMustDescend(i, previousTick, unlockTick);
             previousTick = unlockTick;
         }
     }

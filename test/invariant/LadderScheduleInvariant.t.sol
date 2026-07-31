@@ -16,7 +16,7 @@ contract LadderObservationHandler is Test {
     uint32 internal constant DWELL = 7200;
     uint8 internal constant COUNT = 3;
 
-    int24[3] internal _ticks = [int24(10_000), int24(20_000), int24(30_000)];
+    int24[3] internal _ticks = [int24(-10_000), int24(-20_000), int24(-30_000)];
     uint64[3] internal _breaches;
 
     uint64 public currentBlock = ANCHOR;
@@ -26,10 +26,10 @@ contract LadderObservationHandler is Test {
     /// @notice Advances the chain and applies one swap's worth of observation.
     function observe(int24 tick, uint16 blockAdvance) external {
         currentBlock += uint64(bound(blockAdvance, 1, 5000));
-        currentTick = int24(bound(tick, -50_000, 60_000));
+        currentTick = int24(bound(tick, -60_000, 50_000));
 
         for (uint8 i = 0; i < COUNT; ++i) {
-            if (currentTick >= _ticks[i]) continue;
+            if (currentTick <= _ticks[i]) continue;
             for (uint8 j = i; j < COUNT; ++j) {
                 _breaches[j] = currentBlock;
             }
@@ -81,8 +81,8 @@ contract LadderScheduleInvariantTest is StdInvariant, Test {
         }
     }
 
-    /// @dev Because unlock ticks ascend, a higher tranche breaches whenever a lower one does. Its recorded breach is
-    ///      therefore never older than the one below it.
+    /// @dev Because unlock ticks descend, a higher tranche breaches whenever a lower one does. Its recorded breach
+    ///      is therefore never older than the one below it.
     function invariant_breachesAscendWithTranches() public view {
         uint8 count = handler.trancheCount();
         for (uint8 i = 1; i < count; ++i) {
@@ -101,12 +101,13 @@ contract LadderScheduleInvariantTest is StdInvariant, Test {
         }
     }
 
-    /// @dev No tranche reports unlocked while the pool sits below its level, however long it held previously.
-    function invariant_nothingUnlocksBelowItsTick() public view {
+    /// @dev No tranche reports unlocked while the pool sits below its target price, however long it held
+    ///      previously. A tick above the unlock tick is a price below the target.
+    function invariant_nothingUnlocksBelowItsTarget() public view {
         uint8 count = handler.trancheCount();
         for (uint8 i = 0; i < count; ++i) {
-            if (handler.currentTick() < handler.tickAt(i)) {
-                assertFalse(handler.isUnlocked(i), "unlocked below its own tick");
+            if (handler.currentTick() > handler.tickAt(i)) {
+                assertFalse(handler.isUnlocked(i), "unlocked below its own target price");
             }
         }
     }

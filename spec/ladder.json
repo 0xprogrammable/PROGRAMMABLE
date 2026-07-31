@@ -33,7 +33,7 @@
     "maxDwellBlocks": 216000,
     "minUnlockTick": -887200,
     "maxUnlockTick": 887200,
-    "ticksMustAscend": true,
+    "ticksMustDescend": true,
     "ticksAlignedToSpacing": true,
     "minExpiryDays": 30,
     "maxExpiryDays": 3650,
@@ -57,7 +57,7 @@
     "solmate": null
   },
   "builder": {
-    "githubIdentity": "locallaunchsc-cloud",
-    "beneficiaryAddress": "0xC180590a43bB72C123bD457dABf1730C9aA6712A"
+    "githubIdentity": null,
+    "beneficiaryAddress": null
   }
 }

@@ -4,7 +4,8 @@ pragma solidity 0.8.26;
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /// @notice One performance tranche. `unlockTick` is an absolute Uniswap v4 tick on the pool's ETH/token pair.
-/// @param unlockTick The tick the pool must reach and hold for this tranche to release.
+/// @param unlockTick The tick the pool must reach and hold for this tranche to release. In a native-ETH pool the
+///        tick falls as the token's ETH price rises, so a higher price target is a lower tick.
 /// @param sharesBps The portion of the custodied balance this tranche releases, in basis points.
 struct LadderTranche {
     int24 unlockTick;
@@ -12,7 +13,7 @@ struct LadderTranche {
 }
 
 /// @notice The immutable performance-unlock terms for one launch.
-/// @param tranches Up to five tranches, in strictly ascending tick order, with shares summing to 10,000.
+/// @param tranches Up to five tranches, in strictly descending tick order, with shares summing to 10,000.
 /// @param dwellBlocks Consecutive blocks the pool must hold at or above a tranche's tick before it releases.
 /// @param expiryDays Days after launch at which unreleased tranches are permanently forfeited. Zero disables expiry.
 struct LadderCustodyConfig {
@@ -48,14 +49,18 @@ library LadderScheduleV1 {
     error ExpiryOutOfRange(uint16 expiryDays);
     error ShareBelowMinimum(uint8 index, uint16 sharesBps);
     error SharesMustTotalOneHundredPercent(uint16 totalSharesBps);
-    error TicksMustAscend(uint8 index, int24 previousTick, int24 unlockTick);
+    error TicksMustDescend(uint8 index, int24 previousTick, int24 unlockTick);
     error TickOutOfRange(uint8 index, int24 unlockTick);
     error TrancheCountOutOfRange(uint256 count);
 
     /// @notice Reverts unless `config` is a well-formed ladder.
-    /// @dev Ascending ticks are required so that a pool at any given tick satisfies a contiguous prefix of the
-    ///      ladder. This makes the breach scan in the hook a single ordered pass and makes the ladder legible: a
-    ///      higher tranche always demands a higher price than the one below it.
+    /// @dev Descending ticks are required so that a pool at any given tick satisfies a contiguous prefix of the
+    ///      ladder. This makes the breach scan in the hook a single ordered pass and keeps the ladder legible: each
+    ///      tranche demands a higher token price than the one before it.
+    ///
+    ///      Ticks descend rather than ascend because these pools pair a token against native ETH as `currency0`.
+    ///      The pool's tick measures token per ETH, so it falls as the token's ETH price rises. A 2x price target
+    ///      is a lower tick than the launch tick, and a 5x target is lower still.
     function validate(LadderCustodyConfig memory config) internal pure {
         uint256 count = config.tranches.length;
         if (count == 0 || count > MAX_TRANCHES) revert TrancheCountOutOfRange(count);
@@ -77,8 +82,8 @@ library LadderScheduleV1 {
             if (tranche.unlockTick < MIN_UNLOCK_TICK || tranche.unlockTick > MAX_UNLOCK_TICK) {
                 revert TickOutOfRange(i, tranche.unlockTick);
             }
-            if (i != 0 && tranche.unlockTick <= previousTick) {
-                revert TicksMustAscend(i, previousTick, tranche.unlockTick);
+            if (i != 0 && tranche.unlockTick >= previousTick) {
+                revert TicksMustDescend(i, previousTick, tranche.unlockTick);
             }
             if (tranche.sharesBps < MIN_TRANCHE_SHARES_BPS) {
                 revert ShareBelowMinimum(i, tranche.sharesBps);
@@ -97,8 +102,8 @@ library LadderScheduleV1 {
     ///      pool below this tranche's tick; zero means the pool has been at or above it since the anchor.
     /// @param anchorBlock The block at which the pool was initialized.
     /// @param lastBreachBlock The most recent observed breach of this tranche's tick, or zero if never breached.
-    /// @param currentTick The pool's tick now.
-    /// @param unlockTick The tranche's tick.
+    /// @param currentTick The pool's tick now. Lower is a higher token price.
+    /// @param unlockTick The tranche's tick. The pool must be at or below it.
     /// @param dwellBlocks The required dwell length.
     /// @param blockNumber The block height to evaluate at.
     function isUnlocked(
@@ -112,8 +117,9 @@ library LadderScheduleV1 {
         // An uninitialized pool has no price history and can satisfy nothing.
         if (anchorBlock == 0 || blockNumber <= anchorBlock) return false;
 
-        // A tranche cannot release while the pool sits below its tick, however long it held previously.
-        if (currentTick < unlockTick) return false;
+        // A tranche cannot release while the pool sits below its target price, however long it held previously.
+        // A tick above the unlock tick is a token price below the target.
+        if (currentTick > unlockTick) return false;
 
         // Dwell is measured from the later of the last breach and the anchor, so a pool that opened above a tranche
         // still has to hold it for the full window rather than releasing on its first swap.

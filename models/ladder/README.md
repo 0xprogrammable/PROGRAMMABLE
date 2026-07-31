@@ -19,7 +19,7 @@ If the token never reaches a level, that tranche never releases. If the ladder e
 
 | Term | Meaning |
 | --- | --- |
-| Unlock tick | The price level a tranche requires, as a Uniswap v4 tick |
+| Unlock tick | The price level a tranche requires, as a Uniswap v4 tick. These pools pair the token against native ETH as `currency0`, so the tick **falls** as the token's ETH price rises: a higher target is a lower tick |
 | Share | The portion of the Initial Buy that tranche releases |
 | Dwell | Consecutive blocks the level must hold before the tranche releases |
 | Expiry | Days after launch at which unreleased tranches may be permanently burned |
@@ -32,8 +32,8 @@ A Uniswap v4 pool's tick changes only when a swap executes, and the hook runs on
 records, for each tranche, the most recent block at which the pool was seen *below* that tranche's level. The absence
 of a recorded breach across a window is therefore proof that no breach occurred in that window.
 
-Unlock levels ascend, so the set of breached tranches is always a suffix of the ladder: below one level means below
-every level above it. A pool sitting above every rung writes nothing at all.
+Unlock ticks descend as the price targets rise, so the set of breached tranches is always a suffix of the ladder:
+below one target means below every target above it. A pool clearing every rung writes nothing at all.
 
 ## What the model guarantees
 
@@ -57,7 +57,7 @@ alone.
 
 | Parameter | Bound |
 | --- | --- |
-| Tranches | 1 to 5, ascending, aligned to the pool's tick spacing |
+| Tranches | 1 to 5, descending, aligned to the pool's tick spacing |
 | Share per tranche | At least 5%, totalling exactly 100% |
 | Dwell | 7,200 to 216,000 blocks, about one day to one month |
 | Expiry | Disabled, or 30 to 3,650 days |

@@ -72,6 +72,12 @@ is the primary residual risk. A ladder's levels should be read against the pool'
 **Ticks are ETH-denominated.** A ladder does not adjust for moves in ETH itself, so a level set in one regime may
 mean something different in another.
 
+**Tick direction is inverted relative to price.** These pools use native ETH as `currency0`, so the pool's tick
+measures token per ETH and falls as the token appreciates. Unlock ticks therefore descend as the price targets rise.
+An earlier revision of this model compared the tick in the wrong direction, which would have released tranches as the
+token fell rather than rose. Integration tests against a live PoolManager found it before submission; the direction
+is now asserted end to end in `test_breachStampsTheSuffixOnly` and `test_heldThenDumpedReleasesNothing`.
+
 **Trivially low rungs are possible.** Nothing prevents a creator from setting levels the token has already passed
 except the dwell requirement. The full ladder is disclosed at registration and is visible before anyone buys.
 
