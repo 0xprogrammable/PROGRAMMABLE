@@ -228,8 +228,8 @@ describe("Stock-Paired handlers", () => {
     expect(
       await indexer.ChainEvent.getOrThrow(accrual!.id),
     ).toMatchObject({
-      releaseVersion: "stock-paired-v3",
-      model: "stock-paired",
+      releaseVersion: "unresolved",
+      model: "unresolved",
     });
     expect(await indexer.PoolFeeTotals.getOrThrow(`1:${POOL_ID}`)).toMatchObject({
       releaseVersion: "stock-paired-v3",

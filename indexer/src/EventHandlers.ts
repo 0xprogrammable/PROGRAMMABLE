@@ -133,6 +133,10 @@ async function recordOccurrence(
   const data = lower(encoded.data);
   const decodedPayload = canonicalPayloadJson(event.params);
   const payloadHash = lower(encoded.payloadHash);
+  const candidateRelease = staticReleaseForContract(event.contractName) ?? {
+    model: "unresolved",
+    releaseVersion: "unresolved",
+  };
   const existing = await context.ChainEvent.get(provenance.id);
   if (existing !== undefined) {
     const sameTopics =
@@ -149,6 +153,8 @@ async function recordOccurrence(
       existing.sourceAddress !== provenance.sourceAddress ||
       existing.contractName !== event.contractName ||
       existing.eventName !== event.eventName ||
+      existing.model !== candidateRelease.model ||
+      existing.releaseVersion !== candidateRelease.releaseVersion ||
       !sameTopics ||
       existing.data !== data ||
       existing.decodedPayload !== decodedPayload ||
@@ -198,8 +204,8 @@ async function recordOccurrence(
     ...provenance,
     contractName: event.contractName,
     eventName: event.eventName,
-    model: release.model,
-    releaseVersion: release.releaseVersion,
+    model: candidateRelease.model,
+    releaseVersion: candidateRelease.releaseVersion,
     topics,
     data,
     decodedPayload,
@@ -752,16 +758,6 @@ async function reconcileLaunch(
     const reconciled = applyPoolConfigurationToLaunch(launch, config);
     launch = { ...reconciled.launch };
     context.PoolFeeConfig.set(reconciled.config);
-    await relabelOccurrence(
-      context,
-      config.registrationOccurrenceId,
-      launch,
-    );
-    await relabelOccurrence(
-      context,
-      config.disclosureOccurrenceId,
-      launch,
-    );
   }
 
   const poolVaults = await context.RewardVault.getWhere({
@@ -782,7 +778,6 @@ async function reconcileLaunch(
       const reconciled = applyRewardVaultToLaunch(launch, vault);
       launch = { ...reconciled.launch };
       context.RewardVault.set(reconciled.vault);
-      await relabelOccurrence(context, vault.factoryOccurrenceId, launch);
     }
   }
 
@@ -797,24 +792,6 @@ async function reconcileLaunch(
   await relabelPoolScopedEntities(context, launch);
   launch.isComplete = launchIsComplete(launch);
   context.Launch.set(launch);
-}
-
-async function relabelOccurrence(
-  context: EvmOnEventContext,
-  occurrenceId: string | undefined,
-  launch: Launch,
-): Promise<void> {
-  if (occurrenceId === undefined) {
-    return;
-  }
-  const chainEvent = await context.ChainEvent.get(occurrenceId);
-  if (chainEvent !== undefined) {
-    context.ChainEvent.set({
-      ...chainEvent,
-      model: launch.model,
-      releaseVersion: launch.releaseVersion,
-    });
-  }
 }
 
 async function relabelPoolScopedEntities(
@@ -845,7 +822,6 @@ async function relabelPoolScopedEntities(
       model: launch.model,
       releaseVersion: launch.releaseVersion,
     });
-    await relabelOccurrence(context, entity.id, launch);
   }
   for (const entity of creatorFeeClaims) {
     context.CreatorFeeClaim.set({
@@ -853,7 +829,6 @@ async function relabelPoolScopedEntities(
       model: launch.model,
       releaseVersion: launch.releaseVersion,
     });
-    await relabelOccurrence(context, entity.id, launch);
   }
   for (const entity of rewardCheckpoints) {
     context.RewardCheckpoint.set({
@@ -861,7 +836,6 @@ async function relabelPoolScopedEntities(
       model: launch.model,
       releaseVersion: launch.releaseVersion,
     });
-    await relabelOccurrence(context, entity.id, launch);
   }
   for (const entity of payoutChanges) {
     context.PayoutChange.set({
@@ -869,7 +843,6 @@ async function relabelPoolScopedEntities(
       model: launch.model,
       releaseVersion: launch.releaseVersion,
     });
-    await relabelOccurrence(context, entity.id, launch);
   }
   for (const entity of rewardConfigurationChanges) {
     context.RewardConfigurationChange.set({
@@ -877,7 +850,6 @@ async function relabelPoolScopedEntities(
       model: launch.model,
       releaseVersion: launch.releaseVersion,
     });
-    await relabelOccurrence(context, entity.id, launch);
   }
 
   if (launch.rewardVault === undefined) {
@@ -892,7 +864,6 @@ async function relabelPoolScopedEntities(
       model: launch.model,
       releaseVersion: launch.releaseVersion,
     });
-    await relabelOccurrence(context, entity.id, launch);
   }
 }
 
@@ -1064,16 +1035,6 @@ async function handlePoolConfigurationEvent(
       const reconciled = applyPoolConfigurationToLaunch(launch, next);
       context.PoolFeeConfig.set(reconciled.config);
       context.Launch.set(reconciled.launch);
-      await relabelOccurrence(
-        context,
-        reconciled.config.registrationOccurrenceId,
-        reconciled.launch,
-      );
-      await relabelOccurrence(
-        context,
-        reconciled.config.disclosureOccurrenceId,
-        reconciled.launch,
-      );
     }
   }
 }
@@ -1334,11 +1295,6 @@ async function handleVaultFactoryEvent(
       );
       context.RewardVault.set(reconciled.vault);
       context.Launch.set(reconciled.launch);
-      await relabelOccurrence(
-        context,
-        rewardVaultEntity.factoryOccurrenceId,
-        reconciled.launch,
-      );
     }
   }
 }

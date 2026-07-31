@@ -54,6 +54,99 @@ const PAYLOAD_HASH = keccak256(
   ),
 );
 const DECODED_PAYLOAD = canonicalPayloadJson(EVENT_ARGS);
+const DYNAMIC_SOURCE = "0x4cfe000000000000000000000000000000000001";
+const DYNAMIC_CANDIDATE_ID =
+  `1:${BLOCK_HASH}:${TRANSACTION_HASH}:8`;
+const DYNAMIC_EVENT_ABI = parseAbiItem(
+  "event CreatorFeesCheckpointed(bytes32 indexed poolId, uint64 indexed configurationEpoch, uint256 amount, uint256 totalCreatorFeesReceived)",
+);
+const DYNAMIC_EVENT_ARGS = {
+  poolId: `0x${"77".repeat(32)}`,
+  configurationEpoch: 1n,
+  amount: 900n,
+  totalCreatorFeesReceived: 900n,
+} as const;
+const DYNAMIC_EVENT_TOPICS = encodeEventTopics({
+  abi: [DYNAMIC_EVENT_ABI],
+  eventName: DYNAMIC_EVENT_ABI.name,
+  args: DYNAMIC_EVENT_ARGS,
+}) as readonly Hex[];
+const DYNAMIC_NON_INDEXED_INPUTS = DYNAMIC_EVENT_ABI.inputs.filter(
+  (input) => !("indexed" in input) || input.indexed !== true,
+) as readonly AbiParameter[];
+const DYNAMIC_EVENT_DATA = encodeAbiParameters(
+  DYNAMIC_NON_INDEXED_INPUTS,
+  DYNAMIC_NON_INDEXED_INPUTS.map(
+    (input) =>
+      DYNAMIC_EVENT_ARGS[input.name as keyof typeof DYNAMIC_EVENT_ARGS],
+  ),
+);
+const DYNAMIC_PAYLOAD_HASH = keccak256(
+  encodeAbiParameters(
+    [{ type: "bytes32[]" }, { type: "bytes" }],
+    [DYNAMIC_EVENT_TOPICS, DYNAMIC_EVENT_DATA],
+  ),
+);
+const SHARED_HOOK_SOURCE =
+  "0x90c67c1e866f86526f0e338459cd435e1f23a0cc";
+const SHARED_FACTORY_SOURCE =
+  "0x52d70971d6653a754c29385a2a6f241a481952d4";
+const SHARED_HOOK_ID = `1:${BLOCK_HASH}:${TRANSACTION_HASH}:9`;
+const SHARED_FACTORY_ID = `1:${BLOCK_HASH}:${TRANSACTION_HASH}:10`;
+const SHARED_HOOK_EVENT_ABI = parseAbiItem(
+  "event PoolRegistered(bytes32 indexed poolId, address indexed token, address indexed quoteAsset, address rewardVault, address registrar, bool quoteIsCurrency0, bytes32 rewardConfigurationHash, bytes32 quoteConfigurationHash)",
+);
+const SHARED_HOOK_EVENT_ARGS = {
+  poolId: `0x${"88".repeat(32)}`,
+  token: "0x8888888888888888888888888888888888888888",
+  quoteAsset: "0x9999999999999999999999999999999999999999",
+  rewardVault: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  registrar: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  quoteIsCurrency0: true,
+  rewardConfigurationHash: `0x${"aa".repeat(32)}`,
+  quoteConfigurationHash: `0x${"bb".repeat(32)}`,
+} as const;
+const SHARED_FACTORY_EVENT_ABI = parseAbiItem(
+  "event QuoteAssetFeeSplitVaultDeployed(address indexed vault, address indexed feeHook, bytes32 indexed poolId, address quoteAsset)",
+);
+const SHARED_FACTORY_EVENT_ARGS = {
+  vault: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  feeHook: SHARED_HOOK_SOURCE,
+  poolId: `0x${"88".repeat(32)}`,
+  quoteAsset: "0x9999999999999999999999999999999999999999",
+} as const;
+
+function encodedEventFixture(
+  abi: typeof SHARED_HOOK_EVENT_ABI | typeof SHARED_FACTORY_EVENT_ABI,
+  args: Readonly<Record<string, unknown>>,
+) {
+  const topics = encodeEventTopics({
+    abi: [abi],
+    eventName: abi.name,
+    args,
+  }) as readonly Hex[];
+  const nonIndexedInputs = abi.inputs.filter(
+    (input) => !("indexed" in input) || input.indexed !== true,
+  ) as readonly AbiParameter[];
+  const data = encodeAbiParameters(
+    nonIndexedInputs,
+    nonIndexedInputs.map((input) => {
+      if (!input.name) throw new Error("Shared event input must be named");
+      return args[input.name];
+    }),
+  );
+  return {
+    topics,
+    data,
+    decodedPayload: canonicalPayloadJson(args),
+    payloadHash: keccak256(
+      encodeAbiParameters(
+        [{ type: "bytes32[]" }, { type: "bytes" }],
+        [topics, data],
+      ),
+    ),
+  };
+}
 
 function candidate(overrides: Record<string, unknown> = {}) {
   return {
@@ -78,6 +171,80 @@ function candidate(overrides: Record<string, unknown> = {}) {
     payloadHash: PAYLOAD_HASH,
     ...overrides,
   };
+}
+
+function dynamicCandidate(overrides: Record<string, unknown> = {}) {
+  return {
+    id: DYNAMIC_CANDIDATE_ID,
+    downstreamLogicalId: null,
+    receiptLogOrdinal: null,
+    chainId: 1,
+    blockNumber: "25639597",
+    blockHash: BLOCK_HASH,
+    blockTimestamp: "1785481000",
+    transactionHash: TRANSACTION_HASH,
+    transactionIndex: 4,
+    blockGlobalLogIndex: 8,
+    sourceAddress: DYNAMIC_SOURCE,
+    contractName: "ClassicV3RewardVault",
+    eventName: "CreatorFeesCheckpointed",
+    model: "unresolved",
+    releaseVersion: "unresolved",
+    topics: DYNAMIC_EVENT_TOPICS,
+    data: DYNAMIC_EVENT_DATA,
+    decodedPayload: canonicalPayloadJson(DYNAMIC_EVENT_ARGS),
+    payloadHash: DYNAMIC_PAYLOAD_HASH,
+    ...overrides,
+  };
+}
+
+function sharedStaticCandidates() {
+  const hook = encodedEventFixture(
+    SHARED_HOOK_EVENT_ABI,
+    SHARED_HOOK_EVENT_ARGS,
+  );
+  const factory = encodedEventFixture(
+    SHARED_FACTORY_EVENT_ABI,
+    SHARED_FACTORY_EVENT_ARGS,
+  );
+  return [
+    {
+      id: SHARED_HOOK_ID,
+      downstreamLogicalId: null,
+      receiptLogOrdinal: null,
+      chainId: 1,
+      blockNumber: "25640338",
+      blockHash: BLOCK_HASH,
+      blockTimestamp: "1785482000",
+      transactionHash: TRANSACTION_HASH,
+      transactionIndex: 5,
+      blockGlobalLogIndex: 9,
+      sourceAddress: SHARED_HOOK_SOURCE,
+      contractName: "StockV2V3Hook",
+      eventName: "PoolRegistered",
+      model: "unresolved",
+      releaseVersion: "unresolved",
+      ...hook,
+    },
+    {
+      id: SHARED_FACTORY_ID,
+      downstreamLogicalId: null,
+      receiptLogOrdinal: null,
+      chainId: 1,
+      blockNumber: "25640338",
+      blockHash: BLOCK_HASH,
+      blockTimestamp: "1785482000",
+      transactionHash: TRANSACTION_HASH,
+      transactionIndex: 5,
+      blockGlobalLogIndex: 10,
+      sourceAddress: SHARED_FACTORY_SOURCE,
+      contractName: "StockV2V3RewardVaultFactory",
+      eventName: "QuoteAssetFeeSplitVaultDeployed",
+      model: "unresolved",
+      releaseVersion: "unresolved",
+      ...factory,
+    },
+  ];
 }
 
 function placedCandidate(input: {
@@ -225,6 +392,78 @@ describe("Envio candidate adapter", () => {
     });
 
     await expect(client.readCandidate(CANDIDATE_ID)).resolves.toBeNull();
+  });
+
+  it("accepts known dynamic vault events only as release-neutral candidates", async () => {
+    const accepted = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher: async () =>
+        json({ data: { ChainEvent_by_pk: dynamicCandidate() } }),
+    });
+
+    await expect(
+      accepted.readCandidate(DYNAMIC_CANDIDATE_ID),
+    ).resolves.toMatchObject({
+      sourceAddress: DYNAMIC_SOURCE,
+      contractName: "ClassicV3RewardVault",
+      releaseHint: { model: "unresolved", releaseVersion: "unresolved" },
+    });
+
+    for (const override of [
+      { model: "classic", releaseVersion: "classic-v3" },
+      { contractName: "ClassicV3UnknownVault" },
+      { blockNumber: "25639595" },
+    ]) {
+      const rejected = createEnvioClient({
+        endpoint: "https://envio.example/graphql",
+        fetcher: async () =>
+          json({
+            data: { ChainEvent_by_pk: dynamicCandidate(override) },
+          }),
+      });
+      await expect(
+        rejected.readCandidate(DYNAMIC_CANDIDATE_ID),
+      ).rejects.toMatchObject({
+        dependency: "envio",
+        code: "validation_failed",
+      });
+    }
+  });
+
+  it("accepts shared static hook and factory events only as release-neutral candidates", async () => {
+    for (const fixture of sharedStaticCandidates()) {
+      const accepted = createEnvioClient({
+        endpoint: "https://envio.example/graphql",
+        fetcher: async () =>
+          json({ data: { ChainEvent_by_pk: fixture } }),
+      });
+      await expect(accepted.readCandidate(fixture.id)).resolves.toMatchObject({
+        contractName: fixture.contractName,
+        releaseHint: { model: "unresolved", releaseVersion: "unresolved" },
+      });
+
+      for (const override of [
+        {
+          model: "stock-paired",
+          releaseVersion: "stock-paired-v2",
+        },
+        { blockNumber: "25640337" },
+      ]) {
+        const rejected = createEnvioClient({
+          endpoint: "https://envio.example/graphql",
+          fetcher: async () =>
+            json({
+              data: {
+                ChainEvent_by_pk: { ...fixture, ...override },
+              },
+            }),
+        });
+        await expect(rejected.readCandidate(fixture.id)).rejects.toMatchObject({
+          dependency: "envio",
+          code: "validation_failed",
+        });
+      }
+    }
   });
 
   it.each([

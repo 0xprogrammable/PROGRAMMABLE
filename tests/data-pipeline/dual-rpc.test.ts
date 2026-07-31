@@ -20,7 +20,9 @@ vi.mock(
       getDataPipelineReleaseBinding: () => ({
         ...binding,
         sources: binding.sources.map((source) =>
-          source.contractName === "ClassicV2Launcher"
+          source.contractName === "ClassicV2Launcher" ||
+          source.contractName === "StockV2V3Hook" ||
+          source.contractName === "StockV2V3RewardVaultFactory"
             ? { ...source, runtimeCodeHash: TEST_SOURCE_CODE_HASH }
             : source,
         ),
@@ -53,6 +55,19 @@ const PAYLOAD_HASH = keccak256(
     [[TOPIC], RAW_DATA],
   ),
 );
+const DYNAMIC_BLOCK_HASH = `0x${"66".repeat(32)}` as const;
+const DYNAMIC_SAFE_BLOCK_HASH = `0x${"77".repeat(32)}` as const;
+const DYNAMIC_TRANSACTION_HASH = `0x${"99".repeat(32)}` as const;
+const DYNAMIC_SOURCE =
+  "0x4cfe000000000000000000000000000000000001" as const;
+const DYNAMIC_BLOCK = 25_639_597n;
+const DYNAMIC_SAFE_BLOCK = DYNAMIC_BLOCK + 3n;
+const DYNAMIC_PROVIDER_HEAD = DYNAMIC_SAFE_BLOCK + 12n;
+const DYNAMIC_CODE = "0x6001600055" as const;
+const SHARED_BLOCK_HASH = `0x${"aa".repeat(32)}` as const;
+const SHARED_SAFE_BLOCK_HASH = `0x${"bb".repeat(32)}` as const;
+const SHARED_TRANSACTION_HASH = `0x${"cc".repeat(32)}` as const;
+const SHARED_BLOCK = 25_640_338n;
 
 function candidate(): EnvioCandidate {
   return {
@@ -72,6 +87,142 @@ function candidate(): EnvioCandidate {
     rawData: RAW_DATA,
     decodedPayload: {},
     payloadHash: PAYLOAD_HASH,
+  };
+}
+
+function dynamicCandidate(): EnvioCandidate {
+  return {
+    candidateId: `1:${DYNAMIC_BLOCK_HASH}:${DYNAMIC_TRANSACTION_HASH}:4`,
+    chainId: 1,
+    blockNumber: DYNAMIC_BLOCK.toString(),
+    blockHash: DYNAMIC_BLOCK_HASH,
+    blockTimestamp: "1785481000",
+    transactionHash: DYNAMIC_TRANSACTION_HASH,
+    transactionIndex: 1,
+    blockGlobalLogIndex: 4,
+    sourceAddress: DYNAMIC_SOURCE,
+    contractName: "ClassicV3RewardVault",
+    eventName: "Claimed",
+    releaseHint: { model: "unresolved", releaseVersion: "unresolved" },
+    orderedTopics: [TOPIC],
+    rawData: RAW_DATA,
+    decodedPayload: {},
+    payloadHash: PAYLOAD_HASH,
+  };
+}
+
+function dynamicReceipt(): CandidateRpcReceipt {
+  return {
+    status: "success",
+    blockNumber: DYNAMIC_BLOCK,
+    blockHash: DYNAMIC_BLOCK_HASH,
+    transactionHash: DYNAMIC_TRANSACTION_HASH,
+    transactionIndex: 1,
+    logs: [
+      {
+        address: DYNAMIC_SOURCE,
+        blockNumber: DYNAMIC_BLOCK,
+        blockHash: DYNAMIC_BLOCK_HASH,
+        transactionHash: DYNAMIC_TRANSACTION_HASH,
+        transactionIndex: 1,
+        logIndex: 4,
+        removed: false,
+        topics: [TOPIC],
+        data: RAW_DATA,
+      },
+    ],
+  };
+}
+
+function dynamicClient(
+  bytecode: `0x${string}` = DYNAMIC_CODE,
+): CandidateRpcClient {
+  return {
+    getChainId: async () => 1,
+    getBlockNumber: async () => DYNAMIC_PROVIDER_HEAD,
+    getBlock: async ({ blockNumber }) =>
+      blockNumber === DYNAMIC_SAFE_BLOCK
+        ? {
+            number: DYNAMIC_SAFE_BLOCK,
+            hash: DYNAMIC_SAFE_BLOCK_HASH,
+            timestamp: 1785481100n,
+          }
+        : {
+            number: DYNAMIC_BLOCK,
+            hash: DYNAMIC_BLOCK_HASH,
+            timestamp: 1785481000n,
+          },
+    getTransactionReceipt: async () => dynamicReceipt(),
+    getBytecode: async () => bytecode,
+  };
+}
+
+function sharedStaticCandidate(input: {
+  sourceAddress: `0x${string}`;
+  contractName: string;
+  eventName: string;
+}): EnvioCandidate {
+  return {
+    candidateId:
+      `1:${SHARED_BLOCK_HASH}:${SHARED_TRANSACTION_HASH}:9`,
+    chainId: 1,
+    blockNumber: SHARED_BLOCK.toString(),
+    blockHash: SHARED_BLOCK_HASH,
+    blockTimestamp: "1785482000",
+    transactionHash: SHARED_TRANSACTION_HASH,
+    transactionIndex: 5,
+    blockGlobalLogIndex: 9,
+    sourceAddress: input.sourceAddress,
+    contractName: input.contractName,
+    eventName: input.eventName,
+    releaseHint: { model: "unresolved", releaseVersion: "unresolved" },
+    orderedTopics: [TOPIC],
+    rawData: RAW_DATA,
+    decodedPayload: {},
+    payloadHash: PAYLOAD_HASH,
+  };
+}
+
+function sharedStaticClient(
+  candidate: EnvioCandidate,
+): CandidateRpcClient {
+  const safeBlock = SHARED_BLOCK + 3n;
+  return {
+    getChainId: async () => 1,
+    getBlockNumber: async () => safeBlock + 12n,
+    getBlock: async ({ blockNumber }) =>
+      blockNumber === safeBlock
+        ? {
+            number: safeBlock,
+            hash: SHARED_SAFE_BLOCK_HASH,
+            timestamp: 1785482100n,
+          }
+        : {
+            number: SHARED_BLOCK,
+            hash: SHARED_BLOCK_HASH,
+            timestamp: 1785482000n,
+          },
+    getTransactionReceipt: async () => ({
+      status: "success",
+      blockNumber: SHARED_BLOCK,
+      blockHash: SHARED_BLOCK_HASH,
+      transactionHash: SHARED_TRANSACTION_HASH,
+      transactionIndex: 5,
+      logs: [
+        {
+          address: candidate.sourceAddress,
+          blockNumber: SHARED_BLOCK,
+          blockHash: SHARED_BLOCK_HASH,
+          transactionHash: SHARED_TRANSACTION_HASH,
+          transactionIndex: 5,
+          logIndex: 9,
+          removed: false,
+          topics: [TOPIC],
+          data: RAW_DATA,
+        },
+      ],
+    }),
+    getBytecode: async () => "0x60016000",
   };
 }
 
@@ -221,6 +372,7 @@ describe("dual-RPC Envio candidate verification", () => {
       sourceAddress: SOURCE,
       contractName: "ClassicV2Launcher",
       eventName: "MemeTokenLaunched",
+      sourceKind: "static",
       model: "classic",
       releaseVersion: "classic-v2",
       payloadHash: PAYLOAD_HASH,
@@ -243,6 +395,119 @@ describe("dual-RPC Envio candidate verification", () => {
       rpcProviderCommitment("origin", "https://quicknode-mainnet.example"),
     ]);
     expect(JSON.stringify(result)).not.toContain(".example");
+  });
+
+  it("keeps a known dynamic vault release-neutral until factory proof", async () => {
+    const result = await verifyEnvioCandidateWithDualRpc({
+      candidate: dynamicCandidate(),
+      providers: [
+        provider("alchemy-mainnet", dynamicClient()),
+        provider("quicknode-mainnet", dynamicClient()),
+      ],
+    });
+
+    expect(result).toMatchObject({
+      sourceAddress: DYNAMIC_SOURCE,
+      contractName: "ClassicV3RewardVault",
+      sourceKind: "dynamic-unresolved",
+      model: "unresolved",
+      releaseVersion: "unresolved",
+      sourceCodeHash: keccak256(DYNAMIC_CODE),
+    });
+    expect(result).not.toHaveProperty("factoryOccurrenceFingerprint");
+  });
+
+  it("keeps shared static hook and factory events release-neutral", async () => {
+    const fixtures = [
+      sharedStaticCandidate({
+        sourceAddress: "0x90c67c1e866f86526f0e338459cd435e1f23a0cc",
+        contractName: "StockV2V3Hook",
+        eventName: "PoolRegistered",
+      }),
+      sharedStaticCandidate({
+        sourceAddress: "0x52d70971d6653a754c29385a2a6f241a481952d4",
+        contractName: "StockV2V3RewardVaultFactory",
+        eventName: "QuoteAssetFeeSplitVaultDeployed",
+      }),
+    ];
+
+    for (const fixture of fixtures) {
+      const result = await verifyEnvioCandidateWithDualRpc({
+        candidate: fixture,
+        providers: [
+          provider("alchemy-mainnet", sharedStaticClient(fixture)),
+          provider("quicknode-mainnet", sharedStaticClient(fixture)),
+        ],
+      });
+      expect(result).toMatchObject({
+        contractName: fixture.contractName,
+        sourceKind: "static",
+        model: "unresolved",
+        releaseVersion: "unresolved",
+      });
+
+      for (const forged of [
+        {
+          ...fixture,
+          releaseHint: {
+            model: "stock-paired" as const,
+            releaseVersion: "stock-paired-v2",
+          },
+        },
+        { ...fixture, blockNumber: "25640337" },
+      ]) {
+        await expect(
+          verifyEnvioCandidateWithDualRpc({
+            candidate: forged,
+            providers: [
+              provider("alchemy-mainnet", sharedStaticClient(forged)),
+              provider("quicknode-mainnet", sharedStaticClient(forged)),
+            ],
+          }),
+        ).rejects.toMatchObject({ code: "validation_failed" });
+      }
+    }
+  });
+
+  it("rejects caller-asserted, unknown, premature, or RPC-divergent dynamic vaults", async () => {
+    const trustedProviders = () => [
+      provider("alchemy-mainnet", dynamicClient()),
+      provider("quicknode-mainnet", dynamicClient()),
+    ] as const;
+    for (const forged of [
+      {
+        ...dynamicCandidate(),
+        releaseHint: {
+          model: "classic" as const,
+          releaseVersion: "classic-v3",
+        },
+      },
+      {
+        ...dynamicCandidate(),
+        contractName: "ClassicV3UnknownVault",
+      },
+      {
+        ...dynamicCandidate(),
+        blockNumber: "25639595",
+      },
+    ]) {
+      await expect(
+        verifyEnvioCandidateWithDualRpc({
+          candidate: forged,
+          providers: trustedProviders(),
+        }),
+      ).rejects.toMatchObject({ code: "validation_failed" });
+    }
+
+    await expect(
+      verifyEnvioCandidateWithDualRpc({
+        candidate: dynamicCandidate(),
+        providers: [
+          provider("alchemy-mainnet", dynamicClient()),
+          provider("quicknode-mainnet", dynamicClient("0x6002600055")),
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
   });
 
   it("rejects duplicate providers, wrong chains, and candidates above the shared safe head", async () => {

@@ -145,14 +145,12 @@ const CLASSIC_V3_CONTRACTS = new Set([
   "ClassicV3Launcher",
   "ClassicV3RewardVaultFactory",
   "ClassicV3VestingWalletFactory",
-  "ClassicV3RewardVault",
 ]);
 const STOCK_V1_CONTRACTS = new Set([
   "StockV1Hook",
   "StockV1Launcher",
   "StockV1EthCoordinator",
   "StockV1RewardVaultFactory",
-  "StockV1RewardVault",
 ]);
 const STOCK_V2_CONTRACTS = new Set([
   "StockV2Launcher",

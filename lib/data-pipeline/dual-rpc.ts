@@ -68,27 +68,17 @@ export type CandidateRpcProvider = {
   client: CandidateRpcClient;
 };
 
-export type DynamicSourceAttestation = {
-  sourceAddress: HexAddress;
-  contractName: string;
-  model: "classic" | "stock-paired";
-  releaseVersion: string;
-  activationBlock: string;
-  runtimeCodeHash: HexBytes32;
-  factoryOccurrenceFingerprint: HexBytes32;
-};
-
 export type DualRpcCandidateEvidence = {
   chainId: 1;
   candidateId: string;
   sourceAddress: HexAddress;
   contractName: string;
   eventName: string;
+  sourceKind: "static" | "dynamic-unresolved";
   model: "classic" | "stock-paired" | "unresolved";
   releaseVersion: string;
   payloadHash: HexBytes32;
   rawLogCommitment: HexBytes32;
-  factoryOccurrenceFingerprint: HexBytes32 | null;
   providerIdentities: readonly [string, string];
   providerVendorGroups: readonly [string, string];
   providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
@@ -393,63 +383,7 @@ async function boundedRpcMap<Input, Output>(
   return output;
 }
 
-function validateDynamicAttestation(
-  value: DynamicSourceAttestation,
-): DynamicSourceAttestation {
-  let activationBlock: string;
-  try {
-    activationBlock = parseNonnegativeIntegerText(value?.activationBlock);
-  } catch {
-    throw invalidInput("rpc", "dynamic-source-attestation");
-  }
-  const sourceAddress = rpcAddress(
-    value?.sourceAddress,
-    "dynamic-source-attestation",
-  );
-  const runtimeCodeHash = rpcBytes32(
-    value?.runtimeCodeHash,
-    "dynamic-source-attestation",
-  );
-  const factoryOccurrenceFingerprint = rpcBytes32(
-    value?.factoryOccurrenceFingerprint,
-    "dynamic-source-attestation",
-  );
-  if (
-    typeof value?.contractName !== "string" ||
-    !/^[A-Za-z][A-Za-z0-9]{0,95}$/.test(value.contractName) ||
-    (value.model !== "classic" && value.model !== "stock-paired") ||
-    typeof value.releaseVersion !== "string"
-  ) {
-    throw invalidInput("rpc", "dynamic-source-attestation");
-  }
-  const release = RELEASE_BINDING.releases.find(
-    (candidate) =>
-      candidate.model === value.model &&
-      candidate.releaseVersion === value.releaseVersion &&
-      candidate.dynamicContracts.includes(value.contractName),
-  );
-  if (
-    !release ||
-    BigInt(activationBlock) < BigInt(release.activationBlock)
-  ) {
-    throw invalidInput("rpc", "dynamic-source-attestation");
-  }
-  return {
-    sourceAddress,
-    contractName: value.contractName,
-    model: value.model,
-    releaseVersion: value.releaseVersion,
-    activationBlock,
-    runtimeCodeHash,
-    factoryOccurrenceFingerprint,
-  };
-}
-
-function validateCandidateBoundary(input: {
-  candidate: EnvioCandidate;
-  dynamicAttestations: readonly DynamicSourceAttestation[];
-}) {
-  const { candidate } = input;
+function validateCandidateBoundary(candidate: EnvioCandidate) {
   if (candidate === null || typeof candidate !== "object") {
     throw invalidInput("rpc", "candidate");
   }
@@ -517,8 +451,8 @@ function validateCandidateBoundary(input: {
   const staticSource = RELEASE_BINDING.sources.find(
     (source) => source.address === sourceAddress,
   );
-  let expectedRuntimeCodeHash: HexBytes32;
-  let factoryOccurrenceFingerprint: HexBytes32 | null = null;
+  let sourceKind: "static" | "dynamic-unresolved";
+  let expectedRuntimeCodeHash: HexBytes32 | null;
   if (staticSource) {
     if (
       staticSource.contractName !== candidate.contractName ||
@@ -529,34 +463,44 @@ function validateCandidateBoundary(input: {
     const releases = RELEASE_BINDING.releases.filter(
       (release) =>
         release.sourceContracts.includes(candidate.contractName) &&
-        release.model === model &&
         blockNumber >= BigInt(release.activationBlock),
     );
+    const allSourceReleases = RELEASE_BINDING.releases.filter((release) =>
+      release.sourceContracts.includes(candidate.contractName),
+    );
     const exact = releases.some(
-      (release) => release.releaseVersion === releaseVersion,
+      (release) =>
+        allSourceReleases.length === 1 &&
+        release.model === model &&
+        release.releaseVersion === releaseVersion,
     );
     const unresolved =
-      releaseVersion === "unresolved" && releases.length > 1;
+      model === "unresolved" &&
+      releaseVersion === "unresolved" &&
+      allSourceReleases.length > 1 &&
+      new Set(allSourceReleases.map((release) => release.model)).size === 1 &&
+      releases.length > 0;
     if (!exact && !unresolved) {
       throw validationError("rpc", "candidate-release");
     }
+    sourceKind = "static";
     expectedRuntimeCodeHash = staticSource.runtimeCodeHash;
   } else {
-    const matching = input.dynamicAttestations.filter(
-      (attestation) =>
-        attestation.sourceAddress === sourceAddress &&
-        attestation.contractName === candidate.contractName &&
-        attestation.model === model &&
-        blockNumber >= BigInt(attestation.activationBlock) &&
-        (attestation.releaseVersion === releaseVersion ||
-          releaseVersion === "unresolved"),
+    const matchingReleases = RELEASE_BINDING.releases.filter(
+      (release) => release.dynamicContracts.includes(candidate.contractName),
     );
-    if (matching.length !== 1) {
+    if (
+      matchingReleases.length < 1 ||
+      model !== "unresolved" ||
+      releaseVersion !== "unresolved" ||
+      matchingReleases.every(
+        (release) => blockNumber < BigInt(release.activationBlock),
+      )
+    ) {
       throw validationError("rpc", "dynamic-source-lineage");
     }
-    expectedRuntimeCodeHash = matching[0]!.runtimeCodeHash;
-    factoryOccurrenceFingerprint =
-      matching[0]!.factoryOccurrenceFingerprint;
+    sourceKind = "dynamic-unresolved";
+    expectedRuntimeCodeHash = null;
   }
   return {
     candidate: {
@@ -570,15 +514,14 @@ function validateCandidateBoundary(input: {
     },
     blockNumber,
     timestamp,
+    sourceKind,
     expectedRuntimeCodeHash,
-    factoryOccurrenceFingerprint,
   };
 }
 
 export async function verifyEnvioCandidateBatchWithDualRpc(input: {
   candidates: readonly EnvioCandidate[];
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
-  dynamicSourceAttestations?: readonly DynamicSourceAttestation[];
   rpcPolicy?: {
     maxConcurrency?: number;
     maxAttempts?: number;
@@ -630,35 +573,11 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
   ) {
     throw invalidInput("rpc", "candidate-batch");
   }
-  if (
-    input.dynamicSourceAttestations !== undefined &&
-    !Array.isArray(input.dynamicSourceAttestations)
-  ) {
-    throw invalidInput("rpc", "dynamic-source-attestations");
-  }
-  const dynamicAttestations = (
-    input.dynamicSourceAttestations ?? []
-  ).map(validateDynamicAttestation);
-  if (
-    dynamicAttestations.length > 128 ||
-    new Set(
-      dynamicAttestations.map(
-        (attestation) =>
-          `${attestation.sourceAddress}:${attestation.releaseVersion}`,
-      ),
-    ).size !== dynamicAttestations.length
-  ) {
-    throw invalidInput("rpc", "dynamic-source-attestations");
-  }
-
   const seenCandidateIds = new Set<string>();
   let previousBlock = -1n;
   let previousLogIndex = -1;
   const candidates = input.candidates.map((candidate) => {
-    const validated = validateCandidateBoundary({
-      candidate,
-      dynamicAttestations,
-    });
+    const validated = validateCandidateBoundary(candidate);
     const { blockNumber } = validated;
     const logIndex = safeInteger(
       validated.candidate.blockGlobalLogIndex,
@@ -802,8 +721,8 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
       candidate,
       blockNumber,
       timestamp,
+      sourceKind,
       expectedRuntimeCodeHash,
-      factoryOccurrenceFingerprint,
     }) => {
       const blocks = providerData.map((data) =>
         canonicalBlock(
@@ -852,7 +771,10 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
         throw validationError("rpc", "source-code-agreement");
       }
       const sourceCodeHash = keccak256(code[0]);
-      if (sourceCodeHash !== expectedRuntimeCodeHash) {
+      if (
+        expectedRuntimeCodeHash !== null &&
+        sourceCodeHash !== expectedRuntimeCodeHash
+      ) {
         throw validationError("rpc", "source-code-release");
       }
       const rawLogCommitment = keccak256(
@@ -872,11 +794,11 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
         sourceAddress: candidate.sourceAddress,
         contractName: candidate.contractName,
         eventName: candidate.eventName,
+        sourceKind,
         model: candidate.releaseHint.model,
         releaseVersion: candidate.releaseHint.releaseVersion,
         payloadHash: candidate.payloadHash,
         rawLogCommitment,
-        factoryOccurrenceFingerprint,
         providerIdentities,
         providerVendorGroups,
         providerEndpointCommitments,
@@ -920,7 +842,6 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
 export async function verifyEnvioCandidateWithDualRpc(input: {
   candidate: EnvioCandidate;
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
-  dynamicSourceAttestations?: readonly DynamicSourceAttestation[];
   rpcPolicy?: {
     maxConcurrency?: number;
     maxAttempts?: number;
@@ -931,7 +852,6 @@ export async function verifyEnvioCandidateWithDualRpc(input: {
   const result = await verifyEnvioCandidateBatchWithDualRpc({
     candidates: [input.candidate],
     providers: input.providers,
-    dynamicSourceAttestations: input.dynamicSourceAttestations,
     rpcPolicy: input.rpcPolicy,
   });
   return result.candidates[0]!;

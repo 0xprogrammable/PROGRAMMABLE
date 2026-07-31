@@ -142,7 +142,7 @@ type ReviewedRelease = {
   releaseVersion: ReviewedReleaseVersion;
   sourceContracts: readonly string[];
   dynamicContracts: readonly string[];
-  startBlock: bigint;
+  activationBlock: bigint;
 };
 
 function reviewedModel(value: string): ReviewedModel {
@@ -169,22 +169,12 @@ function reviewedReleaseVersion(value: string): ReviewedReleaseVersion {
 
 const REVIEWED_RELEASES: readonly ReviewedRelease[] =
   RELEASE_BINDING.releases.map((release) => {
-    const sourceStarts = release.sourceContracts.map((contractName) => {
-      const source = RELEASE_BINDING.sources.find(
-        (candidate) => candidate.contractName === contractName,
-      );
-      if (!source) throw new Error("Incomplete data pipeline source binding");
-      return BigInt(source.startBlock);
-    });
     return {
       model: reviewedModel(release.model),
       releaseVersion: reviewedReleaseVersion(release.releaseVersion),
       sourceContracts: release.sourceContracts,
       dynamicContracts: release.dynamicContracts,
-      startBlock: sourceStarts.reduce(
-        (minimum, current) => (current < minimum ? current : minimum),
-        sourceStarts[0],
-      ),
+      activationBlock: BigInt(release.activationBlock),
     };
   });
 
@@ -335,13 +325,20 @@ function validateSource(input: {
     }
     const exact = source.releases.some(
       (release) =>
+        source.releases.length === 1 &&
         release.model === input.model &&
-        release.releaseVersion === input.releaseVersion,
+        release.releaseVersion === input.releaseVersion &&
+        input.blockNumber >= release.activationBlock,
+    );
+    const activeReleases = source.releases.filter(
+      (release) => input.blockNumber >= release.activationBlock,
     );
     const unresolved =
+      input.model === "unresolved" &&
       input.releaseVersion === "unresolved" &&
       source.releases.length > 1 &&
-      source.releases.every((release) => release.model === input.model);
+      new Set(source.releases.map((release) => release.model)).size === 1 &&
+      activeReleases.length > 0;
     if (!exact && !unresolved) {
       throw validationError("envio", "source-release-provenance");
     }
@@ -349,22 +346,15 @@ function validateSource(input: {
   }
 
   const dynamicReleases = REVIEWED_DYNAMIC_SOURCES.get(input.contractName);
-  if (!dynamicReleases) {
+  if (
+    !dynamicReleases ||
+    input.model !== "unresolved" ||
+    input.releaseVersion !== "unresolved" ||
+    dynamicReleases.every(
+      (release) => input.blockNumber < release.activationBlock,
+    )
+  ) {
     throw validationError("envio", "dynamic-source-provenance");
-  }
-  const exact = dynamicReleases.some(
-    (release) =>
-      release.model === input.model &&
-      release.releaseVersion === input.releaseVersion &&
-      input.blockNumber >= release.startBlock,
-  );
-  const unresolved =
-    input.releaseVersion === "unresolved" &&
-    dynamicReleases.length > 1 &&
-    dynamicReleases.every((release) => release.model === input.model) &&
-    dynamicReleases.some((release) => input.blockNumber >= release.startBlock);
-  if (!exact && !unresolved) {
-    throw validationError("envio", "dynamic-source-release-provenance");
   }
 }
 
