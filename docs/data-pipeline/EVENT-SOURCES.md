@@ -1,0 +1,895 @@
+# Mainnet event and market sources
+
+Status: source inventory for the first realtime read-model migration. Addresses
+and blocks below are release-manifest inputs, not environment overrides.
+
+## Included releases
+
+This inventory includes Classic V2, Classic V3, and Stock-Paired V1, V2, and
+V3 on Ethereum Mainnet (`chain_id = 1`). Adaptive and Deep contracts are not
+event sources for this migration.
+
+Checksummed addresses are used in prose. Indexer configuration, entity IDs,
+database keys, and comparisons use lowercase addresses and transaction hashes.
+
+## Static Envio sources
+
+| Release | Contract role | Checksummed address | Inclusive start block | Manifest field |
+| --- | --- | --- | ---: | --- |
+| Classic V2 | Hook (`EthCreatorFeeHookV2`) | `0x025a386eAa79f6067d29848FD05ccC71bEAb20CC` | 25624130 | `mainnet-classic-v2.json: addresses.feeHook`, deployment transaction block |
+| Classic V2 | Launcher (`MemeLaunchV1`) | `0xD240D06f8586eB799f20056054e5b527405E6bAd` | 25624131 | `mainnet-classic-v2.json: addresses.memeLauncher`, deployment transaction block |
+| Classic V3 | Reward-vault factory | `0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a` | 25639538 | `mainnet-classic-v3.json: deploymentBlocks.rewardVaultFactory` |
+| Classic V3 | Vesting-wallet factory | `0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4` | 25639564 | `mainnet-classic-v3.json: deploymentBlocks.initialBuyVestingWalletFactory` |
+| Classic V3 | Hook (`EthCreatorFeeHookV3`) | `0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC` | 25639591 | `mainnet-classic-v3.json: deploymentBlocks.feeHook` |
+| Classic V3 | Launcher (`MemeLaunchV2`) | `0xC3bd04aAc2fb2ba58efD7Eb673E544E0B80De770` | 25639596 | `mainnet-classic-v3.json: deploymentBlocks.launcher` |
+| Stock-Paired V1 | Launcher (`StockPairedLaunchV1`) | `0x195750f33caD5eF2DF857a53226B421297A1e79e` | 25637469 | `mainnet-stock-paired-v1.json: startBlock` |
+| Stock-Paired V1 | ETH coordinator | `0xfa5f17389CA28D071781d59750b32C842ab6A54b` | 25637469 | `mainnet-stock-paired-v1.json: startBlock` |
+| Stock-Paired V1 | Hook | `0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc` | 25637469 | `mainnet-stock-paired-v1.json: startBlock` |
+| Stock-Paired V1 | Reward-vault factory | `0xD430d9162c153AFDf9E4CACA6D2317E72a044441` | 25637469 | `mainnet-stock-paired-v1.json: startBlock` |
+| Stock-Paired V2 | Launcher (`StockPairedLaunchV1` release) | `0x5eA6Be24838061bA45dbE8D82DE1b267DC240Daf` | 25640338 | `mainnet-stock-paired-v2.json: startBlock` |
+| Stock-Paired V2 | ETH coordinator | `0xFb9E1034df6161088E8F358502B19E7515c30fD2` | 25640338 | `mainnet-stock-paired-v2.json: startBlock` |
+| Stock-Paired V2/V3 | Shared hook | `0x90c67C1E866f86526F0e338459cD435E1F23A0cc` | 25640338 | `mainnet-stock-paired-v2.json: startBlock`; reused by V3 |
+| Stock-Paired V2/V3 | Shared reward-vault factory | `0x52d70971D6653a754c29385a2a6f241A481952d4` | 25640338 | `mainnet-stock-paired-v2.json: startBlock`; reused by V3 |
+| Stock-Paired V3 | Launcher (`StockPairedLaunchV3`) | `0x0573879f72d8eE8B0e5a4Ec5E8bcDb2fCab9E51c` | 25642745 | `mainnet-stock-paired-v3.json: startBlock` |
+| Stock-Paired V3 | ETH coordinator | `0xdDC3ABbAB0df7F1189310a4f70e7e365796B74E2` | 25642745 | `mainnet-stock-paired-v3.json: startBlock` |
+
+The V3 Stock-Paired manifest reuses the V2 hook and reward-vault factory. Those
+shared sources must start at `25640338`, not the V3 launcher block, so V2
+history is retained.
+
+HyperIndex has one chain-level `start_block`, so it is `25624130`, the minimum
+of the source cutoffs. The generated source registry still retains and enforces
+each inclusive per-address cutoff. A candidate below its address cutoff is
+rejected before promotion.
+
+Lowercase registry input:
+
+```yaml
+chain_id: 1
+chain_start_block: 25624130
+sources:
+  classic_v2_hook:
+    address: "0x025a386eaa79f6067d29848fd05ccc71beab20cc"
+    start_block: 25624130
+  classic_v2_launcher:
+    address: "0xd240d06f8586eb799f20056054e5b527405e6bad"
+    start_block: 25624131
+  classic_v3_reward_vault_factory:
+    address: "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a"
+    start_block: 25639538
+  classic_v3_vesting_wallet_factory:
+    address: "0xde21b9c0cc0afdb9be20e8236113f066bb8c66f4"
+    start_block: 25639564
+  classic_v3_hook:
+    address: "0x35fe236ea82f7cf525c9719d7df8f49f94d720cc"
+    start_block: 25639591
+  classic_v3_launcher:
+    address: "0xc3bd04aac2fb2ba58efd7eb673e544e0b80de770"
+    start_block: 25639596
+  stock_v1_launcher:
+    address: "0x195750f33cad5ef2df857a53226b421297a1e79e"
+    start_block: 25637469
+  stock_v1_eth_coordinator:
+    address: "0xfa5f17389ca28d071781d59750b32c842ab6a54b"
+    start_block: 25637469
+  stock_v1_hook:
+    address: "0x7773d183fe7b60d4f1885047fa42b815a62fe0cc"
+    start_block: 25637469
+  stock_v1_reward_vault_factory:
+    address: "0xd430d9162c153afdf9e4caca6d2317e72a044441"
+    start_block: 25637469
+  stock_v2_launcher:
+    address: "0x5ea6be24838061ba45dbe8d82de1b267dc240daf"
+    start_block: 25640338
+  stock_v2_eth_coordinator:
+    address: "0xfb9e1034df6161088e8f358502b19e7515c30fd2"
+    start_block: 25640338
+  stock_v2_v3_hook:
+    address: "0x90c67c1e866f86526f0e338459cd435e1f23a0cc"
+    start_block: 25640338
+  stock_v2_v3_reward_vault_factory:
+    address: "0x52d70971d6653a754c29385a2a6f241a481952d4"
+    start_block: 25640338
+  stock_v3_launcher:
+    address: "0x0573879f72d8ee8b0e5a4ec5e8bcdb2fcab9e51c"
+    start_block: 25642745
+  stock_v3_eth_coordinator:
+    address: "0xddc3abbab0df7f1189310a4f70e7e365796b74e2"
+    start_block: 25642745
+```
+
+## ABI authority and Classic V2 ambiguity
+
+The Classic V2 Mainnet hook is `EthCreatorFeeHookV2`, not
+`EthCreatorFeeHookV1`. `contracts/DEPLOYMENT.md` binds
+`0x025a386eAa79f6067d29848FD05ccC71bEAb20CC` to `EthCreatorFeeHookV2`, and
+`contracts/src/EthCreatorFeeHookV2.sol` declares `PoolFeeDisclosure`.
+`EthCreatorFeeHookV1.sol` does not declare that event and is not an event source
+for this migration. No V1-only ABI is applied to the V2 address.
+
+The checked-in TypeScript read ABI currently covers the V2 launch, fee-accrual,
+and claim events used by the legacy path. HyperIndex must import the Solidity
+event definitions below so `PoolRegistered`, `PoolFeeDisclosure`, and
+`LauncherFeesClaimed` are included without changing their indexed parameters.
+
+## Event catalog
+
+Signatures below are copied from the checked-in Solidity declarations. ABI
+types and `indexed` placement are part of the contract; parameter names are
+retained for generated types and decoded payloads.
+
+This is the migration's required event-family allowlist, not every event in
+each contract ABI. Inherited framework and token events remain outside this
+read model unless a separately reviewed migration adds them.
+
+### Classic V2 launcher
+
+Source: `contracts/src/MemeLaunchV1.sol`.
+
+```solidity
+event MemeTokenLaunched(
+    address indexed creator,
+    address indexed token,
+    bytes32 indexed poolId,
+    address feeHook,
+    address positionRecipient,
+    uint256 positionTokenId,
+    uint16 totalSwapFeeBps,
+    bytes32 launchHash
+);
+
+event MemeLiquidityConfigured(
+    address indexed token,
+    uint256 totalSupply,
+    uint256 tokenLiquidityAmount,
+    uint256 lockedTokenDust,
+    int24 initialTick,
+    int24 tickLower,
+    int24 tickUpper,
+    uint24 lpFeePips,
+    bytes32 launchHash
+);
+
+event MemeCreatorInitialBuy(
+    address indexed creator,
+    address indexed token,
+    bytes32 indexed poolId,
+    uint256 nativeAmount,
+    uint256 tokenAmount,
+    bytes32 launchHash
+);
+```
+
+### Classic V2 hook
+
+Source: `contracts/src/EthCreatorFeeHookV2.sol`.
+
+```solidity
+event PoolRegistered(
+    bytes32 indexed poolId,
+    address indexed token,
+    address indexed creator,
+    address registrar,
+    uint16 totalSwapFeeBps
+);
+
+event PoolFeeDisclosure(
+    bytes32 indexed poolId,
+    address indexed token,
+    uint16 buySwapFeeBps,
+    uint16 sellSwapFeeBps,
+    uint16 launcherFeeBps,
+    uint16 transferTaxBps,
+    uint24 lpFeePips
+);
+
+event NativeSwapFeesAccrued(
+    bytes32 indexed poolId,
+    address indexed swapSender,
+    uint256 grossNativeAmount,
+    uint256 creatorFee,
+    uint256 launcherFee
+);
+
+event CreatorFeesClaimed(
+    bytes32 indexed poolId,
+    address indexed creator,
+    address indexed recipient,
+    address caller,
+    uint256 amount
+);
+
+event LauncherFeesClaimed(
+    address indexed treasury,
+    address indexed recipient,
+    address indexed caller,
+    uint256 amount
+);
+```
+
+### Classic V3 launcher
+
+Source: `contracts/src/MemeLaunchV2.sol`.
+
+```solidity
+event MemeTokenLaunchedV2(
+    address indexed deployer,
+    address indexed token,
+    bytes32 indexed poolId,
+    address feeHook,
+    address rewardVault,
+    address positionRecipient,
+    uint256 positionTokenId,
+    uint16 buySwapFeeBps,
+    uint16 sellSwapFeeBps,
+    bytes32 rewardConfigurationHash,
+    bytes32 launchHash
+);
+
+event MemeLiquidityConfiguredV2(
+    address indexed token,
+    uint256 totalSupply,
+    uint256 tokenLiquidityAmount,
+    uint256 lockedTokenDust,
+    int24 initialTick,
+    int24 tickLower,
+    int24 tickUpper,
+    uint24 lpFeePips,
+    bytes32 launchHash
+);
+
+event MemeCreatorInitialBuyV2(
+    address indexed deployer,
+    address indexed token,
+    bytes32 indexed poolId,
+    uint256 nativeAmount,
+    uint256 tokenAmount,
+    bytes32 launchHash
+);
+
+event MemeCreatorInitialBuyCustodyV2(
+    address indexed deployer,
+    address indexed token,
+    address indexed custody,
+    ClassicInitialBuyCustodyMode mode,
+    uint16 durationDays,
+    uint16 cliffDays,
+    bytes32 configurationHash,
+    bytes32 launchHash
+);
+```
+
+`ClassicInitialBuyCustodyMode` is the ABI enum type `uint8`.
+
+### Classic V3 hook
+
+Source: `contracts/src/EthCreatorFeeHookV3.sol`.
+
+```solidity
+event PoolRegistered(
+    bytes32 indexed poolId,
+    address indexed token,
+    address indexed rewardVault,
+    address registrar,
+    uint16 buySwapFeeBps,
+    uint16 sellSwapFeeBps,
+    bytes32 rewardConfigurationHash
+);
+
+event PoolFeeDisclosure(
+    bytes32 indexed poolId,
+    address indexed token,
+    address indexed rewardVault,
+    uint16 buySwapFeeBps,
+    uint16 sellSwapFeeBps,
+    uint16 buyCreatorFeeBps,
+    uint16 sellCreatorFeeBps,
+    uint16 launcherFeeBps,
+    uint16 transferTaxBps,
+    uint24 lpFeePips
+);
+
+event NativeSwapFeesAccrued(
+    bytes32 indexed poolId,
+    address indexed swapSender,
+    bool indexed isBuy,
+    uint16 appliedTotalSwapFeeBps,
+    uint256 grossNativeAmount,
+    uint256 creatorFee,
+    uint256 launcherFee
+);
+
+event CreatorFeesClaimed(
+    bytes32 indexed poolId,
+    address indexed rewardVault,
+    address indexed caller,
+    uint256 amount
+);
+
+event LauncherFeesClaimed(
+    address indexed treasury,
+    address indexed recipient,
+    address indexed caller,
+    uint256 amount
+);
+```
+
+### Classic V3 factories and dynamic vaults
+
+Static factory sources:
+
+- `contracts/src/ClassicRewardVaultFactoryV1.sol`;
+- `contracts/src/ClassicInitialBuyVestingWalletFactoryV1.sol`.
+
+Dynamic vault source:
+`contracts/src/ClassicRewardVaultV1.sol`.
+
+```solidity
+event ClassicRewardVaultDeployed(
+    address indexed vault,
+    bytes32 indexed poolId,
+    address indexed feeHook,
+    bytes32 salt,
+    bytes32 configurationHash
+);
+
+event ClassicInitialBuyVestingWalletDeployed(
+    address indexed wallet,
+    address indexed token,
+    address indexed beneficiary,
+    bytes32 salt,
+    bytes32 configurationHash
+);
+
+event CreatorFeesCheckpointed(
+    bytes32 indexed poolId,
+    uint64 indexed configurationEpoch,
+    uint256 amount,
+    uint256 totalCreatorFeesReceived
+);
+
+event BeneficiaryFeesClaimed(
+    address indexed beneficiary,
+    uint256 amount,
+    uint256 beneficiaryTotalClaimed,
+    uint256 vaultTotalReceived
+);
+
+event PayoutWalletChanged(
+    bytes32 indexed poolId,
+    uint256 indexed allocationIndex,
+    address indexed previousPayoutWallet,
+    address newPayoutWallet,
+    uint16 shareBps,
+    uint64 configurationEpoch,
+    bytes32 activeConfigurationHash,
+    uint256 effectiveTotalCreatorFeesReceived
+);
+
+event CtoRewardConfigurationActivated(
+    bytes32 indexed poolId,
+    bytes32 indexed approvalReference,
+    uint64 indexed configurationEpoch,
+    bytes32 previousConfigurationHash,
+    bytes32 newConfigurationHash,
+    address[] beneficiaries,
+    uint16[] sharesBps,
+    uint256 effectiveTotalCreatorFeesReceived
+);
+```
+
+The `ClassicRewardVaultDeployed` handler registers `vault` as a dynamic
+`ClassicRewardVaultV1` source. Registration is accepted only from the
+manifest-pinned factory. Promotion additionally requires the emitted
+`feeHook`, `poolId`, and configuration hash to agree with the Classic V3
+launcher and hook events.
+
+### Stock-Paired launchers and coordinators
+
+Launcher sources:
+
+- V1 and V2 release ABI: `contracts/src/StockPairedLaunchV1.sol`;
+- V3 release ABI: `contracts/src/StockPairedLaunchV3.sol`.
+
+Coordinator sources:
+
+- V1 and V2 release ABI:
+  `contracts/src/StockPairedEthLaunchCoordinatorV1.sol`;
+- V3 release ABI:
+  `contracts/src/StockPairedEthLaunchCoordinatorV3.sol`.
+
+The corresponding event signatures are identical across those release
+versions:
+
+```solidity
+event StockPairedTokenLaunched(
+    address indexed deployer,
+    address indexed token,
+    address indexed quoteAsset,
+    bytes32 poolId,
+    address rewardVault,
+    address positionRecipient,
+    uint256 positionTokenId,
+    bytes32 launchHash
+);
+
+event StockPairedLiquidityConfigured(
+    address indexed token,
+    address indexed quoteAsset,
+    uint256 totalSupply,
+    uint256 tokenLiquidityAmount,
+    uint256 lockedTokenDust,
+    int24 initialTick,
+    int24 tickLower,
+    int24 tickUpper,
+    uint24 lpFeePips,
+    bytes32 launchHash
+);
+
+event StockPairedCreatorInitialBuy(
+    address indexed deployer,
+    address indexed token,
+    address indexed quoteAsset,
+    bytes32 poolId,
+    uint256 quoteAmount,
+    uint256 tokenAmount,
+    bytes32 launchHash
+);
+
+event StockPairedEthTokenLaunched(
+    address indexed creator,
+    address indexed token,
+    address indexed quoteAsset,
+    uint256 initialBuyEthAmount,
+    uint256 initialBuyQuoteAmount,
+    uint256 initialBuyTokenAmount,
+    bytes32 launchHash
+);
+```
+
+`StockPairedEthTokenLaunched` is coordinator provenance for the ETH-funded
+path. Direct quote-asset launches do not require that event.
+
+### Stock-Paired hooks and dynamic vaults
+
+Hook source: `contracts/src/QuoteAssetCreatorFeeHookV1.sol`.
+
+Factory source: `contracts/src/QuoteAssetFeeSplitVaultFactoryV1.sol`.
+
+Dynamic vault source: `contracts/src/QuoteAssetFeeSplitVaultV1.sol`.
+
+```solidity
+event PoolRegistered(
+    bytes32 indexed poolId,
+    address indexed token,
+    address indexed quoteAsset,
+    address rewardVault,
+    address registrar,
+    bool quoteIsCurrency0,
+    bytes32 rewardConfigurationHash,
+    bytes32 quoteConfigurationHash
+);
+
+event PoolFeeDisclosure(
+    bytes32 indexed poolId,
+    address indexed token,
+    address indexed quoteAsset,
+    address rewardVault,
+    uint16 buySwapFeeBps,
+    uint16 sellSwapFeeBps,
+    uint16 creatorFeeBps,
+    uint16 launcherFeeBps,
+    uint16 transferTaxBps,
+    uint24 lpFeePips
+);
+
+event QuoteSwapFeesAccrued(
+    bytes32 indexed poolId,
+    address indexed swapSender,
+    address indexed quoteAsset,
+    bool isBuy,
+    uint256 grossQuoteAmount,
+    uint256 creatorFee,
+    uint256 launcherFee
+);
+
+event CreatorFeesClaimed(
+    bytes32 indexed poolId,
+    address indexed rewardVault,
+    address indexed quoteAsset,
+    address caller,
+    uint256 amount
+);
+
+event LauncherFeesClaimed(
+    address indexed treasury,
+    address indexed recipient,
+    address indexed quoteAsset,
+    address caller,
+    uint256 amount
+);
+
+event QuoteAssetFeeSplitVaultDeployed(
+    address indexed vault,
+    address indexed feeHook,
+    bytes32 indexed poolId,
+    address quoteAsset
+);
+
+event PayoutAddressUpdated(
+    address indexed beneficiary,
+    address indexed previousPayoutAddress,
+    address indexed newPayoutAddress
+);
+
+event BeneficiaryFeesClaimed(
+    address indexed beneficiary,
+    address indexed payoutAddress,
+    address indexed quoteAsset,
+    uint256 amount,
+    uint256 beneficiaryTotalClaimed,
+    uint256 vaultTotalReceived
+);
+```
+
+The `QuoteAssetFeeSplitVaultDeployed` handler registers `vault` as a dynamic
+`QuoteAssetFeeSplitVaultV1` source. Promotion requires the factory, hook,
+quote asset, pool ID, reward vault, and launcher event to agree with one
+manifest-pinned Stock-Paired release.
+
+## Candidate identity and release assignment
+
+Every event entity uses:
+
+```text
+id = "<chain_id>:<lowercase_transaction_hash>:<log_index>"
+```
+
+The application ledger stores the tuple as separate typed columns with a
+unique constraint. It also stores block number/hash, transaction index, source
+address, event type, raw topics/data, decoded payload, payload hash, and release
+version.
+
+Static address and inclusive start block assign the release before decoding.
+The shared Stock-Paired V2/V3 hook and vault factory use related launcher,
+pool, reward-vault, and block provenance:
+
+- launches tied to the V2 launcher/coordinator are `stock-paired-v2`;
+- launches tied to the V3 launcher/coordinator are `stock-paired-v3`;
+- hook or vault events must resolve through an already verified pool/reward
+  relationship; unresolved events stay candidates and do not enter an
+  application projection.
+
+An event name alone never assigns a release.
+
+## Launch assembly rules
+
+For each launcher transaction, the projector groups records by release,
+transaction hash, token, pool ID where present, and launch hash. It rejects
+conflicting duplicates.
+
+- A launch event is mandatory.
+- The matching liquidity event is mandatory.
+- The matching initial-buy event is mandatory even when its amounts are zero;
+  token, pool, deployer/creator, and launch hash must agree.
+- A Classic V3 custody event is mandatory, including unlocked mode; its mode,
+  configuration hash, and custody address must agree with the launcher. Locked
+  modes also require matching vesting-factory provenance; unlocked mode
+  requires the zero custody address and no vesting-factory event.
+- An ETH-funded Stock-Paired launch requires exactly one matching coordinator
+  event in the same successful transaction.
+- Launcher `rewardVault` must match the corresponding factory event and hook
+  registration before reward history is promoted.
+- Hook registration and fee disclosure must match the recorded pool and
+  canonical PoolKey.
+
+Missing or conflicting supporting events produce a reconciliation finding,
+not a partial public launch.
+
+## Pinned Uniswap v4 source
+
+Use only:
+
+```text
+subgraph_id = DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G
+deployment = QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK
+```
+
+The deployment manifest resolves to schema CID
+`QmTwiKpYxqMefzaNv9qqmqPuXNpBuvvKTSVvk28ZY1a7x3`. The queries below use only
+fields present in that pinned schema.
+
+The first pool operation receives the dual-RPC-confirmed block number. It must
+return `_meta.block.number` equal to that number and `_meta.block.hash` equal
+to the dual-RPC block hash. That returned hash becomes the block input for
+every Swap, Hour, and Day page. Every entity query sets
+`subgraphError: deny`; no partial result produced after a deterministic
+indexing error is accepted.
+
+### Pool snapshot
+
+```graphql
+query ProgrammablePoolSnapshot($poolId: ID!, $block: Int!) {
+  _meta(block: { number: $block }) {
+    deployment
+    hasIndexingErrors
+    block {
+      number
+      hash
+    }
+  }
+  pool(
+    id: $poolId
+    block: { number: $block }
+    subgraphError: deny
+  ) {
+    id
+    createdAtTimestamp
+    createdAtBlockNumber
+    token0 {
+      id
+      decimals
+    }
+    token1 {
+      id
+      decimals
+    }
+    hooks
+    feeTier
+    tickSpacing
+    liquidity
+    sqrtPrice
+    tick
+    txCount
+    volumeToken0
+    volumeToken1
+    volumeUSD
+    totalValueLockedToken0
+    totalValueLockedToken1
+    totalValueLockedUSD
+  }
+}
+```
+
+`Pool.sqrtPrice` is the pinned schema's bigint `sqrtPriceX96` value.
+
+### Swap pages
+
+```graphql
+query ProgrammableSwapPage(
+  $poolId: String!
+  $blockHash: Bytes!
+  $from: BigInt!
+  $toExclusive: BigInt!
+  $cursor: ID!
+) {
+  _meta(block: { hash: $blockHash }) {
+    deployment
+    hasIndexingErrors
+    block {
+      number
+      hash
+    }
+  }
+  swaps(
+    first: 250
+    orderBy: id
+    orderDirection: asc
+    block: { hash: $blockHash }
+    subgraphError: deny
+    where: {
+      pool: $poolId
+      timestamp_gte: $from
+      timestamp_lt: $toExclusive
+      id_gt: $cursor
+    }
+  ) {
+    id
+    transaction {
+      id
+      blockNumber
+      timestamp
+    }
+    timestamp
+    pool {
+      id
+    }
+    sender
+    origin
+    amount0
+    amount1
+    amountUSD
+    sqrtPriceX96
+    tick
+    logIndex
+  }
+}
+```
+
+Start with an empty cursor and use the last returned ID for the next 250-row
+page. Stop when a page returns fewer than 250 rows. The time interval is
+half-open: `[from, toExclusive)`. Sort the collected result by transaction
+block, transaction ID, and log index before producing a chart.
+
+### Hour series
+
+```graphql
+query ProgrammablePoolHourSeries(
+  $poolId: String!
+  $blockHash: Bytes!
+  $from: Int!
+  $toExclusive: Int!
+  $cursor: ID!
+) {
+  _meta(block: { hash: $blockHash }) {
+    deployment
+    hasIndexingErrors
+    block {
+      number
+      hash
+    }
+  }
+  poolHourDatas(
+    first: 250
+    orderBy: id
+    orderDirection: asc
+    block: { hash: $blockHash }
+    subgraphError: deny
+    where: {
+      pool: $poolId
+      periodStartUnix_gte: $from
+      periodStartUnix_lt: $toExclusive
+      id_gt: $cursor
+    }
+  ) {
+    id
+    periodStartUnix
+    pool {
+      id
+    }
+    liquidity
+    sqrtPrice
+    token0Price
+    token1Price
+    tick
+    tvlUSD
+    volumeToken0
+    volumeToken1
+    volumeUSD
+    feesUSD
+    txCount
+    open
+    high
+    low
+    close
+  }
+}
+```
+
+### Day series
+
+```graphql
+query ProgrammablePoolDaySeries(
+  $poolId: String!
+  $blockHash: Bytes!
+  $from: Int!
+  $toExclusive: Int!
+  $cursor: ID!
+) {
+  _meta(block: { hash: $blockHash }) {
+    deployment
+    hasIndexingErrors
+    block {
+      number
+      hash
+    }
+  }
+  poolDayDatas(
+    first: 250
+    orderBy: id
+    orderDirection: asc
+    block: { hash: $blockHash }
+    subgraphError: deny
+    where: {
+      pool: $poolId
+      date_gte: $from
+      date_lt: $toExclusive
+      id_gt: $cursor
+    }
+  ) {
+    id
+    date
+    pool {
+      id
+    }
+    liquidity
+    sqrtPrice
+    token0Price
+    token1Price
+    tick
+    tvlUSD
+    volumeToken0
+    volumeToken1
+    volumeUSD
+    feesUSD
+    txCount
+    open
+    high
+    low
+    close
+  }
+}
+```
+
+Hour and day requests use the same 250-row `orderBy: id`, `id_gt` cursor
+protocol as Swap. Their time intervals are half-open. Start with an empty
+cursor, continue from the last returned ID, and stop when a page returns fewer
+than 250 rows. Larger time ranges are split into non-overlapping half-open
+windows. `feesUSD` is retained because it is present on both `PoolHourData`
+and `PoolDayData` in the pinned schema CID.
+
+## Pool identity and price math
+
+The subgraph receives exactly the lowercased pool ID from the verified
+Programmable projection. The response is accepted only when:
+
+- returned `Pool.id` equals that pool ID;
+- `Pool.hooks` equals the release hook;
+- token0/token1 are exactly the sorted launch currencies;
+- tick spacing is consistent with the verified launch and manifest; and
+- recomputing the canonical PoolKey from verified launch/manifest fields
+  returns the recorded pool ID.
+
+For a dynamic-fee pool, `Pool.feeTier` can represent the most recently applied
+fee rather than the fee value encoded in the canonical PoolKey. Treat the
+subgraph value as applied-fee analytics only. Never compare it with the
+PoolKey fee, use it to recompute a pool ID, or let it override the verified
+launch/manifest PoolKey.
+
+For `s = sqrtPriceX96`, the raw currency1-per-currency0 ratio is:
+
+```text
+raw_1_per_0 = s * s / 2^192
+```
+
+For decimals `d0` and `d1`, the human ratio is:
+
+```text
+token1_per_token0 = s * s * 10^d0 / (2^192 * 10^d1)
+```
+
+The inverse uses the reciprocal bigint expression. Implement both with
+checked bigint `mulDiv`; do not convert the square to JavaScript `number`.
+Select the direct or inverse expression from actual token ordering. Do not
+assume native ETH or WETH is token0.
+
+`Swap.amountUSD`, `Pool.volumeUSD`, `PoolHourData.volumeUSD`, and
+`PoolDayData.volumeUSD` are market analytics. `NativeSwapFeesAccrued.
+grossNativeAmount` and `QuoteSwapFeesAccrued.grossQuoteAmount` are hook
+accounting. Preserve them as separate metrics and label their source.
+
+## Failure behavior
+
+Envio candidates are ignored for promotion when their address, cutoff,
+signature, identity, payload, block hash, or release relationship fails
+validation. Advancement freezes on RPC disagreement.
+
+Uniswap data is ignored when the deployment, exact block number/hash, indexing
+status, body bound, page bound, pool identity, or PoolKey check fails. The
+verified launch remains visible with market data pending.
+
+Neither provider can authorize rewards, claims, payout changes, or transaction
+calldata.
+
+## Checked-in evidence map
+
+| Concern | Checked-in authority |
+| --- | --- |
+| Classic V2 addresses and deployment blocks | `contracts/deployments/mainnet-classic-v2.json`, `contracts/config/app-deployments.v1.json` |
+| Classic V3 addresses and deployment blocks | `contracts/deployments/mainnet-classic-v3.json`, `contracts/config/app-deployments.v1.json` |
+| Stock-Paired V1 sources | `contracts/deployments/mainnet-stock-paired-v1.json` |
+| Stock-Paired V2 sources | `contracts/deployments/mainnet-stock-paired-v2.json` |
+| Stock-Paired V3 sources and V2 reuse | `contracts/deployments/mainnet-stock-paired-v3.json` |
+| Classic V2 events | `contracts/src/MemeLaunchV1.sol`, `contracts/src/EthCreatorFeeHookV2.sol` |
+| Classic V3 events | `contracts/src/MemeLaunchV2.sol`, `contracts/src/EthCreatorFeeHookV3.sol`, `contracts/src/ClassicRewardVaultFactoryV1.sol`, `contracts/src/ClassicRewardVaultV1.sol`, `contracts/src/ClassicInitialBuyVestingWalletFactoryV1.sol` |
+| Stock-Paired events | `contracts/src/StockPairedLaunchV1.sol`, `contracts/src/StockPairedLaunchV3.sol`, `contracts/src/StockPairedEthLaunchCoordinatorV1.sol`, `contracts/src/StockPairedEthLaunchCoordinatorV3.sol`, `contracts/src/QuoteAssetCreatorFeeHookV1.sol`, `contracts/src/QuoteAssetFeeSplitVaultFactoryV1.sol`, `contracts/src/QuoteAssetFeeSplitVaultV1.sol` |
