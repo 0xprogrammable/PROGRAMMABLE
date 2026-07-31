@@ -1,0 +1,143 @@
+import { createTestIndexer } from "envio";
+import { describe, expect, it } from "vitest";
+
+const DEPLOYER = "0x1111111111111111111111111111111111111111";
+const TOKEN = "0x2222222222222222222222222222222222222222";
+const HOOK = "0x35fe236ea82f7cf525c9719d7df8f49f94d720cc";
+const VAULT = "0x3333333333333333333333333333333333333333";
+const CUSTODY = "0x4444444444444444444444444444444444444444";
+const POSITION_RECIPIENT = "0x5555555555555555555555555555555555555555";
+const POOL_ID =
+  "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const CONFIGURATION_HASH =
+  "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const CUSTODY_CONFIGURATION_HASH =
+  "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+const LAUNCH_HASH =
+  "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+const BLOCK_HASH =
+  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+const TRANSACTION_HASH =
+  "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+const BLOCK_NUMBER = 25_650_010;
+
+const block = { number: BLOCK_NUMBER, timestamp: 1_800_000_010, hash: BLOCK_HASH };
+const transaction = { hash: TRANSACTION_HASH, transactionIndex: 2 };
+
+describe("Classic V3 handlers", () => {
+  it("registers a vault in the factory block and preserves custody mode as uint8", async () => {
+    const indexer = createTestIndexer();
+    const result = await indexer.process({
+      chains: {
+        1: {
+          startBlock: BLOCK_NUMBER,
+          endBlock: BLOCK_NUMBER + 12,
+          simulate: [
+            {
+              contract: "ClassicV3RewardVaultFactory",
+              event: "ClassicRewardVaultDeployed",
+              logIndex: 40,
+              block,
+              transaction,
+              params: {
+                vault: VAULT,
+                poolId: POOL_ID,
+                feeHook: HOOK,
+                salt: CONFIGURATION_HASH,
+                configurationHash: CONFIGURATION_HASH,
+              },
+            },
+            {
+              contract: "ClassicV3Launcher",
+              event: "MemeLiquidityConfiguredV2",
+              logIndex: 41,
+              block,
+              transaction,
+              params: {
+                token: TOKEN,
+                totalSupply: 1_000_000n,
+                tokenLiquidityAmount: 900_000n,
+                lockedTokenDust: 0n,
+                initialTick: 0n,
+                tickLower: -10n,
+                tickUpper: 10n,
+                lpFeePips: 3_000n,
+                launchHash: LAUNCH_HASH,
+              },
+            },
+            {
+              contract: "ClassicV3Launcher",
+              event: "MemeCreatorInitialBuyV2",
+              logIndex: 42,
+              block,
+              transaction,
+              params: {
+                deployer: DEPLOYER,
+                token: TOKEN,
+                poolId: POOL_ID,
+                nativeAmount: 999n,
+                tokenAmount: 888n,
+                launchHash: LAUNCH_HASH,
+              },
+            },
+            {
+              contract: "ClassicV3Launcher",
+              event: "MemeCreatorInitialBuyCustodyV2",
+              logIndex: 43,
+              block,
+              transaction,
+              params: {
+                deployer: DEPLOYER,
+                token: TOKEN,
+                custody: CUSTODY,
+                mode: 2n,
+                durationDays: 365n,
+                cliffDays: 30n,
+                configurationHash: CUSTODY_CONFIGURATION_HASH,
+                launchHash: LAUNCH_HASH,
+              },
+            },
+            {
+              contract: "ClassicV3Launcher",
+              event: "MemeTokenLaunchedV2",
+              logIndex: 44,
+              block,
+              transaction,
+              params: {
+                deployer: DEPLOYER,
+                token: TOKEN,
+                poolId: POOL_ID,
+                feeHook: HOOK,
+                rewardVault: VAULT,
+                positionRecipient: POSITION_RECIPIENT,
+                positionTokenId: 42n,
+                buySwapFeeBps: 100n,
+                sellSwapFeeBps: 200n,
+                rewardConfigurationHash: CONFIGURATION_HASH,
+                launchHash: LAUNCH_HASH,
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result.changes[0]?.addresses?.sets).toContainEqual({
+      contract: "ClassicV3RewardVault",
+      address: VAULT,
+    });
+    expect((await indexer.RewardVault.getOrThrow(VAULT)).releaseVersion).toBe(
+      "classic-v3",
+    );
+    const custody = (await indexer.InitialBuyCustody.getAll())[0];
+    expect(custody?.mode).toBe(2);
+    expect(custody?.mode).not.toBe(2n);
+    expect(
+      (
+        await indexer.Launch.getOrThrow(
+          `1:classic-v3:${LAUNCH_HASH}`,
+        )
+      ).isComplete,
+    ).toBe(true);
+  });
+});
