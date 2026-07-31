@@ -32,6 +32,7 @@ import {
 } from "@/lib/data-pipeline/action-lookup";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { encodeClassicV3RewardAction } from "@/lib/profile/classic-v3-rewards";
+import { classicV3ActionRpcProviders } from "@/lib/server/action-rpc-quorum.server";
 import {
   CLASSIC_V3_ROUTE_SCOPE,
   coordinatePublicRouteRead,
@@ -80,31 +81,15 @@ function createClient() {
 }
 
 function classicActionRpcEndpoints() {
-  const secondary =
-    environment === "rehearsal"
-      ? process.env.SEPOLIA_RPC_URL_B ??
-        process.env.SEPOLIA_RPC_URL_SECONDARY ??
-        "https://ethereum-sepolia-rpc.publicnode.com"
-      : process.env.ETHEREUM_RPC_URL_B ??
-        process.env.ETHEREUM_RPC_URL_SECONDARY ??
-        "https://ethereum-rpc.publicnode.com";
-  const fallback =
-    environment === "rehearsal"
-      ? "https://rpc.sepolia.org"
-      : "https://rpc.mevblocker.io";
-  const endpoints = Array.from(new Set([rpcUrl, secondary, fallback]));
-  if (endpoints.length < 2) {
-    throw new Error("Classic actions require two independent RPCs");
-  }
-  return endpoints.slice(0, 2);
+  return classicV3ActionRpcProviders(environment);
 }
 
 function createActionClients() {
-  return classicActionRpcEndpoints().map((endpoint) =>
+  return classicActionRpcEndpoints().map((provider) =>
     createPublicClient({
       chain,
       batch: { multicall: true },
-      transport: http(endpoint, { retryCount: 1, timeout: 12_000 }),
+      transport: http(provider.endpoint, { retryCount: 1, timeout: 12_000 }),
     }),
   );
 }

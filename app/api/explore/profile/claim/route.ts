@@ -27,6 +27,7 @@ import {
   errorChainIncludesData,
   safeServerErrorSummary,
 } from "../../../../../lib/server/safe-error";
+import { creatorClaimRpcProviders } from "../../../../../lib/server/action-rpc-quorum.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,32 +41,6 @@ function maximum(left: bigint, right: bigint) {
 
 function minimum(left: bigint, right: bigint) {
   return left < right ? left : right;
-}
-
-function claimRpcEndpoints(deployment: ReturnType<typeof getOnchainDeployment>) {
-  const fallback =
-    deployment.chainId === 1
-      ? "https://ethereum-rpc.publicnode.com"
-      : "https://ethereum-sepolia-rpc.publicnode.com";
-  const secondaryFallback =
-    deployment.chainId === 1
-      ? "https://rpc.mevblocker.io"
-      : "https://rpc.sepolia.org";
-  const endpoints = Array.from(
-    new Set([
-      deployment.rpcUrl,
-      deployment.rpcUrlSecondary,
-      fallback,
-      secondaryFallback,
-    ].filter((value): value is string => Boolean(value))),
-  );
-  if (endpoints.length < 2) {
-    throw new CreatorClaimUnavailableError(
-      "rpc-unavailable",
-      "Creator claims require two independent Ethereum RPCs",
-    );
-  }
-  return endpoints.slice(0, 2);
 }
 
 function claimClient(
@@ -274,8 +249,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const clients = claimRpcEndpoints(deployment).map((endpoint) =>
-      claimClient(deployment, endpoint),
+    const clients = creatorClaimRpcProviders(deployment).map((provider) =>
+      claimClient(deployment, provider.endpoint),
     );
     const snapshot = await sharedVerifiedBlock(clients);
     const states = await Promise.all(

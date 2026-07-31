@@ -32,6 +32,7 @@ import {
   STOCK_PAIRED_ROUTE_SCOPES,
 } from "@/lib/data-pipeline/public-route-readiness.server";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
+import { stockPairedActionRpcProviders } from "@/lib/server/action-rpc-quorum.server";
 import {
   StockPairedClaimReceiptError,
   verifyStockPairedClaimReceipt,
@@ -72,36 +73,15 @@ function json(body: unknown, status = 200) {
 }
 
 function rpcEndpoints() {
-  const primary =
-    process.env.ETHEREUM_RPC_URL ??
-    "https://ethereum-rpc.publicnode.com";
-  const secondary =
-    process.env.ETHEREUM_RPC_URL_B ??
-    process.env.ETHEREUM_RPC_URL_SECONDARY ??
-    (primary === "https://ethereum-rpc.publicnode.com"
-      ? "https://rpc.mevblocker.io"
-      : "https://ethereum-rpc.publicnode.com");
-  const endpoints = Array.from(
-    new Set([
-      primary,
-      secondary,
-      "https://ethereum-rpc.publicnode.com",
-      "https://rpc.mevblocker.io",
-      "https://eth.drpc.org",
-    ]),
-  );
-  if (endpoints.length < 2) {
-    throw new Error("Stock-Paired rewards require two independent RPCs");
-  }
-  return endpoints;
+  return stockPairedActionRpcProviders();
 }
 
 function clients() {
-  return rpcEndpoints().map((endpoint) =>
+  return rpcEndpoints().map((provider) =>
     createPublicClient({
       chain: mainnet,
       batch: { multicall: true },
-      transport: http(endpoint, { retryCount: 2, timeout: 12_000 }),
+      transport: http(provider.endpoint, { retryCount: 2, timeout: 12_000 }),
     }),
   );
 }
