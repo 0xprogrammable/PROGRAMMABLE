@@ -43,6 +43,7 @@ From the repository root:
 supabase start
 supabase db reset
 supabase test db supabase/tests/database
+npm run db:test:pglite
 (cd supabase/tests/codec && npm ci --ignore-scripts)
 node supabase/tests/codec/verify-reference-canonical-fingerprint-v1.mjs
 node supabase/tests/codec/verify-production-canonical-fingerprint-v1.ts
@@ -51,10 +52,16 @@ node supabase/tests/codec/verify-production-provider-evidence-v2.ts
 supabase db lint --local --level warning
 ```
 
-`supabase db reset` must begin from an empty local database and apply the eight
+`supabase db reset` must begin from an empty local database and apply the nine
 versioned migrations in order. The explicit test path keeps the real
 two-session scripts out of the pgTAP runner; it runs only the suites in
 `supabase/tests/database/`.
+
+`npm run db:test:pglite` is a fast supplementary gate. It replays all
+migrations and then runs each pgTAP file against a separate fresh in-memory
+database. It catches SQL, function-shape and privilege regressions without a
+local container, but it does not replace a native PostgreSQL 17 reset, lint or
+the real two-session concurrency harness.
 
 The local direct Postgres port is `54322` and the local transaction-pooler
 port is `54329`, as declared in `supabase/config.toml`. Set
@@ -104,7 +111,7 @@ migrator owner.
 | --- | --- |
 | `programmable_projector` | Exact audited epoch, provider, ingestion, evidence, staging, promotion and rewind functions |
 | `programmable_reconciler` | Exact audited health, reconciliation, parity and market append functions; named reconciliation views |
-| `programmable_api_reader` | Named stable views and three bounded read functions |
+| `programmable_api_reader` | Named public evidence views plus the frozen public route and indexer-feed read functions |
 | `programmable_profile_binder` | Insert-if-absent first profile binding only |
 | `programmable_profile_recovery` | Hash-version rotation, alias rekey, tombstone and recovery |
 | `programmable_profile_writer` | Revision-fenced profile mutation only |

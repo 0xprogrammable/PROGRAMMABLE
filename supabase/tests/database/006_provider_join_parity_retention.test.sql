@@ -1,5 +1,22 @@
 begin;
 
+create function public.chainlink_latest_round_data_fixture()
+returns bytea
+language sql
+immutable
+security invoker
+set search_path = ''
+as $function$
+  select pg_catalog.decode(
+    '000000000000000000000000000000000000000000000000000000000000002a'
+    || '00000000000000000000000000000000000000000000000000000045d964b800'
+    || '0000000000000000000000000000000000000000000000000000000069570a80'
+    || '0000000000000000000000000000000000000000000000000000000069570bac'
+    || '000000000000000000000000000000000000000000000000000000000000002a',
+    'hex'
+  )
+$function$;
+
 set local role programmable_projector;
 
 select programmable_private.create_release_epoch(
@@ -46,7 +63,7 @@ select programmable_private.open_run(
   '2026-01-01T00:01:00Z'
 );
 
-select plan(56);
+select plan(62);
 
 select throws_ok(
   $sql$
@@ -536,6 +553,110 @@ select programmable_private.append_reconciliation_record(
   array[decode(repeat('54', 32), 'hex')],
   '2026-01-03T00:00:00Z', '2026-01-02T00:02:00Z'
 );
+select throws_ok(
+  $sql$
+    select programmable_private.append_global_eth_usd_snapshot_v1(
+      'aa100000-0000-0000-0000-000000000001',
+      'aa000000-0000-0000-0000-000000000001',
+      'e6000000-0000-0000-0000-000000000003',
+      'b6000000-0000-0000-0000-000000000001',
+      'b6000000-0000-0000-0000-000000000002',
+      43, 300000000000, 8::smallint, '2026-01-02T00:05:00Z',
+      public.chainlink_latest_round_data_fixture(),
+      public.chainlink_latest_round_data_fixture(),
+      decode(repeat('91', 32), 'hex'), decode(repeat('92', 32), 'hex'),
+      '2026-01-02T00:35:00Z'
+    )
+  $sql$,
+  '23514',
+  'ETH/USD writer rejects a caller-supplied round that differs from raw latestRoundData'
+);
+select throws_ok(
+  $sql$
+    select programmable_private.append_global_eth_usd_snapshot_v1(
+      'aa100000-0000-0000-0000-000000000002',
+      'aa000000-0000-0000-0000-000000000001',
+      'e6000000-0000-0000-0000-000000000003',
+      'b6000000-0000-0000-0000-000000000001',
+      'b6000000-0000-0000-0000-000000000002',
+      42, 300000000001, 8::smallint, '2026-01-02T00:05:00Z',
+      public.chainlink_latest_round_data_fixture(),
+      public.chainlink_latest_round_data_fixture(),
+      decode(repeat('93', 32), 'hex'), decode(repeat('94', 32), 'hex'),
+      '2026-01-02T00:35:00Z'
+    )
+  $sql$,
+  '23514',
+  'ETH/USD writer rejects an arbitrary denormalized answer'
+);
+select throws_ok(
+  $sql$
+    select programmable_private.append_global_eth_usd_snapshot_v1(
+      'aa100000-0000-0000-0000-000000000003',
+      'aa000000-0000-0000-0000-000000000001',
+      'e6000000-0000-0000-0000-000000000003',
+      'b6000000-0000-0000-0000-000000000001',
+      'b6000000-0000-0000-0000-000000000002',
+      42, 300000000000, 18::smallint, '2026-01-02T00:05:00Z',
+      public.chainlink_latest_round_data_fixture(),
+      public.chainlink_latest_round_data_fixture(),
+      decode(repeat('95', 32), 'hex'), decode(repeat('96', 32), 'hex'),
+      '2026-01-02T00:35:00Z'
+    )
+  $sql$,
+  '23514',
+  'ETH/USD writer fixes mainnet feed decimals at eight'
+);
+select throws_ok(
+  $sql$
+    select programmable_private.append_global_eth_usd_snapshot_v1(
+      'aa100000-0000-0000-0000-000000000004',
+      'aa000000-0000-0000-0000-000000000001',
+      'e6000000-0000-0000-0000-000000000003',
+      'b6000000-0000-0000-0000-000000000001',
+      'b6000000-0000-0000-0000-000000000002',
+      42, 300000000000, 8::smallint, '2026-01-02T00:05:00Z',
+      public.chainlink_latest_round_data_fixture(),
+      public.chainlink_latest_round_data_fixture(),
+      decode(repeat('97', 32), 'hex'), decode(repeat('98', 32), 'hex'),
+      '2026-01-02T01:05:01Z'
+    )
+  $sql$,
+  '23514',
+  'ETH/USD writer rejects latestRoundData older than the one-hour ceiling'
+);
+select is(
+  programmable_private.append_global_eth_usd_snapshot_v1(
+    'aa100000-0000-0000-0000-000000000005',
+    'aa000000-0000-0000-0000-000000000001',
+    'e6000000-0000-0000-0000-000000000003',
+    'b6000000-0000-0000-0000-000000000001',
+    'b6000000-0000-0000-0000-000000000002',
+    42, 300000000000, 8::smallint, '2026-01-02T00:05:00Z',
+    public.chainlink_latest_round_data_fixture(),
+    public.chainlink_latest_round_data_fixture(),
+    decode(repeat('99', 32), 'hex'), decode(repeat('9a', 32), 'hex'),
+    '2026-01-02T00:35:00Z'
+  ),
+  'aa100000-0000-0000-0000-000000000005'::uuid,
+  'exact raw latestRoundData persists after full ABI and freshness validation'
+);
+reset role;
+select ok(
+  exists (
+    select 1
+    from programmable_private.global_eth_usd_snapshots
+    where global_market_snapshot_id =
+      'aa100000-0000-0000-0000-000000000005'
+      and feed_round_id = 42 and answer = 300000000000
+      and decimals = 8 and rpc_decoding_version = 1
+      and feed_started_at = '2026-01-02T00:00:00Z'
+      and feed_updated_at = '2026-01-02T00:05:00Z'
+      and feed_answered_in_round = 42
+  ),
+  'decoded Chainlink round fields are retained exactly for later audit replay'
+);
+set local role programmable_reconciler;
 select programmable_private.append_parity_record(
   'ab000000-0000-0000-0000-000000000001',
   'aa000000-0000-0000-0000-000000000001',

@@ -1,4 +1,5 @@
 begin;
+select plan(139);
 
 -- Test-only definer readers let the restricted projector replay a previously
 -- stored opaque pair without granting it base-table SELECT. The transaction
@@ -695,6 +696,24 @@ select programmable_private.stage_launch_projection_conditions(
   '97100000-0000-0000-0000-000000000001', false,
   '2026-07-31T03:02:02.400Z'
 );
+select throws_ok(
+  $$
+    select programmable_private.stage_launch_position_liquidity_v1(
+      '97105000-0000-0000-0000-000000000099',
+      '97100000-0000-0000-0000-000000000001',
+      '97000000-0000-0000-0000-000000000001',
+      decode(repeat('72', 20), 'hex'), 1,
+      999999999999999999999999, 1,
+      79228162514264337593543950336,
+      0, 0, 887220,
+      '96100000-0000-0000-0000-000000000004',
+      decode(repeat('6e', 32), 'hex'),
+      '2026-07-31T03:02:02.440Z'
+    )
+  $$,
+  '23514',
+  'Classic boundary exception never permits initial_tick = tick_lower'
+);
 select programmable_private.stage_launch_position_liquidity_v1(
   '97105000-0000-0000-0000-000000000001',
   '97100000-0000-0000-0000-000000000001',
@@ -702,7 +721,7 @@ select programmable_private.stage_launch_position_liquidity_v1(
   decode(repeat('72', 20), 'hex'), 1,
   999999999999999999999999, 1,
   79228162514264337593543950336,
-  0, -887220, 887220,
+  0, -887220, 0,
   '96100000-0000-0000-0000-000000000004',
   decode(repeat('6f', 32), 'hex'),
   '2026-07-31T03:02:02.450Z'
@@ -1331,7 +1350,6 @@ select programmable_private.stage_initial_buy_vesting_projection(
   '2026-07-31T03:03:06.950Z'
 );
 reset role;
-select plan(125);
 
 select is(
   (
@@ -1413,6 +1431,21 @@ select throws_ok(
   $sql$,
   '23514',
   'wrong event and source role are rejected by the release writer allowlist'
+);
+select ok(
+  (
+    select count(*) = 1
+       and bool_and(allocation_fact_id =
+         '98000000-0000-0000-0000-000000000001'::uuid
+       )
+       and bool_and(allocation_evidence_id is not null)
+       and bool_and(cardinality(ordered_beneficiaries) = 2)
+    from programmable_private.get_projector_verified_reward_seed_v1(
+      '97000000-0000-0000-0000-000000000002',
+      decode(repeat('77', 20), 'hex')
+    )
+  ),
+  'projector reward-seed reader returns the one exact promotable fact/evidence pair'
 );
 select throws_ok(
   $sql$
@@ -3593,6 +3626,21 @@ select is(
   1::bigint,
   'projector launch fold reader returns the exact current launch baseline'
 );
+select ok(
+  (
+    select count(*) = 1
+       and bool_and(token = decode(repeat('71', 20), 'hex'))
+       and bool_and(pool_projection_id =
+         '97110000-0000-0000-0000-000000000004'::uuid)
+       and bool_and(pool_fee_configuration_id =
+         '97120000-0000-0000-0000-000000000004'::uuid)
+    from programmable_private.get_projector_pool_baseline_by_id_v1(
+      'a4000000-0000-0000-0000-000000000001',
+      decode(repeat('73', 32), 'hex')
+    )
+  ),
+  'fee-only pool baseline resolves one exact release-scoped current pool'
+);
 select is(
   (
     select count(*)
@@ -3913,6 +3961,227 @@ select is(
   2::bigint,
   'release-neutral cursor retains both forward ancestors'
 );
+
+select programmable_private.open_run(
+  'a4400000-0000-0000-0000-000000000001',
+  'ingestion', 1, 'envio-control', 'envio-control', 'canonical-events',
+  '70000000-0000-0000-0000-000000000002', 1,
+  'envio-adapter-v1', decode(repeat('73', 32), 'hex'),
+  '2026-07-31T03:06:05.600Z'
+);
+select programmable_private.append_safe_head_observation(
+  'a4400000-0000-0000-0000-000000000002',
+  'a4400000-0000-0000-0000-000000000001',
+  '92000000-0000-0000-0000-000000000001',
+  '92000000-0000-0000-0000-000000000002',
+  1, 1, 25639620, 25639620, 12, 25639608,
+  decode(repeat('cc', 32), 'hex'), decode(repeat('cc', 32), 'hex'),
+  2::smallint,
+  decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000173', 'hex'),
+  decode(repeat('74', 32), 'hex'), '2026-07-31T03:06:05.610Z'
+);
+select programmable_private.append_dual_rpc_block_evidence(
+  'a4400000-0000-0000-0000-000000000003',
+  'a4400000-0000-0000-0000-000000000002',
+  'a4400000-0000-0000-0000-000000000001',
+  25639602, decode(repeat('97', 32), 'hex'),
+  decode(repeat('97', 32), 'hex'), 2::smallint,
+  decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000274', 'hex'),
+  decode(repeat('75', 32), 'hex'), '2026-07-31T03:06:05.620Z'
+);
+select throws_ok(
+  $sql$
+    select programmable_private.commit_envio_ingestion_page_v1(
+      'a4400000-0000-0000-0000-000000000004',
+      'a4400000-0000-0000-0000-000000000005',
+      'a4400000-0000-0000-0000-000000000001',
+      '92000000-0000-0000-0000-000000000003', 'canonical-events',
+      2, 3, 25639601,
+      array[]::programmable_private.envio_candidate_page_item_v1[],
+      'a4400000-0000-0000-0000-000000000002',
+      'a4400000-0000-0000-0000-000000000003',
+      '92000000-0000-0000-0000-000000000001',
+      '92000000-0000-0000-0000-000000000002',
+      decode(repeat('76', 32), 'hex'),
+      array[decode(repeat('77', 32), 'hex')], array[]::bytea[],
+      decode(repeat('78', 32), 'hex'), decode(repeat('79', 32), 'hex'),
+      2::smallint,
+      decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000575', 'hex'),
+      decode(repeat('7a', 32), 'hex'), decode(repeat('7b', 32), 'hex'),
+      '2026-07-31T03:06:05.630Z'
+    )
+  $sql$,
+  '22023',
+  'empty page rejects disagreement between the two RPC log arrays'
+);
+select throws_ok(
+  $sql$
+    select programmable_private.commit_envio_ingestion_page_v1(
+      'a4400000-0000-0000-0000-000000000004',
+      'a4400000-0000-0000-0000-000000000005',
+      'a4400000-0000-0000-0000-000000000001',
+      '92000000-0000-0000-0000-000000000003', 'canonical-events',
+      2, 3, 25639601,
+      array[]::programmable_private.envio_candidate_page_item_v1[],
+      'a4400000-0000-0000-0000-000000000002',
+      'a4400000-0000-0000-0000-000000000003',
+      '92000000-0000-0000-0000-000000000001',
+      '92000000-0000-0000-0000-000000000002',
+      decode(repeat('76', 32), 'hex'),
+      array[decode(repeat('77', 32), 'hex')],
+      array[decode(repeat('77', 32), 'hex')],
+      decode(repeat('78', 32), 'hex'), decode(repeat('79', 32), 'hex'),
+      2::smallint,
+      decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000575', 'hex'),
+      decode(repeat('7a', 32), 'hex'), decode(repeat('7b', 32), 'hex'),
+      '2026-07-31T03:06:05.630Z'
+    )
+  $sql$,
+  '22023',
+  'empty page rejects any RPC log even when providers agree'
+);
+select is(
+  programmable_private.commit_envio_ingestion_page_v1(
+    'a4400000-0000-0000-0000-000000000004',
+    'a4400000-0000-0000-0000-000000000005',
+    'a4400000-0000-0000-0000-000000000001',
+    '92000000-0000-0000-0000-000000000003', 'canonical-events',
+    2, 3, 25639601,
+    array[]::programmable_private.envio_candidate_page_item_v1[],
+    'a4400000-0000-0000-0000-000000000002',
+    'a4400000-0000-0000-0000-000000000003',
+    '92000000-0000-0000-0000-000000000001',
+    '92000000-0000-0000-0000-000000000002',
+    decode(repeat('76', 32), 'hex'), array[]::bytea[], array[]::bytea[],
+    decode(repeat('78', 32), 'hex'), decode(repeat('79', 32), 'hex'),
+    2::smallint,
+    decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000575', 'hex'),
+    decode(repeat('7a', 32), 'hex'), decode(repeat('7b', 32), 'hex'),
+    '2026-07-31T03:06:05.630Z'
+  ),
+  3::bigint,
+  'atomic empty page advances with exact same-run block evidence'
+);
+select is(
+  programmable_private.commit_envio_ingestion_page_v1(
+    'a4400000-0000-0000-0000-000000000004',
+    'a4400000-0000-0000-0000-000000000005',
+    'a4400000-0000-0000-0000-000000000001',
+    '92000000-0000-0000-0000-000000000003', 'canonical-events',
+    2, 3, 25639601,
+    array[]::programmable_private.envio_candidate_page_item_v1[],
+    'a4400000-0000-0000-0000-000000000002',
+    'a4400000-0000-0000-0000-000000000003',
+    '92000000-0000-0000-0000-000000000001',
+    '92000000-0000-0000-0000-000000000002',
+    decode(repeat('76', 32), 'hex'), array[]::bytea[], array[]::bytea[],
+    decode(repeat('78', 32), 'hex'), decode(repeat('79', 32), 'hex'),
+    2::smallint,
+    decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000575', 'hex'),
+    decode(repeat('7a', 32), 'hex'), decode(repeat('7b', 32), 'hex'),
+    '2026-07-31T03:06:05.630Z'
+  ),
+  3::bigint,
+  'exact terminal retry returns the already committed next generation'
+);
+select throws_ok(
+  $sql$
+    select programmable_private.commit_envio_ingestion_page_v1(
+      'a4400000-0000-0000-0000-000000000004',
+      'a4400000-0000-0000-0000-000000000005',
+      'a4400000-0000-0000-0000-000000000001',
+      '92000000-0000-0000-0000-000000000003', 'canonical-events',
+      2, 3, 25639601,
+      array[]::programmable_private.envio_candidate_page_item_v1[],
+      'a4400000-0000-0000-0000-000000000002',
+      'a4400000-0000-0000-0000-000000000003',
+      '92000000-0000-0000-0000-000000000001',
+      '92000000-0000-0000-0000-000000000002',
+      decode(repeat('76', 32), 'hex'), array[]::bytea[], array[]::bytea[],
+      decode(repeat('7c', 32), 'hex'), decode(repeat('79', 32), 'hex'),
+      2::smallint,
+      decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000575', 'hex'),
+      decode(repeat('7a', 32), 'hex'), decode(repeat('7b', 32), 'hex'),
+      '2026-07-31T03:06:05.630Z'
+    )
+  $sql$,
+  '23505',
+  'terminal retry with any changed immutable page field fails closed'
+);
+select ok(
+  (
+    select generation = 3 and block_number = 25639602
+       and block_hash = decode(repeat('97', 32), 'hex')
+       and block_global_log_index is null and candidate_id is null
+    from programmable_private.get_envio_ingestion_cursor_v1(
+      1, '92000000-0000-0000-0000-000000000003', 'canonical-events'
+    )
+  ),
+  'empty-page cursor persists the covered block/hash with a NULL log point'
+);
+select programmable_private.open_run(
+  'a4500000-0000-0000-0000-000000000001',
+  'ingestion', 1, 'envio-control', 'envio-control', 'canonical-events',
+  '70000000-0000-0000-0000-000000000002', 1,
+  'envio-adapter-v1', decode(repeat('7d', 32), 'hex'),
+  '2026-07-31T03:06:05.700Z'
+);
+select programmable_private.append_safe_head_observation(
+  'a4500000-0000-0000-0000-000000000002',
+  'a4500000-0000-0000-0000-000000000001',
+  '92000000-0000-0000-0000-000000000001',
+  '92000000-0000-0000-0000-000000000002',
+  1, 1, 25639620, 25639620, 12, 25639608,
+  decode(repeat('cc', 32), 'hex'), decode(repeat('cc', 32), 'hex'),
+  2::smallint,
+  decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a763200017d', 'hex'),
+  decode(repeat('7e', 32), 'hex'), '2026-07-31T03:06:05.710Z'
+);
+select programmable_private.append_dual_rpc_block_evidence(
+  'a4500000-0000-0000-0000-000000000003',
+  'a4500000-0000-0000-0000-000000000002',
+  'a4500000-0000-0000-0000-000000000001',
+  25639603, decode(repeat('96', 32), 'hex'),
+  decode(repeat('96', 32), 'hex'), 2::smallint,
+  decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a763200027e', 'hex'),
+  decode(repeat('7f', 32), 'hex'), '2026-07-31T03:06:05.720Z'
+);
+select throws_ok(
+  $sql$
+    select programmable_private.commit_envio_ingestion_page_v1(
+      'a4500000-0000-0000-0000-000000000004',
+      'a4500000-0000-0000-0000-000000000005',
+      'a4500000-0000-0000-0000-000000000001',
+      '92000000-0000-0000-0000-000000000003', 'canonical-events',
+      2, 3, 25639602,
+      array[]::programmable_private.envio_candidate_page_item_v1[],
+      'a4500000-0000-0000-0000-000000000002',
+      'a4500000-0000-0000-0000-000000000003',
+      '92000000-0000-0000-0000-000000000001',
+      '92000000-0000-0000-0000-000000000002',
+      decode(repeat('80', 32), 'hex'), array[]::bytea[], array[]::bytea[],
+      decode(repeat('81', 32), 'hex'), decode(repeat('82', 32), 'hex'),
+      2::smallint,
+      decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a763200057f', 'hex'),
+      decode(repeat('83', 32), 'hex'), decode(repeat('84', 32), 'hex'),
+      '2026-07-31T03:06:05.730Z'
+    )
+  $sql$,
+  '40001',
+  'stale empty-page CAS cannot advance a newer cursor generation'
+);
+reset role;
+select ok(
+  not exists (
+    select 1 from programmable_private.run_lifecycle_outcomes
+    where run_id = 'a4500000-0000-0000-0000-000000000001'
+  ) and not exists (
+    select 1 from programmable_private.dual_rpc_log_coverage_evidence
+    where verification_run_id = 'a4500000-0000-0000-0000-000000000001'
+  ),
+  'failed stale CAS rolls back terminal outcome and coverage evidence atomically'
+);
+set local role programmable_projector;
 select programmable_private.open_run(
   'a5000000-0000-0000-0000-000000000001',
   'rewind', 1, 'envio-control', 'envio-control', 'canonical-events',
@@ -3950,10 +4219,10 @@ select is(
   programmable_private.rewind_envio_ingestion_cursor_v1(
     'a5000000-0000-0000-0000-000000000001',
     '92000000-0000-0000-0000-000000000003', 'canonical-events',
-    2, 3, 1, decode(repeat('b8', 32), 'hex'),
+    3, 4, 1, decode(repeat('b8', 32), 'hex'),
     '2026-07-31T03:06:06.700Z'
   ),
-  3::bigint,
+  4::bigint,
   'dual-RPC evidence permits an exact ancestor rewind'
 );
 select throws_ok(
@@ -3961,7 +4230,7 @@ select throws_ok(
     select programmable_private.rewind_envio_ingestion_cursor_v1(
       'a5000000-0000-0000-0000-000000000001',
       '92000000-0000-0000-0000-000000000003', 'canonical-events',
-      2, 3, 1, decode(repeat('b9', 32), 'hex'),
+      3, 4, 1, decode(repeat('b9', 32), 'hex'),
       '2026-07-31T03:06:06.800Z'
     )
   $sql$,
@@ -3975,7 +4244,7 @@ select is(
       1, '92000000-0000-0000-0000-000000000003', 'canonical-events'
     )
   ),
-  '3:' || programmable_private.derive_envio_candidate_id(
+  '4:' || programmable_private.derive_envio_candidate_id(
     1, decode(repeat('98', 32), 'hex'), decode(repeat('d1', 32), 'hex'), 31
   )::text,
   'rewind restores the exact ancestor candidate while advancing generation'
@@ -3985,7 +4254,7 @@ select ok(
   exists (
     select 1
     from programmable_private.envio_ingestion_cursor_history
-    where generation = 3 and is_rewind and rewound_from_generation = 2
+    where generation = 4 and is_rewind and rewound_from_generation = 3
       and candidate_id = programmable_private.derive_envio_candidate_id(
         1, decode(repeat('98', 32), 'hex'), decode(repeat('d1', 32), 'hex'), 31
       )
@@ -4144,6 +4413,61 @@ select throws_ok(
   $sql$,
   '55000',
   'terminal ingestion runs reject resolved occurrence replays'
+);
+reset role;
+
+set local role programmable_api_reader;
+select ok(
+  exists (
+    select 1
+    from programmable_private.route_snapshot_readiness_v1
+    where route_key = 'explore-list'
+      and route_status = 'eligible'
+      and route_mode = 'indexed'
+      and parity_status = 'missing'
+      and checkpoint_confirmations >= 0
+  ),
+  'route readiness exposes only an exact current checkpoint and measured confirmations'
+);
+reset role;
+set local role programmable_migrator;
+update programmable_private.route_eligibility_current as route
+set checkpoint_id = (
+  select checkpoint.checkpoint_id
+  from programmable_private.projector_checkpoints as checkpoint
+  where checkpoint.chain_id = route.chain_id
+    and checkpoint.release_id = route.release_id
+    and checkpoint.model_id = route.model_id
+    and checkpoint.source_group = route.source_group
+    and checkpoint.checkpoint_id <> route.checkpoint_id
+  order by checkpoint.checkpoint_generation
+  limit 1
+)
+where route.route_key = 'explore-list'
+  and route.chain_id = 1
+  and route.release_id = 'classic-v3'
+  and route.model_id = 'classic-v3'
+  and route.source_group = 'core';
+reset role;
+set local role programmable_api_reader;
+select ok(
+  not exists (
+    select 1
+    from programmable_private.route_snapshot_readiness_v1
+    where route_key = 'explore-list'
+      and chain_id = 1 and release_id = 'classic-v3'
+  ),
+  'readiness hides a route whose checkpoint ID is no longer exact-current'
+);
+select is(
+  (
+    select count(*)
+    from programmable_private.get_recent_launches_v1(
+      1, 100, null, null, null
+    )
+  ),
+  0::bigint,
+  'published route DTO view fails closed with the same stale checkpoint'
 );
 reset role;
 

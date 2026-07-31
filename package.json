@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "db:test:pglite": "node scripts/run-pglite-db-tests.mjs",
     "verify:uniswap-launcher-sdk": "node scripts/verify-uniswap-liquidity-launcher-sdk.mjs",
     "brand:favicons": "node scripts/generate-programmable-favicons.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
@@ -137,6 +138,7 @@
     "viem": "2.55.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.4",
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
