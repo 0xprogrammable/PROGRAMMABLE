@@ -876,31 +876,41 @@ async function readReadyRegistryModel(
   if (isClassicV3ExploreReleaseReady(config)) {
     registry = mergeClassicV3ExploreModel(
       registry,
-      await readClassicV3ExploreModel(config, snapshotBlockNumber),
+      await withReadStage("classic-v3", () =>
+        readClassicV3ExploreModel(config, snapshotBlockNumber),
+      ),
     );
   }
   if (isDeepExploreReleaseReady(config)) {
     registry = mergeDeepExploreModel(
       registry,
-      await readDeepExploreModel(config, snapshotBlockNumber),
+      await withReadStage("deep-v1", () =>
+        readDeepExploreModel(config, snapshotBlockNumber),
+      ),
     );
   }
   if (isDeepV2ExploreReleaseReady(config)) {
     registry = mergeDeepExploreModel(
       registry,
-      await readDeepV2ExploreModel(config, snapshotBlockNumber),
+      await withReadStage("deep-v2", () =>
+        readDeepV2ExploreModel(config, snapshotBlockNumber),
+      ),
     );
   }
   if (isDeepV3ExploreReleaseReady(config)) {
     registry = mergeDeepV3ExploreModel(
       registry,
-      await readDeepV3ExploreModel(config, snapshotBlockNumber),
+      await withReadStage("deep-v3", () =>
+        readDeepV3ExploreModel(config, snapshotBlockNumber),
+      ),
     );
   }
   if (isStockPairedExploreReleaseReady(config)) {
     registry = mergeStockPairedExploreModel(
       registry,
-      await readStockPairedExploreModel(config, snapshotBlockNumber),
+      await withReadStage("stock-paired", () =>
+        readStockPairedExploreModel(config, snapshotBlockNumber),
+      ),
     );
   }
   return registry;
