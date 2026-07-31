@@ -5,6 +5,9 @@ import releaseBindingJson from "../../config/data-pipeline-release.v1.json";
 type HexAddress = `0x${string}`;
 type HexHash = `0x${string}`;
 
+const ZERO_SOURCE_COMMIT = "0".repeat(40);
+const ZERO_SHA256 = `0x${"00".repeat(32)}`;
+
 const EXPECTED_MODEL_BY_RELEASE = Object.freeze({
   "classic-v2": "classic",
   "classic-v3": "classic",
@@ -94,7 +97,19 @@ function positiveSafeInteger(value: unknown) {
 }
 
 function sha256(value: unknown): HexHash {
-  return boundedString(value, /^0x[0-9a-f]{64}$/, 66) as HexHash;
+  const commitment = boundedString(
+    value,
+    /^0x[0-9a-f]{64}$/,
+    66,
+  ) as HexHash;
+  if (commitment === ZERO_SHA256) return invalidBinding();
+  return commitment;
+}
+
+function sourceCommit(value: unknown) {
+  const commitment = boundedString(value, /^[0-9a-f]{40}$/, 40);
+  if (commitment === ZERO_SOURCE_COMMIT) return invalidBinding();
+  return commitment;
 }
 
 function address(value: unknown): HexAddress {
@@ -285,7 +300,7 @@ export function parseDataPipelineReleaseBinding(
         128,
       ),
       schemaVersion: "1",
-      sourceCommit: boundedString(value.envio.sourceCommit, /^[0-9a-f]{40}$/, 40),
+      sourceCommit: sourceCommit(value.envio.sourceCommit),
       configSha256: sha256(value.envio.configSha256),
       schemaSha256: sha256(value.envio.schemaSha256),
       handlerSha256: sha256(value.envio.handlerSha256),

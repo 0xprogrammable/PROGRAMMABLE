@@ -64,16 +64,22 @@ export function deploymentIdentityFromEnvironment(
     deployment === DEFAULT_DEPLOYMENT_LABEL ||
     sourceCommit === undefined ||
     !SOURCE_COMMIT_PATTERN.test(sourceCommit) ||
+    sourceCommit === DEFAULT_SOURCE_COMMIT ||
     configSha256 === undefined ||
     !SHA256_PATTERN.test(configSha256) ||
+    configSha256 === DEFAULT_ARTIFACT_SHA256 ||
     schemaSha256 === undefined ||
     !SHA256_PATTERN.test(schemaSha256) ||
+    schemaSha256 === DEFAULT_ARTIFACT_SHA256 ||
     handlerSha256 === undefined ||
     !SHA256_PATTERN.test(handlerSha256) ||
+    handlerSha256 === DEFAULT_ARTIFACT_SHA256 ||
     sourceRegistrySha256 === undefined ||
     !SHA256_PATTERN.test(sourceRegistrySha256) ||
+    sourceRegistrySha256 === DEFAULT_ARTIFACT_SHA256 ||
     eventSetSha256 === undefined ||
     !SHA256_PATTERN.test(eventSetSha256) ||
+    eventSetSha256 === DEFAULT_ARTIFACT_SHA256 ||
     eventCount === undefined ||
     !/^[1-9]\d*$/.test(eventCount) ||
     !Number.isSafeInteger(Number(eventCount)) ||

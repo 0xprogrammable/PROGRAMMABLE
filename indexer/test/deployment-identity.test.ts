@@ -49,9 +49,18 @@ describe("deployment identity", () => {
 
   it.each([
     ["missing source commit", { ENVIO_SOURCE_COMMIT: undefined }],
+    ["zero source commit", { ENVIO_SOURCE_COMMIT: "0".repeat(40) }],
     ["uppercase commit", { ENVIO_SOURCE_COMMIT: "A".repeat(40) }],
     ["short hash", { ENVIO_HANDLER_SHA256: "0x12" }],
     ["uppercase hash", { ENVIO_CONFIG_SHA256: `0x${"AA".repeat(32)}` }],
+    ["zero config hash", { ENVIO_CONFIG_SHA256: `0x${"00".repeat(32)}` }],
+    ["zero schema hash", { ENVIO_SCHEMA_SHA256: `0x${"00".repeat(32)}` }],
+    ["zero handler hash", { ENVIO_HANDLER_SHA256: `0x${"00".repeat(32)}` }],
+    [
+      "zero source registry hash",
+      { ENVIO_SOURCE_REGISTRY_SHA256: `0x${"00".repeat(32)}` },
+    ],
+    ["zero event set hash", { ENVIO_EVENT_SET_SHA256: `0x${"00".repeat(32)}` }],
     ["zero event count", { ENVIO_EVENT_COUNT: "0" }],
     ["noncanonical event count", { ENVIO_EVENT_COUNT: "051" }],
   ])("fails the full identity closed for %s", (_name, override) => {

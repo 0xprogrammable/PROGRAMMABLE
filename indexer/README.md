@@ -73,18 +73,21 @@ reproducible code generation and installs.
 - Factory events register reward vaults in the same block.
 - Envio rollback removes orphaned current-state effects transactionally.
 
-The singleton `IndexerState` reports schema, chain, deployment label, and the
-latest processed candidate. The server reads its label from
-`ENVIO_DEPLOYMENT_LABEL` at startup. Missing, empty, malformed, or longer than
-64-character values fail closed to `development-unverified`; accepted labels
-use lowercase ASCII letters, digits, `.`, `_`, and `-`, beginning with a letter
-or digit.
+The singleton `IndexerState` reports schema, chain, the latest processed
+candidate, and the complete deployment identity. A reviewed deployment must
+set `ENVIO_DEPLOYMENT_LABEL`, `ENVIO_SOURCE_COMMIT`, `ENVIO_CONFIG_SHA256`,
+`ENVIO_SCHEMA_SHA256`, `ENVIO_HANDLER_SHA256`,
+`ENVIO_SOURCE_REGISTRY_SHA256`, `ENVIO_EVENT_SET_SHA256`, and
+`ENVIO_EVENT_COUNT`. Any missing, malformed, uppercase, zero-sentinel, or
+incomplete value fails the whole identity closed to `development-unverified`.
+Accepted labels use lowercase ASCII letters, digits, `.`, `_`, and `-`,
+beginning with a letter or digit.
 
 Keep the default for local and unreviewed deployments. A production promotion
 can set an explicit immutable reviewed label such as
-`production-reviewed-2026-07-31` in the Envio deployment environment without a
-code edit. Setting a label records identity only; it is not proof that the
-deployment passed the production gates below.
+`production-reviewed-2026-07-31` together with commitments computed from the
+exact deployed commit. These fields record identity only; they are not proof
+that the deployment passed the production gates below.
 
 ## Production status
 

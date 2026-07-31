@@ -63,11 +63,42 @@ describe("data pipeline release binding", () => {
         eventSetSha256: "0x1234",
       },
     };
+    const zeroSourceCommit = {
+      ...valid,
+      envio: {
+        ...valid.envio,
+        sourceCommit: "0".repeat(40),
+      },
+    };
+    const zeroArtifactCommitment = {
+      ...valid,
+      envio: {
+        ...valid.envio,
+        schemaSha256: `0x${"00".repeat(32)}`,
+      },
+    };
+    const zeroRuntimeCommitment = {
+      ...valid,
+      sources: valid.sources.map((source, index) =>
+        index === 0
+          ? { ...source, runtimeCodeHash: `0x${"00".repeat(32)}` }
+          : source,
+      ),
+    };
 
     expect(() => parseDataPipelineReleaseBinding(duplicateSource)).toThrow(
       "Invalid data pipeline release binding",
     );
     expect(() => parseDataPipelineReleaseBinding(malformedCommitment)).toThrow(
+      "Invalid data pipeline release binding",
+    );
+    expect(() => parseDataPipelineReleaseBinding(zeroSourceCommit)).toThrow(
+      "Invalid data pipeline release binding",
+    );
+    expect(() =>
+      parseDataPipelineReleaseBinding(zeroArtifactCommitment),
+    ).toThrow("Invalid data pipeline release binding");
+    expect(() => parseDataPipelineReleaseBinding(zeroRuntimeCommitment)).toThrow(
       "Invalid data pipeline release binding",
     );
   });
