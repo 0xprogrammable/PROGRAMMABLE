@@ -1,5 +1,5 @@
 begin;
-select plan(21);
+select plan(29);
 
 create function public.large_atomic_projection_fixture_v1()
 returns jsonb
@@ -218,6 +218,162 @@ select ok(
     ), 'current_account_reward_balances_v1'
   ) > 0,
   'reward-state baseline binds current checkpoint, provenance, and balances'
+);
+
+select ok(
+  to_regprocedure(
+    'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'
+  ) is not null,
+  'the all-current reward-balance reader exists'
+);
+
+select ok(
+  pg_catalog.has_function_privilege(
+    'programmable_projector',
+    'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure,
+    'EXECUTE'
+  )
+  and not pg_catalog.has_function_privilege(
+    'programmable_api_reader',
+    'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure,
+    'EXECUTE'
+  )
+  and not pg_catalog.has_function_privilege(
+    'service_role',
+    'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure,
+    'EXECUTE'
+  )
+  and not pg_catalog.has_function_privilege(
+    'public',
+    'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure,
+    'EXECUTE'
+  ),
+  'all-current reward balances remain projector-only'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure
+    ), 'current_account_reward_balances_v1'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure
+    ), 'balance_entity.checkpoint_id = baseline.checkpoint_id'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure
+    ), 'current_checkpoint.reorg_generation ='
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure
+    ), 'balance.epoch_id = header.epoch_id'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure
+    ), 'payout_change_projections'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure
+    ), 'allocation.effective_to_block is null'
+  ) = 0,
+  'balance channel is checkpoint, reorg and epoch bound with historical payout resolution'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_function_result(
+      'programmable_private.get_projector_reward_state_by_vault_v1(uuid,bytea)'::regprocedure
+    ), 'allocation_evidence_id uuid'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_function_result(
+      'programmable_private.get_projector_reward_balances_by_vault_v1(uuid,bytea)'::regprocedure
+    ), 'allocation_evidence_id uuid'
+  ) > 0,
+  'both reward readers expose the exact current allocation evidence identifier'
+);
+
+select ok(
+  to_regprocedure(
+    'programmable_private.stage_current_reward_snapshot_v1(uuid,bytea,bytea,uuid,bigint,bytea,numeric,integer[],bytea[],bytea[],numeric[],bytea[],bytea[],numeric[],numeric[],uuid,numeric,bytea,timestamp with time zone)'
+  ) is not null
+  and pg_catalog.has_function_privilege(
+    'programmable_projector',
+    'programmable_private.stage_current_reward_snapshot_v1(uuid,bytea,bytea,uuid,bigint,bytea,numeric,integer[],bytea[],bytea[],numeric[],bytea[],bytea[],numeric[],numeric[],uuid,numeric,bytea,timestamp with time zone)'::regprocedure,
+    'EXECUTE'
+  )
+  and not pg_catalog.has_function_privilege(
+    'programmable_api_reader',
+    'programmable_private.stage_current_reward_snapshot_v1(uuid,bytea,bytea,uuid,bigint,bytea,numeric,integer[],bytea[],bytea[],numeric[],bytea[],bytea[],numeric[],numeric[],uuid,numeric,bytea,timestamp with time zone)'::regprocedure,
+    'EXECUTE'
+  ),
+  'the exact-current snapshot writer exists and remains projector-only'
+);
+
+select ok(
+  to_regprocedure(
+    'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'
+  ) is not null
+  and pg_catalog.has_function_privilege(
+    'programmable_projector',
+    'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure,
+    'EXECUTE'
+  )
+  and not pg_catalog.has_function_privilege(
+    'service_role',
+    'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure,
+    'EXECUTE'
+  ),
+  'the additive promotion entrypoint exists and remains projector-only'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure
+    ), 'complete_group_occurrence_ids is distinct from p_occurrence_ids'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure
+    ), 'source.transaction_hash <> group_transaction_hash'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure
+    ), 'reward claim rows do not reconcile to the transaction'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure
+    ), 'allocation_evidence_id = p_allocation_evidence_ids[1]'
+  ) > 0,
+  'reward deltas bind the complete transaction, claims, and exact verified seed evidence'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_viewdef(
+      'programmable_private.classic_v3_vault_history_v1'::regclass, true
+    ), 'launch.projection_run_id = vault.projection_run_id'
+  ) = 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_viewdef(
+      'programmable_private.classic_v3_vault_history_v1'::regclass, true
+    ), 'current_launch_projections_v1'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_viewdef(
+      'programmable_private.stock_paired_vault_history_v1'::regclass, true
+    ), 'stock-paired-v1'
+  ) > 0,
+  'reward history follows the immutable launch across later exact snapshot runs'
 );
 
 select ok(

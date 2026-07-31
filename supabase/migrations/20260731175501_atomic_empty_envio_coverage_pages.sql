@@ -6627,10 +6627,13 @@ returns table (
   checkpoint_block_hash bytea,
   reward_vault_projection_id uuid,
   allocation_fact_id uuid,
+  allocation_evidence_id uuid,
   vault bytea,
   pool_id bytea,
   quote_asset bytea,
   configuration_hash bytea,
+  active_configuration_hash bytea,
+  total_creator_fees_received numeric,
   configuration_epoch bigint,
   allocation_index integer,
   beneficiary bytea,
@@ -6733,10 +6736,19 @@ begin
    and current_checkpoint.model_id = checkpoint.model_id
    and current_checkpoint.source_group = checkpoint.source_group
    and current_checkpoint.projector_version = checkpoint.projector_version
-   and current_checkpoint.checkpoint_id = checkpoint.checkpoint_id
-   and current_checkpoint.checkpoint_generation =
-     checkpoint.checkpoint_generation
-   and current_checkpoint.reorg_generation = checkpoint.reorg_generation
+  join programmable_private.projector_checkpoints as current_cursor
+    on current_cursor.checkpoint_id = current_checkpoint.checkpoint_id
+   and current_cursor.chain_id = checkpoint.chain_id
+   and current_cursor.release_id = checkpoint.release_id
+   and current_cursor.model_id = checkpoint.model_id
+   and current_cursor.source_group = checkpoint.source_group
+   and current_cursor.projector_version = checkpoint.projector_version
+   and current_cursor.epoch_id = header.epoch_id
+   and current_cursor.pointer_generation =
+     header.captured_pointer_generation
+   and current_cursor.checkpoint_generation =
+     current_checkpoint.checkpoint_generation
+   and current_cursor.reorg_generation = current_checkpoint.reorg_generation
   join programmable_private.chain_event_current_canonical as canonical
     on canonical.occurrence_id = current_vault.last_source_occurrence_id
    and canonical.logical_event_id =
@@ -6763,6 +6775,14 @@ begin
     and current_vault.pointer_generation =
       header.captured_pointer_generation
     and current_vault.vault = p_vault
+    and current_cursor.reorg_generation = checkpoint.reorg_generation
+    and (
+      current_cursor.block_number,
+      current_cursor.cursor_block_global_log_index
+    ) >= (
+      checkpoint.block_number,
+      checkpoint.cursor_block_global_log_index
+    )
     and programmable_private.has_current_verified_reward_seed(
       current_vault.projection_run_id, current_vault.vault
     );
@@ -6806,17 +6826,34 @@ begin
    and current_checkpoint.model_id = checkpoint.model_id
    and current_checkpoint.source_group = checkpoint.source_group
    and current_checkpoint.projector_version = checkpoint.projector_version
-   and current_checkpoint.checkpoint_id = checkpoint.checkpoint_id
-   and current_checkpoint.checkpoint_generation =
-     checkpoint.checkpoint_generation
-   and current_checkpoint.reorg_generation = checkpoint.reorg_generation
+  join programmable_private.projector_checkpoints as current_cursor
+    on current_cursor.checkpoint_id = current_checkpoint.checkpoint_id
+   and current_cursor.chain_id = checkpoint.chain_id
+   and current_cursor.release_id = checkpoint.release_id
+   and current_cursor.model_id = checkpoint.model_id
+   and current_cursor.source_group = checkpoint.source_group
+   and current_cursor.projector_version = checkpoint.projector_version
+   and current_cursor.epoch_id = header.epoch_id
+   and current_cursor.pointer_generation =
+     header.captured_pointer_generation
+   and current_cursor.checkpoint_generation =
+     current_checkpoint.checkpoint_generation
+   and current_cursor.reorg_generation = current_checkpoint.reorg_generation
   where current_vault.chain_id = header.chain_id
     and current_vault.release_id = header.release_id
     and current_vault.model_id = header.model_id
     and current_vault.epoch_id = header.epoch_id
     and current_vault.pointer_generation =
       header.captured_pointer_generation
-    and current_vault.vault = p_vault;
+    and current_vault.vault = p_vault
+    and current_cursor.reorg_generation = checkpoint.reorg_generation
+    and (
+      current_cursor.block_number,
+      current_cursor.cursor_block_global_log_index
+    ) >= (
+      checkpoint.block_number,
+      checkpoint.cursor_block_global_log_index
+    );
 
   select pg_catalog.count(*),
     pg_catalog.count(distinct allocation.allocation_index),
@@ -6831,9 +6868,15 @@ begin
     and allocation.projection_run_id = baseline.projection_run_id
     and allocation.allocation_fact_id = baseline.current_allocation_fact_id
     and allocation.effective_to_block is null;
-  if active_allocation_count not between 1 and 8
+  if active_allocation_count < 1
+     or active_allocation_count > (
+       case when header.release_id = 'classic-v3' then 5 else 8 end
+     )
      or unique_allocation_count <> active_allocation_count
-     or unique_beneficiary_count <> active_allocation_count
+     or (
+       header.release_id <> 'classic-v3'
+       and unique_beneficiary_count <> active_allocation_count
+     )
      or configuration_epoch_count <> 1
      or total_share_bps <> 10000
   then
@@ -6872,7 +6915,11 @@ begin
    and balance.epoch_id = allocation.epoch_id
    and balance.pointer_generation = allocation.pointer_generation
    and balance.vault = p_vault
-   and balance.account = allocation.beneficiary
+   and balance.account = case
+     when header.release_id = 'classic-v3'
+       then allocation.payout_address
+     else allocation.beneficiary
+   end
   join programmable_private.projection_entity_current as balance_entity
     on balance_entity.entity_kind = 'account_reward_balance'
    and balance_entity.projection_row_id = balance.account_reward_balance_id
@@ -6925,13 +6972,47 @@ begin
     baseline.block_hash::bytea,
     vault_projection.reward_vault_projection_id,
     vault_projection.current_allocation_fact_id,
+    (
+      select verified_seed.allocation_evidence_id
+      from programmable_private.reward_allocation_current_verified
+        as verified_seed
+      where verified_seed.allocation_fact_id =
+          vault_projection.current_allocation_fact_id
+        and verified_seed.vault = vault_projection.vault
+    )::uuid,
     vault_projection.vault::bytea,
     vault_projection.pool_id::bytea,
     vault_projection.quote_asset::bytea,
     vault_projection.configuration_hash::bytea,
+    coalesce(
+      vault_projection.active_configuration_hash,
+      vault_projection.configuration_hash
+    )::bytea,
+    coalesce(
+      vault_projection.total_creator_fees_received,
+      (
+        select pg_catalog.sum(
+          current_balance.claimable_accrued + current_balance.claimed_total
+        )
+        from programmable_private.current_account_reward_balances_v1
+          as current_balance
+        where current_balance.chain_id = vault_projection.chain_id
+          and current_balance.release_id = vault_projection.release_id
+          and current_balance.model_id = vault_projection.model_id
+          and current_balance.epoch_id = vault_projection.epoch_id
+          and current_balance.pointer_generation =
+            vault_projection.pointer_generation
+          and current_balance.vault = vault_projection.vault
+      ),
+      0
+    )::numeric,
     allocation.configuration_epoch,
     allocation.allocation_index,
-    allocation.beneficiary::bytea,
+    case
+      when header.release_id = 'classic-v3'
+        then allocation.payout_address
+      else allocation.beneficiary
+    end::bytea,
     allocation.payout_address::bytea,
     allocation.share_bps::integer,
     balance.claimable_accrued::numeric,
@@ -6953,7 +7034,7 @@ begin
     balance.last_source_occurrence_id,
     balance.last_source_logical_event_id,
     balance.last_source_occurrence_block_hash::bytea,
-    pg_catalog.greatest(
+    greatest(
       vault_projection.verified_at,
       allocation.verified_at,
       balance.verified_at
@@ -6995,7 +7076,11 @@ begin
    and balance.epoch_id = allocation.epoch_id
    and balance.pointer_generation = allocation.pointer_generation
    and balance.vault = vault_projection.vault
-   and balance.account = allocation.beneficiary
+   and balance.account = case
+     when header.release_id = 'classic-v3'
+       then allocation.payout_address
+     else allocation.beneficiary
+   end
   join programmable_private.projection_entity_current as balance_entity
     on balance_entity.entity_kind = 'account_reward_balance'
    and balance_entity.projection_row_id = balance.account_reward_balance_id
@@ -7026,6 +7111,3669 @@ begin
   where vault_projection.reward_vault_projection_id =
       baseline.reward_vault_projection_id
   order by allocation.allocation_index;
+end
+$function$;
+
+alter table programmable_private.reward_vault_projections
+  add column snapshot_kind text,
+  add column configuration_epoch bigint check (configuration_epoch > 0),
+  add column active_configuration_hash programmable_private.bytes32_value,
+  add column total_creator_fees_received
+    programmable_private.uint256_value,
+  add column baseline_reward_vault_projection_id uuid
+    references programmable_private.reward_vault_projections(
+      reward_vault_projection_id
+    ) on delete restrict,
+  add column baseline_checkpoint_id uuid
+    references programmable_private.projector_checkpoints(checkpoint_id)
+    on delete restrict,
+  add column baseline_checkpoint_generation bigint
+    check (baseline_checkpoint_generation > 0),
+  add column baseline_reorg_generation bigint
+    check (baseline_reorg_generation >= 0),
+  add constraint reward_vault_snapshot_shape check (
+    (
+      snapshot_kind is null
+      and configuration_epoch is null
+      and active_configuration_hash is null
+      and total_creator_fees_received is null
+      and baseline_reward_vault_projection_id is null
+      and baseline_checkpoint_id is null
+      and baseline_checkpoint_generation is null
+      and baseline_reorg_generation is null
+    )
+    or (
+      snapshot_kind = 'initial_seed'
+      and configuration_epoch is not null
+      and active_configuration_hash is not null
+      and total_creator_fees_received is not null
+      and baseline_reward_vault_projection_id is null
+      and baseline_checkpoint_id is null
+      and baseline_checkpoint_generation is null
+      and baseline_reorg_generation is null
+    )
+    or (
+      snapshot_kind = 'exact_current'
+      and configuration_epoch is not null
+      and active_configuration_hash is not null
+      and total_creator_fees_received is not null
+      and baseline_reward_vault_projection_id is not null
+      and baseline_checkpoint_id is not null
+      and baseline_checkpoint_generation is not null
+      and baseline_reorg_generation is not null
+    )
+  );
+
+alter table programmable_private.account_reward_balances
+  add column payout_address programmable_private.eth_address;
+
+create or replace view
+  programmable_private.current_reward_vault_projections_v1
+with (security_invoker = false, security_barrier = true)
+as
+select vault.*
+from programmable_private.projection_entity_current as current_entity
+join programmable_private.reward_vault_projections as vault
+  on vault.reward_vault_projection_id = current_entity.projection_row_id
+ and vault.projection_run_id = current_entity.projection_run_id
+where current_entity.entity_kind = 'reward_vault';
+
+create or replace view
+  programmable_private.current_account_reward_balances_v1
+with (security_invoker = false, security_barrier = true)
+as
+select balance.*
+from programmable_private.projection_entity_current as current_entity
+join programmable_private.account_reward_balances as balance
+  on balance.account_reward_balance_id = current_entity.projection_row_id
+ and balance.projection_run_id = current_entity.projection_run_id
+where current_entity.entity_kind = 'account_reward_balance';
+
+-- A current reward snapshot may be published by a later projection run than
+-- the immutable launch it belongs to. Keep launch identity exact without
+-- requiring both rows to share a run or target block.
+create or replace view programmable_private.classic_v3_vault_history_v1
+with (security_invoker = false, security_barrier = true)
+as
+select
+  vault.chain_id,
+  vault.release_id,
+  vault.model_id,
+  vault.vault,
+  vault.pool_id,
+  coalesce(
+    vault.active_configuration_hash,
+    vault.configuration_hash
+  ) as configuration_hash,
+  allocation.configuration_epoch,
+  allocation.allocation_index,
+  allocation.beneficiary,
+  allocation.payout_address,
+  allocation.share_bps,
+  allocation.effective_from_block,
+  allocation.effective_to_block,
+  vault.promoted_block_number,
+  vault.promoted_block_hash,
+  vault.verified_at
+from programmable_private.current_reward_vault_projections_v1 as vault
+join programmable_private.current_launch_projections_v1 as launch
+  on launch.launch_projection_id = vault.launch_projection_id
+ and launch.chain_id = vault.chain_id
+ and launch.release_id = vault.release_id
+ and launch.model_id = vault.model_id
+ and launch.epoch_id = vault.epoch_id
+ and launch.pointer_generation = vault.pointer_generation
+ and launch.reward_vault = vault.vault
+ and launch.pool_id = vault.pool_id
+ and launch.is_complete
+join programmable_private.run_headers as run
+  on run.run_id = vault.projection_run_id
+ and run.run_kind = 'projection'
+ and run.chain_id = vault.chain_id
+ and run.release_id = vault.release_id
+ and run.model_id = vault.model_id
+ and run.epoch_id = vault.epoch_id
+ and run.captured_pointer_generation = vault.pointer_generation
+join programmable_private.projection_publications as publication
+  on publication.run_id = vault.projection_run_id
+ and publication.epoch_id = vault.epoch_id
+ and publication.pointer_generation = vault.pointer_generation
+ and publication.target_block_number = vault.promoted_block_number
+ and publication.target_block_hash = vault.promoted_block_hash
+join programmable_private.release_epoch_current as current_epoch
+  on current_epoch.chain_id = run.chain_id
+ and current_epoch.release_id = run.release_id
+ and current_epoch.model_id = run.model_id
+ and current_epoch.source_group = run.source_group
+ and current_epoch.epoch_id = run.epoch_id
+ and current_epoch.generation = run.captured_pointer_generation
+join programmable_private.route_eligibility_current as route
+  on route.route_key = 'classic-v3-profile'
+ and route.chain_id = run.chain_id
+ and route.release_id = run.release_id
+ and route.model_id = run.model_id
+ and route.source_group = run.source_group
+ and route.epoch_id = run.epoch_id
+ and route.pointer_generation = run.captured_pointer_generation
+ and route.checkpoint_id = publication.checkpoint_id
+ and route.status = 'eligible'
+ and route.route_mode = 'indexed'
+join programmable_private.chain_event_current_canonical as launch_canonical
+  on launch_canonical.logical_event_id = launch.last_source_logical_event_id
+ and launch_canonical.occurrence_id = launch.last_source_occurrence_id
+ and launch_canonical.block_hash = launch.last_source_occurrence_block_hash
+join programmable_private.chain_event_materialized_occurrences_v1
+  as launch_source
+  on launch_source.occurrence_id = launch.last_source_occurrence_id
+ and launch_source.logical_event_id = launch.last_source_logical_event_id
+ and launch_source.block_hash = launch.last_source_occurrence_block_hash
+ and launch_source.chain_id = run.chain_id
+ and launch_source.release_id = run.release_id
+ and launch_source.model_id = run.model_id
+ and launch_source.source_group = run.source_group
+ and launch_source.epoch_id = run.epoch_id
+ and launch_source.pointer_generation = run.captured_pointer_generation
+join programmable_private.reward_allocation_current_verified as verified_seed
+  on verified_seed.allocation_fact_id = vault.current_allocation_fact_id
+ and verified_seed.vault = vault.vault
+join programmable_private.reward_allocation_facts as seed_fact
+  on seed_fact.allocation_fact_id = verified_seed.allocation_fact_id
+ and seed_fact.factory_occurrence_id = verified_seed.factory_occurrence_id
+ and seed_fact.vault = verified_seed.vault
+ and seed_fact.chain_id = run.chain_id
+ and seed_fact.release_id = run.release_id
+ and seed_fact.model_id = run.model_id
+ and seed_fact.epoch_id = run.epoch_id
+ and seed_fact.pointer_generation = run.captured_pointer_generation
+join programmable_private.chain_event_current_canonical as seed_canonical
+  on seed_canonical.logical_event_id = seed_fact.factory_logical_event_id
+ and seed_canonical.occurrence_id = seed_fact.factory_occurrence_id
+ and seed_canonical.block_hash = seed_fact.factory_occurrence_block_hash
+join programmable_private.chain_event_current_canonical as vault_canonical
+  on vault_canonical.logical_event_id = vault.last_source_logical_event_id
+ and vault_canonical.occurrence_id = vault.last_source_occurrence_id
+ and vault_canonical.block_hash = vault.last_source_occurrence_block_hash
+join programmable_private.chain_event_materialized_occurrences_v1
+  as vault_source
+  on vault_source.occurrence_id = vault.last_source_occurrence_id
+ and vault_source.logical_event_id = vault.last_source_logical_event_id
+ and vault_source.block_hash = vault.last_source_occurrence_block_hash
+ and vault_source.chain_id = run.chain_id
+ and vault_source.release_id = run.release_id
+ and vault_source.model_id = run.model_id
+ and vault_source.source_group = run.source_group
+ and vault_source.epoch_id = run.epoch_id
+ and vault_source.pointer_generation = run.captured_pointer_generation
+join programmable_private.reward_allocation_projections as allocation
+  on allocation.reward_vault_projection_id = vault.reward_vault_projection_id
+ and allocation.projection_run_id = vault.projection_run_id
+ and allocation.allocation_fact_id = seed_fact.allocation_fact_id
+ and allocation.chain_id = run.chain_id
+ and allocation.release_id = run.release_id
+ and allocation.model_id = run.model_id
+ and allocation.epoch_id = run.epoch_id
+ and allocation.pointer_generation = run.captured_pointer_generation
+ and allocation.promoted_block_number = publication.target_block_number
+ and allocation.promoted_block_hash = publication.target_block_hash
+join programmable_private.chain_event_current_canonical as allocation_canonical
+  on allocation_canonical.logical_event_id =
+    allocation.last_source_logical_event_id
+ and allocation_canonical.occurrence_id = allocation.last_source_occurrence_id
+ and allocation_canonical.block_hash =
+    allocation.last_source_occurrence_block_hash
+join programmable_private.chain_event_materialized_occurrences_v1
+  as allocation_source
+  on allocation_source.occurrence_id = allocation.last_source_occurrence_id
+ and allocation_source.logical_event_id =
+    allocation.last_source_logical_event_id
+ and allocation_source.block_hash = allocation.last_source_occurrence_block_hash
+ and allocation_source.chain_id = run.chain_id
+ and allocation_source.release_id = run.release_id
+ and allocation_source.model_id = run.model_id
+ and allocation_source.source_group = run.source_group
+ and allocation_source.epoch_id = run.epoch_id
+ and allocation_source.pointer_generation = run.captured_pointer_generation
+where vault.release_id = 'classic-v3'
+  and not exists (
+    select 1
+    from programmable_private.reward_allocation_required_occurrences as required
+    join programmable_private.chain_event_materialized_occurrences_v1
+      as required_occurrence
+      on required_occurrence.occurrence_id = required.occurrence_id
+    left join programmable_private.chain_event_current_canonical
+      as required_canonical
+      on required_canonical.logical_event_id =
+        required_occurrence.logical_event_id
+     and required_canonical.occurrence_id = required_occurrence.occurrence_id
+     and required_canonical.block_hash = required_occurrence.block_hash
+    where required.allocation_fact_id = seed_fact.allocation_fact_id
+      and (
+        required_occurrence.chain_id <> run.chain_id
+        or required_occurrence.release_id <> run.release_id
+        or required_occurrence.model_id <> run.model_id
+        or required_occurrence.source_group <> run.source_group
+        or required_occurrence.epoch_id <> run.epoch_id
+        or required_occurrence.pointer_generation <>
+          run.captured_pointer_generation
+        or required_canonical.occurrence_id is null
+      )
+  );
+
+create or replace view programmable_private.stock_paired_vault_history_v1
+with (security_invoker = false, security_barrier = true)
+as
+select
+  vault.chain_id,
+  vault.release_id,
+  vault.model_id,
+  vault.vault,
+  vault.pool_id,
+  vault.quote_asset,
+  coalesce(
+    vault.active_configuration_hash,
+    vault.configuration_hash
+  ) as configuration_hash,
+  allocation.configuration_epoch,
+  allocation.allocation_index,
+  allocation.beneficiary,
+  allocation.payout_address,
+  allocation.share_bps,
+  allocation.effective_from_block,
+  allocation.effective_to_block,
+  vault.promoted_block_number,
+  vault.promoted_block_hash,
+  vault.verified_at
+from programmable_private.current_reward_vault_projections_v1 as vault
+join programmable_private.current_launch_projections_v1 as launch
+  on launch.launch_projection_id = vault.launch_projection_id
+ and launch.chain_id = vault.chain_id
+ and launch.release_id = vault.release_id
+ and launch.model_id = vault.model_id
+ and launch.epoch_id = vault.epoch_id
+ and launch.pointer_generation = vault.pointer_generation
+ and launch.reward_vault = vault.vault
+ and launch.pool_id = vault.pool_id
+ and launch.is_complete
+join programmable_private.run_headers as run
+  on run.run_id = vault.projection_run_id
+ and run.run_kind = 'projection'
+ and run.chain_id = vault.chain_id
+ and run.release_id = vault.release_id
+ and run.model_id = vault.model_id
+ and run.epoch_id = vault.epoch_id
+ and run.captured_pointer_generation = vault.pointer_generation
+join programmable_private.projection_publications as publication
+  on publication.run_id = vault.projection_run_id
+ and publication.epoch_id = vault.epoch_id
+ and publication.pointer_generation = vault.pointer_generation
+ and publication.target_block_number = vault.promoted_block_number
+ and publication.target_block_hash = vault.promoted_block_hash
+join programmable_private.release_epoch_current as current_epoch
+  on current_epoch.chain_id = run.chain_id
+ and current_epoch.release_id = run.release_id
+ and current_epoch.model_id = run.model_id
+ and current_epoch.source_group = run.source_group
+ and current_epoch.epoch_id = run.epoch_id
+ and current_epoch.generation = run.captured_pointer_generation
+join programmable_private.route_eligibility_current as route
+  on route.route_key = 'creator-profile'
+ and route.chain_id = run.chain_id
+ and route.release_id = run.release_id
+ and route.model_id = run.model_id
+ and route.source_group = run.source_group
+ and route.epoch_id = run.epoch_id
+ and route.pointer_generation = run.captured_pointer_generation
+ and route.checkpoint_id = publication.checkpoint_id
+ and route.status = 'eligible'
+ and route.route_mode = 'indexed'
+join programmable_private.chain_event_current_canonical as launch_canonical
+  on launch_canonical.logical_event_id = launch.last_source_logical_event_id
+ and launch_canonical.occurrence_id = launch.last_source_occurrence_id
+ and launch_canonical.block_hash = launch.last_source_occurrence_block_hash
+join programmable_private.chain_event_materialized_occurrences_v1
+  as launch_source
+  on launch_source.occurrence_id = launch.last_source_occurrence_id
+ and launch_source.logical_event_id = launch.last_source_logical_event_id
+ and launch_source.block_hash = launch.last_source_occurrence_block_hash
+ and launch_source.chain_id = run.chain_id
+ and launch_source.release_id = run.release_id
+ and launch_source.model_id = run.model_id
+ and launch_source.source_group = run.source_group
+ and launch_source.epoch_id = run.epoch_id
+ and launch_source.pointer_generation = run.captured_pointer_generation
+join programmable_private.reward_allocation_current_verified as verified_seed
+  on verified_seed.allocation_fact_id = vault.current_allocation_fact_id
+ and verified_seed.vault = vault.vault
+join programmable_private.reward_allocation_facts as seed_fact
+  on seed_fact.allocation_fact_id = verified_seed.allocation_fact_id
+ and seed_fact.factory_occurrence_id = verified_seed.factory_occurrence_id
+ and seed_fact.vault = verified_seed.vault
+ and seed_fact.chain_id = run.chain_id
+ and seed_fact.release_id = run.release_id
+ and seed_fact.model_id = run.model_id
+ and seed_fact.epoch_id = run.epoch_id
+ and seed_fact.pointer_generation = run.captured_pointer_generation
+join programmable_private.chain_event_current_canonical as seed_canonical
+  on seed_canonical.logical_event_id = seed_fact.factory_logical_event_id
+ and seed_canonical.occurrence_id = seed_fact.factory_occurrence_id
+ and seed_canonical.block_hash = seed_fact.factory_occurrence_block_hash
+join programmable_private.chain_event_current_canonical as vault_canonical
+  on vault_canonical.logical_event_id = vault.last_source_logical_event_id
+ and vault_canonical.occurrence_id = vault.last_source_occurrence_id
+ and vault_canonical.block_hash = vault.last_source_occurrence_block_hash
+join programmable_private.chain_event_materialized_occurrences_v1
+  as vault_source
+  on vault_source.occurrence_id = vault.last_source_occurrence_id
+ and vault_source.logical_event_id = vault.last_source_logical_event_id
+ and vault_source.block_hash = vault.last_source_occurrence_block_hash
+ and vault_source.chain_id = run.chain_id
+ and vault_source.release_id = run.release_id
+ and vault_source.model_id = run.model_id
+ and vault_source.source_group = run.source_group
+ and vault_source.epoch_id = run.epoch_id
+ and vault_source.pointer_generation = run.captured_pointer_generation
+join programmable_private.reward_allocation_projections as allocation
+  on allocation.reward_vault_projection_id = vault.reward_vault_projection_id
+ and allocation.projection_run_id = vault.projection_run_id
+ and allocation.allocation_fact_id = seed_fact.allocation_fact_id
+ and allocation.chain_id = run.chain_id
+ and allocation.release_id = run.release_id
+ and allocation.model_id = run.model_id
+ and allocation.epoch_id = run.epoch_id
+ and allocation.pointer_generation = run.captured_pointer_generation
+ and allocation.promoted_block_number = publication.target_block_number
+ and allocation.promoted_block_hash = publication.target_block_hash
+join programmable_private.chain_event_current_canonical as allocation_canonical
+  on allocation_canonical.logical_event_id =
+    allocation.last_source_logical_event_id
+ and allocation_canonical.occurrence_id = allocation.last_source_occurrence_id
+ and allocation_canonical.block_hash =
+    allocation.last_source_occurrence_block_hash
+join programmable_private.chain_event_materialized_occurrences_v1
+  as allocation_source
+  on allocation_source.occurrence_id = allocation.last_source_occurrence_id
+ and allocation_source.logical_event_id =
+    allocation.last_source_logical_event_id
+ and allocation_source.block_hash = allocation.last_source_occurrence_block_hash
+ and allocation_source.chain_id = run.chain_id
+ and allocation_source.release_id = run.release_id
+ and allocation_source.model_id = run.model_id
+ and allocation_source.source_group = run.source_group
+ and allocation_source.epoch_id = run.epoch_id
+ and allocation_source.pointer_generation = run.captured_pointer_generation
+where vault.release_id in (
+    'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+  )
+  and not exists (
+    select 1
+    from programmable_private.reward_allocation_required_occurrences as required
+    join programmable_private.chain_event_materialized_occurrences_v1
+      as required_occurrence
+      on required_occurrence.occurrence_id = required.occurrence_id
+    left join programmable_private.chain_event_current_canonical
+      as required_canonical
+      on required_canonical.logical_event_id =
+        required_occurrence.logical_event_id
+     and required_canonical.occurrence_id = required_occurrence.occurrence_id
+     and required_canonical.block_hash = required_occurrence.block_hash
+    where required.allocation_fact_id = seed_fact.allocation_fact_id
+      and (
+        required_occurrence.chain_id <> run.chain_id
+        or required_occurrence.release_id <> run.release_id
+        or required_occurrence.model_id <> run.model_id
+        or required_occurrence.source_group <> run.source_group
+        or required_occurrence.epoch_id <> run.epoch_id
+        or required_occurrence.pointer_generation <>
+          run.captured_pointer_generation
+        or required_canonical.occurrence_id is null
+      )
+  );
+
+-- Allocation and balance rows in an exact-current snapshot are a complete
+-- restatement of the vault state, not separate event deltas. The parent vault
+-- event remains release-allowlisted; child rows may reuse that exact source
+-- only after the authorized parent snapshot has been staged.
+create or replace function programmable_private.enforce_projection_event_rule()
+returns trigger
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+declare
+  source_occurrence_id uuid;
+  projection_kind text;
+begin
+  source_occurrence_id := case tg_table_name
+    when 'launch_projections' then
+      (pg_catalog.to_jsonb(new)->>'last_source_occurrence_id')::uuid
+    when 'pool_projections' then
+      (pg_catalog.to_jsonb(new)->>'last_source_occurrence_id')::uuid
+    when 'pool_fee_configurations' then
+      (pg_catalog.to_jsonb(new)->>'disclosure_source_occurrence_id')::uuid
+    when 'fee_accrual_facts' then
+      (pg_catalog.to_jsonb(new)->>'source_occurrence_id')::uuid
+    when 'pool_fee_totals' then
+      (pg_catalog.to_jsonb(new)->>'last_source_occurrence_id')::uuid
+    when 'reward_vault_projections' then
+      (pg_catalog.to_jsonb(new)->>'last_source_occurrence_id')::uuid
+    when 'reward_allocation_projections' then
+      (pg_catalog.to_jsonb(new)->>'last_source_occurrence_id')::uuid
+    when 'claim_projections' then
+      (pg_catalog.to_jsonb(new)->>'source_occurrence_id')::uuid
+    when 'payout_change_projections' then
+      (pg_catalog.to_jsonb(new)->>'source_occurrence_id')::uuid
+    when 'account_reward_balances' then
+      (pg_catalog.to_jsonb(new)->>'last_source_occurrence_id')::uuid
+    when 'initial_buy_custody_projections' then
+      (pg_catalog.to_jsonb(new)->>'source_occurrence_id')::uuid
+    when 'initial_buy_vesting_projections' then
+      (pg_catalog.to_jsonb(new)->>'source_occurrence_id')::uuid
+    else null
+  end;
+  if tg_table_name in (
+       'reward_allocation_projections', 'account_reward_balances'
+     )
+     and exists (
+       select 1
+       from programmable_private.reward_vault_projections as parent
+       where parent.projection_run_id = new.projection_run_id
+         and parent.snapshot_kind = 'exact_current'
+         and parent.last_source_occurrence_id = source_occurrence_id
+         and (
+           tg_table_name <> 'reward_allocation_projections'
+           or parent.reward_vault_projection_id =
+             (pg_catalog.to_jsonb(new)->>'reward_vault_projection_id')::uuid
+         )
+         and (
+           tg_table_name <> 'account_reward_balances'
+           or parent.vault =
+             (pg_catalog.to_jsonb(new)->>'vault')::bytea
+         )
+     )
+  then
+    return new;
+  end if;
+  projection_kind := case tg_table_name
+    when 'launch_projections' then 'launch'
+    when 'pool_projections' then 'pool'
+    when 'pool_fee_configurations' then 'pool_fee_configuration'
+    when 'fee_accrual_facts' then 'fee_accrual'
+    when 'pool_fee_totals' then 'pool_fee_total'
+    when 'reward_vault_projections' then 'reward_vault'
+    when 'reward_allocation_projections' then 'reward_allocation'
+    when 'claim_projections' then 'claim'
+    when 'payout_change_projections' then 'payout_change'
+    when 'account_reward_balances' then 'account_reward_balance'
+    when 'initial_buy_custody_projections' then 'initial_buy_custody'
+    when 'initial_buy_vesting_projections' then 'initial_buy_vesting'
+    else null
+  end;
+  perform programmable_private.assert_projection_event_allowed(
+    new.projection_run_id, source_occurrence_id, projection_kind
+  );
+  return new;
+end
+$function$;
+
+create index account_reward_balance_vault_reader_idx
+  on programmable_private.account_reward_balances (
+    chain_id, release_id, model_id, vault, epoch_id,
+    pointer_generation, account, projection_run_id
+  );
+
+create function programmable_private.stage_current_reward_snapshot_v1(
+  p_run_id uuid,
+  p_vault bytea,
+  p_pool_id bytea,
+  p_initial_allocation_fact_id uuid,
+  p_configuration_epoch bigint,
+  p_active_configuration_hash bytea,
+  p_total_creator_fees_received numeric,
+  p_allocation_indices integer[],
+  p_beneficiaries bytea[],
+  p_payout_addresses bytea[],
+  p_shares_bps numeric[],
+  p_balance_accounts bytea[],
+  p_balance_payout_addresses bytea[],
+  p_claimable_accrued numeric[],
+  p_claimed_totals numeric[],
+  p_snapshot_source_occurrence_id uuid,
+  p_promoted_block_number numeric,
+  p_promoted_block_hash bytea,
+  p_verified_at timestamptz default pg_catalog.clock_timestamp()
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+declare
+  header programmable_private.run_headers%rowtype;
+  scope record;
+  source record;
+  baseline record;
+  launch record;
+  seed programmable_private.reward_allocation_facts%rowtype;
+  activation programmable_private.reward_configuration_activation_facts%rowtype;
+  existing_vault programmable_private.reward_vault_projections%rowtype;
+  prior_balance record;
+  allocation_count integer;
+  balance_count integer;
+  baseline_count bigint;
+  launch_count bigint;
+  prior_configuration_epoch bigint;
+  prior_active_configuration_hash bytea;
+  prior_total numeric := 0;
+  total_share_bps numeric := 0;
+  total_balance_value numeric := 0;
+  normalized_total numeric;
+  normalized_claimable numeric;
+  normalized_claimed numeric;
+  baseline_kind text;
+  baseline_launch_projection_id uuid;
+  baseline_quote_asset bytea;
+  baseline_reward_vault_projection_id uuid;
+  baseline_checkpoint_id uuid;
+  baseline_checkpoint_generation bigint;
+  baseline_reorg_generation bigint;
+  prior_indices integer[];
+  prior_beneficiaries bytea[];
+  prior_payout_addresses bytea[];
+  prior_shares numeric[];
+  changed_positions integer := 0;
+  changed_position integer;
+  allocation_id uuid;
+  balance_id uuid;
+  returned_id uuid;
+  idx integer;
+  prior_idx integer;
+  zero_address bytea := pg_catalog.decode(
+    '0000000000000000000000000000000000000000', 'hex'
+  );
+begin
+  perform programmable_private.assert_caller('programmable_projector');
+  select * into scope
+  from programmable_private.projection_stage_context(
+    p_run_id, p_snapshot_source_occurrence_id,
+    p_promoted_block_number, p_promoted_block_hash
+  );
+  select * into header
+  from programmable_private.run_headers
+  where run_id = p_run_id and run_kind = 'projection'
+  for share;
+  if not found then
+    raise exception using
+      errcode = '23503', message = 'invalid reward snapshot run';
+  end if;
+  select
+    occurrence.source_address,
+    occurrence.block_number,
+    occurrence.block_global_log_index,
+    occurrence.logical_event_id,
+    occurrence.block_hash,
+    materialization.event_type,
+    materialization.decoded_payload
+  into source
+  from programmable_private.chain_event_occurrences as occurrence
+  join programmable_private.chain_event_occurrence_materializations
+    as materialization
+    on materialization.occurrence_id = occurrence.occurrence_id
+   and materialization.chain_id = header.chain_id
+   and materialization.release_id = header.release_id
+   and materialization.model_id = header.model_id
+   and materialization.source_group = header.source_group
+   and materialization.epoch_id = header.epoch_id
+   and materialization.pointer_generation =
+     header.captured_pointer_generation
+  where occurrence.occurrence_id = p_snapshot_source_occurrence_id;
+  if source.logical_event_id is null
+     or header.release_id not in (
+       'classic-v3',
+       'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+     )
+     or pg_catalog.octet_length(p_vault) <> 20
+     or p_vault = zero_address
+     or pg_catalog.octet_length(p_pool_id) <> 32
+     or p_configuration_epoch is null
+     or p_configuration_epoch <= 0
+     or pg_catalog.octet_length(p_active_configuration_hash) <> 32
+  then
+    raise exception using
+      errcode = '22023', message = 'invalid current reward snapshot';
+  end if;
+  normalized_total := programmable_private.validate_uint256(
+    p_total_creator_fees_received
+  );
+  allocation_count := coalesce(
+    pg_catalog.cardinality(p_allocation_indices), 0
+  );
+  balance_count := coalesce(pg_catalog.cardinality(p_balance_accounts), 0);
+  if allocation_count < 1
+     or allocation_count > (
+       case
+         when header.release_id = 'classic-v3' then 5
+         else 8
+       end
+     )
+     or pg_catalog.cardinality(p_beneficiaries) <> allocation_count
+     or pg_catalog.cardinality(p_payout_addresses) <> allocation_count
+     or pg_catalog.cardinality(p_shares_bps) <> allocation_count
+     or balance_count < 1
+     or pg_catalog.cardinality(p_balance_payout_addresses) <> balance_count
+     or pg_catalog.cardinality(p_claimable_accrued) <> balance_count
+     or pg_catalog.cardinality(p_claimed_totals) <> balance_count
+  then
+    raise exception using
+      errcode = '22023', message = 'reward snapshot arrays are incomplete';
+  end if;
+
+  for idx in 1..allocation_count loop
+    if p_allocation_indices[idx] <> idx - 1
+       or pg_catalog.octet_length(p_beneficiaries[idx]) <> 20
+       or p_beneficiaries[idx] = zero_address
+       or pg_catalog.octet_length(p_payout_addresses[idx]) <> 20
+       or p_payout_addresses[idx] = zero_address
+       or p_shares_bps[idx] is null
+       or p_shares_bps[idx] <> pg_catalog.trunc(p_shares_bps[idx])
+       or p_shares_bps[idx] <= 0
+       or p_shares_bps[idx] > 10000
+       or (
+         header.release_id = 'classic-v3'
+         and p_payout_addresses[idx] <> p_beneficiaries[idx]
+       )
+    then
+      raise exception using
+        errcode = '22023', message = 'invalid active reward allocation';
+    end if;
+    if header.release_id <> 'classic-v3' and idx > 1 then
+      for prior_idx in 1..idx - 1 loop
+        if p_beneficiaries[prior_idx] = p_beneficiaries[idx] then
+          raise exception using
+            errcode = '22023',
+            message = 'non-Classic beneficiaries must remain unique';
+        end if;
+      end loop;
+    end if;
+    total_share_bps := total_share_bps + p_shares_bps[idx];
+  end loop;
+  if total_share_bps <> 10000 then
+    raise exception using
+      errcode = '22023', message = 'reward snapshot shares must total 10000';
+  end if;
+
+  for idx in 1..balance_count loop
+    if pg_catalog.octet_length(p_balance_accounts[idx]) <> 20
+       or p_balance_accounts[idx] = zero_address
+       or pg_catalog.octet_length(p_balance_payout_addresses[idx]) <> 20
+       or p_balance_payout_addresses[idx] = zero_address
+       or (
+         header.release_id = 'classic-v3'
+         and p_balance_payout_addresses[idx] <> p_balance_accounts[idx]
+       )
+    then
+      raise exception using
+        errcode = '22023', message = 'invalid reward balance account';
+    end if;
+    if idx > 1
+       and p_balance_accounts[idx - 1] >= p_balance_accounts[idx]
+    then
+      raise exception using
+        errcode = '22023',
+        message = 'reward balance accounts must be unique and ordered';
+    end if;
+    normalized_claimable := programmable_private.validate_uint256(
+      p_claimable_accrued[idx]
+    );
+    normalized_claimed := programmable_private.validate_uint256(
+      p_claimed_totals[idx]
+    );
+    total_balance_value := total_balance_value
+      + normalized_claimable + normalized_claimed;
+  end loop;
+  if total_balance_value <> normalized_total then
+    raise exception using
+      errcode = '23514',
+      message = 'reward balances do not reconcile to total received';
+  end if;
+  for idx in 1..allocation_count loop
+    prior_idx := pg_catalog.array_position(
+      p_balance_accounts, p_beneficiaries[idx]
+    );
+    if prior_idx is null then
+      raise exception using
+        errcode = '23514',
+        message = 'every active beneficiary needs a balance row';
+    end if;
+    if header.release_id <> 'classic-v3'
+       and p_balance_payout_addresses[prior_idx] <>
+         p_payout_addresses[idx]
+    then
+      raise exception using
+        errcode = '23514',
+        message = 'active beneficiary payout does not match its balance';
+    end if;
+  end loop;
+
+  select pg_catalog.count(*) into baseline_count
+  from programmable_private.current_reward_vault_projections_v1 as vault
+  join programmable_private.run_headers as baseline_run
+    on baseline_run.run_id = vault.projection_run_id
+   and baseline_run.run_kind = 'projection'
+   and baseline_run.chain_id = vault.chain_id
+   and baseline_run.release_id = vault.release_id
+   and baseline_run.model_id = vault.model_id
+   and baseline_run.source_group = header.source_group
+   and baseline_run.epoch_id = vault.epoch_id
+   and baseline_run.captured_pointer_generation = vault.pointer_generation
+  join programmable_private.projection_entity_current as entity
+    on entity.entity_kind = 'reward_vault'
+   and entity.projection_row_id = vault.reward_vault_projection_id
+   and entity.projection_run_id = vault.projection_run_id
+   and entity.chain_id = vault.chain_id
+   and entity.release_id = vault.release_id
+   and entity.model_id = vault.model_id
+   and entity.source_group = header.source_group
+  join programmable_private.projector_checkpoints as checkpoint
+    on checkpoint.checkpoint_id = entity.checkpoint_id
+   and checkpoint.chain_id = vault.chain_id
+   and checkpoint.release_id = vault.release_id
+   and checkpoint.model_id = vault.model_id
+   and checkpoint.source_group = header.source_group
+   and checkpoint.epoch_id = header.epoch_id
+   and checkpoint.pointer_generation = header.captured_pointer_generation
+  join programmable_private.projector_checkpoint_current as current_checkpoint
+    on current_checkpoint.chain_id = checkpoint.chain_id
+   and current_checkpoint.release_id = checkpoint.release_id
+   and current_checkpoint.model_id = checkpoint.model_id
+   and current_checkpoint.source_group = checkpoint.source_group
+   and current_checkpoint.projector_version = checkpoint.projector_version
+  join programmable_private.projector_checkpoints as current_cursor
+    on current_cursor.checkpoint_id = current_checkpoint.checkpoint_id
+   and current_cursor.chain_id = checkpoint.chain_id
+   and current_cursor.release_id = checkpoint.release_id
+   and current_cursor.model_id = checkpoint.model_id
+   and current_cursor.source_group = checkpoint.source_group
+   and current_cursor.projector_version = checkpoint.projector_version
+   and current_cursor.epoch_id = header.epoch_id
+   and current_cursor.pointer_generation =
+     header.captured_pointer_generation
+   and current_cursor.checkpoint_generation =
+     current_checkpoint.checkpoint_generation
+   and current_cursor.reorg_generation = current_checkpoint.reorg_generation
+  where vault.chain_id = header.chain_id
+    and vault.release_id = header.release_id
+    and vault.model_id = header.model_id
+    and vault.epoch_id = header.epoch_id
+    and vault.pointer_generation = header.captured_pointer_generation
+    and vault.vault = p_vault
+    and vault.pool_id = p_pool_id
+    and (
+      current_cursor.block_number,
+      current_cursor.cursor_block_global_log_index
+    ) >= (
+      checkpoint.block_number,
+      checkpoint.cursor_block_global_log_index
+    )
+    and programmable_private.has_current_verified_reward_seed(
+      vault.projection_run_id, vault.vault
+    );
+  if baseline_count > 1 then
+    raise exception using
+      errcode = '23514', message = 'current reward baseline is ambiguous';
+  end if;
+
+  if baseline_count = 1 then
+    baseline_kind := 'exact_current';
+    select
+      vault.reward_vault_projection_id,
+      vault.launch_projection_id,
+      vault.quote_asset,
+      vault.current_allocation_fact_id,
+      vault.configuration_epoch,
+      vault.active_configuration_hash,
+      vault.total_creator_fees_received,
+      current_cursor.checkpoint_id,
+      current_cursor.checkpoint_generation,
+      current_cursor.reorg_generation,
+      current_cursor.block_number,
+      current_cursor.cursor_block_global_log_index,
+      seed_fact.active_configuration_hash as seed_active_hash,
+      seed_fact.configuration_hash as seed_configuration_hash
+    into baseline
+    from programmable_private.current_reward_vault_projections_v1 as vault
+    join programmable_private.run_headers as baseline_run
+      on baseline_run.run_id = vault.projection_run_id
+     and baseline_run.run_kind = 'projection'
+     and baseline_run.source_group = header.source_group
+    join programmable_private.projection_entity_current as entity
+      on entity.entity_kind = 'reward_vault'
+     and entity.projection_row_id = vault.reward_vault_projection_id
+     and entity.projection_run_id = vault.projection_run_id
+     and entity.source_group = header.source_group
+    join programmable_private.projector_checkpoints as checkpoint
+      on checkpoint.checkpoint_id = entity.checkpoint_id
+     and checkpoint.epoch_id = header.epoch_id
+     and checkpoint.pointer_generation = header.captured_pointer_generation
+    join programmable_private.projector_checkpoint_current
+      as current_checkpoint
+      on current_checkpoint.chain_id = checkpoint.chain_id
+     and current_checkpoint.release_id = checkpoint.release_id
+     and current_checkpoint.model_id = checkpoint.model_id
+     and current_checkpoint.source_group = checkpoint.source_group
+     and current_checkpoint.projector_version = checkpoint.projector_version
+    join programmable_private.projector_checkpoints as current_cursor
+      on current_cursor.checkpoint_id = current_checkpoint.checkpoint_id
+     and current_cursor.chain_id = checkpoint.chain_id
+     and current_cursor.release_id = checkpoint.release_id
+     and current_cursor.model_id = checkpoint.model_id
+     and current_cursor.source_group = checkpoint.source_group
+     and current_cursor.projector_version = checkpoint.projector_version
+     and current_cursor.epoch_id = header.epoch_id
+     and current_cursor.pointer_generation =
+       header.captured_pointer_generation
+     and current_cursor.checkpoint_generation =
+       current_checkpoint.checkpoint_generation
+     and current_cursor.reorg_generation =
+       current_checkpoint.reorg_generation
+    join programmable_private.reward_allocation_facts as seed_fact
+      on seed_fact.allocation_fact_id = vault.current_allocation_fact_id
+     and seed_fact.epoch_id = vault.epoch_id
+     and seed_fact.pointer_generation = vault.pointer_generation
+     and seed_fact.vault = vault.vault
+    where vault.chain_id = header.chain_id
+      and vault.release_id = header.release_id
+      and vault.model_id = header.model_id
+      and vault.epoch_id = header.epoch_id
+      and vault.pointer_generation = header.captured_pointer_generation
+      and vault.vault = p_vault
+      and vault.pool_id = p_pool_id
+      and (
+        current_cursor.block_number,
+        current_cursor.cursor_block_global_log_index
+      ) >= (
+        checkpoint.block_number,
+        checkpoint.cursor_block_global_log_index
+      );
+    if p_initial_allocation_fact_id <>
+         baseline.current_allocation_fact_id
+       or (
+         source.block_number,
+         source.block_global_log_index
+       ) <= (
+         baseline.block_number,
+         baseline.cursor_block_global_log_index
+       )
+       or source.source_address <> p_vault
+    then
+      raise exception using
+        errcode = '23514',
+        message = 'reward snapshot does not extend the exact current baseline';
+    end if;
+    baseline_launch_projection_id := baseline.launch_projection_id;
+    baseline_quote_asset := baseline.quote_asset;
+    baseline_reward_vault_projection_id :=
+      baseline.reward_vault_projection_id;
+    baseline_checkpoint_id := baseline.checkpoint_id;
+    baseline_checkpoint_generation := baseline.checkpoint_generation;
+    baseline_reorg_generation := baseline.reorg_generation;
+    select * into seed
+    from programmable_private.reward_allocation_facts as fact
+    where fact.allocation_fact_id = p_initial_allocation_fact_id;
+    if seed.allocation_fact_id is null then
+      raise exception using
+        errcode = '23514', message = 'verified initial reward seed is missing';
+    end if;
+
+    select
+      coalesce(
+        baseline.configuration_epoch,
+        pg_catalog.max(allocation.configuration_epoch),
+        1
+      ),
+      coalesce(
+        baseline.active_configuration_hash,
+        baseline.seed_active_hash,
+        baseline.seed_configuration_hash
+      ),
+      pg_catalog.array_agg(
+        allocation.allocation_index order by allocation.allocation_index
+      ),
+      pg_catalog.array_agg(
+        case when header.release_id = 'classic-v3'
+          then allocation.payout_address::bytea
+          else allocation.beneficiary::bytea end
+        order by allocation.allocation_index
+      ),
+      pg_catalog.array_agg(
+        allocation.payout_address::bytea
+        order by allocation.allocation_index
+      ),
+      pg_catalog.array_agg(
+        allocation.share_bps::numeric
+        order by allocation.allocation_index
+      )
+    into prior_configuration_epoch, prior_active_configuration_hash,
+      prior_indices, prior_beneficiaries, prior_payout_addresses,
+      prior_shares
+    from programmable_private.reward_allocation_projections as allocation
+    where allocation.reward_vault_projection_id =
+        baseline.reward_vault_projection_id
+      and allocation.effective_to_block is null;
+    if prior_indices is null then
+      raise exception using
+        errcode = '23514', message = 'current reward allocation is missing';
+    end if;
+    prior_total := baseline.total_creator_fees_received;
+    if prior_total is null then
+      select coalesce(
+        pg_catalog.sum(balance.claimable_accrued + balance.claimed_total), 0
+      ) into prior_total
+      from programmable_private.current_account_reward_balances_v1 as balance
+      where balance.chain_id = header.chain_id
+        and balance.release_id = header.release_id
+        and balance.model_id = header.model_id
+        and balance.epoch_id = header.epoch_id
+        and balance.pointer_generation = header.captured_pointer_generation
+        and balance.vault = p_vault;
+    end if;
+    if normalized_total < prior_total then
+      raise exception using
+        errcode = '23514',
+        message = 'reward snapshot total cannot move backward';
+    end if;
+    for prior_balance in
+      select *
+      from programmable_private.current_account_reward_balances_v1 as balance
+      where balance.chain_id = header.chain_id
+        and balance.release_id = header.release_id
+        and balance.model_id = header.model_id
+        and balance.epoch_id = header.epoch_id
+        and balance.pointer_generation = header.captured_pointer_generation
+        and balance.vault = p_vault
+    loop
+      idx := pg_catalog.array_position(
+        p_balance_accounts, prior_balance.account::bytea
+      );
+      if idx is null then
+        raise exception using
+          errcode = '23514',
+          message = 'historical reward balance cannot be omitted';
+      end if;
+      if idx is not null and (
+        p_claimed_totals[idx] < prior_balance.claimed_total
+        or p_claimable_accrued[idx] + p_claimed_totals[idx]
+          < prior_balance.claimable_accrued + prior_balance.claimed_total
+      ) then
+        raise exception using
+          errcode = '23514',
+          message = 'historical reward totals cannot move backward';
+      end if;
+    end loop;
+
+    if p_configuration_epoch = prior_configuration_epoch
+       and p_active_configuration_hash =
+         prior_active_configuration_hash
+       and p_allocation_indices = prior_indices
+       and p_beneficiaries = prior_beneficiaries
+       and p_payout_addresses = prior_payout_addresses
+       and p_shares_bps = prior_shares
+    then
+      null;
+    elsif header.release_id = 'classic-v3'
+      and source.event_type = 'PayoutWalletChanged'
+    then
+      if p_configuration_epoch <> prior_configuration_epoch + 1
+         or p_allocation_indices <> prior_indices
+         or p_shares_bps <> prior_shares
+         or pg_catalog.cardinality(p_beneficiaries)
+           <> pg_catalog.cardinality(prior_beneficiaries)
+      then
+        raise exception using
+          errcode = '23514', message = 'invalid Classic payout transition';
+      end if;
+      for idx in 1..allocation_count loop
+        if p_beneficiaries[idx] <> prior_beneficiaries[idx]
+           or p_payout_addresses[idx] <> prior_payout_addresses[idx]
+        then
+          changed_positions := changed_positions + 1;
+          changed_position := idx;
+        end if;
+      end loop;
+      if changed_positions <> 1
+         or programmable_private.json_hex_bytes_v1(
+           source.decoded_payload, 'poolId', 32
+         ) is distinct from p_pool_id
+         or (source.decoded_payload ->> 'allocationIndex')::numeric
+           is distinct from (changed_position - 1)::numeric
+         or programmable_private.json_hex_bytes_v1(
+           source.decoded_payload, 'previousPayoutWallet', 20
+         ) is distinct from prior_beneficiaries[changed_position]
+         or programmable_private.json_hex_bytes_v1(
+           source.decoded_payload, 'newPayoutWallet', 20
+         ) is distinct from p_beneficiaries[changed_position]
+         or (source.decoded_payload ->> 'shareBps')::numeric
+           is distinct from p_shares_bps[changed_position]
+         or (source.decoded_payload ->> 'configurationEpoch')::numeric
+           is distinct from p_configuration_epoch::numeric
+         or programmable_private.json_hex_bytes_v1(
+           source.decoded_payload, 'activeConfigurationHash', 32
+         ) is distinct from p_active_configuration_hash
+         or (
+           source.decoded_payload ->> 'effectiveTotalCreatorFeesReceived'
+         )::numeric is distinct from normalized_total
+      then
+        raise exception using
+          errcode = '23514',
+          message = 'Classic payout transition lacks exact event evidence';
+      end if;
+    elsif header.release_id = 'classic-v3'
+      and source.event_type = 'CtoRewardConfigurationActivated'
+    then
+      select * into activation
+      from programmable_private.reward_configuration_activation_facts as fact
+      where fact.source_occurrence_id = p_snapshot_source_occurrence_id
+        and fact.verification_run_id = p_run_id
+        and fact.vault = p_vault
+        and fact.pool_id = p_pool_id;
+      if activation.reward_configuration_activation_fact_id is null
+         or activation.configuration_epoch <> p_configuration_epoch
+         or activation.previous_configuration_hash <>
+           prior_active_configuration_hash
+         or activation.new_configuration_hash <>
+           p_active_configuration_hash
+         or activation.ordered_beneficiaries <> p_beneficiaries
+         or activation.ordered_shares_bps::numeric[] <> p_shares_bps
+         or activation.effective_total_creator_fees_received <>
+           normalized_total
+      then
+        raise exception using
+          errcode = '23514',
+          message = 'CTO reward transition lacks exact activation evidence';
+      end if;
+    elsif header.release_id in (
+        'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+      )
+      and source.event_type = 'PayoutAddressUpdated'
+    then
+      if p_configuration_epoch <> prior_configuration_epoch
+         or p_active_configuration_hash <>
+           prior_active_configuration_hash
+         or p_allocation_indices <> prior_indices
+         or p_beneficiaries <> prior_beneficiaries
+         or p_shares_bps <> prior_shares
+      then
+        raise exception using
+          errcode = '23514', message = 'invalid payout-address transition';
+      end if;
+      for idx in 1..allocation_count loop
+        if p_payout_addresses[idx] <> prior_payout_addresses[idx] then
+          changed_positions := changed_positions + 1;
+          changed_position := idx;
+        end if;
+      end loop;
+      if changed_positions <> 1
+         or programmable_private.json_hex_bytes_v1(
+           source.decoded_payload, 'beneficiary', 20
+         ) is distinct from p_beneficiaries[changed_position]
+         or programmable_private.json_hex_bytes_v1(
+           source.decoded_payload, 'previousPayoutAddress', 20
+         ) is distinct from prior_payout_addresses[changed_position]
+         or programmable_private.json_hex_bytes_v1(
+           source.decoded_payload, 'newPayoutAddress', 20
+         ) is distinct from p_payout_addresses[changed_position]
+      then
+        raise exception using
+          errcode = '23514',
+          message = 'payout transition lacks exact event evidence';
+      end if;
+    else
+      raise exception using
+        errcode = '23514',
+        message = 'reward configuration changed without canonical evidence';
+    end if;
+  else
+    baseline_kind := 'initial_seed';
+    select pg_catalog.count(*) into launch_count
+    from programmable_private.launch_projections as candidate
+    where candidate.projection_run_id = p_run_id
+      and candidate.chain_id = header.chain_id
+      and candidate.release_id = header.release_id
+      and candidate.model_id = header.model_id
+      and candidate.epoch_id = header.epoch_id
+      and candidate.pointer_generation = header.captured_pointer_generation
+      and candidate.reward_vault = p_vault
+      and candidate.pool_id = p_pool_id
+      and candidate.promoted_block_number = scope.promoted_block_number
+      and candidate.promoted_block_hash = scope.promoted_block_hash
+      and candidate.is_complete;
+    if launch_count <> 1 then
+      raise exception using
+        errcode = '23514',
+        message = 'initial reward snapshot requires one staged launch';
+    end if;
+    select * into launch
+    from programmable_private.launch_projections as candidate
+    where candidate.projection_run_id = p_run_id
+      and candidate.reward_vault = p_vault
+      and candidate.pool_id = p_pool_id
+      and candidate.promoted_block_number = scope.promoted_block_number
+      and candidate.promoted_block_hash = scope.promoted_block_hash
+      and candidate.is_complete;
+    select * into seed
+    from programmable_private.reward_allocation_facts as fact
+    where fact.allocation_fact_id = p_initial_allocation_fact_id
+      and fact.chain_id = header.chain_id
+      and fact.release_id = header.release_id
+      and fact.model_id = header.model_id
+      and fact.epoch_id = header.epoch_id
+      and fact.pointer_generation = header.captured_pointer_generation
+      and fact.vault = p_vault;
+    if seed.allocation_fact_id is null
+       or not exists (
+         select 1
+         from programmable_private.reward_allocation_evidence as evidence
+         where evidence.allocation_fact_id = seed.allocation_fact_id
+           and evidence.recomputed_allocation_hash = seed.allocation_hash
+           and evidence.recomputed_configuration_hash =
+             seed.configuration_hash
+           and evidence.recomputed_active_configuration_hash
+             is not distinct from seed.active_configuration_hash
+           and evidence.is_recomputation_attested
+       )
+       or p_configuration_epoch <> 1
+       or p_active_configuration_hash <> coalesce(
+         seed.active_configuration_hash, seed.configuration_hash
+       )
+       or p_beneficiaries <> seed.ordered_beneficiaries
+       or p_payout_addresses <> seed.ordered_beneficiaries
+       or p_shares_bps <> seed.ordered_shares_bps::numeric[]
+       or p_allocation_indices <>
+         array(
+           select value - 1
+           from pg_catalog.generate_series(
+             1, pg_catalog.cardinality(seed.ordered_beneficiaries)
+           ) as value
+         )
+       or not (
+         source.source_address = p_vault
+         or p_snapshot_source_occurrence_id = seed.factory_occurrence_id
+       )
+    then
+      raise exception using
+        errcode = '23514',
+        message = 'initial reward snapshot does not match verified seed';
+    end if;
+    baseline_launch_projection_id := launch.launch_projection_id;
+    select case
+      when pool.currency0 = launch.token then nullif(pool.currency1, zero_address)
+      else nullif(pool.currency0, zero_address)
+    end into baseline_quote_asset
+    from programmable_private.pool_projections as pool
+    where pool.projection_run_id = p_run_id
+      and pool.launch_projection_id = launch.launch_projection_id
+      and pool.pool_id = p_pool_id;
+  end if;
+
+  for idx in 1..balance_count loop
+    if pg_catalog.array_position(
+      p_beneficiaries, p_balance_accounts[idx]
+    ) is null and not exists (
+      select 1
+      from programmable_private.current_account_reward_balances_v1 as balance
+      where baseline_kind = 'exact_current'
+        and balance.chain_id = header.chain_id
+        and balance.release_id = header.release_id
+        and balance.model_id = header.model_id
+        and balance.epoch_id = header.epoch_id
+        and balance.pointer_generation = header.captured_pointer_generation
+        and balance.vault = p_vault
+        and balance.account = p_balance_accounts[idx]
+    ) then
+      raise exception using
+        errcode = '23514',
+        message = 'reward snapshot introduced an unknown historical account';
+    end if;
+  end loop;
+
+  select * into existing_vault
+  from programmable_private.reward_vault_projections as candidate
+  where candidate.chain_id = header.chain_id
+    and candidate.vault = p_vault
+    and candidate.projection_run_id = p_run_id;
+  if found then
+    if existing_vault.pool_id <> p_pool_id
+       or existing_vault.current_allocation_fact_id <>
+         p_initial_allocation_fact_id
+       or existing_vault.snapshot_kind <> baseline_kind
+       or existing_vault.configuration_epoch <> p_configuration_epoch
+       or existing_vault.active_configuration_hash <>
+         p_active_configuration_hash
+       or existing_vault.total_creator_fees_received <> normalized_total
+       or existing_vault.last_source_occurrence_id <>
+         p_snapshot_source_occurrence_id
+       or existing_vault.promoted_block_number <>
+         scope.promoted_block_number
+       or existing_vault.promoted_block_hash <> scope.promoted_block_hash
+       or (
+         select pg_catalog.array_agg(
+           allocation.allocation_index order by allocation.allocation_index
+         )
+         from programmable_private.reward_allocation_projections as allocation
+         where allocation.reward_vault_projection_id =
+           existing_vault.reward_vault_projection_id
+       ) is distinct from p_allocation_indices
+       or (
+         select pg_catalog.array_agg(
+           allocation.beneficiary::bytea order by allocation.allocation_index
+         )
+         from programmable_private.reward_allocation_projections as allocation
+         where allocation.reward_vault_projection_id =
+           existing_vault.reward_vault_projection_id
+       ) is distinct from p_beneficiaries
+       or (
+         select pg_catalog.array_agg(
+           allocation.payout_address::bytea
+           order by allocation.allocation_index
+         )
+         from programmable_private.reward_allocation_projections as allocation
+         where allocation.reward_vault_projection_id =
+           existing_vault.reward_vault_projection_id
+       ) is distinct from p_payout_addresses
+       or (
+         select pg_catalog.array_agg(
+           allocation.share_bps::numeric order by allocation.allocation_index
+         )
+         from programmable_private.reward_allocation_projections as allocation
+         where allocation.reward_vault_projection_id =
+           existing_vault.reward_vault_projection_id
+       ) is distinct from p_shares_bps
+       or (
+         select pg_catalog.array_agg(
+           balance.account::bytea order by balance.account
+         )
+         from programmable_private.account_reward_balances as balance
+         where balance.projection_run_id = p_run_id
+           and balance.vault = p_vault
+       ) is distinct from p_balance_accounts
+       or (
+         select pg_catalog.array_agg(
+           balance.payout_address::bytea order by balance.account
+         )
+         from programmable_private.account_reward_balances as balance
+         where balance.projection_run_id = p_run_id
+           and balance.vault = p_vault
+       ) is distinct from p_balance_payout_addresses
+       or (
+         select pg_catalog.array_agg(
+           balance.claimable_accrued::numeric order by balance.account
+         )
+         from programmable_private.account_reward_balances as balance
+         where balance.projection_run_id = p_run_id
+           and balance.vault = p_vault
+       ) is distinct from p_claimable_accrued
+       or (
+         select pg_catalog.array_agg(
+           balance.claimed_total::numeric order by balance.account
+         )
+         from programmable_private.account_reward_balances as balance
+         where balance.projection_run_id = p_run_id
+           and balance.vault = p_vault
+       ) is distinct from p_claimed_totals
+    then
+      raise exception using
+        errcode = '23505', message = 'reward snapshot replay changed content';
+    end if;
+    return existing_vault.reward_vault_projection_id;
+  end if;
+
+  returned_id := pg_catalog.gen_random_uuid();
+  insert into programmable_private.reward_vault_projections (
+    reward_vault_projection_id, launch_projection_id, chain_id, release_id,
+    model_id, epoch_id, pointer_generation, vault, pool_id, quote_asset,
+    configuration_hash, current_allocation_fact_id,
+    last_source_logical_event_id, last_source_occurrence_id,
+    last_source_occurrence_block_hash, projection_run_id,
+    promoted_block_number, promoted_block_hash, verified_at,
+    snapshot_kind, configuration_epoch, active_configuration_hash,
+    total_creator_fees_received, baseline_reward_vault_projection_id,
+    baseline_checkpoint_id, baseline_checkpoint_generation,
+    baseline_reorg_generation
+  ) values (
+    returned_id, baseline_launch_projection_id, header.chain_id,
+    header.release_id, header.model_id, header.epoch_id,
+    header.captured_pointer_generation,
+    p_vault::programmable_private.eth_address,
+    p_pool_id::programmable_private.bytes32_value,
+    case when baseline_quote_asset is null then null
+      else baseline_quote_asset::programmable_private.eth_address end,
+    seed.configuration_hash,
+    p_initial_allocation_fact_id,
+    scope.source_logical_event_id, p_snapshot_source_occurrence_id,
+    scope.source_occurrence_block_hash, p_run_id,
+    scope.promoted_block_number, scope.promoted_block_hash, p_verified_at,
+    baseline_kind, p_configuration_epoch,
+    p_active_configuration_hash::programmable_private.bytes32_value,
+    normalized_total::programmable_private.uint256_value,
+    baseline_reward_vault_projection_id, baseline_checkpoint_id,
+    baseline_checkpoint_generation, baseline_reorg_generation
+  );
+
+  for idx in 1..allocation_count loop
+    allocation_id := pg_catalog.gen_random_uuid();
+    insert into programmable_private.reward_allocation_projections (
+      reward_allocation_projection_id, reward_vault_projection_id,
+      allocation_fact_id, chain_id, release_id, model_id, epoch_id,
+      pointer_generation, configuration_epoch, allocation_index,
+      beneficiary, payout_address, share_bps, effective_from_block,
+      effective_to_block, last_source_logical_event_id,
+      last_source_occurrence_id, last_source_occurrence_block_hash,
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      verified_at
+    ) values (
+      allocation_id, returned_id, p_initial_allocation_fact_id,
+      header.chain_id, header.release_id, header.model_id, header.epoch_id,
+      header.captured_pointer_generation, p_configuration_epoch,
+      p_allocation_indices[idx],
+      p_beneficiaries[idx]::programmable_private.eth_address,
+      p_payout_addresses[idx]::programmable_private.eth_address,
+      p_shares_bps[idx]::programmable_private.basis_points,
+      source.block_number::programmable_private.block_number_value,
+      null, scope.source_logical_event_id,
+      p_snapshot_source_occurrence_id, scope.source_occurrence_block_hash,
+      p_run_id, scope.promoted_block_number, scope.promoted_block_hash,
+      p_verified_at
+    );
+  end loop;
+
+  for idx in 1..balance_count loop
+    balance_id := pg_catalog.gen_random_uuid();
+    insert into programmable_private.account_reward_balances (
+      account_reward_balance_id, chain_id, release_id, model_id, epoch_id,
+      pointer_generation, account, vault, payout_address,
+      claimable_accrued, claimed_total, last_source_logical_event_id,
+      last_source_occurrence_id, last_source_occurrence_block_hash,
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      verified_at
+    ) values (
+      balance_id, header.chain_id, header.release_id, header.model_id,
+      header.epoch_id, header.captured_pointer_generation,
+      p_balance_accounts[idx]::programmable_private.eth_address,
+      p_vault::programmable_private.eth_address,
+      p_balance_payout_addresses[idx]::programmable_private.eth_address,
+      p_claimable_accrued[idx]::programmable_private.uint256_value,
+      p_claimed_totals[idx]::programmable_private.uint256_value,
+      scope.source_logical_event_id, p_snapshot_source_occurrence_id,
+      scope.source_occurrence_block_hash, p_run_id,
+      scope.promoted_block_number, scope.promoted_block_hash, p_verified_at
+    );
+  end loop;
+  perform programmable_private.append_mutation_audit(
+    'reward_current_snapshot.stage', p_active_configuration_hash,
+    p_run_id, p_verified_at
+  );
+  return returned_id;
+end
+$function$;
+
+create function programmable_private.get_projector_reward_balances_by_vault_v1(
+  p_projection_run_id uuid,
+  p_vault bytea
+)
+returns table (
+  chain_id bigint,
+  release_id text,
+  model_id text,
+  source_group text,
+  epoch_id uuid,
+  pointer_generation bigint,
+  checkpoint_id uuid,
+  projector_version text,
+  checkpoint_generation bigint,
+  reorg_generation bigint,
+  checkpoint_block_number bigint,
+  checkpoint_block_hash bytea,
+  reward_vault_projection_id uuid,
+  allocation_fact_id uuid,
+  allocation_evidence_id uuid,
+  vault bytea,
+  pool_id bytea,
+  quote_asset bytea,
+  configuration_hash bytea,
+  active_configuration_hash bytea,
+  configuration_epoch bigint,
+  total_creator_fees_received numeric,
+  account_reward_balance_id uuid,
+  account bytea,
+  payout_address bytea,
+  payout_source_kind text,
+  payout_configuration_epoch bigint,
+  claimable_accrued numeric,
+  claimed_total numeric,
+  baseline_projection_run_id uuid,
+  baseline_publication_commitment bytea,
+  baseline_promoted_block_number bigint,
+  baseline_promoted_block_hash bytea,
+  balance_projection_run_id uuid,
+  balance_publication_commitment bytea,
+  balance_promoted_block_number bigint,
+  balance_promoted_block_hash bytea,
+  payout_projection_run_id uuid,
+  payout_publication_commitment bytea,
+  payout_promoted_block_number bigint,
+  payout_promoted_block_hash bytea,
+  vault_source_occurrence_id uuid,
+  vault_source_logical_event_id uuid,
+  vault_source_block_hash bytea,
+  payout_source_occurrence_id uuid,
+  payout_source_logical_event_id uuid,
+  payout_source_block_hash bytea,
+  balance_source_occurrence_id uuid,
+  balance_source_logical_event_id uuid,
+  balance_source_block_hash bytea,
+  verified_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  header programmable_private.run_headers%rowtype;
+  baseline record;
+  raw_vault_count bigint;
+  baseline_count bigint;
+  raw_balance_count bigint;
+  eligible_balance_count bigint;
+  unique_account_count bigint;
+begin
+  perform programmable_private.assert_caller('programmable_projector');
+  perform programmable_private.assert_open_projection_run_v1(
+    p_projection_run_id
+  );
+  select * into header
+  from programmable_private.run_headers
+  where run_id = p_projection_run_id and run_kind = 'projection';
+  if p_vault is null or pg_catalog.octet_length(p_vault) <> 20 then
+    raise exception using
+      errcode = '22023', message = 'invalid reward-balance vault';
+  end if;
+
+  select pg_catalog.count(*) into raw_vault_count
+  from programmable_private.current_reward_vault_projections_v1 as current_vault
+  join programmable_private.run_headers as current_run
+    on current_run.run_id = current_vault.projection_run_id
+   and current_run.run_kind = 'projection'
+   and current_run.chain_id = current_vault.chain_id
+   and current_run.release_id = current_vault.release_id
+   and current_run.model_id = current_vault.model_id
+   and current_run.epoch_id = current_vault.epoch_id
+   and current_run.captured_pointer_generation =
+     current_vault.pointer_generation
+   and current_run.source_group = header.source_group
+  where current_vault.chain_id = header.chain_id
+    and current_vault.release_id = header.release_id
+    and current_vault.model_id = header.model_id
+    and current_vault.epoch_id = header.epoch_id
+    and current_vault.pointer_generation =
+      header.captured_pointer_generation
+    and current_vault.vault = p_vault;
+  if raw_vault_count > 1 then
+    raise exception using
+      errcode = '23514', message = 'reward-balance vault is ambiguous';
+  end if;
+  if raw_vault_count = 0 then return; end if;
+
+  select pg_catalog.count(*) into baseline_count
+  from programmable_private.current_reward_vault_projections_v1 as current_vault
+  join programmable_private.run_headers as current_run
+    on current_run.run_id = current_vault.projection_run_id
+   and current_run.run_kind = 'projection'
+   and current_run.chain_id = current_vault.chain_id
+   and current_run.release_id = current_vault.release_id
+   and current_run.model_id = current_vault.model_id
+   and current_run.epoch_id = current_vault.epoch_id
+   and current_run.captured_pointer_generation =
+     current_vault.pointer_generation
+   and current_run.source_group = header.source_group
+  join programmable_private.projection_entity_current as entity
+    on entity.entity_kind = 'reward_vault'
+   and entity.projection_row_id = current_vault.reward_vault_projection_id
+   and entity.projection_run_id = current_vault.projection_run_id
+   and entity.chain_id = current_vault.chain_id
+   and entity.release_id = current_vault.release_id
+   and entity.model_id = current_vault.model_id
+   and entity.source_group = header.source_group
+  join programmable_private.projection_publications as publication
+    on publication.publication_id = entity.publication_id
+   and publication.run_id = current_vault.projection_run_id
+   and publication.epoch_id = current_vault.epoch_id
+   and publication.pointer_generation = current_vault.pointer_generation
+   and publication.checkpoint_id = entity.checkpoint_id
+   and publication.target_block_number =
+     current_vault.promoted_block_number
+   and publication.target_block_hash = current_vault.promoted_block_hash
+  join programmable_private.projector_checkpoints as checkpoint
+    on checkpoint.checkpoint_id = entity.checkpoint_id
+   and checkpoint.chain_id = current_vault.chain_id
+   and checkpoint.release_id = current_vault.release_id
+   and checkpoint.model_id = current_vault.model_id
+   and checkpoint.source_group = header.source_group
+   and checkpoint.epoch_id = header.epoch_id
+   and checkpoint.pointer_generation = header.captured_pointer_generation
+   and checkpoint.block_number = publication.target_block_number
+   and checkpoint.block_hash = publication.target_block_hash
+  join programmable_private.projector_checkpoint_current as current_checkpoint
+    on current_checkpoint.chain_id = checkpoint.chain_id
+   and current_checkpoint.release_id = checkpoint.release_id
+   and current_checkpoint.model_id = checkpoint.model_id
+   and current_checkpoint.source_group = checkpoint.source_group
+   and current_checkpoint.projector_version = checkpoint.projector_version
+  join programmable_private.projector_checkpoints as current_cursor
+    on current_cursor.checkpoint_id = current_checkpoint.checkpoint_id
+   and current_cursor.chain_id = checkpoint.chain_id
+   and current_cursor.release_id = checkpoint.release_id
+   and current_cursor.model_id = checkpoint.model_id
+   and current_cursor.source_group = checkpoint.source_group
+   and current_cursor.projector_version = checkpoint.projector_version
+   and current_cursor.epoch_id = header.epoch_id
+   and current_cursor.pointer_generation =
+     header.captured_pointer_generation
+   and current_cursor.checkpoint_generation =
+     current_checkpoint.checkpoint_generation
+   and current_cursor.reorg_generation = current_checkpoint.reorg_generation
+  join programmable_private.chain_event_current_canonical as canonical
+    on canonical.occurrence_id = current_vault.last_source_occurrence_id
+   and canonical.logical_event_id =
+     current_vault.last_source_logical_event_id
+   and canonical.block_hash =
+     current_vault.last_source_occurrence_block_hash
+  join programmable_private.chain_event_materialized_occurrences_v1
+    as vault_source
+    on vault_source.occurrence_id = current_vault.last_source_occurrence_id
+   and vault_source.logical_event_id =
+     current_vault.last_source_logical_event_id
+   and vault_source.block_hash =
+     current_vault.last_source_occurrence_block_hash
+   and vault_source.chain_id = current_vault.chain_id
+   and vault_source.release_id = current_vault.release_id
+   and vault_source.model_id = current_vault.model_id
+   and vault_source.source_group = header.source_group
+   and vault_source.epoch_id = current_vault.epoch_id
+   and vault_source.pointer_generation = current_vault.pointer_generation
+   and vault_source.block_number <= checkpoint.block_number
+  where current_vault.chain_id = header.chain_id
+    and current_vault.release_id = header.release_id
+    and current_vault.model_id = header.model_id
+    and current_vault.epoch_id = header.epoch_id
+    and current_vault.pointer_generation =
+      header.captured_pointer_generation
+    and current_vault.vault = p_vault
+    and current_cursor.reorg_generation = checkpoint.reorg_generation
+    and (
+      current_cursor.block_number,
+      current_cursor.cursor_block_global_log_index
+    ) >= (
+      checkpoint.block_number,
+      checkpoint.cursor_block_global_log_index
+    )
+    and programmable_private.has_current_verified_reward_seed(
+      current_vault.projection_run_id, current_vault.vault
+    );
+  if baseline_count <> 1 then
+    raise exception using
+      errcode = '23514',
+      message = 'reward-balance baseline is not exact-current';
+  end if;
+
+  select
+    current_vault.reward_vault_projection_id,
+    current_vault.current_allocation_fact_id,
+    current_vault.projection_run_id,
+    current_vault.promoted_block_number,
+    current_vault.promoted_block_hash,
+    current_vault.pool_id,
+    current_vault.quote_asset,
+    current_vault.configuration_hash,
+    coalesce(
+      current_vault.active_configuration_hash,
+      current_vault.configuration_hash
+    ) as active_configuration_hash,
+    coalesce(
+      current_vault.configuration_epoch,
+      (
+        select pg_catalog.max(allocation.configuration_epoch)
+        from programmable_private.reward_allocation_projections as allocation
+        where allocation.reward_vault_projection_id =
+          current_vault.reward_vault_projection_id
+          and allocation.projection_run_id = current_vault.projection_run_id
+      )
+    ) as configuration_epoch,
+    coalesce(
+      current_vault.total_creator_fees_received,
+      (
+        select pg_catalog.sum(
+          current_balance.claimable_accrued + current_balance.claimed_total
+        )
+        from programmable_private.current_account_reward_balances_v1
+          as current_balance
+        where current_balance.chain_id = current_vault.chain_id
+          and current_balance.release_id = current_vault.release_id
+          and current_balance.model_id = current_vault.model_id
+          and current_balance.epoch_id = current_vault.epoch_id
+          and current_balance.pointer_generation =
+            current_vault.pointer_generation
+          and current_balance.vault = current_vault.vault
+      ),
+      0
+    ) as total_creator_fees_received,
+    current_vault.last_source_occurrence_id,
+    current_vault.last_source_logical_event_id,
+    current_vault.last_source_occurrence_block_hash,
+    current_vault.verified_at as vault_verified_at,
+    entity.checkpoint_id,
+    checkpoint.projector_version,
+    checkpoint.checkpoint_generation,
+    checkpoint.reorg_generation,
+    checkpoint.block_number,
+    checkpoint.block_hash,
+    publication_audit.input_commitment
+  into baseline
+  from programmable_private.current_reward_vault_projections_v1 as current_vault
+  join programmable_private.run_headers as current_run
+    on current_run.run_id = current_vault.projection_run_id
+   and current_run.run_kind = 'projection'
+   and current_run.chain_id = current_vault.chain_id
+   and current_run.release_id = current_vault.release_id
+   and current_run.model_id = current_vault.model_id
+   and current_run.epoch_id = current_vault.epoch_id
+   and current_run.captured_pointer_generation =
+     current_vault.pointer_generation
+   and current_run.source_group = header.source_group
+  join programmable_private.projection_entity_current as entity
+    on entity.entity_kind = 'reward_vault'
+   and entity.projection_row_id = current_vault.reward_vault_projection_id
+   and entity.projection_run_id = current_vault.projection_run_id
+   and entity.chain_id = current_vault.chain_id
+   and entity.release_id = current_vault.release_id
+   and entity.model_id = current_vault.model_id
+   and entity.source_group = header.source_group
+  join programmable_private.projection_publications as publication
+    on publication.publication_id = entity.publication_id
+   and publication.run_id = current_vault.projection_run_id
+   and publication.epoch_id = current_vault.epoch_id
+   and publication.pointer_generation = current_vault.pointer_generation
+   and publication.checkpoint_id = entity.checkpoint_id
+   and publication.target_block_number =
+     current_vault.promoted_block_number
+   and publication.target_block_hash = current_vault.promoted_block_hash
+  join programmable_private.mutation_audits as publication_audit
+    on publication_audit.audit_id = publication.audit_id
+   and publication_audit.run_id = current_vault.projection_run_id
+  join programmable_private.projector_checkpoints as checkpoint
+    on checkpoint.checkpoint_id = entity.checkpoint_id
+   and checkpoint.chain_id = current_vault.chain_id
+   and checkpoint.release_id = current_vault.release_id
+   and checkpoint.model_id = current_vault.model_id
+   and checkpoint.source_group = header.source_group
+   and checkpoint.epoch_id = header.epoch_id
+   and checkpoint.pointer_generation = header.captured_pointer_generation
+   and checkpoint.block_number = publication.target_block_number
+   and checkpoint.block_hash = publication.target_block_hash
+  join programmable_private.projector_checkpoint_current as current_checkpoint
+    on current_checkpoint.chain_id = checkpoint.chain_id
+   and current_checkpoint.release_id = checkpoint.release_id
+   and current_checkpoint.model_id = checkpoint.model_id
+   and current_checkpoint.source_group = checkpoint.source_group
+   and current_checkpoint.projector_version = checkpoint.projector_version
+  join programmable_private.projector_checkpoints as current_cursor
+    on current_cursor.checkpoint_id = current_checkpoint.checkpoint_id
+   and current_cursor.chain_id = checkpoint.chain_id
+   and current_cursor.release_id = checkpoint.release_id
+   and current_cursor.model_id = checkpoint.model_id
+   and current_cursor.source_group = checkpoint.source_group
+   and current_cursor.projector_version = checkpoint.projector_version
+   and current_cursor.epoch_id = header.epoch_id
+   and current_cursor.pointer_generation =
+     header.captured_pointer_generation
+   and current_cursor.checkpoint_generation =
+     current_checkpoint.checkpoint_generation
+   and current_cursor.reorg_generation = current_checkpoint.reorg_generation
+  where current_vault.chain_id = header.chain_id
+    and current_vault.release_id = header.release_id
+    and current_vault.model_id = header.model_id
+    and current_vault.epoch_id = header.epoch_id
+    and current_vault.pointer_generation =
+      header.captured_pointer_generation
+    and current_vault.vault = p_vault
+    and current_cursor.reorg_generation = checkpoint.reorg_generation
+    and (
+      current_cursor.block_number,
+      current_cursor.cursor_block_global_log_index
+    ) >= (
+      checkpoint.block_number,
+      checkpoint.cursor_block_global_log_index
+    );
+
+  select
+    pg_catalog.count(*),
+    pg_catalog.count(distinct balance.account)
+  into raw_balance_count, unique_account_count
+  from programmable_private.current_account_reward_balances_v1 as balance
+  join programmable_private.run_headers as balance_run
+    on balance_run.run_id = balance.projection_run_id
+   and balance_run.run_kind = 'projection'
+   and balance_run.chain_id = balance.chain_id
+   and balance_run.release_id = balance.release_id
+   and balance_run.model_id = balance.model_id
+   and balance_run.source_group = header.source_group
+   and balance_run.epoch_id = balance.epoch_id
+   and balance_run.captured_pointer_generation = balance.pointer_generation
+  where balance.chain_id = header.chain_id
+    and balance.release_id = header.release_id
+    and balance.model_id = header.model_id
+    and balance.epoch_id = header.epoch_id
+    and balance.pointer_generation = header.captured_pointer_generation
+    and balance.vault = p_vault;
+  if raw_balance_count < 1 or unique_account_count <> raw_balance_count then
+    raise exception using
+      errcode = '23514',
+      message = 'reward-balance account set is incomplete or ambiguous';
+  end if;
+
+  return query
+  select
+    balance.chain_id::bigint,
+    balance.release_id::text,
+    balance.model_id::text,
+    header.source_group::text,
+    balance.epoch_id,
+    balance.pointer_generation,
+    baseline.checkpoint_id::uuid,
+    baseline.projector_version::text,
+    baseline.checkpoint_generation::bigint,
+    baseline.reorg_generation::bigint,
+    baseline.block_number::bigint,
+    baseline.block_hash::bytea,
+    baseline.reward_vault_projection_id::uuid,
+    baseline.current_allocation_fact_id::uuid,
+    (
+      select verified_seed.allocation_evidence_id
+      from programmable_private.reward_allocation_current_verified
+        as verified_seed
+      where verified_seed.allocation_fact_id =
+          baseline.current_allocation_fact_id
+        and verified_seed.vault = p_vault
+    )::uuid,
+    p_vault::bytea,
+    baseline.pool_id::bytea,
+    baseline.quote_asset::bytea,
+    baseline.configuration_hash::bytea,
+    baseline.active_configuration_hash::bytea,
+    baseline.configuration_epoch::bigint,
+    baseline.total_creator_fees_received::numeric,
+    balance.account_reward_balance_id,
+    balance.account::bytea,
+    payout.payout_address::bytea,
+    payout.payout_source_kind::text,
+    payout.configuration_epoch::bigint,
+    balance.claimable_accrued::numeric,
+    balance.claimed_total::numeric,
+    baseline.projection_run_id::uuid,
+    baseline.input_commitment::bytea,
+    baseline.promoted_block_number::bigint,
+    baseline.promoted_block_hash::bytea,
+    balance.projection_run_id,
+    balance_publication_audit.input_commitment::bytea,
+    balance.promoted_block_number::bigint,
+    balance.promoted_block_hash::bytea,
+    payout.payout_projection_run_id::uuid,
+    payout.payout_publication_commitment::bytea,
+    payout.payout_promoted_block_number::bigint,
+    payout.payout_promoted_block_hash::bytea,
+    baseline.last_source_occurrence_id::uuid,
+    baseline.last_source_logical_event_id::uuid,
+    baseline.last_source_occurrence_block_hash::bytea,
+    payout.payout_source_occurrence_id::uuid,
+    payout.payout_source_logical_event_id::uuid,
+    payout.payout_source_block_hash::bytea,
+    balance.last_source_occurrence_id,
+    balance.last_source_logical_event_id,
+    balance.last_source_occurrence_block_hash::bytea,
+    greatest(
+      baseline.vault_verified_at,
+      balance.verified_at,
+      balance_source.verified_at
+    )
+  from programmable_private.current_account_reward_balances_v1 as balance
+  join programmable_private.run_headers as balance_run
+    on balance_run.run_id = balance.projection_run_id
+   and balance_run.run_kind = 'projection'
+   and balance_run.chain_id = balance.chain_id
+   and balance_run.release_id = balance.release_id
+   and balance_run.model_id = balance.model_id
+   and balance_run.source_group = header.source_group
+   and balance_run.epoch_id = balance.epoch_id
+   and balance_run.captured_pointer_generation = balance.pointer_generation
+  join programmable_private.projection_entity_current as balance_entity
+    on balance_entity.entity_kind = 'account_reward_balance'
+   and balance_entity.projection_row_id = balance.account_reward_balance_id
+   and balance_entity.projection_run_id = balance.projection_run_id
+   and balance_entity.chain_id = balance.chain_id
+   and balance_entity.release_id = balance.release_id
+   and balance_entity.model_id = balance.model_id
+   and balance_entity.source_group = header.source_group
+   and balance_entity.checkpoint_id = baseline.checkpoint_id
+  join programmable_private.projection_publications as balance_publication
+    on balance_publication.publication_id = balance_entity.publication_id
+   and balance_publication.run_id = balance.projection_run_id
+   and balance_publication.epoch_id = balance.epoch_id
+   and balance_publication.pointer_generation = balance.pointer_generation
+   and balance_publication.checkpoint_id = baseline.checkpoint_id
+   and balance_publication.target_block_number =
+     balance.promoted_block_number
+   and balance_publication.target_block_hash = balance.promoted_block_hash
+  join programmable_private.mutation_audits as balance_publication_audit
+    on balance_publication_audit.audit_id = balance_publication.audit_id
+   and balance_publication_audit.run_id = balance.projection_run_id
+  join programmable_private.projector_checkpoints as balance_checkpoint
+    on balance_checkpoint.checkpoint_id = balance_entity.checkpoint_id
+   and balance_checkpoint.chain_id = balance.chain_id
+   and balance_checkpoint.release_id = balance.release_id
+   and balance_checkpoint.model_id = balance.model_id
+   and balance_checkpoint.source_group = header.source_group
+   and balance_checkpoint.epoch_id = header.epoch_id
+   and balance_checkpoint.pointer_generation =
+     header.captured_pointer_generation
+   and balance_checkpoint.projector_version = baseline.projector_version
+   and balance_checkpoint.checkpoint_generation =
+     baseline.checkpoint_generation
+   and balance_checkpoint.reorg_generation = baseline.reorg_generation
+   and balance_checkpoint.block_number = baseline.block_number
+   and balance_checkpoint.block_hash = baseline.block_hash
+  join programmable_private.projector_checkpoint_current
+    as current_checkpoint
+    on current_checkpoint.chain_id = balance_checkpoint.chain_id
+   and current_checkpoint.release_id = balance_checkpoint.release_id
+   and current_checkpoint.model_id = balance_checkpoint.model_id
+   and current_checkpoint.source_group = balance_checkpoint.source_group
+   and current_checkpoint.projector_version =
+     balance_checkpoint.projector_version
+   and current_checkpoint.checkpoint_id = balance_checkpoint.checkpoint_id
+   and current_checkpoint.checkpoint_generation =
+     balance_checkpoint.checkpoint_generation
+   and current_checkpoint.reorg_generation =
+     balance_checkpoint.reorg_generation
+  join programmable_private.chain_event_current_canonical
+    as balance_canonical
+    on balance_canonical.occurrence_id = balance.last_source_occurrence_id
+   and balance_canonical.logical_event_id =
+     balance.last_source_logical_event_id
+   and balance_canonical.block_hash =
+     balance.last_source_occurrence_block_hash
+  join programmable_private.chain_event_materialized_occurrences_v1
+    as balance_source
+    on balance_source.occurrence_id = balance.last_source_occurrence_id
+   and balance_source.logical_event_id = balance.last_source_logical_event_id
+   and balance_source.block_hash = balance.last_source_occurrence_block_hash
+   and balance_source.chain_id = balance.chain_id
+   and balance_source.release_id = balance.release_id
+   and balance_source.model_id = balance.model_id
+   and balance_source.source_group = header.source_group
+   and balance_source.epoch_id = balance.epoch_id
+   and balance_source.pointer_generation = balance.pointer_generation
+   and balance_source.block_number <= balance_checkpoint.block_number
+  join lateral (
+    select candidate.*
+    from (
+      select
+        coalesce(balance.payout_address, balance.account)::bytea
+          as payout_address,
+        'balance_account'::text as payout_source_kind,
+        baseline.configuration_epoch::bigint as configuration_epoch,
+        balance.projection_run_id as payout_projection_run_id,
+        balance_publication_audit.input_commitment::bytea
+          as payout_publication_commitment,
+        balance.promoted_block_number::bigint
+          as payout_promoted_block_number,
+        balance.promoted_block_hash::bytea as payout_promoted_block_hash,
+        balance.last_source_occurrence_id as payout_source_occurrence_id,
+        balance.last_source_logical_event_id
+          as payout_source_logical_event_id,
+        balance.last_source_occurrence_block_hash::bytea
+          as payout_source_block_hash,
+        balance_source.block_number::bigint as payout_source_block_number,
+        balance_source.block_global_log_index::bigint
+          as payout_source_global_log_index,
+        2::integer as payout_source_priority
+      where balance.release_id = 'classic-v3'
+
+      union all
+
+      select
+        payout_change.new_payout_address::bytea as payout_address,
+        'payout_change'::text as payout_source_kind,
+        payout_change.configuration_epoch::bigint as configuration_epoch,
+        payout_change.projection_run_id as payout_projection_run_id,
+        payout_audit.input_commitment::bytea
+          as payout_publication_commitment,
+        payout_change.promoted_block_number::bigint
+          as payout_promoted_block_number,
+        payout_change.promoted_block_hash::bytea
+          as payout_promoted_block_hash,
+        payout_change.source_occurrence_id
+          as payout_source_occurrence_id,
+        payout_change.source_logical_event_id
+          as payout_source_logical_event_id,
+        payout_change.source_occurrence_block_hash::bytea
+          as payout_source_block_hash,
+        payout_source.block_number::bigint as payout_source_block_number,
+        payout_source.block_global_log_index::bigint
+          as payout_source_global_log_index,
+        1::integer as payout_source_priority
+      from programmable_private.payout_change_projections as payout_change
+      join programmable_private.run_headers as payout_run
+        on payout_run.run_id = payout_change.projection_run_id
+       and payout_run.run_kind = 'projection'
+       and payout_run.chain_id = payout_change.chain_id
+       and payout_run.release_id = payout_change.release_id
+       and payout_run.model_id = payout_change.model_id
+       and payout_run.source_group = header.source_group
+       and payout_run.epoch_id = payout_change.epoch_id
+       and payout_run.captured_pointer_generation =
+         payout_change.pointer_generation
+      join programmable_private.projection_publications
+        as payout_publication
+        on payout_publication.run_id = payout_change.projection_run_id
+       and payout_publication.epoch_id = payout_change.epoch_id
+       and payout_publication.pointer_generation =
+         payout_change.pointer_generation
+       and payout_publication.target_block_number =
+         payout_change.promoted_block_number
+       and payout_publication.target_block_hash =
+         payout_change.promoted_block_hash
+      join programmable_private.mutation_audits as payout_audit
+        on payout_audit.audit_id = payout_publication.audit_id
+       and payout_audit.run_id = payout_change.projection_run_id
+      join programmable_private.projector_checkpoints as payout_checkpoint
+        on payout_checkpoint.checkpoint_id = payout_publication.checkpoint_id
+       and payout_checkpoint.chain_id = payout_change.chain_id
+       and payout_checkpoint.release_id = payout_change.release_id
+       and payout_checkpoint.model_id = payout_change.model_id
+       and payout_checkpoint.source_group = header.source_group
+       and payout_checkpoint.epoch_id = header.epoch_id
+       and payout_checkpoint.pointer_generation =
+         header.captured_pointer_generation
+       and payout_checkpoint.block_number =
+         payout_publication.target_block_number
+       and payout_checkpoint.block_hash = payout_publication.target_block_hash
+       and payout_checkpoint.block_number <= baseline.block_number
+      join programmable_private.chain_event_current_canonical
+        as payout_canonical
+        on payout_canonical.occurrence_id =
+          payout_change.source_occurrence_id
+       and payout_canonical.logical_event_id =
+         payout_change.source_logical_event_id
+       and payout_canonical.block_hash =
+         payout_change.source_occurrence_block_hash
+      join programmable_private.chain_event_materialized_occurrences_v1
+        as payout_source
+        on payout_source.occurrence_id = payout_change.source_occurrence_id
+       and payout_source.logical_event_id =
+         payout_change.source_logical_event_id
+       and payout_source.block_hash =
+         payout_change.source_occurrence_block_hash
+       and payout_source.chain_id = payout_change.chain_id
+       and payout_source.release_id = payout_change.release_id
+       and payout_source.model_id = payout_change.model_id
+       and payout_source.source_group = header.source_group
+       and payout_source.epoch_id = payout_change.epoch_id
+       and payout_source.pointer_generation = payout_change.pointer_generation
+       and payout_source.block_number <= payout_checkpoint.block_number
+      where payout_change.chain_id = balance.chain_id
+        and payout_change.release_id = balance.release_id
+        and payout_change.model_id = balance.model_id
+        and payout_change.epoch_id = balance.epoch_id
+        and payout_change.pointer_generation = balance.pointer_generation
+        and payout_change.vault = balance.vault
+        and payout_change.beneficiary = balance.account
+
+      union all
+
+      select
+        allocation.payout_address::bytea,
+        'allocation'::text,
+        allocation.configuration_epoch::bigint,
+        allocation.projection_run_id,
+        allocation_audit.input_commitment::bytea,
+        allocation.promoted_block_number::bigint,
+        allocation.promoted_block_hash::bytea,
+        allocation.last_source_occurrence_id,
+        allocation.last_source_logical_event_id,
+        allocation.last_source_occurrence_block_hash::bytea,
+        allocation_source.block_number::bigint,
+        allocation_source.block_global_log_index::bigint,
+        0::integer
+      from programmable_private.reward_allocation_projections as allocation
+      join programmable_private.reward_vault_projections as allocation_vault
+        on allocation_vault.reward_vault_projection_id =
+          allocation.reward_vault_projection_id
+       and allocation_vault.projection_run_id = allocation.projection_run_id
+       and allocation_vault.chain_id = allocation.chain_id
+       and allocation_vault.release_id = allocation.release_id
+       and allocation_vault.model_id = allocation.model_id
+       and allocation_vault.epoch_id = allocation.epoch_id
+       and allocation_vault.pointer_generation = allocation.pointer_generation
+      join programmable_private.run_headers as allocation_run
+        on allocation_run.run_id = allocation.projection_run_id
+       and allocation_run.run_kind = 'projection'
+       and allocation_run.chain_id = allocation.chain_id
+       and allocation_run.release_id = allocation.release_id
+       and allocation_run.model_id = allocation.model_id
+       and allocation_run.source_group = header.source_group
+       and allocation_run.epoch_id = allocation.epoch_id
+       and allocation_run.captured_pointer_generation =
+         allocation.pointer_generation
+      join programmable_private.projection_publications
+        as allocation_publication
+        on allocation_publication.run_id = allocation.projection_run_id
+       and allocation_publication.epoch_id = allocation.epoch_id
+       and allocation_publication.pointer_generation =
+         allocation.pointer_generation
+       and allocation_publication.target_block_number =
+         allocation.promoted_block_number
+       and allocation_publication.target_block_hash =
+         allocation.promoted_block_hash
+      join programmable_private.mutation_audits as allocation_audit
+        on allocation_audit.audit_id = allocation_publication.audit_id
+       and allocation_audit.run_id = allocation.projection_run_id
+      join programmable_private.projector_checkpoints
+        as allocation_checkpoint
+        on allocation_checkpoint.checkpoint_id =
+          allocation_publication.checkpoint_id
+       and allocation_checkpoint.chain_id = allocation.chain_id
+       and allocation_checkpoint.release_id = allocation.release_id
+       and allocation_checkpoint.model_id = allocation.model_id
+       and allocation_checkpoint.source_group = header.source_group
+       and allocation_checkpoint.epoch_id = header.epoch_id
+       and allocation_checkpoint.pointer_generation =
+         header.captured_pointer_generation
+       and allocation_checkpoint.block_number =
+         allocation_publication.target_block_number
+       and allocation_checkpoint.block_hash =
+         allocation_publication.target_block_hash
+       and allocation_checkpoint.block_number <= baseline.block_number
+      join programmable_private.chain_event_current_canonical
+        as allocation_canonical
+        on allocation_canonical.occurrence_id =
+          allocation.last_source_occurrence_id
+       and allocation_canonical.logical_event_id =
+         allocation.last_source_logical_event_id
+       and allocation_canonical.block_hash =
+         allocation.last_source_occurrence_block_hash
+      join programmable_private.chain_event_materialized_occurrences_v1
+        as allocation_source
+        on allocation_source.occurrence_id =
+          allocation.last_source_occurrence_id
+       and allocation_source.logical_event_id =
+         allocation.last_source_logical_event_id
+       and allocation_source.block_hash =
+         allocation.last_source_occurrence_block_hash
+       and allocation_source.chain_id = allocation.chain_id
+       and allocation_source.release_id = allocation.release_id
+       and allocation_source.model_id = allocation.model_id
+       and allocation_source.source_group = header.source_group
+       and allocation_source.epoch_id = allocation.epoch_id
+       and allocation_source.pointer_generation = allocation.pointer_generation
+       and allocation_source.block_number <=
+         allocation_checkpoint.block_number
+      where allocation.chain_id = balance.chain_id
+        and allocation.release_id = balance.release_id
+        and allocation.model_id = balance.model_id
+        and allocation.epoch_id = balance.epoch_id
+        and allocation.pointer_generation = balance.pointer_generation
+        and allocation_vault.vault = balance.vault
+        and allocation.beneficiary = balance.account
+    ) as candidate
+    order by
+      candidate.payout_source_block_number desc,
+      candidate.payout_source_global_log_index desc,
+      candidate.payout_source_priority desc,
+      candidate.payout_source_occurrence_id desc,
+      candidate.payout_projection_run_id desc
+    limit 1
+  ) as payout on true
+  where balance.chain_id = header.chain_id
+    and balance.release_id = header.release_id
+    and balance.model_id = header.model_id
+    and balance.epoch_id = header.epoch_id
+    and balance.pointer_generation = header.captured_pointer_generation
+    and balance.vault = p_vault
+    and balance.projection_run_id = baseline.projection_run_id
+  order by balance.account;
+  get diagnostics eligible_balance_count = row_count;
+  if eligible_balance_count <> raw_balance_count then
+    raise exception using
+      errcode = '23514',
+      message = 'reward-balance or payout set is not checkpoint-exact';
+  end if;
+end
+$function$;
+
+create function programmable_private.promote_projection_run_v2(
+  p_promotion_mode text,
+  p_publication_id uuid,
+  p_checkpoint_id uuid,
+  p_outcome_id uuid,
+  p_run_id uuid,
+  p_projector_version text,
+  p_lease_generation bigint,
+  p_lease_token_hash bytea,
+  p_expected_checkpoint_generation bigint,
+  p_next_checkpoint_generation bigint,
+  p_reorg_generation bigint,
+  p_safe_head_observation_id uuid,
+  p_target_block_evidence_id uuid,
+  p_target_block_number numeric,
+  p_target_block_hash bytea,
+  p_cursor_block_global_log_index numeric,
+  p_cursor_candidate_id text,
+  p_occurrence_ids uuid[],
+  p_allocation_fact_ids uuid[],
+  p_allocation_evidence_ids uuid[],
+  p_candidate_disposition_ids uuid[],
+  p_route_keys text[],
+  p_result_commitment bytea,
+  p_published_at timestamptz default pg_catalog.clock_timestamp()
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+declare
+  header programmable_private.run_headers%rowtype;
+  observation programmable_private.safe_head_observations%rowtype;
+  target_evidence programmable_private.dual_rpc_block_evidence%rowtype;
+  current_checkpoint
+    programmable_private.projector_checkpoint_current%rowtype;
+  previous_checkpoint programmable_private.projector_checkpoints%rowtype;
+  staged_vault programmable_private.reward_vault_projections%rowtype;
+  baseline_vault programmable_private.reward_vault_projections%rowtype;
+  seed_current
+    programmable_private.reward_allocation_current_verified%rowtype;
+  terminal_occurrence_id uuid;
+  selected_route_key text;
+  group_event record;
+  target_block bigint;
+  cursor_log_index bigint;
+  group_transaction_hash bytea;
+  group_block_number bigint;
+  group_occurrence_count bigint;
+  complete_group_occurrence_ids uuid[];
+  audit_id uuid;
+  status_id uuid;
+  route_history_id uuid;
+  ordered_occurrence_ids uuid[];
+  ordered_fact_ids uuid[];
+  ordered_disposition_ids uuid[];
+  required_disposition_ids uuid[];
+  ordered_route_keys text[];
+  ordered_projection_rows text[];
+  projection_row_count bigint;
+  vault_count bigint;
+  allocation_count bigint;
+  balance_count bigint;
+  claim_count bigint;
+  claim_event_count bigint;
+  checkpoint_count bigint;
+  terminal_reward_event_count bigint;
+  unique_beneficiary_count bigint;
+  total_share_bps numeric;
+  total_balance_value numeric;
+  checkpoint_amount_total numeric;
+  checkpoint_terminal_total numeric;
+  baseline_total_creator_fees numeric;
+  baseline_configuration_epoch bigint;
+begin
+  if p_promotion_mode = 'full_launch' then
+    return programmable_private.promote_projection_run(
+      p_publication_id, p_checkpoint_id, p_outcome_id, p_run_id,
+      p_projector_version, p_lease_generation, p_lease_token_hash,
+      p_expected_checkpoint_generation, p_next_checkpoint_generation,
+      p_reorg_generation, p_safe_head_observation_id,
+      p_target_block_evidence_id, p_target_block_number,
+      p_target_block_hash, p_cursor_block_global_log_index,
+      p_cursor_candidate_id, p_occurrence_ids, p_allocation_fact_ids,
+      p_allocation_evidence_ids, p_candidate_disposition_ids,
+      p_route_keys, p_result_commitment, p_published_at
+    );
+  end if;
+  if p_promotion_mode <> 'reward_snapshot_delta' then
+    raise exception using
+      errcode = '22023', message = 'unknown projection promotion mode';
+  end if;
+
+  perform programmable_private.assert_caller('programmable_projector');
+  select * into header
+  from programmable_private.run_headers
+  where run_id = p_run_id and run_kind = 'projection'
+  for update;
+  if not found then
+    raise exception using
+      errcode = '23503', message = 'invalid projection run';
+  end if;
+  perform programmable_private.assert_current_epoch(
+    header.chain_id, header.release_id, header.model_id,
+    header.source_group, header.epoch_id,
+    header.captured_pointer_generation
+  );
+  if header.release_id not in (
+       'classic-v3',
+       'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+     )
+     or exists (
+       select 1 from programmable_private.run_lifecycle_outcomes
+       where run_id = p_run_id
+     )
+  then
+    raise exception using
+      errcode = '55000', message = 'reward snapshot run is not promotable';
+  end if;
+  if not exists (
+    select 1
+    from programmable_private.projector_lease_current as lease
+    where lease.chain_id = header.chain_id
+      and lease.release_id = header.release_id
+      and lease.model_id = header.model_id
+      and lease.source_group = header.source_group
+      and lease.projector_version = p_projector_version
+      and lease.epoch_id = header.epoch_id
+      and lease.pointer_generation = header.captured_pointer_generation
+      and lease.lease_generation = p_lease_generation
+      and lease.lease_token_hash = p_lease_token_hash
+      and lease.expires_at >= p_published_at
+  ) then
+    raise exception using
+      errcode = '40001', message = 'stale projector lease';
+  end if;
+  if p_target_block_number <> pg_catalog.trunc(p_target_block_number)
+     or p_target_block_number < 0
+     or p_target_block_number > 9223372036854775807
+     or pg_catalog.octet_length(p_target_block_hash) <> 32
+     or p_cursor_block_global_log_index < 0
+     or p_cursor_block_global_log_index <>
+       pg_catalog.trunc(p_cursor_block_global_log_index)
+     or p_cursor_block_global_log_index > 4294967295
+     or p_cursor_candidate_id is null
+     or pg_catalog.octet_length(p_result_commitment) <> 32
+     or p_next_checkpoint_generation <>
+       p_expected_checkpoint_generation + 1
+     or coalesce(pg_catalog.cardinality(p_occurrence_ids), 0) not between 1 and 16
+     or pg_catalog.cardinality(p_allocation_fact_ids) <> 1
+     or pg_catalog.cardinality(p_allocation_evidence_ids) <> 1
+     or coalesce(pg_catalog.cardinality(p_route_keys), 0) = 0
+  then
+    raise exception using
+      errcode = '22023', message = 'invalid reward delta promotion request';
+  end if;
+  select pg_catalog.array_agg(item order by item)
+  into ordered_fact_ids
+  from (
+    select distinct item
+    from pg_catalog.unnest(p_allocation_fact_ids) as item
+  ) as unique_items;
+  select pg_catalog.array_agg(item order by item)
+  into ordered_disposition_ids
+  from (
+    select distinct item
+    from pg_catalog.unnest(p_candidate_disposition_ids) as item
+  ) as unique_items;
+  select pg_catalog.array_agg(item order by item)
+  into ordered_route_keys
+  from (
+    select distinct item from pg_catalog.unnest(p_route_keys) as item
+  ) as unique_items;
+  if p_allocation_fact_ids is distinct from ordered_fact_ids
+     or p_candidate_disposition_ids is distinct from
+       coalesce(ordered_disposition_ids, array[]::uuid[])
+     or p_route_keys is distinct from ordered_route_keys
+     or exists (
+       select 1 from pg_catalog.unnest(p_occurrence_ids) as item
+       where item is null
+     )
+     or pg_catalog.cardinality(p_occurrence_ids) <>
+       (
+         select pg_catalog.count(distinct item)
+         from pg_catalog.unnest(p_occurrence_ids) as item
+       )
+     or exists (
+       select 1 from pg_catalog.unnest(p_allocation_fact_ids) as item
+       where item is null
+     )
+     or exists (
+       select 1 from pg_catalog.unnest(p_allocation_evidence_ids) as item
+       where item is null
+     )
+     or exists (
+       select 1 from pg_catalog.unnest(p_candidate_disposition_ids) as item
+       where item is null
+     )
+     or exists (
+       select 1 from pg_catalog.unnest(p_route_keys) as item
+       where item is null
+     )
+  then
+    raise exception using
+      errcode = '22023',
+      message = 'promotion arrays must be non-null and canonically ordered';
+  end if;
+  terminal_occurrence_id := p_occurrence_ids[
+    pg_catalog.array_upper(p_occurrence_ids, 1)
+  ];
+
+  target_block := p_target_block_number::bigint;
+  cursor_log_index := p_cursor_block_global_log_index::bigint;
+  select * into observation
+  from programmable_private.safe_head_observations
+  where observation_id = p_safe_head_observation_id;
+  if not found
+     or observation.epoch_id <> header.epoch_id
+     or observation.pointer_generation <>
+       header.captured_pointer_generation
+     or target_block > observation.safe_block_number
+  then
+    raise exception using
+      errcode = '23514', message = 'target is outside accepted safe head';
+  end if;
+  select * into target_evidence
+  from programmable_private.dual_rpc_block_evidence
+  where block_evidence_id = p_target_block_evidence_id
+    and observation_id = p_safe_head_observation_id
+    and epoch_id = header.epoch_id
+    and pointer_generation = header.captured_pointer_generation;
+  if not found
+     or target_evidence.block_number <> target_block
+     or target_evidence.agreed_block_hash <> p_target_block_hash
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'target/checkpoint hash is not bound evidence';
+  end if;
+  select * into current_checkpoint
+  from programmable_private.projector_checkpoint_current
+  where chain_id = header.chain_id
+    and release_id = header.release_id
+    and model_id = header.model_id
+    and source_group = header.source_group
+    and projector_version = p_projector_version
+  for update;
+  if not found
+     or current_checkpoint.checkpoint_generation <>
+       p_expected_checkpoint_generation
+     or current_checkpoint.reorg_generation <> p_reorg_generation
+     or p_expected_checkpoint_generation = 0
+  then
+    raise exception using
+      errcode = '40001', message = 'reward delta checkpoint CAS lost';
+  end if;
+  select * into previous_checkpoint
+  from programmable_private.projector_checkpoints
+  where checkpoint_id = current_checkpoint.checkpoint_id;
+  if not found
+     or previous_checkpoint.epoch_id <> header.epoch_id
+     or previous_checkpoint.pointer_generation <>
+       header.captured_pointer_generation
+  then
+    raise exception using
+      errcode = '23503', message = 'current checkpoint identity is missing';
+  end if;
+  if (
+    target_block, cursor_log_index, p_cursor_candidate_id
+  ) <= (
+    previous_checkpoint.block_number::bigint,
+    previous_checkpoint.cursor_block_global_log_index::bigint,
+    previous_checkpoint.cursor_candidate_id::text
+  ) then
+    raise exception using
+      errcode = '23514', message = 'reward delta cursor did not advance';
+  end if;
+  if not exists (
+    select 1 from programmable_private.envio_candidate_inbox as candidate
+    where candidate.candidate_id = p_cursor_candidate_id
+      and candidate.chain_id = header.chain_id
+      and candidate.block_number = target_block
+      and candidate.block_hash = p_target_block_hash
+      and candidate.block_global_log_index = cursor_log_index
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'checkpoint cursor does not match its exact inbox row';
+  end if;
+  if exists (
+    select 1
+    from programmable_private.envio_candidate_inbox as candidate
+    left join programmable_private.envio_candidate_status_current as status
+      on status.candidate_id = candidate.candidate_id
+     and status.epoch_id = header.epoch_id
+     and status.pointer_generation = header.captured_pointer_generation
+    where candidate.chain_id = header.chain_id
+      and (
+        candidate.block_number::bigint,
+        candidate.block_global_log_index::bigint,
+        candidate.candidate_id::text
+      ) > (
+        previous_checkpoint.block_number::bigint,
+        previous_checkpoint.cursor_block_global_log_index::bigint,
+        previous_checkpoint.cursor_candidate_id::text
+      )
+      and (
+        candidate.block_number::bigint,
+        candidate.block_global_log_index::bigint,
+        candidate.candidate_id::text
+      ) <= (target_block, cursor_log_index, p_cursor_candidate_id)
+      and coalesce(status.status::text, 'pending') not in (
+        'resolved', 'ignored', 'quarantined'
+      )
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'checkpoint cursor cannot pass a pending candidate';
+  end if;
+  select pg_catalog.array_agg(status.decision_id order by status.decision_id)
+  into required_disposition_ids
+  from programmable_private.envio_candidate_inbox as candidate
+  join programmable_private.envio_candidate_status_current as status
+    on status.candidate_id = candidate.candidate_id
+   and status.epoch_id = header.epoch_id
+   and status.pointer_generation = header.captured_pointer_generation
+   and status.status in ('resolved', 'ignored', 'quarantined')
+  where candidate.chain_id = header.chain_id
+    and (
+      candidate.block_number::bigint,
+      candidate.block_global_log_index::bigint,
+      candidate.candidate_id::text
+    ) > (
+      previous_checkpoint.block_number::bigint,
+      previous_checkpoint.cursor_block_global_log_index::bigint,
+      previous_checkpoint.cursor_candidate_id::text
+    )
+    and (
+      candidate.block_number::bigint,
+      candidate.block_global_log_index::bigint,
+      candidate.candidate_id::text
+    ) <= (target_block, cursor_log_index, p_cursor_candidate_id);
+  if p_candidate_disposition_ids is distinct from
+     coalesce(required_disposition_ids, array[]::uuid[])
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'candidate disposition manifest is incomplete';
+  end if;
+
+  if exists (
+       select 1 from programmable_private.launch_projections
+       where projection_run_id = p_run_id
+     )
+     or exists (
+       select 1 from programmable_private.pool_projections
+       where projection_run_id = p_run_id
+     )
+     or exists (
+       select 1 from programmable_private.pool_fee_configurations
+       where projection_run_id = p_run_id
+     )
+     or exists (
+       select 1 from programmable_private.fee_accrual_facts
+       where projection_run_id = p_run_id
+     )
+     or exists (
+       select 1 from programmable_private.pool_fee_totals
+       where projection_run_id = p_run_id
+     )
+     or exists (
+       select 1 from programmable_private.payout_change_projections
+       where projection_run_id = p_run_id
+     )
+     or exists (
+       select 1 from programmable_private.initial_buy_custody_projections
+       where projection_run_id = p_run_id
+     )
+     or exists (
+       select 1 from programmable_private.initial_buy_vesting_projections
+       where projection_run_id = p_run_id
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward delta cannot contain another projection mode';
+  end if;
+  select pg_catalog.count(*) into vault_count
+  from programmable_private.reward_vault_projections
+  where projection_run_id = p_run_id;
+  if vault_count <> 1 then
+    raise exception using
+      errcode = '23514',
+      message = 'reward delta requires one complete vault snapshot';
+  end if;
+  select * into staged_vault
+  from programmable_private.reward_vault_projections
+  where projection_run_id = p_run_id;
+  if staged_vault.snapshot_kind <> 'exact_current'
+     or staged_vault.chain_id <> header.chain_id
+     or staged_vault.release_id <> header.release_id
+     or staged_vault.model_id <> header.model_id
+     or staged_vault.epoch_id <> header.epoch_id
+     or staged_vault.pointer_generation <>
+       header.captured_pointer_generation
+     or staged_vault.promoted_block_number <> target_block
+     or staged_vault.promoted_block_hash <> p_target_block_hash
+     or staged_vault.last_source_occurrence_id <> terminal_occurrence_id
+     or staged_vault.baseline_checkpoint_id <>
+       current_checkpoint.checkpoint_id
+     or staged_vault.baseline_checkpoint_generation <>
+       current_checkpoint.checkpoint_generation
+     or staged_vault.baseline_reorg_generation <>
+       current_checkpoint.reorg_generation
+     or staged_vault.current_allocation_fact_id <>
+       p_allocation_fact_ids[1]
+     or staged_vault.configuration_epoch is null
+     or staged_vault.active_configuration_hash is null
+     or staged_vault.total_creator_fees_received is null
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward delta vault is not checkpoint-exact';
+  end if;
+  select * into baseline_vault
+  from programmable_private.current_reward_vault_projections_v1 as baseline
+  where baseline.reward_vault_projection_id =
+      staged_vault.baseline_reward_vault_projection_id
+    and baseline.chain_id = header.chain_id
+    and baseline.release_id = header.release_id
+    and baseline.model_id = header.model_id
+    and baseline.epoch_id = header.epoch_id
+    and baseline.pointer_generation = header.captured_pointer_generation
+    and baseline.vault = staged_vault.vault
+    and baseline.pool_id = staged_vault.pool_id;
+  if not found
+     or baseline_vault.launch_projection_id <>
+       staged_vault.launch_projection_id
+     or baseline_vault.current_allocation_fact_id <>
+       staged_vault.current_allocation_fact_id
+     or not programmable_private.has_current_verified_reward_seed(
+       baseline_vault.projection_run_id, baseline_vault.vault
+     )
+     or not exists (
+       select 1
+       from programmable_private.current_launch_projections_v1 as launch
+       where launch.launch_projection_id = baseline_vault.launch_projection_id
+         and launch.chain_id = header.chain_id
+         and launch.release_id = header.release_id
+         and launch.model_id = header.model_id
+         and launch.epoch_id = header.epoch_id
+         and launch.pointer_generation =
+           header.captured_pointer_generation
+         and launch.reward_vault = baseline_vault.vault
+         and launch.pool_id = baseline_vault.pool_id
+         and launch.is_complete
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward delta baseline is stale or incomplete';
+  end if;
+  select * into seed_current
+  from programmable_private.reward_allocation_current_verified
+  where allocation_fact_id = p_allocation_fact_ids[1]
+    and allocation_evidence_id = p_allocation_evidence_ids[1]
+    and vault = staged_vault.vault;
+  if not found then
+    raise exception using
+      errcode = '23514',
+      message = 'reward delta initial seed is not current verified';
+  end if;
+
+  select
+    coalesce(
+      baseline_vault.total_creator_fees_received,
+      (
+        select pg_catalog.sum(
+          balance.claimable_accrued + balance.claimed_total
+        )
+        from programmable_private.current_account_reward_balances_v1
+          as balance
+        where balance.chain_id = header.chain_id
+          and balance.release_id = header.release_id
+          and balance.model_id = header.model_id
+          and balance.epoch_id = header.epoch_id
+          and balance.pointer_generation =
+            header.captured_pointer_generation
+          and balance.vault = staged_vault.vault
+      ),
+      0
+    ),
+    coalesce(
+      baseline_vault.configuration_epoch,
+      (
+        select pg_catalog.max(allocation.configuration_epoch)
+        from programmable_private.reward_allocation_projections
+          as allocation
+        where allocation.reward_vault_projection_id =
+            baseline_vault.reward_vault_projection_id
+          and allocation.projection_run_id =
+            baseline_vault.projection_run_id
+          and allocation.effective_to_block is null
+      )
+    )
+  into baseline_total_creator_fees, baseline_configuration_epoch;
+  if baseline_configuration_epoch is null then
+    raise exception using
+      errcode = '23514',
+      message = 'reward delta baseline configuration is incomplete';
+  end if;
+
+  select source.transaction_hash, source.block_number::bigint
+  into group_transaction_hash, group_block_number
+  from programmable_private.chain_event_occurrences as source
+  where source.occurrence_id = p_occurrence_ids[1];
+  if not found then
+    raise exception using
+      errcode = '23503', message = 'reward event group is missing';
+  end if;
+  select
+    pg_catalog.count(*),
+    pg_catalog.array_agg(
+      source.occurrence_id
+      order by source.block_number,
+        source.block_global_log_index, source.occurrence_id
+    )
+  into group_occurrence_count, ordered_occurrence_ids
+  from pg_catalog.unnest(p_occurrence_ids) as requested(occurrence_id)
+  join programmable_private.chain_event_occurrences as source
+    on source.occurrence_id = requested.occurrence_id
+  join programmable_private.chain_event_occurrence_materializations
+    as materialization
+    on materialization.occurrence_id = source.occurrence_id
+   and materialization.chain_id = header.chain_id
+   and materialization.release_id = header.release_id
+   and materialization.model_id = header.model_id
+   and materialization.source_group = header.source_group
+   and materialization.epoch_id = header.epoch_id
+   and materialization.pointer_generation =
+     header.captured_pointer_generation;
+  if group_occurrence_count <> pg_catalog.cardinality(p_occurrence_ids)
+     or ordered_occurrence_ids is distinct from p_occurrence_ids
+     or group_block_number <> target_block
+     or exists (
+       select 1
+       from pg_catalog.unnest(p_occurrence_ids) as requested(occurrence_id)
+       join programmable_private.chain_event_occurrences as source
+         on source.occurrence_id = requested.occurrence_id
+       where source.chain_id <> header.chain_id
+          or source.source_address <> staged_vault.vault
+          or source.transaction_hash <> group_transaction_hash
+          or source.block_number <> group_block_number
+          or source.block_hash <> p_target_block_hash
+          or (
+            source.block_number,
+            source.block_global_log_index
+          ) <= (
+            previous_checkpoint.block_number,
+            previous_checkpoint.cursor_block_global_log_index
+          )
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward event group is partial, mixed, stale or misordered';
+  end if;
+
+  select pg_catalog.array_agg(
+    source.occurrence_id
+    order by source.block_number,
+      source.block_global_log_index, source.occurrence_id
+  )
+  into complete_group_occurrence_ids
+  from programmable_private.chain_event_occurrences as source
+  join programmable_private.chain_event_occurrence_materializations
+    as materialization
+    on materialization.occurrence_id = source.occurrence_id
+   and materialization.chain_id = header.chain_id
+   and materialization.release_id = header.release_id
+   and materialization.model_id = header.model_id
+   and materialization.source_group = header.source_group
+   and materialization.epoch_id = header.epoch_id
+   and materialization.pointer_generation =
+     header.captured_pointer_generation
+  where source.chain_id = header.chain_id
+    and source.source_address = staged_vault.vault
+    and source.transaction_hash = group_transaction_hash
+    and source.block_number = group_block_number
+    and source.block_hash = p_target_block_hash;
+  if complete_group_occurrence_ids is distinct from p_occurrence_ids
+     or not exists (
+       select 1
+       from programmable_private.chain_event_occurrence_materializations
+         as terminal_materialization
+       where terminal_materialization.occurrence_id =
+           terminal_occurrence_id
+         and terminal_materialization.chain_id = header.chain_id
+         and terminal_materialization.release_id = header.release_id
+         and terminal_materialization.model_id = header.model_id
+         and terminal_materialization.source_group = header.source_group
+         and terminal_materialization.epoch_id = header.epoch_id
+         and terminal_materialization.pointer_generation =
+           header.captured_pointer_generation
+         and coalesce(
+           terminal_materialization.first_seen_neutral_candidate_id::text,
+           terminal_materialization.first_seen_envio_candidate_id::text
+         ) = p_cursor_candidate_id
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward transaction group or cursor is incomplete';
+  end if;
+
+  for group_event in
+    select
+      source.*,
+      materialization.event_type as materialized_event_type,
+      materialization.decoded_payload as materialized_payload,
+      materialization.block_evidence_id as materialized_block_evidence_id,
+      materialization.release_binding_id as materialized_binding_id,
+      materialization.dynamic_source_attestation_id
+        as materialized_dynamic_source_id
+    from pg_catalog.unnest(p_occurrence_ids) as requested(occurrence_id)
+    join programmable_private.chain_event_occurrences as source
+      on source.occurrence_id = requested.occurrence_id
+    join programmable_private.chain_event_occurrence_materializations
+      as materialization
+      on materialization.occurrence_id = source.occurrence_id
+     and materialization.chain_id = header.chain_id
+     and materialization.release_id = header.release_id
+     and materialization.model_id = header.model_id
+     and materialization.source_group = header.source_group
+     and materialization.epoch_id = header.epoch_id
+     and materialization.pointer_generation =
+       header.captured_pointer_generation
+    order by source.block_number,
+      source.block_global_log_index, source.occurrence_id
+  loop
+    if not exists (
+         select 1
+         from programmable_private.dual_rpc_block_evidence as evidence
+         where evidence.block_evidence_id =
+             group_event.materialized_block_evidence_id
+           and evidence.observation_id = p_safe_head_observation_id
+           and evidence.epoch_id = header.epoch_id
+           and evidence.pointer_generation =
+             header.captured_pointer_generation
+           and evidence.block_number = group_event.block_number
+           and evidence.agreed_block_hash = group_event.block_hash
+       )
+       or coalesce(
+         (
+           select binding.source_role::text
+           from programmable_private.release_source_bindings as binding
+           where binding.binding_id = group_event.materialized_binding_id
+         ),
+         (
+           select dynamic_source.deployed_source_role::text
+           from programmable_private.dynamic_source_attestations
+             as dynamic_source
+           where dynamic_source.dynamic_source_attestation_id =
+             group_event.materialized_dynamic_source_id
+         )
+       ) is distinct from 'reward_vault'
+       or (
+         header.release_id = 'classic-v3'
+         and group_event.materialized_event_type not in (
+           'CreatorFeesCheckpointed', 'BeneficiaryFeesClaimed',
+           'PayoutWalletChanged', 'CtoRewardConfigurationActivated'
+         )
+       )
+       or (
+         header.release_id in (
+           'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+         )
+         and group_event.materialized_event_type not in (
+           'BeneficiaryFeesClaimed', 'PayoutAddressUpdated'
+         )
+       )
+       or exists (
+         select 1
+         from programmable_private.chain_event_current_canonical as current
+         where current.logical_event_id = group_event.logical_event_id
+           and current.occurrence_id <> group_event.occurrence_id
+       )
+    then
+      raise exception using
+        errcode = '23514',
+        message = 'reward event group lacks exact canonical evidence';
+    end if;
+  end loop;
+
+  select pg_catalog.count(*) into terminal_reward_event_count
+  from programmable_private.chain_event_occurrence_materializations
+    as materialization
+  where materialization.occurrence_id = any(p_occurrence_ids)
+    and materialization.chain_id = header.chain_id
+    and materialization.release_id = header.release_id
+    and materialization.model_id = header.model_id
+    and materialization.source_group = header.source_group
+    and materialization.epoch_id = header.epoch_id
+    and materialization.pointer_generation =
+      header.captured_pointer_generation
+    and materialization.event_type in (
+      'BeneficiaryFeesClaimed', 'PayoutWalletChanged',
+      'CtoRewardConfigurationActivated', 'PayoutAddressUpdated'
+    );
+  if terminal_reward_event_count > 1
+     or (
+       terminal_reward_event_count = 1
+       and not exists (
+         select 1
+         from programmable_private.chain_event_occurrence_materializations
+           as terminal_materialization
+         where terminal_materialization.occurrence_id =
+             terminal_occurrence_id
+           and terminal_materialization.chain_id = header.chain_id
+           and terminal_materialization.release_id = header.release_id
+           and terminal_materialization.model_id = header.model_id
+           and terminal_materialization.source_group = header.source_group
+           and terminal_materialization.epoch_id = header.epoch_id
+           and terminal_materialization.pointer_generation =
+             header.captured_pointer_generation
+           and terminal_materialization.event_type in (
+             'BeneficiaryFeesClaimed', 'PayoutWalletChanged',
+             'CtoRewardConfigurationActivated', 'PayoutAddressUpdated'
+           )
+       )
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward transaction has ambiguous terminal semantics';
+  end if;
+
+  select
+    pg_catalog.count(*),
+    coalesce(pg_catalog.sum(
+      (materialization.decoded_payload ->> 'amount')::numeric
+    ), 0),
+    (
+      pg_catalog.array_agg(
+        (materialization.decoded_payload ->>
+          'totalCreatorFeesReceived')::numeric
+        order by source.block_global_log_index desc,
+          source.occurrence_id desc
+      )
+    )[1]
+  into checkpoint_count, checkpoint_amount_total,
+    checkpoint_terminal_total
+  from programmable_private.chain_event_occurrence_materializations
+    as materialization
+  join programmable_private.chain_event_occurrences as source
+    on source.occurrence_id = materialization.occurrence_id
+  where materialization.occurrence_id = any(p_occurrence_ids)
+    and materialization.chain_id = header.chain_id
+    and materialization.release_id = header.release_id
+    and materialization.model_id = header.model_id
+    and materialization.source_group = header.source_group
+    and materialization.epoch_id = header.epoch_id
+    and materialization.pointer_generation =
+      header.captured_pointer_generation
+    and materialization.event_type = 'CreatorFeesCheckpointed';
+  if header.release_id = 'classic-v3' and (
+       checkpoint_count > 1
+       or checkpoint_amount_total < 0
+       or staged_vault.total_creator_fees_received <
+         baseline_total_creator_fees
+       or (
+         checkpoint_count = 0
+         and staged_vault.total_creator_fees_received <>
+           baseline_total_creator_fees
+       )
+       or (
+         checkpoint_count > 0
+         and (
+           baseline_total_creator_fees + checkpoint_amount_total <>
+             staged_vault.total_creator_fees_received
+           or checkpoint_terminal_total <>
+             staged_vault.total_creator_fees_received
+         )
+       )
+       or exists (
+         select 1
+         from programmable_private.chain_event_occurrence_materializations
+           as checkpoint
+         where checkpoint.occurrence_id = any(p_occurrence_ids)
+           and checkpoint.chain_id = header.chain_id
+           and checkpoint.release_id = header.release_id
+           and checkpoint.model_id = header.model_id
+           and checkpoint.source_group = header.source_group
+           and checkpoint.epoch_id = header.epoch_id
+           and checkpoint.pointer_generation =
+             header.captured_pointer_generation
+           and checkpoint.event_type = 'CreatorFeesCheckpointed'
+           and (
+             programmable_private.json_hex_bytes_v1(
+               checkpoint.decoded_payload, 'poolId', 32
+             ) is distinct from staged_vault.pool_id
+             or (checkpoint.decoded_payload ->>
+               'configurationEpoch')::numeric is distinct from
+                 baseline_configuration_epoch::numeric
+             or (checkpoint.decoded_payload ->> 'amount')::numeric <= 0
+           )
+       )
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward checkpoint group does not reconcile';
+  end if;
+
+  select
+    pg_catalog.count(*),
+    pg_catalog.count(distinct allocation.beneficiary),
+    coalesce(pg_catalog.sum(allocation.share_bps), 0)
+  into allocation_count, unique_beneficiary_count, total_share_bps
+  from programmable_private.reward_allocation_projections as allocation
+  where allocation.projection_run_id = p_run_id
+    and allocation.reward_vault_projection_id =
+      staged_vault.reward_vault_projection_id
+    and allocation.allocation_fact_id =
+      staged_vault.current_allocation_fact_id
+    and allocation.chain_id = header.chain_id
+    and allocation.release_id = header.release_id
+    and allocation.model_id = header.model_id
+    and allocation.epoch_id = header.epoch_id
+    and allocation.pointer_generation = header.captured_pointer_generation
+    and allocation.promoted_block_number = target_block
+    and allocation.promoted_block_hash = p_target_block_hash
+    and allocation.last_source_occurrence_id = terminal_occurrence_id
+    and allocation.configuration_epoch =
+      staged_vault.configuration_epoch
+    and allocation.effective_to_block is null;
+  if allocation_count < 1
+     or allocation_count > (case
+       when header.release_id = 'classic-v3' then 5 else 8
+     end)
+     or total_share_bps <> 10000
+     or (
+       header.release_id <> 'classic-v3'
+       and unique_beneficiary_count <> allocation_count
+     )
+     or (
+       select pg_catalog.count(distinct allocation.allocation_index)
+       from programmable_private.reward_allocation_projections as allocation
+       where allocation.projection_run_id = p_run_id
+     ) <> allocation_count
+     or (
+       select pg_catalog.min(allocation.allocation_index)
+       from programmable_private.reward_allocation_projections as allocation
+       where allocation.projection_run_id = p_run_id
+     ) <> 0
+     or (
+       select pg_catalog.max(allocation.allocation_index)
+       from programmable_private.reward_allocation_projections as allocation
+       where allocation.projection_run_id = p_run_id
+     ) <> allocation_count - 1
+     or exists (
+       select 1
+       from programmable_private.reward_allocation_projections as allocation
+       where allocation.projection_run_id = p_run_id
+         and allocation.reward_vault_projection_id <>
+           staged_vault.reward_vault_projection_id
+     )
+     or (
+       header.release_id = 'classic-v3'
+       and exists (
+         select 1
+         from programmable_private.reward_allocation_projections as allocation
+         where allocation.projection_run_id = p_run_id
+           and allocation.beneficiary <> allocation.payout_address
+       )
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward delta allocation set is incomplete';
+  end if;
+
+  select
+    pg_catalog.count(*),
+    coalesce(pg_catalog.sum(
+      balance.claimable_accrued + balance.claimed_total
+    ), 0)
+  into balance_count, total_balance_value
+  from programmable_private.account_reward_balances as balance
+  where balance.projection_run_id = p_run_id
+    and balance.chain_id = header.chain_id
+    and balance.release_id = header.release_id
+    and balance.model_id = header.model_id
+    and balance.epoch_id = header.epoch_id
+    and balance.pointer_generation = header.captured_pointer_generation
+    and balance.vault = staged_vault.vault
+    and balance.promoted_block_number = target_block
+    and balance.promoted_block_hash = p_target_block_hash
+    and balance.last_source_occurrence_id = terminal_occurrence_id;
+  if balance_count < 1
+     or total_balance_value <> staged_vault.total_creator_fees_received
+     or (
+       select pg_catalog.count(distinct balance.account)
+       from programmable_private.account_reward_balances as balance
+       where balance.projection_run_id = p_run_id
+     ) <> balance_count
+     or exists (
+       select 1
+       from programmable_private.account_reward_balances as balance
+       where balance.projection_run_id = p_run_id
+         and (
+           balance.vault <> staged_vault.vault
+           or (
+             header.release_id = 'classic-v3'
+             and balance.payout_address <> balance.account
+           )
+         )
+     )
+     or exists (
+       select 1
+       from programmable_private.reward_allocation_projections as allocation
+       where allocation.projection_run_id = p_run_id
+         and not exists (
+           select 1
+           from programmable_private.account_reward_balances as balance
+           where balance.projection_run_id = p_run_id
+             and balance.vault = staged_vault.vault
+             and balance.account = case
+               when header.release_id = 'classic-v3'
+                 then allocation.payout_address
+               else allocation.beneficiary
+             end
+             and (
+               header.release_id = 'classic-v3'
+               or balance.payout_address = allocation.payout_address
+             )
+         )
+     )
+     or exists (
+       select 1
+       from programmable_private.current_account_reward_balances_v1
+         as prior_balance
+       where prior_balance.chain_id = header.chain_id
+         and prior_balance.release_id = header.release_id
+         and prior_balance.model_id = header.model_id
+         and prior_balance.epoch_id = header.epoch_id
+         and prior_balance.pointer_generation =
+           header.captured_pointer_generation
+         and prior_balance.vault = staged_vault.vault
+         and not exists (
+           select 1
+           from programmable_private.account_reward_balances as next_balance
+           where next_balance.projection_run_id = p_run_id
+             and next_balance.vault = staged_vault.vault
+             and next_balance.account = prior_balance.account
+             and next_balance.claimed_total >= prior_balance.claimed_total
+             and next_balance.claimable_accrued + next_balance.claimed_total
+               >= prior_balance.claimable_accrued
+                 + prior_balance.claimed_total
+         )
+     )
+     or exists (
+       select 1
+       from programmable_private.account_reward_balances as balance
+       where balance.projection_run_id = p_run_id
+         and not exists (
+           select 1
+           from programmable_private.current_account_reward_balances_v1
+             as prior_balance
+           where prior_balance.chain_id = header.chain_id
+             and prior_balance.release_id = header.release_id
+             and prior_balance.model_id = header.model_id
+             and prior_balance.epoch_id = header.epoch_id
+             and prior_balance.pointer_generation =
+               header.captured_pointer_generation
+             and prior_balance.vault = staged_vault.vault
+             and prior_balance.account = balance.account
+         )
+         and not exists (
+           select 1
+           from programmable_private.reward_allocation_projections
+             as active_allocation
+           where active_allocation.projection_run_id = p_run_id
+             and (
+               case when header.release_id = 'classic-v3'
+                 then active_allocation.payout_address
+                 else active_allocation.beneficiary
+               end
+             ) = balance.account
+         )
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward delta balance set is incomplete or nonmonotonic';
+  end if;
+
+  select pg_catalog.count(*) into claim_count
+  from programmable_private.claim_projections as claim
+  where claim.projection_run_id = p_run_id;
+  select pg_catalog.count(*) into claim_event_count
+  from programmable_private.chain_event_occurrence_materializations
+    as materialization
+  where materialization.occurrence_id = any(p_occurrence_ids)
+    and materialization.chain_id = header.chain_id
+    and materialization.release_id = header.release_id
+    and materialization.model_id = header.model_id
+    and materialization.source_group = header.source_group
+    and materialization.epoch_id = header.epoch_id
+    and materialization.pointer_generation =
+      header.captured_pointer_generation
+    and materialization.event_type = 'BeneficiaryFeesClaimed';
+  if claim_count <> claim_event_count
+     or claim_count > 1
+     or (
+       select pg_catalog.count(distinct claim.source_occurrence_id)
+       from programmable_private.claim_projections as claim
+       where claim.projection_run_id = p_run_id
+     ) <> claim_count
+     or exists (
+       select 1
+       from programmable_private.claim_projections as claim
+       join programmable_private.chain_event_occurrence_materializations
+         as materialization
+         on materialization.occurrence_id = claim.source_occurrence_id
+        and materialization.chain_id = header.chain_id
+        and materialization.release_id = header.release_id
+        and materialization.model_id = header.model_id
+        and materialization.source_group = header.source_group
+        and materialization.epoch_id = header.epoch_id
+        and materialization.pointer_generation =
+          header.captured_pointer_generation
+       join programmable_private.chain_event_occurrences as source
+         on source.occurrence_id = materialization.occurrence_id
+       where claim.projection_run_id = p_run_id
+         and (
+           claim.chain_id <> header.chain_id
+           or claim.release_id <> header.release_id
+           or claim.model_id <> header.model_id
+           or claim.epoch_id <> header.epoch_id
+           or claim.pointer_generation <>
+             header.captured_pointer_generation
+           or claim.vault <> staged_vault.vault
+           or claim.claimant_kind <> 'beneficiary'
+           or claim.amount <= 0
+           or claim.vault_total_received <>
+             staged_vault.total_creator_fees_received
+           or claim.promoted_block_number <> target_block
+           or claim.promoted_block_hash <> p_target_block_hash
+           or claim.source_occurrence_id <> terminal_occurrence_id
+           or claim.source_logical_event_id <> source.logical_event_id
+           or claim.source_occurrence_block_hash <> source.block_hash
+           or materialization.event_type <> 'BeneficiaryFeesClaimed'
+           or programmable_private.json_hex_bytes_v1(
+             materialization.decoded_payload, 'beneficiary', 20
+           ) is distinct from claim.beneficiary
+           or (materialization.decoded_payload ->> 'amount')::numeric
+             is distinct from claim.amount
+           or (
+             materialization.decoded_payload ->>
+               'beneficiaryTotalClaimed'
+           )::numeric is distinct from claim.beneficiary_total_claimed
+           or (materialization.decoded_payload ->>
+             'vaultTotalReceived')::numeric
+               is distinct from claim.vault_total_received
+           or (
+             header.release_id = 'classic-v3'
+             and claim.recipient <> claim.beneficiary
+           )
+           or (
+             header.release_id in (
+               'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+             )
+             and (
+               programmable_private.json_hex_bytes_v1(
+                 materialization.decoded_payload, 'payoutAddress', 20
+               ) is distinct from claim.recipient
+               or programmable_private.json_hex_bytes_v1(
+                 materialization.decoded_payload, 'quoteAsset', 20
+               ) is distinct from staged_vault.quote_asset
+             )
+           )
+           or not exists (
+             select 1
+             from programmable_private.account_reward_balances as balance
+             where balance.projection_run_id = p_run_id
+               and balance.vault = staged_vault.vault
+               and balance.account = claim.beneficiary
+               and balance.claimed_total =
+                 claim.beneficiary_total_claimed
+               and (
+                 header.release_id = 'classic-v3'
+                 or balance.payout_address = claim.recipient
+               )
+           )
+           or claim.beneficiary_total_claimed <>
+             coalesce(
+               (
+                 select prior.claimed_total
+                 from programmable_private.current_account_reward_balances_v1
+                   as prior
+                 where prior.chain_id = header.chain_id
+                   and prior.release_id = header.release_id
+                   and prior.model_id = header.model_id
+                   and prior.epoch_id = header.epoch_id
+                   and prior.pointer_generation =
+                     header.captured_pointer_generation
+                   and prior.vault = staged_vault.vault
+                   and prior.account = claim.beneficiary
+               ),
+               0
+             ) + claim.amount
+         )
+     )
+     or exists (
+       select 1
+       from programmable_private.chain_event_occurrence_materializations
+         as materialization
+       where materialization.occurrence_id = any(p_occurrence_ids)
+         and materialization.chain_id = header.chain_id
+         and materialization.release_id = header.release_id
+         and materialization.model_id = header.model_id
+         and materialization.source_group = header.source_group
+         and materialization.epoch_id = header.epoch_id
+         and materialization.pointer_generation =
+           header.captured_pointer_generation
+         and materialization.event_type = 'BeneficiaryFeesClaimed'
+         and not exists (
+           select 1
+           from programmable_private.claim_projections as claim
+           where claim.projection_run_id = p_run_id
+             and claim.source_occurrence_id = materialization.occurrence_id
+         )
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward claim rows do not reconcile to the transaction';
+  end if;
+
+  if header.release_id = 'classic-v3' and exists (
+    with baseline_allocations as (
+      select
+        allocation.allocation_index,
+        allocation.payout_address::bytea as account,
+        allocation.share_bps::numeric as share_bps,
+        pg_catalog.max(allocation.allocation_index) over () as last_index
+      from programmable_private.reward_allocation_projections as allocation
+      where allocation.reward_vault_projection_id =
+          baseline_vault.reward_vault_projection_id
+        and allocation.projection_run_id =
+          baseline_vault.projection_run_id
+        and allocation.effective_to_block is null
+    ), non_last_total as (
+      select coalesce(pg_catalog.sum(
+        case
+          when allocation_index < last_index then
+            pg_catalog.div(checkpoint_amount_total * share_bps, 10000)
+          else 0
+        end
+      ), 0) as amount
+      from baseline_allocations
+    ), checkpoint_credits as (
+      select
+        allocation.account,
+        pg_catalog.sum(
+          case
+            when allocation.allocation_index = allocation.last_index then
+              checkpoint_amount_total - non_last_total.amount
+            else pg_catalog.div(
+              checkpoint_amount_total * allocation.share_bps, 10000
+            )
+          end
+        ) as amount
+      from baseline_allocations as allocation
+      cross join non_last_total
+      group by allocation.account
+    ), transaction_claims as (
+      select claim.beneficiary::bytea as account, claim.amount::numeric
+      from programmable_private.claim_projections as claim
+      where claim.projection_run_id = p_run_id
+    )
+    select 1
+    from programmable_private.account_reward_balances as next_balance
+    left join programmable_private.current_account_reward_balances_v1
+      as prior_balance
+      on prior_balance.chain_id = header.chain_id
+     and prior_balance.release_id = header.release_id
+     and prior_balance.model_id = header.model_id
+     and prior_balance.epoch_id = header.epoch_id
+     and prior_balance.pointer_generation =
+       header.captured_pointer_generation
+     and prior_balance.vault = staged_vault.vault
+     and prior_balance.account = next_balance.account
+    left join checkpoint_credits as credit
+      on credit.account = next_balance.account
+    left join transaction_claims as transaction_claim
+      on transaction_claim.account = next_balance.account
+    where next_balance.projection_run_id = p_run_id
+      and next_balance.vault = staged_vault.vault
+      and (
+        next_balance.claimed_total <>
+          coalesce(prior_balance.claimed_total, 0)
+            + coalesce(transaction_claim.amount, 0)
+        or next_balance.claimable_accrued <>
+          coalesce(prior_balance.claimable_accrued, 0)
+            + coalesce(credit.amount, 0)
+            - coalesce(transaction_claim.amount, 0)
+      )
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Classic reward balances do not match the exact transaction';
+  end if;
+
+  if header.release_id in (
+       'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+     ) and (
+       (
+         claim_count = 0
+         and staged_vault.total_creator_fees_received <>
+           baseline_total_creator_fees
+       )
+       or exists (
+         with active_allocations as (
+           select
+             allocation.allocation_index,
+             allocation.beneficiary::bytea as account,
+             allocation.share_bps::numeric as share_bps,
+             pg_catalog.max(allocation.allocation_index) over ()
+               as last_index
+           from programmable_private.reward_allocation_projections
+             as allocation
+           where allocation.projection_run_id = p_run_id
+             and allocation.reward_vault_projection_id =
+               staged_vault.reward_vault_projection_id
+             and allocation.effective_to_block is null
+         ), non_last_total as (
+           select coalesce(pg_catalog.sum(
+             case
+               when allocation_index < last_index then
+                 pg_catalog.div(
+                   staged_vault.total_creator_fees_received * share_bps,
+                   10000
+                 )
+               else 0
+             end
+           ), 0) as amount
+           from active_allocations
+         ), entitlements as (
+           select
+             allocation.account,
+             case
+               when allocation.allocation_index = allocation.last_index then
+                 staged_vault.total_creator_fees_received
+                   - non_last_total.amount
+               else pg_catalog.div(
+                 staged_vault.total_creator_fees_received
+                   * allocation.share_bps,
+                 10000
+               )
+             end as amount
+           from active_allocations as allocation
+           cross join non_last_total
+         ), transaction_claims as (
+           select claim.beneficiary::bytea as account, claim.amount::numeric
+           from programmable_private.claim_projections as claim
+           where claim.projection_run_id = p_run_id
+         )
+         select 1
+         from programmable_private.account_reward_balances as next_balance
+         left join entitlements as entitlement
+           on entitlement.account = next_balance.account
+         left join programmable_private.current_account_reward_balances_v1
+           as prior_balance
+           on prior_balance.chain_id = header.chain_id
+          and prior_balance.release_id = header.release_id
+          and prior_balance.model_id = header.model_id
+          and prior_balance.epoch_id = header.epoch_id
+          and prior_balance.pointer_generation =
+            header.captured_pointer_generation
+          and prior_balance.vault = staged_vault.vault
+          and prior_balance.account = next_balance.account
+         left join transaction_claims as transaction_claim
+           on transaction_claim.account = next_balance.account
+         where next_balance.projection_run_id = p_run_id
+           and next_balance.vault = staged_vault.vault
+           and (
+             entitlement.account is null
+             or next_balance.claimed_total <>
+               coalesce(prior_balance.claimed_total, 0)
+                 + coalesce(transaction_claim.amount, 0)
+             or next_balance.claimable_accrued <>
+               entitlement.amount
+                 - coalesce(prior_balance.claimed_total, 0)
+                 - coalesce(transaction_claim.amount, 0)
+           )
+       )
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'Stock-Paired reward balances do not match the exact state';
+  end if;
+
+  audit_id := programmable_private.append_mutation_audit(
+    'projection.promote.reward_snapshot_delta',
+    p_result_commitment, p_run_id, p_published_at
+  );
+  select
+    pg_catalog.array_agg(
+      pg_catalog.format('%s:%s', staged.row_kind, staged.row_id)
+      order by staged.row_kind, staged.row_id
+    ),
+    pg_catalog.count(*)
+  into ordered_projection_rows, projection_row_count
+  from (
+    select 'reward_vault'::text as row_kind,
+      reward_vault_projection_id as row_id
+    from programmable_private.reward_vault_projections
+    where projection_run_id = p_run_id
+    union all
+    select 'reward_allocation', reward_allocation_projection_id
+    from programmable_private.reward_allocation_projections
+    where projection_run_id = p_run_id
+    union all
+    select 'account_reward_balance', account_reward_balance_id
+    from programmable_private.account_reward_balances
+    where projection_run_id = p_run_id
+    union all
+    select 'claim', claim_projection_id
+    from programmable_private.claim_projections
+    where projection_run_id = p_run_id
+  ) as staged;
+  if projection_row_count <>
+      1 + allocation_count + balance_count + claim_count
+  then
+    raise exception using
+      errcode = '23514', message = 'reward delta manifest is incomplete';
+  end if;
+  insert into programmable_private.projection_fold_manifests (
+    run_id, epoch_id, pointer_generation, target_block_number,
+    target_block_hash, ordered_occurrence_ids,
+    ordered_allocation_fact_ids, ordered_allocation_evidence_ids,
+    ordered_candidate_disposition_ids, ordered_route_keys,
+    cursor_block_global_log_index, cursor_candidate_id,
+    ordered_projection_rows, projection_row_count,
+    result_commitment, created_at, audit_id
+  ) values (
+    p_run_id, header.epoch_id, header.captured_pointer_generation,
+    target_block::programmable_private.block_number_value,
+    p_target_block_hash::programmable_private.bytes32_value,
+    p_occurrence_ids, p_allocation_fact_ids, p_allocation_evidence_ids,
+    p_candidate_disposition_ids, p_route_keys,
+    cursor_log_index::programmable_private.block_log_index_value,
+    p_cursor_candidate_id::programmable_private.envio_candidate_identifier,
+    ordered_projection_rows, projection_row_count,
+    p_result_commitment::programmable_private.bytes32_value,
+    p_published_at, audit_id
+  );
+  for group_event in
+    select source.*, materialization.block_evidence_id
+    from pg_catalog.unnest(p_occurrence_ids) as requested(occurrence_id)
+    join programmable_private.chain_event_occurrences as source
+      on source.occurrence_id = requested.occurrence_id
+    join programmable_private.chain_event_occurrence_materializations
+      as materialization
+      on materialization.occurrence_id = source.occurrence_id
+     and materialization.chain_id = header.chain_id
+     and materialization.release_id = header.release_id
+     and materialization.model_id = header.model_id
+     and materialization.source_group = header.source_group
+     and materialization.epoch_id = header.epoch_id
+     and materialization.pointer_generation =
+       header.captured_pointer_generation
+    order by source.block_number,
+      source.block_global_log_index, source.occurrence_id
+  loop
+    status_id := pg_catalog.gen_random_uuid();
+    insert into programmable_private.chain_event_occurrence_status_history (
+      status_history_id, occurrence_id, logical_event_id, block_hash,
+      status, safe_head_observation_id, block_evidence_id,
+      decision_run_id, decision_commitment, decided_at, audit_id
+    ) values (
+      status_id, group_event.occurrence_id, group_event.logical_event_id,
+      group_event.block_hash, 'canonical', p_safe_head_observation_id,
+      group_event.block_evidence_id, p_run_id,
+      p_result_commitment, p_published_at, audit_id
+    );
+    insert into programmable_private.chain_event_current_canonical (
+      logical_event_id, occurrence_id, block_hash, status_history_id,
+      selected_by_run_id, selected_at
+    ) values (
+      group_event.logical_event_id, group_event.occurrence_id,
+      group_event.block_hash, status_id, p_run_id, p_published_at
+    )
+    on conflict (logical_event_id) do update
+      set status_history_id = excluded.status_history_id,
+          selected_by_run_id = excluded.selected_by_run_id,
+          selected_at = excluded.selected_at
+      where programmable_private.chain_event_current_canonical.occurrence_id
+        = excluded.occurrence_id;
+    if not found then
+      raise exception using
+        errcode = '23505', message = 'canonical pointer conflict';
+    end if;
+  end loop;
+
+  insert into programmable_private.run_lifecycle_outcomes (
+    outcome_id, run_id, status, result_commitment, caller_role,
+    finished_at, audit_id
+  ) values (
+    p_outcome_id, p_run_id, 'succeeded',
+    p_result_commitment::programmable_private.bytes32_value,
+    programmable_private.caller_role_name(), p_published_at, audit_id
+  );
+  insert into programmable_private.projector_checkpoints (
+    checkpoint_id, chain_id, release_id, model_id, source_group,
+    projector_version, epoch_id, pointer_generation, lease_generation,
+    checkpoint_generation, reorg_generation, block_number, block_hash,
+    cursor_block_global_log_index, cursor_candidate_id,
+    safe_head_observation_id, target_block_evidence_id, run_id,
+    terminal_outcome_id, created_at
+  ) values (
+    p_checkpoint_id, header.chain_id, header.release_id, header.model_id,
+    header.source_group,
+    p_projector_version::programmable_private.projector_identifier,
+    header.epoch_id, header.captured_pointer_generation,
+    p_lease_generation, p_next_checkpoint_generation,
+    p_reorg_generation,
+    target_block::programmable_private.block_number_value,
+    p_target_block_hash::programmable_private.bytes32_value,
+    cursor_log_index::programmable_private.block_log_index_value,
+    p_cursor_candidate_id::programmable_private.envio_candidate_identifier,
+    p_safe_head_observation_id, p_target_block_evidence_id,
+    p_run_id, p_outcome_id, p_published_at
+  );
+  update programmable_private.projector_checkpoint_current
+  set checkpoint_id = p_checkpoint_id,
+      checkpoint_generation = p_next_checkpoint_generation,
+      reorg_generation = p_reorg_generation,
+      changed_at = p_published_at
+  where chain_id = header.chain_id
+    and release_id = header.release_id
+    and model_id = header.model_id
+    and source_group = header.source_group
+    and projector_version = p_projector_version
+    and checkpoint_generation = p_expected_checkpoint_generation
+    and reorg_generation = p_reorg_generation;
+  if not found then
+    raise exception using
+      errcode = '40001', message = 'checkpoint CAS lost';
+  end if;
+  insert into programmable_private.projection_publications (
+    publication_id, run_id, epoch_id, pointer_generation, checkpoint_id,
+    terminal_outcome_id, target_block_number, target_block_hash,
+    published_at, audit_id
+  ) values (
+    p_publication_id, p_run_id, header.epoch_id,
+    header.captured_pointer_generation, p_checkpoint_id, p_outcome_id,
+    target_block::programmable_private.block_number_value,
+    p_target_block_hash::programmable_private.bytes32_value,
+    p_published_at, audit_id
+  );
+  foreach selected_route_key in array p_route_keys loop
+    route_history_id := pg_catalog.gen_random_uuid();
+    insert into programmable_private.route_eligibility_history (
+      route_eligibility_history_id, route_key, chain_id, release_id,
+      model_id, source_group, epoch_id, pointer_generation, status,
+      route_mode, checkpoint_id, reason_commitment, changed_by_run_id,
+      changed_at, audit_id
+    ) values (
+      route_history_id,
+      selected_route_key::programmable_private.source_identifier,
+      header.chain_id, header.release_id, header.model_id,
+      header.source_group, header.epoch_id,
+      header.captured_pointer_generation, 'eligible', 'indexed',
+      p_checkpoint_id,
+      p_result_commitment::programmable_private.bytes32_value,
+      p_run_id, p_published_at, audit_id
+    );
+    insert into programmable_private.route_eligibility_current (
+      route_key, chain_id, release_id, model_id, source_group, epoch_id,
+      pointer_generation, status, route_mode, checkpoint_id, history_id,
+      changed_at
+    ) values (
+      selected_route_key::programmable_private.source_identifier,
+      header.chain_id, header.release_id, header.model_id,
+      header.source_group, header.epoch_id,
+      header.captured_pointer_generation, 'eligible', 'indexed',
+      p_checkpoint_id, route_history_id, p_published_at
+    )
+    on conflict (
+      route_key, chain_id, release_id, model_id, source_group
+    ) do update
+      set epoch_id = excluded.epoch_id,
+          pointer_generation = excluded.pointer_generation,
+          status = excluded.status,
+          route_mode = excluded.route_mode,
+          checkpoint_id = excluded.checkpoint_id,
+          history_id = excluded.history_id,
+          changed_at = excluded.changed_at
+      where programmable_private.route_eligibility_current
+        .pointer_generation <= excluded.pointer_generation;
+    if not found then
+      raise exception using
+        errcode = '40001',
+        message = 'stale route eligibility generation';
+    end if;
+  end loop;
+  return p_publication_id;
 end
 $function$;
 
@@ -7121,14 +10869,54 @@ grant execute on function
 to programmable_projector;
 
 revoke all on function
-  programmable_private.get_projector_reward_state_by_vault_v1(uuid, bytea)
+  programmable_private.get_projector_reward_state_by_vault_v1(uuid, bytea),
+  programmable_private.get_projector_reward_balances_by_vault_v1(uuid, bytea)
 from public, anon, authenticated, service_role,
   programmable_projector, programmable_reconciler, programmable_api_reader,
   programmable_profile_binder, programmable_profile_recovery,
   programmable_profile_writer, programmable_maintenance;
 
 grant execute on function
-  programmable_private.get_projector_reward_state_by_vault_v1(uuid, bytea)
+  programmable_private.get_projector_reward_state_by_vault_v1(uuid, bytea),
+  programmable_private.get_projector_reward_balances_by_vault_v1(uuid, bytea)
+to programmable_projector;
+
+revoke all on function
+  programmable_private.stage_current_reward_snapshot_v1(
+    uuid, bytea, bytea, uuid, bigint, bytea, numeric,
+    integer[], bytea[], bytea[], numeric[], bytea[], bytea[],
+    numeric[], numeric[], uuid, numeric, bytea, timestamptz
+  )
+from public, anon, authenticated, service_role,
+  programmable_projector, programmable_reconciler, programmable_api_reader,
+  programmable_profile_binder, programmable_profile_recovery,
+  programmable_profile_writer, programmable_maintenance;
+
+grant execute on function
+  programmable_private.stage_current_reward_snapshot_v1(
+    uuid, bytea, bytea, uuid, bigint, bytea, numeric,
+    integer[], bytea[], bytea[], numeric[], bytea[], bytea[],
+    numeric[], numeric[], uuid, numeric, bytea, timestamptz
+  )
+to programmable_projector;
+
+revoke all on function
+  programmable_private.promote_projection_run_v2(
+    text, uuid, uuid, uuid, uuid, text, bigint, bytea,
+    bigint, bigint, bigint, uuid, uuid, numeric, bytea, numeric,
+    text, uuid[], uuid[], uuid[], uuid[], text[], bytea, timestamptz
+  )
+from public, anon, authenticated, service_role,
+  programmable_projector, programmable_reconciler, programmable_api_reader,
+  programmable_profile_binder, programmable_profile_recovery,
+  programmable_profile_writer, programmable_maintenance;
+
+grant execute on function
+  programmable_private.promote_projection_run_v2(
+    text, uuid, uuid, uuid, uuid, text, bigint, bytea,
+    bigint, bigint, bigint, uuid, uuid, numeric, bytea, numeric,
+    text, uuid[], uuid[], uuid[], uuid[], text[], bytea, timestamptz
+  )
 to programmable_projector;
 
 revoke all on function programmable_private.bind_route_checkpoint_parity_v1(

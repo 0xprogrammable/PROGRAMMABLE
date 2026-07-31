@@ -1,5 +1,5 @@
 begin;
-select plan(139);
+select plan(156);
 
 -- Test-only definer readers let the restricted projector replay a previously
 -- stored opaque pair without granting it base-table SELECT. The transaction
@@ -134,6 +134,38 @@ begin
 end
 $function$;
 
+create function public.reward_test_stale_reward_balance_reorg(
+  p_projection_run_id uuid,
+  p_vault bytea
+)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+begin
+  update programmable_private.projector_checkpoint_current
+  set reorg_generation = reorg_generation + 1
+  where chain_id = 1
+    and release_id = 'classic-v3'
+    and model_id = 'classic-v3'
+    and source_group = 'core'
+    and projector_version = 'projector-v1';
+  if not found then
+    raise exception using
+      errcode = 'P0002', message = 'checkpoint fixture is absent';
+  end if;
+  perform balance.account
+  from programmable_private.get_projector_reward_balances_by_vault_v1(
+    p_projection_run_id, p_vault
+  ) as balance;
+  raise exception using
+    errcode = 'P0001',
+    message = 'stale reorg binding unexpectedly returned balances';
+end
+$function$;
+
 set local role programmable_projector;
 
 select programmable_private.create_release_epoch(
@@ -237,7 +269,10 @@ from (values
   ('91400000-0000-0000-0000-000000000016'::uuid, 'creator_hook_claim', 'hook', 'CreatorFeesClaimed', decode(repeat('10', 32), 'hex')),
   ('91400000-0000-0000-0000-000000000017'::uuid, 'launcher_hook_claim', 'hook', 'LauncherFeesClaimed', decode(repeat('20', 32), 'hex')),
   ('91400000-0000-0000-0000-000000000018'::uuid, 'creator_fee_checkpoint', 'reward_vault', 'CreatorFeesCheckpointed', decode(repeat('30', 32), 'hex')),
-  ('91400000-0000-0000-0000-000000000019'::uuid, 'reward_configuration_activation', 'reward_vault', 'CtoRewardConfigurationActivated', decode(repeat('40', 32), 'hex'))
+  ('91400000-0000-0000-0000-000000000019'::uuid, 'reward_configuration_activation', 'reward_vault', 'CtoRewardConfigurationActivated', decode(repeat('40', 32), 'hex')),
+  ('91400000-0000-0000-0000-000000000020'::uuid, 'reward_vault', 'reward_vault', 'BeneficiaryFeesClaimed', decode(repeat('31', 32), 'hex')),
+  ('91400000-0000-0000-0000-000000000021'::uuid, 'claim', 'reward_vault', 'BeneficiaryFeesClaimed', decode(repeat('32', 32), 'hex')),
+  ('91400000-0000-0000-0000-000000000022'::uuid, 'reward_vault', 'reward_vault', 'PayoutWalletChanged', decode(repeat('33', 32), 'hex'))
 ) as rule(rule_id, projection_kind, source_role, event_type, commitment);
 select programmable_private.append_release_launch_requirement(
   requirement_id, '91000000-0000-0000-0000-000000000001', ordinal,
@@ -1246,10 +1281,25 @@ select programmable_private.stage_account_reward_balance(
   '98200000-0000-0000-0000-000000000001',
   '97000000-0000-0000-0000-000000000002',
   decode(repeat('11', 20), 'hex'), decode(repeat('77', 20), 'hex'),
-  115792089237316195423570985008687907853269984665640564039457584007913129639935,
-  0, '96100000-0000-0000-0000-000000000001',
+  593, 0, '96100000-0000-0000-0000-000000000001',
   25639600, decode(repeat('99', 32), 'hex'),
   '2026-07-31T03:03:06Z'
+);
+select programmable_private.stage_account_reward_balance(
+  '98200000-0000-0000-0000-000000000003',
+  '97000000-0000-0000-0000-000000000002',
+  decode(repeat('22', 20), 'hex'), decode(repeat('77', 20), 'hex'),
+  395, 0, '96100000-0000-0000-0000-000000000001',
+  25639600, decode(repeat('99', 32), 'hex'),
+  '2026-07-31T03:03:06.010Z'
+);
+select programmable_private.stage_account_reward_balance(
+  '98200000-0000-0000-0000-000000000004',
+  '97000000-0000-0000-0000-000000000002',
+  decode(repeat('33', 20), 'hex'), decode(repeat('77', 20), 'hex'),
+  7, 5, '96100000-0000-0000-0000-000000000001',
+  25639600, decode(repeat('99', 32), 'hex'),
+  '2026-07-31T03:03:06.020Z'
 );
 select programmable_private.stage_reward_vault_projection(
   '98210000-0000-0000-0000-000000000001',
@@ -1323,8 +1373,8 @@ select programmable_private.stage_claim_projection(
 select programmable_private.stage_payout_change_projection(
   '98270000-0000-0000-0000-000000000001',
   '97000000-0000-0000-0000-000000000002',
-  decode(repeat('77', 20), 'hex'), decode(repeat('11', 20), 'hex'),
-  decode(repeat('11', 20), 'hex'), decode(repeat('12', 20), 'hex'), 1,
+  decode(repeat('77', 20), 'hex'), decode(repeat('33', 20), 'hex'),
+  decode(repeat('33', 20), 'hex'), decode(repeat('34', 20), 'hex'), 1,
   '96100000-0000-0000-0000-000000000001',
   25639600, decode(repeat('99', 32), 'hex'),
   '2026-07-31T03:03:06.800Z'
@@ -2450,13 +2500,11 @@ select is(
   'SQL stores the reviewed evidence Keccak digest byte-for-byte'
 );
 select is(
-  (
-    select claimable_accrued::numeric
-    from programmable_private.account_reward_balances
-    where account_reward_balance_id = '98200000-0000-0000-0000-000000000001'
+  programmable_private.validate_uint256(
+    115792089237316195423570985008687907853269984665640564039457584007913129639935
   ),
   115792089237316195423570985008687907853269984665640564039457584007913129639935::numeric,
-  'maximum uint256 reward balance remains exact'
+  'maximum uint256 validation remains exact without poisoning a live baseline'
 );
 select is(
   (
@@ -2620,6 +2668,76 @@ select programmable_private.promote_projection_run(
   array['explore-list']::text[],
   decode(repeat('e2', 32), 'hex'), '2026-07-31T03:03:16Z'
 );
+select programmable_private.open_run(
+  'a3100000-0000-0000-0000-000000000001',
+  'projection', 1, 'classic-v3', 'classic-v3', 'core',
+  '91000000-0000-0000-0000-000000000001', 1,
+  'projector-v1', decode(repeat('a3', 32), 'hex'),
+  '2026-07-31T03:03:16.010Z'
+);
+select is(
+  (
+    select pg_catalog.count(*)
+    from programmable_private.get_projector_reward_balances_by_vault_v1(
+      'a3100000-0000-0000-0000-000000000001',
+      decode(repeat('77', 20), 'hex')
+    )
+  ),
+  3::bigint,
+  'all-current balance reader retains active and historical beneficiaries'
+);
+select ok(
+  (
+    select pg_catalog.count(*) = 1
+       and pg_catalog.bool_and(claimable_accrued = 7)
+       and pg_catalog.bool_and(claimed_total = 5)
+    from programmable_private.get_projector_reward_balances_by_vault_v1(
+      'a3100000-0000-0000-0000-000000000001',
+      decode(repeat('77', 20), 'hex')
+    )
+    where account = decode(repeat('33', 20), 'hex')
+  ),
+  'historical beneficiary keeps nonzero claimable and claimed totals'
+);
+select is(
+  (
+    select pg_catalog.count(*)
+    from programmable_private.get_projector_reward_state_by_vault_v1(
+      'a3100000-0000-0000-0000-000000000001',
+      decode(repeat('77', 20), 'hex')
+    )
+  ),
+  2::bigint,
+  'active-allocation reader remains a separate two-beneficiary channel'
+);
+select is(
+  (
+    select pg_catalog.count(*)
+    from programmable_private.get_projector_reward_state_by_vault_v1(
+      'a3100000-0000-0000-0000-000000000001',
+      decode(repeat('77', 20), 'hex')
+    )
+    where beneficiary = decode(repeat('33', 20), 'hex')
+  ),
+  0::bigint,
+  'historical beneficiary is not misrepresented as an active allocation'
+);
+select throws_ok(
+  $sql$
+    select public.reward_test_stale_reward_balance_reorg(
+      'a3100000-0000-0000-0000-000000000001',
+      decode(repeat('77', 20), 'hex')
+    )
+  $sql$,
+  '23514',
+  'all-current balance reader rejects stale reorg generation bindings'
+);
+select programmable_private.append_run_outcome(
+  'a3100000-0000-0000-0000-000000000002',
+  'a3100000-0000-0000-0000-000000000001',
+  'succeeded', decode(repeat('a4', 32), 'hex'),
+  '2026-07-31T03:03:16.020Z'
+);
 select throws_ok(
   $sql$
     select programmable_private.append_creator_hook_claim_fact(
@@ -2659,6 +2777,8 @@ select is(
   ),
   array[
     'account_reward_balance:98200000-0000-0000-0000-000000000001',
+    'account_reward_balance:98200000-0000-0000-0000-000000000003',
+    'account_reward_balance:98200000-0000-0000-0000-000000000004',
     'claim:98260000-0000-0000-0000-000000000001',
     'fee_accrual:98240000-0000-0000-0000-000000000001',
     'initial_buy_custody:98280000-0000-0000-0000-000000000001',
@@ -2878,7 +2998,7 @@ select is(
       + (select count(*) from programmable_private.current_account_reward_balances_v1)
       + (select count(*) from programmable_private.current_pool_fee_totals_v1)
   ),
-  4::bigint,
+  6::bigint,
   'delta publication retains prior reward pointers and both fee-total pointers'
 );
 set local role programmable_api_reader;
@@ -2916,6 +3036,581 @@ select is(
   'composite cursor concatenates same-block pages without omission or duplication'
 );
 reset role;
+
+-- Reward deltas may legitimately follow an unrelated launch publication.  The
+-- staged snapshot binds the current global cursor while retaining the immutable
+-- reward-vault entity identity, then promotion proves the exact per-beneficiary
+-- transition for every event in the same vault transaction.
+set local role programmable_projector;
+select programmable_private.append_dual_rpc_block_evidence(
+  '95000000-0000-0000-0000-000000000601',
+  '94000000-0000-0000-0000-000000000001',
+  '93000000-0000-0000-0000-000000000001',
+  25639601, decode(repeat('9a', 32), 'hex'), decode(repeat('9a', 32), 'hex'),
+  2::smallint,
+  decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000245', 'hex'),
+  decode(repeat('46', 32), 'hex'), '2026-07-31T03:03:17.000Z'
+);
+select programmable_private.append_dual_rpc_block_evidence(
+  '95000000-0000-0000-0000-000000000602',
+  '94000000-0000-0000-0000-000000000001',
+  '93000000-0000-0000-0000-000000000001',
+  25639602, decode(repeat('9b', 32), 'hex'), decode(repeat('9b', 32), 'hex'),
+  2::smallint,
+  decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000246', 'hex'),
+  decode(repeat('47', 32), 'hex'), '2026-07-31T03:03:17.010Z'
+);
+select programmable_private.append_dual_rpc_block_evidence(
+  '95000000-0000-0000-0000-000000000603',
+  '94000000-0000-0000-0000-000000000001',
+  '93000000-0000-0000-0000-000000000001',
+  25639603, decode(repeat('99', 32), 'hex'), decode(repeat('99', 32), 'hex'),
+  2::smallint,
+  decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000247', 'hex'),
+  decode(repeat('48', 32), 'hex'), '2026-07-31T03:03:17.020Z'
+);
+
+select programmable_private.append_release_neutral_envio_candidate(
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 21
+  ),
+  '910c0000-0000-0000-0000-000000000001', 25639601,
+  decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'),
+  12, 21, decode(repeat('77', 20), 'hex'),
+  decode(repeat('e6', 32), 'hex'), 'CreatorFeesCheckpointed',
+  array[decode(repeat('e6', 32), 'hex')], decode('0201', 'hex'),
+  '{"poolId":"0x7373737373737373737373737373737373737373737373737373737373737373","configurationEpoch":"1","amount":"100","totalCreatorFeesReceived":"1100"}'::jsonb,
+  decode(repeat('e7', 32), 'hex'),
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 21
+  ),
+  '92000000-0000-0000-0000-000000000003',
+  decode(repeat('e8', 32), 'hex'), '2026-07-31T03:03:17.100Z'
+);
+select programmable_private.resolve_envio_candidate(
+  'a3210000-0000-0000-0000-000000000001',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 21
+  ), null, '91210000-0000-0000-0000-000000000001',
+  decode(repeat('d2', 32), 'hex'), decode(repeat('e9', 32), 'hex'),
+  '2026-07-31T03:03:17.110Z'
+);
+select programmable_private.append_chain_event_occurrence(
+  'a3230000-0000-0000-0000-000000000001',
+  'a3240000-0000-0000-0000-000000000001',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 21
+  ),
+  'a3210000-0000-0000-0000-000000000001',
+  0, '2026-07-31T02:58:41Z', 'decoder-v1',
+  decode(repeat('d2', 32), 'hex'),
+  '95000000-0000-0000-0000-000000000601', 1::smallint,
+  decode('70726f6772616d6d61626c653a6f6363757272656e63653a76310081', 'hex'),
+  decode(repeat('f1', 32), 'hex'), '2026-07-31T03:03:17.120Z'
+);
+
+select programmable_private.append_release_neutral_envio_candidate(
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 22
+  ),
+  '910c0000-0000-0000-0000-000000000001', 25639601,
+  decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'),
+  12, 22, decode(repeat('77', 20), 'hex'),
+  decode(repeat('ea', 32), 'hex'), 'BeneficiaryFeesClaimed',
+  array[decode(repeat('ea', 32), 'hex')], decode('0202', 'hex'),
+  '{"beneficiary":"0x1111111111111111111111111111111111111111","amount":"653","beneficiaryTotalClaimed":"653","vaultTotalReceived":"1100"}'::jsonb,
+  decode(repeat('eb', 32), 'hex'),
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 22
+  ),
+  '92000000-0000-0000-0000-000000000003',
+  decode(repeat('ec', 32), 'hex'), '2026-07-31T03:03:17.200Z'
+);
+select programmable_private.resolve_envio_candidate(
+  'a3210000-0000-0000-0000-000000000002',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 22
+  ), null, '91210000-0000-0000-0000-000000000001',
+  decode(repeat('d2', 32), 'hex'), decode(repeat('ed', 32), 'hex'),
+  '2026-07-31T03:03:17.210Z'
+);
+select programmable_private.append_chain_event_occurrence(
+  'a3230000-0000-0000-0000-000000000002',
+  'a3240000-0000-0000-0000-000000000002',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 22
+  ),
+  'a3210000-0000-0000-0000-000000000002',
+  1, '2026-07-31T02:58:41Z', 'decoder-v1',
+  decode(repeat('d2', 32), 'hex'),
+  '95000000-0000-0000-0000-000000000601', 1::smallint,
+  decode('70726f6772616d6d61626c653a6f6363757272656e63653a76310082', 'hex'),
+  decode(repeat('f2', 32), 'hex'), '2026-07-31T03:03:17.220Z'
+);
+
+select programmable_private.append_release_neutral_envio_candidate(
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 23
+  ),
+  '910c0000-0000-0000-0000-000000000001', 25639602,
+  decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'),
+  13, 23, decode(repeat('77', 20), 'hex'),
+  decode(repeat('ee', 32), 'hex'), 'CreatorFeesCheckpointed',
+  array[decode(repeat('ee', 32), 'hex')], decode('0203', 'hex'),
+  '{"poolId":"0x7373737373737373737373737373737373737373737373737373737373737373","configurationEpoch":"1","amount":"100","totalCreatorFeesReceived":"1200"}'::jsonb,
+  decode(repeat('ef', 32), 'hex'),
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 23
+  ),
+  '92000000-0000-0000-0000-000000000003',
+  decode(repeat('f3', 32), 'hex'), '2026-07-31T03:03:17.300Z'
+);
+select programmable_private.resolve_envio_candidate(
+  'a3310000-0000-0000-0000-000000000001',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 23
+  ), null, '91210000-0000-0000-0000-000000000001',
+  decode(repeat('d2', 32), 'hex'), decode(repeat('f4', 32), 'hex'),
+  '2026-07-31T03:03:17.310Z'
+);
+select programmable_private.append_chain_event_occurrence(
+  'a3330000-0000-0000-0000-000000000001',
+  'a3340000-0000-0000-0000-000000000001',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 23
+  ),
+  'a3310000-0000-0000-0000-000000000001',
+  0, '2026-07-31T02:58:42Z', 'decoder-v1',
+  decode(repeat('d2', 32), 'hex'),
+  '95000000-0000-0000-0000-000000000602', 1::smallint,
+  decode('70726f6772616d6d61626c653a6f6363757272656e63653a76310083', 'hex'),
+  decode(repeat('f5', 32), 'hex'), '2026-07-31T03:03:17.320Z'
+);
+
+select programmable_private.append_release_neutral_envio_candidate(
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 24
+  ),
+  '910c0000-0000-0000-0000-000000000001', 25639602,
+  decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'),
+  13, 24, decode(repeat('77', 20), 'hex'),
+  decode(repeat('f6', 32), 'hex'), 'PayoutWalletChanged',
+  array[decode(repeat('f6', 32), 'hex')], decode('0204', 'hex'),
+  '{"poolId":"0x7373737373737373737373737373737373737373737373737373737373737373","allocationIndex":"1","previousPayoutWallet":"0x2222222222222222222222222222222222222222","newPayoutWallet":"0x1111111111111111111111111111111111111111","shareBps":"4000","configurationEpoch":"2","activeConfigurationHash":"0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5","effectiveTotalCreatorFeesReceived":"1200"}'::jsonb,
+  decode(repeat('f7', 32), 'hex'),
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 24
+  ),
+  '92000000-0000-0000-0000-000000000003',
+  decode(repeat('f8', 32), 'hex'), '2026-07-31T03:03:17.400Z'
+);
+select programmable_private.resolve_envio_candidate(
+  'a3310000-0000-0000-0000-000000000002',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 24
+  ), null, '91210000-0000-0000-0000-000000000001',
+  decode(repeat('d2', 32), 'hex'), decode(repeat('f9', 32), 'hex'),
+  '2026-07-31T03:03:17.410Z'
+);
+select programmable_private.append_chain_event_occurrence(
+  'a3330000-0000-0000-0000-000000000002',
+  'a3340000-0000-0000-0000-000000000002',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 24
+  ),
+  'a3310000-0000-0000-0000-000000000002',
+  1, '2026-07-31T02:58:42Z', 'decoder-v1',
+  decode(repeat('d2', 32), 'hex'),
+  '95000000-0000-0000-0000-000000000602', 1::smallint,
+  decode('70726f6772616d6d61626c653a6f6363757272656e63653a76310084', 'hex'),
+  decode(repeat('fa', 32), 'hex'), '2026-07-31T03:03:17.420Z'
+);
+
+select programmable_private.open_run(
+  'a3250000-0000-0000-0000-000000000001',
+  'projection', 1, 'classic-v3', 'classic-v3', 'core',
+  '91000000-0000-0000-0000-000000000001', 1,
+  'projector-v1', decode(repeat('b1', 32), 'hex'),
+  '2026-07-31T03:03:18.000Z'
+);
+select is(
+  (
+    select pg_catalog.count(*)
+    from programmable_private.get_projector_reward_state_by_vault_v1(
+      'a3250000-0000-0000-0000-000000000001',
+      decode(repeat('77', 20), 'hex')
+    )
+  ),
+  2::bigint,
+  'reward reader survives an unrelated global cursor advance'
+);
+select programmable_private.stage_current_reward_snapshot_v1(
+  'a3250000-0000-0000-0000-000000000001',
+  decode(repeat('77', 20), 'hex'), decode(repeat('73', 32), 'hex'),
+  '98000000-0000-0000-0000-000000000001',
+  1, decode(repeat('a3', 32), 'hex'), 1100,
+  array[0, 1],
+  array[decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex')],
+  array[decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex')],
+  array[6000::numeric, 4000::numeric],
+  array[
+    decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex'),
+    decode(repeat('33', 20), 'hex')
+  ],
+  array[
+    decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex'),
+    decode(repeat('33', 20), 'hex')
+  ],
+  array[1::numeric, 434::numeric, 7::numeric],
+  array[653::numeric, 0::numeric, 5::numeric],
+  'a3240000-0000-0000-0000-000000000002',
+  25639601, decode(repeat('9a', 32), 'hex'),
+  '2026-07-31T03:03:18.100Z'
+);
+select programmable_private.stage_claim_projection(
+  'a3260000-0000-0000-0000-000000000001',
+  'a3250000-0000-0000-0000-000000000001',
+  decode(repeat('77', 20), 'hex'), 'beneficiary',
+  decode(repeat('11', 20), 'hex'), decode(repeat('11', 20), 'hex'),
+  653, 653, 1100,
+  'a3240000-0000-0000-0000-000000000002',
+  25639601, decode(repeat('9a', 32), 'hex'),
+  '2026-07-31T03:03:18.110Z'
+);
+select throws_ok(
+  $sql$
+    select programmable_private.promote_projection_run_v2(
+      'reward_snapshot_delta',
+      'a3270000-0000-0000-0000-000000000001',
+      'a3270000-0000-0000-0000-000000000002',
+      'a3270000-0000-0000-0000-000000000003',
+      'a3250000-0000-0000-0000-000000000001',
+      'projector-v1', 1, decode(repeat('aa', 32), 'hex'),
+      3, 4, 0,
+      '94000000-0000-0000-0000-000000000001',
+      '95000000-0000-0000-0000-000000000601',
+      25639601, decode(repeat('9a', 32), 'hex'), 22,
+      programmable_private.derive_envio_candidate_id(
+        1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 22
+      ),
+      array[
+        'a3240000-0000-0000-0000-000000000001'::uuid,
+        'a3240000-0000-0000-0000-000000000002'::uuid
+      ],
+      array['98000000-0000-0000-0000-000000000001'::uuid],
+      array['98100000-0000-0000-0000-000000000001'::uuid],
+      array[
+        'a3210000-0000-0000-0000-000000000001'::uuid,
+        'a3210000-0000-0000-0000-000000000002'::uuid
+      ],
+      array['explore-list']::text[], decode(repeat('b2', 32), 'hex'),
+      '2026-07-31T03:03:18.200Z'
+    )
+  $sql$,
+  '23514',
+  'fabricated per-beneficiary reward movement is rejected'
+);
+reset role;
+select is(
+  (
+    select checkpoint_generation
+    from programmable_private.projector_checkpoint_current
+    where chain_id = 1 and release_id = 'classic-v3'
+  ),
+  3::bigint,
+  'fabricated reward movement cannot advance the checkpoint'
+);
+
+set local role programmable_projector;
+select programmable_private.open_run(
+  'a3250000-0000-0000-0000-000000000002',
+  'projection', 1, 'classic-v3', 'classic-v3', 'core',
+  '91000000-0000-0000-0000-000000000001', 1,
+  'projector-v1', decode(repeat('b3', 32), 'hex'),
+  '2026-07-31T03:03:18.300Z'
+);
+select programmable_private.stage_current_reward_snapshot_v1(
+  'a3250000-0000-0000-0000-000000000002',
+  decode(repeat('77', 20), 'hex'), decode(repeat('73', 32), 'hex'),
+  '98000000-0000-0000-0000-000000000001',
+  1, decode(repeat('a3', 32), 'hex'), 1100,
+  array[0, 1],
+  array[decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex')],
+  array[decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex')],
+  array[6000::numeric, 4000::numeric],
+  array[
+    decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex'),
+    decode(repeat('33', 20), 'hex')
+  ],
+  array[
+    decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex'),
+    decode(repeat('33', 20), 'hex')
+  ],
+  array[0::numeric, 435::numeric, 7::numeric],
+  array[653::numeric, 0::numeric, 5::numeric],
+  'a3240000-0000-0000-0000-000000000002',
+  25639601, decode(repeat('9a', 32), 'hex'),
+  '2026-07-31T03:03:18.400Z'
+);
+select programmable_private.stage_claim_projection(
+  'a3260000-0000-0000-0000-000000000002',
+  'a3250000-0000-0000-0000-000000000002',
+  decode(repeat('77', 20), 'hex'), 'beneficiary',
+  decode(repeat('11', 20), 'hex'), decode(repeat('11', 20), 'hex'),
+  653, 653, 1100,
+  'a3240000-0000-0000-0000-000000000002',
+  25639601, decode(repeat('9a', 32), 'hex'),
+  '2026-07-31T03:03:18.410Z'
+);
+select lives_ok(
+  $sql$
+    select programmable_private.promote_projection_run_v2(
+      'reward_snapshot_delta',
+      'a3270000-0000-0000-0000-000000000011',
+      'a3270000-0000-0000-0000-000000000012',
+      'a3270000-0000-0000-0000-000000000013',
+      'a3250000-0000-0000-0000-000000000002',
+      'projector-v1', 1, decode(repeat('aa', 32), 'hex'),
+      3, 4, 0,
+      '94000000-0000-0000-0000-000000000001',
+      '95000000-0000-0000-0000-000000000601',
+      25639601, decode(repeat('9a', 32), 'hex'), 22,
+      programmable_private.derive_envio_candidate_id(
+        1, decode(repeat('9a', 32), 'hex'), decode(repeat('c4', 32), 'hex'), 22
+      ),
+      array[
+        'a3240000-0000-0000-0000-000000000001'::uuid,
+        'a3240000-0000-0000-0000-000000000002'::uuid
+      ],
+      array['98000000-0000-0000-0000-000000000001'::uuid],
+      array['98100000-0000-0000-0000-000000000001'::uuid],
+      array[
+        'a3210000-0000-0000-0000-000000000001'::uuid,
+        'a3210000-0000-0000-0000-000000000002'::uuid
+      ],
+      array['explore-list']::text[], decode(repeat('b4', 32), 'hex'),
+      '2026-07-31T03:03:18.500Z'
+    )
+  $sql$,
+  'exact checkpoint and claim reward movement promotes atomically'
+);
+reset role;
+select is(
+  (
+    select pg_catalog.array_agg(
+      pg_catalog.format(
+        '%s:%s:%s', pg_catalog.encode(account, 'hex'),
+        claimable_accrued, claimed_total
+      ) order by account
+    )
+    from programmable_private.current_account_reward_balances_v1
+    where vault = decode(repeat('77', 20), 'hex')
+  ),
+  array[
+    repeat('11', 20) || ':0:653',
+    repeat('22', 20) || ':435:0',
+    repeat('33', 20) || ':7:5'
+  ]::text[],
+  'successful claim snapshot publishes exact active and historical balances'
+);
+select is(
+  (
+    select ordered_occurrence_ids
+    from programmable_private.projection_fold_manifests
+    where run_id = 'a3250000-0000-0000-0000-000000000002'
+  ),
+  array[
+    'a3240000-0000-0000-0000-000000000001'::uuid,
+    'a3240000-0000-0000-0000-000000000002'::uuid
+  ],
+  'claim fold manifest retains the complete transaction group in chain order'
+);
+
+set local role programmable_projector;
+select programmable_private.open_run(
+  'a3350000-0000-0000-0000-000000000001',
+  'projection', 1, 'classic-v3', 'classic-v3', 'core',
+  '91000000-0000-0000-0000-000000000001', 1,
+  'projector-v1', decode(repeat('b5', 32), 'hex'),
+  '2026-07-31T03:03:18.600Z'
+);
+select programmable_private.stage_current_reward_snapshot_v1(
+  'a3350000-0000-0000-0000-000000000001',
+  decode(repeat('77', 20), 'hex'), decode(repeat('73', 32), 'hex'),
+  '98000000-0000-0000-0000-000000000001',
+  2, decode(repeat('a5', 32), 'hex'), 1200,
+  array[0, 1],
+  array[decode(repeat('11', 20), 'hex'), decode(repeat('11', 20), 'hex')],
+  array[decode(repeat('11', 20), 'hex'), decode(repeat('11', 20), 'hex')],
+  array[6000::numeric, 4000::numeric],
+  array[
+    decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex'),
+    decode(repeat('33', 20), 'hex')
+  ],
+  array[
+    decode(repeat('11', 20), 'hex'), decode(repeat('22', 20), 'hex'),
+    decode(repeat('33', 20), 'hex')
+  ],
+  array[60::numeric, 475::numeric, 7::numeric],
+  array[653::numeric, 0::numeric, 5::numeric],
+  'a3340000-0000-0000-0000-000000000002',
+  25639602, decode(repeat('9b', 32), 'hex'),
+  '2026-07-31T03:03:18.700Z'
+);
+reset role;
+
+savepoint stale_reward_delta_reorg;
+select public.reward_test_private_call($call$
+  update programmable_private.projector_checkpoint_current
+  set reorg_generation = reorg_generation + 1
+  where chain_id = 1
+    and release_id = 'classic-v3'
+    and model_id = 'classic-v3'
+    and source_group = 'core'
+    and projector_version = 'projector-v1'
+$call$);
+set local role programmable_projector;
+select throws_ok(
+  $sql$
+    select programmable_private.promote_projection_run_v2(
+      'reward_snapshot_delta',
+      'a3370000-0000-0000-0000-000000000001',
+      'a3370000-0000-0000-0000-000000000002',
+      'a3370000-0000-0000-0000-000000000003',
+      'a3350000-0000-0000-0000-000000000001',
+      'projector-v1', 1, decode(repeat('aa', 32), 'hex'),
+      4, 5, 0,
+      '94000000-0000-0000-0000-000000000001',
+      '95000000-0000-0000-0000-000000000602',
+      25639602, decode(repeat('9b', 32), 'hex'), 24,
+      programmable_private.derive_envio_candidate_id(
+        1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 24
+      ),
+      array[
+        'a3340000-0000-0000-0000-000000000001'::uuid,
+        'a3340000-0000-0000-0000-000000000002'::uuid
+      ],
+      array['98000000-0000-0000-0000-000000000001'::uuid],
+      array['98100000-0000-0000-0000-000000000001'::uuid],
+      array[
+        'a3310000-0000-0000-0000-000000000001'::uuid,
+        'a3310000-0000-0000-0000-000000000002'::uuid
+      ],
+      array['explore-list']::text[], decode(repeat('b6', 32), 'hex'),
+      '2026-07-31T03:03:18.800Z'
+    )
+  $sql$,
+  '40001',
+  'reward delta rejects a stale reorg generation'
+);
+reset role;
+rollback to savepoint stale_reward_delta_reorg;
+select ok(
+  (
+    select checkpoint_generation = 4 and reorg_generation = 0
+    from programmable_private.projector_checkpoint_current
+    where chain_id = 1 and release_id = 'classic-v3'
+  ),
+  'stale reorg attempt leaves the current checkpoint unchanged'
+);
+
+set local role programmable_projector;
+select lives_ok(
+  $sql$
+    select programmable_private.promote_projection_run_v2(
+      'reward_snapshot_delta',
+      'a3370000-0000-0000-0000-000000000011',
+      'a3370000-0000-0000-0000-000000000012',
+      'a3370000-0000-0000-0000-000000000013',
+      'a3350000-0000-0000-0000-000000000001',
+      'projector-v1', 1, decode(repeat('aa', 32), 'hex'),
+      4, 5, 0,
+      '94000000-0000-0000-0000-000000000001',
+      '95000000-0000-0000-0000-000000000602',
+      25639602, decode(repeat('9b', 32), 'hex'), 24,
+      programmable_private.derive_envio_candidate_id(
+        1, decode(repeat('9b', 32), 'hex'), decode(repeat('c5', 32), 'hex'), 24
+      ),
+      array[
+        'a3340000-0000-0000-0000-000000000001'::uuid,
+        'a3340000-0000-0000-0000-000000000002'::uuid
+      ],
+      array['98000000-0000-0000-0000-000000000001'::uuid],
+      array['98100000-0000-0000-0000-000000000001'::uuid],
+      array[
+        'a3310000-0000-0000-0000-000000000001'::uuid,
+        'a3310000-0000-0000-0000-000000000002'::uuid
+      ],
+      array['explore-list']::text[], decode(repeat('b7', 32), 'hex'),
+      '2026-07-31T03:03:18.900Z'
+    )
+  $sql$,
+  'checkpoint and duplicate payout-address transition promote atomically'
+);
+reset role;
+select is(
+  (
+    select pg_catalog.array_agg(
+      pg_catalog.format(
+        '%s:%s:%s', pg_catalog.encode(beneficiary, 'hex'),
+        pg_catalog.encode(payout_address, 'hex'), share_bps
+      ) order by allocation_index
+    )
+    from programmable_private.projection_entity_current as entity
+    join programmable_private.reward_vault_projections as vault
+      on vault.reward_vault_projection_id = entity.projection_row_id
+     and vault.projection_run_id = entity.projection_run_id
+    join programmable_private.reward_allocation_projections as allocation
+      on allocation.reward_vault_projection_id =
+        vault.reward_vault_projection_id
+     and allocation.projection_run_id = vault.projection_run_id
+     and allocation.effective_to_block is null
+    where entity.entity_kind = 'reward_vault'
+      and vault.vault = decode(repeat('77', 20), 'hex')
+  ),
+  array[
+    repeat('11', 20) || ':' || repeat('11', 20) || ':6000',
+    repeat('11', 20) || ':' || repeat('11', 20) || ':4000'
+  ]::text[],
+  'active Classic allocations preserve a deliberate duplicate payout wallet'
+);
+select ok(
+  (
+    select pg_catalog.count(*) = 2
+       and pg_catalog.bool_and(
+         case
+           when account = decode(repeat('22', 20), 'hex')
+             then claimable_accrued = 475 and claimed_total = 0
+           when account = decode(repeat('33', 20), 'hex')
+             then claimable_accrued = 7 and claimed_total = 5
+           else false
+         end
+       )
+    from programmable_private.current_account_reward_balances_v1
+    where vault = decode(repeat('77', 20), 'hex')
+      and account in (
+        decode(repeat('22', 20), 'hex'), decode(repeat('33', 20), 'hex')
+      )
+  ),
+  'payout change retains exact balances for historical accounts'
+);
+select is(
+  (
+    select checkpoint_generation
+    from programmable_private.projector_checkpoint_current
+    where chain_id = 1 and release_id = 'classic-v3'
+  ),
+  5::bigint,
+  'two exact reward deltas advance the checkpoint to generation five'
+);
 
 set local role programmable_projector;
 select programmable_private.open_run(
@@ -3081,7 +3776,7 @@ select throws_ok(
       '97400000-0000-0000-0000-000000000004',
       '97000000-0000-0000-0000-000000000004',
       'projector-v1', 1, decode(repeat('aa', 32), 'hex'),
-      3, 4, 0,
+      5, 6, 0,
       '94000000-0000-0000-0000-000000000001',
       '95000000-0000-0000-0000-000000000600',
       25639600, decode(repeat('99', 32), 'hex'),
@@ -3109,7 +3804,7 @@ select is(
     from programmable_private.projector_checkpoint_current
     where chain_id = 1 and release_id = 'classic-v3'
   ),
-  3::bigint,
+  5::bigint,
   'failed re-promotion cannot advance the checkpoint'
 );
 select is(
@@ -3258,7 +3953,7 @@ select programmable_private.append_release_neutral_envio_candidate(
     1, decode(repeat('99', 32), 'hex'), decode(repeat('c1', 32), 'hex'), 21
   ),
   '910c0000-0000-0000-0000-000000000001',
-  25639600, decode(repeat('99', 32), 'hex'), decode(repeat('c1', 32), 'hex'),
+  25639603, decode(repeat('99', 32), 'hex'), decode(repeat('c1', 32), 'hex'),
   21, 21, decode(repeat('3d', 20), 'hex'), decode(repeat('3e', 32), 'hex'),
   'ClassicRewardVaultDeployed', array[decode(repeat('3e', 32), 'hex')],
   decode('0201', 'hex'), '{}'::jsonb, decode(repeat('d1', 32), 'hex'),
@@ -3274,7 +3969,7 @@ select programmable_private.append_release_neutral_envio_candidate(
     1, decode(repeat('99', 32), 'hex'), decode(repeat('c2', 32), 'hex'), 21
   ),
   '910c0000-0000-0000-0000-000000000001',
-  25639600, decode(repeat('99', 32), 'hex'), decode(repeat('c2', 32), 'hex'),
+  25639603, decode(repeat('99', 32), 'hex'), decode(repeat('c2', 32), 'hex'),
   22, 21, decode(repeat('3d', 20), 'hex'), decode(repeat('3e', 32), 'hex'),
   'ClassicRewardVaultDeployed', array[decode(repeat('3e', 32), 'hex')],
   decode('0202', 'hex'), '{}'::jsonb, decode(repeat('d2', 32), 'hex'),
@@ -3290,7 +3985,7 @@ select programmable_private.append_release_neutral_envio_candidate(
     1, decode(repeat('99', 32), 'hex'), decode(repeat('c3', 32), 'hex'), 21
   ),
   '910c0000-0000-0000-0000-000000000001',
-  25639600, decode(repeat('99', 32), 'hex'), decode(repeat('c3', 32), 'hex'),
+  25639603, decode(repeat('99', 32), 'hex'), decode(repeat('c3', 32), 'hex'),
   23, 21, decode(repeat('3d', 20), 'hex'), decode(repeat('3e', 32), 'hex'),
   'ClassicRewardVaultDeployed', array[decode(repeat('3e', 32), 'hex')],
   decode('0203', 'hex'), '{}'::jsonb, decode(repeat('d3', 32), 'hex'),
@@ -3415,12 +4110,49 @@ select programmable_private.ignore_envio_candidate_v1(
   0, 'known-nonrelease-event', decode(repeat('f4', 32), 'hex'),
   '2026-07-31T03:06:02.100Z'
 );
+select programmable_private.open_run(
+  'a2f00000-0000-0000-0000-000000000001',
+  'projection', 1, 'classic-v3', 'classic-v3', 'core',
+  '91000000-0000-0000-0000-000000000001', 1,
+  'projector-v1', decode(repeat('9d', 32), 'hex'),
+  '2026-07-31T03:06:02.110Z'
+);
+select programmable_private.stage_launch_projection(
+  'a2f10000-0000-0000-0000-000000000001',
+  'a2f00000-0000-0000-0000-000000000001',
+  decode(repeat('71', 20), 'hex'), decode(repeat('72', 20), 'hex'),
+  decode(repeat('88', 32), 'hex'), decode(repeat('73', 32), 'hex'),
+  null, decode(repeat('74', 32), 'hex'),
+  'Seed Token', 'SEED', 1000000000000000000000000,
+  '96100000-0000-0000-0000-000000000001',
+  25639603, decode(repeat('99', 32), 'hex'),
+  '2026-07-31T03:06:02.120Z'
+);
+select programmable_private.stage_pool_projection(
+  'a2f20000-0000-0000-0000-000000000001',
+  'a2f10000-0000-0000-0000-000000000001',
+  'a2f00000-0000-0000-0000-000000000001',
+  decode(repeat('00', 20), 'hex'), decode(repeat('71', 20), 'hex'),
+  3000, 60, decode(repeat('39', 20), 'hex'),
+  '96100000-0000-0000-0000-000000000001',
+  25639603, decode(repeat('99', 32), 'hex'),
+  '2026-07-31T03:06:02.130Z'
+);
+select programmable_private.stage_pool_fee_configuration(
+  'a2f30000-0000-0000-0000-000000000001',
+  'a2f20000-0000-0000-0000-000000000001',
+  'a2f00000-0000-0000-0000-000000000001',
+  30, 40, 20, 10, 0, 3000,
+  '96100000-0000-0000-0000-000000000001',
+  25639603, decode(repeat('99', 32), 'hex'),
+  '2026-07-31T03:06:02.140Z'
+);
 select programmable_private.stage_launch_occurrence_role(
-  '97100000-0000-0000-0000-000000000004', 'vault_factory',
+  'a2f10000-0000-0000-0000-000000000001', 'vault_factory',
   '96100000-0000-0000-0000-000000000001', '2026-07-31T03:06:02.200Z'
 );
 select programmable_private.stage_launch_projection_conditions(
-  '97100000-0000-0000-0000-000000000004', false,
+  'a2f10000-0000-0000-0000-000000000001', false,
   '2026-07-31T03:06:02.300Z'
 );
 select throws_ok(
@@ -3429,11 +4161,11 @@ select throws_ok(
       'a3000000-0000-0000-0000-000000000001',
       'a3000000-0000-0000-0000-000000000002',
       'a3000000-0000-0000-0000-000000000003',
-      '97000000-0000-0000-0000-000000000004',
-      'projector-v1', 1, decode(repeat('aa', 32), 'hex'), 3, 4, 0,
+      'a2f00000-0000-0000-0000-000000000001',
+      'projector-v1', 1, decode(repeat('aa', 32), 'hex'), 5, 6, 0,
       '94000000-0000-0000-0000-000000000001',
-      '95000000-0000-0000-0000-000000000600',
-      25639600, decode(repeat('99', 32), 'hex'), 21,
+      '95000000-0000-0000-0000-000000000603',
+      25639603, decode(repeat('99', 32), 'hex'), 21,
       programmable_private.derive_envio_candidate_id(
         1, decode(repeat('99', 32), 'hex'), decode(repeat('c3', 32), 'hex'), 21
       ),
@@ -3512,11 +4244,11 @@ select lives_ok(
       'a3000000-0000-0000-0000-000000000011',
       'a3000000-0000-0000-0000-000000000012',
       'a3000000-0000-0000-0000-000000000013',
-      '97000000-0000-0000-0000-000000000004',
-      'projector-v1', 1, decode(repeat('aa', 32), 'hex'), 3, 4, 0,
+      'a2f00000-0000-0000-0000-000000000001',
+      'projector-v1', 1, decode(repeat('aa', 32), 'hex'), 5, 6, 0,
       '94000000-0000-0000-0000-000000000001',
-      '95000000-0000-0000-0000-000000000600',
-      25639600, decode(repeat('99', 32), 'hex'), 21,
+      '95000000-0000-0000-0000-000000000603',
+      25639603, decode(repeat('99', 32), 'hex'), 21,
       programmable_private.derive_envio_candidate_id(
         1, decode(repeat('99', 32), 'hex'), decode(repeat('c3', 32), 'hex'), 21
       ),
@@ -3542,7 +4274,7 @@ select ok(
          'a2000000-0000-0000-0000-000000000003'::uuid
        ]
     from programmable_private.projection_fold_manifests
-    where run_id = '97000000-0000-0000-0000-000000000004'
+    where run_id = 'a2f00000-0000-0000-0000-000000000001'
   ),
   'cursor-only fold manifest records no occurrence IDs and every terminal decision ID'
 );
@@ -3551,7 +4283,7 @@ select ok(
   (
     select pg_catalog.jsonb_array_length(source_bindings) = 5
        and pg_catalog.jsonb_array_length(dynamic_source_templates) = 2
-       and pg_catalog.jsonb_array_length(projection_event_rules) = 19
+       and pg_catalog.jsonb_array_length(projection_event_rules) = 22
        and pg_catalog.jsonb_array_length(
          launch_completeness_requirements
        ) = 4
@@ -3631,9 +4363,9 @@ select ok(
     select count(*) = 1
        and bool_and(token = decode(repeat('71', 20), 'hex'))
        and bool_and(pool_projection_id =
-         '97110000-0000-0000-0000-000000000004'::uuid)
+         'a2f20000-0000-0000-0000-000000000001'::uuid)
        and bool_and(pool_fee_configuration_id =
-         '97120000-0000-0000-0000-000000000004'::uuid)
+         'a2f30000-0000-0000-0000-000000000001'::uuid)
     from programmable_private.get_projector_pool_baseline_by_id_v1(
       'a4000000-0000-0000-0000-000000000001',
       decode(repeat('73', 32), 'hex')
@@ -3709,7 +4441,7 @@ select is(
       1, 'classic-v3', 'classic-v3', 'core', 'projector-v1', 100
     )
   ),
-  4::bigint,
+  6::bigint,
   'checkpoint ancestors retain every promoted full cursor generation'
 );
 select programmable_private.append_run_outcome(
