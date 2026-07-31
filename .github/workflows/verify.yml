@@ -37,6 +37,9 @@ jobs:
       - name: Install indexer dependencies
         run: pnpm --dir indexer install --frozen-lockfile
 
+      - name: Audit indexer production dependencies
+        run: pnpm --dir indexer audit --prod --audit-level high
+
       - name: Generate and verify indexer
         run: |
           pnpm --dir indexer codegen
