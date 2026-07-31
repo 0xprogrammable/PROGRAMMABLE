@@ -129,6 +129,15 @@ This follows HyperIndex's `contractRegister` model, but the application does
 not depend on Envio's internal dynamic-address registry as durable discovery
 state. The factory event in the application ledger is the durable evidence.
 
+Initial reward beneficiaries and shares are constructor inputs, not indexed
+events. Envio handlers do not attempt to recover them and retain the same
+no-network-effects rule. After an occurrence reaches the safe head, a separate
+server-only seed verifier reads both RPCs at the exact creation block hash or,
+when historical getters are unavailable, verifies and decodes the identical
+transaction input returned by both RPCs. The source-specific methods, selectors,
+getter sets, commitments, and fallback rules are defined in
+[EVENT-SOURCES.md](./EVENT-SOURCES.md).
+
 ### 2. Safe head
 
 For each advancement, the projector reads both configured RPCs in parallel:
@@ -150,16 +159,28 @@ The projector records both observed heads, the safe-head number and hash, RPC
 endpoint identifiers (never URLs or credentials), and the observation time in
 each projection run.
 
-### 3. Immutable raw ledger
+### 3. Immutable logical identities and fork occurrences
 
-`chain_event_ledger` is append-only. Its primary key is the immutable event
-identity:
+The immutable logical event identity remains:
 
 ```text
 (chain_id, transaction_hash, log_index)
 ```
 
-Addresses and hashes are stored as lowercase hex. Each row also retains:
+It identifies one logical receipt-log position but is not a database primary
+key for chain placement: the same transaction can be re-mined with the same log
+index at a different block. The append-only ledger therefore uses two layers:
+
+```text
+chain_event_identity
+  primary key (chain_id, transaction_hash, log_index)
+
+chain_event_occurrence
+  primary key (chain_id, transaction_hash, log_index, block_hash)
+  foreign key (chain_id, transaction_hash, log_index)
+```
+
+Addresses and hashes are stored as lowercase hex. Each occurrence retains:
 
 - block number and block hash;
 - transaction index;
@@ -172,14 +193,26 @@ Addresses and hashes are stored as lowercase hex. Each row also retains:
 - first-seen Envio cursor; and
 - first verification run ID.
 
-The same identity with a different source address, event type, payload hash,
-block number, or block hash is a hard reconciliation conflict. It is never
-overwritten.
+Two occurrences of one logical identity may have different placement or
+payload because execution after re-mining can observe different block context.
+Both are retained. The same occurrence key with different block number,
+transaction index, source, event type, topics, data, or payload hash is a hard
+integrity conflict and is never overwritten.
 
-Canonicality is not mutated into the raw row. `chain_event_status_history`
-appends `verified`, `orphaned`, or `superseded` decisions with the RPC evidence
-and reconciliation run. A view selects the latest status. This preserves the
-original candidate while allowing a reorg rewind.
+Canonicality is not mutated into either raw row.
+`chain_event_occurrence_status_history` appends `observed`, `canonical`,
+`orphaned`, `superseded`, or `conflicted` decisions and the complete two-RPC
+receipt/block evidence. To select `canonical`, both RPCs must return the same
+successful receipt, block hash/number, transaction index, and log at the
+logical log index; that block must be at or below the safe head. A database
+constraint permits at most one current canonical occurrence for a logical
+identity. RPC disagreement or two competing canonical placements freezes
+advancement.
+
+A re-mined occurrence with a changed payload produces a high-severity reorg
+finding, not a destructive update to the old row. Once both RPCs agree on the
+new canonical placement, the old occurrence is appended as `orphaned`, the new
+one as `canonical`, and affected projections are rewound and rebuilt.
 
 ### 4. Verified projections
 
@@ -195,15 +228,24 @@ Only events at or below the dual-RPC safe head can affect these derived tables:
 - `market_projection`.
 
 Every projection row carries its release version, last source event identity,
-projection run ID, promoted block number/hash, and `verified_at`. Application
-metadata and profiles are separate tables and are never reconstructed from
-chain events.
+last source occurrence block hash, projection run ID, promoted block
+number/hash, and `verified_at`. Application metadata and profiles are separate
+tables and are never reconstructed from chain events.
 
-Projection code is a deterministic fold over verified ledger rows ordered by:
+Projection code is a deterministic fold over only the current canonical
+occurrence for each logical identity, ordered by:
 
 ```text
 block_number, transaction_index, log_index
 ```
+
+An occurrence that is merely observed, superseded, conflicted, or orphaned is
+never folded. Reward-allocation projections additionally require a verified
+seed record tied to the same canonical factory occurrence. Seed provenance
+stores the creation occurrence key, recovery method, method selector, input
+hash, normalized allocation hash, both RPC result hashes, exact block
+number/hash, getter set or decoded calldata path, configuration commitments,
+verification run, and finality time.
 
 The projection transaction writes derived rows, reconciliation results, and
 the checkpoint atomically. An API route never discovers or inserts a vault,
@@ -211,13 +253,17 @@ advances a checkpoint, or repairs a projection.
 
 ### 5. Reconciliation
 
-The reconciler performs four independent comparisons:
+The reconciler performs six independent comparisons:
 
 1. Envio candidate identities and payload hashes against dual-RPC logs.
-2. Ledger block hashes against both RPCs.
-3. Projection aggregates against a fresh fold of the verified ledger.
-4. Existing DTOs from the indexed resolver against the legacy Blob/RPC
+2. Every occurrence placement and status against both RPC receipts and blocks.
+3. Initial reward seeds against historical getters or verified transaction
+   calldata, factory/vault commitments, and the canonical creation occurrence.
+4. Projection aggregates against a fresh fold of canonical occurrences.
+5. Existing DTOs from the indexed resolver against the legacy Blob/RPC
    resolver.
+6. Reward allocations reconstructed from the seed plus later canonical
+   payout/configuration events against exact-block vault getters.
 
 Reconciliation results are append-only and name the source range, release
 version, compared counts, mismatch identities, run version, and timestamps.
@@ -238,15 +284,19 @@ On resume:
 3. resume only if both hashes equal the checkpoint hash;
 4. otherwise find the highest earlier checkpoint whose hash both RPCs agree
    on;
-5. append `orphaned` decisions for affected event identities;
+5. append `orphaned` decisions for affected occurrences and their seed
+   records;
 6. delete and rebuild only derived projection rows after that checkpoint; and
 7. replay through the current safe head before advancing the public pointer.
 
-Raw ledger rows and reconciliation history are never deleted by the rewind.
-If no common checkpoint exists, rebuild the affected release from its manifest
-start block. A reorg that reaches or crosses a promoted checkpoint is a
-critical alert and immediately removes indexed eligibility for affected
-routes.
+Logical identities, occurrence rows, seed records, and reconciliation history
+are never deleted by the rewind. If the same logical identity appears in a new
+block hash, append the new occurrence, verify its receipt with both RPCs,
+reseed any constructor-derived allocation against that occurrence, and fold
+only after the new placement is canonical. If no common checkpoint exists,
+rebuild the affected release from its manifest start block. A reorg that
+reaches or crosses a promoted checkpoint is a critical alert and immediately
+removes indexed eligibility for affected routes.
 
 ## Uniswap market analytics
 
@@ -348,6 +398,9 @@ any of these conditions holds:
 - the required release or address set differs from a checked-in manifest;
 - the projection checkpoint is above the current safe head;
 - the checkpoint block hash does not match both RPCs;
+- any required logical event lacks exactly one dual-RPC-canonical occurrence;
+- a required initial reward seed is missing, conflicted, or tied to an
+  orphaned occurrence;
 - projection lag is more than 2 blocks behind the safe head;
 - the last complete reconciliation is older than 5 minutes;
 - a reconciliation conflict is unresolved for the route's release;
@@ -414,6 +467,10 @@ projection.blockHash
 projection.lagBlocks
 projection.lastReconciledAt
 projection.releaseVersions
+projection.canonicalOccurrenceCount
+projection.pendingOccurrenceCount
+projection.unverifiedRewardSeedCount
+projection.lastRewardSeedVerifiedAt
 fallback.blobAgeSeconds
 fallback.activeSource
 circuits.<dependency>.state
@@ -446,6 +503,7 @@ Alert thresholds are:
 | last complete reconciliation | older than 2 min | older than 5 min |
 | Envio progress lag behind safe head | more than 12 blocks for 2 min | more than 64 blocks for 5 min |
 | unresolved identity, payload, release, or projection mismatch | n/a | immediately |
+| competing occurrence placement or reward-seed mismatch | n/a | immediately |
 | reorg reaches a promoted checkpoint | n/a | immediately |
 | private Blob age while fallback is enabled | older than 10 min | invalid at 15 min |
 | any upstream circuit open | more than 1 min | more than 5 min |
@@ -478,8 +536,9 @@ responses, logs, or health fields.
 A route is eligible for `active` only after all of these gates pass:
 
 1. backfill reaches the safe head for all five included releases;
-2. two clean full replays produce identical ledger identities, payload hashes,
-   projections, and checkpoints;
+2. two clean full replays produce identical logical identities, occurrence
+   placements/statuses, reward seeds, payload hashes, projections, and
+   checkpoints;
 3. dual-RPC replay has zero missing, extra, or changed included events;
 4. deterministic existing DTO fields match at 100% across the historical
    corpus and seven consecutive days of shadow comparisons;

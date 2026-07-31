@@ -537,7 +537,199 @@ The `QuoteAssetFeeSplitVaultDeployed` handler registers `vault` as a dynamic
 quote asset, pool ID, reward vault, and launcher event to agree with one
 manifest-pinned Stock-Paired release.
 
-## Candidate identity and release assignment
+## Initial reward-allocation seed
+
+Initial beneficiaries and shares are vault constructor/factory-call inputs.
+They are not present in `ClassicRewardVaultDeployed` or
+`QuoteAssetFeeSplitVaultDeployed`, and Envio cannot infer them from those
+events. Envio handlers only record deterministic event entities and dynamic
+addresses; they perform no RPC, HTTP, trace, Postgres, or other external side
+effect.
+
+A separate application seed verifier runs only after the factory occurrence is
+canonical and its creation block is at or below
+`safeHead = min(headA, headB) - 12`, with both RPCs agreeing on that
+safe-head hash and the creation occurrence. It uses the exact creation block
+hash, never `latest`.
+
+### Historical getter path
+
+The preferred method sends every `eth_call` independently to both RPCs with
+the EIP-1898 block parameter:
+
+```json
+{ "blockHash": "<canonical creation block hash>", "requireCanonical": true }
+```
+
+Both RPCs must return the same normalized values. If either RPC cannot serve
+that historical hash, the verifier uses the transaction-input path below; it
+does not downgrade to an unpinned `latest` or single-RPC call.
+
+For `ClassicRewardVaultV1`, read:
+
+```solidity
+beneficiaryCount() returns (uint256)
+beneficiaryAt(uint256 index) returns (address)
+shareBpsAt(uint256 index) returns (uint16)
+configurationEpoch() returns (uint64)
+configurationHash() returns (bytes32)
+activeConfigurationHash() returns (bytes32)
+feeHook() returns (address)
+poolManager() returns (address)
+ctoAuthority() returns (address)
+poolId() returns (bytes32)
+```
+
+Also read
+`ClassicRewardVaultFactoryV1.configurationHashOf(address vault)`. When
+`configurationEpoch() == 1`, the ordered `beneficiaryAt` and `shareBpsAt`
+arrays are the initial allocation. If a later transaction in the creation
+block already advanced the epoch, recover the initial arrays from calldata,
+then replay later canonical `PayoutWalletChanged` or
+`CtoRewardConfigurationActivated` occurrences in transaction/log order and
+require the result to equal the creation-block getter snapshot.
+
+For `QuoteAssetFeeSplitVaultV1`, read:
+
+```solidity
+beneficiaryCount() returns (uint256)
+beneficiaryAt(uint256 index) returns (address)
+shareBpsOf(address beneficiary) returns (uint16)
+payoutAddressOf(address beneficiary) returns (address)
+configurationHash() returns (bytes32)
+feeHook() returns (address)
+poolManager() returns (address)
+quoteAsset() returns (address)
+poolId() returns (bytes32)
+```
+
+Also read
+`QuoteAssetFeeSplitVaultFactoryV1.configurationHashOf(address vault)`.
+Stock-Paired beneficiaries and shares are immutable; payout addresses may
+change. At the creation block, each initial payout address must equal its
+beneficiary unless a later canonical `PayoutAddressUpdated` occurrence in that
+same block explains the end-of-block value.
+
+### Transaction-input path
+
+Both RPCs must return the same transaction hash, `from`, `to`, input bytes,
+value, block number/hash, and transaction index, and the same successful
+receipt containing the canonical factory occurrence. The decoder selects an
+ABI only from the manifest-pinned destination and exact selector:
+
+| Source | Selector and canonical signature | Allocation inputs |
+| --- | --- | --- |
+| Classic V3 launcher | `0xbf388406` — `launch((string,string,uint16,uint16,bytes32,(string,string,string,bytes),address[],uint16[],(uint8,uint16,uint16)))` | `LaunchParameters.rewardBeneficiaries`, `rewardSharesBps` |
+| Stock V1/V2/V3 launcher | `0x0f6d2003` — `launch((string,string,address,uint256,bytes32,(string,string,string,bytes),address[],uint16[]))` | `LaunchParameters.rewardBeneficiaries`, `rewardSharesBps` |
+| Stock V1/V2/V3 ETH coordinator | `0xdfd98d51` — `launch((uint256,uint256,uint256,(string,string,address,uint256,bytes32,(string,string,string,bytes),address[],uint16[])))` | nested `EthLaunchParameters.launch.rewardBeneficiaries`, `rewardSharesBps` |
+| Classic factory | `0x19e3bddc` — `deploy(bytes32,address,bytes32,address[],uint16[])` | `beneficiaries`, `sharesBps` |
+| Classic factory | `0x97f32fb5` — `deployOrGet(bytes32,address,bytes32,address[],uint16[])` | `beneficiaries`, `sharesBps` |
+| Stock factory | `0xcd12090e` — `deploy(bytes32,address,bytes32,address,address[],uint16[])` | `beneficiaries`, `sharesBps` |
+
+Normal Programmable launches call the factory internally, so a standard
+transaction lookup exposes the launcher or ETH-coordinator calldata, not the
+internal factory calldata. Direct factory calldata is decoded only when the
+factory is the top-level transaction destination. Provider-specific execution
+traces are diagnostic evidence and are never the sole seed authority. A direct
+factory deployment can verify a vault seed but cannot create a public launch
+without the matching launcher events.
+
+For every path, require equal non-empty arrays, ordered unique nonzero
+beneficiaries, nonzero shares, and a total of `10_000` basis points. Classic
+allows 1–5 entries; Stock-Paired allows 1–8.
+
+For launcher/coordinator transactions derive the factory salt exactly as the
+source does:
+
+```text
+Classic V3 salt =
+  keccak256(abi.encode(
+    "programmable.classic-reward-vault.v1", token, launcher-event deployer
+  ))
+
+Stock V1/V2 salt =
+  keccak256(abi.encode(
+    "programmable.stock-paired-reward-vault.v1",
+    token, quoteAsset, launcher-event deployer
+  ))
+
+Stock V3 salt =
+  keccak256(abi.encode(
+    "programmable.stock-paired-reward-vault.v3",
+    token, quoteAsset, launcher-event deployer
+  ))
+```
+
+For a direct factory transaction use its decoded `salt`. Rebuild the exact
+factory `initCode`, compute
+`keccak256(0xff ++ factory ++ salt ++ keccak256(initCode))[12:]`, and require
+that address to equal the emitted vault. The locally rebuilt address must also
+equal both RPCs' exact-block `predict(...)` result.
+
+Recompute and verify the constructor commitments:
+
+```text
+Classic configurationHash =
+  keccak256(abi.encode(
+    chainId, vault, feeHook, poolManager, ctoAuthority, poolId,
+    beneficiaries, sharesBps
+  ))
+
+Classic initial activeConfigurationHash =
+  keccak256(abi.encode(
+    chainId, vault, configurationHash, uint64(1),
+    beneficiaries, sharesBps
+  ))
+
+Stock configurationHash =
+  keccak256(abi.encode(
+    chainId, vault, feeHook, poolManager, quoteAsset, poolId,
+    beneficiaries, sharesBps
+  ))
+```
+
+The result must match both RPCs' vault and factory getters, the deterministic
+CREATE2 prediction from the factory inputs, and the emitted vault address. For
+Classic it must also match the factory event and launcher
+`rewardConfigurationHash`; for Stock-Paired it must match the hook
+`PoolRegistered.rewardConfigurationHash`.
+
+The seed record retains:
+
+```text
+chain_id
+factory_event_logical_identity
+factory_occurrence_block_hash
+creation_block_number
+creation_transaction_index
+vault
+release_version
+recovery_method = historical_getters|launcher_calldata|coordinator_calldata|factory_calldata
+top_level_to
+method_selector
+transaction_input_hash
+ordered_beneficiaries
+ordered_shares_bps
+allocation_hash
+configuration_hash
+active_configuration_hash
+getter_block_hash
+rpc_a_result_hash
+rpc_b_result_hash
+verification_run_id
+verified_at
+```
+
+`active_configuration_hash` is the Classic epoch-one commitment; it is `null`
+for the immutable Stock-Paired allocation.
+
+No seed is verified before finality. A getter/calldata, RPC, CREATE2, event, or
+commitment mismatch quarantines the seed and its launch/reward projections.
+If the creation occurrence is orphaned, append an orphaned seed status and
+recover a new seed against the newly canonical occurrence, even when the
+logical transaction hash and log index are unchanged.
+
+## Candidate identity, occurrence, and release assignment
 
 Every event entity uses:
 
@@ -545,10 +737,28 @@ Every event entity uses:
 id = "<chain_id>:<lowercase_transaction_hash>:<log_index>"
 ```
 
-The application ledger stores the tuple as separate typed columns with a
-unique constraint. It also stores block number/hash, transaction index, source
-address, event type, raw topics/data, decoded payload, payload hash, and release
-version.
+This is the logical identity. A transaction can be re-mined at a different
+placement, so each Envio candidate also uses the fork-occurrence key:
+
+```text
+occurrence_id =
+  "<chain_id>:<lowercase_transaction_hash>:<log_index>:<lowercase_block_hash>"
+```
+
+The application stores logical identities separately from occurrences. The
+occurrence key is unique and retains block number/hash, transaction index,
+source address, event type, raw topics/data, decoded payload, payload hash, and
+release version. Different block hashes for the same logical identity are
+retained, not overwritten.
+
+Only an occurrence whose receipt, exact log, block, and successful status match
+on both RPCs at or below the safe head is canonical. At most one occurrence per
+logical identity may be current-canonical. A changed payload on a re-mined
+occurrence is preserved and raises a high-severity reorg finding; after
+dual-RPC agreement the old placement becomes orphaned, the new placement
+becomes canonical, and only the new occurrence enters the fold. Different
+content for the same full occurrence key is an integrity conflict and freezes
+promotion.
 
 Static address and inclusive start block assign the release before decoding.
 The shared Stock-Paired V2/V3 hook and vault factory use related launcher,
@@ -580,6 +790,9 @@ conflicting duplicates.
   event in the same successful transaction.
 - Launcher `rewardVault` must match the corresponding factory event and hook
   registration before reward history is promoted.
+- The initial ordered reward allocation must have a verified seed tied to the
+  canonical factory occurrence and must satisfy the getter/calldata,
+  commitment, and CREATE2 checks above.
 - Hook registration and fee disclosure must match the recorded pool and
   canonical PoolKey.
 
