@@ -53,6 +53,7 @@ describe("data-pipeline configuration", () => {
       PROGRAMMABLE_POSTGRES_SSL_CA_PEM: rootCertificates[0],
       PROGRAMMABLE_ENVIO_GRAPHQL_URL: "https://envio.example/graphql",
       PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL: "https://gateway.thegraph.com",
+      UNISWAP_V4_SUBGRAPH_API_KEY: "legacy-server-only-graph-key",
     });
 
     expect(config.flags.INDEXED_EXPLORE_LIST_READS_ENABLED).toBe(true);
@@ -67,6 +68,7 @@ describe("data-pipeline configuration", () => {
     expect(config.uniswap.gatewayBaseUrl).toBe(
       "https://gateway.thegraph.com",
     );
+    expect(config.uniswap.apiKey).toBe("legacy-server-only-graph-key");
 
     expect(() =>
       loadDataPipelineConfig({
@@ -82,6 +84,11 @@ describe("data-pipeline configuration", () => {
     expect(() =>
       loadDataPipelineConfig({
         NEXT_PUBLIC_PROGRAMMABLE_SHADOW_PROBE_TOKEN: "x".repeat(48),
+      }),
+    ).toThrowError(DataPipelineError);
+    expect(() =>
+      loadDataPipelineConfig({
+        NEXT_PUBLIC_UNISWAP_V4_SUBGRAPH_API_KEY: "public-graph-key",
       }),
     ).toThrowError(DataPipelineError);
     expect(() =>
@@ -182,6 +189,15 @@ describe("data-pipeline configuration", () => {
     expect(config.uniswap.gatewayBaseUrl).toBe(
       "https://graph-proxy.example/custom-base",
     );
+  });
+
+  it("prefers the dedicated Graph key over the legacy server-only key", () => {
+    const config = loadDataPipelineConfig({
+      PROGRAMMABLE_UNISWAP_GRAPH_API_KEY: "dedicated-server-key",
+      UNISWAP_V4_SUBGRAPH_API_KEY: "legacy-server-key",
+    });
+
+    expect(config.uniswap.apiKey).toBe("dedicated-server-key");
   });
 
   it("rejects a custom Graph gateway when the trusted process environment is production", () => {

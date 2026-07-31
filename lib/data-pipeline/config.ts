@@ -39,6 +39,7 @@ const BROWSER_FORBIDDEN_NAMES = [
   "NEXT_PUBLIC_PROGRAMMABLE_RELEASE_PROBE_DATABASE_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_POSTGRES_SSL_CA_PEM",
   "NEXT_PUBLIC_PROGRAMMABLE_UNISWAP_GRAPH_API_KEY",
+  "NEXT_PUBLIC_UNISWAP_V4_SUBGRAPH_API_KEY",
   "NEXT_PUBLIC_PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
@@ -295,7 +296,10 @@ export function loadDataPipelineConfig(
     }),
     uniswap: Object.freeze({
       gatewayBaseUrl: uniswapGraphGatewayBaseUrl,
-      apiKey: optionalSecret(env.PROGRAMMABLE_UNISWAP_GRAPH_API_KEY),
+      apiKey: optionalSecret(
+        env.PROGRAMMABLE_UNISWAP_GRAPH_API_KEY ??
+          env.UNISWAP_V4_SUBGRAPH_API_KEY,
+      ),
       timeoutMs: 2_500 as const,
       maximumBodyBytes: 128 * 1024,
     }),
