@@ -25,6 +25,11 @@ import {
   getConfiguredClassicV3Release,
   isClassicV3ReleaseVerified,
 } from "@/lib/classic-v3-release";
+import {
+  ActionLookupError,
+  lookupActionReward,
+  type ActionRewardLookup,
+} from "@/lib/data-pipeline/action-lookup";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { encodeClassicV3RewardAction } from "@/lib/profile/classic-v3-rewards";
 
@@ -66,6 +71,72 @@ function createClient() {
     batch: { multicall: true },
     transport: http(rpcUrl, { retryCount: 1, timeout: 12_000 }),
   });
+}
+
+function classicActionRpcEndpoints() {
+  const secondary =
+    environment === "rehearsal"
+      ? process.env.SEPOLIA_RPC_URL_B ??
+        process.env.SEPOLIA_RPC_URL_SECONDARY ??
+        "https://ethereum-sepolia-rpc.publicnode.com"
+      : process.env.ETHEREUM_RPC_URL_B ??
+        process.env.ETHEREUM_RPC_URL_SECONDARY ??
+        "https://ethereum-rpc.publicnode.com";
+  const fallback =
+    environment === "rehearsal"
+      ? "https://rpc.sepolia.org"
+      : "https://rpc.mevblocker.io";
+  const endpoints = Array.from(new Set([rpcUrl, secondary, fallback]));
+  if (endpoints.length < 2) {
+    throw new Error("Classic actions require two independent RPCs");
+  }
+  return endpoints.slice(0, 2);
+}
+
+function createActionClients() {
+  return classicActionRpcEndpoints().map((endpoint) =>
+    createPublicClient({
+      chain,
+      batch: { multicall: true },
+      transport: http(endpoint, { retryCount: 1, timeout: 12_000 }),
+    }),
+  );
+}
+
+async function sharedActionBlock(clients: readonly PublicClient[]) {
+  if (clients.length !== 2) {
+    throw new Error("Classic actions require two independent RPCs");
+  }
+  const heads = await Promise.all(clients.map((client) => client.getBlockNumber()));
+  const blockNumber = heads[0]! < heads[1]! ? heads[0]! : heads[1]!;
+  const blocks = await Promise.all(
+    clients.map((client) => client.getBlock({ blockNumber })),
+  );
+  if (
+    !blocks[0]?.hash ||
+    !blocks[1]?.hash ||
+    blocks[0].hash.toLowerCase() !== blocks[1].hash.toLowerCase()
+  ) {
+    throw new Error("Independent RPCs disagree on Classic action state");
+  }
+  return blockNumber;
+}
+
+async function assertCodeHashAtBlock(
+  client: PublicClient,
+  address: Address,
+  expectedHash: string,
+  blockNumber: bigint,
+  label: string,
+) {
+  const code = await client.getCode({ address, blockNumber });
+  if (
+    !code ||
+    code === "0x" ||
+    keccak256(code).toLowerCase() !== expectedHash.toLowerCase()
+  ) {
+    throw new Error(`${label} does not match the Classic manifest`);
+  }
 }
 
 async function assertCodeHash(
@@ -134,6 +205,204 @@ function prospectiveAllocation(
     }
   }
   return accountAmount;
+}
+
+async function readClassicActionState(input: {
+  client: PublicClient;
+  reward: ActionRewardLookup;
+  account: Address;
+  blockNumber: bigint;
+  allocationIndex?: number;
+}) {
+  const { client, reward, account, blockNumber, allocationIndex } = input;
+  const hook = getAddress(manifest.ethCreatorFeeHookV3 as string);
+  const launcher = getAddress(manifest.memeLaunchV2 as string);
+  const vaultFactory = getAddress(
+    manifest.classicRewardVaultFactoryV1 as string,
+  );
+  await Promise.all([
+    assertCodeHashAtBlock(
+      client,
+      launcher,
+      manifest.runtimeCodeHashes?.memeLaunchV2 as string,
+      blockNumber,
+      "Classic launcher",
+    ),
+    assertCodeHashAtBlock(
+      client,
+      hook,
+      manifest.runtimeCodeHashes?.ethCreatorFeeHookV3 as string,
+      blockNumber,
+      "Classic hook",
+    ),
+    assertCodeHashAtBlock(
+      client,
+      vaultFactory,
+      manifest.runtimeCodeHashes?.classicRewardVaultFactoryV1 as string,
+      blockNumber,
+      "Classic reward factory",
+    ),
+  ]);
+  const [
+    vaultCode,
+    factoryVault,
+    vaultHook,
+    vaultPoolId,
+    beneficiaryCount,
+    shareBps,
+    checkpointed,
+    claimed,
+    disclosure,
+    poolConfig,
+  ] = await Promise.all([
+    client.getCode({ address: reward.vaultAddress, blockNumber }),
+    client.readContract({
+      address: vaultFactory,
+      abi: classicRewardVaultFactoryAbi,
+      functionName: "isFactoryVault",
+      args: [reward.vaultAddress],
+      blockNumber,
+    }),
+    client.readContract({
+      address: reward.vaultAddress,
+      abi: classicRewardVaultAbi,
+      functionName: "feeHook",
+      blockNumber,
+    }),
+    client.readContract({
+      address: reward.vaultAddress,
+      abi: classicRewardVaultAbi,
+      functionName: "poolId",
+      blockNumber,
+    }),
+    client.readContract({
+      address: reward.vaultAddress,
+      abi: classicRewardVaultAbi,
+      functionName: "beneficiaryCount",
+      blockNumber,
+    }),
+    client.readContract({
+      address: reward.vaultAddress,
+      abi: classicRewardVaultAbi,
+      functionName: "shareBpsOf",
+      args: [account],
+      blockNumber,
+    }),
+    client.readContract({
+      address: reward.vaultAddress,
+      abi: classicRewardVaultAbi,
+      functionName: "claimable",
+      args: [account],
+      blockNumber,
+    }),
+    client.readContract({
+      address: reward.vaultAddress,
+      abi: classicRewardVaultAbi,
+      functionName: "claimedBy",
+      args: [account],
+      blockNumber,
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "feeDisclosure",
+      args: [reward.poolId],
+      blockNumber,
+    }),
+    client.readContract({
+      address: hook,
+      abi: classicV3HookAbi,
+      functionName: "poolFeeConfig",
+      args: [reward.poolId],
+      blockNumber,
+    }),
+  ]);
+  if (
+    !vaultCode ||
+    vaultCode === "0x" ||
+    !factoryVault ||
+    getAddress(vaultHook).toLowerCase() !== hook.toLowerCase() ||
+    vaultPoolId.toLowerCase() !== reward.poolId.toLowerCase() ||
+    beneficiaryCount < 1n ||
+    beneficiaryCount > 5n ||
+    disclosure[7].toLowerCase() !== reward.vaultAddress.toLowerCase() ||
+    poolConfig[0].toLowerCase() !== reward.vaultAddress.toLowerCase() ||
+    getAddress(poolConfig[1]).toLowerCase() !== launcher.toLowerCase() ||
+    !poolConfig[4] ||
+    Number(disclosure[0]) !== reward.token.buySwapFeeBps ||
+    Number(disclosure[1]) !== reward.token.sellSwapFeeBps ||
+    Number(disclosure[2]) !== reward.token.buyCreatorFeeBps ||
+    Number(disclosure[3]) !== reward.token.sellCreatorFeeBps ||
+    Number(disclosure[4]) !== reward.token.launcherFeeBps ||
+    Number(disclosure[5]) !== reward.token.transferTaxBps ||
+    Number(disclosure[6]) !== reward.token.lpFeePips ||
+    Number(poolConfig[2]) !== reward.token.buySwapFeeBps ||
+    Number(poolConfig[3]) !== reward.token.sellSwapFeeBps
+  ) {
+    throw new Error("Classic reward provenance does not match the indexed launch");
+  }
+  const allocations = await Promise.all(
+    Array.from({ length: Number(beneficiaryCount) }, async (_, index) => {
+      const [beneficiary, allocationShare] = await Promise.all([
+        client.readContract({
+          address: reward.vaultAddress,
+          abi: classicRewardVaultAbi,
+          functionName: "beneficiaryAt",
+          args: [BigInt(index)],
+          blockNumber,
+        }),
+        client.readContract({
+          address: reward.vaultAddress,
+          abi: classicRewardVaultAbi,
+          functionName: "shareBpsAt",
+          args: [BigInt(index)],
+          blockNumber,
+        }),
+      ]);
+      return {
+        allocationIndex: index,
+        payoutAddress: getAddress(beneficiary),
+        shareBps: Number(allocationShare),
+      };
+    }),
+  );
+  if (
+    new Set(allocations.map((item) => item.payoutAddress.toLowerCase())).size !==
+      allocations.length ||
+    allocations.some((item) => item.shareBps <= 0) ||
+    allocations.reduce((sum, item) => sum + item.shareBps, 0) !== 10_000 ||
+    allocations
+      .filter(
+        (item) => item.payoutAddress.toLowerCase() === account.toLowerCase(),
+      )
+      .reduce((sum, item) => sum + item.shareBps, 0) !== Number(shareBps)
+  ) {
+    throw new Error("Classic reward allocation is invalid");
+  }
+  const prospective = prospectiveAllocation(
+    poolConfig[5],
+    allocations,
+    account,
+  );
+  const claimable = checkpointed + prospective;
+  const ownsAllocation =
+    allocationIndex === undefined
+      ? false
+      : allocations.some(
+          (item) =>
+            item.allocationIndex === allocationIndex &&
+            item.payoutAddress.toLowerCase() === account.toLowerCase(),
+        );
+  return {
+    claimableWei: claimable.toString(),
+    claimedWei: claimed.toString(),
+    shareBps: Number(shareBps),
+    ownsAllocation,
+    allocations: allocations.map((item) => ({
+      ...item,
+      payoutAddress: item.payoutAddress.toLowerCase(),
+    })),
+  };
 }
 
 async function readRewards(account: Address) {
@@ -487,32 +756,54 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const profile = await readRewards(account);
-    if (profile.status !== "ready") {
+    if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
       return json({ error: "Classic is not deployed yet" }, 409);
     }
-    const reward = profile.rewards.find(
-      (item) =>
-        item.vaultAddress.toLowerCase() === vaultAddress.toLowerCase(),
-    );
-    if (!reward) {
+    const reward = await lookupActionReward({
+      chainId: chain.id,
+      account,
+      vaultAddress,
+    });
+    if (
+      reward.releaseVersion !== "classic-v3" ||
+      reward.modelVersion !== "classic" ||
+      reward.token.rewardVaultAddress?.toLowerCase() !==
+        vaultAddress.toLowerCase() ||
+      reward.hookAddress.toLowerCase() !==
+        getAddress(manifest.ethCreatorFeeHookV3 as string).toLowerCase()
+    ) {
       return json(
         { error: "Only a current or historic payout wallet can continue" },
         403,
       );
     }
+    const clients = createActionClients();
+    const blockNumber = await sharedActionBlock(clients);
+    const actionStates = await Promise.all(
+      clients.map((client) =>
+        readClassicActionState({
+          client,
+          reward,
+          account,
+          blockNumber,
+          allocationIndex,
+        }),
+      ),
+    );
+    if (JSON.stringify(actionStates[0]) !== JSON.stringify(actionStates[1])) {
+      throw new Error("Independent RPCs disagree on Classic reward state");
+    }
+    const actionState = actionStates[0]!;
     if (
       input.action === "update-payout" &&
-      !reward.ownedAllocations.some(
-        (item) => item.allocationIndex === allocationIndex,
-      )
+      !actionState.ownsAllocation
     ) {
       return json(
         { error: "Only the current owner of this reward allocation can change it" },
         403,
       );
     }
-    if (input.action === "claim" && BigInt(reward.claimableWei) === 0n) {
+    if (input.action === "claim" && BigInt(actionState.claimableWei) === 0n) {
       return json({ error: "There are no rewards to claim" }, 409);
     }
     const data = encodeClassicV3RewardAction({
@@ -520,23 +811,40 @@ export async function POST(request: NextRequest) {
       allocationIndex,
       newPayoutAddress,
     });
-    const client = createClient();
-    await client.call({
-      account,
-      to: vaultAddress,
-      data,
-      value: 0n,
-    });
-    const [estimatedGas, gasPrice, balance] = await Promise.all([
-      client.estimateGas({
-        account,
-        to: vaultAddress,
-        data,
-        value: 0n,
+    const simulations = await Promise.all(
+      clients.map(async (client) => {
+        const transaction = {
+          account,
+          to: vaultAddress,
+          data,
+          value: 0n,
+        };
+        await client.call(transaction);
+        const [estimatedGas, gasPrice, balance] = await Promise.all([
+          client.estimateGas(transaction),
+          client.getGasPrice(),
+          client.getBalance({ address: account }),
+        ]);
+        return { estimatedGas, gasPrice, balance };
       }),
-      client.getGasPrice(),
-      client.getBalance({ address: account }),
-    ]);
+    );
+    const estimatedGas = simulations.reduce(
+      (largest, candidate) =>
+        candidate.estimatedGas > largest
+          ? candidate.estimatedGas
+          : largest,
+      0n,
+    );
+    const gasPrice = simulations.reduce(
+      (largest, candidate) =>
+        candidate.gasPrice > largest ? candidate.gasPrice : largest,
+      0n,
+    );
+    const balance = simulations.reduce(
+      (smallest, candidate) =>
+        candidate.balance < smallest ? candidate.balance : smallest,
+      simulations[0]!.balance,
+    );
     const gasLimit = (estimatedGas * 120n + 99n) / 100n;
     if (balance < gasLimit * gasPrice) {
       return json(
@@ -564,6 +872,12 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof ActionLookupError && error.code === "not-found") {
+      return json(
+        { error: "Only a current or historic payout wallet can continue" },
+        403,
+      );
+    }
     console.error("Classic reward preparation failed", error);
     return json(
       { error: "The reward action could not be simulated from current onchain state" },

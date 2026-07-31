@@ -28,6 +28,19 @@ const mocks = vi.hoisted(() => {
   return { client, runtimeCodes };
 });
 
+vi.mock("server-only", () => ({}));
+
+vi.mock("../lib/data-pipeline/action-lookup", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/data-pipeline/action-lookup")>();
+  return {
+    ...actual,
+    lookupActionReward: vi.fn(async () => {
+      throw new actual.ActionLookupError("not-found");
+    }),
+  };
+});
+
 vi.mock("viem", async (importOriginal) => {
   const actual = await importOriginal<typeof import("viem")>();
   return {

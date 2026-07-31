@@ -8,9 +8,10 @@ import {
 import { mainnet, sepolia } from "viem/chains";
 
 import {
-  getOnchainDeployment,
-  readExploreModel,
-} from "../../../../lib/onchain";
+  ActionLookupError,
+  actionTokenAsExploreModel,
+  lookupActionTokenByAddress,
+} from "../../../../lib/data-pipeline/action-lookup";
 import {
   ClassicTradeInputError,
 } from "../../../../lib/trade/classic";
@@ -168,18 +169,20 @@ export async function POST(request: NextRequest) {
   try {
     const tradeRequest = parseClassicTradeRequest(input);
     getPinnedOfficialTradeStack(tradeRequest.chainId);
-    const registryDeployment = getOnchainDeployment(
-      tradeRequest.chainId === 1 ? "production" : "rehearsal",
-    );
-    const registry = await readExploreModel(registryDeployment);
-    const indexedToken =
-      registry.status === "ready"
-        ? registry.tokens.find(
-            (candidate) =>
-              candidate.tokenAddress.toLowerCase() ===
-              tradeRequest.token.toLowerCase(),
-          )
-        : undefined;
+    const actionChainId =
+      tradeRequest.chainId === 1 || tradeRequest.chainId === 11_155_111
+        ? tradeRequest.chainId
+        : (() => {
+            throw new ClassicTradeUnavailableError(
+              `Classic trading is not supported on chain ${tradeRequest.chainId}`,
+            );
+          })();
+    const indexedLaunch = await lookupActionTokenByAddress({
+      chainId: actionChainId,
+      token: tradeRequest.token,
+    });
+    const registry = actionTokenAsExploreModel(indexedLaunch);
+    const indexedToken = registry.tokens[0];
     if (indexedToken?.launchModel === "stock-paired") {
       const { deployment } = resolveStockPairedTradeDeployment(
         tradeRequest.chainId,
@@ -267,6 +270,12 @@ export async function POST(request: NextRequest) {
       error instanceof StockPairedTradeUnavailableError
     ) {
       return json({ error: error.message }, 409);
+    }
+    if (error instanceof ActionLookupError) {
+      return json(
+        { error: "This token is not a verified Programmable launch" },
+        409,
+      );
     }
     console.error(
       "Trade preparation failed",
