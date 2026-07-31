@@ -10,6 +10,7 @@ accounted for. [`models/registry.json`](models/registry.json) is the canonical m
 | Classic | **Available** | [`classic-v3`](releases/classic-v3/RELEASE.md) | [Open model](models/classic/README.md) |
 | Stock-Paired | **Candidate** | Deployed candidate | [Open candidate](models/stock-paired/README.md) |
 | Deep | **Design** | None | [Open design](models/deep/README.md) |
+| Shards | **Design** | None | [Open design](models/shards/README.md) |
 
 `Available` means the exact source, parameters, deployment, runtime hashes and security status are public. It does not
 mean that a model has received an independent audit.
@@ -76,6 +77,18 @@ Exact Match and six Similar Matches.
 is reached. It has no deployed contracts and is not available for launch.
 
 [Design and open release gates](models/deep/README.md)
+
+## Shards
+
+**Design only.** Shards proposes a single-sided bonding-curve market for a fixed 10,000-piece on-chain-art NFT
+collection. Each launch deploys its own hook, token, NFT contract and renderer; the whole supply is locked into a
+permanent Uniswap v4 position with no withdrawal path, and art is regenerated on every acquisition from the pool.
+Its 1.00% native-ETH swap fee is split 0.80% to collection holders, 0.10% to the hook builder and 0.10% to
+Programmable. It has no deployed contracts and is not available for launch.
+
+[Design and open release gates](models/shards/README.md) ·
+[Security properties](models/shards/SECURITY.md) ·
+[Fixed parameters](spec/shards-v1.json)
 
 ## Adding a model
 

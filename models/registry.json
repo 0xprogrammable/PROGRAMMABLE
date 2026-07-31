@@ -1,7 +1,7 @@
 {
   "$schema": "./schema/registry.schema.json",
   "schemaVersion": 1,
-  "updatedAt": "2026-07-30",
+  "updatedAt": "2026-07-31",
   "statuses": [
     "design",
     "candidate",
@@ -18,20 +18,28 @@
       "documentation": "models/classic/README.md"
     },
     {
-      "id": "stock-paired",
-      "name": "Stock-Paired",
-      "status": "candidate",
-      "summary": "A fixed-supply token paired with one reviewed tokenized stock or ETF quote asset, with quote-asset rewards and permanently locked Uniswap v4 launch liquidity.",
-      "manifest": "models/stock-paired/model.json",
-      "documentation": "models/stock-paired/README.md"
-    },
-    {
       "id": "deep",
       "name": "Deep",
       "status": "design",
       "summary": "A proposed launch model that directs the creator fee share into add-only locked liquidity until an immutable target is reached.",
       "manifest": "models/deep/model.json",
       "documentation": "models/deep/README.md"
+    },
+    {
+      "id": "shards",
+      "name": "Shards",
+      "status": "design",
+      "summary": "Single-sided bonding-curve market for a fixed 10,000-piece on-chain-art NFT collection; every swap pays a 1.00% native-ETH fee split 0.80% to collection holders, 0.10% to the builder and 0.10% to Programmable.",
+      "manifest": "models/shards/model.json",
+      "documentation": "models/shards/README.md"
+    },
+    {
+      "id": "stock-paired",
+      "name": "Stock-Paired",
+      "status": "candidate",
+      "summary": "A fixed-supply token paired with one reviewed tokenized stock or ETF quote asset, with quote-asset rewards and permanently locked Uniswap v4 launch liquidity.",
+      "manifest": "models/stock-paired/model.json",
+      "documentation": "models/stock-paired/README.md"
     }
   ]
 }

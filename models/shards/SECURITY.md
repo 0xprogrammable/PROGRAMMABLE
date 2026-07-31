@@ -1,0 +1,131 @@
+# Shards security
+
+This is a design-stage record for a model with no production deployment and no independent audit.
+
+## Trust assumptions
+
+| Party or contract | Trusted for | Cannot |
+| --- | --- | --- |
+| Uniswap v4 `PoolManager` | Pool accounting, swap execution, ERC-6909 claim balances, unlock/settle semantics | Be replaced; the address is an immutable constructor argument |
+| `deployer` | Calling `setNFT` with the correct NFT, and `initialise` once | Move funds, claim fees, remove liquidity, or act at all after `initialise` |
+| `builderFeeRecipient` | Nothing; it is a payee | Touch holder funds, launcher funds, the pool or the NFT contract |
+| `launcherFeeRecipient` | Nothing; it is a payee | Be changed after deployment |
+| `ShardNFTV1` | Calling `settleOnTransfer` truthfully; enforcing ownership on `release` | Be swapped out after `setNFT` |
+| `ShardTokenV1` | Fixed supply, no mint, no burn, no owner | Change supply |
+| Renderer | Producing SVG and attribute strings for `tokenURI` | Affect accounting, custody or trading |
+
+Between deployment and `setNFT` the hook has no NFT bound. That window is the model's sharpest trust assumption:
+a malicious NFT bound there could drain the accumulator through `settleOnTransfer` across all 10,000 ids. It is
+closed by the deployer gate plus the one-shot check, and the factory release gate exists to close it atomically.
+
+There is no oracle, no price feed, no keeper, no relayer, no offchain service, no owner, no pause, no timelock
+and no upgrade path. The only mutable configuration in the whole model is `builderFeeRecipient`, and only the
+current holder of that role can change it.
+
+## Invariants
+
+**Custody.** The ETH the hook controls — its real balance plus its ERC-6909 native claims against the pool
+manager — is at least everything it owes:
+
+```
+address(hook).balance + poolManager.balanceOf(hook, ETH)
+    >= escrowBalance + sum(claimable) + builderFeesAccrued + launcherFeesAccrued
+```
+
+`claimable` is materialised from `accFeePerNFT` by `_settle`, with the sub-wei remainder carried in `dustScaled`,
+so unsettled holder entitlement is bounded by the accumulator and no wei is stranded. Each market path asserts a
+weaker local form directly: after a buy, `address(this).balance >= holderEth + fee`, otherwise `FeeEthMissing`.
+
+**Backing.** Every circulating piece is backed one-for-one by SHARD the hook holds:
+
+```
+shard.balanceOf(hook) == nft.circulatingSupply() * 1e18 + seedDust
+```
+
+`seedDust` is fixed at `initialise` and is the SHARD that liquidity rounding left behind. This is why `buyMax`
+transfers its sub-whole leftover to the caller, why `acquire`/`release` never use the `_safe*` ERC-721 variants,
+why `_update` rejects direct deposits to the NFT contract or the hook, and why every hook-initiated swap reverts
+`PartialFillNotSupported` rather than mint a piece it cannot back.
+
+**Fee conservation.** For every fee event, `builderCut + launcherCut + holderAmount == fee`, with both cuts
+rounding down and the remainder to holders. Donations bypass the split entirely and reach holders in full.
+
+**Authorization.** `claimBuilderFees` reverts `NotBuilder` for anyone but the current `builderFeeRecipient`;
+`claimLauncherFees` reverts `NotLauncher` for anyone but the immutable `launcherFeeRecipient`;
+`setBuilderFeeRecipient` reverts `NotBuilder` for anyone else and `ZeroAddress` for the zero address; `claim`
+credits `nft.ownerOf(id)` and pays only `msg.sender`; `setNFT` and `initialise` revert `NotDeployer`;
+`unlockCallback` reverts `NotPoolManager`; `settleOnTransfer` reverts `NotNFT`; `acquire` and `release` revert
+`NotHook`.
+
+**Configuration.** `initialise` and `setNFT` are each one-shot (`AlreadyInitialised`). `poolKey`, the three
+ticks, the start price, the fee constants and the split constants are immutable. Every swap callback re-checks
+the pool id against `poolKey.toId()` (`WrongPool`), so a foreign pool can never route a fee in the wrong currency
+into the accumulator.
+
+**Liquidity.** `poolManager.modifyLiquidity` is called from exactly one place, `_mintPosition`, and always with a
+positive `liquidityDelta`. There is no removal path anywhere in the model, behind any guard or role, and v4 keys
+positions on `msg.sender`, so no external contract can address them.
+
+**Failure recovery.** Fees accrued with nothing circulating escrow and release to the first holder rather than
+being lost. `claim` reverts `NothingToClaim` rather than paying zero, and rolls back any settlement it performed
+in the same call — settling on another holder's behalf only persists when the caller is also owed something.
+Every ETH send checks its return value and reverts `EthTransferFailed`. All ETH-moving entry points carry a
+reentrancy guard, and refunds are sent after `unlock` returns, never inside the callback, so a contract buyer's
+re-entry cannot self-DoS on `AlreadyUnlocked`.
+
+## Ordering and MEV
+
+The model is a bonding curve on a public pool, so ordinary Uniswap ordering risk applies. Its defences are
+explicit bounds rather than any price oracle:
+
+- **Sandwich bounds.** `buyNFT` and `buyMany` take `maxEthIn`, the largest total (curve cost plus fee) the caller
+  will accept, and revert `SlippageExceeded`. `buyMax` takes `minCount` and reverts `InsufficientOutput`.
+  `sellNFT` and `sellMany` take `minEthOut`, the smallest payout after fee. Every market path also takes a
+  `deadline` and reverts `Expired`.
+- **Per-swap size cap.** `afterSwap` caps a single third-party swap at `MAX_BATCH * 1e18 = 50e18` SHARD of
+  movement, measured on the SHARD leg so one check covers all four direction × exactness quadrants
+  (`SwapTooLarge`). This makes the batch limit a property of the pool, not of the front end used; without it, a
+  direct swap plus `redeemMany` bypasses it. It is symmetric on purpose, so a large position cannot be unwound
+  in one transaction either. The accepted cost is that large entries and exits take several transactions.
+- **Front-run-tolerant initialisation.** `beforeInitialize` always fires for a third party, and validates both
+  the pool key and the exact start price (`WrongPool`, `WrongStartPrice`). A front-runner can therefore only
+  create the pool the hook was going to create, at the price the hook was going to use, and `initialise` catches
+  `PoolAlreadyInitialized` and proceeds to seed it. Swapping before the seed is blocked by the `NotInitialised`
+  guard in both swap callbacks.
+- **Same-block accrual guard.** A piece joins the earning set only from the block after acquisition, so a trader
+  cannot buy into the holder pool, collect from the fee their own trade generated, and leave.
+- **Art entropy.** Seeds come from `blockhash`, `block.timestamp`, `arbBlockNumber()`, the recipient and a
+  nonce. Grinding resistance is deliberately not a goal: traits are flat, so there is no jackpot to farm and a
+  reroll only affects the roller's own draw. Do not treat the seed as secure randomness.
+
+## Known limitations
+
+- **No production deployment.** No contract in this model is deployed on Ethereum or any other production
+  network. The only live evidence is for a prior version of this design on the Robinhood chain testnet, which is
+  not evidence for the code in this repository.
+- **No audit.** No independent smart-contract audit and no public security contest.
+- **No factory.** v1 has no factory contract. Launches are manual CREATE2 deployments plus a two-call wiring
+  step, and the unwired window described above depends on the deployer behaving.
+- **One collection per deployment.** One hook serves one pool and one 10,000-piece collection. There is no
+  multi-pool, multi-collection or shared-instance mode.
+- **EIP-170 headroom.** The hook's runtime bytecode is 24,388 of the 24,576-byte limit at the pinned compiler
+  settings — 188 bytes of headroom. Almost any addition to the hook will need code moved out of it first.
+- **Per-swap cap.** Third-party swaps larger than 50 SHARD revert (`SwapTooLarge`). Aggregators that route large
+  ETH amounts through this pool in a single hop will fail rather than partially fill.
+- **Partial fills are rejected, not repriced.** When ETH is the specified currency the fee is fixed before
+  execution, on the requested size. If the swap then stops at its price limit, that fee becomes a large share of
+  what actually executed — measured at 7,655 bps on a 1 ETH request that filled 0.013 ETH — and `afterSwap`
+  cannot correct it, because its return value adjusts only the unspecified currency. Such swaps revert
+  `PartialFillNotSupported` rather than being overcharged. Ordinary slippage limits that never bind are
+  unaffected. The hook's own swap paths assert exactness for the same reason.
+- **Immutable payees.** `launcherFeeRecipient` cannot be changed. If it becomes uncontrollable, its accrued
+  share is permanently unclaimable. The rest of the model keeps working.
+- **Direct ETH transfers are unrecoverable.** `receive()` must stay silent, because v4 delivers native ETH that
+  way during swaps. ETH sent straight to the hook outside `donate()` is never distributed and never claimable on
+  a contract that cannot be upgraded. Use `donate()` or `ShardFeeForwarderV1`.
+- **Claims require the holder to act.** Holding accrues value in the accumulator, but `claim` needs the token ids
+  passed in — the hook does not track which ids an address holds. It is not a keeper interface.
+- **Fee arithmetic is truncating.** Small fee events lose sub-wei precision to rounding. It is conserved, not
+  eliminated: the remainder always goes to holders, never to the builder or Programmable.
+
+This file does not claim an audit.
