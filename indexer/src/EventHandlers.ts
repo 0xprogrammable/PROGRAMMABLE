@@ -493,6 +493,7 @@ async function handleCoordinatorEvent(
   const params = event.params;
   const release =
     staticReleaseForContract(event.contractName) ?? occurrence.release;
+  const expectedCoordinatorSource = sourceAddress(event.contractName);
   const launch = await upsertLaunch(context, release, params.launchHash, {
     creator: lowerAddress(params.creator),
     token: lowerAddress(params.token),
@@ -502,7 +503,7 @@ async function handleCoordinatorEvent(
     initialBuyTokenAmount: params.initialBuyTokenAmount,
     coordinatorOccurrenceId: occurrence.provenance.id,
     hasCoordinatorEvent: true,
-  }, "coordinator", occurrence);
+  }, "coordinator", occurrence, { expectedCoordinatorSource });
   await reconcileLaunch(context, launch);
 }
 
@@ -513,6 +514,9 @@ async function upsertLaunch(
   patch: Partial<Launch>,
   kind: "launch" | "liquidity" | "initial-buy" | "custody" | "coordinator",
   occurrence: RecordedOccurrence,
+  authorization: Readonly<{
+    expectedCoordinatorSource?: string;
+  }> = {},
 ): Promise<Launch> {
   const launchHash = lower(launchHashValue);
   const id = launchEntityId(CHAIN_ID, release.releaseVersion, launchHash);
@@ -521,6 +525,18 @@ async function upsertLaunch(
     defaultLaunch(id, release, launchHash, occurrence.provenance.blockNumber);
   const next: Mutable<Launch> = { ...existing };
   let provenanceValid = existing.provenanceValid;
+  const authenticatedCoordinatorSource =
+    kind === "coordinator" &&
+    authorization.expectedCoordinatorSource !== undefined &&
+    sameValue(
+      occurrence.provenance.sourceAddress,
+      authorization.expectedCoordinatorSource,
+    )
+      ? authorization.expectedCoordinatorSource
+      : undefined;
+  if (kind === "coordinator" && authenticatedCoordinatorSource === undefined) {
+    provenanceValid = false;
+  }
 
   for (const key of Object.keys(patch) as (keyof Launch)[]) {
     const incoming = patch[key];
@@ -528,14 +544,26 @@ async function upsertLaunch(
       continue;
     }
     const current = next[key];
+    const replacesProvisionalCoordinatorCreator =
+      key === "creator" &&
+      kind === "coordinator" &&
+      authenticatedCoordinatorSource !== undefined &&
+      current !== undefined &&
+      sameValue(current, authenticatedCoordinatorSource);
     if (
       LAUNCH_IDENTITY_FIELDS.has(key) &&
       current !== undefined &&
-      !sameValue(current, incoming)
+      !sameValue(current, incoming) &&
+      !replacesProvisionalCoordinatorCreator
     ) {
       provenanceValid = false;
     }
-    if (current === undefined || kind === "launch" || isEventFlag(key)) {
+    if (
+      current === undefined ||
+      kind === "launch" ||
+      isEventFlag(key) ||
+      replacesProvisionalCoordinatorCreator
+    ) {
       (next as Record<keyof Launch, unknown>)[key] = incoming;
     }
   }

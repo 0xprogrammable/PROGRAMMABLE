@@ -24,6 +24,89 @@ const TRANSACTION_HASH =
 const BLOCK_NUMBER = 25_650_020;
 const MISMATCHED_VAULT: `0x${string}` =
   "0x6666666666666666666666666666666666666666";
+const COORDINATED_CREATOR: `0x${string}` =
+  "0x2bb333d48dfaf1596d9036671d2e43168994249e";
+const CONFLICTING_CREATOR: `0x${string}` =
+  "0x7777777777777777777777777777777777777777";
+const STOCK_ETH_TRANSACTION_HASH =
+  "0xbe52bd2bb71159a1f6ab085cb7c7d5eb4f0583608b8adaf7d62f283be6693b19";
+
+const stockReleaseCases = [
+  {
+    releaseVersion: "stock-paired-v1",
+    launcherContract: "StockV1Launcher" as const,
+    launcherSource: "0x195750f33cad5ef2df857a53226b421297a1e79e" as const,
+    coordinatorContract: "StockV1EthCoordinator" as const,
+    coordinatorSource: "0xfa5f17389ca28d071781d59750b32c842ab6a54b" as const,
+  },
+  {
+    releaseVersion: "stock-paired-v2",
+    launcherContract: "StockV2Launcher" as const,
+    launcherSource: "0x5ea6be24838061ba45dbe8d82de1b267dc240daf" as const,
+    coordinatorContract: "StockV2EthCoordinator" as const,
+    coordinatorSource: "0xfb9e1034df6161088e8f358502b19e7515c30fd2" as const,
+  },
+  {
+    releaseVersion: "stock-paired-v3",
+    launcherContract: "StockV3Launcher" as const,
+    launcherSource: "0x0573879f72d8ee8b0e5a4ec5e8bcdb2fcab9e51c" as const,
+    coordinatorContract: "StockV3EthCoordinator" as const,
+    coordinatorSource: "0xddc3abbab0df7f1189310a4f70e7e365796b74e2" as const,
+  },
+] as const;
+
+type StockReleaseCase = (typeof stockReleaseCases)[number];
+
+function coordinatedLaunchEvents(
+  release: StockReleaseCase,
+  overrides: {
+    launcherDeployer?: `0x${string}`;
+    coordinatorCreator?: `0x${string}`;
+    coordinatorSource?: `0x${string}`;
+  } = {},
+) {
+  const stockTransaction = {
+    hash: STOCK_ETH_TRANSACTION_HASH,
+    transactionIndex: 3,
+  };
+  return [
+    {
+      contract: release.launcherContract,
+      event: "StockPairedTokenLaunched" as const,
+      srcAddress: release.launcherSource,
+      logIndex: 60,
+      block,
+      transaction: stockTransaction,
+      params: {
+        deployer: overrides.launcherDeployer ?? release.coordinatorSource,
+        token: TOKEN,
+        quoteAsset: QUOTE,
+        poolId: POOL_ID,
+        rewardVault: VAULT,
+        positionRecipient: POSITION_RECIPIENT,
+        positionTokenId: 12n,
+        launchHash: LAUNCH_HASH,
+      },
+    },
+    {
+      contract: release.coordinatorContract,
+      event: "StockPairedEthTokenLaunched" as const,
+      srcAddress: overrides.coordinatorSource ?? release.coordinatorSource,
+      logIndex: 61,
+      block,
+      transaction: stockTransaction,
+      params: {
+        creator: overrides.coordinatorCreator ?? COORDINATED_CREATOR,
+        token: TOKEN,
+        quoteAsset: QUOTE,
+        initialBuyEthAmount: 1_000n,
+        initialBuyQuoteAmount: 2_000n,
+        initialBuyTokenAmount: 3_000n,
+        launchHash: LAUNCH_HASH,
+      },
+    },
+  ];
+}
 
 const block = { number: BLOCK_NUMBER, timestamp: 1_800_000_020, hash: BLOCK_HASH };
 const transaction = { hash: TRANSACTION_HASH, transactionIndex: 3 };
@@ -165,6 +248,127 @@ const v3LaunchEvents = [
 ];
 
 describe("Stock-Paired handlers", () => {
+  it.each(stockReleaseCases)(
+    "replaces the $releaseVersion provisional coordinator deployer with the authenticated creator",
+    async (release) => {
+      const indexer = createTestIndexer();
+      await indexer.process({
+        chains: {
+          1: {
+            startBlock: BLOCK_NUMBER,
+            endBlock: BLOCK_NUMBER + 12,
+            simulate: coordinatedLaunchEvents(release),
+          },
+        },
+      });
+
+      expect(
+        await indexer.Launch.getOrThrow(
+          `1:${release.releaseVersion}:${LAUNCH_HASH}`,
+        ),
+      ).toMatchObject({
+        creator: COORDINATED_CREATOR,
+        token: TOKEN,
+        quoteAsset: QUOTE,
+        provenanceValid: true,
+        hasLaunchEvent: true,
+        hasCoordinatorEvent: true,
+      });
+    },
+  );
+
+  it.each(stockReleaseCases)(
+    "rejects a $releaseVersion coordinator creator when the launcher deployer was not provisional",
+    async (release) => {
+      const indexer = createTestIndexer();
+      await indexer.process({
+        chains: {
+          1: {
+            startBlock: BLOCK_NUMBER,
+            endBlock: BLOCK_NUMBER + 12,
+            simulate: coordinatedLaunchEvents(release, {
+              launcherDeployer: CONFLICTING_CREATOR,
+            }),
+          },
+        },
+      });
+
+      expect(
+        await indexer.Launch.getOrThrow(
+          `1:${release.releaseVersion}:${LAUNCH_HASH}`,
+        ),
+      ).toMatchObject({
+        creator: CONFLICTING_CREATOR,
+        provenanceValid: false,
+      });
+    },
+  );
+
+  it.each(stockReleaseCases)(
+    "rejects a $releaseVersion coordinator event from a non-release source",
+    async (release) => {
+      const indexer = createTestIndexer();
+      await indexer.process({
+        chains: {
+          1: {
+            startBlock: BLOCK_NUMBER,
+            endBlock: BLOCK_NUMBER + 12,
+            simulate: coordinatedLaunchEvents(release, {
+              coordinatorSource: CONFLICTING_CREATOR,
+            }),
+          },
+        },
+      });
+
+      expect(
+        await indexer.Launch.getOrThrow(
+          `1:${release.releaseVersion}:${LAUNCH_HASH}`,
+        ),
+      ).toMatchObject({
+        creator: release.coordinatorSource,
+        provenanceValid: false,
+      });
+    },
+  );
+
+  it.each(stockReleaseCases)(
+    "invalidates a conflicting duplicate $releaseVersion coordinator creator",
+    async (release) => {
+      const indexer = createTestIndexer();
+      const baseEvents = coordinatedLaunchEvents(release);
+      const firstCoordinator = baseEvents.find(
+        (event) => event.event === "StockPairedEthTokenLaunched",
+      )!;
+      const events = [...baseEvents, {
+        ...firstCoordinator,
+        logIndex: 62,
+        params: {
+          ...firstCoordinator.params,
+          creator: CONFLICTING_CREATOR,
+        },
+      }];
+
+      await indexer.process({
+        chains: {
+          1: {
+            startBlock: BLOCK_NUMBER,
+            endBlock: BLOCK_NUMBER + 12,
+            simulate: events,
+          },
+        },
+      });
+
+      expect(
+        await indexer.Launch.getOrThrow(
+          `1:${release.releaseVersion}:${LAUNCH_HASH}`,
+        ),
+      ).toMatchObject({
+        creator: COORDINATED_CREATOR,
+        provenanceValid: false,
+      });
+    },
+  );
+
   it("resolves the shared hook and factory through poolId to Stock V3", async () => {
     const indexer = createTestIndexer();
     const result = await indexer.process({
