@@ -5,6 +5,7 @@
   "confirmations": 12,
   "envio": {
     "deploymentLabel": "production-1e7c381",
+    "graphqlEndpoint": "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
     "schemaVersion": "1",
     "sourceCommit": "1e7c38125714e2f485f8be0c665b12e7d7fb1809",
     "configSha256": "0x378e3a799c762cb31107792c7123f5f90b54b5826884c398995e7465176fe1c2",

@@ -14,9 +14,15 @@ import type {
 } from "./envio";
 import { dataPipelineError, invalidInput } from "./errors";
 import type { VerifiedDynamicSourceLineage } from "./projector-identities";
+import { PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE } from "./projector-runtime-limits";
 
-const PROJECTOR_PAGE_LIMIT = 12;
-const MAXIMUM_PROVIDER_CALLS = 48;
+/**
+ * Envio's adapter validates and caps candidate windows at 32 rows. Using the
+ * complete safe page materially reduces initial catch-up time while the RPC
+ * budget below still covers the worst case where every row is in a distinct
+ * block, transaction and source.
+ */
+const MAXIMUM_PROVIDER_CALLS = 128;
 const COVERAGE_BLOCK_SPAN = 500;
 const MAXIMUM_COVERAGE_REQUESTS = 9;
 const MAXIMUM_DEADLINE_MS = 75_000;
@@ -24,11 +30,24 @@ const MAXIMUM_DEADLINE_MS = 75_000;
 export type ProjectorCursor = EnvioCandidateCursor & {
   generation: string;
   blockHash: `0x${string}`;
+  /**
+   * PostgreSQL stores a genesis or verified-empty-page cursor at a block
+   * boundary with NULL log/candidate coordinates. The provider adapters use
+   * the equivalent uint32-max sentinel so the next window starts at the next
+   * block without inventing an Envio candidate.
+   */
+  isBlockBoundary: boolean;
 };
 
 export type ProjectorPlan = Readonly<{
   cursor: ProjectorCursor;
   dynamicSources: readonly VerifiedDynamicSourceLineage[];
+  database: Readonly<{
+    epochId: string;
+    pointerGeneration: string;
+    envioProviderDeploymentId: string;
+    rpcProviderDeploymentIds: readonly [string, string];
+  }>;
 }>;
 
 export type ProjectorStore = Readonly<{
@@ -118,8 +137,8 @@ export async function runProjectorCycle(input: {
         blockHash: plan.cursor.blockHash,
       },
       rpcPolicy: {
-        deadlineMs: remaining(),
-        maxProviderCalls: MAXIMUM_PROVIDER_CALLS,
+        hardDeadlineMs: remaining(),
+        maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
       },
     });
     const progress = await input.envio.readProgress({
@@ -131,6 +150,13 @@ export async function runProjectorCycle(input: {
         : BigInt(safeHead.safeBlockNumber);
     const cursorBlock = BigInt(plan.cursor.blockNumber);
     if (snapshot < cursorBlock) {
+      return {
+        status: "idle" as const,
+        candidateCount: 0,
+        snapshotBlock: snapshot.toString(),
+      };
+    }
+    if (plan.cursor.isBlockBoundary && snapshot === cursorBlock) {
       return {
         status: "idle" as const,
         candidateCount: 0,
@@ -151,7 +177,7 @@ export async function runProjectorCycle(input: {
     const candidates = await input.envio.readCandidatesWindow({
       cursor,
       throughBlock: snapshotBlock,
-      limit: PROJECTOR_PAGE_LIMIT,
+        limit: PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
     });
     const last = candidates[candidates.length - 1];
     const through: EnvioCandidateCursor = last
@@ -176,17 +202,10 @@ export async function runProjectorCycle(input: {
         maximumRequests: MAXIMUM_COVERAGE_REQUESTS,
       },
       rpcPolicy: {
-        deadlineMs: remaining(),
-        maxProviderCalls: MAXIMUM_PROVIDER_CALLS,
+        hardDeadlineMs: remaining(),
+        maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
       },
     });
-    if (candidates.length === 0) {
-      return {
-        status: "idle" as const,
-        candidateCount: 0,
-        snapshotBlock,
-      };
-    }
     const committed = await input.store.commitVerifiedPage({
       plan,
       snapshotBlock,
@@ -194,7 +213,9 @@ export async function runProjectorCycle(input: {
       evidence,
     });
     return {
-      status: "committed" as const,
+      status: candidates.length === 0
+        ? "committed-empty" as const
+        : "committed" as const,
       candidateCount: candidates.length,
       generation: committed.generation,
       snapshotBlock,

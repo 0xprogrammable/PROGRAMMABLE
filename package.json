@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:test:pglite": "node scripts/run-pglite-db-tests.mjs",
+    "projector:provider-commitments": "node scripts/compute-projector-provider-commitments.mjs",
     "verify:uniswap-launcher-sdk": "node scripts/verify-uniswap-liquidity-launcher-sdk.mjs",
     "brand:favicons": "node scripts/generate-programmable-favicons.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",

@@ -1,0 +1,567 @@
+import "server-only";
+
+import { createEnvioClient } from "./envio";
+import { invalidInput } from "./errors";
+import { createPostgresExecutor } from "./postgres";
+import {
+  createPostgresReleaseProjectionStore,
+  createPostgresProjectorStore,
+  type ProjectorProviderDatabaseBinding,
+  type ProjectorReleaseDatabaseScope,
+} from "./postgres-projector";
+import { runProjectorCycle } from "./projector";
+import { runReleaseProjectionCycle } from "./projector-projection";
+import { createProjectorRuntimeLeaseController } from "./projector-runtime-lease.server";
+import {
+  PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
+  PROJECTOR_MAXIMUM_RUNTIME_ROUNDS,
+} from "./projector-runtime-limits";
+import { getDataPipelineReleaseBinding } from "./release-binding.server";
+import {
+  canonicalProjectorEnvioEndpoint,
+  projectorEnvioDeploymentCommitment,
+  projectorEnvioSchemaCommitment,
+  projectorRpcSchemaCommitment,
+} from "./projector-provider-commitments";
+import {
+  assertProductionDualRpcProviders,
+  createProductionDualRpcProviders,
+  productionRpcProjectorCommitments,
+} from "./rpc-providers.server";
+import {
+  validatedPostgresConnectionString,
+  validatedPostgresSslCa,
+} from "./postgres-connection.server";
+
+type Environment = Readonly<Record<string, string | undefined>>;
+
+const PROJECTOR_DEADLINE_MS = 75_000;
+const INGESTION_DEADLINE_MS = 10_000;
+const RELEASE_PROJECTION_DEADLINE_MS = 10_000;
+const PROJECTOR_CLOSE_RESERVE_MS = 5_000;
+const MINIMUM_OPERATION_DEADLINE_MS = 250;
+const EXACT_RELEASE_SCOPES = Object.freeze([
+  Object.freeze({ releaseId: "classic-v2", modelId: "classic", sourceGroup: "core" }),
+  Object.freeze({ releaseId: "classic-v3", modelId: "classic", sourceGroup: "core" }),
+  Object.freeze({ releaseId: "stock-paired-v1", modelId: "stock-paired", sourceGroup: "core" }),
+  Object.freeze({ releaseId: "stock-paired-v2", modelId: "stock-paired", sourceGroup: "core" }),
+  Object.freeze({ releaseId: "stock-paired-v3", modelId: "stock-paired", sourceGroup: "core" }),
+] satisfies readonly ProjectorReleaseDatabaseScope[]);
+const BROWSER_FORBIDDEN_NAMES = Object.freeze([
+  "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_DATABASE_URL",
+  "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_RUNTIME_DATABASE_URL",
+  "NEXT_PUBLIC_PROGRAMMABLE_POSTGRES_SSL_CA_PEM",
+  "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN",
+] as const);
+
+function invalidRuntimeConfig(): never {
+  throw invalidInput("config", "projector-runtime-config");
+}
+
+function requiredText(
+  value: unknown,
+  pattern: RegExp,
+  maximum: number,
+): string {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > maximum ||
+    /[\u0000-\u001f\u007f]/u.test(value) ||
+    !pattern.test(value)
+  ) {
+    return invalidRuntimeConfig();
+  }
+  return value;
+}
+
+function optionalSecret(value: unknown): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  return requiredText(value, /^[^\s]+$/u, 2_048);
+}
+
+function releaseScopes(): readonly ProjectorReleaseDatabaseScope[] {
+  const binding = getDataPipelineReleaseBinding();
+  if (
+    binding.releases.length !== EXACT_RELEASE_SCOPES.length ||
+    binding.releases.some((release, index) => {
+      const expected = EXACT_RELEASE_SCOPES[index]!;
+      return (
+        release.releaseVersion !== expected.releaseId ||
+        release.model !== expected.modelId
+      );
+    })
+  ) {
+    return invalidRuntimeConfig();
+  }
+  return EXACT_RELEASE_SCOPES;
+}
+
+export type ProjectorRuntimeConfig = Readonly<{
+  database: Readonly<{
+    projectorConnectionString: string;
+    runtimeConnectionString: string;
+    sslCaPem: string;
+  }>;
+  envio: Readonly<{
+    endpoint: string;
+    token?: string;
+  }>;
+  providers: readonly ProjectorProviderDatabaseBinding[];
+  releaseScopes: readonly ProjectorReleaseDatabaseScope[];
+}>;
+
+export function assertProjectorRuntimeProviderCommitments(
+  bindings: readonly ProjectorProviderDatabaseBinding[],
+  providers: ReturnType<typeof createProductionDualRpcProviders>,
+): void {
+  if (
+    bindings.length !== 3 ||
+    providers.length !== 2 ||
+    bindings[1]?.type !== "rpc_provider" ||
+    bindings[2]?.type !== "rpc_provider" ||
+    providers[0].vendorGroup !== "alchemy" ||
+    providers[1].vendorGroup !== "quicknode" ||
+    providers[0].endpointCommitment !== bindings[1].deploymentCommitment ||
+    providers[1].endpointCommitment !== bindings[2].deploymentCommitment ||
+    bindings[1].schemaCommitment !== projectorRpcSchemaCommitment() ||
+    bindings[2].schemaCommitment !== projectorRpcSchemaCommitment()
+  ) {
+    return invalidRuntimeConfig();
+  }
+}
+
+export function loadProjectorRuntimeConfig(
+  env: Environment = process.env,
+): ProjectorRuntimeConfig {
+  if (BROWSER_FORBIDDEN_NAMES.some((name) => env[name])) {
+    return invalidRuntimeConfig();
+  }
+  const binding = getDataPipelineReleaseBinding();
+  const envioEndpoint = canonicalProjectorEnvioEndpoint(
+    env.PROGRAMMABLE_ENVIO_GRAPHQL_URL,
+    binding.envio.graphqlEndpoint,
+  );
+  const envioIdentity = requiredText(
+    env.PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY,
+    /^[a-z0-9][a-z0-9._:/-]{0,127}$/u,
+    128,
+  );
+  if (envioIdentity !== `envio:${binding.envio.deploymentLabel}`) {
+    return invalidRuntimeConfig();
+  }
+  const rpcCommitments = productionRpcProjectorCommitments(env);
+  const derivedCommitments = Object.freeze({
+    envioDeployment: projectorEnvioDeploymentCommitment({
+      endpoint: envioEndpoint,
+      redactedIdentity: envioIdentity,
+      binding,
+    }),
+    envioSchema: projectorEnvioSchemaCommitment(binding),
+    alchemyDeployment: rpcCommitments.alchemy.deploymentCommitment,
+    alchemySchema: rpcCommitments.alchemy.schemaCommitment,
+    quicknodeDeployment: rpcCommitments.quicknode.deploymentCommitment,
+    quicknodeSchema: rpcCommitments.quicknode.schemaCommitment,
+  });
+  const providers = Object.freeze([
+    Object.freeze({
+      type: "envio_deployment" as const,
+      redactedIdentity: envioIdentity,
+      deploymentCommitment: derivedCommitments.envioDeployment,
+      schemaCommitment: derivedCommitments.envioSchema,
+    }),
+    Object.freeze({
+      type: "rpc_provider" as const,
+      redactedIdentity: "rpc:1:alchemy",
+      deploymentCommitment: derivedCommitments.alchemyDeployment,
+      schemaCommitment: derivedCommitments.alchemySchema,
+    }),
+    Object.freeze({
+      type: "rpc_provider" as const,
+      redactedIdentity: "rpc:1:quicknode",
+      deploymentCommitment: derivedCommitments.quicknodeDeployment,
+      schemaCommitment: derivedCommitments.quicknodeSchema,
+    }),
+  ] satisfies readonly ProjectorProviderDatabaseBinding[]);
+
+  return Object.freeze({
+    database: Object.freeze({
+      projectorConnectionString: validatedPostgresConnectionString(
+        env.PROGRAMMABLE_PROJECTOR_DATABASE_URL,
+      ),
+      runtimeConnectionString: validatedPostgresConnectionString(
+        env.PROGRAMMABLE_PROJECTOR_RUNTIME_DATABASE_URL,
+      ),
+      sslCaPem: validatedPostgresSslCa(
+        env.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
+      ),
+    }),
+    envio: Object.freeze({
+      endpoint: envioEndpoint,
+      token: optionalSecret(env.PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN),
+    }),
+    providers,
+    releaseScopes: releaseScopes(),
+  });
+}
+
+export type ProjectorRuntimeDependencies = Readonly<{
+  createExecutor: typeof createPostgresExecutor;
+  createLeaseController: typeof createProjectorRuntimeLeaseController;
+  createProviders: typeof createProductionDualRpcProviders;
+  assertProviders: typeof assertProductionDualRpcProviders;
+  createEnvio: typeof createEnvioClient;
+  createStore: typeof createPostgresProjectorStore;
+  createReleaseStore: typeof createPostgresReleaseProjectionStore;
+  runCycle: typeof runProjectorCycle;
+  runReleaseCycle: typeof runReleaseProjectionCycle;
+}>;
+
+const DEFAULT_DEPENDENCIES: ProjectorRuntimeDependencies = Object.freeze({
+  createExecutor: createPostgresExecutor,
+  createLeaseController: createProjectorRuntimeLeaseController,
+  createProviders: createProductionDualRpcProviders,
+  assertProviders: assertProductionDualRpcProviders,
+  createEnvio: createEnvioClient,
+  createStore: createPostgresProjectorStore,
+  createReleaseStore: createPostgresReleaseProjectionStore,
+  runCycle: runProjectorCycle,
+  runReleaseCycle: runReleaseProjectionCycle,
+});
+
+export async function runConfiguredProjectorCycle(
+  input: Readonly<{
+    env?: Environment;
+    dependencies?: ProjectorRuntimeDependencies;
+  }> = {},
+) {
+  const env = input.env ?? process.env;
+  const dependencies = input.dependencies ?? DEFAULT_DEPENDENCIES;
+  const config = loadProjectorRuntimeConfig(env);
+  const runtimeExecutor = dependencies.createExecutor({
+    connectionString: config.database.runtimeConnectionString,
+    sslCaPem: config.database.sslCaPem,
+    maxConnections: 1,
+    connectTimeoutMs: 2_000,
+    idleTimeoutMs: 5_000,
+  });
+  const leaseController = dependencies.createLeaseController({
+    executor: runtimeExecutor,
+  });
+  let executor: ReturnType<typeof createPostgresExecutor> | null = null;
+  let acquiredFence: Awaited<
+    ReturnType<typeof leaseController.tryAcquire>
+  >["fence"];
+  try {
+    const acquisition = await leaseController.tryAcquire();
+    if (acquisition.status === "busy") {
+      return Object.freeze({
+        ok: true as const,
+        status: "busy" as const,
+        readiness: Object.freeze({
+          status: "busy" as const,
+          activationReady: false as const,
+          lagging: true as const,
+        }),
+      });
+    }
+    if (!acquisition.fence) return invalidRuntimeConfig();
+    const runtimeFence = acquisition.fence;
+    acquiredFence = runtimeFence;
+    const providers = dependencies.createProviders(env);
+    dependencies.assertProviders(providers);
+    assertProjectorRuntimeProviderCommitments(config.providers, providers);
+    const envio = dependencies.createEnvio(config.envio);
+    const writerExecutor = dependencies.createExecutor({
+      connectionString: config.database.projectorConnectionString,
+      sslCaPem: config.database.sslCaPem,
+      maxConnections: 1,
+      connectTimeoutMs: 2_000,
+      idleTimeoutMs: 5_000,
+    });
+    executor = writerExecutor;
+    const startedAt = Date.now();
+    const remainingRuntimeMs = () =>
+      PROJECTOR_DEADLINE_MS - (Date.now() - startedAt);
+    const operationDeadline = (operationsRemainingInRound: number) => {
+      if (
+        !Number.isSafeInteger(operationsRemainingInRound) ||
+        operationsRemainingInRound < 1
+      ) {
+        return invalidRuntimeConfig();
+      }
+      const available = remainingRuntimeMs() - PROJECTOR_CLOSE_RESERVE_MS;
+      const fairShare = Math.floor(available / operationsRemainingInRound);
+      if (fairShare < MINIMUM_OPERATION_DEADLINE_MS) return null;
+      return Math.min(
+        INGESTION_DEADLINE_MS,
+        RELEASE_PROJECTION_DEADLINE_MS,
+        fairShare,
+      );
+    };
+    const ingestionStore = dependencies.createStore({
+      executor: writerExecutor,
+      providers: config.providers,
+      releaseScopes: config.releaseScopes,
+      runtimeFence,
+    });
+    const releaseStores = config.releaseScopes.map((scope) =>
+      Object.freeze({
+        scope,
+        store: dependencies.createReleaseStore({
+          executor: writerExecutor,
+          providers: config.providers,
+          scope,
+          runtimeFence,
+        }),
+      }),
+    );
+    const ingestionState: {
+      failed: boolean;
+      committed: boolean;
+      committedEmpty: boolean;
+      candidateCount: number;
+      pageCount: number;
+      snapshotBlock: string | null;
+      generation: string | null;
+    } = {
+      failed: false,
+      committed: false,
+      committedEmpty: false,
+      candidateCount: 0,
+      pageCount: 0,
+      snapshotBlock: null,
+      generation: null,
+    };
+    const projectionStates = config.releaseScopes.map((scope) => ({
+      releaseId: scope.releaseId,
+      failed: false,
+      committed: false,
+      projectedCandidateCount: 0,
+      ignoredCandidateCount: 0,
+      pageCount: 0,
+      checkpointGeneration: null as string | null,
+    }));
+    let madeAnyProgress = false;
+    let terminalSweepComplete = false;
+    let completedRounds = 0;
+    let stoppedForDeadline = false;
+
+    for (
+      let round = 0;
+      round < PROJECTOR_MAXIMUM_RUNTIME_ROUNDS;
+      round += 1
+    ) {
+      const operationCount = 1 + releaseStores.length;
+      if (operationDeadline(operationCount) === null) {
+        stoppedForDeadline = true;
+        break;
+      }
+      let madeProgress = false;
+      let operationsRemaining = operationCount;
+      let ingestionIdle = false;
+      let idleProjectionCount = 0;
+
+      const ingestionDeadline = operationDeadline(operationsRemaining);
+      if (ingestionDeadline === null) {
+        stoppedForDeadline = true;
+        break;
+      }
+      try {
+        const result = await dependencies.runCycle({
+          store: ingestionStore,
+          envio,
+          providers,
+          deadlineMs: ingestionDeadline,
+        });
+        if (
+          !Number.isSafeInteger(result.candidateCount) ||
+          result.candidateCount < 0 ||
+          result.candidateCount > PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+        ) {
+          return invalidRuntimeConfig();
+        }
+        ingestionState.pageCount += 1;
+        ingestionState.snapshotBlock = result.snapshotBlock;
+        ingestionState.candidateCount += result.candidateCount;
+        if (result.status === "committed") {
+          ingestionState.committed = true;
+          ingestionState.generation = result.generation;
+          madeProgress = true;
+        } else if (result.status === "committed-empty") {
+          ingestionState.committedEmpty = true;
+          ingestionState.generation = result.generation;
+          madeProgress = true;
+        } else {
+          ingestionIdle = true;
+        }
+      } catch {
+        ingestionState.failed = true;
+      }
+      operationsRemaining -= 1;
+
+      for (let index = 0; index < releaseStores.length; index += 1) {
+        const binding = releaseStores[index]!;
+        const state = projectionStates[index]!;
+        const deadline = operationDeadline(operationsRemaining);
+        if (deadline === null) {
+          stoppedForDeadline = true;
+          break;
+        }
+        try {
+          const result = await dependencies.runReleaseCycle({
+            store: binding.store,
+            envio,
+            providers,
+            deadlineMs: deadline,
+          });
+          const projectedCandidateCount =
+            result.status === "committed"
+              ? result.projectedCandidateCount
+              : 0;
+          const ignoredCandidateCount =
+            result.status === "committed"
+              ? result.ignoredCandidateCount
+              : 0;
+          if (
+            !Number.isSafeInteger(projectedCandidateCount) ||
+            projectedCandidateCount < 0 ||
+            !Number.isSafeInteger(ignoredCandidateCount) ||
+            ignoredCandidateCount < 0 ||
+            projectedCandidateCount + ignoredCandidateCount >
+              PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+          ) {
+            return invalidRuntimeConfig();
+          }
+          state.pageCount += 1;
+          if (result.status === "committed") {
+            state.committed = true;
+            state.projectedCandidateCount += result.projectedCandidateCount;
+            state.ignoredCandidateCount += result.ignoredCandidateCount;
+            state.checkpointGeneration = result.checkpointGeneration;
+            madeProgress = true;
+          } else {
+            idleProjectionCount += 1;
+          }
+        } catch {
+          state.failed = true;
+        }
+        operationsRemaining -= 1;
+      }
+
+      if (stoppedForDeadline) break;
+      completedRounds += 1;
+      terminalSweepComplete =
+        ingestionIdle && idleProjectionCount === releaseStores.length;
+      if (madeProgress) madeAnyProgress = true;
+
+      if (terminalSweepComplete || !madeProgress) break;
+      if (
+        ingestionState.failed ||
+        projectionStates.some(({ failed }) => failed)
+      ) {
+        break;
+      }
+    }
+
+    if (
+      !ingestionState.failed &&
+      (ingestionState.pageCount < 1 ||
+        ingestionState.snapshotBlock === null ||
+        ((ingestionState.committed || ingestionState.committedEmpty) &&
+          ingestionState.generation === null))
+    ) {
+      ingestionState.failed = true;
+    }
+    for (const state of projectionStates) {
+      if (state.committed && state.checkpointGeneration === null) {
+        state.failed = true;
+      }
+    }
+
+    const ingestion = ingestionState.failed
+      ? Object.freeze({ status: "failed" as const })
+      : ingestionState.committed
+        ? Object.freeze({
+            status: "committed" as const,
+            candidateCount: ingestionState.candidateCount,
+            pageCount: ingestionState.pageCount,
+            snapshotBlock: ingestionState.snapshotBlock,
+            generation: ingestionState.generation,
+          })
+        : ingestionState.committedEmpty
+          ? Object.freeze({
+              status: "committed-empty" as const,
+              candidateCount: 0,
+              pageCount: ingestionState.pageCount,
+              snapshotBlock: ingestionState.snapshotBlock,
+              generation: ingestionState.generation,
+            })
+          : Object.freeze({
+              status: "idle" as const,
+              candidateCount: 0,
+              pageCount: ingestionState.pageCount,
+              snapshotBlock: ingestionState.snapshotBlock,
+            });
+    const projections = projectionStates.map((state) => {
+      if (state.failed) {
+        return Object.freeze({
+          releaseId: state.releaseId,
+          status: "failed" as const,
+        });
+      }
+      if (!state.committed) {
+        return Object.freeze({
+          releaseId: state.releaseId,
+          status: "idle" as const,
+          pageCount: state.pageCount,
+        });
+      }
+      return Object.freeze({
+        releaseId: state.releaseId,
+        status: "committed" as const,
+        projectedCandidateCount: state.projectedCandidateCount,
+        ignoredCandidateCount: state.ignoredCandidateCount,
+        pageCount: state.pageCount,
+        checkpointGeneration: state.checkpointGeneration,
+      });
+    });
+    const failed =
+      ingestion.status === "failed" ||
+      projections.some(({ status }) => status === "failed");
+    const readinessStatus = failed
+      ? "incomplete" as const
+      : terminalSweepComplete
+        ? "caught-up" as const
+        : madeAnyProgress
+          ? "progressed" as const
+          : "incomplete" as const;
+    const readiness = Object.freeze({
+      status: readinessStatus,
+      activationReady: readinessStatus === "caught-up",
+      lagging: readinessStatus !== "caught-up",
+      terminalSweepComplete,
+      stoppedForDeadline,
+      completedRounds,
+      snapshotBlock: ingestionState.snapshotBlock,
+    });
+    return Object.freeze({
+      ok: !failed,
+      ingestion,
+      projections: Object.freeze(projections),
+      readiness,
+      deadlineMs: PROJECTOR_DEADLINE_MS,
+    });
+  } finally {
+    if (acquiredFence) {
+      try {
+        await leaseController.release(acquiredFence);
+      } catch {
+        // The database lease expires independently. Every writer transaction is
+        // fenced, so release remains a best-effort latency optimization.
+      }
+    }
+    if (executor) await executor.close();
+    await runtimeExecutor.close();
+  }
+}

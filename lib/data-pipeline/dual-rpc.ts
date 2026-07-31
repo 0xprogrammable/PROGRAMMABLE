@@ -7,6 +7,7 @@ import {
   canonicalBytes32,
   canonicalRawData,
   parseNonnegativeIntegerText,
+  parseUint256Text,
   type HexAddress,
   type HexBytes32,
 } from "./codecs";
@@ -28,6 +29,12 @@ import {
   canonicalDynamicSourceLineages,
   type VerifiedDynamicSourceLineage,
 } from "./projector-identities";
+import {
+  expectedRewardRpcCallCount,
+  PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1,
+  type ProjectorRewardRpcModel,
+} from "./projector-reward-rpc-contract";
+import type { ProjectorRewardSnapshot } from "./projector-reward-fold";
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
 import { runtimeBytecodeEvidence } from "./runtime-bytecode";
 import { assertProductionDualRpcProviders } from "./rpc-providers.server";
@@ -70,12 +77,78 @@ export type CandidateRpcClient = {
     address: HexAddress;
     blockNumber: bigint;
   }): Promise<Hex | undefined>;
+  /**
+   * Reads immutable launch-token display metadata at the launch block. The
+   * projector accepts the values only when both independent providers return
+   * the exact same UTF-8 strings. This deliberately does not fall back to a
+   * subgraph, token list, or latest-block read.
+   */
+  readErc20Metadata?(input: {
+    address: HexAddress;
+    blockNumber: bigint;
+  }): Promise<Readonly<{ name: unknown; symbol: unknown }>>;
+  /**
+   * Executes only the frozen reward-vault call shapes at one exact block.
+   * The returned call count is verified against the committed formula.
+   */
+  readRewardSnapshot?(input: {
+    model: ProjectorRewardRpcModel;
+    vault: HexAddress;
+    blockNumber: bigint;
+    balanceAccounts: readonly HexAddress[];
+  }): Promise<CandidateRpcRewardSnapshot>;
   getLogs?(input: {
     addresses: readonly HexAddress[];
     fromBlock: bigint;
     toBlock: bigint;
   }): Promise<readonly CandidateRpcLog[]>;
 };
+
+export type CandidateRpcRewardSnapshot = Readonly<{
+  model: unknown;
+  vault: unknown;
+  blockNumber: unknown;
+  poolId: unknown;
+  configurationEpoch: unknown;
+  configurationHash: unknown;
+  totalCreatorFeesReceived: unknown;
+  totalCreatorFeesClaimed: unknown;
+  beneficiaryCount: unknown;
+  allocations: unknown;
+  balances: unknown;
+  rpcCallCount: unknown;
+}>;
+
+export type DualRpcRewardSnapshot = Readonly<{
+  model: ProjectorRewardRpcModel;
+  vault: HexAddress;
+  blockNumber: string;
+  poolId: HexBytes32;
+  configurationEpoch: string | null;
+  configurationHash: HexBytes32;
+  totalCreatorFeesReceived: string;
+  totalCreatorFeesClaimed: string;
+  allocations: readonly Readonly<{
+    allocationIndex: number;
+    beneficiary: HexAddress;
+    payoutAddress: HexAddress;
+    shareBps: string;
+  }>[];
+  balances: readonly Readonly<{
+    account: HexAddress;
+    payoutAddress: HexAddress;
+    claimableAccrued: string;
+    claimedTotal: string;
+  }>[];
+  rpcCallCount: number;
+}>;
+
+export type DualRpcTokenMetadata = Readonly<{
+  token: HexAddress;
+  blockNumber: string;
+  name: string;
+  symbol: string;
+}>;
 
 export type CandidateRpcProvider = {
   identity: string;
@@ -84,6 +157,50 @@ export type CandidateRpcProvider = {
   endpointOriginCommitment: HexBytes32;
   client: CandidateRpcClient;
 };
+
+export type DualRpcOperation =
+  | "getChainId"
+  | "getBlockNumber"
+  | "getBlock"
+  | "getTransactionReceipt"
+  | "getBytecode";
+
+export type DualRpcCallTrace = Readonly<{
+  providerIdentity: string;
+  providerVendorGroup: string;
+  providerEndpointCommitment: HexBytes32;
+  providerOriginCommitment: HexBytes32;
+  operation: DualRpcOperation;
+  attempt: number;
+  startedOffsetMs: number;
+  durationMs: number;
+  outcome: "success" | "error";
+}>;
+
+export type DualRpcExecutionTrace = Readonly<{
+  startedAtMs: number;
+  completedAtMs: number;
+  candidateBatchSize: number;
+  hardDeadlineMs: number;
+  maxCallsPerProvider: number;
+  elapsedMs: number;
+  providerCallCounts: readonly [number, number];
+  calls: readonly DualRpcCallTrace[];
+}>;
+
+export type DualRpcExecutionPolicy = Readonly<{
+  maxConcurrency?: number;
+  maxAttempts?: number;
+  baseBackoffMs?: number;
+  hardDeadlineMs?: number;
+  maxCallsPerProvider?: number;
+  signal?: AbortSignal;
+  sleep?: (milliseconds: number) => Promise<void>;
+  /** @deprecated Use hardDeadlineMs. Kept only for migration compatibility. */
+  deadlineMs?: number;
+  /** @deprecated Use maxCallsPerProvider. Kept only for migration compatibility. */
+  maxProviderCalls?: number;
+}>;
 
 export type DualRpcCandidateEvidence = {
   chainId: 1;
@@ -127,6 +244,7 @@ export type DualRpcCandidateBatchEvidence = {
   safeBlockNumber: string;
   safeBlockHash: HexBytes32;
   candidates: readonly DualRpcCandidateEvidence[];
+  executionTrace: DualRpcExecutionTrace;
 };
 
 export type DualRpcCandidateWindowEvidence =
@@ -135,7 +253,9 @@ export type DualRpcCandidateWindowEvidence =
     coverage: {
       fromBlockNumber: string;
       throughBlockNumber: string;
+      throughBlockHash: HexBytes32;
       throughBlockGlobalLogIndex: string;
+      filterCommitment: HexBytes32;
       providerLogCommitments: readonly [HexBytes32, HexBytes32];
     };
   };
@@ -347,22 +467,25 @@ function providerIdentity(value: unknown) {
   return value;
 }
 
-type RpcExecutionPolicyInput = {
-  maxConcurrency?: number;
-  maxAttempts?: number;
-  baseBackoffMs?: number;
-  sleep?: (milliseconds: number) => Promise<void>;
-  deadlineMs?: number;
-  maxProviderCalls?: number;
-};
+type RpcExecutionPolicyInput = DualRpcExecutionPolicy;
 
 function rpcExecutionPolicy(input: RpcExecutionPolicyInput | undefined) {
   const maxConcurrency = input?.maxConcurrency ?? DEFAULT_RPC_CONCURRENCY;
   const maxAttempts = input?.maxAttempts ?? DEFAULT_RPC_ATTEMPTS;
   const baseBackoffMs = input?.baseBackoffMs ?? DEFAULT_RPC_BACKOFF_MS;
-  const deadlineMs = input?.deadlineMs ?? DEFAULT_RPC_DEADLINE_MS;
-  const maxProviderCalls =
-    input?.maxProviderCalls ?? DEFAULT_MAXIMUM_PROVIDER_CALLS;
+  if (
+    (input?.hardDeadlineMs !== undefined && input.deadlineMs !== undefined) ||
+    (input?.maxCallsPerProvider !== undefined &&
+      input.maxProviderCalls !== undefined)
+  ) {
+    throw invalidInput("rpc", "execution-policy");
+  }
+  const hardDeadlineMs =
+    input?.hardDeadlineMs ?? input?.deadlineMs ?? DEFAULT_RPC_DEADLINE_MS;
+  const maxCallsPerProvider =
+    input?.maxCallsPerProvider ??
+    input?.maxProviderCalls ??
+    DEFAULT_MAXIMUM_PROVIDER_CALLS;
   if (
     !Number.isSafeInteger(maxConcurrency) ||
     maxConcurrency < 1 ||
@@ -373,12 +496,14 @@ function rpcExecutionPolicy(input: RpcExecutionPolicyInput | undefined) {
     !Number.isSafeInteger(baseBackoffMs) ||
     baseBackoffMs < 0 ||
     baseBackoffMs > 1_000 ||
-    !Number.isSafeInteger(deadlineMs) ||
-    deadlineMs < 10 ||
-    deadlineMs > DEFAULT_RPC_DEADLINE_MS ||
-    !Number.isSafeInteger(maxProviderCalls) ||
-    maxProviderCalls < 1 ||
-    maxProviderCalls > 128 ||
+    !Number.isSafeInteger(hardDeadlineMs) ||
+    hardDeadlineMs < 10 ||
+    hardDeadlineMs > DEFAULT_RPC_DEADLINE_MS ||
+    !Number.isSafeInteger(maxCallsPerProvider) ||
+    maxCallsPerProvider < 1 ||
+    maxCallsPerProvider > 128 ||
+    (input?.signal !== undefined &&
+      !(input.signal instanceof AbortSignal)) ||
     (input?.sleep !== undefined && typeof input.sleep !== "function")
   ) {
     throw invalidInput("rpc", "execution-policy");
@@ -387,14 +512,95 @@ function rpcExecutionPolicy(input: RpcExecutionPolicyInput | undefined) {
     maxConcurrency,
     maxAttempts,
     baseBackoffMs,
-    deadlineMs,
-    deadlineAt: Date.now() + deadlineMs,
-    maxProviderCalls,
+    hardDeadlineMs,
+    deadlineAt: Date.now() + hardDeadlineMs,
+    maxCallsPerProvider,
+    callerSignal: input?.signal,
     sleep:
       input?.sleep ??
       ((milliseconds: number) =>
         new Promise<void>((resolve) => setTimeout(resolve, milliseconds))),
   };
+}
+
+type RpcTraceContext = {
+  providerIdentity: string;
+  providerVendorGroup: string;
+  providerEndpointCommitment: HexBytes32;
+  providerOriginCommitment: HexBytes32;
+  startedAtMs: number;
+  callCount: number;
+  calls: DualRpcCallTrace[];
+};
+
+function rpcCallBudgetExceeded(): DataPipelineError {
+  return dataPipelineError({
+    dependency: "rpc",
+    code: "dependency_unavailable",
+    retryable: true,
+    countsTowardCircuit: true,
+    metadata: { operation: "call-budget" },
+  });
+}
+
+async function retryTracedRpc<T>(
+  operationName: DualRpcOperation,
+  operation: () => Promise<T>,
+  policy: ReturnType<typeof rpcExecutionPolicy>,
+  context: RpcTraceContext,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < policy.maxAttempts; attempt += 1) {
+    if (policy.callerSignal?.aborted) {
+      throw dataPipelineError({
+        dependency: "rpc",
+        code: "timeout",
+        retryable: true,
+        countsTowardCircuit: true,
+      });
+    }
+    if (context.callCount >= policy.maxCallsPerProvider) {
+      throw rpcCallBudgetExceeded();
+    }
+    context.callCount += 1;
+    const startedAtMs = Date.now();
+    try {
+      const value = await withinRpcDeadline(operation, policy);
+      context.calls.push(
+        Object.freeze({
+          providerIdentity: context.providerIdentity,
+          providerVendorGroup: context.providerVendorGroup,
+          providerEndpointCommitment: context.providerEndpointCommitment,
+          providerOriginCommitment: context.providerOriginCommitment,
+          operation: operationName,
+          attempt: attempt + 1,
+          startedOffsetMs: Math.max(0, startedAtMs - context.startedAtMs),
+          durationMs: Math.max(0, Date.now() - startedAtMs),
+          outcome: "success" as const,
+        }),
+      );
+      return value;
+    } catch (error) {
+      context.calls.push(
+        Object.freeze({
+          providerIdentity: context.providerIdentity,
+          providerVendorGroup: context.providerVendorGroup,
+          providerEndpointCommitment: context.providerEndpointCommitment,
+          providerOriginCommitment: context.providerOriginCommitment,
+          operation: operationName,
+          attempt: attempt + 1,
+          startedOffsetMs: Math.max(0, startedAtMs - context.startedAtMs),
+          durationMs: Math.max(0, Date.now() - startedAtMs),
+          outcome: "error" as const,
+        }),
+      );
+      lastError = error;
+      if (attempt + 1 < policy.maxAttempts) {
+        await policy.sleep(policy.baseBackoffMs * 2 ** attempt);
+      }
+    }
+  }
+  throw lastError;
 }
 
 async function withinRpcDeadline<T>(
@@ -603,7 +809,8 @@ function validateCandidateBoundary(
     if (dynamicSourceLineage) {
       const parentBeforeChild =
         BigInt(dynamicSourceLineage.factoryBlockNumber) < blockNumber ||
-        (BigInt(dynamicSourceLineage.factoryBlockNumber) === blockNumber &&
+        (dynamicSourceLineage.factoryBlockGlobalLogIndex !== undefined &&
+          BigInt(dynamicSourceLineage.factoryBlockNumber) === blockNumber &&
           BigInt(dynamicSourceLineage.factoryBlockGlobalLogIndex) <
             BigInt(logIndex));
       if (
@@ -666,7 +873,7 @@ export async function readDualRpcSafeHead(input: {
     throw invalidInput("rpc", "safe-head-cursor");
   }
   const policy = rpcExecutionPolicy(input.rpcPolicy);
-  if (4 > policy.maxProviderCalls) {
+  if (4 > policy.maxCallsPerProvider) {
     throw invalidInput("rpc", "provider-call-budget");
   }
   try {
@@ -747,6 +954,442 @@ export async function readDualRpcSafeHead(input: {
   }
 }
 
+function canonicalMetadataText(
+  value: unknown,
+  field: "name" | "symbol",
+): string {
+  const maximumBytes = field === "name" ? 128 : 32;
+  if (
+    typeof value !== "string" ||
+    value.normalize("NFC") !== value ||
+    /[\u0000-\u001f\u007f]/u.test(value) ||
+    Buffer.byteLength(value, "utf8") < 1 ||
+    Buffer.byteLength(value, "utf8") > maximumBytes
+  ) {
+    throw validationError("rpc", `erc20-${field}`);
+  }
+  return value;
+}
+
+/**
+ * Reads token metadata from the two canonical providers at the exact launch
+ * block. Provider disagreement is an integrity failure, never a preference
+ * or a reason to silently use one answer.
+ */
+export async function readDualRpcTokenMetadata(input: {
+  tokens: readonly Readonly<{
+    token: HexAddress;
+    blockNumber: string;
+  }>[];
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  rpcPolicy?: RpcExecutionPolicyInput;
+}): Promise<readonly DualRpcTokenMetadata[]> {
+  assertProductionDualRpcProviders(input.providers);
+  if (!Array.isArray(input.tokens) || input.tokens.length > 16) {
+    throw invalidInput("rpc", "erc20-metadata-batch");
+  }
+  const first = input.providers[0];
+  const second = input.providers[1];
+  providerIdentity(first.identity);
+  providerIdentity(second.identity);
+  if (
+    first.identity === second.identity ||
+    first.vendorGroup === second.vendorGroup ||
+    first.client === second.client ||
+    typeof first.client.readErc20Metadata !== "function" ||
+    typeof second.client.readErc20Metadata !== "function"
+  ) {
+    throw invalidInput("rpc", "erc20-metadata-providers");
+  }
+  const policy = rpcExecutionPolicy(input.rpcPolicy);
+  if (input.tokens.length * 2 > policy.maxCallsPerProvider) {
+    throw invalidInput("rpc", "provider-call-budget");
+  }
+  const seen = new Set<HexAddress>();
+  try {
+    return Object.freeze(
+      await boundedRpcMap(
+        input.tokens,
+        policy.maxConcurrency,
+        async (requested) => {
+          const token = rpcAddress(requested.token, "erc20-token");
+          let blockNumber: bigint;
+          try {
+            blockNumber = BigInt(
+              parseNonnegativeIntegerText(requested.blockNumber),
+            );
+          } catch {
+            throw invalidInput("rpc", "erc20-block");
+          }
+          if (seen.has(token)) {
+            throw invalidInput("rpc", "erc20-metadata-duplicate");
+          }
+          seen.add(token);
+          const [left, right] = await Promise.all([
+            retryRpc(
+              () => first.client.readErc20Metadata!({
+                address: token,
+                blockNumber,
+              }),
+              policy,
+            ),
+            retryRpc(
+              () => second.client.readErc20Metadata!({
+                address: token,
+                blockNumber,
+              }),
+              policy,
+            ),
+          ]);
+          const leftName = canonicalMetadataText(left.name, "name");
+          const rightName = canonicalMetadataText(right.name, "name");
+          const leftSymbol = canonicalMetadataText(left.symbol, "symbol");
+          const rightSymbol = canonicalMetadataText(right.symbol, "symbol");
+          if (leftName !== rightName || leftSymbol !== rightSymbol) {
+            throw validationError("rpc", "erc20-metadata-agreement");
+          }
+          return Object.freeze({
+            token,
+            blockNumber: blockNumber.toString(),
+            name: leftName,
+            symbol: leftSymbol,
+          });
+        },
+      ),
+    );
+  } catch (error) {
+    if (error instanceof DataPipelineError) throw error;
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "dependency_unavailable",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
+}
+
+function rewardUint(value: unknown, field: string): string {
+  try {
+    return parseUint256Text(value);
+  } catch {
+    throw validationError("rpc", `reward-${field}`);
+  }
+}
+
+function rewardEpoch(value: unknown): string {
+  const epoch = BigInt(rewardUint(value, "configuration-epoch"));
+  if (epoch > (1n << 64n) - 1n) {
+    throw validationError("rpc", "reward-configuration-epoch");
+  }
+  return epoch.toString();
+}
+
+function rewardArray(value: unknown, field: string): readonly Record<string, unknown>[] {
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (entry) =>
+        entry === null ||
+        typeof entry !== "object" ||
+        Array.isArray(entry),
+    )
+  ) {
+    throw validationError("rpc", `reward-${field}`);
+  }
+  return value as readonly Record<string, unknown>[];
+}
+
+function canonicalRewardSnapshot(
+  raw: CandidateRpcRewardSnapshot,
+  request: Readonly<{
+    model: ProjectorRewardRpcModel;
+    vault: HexAddress;
+    blockNumber: string;
+    balanceAccounts: readonly HexAddress[];
+  }>,
+): DualRpcRewardSnapshot {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw validationError("rpc", "reward-snapshot");
+  }
+  const contract = PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1.models[request.model];
+  const model = raw.model;
+  const vault = rpcAddress(raw.vault, "reward-vault");
+  const blockNumber = rewardUint(raw.blockNumber, "block-number");
+  const poolId = rpcBytes32(raw.poolId, "reward-pool-id");
+  const configurationEpoch = request.model === "classic-v3"
+    ? rewardEpoch(raw.configurationEpoch)
+    : raw.configurationEpoch === null
+      ? null
+      : (() => {
+          throw validationError("rpc", "reward-configuration-epoch");
+        })();
+  const configurationHash = rpcBytes32(
+    raw.configurationHash,
+    "reward-configuration-hash",
+  );
+  const totalCreatorFeesReceived = rewardUint(
+    raw.totalCreatorFeesReceived,
+    "total-received",
+  );
+  const totalCreatorFeesClaimed = rewardUint(
+    raw.totalCreatorFeesClaimed,
+    "total-claimed",
+  );
+  const beneficiaryCountText = rewardUint(
+    raw.beneficiaryCount,
+    "beneficiary-count",
+  );
+  const beneficiaryCount = Number(beneficiaryCountText);
+  const allocations = rewardArray(raw.allocations, "allocations").map(
+    (allocation, allocationIndex) => {
+      const receivedIndex = typeof allocation.allocationIndex === "number"
+        ? allocation.allocationIndex
+        : Number(rewardUint(allocation.allocationIndex, "allocation-index"));
+      if (
+        !Number.isSafeInteger(receivedIndex) ||
+        receivedIndex !== allocationIndex
+      ) {
+        throw validationError("rpc", "reward-allocation-index");
+      }
+      const beneficiary = rpcAddress(
+        allocation.beneficiary,
+        "reward-beneficiary",
+      );
+      const payoutAddress = rpcAddress(
+        allocation.payoutAddress,
+        "reward-payout-address",
+      );
+      const shareBps = rewardUint(allocation.shareBps, "share-bps");
+      if (
+        BigInt(shareBps) < 1n ||
+        BigInt(shareBps) > 10_000n ||
+        (request.model === "classic-v3" && beneficiary !== payoutAddress)
+      ) {
+        throw validationError("rpc", "reward-allocation");
+      }
+      return Object.freeze({
+        allocationIndex,
+        beneficiary,
+        payoutAddress,
+        shareBps,
+      });
+    },
+  );
+  if (
+    model !== request.model ||
+    vault !== request.vault ||
+    blockNumber !== request.blockNumber ||
+    !Number.isSafeInteger(beneficiaryCount) ||
+    beneficiaryCount < 1 ||
+    beneficiaryCount > contract.maximumAllocations ||
+    allocations.length !== beneficiaryCount ||
+    allocations.reduce((sum, { shareBps }) => sum + BigInt(shareBps), 0n) !==
+      10_000n ||
+    (request.model === "stock-paired" &&
+      new Set(allocations.map(({ beneficiary }) => beneficiary)).size !==
+        allocations.length)
+  ) {
+    throw validationError("rpc", "reward-snapshot-header");
+  }
+  const balances = rewardArray(raw.balances, "balances").map(
+    (balance, index) => {
+      const account = rpcAddress(balance.account, "reward-account");
+      const payoutAddress = rpcAddress(
+        balance.payoutAddress,
+        "reward-balance-payout",
+      );
+      if (
+        account !== request.balanceAccounts[index] ||
+        (request.model === "classic-v3" && payoutAddress !== account)
+      ) {
+        throw validationError("rpc", "reward-balance-account");
+      }
+      return Object.freeze({
+        account,
+        payoutAddress,
+        claimableAccrued: rewardUint(
+          balance.claimableAccrued,
+          "claimable",
+        ),
+        claimedTotal: rewardUint(balance.claimedTotal, "claimed"),
+      });
+    },
+  );
+  const expectedRpcCallCount = expectedRewardRpcCallCount(
+    request.model,
+    allocations.length,
+    balances.length,
+  );
+  if (
+    balances.length !== request.balanceAccounts.length ||
+    request.balanceAccounts.length > contract.maximumBalanceAccounts ||
+    request.balanceAccounts.some(
+      (account, index) => index > 0 && account <= request.balanceAccounts[index - 1]!,
+    ) ||
+    allocations.some(
+      ({ beneficiary }) => !balances.some(({ account }) => account === beneficiary),
+    ) ||
+    (request.model === "stock-paired" &&
+      (balances.length !== allocations.length ||
+        balances.some(
+          ({ account }) =>
+            !allocations.some(({ beneficiary }) => beneficiary === account),
+        ))) ||
+    balances.reduce(
+      (sum, { claimableAccrued, claimedTotal }) =>
+        sum + BigInt(claimableAccrued) + BigInt(claimedTotal),
+      0n,
+    ) !== BigInt(totalCreatorFeesReceived) ||
+    balances.reduce(
+      (sum, { claimedTotal }) => sum + BigInt(claimedTotal),
+      0n,
+    ) !== BigInt(totalCreatorFeesClaimed) ||
+    typeof raw.rpcCallCount !== "number" ||
+    !Number.isSafeInteger(raw.rpcCallCount) ||
+    raw.rpcCallCount !== expectedRpcCallCount
+  ) {
+    throw validationError("rpc", "reward-snapshot-conservation");
+  }
+  return Object.freeze({
+    model: request.model,
+    vault,
+    blockNumber,
+    poolId,
+    configurationEpoch,
+    configurationHash,
+    totalCreatorFeesReceived,
+    totalCreatorFeesClaimed,
+    allocations: Object.freeze(allocations),
+    balances: Object.freeze(balances),
+    rpcCallCount: expectedRpcCallCount,
+  });
+}
+
+function assertRewardSnapshotMatchesProjection(
+  snapshot: DualRpcRewardSnapshot,
+  expected: ProjectorRewardSnapshot,
+): void {
+  const expectedConfigurationHash = expected.activeConfigurationHash;
+  const expectedClaimed = expected.balances.reduce(
+    (sum, { claimedTotal }) => sum + BigInt(claimedTotal),
+    0n,
+  ).toString();
+  if (
+    expectedConfigurationHash === null ||
+    snapshot.vault !== expected.vault ||
+    snapshot.poolId !== expected.poolId ||
+    snapshot.configurationHash !== expectedConfigurationHash ||
+    snapshot.totalCreatorFeesReceived !== expected.totalCreatorFeesReceived ||
+    snapshot.totalCreatorFeesClaimed !== expectedClaimed ||
+    (snapshot.model === "classic-v3" &&
+      snapshot.configurationEpoch !== expected.configurationEpoch) ||
+    JSON.stringify(snapshot.allocations) !==
+      JSON.stringify(expected.allocations) ||
+    JSON.stringify(snapshot.balances) !== JSON.stringify(expected.balances)
+  ) {
+    throw validationError("rpc", "reward-projection-agreement");
+  }
+}
+
+/**
+ * Proves one folded reward delta against two independent exact-block vault
+ * snapshots. Any provider, call-count, conservation or projected-state
+ * disagreement rejects the complete projection transaction.
+ */
+export async function readDualRpcRewardSnapshot(input: Readonly<{
+  model: ProjectorRewardRpcModel;
+  expected: ProjectorRewardSnapshot;
+  blockNumber: string;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  rpcPolicy?: RpcExecutionPolicyInput;
+}>): Promise<DualRpcRewardSnapshot> {
+  assertProductionDualRpcProviders(input.providers);
+  const first = input.providers[0];
+  const second = input.providers[1];
+  providerIdentity(first.identity);
+  providerIdentity(second.identity);
+  if (
+    first.identity === second.identity ||
+    first.vendorGroup === second.vendorGroup ||
+    first.client === second.client ||
+    typeof first.client.readRewardSnapshot !== "function" ||
+    typeof second.client.readRewardSnapshot !== "function" ||
+    (input.rpcPolicy?.maxAttempts !== undefined &&
+      input.rpcPolicy.maxAttempts !== 1)
+  ) {
+    throw invalidInput("rpc", "reward-snapshot-providers");
+  }
+  let blockNumber: bigint;
+  try {
+    blockNumber = BigInt(parseNonnegativeIntegerText(input.blockNumber));
+  } catch {
+    throw invalidInput("rpc", "reward-snapshot-block");
+  }
+  const vault = rpcAddress(input.expected.vault, "reward-vault");
+  const balanceAccounts = Object.freeze(
+    input.expected.balances.map(({ account }) =>
+      rpcAddress(account, "reward-balance-account")
+    ),
+  );
+  const maximum =
+    PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1.models[input.model]
+      .maximumBalanceAccounts;
+  if (
+    balanceAccounts.length < 1 ||
+    balanceAccounts.length > maximum ||
+    balanceAccounts.some(
+      (account, index) => index > 0 && account <= balanceAccounts[index - 1]!,
+    )
+  ) {
+    throw invalidInput("rpc", "reward-balance-accounts");
+  }
+  const expectedCallCount = expectedRewardRpcCallCount(
+    input.model,
+    input.expected.allocations.length,
+    balanceAccounts.length,
+  );
+  const policy = rpcExecutionPolicy({
+    ...input.rpcPolicy,
+    maxAttempts: 1,
+  });
+  if (expectedCallCount > policy.maxCallsPerProvider) {
+    throw invalidInput("rpc", "provider-call-budget");
+  }
+  const request = Object.freeze({
+    model: input.model,
+    vault,
+    blockNumber,
+    balanceAccounts,
+  });
+  try {
+    const [leftRaw, rightRaw] = await Promise.all([
+      retryRpc(() => first.client.readRewardSnapshot!(request), policy),
+      retryRpc(() => second.client.readRewardSnapshot!(request), policy),
+    ]);
+    const canonicalRequest = Object.freeze({
+      model: input.model,
+      vault,
+      blockNumber: blockNumber.toString(),
+      balanceAccounts,
+    });
+    const left = canonicalRewardSnapshot(leftRaw, canonicalRequest);
+    const right = canonicalRewardSnapshot(rightRaw, canonicalRequest);
+    if (JSON.stringify(left) !== JSON.stringify(right)) {
+      throw validationError("rpc", "reward-provider-agreement");
+    }
+    assertRewardSnapshotMatchesProjection(left, input.expected);
+    return left;
+  } catch (error) {
+    if (error instanceof DataPipelineError) throw error;
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "dependency_unavailable",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
+}
+
 export async function verifyEnvioCandidateBatchWithDualRpc(input: {
   candidates: readonly EnvioCandidate[];
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
@@ -754,6 +1397,7 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
   dynamicSources?: readonly VerifiedDynamicSourceLineage[];
   requireDynamicLineage?: boolean;
 }): Promise<DualRpcCandidateBatchEvidence> {
+  const executionStartedAtMs = Date.now();
   assertProductionDualRpcProviders(input.providers);
   const firstIdentity = providerIdentity(input.providers?.[0]?.identity);
   const secondIdentity = providerIdentity(input.providers?.[1]?.identity);
@@ -840,16 +1484,37 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
           `${blockNumber}:${candidate.sourceAddress}`,
       ),
     ).size;
-  if (estimatedCallsPerProvider > policy.maxProviderCalls) {
+  if (estimatedCallsPerProvider > policy.maxCallsPerProvider) {
     throw invalidInput("rpc", "provider-call-budget");
   }
 
+  const traceContexts = input.providers.map((provider) => ({
+    providerIdentity: provider.identity,
+    providerVendorGroup: provider.vendorGroup,
+    providerEndpointCommitment: provider.endpointCommitment,
+    providerOriginCommitment: provider.endpointOriginCommitment,
+    startedAtMs: executionStartedAtMs,
+    callCount: 0,
+    calls: [] as DualRpcCallTrace[],
+  })) as [RpcTraceContext, RpcTraceContext];
+
   try {
     const states = await Promise.all(
-      clients.map(async (client) => {
+      clients.map(async (client, providerIndex) => {
+        const traceContext = traceContexts[providerIndex]!;
         const [chainId, head] = await Promise.all([
-          retryRpc(() => client.getChainId(), policy),
-          retryRpc(() => client.getBlockNumber(), policy),
+          retryTracedRpc(
+            "getChainId",
+            () => client.getChainId(),
+            policy,
+            traceContext,
+          ),
+          retryTracedRpc(
+            "getBlockNumber",
+            () => client.getBlockNumber(),
+            policy,
+            traceContext,
+          ),
         ]);
         return { chainId, head };
       }),
@@ -898,15 +1563,18 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
       ).entries(),
     ];
     const providerData = await Promise.all(
-      clients.map(async (client) => {
+      clients.map(async (client, providerIndex) => {
+        const traceContext = traceContexts[providerIndex]!;
         const blocks = await boundedRpcMap(
           blockNumbers,
           policy.maxConcurrency,
           async (blockNumber) => [
             blockNumber.toString(),
-            await retryRpc(
+            await retryTracedRpc(
+              "getBlock",
               () => client.getBlock({ blockNumber }),
               policy,
+              traceContext,
             ),
           ] as const,
         );
@@ -915,9 +1583,11 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
           policy.maxConcurrency,
           async (transactionHash) => [
             transactionHash,
-            await retryRpc(
+            await retryTracedRpc(
+              "getTransactionReceipt",
               () => client.getTransactionReceipt({ hash: transactionHash }),
               policy,
+              traceContext,
             ),
           ] as const,
         );
@@ -926,7 +1596,12 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
           policy.maxConcurrency,
           async ([key, request]) => [
             key,
-            await retryRpc(() => client.getBytecode(request), policy),
+            await retryTracedRpc(
+              "getBytecode",
+              () => client.getBytecode(request),
+              policy,
+              traceContext,
+            ),
           ] as const,
         );
         return {
@@ -1104,6 +1779,7 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
       } satisfies DualRpcCandidateEvidence;
     });
 
+    const executionCompletedAtMs = Date.now();
     return {
       chainId: 1,
       providerIdentities,
@@ -1114,6 +1790,22 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
       safeBlockNumber: safeBlockNumber.toString(),
       safeBlockHash: safe[0].hash,
       candidates: evidence,
+      executionTrace: Object.freeze({
+        startedAtMs: executionStartedAtMs,
+        completedAtMs: executionCompletedAtMs,
+        candidateBatchSize: candidates.length,
+        hardDeadlineMs: policy.hardDeadlineMs,
+        maxCallsPerProvider: policy.maxCallsPerProvider,
+        elapsedMs: Math.max(0, executionCompletedAtMs - executionStartedAtMs),
+        providerCallCounts: Object.freeze([
+          traceContexts[0].callCount,
+          traceContexts[1].callCount,
+        ]) as readonly [number, number],
+        calls: Object.freeze([
+          ...traceContexts[0].calls,
+          ...traceContexts[1].calls,
+        ]),
+      }),
     };
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;
@@ -1146,7 +1838,6 @@ export async function verifyEnvioCandidateWithDualRpc(input: {
 function coverageCursor(
   value: EnvioCandidateCursor,
   operation: string,
-  allowUpperSentinel = false,
 ) {
   if (value === null || typeof value !== "object") {
     throw invalidInput("rpc", operation);
@@ -1164,11 +1855,7 @@ function coverageCursor(
   const blockGlobalLogIndex = Number(
     canonicalUint32DecimalText(logIndex, operation),
   );
-  if (
-    allowUpperSentinel &&
-    blockGlobalLogIndex === 0xffff_ffff &&
-    value.candidateId === ""
-  ) {
+  if (blockGlobalLogIndex === 0xffff_ffff && value.candidateId === "") {
     return { blockNumber, blockGlobalLogIndex, candidateId: "" };
   }
   if (
@@ -1231,11 +1918,7 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
 }): Promise<DualRpcCandidateWindowEvidence> {
   const windowStartedAt = Date.now();
   const cursor = coverageCursor(input.cursor, "coverage-cursor");
-  const through = coverageCursor(
-    input.through,
-    "coverage-through",
-    true,
-  );
+  const through = coverageCursor(input.through, "coverage-through");
   if (comparePlacement(cursor, through) >= 0) {
     throw invalidInput("rpc", "coverage-window");
   }
@@ -1316,11 +1999,27 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     sources.map(({ address, selectors }) => [address, selectors] as const),
   );
   const addresses = sources.map(({ address }) => address);
+  const filterCommitment = keccak256(
+    toBytes(
+      JSON.stringify(
+        sources
+          .map(({ address, selectors }) => [
+            address,
+            [...selectors].sort(),
+          ])
+          .sort(([left], [right]) => String(left).localeCompare(String(right))),
+      ),
+    ),
+  );
   const fromBlock = BigInt(cursor.blockNumber);
+  const effectiveFromBlock =
+    cursor.blockGlobalLogIndex === 0xffff_ffff && cursor.candidateId === ""
+      ? fromBlock + 1n
+      : fromBlock;
   const toBlock = BigInt(through.blockNumber);
   const span = BigInt(maximumBlockSpan);
   const ranges: { fromBlock: bigint; toBlock: bigint }[] = [];
-  for (let start = fromBlock; start <= toBlock; start += span) {
+  for (let start = effectiveFromBlock; start <= toBlock; start += span) {
     ranges.push({
       fromBlock: start,
       toBlock: start + span - 1n < toBlock ? start + span - 1n : toBlock,
@@ -1330,7 +2029,9 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     throw invalidInput("rpc", "coverage-request-budget");
   }
   const remainingDeadlineMs =
-    (input.rpcPolicy?.deadlineMs ?? DEFAULT_RPC_DEADLINE_MS) -
+    (input.rpcPolicy?.hardDeadlineMs ??
+      input.rpcPolicy?.deadlineMs ??
+      DEFAULT_RPC_DEADLINE_MS) -
     (Date.now() - windowStartedAt);
   if (remainingDeadlineMs < 10) {
     throw dataPipelineError({
@@ -1342,7 +2043,8 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
   }
   const coveragePolicy = rpcExecutionPolicy({
     ...input.rpcPolicy,
-    deadlineMs: remainingDeadlineMs,
+    hardDeadlineMs: remainingDeadlineMs,
+    deadlineMs: undefined,
   });
   if (
     ranges.length +
@@ -1355,8 +2057,9 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
         input.candidates.map(
           ({ blockNumber, sourceAddress }) => `${blockNumber}:${sourceAddress}`,
         ),
-      ).size >
-    coveragePolicy.maxProviderCalls
+      ).size +
+      (lastCandidate ? 0 : 1) >
+    coveragePolicy.maxCallsPerProvider
   ) {
     throw invalidInput("rpc", "provider-call-budget");
   }
@@ -1431,13 +2134,39 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     ) {
       throw validationError("rpc", "coverage-agreement");
     }
+    let throughBlockHash: HexBytes32;
+    if (lastCandidate) {
+      throughBlockHash = lastCandidate.blockHash;
+    } else {
+      const terminalBlocks = await Promise.all(
+        input.providers.map(({ client }) =>
+          retryRpc(
+            () => client.getBlock({ blockNumber: toBlock }),
+            coveragePolicy,
+          ),
+        ),
+      );
+      const canonicalTerminalBlocks = terminalBlocks.map((block) =>
+        canonicalBlock(block, toBlock, "coverage-terminal-block"),
+      );
+      if (
+        canonicalTerminalBlocks[0]!.hash !== canonicalTerminalBlocks[1]!.hash ||
+        canonicalTerminalBlocks[0]!.timestamp !==
+          canonicalTerminalBlocks[1]!.timestamp
+      ) {
+        throw validationError("rpc", "coverage-terminal-block-agreement");
+      }
+      throughBlockHash = canonicalTerminalBlocks[0]!.hash;
+    }
     return Object.freeze({
       ...batch,
       coveredCandidateCount: expected.length,
       coverage: Object.freeze({
-        fromBlockNumber: cursor.blockNumber,
+        fromBlockNumber: effectiveFromBlock.toString(),
         throughBlockNumber: through.blockNumber,
+        throughBlockHash,
         throughBlockGlobalLogIndex: String(through.blockGlobalLogIndex),
+        filterCommitment,
         providerLogCommitments: Object.freeze(commitments),
       }),
     });

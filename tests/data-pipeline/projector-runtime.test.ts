@@ -10,6 +10,16 @@ const CURSOR_HASH = `0x${"11".repeat(32)}` as const;
 const SAFE_HASH = `0x${"22".repeat(32)}` as const;
 const TX_HASH = `0x${"33".repeat(32)}` as const;
 const CANDIDATE_HASH = `0x${"44".repeat(32)}` as const;
+const executionTrace = (candidateBatchSize = 0) => ({
+  startedAtMs: 1,
+  completedAtMs: 2,
+  candidateBatchSize,
+  hardDeadlineMs: 75_000,
+  maxCallsPerProvider: 128,
+  elapsedMs: 1,
+  providerCallCounts: [0, 0] as const,
+  calls: [],
+});
 
 function candidate(): EnvioCandidate {
   return {
@@ -45,8 +55,19 @@ function fixtures() {
           blockHash: CURSOR_HASH,
           blockGlobalLogIndex: -1,
           candidateId: "",
+          isBlockBoundary: false,
         },
         dynamicSources: [],
+        database: {
+          epochId: "70000000-0000-0000-0000-000000000002",
+          pointerGeneration: "1",
+          envioProviderDeploymentId:
+            "70000000-0000-4000-8000-000000000003",
+          rpcProviderDeploymentIds: [
+            "70000000-0000-4000-8000-000000000004",
+            "70000000-0000-4000-8000-000000000005",
+          ] as const,
+        },
       };
     }),
     commitVerifiedPage: vi.fn(async () => {
@@ -87,11 +108,14 @@ function fixtures() {
       safeBlockNumber: "208",
       safeBlockHash: SAFE_HASH,
       candidates: [],
+      executionTrace: executionTrace(),
       coveredCandidateCount: 1,
       coverage: {
         fromBlockNumber: "100",
         throughBlockNumber: "101",
+        throughBlockHash: CANDIDATE_HASH,
         throughBlockGlobalLogIndex: "7",
+        filterCommitment: SAFE_HASH,
         providerLogCommitments: [SAFE_HASH, SAFE_HASH] as const,
       },
     };
@@ -121,8 +145,8 @@ describe("projector runtime boundary", () => {
         through: expect.objectContaining({ candidateId: candidate().candidateId }),
         dynamicSources: [],
         rpcPolicy: expect.objectContaining({
-          maxProviderCalls: 48,
-          deadlineMs: expect.any(Number),
+          maxCallsPerProvider: 128,
+          hardDeadlineMs: expect.any(Number),
         }),
       }),
     );
@@ -143,7 +167,7 @@ describe("projector runtime boundary", () => {
     expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
   });
 
-  it("caps each persisted page to the safe call-budget prefix", async () => {
+  it("uses the full validated Envio page with a worst-case RPC budget", async () => {
     const input = fixtures();
     await runProjectorCycle({
       ...input,
@@ -151,7 +175,7 @@ describe("projector runtime boundary", () => {
       deadlineMs: 1_000,
     });
     expect(input.envio.readCandidatesWindow).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 12 }),
+      expect.objectContaining({ limit: 32 }),
     );
   });
 

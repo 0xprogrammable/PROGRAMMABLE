@@ -16,7 +16,7 @@ import {
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
 
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const CANDIDATE_ID_PATTERN =
   /^1:(0x[0-9a-f]{64}):(0x[0-9a-f]{64}):(0|[1-9]\d*)$/u;
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
@@ -38,9 +38,10 @@ export type VerifiedDynamicSourceLineage = Readonly<{
     | "stock-paired-v3";
   factoryAddress: HexAddress;
   factoryContractName: (typeof DYNAMIC_FACTORY_CONTRACTS)[keyof typeof DYNAMIC_FACTORY_CONTRACTS];
-  factoryCandidateId: string;
+  parentOccurrenceId?: string;
+  factoryCandidateId?: string;
   factoryBlockNumber: string;
-  factoryBlockGlobalLogIndex: string;
+  factoryBlockGlobalLogIndex?: string;
   expectedExactRuntimeCodeHash: HexBytes32;
   expectedNormalizedRuntimeCodeHash: HexBytes32;
   expectedImmutableReferencesCommitment: HexBytes32;
@@ -64,8 +65,7 @@ export function canonicalDynamicSourceLineage(
   if (
     !expectedFactoryContractName ||
     value.factoryContractName !== expectedFactoryContractName ||
-    !UUID_PATTERN.test(value.attestationId) ||
-    !CANDIDATE_ID_PATTERN.test(value.factoryCandidateId)
+    !UUID_PATTERN.test(value.attestationId)
   ) {
     return dynamicLineageError();
   }
@@ -88,7 +88,7 @@ export function canonicalDynamicSourceLineage(
   let expectedNormalizedRuntimeCodeHash: HexBytes32;
   let expectedImmutableReferencesCommitment: HexBytes32;
   let factoryBlockNumber: string;
-  let factoryBlockGlobalLogIndex: string;
+  let factoryBlockGlobalLogIndex: string | undefined;
   let expectedRuntimeByteLength: string;
   try {
     sourceAddress = canonicalAddress(value.sourceAddress);
@@ -105,10 +105,13 @@ export function canonicalDynamicSourceLineage(
     factoryBlockNumber = parseNonnegativeIntegerText(
       value.factoryBlockNumber,
     );
-    factoryBlockGlobalLogIndex = canonicalUint32DecimalText(
-      value.factoryBlockGlobalLogIndex,
-      "dynamic-factory-log-index",
-    );
+    factoryBlockGlobalLogIndex =
+      value.factoryBlockGlobalLogIndex === undefined
+        ? undefined
+        : canonicalUint32DecimalText(
+            value.factoryBlockGlobalLogIndex,
+            "dynamic-factory-log-index",
+          );
     expectedRuntimeByteLength = canonicalUint32DecimalText(
       value.expectedRuntimeByteLength,
       "dynamic-runtime-length",
@@ -137,8 +140,24 @@ export function canonicalDynamicSourceLineage(
   } catch {
     return dynamicLineageError();
   }
-  const parentMatch = CANDIDATE_ID_PATTERN.exec(value.factoryCandidateId)!;
-  if (BigInt(parentMatch[3]) !== BigInt(factoryBlockGlobalLogIndex)) {
+  const hasCandidateParent = value.factoryCandidateId !== undefined;
+  const hasOccurrenceParent = value.parentOccurrenceId !== undefined;
+  if (hasCandidateParent === hasOccurrenceParent) {
+    return dynamicLineageError();
+  }
+  if (hasCandidateParent) {
+    const parentMatch = CANDIDATE_ID_PATTERN.exec(value.factoryCandidateId!);
+    if (
+      !parentMatch ||
+      factoryBlockGlobalLogIndex === undefined ||
+      BigInt(parentMatch[3]) !== BigInt(factoryBlockGlobalLogIndex)
+    ) {
+      return dynamicLineageError();
+    }
+  } else if (
+    !UUID_PATTERN.test(value.parentOccurrenceId!) ||
+    factoryBlockGlobalLogIndex !== undefined
+  ) {
     return dynamicLineageError();
   }
   return Object.freeze({
@@ -149,9 +168,16 @@ export function canonicalDynamicSourceLineage(
     releaseVersion: value.releaseVersion,
     factoryAddress,
     factoryContractName: expectedFactoryContractName,
-    factoryCandidateId: value.factoryCandidateId,
+    ...(value.parentOccurrenceId
+      ? { parentOccurrenceId: value.parentOccurrenceId }
+      : {}),
+    ...(value.factoryCandidateId
+      ? { factoryCandidateId: value.factoryCandidateId }
+      : {}),
     factoryBlockNumber,
-    factoryBlockGlobalLogIndex,
+    ...(factoryBlockGlobalLogIndex === undefined
+      ? {}
+      : { factoryBlockGlobalLogIndex }),
     expectedExactRuntimeCodeHash,
     expectedNormalizedRuntimeCodeHash,
     expectedImmutableReferencesCommitment,

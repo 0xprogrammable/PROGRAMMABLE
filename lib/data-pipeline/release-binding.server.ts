@@ -38,6 +38,7 @@ export type DataPipelineReleaseBinding = {
   confirmations: 12;
   envio: {
     deploymentLabel: string;
+    graphqlEndpoint: string;
     schemaVersion: "1";
     sourceCommit: string;
     configSha256: HexHash;
@@ -146,6 +147,7 @@ export function parseDataPipelineReleaseBinding(
     !isRecord(value.envio) ||
     !hasOnlyKeys(value.envio, [
       "deploymentLabel",
+      "graphqlEndpoint",
       "schemaVersion",
       "sourceCommit",
       "configSha256",
@@ -298,6 +300,11 @@ export function parseDataPipelineReleaseBinding(
         value.envio.deploymentLabel,
         /^[a-z0-9][a-z0-9-]*$/,
         128,
+      ),
+      graphqlEndpoint: boundedString(
+        value.envio.graphqlEndpoint,
+        /^https:\/\/indexer\.hyperindex\.xyz\/[a-z0-9]{7,64}\/v1\/graphql$/,
+        256,
       ),
       schemaVersion: "1",
       sourceCommit: sourceCommit(value.envio.sourceCommit),

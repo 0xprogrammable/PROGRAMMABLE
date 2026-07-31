@@ -17,6 +17,8 @@ describe("data pipeline release binding", () => {
       startBlock: 25_624_130,
       envio: {
         deploymentLabel: "production-1e7c381",
+        graphqlEndpoint:
+          "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
         schemaVersion: "1",
         sourceCommit: "1e7c38125714e2f485f8be0c665b12e7d7fb1809",
         eventCount: 51,
@@ -85,6 +87,13 @@ describe("data pipeline release binding", () => {
           : source,
       ),
     };
+    const unreviewedEndpoint = {
+      ...valid,
+      envio: {
+        ...valid.envio,
+        graphqlEndpoint: "https://example.com/graphql",
+      },
+    };
 
     expect(() => parseDataPipelineReleaseBinding(duplicateSource)).toThrow(
       "Invalid data pipeline release binding",
@@ -99,6 +108,9 @@ describe("data pipeline release binding", () => {
       parseDataPipelineReleaseBinding(zeroArtifactCommitment),
     ).toThrow("Invalid data pipeline release binding");
     expect(() => parseDataPipelineReleaseBinding(zeroRuntimeCommitment)).toThrow(
+      "Invalid data pipeline release binding",
+    );
+    expect(() => parseDataPipelineReleaseBinding(unreviewedEndpoint)).toThrow(
       "Invalid data pipeline release binding",
     );
   });
