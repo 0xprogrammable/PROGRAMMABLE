@@ -76,6 +76,64 @@ describe("data-pipeline configuration", () => {
     ).toThrowError(DataPipelineError);
   });
 
+  it.each(["NODE_ENV", "VERCEL_ENV"] as const)(
+    "rejects disabled parity when %s marks a production runtime",
+    (productionMarker) => {
+      expect(() =>
+        loadDataPipelineConfig({
+          [productionMarker]: "production",
+          INDEXED_READ_REQUIRE_PARITY_ENABLED: "false",
+        }),
+      ).toThrowError(DataPipelineError);
+    },
+  );
+
+  it("allows operators to disable parity outside production", () => {
+    const config = loadDataPipelineConfig({
+      NODE_ENV: "development",
+      VERCEL_ENV: "preview",
+      INDEXED_READ_REQUIRE_PARITY_ENABLED: "false",
+    });
+
+    expect(config.flags.INDEXED_READ_REQUIRE_PARITY_ENABLED).toBe(false);
+  });
+
+  it("accepts only the official Graph gateway base in production", () => {
+    expect(
+      loadDataPipelineConfig({
+        NODE_ENV: "production",
+        PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL:
+          "https://gateway.thegraph.com/",
+      }).uniswap.gatewayBaseUrl,
+    ).toBe("https://gateway.thegraph.com");
+
+    for (const gatewayBaseUrl of [
+      "https://graph-proxy.example",
+      "https://gateway.thegraph.com.evil.example",
+      "https://gateway.thegraph.com/custom-proxy",
+    ]) {
+      expect(() =>
+        loadDataPipelineConfig({
+          VERCEL_ENV: "production",
+          PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL: gatewayBaseUrl,
+        }),
+      ).toThrowError(DataPipelineError);
+    }
+  });
+
+  it("retains custom HTTPS Graph gateways outside production", () => {
+    const config = loadDataPipelineConfig({
+      NODE_ENV: "test",
+      VERCEL_ENV: "preview",
+      PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL:
+        "https://graph-proxy.example/custom-base/",
+    });
+
+    expect(config.uniswap.gatewayBaseUrl).toBe(
+      "https://graph-proxy.example/custom-base",
+    );
+  });
+
   it("rejects browser-prefixed credential paths without echoing a secret", () => {
     const secret = "do-not-echo-this-token";
     let thrown: unknown;

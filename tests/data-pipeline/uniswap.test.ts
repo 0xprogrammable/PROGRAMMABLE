@@ -124,6 +124,12 @@ function candle(id: string, time: number) {
   };
 }
 
+function dayCandle(id: string, time: number) {
+  const value: Record<string, unknown> = { ...candle(id, time) };
+  delete value.periodStartUnix;
+  return { ...value, date: time };
+}
+
 describe("pinned Uniswap v4 analytics adapter", () => {
   it("uses the fixed subgraph and exact block Pool contract", async () => {
     const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
@@ -354,6 +360,263 @@ describe("pinned Uniswap v4 analytics adapter", () => {
     expect(queries[0]).toContain("periodStartUnix_lt: $toExclusive");
     expect(queries[1]).toContain("date_lt: $toExclusive");
     expect(queries.every((query) => query.includes("feesUSD"))).toBe(true);
+  });
+
+  it("splits swap ranges into contiguous six-hour windows before paginating each window", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as {
+        variables: Record<string, unknown>;
+      };
+      requests.push(request.variables);
+
+      if (requests.length === 1) {
+        return json({
+          data: {
+            _meta: meta(),
+            swaps: Array.from({ length: 250 }, (_, index) =>
+              swap(index, 100),
+            ),
+          },
+        });
+      }
+      if (requests.length === 2) {
+        return json({ data: { _meta: meta(), swaps: [] } });
+      }
+      return json({ data: { _meta: meta(), swaps: [swap(300, 21_700)] } });
+    });
+    const client = createUniswapAnalyticsClient({
+      gatewayBaseUrl: "https://gateway.thegraph.com",
+      apiKey: "graph-secret",
+      fetcher,
+    });
+
+    const result = await client.readSwaps({
+      poolKey: POOL_KEY,
+      block: BLOCK,
+      from: "100",
+      toExclusive: "21705",
+    });
+
+    expect(result).toMatchObject({ status: "ready" });
+    if (result.status !== "ready") throw new Error("expected ready");
+    expect(result.data).toHaveLength(251);
+    expect(requests).toEqual([
+      {
+        poolId: POOL_ID,
+        blockHash: BLOCK.hash,
+        from: "100",
+        toExclusive: "21700",
+        cursor: "",
+      },
+      {
+        poolId: POOL_ID,
+        blockHash: BLOCK.hash,
+        from: "100",
+        toExclusive: "21700",
+        cursor: "swap-0249",
+      },
+      {
+        poolId: POOL_ID,
+        blockHash: BLOCK.hash,
+        from: "21700",
+        toExclusive: "21705",
+        cursor: "",
+      },
+    ]);
+  });
+
+  it("splits hour and day ranges at deterministic contiguous half-open boundaries", async () => {
+    const hourVariables: Array<Record<string, unknown>> = [];
+    const dayVariables: Array<Record<string, unknown>> = [];
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as {
+        query: string;
+        variables: Record<string, unknown>;
+      };
+      if (request.query.includes("PoolHourSeries")) {
+        hourVariables.push(request.variables);
+        if (hourVariables.length === 1) {
+          return json({
+            data: {
+              _meta: meta(),
+              poolHourDatas: [candle("hour-a", 102), candle("hour-z", 101)],
+            },
+          });
+        }
+        return json({
+          data: {
+            _meta: meta(),
+            poolHourDatas: [candle("hour-b", 2_678_500)],
+          },
+        });
+      }
+
+      dayVariables.push(request.variables);
+      if (dayVariables.length === 1) {
+        return json({
+          data: {
+            _meta: meta(),
+            poolDayDatas: [dayCandle("day-a", 102), dayCandle("day-z", 101)],
+          },
+        });
+      }
+      return json({
+        data: {
+          _meta: meta(),
+          poolDayDatas: [dayCandle("day-b", 31_622_500)],
+        },
+      });
+    });
+    const client = createUniswapAnalyticsClient({
+      gatewayBaseUrl: "https://gateway.thegraph.com",
+      apiKey: "graph-secret",
+      fetcher,
+    });
+
+    const hours = await client.readHourSeries({
+      poolKey: POOL_KEY,
+      block: BLOCK,
+      from: 100,
+      toExclusive: 2_678_505,
+    });
+    const days = await client.readDaySeries({
+      poolKey: POOL_KEY,
+      block: BLOCK,
+      from: 100,
+      toExclusive: 31_622_505,
+    });
+
+    expect(hours).toMatchObject({ status: "ready" });
+    expect(days).toMatchObject({ status: "ready" });
+    if (hours.status !== "ready" || days.status !== "ready") {
+      throw new Error("expected ready");
+    }
+    expect(hours.data.map((item) => item.id)).toEqual([
+      "hour-z",
+      "hour-a",
+      "hour-b",
+    ]);
+    expect(days.data.map((item) => item.id)).toEqual([
+      "day-z",
+      "day-a",
+      "day-b",
+    ]);
+    expect(hourVariables).toEqual([
+      {
+        poolId: POOL_ID,
+        blockHash: BLOCK.hash,
+        from: 100,
+        toExclusive: 2_678_500,
+        cursor: "",
+      },
+      {
+        poolId: POOL_ID,
+        blockHash: BLOCK.hash,
+        from: 2_678_500,
+        toExclusive: 2_678_505,
+        cursor: "",
+      },
+    ]);
+    expect(dayVariables).toEqual([
+      {
+        poolId: POOL_ID,
+        blockHash: BLOCK.hash,
+        from: 100,
+        toExclusive: 31_622_500,
+        cursor: "",
+      },
+      {
+        poolId: POOL_ID,
+        blockHash: BLOCK.hash,
+        from: 31_622_500,
+        toExclusive: 31_622_505,
+        cursor: "",
+      },
+    ]);
+  });
+
+  it("sorts swaps deterministically after combining all split windows", async () => {
+    let call = 0;
+    const client = createUniswapAnalyticsClient({
+      gatewayBaseUrl: "https://gateway.thegraph.com",
+      apiKey: "graph-secret",
+      fetcher: async () => {
+        const fixtures = [swap(3, 100), swap(2, 21_700), swap(1, 43_300)];
+        const entity = fixtures[call];
+        call += 1;
+        return json({ data: { _meta: meta(), swaps: [entity] } });
+      },
+    });
+
+    const result = await client.readSwaps({
+      poolKey: POOL_KEY,
+      block: BLOCK,
+      from: "100",
+      toExclusive: "43305",
+    });
+
+    expect(result).toMatchObject({ status: "ready" });
+    if (result.status !== "ready") throw new Error("expected ready");
+    expect(result.data.map((item) => item.id)).toEqual([
+      "swap-0001",
+      "swap-0002",
+      "swap-0003",
+    ]);
+  });
+
+  it("enforces one global page budget across split windows", async () => {
+    const fetcher = vi.fn(async () =>
+      json({ data: { _meta: meta(), swaps: [] } }),
+    );
+    const client = createUniswapAnalyticsClient({
+      gatewayBaseUrl: "https://gateway.thegraph.com",
+      apiKey: "graph-secret",
+      limits: { maximumPages: 2, maximumEntities: 500 },
+      fetcher,
+    });
+
+    await expect(
+      client.readSwaps({
+        poolKey: POOL_KEY,
+        block: BLOCK,
+        from: "100",
+        toExclusive: "43305",
+      }),
+    ).resolves.toEqual({ status: "pending", reason: "response_oversize" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("enforces one global entity budget across split windows", async () => {
+    let call = 0;
+    const fetcher = vi.fn(async () => {
+      call += 1;
+      return json({
+        data: {
+          _meta: meta(),
+          swaps:
+            call === 1
+              ? [swap(1, 100), swap(2, 101)]
+              : [swap(3, 21_700)],
+        },
+      });
+    });
+    const client = createUniswapAnalyticsClient({
+      gatewayBaseUrl: "https://gateway.thegraph.com",
+      apiKey: "graph-secret",
+      limits: { maximumPages: 4, maximumEntities: 2 },
+      fetcher,
+    });
+
+    await expect(
+      client.readSwaps({
+        poolKey: POOL_KEY,
+        block: BLOCK,
+        from: "100",
+        toExclusive: "21705",
+      }),
+    ).resolves.toEqual({ status: "pending", reason: "response_oversize" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("returns pending for GraphQL, body, and bounded-page failures", async () => {

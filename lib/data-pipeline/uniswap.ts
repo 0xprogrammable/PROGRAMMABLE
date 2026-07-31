@@ -27,6 +27,13 @@ export const OFFICIAL_V4_SUBGRAPH_ID =
 export const OFFICIAL_V4_SUBGRAPH_DEPLOYMENT =
   "QmZsgJLiLQKpb8hxTmQ5LWyrFVvfWzVaL4WK8dfFBn7EeK";
 
+// Conservative query spans keep each fixed subgraph request bounded before
+// entity pagination: six hours of swaps, 31 days of hourly candles, and one
+// leap year of daily candles. Every split remains half-open: [from, to).
+export const UNISWAP_SWAP_WINDOW_SECONDS = 21_600n;
+export const UNISWAP_HOUR_WINDOW_SECONDS = 2_678_400;
+export const UNISWAP_DAY_WINDOW_SECONDS = 31_622_400;
+
 const POOL_QUERY = `
   query ProgrammablePoolSnapshot($poolId: ID!, $block: Int!) {
     _meta(block: { number: $block }) {
@@ -791,6 +798,37 @@ function windowInt(from: number, toExclusive: number) {
   return { from, toExclusive };
 }
 
+function* splitBigIntWindow(
+  window: ReturnType<typeof windowBigInt>,
+  maximumSpan: bigint,
+) {
+  let from = window.fromBigInt;
+  while (from < window.toBigInt) {
+    const candidate = from + maximumSpan;
+    const toExclusive =
+      candidate < window.toBigInt ? candidate : window.toBigInt;
+    yield {
+      from: from.toString(),
+      toExclusive: toExclusive.toString(),
+      fromBigInt: from,
+      toBigInt: toExclusive,
+    };
+    from = toExclusive;
+  }
+}
+
+function* splitIntWindow(
+  window: ReturnType<typeof windowInt>,
+  maximumSpan: number,
+) {
+  let from = window.from;
+  while (from < window.toExclusive) {
+    const toExclusive = Math.min(from + maximumSpan, window.toExclusive);
+    yield { from, toExclusive };
+    from = toExclusive;
+  }
+}
+
 function pending(error: unknown): { status: "pending"; reason: DataPipelineErrorCode } {
   if (error instanceof DataPipelineError) {
     return { status: "pending", reason: error.code };
@@ -858,49 +896,72 @@ export function createUniswapAnalyticsClient(options: {
   }
 
   async function paginate<T>(input: {
-    key: CanonicalPoolKey;
     block: ReturnType<typeof canonicalBlock>;
     query: string;
     entityKey: "swaps" | "poolHourDatas" | "poolDayDatas";
-    variables: Record<string, unknown>;
-    parse: (value: unknown) => T;
+    windows: Iterable<{
+      variables: Record<string, unknown>;
+      parse: (value: unknown) => T;
+    }>;
     sort?: (left: T, right: T) => number;
   }) {
     return execute(async () => {
       const collected: T[] = [];
-      let cursor = "";
       let provenance: Meta | undefined;
-      for (let page = 0; page < maximumPages; page += 1) {
-        const response = await request({
-          query: input.query,
-          variables: { ...input.variables, cursor },
-        });
-        const parsed = responseData(response, input.entityKey);
-        const currentMeta = parseMeta(parsed.meta, input.block);
-        if (
-          provenance !== undefined &&
-          (provenance.blockNumber !== currentMeta.blockNumber ||
-            provenance.blockHash !== currentMeta.blockHash)
-        ) {
-          throw validationError("uniswap", "page-metadata");
-        }
-        provenance = currentMeta;
-        if (!Array.isArray(parsed.entity) || parsed.entity.length > 250) {
-          throw validationError("uniswap", "page");
-        }
-        let previousId = cursor;
-        for (const entity of parsed.entity) {
-          const item = input.parse(entity);
-          const itemId =
-            isRecord(entity) && typeof entity.id === "string"
-              ? entity.id
-              : "";
-          if (itemId <= previousId) {
-            throw validationError("uniswap", "page-order");
+      let pagesConsumed = 0;
+      for (const window of input.windows) {
+        let cursor = "";
+        while (true) {
+          if (pagesConsumed >= maximumPages) {
+            throw dataPipelineError({
+              dependency: "uniswap",
+              code: "response_oversize",
+              retryable: true,
+              countsTowardCircuit: true,
+            });
           }
-          previousId = itemId;
-          collected.push(item);
-          if (collected.length > maximumEntities) {
+          pagesConsumed += 1;
+          const response = await request({
+            query: input.query,
+            variables: { ...window.variables, cursor },
+          });
+          const parsed = responseData(response, input.entityKey);
+          const currentMeta = parseMeta(parsed.meta, input.block);
+          if (
+            provenance !== undefined &&
+            (provenance.blockNumber !== currentMeta.blockNumber ||
+              provenance.blockHash !== currentMeta.blockHash)
+          ) {
+            throw validationError("uniswap", "page-metadata");
+          }
+          provenance = currentMeta;
+          if (!Array.isArray(parsed.entity) || parsed.entity.length > 250) {
+            throw validationError("uniswap", "page");
+          }
+          let previousId = cursor;
+          for (const entity of parsed.entity) {
+            const item = window.parse(entity);
+            const itemId =
+              isRecord(entity) && typeof entity.id === "string"
+                ? entity.id
+                : "";
+            if (itemId <= previousId) {
+              throw validationError("uniswap", "page-order");
+            }
+            previousId = itemId;
+            collected.push(item);
+            if (collected.length > maximumEntities) {
+              throw dataPipelineError({
+                dependency: "uniswap",
+                code: "response_oversize",
+                retryable: true,
+                countsTowardCircuit: true,
+              });
+            }
+          }
+          if (parsed.entity.length < 250) break;
+          cursor = previousId;
+          if (collected.length >= maximumEntities) {
             throw dataPipelineError({
               dependency: "uniswap",
               code: "response_oversize",
@@ -909,30 +970,10 @@ export function createUniswapAnalyticsClient(options: {
             });
           }
         }
-        if (parsed.entity.length < 250) {
-          if (!provenance) throw validationError("uniswap", "page-metadata");
-          if (input.sort) collected.sort(input.sort);
-          return { data: collected, provenance };
-        }
-        cursor = previousId;
-        if (
-          page + 1 >= maximumPages ||
-          collected.length >= maximumEntities
-        ) {
-          throw dataPipelineError({
-            dependency: "uniswap",
-            code: "response_oversize",
-            retryable: true,
-            countsTowardCircuit: true,
-          });
-        }
       }
-      throw dataPipelineError({
-        dependency: "uniswap",
-        code: "response_oversize",
-        retryable: true,
-        countsTowardCircuit: true,
-      });
+      if (!provenance) throw validationError("uniswap", "page-metadata");
+      if (input.sort) collected.sort(input.sort);
+      return { data: collected, provenance };
     });
   }
 
@@ -972,24 +1013,28 @@ export function createUniswapAnalyticsClient(options: {
       const key = canonicalPoolKey(input.poolKey);
       const block = canonicalBlock(input.block);
       const window = windowBigInt(input.from, input.toExclusive);
+      function* windows() {
+        for (const split of splitBigIntWindow(
+          window,
+          UNISWAP_SWAP_WINDOW_SECONDS,
+        )) {
+          yield {
+            variables: {
+              poolId: key.poolId,
+              blockHash: block.hash,
+              from: split.from,
+              toExclusive: split.toExclusive,
+            },
+            parse: (value: unknown) =>
+              parseSwap(value, key, split.fromBigInt, split.toBigInt),
+          };
+        }
+      }
       return paginate({
-        key,
         block,
         query: SWAP_QUERY,
         entityKey: "swaps",
-        variables: {
-          poolId: key.poolId,
-          blockHash: block.hash,
-          from: window.from,
-          toExclusive: window.toExclusive,
-        },
-        parse: (value) =>
-          parseSwap(
-            value,
-            key,
-            window.fromBigInt,
-            window.toBigInt,
-          ),
+        windows: windows(),
         sort: (left, right) => {
           const blockOrder =
             BigInt(left.blockNumber) - BigInt(right.blockNumber);
@@ -1016,24 +1061,39 @@ export function createUniswapAnalyticsClient(options: {
       const key = canonicalPoolKey(input.poolKey);
       const block = canonicalBlock(input.block);
       const window = windowInt(input.from, input.toExclusive);
+      function* windows() {
+        for (const split of splitIntWindow(
+          window,
+          UNISWAP_HOUR_WINDOW_SECONDS,
+        )) {
+          yield {
+            variables: {
+              poolId: key.poolId,
+              blockHash: block.hash,
+              ...split,
+            },
+            parse: (value: unknown) =>
+              parseCandle(
+                value,
+                key,
+                "periodStartUnix",
+                split.from,
+                split.toExclusive,
+              ),
+          };
+        }
+      }
       return paginate({
-        key,
         block,
         query: HOUR_QUERY,
         entityKey: "poolHourDatas",
-        variables: {
-          poolId: key.poolId,
-          blockHash: block.hash,
-          ...window,
+        windows: windows(),
+        sort: (left, right) => {
+          if (left.periodStart !== right.periodStart) {
+            return left.periodStart - right.periodStart;
+          }
+          return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
         },
-        parse: (value) =>
-          parseCandle(
-            value,
-            key,
-            "periodStartUnix",
-            window.from,
-            window.toExclusive,
-          ),
       });
     },
 
@@ -1046,24 +1106,39 @@ export function createUniswapAnalyticsClient(options: {
       const key = canonicalPoolKey(input.poolKey);
       const block = canonicalBlock(input.block);
       const window = windowInt(input.from, input.toExclusive);
+      function* windows() {
+        for (const split of splitIntWindow(
+          window,
+          UNISWAP_DAY_WINDOW_SECONDS,
+        )) {
+          yield {
+            variables: {
+              poolId: key.poolId,
+              blockHash: block.hash,
+              ...split,
+            },
+            parse: (value: unknown) =>
+              parseCandle(
+                value,
+                key,
+                "date",
+                split.from,
+                split.toExclusive,
+              ),
+          };
+        }
+      }
       return paginate({
-        key,
         block,
         query: DAY_QUERY,
         entityKey: "poolDayDatas",
-        variables: {
-          poolId: key.poolId,
-          blockHash: block.hash,
-          ...window,
+        windows: windows(),
+        sort: (left, right) => {
+          if (left.periodStart !== right.periodStart) {
+            return left.periodStart - right.periodStart;
+          }
+          return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
         },
-        parse: (value) =>
-          parseCandle(
-            value,
-            key,
-            "date",
-            window.from,
-            window.toExclusive,
-          ),
       });
     },
 

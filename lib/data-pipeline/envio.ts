@@ -18,6 +18,7 @@ import {
   invalidInput,
   validationError,
 } from "./errors";
+import { decodeManifestEvent } from "./event-manifest";
 import {
   boundedJsonRequest,
   type DataPipelineFetcher,
@@ -450,6 +451,18 @@ function parseCandidate(
   if (!isRecord(decodedPayload)) {
     throw validationError("envio", "decoded-payload");
   }
+  let locallyDecodedPayload: Record<string, unknown>;
+  try {
+    locallyDecodedPayload = decodeManifestEvent({
+      contractName,
+      eventName,
+      topics: orderedTopics,
+      data: rawData,
+      providerPayload: decodedPayload,
+    });
+  } catch {
+    throw validationError("envio", "event-abi");
+  }
 
   return {
     candidateId: value.id,
@@ -466,7 +479,7 @@ function parseCandidate(
     releaseHint: { model, releaseVersion },
     orderedTopics,
     rawData,
-    decodedPayload,
+    decodedPayload: locallyDecodedPayload,
     payloadHash,
   };
 }
@@ -515,6 +528,20 @@ function parseProgress(value: unknown, requiredBlock: string): EnvioProgress {
     CANDIDATE_PATTERN,
     "progress-occurrence",
   );
+  const occurrenceMatch = CANDIDATE_PATTERN.exec(progressOccurrenceId);
+  if (!occurrenceMatch) {
+    throw validationError("envio", "progress-occurrence");
+  }
+  const progressBlockHash = canonicalBytes32(value.progressBlockHash);
+  const progressTransactionHash = canonicalBytes32(
+    value.progressTransactionHash,
+  );
+  if (
+    occurrenceMatch[1] !== progressBlockHash ||
+    occurrenceMatch[2] !== progressTransactionHash
+  ) {
+    throw validationError("envio", "progress-occurrence-identity");
+  }
   const progress = BigInt(progressBlock);
   const required = BigInt(canonicalRequired);
   return {
@@ -522,11 +549,9 @@ function parseProgress(value: unknown, requiredBlock: string): EnvioProgress {
     deployment: value.deployment,
     schemaVersion: "1",
     progressBlock,
-    progressBlockHash: canonicalBytes32(value.progressBlockHash),
+    progressBlockHash,
     progressTimestamp: parseNonnegativeIntegerText(value.progressTimestamp),
-    progressTransactionHash: canonicalBytes32(
-      value.progressTransactionHash,
-    ),
+    progressTransactionHash,
     progressOccurrenceId,
     requiredBlock: canonicalRequired,
     lagBlocks: (required > progress ? required - progress : 0n).toString(),

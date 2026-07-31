@@ -23,6 +23,9 @@ export type DataPipelineFlagName = RouteFlagName | ControlFlagName;
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
+const OFFICIAL_UNISWAP_GRAPH_GATEWAY_BASE_URL =
+  "https://gateway.thegraph.com";
+
 const BROWSER_FORBIDDEN_NAMES = [
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN",
@@ -184,6 +187,22 @@ export function loadDataPipelineConfig(
     ),
   } satisfies Record<DataPipelineFlagName, boolean>;
 
+  const isProduction =
+    env.NODE_ENV === "production" || env.VERCEL_ENV === "production";
+  if (isProduction && !flags.INDEXED_READ_REQUIRE_PARITY_ENABLED) {
+    invalidConfig();
+  }
+
+  const uniswapGraphGatewayBaseUrl =
+    parseHttpsUrl(env.PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL) ??
+    OFFICIAL_UNISWAP_GRAPH_GATEWAY_BASE_URL;
+  if (
+    isProduction &&
+    uniswapGraphGatewayBaseUrl !== OFFICIAL_UNISWAP_GRAPH_GATEWAY_BASE_URL
+  ) {
+    invalidConfig();
+  }
+
   return Object.freeze({
     flags: Object.freeze(flags),
     envio: Object.freeze({
@@ -228,9 +247,7 @@ export function loadDataPipelineConfig(
       ),
     }),
     uniswap: Object.freeze({
-      gatewayBaseUrl:
-        parseHttpsUrl(env.PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL) ??
-        "https://gateway.thegraph.com",
+      gatewayBaseUrl: uniswapGraphGatewayBaseUrl,
       apiKey: optionalSecret(env.PROGRAMMABLE_UNISWAP_GRAPH_API_KEY),
       timeoutMs: 2_500 as const,
       maximumBodyBytes: 128 * 1024,
