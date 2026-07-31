@@ -1,8 +1,7 @@
 .page {
-  max-width: 1180px;
+  max-width: 1120px;
   min-height: calc(100svh - var(--header-height));
-  padding-bottom: 48px;
-  padding-top: 24px;
+  padding-block: 20px 56px;
 }
 
 .hero,
@@ -14,7 +13,7 @@
   border: 1px solid var(--panel-border-soft);
   box-shadow:
     0 1px 0 var(--card-shadow),
-    0 22px 64px var(--card-shadow-soft);
+    0 20px 56px var(--card-shadow-soft);
 }
 
 .hero {
@@ -25,10 +24,10 @@
   border-radius: 0;
   box-shadow: none;
   display: grid;
-  gap: 18px;
+  gap: 16px;
   grid-template-columns: auto minmax(0, 1fr);
-  min-height: 104px;
-  padding: 12px 8px;
+  min-height: 90px;
+  padding: 10px 8px;
 }
 
 .heroEditing {
@@ -36,65 +35,72 @@
   backdrop-filter: blur(22px) saturate(1.08);
   background: color-mix(in srgb, var(--glass-96) 94%, transparent);
   border: 1px solid var(--panel-border-soft);
-  border-radius: 26px;
+  border-radius: 22px;
   box-shadow:
     0 1px 0 var(--card-shadow),
-    0 22px 64px var(--card-shadow-soft);
-  padding: 20px 24px;
+    0 20px 56px var(--card-shadow-soft);
+  padding: 18px 20px;
 }
 
 .avatar {
   align-items: center;
   background: var(--avatar-background);
   border: 1px solid color-mix(in srgb, var(--glass-94) 88%, var(--border));
-  border-radius: 20px;
+  border-radius: 18px;
   color: var(--accent-strong);
   display: flex;
   flex: none;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 20px;
-  font-weight: 500;
-  height: 70px;
+  font-size: 19px;
+  font-weight: 600;
+  height: 64px;
   justify-content: center;
   overflow: hidden;
   position: relative;
-  width: 70px;
+  width: 64px;
 }
 
 .avatar img {
   object-fit: cover;
 }
 
-.heroCopy {
+.heroCopy,
+.nameRow,
+.tokenCopy,
+.tokenNameRow {
   min-width: 0;
 }
 
 .nameRow {
   align-items: center;
   display: flex;
-  gap: 12px;
-  min-width: 0;
+  gap: 10px;
 }
 
 .nameRow h1 {
-  font-size: clamp(32px, 3vw, 40px);
-  font-weight: 570;
+  font-size: clamp(30px, 3vw, 37px);
+  font-weight: 590;
   letter-spacing: -0.045em;
-  line-height: 1.08;
-  min-width: 0;
+  line-height: 1.06;
   overflow: hidden;
-  padding-bottom: 0.06em;
+  padding-block-end: 0.05em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.address,
+.tokenAddress,
+.payoutRow a,
+.rewardSettingHeader p {
+  font-family: var(--font-plex-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 .address {
   color: var(--muted);
-  font-family: var(--font-plex-mono), monospace;
   font-size: 12px;
-  font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
-  margin-top: 9px;
+  margin-block-start: 7px;
 }
 
 .editButton,
@@ -102,11 +108,12 @@
 .editAction,
 .claimButton,
 .secondaryAction,
-.retryButton {
+.retryButton,
+.emptyAction {
   align-items: center;
   border: 1px solid var(--border);
   display: inline-flex;
-  font-weight: 620;
+  font-weight: 650;
   justify-content: center;
 }
 
@@ -116,22 +123,22 @@
   color: var(--text-soft);
   flex: none;
   font-size: 12px;
-  min-height: 42px;
-  padding: 0 14px;
+  min-height: 44px;
+  padding-inline: 14px;
 }
 
 .editForm {
-  border-top: 1px solid var(--border);
-  margin-top: 17px;
+  border-block-start: 1px solid var(--border);
+  margin-block-start: 15px;
   max-width: 760px;
-  padding-top: 16px;
+  padding-block-start: 15px;
 }
 
 .editGrid {
   align-items: end;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(200px, 0.9fr) minmax(330px, 1.35fr);
+  grid-template-columns: minmax(190px, 0.85fr) minmax(330px, 1.4fr);
 }
 
 .imageControl,
@@ -143,7 +150,7 @@
 .fieldLabel {
   color: var(--text-soft);
   font-size: 12px;
-  font-weight: 620;
+  font-weight: 650;
 }
 
 .imageActions,
@@ -159,7 +166,7 @@
   color: var(--text-soft);
   font-size: 12px;
   min-height: 44px;
-  padding: 0 14px;
+  padding-inline: 14px;
 }
 
 .usernameRow {
@@ -173,10 +180,11 @@
   border: 1px solid var(--border-strong);
   border-radius: 12px;
   color: var(--text);
+  font-size: 16px;
   height: 44px;
   min-width: 0;
   outline: 0;
-  padding: 0 13px;
+  padding-inline: 13px;
 }
 
 .saveAction {
@@ -188,8 +196,8 @@
 .formHelp {
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.45;
-  margin-top: 7px;
+  line-height: 1.5;
+  margin-block-start: 7px;
 }
 
 .formError {
@@ -198,38 +206,38 @@
 
 .connectCard {
   align-items: center;
-  border-radius: 28px;
+  border-radius: 26px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  margin: clamp(42px, 10svh, 92px) auto 0;
-  max-width: 580px;
-  min-height: 340px;
-  padding: 42px 32px;
+  margin: clamp(38px, 9svh, 82px) auto 0;
+  max-width: 560px;
+  min-height: 326px;
+  padding: 40px 30px;
   text-align: center;
 }
 
 .connectMark {
   filter: drop-shadow(0 14px 30px rgba(142, 68, 109, 0.1));
-  height: 82px;
-  margin-bottom: 24px;
+  height: 78px;
+  margin-block-end: 22px;
   object-fit: contain;
-  width: 82px;
+  width: 78px;
 }
 
 .connectCard h1 {
-  font-size: clamp(38px, 4vw, 48px);
-  font-weight: 580;
+  font-size: clamp(36px, 4vw, 46px);
+  font-weight: 590;
   letter-spacing: -0.048em;
   line-height: 1;
 }
 
 .connectCard p {
   color: var(--text-soft);
-  font-size: 15.5px;
+  font-size: 15px;
   line-height: 1.5;
-  margin-top: 13px;
-  max-width: 400px;
+  margin-block-start: 12px;
+  max-width: 380px;
 }
 
 .connectButton {
@@ -242,26 +250,26 @@
   font-size: 14px;
   font-weight: 680;
   justify-content: center;
-  margin-top: 24px;
+  margin-block-start: 22px;
   min-height: 48px;
-  padding: 0 20px;
+  padding-inline: 20px;
 }
 
 .portfolio {
-  border-radius: 28px;
-  margin-top: 14px;
+  border-radius: 24px;
+  margin-block-start: 10px;
   min-width: 0;
   overflow: hidden;
 }
 
 .portfolioHeader {
   align-items: center;
-  border-bottom: 1px solid var(--border);
+  border-block-end: 1px solid var(--border);
   display: grid;
-  gap: 20px 36px;
+  gap: 16px 28px;
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 124px;
-  padding: 24px 28px 22px;
+  min-height: 100px;
+  padding: 20px 24px 18px;
 }
 
 .portfolioTitle {
@@ -269,82 +277,82 @@
 }
 
 .portfolioTitle h2 {
-  font-size: 32px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 610;
   letter-spacing: -0.04em;
   line-height: 1;
 }
 
 .portfolioStats {
-  align-items: center;
+  align-items: stretch;
   display: flex;
   flex: none;
-  gap: 8px;
 }
 
 .portfolioStat {
+  align-content: center;
   display: grid;
-  gap: 5px;
-  min-width: 96px;
-  padding: 11px 18px;
+  gap: 4px;
+  min-width: 82px;
+  padding-block: 2px;
+  padding-inline: 18px;
 }
 
 .portfolioStat + .portfolioStat {
-  border-left: 0;
+  border-inline-start: 1px solid var(--border);
 }
 
 .portfolioStat:last-child {
-  padding-right: 18px;
+  padding-inline-end: 0;
 }
 
 .portfolioStat span {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 560;
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .portfolioStat strong {
   color: var(--text);
-  font-size: 22px;
+  font-size: 20px;
   font-variant-numeric: tabular-nums;
-  font-weight: 620;
+  font-weight: 640;
   letter-spacing: -0.025em;
   line-height: 1.1;
   white-space: nowrap;
+}
+
+.portfolioTotal {
+  min-width: 176px;
 }
 
 .portfolioTotal strong {
   color: var(--accent-strong);
 }
 
-.portfolioTotal {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
-  border-radius: 16px;
-  min-width: 190px;
-}
-
 .portfolioTotal small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;
 }
 
 .rewardDistribution {
-  background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 82%, transparent);
   border-radius: 999px;
   display: flex;
   gap: 2px;
   grid-column: 1 / -1;
-  height: 5px;
+  height: 4px;
   overflow: hidden;
   width: 100%;
 }
 
 .rewardDistribution span {
   background: var(--accent);
-  min-width: 5px;
+  min-width: 4px;
 }
 
 .rewardDistribution span:nth-child(3n + 2) {
@@ -358,7 +366,7 @@
 .sourceWarning {
   align-items: center;
   background: var(--warning-background);
-  border-bottom: 1px solid var(--warning-border);
+  border-block-end: 1px solid var(--warning-border);
   color: var(--warning-text);
   display: flex;
   font-size: 12px;
@@ -374,7 +382,8 @@
   color: inherit;
   font-size: 12px;
   font-weight: 680;
-  min-height: 32px;
+  min-height: 36px;
+  padding-inline: 6px;
 }
 
 .ledger {
@@ -385,39 +394,39 @@
 .tokenMain {
   display: grid;
   grid-template-columns:
-    minmax(310px, 1.72fr)
-    minmax(128px, 0.7fr)
-    minmax(168px, 0.92fr)
-    minmax(178px, auto);
+    minmax(300px, 1.7fr)
+    minmax(118px, 0.66fr)
+    minmax(158px, 0.86fr)
+    minmax(182px, auto);
 }
 
 .ledgerHeader {
   align-items: center;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 620;
+  font-weight: 640;
   letter-spacing: 0.045em;
-  min-height: 46px;
-  padding: 0 28px;
+  min-height: 40px;
+  padding-inline: 24px;
   text-transform: uppercase;
 }
 
 .ledgerHeader span:nth-child(2),
 .ledgerHeader span:nth-child(3) {
-  padding-left: 20px;
+  padding-inline-start: 18px;
 }
 
 .list {
-  border-top: 1px solid var(--border);
+  border-block-start: 1px solid var(--border);
   display: grid;
 }
 
 .tokenRow {
   align-self: stretch;
   background: color-mix(in srgb, var(--glass-82) 88%, transparent);
-  border-bottom: 1px solid var(--border);
+  border-block-end: 1px solid var(--border);
   min-width: 0;
-  padding: 0 28px;
+  padding-inline: 24px;
   transform: translate3d(0, 0, 0);
   transition:
     background-color 170ms ease,
@@ -426,22 +435,22 @@
 }
 
 .tokenRow:last-child {
-  border-bottom: 0;
+  border-block-end: 0;
 }
 
 .tokenRowClaimable {
   background:
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--accent-soft) 72%, transparent),
-      transparent 44%
+      color-mix(in srgb, var(--accent-soft) 68%, transparent),
+      transparent 42%
     ),
     color-mix(in srgb, var(--glass-82) 90%, transparent);
 }
 
 .tokenMain {
   align-items: center;
-  min-height: 106px;
+  min-height: 96px;
   min-width: 0;
 }
 
@@ -449,20 +458,20 @@
   align-items: center;
   color: var(--text);
   display: flex;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
-  padding-right: 24px;
+  padding-inline-end: 20px;
 }
 
 .tokenArt {
   background: var(--surface-soft);
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 18px;
+  border-radius: 16px;
   flex: none;
-  height: 62px;
+  height: 58px;
   overflow: hidden;
   position: relative;
-  width: 62px;
+  width: 58px;
 }
 
 .tokenArt img {
@@ -472,19 +481,17 @@
 .tokenCopy {
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 
 .tokenNameRow {
   align-items: baseline;
   display: flex;
-  gap: 9px;
-  min-width: 0;
+  gap: 8px;
 }
 
 .tokenCopy strong {
-  font-size: 17.5px;
-  font-weight: 630;
+  font-size: 17px;
+  font-weight: 640;
   letter-spacing: -0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -495,7 +502,7 @@
   color: var(--accent-strong);
   flex: none;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 640;
 }
 
 .tokenMeta {
@@ -504,7 +511,7 @@
   display: flex;
   font-size: 12px;
   gap: 8px;
-  margin-top: 5px;
+  margin-block-start: 4px;
   min-width: 0;
 }
 
@@ -518,41 +525,21 @@
   color: var(--accent-strong);
   flex: none;
   font-size: 12px;
-  font-weight: 620;
+  font-weight: 640;
 }
 
 .modelLabel::after {
   color: var(--muted);
   content: "·";
-  margin-left: 8px;
+  margin-inline-start: 8px;
 }
 
 .tokenAddress {
   color: var(--muted);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  margin-top: 5px;
+  font-size: 11px;
+  margin-block-start: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.openToken {
-  align-items: center;
-  background: color-mix(in srgb, var(--glass-88) 72%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  color: var(--text-soft);
-  display: inline-flex;
-  flex: none;
-  font-size: 12px;
-  font-weight: 610;
-  height: 44px;
-  justify-content: center;
-  line-height: 1;
-  min-width: 94px;
-  padding: 0 15px;
   white-space: nowrap;
 }
 
@@ -560,27 +547,26 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0 20px;
+  padding-inline: 18px;
 }
 
 .marketMetric,
 .rewardMetric {
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
 }
 
 .metric span {
   color: var(--muted);
   display: none;
-  font-size: 12px;
-  font-weight: 560;
+  font-size: 11px;
+  font-weight: 590;
 }
 
 .metric strong {
-  font-size: 16px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
-  font-weight: 630;
+  font-weight: 650;
   letter-spacing: -0.015em;
-  margin-top: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -588,8 +574,8 @@
 
 .metric small {
   color: var(--muted);
-  font-size: 12px;
-  margin-top: 3px;
+  font-size: 11px;
+  margin-block-start: 3px;
 }
 
 .rewardMetricReady strong {
@@ -600,9 +586,9 @@
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px;
   justify-content: flex-end;
-  padding-left: 18px;
+  padding-inline-start: 16px;
 }
 
 .actions:empty {
@@ -618,11 +604,11 @@
 .stockClaimEstimate {
   color: var(--text-soft);
   font-size: 11px;
-  font-weight: 560;
   font-variant-numeric: tabular-nums;
+  font-weight: 580;
   line-height: 1.3;
-  padding: 0 2px;
-  text-align: right;
+  padding-inline: 2px;
+  text-align: end;
   white-space: nowrap;
 }
 
@@ -633,17 +619,18 @@
 
 .stockClaimButtons .claimButton,
 .stockClaimButtons .secondaryAction {
-  min-width: 98px;
-  padding-inline: 13px;
+  min-width: 96px;
+  padding-inline: 12px;
 }
 
 .claimButton,
-.secondaryAction {
+.secondaryAction,
+.openToken {
   border-radius: 12px;
   font-size: 12px;
   min-height: 44px;
   min-width: 76px;
-  padding: 0 15px;
+  padding-inline: 14px;
 }
 
 .claimButton {
@@ -652,9 +639,25 @@
   color: var(--accent-ink);
 }
 
-.claimButton:disabled {
+.claimButton:disabled,
+.secondaryAction:disabled,
+.textAction:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+.openToken {
+  align-items: center;
+  background: color-mix(in srgb, var(--glass-88) 72%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  display: inline-flex;
+  flex: none;
+  font-weight: 620;
+  justify-content: center;
+  line-height: 1;
+  min-width: 92px;
+  white-space: nowrap;
 }
 
 .actionState,
@@ -664,8 +667,8 @@
   font-size: 12px;
   gap: 8px;
   justify-content: flex-end;
-  line-height: 1.4;
-  margin: 0 0 12px;
+  line-height: 1.45;
+  margin: -2px 0 10px;
 }
 
 .actionState {
@@ -682,63 +685,104 @@
   font-weight: 650;
 }
 
-.rewardSettings {
-  border-top: 1px solid var(--border);
+.advancedSettings {
+  border-block-start: 1px solid var(--border);
   margin: 0;
   padding: 0;
 }
 
-.rewardSettings > summary {
+.advancedSettings > summary {
   align-items: center;
   color: var(--text-soft);
-  cursor: default;
   display: flex;
   font-size: 12px;
-  gap: 8px;
+  gap: 10px;
   justify-content: space-between;
   list-style: none;
-  min-height: 46px;
+  min-height: 48px;
   outline: 0;
 }
 
-.rewardSettings > summary::-webkit-details-marker {
+.advancedSettings > summary::-webkit-details-marker {
   display: none;
 }
 
-.rewardSettings > summary::after {
-  color: var(--muted);
+.advancedSettings > summary::after {
+  color: var(--accent-strong);
   content: "+";
   flex: none;
-  font-size: 15px;
+  font-size: 17px;
+  font-weight: 500;
   line-height: 1;
+  text-align: center;
+  width: 20px;
 }
 
-.rewardSettings[open] > summary::after {
+.advancedSettings[open] > summary::after {
   content: "−";
 }
 
-.rewardSettings > summary span {
-  font-weight: 590;
+.advancedSettings > summary span {
+  font-weight: 650;
   min-width: 0;
 }
 
-.rewardSettings > summary small {
+.advancedSettings > summary small {
   color: var(--muted);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 12px;
-  margin-left: auto;
-  max-width: 150px;
+  font-size: 11px;
+  margin-inline-start: auto;
+}
+
+.advancedSettingsBody {
+  background: color-mix(in srgb, var(--surface-soft) 52%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 16px;
+  margin-block-end: 16px;
+  padding-inline: 16px;
+}
+
+.advancedSettings[open] .advancedSettingsBody {
+  animation: profile-settings-enter 180ms var(--ease-out) both;
+}
+
+.rewardSettingGroup {
+  padding-block: 16px;
+}
+
+.rewardSettingGroup + .rewardSettingGroup {
+  border-block-start: 1px solid var(--border);
+}
+
+.rewardSettingHeader {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-block-end: 12px;
+}
+
+.rewardSettingHeader h3 {
+  font-size: 13px;
+  font-weight: 660;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.rewardSettingHeader p {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+  max-width: 48%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .settingsBody {
-  animation: profile-settings-enter 180ms var(--ease-out) both;
   display: grid;
-  gap: 16px;
+  gap: 14px;
   grid-template-columns: 1fr;
-  padding: 2px 0 17px;
 }
 
 @keyframes profile-settings-enter {
@@ -754,44 +798,46 @@
 }
 
 .rewardTerms {
-  display: grid;
-  gap: 7px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0;
-}
-
-.rewardTerms > div {
-  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+  background: color-mix(in srgb, var(--border) 68%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   border-radius: 12px;
   display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+}
+
+.rewardTerms > div {
+  background: color-mix(in srgb, var(--glass-94) 94%, transparent);
+  display: grid;
   gap: 3px;
-  padding: 10px;
+  padding: 10px 11px;
 }
 
 .rewardTerms dt {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .rewardTerms dd {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  font-weight: 650;
+  font-weight: 660;
   margin: 0;
   overflow-wrap: anywhere;
 }
 
 .payout {
   display: grid;
-  gap: 8px;
+  gap: 7px;
 }
 
 .payoutLabel,
 .splitLabel {
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 620;
+  font-size: 10px;
+  font-weight: 660;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -801,12 +847,16 @@
   align-items: center;
   display: flex;
   gap: 8px;
+  min-width: 0;
 }
 
 .payoutRow a {
   color: var(--text-soft);
-  font-family: var(--font-plex-mono), monospace;
   font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .secondaryAction {
@@ -818,21 +868,22 @@
   background: transparent;
   border: 0;
   color: var(--accent-strong);
+  flex: none;
   font-size: 12px;
   font-weight: 650;
   min-height: 44px;
-  padding: 0 4px;
+  padding-inline: 6px;
 }
 
 .split {
-  border-top: 1px solid var(--border);
-  padding-top: 13px;
+  border-block-start: 1px solid var(--border);
+  padding-block-start: 12px;
 }
 
 .splitList {
   display: grid;
   gap: 7px;
-  margin-top: 8px;
+  margin-block-start: 8px;
 }
 
 .splitItem {
@@ -853,7 +904,7 @@
 }
 
 .splitItem small {
-  text-align: right;
+  text-align: end;
 }
 
 .emptySection {
@@ -861,59 +912,96 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 178px;
-  padding: 28px 24px;
+  min-height: 182px;
+  padding: 30px 24px;
 }
 
 .emptySection strong {
-  font-size: 17px;
-  font-weight: 610;
+  font-size: 18px;
+  font-weight: 630;
 }
 
 .emptySection p {
   color: var(--muted);
   font-size: 13px;
-  margin-top: 6px;
+  margin-block-start: 5px;
+}
+
+.emptyAction {
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent-strong) 42%, transparent);
+  border-radius: 12px;
+  color: var(--accent-ink);
+  font-size: 12px;
+  margin-block-start: 16px;
+  min-height: 44px;
+  padding-inline: 16px;
 }
 
 .accountState {
   align-items: center;
-  border-radius: 26px;
+  border-radius: 24px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  margin-top: 16px;
-  min-height: 280px;
-  padding: 30px;
+  margin-block-start: 12px;
+  min-height: 260px;
+  overflow: hidden;
+  padding: 28px;
+  position: relative;
   text-align: center;
 }
 
+.accountState[aria-busy="true"]::before {
+  animation: profile-loading 1.4s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 48%, transparent),
+    transparent
+  );
+  content: "";
+  height: 2px;
+  inset-block-start: 0;
+  inset-inline: 0;
+  position: absolute;
+  transform: translateX(-100%);
+}
+
+@keyframes profile-loading {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 .accountState h2 {
-  font-size: 26px;
-  font-weight: 600;
+  font-size: 25px;
+  font-weight: 610;
   letter-spacing: -0.03em;
 }
 
 .accountState p {
   color: var(--muted);
   font-size: 13px;
-  margin-top: 7px;
+  line-height: 1.5;
+  margin-block-start: 6px;
+  max-width: 440px;
 }
 
 .retryButton {
   background: var(--surface-soft);
   border-radius: 12px;
   font-size: 12px;
-  margin-top: 16px;
+  margin-block-start: 16px;
   min-height: 44px;
-  padding: 0 15px;
+  padding-inline: 15px;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .tokenRow:hover {
     background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
     box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 58%, transparent);
-    transform: translate3d(2px, 0, 0);
+    transform: translate3d(0, -1px, 0);
   }
 
   .tokenIdentity:hover strong {
@@ -924,18 +1012,20 @@
   .imageAction:hover,
   .editAction:hover,
   .openToken:hover,
-  .secondaryAction:hover,
+  .secondaryAction:not(:disabled):hover,
   .retryButton:hover {
     border-color: var(--border-strong);
     color: var(--text);
   }
 
-  .textAction:hover {
+  .advancedSettings > summary:hover,
+  .textAction:not(:disabled):hover {
     color: var(--text);
   }
 
   .claimButton:not(:disabled):hover,
-  .connectButton:hover {
+  .connectButton:hover,
+  .emptyAction:hover {
     background: var(--accent-hover);
   }
 }
@@ -948,12 +1038,13 @@
 .claimButton:focus-visible,
 .secondaryAction:focus-visible,
 .openToken:focus-visible,
-.rewardSettings > summary:focus-visible,
+.advancedSettings > summary:focus-visible,
 .payoutEdit input:focus-visible,
 .textAction:focus-visible,
 .retryButton:focus-visible,
 .sourceWarning button:focus-visible,
-.tokenIdentity:focus-visible {
+.tokenIdentity:focus-visible,
+.emptyAction:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -966,7 +1057,8 @@
 .secondaryAction,
 .openToken,
 .textAction,
-.retryButton {
+.retryButton,
+.emptyAction {
   transition:
     background-color 150ms ease,
     border-color 150ms ease,
@@ -979,11 +1071,12 @@
 .editAction:active,
 .connectButton:active,
 .claimButton:not(:disabled):active,
-.secondaryAction:active,
+.secondaryAction:not(:disabled):active,
 .openToken:active,
-.textAction:active,
-.retryButton:active {
-  transform: scale(0.96);
+.textAction:not(:disabled):active,
+.retryButton:active,
+.emptyAction:active {
+  transform: scale(0.97);
 }
 
 @media (max-width: 980px) {
@@ -1003,17 +1096,18 @@
   .tokenRow {
     border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
     border-radius: 18px;
-    padding: 16px;
+    padding-inline: 16px;
   }
 
   .tokenRow:last-child {
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+    border-block-end: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
   }
 
   .tokenMain {
     gap: 14px 0;
     grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
     min-height: 0;
+    padding-block: 15px;
   }
 
   .tokenIdentity {
@@ -1022,10 +1116,10 @@
   }
 
   .marketMetric {
-    border-left: 0;
+    border-inline-start: 0;
     grid-column: 1;
     grid-row: 2;
-    padding-left: 0;
+    padding-inline-start: 0;
   }
 
   .rewardMetric {
@@ -1034,8 +1128,8 @@
   }
 
   .metric {
-    border-top: 1px solid var(--border);
-    padding-top: 13px;
+    border-block-start: 1px solid var(--border);
+    padding-block-start: 12px;
   }
 
   .metric span {
@@ -1043,43 +1137,46 @@
   }
 
   .metric strong {
-    margin-top: 4px;
+    margin-block-start: 3px;
   }
 
   .actions {
     grid-column: 2;
     grid-row: 1;
   }
+
+  .advancedSettingsBody {
+    margin-block-end: 15px;
+  }
 }
 
 @media (max-width: 720px) {
   .page {
     min-height: calc(100svh - var(--header-height) - 68px);
-    padding-bottom: 104px;
-    padding-top: 16px;
+    padding-block: 14px 104px;
   }
 
   .hero,
   .portfolio,
   .connectCard,
   .accountState {
-    border-radius: 22px;
+    border-radius: 21px;
   }
 
   .hero {
-    gap: 14px;
-    min-height: 96px;
-    padding: 15px;
+    gap: 13px;
+    min-height: 86px;
+    padding: 12px;
   }
 
   .avatar {
-    border-radius: 19px;
-    height: 60px;
-    width: 60px;
+    border-radius: 17px;
+    height: 58px;
+    width: 58px;
   }
 
   .nameRow h1 {
-    font-size: 30px;
+    font-size: 29px;
   }
 
   .editGrid {
@@ -1087,7 +1184,7 @@
   }
 
   .connectCard {
-    margin-top: 18px;
+    margin-block-start: 18px;
     min-height: 272px;
     padding: 30px 22px;
   }
@@ -1097,16 +1194,16 @@
   }
 
   .portfolioHeader {
-    padding: 20px 18px;
+    padding: 18px;
   }
 
   .portfolioTitle h2 {
-    font-size: 27px;
+    font-size: 26px;
   }
 
   .portfolioStat {
-    min-width: 76px;
-    padding: 0 16px;
+    min-width: 72px;
+    padding-inline: 14px;
   }
 
   .portfolioStat strong {
@@ -1119,7 +1216,7 @@
   }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 560px) {
   .hero {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -1128,22 +1225,16 @@
     grid-template-columns: 1fr;
   }
 
-  .avatar {
-    border-radius: 18px;
-    height: 58px;
-    width: 58px;
-  }
-
   .nameRow {
     gap: 8px;
   }
 
   .nameRow h1 {
-    font-size: 27px;
+    font-size: 26px;
   }
 
   .editButton {
-    padding: 0 12px;
+    padding-inline: 12px;
   }
 
   .usernameRow {
@@ -1156,35 +1247,24 @@
 
   .portfolioHeader {
     align-items: start;
-    gap: 18px;
+    gap: 16px;
     grid-template-columns: 1fr;
   }
 
   .portfolioStats {
-    justify-content: flex-start;
     width: 100%;
   }
 
   .portfolioStat:first-child {
-    padding-left: 0;
+    padding-inline-start: 0;
   }
 
   .portfolioStat:last-child {
-    padding-right: 16px;
+    padding-inline-end: 0;
   }
 
   .portfolioTotal {
     min-width: 0;
-  }
-
-  .tokenArt {
-    border-radius: 16px;
-    height: 60px;
-    width: 60px;
-  }
-
-  .tokenCopy strong {
-    font-size: 16px;
   }
 
   .tokenMain {
@@ -1194,7 +1274,7 @@
   .tokenIdentity {
     grid-column: 1 / -1;
     grid-row: 1;
-    padding-right: 0;
+    padding-inline-end: 0;
   }
 
   .marketMetric {
@@ -1205,15 +1285,16 @@
   .rewardMetric {
     grid-column: 2;
     grid-row: 2;
+    padding-inline-start: 13px;
   }
 
   .actions {
-    border-top: 1px solid var(--border);
+    border-block-start: 1px solid var(--border);
     grid-column: 1 / -1;
     grid-row: 3;
     justify-content: stretch;
-    padding-left: 0;
-    padding-top: 13px;
+    padding-block-start: 12px;
+    padding-inline-start: 0;
   }
 
   .stockClaimActions {
@@ -1222,7 +1303,7 @@
   }
 
   .stockClaimEstimate {
-    text-align: left;
+    text-align: start;
   }
 
   .stockClaimButtons {
@@ -1236,20 +1317,18 @@
     width: 100%;
   }
 
-  .openToken {
-    flex: 1 1 auto;
-    font-size: 12px;
-    height: 46px;
-    padding: 0 11px;
-  }
-
-  .rewardMetric {
-    padding-left: 14px;
-  }
-
-  .claimButton {
+  .openToken,
+  .claimButton,
+  .secondaryAction {
     flex: 1 1 auto;
     min-height: 46px;
+  }
+
+  .advancedSettings > summary small {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .rewardTerms {
@@ -1261,30 +1340,89 @@
     flex-direction: column;
   }
 
+  .payoutEdit .secondaryAction,
+  .payoutEdit .textAction {
+    width: 100%;
+  }
+
   .actionState,
   .rowError {
     align-items: flex-start;
     flex-direction: column;
     gap: 3px;
+    justify-content: flex-start;
   }
 }
 
 @media (max-width: 380px) {
+  .page {
+    padding-block-start: 10px;
+  }
+
   .hero {
-    gap: 11px;
+    gap: 10px;
+    padding-inline: 8px;
   }
 
   .avatar {
+    height: 52px;
+    width: 52px;
+  }
+
+  .nameRow h1 {
+    font-size: 23px;
+  }
+
+  .address {
+    font-size: 11px;
+  }
+
+  .portfolioHeader {
+    padding-inline: 15px;
+  }
+
+  .portfolioStat {
+    padding-inline: 11px;
+  }
+
+  .portfolioStat strong {
+    font-size: 17px;
+  }
+
+  .tokenRow {
+    padding-inline: 13px;
+  }
+
+  .tokenArt {
+    border-radius: 14px;
     height: 54px;
     width: 54px;
   }
 
-  .nameRow h1 {
-    font-size: 24px;
+  .tokenCopy strong {
+    font-size: 16px;
   }
 
-  .address {
-    font-size: 12px;
+  .advancedSettings > summary {
+    gap: 6px;
+  }
+
+  .advancedSettings > summary small {
+    display: none;
+  }
+
+  .advancedSettingsBody {
+    padding-inline: 12px;
+  }
+
+  .rewardSettingHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .rewardSettingHeader p {
+    max-width: 100%;
   }
 
   .rewardTerms {
@@ -1297,11 +1435,17 @@
 
   .splitItem small {
     grid-column: 1 / -1;
-    text-align: left;
+    text-align: start;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .accountState[aria-busy="true"]::before {
+    animation: none;
+    opacity: 0.55;
+    transform: none;
+  }
+
   .tokenRow,
   .editButton,
   .imageAction,
@@ -1311,11 +1455,25 @@
   .secondaryAction,
   .openToken,
   .textAction,
-  .retryButton {
+  .retryButton,
+  .emptyAction {
     transition: none;
   }
 
-  .settingsBody {
+  .advancedSettings[open] .advancedSettingsBody {
     animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .tokenRowClaimable,
+  .advancedSettingsBody {
+    background: Canvas;
+  }
+
+  .claimButton,
+  .connectButton,
+  .emptyAction {
+    border: 1px solid ButtonText;
   }
 }

@@ -2400,7 +2400,7 @@ function ProfileAccountWorkspace({
     return (
       <section className={styles.accountState}>
         <h2>Connect your wallet</h2>
-        <p>Your tokens and creator rewards will appear here</p>
+        <p>Connect to see your launches and claimable rewards.</p>
         <button
           className={styles.connectButton}
           type="button"
@@ -2432,11 +2432,15 @@ function ProfileAccountWorkspace({
     !stockPairedReady
   ) {
     return (
-      <section className={styles.accountState} aria-live="polite">
-        <h2>{loading ? "Loading your profile" : "Your profile could not be loaded"}</h2>
+      <section
+        className={styles.accountState}
+        aria-busy={loading}
+        aria-live="polite"
+      >
+        <h2>{loading ? "Loading profile" : "Unable to load profile"}</h2>
         <p>
           {loading
-            ? "Reading your tokens and rewards"
+            ? "Reading your launches and rewards."
             : data.status === "error" && data.errorMessage
               ? data.errorMessage
               : classicV3Rewards.status === "error" &&
@@ -2451,7 +2455,7 @@ function ProfileAccountWorkspace({
                   : stockPairedRewards.status === "error" &&
                       stockPairedRewards.errorMessage
                     ? stockPairedRewards.errorMessage
-                  : "Try again in a moment"}
+                  : "Check your connection and try again."}
         </p>
         {!loading ? (
           <button
@@ -2621,8 +2625,10 @@ function ProfileAccountWorkspace({
         </div>
       ) : (
         <ProfileSectionEmpty
-          title="No tokens yet"
-          detail="Tokens launched by this wallet will appear here"
+          title="No launches yet"
+          detail="Tokens launched by this wallet will appear here."
+          actionHref="/launch"
+          actionLabel="Launch a token"
         />
       )}
     </section>
@@ -2842,6 +2848,11 @@ function ProfilePortfolioRow({
       : "";
   const hasClaimableReward =
     totalClaimable > 0n || stockPairedClaimable > 0n;
+  const advancedSettingsCount =
+    ownedClassicRewards.length +
+    ownedDeepRewards.length +
+    ownedStockPairedRewards.length +
+    Number(Boolean(deepV3Token));
 
   return (
     <article
@@ -3091,40 +3102,50 @@ function ProfilePortfolioRow({
         );
       })}
 
-      {deepV3Token ? (
-        <DeepV3GrowthState token={deepV3Token} />
-      ) : null}
+      {advancedSettingsCount > 0 ? (
+        <details className={styles.advancedSettings}>
+          <summary>
+            <span>Reward settings</span>
+            <small>Payouts, fee terms and splits</small>
+          </summary>
+          <div className={styles.advancedSettingsBody}>
+            {deepV3Token ? (
+              <DeepV3GrowthState token={deepV3Token} />
+            ) : null}
 
-      {ownedClassicRewards.map((reward) => (
-        <ClassicRewardSettings
-          key={reward.vaultAddress}
-          reward={reward}
-          account={account}
-          actionStates={classicV3ActionStates}
-          chainId={chainId}
-          onAction={onClassicV3Action}
-        />
-      ))}
-      {ownedDeepRewards.map((reward) => (
-        <DeepRewardSettings
-          key={`${reward.vaultAddress}:${reward.payoutAddress}`}
-          reward={reward}
-          account={account}
-          actionStates={deepActionStates}
-          chainId={chainId}
-          onAction={onDeepAction}
-        />
-      ))}
-      {ownedStockPairedRewards.map((reward) => (
-        <StockPairedRewardSettings
-          key={`${reward.vaultAddress}:${reward.payoutAddress}`}
-          reward={reward}
-          account={account}
-          actionStates={stockPairedActionStates}
-          chainId={chainId}
-          onAction={onStockPairedAction}
-        />
-      ))}
+            {ownedClassicRewards.map((reward) => (
+              <ClassicRewardSettings
+                key={reward.vaultAddress}
+                reward={reward}
+                account={account}
+                actionStates={classicV3ActionStates}
+                chainId={chainId}
+                onAction={onClassicV3Action}
+              />
+            ))}
+            {ownedDeepRewards.map((reward) => (
+              <DeepRewardSettings
+                key={`${reward.vaultAddress}:${reward.payoutAddress}`}
+                reward={reward}
+                account={account}
+                actionStates={deepActionStates}
+                chainId={chainId}
+                onAction={onDeepAction}
+              />
+            ))}
+            {ownedStockPairedRewards.map((reward) => (
+              <StockPairedRewardSettings
+                key={`${reward.vaultAddress}:${reward.payoutAddress}`}
+                reward={reward}
+                account={account}
+                actionStates={stockPairedActionStates}
+                chainId={chainId}
+                onAction={onStockPairedAction}
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
     </article>
   );
 }
@@ -3132,17 +3153,22 @@ function ProfilePortfolioRow({
 function DeepV3GrowthState({ token }: { token: DeepV3CreatorToken }) {
   const compoundCount = BigInt(token.compoundCount);
   return (
-    <details className={styles.rewardSettings}>
-      <summary>
-        <span>Liquidity growth</span>
-        <small>
+    <section
+      className={styles.rewardSettingGroup}
+      aria-labelledby={`liquidity-growth-${token.vaultAddress}`}
+    >
+      <header className={styles.rewardSettingHeader}>
+        <h3 id={`liquidity-growth-${token.vaultAddress}`}>
+          Liquidity growth
+        </h3>
+        <p>
           {compoundCount === 0n
             ? "No compounds yet"
             : `${compoundCount.toString()} ${
                 compoundCount === 1n ? "compound" : "compounds"
               }`}
-        </small>
-      </summary>
+        </p>
+      </header>
       <div className={styles.settingsBody}>
         <dl className={styles.rewardTerms}>
           <div>
@@ -3159,7 +3185,7 @@ function DeepV3GrowthState({ token }: { token: DeepV3CreatorToken }) {
           </div>
         </dl>
       </div>
-    </details>
+    </section>
   );
 }
 
@@ -3211,15 +3237,15 @@ function ClassicRewardSettings({
   ) => void;
 }) {
   return (
-    <details className={styles.rewardSettings}>
-      <summary>
-        <span>Classic rewards</span>
-        <small>
+    <section className={styles.rewardSettingGroup}>
+      <header className={styles.rewardSettingHeader}>
+        <h3>Classic rewards</h3>
+        <p>
           {reward.shareBps > 0
             ? `${(reward.shareBps / 100).toFixed(2)}% current share`
             : "Historic rewards"}
-        </small>
-      </summary>
+        </p>
+      </header>
       <div className={styles.settingsBody}>
         <dl className={styles.rewardTerms}>
           <div>
@@ -3265,7 +3291,7 @@ function ClassicRewardSettings({
           </div>
         ) : null}
       </div>
-    </details>
+    </section>
   );
 }
 
@@ -3413,13 +3439,13 @@ function StockPairedRewardSettings({
   const payoutPending = actionPending(payoutState);
 
   return (
-    <details className={styles.rewardSettings}>
-      <summary>
-        <span>
+    <section className={styles.rewardSettingGroup}>
+      <header className={styles.rewardSettingHeader}>
+        <h3>
           Stock-Paired rewards · {reward.quoteAssetSymbol}
-        </span>
-        <small>{shortenAddress(reward.payoutAddress)}</small>
-      </summary>
+        </h3>
+        <p>{shortenAddress(reward.payoutAddress)}</p>
+      </header>
       <div className={styles.settingsBody}>
         <dl className={styles.rewardTerms}>
           <div>
@@ -3523,7 +3549,7 @@ function StockPairedRewardSettings({
           </div>
         ) : null}
       </div>
-    </details>
+    </section>
   );
 }
 
@@ -3587,16 +3613,16 @@ function DeepRewardSettings({
       : null;
 
   return (
-    <details className={styles.rewardSettings}>
-      <summary>
-        <span>
+    <section className={styles.rewardSettingGroup}>
+      <header className={styles.rewardSettingHeader}>
+        <h3>
           Deep liquidity ·{" "}
           {reward.growthTargetReached
             ? "Target reached"
             : `${(progressBps / 100).toFixed(2)}% added`}
-        </span>
-        <small>{shortenAddress(reward.payoutAddress)}</small>
-      </summary>
+        </h3>
+        <p>{shortenAddress(reward.payoutAddress)}</p>
+      </header>
       <div className={styles.settingsBody}>
         <div>
           <dl className={styles.rewardTerms}>
@@ -3710,7 +3736,7 @@ function DeepRewardSettings({
           <ProfileActionState state={payoutState} chainId={chainId} />
         </div>
       </div>
-    </details>
+    </section>
   );
 }
 
@@ -3721,14 +3747,23 @@ function minimumBigInt(left: bigint, right: bigint) {
 function ProfileSectionEmpty({
   title,
   detail,
+  actionHref,
+  actionLabel,
 }: {
   title: string;
   detail: string;
+  actionHref?: string;
+  actionLabel?: string;
 }) {
   return (
     <div className={styles.emptySection}>
       <strong>{title}</strong>
       <p>{detail}</p>
+      {actionHref && actionLabel ? (
+        <Link className={styles.emptyAction} href={actionHref}>
+          {actionLabel}
+        </Link>
+      ) : null}
     </div>
   );
 }
