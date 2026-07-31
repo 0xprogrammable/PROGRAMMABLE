@@ -13,10 +13,12 @@ import {
   type PoolFeeConfig,
   type RewardCheckpoint,
   type RewardConfigurationChange,
+  type RewardVault,
   type VestingWallet,
 } from "envio";
 import type { AbiEvent } from "viem";
 
+import { deploymentLabelFromEnvironment } from "./lib/deployment-identity.js";
 import { launchEntityId, poolEntityId } from "./lib/ids.js";
 import {
   canonicalPayloadJson,
@@ -48,7 +50,7 @@ type RecordedOccurrence = {
 const CHAIN_ID = 1;
 const INDEXER_STATE_ID = "ethereum-mainnet";
 const SCHEMA_VERSION = "1";
-const DEPLOYMENT_IDENTITY = "development-unverified";
+const DEPLOYMENT_IDENTITY = deploymentLabelFromEnvironment();
 
 const DYNAMIC_VAULT_CONTRACTS = new Set([
   "ClassicV3RewardVault",
@@ -316,7 +318,7 @@ async function handleLauncherEvent(
     }
     if (event.eventName === "MemeLiquidityConfigured") {
       const params = event.params;
-      await upsertLaunch(context, release, params.launchHash, {
+      const launch = await upsertLaunch(context, release, params.launchHash, {
         token: lowerAddress(params.token),
         totalSupply: params.totalSupply,
         tokenLiquidityAmount: params.tokenLiquidityAmount,
@@ -328,10 +330,11 @@ async function handleLauncherEvent(
         liquidityOccurrenceId: occurrence.provenance.id,
         hasLiquidityEvent: true,
       }, "liquidity", occurrence);
+      await reconcileLaunch(context, launch);
       return;
     }
     const params = event.params;
-    await upsertLaunch(context, release, params.launchHash, {
+    const launch = await upsertLaunch(context, release, params.launchHash, {
       token: lowerAddress(params.token),
       creator: lowerAddress(params.creator),
       poolId: lower(params.poolId),
@@ -340,6 +343,7 @@ async function handleLauncherEvent(
       initialBuyOccurrenceId: occurrence.provenance.id,
       hasInitialBuyEvent: true,
     }, "initial-buy", occurrence);
+    await reconcileLaunch(context, launch);
     return;
   }
 
@@ -365,7 +369,7 @@ async function handleLauncherEvent(
     }
     if (event.eventName === "MemeLiquidityConfiguredV2") {
       const params = event.params;
-      await upsertLaunch(context, release, params.launchHash, {
+      const launch = await upsertLaunch(context, release, params.launchHash, {
         token: lowerAddress(params.token),
         totalSupply: params.totalSupply,
         tokenLiquidityAmount: params.tokenLiquidityAmount,
@@ -377,11 +381,12 @@ async function handleLauncherEvent(
         liquidityOccurrenceId: occurrence.provenance.id,
         hasLiquidityEvent: true,
       }, "liquidity", occurrence);
+      await reconcileLaunch(context, launch);
       return;
     }
     if (event.eventName === "MemeCreatorInitialBuyV2") {
       const params = event.params;
-      await upsertLaunch(context, release, params.launchHash, {
+      const launch = await upsertLaunch(context, release, params.launchHash, {
         token: lowerAddress(params.token),
         creator: lowerAddress(params.deployer),
         poolId: lower(params.poolId),
@@ -390,6 +395,7 @@ async function handleLauncherEvent(
         initialBuyOccurrenceId: occurrence.provenance.id,
         hasInitialBuyEvent: true,
       }, "initial-buy", occurrence);
+      await reconcileLaunch(context, launch);
       return;
     }
     const params = event.params;
@@ -405,12 +411,13 @@ async function handleLauncherEvent(
       configurationHash: lower(params.configurationHash),
     };
     context.InitialBuyCustody.set(custody);
-    await upsertLaunch(context, release, params.launchHash, {
+    const launch = await upsertLaunch(context, release, params.launchHash, {
       token: custody.token,
       creator: custody.deployer,
       custodyOccurrenceId: occurrence.provenance.id,
       hasCustodyEvent: true,
     }, "custody", occurrence);
+    await reconcileLaunch(context, launch);
     return;
   }
 
@@ -434,7 +441,7 @@ async function handleLauncherEvent(
   }
   if (event.eventName === "StockPairedLiquidityConfigured") {
     const params = event.params;
-    await upsertLaunch(context, release, params.launchHash, {
+    const launch = await upsertLaunch(context, release, params.launchHash, {
       token: lowerAddress(params.token),
       quoteAsset: lowerAddress(params.quoteAsset),
       totalSupply: params.totalSupply,
@@ -447,10 +454,11 @@ async function handleLauncherEvent(
       liquidityOccurrenceId: occurrence.provenance.id,
       hasLiquidityEvent: true,
     }, "liquidity", occurrence);
+    await reconcileLaunch(context, launch);
     return;
   }
   const params = event.params;
-  await upsertLaunch(context, release, params.launchHash, {
+  const launch = await upsertLaunch(context, release, params.launchHash, {
     token: lowerAddress(params.token),
     creator: lowerAddress(params.deployer),
     quoteAsset: lowerAddress(params.quoteAsset),
@@ -460,6 +468,7 @@ async function handleLauncherEvent(
     initialBuyOccurrenceId: occurrence.provenance.id,
     hasInitialBuyEvent: true,
   }, "initial-buy", occurrence);
+  await reconcileLaunch(context, launch);
 }
 
 async function handleCoordinatorEvent(
@@ -478,7 +487,7 @@ async function handleCoordinatorEvent(
   const params = event.params;
   const release =
     staticReleaseForContract(event.contractName) ?? occurrence.release;
-  await upsertLaunch(context, release, params.launchHash, {
+  const launch = await upsertLaunch(context, release, params.launchHash, {
     creator: lowerAddress(params.creator),
     token: lowerAddress(params.token),
     quoteAsset: lowerAddress(params.quoteAsset),
@@ -488,6 +497,7 @@ async function handleCoordinatorEvent(
     coordinatorOccurrenceId: occurrence.provenance.id,
     hasCoordinatorEvent: true,
   }, "coordinator", occurrence);
+  await reconcileLaunch(context, launch);
 }
 
 async function upsertLaunch(
@@ -529,7 +539,7 @@ async function upsertLaunch(
     occurrence.provenance.blockNumber > next.updatedBlock
       ? occurrence.provenance.blockNumber
       : next.updatedBlock;
-  next.isComplete = launchIsComplete(next);
+  next.isComplete = false;
   context.Launch.set(next);
   return next;
 }
@@ -579,6 +589,9 @@ function defaultLaunch(
     hasInitialBuyEvent: false,
     hasCustodyEvent: false,
     hasCoordinatorEvent: false,
+    hasPoolRegistrationEvent: false,
+    hasPoolFeeDisclosureEvent: false,
+    hasRewardVaultFactoryEvent: false,
     provenanceValid: true,
     isComplete: false,
     updatedBlock: blockNumber,
@@ -590,10 +603,108 @@ function launchIsComplete(launch: Launch): boolean {
     launch.provenanceValid &&
     launch.hasLaunchEvent &&
     launch.hasLiquidityEvent &&
-    launch.hasInitialBuyEvent;
+    launch.hasInitialBuyEvent &&
+    launch.hasPoolRegistrationEvent &&
+    launch.hasPoolFeeDisclosureEvent &&
+    (launch.releaseVersion === "classic-v2" ||
+      launch.hasRewardVaultFactoryEvent);
   return launch.releaseVersion === "classic-v3"
     ? base && launch.hasCustodyEvent
     : base;
+}
+
+function applyPoolConfigurationToLaunch(
+  launchInput: Launch,
+  configInput: PoolFeeConfig,
+): { launch: Launch; config: PoolFeeConfig } {
+  const launch: Mutable<Launch> = { ...launchInput };
+  launch.hasPoolRegistrationEvent =
+    configInput.registrationOccurrenceId !== undefined;
+  launch.hasPoolFeeDisclosureEvent =
+    configInput.disclosureOccurrenceId !== undefined;
+  if (
+    launch.releaseVersion !== "classic-v3" &&
+    launch.rewardConfigurationHash === undefined &&
+    configInput.rewardConfigurationHash !== undefined
+  ) {
+    launch.rewardConfigurationHash = configInput.rewardConfigurationHash;
+  }
+  if (
+    launch.quoteConfigurationHash === undefined &&
+    configInput.quoteConfigurationHash !== undefined
+  ) {
+    launch.quoteConfigurationHash = configInput.quoteConfigurationHash;
+  }
+  const configValid =
+    configInput.provenanceValid &&
+    optionalMatches(configInput.token, launch.token) &&
+    optionalMatches(configInput.quoteAsset, launch.quoteAsset) &&
+    optionalMatches(configInput.rewardVault, launch.rewardVault) &&
+    (launch.releaseVersion !== "classic-v3" ||
+      !launch.hasPoolRegistrationEvent ||
+      exactOptionalValueMatch(
+        configInput.rewardConfigurationHash,
+        launch.rewardConfigurationHash,
+      )) &&
+    compatibleOptionalValue(
+      configInput.quoteConfigurationHash,
+      launch.quoteConfigurationHash,
+    );
+  if (!configValid) {
+    launch.provenanceValid = false;
+  }
+  launch.updatedBlock =
+    configInput.blockNumber > launch.updatedBlock
+      ? configInput.blockNumber
+      : launch.updatedBlock;
+  launch.isComplete = launchIsComplete(launch);
+  return {
+    launch,
+    config: {
+      ...configInput,
+      model: launch.model,
+      releaseVersion: launch.releaseVersion,
+      provenanceValid: configValid,
+    },
+  };
+}
+
+function applyRewardVaultToLaunch(
+  launchInput: Launch,
+  vaultInput: RewardVault,
+): { launch: Launch; vault: RewardVault } {
+  const launch: Mutable<Launch> = { ...launchInput };
+  const vaultValid =
+    launch.poolId !== undefined &&
+    launch.hook !== undefined &&
+    launch.rewardVault !== undefined &&
+    sameValue(vaultInput.vault, launch.rewardVault) &&
+    sameValue(vaultInput.poolId, launch.poolId) &&
+    sameValue(vaultInput.hook, launch.hook) &&
+    optionalMatches(vaultInput.quoteAsset, launch.quoteAsset) &&
+    (launch.releaseVersion !== "classic-v3" ||
+      exactOptionalValueMatch(
+        vaultInput.configurationHash,
+        launch.rewardConfigurationHash,
+      ));
+  if (vaultValid) {
+    launch.hasRewardVaultFactoryEvent = true;
+  } else {
+    launch.provenanceValid = false;
+  }
+  launch.updatedBlock =
+    vaultInput.blockNumber > launch.updatedBlock
+      ? vaultInput.blockNumber
+      : launch.updatedBlock;
+  launch.isComplete = launchIsComplete(launch);
+  return {
+    launch,
+    vault: {
+      ...vaultInput,
+      model: launch.model,
+      releaseVersion: launch.releaseVersion,
+    },
+  };
 }
 
 async function reconcileLaunch(
@@ -602,6 +713,11 @@ async function reconcileLaunch(
 ): Promise<void> {
   let launch: Mutable<Launch> = { ...launchInput };
   const expectedHook = hookForRelease(launch.releaseVersion);
+  if (!launch.hasLaunchEvent) {
+    launch.isComplete = false;
+    context.Launch.set(launch);
+    return;
+  }
   if (
     launch.token === undefined ||
     launch.poolId === undefined ||
@@ -633,40 +749,9 @@ async function reconcileLaunch(
 
   const config = await context.PoolFeeConfig.get(relationId);
   if (config !== undefined) {
-    if (
-      launch.rewardConfigurationHash === undefined &&
-      config.rewardConfigurationHash !== undefined
-    ) {
-      launch.rewardConfigurationHash = config.rewardConfigurationHash;
-    }
-    if (
-      launch.quoteConfigurationHash === undefined &&
-      config.quoteConfigurationHash !== undefined
-    ) {
-      launch.quoteConfigurationHash = config.quoteConfigurationHash;
-    }
-    const configValid =
-      config.provenanceValid &&
-      optionalMatches(config.token, launch.token) &&
-      optionalMatches(config.quoteAsset, launch.quoteAsset) &&
-      optionalMatches(config.rewardVault, launch.rewardVault) &&
-      compatibleOptionalValue(
-        config.rewardConfigurationHash,
-        launch.rewardConfigurationHash,
-      ) &&
-      compatibleOptionalValue(
-        config.quoteConfigurationHash,
-        launch.quoteConfigurationHash,
-      );
-    context.PoolFeeConfig.set({
-      ...config,
-      model: launch.model,
-      releaseVersion: launch.releaseVersion,
-      provenanceValid: configValid,
-    });
-    if (!configValid) {
-      launch.provenanceValid = false;
-    }
+    const reconciled = applyPoolConfigurationToLaunch(launch, config);
+    launch = { ...reconciled.launch };
+    context.PoolFeeConfig.set(reconciled.config);
     await relabelOccurrence(
       context,
       config.registrationOccurrenceId,
@@ -679,25 +764,24 @@ async function reconcileLaunch(
     );
   }
 
+  const poolVaults = await context.RewardVault.getWhere({
+    poolId: { _eq: launch.poolId },
+  });
   if (launch.rewardVault !== undefined) {
-    const vault = await context.RewardVault.get(launch.rewardVault);
+    const vault = poolVaults.find(({ vault: address }) =>
+      sameValue(address, launch.rewardVault)
+    );
+    if (
+      poolVaults.some(({ vault: address }) =>
+        !sameValue(address, launch.rewardVault)
+      )
+    ) {
+      launch.provenanceValid = false;
+    }
     if (vault !== undefined) {
-      const vaultValid =
-        sameValue(vault.poolId, launch.poolId) &&
-        sameValue(vault.hook, launch.hook) &&
-        optionalMatches(vault.quoteAsset, launch.quoteAsset) &&
-        compatibleOptionalValue(
-          vault.configurationHash,
-          launch.rewardConfigurationHash,
-        );
-      context.RewardVault.set({
-        ...vault,
-        model: launch.model,
-        releaseVersion: launch.releaseVersion,
-      });
-      if (!vaultValid) {
-        launch.provenanceValid = false;
-      }
+      const reconciled = applyRewardVaultToLaunch(launch, vault);
+      launch = { ...reconciled.launch };
+      context.RewardVault.set(reconciled.vault);
       await relabelOccurrence(context, vault.factoryOccurrenceId, launch);
     }
   }
@@ -977,7 +1061,19 @@ async function handlePoolConfigurationEvent(
   if (relation !== undefined) {
     const launch = await context.Launch.get(relation.launchId);
     if (launch !== undefined) {
-      await reconcileLaunch(context, launch);
+      const reconciled = applyPoolConfigurationToLaunch(launch, next);
+      context.PoolFeeConfig.set(reconciled.config);
+      context.Launch.set(reconciled.launch);
+      await relabelOccurrence(
+        context,
+        reconciled.config.registrationOccurrenceId,
+        reconciled.launch,
+      );
+      await relabelOccurrence(
+        context,
+        reconciled.config.disclosureOccurrenceId,
+        reconciled.launch,
+      );
     }
   }
 }
@@ -1207,7 +1303,7 @@ async function handleVaultFactoryEvent(
       ? lower(event.params.configurationHash)
       : undefined;
 
-  context.RewardVault.set({
+  const rewardVaultEntity: RewardVault = {
     id: vault,
     chainId: CHAIN_ID,
     vault,
@@ -1227,11 +1323,22 @@ async function handleVaultFactoryEvent(
     blockHash: occurrence.provenance.blockHash,
     transactionHash: occurrence.provenance.transactionHash,
     blockGlobalLogIndex: occurrence.provenance.blockGlobalLogIndex,
-  });
+  };
+  context.RewardVault.set(rewardVaultEntity);
   if (relation !== undefined) {
     const launch = await context.Launch.get(relation.launchId);
     if (launch !== undefined) {
-      await reconcileLaunch(context, launch);
+      const reconciled = applyRewardVaultToLaunch(
+        launch,
+        rewardVaultEntity,
+      );
+      context.RewardVault.set(reconciled.vault);
+      context.Launch.set(reconciled.launch);
+      await relabelOccurrence(
+        context,
+        rewardVaultEntity.factoryOccurrenceId,
+        reconciled.launch,
+      );
     }
   }
 }
@@ -1492,13 +1599,27 @@ function compatibleOptionalValue(
   return left === undefined || right === undefined || sameValue(left, right);
 }
 
+function exactOptionalValueMatch(
+  left: string | undefined,
+  right: string | undefined,
+): boolean {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    sameValue(left, right)
+  );
+}
+
 function isEventFlag(key: keyof Launch): boolean {
   return (
     key === "hasLaunchEvent" ||
     key === "hasLiquidityEvent" ||
     key === "hasInitialBuyEvent" ||
     key === "hasCustodyEvent" ||
-    key === "hasCoordinatorEvent"
+    key === "hasCoordinatorEvent" ||
+    key === "hasPoolRegistrationEvent" ||
+    key === "hasPoolFeeDisclosureEvent" ||
+    key === "hasRewardVaultFactoryEvent"
   );
 }
 
