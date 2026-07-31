@@ -116,7 +116,7 @@ Suites live in [`test/`](../../test/), and each one owns a named area so no cove
   and the lock (`invariant_liquidityPositionIsNeverReduced`, `invariant_bandPositionIsNeverReduced`,
   `invariant_bandStaysDenserThanTheFullRange`).
 - **Fuzz all bounded parameters and native/token amount ranges.** `testFuzz_split_conserves` in
-  `ShardFeeSplitV1.t.sol` fuzzes the split across the whole `uint256` fee range;
+  `ShardFeeSplitV1.t.sol` fuzzes the split over fee amounts bounded to `[0, 1_000_000 ether]`;
   `testFuzz_buyMaxNeverOverspendsMsgValue` in `ShardHookExhaustionV1.t.sol` fuzzes the exact-input buy against
   `msg.value`; `testFuzz_neverReverts` in `GeometricRendererV1.t.sol` fuzzes the seed space;
   `testFuzz_feeNeverExceedsOnePercent` and `testFuzz_poolIsNeverLeftWithNegativeDelta` in

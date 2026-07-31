@@ -25,7 +25,6 @@ interface IShardHookDonate {
 contract ShardFeeForwarderV1 {
     error ZeroAddress();
     error NothingToFlush();
-    error FlushFailed();
 
     /// @notice The hook whose holders get paid. Fixed at deployment.
     address payable public immutable hook;

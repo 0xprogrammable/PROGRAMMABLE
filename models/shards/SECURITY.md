@@ -57,8 +57,9 @@ credits `nft.ownerOf(id)` and pays only `msg.sender`; `setNFT` and `initialise` 
 `unlockCallback` reverts `NotPoolManager`; `settleOnTransfer` reverts `NotNFT`; `acquire` and `release` revert
 `NotHook`.
 
-**Configuration.** `initialise` and `setNFT` are each one-shot (`AlreadyInitialised`). `poolKey`, the three
-ticks, the start price, the fee constants and the split constants are immutable. Every swap callback re-checks
+**Configuration.** `initialise` and `setNFT` are each one-shot (`AlreadyInitialised`). The three ticks, the
+start price, the fee constants and the split constants are Solidity `immutable`/`constant`; `poolKey` is a
+storage struct assigned once in the constructor with no write path afterwards. Every swap callback re-checks
 the pool id against `poolKey.toId()` (`WrongPool`), so a foreign pool can never route a fee in the wrong currency
 into the accumulator.
 
@@ -94,9 +95,11 @@ explicit bounds rather than any price oracle:
   guard in both swap callbacks.
 - **Same-block accrual guard.** A piece joins the earning set only from the block after acquisition, so a trader
   cannot buy into the holder pool, collect from the fee their own trade generated, and leave.
-- **Art entropy.** Seeds come from `blockhash`, `block.timestamp`, `arbBlockNumber()`, the recipient and a
-  nonce. Grinding resistance is deliberately not a goal: traits are flat, so there is no jackpot to farm and a
-  reroll only affects the roller's own draw. Do not treat the seed as secure randomness.
+- **Art entropy.** Seeds come from `blockhash`, `block.timestamp`, the recipient and a nonce, plus an
+  `arbBlockNumber()` staticcall that contributes entropy only on Arbitrum-stack chains — on Ethereum mainnet the
+  precompile does not exist, the gas-capped call fails closed and the term is always zero. Grinding resistance
+  is deliberately not a goal: traits are flat, so there is no jackpot to farm and a reroll only affects the
+  roller's own draw. Do not treat the seed as secure randomness.
 
 ## Known limitations
 

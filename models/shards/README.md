@@ -128,9 +128,10 @@ refuse any pool id other than the canonical one (`WrongPool`).
 ### Parameters
 
 Immutable from construction: `deployer`, `shard`, `tickLower`, `tickBand`, `tickUpper`, `startSqrtPriceX96`,
-`launcherFeeRecipient`, `poolKey`, and the constants `FEE_BPS = 100`, `HOLDER_SHARE_BPS = 8000`,
+`launcherFeeRecipient`, and the constants `FEE_BPS = 100`, `HOLDER_SHARE_BPS = 8000`,
 `BUILDER_SHARE_BPS = 1000`, `LAUNCHER_SHARE_BPS = 1000`, `MAX_BATCH = 50`, `SEED_AMOUNT = 10_000e18`.
-`ShardNFTV1` holds `hook` and `renderer` as immutables.
+`ShardNFTV1` holds `hook` and `renderer` as immutables. `poolKey` is a storage struct (structs cannot be
+Solidity `immutable`) assigned in the constructor and never written afterwards; no function mutates it.
 
 Write-once: `nft` (via `setNFT`), `initialised`, `seedDust`, `seedLiquidity`, `seedLiquidityBand`.
 
@@ -157,7 +158,7 @@ under `lib/`. Exact revisions are recorded in [`spec/shards-v1.json`](../../spec
 | `deployer` | `setNFT`, `initialise` | One-shot each; moves no funds; both are dead after the launch transaction |
 | `builderFeeRecipient` | `claimBuilderFees`, `setBuilderFeeRecipient` | Only the accrued builder balance; cannot touch holder, launcher or pool funds |
 | `launcherFeeRecipient` | `claimLauncherFees` | Immutable address; only the accrued launcher balance |
-| Any NFT holder | `claim(tokenIds)` | Paid to `nft.ownerOf(id)`, never to the caller |
+| Any NFT holder | `claim(tokenIds)` | Settlement credits each token's current owner; the ETH transfer pays only the caller's own accrued balance |
 | Any account | `donate()`, `redeem`, `buyNFT`, `buyMany`, `buyMax`, `sellNFT`, `sellMany`, third-party swaps | Ordinary market access; `donate` can only give ETH away |
 | `PoolManager` | `unlockCallback`, hook callbacks | Caller identity checked on every entry |
 
@@ -175,6 +176,11 @@ market path, or redirect holder fees.
 | Fee currency | Native ETH |
 | LP fee | Zero |
 | Token transfer tax | None |
+
+A disclosure for the acceptance record: `BUILDER_PROGRAM.md` allocates the 0.80% share to the *token creator*.
+Shards has no separate creator payout — the collection holders collectively receive that share, and the creator
+participates by holding pieces of their own collection. If Programmable requires a distinct creator allocation,
+that is a contract change and a new model version.
 
 The fee is charged once, on the ETH leg, on every third-party swap and on every hook-market trade — `buyNFT`,
 `buyMany`, `buyMax`, `sellNFT` and `sellMany`. The two paths are mutually exclusive by construction, because v4

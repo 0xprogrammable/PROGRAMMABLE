@@ -398,7 +398,6 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
     ///      which swap via `poolManager.unlock()`, never reach here — they charge the 1%
     ///      explicitly in their own bodies. The two paths are mutually exclusive by
     ///      construction, so nothing is ever double-charged and nothing is ever free.
-    ///      Empirically confirmed in `test/spike/LiquidityLock.spike.t.sol`.
     ///      ==============================================================================
     ///
     ///      The fee is ALWAYS 1% of the total ETH the swap moves, and is ALWAYS inclusive.
@@ -933,7 +932,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         // `balanceOf(hook) == circulatingSupply * 1e18 + seedDust` on a contract that cannot be
         // upgraded. The twin of the guards in {_sellSwap} and {_buyExactOutSwap}: unreachable at
         // the shipped tick range, asserted anyway so the identity belongs to THIS contract
-        // rather than to whatever ticks Deploy.s.sol happened to pass.
+        // rather than to whatever ticks the deployment happened to pass.
         uint256 shardsIn = uint256(uint128(delta.amount1()));
         if (shardsIn != ShardConstantsV1.SHARDS_PER_NFT) revert ShardErrorsV1.PartialFillNotSupported();
 
@@ -958,7 +957,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         // so a partial fill would leave the hook holding shards for NFTs no longer in
         // circulation — breaking `balanceOf(hook) == circulatingSupply * 1e18 + seedDust` on a
         // contract that cannot be upgraded. Unreachable at the shipped tick range; asserted
-        // anyway so the identity belongs to THIS contract, not to Deploy.s.sol's ticks.
+        // anyway so the identity belongs to THIS contract, not to the deployment's ticks.
         uint256 shardsSpent = uint256(uint128(-delta.amount1()));
         if (shardsSpent != shardsIn) revert ShardErrorsV1.PartialFillNotSupported();
 
@@ -985,7 +984,7 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
         // The caller mints `count` NFTs on the strength of this swap, so a partial fill would
         // mint NFTs the hook has no SHARD to back. Unreachable at the shipped tick range, but
         // the hook is immutable — make the backing identity a property of THIS contract rather
-        // than of whatever ticks Deploy.s.sol happened to pass.
+        // than of whatever ticks the deployment happened to pass.
         uint256 shardsIn = uint256(uint128(delta.amount1()));
         if (shardsIn != shardsOut) revert ShardErrorsV1.PartialFillNotSupported();
 
@@ -1050,11 +1049,11 @@ contract ShardHookV1 is BaseHook, ShardFeeDistributorV1, IUnlockCallback, Reentr
 
     /// @dev Grinding resistance is deliberately NOT required — traits are flat, so there is
     ///      no jackpot to farm and a reroll only affects the roller's own draw.
-    ///      Verified on-chain (docs/verification-entropy.md): on Orbit `block.number` is the
-    ///      L1 number and moves ~every 1-2s, `block.prevrandao` is a hardcoded constant and
-    ///      `block.coinbase` is the fixed sequencer — none are usable. `arbBlockNumber()` is
-    ///      the only value with true per-L2-block granularity. `_seedNonce` and `to` already
-    ///      guarantee distinctness; the block data only adds variety.
+    ///      `_seedNonce` and `to` already guarantee distinctness; the block data only adds
+    ///      variety. On Ethereum mainnet `_arbBlockNumber()` returns 0 (the precompile does
+    ///      not exist and the gas-capped staticcall fails closed) and the seed rests on
+    ///      `blockhash`/`timestamp`/nonce alone; on Arbitrum-style chains it adds per-L2-block
+    ///      granularity where `block.number` is the slower L1 number.
     function _nextSeed(address to) private returns (uint256) {
         unchecked {
             _seedNonce++;
