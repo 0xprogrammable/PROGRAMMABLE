@@ -22,6 +22,8 @@ const BLOCK_HASH =
 const TRANSACTION_HASH =
   "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 const BLOCK_NUMBER = 25_650_020;
+const MISMATCHED_VAULT: `0x${string}` =
+  "0x6666666666666666666666666666666666666666";
 
 const block = { number: BLOCK_NUMBER, timestamp: 1_800_000_020, hash: BLOCK_HASH };
 const transaction = { hash: TRANSACTION_HASH, transactionIndex: 3 };
@@ -58,9 +60,25 @@ const v3LaunchEvents = [
     },
   },
   {
+    contract: "StockV2V3Hook" as const,
+    event: "QuoteSwapFeesAccrued" as const,
+    logIndex: 52,
+    block,
+    transaction,
+    params: {
+      poolId: POOL_ID,
+      swapSender: DEPLOYER,
+      quoteAsset: QUOTE,
+      isBuy: true,
+      grossQuoteAmount: 10_000n,
+      creatorFee: 900n,
+      launcherFee: 100n,
+    },
+  },
+  {
     contract: "StockV3Launcher" as const,
     event: "StockPairedLiquidityConfigured" as const,
-    logIndex: 52,
+    logIndex: 53,
     block,
     transaction,
     params: {
@@ -79,7 +97,7 @@ const v3LaunchEvents = [
   {
     contract: "StockV3Launcher" as const,
     event: "StockPairedCreatorInitialBuy" as const,
-    logIndex: 53,
+    logIndex: 54,
     block,
     transaction,
     params: {
@@ -95,7 +113,7 @@ const v3LaunchEvents = [
   {
     contract: "StockV3Launcher" as const,
     event: "StockPairedTokenLaunched" as const,
-    logIndex: 54,
+    logIndex: 55,
     block,
     transaction,
     params: {
@@ -107,6 +125,22 @@ const v3LaunchEvents = [
       positionRecipient: POSITION_RECIPIENT,
       positionTokenId: 12n,
       launchHash: LAUNCH_HASH,
+    },
+  },
+  {
+    contract: "StockV2V3RewardVault" as const,
+    event: "BeneficiaryFeesClaimed" as const,
+    srcAddress: VAULT,
+    logIndex: 56,
+    block,
+    transaction,
+    params: {
+      beneficiary: DEPLOYER,
+      payoutAddress: POSITION_RECIPIENT,
+      quoteAsset: QUOTE,
+      amount: 9_007_199_254_740_993n,
+      beneficiaryTotalClaimed: 90_071_992_547_409_931n,
+      vaultTotalReceived: 900_719_925_474_099_311n,
     },
   },
 ];
@@ -134,11 +168,131 @@ describe("Stock-Paired handlers", () => {
       model: "stock-paired",
       provenanceValid: true,
     });
+    expect(
+      await indexer.Launch.getOrThrow(
+        `1:stock-paired-v3:${LAUNCH_HASH}`,
+      ),
+    ).toMatchObject({
+      rewardConfigurationHash: REWARD_CONFIGURATION_HASH,
+      quoteConfigurationHash: QUOTE_CONFIGURATION_HASH,
+    });
     expect(await indexer.RewardVault.getOrThrow(VAULT)).toMatchObject({
       releaseVersion: "stock-paired-v3",
       poolId: POOL_ID,
       hook: SHARED_HOOK,
       quoteAsset: QUOTE,
+    });
+    expect((await indexer.BeneficiaryClaim.getAll())[0]).toMatchObject({
+      vault: VAULT,
+      beneficiary: DEPLOYER,
+      payoutAddress: POSITION_RECIPIENT,
+      quoteAsset: QUOTE,
+      amount: 9_007_199_254_740_993n,
+      beneficiaryTotalClaimed: 90_071_992_547_409_931n,
+      vaultTotalReceived: 900_719_925_474_099_311n,
+      releaseVersion: "stock-paired-v3",
+      downstreamLogicalId: undefined,
+      receiptLogOrdinal: undefined,
+    });
+    const accrual = (await indexer.FeeAccrual.getAll())[0];
+    expect(accrual).toMatchObject({
+      releaseVersion: "stock-paired-v3",
+      model: "stock-paired",
+      poolId: POOL_ID,
+      quoteAsset: QUOTE,
+      grossAmount: 10_000n,
+      creatorFee: 900n,
+      launcherFee: 100n,
+    });
+    expect(
+      await indexer.ChainEvent.getOrThrow(accrual!.id),
+    ).toMatchObject({
+      releaseVersion: "stock-paired-v3",
+      model: "stock-paired",
+    });
+    expect(await indexer.PoolFeeTotals.getOrThrow(`1:${POOL_ID}`)).toMatchObject({
+      releaseVersion: "stock-paired-v3",
+      model: "stock-paired",
+      grossAmount: 10_000n,
+      creatorFees: 900n,
+      launcherFees: 100n,
+      swapCount: 1n,
+    });
+  });
+
+  it("resolves the same shared hook and factory through poolId to Stock V2", async () => {
+    const indexer = createTestIndexer();
+    const v2LaunchEvents = v3LaunchEvents.map((event) =>
+      event.contract === "StockV3Launcher"
+        ? { ...event, contract: "StockV2Launcher" as const }
+        : event,
+    );
+
+    await indexer.process({
+      chains: {
+        1: {
+          startBlock: BLOCK_NUMBER,
+          endBlock: BLOCK_NUMBER + 12,
+          simulate: v2LaunchEvents,
+        },
+      },
+    });
+
+    expect((await indexer.PoolFeeConfig.getOrThrow(`1:${POOL_ID}`))).toMatchObject({
+      releaseVersion: "stock-paired-v2",
+      model: "stock-paired",
+      provenanceValid: true,
+    });
+    expect(await indexer.RewardVault.getOrThrow(VAULT)).toMatchObject({
+      releaseVersion: "stock-paired-v2",
+      poolId: POOL_ID,
+      hook: SHARED_HOOK,
+      quoteAsset: QUOTE,
+    });
+    expect((await indexer.BeneficiaryClaim.getAll())[0]).toMatchObject({
+      releaseVersion: "stock-paired-v2",
+      amount: 9_007_199_254_740_993n,
+    });
+    expect((await indexer.FeeAccrual.getAll())[0]).toMatchObject({
+      releaseVersion: "stock-paired-v2",
+      model: "stock-paired",
+      grossAmount: 10_000n,
+    });
+  });
+
+  it("invalidates a complete launch when a mismatched shared hook event arrives later", async () => {
+    const indexer = createTestIndexer();
+    const events = v3LaunchEvents.map((event) =>
+      event.contract === "StockV2V3Hook" &&
+      event.event === "PoolRegistered"
+        ? {
+            ...event,
+            logIndex: 57,
+            params: {
+              ...event.params,
+              rewardVault: MISMATCHED_VAULT,
+            },
+          }
+        : event,
+    );
+
+    await indexer.process({
+      chains: {
+        1: {
+          startBlock: BLOCK_NUMBER,
+          endBlock: BLOCK_NUMBER + 12,
+          simulate: events,
+        },
+      },
+    });
+
+    expect(
+      await indexer.Launch.getOrThrow(
+        `1:stock-paired-v3:${LAUNCH_HASH}`,
+      ),
+    ).toMatchObject({
+      provenanceValid: false,
+      isComplete: false,
     });
   });
 

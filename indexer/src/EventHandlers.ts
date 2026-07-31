@@ -124,8 +124,39 @@ async function recordOccurrence(
   context: EvmOnEventContext,
 ): Promise<RecordedOccurrence> {
   const provenance = eventProvenance(event);
+  const encoded = encodeEventPayload(
+    findEventAbi(event),
+    event.params as unknown as Readonly<Record<string, unknown>>,
+  );
+  const topics = encoded.topics.map(lower);
+  const data = lower(encoded.data);
+  const decodedPayload = canonicalPayloadJson(event.params);
+  const payloadHash = lower(encoded.payloadHash);
   const existing = await context.ChainEvent.get(provenance.id);
   if (existing !== undefined) {
+    const sameTopics =
+      existing.topics.length === topics.length &&
+      existing.topics.every((topic, index) => topic === topics[index]);
+    const isConflict =
+      existing.chainId !== provenance.chainId ||
+      existing.blockNumber !== provenance.blockNumber ||
+      existing.blockHash !== provenance.blockHash ||
+      existing.blockTimestamp !== provenance.blockTimestamp ||
+      existing.transactionHash !== provenance.transactionHash ||
+      existing.transactionIndex !== provenance.transactionIndex ||
+      existing.blockGlobalLogIndex !== provenance.blockGlobalLogIndex ||
+      existing.sourceAddress !== provenance.sourceAddress ||
+      existing.contractName !== event.contractName ||
+      existing.eventName !== event.eventName ||
+      !sameTopics ||
+      existing.data !== data ||
+      existing.decodedPayload !== decodedPayload ||
+      existing.payloadHash !== payloadHash;
+    if (isConflict) {
+      throw new Error(
+        `Conflicting duplicate candidate occurrence ${provenance.id}`,
+      );
+    }
     return {
       isNew: false,
       provenance,
@@ -162,21 +193,16 @@ async function recordOccurrence(
             releaseVersion: vaultRelation.releaseVersion,
           },
   });
-  const encoded = encodeEventPayload(
-    findEventAbi(event),
-    event.params as unknown as Readonly<Record<string, unknown>>,
-  );
-
   const chainEvent: ChainEvent = {
     ...provenance,
     contractName: event.contractName,
     eventName: event.eventName,
     model: release.model,
     releaseVersion: release.releaseVersion,
-    topics: encoded.topics.map(lower),
-    data: lower(encoded.data),
-    decodedPayload: canonicalPayloadJson(event.params),
-    payloadHash: lower(encoded.payloadHash),
+    topics,
+    data,
+    decodedPayload,
+    payloadHash,
   };
   context.ChainEvent.set(chainEvent);
   await updateIndexerState(context, provenance);
@@ -194,20 +220,15 @@ async function updateIndexerState(
   provenance: EventProvenance,
 ): Promise<void> {
   const current = await context.IndexerState.get(INDEXER_STATE_ID);
+  const currentOccurrence =
+    current === undefined
+      ? undefined
+      : await context.ChainEvent.get(current.progressOccurrenceId);
   if (
     current !== undefined &&
-    comparePlacement(
-      [
-        current.progressBlock,
-        current.progressTransactionHash,
-        current.progressOccurrenceId,
-      ],
-      [
-        provenance.blockNumber,
-        provenance.transactionHash,
-        provenance.id,
-      ],
-    ) >= 0
+    (currentOccurrence !== undefined
+      ? comparePlacement(currentOccurrence, provenance) >= 0
+      : current.progressBlock > provenance.blockNumber)
   ) {
     return;
   }
@@ -224,16 +245,37 @@ async function updateIndexerState(
   });
 }
 
+type CandidatePlacement = {
+  readonly id: string;
+  readonly blockNumber: bigint;
+  readonly blockHash: string;
+  readonly transactionHash: string;
+  readonly transactionIndex: number;
+  readonly blockGlobalLogIndex: number;
+};
+
 function comparePlacement(
-  left: readonly [bigint, string, string],
-  right: readonly [bigint, string, string],
+  left: CandidatePlacement,
+  right: CandidatePlacement,
 ): number {
-  if (left[0] !== right[0]) {
-    return left[0] > right[0] ? 1 : -1;
+  if (left.blockNumber !== right.blockNumber) {
+    return left.blockNumber > right.blockNumber ? 1 : -1;
   }
-  const transactionOrder = left[1].localeCompare(right[1]);
+  if (left.transactionIndex !== right.transactionIndex) {
+    return left.transactionIndex > right.transactionIndex ? 1 : -1;
+  }
+  if (left.blockGlobalLogIndex !== right.blockGlobalLogIndex) {
+    return left.blockGlobalLogIndex > right.blockGlobalLogIndex ? 1 : -1;
+  }
+  const blockOrder = left.blockHash.localeCompare(right.blockHash);
+  if (blockOrder !== 0) {
+    return blockOrder;
+  }
+  const transactionOrder = left.transactionHash.localeCompare(
+    right.transactionHash,
+  );
   return transactionOrder === 0
-    ? left[2].localeCompare(right[2])
+    ? left.id.localeCompare(right.id)
     : transactionOrder;
 }
 
@@ -591,11 +633,31 @@ async function reconcileLaunch(
 
   const config = await context.PoolFeeConfig.get(relationId);
   if (config !== undefined) {
+    if (
+      launch.rewardConfigurationHash === undefined &&
+      config.rewardConfigurationHash !== undefined
+    ) {
+      launch.rewardConfigurationHash = config.rewardConfigurationHash;
+    }
+    if (
+      launch.quoteConfigurationHash === undefined &&
+      config.quoteConfigurationHash !== undefined
+    ) {
+      launch.quoteConfigurationHash = config.quoteConfigurationHash;
+    }
     const configValid =
       config.provenanceValid &&
       optionalMatches(config.token, launch.token) &&
       optionalMatches(config.quoteAsset, launch.quoteAsset) &&
-      optionalMatches(config.rewardVault, launch.rewardVault);
+      optionalMatches(config.rewardVault, launch.rewardVault) &&
+      compatibleOptionalValue(
+        config.rewardConfigurationHash,
+        launch.rewardConfigurationHash,
+      ) &&
+      compatibleOptionalValue(
+        config.quoteConfigurationHash,
+        launch.quoteConfigurationHash,
+      );
     context.PoolFeeConfig.set({
       ...config,
       model: launch.model,
@@ -623,7 +685,11 @@ async function reconcileLaunch(
       const vaultValid =
         sameValue(vault.poolId, launch.poolId) &&
         sameValue(vault.hook, launch.hook) &&
-        optionalMatches(vault.quoteAsset, launch.quoteAsset);
+        optionalMatches(vault.quoteAsset, launch.quoteAsset) &&
+        compatibleOptionalValue(
+          vault.configurationHash,
+          launch.rewardConfigurationHash,
+        );
       context.RewardVault.set({
         ...vault,
         model: launch.model,
@@ -644,6 +710,7 @@ async function reconcileLaunch(
       releaseVersion: launch.releaseVersion,
     });
   }
+  await relabelPoolScopedEntities(context, launch);
   launch.isComplete = launchIsComplete(launch);
   context.Launch.set(launch);
 }
@@ -663,6 +730,85 @@ async function relabelOccurrence(
       model: launch.model,
       releaseVersion: launch.releaseVersion,
     });
+  }
+}
+
+async function relabelPoolScopedEntities(
+  context: EvmOnEventContext,
+  launch: Launch,
+): Promise<void> {
+  if (launch.poolId === undefined) {
+    return;
+  }
+  const poolFilter = { poolId: { _eq: launch.poolId } };
+  const [
+    feeAccruals,
+    creatorFeeClaims,
+    rewardCheckpoints,
+    payoutChanges,
+    rewardConfigurationChanges,
+  ] = await Promise.all([
+    context.FeeAccrual.getWhere(poolFilter),
+    context.CreatorFeeClaim.getWhere(poolFilter),
+    context.RewardCheckpoint.getWhere(poolFilter),
+    context.PayoutChange.getWhere(poolFilter),
+    context.RewardConfigurationChange.getWhere(poolFilter),
+  ]);
+
+  for (const entity of feeAccruals) {
+    context.FeeAccrual.set({
+      ...entity,
+      model: launch.model,
+      releaseVersion: launch.releaseVersion,
+    });
+    await relabelOccurrence(context, entity.id, launch);
+  }
+  for (const entity of creatorFeeClaims) {
+    context.CreatorFeeClaim.set({
+      ...entity,
+      model: launch.model,
+      releaseVersion: launch.releaseVersion,
+    });
+    await relabelOccurrence(context, entity.id, launch);
+  }
+  for (const entity of rewardCheckpoints) {
+    context.RewardCheckpoint.set({
+      ...entity,
+      model: launch.model,
+      releaseVersion: launch.releaseVersion,
+    });
+    await relabelOccurrence(context, entity.id, launch);
+  }
+  for (const entity of payoutChanges) {
+    context.PayoutChange.set({
+      ...entity,
+      model: launch.model,
+      releaseVersion: launch.releaseVersion,
+    });
+    await relabelOccurrence(context, entity.id, launch);
+  }
+  for (const entity of rewardConfigurationChanges) {
+    context.RewardConfigurationChange.set({
+      ...entity,
+      model: launch.model,
+      releaseVersion: launch.releaseVersion,
+    });
+    await relabelOccurrence(context, entity.id, launch);
+  }
+
+  if (launch.rewardVault === undefined) {
+    return;
+  }
+  const beneficiaryClaims = await context.BeneficiaryClaim.getWhere({
+    vault: { _eq: launch.rewardVault },
+  });
+  for (const entity of beneficiaryClaims) {
+    context.BeneficiaryClaim.set({
+      ...entity,
+      model: launch.model,
+      releaseVersion: launch.releaseVersion,
+    });
+    await relabelOccurrence(context, entity.id, launch);
   }
 }
 
@@ -828,6 +974,12 @@ async function handlePoolConfigurationEvent(
       ? occurrence.provenance.blockNumber
       : next.blockNumber;
   context.PoolFeeConfig.set(next);
+  if (relation !== undefined) {
+    const launch = await context.Launch.get(relation.launchId);
+    if (launch !== undefined) {
+      await reconcileLaunch(context, launch);
+    }
+  }
 }
 
 function defaultPoolFeeConfig(
@@ -1076,6 +1228,12 @@ async function handleVaultFactoryEvent(
     transactionHash: occurrence.provenance.transactionHash,
     blockGlobalLogIndex: occurrence.provenance.blockGlobalLogIndex,
   });
+  if (relation !== undefined) {
+    const launch = await context.Launch.get(relation.launchId);
+    if (launch !== undefined) {
+      await reconcileLaunch(context, launch);
+    }
+  }
 }
 
 function handleVestingFactoryEvent(
@@ -1325,6 +1483,13 @@ function optionalMatches(
   return actual === undefined || expected === undefined
     ? actual === expected || actual === undefined
     : sameValue(actual, expected);
+}
+
+function compatibleOptionalValue(
+  left: string | undefined,
+  right: string | undefined,
+): boolean {
+  return left === undefined || right === undefined || sameValue(left, right);
 }
 
 function isEventFlag(key: keyof Launch): boolean {
