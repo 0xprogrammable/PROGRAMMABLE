@@ -110,4 +110,15 @@ run_phase "$username_file" setup "${username_phases[@]}"
 run_pair "$username_file" collision_a collision_b "${username_phases[@]}"
 run_phase "$username_file" verify "${username_phases[@]}"
 
+release_probe_nonce_file="$script_dir/release_probe_nonce_sessions.sql"
+release_probe_nonce_phases=(
+  setup same_nonce_a same_nonce_b different_route_a different_route_b verify
+)
+run_phase "$release_probe_nonce_file" setup "${release_probe_nonce_phases[@]}"
+run_pair "$release_probe_nonce_file" \
+  same_nonce_a same_nonce_b "${release_probe_nonce_phases[@]}"
+run_pair "$release_probe_nonce_file" \
+  different_route_a different_route_b "${release_probe_nonce_phases[@]}"
+run_phase "$release_probe_nonce_file" verify "${release_probe_nonce_phases[@]}"
+
 echo "two-session concurrency harness passed"
