@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
+
 const mocks = vi.hoisted(() => ({
   enrichExplorePageWithOfficialV4Subgraph: vi.fn(),
   paginateExplore: vi.fn(),

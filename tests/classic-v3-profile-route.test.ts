@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
+
 const mocks = vi.hoisted(() => {
   const runtimeCodes = {
     "0x01":

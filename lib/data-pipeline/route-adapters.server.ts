@@ -1753,7 +1753,7 @@ export function adaptIndexedChartV2(
     "explore-chart",
     ALL_SUPPORTED_RELEASES,
   );
-  canonicalAddress(ready.data.address, "chart-address");
+  const address = canonicalAddress(ready.data.address, "chart-address");
   canonicalBytes32(ready.data.poolId, "chart-pool");
   if (!["1h", "1d", "1w", "all"].includes(ready.data.range)) {
     fail("invalid-input", "chart-range");
@@ -1781,6 +1781,7 @@ export function adaptIndexedChartV2(
     }
     return {
       status: "insufficient-history" as const,
+      address,
       points: [],
       swapCount: 0,
       volumeWei: "0",
@@ -1818,6 +1819,7 @@ export function adaptIndexedChartV2(
   });
   return {
     status: points.length >= 2 ? ("ready" as const) : ("insufficient-history" as const),
+    address,
     points,
     swapCount,
     volumeWei,

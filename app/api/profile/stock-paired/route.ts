@@ -24,6 +24,13 @@ import {
   lookupActionReward,
   type ActionRewardLookup,
 } from "@/lib/data-pipeline/action-lookup";
+import {
+  coordinatePublicRouteRead,
+  PUBLIC_INDEXED_ROUTE_READS,
+  publicRouteSearchParams,
+  publicSnapshotCheckpoint,
+  STOCK_PAIRED_ROUTE_SCOPES,
+} from "@/lib/data-pipeline/public-route-readiness.server";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
 import {
   StockPairedClaimReceiptError,
@@ -516,6 +523,7 @@ async function readRewardsWithClients(
         chainId: 1 as const,
         rewards: [],
       },
+      checkpoint: undefined,
       rpcClients: [] as PublicClient[],
     };
   }
@@ -592,6 +600,7 @@ async function readRewardsWithClients(
       snapshotBlock: snapshotBlock.toString(),
       rewards,
     },
+    checkpoint: publicSnapshotCheckpoint(model.snapshot),
     rpcClients: verifiedClients,
   };
 }
@@ -723,17 +732,41 @@ async function readStockActionReward(
   };
 }
 
-async function readRewards(account: Address, includeEstimates = true) {
-  return (await readRewardsWithClients(account, includeEstimates)).response;
-}
-
 export async function GET(request: NextRequest) {
-  const accountInput = request.nextUrl.searchParams.get("account")?.trim();
+  const search = publicRouteSearchParams(
+    request.nextUrl.searchParams,
+    request.headers,
+  );
+  if (
+    [...search.keys()].some((key) => key !== "account") ||
+    search.getAll("account").length !== 1
+  ) {
+    return json({ error: "Unsupported query parameters" }, 400);
+  }
+  const accountInput = search.get("account")?.trim();
   if (!accountInput || !isAddress(accountInput)) {
     return json({ error: "Enter a valid Ethereum account address" }, 400);
   }
   try {
-    return json(await readRewards(getAddress(accountInput)));
+    const account = getAddress(accountInput);
+    return await coordinatePublicRouteRead({
+      route: "creator-profile",
+      scope: STOCK_PAIRED_ROUTE_SCOPES,
+      requestHeaders: request.headers,
+      indexed: (transaction) =>
+        PUBLIC_INDEXED_ROUTE_READS.stockPairedProfile(transaction, {
+          chainId: 1,
+          account,
+        }),
+      async legacy() {
+        const result = await readRewardsWithClients(account);
+        return {
+          source: "rpc" as const,
+          ...(result.checkpoint ? { checkpoint: result.checkpoint } : {}),
+          response: json(result.response),
+        };
+      },
+    });
   } catch (error) {
     console.error(
       "Stock-Paired profile read failed",

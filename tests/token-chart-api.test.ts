@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
+
 const mocks = vi.hoisted(() => ({
   getPublicOnchainDeployment: vi.fn(),
   isTokenChartRange: vi.fn(),
@@ -76,6 +78,7 @@ describe("token chart API", () => {
       }),
     );
     await expect(response.json()).resolves.toMatchObject({
+      address: token.tokenAddress,
       range: "1h",
       swapCount: 2,
       volumeWei: "1250000000000000000",

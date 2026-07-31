@@ -715,6 +715,7 @@ describe("indexed chart adapter v2", () => {
 
     expect(response).toEqual({
       status: "ready",
+      address: TOKEN_A,
       points: [
         {
           blockNumber: "25650001",
@@ -753,6 +754,7 @@ describe("indexed chart adapter v2", () => {
         ),
       ).toEqual({
         status: "insufficient-history",
+        address: TOKEN_A,
         points: [],
         swapCount: 0,
         volumeWei: "0",

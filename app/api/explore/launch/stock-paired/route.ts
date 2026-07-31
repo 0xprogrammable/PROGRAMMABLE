@@ -14,6 +14,12 @@ import { mainnet } from "viem/chains";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
 import { getConfiguredStockPairedReleases } from "@/lib/stock-paired-release";
+import {
+  coordinatePublicRouteRead,
+  PUBLIC_INDEXED_ROUTE_READS,
+  publicRouteSearchParams,
+  STOCK_PAIRED_ROUTE_SCOPES,
+} from "@/lib/data-pipeline/public-route-readiness.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -45,8 +51,11 @@ function endpoints() {
   return [primary, secondary] as const;
 }
 
-export async function GET(request: NextRequest) {
-  const search = request.nextUrl.searchParams;
+async function readLegacyLaunchLookup(request: NextRequest) {
+  const search = publicRouteSearchParams(
+    request.nextUrl.searchParams,
+    request.headers,
+  );
   if (
     [...search.keys()].some(
       (key) => key !== "account" && key !== "transaction",
@@ -228,6 +237,58 @@ export async function GET(request: NextRequest) {
     }
     console.error(
       "Stock-Paired launch lookup failed",
+      safeServerErrorSummary(error),
+    );
+    return json({ error: "The launch receipt is temporarily unavailable" }, 503);
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const search = publicRouteSearchParams(
+    request.nextUrl.searchParams,
+    request.headers,
+  );
+  if (
+    [...search.keys()].some(
+      (key) => key !== "account" && key !== "transaction",
+    ) ||
+    search.getAll("account").length !== 1 ||
+    search.getAll("transaction").length !== 1
+  ) {
+    return json({ error: "Unsupported query parameters" }, 400);
+  }
+  const accountInput = search.get("account")?.trim() ?? "";
+  const transactionInput = search.get("transaction")?.trim() ?? "";
+  if (
+    !isAddress(accountInput) ||
+    !isHex(transactionInput, { strict: true }) ||
+    transactionInput.length !== 66
+  ) {
+    return json({ error: "Invalid Stock-Paired launch lookup" }, 400);
+  }
+
+  try {
+    return await coordinatePublicRouteRead({
+      route: "launch-lookup",
+      scope: STOCK_PAIRED_ROUTE_SCOPES,
+      requestHeaders: request.headers,
+      indexed: (readTransaction) =>
+        PUBLIC_INDEXED_ROUTE_READS.launchLookup(readTransaction, {
+          chainId: 1,
+          surface: "stock-paired",
+          account: getAddress(accountInput),
+          transactionHash: transactionInput,
+        }),
+      async legacy() {
+        return {
+          source: "rpc" as const,
+          response: await readLegacyLaunchLookup(request),
+        };
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Stock-Paired launch lookup coordination failed",
       safeServerErrorSummary(error),
     );
     return json({ error: "The launch receipt is temporarily unavailable" }, 503);

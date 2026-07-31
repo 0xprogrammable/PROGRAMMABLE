@@ -300,7 +300,7 @@ export function createPostgresPublicRouteSnapshotAdapters(input: {
         snapshot: envelope.snapshot,
         recordSources: envelope.data.token ? [envelope.data.token.source] : [],
         response: {
-          status: 200,
+          status: body.status === "pending" ? 202 : 200,
           body,
           headers: indexedRouteCacheHeaders("launch-lookup"),
         },

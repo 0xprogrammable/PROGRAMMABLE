@@ -32,6 +32,12 @@ import {
 } from "@/lib/data-pipeline/action-lookup";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { encodeClassicV3RewardAction } from "@/lib/profile/classic-v3-rewards";
+import {
+  CLASSIC_V3_ROUTE_SCOPE,
+  coordinatePublicRouteRead,
+  PUBLIC_INDEXED_ROUTE_READS,
+  publicRouteSearchParams,
+} from "@/lib/data-pipeline/public-route-readiness.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -684,21 +690,69 @@ async function readLaunchByTransaction(account: Address, transactionHash: Hex) {
 }
 
 export async function GET(request: NextRequest) {
-  const input = request.nextUrl.searchParams.get("account")?.trim();
+  const search = publicRouteSearchParams(
+    request.nextUrl.searchParams,
+    request.headers,
+  );
+  if (
+    [...search.keys()].some(
+      (key) => key !== "account" && key !== "launch",
+    ) ||
+    search.getAll("account").length !== 1 ||
+    search.getAll("launch").length > 1
+  ) {
+    return json({ error: "Unsupported query parameters" }, 400);
+  }
+  const input = search.get("account")?.trim();
   if (!input || !isAddress(input)) {
     return json({ error: "Enter a valid Ethereum account address" }, 400);
   }
   try {
-    const launch = request.nextUrl.searchParams.get("launch")?.trim();
+    const launch = search.get("launch")?.trim();
     if (launch) {
       if (!isHex(launch, { strict: true }) || launch.length !== 66) {
         return json({ error: "Enter a valid launch transaction hash" }, 400);
       }
-      return json(
-        await readLaunchByTransaction(getAddress(input), launch as Hex),
-      );
+      return await coordinatePublicRouteRead({
+        route: "launch-lookup",
+        scope: CLASSIC_V3_ROUTE_SCOPE,
+        requestHeaders: request.headers,
+        indexed: (transaction) =>
+          PUBLIC_INDEXED_ROUTE_READS.launchLookup(transaction, {
+            chainId: 1,
+            surface: "classic-v3",
+            account: getAddress(input),
+            transactionHash: launch,
+          }),
+        async legacy() {
+          return {
+            source: "rpc" as const,
+            response: json(
+              await readLaunchByTransaction(
+                getAddress(input),
+                launch as Hex,
+              ),
+            ),
+          };
+        },
+      });
     }
-    return json(await readRewards(getAddress(input)));
+    return await coordinatePublicRouteRead({
+      route: "classic-v3-profile",
+      scope: CLASSIC_V3_ROUTE_SCOPE,
+      requestHeaders: request.headers,
+      indexed: (transaction) =>
+        PUBLIC_INDEXED_ROUTE_READS.classicV3Profile(transaction, {
+          chainId: 1,
+          account: getAddress(input),
+        }),
+      async legacy() {
+        return {
+          source: "rpc" as const,
+          response: json(await readRewards(getAddress(input))),
+        };
+      },
+    });
   } catch (error) {
     console.error("Classic profile read failed", error);
     return json({ error: "Classic rewards are temporarily unavailable" }, 503);
