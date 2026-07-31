@@ -214,9 +214,20 @@ class FakeExecutor implements PostgresExecutor {
         values: readonly PostgresParameter[] = [],
       ) => {
         this.queries.push({ text, values });
-        if (/select current_role/i.test(text)) {
+        if (
+          text ===
+          "select session_user::text as session_user, current_role::text as current_role"
+        ) {
           return [
-            { current_role: "programmable_api_reader" },
+            {
+              session_user: "programmable_api_reader_login",
+              current_role: "programmable_api_reader",
+            },
+          ] as unknown as Row[];
+        }
+        if (text === "select session_user::text as session_user") {
+          return [
+            { session_user: "programmable_api_reader_login" },
           ] as unknown as Row[];
         }
         return (await this.responder(text, values)) as Row[];
@@ -418,7 +429,7 @@ describe("final private read-model database contract", () => {
 
     const dataQueries = executor.queries.filter(
       ({ text }) =>
-        !/^set local/i.test(text) && !/select current_role/i.test(text),
+        !/^set local/i.test(text) && !/select session_user/i.test(text),
     );
     expect(dataQueries[0]!.values).toEqual(["1", bytes(TOKEN)]);
     expect(dataQueries[1]!.values).toEqual([
