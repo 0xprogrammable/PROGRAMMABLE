@@ -207,7 +207,6 @@ test("trusted closed intake blocks application data before candidate Git fetch",
       const fixture = createRevisionPair(t2, { intakeState });
       const candidateRoot = path.join(fixture.root, "candidate.git");
       const candidateCommit = "b".repeat(40);
-      const mergeCommit = "c".repeat(40);
       let runFetchCalled = false;
       await assert.rejects(
         fetchPublicApplicationCandidate({
@@ -217,13 +216,11 @@ test("trusted closed intake blocks application data before candidate Git fetch",
           pullRequestNumber: PULL_REQUEST_NUMBER,
           expectedBaseCommit: fixture.baseCommit,
           expectedCandidateCommit: candidateCommit,
-          expectedMergeCommit: mergeCommit,
           readToken: "test-read-token"
         }, {
           fetchImplementation: createPullRequestMetadataFetch({
             baseCommit: fixture.baseCommit,
             candidateCommit,
-            mergeCommit,
             files: [{ filename: "submissions/example-hook/application.json", status: "added" }]
           }),
           async runFetch() {
@@ -542,15 +539,13 @@ test("paused-new preflight rejects foreign, mixed, renamed, and deleted applicat
   }
 });
 
-test("candidate preflight binds exact GitHub base, head, and merge identities", async (t) => {
+test("candidate preflight binds exact GitHub base and head without removed merge metadata", async (t) => {
   const fixture = createRevisionPair(t, { intakeState: "prelaunch" });
   const candidateCommit = "b".repeat(40);
-  const mergeCommit = "c".repeat(40);
-  for (const mismatch of ["base", "head", "merge"]) {
+  for (const mismatch of ["base", "head"]) {
     await t.test(mismatch, async () => {
       const observedBase = mismatch === "base" ? "d".repeat(40) : fixture.baseCommit;
       const observedHead = mismatch === "head" ? "d".repeat(40) : candidateCommit;
-      const observedMerge = mismatch === "merge" ? "d".repeat(40) : mergeCommit;
       await assert.rejects(
         preflightPublicApplicationCandidateFetch({
           baseRoot: fixture.base,
@@ -564,7 +559,6 @@ test("candidate preflight binds exact GitHub base, head, and merge identities", 
           fetchImplementation: createPullRequestMetadataFetch({
             baseCommit: observedBase,
             candidateCommit: observedHead,
-            mergeCommit: observedMerge,
             files: [{ filename: "submissions/example-hook/application.json", status: "added" }]
           })
         }),
@@ -603,6 +597,33 @@ test("hydration enforces trusted intake state before GitHub tree metadata or bac
   assert.equal(metadataCalled, false);
 });
 
+test("initial candidate fetch derives the merge id and immediately binds the event head", async (t) => {
+  const fixture = createRevisionPair(t, { intakeState: "open" });
+  writeFile(fixture.candidate, "skills/programmable-v4-hook-builder/SKILL.md", "candidate data\n");
+  const candidateCommit = commitAll(fixture.candidate, "candidate revision");
+  const mergeCommit = createPullRequestMerge(fixture, candidateCommit);
+  git(fixture.candidate, ["update-ref", `refs/pull/${PULL_REQUEST_NUMBER}/merge`, mergeCommit]);
+  git(fixture.candidate, ["config", "uploadpack.allowFilter", "true"]);
+  const candidateData = path.join(fixture.root, "candidate.git");
+
+  await assert.rejects(
+    fetchPublicApplicationCandidate({
+      baseRoot: fixture.base,
+      candidateRoot: candidateData,
+      repository: "central/repository",
+      pullRequestNumber: PULL_REQUEST_NUMBER,
+      expectedBaseCommit: fixture.baseCommit,
+      expectedCandidateCommit: "d".repeat(40),
+      readToken: "test-read-token"
+    }, {
+      remoteUrlForTests: pathToFileURL(fixture.candidate).href,
+      allowFileProtocolForTests: true
+    }),
+    (error) => error?.code === "PR_MERGE_PARENT_MISMATCH" && error?.kind === "system"
+  );
+  assert.equal(fs.existsSync(candidateData), false);
+});
+
 test("initial candidate fetch rejects a giant pack and removes the token-bearing object store", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "public-hook-fetch-giant-pack-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -627,7 +648,6 @@ test("initial candidate fetch rejects a giant pack and removes the token-bearing
       pullRequestNumber: PULL_REQUEST_NUMBER,
       expectedBaseCommit: baseCommit,
       expectedCandidateCommit: "b".repeat(40),
-      expectedMergeCommit: "a".repeat(40),
       readToken: "test-read-token"
     }, {
       remoteUrlForTests: "https://github.com/central/repository.git",
@@ -812,7 +832,6 @@ async function fetchBloblessPullRequestMerge(fixture, mergeCommit) {
     pullRequestNumber: PULL_REQUEST_NUMBER,
     expectedBaseCommit: fixture.baseCommit,
     expectedCandidateCommit: candidateCommit,
-    expectedMergeCommit: mergeCommit,
     readToken: "test-read-token"
   }, {
     remoteUrlForTests: pathToFileURL(fixture.candidate).href,
@@ -851,7 +870,7 @@ function fetchBloblessPullRequestMergeWithoutIntake(fixture, mergeCommit) {
   return candidateData;
 }
 
-function createPullRequestMetadataFetch({ baseCommit, candidateCommit, mergeCommit, files }) {
+function createPullRequestMetadataFetch({ baseCommit, candidateCommit, files }) {
   const pullRequestUrl = `https://api.github.com/repos/central/repository/pulls/${PULL_REQUEST_NUMBER}`;
   const documents = new Map([
     [pullRequestUrl, {
@@ -859,7 +878,6 @@ function createPullRequestMetadataFetch({ baseCommit, candidateCommit, mergeComm
       state: "open",
       base: { sha: baseCommit, repo: { full_name: "central/repository" } },
       head: { sha: candidateCommit },
-      merge_commit_sha: mergeCommit,
       changed_files: files.length
     }],
     [`${pullRequestUrl}/files?per_page=100&page=1`, files]

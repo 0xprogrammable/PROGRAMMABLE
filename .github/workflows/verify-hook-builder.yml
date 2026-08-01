@@ -50,26 +50,13 @@ jobs:
           lfs: false
           submodules: false
 
-      - name: Require immutable PR merge identity
-        shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-        run: |
-          set -euo pipefail
-          sha_pattern='^[a-f0-9]{40}$'
-          if [[ ! "$BASE_SHA" =~ $sha_pattern || ! "$HEAD_SHA" =~ $sha_pattern || ! "$MERGE_SHA" =~ $sha_pattern ]]; then
-            echo "::error::GitHub did not provide an immutable merge commit for this PR. Resolve merge conflicts and retry."
-            exit 1
-          fi
-
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
 
       - name: Fetch exact candidate merge as blobless data
+        id: candidate_fetch
         shell: bash
         env:
           CANDIDATE_READ_TOKEN: ${{ github.token }}
@@ -82,7 +69,7 @@ jobs:
             exit 1
           fi
 
-          timeout --signal=KILL 90s node \
+          fetch_report="$(timeout --signal=KILL 90s node \
             "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
             --fetch-candidate \
             --repository "${{ github.repository }}" \
@@ -90,8 +77,13 @@ jobs:
             --base-root "$GITHUB_WORKSPACE/trusted" \
             --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
             --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
-            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
-            --expected-merge-commit "${{ github.event.pull_request.merge_commit_sha }}"
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}")"
+          merge_commit="$(node -e '
+            const report = JSON.parse(process.argv[1]);
+            if (report.result !== "exact-blobless-candidate-fetched" || !/^[a-f0-9]{40}$/.test(report.mergeCommit)) process.exit(1);
+            process.stdout.write(report.mergeCommit);
+          ' "$fetch_report")"
+          echo "merge_commit=$merge_commit" >> "$GITHUB_OUTPUT"
 
       - name: Classify candidate data with trusted base code
         id: classify
@@ -109,7 +101,7 @@ jobs:
             --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
             --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
             --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
-            --expected-merge-commit "${{ github.event.pull_request.merge_commit_sha }}")"
+            --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}")"
           case "$mode" in
             application|builder-maintenance|no-op) ;;
             *)
@@ -136,7 +128,7 @@ jobs:
             --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
             --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
             --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
-            --expected-merge-commit "${{ github.event.pull_request.merge_commit_sha }}"
+            --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}"
 
       - name: Remove candidate fetch credential
         if: always()
@@ -177,7 +169,7 @@ jobs:
             --expected-builder-login "${{ github.event.pull_request.user.login }}" \
             --expected-builder-user-id "${{ github.event.pull_request.user.id }}" \
             --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
-            --expected-merge-commit "${{ github.event.pull_request.merge_commit_sha }}"
+            --expected-merge-commit "${{ steps.candidate_fetch.outputs.merge_commit }}"
 
       - name: Defer executable builder-maintenance checks to read-only pull-request CI
         if: steps.classify.outputs.mode == 'builder-maintenance'

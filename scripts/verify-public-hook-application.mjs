@@ -17,7 +17,7 @@ import {
 const usage = `Usage:
   verify-public-hook-application.mjs --classify --base-root <path> --candidate-root <path> --expected-base-commit <sha> --expected-candidate-commit <sha> --expected-merge-commit <sha>
   verify-public-hook-application.mjs --pull-request-number <number> --base-root <path> --candidate-root <path> --expected-base-commit <sha> --expected-candidate-commit <sha> --expected-merge-commit <sha> --expected-builder-login <login> --expected-builder-user-id <decimal-id>
-  verify-public-hook-application.mjs --fetch-candidate --repository <owner/repository> --pull-request-number <number> --base-root <path> --candidate-root <path> --expected-base-commit <sha> --expected-candidate-commit <sha> --expected-merge-commit <sha>
+  verify-public-hook-application.mjs --fetch-candidate --repository <owner/repository> --pull-request-number <number> --base-root <path> --candidate-root <path> --expected-base-commit <sha> --expected-candidate-commit <sha>
   verify-public-hook-application.mjs --hydrate-candidate --repository <owner/repository> --pull-request-number <number> --base-root <path> --candidate-root <path> --expected-base-commit <sha> --expected-candidate-commit <sha> --expected-merge-commit <sha>
   verify-public-hook-application.mjs --verify-maintained --repository-root <path>
 
@@ -25,7 +25,7 @@ Inspect one pull request with trusted base code. Candidate Git objects are treat
 
 Options:
   --classify                    Print application, builder-maintenance, or no-op without network access
-  --fetch-candidate             Fetch the exact base-repository PR merge into bounded blobless storage
+  --fetch-candidate             Fetch and identify the exact base-repository PR merge in bounded blobless storage
   --hydrate-candidate           Preflight sizes and hydrate only the closed six-file candidate package
   --repository <owner/name>     Authenticated central GitHub repository for candidate tree metadata
   --pull-request-number <n>     Exact central pull-request number for fetch, hydration, and final application verification
@@ -68,7 +68,6 @@ if (options?.help) {
         pullRequestNumber: options.pullRequestNumber,
         expectedBaseCommit: options.expectedBaseCommit,
         expectedCandidateCommit: options.expectedCandidateCommit,
-        expectedMergeCommit: options.expectedMergeCommit,
         readToken: process.env.CANDIDATE_READ_TOKEN
       });
       process.stdout.write(`${JSON.stringify(report)}\n`);
@@ -183,10 +182,10 @@ function parseArguments(args) {
         }
       }
     } else if (parsed.fetchCandidate) {
-      for (const key of ["repository", "pullRequestNumber", "baseRoot", "candidateRoot", "expectedBaseCommit", "expectedCandidateCommit", "expectedMergeCommit"]) {
+      for (const key of ["repository", "pullRequestNumber", "baseRoot", "candidateRoot", "expectedBaseCommit", "expectedCandidateCommit"]) {
         if (parsed[key] === null) throw new PublicIntakeError("CLI_ARGUMENT_MISSING", "Candidate fetch is missing a required trusted option.", { kind: "system" });
       }
-      for (const key of ["repositoryRoot", "expectedBuilderLogin", "expectedBuilderUserId"]) {
+      for (const key of ["repositoryRoot", "expectedBuilderLogin", "expectedBuilderUserId", "expectedMergeCommit"]) {
         if (parsed[key] !== null) throw new PublicIntakeError("CLI_ARGUMENT_INVALID", "Candidate fetch received an unrelated validator option.", { kind: "system" });
       }
     } else {
