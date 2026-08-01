@@ -27,9 +27,9 @@ import {
 } from "../scripts/generate-plugin.mjs";
 
 const goldenHashes = {
-  skillTree: "c5716600973d15e238e014db6ab65deaeec3ae19fa3c4e194b7994cf28d7107f",
-  codexManifest: "e74bce863cb9fc55f7dabc8ba981061aaf454a7fcc15885857ff5259638e816f",
-  claudeManifest: "e7c2b7d1854f836ccc4e0fd5924f87ee68c20e5386ef00c5aec39b33d40f4304",
+  skillTree: "92dd44f39c929d2fed15367d514cdc861dfb4973d405d36e6d0a6955374d21c8",
+  codexManifest: "a834b200145d050ac30e0cd8881965c7f87dae6650f49eff72e21ac860f7d353",
+  claudeManifest: "77108bc56ad454fded5bc58722ad1ffadac49f87ca303dc422c9ddade583f1b5",
   codexMarketplace: "f51e251087f6d26c75308aeff915485de9493b619c31b5a59baca072d725d0c0",
   claudeMarketplace: "214475551068f84d699cada5adf4518ab3bd2bfe750be6ac4688bcd6ed1ef9c7"
 };

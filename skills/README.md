@@ -48,7 +48,7 @@ commit SHA remains an equivalent pin when an organization requires commit-only p
 
 ```bash
 gh skill preview 0xprogrammable/programmable \
-  programmable-v4-hook-builder@programmable-v4-builder-v0.2.0
+  programmable-v4-hook-builder@programmable-v4-builder-v0.2.1
 ```
 
 Install the same revision for one supported host:
@@ -59,29 +59,30 @@ gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent codex \
   --scope user \
-  --pin programmable-v4-builder-v0.2.0
+  --pin programmable-v4-builder-v0.2.1
 
 # Claude Code
 gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent claude-code \
   --scope user \
-  --pin programmable-v4-builder-v0.2.0
+  --pin programmable-v4-builder-v0.2.1
 
 # GitHub Copilot
 gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent github-copilot \
   --scope user \
-  --pin programmable-v4-builder-v0.2.0
+  --pin programmable-v4-builder-v0.2.1
 ```
 
 The `gh skill` command chooses the host-specific destination. Its skill commands are currently a preview feature, and
 host behavior still depends on each agent's sandbox, tool permissions, and Agent Skills implementation. Installation
 does not grant wallet access, deployment authority, review approval, or permission to publish external changes.
 
-Builder `v0.1.1` remains available only to reproduce legacy review records. Use `v0.2.0` for new launch applications;
-it adds the mandatory Programmable fee policy and evidence gates.
+Builder `v0.1.1` remains available only to reproduce pre-fee legacy records, and `v0.2.0` preserves the first
+fee-policy release. Use `v0.2.1` for new launch applications; it keeps the mandatory Programmable fee policy and adds
+the end-to-end trusted-intake correction for declared Solidity contract paths.
 
 For repository-scoped use, change `--scope user` to `--scope project` only when the generated `.agents/` directory is
 intentionally committed or excluded from Git; otherwise it makes the project worktree dirty and blocks `prepare-pr`.

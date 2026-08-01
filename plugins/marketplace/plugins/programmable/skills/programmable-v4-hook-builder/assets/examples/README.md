@@ -25,7 +25,7 @@ Run the compatibility preflight separately:
 node scripts/validate-submission.mjs submission.json
 ```
 
-A structurally ready example is still a proposal. For Builder `v0.2.0`, every materialized scenario also inherits the
+A structurally ready example is still a proposal. For Builder `v0.2.1`, every materialized scenario also inherits the
 mandatory root `programmableFee` policy from the canonical template. A scenario may vary project economics, but cannot
 replace the 10 bps canonical-pool platform allocation with an LP fee, transfer tax, router charge, app payment, or
 alternative pool. The examples are not audits, deployments, proof of live fee collection, routing approvals, or
