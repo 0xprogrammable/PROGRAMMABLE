@@ -5,7 +5,6 @@ vi.mock("server-only", () => ({}));
 import {
   assertCandidateDatabaseBootstrapState,
   assertCandidateDatabasePromotedState,
-  CANDIDATE_PROMOTION_ENV_NAMES,
   loadCandidateProjectorRuntimeBinding,
   selectProjectorRuntimeBinding,
 } from "../../lib/data-pipeline/candidate-projector-runtime-binding.server";
@@ -39,38 +38,13 @@ function candidateEnvironment(
   };
 }
 
-const PROMOTION_COMMITMENTS = Object.freeze({
-  baseline: `0x${"31".repeat(32)}`,
-  parity: `0x${"32".repeat(32)}`,
-  attestation: `0x${"33".repeat(32)}`,
-  input: `0x${"34".repeat(32)}`,
-});
-
 function promotedReleaseEnvironment(
   overrides: Record<string, string | undefined> = {},
 ) {
   return candidateEnvironment({
     PROGRAMMABLE_PROJECTOR_BINDING_MODE: "release",
-    [CANDIDATE_PROMOTION_ENV_NAMES.providerDeploymentId]:
-      "d08b62a6-74fb-5e0a-a698-dc6877150db4",
-    [CANDIDATE_PROMOTION_ENV_NAMES.deploymentCommitment]:
-      "0xa4267153060a4b02b630d81063e0f84bb36f6f637a52ef71fb29c117c5384259",
-    [CANDIDATE_PROMOTION_ENV_NAMES.schemaCommitment]:
-      "0x5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1",
-    [CANDIDATE_PROMOTION_ENV_NAMES.initializationInputCommitment]:
-      "0x8945e310f60754716ca0015bcdcdf4a39f9db07ab1c6d9c6bf59fee2b701dca9",
-    [CANDIDATE_PROMOTION_ENV_NAMES.initializedAt]:
-      "2026-08-01T09:00:00.000Z",
-    [CANDIDATE_PROMOTION_ENV_NAMES.baselineCommitment]:
-      PROMOTION_COMMITMENTS.baseline,
-    [CANDIDATE_PROMOTION_ENV_NAMES.parityCommitment]:
-      PROMOTION_COMMITMENTS.parity,
-    [CANDIDATE_PROMOTION_ENV_NAMES.envioAttestationCommitment]:
-      PROMOTION_COMMITMENTS.attestation,
-    [CANDIDATE_PROMOTION_ENV_NAMES.promotionInputCommitment]:
-      PROMOTION_COMMITMENTS.input,
-    [CANDIDATE_PROMOTION_ENV_NAMES.promotedAt]:
-      "2026-08-01T10:00:00.000Z",
+    VERCEL_GIT_COMMIT_SHA: "a".repeat(40),
+    VERCEL_DEPLOYMENT_ID: "dpl_12345678901234567890",
     ...overrides,
   });
 }
@@ -80,6 +54,31 @@ function canonicalCandidateBinding() {
     env: candidateEnvironment(),
     activeProductionBinding: getDataPipelineReleaseBinding(),
   }).releaseBinding;
+}
+
+function legacyReleaseBinding() {
+  const canonical = getDataPipelineReleaseBinding();
+  return {
+    ...canonical,
+    envio: {
+      deploymentLabel: "production-1e7c381",
+      graphqlEndpoint:
+        "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
+      schemaVersion: "1" as const,
+      sourceCommit: "1e7c38125714e2f485f8be0c665b12e7d7fb1809",
+      configSha256:
+        "0x378e3a799c762cb31107792c7123f5f90b54b5826884c398995e7465176fe1c2" as const,
+      schemaSha256:
+        "0x3217def060af2d1053ec3bca854187ff547fb43d91b113bc87a9f3285489362d" as const,
+      handlerSha256:
+        "0x241e18c3eda104b96eec4142826459c41c39cbce0474322634b5ea161d2fdf3e" as const,
+      sourceRegistrySha256:
+        "0x552e941d2ad7fea1184bf1efb97f840bdce9835c647b76f753f1326c6afe211f" as const,
+      eventSetSha256:
+        "0x7481d6fa986d706e46b9834e40574dd84f21be80b041d35e7d47dbfa59d69243" as const,
+      eventCount: 51,
+    },
+  };
 }
 
 describe("candidate projector runtime binding", () => {
@@ -113,22 +112,20 @@ describe("candidate projector runtime binding", () => {
     });
   });
 
-  it("leaves the canonical production release binding unchanged", () => {
+  it("leaves the canonical candidate release binding unchanged", () => {
     const production = getDataPipelineReleaseBinding();
+    const before = structuredClone(production);
     loadCandidateProjectorRuntimeBinding({
       env: candidateEnvironment(),
       activeProductionBinding: production,
     });
 
-    expect(production.envio).toMatchObject({
-      deploymentLabel: "production-1e7c381",
-      graphqlEndpoint:
-        "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
-    });
+    expect(production).toEqual(before);
+    expect(production.envio.deploymentLabel).toBe("production-7f24e63");
   });
 
   it("selects legacy, candidate-backfill, and promoted-release bindings without mutable globals", () => {
-    const legacy = getDataPipelineReleaseBinding();
+    const legacy = legacyReleaseBinding();
     const candidate = canonicalCandidateBinding();
 
     expect(selectProjectorRuntimeBinding({
@@ -157,34 +154,18 @@ describe("candidate projector runtime binding", () => {
       candidate: null,
       promotedDatabase: {
         providerDeploymentId: "d08b62a6-74fb-5e0a-a698-dc6877150db4",
-        baselineCommitment: PROMOTION_COMMITMENTS.baseline,
-        parityCommitment: PROMOTION_COMMITMENTS.parity,
-        envioAttestationCommitment: PROMOTION_COMMITMENTS.attestation,
-        promotionInputCommitment: PROMOTION_COMMITMENTS.input,
-        promotedAt: "2026-08-01T10:00:00.000Z",
+        productCommit: "a".repeat(40),
+        stagedDeploymentId: "dpl_12345678901234567890",
       },
     });
   });
 
   it.each([
-    [CANDIDATE_PROMOTION_ENV_NAMES.baselineCommitment, undefined],
-    [CANDIDATE_PROMOTION_ENV_NAMES.parityCommitment, `0x${"00".repeat(32)}`],
-    [
-      CANDIDATE_PROMOTION_ENV_NAMES.envioAttestationCommitment,
-      "0x1234",
-    ],
-    [
-      CANDIDATE_PROMOTION_ENV_NAMES.providerDeploymentId,
-      "d08b62a6-74fb-5e0a-a698-dc6877150db5",
-    ],
-    [
-      CANDIDATE_PROMOTION_ENV_NAMES.promotedAt,
-      "2026-08-01T08:59:59.000Z",
-    ],
-    [
-      `NEXT_PUBLIC_${CANDIDATE_PROMOTION_ENV_NAMES.baselineCommitment}`,
-      PROMOTION_COMMITMENTS.baseline,
-    ],
+    ["VERCEL_GIT_COMMIT_SHA", undefined],
+    ["VERCEL_GIT_COMMIT_SHA", "0".repeat(40)],
+    ["VERCEL_GIT_COMMIT_SHA", "A".repeat(40)],
+    ["VERCEL_DEPLOYMENT_ID", undefined],
+    ["VERCEL_DEPLOYMENT_ID", "production"],
   ])("rejects missing or mismatched promoted-release evidence in %s", (name, value) => {
     expect(() => selectProjectorRuntimeBinding({
       env: promotedReleaseEnvironment({ [name]: value }),
@@ -296,7 +277,7 @@ describe("candidate projector runtime binding", () => {
       if (text === "select session_user::text as session_user") {
         return [{ session_user: "programmable_projector_login" }];
       }
-      if (text.includes("verify_candidate_database_promoted_v1")) {
+      if (text.includes("verify_candidate_database_promoted_v2")) {
         return [{ verified: true }];
       }
       return [];
@@ -311,11 +292,12 @@ describe("candidate projector runtime binding", () => {
       binding: selection.promotedDatabase,
     })).resolves.toBeUndefined();
     expect(query).toHaveBeenCalledWith(
-      expect.stringContaining("verify_candidate_database_promoted_v1"),
+      expect.stringContaining("verify_candidate_database_promoted_v2"),
       expect.arrayContaining([
         "d08b62a6-74fb-5e0a-a698-dc6877150db4",
         "2026-08-01T09:00:00.000Z",
-        "2026-08-01T10:00:00.000Z",
+        "a".repeat(40),
+        "dpl_12345678901234567890",
       ]),
     );
   });
@@ -374,8 +356,8 @@ describe("candidate projector runtime binding", () => {
     });
 
     const legacyClient = createEnvioClient({
-      endpoint: getDataPipelineReleaseBinding().envio.graphqlEndpoint,
-      releaseBinding: getDataPipelineReleaseBinding(),
+      endpoint: legacyReleaseBinding().envio.graphqlEndpoint,
+      releaseBinding: legacyReleaseBinding(),
       fetcher,
     });
     await expect(legacyClient.readProgress({

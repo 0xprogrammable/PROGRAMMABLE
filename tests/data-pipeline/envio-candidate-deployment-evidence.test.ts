@@ -85,11 +85,12 @@ describe("Envio candidate deployment evidence", () => {
     ).toBe(artifacts.candidateAudit.authenticatedCoordinatorCreatorRepairs);
   });
 
-  it("keeps the audited candidate separate from active production", async () => {
+  it("preserves pre-promotion evidence while the canonical release selects the candidate", async () => {
     const evidence = await readJson(evidencePath);
     const prepared = evidence.historicalPreparation as Record<string, unknown>;
     const candidate = evidence.candidate as Record<string, unknown>;
     const active = evidence.activeProduction as Record<string, unknown>;
+    const rollback = evidence.rollback as Record<string, unknown>;
     const promotion = evidence.promotion as Record<string, unknown>;
     const binding = await readJson("config/data-pipeline-release.v1.json");
     const envio = binding.envio as Record<string, unknown>;
@@ -102,9 +103,12 @@ describe("Envio candidate deployment evidence", () => {
     expect(candidate.controlPlaneStatus).toBe("none");
     expect(promotion.state).toBe("not-promoted");
     expect(promotion.productionBindingMayChange).toBe(false);
-    expect(envio.deploymentLabel).toBe(active.deploymentLabel);
-    expect(envio.graphqlEndpoint).toBe(active.endpoint);
-    expect(envio.sourceCommit).toBe(active.sourceCommit);
+    expect(active.deploymentLabel).toBe(rollback.deployment);
+    expect(active.endpoint).toBe(rollback.graphqlEndpoint);
+    expect(active.sourceCommit).toBe(rollback.sourceCommit);
+    expect(envio.deploymentLabel).toBe(candidate.deploymentLabel);
+    expect(envio.graphqlEndpoint).toBe(candidate.endpoint);
+    expect(envio).toMatchObject(candidate.identity as Record<string, unknown>);
   });
 
   it("records inventory, repairs and the rejected deployment explicitly", async () => {

@@ -3,7 +3,6 @@ import "server-only";
 import {
   assertCandidateDatabaseBootstrapState,
   assertCandidateDatabasePromotedState,
-  CANDIDATE_PROMOTION_ENV_NAMES,
   selectProjectorRuntimeBinding,
   type ProjectorRuntimeBindingSelection,
 } from "./candidate-projector-runtime-binding.server";
@@ -66,9 +65,6 @@ const BROWSER_FORBIDDEN_NAMES = Object.freeze([
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN",
   "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_BINDING_MODE",
   "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT",
-  ...Object.values(CANDIDATE_PROMOTION_ENV_NAMES).map(
-    (name) => `NEXT_PUBLIC_${name}`,
-  ),
 ] as const);
 
 type StagedDynamicParentResult = Readonly<{

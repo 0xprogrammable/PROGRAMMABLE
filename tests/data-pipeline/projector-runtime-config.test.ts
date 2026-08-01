@@ -11,10 +11,7 @@ import {
   projectorRuntimeActivationState,
   runConfiguredProjectorCycle,
 } from "../../lib/data-pipeline/projector-runtime-config.server";
-import {
-  CANDIDATE_PROMOTION_ENV_NAMES,
-  loadCandidateProjectorRuntimeBinding,
-} from "../../lib/data-pipeline/candidate-projector-runtime-binding.server";
+import { loadCandidateProjectorRuntimeBinding } from "../../lib/data-pipeline/candidate-projector-runtime-binding.server";
 import {
   projectorEnvioDeploymentCommitment,
   projectorEnvioSchemaCommitment,
@@ -27,8 +24,8 @@ const bytes32 = (byte: string) => `0x${byte.repeat(64)}`;
 const TEST_CA = rootCertificates[0]!;
 const ALCHEMY_URL = "https://eth-mainnet.g.alchemy.com/v2/abcdefgh";
 const QUICKNODE_URL = "https://example.quiknode.pro/abcdefgh/";
-const ENVIO_URL = "https://indexer.hyperindex.xyz/f6714ef/v1/graphql";
-const ENVIO_IDENTITY = "envio:production-1e7c381";
+const ENVIO_URL = "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql";
+const ENVIO_IDENTITY = "envio:production-7f24e63";
 const RELEASE_BINDING = getDataPipelineReleaseBinding();
 const RPC_SCHEMA_COMMITMENT = projectorRpcSchemaCommitment();
 const EXPECTED_COMMITMENTS = Object.freeze({
@@ -67,6 +64,10 @@ function environment(
     PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_URL,
     PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE_URL,
     PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY: ENVIO_IDENTITY,
+    PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
+      "7ffd15c2a28c481a2d3632e30b315262c2471b2e",
+    VERCEL_GIT_COMMIT_SHA: "a".repeat(40),
+    VERCEL_DEPLOYMENT_ID: "dpl_12345678901234567890",
     ...overrides,
   };
 }
@@ -94,24 +95,6 @@ function candidateEnvironment() {
 function promotedReleaseEnvironment() {
   return candidateEnvironmentWithOverrides({
     PROGRAMMABLE_PROJECTOR_BINDING_MODE: "release",
-    [CANDIDATE_PROMOTION_ENV_NAMES.providerDeploymentId]:
-      "d08b62a6-74fb-5e0a-a698-dc6877150db4",
-    [CANDIDATE_PROMOTION_ENV_NAMES.deploymentCommitment]:
-      "0xa4267153060a4b02b630d81063e0f84bb36f6f637a52ef71fb29c117c5384259",
-    [CANDIDATE_PROMOTION_ENV_NAMES.schemaCommitment]:
-      "0x5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1",
-    [CANDIDATE_PROMOTION_ENV_NAMES.initializationInputCommitment]:
-      "0x8945e310f60754716ca0015bcdcdf4a39f9db07ab1c6d9c6bf59fee2b701dca9",
-    [CANDIDATE_PROMOTION_ENV_NAMES.initializedAt]:
-      "2026-08-01T09:00:00.000Z",
-    [CANDIDATE_PROMOTION_ENV_NAMES.baselineCommitment]:
-      bytes32("3"),
-    [CANDIDATE_PROMOTION_ENV_NAMES.parityCommitment]: bytes32("4"),
-    [CANDIDATE_PROMOTION_ENV_NAMES.envioAttestationCommitment]:
-      bytes32("5"),
-    [CANDIDATE_PROMOTION_ENV_NAMES.promotionInputCommitment]: bytes32("6"),
-    [CANDIDATE_PROMOTION_ENV_NAMES.promotedAt]:
-      "2026-08-01T10:00:00.000Z",
   });
 }
 
@@ -179,7 +162,10 @@ describe("configured projector runtime", () => {
       mode: "release",
       releaseBinding: RELEASE_BINDING,
       candidate: null,
-      promotedDatabase: null,
+      promotedDatabase: {
+        productCommit: "a".repeat(40),
+        stagedDeploymentId: "dpl_12345678901234567890",
+      },
     });
     expect(config.database).toEqual({
       projectorConnectionString:
@@ -189,7 +175,7 @@ describe("configured projector runtime", () => {
       sslCaPem: TEST_CA,
     });
     expect(config.envio).toEqual({
-      endpoint: "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
+      endpoint: "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
       token: "envio-token",
       releaseBinding: RELEASE_BINDING,
     });
@@ -264,10 +250,8 @@ describe("configured projector runtime", () => {
       },
       candidate: null,
       promotedDatabase: {
-        baselineCommitment: bytes32("3"),
-        parityCommitment: bytes32("4"),
-        envioAttestationCommitment: bytes32("5"),
-        promotionInputCommitment: bytes32("6"),
+        productCommit: "a".repeat(40),
+        stagedDeploymentId: "dpl_12345678901234567890",
       },
     });
     expect(config.envio.releaseBinding.envio.deploymentLabel).toBe(
@@ -485,6 +469,7 @@ describe("configured projector runtime", () => {
       .mockRejectedValueOnce(new Error("runtime failed"));
     const dependencies = {
       createExecutor: vi.fn(() => executor),
+      assertPromotedDatabase: vi.fn(async () => undefined),
       createLeaseController: vi.fn(() => ({
         tryAcquire: vi.fn(async () => ({
           status: "acquired",
@@ -571,6 +556,7 @@ describe("configured projector runtime", () => {
     const release = vi.fn();
     const dependencies = {
       createExecutor,
+      assertPromotedDatabase: vi.fn(async () => undefined),
       createLeaseController: vi.fn(() => ({
         tryAcquire: vi.fn(async () => ({
           status: "busy",
@@ -631,6 +617,7 @@ describe("configured projector runtime", () => {
     const runReleaseCycle = vi.fn();
     const dependencies = {
       createExecutor: vi.fn(() => executor),
+      assertPromotedDatabase: vi.fn(async () => undefined),
       createLeaseController: vi.fn(() => ({
         tryAcquire: vi.fn(async () => ({
           status: "acquired",
@@ -706,6 +693,7 @@ describe("configured projector runtime", () => {
     const runReleaseCycle = vi.fn();
     const dependencies = {
       createExecutor: vi.fn(() => executor),
+      assertPromotedDatabase: vi.fn(async () => undefined),
       createLeaseController: vi.fn(() => ({
         tryAcquire: vi.fn(async () => ({
           status: "acquired",
@@ -797,6 +785,7 @@ describe("configured projector runtime", () => {
     });
     const dependencies = {
       createExecutor: vi.fn(() => executor),
+      assertPromotedDatabase: vi.fn(async () => undefined),
       createLeaseController: vi.fn(() => ({
         tryAcquire: vi.fn(async () => ({
           status: "acquired",
@@ -891,6 +880,7 @@ describe("configured projector runtime", () => {
     });
     const dependencies = {
       createExecutor: vi.fn(() => executor),
+      assertPromotedDatabase: vi.fn(async () => undefined),
       createLeaseController: vi.fn(() => ({
         tryAcquire: vi.fn(async () => ({
           status: "acquired",
@@ -997,6 +987,7 @@ describe("configured projector runtime", () => {
     });
     const dependencies = {
       createExecutor: vi.fn(() => executor),
+      assertPromotedDatabase: vi.fn(async () => undefined),
       createLeaseController: vi.fn(() => ({
         tryAcquire: vi.fn(async () => ({
           status: "acquired",

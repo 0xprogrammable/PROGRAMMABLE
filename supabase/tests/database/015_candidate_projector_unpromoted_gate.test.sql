@@ -202,6 +202,8 @@ select is(
     pg_catalog.decode(pg_catalog.repeat('32', 32), 'hex'),
     pg_catalog.decode(pg_catalog.repeat('33', 32), 'hex'),
     pg_catalog.decode(pg_catalog.repeat('34', 32), 'hex'),
+    pg_catalog.repeat('a', 40),
+    'dpl_12345678901234567890',
     '2026-07-31T00:05:00Z'
   ),
   true,

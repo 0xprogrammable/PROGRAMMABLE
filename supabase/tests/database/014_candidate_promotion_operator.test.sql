@@ -87,7 +87,7 @@ select programmable_private.register_provider_deployment(
   decode(repeat('11', 32), 'hex'),
   decode(repeat('12', 32), 'hex'),
   decode(repeat('13', 32), 'hex'),
-  pg_catalog.clock_timestamp()
+  '2026-07-31T00:00:00Z'
 );
 
 select programmable_private.initialize_candidate_database(
@@ -95,7 +95,7 @@ select programmable_private.initialize_candidate_database(
   decode(repeat('11', 32), 'hex'),
   decode(repeat('12', 32), 'hex'),
   decode(repeat('14', 32), 'hex'),
-  pg_catalog.clock_timestamp()
+  '2026-07-31T00:00:00Z'
 );
 
 reset role;
@@ -109,7 +109,9 @@ select lives_ok(
       decode(repeat('22', 32), 'hex'),
       decode(repeat('23', 32), 'hex'),
       decode(repeat('24', 32), 'hex'),
-      pg_catalog.clock_timestamp()
+      repeat('a', 40),
+      'dpl_12345678901234567890',
+      '2026-07-31T00:05:00Z'
     )
   $$,
   'promotion operator can execute the evidence-bound promotion'

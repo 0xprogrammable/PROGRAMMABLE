@@ -57,25 +57,6 @@ const EXACT = Object.freeze({
 
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
 
-export const CANDIDATE_PROMOTION_ENV_NAMES = Object.freeze({
-  providerDeploymentId:
-    "PROGRAMMABLE_PROJECTOR_CANDIDATE_PROVIDER_DEPLOYMENT_ID",
-  deploymentCommitment:
-    "PROGRAMMABLE_PROJECTOR_CANDIDATE_DEPLOYMENT_COMMITMENT",
-  schemaCommitment: "PROGRAMMABLE_PROJECTOR_CANDIDATE_SCHEMA_COMMITMENT",
-  initializationInputCommitment:
-    "PROGRAMMABLE_PROJECTOR_CANDIDATE_INITIALIZATION_INPUT_COMMITMENT",
-  initializedAt: "PROGRAMMABLE_PROJECTOR_CANDIDATE_INITIALIZED_AT",
-  baselineCommitment:
-    "PROGRAMMABLE_PROJECTOR_PROMOTION_BASELINE_COMMITMENT",
-  parityCommitment: "PROGRAMMABLE_PROJECTOR_PROMOTION_PARITY_COMMITMENT",
-  envioAttestationCommitment:
-    "PROGRAMMABLE_PROJECTOR_PROMOTION_ENVIO_ATTESTATION_COMMITMENT",
-  promotionInputCommitment:
-    "PROGRAMMABLE_PROJECTOR_PROMOTION_INPUT_COMMITMENT",
-  promotedAt: "PROGRAMMABLE_PROJECTOR_PROMOTED_AT",
-} as const);
-
 function invalidCandidateBinding(): never {
   throw invalidInput("config", "candidate-projector-runtime-binding");
 }
@@ -131,11 +112,8 @@ export type CandidateDatabasePromotionBinding = Readonly<{
   schemaCommitment: HexBytes32;
   initializationInputCommitment: HexBytes32;
   initializedAt: string;
-  baselineCommitment: HexBytes32;
-  parityCommitment: HexBytes32;
-  envioAttestationCommitment: HexBytes32;
-  promotionInputCommitment: HexBytes32;
-  promotedAt: string;
+  productCommit: string;
+  stagedDeploymentId: string;
 }>;
 
 export type ProjectorRuntimeBindingSelection =
@@ -226,56 +204,27 @@ function canonicalTimestamp(value: unknown): string {
 function loadCandidateDatabasePromotionBinding(
   env: Environment,
 ): CandidateDatabasePromotionBinding {
-  const providerDeploymentId =
-    env[CANDIDATE_PROMOTION_ENV_NAMES.providerDeploymentId];
-  const deploymentCommitment = nonzeroBytes32(
-    env[CANDIDATE_PROMOTION_ENV_NAMES.deploymentCommitment],
-  );
-  const schemaCommitment = nonzeroBytes32(
-    env[CANDIDATE_PROMOTION_ENV_NAMES.schemaCommitment],
-  );
-  const initializationInputCommitment = nonzeroBytes32(
-    env[CANDIDATE_PROMOTION_ENV_NAMES.initializationInputCommitment],
-  );
-  const initializedAt = canonicalTimestamp(
-    env[CANDIDATE_PROMOTION_ENV_NAMES.initializedAt],
-  );
-  const baselineCommitment = nonzeroBytes32(
-    env[CANDIDATE_PROMOTION_ENV_NAMES.baselineCommitment],
-  );
-  const parityCommitment = nonzeroBytes32(
-    env[CANDIDATE_PROMOTION_ENV_NAMES.parityCommitment],
-  );
-  const envioAttestationCommitment = nonzeroBytes32(
-    env[CANDIDATE_PROMOTION_ENV_NAMES.envioAttestationCommitment],
-  );
-  const promotionInputCommitment = nonzeroBytes32(
-    env[CANDIDATE_PROMOTION_ENV_NAMES.promotionInputCommitment],
-  );
-  const promotedAt = canonicalTimestamp(
-    env[CANDIDATE_PROMOTION_ENV_NAMES.promotedAt],
-  );
+  const productCommit = env.VERCEL_GIT_COMMIT_SHA;
+  const stagedDeploymentId = env.VERCEL_DEPLOYMENT_ID;
   if (
-    providerDeploymentId !== EXACT.providerDeploymentId ||
-    deploymentCommitment !== EXACT.deploymentCommitment ||
-    schemaCommitment !== EXACT.schemaCommitment ||
-    initializationInputCommitment !== EXACT.initializationInputCommitment ||
-    initializedAt !== EXACT.initializedAt ||
-    Date.parse(promotedAt) <= Date.parse(initializedAt)
+    typeof productCommit !== "string" ||
+    !/^[0-9a-f]{40}$/u.test(productCommit) ||
+    productCommit === "0".repeat(40) ||
+    typeof stagedDeploymentId !== "string" ||
+    !/^dpl_[A-Za-z0-9]{20,128}$/u.test(stagedDeploymentId)
   ) {
     return invalidCandidateBinding();
   }
   return Object.freeze({
-    providerDeploymentId,
-    deploymentCommitment,
-    schemaCommitment,
-    initializationInputCommitment,
-    initializedAt,
-    baselineCommitment,
-    parityCommitment,
-    envioAttestationCommitment,
-    promotionInputCommitment,
-    promotedAt,
+    providerDeploymentId: EXACT.providerDeploymentId,
+    deploymentCommitment: nonzeroBytes32(EXACT.deploymentCommitment),
+    schemaCommitment: nonzeroBytes32(EXACT.schemaCommitment),
+    initializationInputCommitment: nonzeroBytes32(
+      EXACT.initializationInputCommitment,
+    ),
+    initializedAt: canonicalTimestamp(EXACT.initializedAt),
+    productCommit,
+    stagedDeploymentId,
   });
 }
 
@@ -340,13 +289,6 @@ export function selectProjectorRuntimeBinding(input: Readonly<{
   env: Environment;
   canonicalBinding: DataPipelineReleaseBinding;
 }>): ProjectorRuntimeBindingSelection {
-  if (
-    Object.values(CANDIDATE_PROMOTION_ENV_NAMES).some(
-      (name) => input.env[`NEXT_PUBLIC_${name}`] !== undefined,
-    )
-  ) {
-    return invalidCandidateBinding();
-  }
   const mode = input.env.PROGRAMMABLE_PROJECTOR_BINDING_MODE;
   if (mode === CANDIDATE_PROJECTOR_RUNTIME_MODE) {
     const candidate = loadCandidateProjectorRuntimeBinding({
@@ -490,18 +432,15 @@ export async function assertCandidateDatabasePromotedState(input: Readonly<{
       return invalidCandidateBinding();
     }
     const rows = await transaction.query<{ verified: unknown }>(
-      "select programmable_private.verify_candidate_database_promoted_v1($1::uuid, $2::bytea, $3::bytea, $4::bytea, $5::timestamptz, $6::bytea, $7::bytea, $8::bytea, $9::bytea, $10::timestamptz) as verified",
+      "select programmable_private.verify_candidate_database_promoted_v2($1::uuid, $2::bytea, $3::bytea, $4::bytea, $5::timestamptz, $6::text, $7::text) as verified",
       [
         input.binding.providerDeploymentId,
         hexToBytes(input.binding.deploymentCommitment),
         hexToBytes(input.binding.schemaCommitment),
         hexToBytes(input.binding.initializationInputCommitment),
         input.binding.initializedAt,
-        hexToBytes(input.binding.baselineCommitment),
-        hexToBytes(input.binding.parityCommitment),
-        hexToBytes(input.binding.envioAttestationCommitment),
-        hexToBytes(input.binding.promotionInputCommitment),
-        input.binding.promotedAt,
+        input.binding.productCommit,
+        input.binding.stagedDeploymentId,
       ],
     );
     if (rows.length !== 1 || rows[0]?.verified !== true) {
