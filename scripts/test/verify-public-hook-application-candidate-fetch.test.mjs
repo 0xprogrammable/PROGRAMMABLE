@@ -12,6 +12,7 @@ import {
   classifyPublicIntakePullRequest,
   fetchPublicApplicationCandidate,
   hydratePublicApplicationCandidate,
+  measureHydrationDirectory,
   preflightPublicApplicationCandidateFetch,
   PUBLIC_BETA_DISCLAIMER,
   runBoundedHydrationGitProcess,
@@ -65,6 +66,33 @@ test("blobless maintenance classification never materializes an unexpected 100 M
   assert.equal(classified.mode, "builder-maintenance");
   assert.equal(hasObjectWithoutLazyFetch(candidateData, oversizedObjectId), false);
   assert.equal(fs.existsSync(path.join(candidateData, "skills")), false);
+});
+
+test("bounded repository measurement tolerates Git removing a temporary child directory", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "public-hook-measure-race-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const stableBytes = Buffer.from("stable object bytes");
+  fs.writeFileSync(path.join(root, "stable-object"), stableBytes);
+  const transientDirectory = path.join(root, "temporary-pack");
+  fs.mkdirSync(transientDirectory);
+  fs.writeFileSync(path.join(transientDirectory, "in-flight.pack"), "temporary bytes");
+
+  const originalLstatSync = fs.lstatSync;
+  let removed = false;
+  fs.lstatSync = function lstatAndRemoveTemporaryDirectory(target, options) {
+    const status = originalLstatSync.call(fs, target, options);
+    if (!removed && target === transientDirectory) {
+      removed = true;
+      fs.rmSync(transientDirectory, { recursive: true, force: true });
+    }
+    return status;
+  };
+  try {
+    assert.equal(measureHydrationDirectory(root), stableBytes.length);
+  } finally {
+    fs.lstatSync = originalLstatSync;
+  }
+  assert.equal(removed, true);
 });
 
 test("trusted application validation hydrates only the six closed package blobs", async (t) => {
