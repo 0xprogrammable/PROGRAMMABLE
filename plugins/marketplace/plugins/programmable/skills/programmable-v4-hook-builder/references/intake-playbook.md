@@ -81,6 +81,14 @@ Propose these defaults together unless the idea requires something else:
 The builder may confirm these defaults as a group. Any departure that changes economics, custody, authority,
 dependencies or exits requires separate confirmation.
 
+If the builder requests a token transfer tax or automatic liquidity, keep the official route as the comparison but do
+not force the idea into a hook or reject it for leaving the default. Select `model-specific-no-hook` and confirm, in this
+order: all buy/sell/peer rates and the immutable maximum; whether any ordinary transfer or sale can be blocked; every
+recipient and value flow; mutability, authority and delay; tax exemptions and PoolManager transfer scope; automatic
+swap threshold, maximum, slippage, deadline and reentrancy; LP custody and exit; then routing, quote, indexer, scanner,
+and listing limitations. Hidden sell blocks, address lists, transaction/wallet caps, cooldowns, and a 100 percent bound
+do not continue on the permissionless path.
+
 ## Fact ownership
 
 The agent derives without asking:
@@ -133,12 +141,26 @@ role, origin, exact chain address when it already exists, standard or non-standa
 upgrade path, and failure effect. Native ETH uses the zero address; WETH is a separate ERC-20 and must not be substituted
 silently.
 
+### Public project and token metadata
+
+Record the exact public project name and description, token name and symbol, project and token metadata URIs, logo URIs
+and byte hashes, mutability, and the owner of every mutable record. Do not silently normalize a builder's Unicode name.
+Instead, show the intended spelling and normalized identity for review when compatibility or cross-script confusable
+characters are present. Remove invisible and bidirectional control characters.
+
+Ask whether any organization is being presented as official, partner, sponsor, auditor, ecosystem affiliation, or only
+as technology used. Keep the exact relationship and public attributable evidence separate. For each intended external
+provider, record its slug, proposed tags and labels, and whether support is not requested, unknown, or documented by a
+provider-owned source. Unknown provider support remains an external review task; it never means the architecture is
+unsafe or rejected.
+
 ### Hook choice and callbacks
 
 Record `hook.used` explicitly. When it is false, keep the hook address/base, admission rules, callback policies,
 hookData, custom accounting, hook-owned fees, return deltas, claims, and nested actions disabled; all permission bits are
-false and there is no hook-address mask to mine. Select and bind the official launch profile separately. When it is true,
-apply every callback rule below.
+false and there is no hook-address mask to mine. Select `official-launchpad` and bind its committed profile by default,
+or select `model-specific-no-hook`, keep the official profile null, and complete its separate token mechanics,
+dependencies and gates. When `hook.used` is true, apply every callback rule below.
 
 Set all 14 permission fields to explicit booleans. Enable only callbacks required by confirmed behavior. Record:
 
@@ -236,7 +258,9 @@ surface changes who can act, which trades work, where value appears, what can fa
 
 - **LP fee:** paid to liquidity providers in that pool. It is not creator revenue.
 - **Hook-owned charge:** accounted by hook logic and owed to explicit recipients. Its currency can change by direction and exactness.
-- **Token transfer tax:** runs on ERC-20 transfers outside the pool too and is not part of the conservative default.
+- **Token transfer tax:** runs on ERC-20 transfers outside the pool too. It is not part of the conservative default, but
+  a transparent bounded version may enter model-specific no-hook review with exact recipients, authority, custody,
+  provider limitations, received-amount semantics, and liveness tests.
 
 Units in the schema are hundredths of a basis point:
 

@@ -14,10 +14,14 @@ current Programmable launch integration remains Ethereum Mainnet-only, so every 
 separate release gate and cannot claim current platform launchability. Exact Base or Unichain official deployment
 records remain a runtime-unverified reference tier, not Programmable-tested deployment evidence.
 
-Submission standard `1.1.0` introduces this chain/application split and the separate deployment-reference digest. A
-`1.0.0` submission is not silently reinterpreted. Regenerate it from the current template, review the target chain,
-network slug, deployment trust tier and new release gates, then commit the fresh report and gate-status authority
-digests.
+Submission standard `1.2.0` adds the open project-surface and capability graph. It preserves unfamiliar games, maps,
+services, databases, data sources, keepers, claims and later kinds for architecture review while deriving non-bypassable
+security profiles from explicit triggers. It also separates a signed offchain data source from an optional onchain
+oracle verifier. The same version adds explicit `official-launchpad` and `model-specific-no-hook` architecture paths
+plus structured transfer-tax, automatic-liquidity, provider-limit and test declarations. A `1.1.0` submission is not
+silently reinterpreted. Regenerate it from the current template; review every surface, capability, exposure, path,
+profile, no-hook route, target chain, network slug, dependency and deployment trust tier; then commit the fresh report
+and gate-status authority digests.
 
 ## Stages
 
@@ -35,7 +39,9 @@ The builder repository contains:
 
 No implementation language is required at proposal stage. The proposal must still resolve the user outcome, project
 surfaces, value flow, canonical PoolKey, whether a custom hook is used, authorities, dependencies, hard failure behavior,
-and expected evidence. Hook callbacks, a permission mask, and CREATE2 planning apply only when `hook.used` is true.
+and expected evidence. Hook callbacks, a permission mask, and CREATE2 planning apply only when `hook.used` is true. A
+no-hook proposal selects the safer official Launchpad default or the model-specific route; the latter completes its own
+token mechanics, fee bounds, recipients, authority, liquidity custody and exit, provider limits, and test scenarios.
 
 ### Prototype
 
@@ -176,6 +182,13 @@ Commit the generated report. If the design changes, regenerate it. CI should fai
 submission contents or standard version. A proposal package may preserve a `REDESIGN_REQUIRED` or `UNSUPPORTED`
 decision so reviewers can discuss the design. Prototype packages require `PROTOTYPE_READY`.
 
+`REDESIGN_REQUIRED` does not make an empty scaffold application-ready. A proposal package must replace the generated
+instructions with a concrete idea, base architecture, lifecycle, value flows, authority inventory or explicit
+no-authority statement, failure response, and project-specific proposal, threat model, test plan, and evidence status.
+It may retain specific named architecture questions in `unresolved`; each question must identify the actual decision
+instead of repeating a generic template task. `package` rejects placeholder fields and substantially unchanged scaffold
+documents before `prepare-pr` performs any public-source work.
+
 `check` also records `closure.status` and closed diagnostics for the exact repository. A proposal may retain an
 incomplete closure for aliases, bundler globs, runtime module selection, a language without a bundled scanner, a
 non-Foundry Solidity build profile, or a separately pinned companion repository; its central result remains
@@ -193,7 +206,8 @@ proposal-eligible with an explicit incomplete-closure diagnostic, but it cannot 
 
 For a prototype, create source, tests, and final evidence artifacts first. Create `gate-status.json` with those evidence
 paths, build `review-target.json`, copy its exact hash into the gate status and every completed gate-evidence metadata
-record, then rebuild the target. The two targets must be identical. Closure method v9 hashes the evidence artifacts but
+record, then rebuild the target. The two targets must be identical. Closure method v10 also binds project-surface
+source, test, schema and evidence files. It hashes the evidence artifacts but
 not `gate-status.json` or `review-target.json` themselves; `prepare-pr` binds both authority records separately to exact
 HEAD and the primary GitHub source request. A gate evidence `commit` is an exact 40-character provenance value and need
 not equal the later packaging HEAD.
@@ -235,6 +249,15 @@ node "$SKILL_ROOT/scripts/cli.mjs" prepare-pr \
   --companion-manifest ".programmable/companions/backend.json" \
   --companion-manifest ".programmable/companions/game-client.json"
 ```
+
+Use companion manifest v2 when an npm game, app, or service can declare an exact static closure. It binds the numeric
+repository id, commit, root tree, separate source/test/runtime/build paths, package-lock v3 and successful
+exact-revision Actions evidence from the closed JSON workflow in `assets/templates/companion-closure-workflow.yml`.
+That workflow unconditionally runs the pinned install, named build, and named test steps; the resulting canonical
+receipt is also embedded in the central `application.json` for downstream authority checks. Validate and canonicalize
+the manifest first with `cli.mjs companion <manifest> --write-canonical`.
+Keep v1 for proposal-only or unsupported build/runtime mechanics. Read `companion-manifests.md` and use
+`companion-manifest-v2.schema.json`; a v1 companion intentionally retains the closure-review diagnostic.
 
 `prepare-pr` independently resolves every declared public repository's numeric id, exact commit, root tree, and
 declared paths. It also observes the exact current `0xprogrammable/programmable:main` commit before deriving the

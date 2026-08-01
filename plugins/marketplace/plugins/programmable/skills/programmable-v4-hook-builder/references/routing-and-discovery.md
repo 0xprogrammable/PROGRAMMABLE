@@ -69,6 +69,12 @@ pool, router, quote, and interface behaviors that the named provider actually de
 provider support creates an external provider-review item. It is not an automatic `unsafe`, `unsupported architecture`,
 or maintainer-rejection finding, and it must not be disguised as a passed compatibility check.
 
+Represent each intended provider in `publicMetadata.providerPresentations`. Keep its proposed tags and labels distinct
+from `supportStatus`: `not-requested` means no request was made, `unknown` means current support is not established, and
+`provider-documented` requires an exact public provider-owned evidence URI. Even documented support stays behind
+provider review until the exact project and current policy are confirmed. Provider-facing labels may describe facts;
+they may not imply approval, audit, safety, launch or availability.
+
 ## Hooklist is a discovery registry
 
 [`Uniswap/hooklist`](https://github.com/Uniswap/hooklist) records known hook deployments and structured properties such

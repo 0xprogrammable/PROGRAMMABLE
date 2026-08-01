@@ -10,6 +10,7 @@ import {
   isExactDeclaredPackageSpecifier,
   isExactPackageDependency,
   isExactPackageFilePath,
+  isCanonicalNpmPackageName,
   packageRootPath
 } from "./package-dependency-contract.mjs";
 import {
@@ -22,6 +23,7 @@ import {
   REVIEW_TARGET_CLOSURE_METHOD_V1,
   REVIEW_TARGET_CONTRACT_V1
 } from "./review-target-contract.mjs";
+import { buildRuntimeAssetReview } from "./runtime-assets-core.mjs";
 
 const packageFiles = ["submission.json", "compatibility-report.json", "PROPOSAL.md", "THREAT_MODEL.md", "TEST_PLAN.md", "EVIDENCE.md"];
 // Solidity accepts bare, named, wildcard, aliased and compact imports. Parse
@@ -84,6 +86,8 @@ export function buildReviewTarget({
   }
   let totalBytes = 0;
   const implementation = submission.implementation ?? {};
+  let runtimeAssets = null;
+  const runtimeAssetPaths = new Set();
   const hasDeclaredSoliditySource = declaredSoliditySourceAndTestPaths(submission).length > 0;
   let remappings = [];
   if (hasDeclaredSoliditySource) {
@@ -128,6 +132,29 @@ export function buildReviewTarget({
     if (inspectRepositoryEntry(repository, bootstrapPath, { allowMissing: true })) addPath(bootstrapPath, "dependency-bootstrap");
   }
 
+  if (implementation.runtimeAssetManifestPath) {
+    if (!isCanonicalReviewTargetPath(implementation.runtimeAssetManifestPath)) {
+      throw new Error(`unsafe runtime asset manifest path: ${implementation.runtimeAssetManifestPath}`);
+    }
+    const manifestBytes = addPath(
+      path.resolve(repository, implementation.runtimeAssetManifestPath),
+      "runtime-asset-manifest"
+    );
+    const review = buildRuntimeAssetReview({
+      repositoryRoot: repository,
+      manifestPath: implementation.runtimeAssetManifestPath,
+      manifestBytes
+    });
+    for (const evidencePath of review.evidencePaths) {
+      addRepositoryPath(evidencePath, "runtime-asset-evidence");
+    }
+    for (const asset of review.assets) {
+      if (asset.repositoryPath !== null) runtimeAssetPaths.add(asset.repositoryPath);
+    }
+    const { evidencePaths: ignoredEvidencePaths, ...closedReview } = review;
+    runtimeAssets = closedReview;
+  }
+
   for (const sourcePath of implementation.sourcePaths ?? []) addRepositoryPath(sourcePath, "source-entry");
   for (const testPath of implementation.testPaths ?? []) addRepositoryPath(testPath, "test-entry");
   for (const sourcePath of submission.integration?.appSourcePaths ?? []) addRepositoryPath(sourcePath, "app-integration-source");
@@ -142,6 +169,13 @@ export function buildReviewTarget({
   for (const sourcePath of platformHandoff.apiSourcePaths ?? []) addRepositoryPath(sourcePath, "platform-handoff-api-source");
   for (const sourcePath of platformHandoff.indexerSourcePaths ?? []) addRepositoryPath(sourcePath, "platform-handoff-indexer-source");
   for (const testPath of platformHandoff.testPaths ?? []) addRepositoryPath(testPath, "platform-handoff-test");
+  for (const surface of submission.projectSurfaces ?? []) {
+    const surfaceId = surface?.id ?? "unidentified";
+    for (const sourcePath of surface?.sourcePaths ?? []) addRepositoryPath(sourcePath, `project-surface-source:${surfaceId}`);
+    for (const testPath of surface?.testPaths ?? []) addRepositoryPath(testPath, `project-surface-test:${surfaceId}`);
+    for (const schemaPath of surface?.schemaPaths ?? []) addRepositoryPath(schemaPath, `project-surface-schema:${surfaceId}`);
+    for (const evidencePath of surface?.evidencePaths ?? []) addRepositoryPath(evidencePath, `project-surface-evidence:${surfaceId}`);
+  }
   for (const extension of submission.capabilityExtensions ?? []) {
     if (extension?.schemaPath) addRepositoryPath(extension.schemaPath, `capability-schema:${extension.capabilityId ?? "unidentified"}`);
     for (const sourcePath of extension?.sourcePaths ?? []) addRepositoryPath(sourcePath, `capability-source:${extension.capabilityId ?? "unidentified"}`);
@@ -231,12 +265,17 @@ export function buildReviewTarget({
       for (const dependency of dependencies) {
         if (!isLocalJavaScriptSpecifier(dependency.specifier)) continue;
         const resolution = resolveJavaScriptImport(file, dependency.specifier);
-        addPath(resolution, dependency.kind);
+        const resolvedPath = relative(resolution.path);
+        const runtimeAsset = runtimeAssetPaths.has(resolvedPath);
+        if (resolution.assetQuery && !runtimeAsset) {
+          throw new Error(`JavaScript ?url import is not declared by the runtime asset manifest: ${dependency.specifier} from ${importer}`);
+        }
+        if (!runtimeAsset) addPath(resolution.path, dependency.kind);
         const record = {
           specifier: dependency.specifier,
           importer,
-          resolvedPath: relative(resolution),
-          kind: dependency.kind
+          resolvedPath,
+          kind: runtimeAsset ? `${dependency.kind}-runtime-asset-reference` : dependency.kind
         };
         javascriptImportResolutions.set(canonicalJson(record), record);
         if (javascriptImportResolutions.size > REVIEW_TARGET_CONTRACT_V1.maximumImportResolutions) {
@@ -264,6 +303,7 @@ export function buildReviewTarget({
     importResolutions: [...importResolutions.values()].sort(compareImportResolutionRecords),
     javascriptImportResolutions: [...javascriptImportResolutions.values()].sort(compareImportResolutionRecords)
   };
+  if (runtimeAssets !== null) target.runtimeAssets = runtimeAssets;
   return {
     ...target,
     reviewTargetHash: calculateReviewTargetHash(target)
@@ -408,10 +448,15 @@ export function buildReviewTarget({
   }
 
   function resolveJavaScriptImport(importer, specifier) {
-    if (specifier.includes("\0") || specifier.includes("\\") || /[?#]/.test(specifier)) {
+    if (specifier.includes("\0") || specifier.includes("\\") || specifier.includes("#")) {
       throw new Error(`unsupported local JavaScript import specifier: ${specifier} from ${relative(importer)}`);
     }
-    const unresolved = path.resolve(path.dirname(importer), specifier);
+    const assetQuery = specifier.endsWith("?url");
+    if (specifier.includes("?") && !assetQuery) {
+      throw new Error(`unsupported local JavaScript import specifier: ${specifier} from ${relative(importer)}`);
+    }
+    const cleanSpecifier = assetQuery ? specifier.slice(0, -4) : specifier;
+    const unresolved = path.resolve(path.dirname(importer), cleanSpecifier);
     if (!inside(repository, unresolved)) {
       throw new Error(`JavaScript import escapes the repository: ${specifier} from ${relative(importer)}`);
     }
@@ -437,7 +482,7 @@ export function buildReviewTarget({
     if (matches.length > 1) {
       throw new Error(`local JavaScript import is ambiguous: ${specifier} from ${relative(importer)}`);
     }
-    return matches[0];
+    return { path: matches[0], assetQuery };
 
     function addCandidate(candidate) {
       const stat = lstatOrNull(candidate);
@@ -477,13 +522,21 @@ export function buildReviewTarget({
 }
 
 export function analyzeRepositoryClosure({ repositoryRoot, packageRoot, submission }) {
-  return buildReviewTarget({
+  return analyzeRepositoryReview({ repositoryRoot, packageRoot, submission }).closure;
+}
+
+export function analyzeRepositoryReview({ repositoryRoot, packageRoot, submission }) {
+  const target = buildReviewTarget({
     repositoryRoot,
     packageRoot,
     submission,
     includePackageArtifacts: false,
     tolerateUnsupportedClosure: true
-  }).closure;
+  });
+  return {
+    closure: target.closure,
+    runtimeAssets: target.runtimeAssets ?? null
+  };
 }
 
 export function appendReviewTargetClosureDiagnostics(reviewTarget, additionalDiagnostics) {
@@ -691,6 +744,18 @@ function extractJavaScriptDependencies(source, importer, declaredPackages) {
     }
     dependencies.push({ specifier, kind });
   }
+}
+
+export function analyzeJavaScriptModuleDependencies(source, importer, declaredPackages = []) {
+  if (typeof source !== "string" || !isCanonicalReviewTargetPath(importer)) {
+    throw new Error("JavaScript closure analysis input is invalid");
+  }
+  const packageNames = [...declaredPackages];
+  if (packageNames.some((entry) => !isCanonicalNpmPackageName(entry))) {
+    throw new Error("JavaScript closure analysis package input is invalid");
+  }
+  return extractJavaScriptDependencies(source, importer, packageNames)
+    .map((entry) => Object.freeze({ ...entry }));
 }
 
 function rejectUnsupportedRuntimeLoaders(tokens, importer) {

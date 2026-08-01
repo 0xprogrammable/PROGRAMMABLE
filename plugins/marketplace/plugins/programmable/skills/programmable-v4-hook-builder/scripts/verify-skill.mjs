@@ -68,6 +68,8 @@ const required = [
   "references/application-api.schema.json",
   "references/compatibility-standard.md",
   "references/intake-playbook.md",
+  "references/companion-manifests.md",
+  "references/companion-manifest-v2.schema.json",
   "references/deployment-snapshot.json",
   "references/github-public-source-contract-v1.json",
   "references/github-public-source-contract-v1.schema.json",
@@ -76,6 +78,8 @@ const required = [
   "references/output-contract.md",
   "references/public-pr-application.schema.json",
   "references/routing-and-discovery.md",
+  "references/runtime-assets-v1.schema.json",
+  "references/runtime-assets.md",
   "references/scenario-matrix.md",
   "references/security-and-evidence.md",
   "references/submission-workflow.md",
@@ -89,6 +93,10 @@ const required = [
   "assets/examples/transparent-pool-scoped-fee.json",
   "assets/examples/unsafe-hidden-curve.json",
   "assets/templates/submission.example.json",
+  "assets/templates/no-hook-architecture.example.json",
+  "assets/templates/runtime-assets.example.json",
+  "assets/templates/companion-closure-workflow.yml",
+  "assets/templates/companion-manifest-v2.example.json",
   "assets/templates/deployment-evidence.example.json",
   "assets/templates/dependency-lock.example.json",
   "assets/templates/gate-status.example.json",
@@ -101,6 +109,7 @@ const required = [
   "scripts/cli-args.mjs",
   "scripts/cli-central-base.mjs",
   "scripts/cli-central-package.mjs",
+  "scripts/companion-manifest-contract.mjs",
   "scripts/cli-github-source.mjs",
   "scripts/cli-local-draft.mjs",
   "scripts/cli-output-dir.mjs",
@@ -115,6 +124,7 @@ const required = [
   "scripts/github-exact-object-resolver.mjs",
   "scripts/github-public-source-core.mjs",
   "scripts/materialize-example.mjs",
+  "scripts/metadata-core.mjs",
   "scripts/official-launchpad-core.mjs",
   "scripts/package-dependency-contract.mjs",
   "scripts/public-claims-core.mjs",
@@ -122,12 +132,14 @@ const required = [
   "scripts/resolve-deployment.mjs",
   "scripts/review-target-contract.mjs",
   "scripts/review-target-core.mjs",
+  "scripts/runtime-assets-core.mjs",
   "scripts/scaffold-submission.mjs",
   "scripts/submission-core.mjs",
   "scripts/test/application-api-schema.test.mjs",
   "scripts/test/build-info.test.mjs",
   "scripts/test/cli-central-base.test.mjs",
   "scripts/test/cli-central-package.test.mjs",
+  "scripts/test/companion-manifest-v2.test.mjs",
   "scripts/test/cli-entry.test.mjs",
   "scripts/test/cli-output-dir.test.mjs",
   "scripts/test/cli-prepare-pr.test.mjs",
@@ -143,6 +155,7 @@ const required = [
   "scripts/test/public-claims.test.mjs",
   "scripts/test/review-target-contract.test.mjs",
   "scripts/test/review-target.test.mjs",
+  "scripts/test/runtime-assets-core.test.mjs",
   "scripts/test/schema-security.test.mjs",
   "scripts/test/submission.test.mjs",
   "scripts/test/upstream-drift.test.mjs",
@@ -290,6 +303,15 @@ try {
   for (const finding of schemaFindings) errors.push(`template ${finding.path}: ${finding.message}`);
 } catch (error) {
   errors.push(`schema or template JSON: ${error.message}`);
+}
+
+try {
+  const runtimeSchema = JSON.parse(read("references/runtime-assets-v1.schema.json"));
+  const runtimeExample = JSON.parse(read("assets/templates/runtime-assets.example.json"));
+  const runtimeFindings = validateAgainstSchema(runtimeExample, runtimeSchema);
+  for (const finding of runtimeFindings) errors.push(`runtime asset template ${finding.path}: ${finding.message}`);
+} catch (error) {
+  errors.push(`runtime asset schema or template JSON: ${error.message}`);
 }
 
 try {

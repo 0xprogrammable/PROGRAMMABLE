@@ -1,6 +1,6 @@
 # Programmable compatibility standard
 
-Version: `1.1.0`
+Version: `1.2.0`
 
 This standard defines the information and structural checks required before a Programmable prototype begins. It does
 not approve a model, certify security or predict support from Uniswap routing or third-party indexers.
@@ -146,7 +146,10 @@ Permission bits, from highest to lowest:
 | `0x0001` | `afterRemoveLiquidityReturnDelta` |
 
 When `hook.used` is false, all 14 bits are false, hook-only configuration is neutral, and no hook address is mined. A
-static ordinary v4 pool is valid on that route. When `hook.used` is true, every return-delta bit requires its parent
+static ordinary v4 pool is valid on that route. `noHookArchitecture.route` must then select either the safer
+`official-launchpad` default or a `model-specific-no-hook` design. The model-specific route cannot borrow an official
+profile identity. It binds its own dependencies and enters architecture review. When `hook.used` is true,
+`noHookArchitecture` is null, every return-delta bit requires its parent
 callback and the deployed address must match the final permission mask. Any
 compiler, metadata, import, optimizer, constructor, deployer, or creation-code change invalidates a previously mined
 CREATE2 salt.
@@ -167,6 +170,21 @@ For a dynamic LP fee, additionally lock:
 - manipulation resistance, stale-data behavior, and failure rule
 
 A dynamic LP fee belongs to liquidity providers and is not creator revenue.
+
+For a model-specific no-hook transfer tax, lock the buy, sell, and peer-transfer rates; immutable maximum; exemption
+set; recipient destinations and shares; value-flow ids; mutability, authority, and delay; PoolManager transfer scope
+and classification; liquidity-add/remove and alternative-pool treatment; event; and failure behavior. A token sees the
+shared PoolManager, not a trustworthy PoolId or swap-versus-liquidity action label, so any ingress/egress classification
+or exact counterparty classifier must be explicit and adversarially tested. Ordinary peer transfers, pool buys, and pool sells remain permitted. Transaction caps,
+wallet caps, cooldowns, denylists, allowlists, or a tax bound that can consume the complete amount are hard conflicts for
+this permissionless path.
+
+For automatic liquidity, additionally lock the funding recipient bucket, safe trigger mode, pool-transfer suppression,
+trigger threshold, maximum swap amount, slippage, deadline, execution actor, reentrancy guard, actual-received accounting, LP position custodian,
+transferability, exit, emergency recovery, events, and failure atomicity. Trace collection, conversion, liquidity add,
+and position custody through stable value-flow ids. A failed automatic action remains retryable and cannot block the
+underlying permitted transfer. Provider routing, quoting, indexing, scanner, and listing support
+remain external states even after local tests pass.
 
 For a hook-owned fee or reward split, lock the charged currency in each supported swap quadrant, aggregate bound,
 collection path, matching value-flow id, liability-key dimensions, collection event, and rounding. Each recipient records
@@ -256,6 +274,17 @@ fields empty or null. Do not add the event/reorg/backfill/freshness gate in that
 Quote and execute the same PoolKey, direction, amount semantics, and validated hookData. Router or SDK ambiguity is a
 blocking finding until an exact generation is selected.
 
+Bind public presentation separately from protocol behavior. Record the exact project name and description, token name
+and symbol, project/token URIs, logo URIs and content hashes, whether each metadata record is mutable, and the exact
+owner of every mutable record. Preserve Unicode names, but review compatibility forms, mixed-script confusables and
+protected provider lookalikes before display. Invisible controls and bidirectional overrides are not valid metadata.
+
+Record affiliations as structured relationships. `technology-use` means only that the project uses the named
+technology. Official, partner, sponsored, audit or other organizational claims require public attributable evidence and
+human verification. Record provider-facing tags and labels per provider with `not-requested`, `unknown`, or
+`provider-documented` support. Unknown support adds provider review only; it is not a compatibility rejection and must
+not be converted into a favorable support claim.
+
 Locally resolved package files are not primary GitHub source. Mark them as builder-declared local evidence, exclude
 them from primary source paths, and require a separate package-lock/install/closure gate before treating their version
 or integrity as verified.
@@ -302,8 +331,9 @@ Record the underlying answers, not only a total. Use the framework's published b
 - `7–17`: medium
 - `18–33`: high
 
-Feature triggers override a low aggregate score. Return deltas, custom math, hook-held liquidity, external pricing data,
-autonomous changes, upgradeability, meaningful custody, and high expected value require their capability-specific gates.
+Feature triggers override a low aggregate score. Return deltas, custom math, hook-held liquidity, transfer taxes,
+automatic liquidity, external pricing data, autonomous changes, upgradeability, meaningful custody, and high expected
+value require their capability-specific gates.
 
 The agent derives a conservative provisional score from the declared design and evidence. The builder supplies factual
 inputs such as expected value at risk and operating maturity but may not lower the score by assertion. The score is a
@@ -318,14 +348,35 @@ self-assessment, not a badge. Programmable does not convert it into “safe.”
    conservation, failure behavior, proposal, threat model, and test plan agree.
 
 Schema-valid prose is not evidence that an equation is correct or a dependency claim is true.
+Review public UI and application strings as well as documents. Ignore comments and declared test fixtures, but reject
+unsupported approval, audit, safety, deployment and availability claims that would actually be shown to users.
 
 ## Platform profiles
+
+### Open project-surface profile
+
+Inventory every contract, app, game, map, service, database, indexer, signed data source, optional onchain verifier,
+keeper, claim and monitoring boundary through `projectSurfaces` and `projectCapabilities`. Surface and capability kinds
+are open slugs: unfamiliar kinds enter architecture review instead of being rejected by a closed launch-type enum.
+
+Open kinds do not weaken security. Every capability explicitly triggers and derives the applicable authority,
+value-flow, source-of-truth, signatures/replay, external-call, custody, PII/geolocation, secret-boundary,
+source/test/schema and failure/recovery profiles. Authority, source of truth, source/test/schema and failure/recovery
+remain mandatory even for permissionless or value-free components. Exposure booleans, capability triggers, profile
+status, declared references and prototype closure must agree.
+
+Keep a signed offchain data source separate from an optional onchain oracle verifier. The source binds signer authority,
+canonical payload schema, freshness and replay. A verifier binds one or more distinct signed-source surfaces and its
+verification, freshness, replay and failure rules. The verifier is optional unless the actual architecture uses one.
+See [project-surfaces-and-capabilities.md](project-surfaces-and-capabilities.md).
 
 ### Permissionless token profile
 
 A permissionless launch model may not hide or retain arbitrary minting, transfer freezing, confiscation, blacklisting,
-undisclosed transfer tax, arbitrary execution, or silent fee and payout changes. Any disclosed administration changes the
-trust profile and may make the design unsuitable for this category.
+undisclosed transfer tax, arbitrary execution, or silent fee and payout changes. A disclosed, bounded transfer tax can
+continue only through the model-specific no-hook profile with unrestricted transfer and sell liveness, exact recipients,
+authority, custody, provider limitations, and tests. Any administration changes the trust profile and may make the
+design unsuitable for this category.
 
 ### Permissioned or regulated asset profile
 
@@ -364,13 +415,13 @@ Return `UNSUPPORTED` for the current design when any condition below is true:
 - `tx.origin` authorization
 - User-controlled or unexplained `delegatecall`
 - Arbitrary target and calldata executed with protocol authority
-- Unbounded storage-dependent loop on a critical path
 - Unverifiable custody, solvency source, or value flow
-- Ignored call or token-transfer result
-- Floating or unknown dependency provenance
-- Signature authority without replay, domain, action, parameter, and deadline binding
-- Runtime, CREATE2, or permission claims that cannot be reproduced
-- A requested mainnet, audit, approval, routing, or availability claim without its separate evidence
+
+Repairable implementation defects and missing evidence block the current revision as `REDESIGN_REQUIRED` or a tooling
+state; they do not make the product category unsupported. This includes unbounded critical loops, ignored call or
+token-transfer results, floating dependency pins, incomplete signature bindings, missing runtime/CREATE2/permission
+evidence, and unsupported mainnet, audit, approval, routing, or availability wording. Name the exact correction and
+rerun the invalidated checks. Return `UNSUPPORTED` only when the requested behavior itself depends on the hard conflict.
 
 ## Sources
 

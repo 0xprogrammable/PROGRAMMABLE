@@ -21,10 +21,16 @@ meaning, hookData validation, exact selector and return shape, nested-action sup
 
 ## Ordinary no-hook boundary, only when `hook.used` is false
 
-Identify the current pinned ordinary launch profile and state that the project introduces no custom callbacks, hook
+Identify `official-launchpad` or `model-specific-no-hook` and state that the project introduces no custom callbacks, hook
 permission mask, or hook CREATE2 address. Explain which behavior remains in the token, router, app, game, or service and
 why it does not require atomic PoolManager callback execution. Treat any separately declared contract or offchain
-authority as its own boundary rather than inventing hook controls.
+authority as its own boundary rather than inventing hook controls. For a model-specific path, threat-model transfer and
+sell liveness, tax bounds and recipients, requested-versus-received amounts, automatic swaps, reentrancy, MEV, liquidity
+position custody and exit, mutable authorities, and provider incompatibility.
+
+For a taxed v4 token, remember that the token observes the shared PoolManager address, not a trustworthy PoolId or
+swap-versus-liquidity label. Model spoofed classifiers and the tax effect on liquidity adds, removals and alternative
+pools; never describe PoolManager ingress and egress as buy and sell without this limitation.
 
 ## Value flows and accounting
 
@@ -45,6 +51,12 @@ sites, rate limit, immutable bounds, metric, observation, cadence, manipulation 
 and failure rule. For hook-owned fees, cover collection path, value-flow id, liability keys, event, recipient share,
 address source and launch binding, rounding, duplicates, zero and failed recipients, claim and redirect authorization,
 address validation, mutation event, and historic entitlements.
+
+For token transfer taxes, separately model buy, sell and peer classification; immutable maximum; exemption boundaries;
+recipient conservation; zero, tiny and maximum amounts; PoolManager requested-versus-received behavior; actual user
+receipt; and the impossibility of hiding a sell block behind a fee or configuration path. For automatic liquidity, model
+threshold manipulation, repeated triggers, pool-transfer suppression, reentrancy, partial external execution, slippage,
+deadline, position custody, creator withdrawal, stuck balances, retry, and failure without blocking the user's underlying transfer.
 
 ## Attack and failure scenarios
 

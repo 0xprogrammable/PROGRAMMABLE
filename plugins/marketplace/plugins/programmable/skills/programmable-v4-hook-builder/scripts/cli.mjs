@@ -3,7 +3,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { TextDecoder } from "node:util";
 import { parseCli, renderHelp } from "./cli-args.mjs";
+import { normalizeCompanionManifest } from "./companion-manifest-contract.mjs";
 import { inspectLocalGitReadiness, preparePullRequest } from "./cli-prepare-pr.mjs";
 import { assertInsideRepository, resolveRepositoryRoot } from "./repository-root.mjs";
 import {
@@ -13,6 +15,7 @@ import {
   requireJsonResult,
   runBundledCommand
 } from "./cli-runtime.mjs";
+import { canonicalJson } from "./submission-core.mjs";
 
 const commandSpecs = new Map([
   ["doctor", {
@@ -47,6 +50,15 @@ const commandSpecs = new Map([
     options: [repositoryOption()],
     positionals: { min: 1, max: 1, names: ["submission-directory"] }
   }],
+  ["companion", {
+    usage: "cli.mjs companion <manifest.json> [--write-canonical] [--repository-root <path>]",
+    summary: "Validate a companion manifest and optionally rewrite canonical JSON without network access.",
+    options: [
+      repositoryOption(),
+      { name: "--write-canonical", key: "writeCanonical", type: "boolean", description: "Atomically rewrite the manifest as canonical JSON with one trailing newline." }
+    ],
+    positionals: { min: 1, max: 1, names: ["manifest.json"] }
+  }],
   ["prepare-pr", {
     usage: "cli.mjs prepare-pr <submission-directory> [--base <branch>] [--companion-manifest <path>]... [--output-dir <path>] [--replace-existing | --replace-draft] [--repository-root <path>]",
     summary: "Prepare deterministic PR metadata for one clean, pushed, public GitHub revision without opening it.",
@@ -59,15 +71,16 @@ const commandSpecs = new Map([
         type: "value",
         repeatable: true,
         valueName: "path",
-        description: "Bind one canonical companion manifest committed in the primary repository HEAD. Repeat up to eight times."
+        description: "Bind one canonical v1 or v2 companion manifest committed in primary HEAD. Repeat up to eight times."
       },
-      { name: "--output-dir", key: "outputDirectory", type: "value", valueName: "path", description: "Materialize the frozen six-file package in the exact application-id directory." },
+      { name: "--output-dir", key: "outputDirectory", type: "value", valueName: "path", description: "Materialize the frozen six-file package below an existing real parent directory outside the project repository." },
       { name: "--replace-existing", key: "replaceExisting", type: "boolean", description: "Create the first next-revision draft by replacing only an exact package from immutable main." },
       { name: "--replace-draft", key: "replaceDraft", type: "boolean", description: "Replace one self-consistent local draft while keeping the revision authorized by immutable main." }
     ],
     positionals: { min: 1, max: 1, names: ["submission-directory"] }
   }]
 ]);
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
 
 const argv = process.argv.slice(2);
 if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
@@ -193,6 +206,40 @@ async function execute(command, options, positionals) {
       throw error;
     }
   }
+  if (command === "companion") {
+    const manifestPath = resolveRegularFile(repositoryRoot, positionals[0]);
+    const bytes = fs.readFileSync(manifestPath);
+    if (bytes.length < 2 || bytes.length > 65_536) {
+      throw new CliFailure("COMPANION_MANIFEST_INVALID", "companion manifest exceeds the bounded byte limit");
+    }
+    let value;
+    try {
+      value = JSON.parse(strictUtf8.decode(bytes));
+    } catch {
+      throw new CliFailure("COMPANION_MANIFEST_INVALID", "companion manifest must be UTF-8 JSON");
+    }
+    let normalized;
+    try {
+      normalized = normalizeCompanionManifest(value);
+    } catch (error) {
+      throw new CliFailure("COMPANION_MANIFEST_INVALID", error?.message ?? "companion manifest is invalid");
+    }
+    const canonicalBytes = Buffer.from(`${canonicalJson(value)}\n`, "utf8");
+    const wasCanonical = bytes.equals(canonicalBytes);
+    if (options.writeCanonical && !wasCanonical) writeCanonicalAtomically(manifestPath, canonicalBytes);
+    return {
+      path: relative(repositoryRoot, manifestPath),
+      schemaVersion: normalized.schemaVersion,
+      closureStatus: normalized.closureStatus,
+      canonical: wasCanonical || options.writeCanonical,
+      rewritten: options.writeCanonical && !wasCanonical,
+      networkAccessed: false,
+      prototypeClosureVerified: false,
+      note: normalized.schemaVersion === "2.0.0"
+        ? "Manifest structure is valid; prepare-pr still verifies exact public Git objects, npm closure and successful CI."
+        : "Manifest v1 remains proposal-compatible and closure-incomplete."
+    };
+  }
   return preparePullRequest({
     repositoryRoot,
     packageInput: positionals[0],
@@ -270,6 +317,18 @@ function writeJsonAtomically(target, value) {
   }
 }
 
+function writeCanonicalAtomically(target, bytes) {
+  const directory = path.dirname(target);
+  const temporaryDirectory = fs.mkdtempSync(path.join(directory, ".programmable-companion-"));
+  const temporaryPath = path.join(temporaryDirectory, "manifest.json");
+  try {
+    fs.writeFileSync(temporaryPath, bytes, { flag: "wx", mode: 0o600 });
+    fs.renameSync(temporaryPath, target);
+  } finally {
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
+}
+
 function repositoryOption() {
   return {
     name: "--repository-root",
@@ -291,6 +350,7 @@ function globalHelp() {
     "  scaffold    Create one isolated proposal package.",
     "  check       Run deterministic compatibility preflight.",
     "  package     Validate a complete public intake package.",
+    "  companion   Validate or canonicalize one companion manifest.",
     "  prepare-pr  Generate PR metadata without pushing or opening a PR.",
     "",
     "Run 'cli.mjs <command> --help' for command options."

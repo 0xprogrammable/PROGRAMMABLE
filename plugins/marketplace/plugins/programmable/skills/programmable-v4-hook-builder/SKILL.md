@@ -8,33 +8,17 @@ license: MIT
 
 ## Purpose
 
-Give a builder and their coding agent one end-to-end path from a plain-language idea or existing repository to a reviewable public GitHub application. The skill helps choose the architecture, build or repair the project, create evidence,
-run deterministic checks, bind one exact public source revision, and prepare the application. It does not
-approve, deploy, publish, route, list, or launch a project.
+Give a builder and their coding agent one end-to-end path from a plain-language idea or existing repository to a reviewable public GitHub application. The skill helps choose the architecture, build or repair the project, create evidence, run deterministic checks, bind one exact public source revision, and prepare the application. It does not approve, deploy, publish, route, list, or launch a project.
 
-This is a v4 project builder, not a hook-at-all-costs generator. First determine whether any requested behavior must run
-atomically with a pool action. A plain fixed-supply token with ordinary price discovery and liquidity should use the
-current pinned official Uniswap Liquidity Launchpad path and no custom hook. Build a custom hook only when the confirmed
-mechanism needs one. A game, map, browser experience, wallet-action product, server, keeper, indexer, or other application
-may be part of the same project and review target.
+This is a v4 project builder, not a hook-at-all-costs generator. First determine whether any requested behavior must run atomically with a pool action. A plain fixed-supply token with ordinary price discovery and liquidity should use the current pinned official Uniswap Liquidity Launchpad path and no custom hook. That is the safer default, not the only no-hook architecture. A model-specific ordinary token, including a transparent transfer tax or bounded automatic liquidity lifecycle, may enter architecture review when fees, recipients, mutability, authority, value flows, custody, exit, provider limits, and tests are explicit. Build a custom hook only when the confirmed mechanism needs one. A game, map, browser experience, wallet-action product, server, keeper, indexer, or other application may be part of the same project and review target.
 
-There is no launch-type allowlist. An unfamiliar mechanism enters architecture discussion so its authority, value flow,
-trust boundary, failure behavior, and evidence can be understood. Novelty is not a security finding. Automatic adverse
-results must be tied to a reproducible objective conflict, not a missing catalog label or parser limitation.
+There is no launch-type allowlist. An unfamiliar mechanism enters architecture discussion so its authority, value flow, trust boundary, failure behavior, and evidence can be understood. Novelty is not a security finding. Automatic adverse results must be tied to a reproducible objective conflict, not a missing catalog label or parser limitation.
 
-For the Programmable launch path, the project still defines one launched token, one canonical Uniswap v4 launch pool,
-and the complete creation-to-retirement lifecycle. A reusable component for arbitrary existing pools may be built and
-reviewed, but it cannot claim platform-launch compatibility until that launch lifecycle and integration boundary are
-defined. Alternative pools never inherit the canonical pool's behavior by implication.
+For the Programmable launch path, the project still defines one launched token, one canonical Uniswap v4 launch pool, and the complete creation-to-retirement lifecycle. A reusable component for arbitrary existing pools may be built and reviewed, but it cannot claim platform-launch compatibility until that launch lifecycle and integration boundary are defined. Alternative pools never inherit the canonical pool's behavior by implication.
 
-Any positive JavaScript-safe EVM chain may be submitted. Known ids bind to canonical slugs: Ethereum `1/ethereum`,
-Unichain `130/unichain`, Base `8453/base`, and Sepolia `11155111/sepolia`. An unknown chain enters architecture review;
-it is not automatically unsafe or unsupported. Application eligibility is not launch eligibility: the current
-Programmable launch runtime is Ethereum Mainnet-only. Every other chain stays behind a maintainer-owned platform
-integration release gate, even when an exact official Uniswap deployment reference exists.
+Any positive JavaScript-safe EVM chain may be submitted. Known ids bind to canonical slugs: Ethereum `1/ethereum`, Unichain `130/unichain`, Base `8453/base`, and Sepolia `11155111/sepolia`. An unknown chain enters architecture review; it is not automatically unsafe or unsupported. Application eligibility is not launch eligibility: the current Programmable launch runtime is Ethereum Mainnet-only. Every other chain stays behind a maintainer-owned platform integration release gate, even when an exact official Uniswap deployment reference exists.
 
-The builder may be non-technical. Ask in plain language, derive technical fields where the answer is unambiguous, and
-explain every blocker with a safer or simpler redesign. Never lower a gate because the user does not know the jargon.
+The builder may be non-technical. Ask in plain language, derive technical fields where the answer is unambiguous, and explain every blocker with a safer or simpler redesign. Never lower a gate because the user does not know the jargon.
 
 For a non-technical builder:
 
@@ -63,6 +47,7 @@ For a non-technical builder:
 - Keep `prototype-tested`, `candidate-reviewed`, `deployed`, `source-verified`, `lifecycle-verified`, `routing-reviewed`,
   and `available` as separate states.
 - Never describe generated or internally tested code as safe, audited, approved, unruggable, verified, or live.
+- Bind public project/token names, symbol, URIs, logo bytes, mutability, owners, affiliations, and provider labels; Unicode confusables and unknown provider support go to review, not automatic architecture rejection.
 - Never sign, broadcast, deploy to any chain, open a pull request, submit to Hooklist, request routing, or publish without
   explicit human authorization for that exact external action.
 - The builder skill cannot accept its own submission. Only Programmable maintainers can create an acceptance record,
@@ -107,9 +92,10 @@ Read these files before the corresponding phase:
   current Public GitHub PR Beta.
 - Official source selection and drift: [upstream-sources.md](references/upstream-sources.md)
 - Current official Launchpad records and fail-closed selection:
-  `references/official-launchpad-deployments.json`; load it for every ordinary-token route and before naming a Launchpad
+  `references/official-launchpad-deployments.json`; load it for the official ordinary-token route, as the safer comparison for a model-specific route, and before naming a Launchpad
   address or version. Its Base and Unichain records are a separate runtime-unverified reference tier, not
   Programmable-tested deployments.
+- Model-specific no-hook profile: `assets/templates/no-hook-architecture.example.json`; load it only when the ordinary token, launcher, transfer tax, or automatic liquidity path differs from the safer official Launchpad default.
 - Pinned deployment-feed records: `references/deployment-snapshot.json`; load it together with the official Launchpad
   reference when resolving any `deploymentRecordId`, and preserve the returned trust tier.
 - Public GitHub identity and revision resolution: `references/github-public-source-contract-v1.json`; load it for
@@ -121,8 +107,8 @@ Read these files before the corresponding phase:
   [submission-workflow.md](references/submission-workflow.md)
 - Official model-pattern comparison: `references/official-model-patterns.md`; load it only after the model category or
   triggered capability is known.
-- Routing, discovery, and indexing: `references/routing-and-discovery.md`; load it for Uniswap or third-party discovery,
-  indexed data, quotes, swaps, Hooklist or routing work, and every accepted-model platform handoff.
+- Routing, discovery, and indexing: `references/routing-and-discovery.md`; load it for Uniswap or third-party discovery, indexed data, quotes, swaps, Hooklist or routing work, and every accepted-model platform handoff.
+- Large non-executable game, Three.js, audio, level, map, media, or provider data: [runtime-assets.md](references/runtime-assets.md); load it before declaring runtime-only data outside source/test closure.
 
 Do not load every reference by default. A pattern is evidence about one pinned implementation, not approval for a
 derived model. Routing or indexer support is a provider state, not protocol compatibility.
@@ -201,6 +187,8 @@ Create `submission.json` from [submission.example.json](assets/templates/submiss
 yet. Fill unknown values with `null` or an explicit unresolved item; never invent an address, authority, fee, oracle,
 asset behavior, or deployment fact.
 
+When `hook.used` is false, choose `noHookArchitecture.route` explicitly. Use `official-launchpad` by default and bind its exact committed profile. Use `model-specific-no-hook` only for a separately pinned token or launcher architecture; keep `officialLaunchProfileId` null and complete the structured transfer, fee, liquidity, provider, and test fields.
+
 Run:
 
 ```bash
@@ -232,6 +220,7 @@ numeric score. Never lower a tier manually in prose.
 Before presenting `PROTOTYPE_READY`, independently check that the design card, structured submission, worked numerical
 examples, value conservation, failure behavior, proposal, threat model, and test plan agree. Free-text length and schema
 validity do not prove that a rule is meaningful or true.
+Compare public UI/application strings with `publicMetadata`; scan declared JS/TS/HTML/UI source while excluding comments and declared tests, and never hide approval, audit, safety, deployment or availability claims in user-facing copy.
 
 ### 4. Lock the architecture
 
@@ -254,11 +243,14 @@ Before implementation, produce and freeze:
 - Required events and the indexer reconstruction path
 - A surface specification for every intended UI, API, indexer, quote, trade, claim, and monitoring path: source of truth,
   inputs, outputs, errors, dependencies, unsupported states, and proposed source or test paths when known
+- The open surface/capability inventory and non-bypassable profiles in
+  [project-surfaces-and-capabilities.md](references/project-surfaces-and-capabilities.md)
 - The exact `submission.json.integration.platformHandoff` intent, handoff notes, optional contributor path proposals,
   and contributor-limited review flags
 - Security properties and test obligations generated by the scenario matrix
 - Every structured capability profile that applies: external calls, permissioned assets, oracles, keepers, proofs,
   cross-chain messages, external liquidity, async swaps, and custom curves
+- For a model-specific no-hook token: unrestricted buy, sell, and peer-transfer liveness; exact tax rates and immutable maximum; recipients and value-flow ids; configuration authority and delay; automatic-liquidity thresholds, slippage, deadline, custody and exit; provider limitations; and the required test-scenario ids
 
 If any item changes later, rerun preflight and regenerate the compatibility report before continuing.
 
@@ -274,6 +266,8 @@ current committed official Liquidity Launchpad profile: official token factory, 
 LBP strategy, and resulting v4 liquidity. Do not generate a custom hook merely to satisfy this skill's name. The
 committed profile is still runtime-unverified until the execution-time drift, runtime, interface, chain, and source
 checks pass; never copy an address from prose or silently fall back to an older CCA release.
+
+If the token itself changes transfer amounts or automatically swaps and adds liquidity, do not disguise that design as the official profile and do not invent a hook. Select `model-specific-no-hook`, pin its exact contract and dependencies, use the dedicated template, and keep it behind architecture, economic, custody, provider, and independent review gates. Reject hidden transfer blocks, sell restrictions, mutable undisclosed recipients, and a 100 percent tax bound.
 
 When available, the official OpenZeppelin hook generator may scaffold a base contract. Its output is only a starting
 point. Compile it inside the pinned workspace, replace stale imports, confirm permissions, and apply every gate in this
@@ -356,12 +350,20 @@ Wrong paths, missing literal relative imports, symlinks, Git LFS pointers and re
 source-binding errors. Compiler AST or build-info evidence must separately prove Solidity compiler source closure. A
 successful intake result is `intakeValidated`, never `verified`, `accepted`, or `releaseEligible`.
 
+Proposal packaging requires a concrete outcome, architecture, lifecycle, value flow, authority evidence, failure handling, and project-specific documents; specific open architecture questions remain allowed, but generic or substantially unchanged templates fail.
+
 The backward-compatible `integration.sdkDependencies` field records every exact registry package used by JavaScript,
 TypeScript, or package-backed Solidity, not only SDKs. Package name, exact version, and sha512 integrity are mandatory.
 Source repository and 40-character commit are either both present or both null; official documented Uniswap SDK
 packages must use their exact `Uniswap/sdks` release source. Local `node_modules` source bytes are builder-declared,
 locally hash-bound evidence only. They never enter the primary GitHub source paths and are not centrally source- or
 integrity-verified without the separate package-lock and closure verification gate.
+
+Before `check` or `package`, inspect the project's pinned dependency files and materialize the declared dependency
+closure. A clean clone may still be incomplete because `node_modules`, Foundry libraries, generated bindings, or other
+locked artifacts have not been installed. Inspect install scripts first and run untrusted installs and builds only in
+an isolated environment without credentials or wallet access. `doctor` proves tool and Git readiness, not that project
+dependencies already exist.
 
 Derive client gates from `integration.routingAndDiscoverability.routingMode`: `programmable-app` and
 `custom-reviewed` mean the project includes a swap client; `uniswap-interface-api` and `uniswapx-filler` mean the
@@ -405,8 +407,9 @@ GitHub Actions evidence. A branch, tag, repository slug, pull-request number, lo
 source authority.
 
 When one project spans repositories, accept up to eight canonical companion manifests committed in the primary HEAD.
-Resolve every companion's public numeric id, full commit, root tree, and declared paths independently. Do not collapse a
-game, app, service, indexer, or other repository into an unsupported category merely because it is not Solidity.
+Use v2 for a closed npm game/app/service path; keep v1 proposal-compatible for unsupported closure mechanics. Resolve
+every repository independently and follow `references/companion-manifests.md`. Do not reject a project category merely
+because it is not Solidity.
 
 Prepare the closed six-file application package defined by `references/public-pr-application.schema.json` and a
 copy-ready draft PR body. The complete project remains in the pinned external repository. The central package contains
@@ -419,7 +422,9 @@ revision authority: a new application stays at revision 1 throughout its open pu
 revision n stays at n+1 until merge. Use `--replace-existing` once to turn a byte-exact local copy of merged main n into
 the first n+1 draft. Use `--replace-draft` for every later iteration of that same open pull request, including a new
 source commit or a package-only correction. Both modes require an explicit output directory outside the builder source
-repository and perform no GitHub write. Never treat the local draft or a moving branch as revision authority.
+repository. Its parent must already exist, contain no symbolic-link path component, and be supplied by its canonical
+real path (for example `/private/tmp/...` rather than the macOS `/tmp` alias). The command performs no GitHub write.
+Never treat the local draft or a moving branch as revision authority.
 
 For this beta, `applicationId` is the stable lower-case project slug and central directory name; the pull-request
 number is the review thread. Neither is a connected-service identity or approval record.

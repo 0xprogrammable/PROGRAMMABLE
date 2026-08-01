@@ -51,6 +51,7 @@ The deterministic report must contain:
 - Derived hook permission mask when `hook.used` is true, otherwise an explicit not-applicable result
 - Errors, blockers, warnings, and required actions with stable codes
 - Required test, review, operational, integration, and disclosure gates
+- Structured public project/token metadata, mutable owners, affiliation claims, and provider-facing presentation review
 
 Required gates are surface-derived. A contract-only, external-client, or ordinary no-hook project does not receive
 included-client or indexer gates unless it actually declares those surfaces. Hook and value-safety gates remain based
@@ -70,6 +71,9 @@ Before a human handoff says `PROTOTYPE_READY`, the proposal also contains:
   that the ordinary pool path introduces no custom swap callback behavior
 - A planned boundary for every intended UI, game, service, API, indexer, quote, trade, claim, keeper, oracle, and
   monitoring surface, with unused surfaces marked not applicable with a reason
+- A machine-readable `projectSurfaces` and `projectCapabilities` graph. New surface or capability kinds remain open for
+  architecture review, while every capability still derives authority, value-flow, source-of-truth, signature/replay,
+  external-call, custody, PII/geolocation, secret, source/test/schema and failure/recovery profiles.
 - No contradiction among the design card, structured submission, proposal, threat model, and test plan
 
 ## Prototype output
@@ -97,7 +101,8 @@ fields apply. Mark a capability-specific field or gate not applicable with a rea
 unexecuted command.
 
 `review-target.json` binds the package, declared source and test files, the supported closure for each declared language,
-the dependency lock, and every gate-evidence artifact by content hash. Closure method v9 deliberately excludes both
+the dependency lock, and every gate-evidence artifact by content hash. Closure method v10 additionally binds every
+declared project-surface source, test, schema and evidence path, and deliberately excludes both
 `gate-status.json` and `review-target.json` from its own file subject, preventing either authority record from hashing
 itself. `prepare-pr` binds those two records separately as exact primary HEAD/GitHub source blobs. Solidity uses compiler and import closure;
 JavaScript and TypeScript use static or literal local module closure. Another language uses its declared supported
@@ -125,16 +130,26 @@ Capability-triggered evidence is additive:
   and lifecycle evidence for the callbacks it actually enables.
 - An ordinary no-hook project requires no custom Solidity, callback, permission-mask, or CREATE2 artifact unless another
   declared contract surface independently needs it.
+- A model-specific no-hook token requires its own exact source and dependency closure plus the declared transfer-tax,
+  actual-received, authority, automatic-liquidity, custody, exit and provider-limit scenarios. It cannot reuse official
+  Launchpad evidence or turn local provider canaries into routing, indexing, scanner or listing approval.
 - An app or game requires the relevant build, interaction, state, wallet/signing, accessibility, responsive, browser,
   and failure tests for its declared behavior; unused categories are not fabricated.
 - A service, keeper, oracle, or indexer requires the relevant API/schema, authentication, authorization, retry,
   freshness, reorg, idempotency, failure, operating, and monitoring evidence for its declared responsibilities.
+- A signed offchain data producer and an optional onchain oracle verifier remain separate surfaces with reciprocal
+  references. A signed source without an onchain verifier is valid when the declared consumer boundary does not use one.
 
 The prototype also records the product-facing specification. For each intended surface, name the source of truth, input,
 output, error behavior, unsupported state, dependency ids, source paths, executable tests, and operating owner. These
 records are plans and local evidence, not proof that the Programmable product or a third-party provider supports them.
 Contributor-controlled `submission.json`, `gate-status.json`, and evidence files cannot complete candidate,
 maintainer-review, deployment, verification, provider, or availability gates.
+
+Public metadata is part of the exact reviewed revision. Bind project and token names, symbol, URIs, logo content hashes,
+mutability and owners. Provider-facing tags and labels remain proposals until the named provider confirms them. Unknown
+provider support produces an external review gate, not a rejection. Scan visible copy in declared app and UI source;
+comments and declared test fixtures are not public claims.
 
 The machine-readable plan lives at `submission.json.integration.platformHandoff`. When `intended` is true, fill
 `handoffNotes`. Repository and test paths are optional contributor proposals until maintainers accept the exact
@@ -154,7 +169,11 @@ and separately asserted source match. Builder evidence remains untrusted until a
 - `centralPullRequestTarget`: fixed `0xprogrammable/programmable:main` identity, observed base commit and tree, central
   application path, prior revision, and next revision;
 - `github.sourceRequest`: the immutable primary authority and zero to eight sorted companion authorities;
-- `centralPackage`: exactly six canonical application files with byte lengths and SHA-256 digests;
+- `github.companionClosure`: one verified exact-closure receipt per v2 companion; v1 has no receipt and retains its
+  proposal closure diagnostic;
+- `centralPackage`: exactly six canonical application files with byte lengths and SHA-256 digests; its
+  `application.json.companionClosure` durably carries the same canonical v2 receipts and is checked against the exact
+  companion authorities and Actions run ids by downstream intake;
 - a copy-ready draft pull-request `title`, `body`, and confirmation `checklist`;
 - `localWritesPerformed`: empty unless an explicit output directory was requested;
 - `externalActionsPerformed`: always empty; and
@@ -233,6 +252,11 @@ decision, and all still-open independent gates. Contributor tooling cannot creat
 
 `review-status.json` uses factual states such as `not-started`, `required`, `in-progress`, and `completed-with-report`.
 It never stores `safe`, `approved`, or a self-assigned security score.
+
+When `implementation.runtimeAssetManifestPath` is present, the review target also carries the closed runtime-asset
+summary: exact repository blob identities, declared sizes and MIME types, bounded integrity state, and review-required
+diagnostics for external, transformed or unmaterialized content. The large asset bytes are not copied into the central
+application package and are never executed by deterministic checks.
 
 ## Accepted-model platform handoff
 

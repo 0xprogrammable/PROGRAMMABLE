@@ -1,0 +1,105 @@
+{
+  "route": "model-specific-no-hook",
+  "rationale": "Use an ordinary token contract because the declared transfer tax and automatic liquidity lifecycle do not require a custom PoolManager callback.",
+  "transferPolicy": {
+    "peerTransfersAllowed": true,
+    "poolBuysAllowed": true,
+    "poolSellsAllowed": true,
+    "maxTransactionAmount": null,
+    "maxWalletAmount": null,
+    "cooldownSeconds": null,
+    "allowlist": false,
+    "denylist": false
+  },
+  "transferTax": {
+    "used": true,
+    "buyHundredthsOfBip": 30000,
+    "sellHundredthsOfBip": 30000,
+    "peerTransferHundredthsOfBip": 0,
+    "maximumHundredthsOfBip": 50000,
+    "mutable": false,
+    "authorityRole": null,
+    "changeDelay": null,
+    "recipients": [
+      {
+        "id": "liquidity-bucket",
+        "destination": "The immutable token contract balance reserved only for the declared automatic liquidity lifecycle.",
+        "shareBps": 6000
+      },
+      {
+        "id": "treasury-beneficiary",
+        "destination": "The exact immutable beneficiary address declared in the submission builder and value-flow records.",
+        "shareBps": 4000
+      }
+    ],
+    "recipientValueFlowIds": [
+      "transfer-tax-collection",
+      "transfer-tax-treasury"
+    ],
+    "exemptions": [
+      "No mutable exemptions; only the zero address is excluded because mint and burn are not user transfers."
+    ],
+    "appliesToPoolManagerTransfers": true,
+    "poolManagerTransferPolicy": "tax-all-ingress-egress",
+    "liquidityOperationTreatment": "Because the token sees the shared PoolManager rather than one PoolId or action type, the sell rate also applies to token ingress for liquidity adds and the buy rate also applies to token egress for liquidity removal; the client must quote and disclose those received amounts.",
+    "alternativePoolTreatment": "The same PoolManager ingress and egress policy applies to every v4 pool using this token; an alternative pool does not inherit canonical status but cannot silently escape or change the token tax.",
+    "event": "Emit TransferTaxApplied with sender, recipient, gross amount, tax amount and each immutable recipient bucket.",
+    "failureRule": "A failed tax allocation reverts the complete transfer; no recipient balance or transfer amount may update partially."
+  },
+  "autoLiquidity": {
+    "used": true,
+    "fundingRecipientId": "liquidity-bucket",
+    "triggerMode": "eligible-non-pool-transfer",
+    "triggerThreshold": "10000000000000000000000",
+    "maximumSwapAmount": "1000000000000000000000",
+    "slippageHundredthsOfBip": 50000,
+    "deadlineSeconds": 300,
+    "executionActor": "An eligible non-pool transfer may trigger the same bounded lifecycle after the tax balance reaches the immutable threshold.",
+    "poolTransferSuppression": true,
+    "reentrancyGuard": true,
+    "underlyingTransferFailurePolicy": "continue-transfer",
+    "mutable": false,
+    "authorityRole": null,
+    "valueFlowIds": [
+      "auto-liquidity-swap",
+      "auto-liquidity-add",
+      "auto-liquidity-position"
+    ],
+    "custody": "The token contract holds only the disclosed liquidity tax bucket until a bounded swap and add-liquidity action completes atomically.",
+    "lpPositionCustodian": "The immutable liquidity custody contract named in the submission owns the exact resulting v4 position.",
+    "lpPositionTransferable": false,
+    "exitPolicy": "The position cannot be transferred or reduced by a creator authority; any programmed exit must be separately immutable, time-bound and fully disclosed.",
+    "emergencyRecovery": "There is no administrator rescue path for the LP position; failed execution leaves the disclosed tax bucket retryable under the same immutable bounds.",
+    "event": "Emit AutoLiquidityExecuted with gross token input, actual quote received, amounts added, PoolId and position identifier.",
+    "failureRule": "A quote, swap, received-amount, deadline, slippage or liquidity-add failure reverts the complete automatic liquidity action without blocking the underlying user transfer."
+  },
+  "providerCompatibility": {
+    "routing": "Fee-on-transfer support must be verified against the exact router and PoolManager settlement path; ordinary token routing is not assumed.",
+    "quoting": "Every quote must show gross input, tax, router input, pool result and actual amount received by the user for the exact transfer direction.",
+    "indexing": "Indexers need the tax and automatic-liquidity events plus canonical token, PoolKey and position identifiers to reconstruct balances and custody.",
+    "status": "requires-provider-review",
+    "evidence": [],
+    "limitations": [
+      "Passing the builder checks does not prove support in the Uniswap interface, aggregators, token scanners, GMGN, FOMO or any other provider.",
+      "Exact-output and multihop routes may be unavailable when a taxed transfer prevents the provider from enforcing the final received amount."
+    ],
+    "fallback": "Keep the project reviewable through its own tested client and do not claim external routing, quoting, indexing or listing until the provider confirms the exact runtime."
+  },
+  "testScenarios": [
+    "buy-sell-peer-tax-rates",
+    "zero-tax-path",
+    "immutable-maximum-tax-bound",
+    "recipient-split-conservation",
+    "exemption-boundaries",
+    "poolmanager-requested-versus-received",
+    "poolmanager-liquidity-and-alternative-pool-classification",
+    "quote-execution-received-amount",
+    "unrestricted-buy-sell-transfer-liveness",
+    "auto-liquidity-threshold-boundaries",
+    "auto-liquidity-maximum-swap-bound",
+    "auto-liquidity-slippage-and-deadline",
+    "auto-liquidity-reentrancy",
+    "auto-liquidity-failure-atomicity",
+    "lp-custody-and-exit"
+  ]
+}

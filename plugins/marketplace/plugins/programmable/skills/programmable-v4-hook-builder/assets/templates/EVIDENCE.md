@@ -19,6 +19,12 @@ List the exact compatibility report, review-target hash, compiler and dependency
 dispositions, fork block, gas and size results, permission mask, CREATE2 plan, and independent reviews. Mark missing,
 skipped, flaky, reverted, or unavailable checks as blockers.
 
+For a model-specific no-hook transfer tax or automatic liquidity lifecycle, also record the exact token source and
+constructor, direction rates and immutable maximum, recipient conservation, authority/delay result, requested-versus-
+received and actual-user-receipt cases, automatic-liquidity threshold/cap/slippage/deadline, reentrancy and failure
+atomicity, LP position identity/custody/exit, and every declared `testScenarios` result. Record provider tests and
+provider-owned confirmations separately; a canary, HTTP response, local route, or documentation page is not approval.
+
 ## Accepted-model integration evidence
 
 Use this section only when a maintainer acceptance record exists. Bind its path and content hash, model id, version,
