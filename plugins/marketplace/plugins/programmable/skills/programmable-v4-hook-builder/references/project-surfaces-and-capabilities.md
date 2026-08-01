@@ -106,6 +106,10 @@ signature and source-of-truth profiles without pretending a hook oracle exists.
 - Surface source and test paths enter the implementation manifest at prototype stage.
 - Surface source, test, schema and evidence paths enter the review target. Profile evidence refs must point to one of
   those surface-bound paths.
+- Public claim checks follow only declared application/UI paths and `browser` or `mobile-client` surface source paths.
+  Bind shipped locale and content JSON, YAML, Markdown or text files to that public surface so visible approval, audit,
+  safety, deployment and provider claims are reviewed. Tests, comments, code examples, tool configuration, lockfiles and
+  unrelated repository data are not public copy merely because they contain a marketing word.
 - Signed payload schemas belong in both `signedDataSource.payloadSchemaPath` and the surface `schemaPaths` list.
 - Prototype services, databases, signed sources, verifier contracts and claim services bind a machine-readable API,
   payload, storage, ABI or protocol schema.

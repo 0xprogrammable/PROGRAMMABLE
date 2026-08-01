@@ -8,7 +8,10 @@ import {
   validateGitHubPublicSourceRequestV1
 } from "./github-public-source-core.mjs";
 import { isCanonicalNpmPackageName } from "./package-dependency-contract.mjs";
-import { analyzeJavaScriptModuleDependencies } from "./review-target-core.mjs";
+import {
+  analyzeJavaScriptModuleDependencies,
+  assertNoUnboundBrowserRuntimeLoaders
+} from "./review-target-core.mjs";
 import { isCanonicalReviewTargetPath } from "./review-target-contract.mjs";
 import { canonicalJson } from "./submission-core.mjs";
 
@@ -18,6 +21,14 @@ export const COMPANION_MANIFEST_V2 = Object.freeze({
   maximumPaths: GITHUB_PUBLIC_SOURCE_CONTRACT_V1.limits.pathsTotal,
   maximumLockPackages: 8_192
 });
+
+export class UnsupportedCompanionClosureError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "UnsupportedCompanionClosureError";
+    this.code = "COMPANION_STATIC_CLOSURE_UNSUPPORTED";
+  }
+}
 
 const V1_KEYS = Object.freeze([
   "contractPaths",
@@ -71,8 +82,16 @@ export function normalizeCompanionManifest(input) {
   invalid("companion manifest schemaVersion is unsupported");
 }
 
-export function verifyCompanionManifestV2Closure(manifest, records, githubActionsEvidence) {
+export function verifyCompanionManifestV2Closure(
+  manifest,
+  records,
+  githubActionsEvidence,
+  { manifestPath } = {}
+) {
   const normalized = normalizeV2(manifest).manifestV2;
+  if (!isCanonicalReviewTargetPath(manifestPath)) {
+    invalid("companion v2 requires its exact primary manifest path");
+  }
   if (!(records instanceof Map)) invalid("companion v2 exact Git object records are unavailable");
 
   const closurePaths = manifestClosurePaths(normalized);
@@ -102,6 +121,13 @@ export function verifyCompanionManifestV2Closure(manifest, records, githubAction
     const bytes = bytesByPath.get(importer);
     if (JAVASCRIPT_EXTENSION.test(importer)) {
       const source = decodeText(bytes, importer);
+      try {
+        assertNoUnboundBrowserRuntimeLoaders(source, importer);
+      } catch (error) {
+        unsupportedStaticClosure(
+          `${boundedMessage(error?.message)}; use companion manifest v1 for architecture review`
+        );
+      }
       let dependencies;
       try {
         dependencies = analyzeJavaScriptModuleDependencies(source, importer, directPackageNames);
@@ -109,6 +135,11 @@ export function verifyCompanionManifestV2Closure(manifest, records, githubAction
         invalid(`companion JavaScript closure is incomplete at ${importer}: ${boundedMessage(error?.message)}`);
       }
       for (const dependency of dependencies) {
+        if (/\.wasm(?:[?#].*)?$/iu.test(dependency.specifier)) {
+          unsupportedStaticClosure(
+            `WebAssembly module imports are outside companion v2 static closure: ${importer}; use companion manifest v1 for architecture review`
+          );
+        }
         if (!isLocalSpecifier(dependency.specifier)) continue;
         const resolvedPath = resolveDeclaredDependency(importer, dependency.specifier, declaredPaths);
         moduleResolutions.push({
@@ -179,8 +210,9 @@ export function verifyCompanionManifestV2Closure(manifest, records, githubAction
     || compareUtf8(left.kind, right.kind)
   ));
   const preimage = {
-    schemaVersion: normalized.schemaVersion,
+    schemaVersion: "2.0.0",
     closureMethod: normalized.closureMethod,
+    manifestPath,
     repositoryUri: normalized.repositoryUri,
     numericRepositoryId: normalized.numericRepositoryId,
     revisionObjectId: normalized.revisionObjectId,
@@ -192,9 +224,10 @@ export function verifyCompanionManifestV2Closure(manifest, records, githubAction
     githubActionsEvidence: evidence.map(({ conclusion, runId, workflowPath }) => ({ conclusion, runId, workflowPath }))
   };
   return deepFreeze({
-    schemaVersion: "1.0.0",
+    schemaVersion: "2.0.0",
     status: "verified",
     closureMethod: normalized.closureMethod,
+    manifestPath,
     repositoryUri: normalized.repositoryUri,
     numericRepositoryId: normalized.numericRepositoryId,
     revisionObjectId: normalized.revisionObjectId,
@@ -218,10 +251,21 @@ export function validateCompanionClosureReceipts(input, sourceRequest) {
   );
   if (input.length !== expected.length) invalid("companion closure receipts do not cover every v2 source authority");
   const normalized = input.map((receipt, index) => normalizeClosureReceipt(receipt, expected[index]));
+  const primaryPaths = new Set([
+    ...(sourceRequest.primary?.sourcePaths ?? []),
+    ...(sourceRequest.primary?.contractPaths ?? [])
+  ]);
+  const manifestPaths = new Set();
   for (let index = 1; index < normalized.length; index += 1) {
     if (compareUtf8(normalized[index - 1].repositoryUri, normalized[index].repositoryUri) >= 0) {
       invalid("companion closure receipts are not unique and sorted by repository URI");
     }
+  }
+  for (const receipt of normalized) {
+    if (!primaryPaths.has(receipt.manifestPath) || manifestPaths.has(receipt.manifestPath)) {
+      invalid("companion closure receipt manifest paths must be unique exact primary-source paths");
+    }
+    manifestPaths.add(receipt.manifestPath);
   }
   return deepFreeze(normalized);
 }
@@ -362,6 +406,7 @@ function validateNpmClosure({ packageManifest, packageLock, build }) {
       || Buffer.byteLength(command, "utf8") > 4_096
       || CONTROL_OR_BIDI_PATTERN.test(command)
     ) invalid(`companion package.json is missing a bounded ${scriptName} script`);
+    rejectUnboundNpmScript(command, scriptName);
     for (const lifecycleName of [`pre${scriptName}`, `post${scriptName}`]) {
       if (packageManifest.scripts[lifecycleName] !== undefined) {
         invalid(`companion v2 build evidence does not accept implicit npm lifecycle script: ${lifecycleName}`);
@@ -442,6 +487,17 @@ function validateNpmClosure({ packageManifest, packageLock, build }) {
   };
 }
 
+function rejectUnboundNpmScript(command, scriptName) {
+  if (
+    /(?:^|\s)(?:bash|curl|npx|powershell|pwsh|sh|wget)(?:\s|$)/iu.test(command)
+    || /(?:^|\s)npm\s+exec(?:\s|$)/iu.test(command)
+    || /(?:https?:|git\+|file:|data:|`|\$\(|&&|\|\||[;<>])/u.test(command)
+    || /(?:^|\s)node\s+(?:--eval|-e|--input-type)(?:\s|=|$)/u.test(command)
+  ) unsupportedStaticClosure(
+    `companion npm ${scriptName} script can load or generate unbound code; use companion manifest v1 for architecture review`
+  );
+}
+
 function resolveLockDependency(importerPackagePath, packageName, packageRecords) {
   let cursor = importerPackagePath;
   while (true) {
@@ -490,6 +546,7 @@ function normalizeClosureReceipt(receipt, authority) {
     "closureMethod",
     "dependencyEdgeCount",
     "fileCount",
+    "manifestPath",
     "moduleResolutionCount",
     "numericRepositoryId",
     "packageCount",
@@ -502,13 +559,14 @@ function normalizeClosureReceipt(receipt, authority) {
     "workflowReceipts"
   ], "companion closure receipt fields do not match the closed contract");
   if (
-    receipt.schemaVersion !== "1.0.0"
+    receipt.schemaVersion !== "2.0.0"
     || receipt.status !== "verified"
     || receipt.closureMethod !== COMPANION_MANIFEST_V2.closureMethod
     || receipt.repositoryUri !== authority.repositoryUri
     || receipt.numericRepositoryId !== authority.numericRepositoryId
     || receipt.revisionObjectId !== authority.revisionObjectId
     || receipt.treeObjectId !== authority.treeObjectId
+    || !isCanonicalReviewTargetPath(receipt.manifestPath)
     || !SHA256_RECEIPT_PATTERN.test(receipt.closureHash ?? "")
   ) invalid("companion closure receipt does not match its exact source authority");
   for (const field of ["fileCount", "packageCount", "dependencyEdgeCount", "moduleResolutionCount"]) {
@@ -546,6 +604,7 @@ function normalizeClosureReceipt(receipt, authority) {
     schemaVersion: receipt.schemaVersion,
     status: receipt.status,
     closureMethod: receipt.closureMethod,
+    manifestPath: receipt.manifestPath,
     repositoryUri: receipt.repositoryUri,
     numericRepositoryId: receipt.numericRepositoryId,
     revisionObjectId: receipt.revisionObjectId,
@@ -707,7 +766,9 @@ function extractHtmlDependencies(source, importer) {
   for (const match of source.matchAll(attribute)) {
     parsed += 1;
     const specifier = match[1] ?? match[2] ?? match[3];
-    if (isExternalResource(specifier)) continue;
+    if (isExternalResource(specifier)) unsupportedStaticClosure(
+      `external HTML resource loading is outside companion v2 static closure: ${importer}`
+    );
     dependencies.push(specifier);
   }
   if (parsed !== assignments.length) invalid(`companion HTML resource attribute syntax is unsupported: ${importer}`);
@@ -722,7 +783,9 @@ function extractCssDependencies(source, importer) {
   const pattern = /@import\s+(?:url\(\s*)?(["'])([^"']+)\1\s*\)?|url\(\s*(["']?)([^)'"\s]+)\3\s*\)/giu;
   for (const match of source.matchAll(pattern)) {
     const specifier = match[2] ?? match[4];
-    if (isExternalResource(specifier)) continue;
+    if (isExternalResource(specifier)) unsupportedStaticClosure(
+      `external CSS resource loading is outside companion v2 static closure: ${importer}`
+    );
     dependencies.push(specifier);
   }
   return uniqueSorted(dependencies);
@@ -928,4 +991,8 @@ function deepFreeze(value) {
 
 function invalid(message) {
   throw new Error(message);
+}
+
+function unsupportedStaticClosure(message) {
+  throw new UnsupportedCompanionClosureError(message);
 }

@@ -11,6 +11,7 @@ export const RUNTIME_ASSET_MANIFEST_V1 = Object.freeze({
   maximumManifestBytes: 1_000_000,
   maximumAssetBytes: 512_000_000,
   maximumTotalDeclaredBytes: 2_000_000_000,
+  maximumStructuredTextSniffBytes: 8_000_000,
   maximumTextBytes: 1_024,
   maximumEvidencePaths: 512
 });
@@ -48,6 +49,7 @@ const provenanceKinds = new Set([
 ]);
 const verificationStates = new Set([
   "content-hash-verified",
+  "content-classification-review-required",
   "git-lfs-pointer-bound",
   "git-blob-review-required",
   "external-declared"
@@ -56,10 +58,40 @@ const executableAssetExtension = /\.(?:bat|cjs|class|cmd|com|dll|dylib|exe|frag|
 const executableMimeTypes = new Set([
   "application/javascript",
   "application/wasm",
+  "image/svg+xml",
   "text/css",
   "text/html",
   "text/javascript"
 ]);
+const structuredJsonMimeTypes = new Set([
+  "application/geo+json",
+  "application/json",
+  "model/gltf+json"
+]);
+const ASCII_WHITESPACE_BYTES = new Set([0x09, 0x0a, 0x0c, 0x0d, 0x20]);
+const EXECUTABLE_SNIFF_BYTES = 262_144;
+const EXECUTABLE_BINARY_MAGICS = Object.freeze([
+  { name: "WebAssembly", bytes: Buffer.from([0x00, 0x61, 0x73, 0x6d]) },
+  { name: "ELF executable", bytes: Buffer.from([0x7f, 0x45, 0x4c, 0x46]) },
+  { name: "DOS or PE executable", bytes: Buffer.from([0x4d, 0x5a]) },
+  { name: "Java class", bytes: Buffer.from([0xca, 0xfe, 0xba, 0xbe]) },
+  { name: "Dalvik executable", bytes: Buffer.from("dex\n", "ascii") },
+  { name: "Mach-O executable", bytes: Buffer.from([0xfe, 0xed, 0xfa, 0xce]) },
+  { name: "Mach-O executable", bytes: Buffer.from([0xce, 0xfa, 0xed, 0xfe]) },
+  { name: "Mach-O executable", bytes: Buffer.from([0xfe, 0xed, 0xfa, 0xcf]) },
+  { name: "Mach-O executable", bytes: Buffer.from([0xcf, 0xfa, 0xed, 0xfe]) }
+]);
+const recognizedBinaryFormats = Object.freeze({
+  "audio/wav": { extensions: new Set([".wav"]), inspect: inspectRiffWave },
+  "audio/x-wav": { extensions: new Set([".wav"]), inspect: inspectRiffWave },
+  "font/woff": { extensions: new Set([".woff"]), inspect: inspectWoff },
+  "font/woff2": { extensions: new Set([".woff2"]), inspect: inspectWoff2 },
+  "image/gif": { extensions: new Set([".gif"]), inspect: inspectGif },
+  "image/jpeg": { extensions: new Set([".jpeg", ".jpg"]), inspect: inspectJpeg },
+  "image/png": { extensions: new Set([".png"]), inspect: inspectPng },
+  "image/webp": { extensions: new Set([".webp"]), inspect: inspectRiffWebp },
+  "model/gltf-binary": { extensions: new Set([".glb"]), inspect: inspectGlb }
+});
 
 export function buildRuntimeAssetReview({ repositoryRoot, manifestPath, manifestBytes }) {
   if (!isCanonicalReviewTargetPath(manifestPath)) {
@@ -115,6 +147,8 @@ export function buildRuntimeAssetReview({ repositoryRoot, manifestPath, manifest
           assetId: asset.id,
           detail: record.verification === "git-lfs-pointer-bound"
             ? "The exact Git LFS pointer is bound, but the large object bytes were not materialized and hashed locally."
+            : record.verification === "content-classification-review-required"
+              ? "The exact bytes and hash are bound, but the declared format could not be classified as inert by the bounded content checks."
             : "The exact Git blob is bound, but transformed worktree bytes prevented local SHA-256 verification."
         });
       }
@@ -373,7 +407,10 @@ function inspectRepositoryAsset(repositoryRoot, asset) {
     if (stat.size === asset.bytes) {
       const observed = stableSha256(target, stat, asset.repositoryPath);
       if (observed !== asset.sha256) throw new Error(`materialized runtime asset SHA-256 differs from its Git LFS pointer: ${asset.repositoryPath}`);
-      return repositoryRecord(asset, "content-hash-verified");
+      const classification = classifyMaterializedRuntimeAsset(target, stat, asset);
+      return repositoryRecord(asset, classification === "verified"
+        ? "content-hash-verified"
+        : "content-classification-review-required");
     }
     return repositoryRecord(asset, "git-lfs-pointer-bound");
   }
@@ -389,7 +426,260 @@ function inspectRepositoryAsset(repositoryRoot, asset) {
   }
   const observed = stableSha256(target, stat, asset.repositoryPath);
   if (observed !== asset.sha256) throw new Error(`runtime asset SHA-256 does not match the exact Git blob bytes: ${asset.repositoryPath}`);
-  return repositoryRecord(asset, "content-hash-verified");
+  const classification = classifyMaterializedRuntimeAsset(target, stat, asset);
+  return repositoryRecord(asset, classification === "verified"
+    ? "content-hash-verified"
+    : "content-classification-review-required");
+}
+
+function classifyMaterializedRuntimeAsset(target, expectedStat, asset) {
+  return withStableAssetDescriptor(target, expectedStat, asset.repositoryPath, (descriptor, opened) => {
+    const leading = readDescriptorRange(descriptor, 0, Math.min(opened.size, EXECUTABLE_SNIFF_BYTES));
+    rejectExecutablePrefix(leading, asset.id);
+
+    const extension = path.extname(asset.repositoryPath).toLowerCase();
+    const binaryFormat = recognizedBinaryFormats[asset.mime];
+    if (binaryFormat !== undefined) {
+      const inspection = binaryFormat.inspect(descriptor, opened.size);
+      if (inspection.executableSuffixOffset !== null) {
+        const suffix = readDescriptorRange(
+          descriptor,
+          inspection.executableSuffixOffset,
+          Math.min(opened.size - inspection.executableSuffixOffset, EXECUTABLE_SNIFF_BYTES)
+        );
+        rejectExecutablePrefix(suffix, asset.id);
+      }
+      return binaryFormat.extensions.has(extension) && inspection.closed === true
+        ? "verified"
+        : "review-required";
+    }
+
+    if (structuredJsonMimeTypes.has(asset.mime)) {
+      if (opened.size > RUNTIME_ASSET_MANIFEST_V1.maximumStructuredTextSniffBytes) return "review-required";
+      const bytes = readDescriptorRange(descriptor, 0, opened.size);
+      try {
+        JSON.parse(decodeStrictUtf8(bytes));
+      } catch {
+        rejectExecutablePrefix(bytes, asset.id);
+        return "review-required";
+      }
+      return new Set([".geojson", ".gltf", ".json"]).has(extension)
+        ? "verified"
+        : "review-required";
+    }
+
+    return "review-required";
+  });
+}
+
+function rejectExecutablePrefix(bytes, assetId) {
+  let offset = 0;
+  if (bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))) offset = 3;
+  while (offset < bytes.length && ASCII_WHITESPACE_BYTES.has(bytes[offset])) offset += 1;
+  const prefix = bytes.subarray(offset);
+  for (const magic of EXECUTABLE_BINARY_MAGICS) {
+    if (prefix.subarray(0, magic.bytes.length).equals(magic.bytes)) {
+      throw new Error(`executable ${magic.name} content cannot use the runtime asset channel: ${assetId}`);
+    }
+  }
+  const text = decodeUtf8Prefix(prefix);
+  if (text === null) return;
+  const normalized = stripLeadingSourceComments(text).trimStart();
+  if (
+    /^(?:#!|<!doctype\s+html\b|<\?php\b|<(?:html|script|svg)\b)/iu.test(normalized)
+    || /^(?:["']use strict["']\s*;|(?:async\s+)?function\s+[A-Za-z_$]|class\s+[A-Za-z_$][\w$]*(?:\s+extends\s+[^\{]+)?\s*\{|(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=|(?:export|import)\s+(?:default\b|type\b|["'{*A-Za-z_$])|(?:await\s+)?(?:eval|fetch|require)\s*\(|new\s+(?:Function|SharedWorker|Worker)\s*\(|(?:console|document|globalThis|module\.exports|process|self|WebAssembly|window)\s*[.[]|\(?\s*(?:async\s*)?\([^)]*\)\s*=>|pragma\s+solidity\b)/u.test(normalized)
+    || /^(?:#version\s+\d+\b|@(?:compute|fragment|vertex)\b|precision\s+(?:highp|lowp|mediump)\b)/u.test(normalized)
+  ) {
+    throw new Error(`executable script, markup or shader content cannot use the runtime asset channel: ${assetId}`);
+  }
+}
+
+function stripLeadingSourceComments(source) {
+  let remaining = source;
+  for (let index = 0; index < 64; index += 1) {
+    const line = /^\/\/[^\r\n]*(?:\r?\n|$)/u.exec(remaining);
+    if (line) {
+      remaining = remaining.slice(line[0].length).trimStart();
+      continue;
+    }
+    const block = /^\/\*[\s\S]*?\*\//u.exec(remaining);
+    if (block) {
+      remaining = remaining.slice(block[0].length).trimStart();
+      continue;
+    }
+    const markup = /^<!--[\s\S]*?-->/u.exec(remaining);
+    if (markup) {
+      remaining = remaining.slice(markup[0].length).trimStart();
+      continue;
+    }
+    break;
+  }
+  return remaining;
+}
+
+function decodeUtf8Prefix(bytes) {
+  try {
+    const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    if (/\u0000/u.test(decoded)) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function decodeStrictUtf8(bytes) {
+  const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  if (decoded.startsWith("\uFEFF")) return decoded.slice(1);
+  return decoded;
+}
+
+function inspectGlb(descriptor, size) {
+  if (size < 12) return ambiguousInspection();
+  const header = readDescriptorRange(descriptor, 0, 12);
+  if (header.toString("ascii", 0, 4) !== "glTF" || header.readUInt32LE(4) !== 2) return ambiguousInspection();
+  const declared = header.readUInt32LE(8);
+  if (!Number.isSafeInteger(declared) || declared < 20 || declared > size) return ambiguousInspection();
+  if (declared < size) return { closed: false, executableSuffixOffset: declared };
+
+  const jsonHeader = readDescriptorRange(descriptor, 12, 8);
+  const jsonBytes = jsonHeader.readUInt32LE(0);
+  if (
+    jsonHeader.readUInt32LE(4) !== 0x4e4f534a
+    || jsonBytes < 2
+    || jsonBytes % 4 !== 0
+    || 20 + jsonBytes > size
+    || jsonBytes > RUNTIME_ASSET_MANIFEST_V1.maximumStructuredTextSniffBytes
+  ) return ambiguousInspection();
+  try {
+    JSON.parse(decodeStrictUtf8(readDescriptorRange(descriptor, 20, jsonBytes)).trimEnd());
+  } catch {
+    return ambiguousInspection();
+  }
+  const nextOffset = 20 + jsonBytes;
+  if (nextOffset === size) return { closed: true, executableSuffixOffset: null };
+  if (nextOffset + 8 > size) return ambiguousInspection();
+  const binaryHeader = readDescriptorRange(descriptor, nextOffset, 8);
+  const binaryBytes = binaryHeader.readUInt32LE(0);
+  if (binaryHeader.readUInt32LE(4) !== 0x004e4942 || nextOffset + 8 + binaryBytes !== size) {
+    return ambiguousInspection();
+  }
+  return { closed: true, executableSuffixOffset: null };
+}
+
+function inspectPng(descriptor, size) {
+  const signature = readDescriptorRange(descriptor, 0, Math.min(size, 8));
+  if (!signature.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return ambiguousInspection();
+  let offset = 8;
+  for (let chunks = 0; chunks < 1_000_000 && offset + 12 <= size; chunks += 1) {
+    const header = readDescriptorRange(descriptor, offset, 8);
+    const length = header.readUInt32BE(0);
+    const boundary = offset + 12 + length;
+    if (!Number.isSafeInteger(boundary) || boundary > size) return ambiguousInspection();
+    const type = header.toString("ascii", 4, 8);
+    if (chunks === 0 && (type !== "IHDR" || length !== 13)) return ambiguousInspection();
+    if (type === "IEND") {
+      if (length !== 0) return ambiguousInspection();
+      return {
+        closed: boundary === size,
+        executableSuffixOffset: boundary === size ? null : boundary
+      };
+    }
+    offset = boundary;
+  }
+  return ambiguousInspection();
+}
+
+function inspectJpeg(descriptor, size) {
+  if (size < 4) return ambiguousInspection();
+  const leading = readDescriptorRange(descriptor, 0, 2);
+  const trailing = readDescriptorRange(descriptor, size - 2, 2);
+  return {
+    closed: leading.equals(Buffer.from([0xff, 0xd8])) && trailing.equals(Buffer.from([0xff, 0xd9])),
+    executableSuffixOffset: null
+  };
+}
+
+function inspectGif(descriptor, size) {
+  if (size < 7) return ambiguousInspection();
+  const leading = readDescriptorRange(descriptor, 0, 6).toString("ascii");
+  const trailing = readDescriptorRange(descriptor, size - 1, 1)[0];
+  return {
+    closed: (leading === "GIF87a" || leading === "GIF89a") && trailing === 0x3b,
+    executableSuffixOffset: null
+  };
+}
+
+function inspectRiffWebp(descriptor, size) {
+  return inspectRiff(descriptor, size, "WEBP");
+}
+
+function inspectRiffWave(descriptor, size) {
+  return inspectRiff(descriptor, size, "WAVE");
+}
+
+function inspectRiff(descriptor, size, formType) {
+  if (size < 12) return ambiguousInspection();
+  const header = readDescriptorRange(descriptor, 0, 12);
+  if (header.toString("ascii", 0, 4) !== "RIFF" || header.toString("ascii", 8, 12) !== formType) return ambiguousInspection();
+  return closedLengthInspection(header.readUInt32LE(4) + 8, size);
+}
+
+function inspectWoff(descriptor, size) {
+  if (size < 12) return ambiguousInspection();
+  const header = readDescriptorRange(descriptor, 0, 12);
+  if (header.toString("ascii", 0, 4) !== "wOFF") return ambiguousInspection();
+  return closedLengthInspection(header.readUInt32BE(8), size);
+}
+
+function inspectWoff2(descriptor, size) {
+  if (size < 12) return ambiguousInspection();
+  const header = readDescriptorRange(descriptor, 0, 12);
+  if (header.toString("ascii", 0, 4) !== "wOF2") return ambiguousInspection();
+  return closedLengthInspection(header.readUInt32BE(8), size);
+}
+
+function closedLengthInspection(declaredLength, size) {
+  if (!Number.isSafeInteger(declaredLength) || declaredLength < 1 || declaredLength > size) return ambiguousInspection();
+  return {
+    closed: declaredLength === size,
+    executableSuffixOffset: declaredLength === size ? null : declaredLength
+  };
+}
+
+function ambiguousInspection() {
+  return { closed: false, executableSuffixOffset: null };
+}
+
+function withStableAssetDescriptor(target, expectedStat, repositoryPath, operation) {
+  const descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const opened = fs.fstatSync(descriptor);
+    if (
+      !opened.isFile()
+      || opened.dev !== expectedStat.dev
+      || opened.ino !== expectedStat.ino
+      || opened.size !== expectedStat.size
+    ) throw new Error(`runtime asset changed while it was opened: ${repositoryPath}`);
+    const result = operation(descriptor, opened);
+    const finalStat = fs.fstatSync(descriptor);
+    if (finalStat.size !== opened.size || finalStat.mtimeMs !== opened.mtimeMs) {
+      throw new Error(`runtime asset changed while it was inspected: ${repositoryPath}`);
+    }
+    return result;
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function readDescriptorRange(descriptor, offset, length) {
+  const bytes = Buffer.alloc(length);
+  let consumed = 0;
+  while (consumed < length) {
+    const count = fs.readSync(descriptor, bytes, consumed, length - consumed, offset + consumed);
+    if (count <= 0) throw new Error("runtime asset ended during bounded content inspection");
+    consumed += count;
+  }
+  return bytes;
 }
 
 function repositoryRecord(asset, verification) {

@@ -254,8 +254,9 @@ Use companion manifest v2 when an npm game, app, or service can declare an exact
 repository id, commit, root tree, separate source/test/runtime/build paths, package-lock v3 and successful
 exact-revision Actions evidence from the closed JSON workflow in `assets/templates/companion-closure-workflow.yml`.
 That workflow unconditionally runs the pinned install, named build, and named test steps; the resulting canonical
-receipt is also embedded in the central `application.json` for downstream authority checks. Validate and canonicalize
-the manifest first with `cli.mjs companion <manifest> --write-canonical`.
+receipt binds the exact primary manifest path and is also embedded in the central `application.json`. Central intake
+re-reads the exact manifest, package, source, runtime and workflow objects and recomputes the receipt before accepting
+it. Validate and canonicalize the manifest first with `cli.mjs companion <manifest> --write-canonical`.
 Keep v1 for proposal-only or unsupported build/runtime mechanics. Read `companion-manifests.md` and use
 `companion-manifest-v2.schema.json`; a v1 companion intentionally retains the closure-review diagnostic.
 

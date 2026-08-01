@@ -179,10 +179,13 @@ or exact counterparty classifier must be explicit and adversarially tested. Ordi
 wallet caps, cooldowns, denylists, allowlists, or a tax bound that can consume the complete amount are hard conflicts for
 this permissionless path.
 
-For automatic liquidity, additionally lock the funding recipient bucket, safe trigger mode, pool-transfer suppression,
+For automatic liquidity, additionally lock every funding source, source kind, originating asset, authority, value flows,
+custody, accounting limit, withdrawal rule and failure behavior, plus the safe trigger mode and pool-transfer suppression,
 trigger threshold, maximum swap amount, slippage, deadline, execution actor, reentrancy guard, actual-received accounting, LP position custodian,
 transferability, exit, emergency recovery, events, and failure atomicity. Trace collection, conversion, liquidity add,
-and position custody through stable value-flow ids. A failed automatic action remains retryable and cannot block the
+and position custody through stable value-flow ids. A transfer-tax recipient is one funding option, not a prerequisite;
+launcher allocations, protocol revenue, donations, deposits and novel reviewed sources remain representable when their
+boundaries are explicit. A failed automatic action remains retryable and cannot block the
 underlying permitted transfer. Provider routing, quoting, indexing, scanner, and listing support
 remain external states even after local tests pass.
 
@@ -332,8 +335,9 @@ Record the underlying answers, not only a total. Use the framework's published b
 - `18–33`: high
 
 Feature triggers override a low aggregate score. Return deltas, custom math, hook-held liquidity, transfer taxes,
-automatic liquidity, external pricing data, autonomous changes, upgradeability, meaningful custody, and high expected
-value require their capability-specific gates.
+automatic liquidity, external pricing data, autonomous changes, upgradeability, and project-surface value movement,
+signatures, external calls, custody, personal data or secret boundaries require their capability-specific prototype,
+candidate and release gates. A novel kind never removes those triggers or lowers the effective tier.
 
 The agent derives a conservative provisional score from the declared design and evidence. The builder supplies factual
 inputs such as expected value at risk and operating maturity but may not lower the score by assertion. The score is a
@@ -377,6 +381,12 @@ undisclosed transfer tax, arbitrary execution, or silent fee and payout changes.
 continue only through the model-specific no-hook profile with unrestricted transfer and sell liveness, exact recipients,
 authority, custody, provider limitations, and tests. Any administration changes the trust profile and may make the
 design unsuitable for this category.
+
+Token behavior names are open slugs. A behavior outside the acceleration catalog must use `tokenBehaviorExtensions`
+and bind one profiled project capability, exact authorities and value flows, supply and transfer impact, public
+visibility, failure behavior, provider limitations, source, tests and derived security profiles. Unknown novelty enters
+architecture review. Undisclosed or obfuscated behavior and permissionless transfer blocking or confiscation remain hard
+conflicts; a token declared fixed supply cannot retain a hidden mint, rebase or externally managed supply path.
 
 ### Permissioned or regulated asset profile
 

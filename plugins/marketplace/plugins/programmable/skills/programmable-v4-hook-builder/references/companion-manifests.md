@@ -33,12 +33,15 @@ Use `npm-package-lock-v3-static-module-closure-v1` exactly. The current method a
 tarballs, dependencies without exact versions and canonical 64-byte SHA-512 integrity, missing transitive dependency
 targets, undeclared local imports,
 ambiguous module resolution, aliases, nonliteral dynamic imports, runtime loaders, inline HTML scripts, and unsupported
-source/config languages. Implicit `pre*` and `post*` lifecycle scripts for the declared build/test names are rejected.
+source/config languages. Worker and service-worker loaders, `fetch`, WebAssembly instantiation, dynamic DOM construction,
+external HTML/CSS resources, and build scripts capable of downloading or evaluating unbound code stay on v1. That is
+an architecture-review state, not an unsafe-project verdict. Implicit `pre*` and `post*` lifecycle scripts for the
+declared build/test names are rejected.
 
 Declare runtime assets such as HTML, CSS, images, fonts, audio, video, WebAssembly, and shaders when the reviewed
 project uses them. Static HTML `src`/`href`, CSS `@import`/`url`, JavaScript/TypeScript imports, CommonJS `require`, and
 quoted shader includes must resolve to one declared path. Remote HTTP resources remain an explicit external runtime
-dependency and are not transformed into repository evidence.
+dependency and therefore cannot receive a v2 static-closure receipt; use v1 and describe the dependency for review.
 
 Copy `../assets/templates/companion-closure-workflow.yml` into `.github/workflows/`. Despite the `.yml` suffix, this
 profile is deliberately strict JSON (valid YAML): exactly one unconditional Ubuntu 24.04 job, pinned checkout and
@@ -81,8 +84,10 @@ node "$SKILL_ROOT/scripts/cli.mjs" prepare-pr \
 For v2, `prepare-pr` independently checks the declared numeric repository id, commit, root tree, every closure blob,
 static module/resource graph, complete npm dependency targets, the exact closure workflow, and its successful
 exact-revision Actions receipt. The JSON output records one `github.companionClosure` item with a closure hash and
-copies that canonical receipt into `centralPackage/application.json`, where downstream intake checks it against the
-exact companion authority and run ids. A v2 mismatch fails closed; it never silently falls back to v1.
+exact primary manifest path, then copies that canonical receipt into `centralPackage/application.json`. Downstream
+intake re-reads that manifest and every immutable companion/workflow blob and independently recomputes the receipt,
+including script names, object ids, counts, resolutions, Actions evidence, and closure hash. A v2 mismatch fails
+closed; it never silently falls back to v1.
 
 For v1, `prepare-pr` still verifies the public repository, observed numeric id, exact commit, observed root tree, and
 declared blobs. It keeps the companion closure diagnostic, allowing a proposal to enter architecture review while

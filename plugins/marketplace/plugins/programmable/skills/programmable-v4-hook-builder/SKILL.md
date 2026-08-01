@@ -212,7 +212,7 @@ numeric score. Never lower a tier manually in prose.
 Before presenting `PROTOTYPE_READY`, independently check that the design card, structured submission, worked numerical
 examples, value conservation, failure behavior, proposal, threat model, and test plan agree. Free-text length and schema
 validity do not prove that a rule is meaningful or true.
-Compare public UI/application strings with `publicMetadata`; scan declared JS/TS/HTML/UI source while excluding comments and declared tests, and never hide approval, audit, safety, deployment or availability claims in user-facing copy.
+Compare public UI/application strings with `publicMetadata`; scan declared public UI, browser/mobile surface, locale and shipped content paths across JS/TS/HTML/component, JSON, YAML and Markdown/text content. Exclude comments, code examples, declared tests, recognized tool configuration and lockfiles rather than scanning arbitrary repository text. Never hide approval, audit, safety, deployment or availability claims in user-facing copy.
 
 ### 4. Lock the architecture
 
@@ -259,7 +259,7 @@ LBP strategy, and resulting v4 liquidity. Do not generate a custom hook merely t
 committed profile is still runtime-unverified until the execution-time drift, runtime, interface, chain, and source
 checks pass; never copy an address from prose or silently fall back to an older CCA release.
 
-If the token itself changes transfer amounts or automatically swaps and adds liquidity, do not disguise that design as the official profile and do not invent a hook. Select `model-specific-no-hook`, pin its exact contract and dependencies, use the dedicated template, and keep it behind architecture, economic, custody, provider, and independent review gates. Reject hidden transfer blocks, sell restrictions, mutable undisclosed recipients, and a 100 percent tax bound.
+If the token itself changes transfer amounts or automatically swaps and adds liquidity, do not disguise that design as the official profile and do not invent a hook. Select `model-specific-no-hook`, pin its exact contract and dependencies, use the dedicated template, and keep it behind architecture, economic, custody, provider, and independent review gates. Novel token behavior stays open through `tokenBehaviorExtensions`, with exact authority, value-flow, failure, test, provider, source and security-trigger records; it is not forced into a closed behavior catalog. Automatic liquidity may use a transfer-tax bucket or another explicitly bounded funding source with separate custody and accounting. Reject hidden mint, confiscation, transfer or sell controls, mutable undisclosed recipients, and a 100 percent tax bound.
 
 When available, the official OpenZeppelin hook generator may scaffold a base contract. Its output is only a starting
 point. Compile it inside the pinned workspace, replace stale imports, confirm permissions, and apply every gate in this

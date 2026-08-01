@@ -17,7 +17,7 @@ test("large Three.js runtime assets stay outside strict code closure while exact
     assert.equal(target.files.some(({ path: filePath }) => filePath === fixture.assetPath), false);
     assert.equal(target.files.some(({ path: filePath }) => filePath === fixture.manifestPath), true);
     assert.equal(target.runtimeAssets.status, "verified");
-    assert.equal(target.runtimeAssets.assets[0].bytes, 2_000_001);
+    assert.equal(target.runtimeAssets.assets[0].bytes, fixture.assetBytes);
     assert.equal(target.runtimeAssets.assets[0].verification, "content-hash-verified");
     assert.equal(isClosedRuntimeAssetReview(target.runtimeAssets), true);
     assert.ok(target.javascriptImportResolutions.some(({ kind, resolvedPath }) => (
@@ -152,6 +152,115 @@ test("runtime asset traversal, executable blobs and undeclared ?url imports fail
   });
 });
 
+test("renamed executable content cannot bypass source closure through a media declaration", async (t) => {
+  const cases = [
+    ["WebAssembly", Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])],
+    ["JavaScript", Buffer.from("// generated bundle\nexport default function steal() { return window.ethereum; }\n", "utf8")],
+    ["JavaScript console", Buffer.from("/* bundle */\nconsole.log(window.ethereum);\n", "utf8")],
+    ["HTML", Buffer.from("\uFEFF  <!-- generated --><!doctype html><script>window.location='https://example.invalid'</script>", "utf8")],
+    ["shader", Buffer.from("/* generated */\n#version 300 es\nvoid main() {}\n", "utf8")],
+    ["native build", Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00])]
+  ];
+  for (const [name, assetContent] of cases) {
+    await t.test(name, () => {
+      const fixture = createRuntimeAssetFixture({
+        assetContent,
+        assetFileName: `${name.toLowerCase().replaceAll(" ", "-")}.png`,
+        assetMime: "image/png"
+      });
+      try {
+        assert.throws(
+          () => buildReviewTarget(fixture),
+          /executable .* content cannot use the runtime asset channel|executable script, markup or shader content cannot use the runtime asset channel/u
+        );
+      } finally {
+        fixture.cleanup();
+      }
+    });
+  }
+});
+
+test("executable suffix polyglots are rejected while benign ambiguity is routed to review", async (t) => {
+  await t.test("PNG followed by HTML", () => {
+    const fixture = createRuntimeAssetFixture({
+      assetContent: Buffer.concat([makePng(), Buffer.from("\n<script>alert(1)</script>\n", "utf8")]),
+      assetFileName: "texture.png",
+      assetMime: "image/png"
+    });
+    try {
+      assert.throws(() => buildReviewTarget(fixture), /executable script, markup or shader content/u);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  await t.test("GLB followed by WebAssembly", () => {
+    const glb = makeGlb(256);
+    const fixture = createRuntimeAssetFixture({
+      assetContent: Buffer.concat([glb, Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])]),
+      assetFileName: "world.glb",
+      assetMime: "model/gltf-binary"
+    });
+    try {
+      assert.throws(() => buildReviewTarget(fixture), /executable WebAssembly content/u);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  await t.test("unsupported but plausible audio stays reviewable", () => {
+    const fixture = createRuntimeAssetFixture({
+      assetContent: Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+      assetFileName: "theme.mp3",
+      assetMime: "audio/mpeg"
+    });
+    try {
+      const target = buildReviewTarget(fixture);
+      assert.equal(target.runtimeAssets.status, "review-required");
+      assert.equal(target.runtimeAssets.assets[0].verification, "content-classification-review-required");
+      assert.equal(isClosedRuntimeAssetReview(target.runtimeAssets), true);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  await t.test("XML map data stays reviewable instead of being mislabeled executable", () => {
+    const fixture = createRuntimeAssetFixture({
+      assetContent: Buffer.from('<?xml version="1.0"?><kml><Placemark /></kml>\n', "utf8"),
+      assetFileName: "world.kml",
+      assetMime: "application/vnd.google-earth.kml+xml"
+    });
+    try {
+      const target = buildReviewTarget(fixture);
+      assert.equal(target.runtimeAssets.status, "review-required");
+      assert.equal(target.runtimeAssets.assets[0].verification, "content-classification-review-required");
+    } finally {
+      fixture.cleanup();
+    }
+  });
+});
+
+test("closed GLB, image, audio and map data formats remain verified runtime assets", async (t) => {
+  const cases = [
+    ["GLB", "world.glb", "model/gltf-binary", makeGlb(512)],
+    ["PNG", "texture.png", "image/png", makePng()],
+    ["WAV", "theme.wav", "audio/wav", makeWav()],
+    ["JSON map", "level.json", "application/json", Buffer.from('{"features":[],"type":"FeatureCollection"}\n', "utf8")]
+  ];
+  for (const [name, assetFileName, assetMime, assetContent] of cases) {
+    await t.test(name, () => {
+      const fixture = createRuntimeAssetFixture({ assetContent, assetFileName, assetMime });
+      try {
+        const target = buildReviewTarget(fixture);
+        assert.equal(target.runtimeAssets.status, "verified");
+        assert.equal(target.runtimeAssets.assets[0].verification, "content-hash-verified");
+      } finally {
+        fixture.cleanup();
+      }
+    });
+  }
+});
+
 test("mutable external URLs remain review-required even when a digest is declared", () => {
   const fixture = createRuntimeAssetFixture({ external: true });
   try {
@@ -171,19 +280,25 @@ test("mutable external URLs remain review-required even when a digest is declare
   }
 });
 
-function createRuntimeAssetFixture({ lfsPointer = false, external = false } = {}) {
+function createRuntimeAssetFixture({
+  lfsPointer = false,
+  external = false,
+  assetContent = makeGlb(2_000_000),
+  assetFileName = "world.glb",
+  assetMime = "model/gltf-binary"
+} = {}) {
   const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-runtime-assets-"));
   const packageRoot = path.join(repositoryRoot, "submissions", "fixture");
   const prefix = "submissions/fixture";
   const sourcePath = `${prefix}/app/scene.ts`;
-  const assetPath = `${prefix}/public/assets/world.glb`;
+  const assetPath = `${prefix}/public/assets/${assetFileName}`;
   const manifestPath = `${prefix}/runtime-assets.json`;
   fs.mkdirSync(path.join(packageRoot, "app"), { recursive: true });
   fs.mkdirSync(path.join(packageRoot, "public", "assets"), { recursive: true });
   fs.mkdirSync(path.join(packageRoot, "docs", "assets"), { recursive: true });
-  fs.writeFileSync(path.join(repositoryRoot, sourcePath), 'import worldUrl from "../public/assets/world.glb?url";\nexport { worldUrl };\n');
-  const contentSha = crypto.createHash("sha256").update(Buffer.alloc(2_000_001, 7)).digest("hex");
-  const assetBytes = 2_000_001;
+  fs.writeFileSync(path.join(repositoryRoot, sourcePath), `import worldUrl from "../public/assets/${assetFileName}?url";\nexport { worldUrl };\n`);
+  const contentSha = crypto.createHash("sha256").update(assetContent).digest("hex");
+  const assetBytes = assetContent.byteLength;
   if (lfsPointer) {
     fs.writeFileSync(path.join(repositoryRoot, assetPath), [
       "version https://git-lfs.github.com/spec/v1",
@@ -192,7 +307,7 @@ function createRuntimeAssetFixture({ lfsPointer = false, external = false } = {}
       ""
     ].join("\n"));
   } else {
-    fs.writeFileSync(path.join(repositoryRoot, assetPath), Buffer.alloc(assetBytes, 7));
+    fs.writeFileSync(path.join(repositoryRoot, assetPath), assetContent);
   }
   fs.writeFileSync(path.join(packageRoot, "docs", "assets", "license.md"), "# Runtime asset license\n\nCC-BY-4.0.\n");
   fs.writeFileSync(path.join(packageRoot, "docs", "assets", "provenance.md"), "# Runtime asset provenance\n\nCreated for this fixture.\n");
@@ -211,7 +326,8 @@ function createRuntimeAssetFixture({ lfsPointer = false, external = false } = {}
     assetPath,
     gitBlob,
     sha256: `sha256:${contentSha}`,
-    bytes: assetBytes
+    bytes: assetBytes,
+    mime: assetMime
   })];
   if (external) assets.push(externalAsset());
   fs.writeFileSync(path.join(repositoryRoot, manifestPath), `${JSON.stringify({
@@ -226,6 +342,7 @@ function createRuntimeAssetFixture({ lfsPointer = false, external = false } = {}
     packageRoot,
     sourcePath,
     assetPath,
+    assetBytes,
     manifestPath,
     submission: {
       stage: "prototype",
@@ -245,7 +362,7 @@ function createRuntimeAssetFixture({ lfsPointer = false, external = false } = {}
   };
 }
 
-function repositoryAsset({ assetPath, gitBlob, sha256, bytes }) {
+function repositoryAsset({ assetPath, gitBlob, sha256, bytes, mime }) {
   return {
     id: "arena-world",
     source: "repository",
@@ -253,7 +370,7 @@ function repositoryAsset({ assetPath, gitBlob, sha256, bytes }) {
     externalUri: null,
     gitBlob,
     sha256,
-    mime: "model/gltf-binary",
+    mime,
     bytes,
     load: {
       phase: "level-on-demand",
@@ -275,6 +392,50 @@ function repositoryAsset({ assetPath, gitBlob, sha256, bytes }) {
       evidencePath: "submissions/fixture/docs/assets/provenance.md"
     }
   };
+}
+
+function makeGlb(totalBytes) {
+  assert.equal(totalBytes % 4, 0);
+  const json = Buffer.from('{"asset":{"version":"2.0"}}', "utf8");
+  const paddedJsonBytes = Math.ceil(json.length / 4) * 4;
+  const binaryBytes = totalBytes - 12 - 8 - paddedJsonBytes - 8;
+  assert.ok(binaryBytes >= 0);
+  const result = Buffer.alloc(totalBytes);
+  result.write("glTF", 0, "ascii");
+  result.writeUInt32LE(2, 4);
+  result.writeUInt32LE(totalBytes, 8);
+  result.writeUInt32LE(paddedJsonBytes, 12);
+  result.writeUInt32LE(0x4e4f534a, 16);
+  json.copy(result, 20);
+  result.fill(0x20, 20 + json.length, 20 + paddedJsonBytes);
+  const binaryHeader = 20 + paddedJsonBytes;
+  result.writeUInt32LE(binaryBytes, binaryHeader);
+  result.writeUInt32LE(0x004e4942, binaryHeader + 4);
+  return result;
+}
+
+function makePng() {
+  return Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64"
+  );
+}
+
+function makeWav() {
+  const wav = Buffer.alloc(44);
+  wav.write("RIFF", 0, "ascii");
+  wav.writeUInt32LE(36, 4);
+  wav.write("WAVEfmt ", 8, "ascii");
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(8_000, 24);
+  wav.writeUInt32LE(16_000, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36, "ascii");
+  wav.writeUInt32LE(0, 40);
+  return wav;
 }
 
 function externalAsset() {

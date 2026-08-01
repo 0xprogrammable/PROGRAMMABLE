@@ -242,12 +242,34 @@ export function analyzeProjectSurfaces(submission, {
 }
 
 function addTriggeredProjectGates(triggers, gate) {
-  if (triggers.valueFlow === true) gate("project-value-flow-conservation-and-claim-tests", "prototype", "A project surface can move, award, claim, fee or settle value.");
-  if (triggers.signaturesReplay === true) gate("project-signature-domain-replay-and-expiry-tests", "prototype", "A project surface consumes signatures or signed data.");
-  if (triggers.externalCalls === true) gate("project-external-call-authentication-and-failure-tests", "prototype", "A project surface calls another contract, API, provider or service.");
-  if (triggers.custody === true) gate("project-custody-solvency-and-exit-tests", "prototype", "A project surface holds assets, positions, claims, keys or withdrawal authority.");
-  if (triggers.piiGeolocation === true) gate("project-pii-geolocation-privacy-review", "candidate", "A project surface handles personal data or user geolocation.");
-  if (triggers.secretBoundary === true) gate("project-secret-boundary-operations-review", "candidate", "A project surface depends on signing keys, API keys or another confidential operations boundary.");
+  if (triggers.valueFlow === true) {
+    gate("project-value-flow-conservation-and-claim-tests", "prototype", "A project surface can move, award, claim, fee or settle value.");
+    gate("independent-project-value-flow-review", "candidate", "A value-moving project surface needs independent accounting, authorization and economic review.");
+    gate("project-value-flow-production-monitoring", "release", "A released value-moving surface needs live conservation, payout and failed-settlement monitoring.");
+  }
+  if (triggers.signaturesReplay === true) {
+    gate("project-signature-domain-replay-and-expiry-tests", "prototype", "A project surface consumes signatures or signed data.");
+    gate("project-signer-governance-review", "candidate", "Signer scope, domain binding, revocation and compromise handling need independent review.");
+    gate("project-signer-rotation-and-replay-monitoring", "release", "A released signed-data path needs signer health, rotation and replay monitoring.");
+  }
+  if (triggers.externalCalls === true) {
+    gate("project-external-call-authentication-and-failure-tests", "prototype", "A project surface calls another contract, API, provider or service.");
+    gate("project-external-dependency-trust-review", "candidate", "External target identity, upgradeability, failure and return-value assumptions need independent review.");
+    gate("project-external-dependency-release-monitoring", "release", "A released external dependency needs availability, drift and failure monitoring.");
+  }
+  if (triggers.custody === true) {
+    gate("project-custody-solvency-and-exit-tests", "prototype", "A project surface holds assets, positions, claims, keys or withdrawal authority.");
+    gate("independent-project-custody-and-solvency-review", "candidate", "Custody ownership, solvency, loss allocation and user exits need independent review.");
+    gate("project-custody-solvency-and-withdrawal-monitoring", "release", "A released custodial surface needs live solvency, withdrawal and authority monitoring.");
+  }
+  if (triggers.piiGeolocation === true) {
+    gate("project-pii-geolocation-privacy-review", "candidate", "A project surface handles personal data or user geolocation.");
+    gate("project-data-retention-and-incident-readiness", "release", "A released personal-data surface needs accepted retention, deletion and incident controls.");
+  }
+  if (triggers.secretBoundary === true) {
+    gate("project-secret-boundary-operations-review", "candidate", "A project surface depends on signing keys, API keys or another confidential operations boundary.");
+    gate("project-secret-rotation-and-compromise-readiness", "release", "A released secret-bearing surface needs rotation, revocation and compromise response evidence.");
+  }
 }
 
 function validateExposure(surface, linkedTriggers, surfacePath, add) {

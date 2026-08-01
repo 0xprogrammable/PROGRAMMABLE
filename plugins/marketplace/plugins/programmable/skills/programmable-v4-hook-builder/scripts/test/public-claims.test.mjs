@@ -188,6 +188,61 @@ test("HTML and component extraction checks visible copy and accessible labels", 
   assert.match(visible, /Production-ready/);
 });
 
+test("declared JSON and YAML locale values expose public claims without treating keys or comments as copy", () => {
+  const jsonText = extractPublicClaimText(JSON.stringify({
+    "This hook is unruggable.": "Internal translation key only",
+    hero: { title: "This hook is approved by Uniswap." }
+  }), ".json");
+  assert.doesNotMatch(jsonText, /unruggable/);
+  assert.deepEqual(findUnsupportedPublicClaims(jsonText), [
+    "Uniswap verification, approval, certification or official status"
+  ]);
+
+  const yamlText = extractPublicClaimText(`
+    # This hook is approved by Programmable.
+    hero:
+      title: "This hook is independently audited."
+      details: |
+        Prototype evidence is shown here.
+        The project is live on mainnet.
+  `, ".yml");
+  assert.doesNotMatch(yamlText, /approved by Programmable/);
+  assert.deepEqual(findUnsupportedPublicClaims(yamlText), [
+    "Independent audit or certification",
+    "Deployment, launch or availability"
+  ]);
+});
+
+test("shipped Markdown checks visible content while ignoring examples, comments and MDX imports", () => {
+  const markdownText = extractPublicClaimText(`---
+title: Prototype status
+---
+<!-- This hook is approved by Uniswap. -->
+import Fixture from "./fixture";
+
+\`\`\`text
+This hook is unruggable.
+\`\`\`
+
+# Current status
+
+The submitted project is production-ready.
+`, ".mdx");
+  assert.doesNotMatch(markdownText, /approved by Uniswap/);
+  assert.doesNotMatch(markdownText, /unruggable/);
+  assert.deepEqual(findUnsupportedPublicClaims(markdownText), ["Deployment, launch or availability"]);
+});
+
+test("honest structured content and unknown provider review copy do not become false blockers", () => {
+  for (const [extension, contents] of [
+    [".json", JSON.stringify({ unsafeExample: "This hook is not audited and is not deployed." })],
+    [".yaml", "# This hook is guaranteed safe.\nstatus: No Uniswap approval is claimed.\n"],
+    [".md", "`This hook is unruggable.`\n\nNebulaRoute support requires provider review; no approval is claimed.\n"]
+  ]) {
+    assert.deepEqual(findUnsupportedPublicClaims(extractPublicClaimText(contents, extension)), [], extension);
+  }
+});
+
 test("metadata identity inspection preserves legitimate Unicode while surfacing confusables", () => {
   const japanese = inspectPublicMetadataText("東京トークン");
   assert.equal(japanese.hasConfusableCharacters, false);

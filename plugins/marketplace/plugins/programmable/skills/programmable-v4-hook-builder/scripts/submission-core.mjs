@@ -21,7 +21,7 @@ import {
   isCanonicalReviewTargetPath
 } from "./review-target-contract.mjs";
 import { findUnsupportedPublicClaims } from "./public-claims-core.mjs";
-import { analyzeProjectSurfaces } from "./project-surfaces-core.mjs";
+import { analyzeProjectSurfaces, requiredProjectProfiles } from "./project-surfaces-core.mjs";
 
 export const REPORT_VERSION = 2;
 export const STANDARD_VERSION = "1.2.0";
@@ -75,6 +75,25 @@ const knownModelCategories = new Set([
   "distribution",
   "oracle-linked",
   "privacy"
+]);
+const knownAssetBehaviors = new Set([
+  "standard",
+  "fee-on-transfer",
+  "rebasing",
+  "callback-on-transfer",
+  "pausable",
+  "blacklistable",
+  "confiscatable",
+  "upgradeable",
+  "permit",
+  "erc4626"
+]);
+const knownAutoLiquidityFundingKinds = new Set([
+  "transfer-tax-recipient",
+  "launcher-allocation",
+  "protocol-revenue",
+  "donation",
+  "external-deposit"
 ]);
 const includedSwapClientRoutingModes = new Set(["programmable-app", "custom-reviewed"]);
 const noIncludedSwapClientRoutingModes = new Set(["uniswap-interface-api", "uniswapx-filler", "not-planned"]);
@@ -691,6 +710,8 @@ export function analyzeSubmission(submission, { schema } = {}) {
       submission.noHookArchitecture?.transferTax?.used === true;
     if (settlementSensitive.length > 0 && !reviewableNoHookTransferTax && (!["permissioned-adapter", "external-wrapper"].includes(asset.origin) || submission.hook?.customAccounting?.used !== true || submission.capabilities?.externalCalls?.used !== true)) add("blocker", "NON_STANDARD_TOKEN_ADAPTER_MISSING", `$.assets[${index}]`, "A settlement-sensitive token behavior is declared without an explicit reviewed adapter or transparent model-specific no-hook accounting path.", "Use a reviewed adapter or wrapper, or declare the launched token's bounded transfer tax in noHookArchitecture with requested-versus-received, quote parity, liveness and provider-limit tests.");
   }
+
+  validateTokenBehaviorExtensions({ submission, assets, stage, add, gate, validateDeclaredPath });
 
   if (assets.filter((asset) => asset?.role === "launched").length !== 1) add("blocker", "LAUNCHED_ASSET_COUNT_INVALID", "$.assets", "A launch model needs exactly one launched asset.", "Identify one launched asset and classify the other PoolKey currency as quote.");
   if (assets.filter((asset) => asset?.role === "quote").length !== 1) add("blocker", "QUOTE_ASSET_COUNT_INVALID", "$.assets", "A launch model needs exactly one quote asset.", "Identify one quote asset and disclose its exact origin and behavior.");
@@ -2123,6 +2144,74 @@ export function analyzeSubmission(submission, { schema } = {}) {
   return buildReport(submission, findings, gates, mask, derivedTriggers, risk.score, risk, schema);
 }
 
+function validateTokenBehaviorExtensions({ submission, assets, stage, add, gate, validateDeclaredPath }) {
+  const extensions = Array.isArray(submission.tokenBehaviorExtensions) ? submission.tokenBehaviorExtensions : [];
+  const assetById = new Map(assets.map((asset) => [asset?.id, asset]));
+  const authorityRoles = new Set((submission.authorities ?? []).map((authority) => authority?.role));
+  const valueFlowIds = new Set((submission.valueFlows ?? []).map((flow) => flow?.id));
+  const projectCapabilities = new Map((submission.projectCapabilities ?? []).map((capability) => [capability?.id, capability]));
+  const extensionByBehavior = new Map();
+  const implementationSources = new Set(submission.implementation?.sourcePaths ?? []);
+  const implementationTests = new Set(submission.implementation?.testPaths ?? []);
+
+  for (const [index, extension] of extensions.entries()) {
+    const extensionPath = `$.tokenBehaviorExtensions[${index}]`;
+    const key = `${extension?.assetId ?? ""}\0${extension?.behavior ?? ""}`;
+    if (extensionByBehavior.has(key)) add("blocker", "TOKEN_BEHAVIOR_EXTENSION_DUPLICATE", extensionPath, "A token behavior has more than one extension record.", "Use one complete extension for each exact asset and behavior pair.");
+    extensionByBehavior.set(key, extension);
+
+    const asset = assetById.get(extension?.assetId);
+    if (!asset) add("blocker", "TOKEN_BEHAVIOR_EXTENSION_ASSET_UNKNOWN", `${extensionPath}.assetId`, "The token behavior extension references an unknown asset.", "Use the stable id of one declared asset.");
+    else if (!(asset.behaviors ?? []).includes(extension?.behavior)) add("blocker", "TOKEN_BEHAVIOR_EXTENSION_NOT_DECLARED", `${extensionPath}.behavior`, "The extension behavior is not listed on its asset.", "Add the exact open behavior slug to assets[].behaviors or remove the stale extension.");
+    if (asset?.role === "launched" && submission.hook?.used === false && submission.noHookArchitecture?.route === "official-launchpad") add("blocker", "OFFICIAL_LAUNCHPAD_NOVEL_TOKEN_BEHAVIOR", extensionPath, "The official launchpad profile cannot self-attach novel token behavior.", "Use model-specific-no-hook with its own pinned token and dependency baseline, or remove the custom behavior.");
+
+    const capability = projectCapabilities.get(extension?.projectCapabilityId);
+    if (!capability) {
+      add("blocker", "TOKEN_BEHAVIOR_PROJECT_CAPABILITY_MISSING", `${extensionPath}.projectCapabilityId`, "The novel token behavior is outside the profiled project capability graph.", "Declare the capability, bind its project surfaces, and complete its security triggers and required profiles.");
+    } else {
+      const expectedProfiles = requiredProjectProfiles(extension?.securityTriggers);
+      const declaredProfiles = [...new Set(extension?.requiredProfiles ?? [])].sort();
+      if (!sameValue(extension?.securityTriggers ?? {}, capability.securityTriggers ?? {})) add("blocker", "TOKEN_BEHAVIOR_SECURITY_TRIGGER_MISMATCH", `${extensionPath}.securityTriggers`, "The token extension and linked project capability declare different security triggers.", "Use one exact trigger set on both records so risk and release gates cannot be bypassed.");
+      if (!sameStringList(expectedProfiles, declaredProfiles) || !sameStringList(declaredProfiles, [...new Set(capability.requiredProfiles ?? [])].sort())) add("blocker", "TOKEN_BEHAVIOR_REQUIRED_PROFILES_MISMATCH", `${extensionPath}.requiredProfiles`, "The token behavior profiles do not equal the profiles derived through its linked project capability.", "Regenerate requiredProfiles from securityTriggers on both records.");
+    }
+
+    for (const [authorityIndex, authorityRef] of (extension?.authorityRefs ?? []).entries()) if (!authorityRoles.has(authorityRef)) add("blocker", "TOKEN_BEHAVIOR_AUTHORITY_UNKNOWN", `${extensionPath}.authorityRefs[${authorityIndex}]`, `Authority role ${authorityRef} is not declared.`, "Add the exact controller to authorities or remove the stale reference.");
+    for (const [flowIndex, flowId] of (extension?.valueFlowIds ?? []).entries()) if (!valueFlowIds.has(flowId)) add("blocker", "TOKEN_BEHAVIOR_VALUE_FLOW_UNKNOWN", `${extensionPath}.valueFlowIds[${flowIndex}]`, `Value flow ${flowId} is not declared.`, "Add the exact value flow or fix the reference.");
+    if (extension?.mutable === true && (extension.authorityRefs?.length ?? 0) === 0) add("blocker", "TOKEN_BEHAVIOR_MUTABLE_AUTHORITY_MISSING", `${extensionPath}.authorityRefs`, "A mutable token behavior has no declared controller.", "Bind every authority that can change the behavior and describe its bounded capability and user-exit impact.");
+    if (extension?.securityTriggers?.valueFlow === true && (extension.valueFlowIds?.length ?? 0) === 0) add("blocker", "TOKEN_BEHAVIOR_VALUE_FLOW_MISSING", `${extensionPath}.valueFlowIds`, "A value-moving token behavior has no exact value-flow records.", "Reference every collection, supply, balance, payout and settlement flow.");
+    if (extension?.supplyImpact !== "none" && extension?.securityTriggers?.valueFlow !== true) add("blocker", "TOKEN_BEHAVIOR_SUPPLY_TRIGGER_MISSING", `${extensionPath}.securityTriggers.valueFlow`, "A supply-changing behavior is missing its value-flow security trigger.", "Activate valueFlow and bind the exact mint, burn, rebase or managed-supply flow.");
+    if (["changes-amount", "can-confiscate"].includes(extension?.transferImpact) && extension?.securityTriggers?.valueFlow !== true) add("blocker", "TOKEN_BEHAVIOR_TRANSFER_TRIGGER_MISSING", `${extensionPath}.securityTriggers.valueFlow`, "A balance-changing transfer behavior is missing its value-flow security trigger.", "Activate valueFlow and bind gross, net, recipient and failure accounting.");
+    if (extension?.transferImpact === "callback" && extension?.securityTriggers?.externalCalls !== true) add("blocker", "TOKEN_BEHAVIOR_CALLBACK_TRIGGER_MISSING", `${extensionPath}.securityTriggers.externalCalls`, "A callback token behavior is missing its external-call security trigger.", "Activate externalCalls and document authentication, reentrancy, return values and failure atomicity.");
+
+    if (extension?.visibility === "undisclosed-or-obfuscated") add("hard", "HIDDEN_TOKEN_BEHAVIOR", `${extensionPath}.visibility`, "A token behavior or control path is intentionally undisclosed or obfuscated.", "Make the exact behavior, authority, value movement and failure effects public and machine-readable.");
+    if (submission.model?.category === "permissionless-token" && ["can-restrict", "can-confiscate"].includes(extension?.transferImpact)) add("hard", "PERMISSIONLESS_NOVEL_TOKEN_CONTROL", `${extensionPath}.transferImpact`, "A permissionless token extension can block transfers or confiscate balances.", "Remove the control or classify and present the design through a separately reviewed permissioned-asset trust model.");
+    if (asset?.origin === "new-fixed-supply" && ["mint-reviewed", "rebase-reviewed", "externally-managed-reviewed"].includes(extension?.supplyImpact)) add("hard", "FIXED_SUPPLY_NOVEL_SUPPLY_CONTROL", `${extensionPath}.supplyImpact`, "A token declared fixed at creation retains a path that can increase or externally rewrite supply.", "Remove the supply control or use an honest managed or mintable asset profile.");
+    if (extension?.providerImpact?.status === "confirmed-external" && (extension.providerImpact.evidence?.length ?? 0) === 0) add("blocker", "TOKEN_BEHAVIOR_PROVIDER_EVIDENCE_MISSING", `${extensionPath}.providerImpact.evidence`, "Confirmed external provider support has no attributable evidence.", "Add provider-owned documentation or an attributable approval record for the exact behavior, runtime and chain.");
+
+    for (const [field, role] of [["sourcePaths", "token behavior source"], ["testPaths", "token behavior test"], ["evidencePaths", "token behavior evidence"]]) {
+      for (const [pathIndex, entry] of (extension?.[field] ?? []).entries()) validateDeclaredPath(entry, `${extensionPath}.${field}[${pathIndex}]`, role);
+    }
+    if (stage === "prototype") {
+      if ((extension?.sourcePaths?.length ?? 0) === 0) add("blocker", "TOKEN_BEHAVIOR_SOURCE_MISSING", `${extensionPath}.sourcePaths`, "A prototype token behavior has no exact source path.", "Bind the implementation bytes that create the behavior.");
+      if ((extension?.testPaths?.length ?? 0) === 0) add("blocker", "TOKEN_BEHAVIOR_TEST_MISSING", `${extensionPath}.testPaths`, "A prototype token behavior has no exact test path.", "Bind executable boundary, failure, authority and provider-compatibility tests.");
+      for (const [pathIndex, entry] of (extension?.sourcePaths ?? []).entries()) if (!implementationSources.has(entry)) add("blocker", "TOKEN_BEHAVIOR_SOURCE_NOT_BOUND", `${extensionPath}.sourcePaths[${pathIndex}]`, "Token behavior source is outside implementation.sourcePaths.", "Add the exact source path to the implementation manifest.");
+      for (const [pathIndex, entry] of (extension?.testPaths ?? []).entries()) if (!implementationTests.has(entry)) add("blocker", "TOKEN_BEHAVIOR_TEST_NOT_BOUND", `${extensionPath}.testPaths[${pathIndex}]`, "Token behavior tests are outside implementation.testPaths.", "Add the exact test path to the implementation manifest.");
+    }
+
+    add("warning", "TOKEN_BEHAVIOR_REQUIRES_ARCHITECTURE_REVIEW", extensionPath, `Novel token behavior ${extension?.behavior ?? "without a behavior id"} remains reviewable outside the acceleration catalog.`, "Review its exact authority, value, supply, transfer, provider, failure and test boundaries without forcing it into a known behavior.");
+    gate("novel-token-behavior-architecture-review", "candidate", "At least one token behavior is outside the current acceleration catalog.");
+    gate("novel-token-behavior-adversarial-tests", "prototype", "Novel token behavior needs bound authority, accounting, liveness and failure tests.");
+    gate("novel-token-behavior-provider-review", "external", "External routers, quoters, indexers, scanners and listings control their own support decisions.");
+  }
+
+  for (const asset of assets) {
+    for (const behavior of asset?.behaviors ?? []) {
+      if (knownAssetBehaviors.has(behavior) || behavior === "unknown") continue;
+      if (!extensionByBehavior.has(`${asset.id}\0${behavior}`)) add("blocker", "NOVEL_TOKEN_BEHAVIOR_EXTENSION_MISSING", `$.assets[${assets.indexOf(asset)}].behaviors`, `Novel token behavior ${behavior} has no structured extension.`, "Keep the open behavior slug and add tokenBehaviorExtensions with exact authority, value flow, failure, tests, provider impact and security triggers.");
+    }
+  }
+}
+
 function validateNoCustomHookRoute({ submission, hook, poolAdmission, permissions, computedMask, lpFee, target, assets, add, gate }) {
   validateNoHookArchitecture({ submission, target, assets, add, gate });
   if (lpFee.mode === "dynamic") {
@@ -2431,13 +2520,12 @@ function validateTransferTaxProfile({ submission, transferTax, autoLiquidity, ad
   ];
   if (transferTax.mutable === true) requiredTests.push("authority-and-delay");
   requireTestScenarios(submission.noHookArchitecture?.testScenarios, requiredTests, add);
-  if (autoLiquidity.used === true && !recipientIds.has(autoLiquidity.fundingRecipientId)) add("blocker", "AUTO_LIQUIDITY_FUNDING_RECIPIENT_MISSING", "$.noHookArchitecture.autoLiquidity.fundingRecipientId", "Auto-liquidity funding does not reference one declared transfer-tax recipient bucket.", "Use a recipient id from transferTax.recipients and trace it through the liquidity value flows.");
 }
 
 function validateAutoLiquidityProfile({ submission, transferTax, autoLiquidity, add, gate }) {
-  gate("auto-liquidity-lifecycle-and-reentrancy-tests", "prototype", "The token automatically swaps or adds liquidity from collected tax balances.");
+  gate("auto-liquidity-lifecycle-and-reentrancy-tests", "prototype", "The token automatically swaps or adds liquidity from one or more declared funding balances.");
   gate("auto-liquidity-custody-and-exit-review", "candidate", "The model creates and custodies liquidity through token-controlled execution.");
-  if (transferTax.used !== true) add("blocker", "AUTO_LIQUIDITY_WITHOUT_FUNDING_TAX", "$.noHookArchitecture.autoLiquidity", "Auto-liquidity is enabled without one explicit transfer-tax funding path.", "Enable and complete transferTax or remove auto-liquidity.");
+  validateAutoLiquidityFundingSources({ submission, transferTax, autoLiquidity, add, gate });
   if (!["permissionless-explicit-call", "eligible-non-pool-transfer"].includes(autoLiquidity.triggerMode)) add("blocker", "AUTO_LIQUIDITY_TRIGGER_MODE_UNRESOLVED", "$.noHookArchitecture.autoLiquidity.triggerMode", "The automatic liquidity trigger path is unresolved.", "Use a permissionless explicit call or an eligible non-pool transfer and test its exact threshold boundaries.");
   if (autoLiquidity.poolTransferSuppression !== true) add("hard", "AUTO_LIQUIDITY_POOL_TRANSFER_REENTRANCY", "$.noHookArchitecture.autoLiquidity.poolTransferSuppression", "Automatic liquidity may execute while PoolManager or a router is settling the transfer that triggered it.", "Suppress automatic execution during pool and router transfers; settle the user action first and use the declared safe trigger path.");
   if (autoLiquidity.reentrancyGuard !== true) add("hard", "AUTO_LIQUIDITY_REENTRANCY_GUARD_MISSING", "$.noHookArchitecture.autoLiquidity.reentrancyGuard", "The router and position lifecycle can reenter token transfer logic without an explicit guard.", "Use one bounded execution lock and test callback, token and cross-function reentrancy.");
@@ -2469,6 +2557,35 @@ function validateAutoLiquidityProfile({ submission, transferTax, autoLiquidity, 
     "lp-custody-and-exit"
   ], add);
   if (submission.capabilities?.externalCalls?.used !== true) add("blocker", "AUTO_LIQUIDITY_EXTERNAL_CALL_PROFILE_MISSING", "$.capabilities.externalCalls.used", "Auto-liquidity executes router or position-manager calls without the structured external-call policy.", "Enable externalCalls and document exact targets, call sites, return checks, reentrancy, state drift and failure atomicity.");
+}
+
+function validateAutoLiquidityFundingSources({ submission, transferTax, autoLiquidity, add, gate }) {
+  const sources = Array.isArray(autoLiquidity.fundingSources) ? autoLiquidity.fundingSources : [];
+  const assetIds = new Set((submission.assets ?? []).map((asset) => asset?.id));
+  const authorityRoles = new Set((submission.authorities ?? []).map((authority) => authority?.role));
+  const valueFlows = submission.valueFlows ?? [];
+  const recipientIds = new Set((transferTax.recipients ?? []).map((recipient) => recipient?.id));
+  const sourceIds = new Set();
+  if (sources.length === 0) add("blocker", "AUTO_LIQUIDITY_FUNDING_SOURCE_MISSING", "$.noHookArchitecture.autoLiquidity.fundingSources", "Auto-liquidity has no explicit source of funds.", "Declare every funding source with its origin, value flow, custody, accounting, limit, withdrawal and failure rules.");
+  for (const [index, source] of sources.entries()) {
+    const sourcePath = `$.noHookArchitecture.autoLiquidity.fundingSources[${index}]`;
+    if (sourceIds.has(source?.id)) add("blocker", "AUTO_LIQUIDITY_FUNDING_SOURCE_DUPLICATE", `${sourcePath}.id`, "Auto-liquidity funding-source ids must be unique.", "Give each economically distinct funding source one stable id.");
+    sourceIds.add(source?.id);
+    if (!knownAutoLiquidityFundingKinds.has(source?.kind)) {
+      add("warning", "AUTO_LIQUIDITY_FUNDING_KIND_REQUIRES_ARCHITECTURE_REVIEW", `${sourcePath}.kind`, `Funding kind ${source?.kind ?? "without a kind"} remains valid outside the acceleration catalog.`, "Keep the open kind and review its exact provenance, authority, accounting, custody, withdrawal and failure boundaries.");
+      gate("novel-auto-liquidity-funding-architecture-review", "candidate", "At least one automatic-liquidity funding source is outside the acceleration catalog.");
+    }
+    if (!assetIds.has(source?.assetId)) add("blocker", "AUTO_LIQUIDITY_FUNDING_ASSET_UNKNOWN", `${sourcePath}.assetId`, "The funding source references an unknown asset.", "Use one declared asset id and account for any conversion separately.");
+    if (source?.authorityRole !== null && !authorityRoles.has(source?.authorityRole)) add("blocker", "AUTO_LIQUIDITY_FUNDING_AUTHORITY_UNKNOWN", `${sourcePath}.authorityRole`, "The funding source references an unknown authority.", "Bind the exact controller in authorities or use null for a genuinely permissionless source.");
+    validateValueFlowReferences(source?.valueFlowIds, valueFlows, `${sourcePath}.valueFlowIds`, "AUTO_LIQUIDITY_FUNDING_VALUE_FLOW", add);
+    for (const field of ["source", "custody", "accountingRule", "fundingLimit", "withdrawalRule", "failureRule"]) requireDetailedText(source?.[field], `${sourcePath}.${field}`, "AUTO_LIQUIDITY_FUNDING_PROFILE_INCOMPLETE", add);
+    if (source?.kind === "transfer-tax-recipient") {
+      if (transferTax.used !== true) add("blocker", "AUTO_LIQUIDITY_TAX_SOURCE_WITHOUT_TAX", sourcePath, "A transfer-tax funding source is declared while transfer tax is disabled.", "Enable and complete transferTax or use the actual non-tax funding kind.");
+      if (!recipientIds.has(source?.transferTaxRecipientId)) add("blocker", "AUTO_LIQUIDITY_FUNDING_RECIPIENT_MISSING", `${sourcePath}.transferTaxRecipientId`, "The funding source does not reference a declared transfer-tax recipient bucket.", "Use one exact recipient id from transferTax.recipients and bind its value flow.");
+    } else if (source?.transferTaxRecipientId !== null) {
+      add("blocker", "AUTO_LIQUIDITY_NON_TAX_RECIPIENT_CONFLICT", `${sourcePath}.transferTaxRecipientId`, "A non-tax funding source retains a transfer-tax recipient id.", "Set transferTaxRecipientId to null and document the actual source and accounting rule.");
+    }
+  }
 }
 
 function validateNoHookProviderProfile({ submission, profile, transferTax, autoLiquidity, add, gate }) {
@@ -2518,18 +2635,26 @@ function analyzeRisk(riskInput, derivedTriggers, add) {
   }
   const triggerSet = new Set(derivedTriggers);
   const floors = {
-    complexity: derivedTriggers.some((trigger) => ["custom-math", "custom-accounting", "return-delta", "oracle", "autonomous", "proof", "cross-chain", "external-liquidity", "async-swap", "custom-curve", "transfer-tax", "auto-liquidity"].includes(trigger)) ? 2 : 1,
+    complexity: derivedTriggers.some((trigger) => ["custom-math", "custom-accounting", "return-delta", "oracle", "autonomous", "proof", "cross-chain", "external-liquidity", "async-swap", "custom-curve", "transfer-tax", "auto-liquidity", "novel-token-behavior", "project-value-flow", "project-signatures", "project-external-calls", "project-custody", "project-pii-geolocation", "project-secret-boundary"].includes(trigger)) ? 2 : 1,
     customMath: triggerSet.has("custom-math") || triggerSet.has("custom-curve") ? 1 : 0,
-    externalDependencies: derivedTriggers.some((trigger) => ["external-calls", "oracle", "proof", "cross-chain"].includes(trigger)) ? 1 : 0,
+    externalDependencies: derivedTriggers.some((trigger) => ["external-calls", "oracle", "proof", "cross-chain", "project-external-calls"].includes(trigger)) ? 1 : 0,
     externalLiquidity: triggerSet.has("external-liquidity") || triggerSet.has("hook-held-liquidity") ? 1 : 0,
+    valueAtRisk: triggerSet.has("project-value-flow") || triggerSet.has("project-custody") ? 1 : 0,
     upgradeability: triggerSet.has("upgradeable") ? 1 : 0,
     autonomy: triggerSet.has("autonomous") ? 1 : 0,
     priceImpact: triggerSet.has("price-impact") || triggerSet.has("return-delta") || triggerSet.has("custom-curve") ? 1 : 0
   };
   for (const [name, floor] of Object.entries(floors)) if (Number.isInteger(dimensions[name]) && dimensions[name] < floor) add("blocker", "RISK_DIMENSION_BELOW_FEATURE_FLOOR", `$.risk.dimensions.${name}`, `Risk dimension ${name} is below the minimum implied by the declared capabilities.`, `Use at least ${floor} and explain the specific exposure in risk.rationales.${name}.`);
   const baseTier = complete ? tierForScore(score) : null;
-  const critical = new Set(["custom-math", "custom-accounting", "return-delta", "hook-held-liquidity", "oracle", "autonomous", "price-impact", "upgradeable", "permissioned-asset", "proof", "cross-chain", "external-liquidity", "async-swap", "custom-curve", "transfer-tax", "auto-liquidity"]);
-  const effectiveTier = complete && derivedTriggers.some((trigger) => critical.has(trigger)) ? "high" : baseTier;
+  const highRiskTriggers = new Set(["custom-math", "custom-accounting", "return-delta", "hook-held-liquidity", "oracle", "autonomous", "price-impact", "upgradeable", "permissioned-asset", "proof", "cross-chain", "external-liquidity", "async-swap", "custom-curve", "transfer-tax", "auto-liquidity", "project-value-flow", "project-custody"]);
+  const mediumRiskTriggers = new Set(["project-signatures", "project-external-calls", "project-pii-geolocation", "project-secret-boundary"]);
+  const effectiveTier = !complete
+    ? null
+    : derivedTriggers.some((trigger) => highRiskTriggers.has(trigger))
+      ? "high"
+      : baseTier === "low" && derivedTriggers.some((trigger) => mediumRiskTriggers.has(trigger))
+        ? "medium"
+        : baseTier;
   if (complete && risk.declaredTotal !== score) add("blocker", "RISK_TOTAL_MISMATCH", "$.risk.declaredTotal", `Declared total ${risk.declaredTotal} does not match derived total ${score}.`, "Update the total from the nine dimension values.");
   if (complete && risk.declaredTier !== effectiveTier) add("blocker", "RISK_TIER_MISMATCH", "$.risk.declaredTier", `Declared tier ${risk.declaredTier} does not match effective tier ${effectiveTier}.`, "Use the numeric tier and raise it when a critical feature trigger applies.");
   const declaredTriggers = new Set(Array.isArray(risk.featureTriggers) ? risk.featureTriggers : []);
@@ -2571,6 +2696,16 @@ function deriveFeatureTriggers(submission) {
   if (submission.noHookArchitecture?.autoLiquidity?.used === true) {
     triggers.add("auto-liquidity");
     triggers.add("autonomous");
+  }
+  if ((submission.tokenBehaviorExtensions?.length ?? 0) > 0) triggers.add("novel-token-behavior");
+  for (const capability of submission.projectCapabilities ?? []) {
+    const projectTriggers = capability?.securityTriggers ?? {};
+    if (projectTriggers.valueFlow === true) triggers.add("project-value-flow");
+    if (projectTriggers.signaturesReplay === true) triggers.add("project-signatures");
+    if (projectTriggers.externalCalls === true) triggers.add("project-external-calls");
+    if (projectTriggers.custody === true) triggers.add("project-custody");
+    if (projectTriggers.piiGeolocation === true) triggers.add("project-pii-geolocation");
+    if (projectTriggers.secretBoundary === true) triggers.add("project-secret-boundary");
   }
   return [...triggers].sort();
 }
@@ -3229,6 +3364,10 @@ function matchesType(value, type) {
 
 function sameValue(left, right) {
   return canonicalJson(left) === canonicalJson(right);
+}
+
+function sameStringList(left, right) {
+  return left.length === right.length && left.every((entry, index) => entry === right[index]);
 }
 
 function sortValue(value) {

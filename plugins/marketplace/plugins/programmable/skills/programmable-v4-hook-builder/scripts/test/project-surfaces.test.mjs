@@ -38,6 +38,7 @@ test("unknown game capability remains reviewable while its security profiles sta
   });
   submission.projectCapabilities.push(capability);
   submission.projectSurfaces.push(surface);
+  declareProjectRisk(submission, ["project-external-calls", "project-secret-boundary", "project-signatures"]);
 
   const report = analyzeSubmission(submission, { schema });
 
@@ -72,6 +73,7 @@ test("signed offchain source is complete without an onchain verifier", () => {
   });
   submission.projectCapabilities.push(capability);
   submission.projectSurfaces.push(surface);
+  declareProjectRisk(submission, ["project-secret-boundary", "project-signatures"]);
 
   const report = analyzeSubmission(submission, { schema });
 
@@ -128,6 +130,7 @@ test("optional onchain verifier must be a separate reciprocal surface", () => {
   });
   submission.projectCapabilities.push(sourceCapability, verifierCapability);
   submission.projectSurfaces.push(source, verifier);
+  declareProjectRisk(submission, ["project-secret-boundary", "project-signatures"]);
 
   let report = analyzeSubmission(submission, { schema });
   assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
@@ -156,6 +159,7 @@ test("novel map capability cannot hide PII or geolocation by changing its kind",
   });
   submission.projectCapabilities.push(capability);
   submission.projectSurfaces.push(surface);
+  declareProjectRisk(submission, ["project-pii-geolocation"]);
 
   let report = analyzeSubmission(submission, { schema });
   assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
@@ -204,8 +208,60 @@ test("capability extensions cannot exist outside the profiled project capability
   assert.ok(report.findings.some(({ code }) => code === "CAPABILITY_EXTENSION_PROJECT_PROFILE_MISSING"));
 });
 
+test("dangerous novel capability cannot bypass risk tier or release gates", () => {
+  const submission = readyProposal();
+  const surface = submission.projectSurfaces[0];
+  const valueFlowId = submission.valueFlows[0].id;
+  const capability = capabilityRecord({
+    id: "novel-value-distribution",
+    kind: "creator-defined-value-distribution",
+    surfaceIds: [surface.id],
+    valueFlow: true
+  });
+  submission.projectCapabilities.push(capability);
+  surface.capabilityIds.push(capability.id);
+  surface.valueFlowRefs = [valueFlowId];
+  surface.exposure.movesValue = true;
+  surface.profiles.valueFlow = {
+    status: "applicable",
+    summary: "The exact declared value flow defines every source, destination, amount rule, settlement step and atomic failure path.",
+    controls: ["Conserve the complete declared value across success, revert, retry and duplicate execution paths."],
+    evidenceRefs: []
+  };
+
+  let report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "REDESIGN_REQUIRED");
+  assert.ok(report.findings.some(({ code }) => code === "RISK_TRIGGER_MISSING"));
+  assert.ok(report.findings.some(({ code }) => code === "RISK_DIMENSION_BELOW_FEATURE_FLOOR"));
+  assert.ok(report.requiredGates.some(({ id, stage }) => id === "independent-project-value-flow-review" && stage === "candidate"));
+  assert.ok(report.requiredGates.some(({ id, stage }) => id === "project-value-flow-production-monitoring" && stage === "release"));
+
+  declareProjectRisk(submission, ["project-value-flow"]);
+  report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.risk.effectiveTier, "high");
+  assert.ok(report.requiredGates.some(({ id, stage }) => id === "independent-security-review-two" && stage === "release"));
+});
+
 function readyProposal() {
   return materializeExample({ skillRoot, exampleId: "dynamic-lp-fee", stepId: "fully-specified" });
+}
+
+function declareProjectRisk(submission, triggers) {
+  submission.risk.dimensions.complexity = Math.max(submission.risk.dimensions.complexity, 2);
+  if (triggers.includes("project-external-calls")) {
+    submission.risk.dimensions.externalDependencies = Math.max(submission.risk.dimensions.externalDependencies, 1);
+    submission.risk.rationales.externalDependencies = "The declared project capability calls an exact external service whose identity, failure and upgrade assumptions remain review inputs.";
+  }
+  if (triggers.some((trigger) => ["project-value-flow", "project-custody"].includes(trigger))) {
+    submission.risk.dimensions.valueAtRisk = Math.max(submission.risk.dimensions.valueAtRisk, 1);
+    submission.risk.rationales.valueAtRisk = "The declared project capability can move or custody value, so accounting, authorization, solvency and exit failures remain in scope.";
+  }
+  submission.risk.featureTriggers = [...new Set([...submission.risk.featureTriggers, ...triggers])].sort();
+  submission.risk.declaredTotal = Object.values(submission.risk.dimensions).reduce((total, value) => total + value, 0);
+  submission.risk.declaredTier = "high";
 }
 
 function addAuthority(submission, role) {

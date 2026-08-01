@@ -182,6 +182,9 @@ if (submission) {
     ...(submission.capabilityExtensions ?? []).flatMap((extension) => [
       extension?.schemaPath,
       ...(extension?.evidencePaths ?? [])
+    ]),
+    ...(submission.tokenBehaviorExtensions ?? []).flatMap((extension) => [
+      ...(extension?.evidencePaths ?? [])
     ])
   ].filter(Boolean);
   for (const listedPath of [...new Set(listedPaths)]) {
@@ -850,21 +853,31 @@ function closingDelimiter(source, start, open, close) {
 }
 
 function rejectUnsupportedPublicClaims(claimErrors) {
+  const publicApplicationDocuments = new Set([
+    "submission.json",
+    "compatibility-report.json",
+    "PROPOSAL.md",
+    "THREAT_MODEL.md",
+    "TEST_PLAN.md",
+    "EVIDENCE.md"
+  ]);
   const packageTargets = packageEntries
-    .filter((entry) => entry.stat.isFile() && entry.stat.size <= MAX_FILE_BYTES && /\.(?:md|txt|json|sol|ya?ml)$/i.test(entry.path))
+    .filter((entry) => entry.stat.isFile()
+      && entry.stat.size <= MAX_FILE_BYTES
+      && publicApplicationDocuments.has(path.relative(packageRoot, entry.path).replaceAll(path.sep, "/")))
     .map((entry) => entry.path);
   const scannedTargets = new Set();
   for (const target of packageTargets) {
     scannedTargets.add(path.resolve(target));
-    const text = fs.readFileSync(target, "utf8");
+    const text = extractPublicClaimText(fs.readFileSync(target, "utf8"), path.extname(target));
     for (const finding of findUnsupportedPublicClaims(text)) {
       claimErrors.push(`${relative(target)} contains an unsupported ${finding} claim`);
     }
   }
 
-  for (const relativePath of declaredPublicSourcePaths(submission)) {
+  for (const relativePath of declaredPublicClaimPaths(submission)) {
     const extension = path.extname(relativePath).toLowerCase();
-    if (!/[.](?:[cm]?[jt]sx?|html?|vue|svelte)$/iu.test(extension)) continue;
+    if (!isSupportedPublicClaimPath(relativePath, extension)) continue;
     if (!isCanonicalReviewTargetPath(relativePath)) continue;
     const target = path.resolve(repositoryRoot, relativePath);
     if (scannedTargets.has(target) || isTestLikePublicSourcePath(relativePath)) continue;
@@ -878,12 +891,12 @@ function rejectUnsupportedPublicClaims(claimErrors) {
     scannedTargets.add(target);
     const publicText = extractPublicClaimText(fs.readFileSync(target, "utf8"), extension);
     for (const finding of findUnsupportedPublicClaims(publicText)) {
-      claimErrors.push(`${relativePath} contains an unsupported ${finding} claim in public UI or application text`);
+      claimErrors.push(`${relativePath} contains an unsupported ${finding} claim in declared public UI, locale or content text`);
     }
   }
 }
 
-function declaredPublicSourcePaths(value) {
+function declaredPublicClaimPaths(value) {
   const integration = value?.integration ?? {};
   const routing = integration.routingAndDiscoverability ?? {};
   const reconstruction = integration.dataReconstruction ?? {};
@@ -894,9 +907,31 @@ function declaredPublicSourcePaths(value) {
     ...(routing.testPaths ?? []),
     ...(reconstruction.testPaths ?? []),
     ...(handoff.testPaths ?? []),
-    ...(value?.capabilityExtensions ?? []).flatMap((extension) => extension?.testPaths ?? [])
+    ...(value?.projectSurfaces ?? []).flatMap((surface) => surface?.testPaths ?? []),
+    ...(value?.capabilityExtensions ?? []).flatMap((extension) => extension?.testPaths ?? []),
+    ...(value?.tokenBehaviorExtensions ?? []).flatMap((extension) => extension?.testPaths ?? [])
   ]);
-  return declaredSourceAndTestPaths(value).filter((entry) => !testPaths.has(entry));
+  const declared = [
+    ...(integration.appSourcePaths ?? []),
+    ...(handoff.uiSourcePaths ?? []),
+    ...(value?.projectSurfaces ?? [])
+      .filter(isPublicFacingProjectSurface)
+      .flatMap((surface) => surface?.sourcePaths ?? [])
+  ];
+  return [...new Set(declared)].filter((entry) => !testPaths.has(entry));
+}
+
+function isPublicFacingProjectSurface(surface) {
+  if (["browser", "mobile-client"].includes(surface?.executionBoundary)) return true;
+  return new Set(["game-client", "map-client", "mobile-app", "web-app"]).has(surface?.kind);
+}
+
+function isSupportedPublicClaimPath(relativePath, extension) {
+  if (!/[.](?:[cm]?[jt]sx?|html?|vue|svelte|json|ya?ml|mdx?|markdown|txt)$/iu.test(extension)) return false;
+  const baseName = path.posix.basename(relativePath).toLowerCase();
+  if (/^(?:bun|npm-shrinkwrap|package|package-lock|pnpm-lock|yarn)\.(?:json|lock|ya?ml|lockb)$/u.test(baseName)) return false;
+  if (/^(?:babel|eslint|jest|jsconfig|next|nuxt|postcss|prettier|rollup|stylelint|svelte|tailwind|tsconfig|vite|vitest|webpack)(?:\.[^.]+)*\.(?:json|ya?ml|[cm]?[jt]s)$/u.test(baseName)) return false;
+  return true;
 }
 
 function isTestLikePublicSourcePath(value) {

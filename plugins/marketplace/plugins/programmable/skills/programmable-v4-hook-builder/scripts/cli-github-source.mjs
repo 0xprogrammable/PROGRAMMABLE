@@ -16,6 +16,7 @@ import {
   verifyCompanionManifestV2Closure
 } from "./companion-manifest-contract.mjs";
 import { CliFailure } from "./cli-runtime.mjs";
+import { isCanonicalReviewTargetPath } from "./review-target-contract.mjs";
 import { canonicalJson } from "./submission-core.mjs";
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
@@ -399,11 +400,14 @@ async function resolveOnce({
         return verifyCompanionManifestV2Closure(
           companion.companionManifestV2,
           capturedCompanionRecords.get(companion.repositoryUri),
-          resolved.githubActionsEvidence
+          resolved.githubActionsEvidence,
+          { manifestPath: companion.manifestPath }
         );
       } catch (error) {
         throw new CliFailure(
-          "COMPANION_MANIFEST_INVALID",
+          error?.code === "COMPANION_STATIC_CLOSURE_UNSUPPORTED"
+            ? "COMPANION_CLOSURE_REVIEW_REQUIRED"
+            : "COMPANION_MANIFEST_INVALID",
           error?.message ?? "companion v2 closure verification failed",
           { exitCode: 1 }
         );
@@ -467,6 +471,10 @@ export function normalizeCompanionDescriptors(companions) {
   for (const companion of companions) {
     try {
       const manifestV2 = companion?.companionManifestV2 ?? null;
+      const manifestPath = companion?.manifestPath ?? null;
+      if (manifestV2 !== null && !isCanonicalReviewTargetPath(manifestPath)) {
+        throw new Error("companion v2 descriptor is missing its exact primary manifest path");
+      }
       let expected;
       if (manifestV2 !== null) {
         expected = normalizeCompanionManifest(manifestV2);
@@ -508,6 +516,7 @@ export function normalizeCompanionDescriptors(companions) {
         sourcePaths: request.sourcePaths,
         contractPaths: request.contractPaths,
         githubActionsRunIds: request.githubActionsRunIds,
+        manifestPath,
         companionManifestV2: manifestV2 === null ? null : expected.manifestV2
       }));
     } catch (error) {

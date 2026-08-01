@@ -116,6 +116,131 @@ test("transparent transfer-tax and auto-liquidity token enters model-specific no
   ]) assert.ok(report.requiredGates.some(({ id }) => id === gateId), gateId);
 });
 
+test("auto-liquidity accepts a bounded launch allocation without requiring transfer tax", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  submission.noHookArchitecture.transferTax = officialNoHookArchitecture().transferTax;
+  submission.assets.find(({ role }) => role === "launched").behaviors = ["standard"];
+  submission.valueFlows.push({
+    id: "auto-liquidity-launch-allocation",
+    action: "reserve an immutable launch allocation for later canonical liquidity",
+    asset: "launched-token",
+    from: "the fixed token supply allocation committed at creation",
+    to: "the separately accounted automatic-liquidity bucket",
+    amountRule: "Credit no more than the immutable constructor allocation and never debit a holder, recipient or unrelated treasury balance.",
+    settlement: "Record the allocation before trading and debit only actual amounts used by the bounded swap and liquidity-add lifecycle.",
+    failure: "A failed allocation or later liquidity action cannot mint, confiscate, borrow or redirect any user balance."
+  });
+  submission.noHookArchitecture.autoLiquidity.fundingSources = [{
+    id: "immutable-launch-allocation",
+    kind: "launcher-allocation",
+    assetId: "launched-token",
+    source: "An immutable fixed-supply allocation reserved by the reviewed token constructor before trading begins.",
+    transferTaxRecipientId: null,
+    authorityRole: null,
+    valueFlowIds: ["auto-liquidity-launch-allocation", "auto-liquidity-swap", "auto-liquidity-add"],
+    custody: "The token contract keeps the allocation in a separately accounted balance used only by the bounded liquidity lifecycle.",
+    accountingRule: "Track initial credit, each actual router debit, each added amount and every retryable remainder without mixing beneficiary or user balances.",
+    fundingLimit: "The source can never exceed the immutable constructor allocation and exposes no mint, pull, tax or confiscation path.",
+    withdrawalRule: "No creator or administrator can withdraw or redirect this allocation outside the declared canonical-liquidity lifecycle.",
+    failureRule: "Failure leaves the exact unspent allocation retryable and cannot block transfers or debit another account."
+  }];
+  submission.noHookArchitecture.autoLiquidity.valueFlowIds.push("auto-liquidity-launch-allocation");
+  submission.risk.featureTriggers = submission.risk.featureTriggers.filter((trigger) => !["non-standard-token", "transfer-tax"].includes(trigger));
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.findings.some(({ code }) => code === "AUTO_LIQUIDITY_WITHOUT_FUNDING_TAX"), false);
+  assert.equal(report.risk.featureTriggers.includes("transfer-tax"), false);
+});
+
+test("unknown token behavior remains reviewable through the open structured extension", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  const launchedAsset = submission.assets.find(({ role }) => role === "launched");
+  const capability = submission.projectCapabilities.find(({ id }) => id === "canonical-pool-state");
+  launchedAsset.behaviors.push("time-weighted-vote-checkpoint");
+  submission.tokenBehaviorExtensions = [{
+    id: "time-weighted-vote-checkpoint",
+    assetId: launchedAsset.id,
+    behavior: "time-weighted-vote-checkpoint",
+    summary: "Record a non-transferable time-weighted governance checkpoint without changing balances, supply, transfer liveness or pool settlement.",
+    projectCapabilityId: capability.id,
+    authorityRefs: [],
+    valueFlowIds: [],
+    mutable: false,
+    visibility: "fully-disclosed",
+    supplyImpact: "none",
+    transferImpact: "none",
+    failureRule: "A checkpoint write failure reverts only the governance checkpoint action and cannot alter or block an ordinary transfer, buy or sell.",
+    providerImpact: {
+      routing: "Routers may ignore the checkpoint because it does not change transferred amounts, token approvals or pool settlement.",
+      quoting: "Quotes remain based on the exact ordinary transfer and pool amounts, with the existing visible tax handled separately.",
+      indexing: "Indexers may consume the new checkpoint event only when they opt into the exact published schema and source revision.",
+      status: "requires-provider-review",
+      evidence: [],
+      limitations: ["Passing this check does not make an external router, indexer, scanner or listing understand the new checkpoint event."],
+      fallback: "Keep routing independent from the checkpoint and expose the feature only through a client that verifies the exact event schema."
+    },
+    securityTriggers: structuredClone(capability.securityTriggers),
+    requiredProfiles: [...capability.requiredProfiles],
+    sourcePaths: [],
+    testPaths: [],
+    evidencePaths: [],
+    testScenarios: ["Checkpoint creation and failure cannot change balances, supply, transfer liveness or canonical pool settlement."]
+  }];
+  submission.risk.featureTriggers.push("novel-token-behavior");
+  submission.risk.featureTriggers.sort();
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code, severity }) => code === "TOKEN_BEHAVIOR_REQUIRES_ARCHITECTURE_REVIEW" && severity === "warning"));
+  assert.ok(report.requiredGates.some(({ id }) => id === "novel-token-behavior-architecture-review"));
+  assert.ok(report.requiredGates.some(({ id }) => id === "novel-token-behavior-provider-review"));
+});
+
+test("open token behavior path still rejects hidden controls", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  const launchedAsset = submission.assets.find(({ role }) => role === "launched");
+  const capability = submission.projectCapabilities.find(({ id }) => id === "canonical-pool-state");
+  launchedAsset.behaviors.push("concealed-balance-rule");
+  submission.tokenBehaviorExtensions = [{
+    id: "concealed-balance-rule",
+    assetId: launchedAsset.id,
+    behavior: "concealed-balance-rule",
+    summary: "This negative fixture declares an intentionally concealed balance rule so the hard policy boundary is exercised.",
+    projectCapabilityId: capability.id,
+    authorityRefs: [],
+    valueFlowIds: [],
+    mutable: false,
+    visibility: "undisclosed-or-obfuscated",
+    supplyImpact: "none",
+    transferImpact: "none",
+    failureRule: "The negative fixture does not define a safe public failure rule because its behavior is intentionally concealed from users.",
+    providerImpact: {
+      routing: "No router can safely evaluate an intentionally concealed balance rule without exact public behavior and source.",
+      quoting: "No quoter can safely predict final received amounts while a balance rule remains intentionally concealed.",
+      indexing: "No indexer can reconstruct balances while the behavior and controlling state remain intentionally concealed.",
+      status: "unsupported",
+      evidence: [],
+      limitations: ["The hidden rule prevents truthful transfer, quote, routing and balance reconstruction claims."],
+      fallback: "Remove the hidden behavior and publish the exact authority, state, value and failure rules before review."
+    },
+    securityTriggers: structuredClone(capability.securityTriggers),
+    requiredProfiles: [...capability.requiredProfiles],
+    sourcePaths: [],
+    testPaths: [],
+    evidencePaths: [],
+    testScenarios: ["The negative fixture proves intentionally hidden behavior cannot enter architecture review as a safe extension."]
+  }];
+  submission.risk.featureTriggers.push("novel-token-behavior");
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "UNSUPPORTED");
+  assert.ok(report.findings.some(({ code, severity }) => code === "HIDDEN_TOKEN_BEHAVIOR" && severity === "hard"));
+});
+
 test("model-specific no-hook path rejects concealed sell restrictions", () => {
   const submission = modelSpecificTaxTokenSubmission();
   submission.noHookArchitecture.transferPolicy.poolSellsAllowed = false;
@@ -2815,12 +2940,17 @@ test("prototype intake rejects build info that omits a reviewed Solidity source"
   }
 });
 
-test("unsupported provider claims are rejected anywhere in the package", () => {
+test("unsupported provider claims are rejected in declared shipped package content", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-claim-scan-test-"));
   try {
-    const { modelRoot } = createPrototypePackage(destinationRoot);
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
     fs.mkdirSync(path.join(modelRoot, "notes"));
-    fs.writeFileSync(path.join(modelRoot, "notes", "marketing.md"), "This model is officially verified by Uniswap.\n");
+    const marketingPath = path.join(modelRoot, "notes", "marketing.md");
+    fs.writeFileSync(marketingPath, "This model is officially verified by Uniswap.\n");
+    const repositoryPath = path.relative(repositoryRoot, marketingPath).replaceAll(path.sep, "/");
+    submission.implementation.sourcePaths.push(repositoryPath);
+    submission.integration.platformHandoff.uiSourcePaths.push(repositoryPath);
+    rewritePrototypePackageArtifacts(modelRoot, submission);
     const result = childProcess.spawnSync(process.execPath, [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot], { cwd: repositoryRoot, encoding: "utf8", shell: false });
     assert.notEqual(result.status, 0);
     const report = JSON.parse(result.stdout);
@@ -2857,6 +2987,89 @@ test("public UI source claims are checked while comments and test sources are ig
     assert.notEqual(visibleClaim.status, 0);
     const report = JSON.parse(visibleClaim.stdout);
     assert.ok(report.errors.some((message) => /ui\.tsx contains an unsupported Uniswap verification/.test(message)), JSON.stringify(report.errors));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("declared locale and shipped content files are checked without scanning tests or tool configuration as public copy", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-content-claim-scan-test-"));
+  try {
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
+    const contentDirectory = path.join(modelRoot, "app", "content");
+    const localeDirectory = path.join(modelRoot, "app", "locales");
+    fs.mkdirSync(contentDirectory, { recursive: true });
+    fs.mkdirSync(localeDirectory, { recursive: true });
+
+    const jsonPath = path.join(localeDirectory, "en.json");
+    const yamlPath = path.join(localeDirectory, "de.yml");
+    const markdownPath = path.join(contentDirectory, "status.md");
+    const configPath = path.join(modelRoot, "app", "tsconfig.json");
+    const fixturePath = path.join(modelRoot, "app", "claims.test.json");
+    writeJson(jsonPath, {
+      "This hook is unruggable.": "translation-key-is-not-copy",
+      status: "This hook is not audited and is not deployed."
+    });
+    fs.writeFileSync(yamlPath, "# This hook is approved by Programmable.\nstatus: No Uniswap approval is claimed.\n");
+    fs.writeFileSync(markdownPath, "```text\nThis hook is guaranteed safe.\n```\n\nPrototype evidence only.\n");
+    writeJson(configPath, { compilerMessage: "This hook is approved by Uniswap." });
+    writeJson(fixturePath, { fixture: "This hook is unruggable." });
+
+    const repositoryPaths = [jsonPath, yamlPath, markdownPath, configPath, fixturePath]
+      .map((target) => path.relative(repositoryRoot, target).replaceAll(path.sep, "/"));
+    submission.implementation.sourcePaths.push(...repositoryPaths);
+    submission.integration.platformHandoff.uiSourcePaths.push(...repositoryPaths.slice(0, 2));
+    submission.integration.appSourcePaths.push(...repositoryPaths.slice(3));
+    const browserSurface = structuredClone(submission.projectSurfaces[0]);
+    Object.assign(browserSurface, {
+      id: "public-status-content",
+      kind: "web-app",
+      name: "Public status content",
+      summary: "A browser surface renders the declared public status Markdown as user-facing project copy.",
+      executionBoundary: "browser",
+      capabilityIds: ["public-status-display"],
+      sourcePaths: [repositoryPaths[2]],
+      testPaths: [submission.integration.platformHandoff.testPaths[0]],
+      schemaPaths: [],
+      evidencePaths: []
+    });
+    const browserCapability = structuredClone(submission.projectCapabilities[0]);
+    Object.assign(browserCapability, {
+      id: "public-status-display",
+      kind: "state-observation",
+      summary: "Render the declared project status content without changing pool, token or user state.",
+      surfaceIds: [browserSurface.id]
+    });
+    submission.projectSurfaces.push(browserSurface);
+    submission.projectCapabilities.push(browserCapability);
+    rewritePrototypePackageArtifacts(modelRoot, submission);
+
+    const nonPublicExamples = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(nonPublicExamples.status, 0, nonPublicExamples.stderr || nonPublicExamples.stdout);
+
+    const forbiddenByPath = [
+      [jsonPath, () => writeJson(jsonPath, { hero: "This hook is approved by Uniswap." }), /en\.json contains an unsupported Uniswap verification/],
+      [yamlPath, () => fs.writeFileSync(yamlPath, "hero: This hook is unruggable.\n"), /de\.yml contains an unsupported Safety, rug-free or risk-free status/],
+      [markdownPath, () => fs.writeFileSync(markdownPath, "The submitted project is live on mainnet.\n"), /status\.md contains an unsupported Deployment, launch or availability/]
+    ];
+    for (const [target, writeForbidden, expected] of forbiddenByPath) {
+      const original = fs.readFileSync(target, "utf8");
+      writeForbidden();
+      rewritePrototypePackageArtifacts(modelRoot, submission);
+      const visibleClaim = childProcess.spawnSync(
+        process.execPath,
+        [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+        { cwd: repositoryRoot, encoding: "utf8", shell: false }
+      );
+      assert.notEqual(visibleClaim.status, 0);
+      const report = JSON.parse(visibleClaim.stdout);
+      assert.ok(report.errors.some((message) => expected.test(message)), JSON.stringify(report.errors));
+      fs.writeFileSync(target, original);
+    }
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
   }
@@ -3399,7 +3612,7 @@ function officialNoHookArchitecture() {
     },
     autoLiquidity: {
       used: false,
-      fundingRecipientId: null,
+      fundingSources: [],
       triggerMode: null,
       triggerThreshold: null,
       maximumSwapAmount: null,

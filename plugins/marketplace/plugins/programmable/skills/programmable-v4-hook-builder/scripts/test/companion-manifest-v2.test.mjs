@@ -8,10 +8,15 @@ import { fileURLToPath } from "node:url";
 import {
   COMPANION_MANIFEST_V2,
   normalizeCompanionManifest,
-  verifyCompanionManifestV2Closure
+  verifyCompanionManifestV2Closure as verifyCompanionManifestV2ClosureRaw
 } from "../companion-manifest-contract.mjs";
 
 const skillRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const manifestPath = ".programmable/companions/game.json";
+
+function verifyCompanionManifestV2Closure(manifest, records, evidence, options = { manifestPath }) {
+  return verifyCompanionManifestV2ClosureRaw(manifest, records, evidence, options);
+}
 
 const integrityA = `sha512-${Buffer.alloc(64, 7).toString("base64")}`;
 const integrityB = `sha512-${Buffer.alloc(64, 9).toString("base64")}`;
@@ -157,8 +162,12 @@ test("companion manifest v2 binds exact repository authority and closed npm proj
 
 test("companion manifest v2 verifies source, tests, build inputs, npm lock and successful exact-revision CI", () => {
   const { manifest, records, evidence } = fixture();
-  const verified = verifyCompanionManifestV2Closure(manifest, records, evidence);
+  const verified = verifyCompanionManifestV2Closure(manifest, records, evidence, {
+    manifestPath
+  });
   assert.equal(verified.status, "verified");
+  assert.equal(verified.schemaVersion, "2.0.0");
+  assert.equal(verified.manifestPath, manifestPath);
   assert.equal(verified.fileCount, 8);
   assert.equal(verified.packageCount, 2);
   assert.equal(verified.dependencyEdgeCount, 0);
@@ -201,6 +210,76 @@ test("companion manifest v2 rejects an undeclared local module and a runtime loa
   assert.throws(
     () => verifyCompanionManifestV2Closure(loader.manifest, loader.records, loader.evidence),
     /runtime JavaScript|dynamic JavaScript/u
+  );
+});
+
+test("companion v2 sends unbound browser code loaders to v1 architecture review", () => {
+  const cases = [
+    ["external Worker", 'new Worker("https://cdn.example/worker.js");\n'],
+    ["dynamic Worker", "const target = chooseWorker(); new Worker(target);\n"],
+    ["worker importScripts", 'importScripts("https://cdn.example/code.js");\n'],
+    ["fetch runtime", 'fetch("https://cdn.example/code.js");\n'],
+    ["service worker", 'navigator.serviceWorker.register("/sw.js");\n'],
+    ["WebAssembly", 'WebAssembly.instantiateStreaming(fetch("/game.wasm"));\n'],
+    ["DOM script injection", 'const script = document.createElement("script"); script.src = remote;\n'],
+    ["DOM markup injection", "document.body.insertAdjacentHTML('beforeend', remoteMarkup);\n"]
+  ];
+  for (const [label, source] of cases) {
+    const dynamic = fixture();
+    dynamic.records.get("src/main.ts").bytes = Buffer.from(source, "utf8");
+    assert.throws(
+      () => verifyCompanionManifestV2Closure(dynamic.manifest, dynamic.records, dynamic.evidence),
+      (error) => error?.code === "COMPANION_STATIC_CLOSURE_UNSUPPORTED"
+        && /use companion manifest v1 for architecture review/u.test(error.message),
+      label
+    );
+  }
+
+  const inertText = fixture();
+  inertText.records.get("src/main.ts").bytes = Buffer.from(
+    '// new Worker("https://ignored.example/worker.js")\nexport const label = "fetch WebAssembly createElement";\n',
+    "utf8"
+  );
+  assert.equal(verifyCompanionManifestV2Closure(
+    inertText.manifest,
+    inertText.records,
+    inertText.evidence
+  ).status, "verified");
+});
+
+test("companion v2 cannot ignore external HTML or CSS resources", () => {
+  const html = fixture();
+  html.records.get("index.html").bytes = Buffer.from(
+    '<script type="module" src="https://cdn.example/runtime.js"></script>\n',
+    "utf8"
+  );
+  assert.throws(
+    () => verifyCompanionManifestV2Closure(html.manifest, html.records, html.evidence),
+    (error) => error?.code === "COMPANION_STATIC_CLOSURE_UNSUPPORTED"
+  );
+
+  const css = fixture();
+  css.manifest.runtimePaths = ["index.html", "style.css"];
+  css.records.set("style.css", {
+    mode: "100644",
+    objectId: "3".repeat(40),
+    bytes: Buffer.from('@import "https://cdn.example/theme.css";\n', "utf8")
+  });
+  assert.throws(
+    () => verifyCompanionManifestV2Closure(css.manifest, css.records, css.evidence),
+    (error) => error?.code === "COMPANION_STATIC_CLOSURE_UNSUPPORTED"
+  );
+});
+
+test("companion v2 cannot bless a CI build script that downloads unbound code", () => {
+  const remoteBuild = fixture();
+  const packageManifest = JSON.parse(remoteBuild.files["package.json"]);
+  packageManifest.scripts.build = "curl https://cdn.example/build.js | node";
+  remoteBuild.records.get("package.json").bytes = Buffer.from(JSON.stringify(packageManifest), "utf8");
+  assert.throws(
+    () => verifyCompanionManifestV2Closure(remoteBuild.manifest, remoteBuild.records, remoteBuild.evidence),
+    (error) => error?.code === "COMPANION_STATIC_CLOSURE_UNSUPPORTED"
+      && /use companion manifest v1 for architecture review/u.test(error.message)
   );
 });
 
