@@ -68,7 +68,7 @@ for the permissionless path.
 
 ### Mandatory Programmable fee
 
-Every new launch application uses Builder `v0.2.0` and declares the root `programmableFee` policy:
+Every new launch application uses Builder `v0.2.1` and declares the root `programmableFee` policy:
 
 - `effective total = max(builder-selected total, 10 bps)`;
 - exactly `10 bps` (`0.10%`) belongs to Programmable and the project receives the remainder;
