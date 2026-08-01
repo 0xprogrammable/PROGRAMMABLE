@@ -48,6 +48,22 @@ The accepted evidence proves all of the following:
 
 The public API reader cannot manufacture or retrieve this corpus.
 
+## Indexer replay boundary
+
+The Envio deployment used for a release must be the exact handler, schema and
+source registry committed by the release manifest. A deployment being marked
+ready is not enough. Before database backfill, enumerate the complete launch
+inventory and require every eligible launch to be both complete and provenance
+valid for its declared release. Raw launch counts are never promotable evidence.
+
+The replay must also prove release-specific identity transitions. In
+Stock-Paired ETH launches, the launcher may first record the authenticated
+coordinator as the provisional deployer. The coordinator event may replace that
+value only when it comes from the manifest-bound coordinator and names the
+actual creator. A replay that treats this transition as a conflict, accepts an
+unbound coordinator, or leaves any supported release incomplete must remain
+outside the projector and public route activation.
+
 ## Signed route probes
 
 Each parity request carries a unique route-bound HMAC. The secret in `PROGRAMMABLE_SHADOW_PROBE_TOKEN` remains on the capture runner and server. It is never sent in an HTTP header.
