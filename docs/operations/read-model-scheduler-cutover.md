@@ -40,8 +40,11 @@ deployments without moving `programmable.family`; only the reviewed workflow
 may promote it. The workflow records the current deployment before staging and
 fails if Vercel has already moved production to the candidate commit.
 
-1. Apply and test every migration named in
-   `config/read-model-operations.v1.json`.
+1. Produce and review the deterministic hosted database plan, then apply and
+   verify every ordered `supabase/migrations/*.sql` file at the exact reviewed
+   commit. `config/read-model-operations.v1.json` pins worker-specific release
+   inputs; it is not the complete migration inventory. Follow
+   `docs/data-pipeline/HOSTED-DATABASE-OPERATOR.md` and keep bootstrap separate.
 2. Backfill Envio and Postgres at an exact, recorded checkpoint.
 3. Enable the source projector and prove it catches up without partial-block
    publication.

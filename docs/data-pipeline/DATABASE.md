@@ -353,6 +353,13 @@ applied to any environment. Before a reviewed hosted migration:
 5. Run the secret scan over the exact diff.
 6. Take a direct-port backup and record the reviewed migration commit.
 
+The deterministic hosted operator and its exact plan, dry-run, apply and
+verification sequence are documented in
+[`HOSTED-DATABASE-OPERATOR.md`](./HOSTED-DATABASE-OPERATOR.md). Its plan scans
+the complete ordered `supabase/migrations/*.sql` set; no hand-maintained
+worker manifest is an authority for migration completeness. Migration and
+release bootstrap remain separate operations.
+
 Backup and restore must copy the stored fingerprint triple byte-for-byte.
 Compare ordered exports of:
 
