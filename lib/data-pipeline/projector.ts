@@ -9,28 +9,41 @@ import type {
 import {
   readDualRpcSafeHead,
   verifyDynamicRuntimeAtBlockWithDualRpc,
+  verifyDynamicRuntimesAtBlockWithDualRpc,
   verifyEnvioCandidateWindowWithDualRpc,
 } from "./dual-rpc";
 import type {
   EnvioCandidate,
   EnvioCandidateCursor,
 } from "./envio";
-import { dataPipelineError, invalidInput } from "./errors";
+import { DataPipelineError, dataPipelineError, invalidInput } from "./errors";
 import type { VerifiedDynamicSourceLineage } from "./projector-identities";
-import { PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE } from "./projector-runtime-limits";
+import {
+  buildEnvioCursorRecoveryPlan,
+  findCanonicalAncestorWithDualRpc,
+  type EnvioCursorRecoveryPlan,
+  type ReorgGenesisAnchor,
+  type ReorgHistoryAncestor,
+} from "./projector-reorg";
+import { PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP } from "./projector-runtime-limits";
+import { manifestEventSelectors } from "./event-manifest";
+import { getDataPipelineReleaseBinding } from "./release-binding.server";
 
 /**
  * A short page is the only Envio response that can prove the frozen window is
- * exhausted. Page in bounded chunks while retaining the adapter's 32-row hard
- * ceiling for one atomic commit.
+ * exhausted. Page in bounded chunks while retaining the shared atomic-group
+ * ceiling for one block-complete commit.
  */
-const PROJECTOR_PAGE_LIMIT = 12;
+const PROJECTOR_PAGE_LIMIT = 32;
 const MAXIMUM_CANDIDATES_PER_COMMIT =
-  PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE;
+  PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP;
 const MAXIMUM_PROVIDER_CALLS = 128;
 const COVERAGE_BLOCK_SPAN = 500;
 const MAXIMUM_COVERAGE_REQUESTS = 9;
 const MAXIMUM_DEADLINE_MS = 75_000;
+const MAXIMUM_JSON_RPC_BATCH_SIZE = 100;
+const MAXIMUM_LOG_FILTER_ADDRESSES = 512;
+const MAXIMUM_LOG_FILTER_TOPIC0 = 64;
 
 export type ProjectorCursor = EnvioCandidateCursor & {
   generation: string;
@@ -47,6 +60,7 @@ export type ProjectorCursor = EnvioCandidateCursor & {
 export type ProjectorPlan = Readonly<{
   cursor: ProjectorCursor;
   dynamicSources: readonly VerifiedDynamicSourceLineage[];
+  provisionalSourceAddresses: readonly `0x${string}`[];
   dynamicSourceTemplates: readonly ProjectorDynamicSourceTemplate[];
   database: Readonly<{
     epochId: string;
@@ -59,6 +73,22 @@ export type ProjectorPlan = Readonly<{
 
 export type ProjectorStore = Readonly<{
   readPlan(): Promise<ProjectorPlan>;
+  readReorgRecoveryState(input: {
+    plan: ProjectorPlan;
+    maximumDepth: number;
+  }): Promise<Readonly<{
+    ancestors: readonly ReorgHistoryAncestor[];
+    genesis: ReorgGenesisAnchor;
+    currentReorgGeneration: string;
+  }>>;
+  recoverCanonicalReorg(input: {
+    plan: ProjectorPlan;
+    recovery: EnvioCursorRecoveryPlan;
+  }): Promise<Readonly<{
+    generation: string;
+    reorgGeneration: string;
+    releaseCheckpointCount: number;
+  }>>;
   stageVerifiedDynamicParents(input: {
     plan: ProjectorPlan;
     snapshotBlock: string;
@@ -90,68 +120,79 @@ type ProjectorEnvio = Readonly<{
 type CaptureSafeHead = typeof readDualRpcSafeHead;
 type VerifyWindow = typeof verifyEnvioCandidateWindowWithDualRpc;
 type VerifyDynamicRuntime = typeof verifyDynamicRuntimeAtBlockWithDualRpc;
+type VerifyDynamicRuntimes = typeof verifyDynamicRuntimesAtBlockWithDualRpc;
+type FindCanonicalAncestor = typeof findCanonicalAncestorWithDualRpc;
 
-const DYNAMIC_PARENT_BINDINGS = Object.freeze({
-  ClassicV3RewardVault: Object.freeze({
-    factoryContractName: "ClassicV3RewardVaultFactory",
-    factoryEventName: "ClassicRewardVaultDeployed",
-  }),
-} as const);
-
-function dynamicParentForReplay(
-  candidates: readonly EnvioCandidate[],
-  dynamicSources: readonly VerifiedDynamicSourceLineage[],
-): Readonly<{
+type DynamicParentForReplay = Readonly<{
   parent: EnvioCandidate;
   childSourceAddress: `0x${string}`;
-  childContractName: ProjectorDynamicSourceTemplate["contractName"];
-}> | null {
-  const known = new Set(dynamicSources.map(({ sourceAddress }) => sourceAddress));
-  for (const child of candidates) {
-    const binding =
-      DYNAMIC_PARENT_BINDINGS[
-        child.contractName as keyof typeof DYNAMIC_PARENT_BINDINGS
-      ];
-    if (!binding || known.has(child.sourceAddress)) continue;
-    const parent = candidates.find((candidate) => {
-      const vault = candidate.decodedPayload.vault;
-      return (
-        candidate.blockNumber === child.blockNumber &&
-        candidate.blockGlobalLogIndex < child.blockGlobalLogIndex &&
-        candidate.contractName === binding.factoryContractName &&
-        candidate.eventName === binding.factoryEventName &&
-        typeof vault === "string" &&
-        vault.toLowerCase() === child.sourceAddress
-      );
-    });
-    if (parent) {
-      return Object.freeze({
-        parent,
-        childSourceAddress: child.sourceAddress,
-        childContractName:
-          child.contractName as ProjectorDynamicSourceTemplate["contractName"],
-      });
+  template: ProjectorDynamicSourceTemplate;
+}>;
+
+function dynamicParentsForReplay(
+  candidates: readonly EnvioCandidate[],
+  dynamicSources: readonly VerifiedDynamicSourceLineage[],
+  provisionalSourceAddresses: readonly `0x${string}`[],
+  templates: readonly ProjectorDynamicSourceTemplate[],
+): readonly DynamicParentForReplay[] {
+  const known = new Set([
+    ...dynamicSources.map(({ sourceAddress }) => sourceAddress),
+    ...provisionalSourceAddresses,
+  ]);
+  const selectedSources = new Set<string>();
+  const selectedParents = new Set<string>();
+  const matches: DynamicParentForReplay[] = [];
+  let targetBlock: string | null = null;
+  for (const parent of candidates) {
+    const matchingTemplates = templates.filter(
+      (template) =>
+        template.parentFactoryAddress === parent.sourceAddress &&
+        template.parentFactoryContractName === parent.contractName &&
+        template.factoryEventName === parent.eventName,
+    );
+    if (matchingTemplates.length === 0) continue;
+    if (matchingTemplates.length !== 1) {
+      throw invalidInput("config", "dynamic-runtime-template");
     }
+    const template = matchingTemplates[0]!;
+    const deployedAddress =
+      parent.decodedPayload[template.deployedAddressField];
+    if (
+      typeof deployedAddress !== "string" ||
+      !/^0x[0-9a-f]{40}$/u.test(deployedAddress)
+    ) {
+      continue;
+    }
+    const childSourceAddress = deployedAddress as `0x${string}`;
+    if (known.has(childSourceAddress)) continue;
+    if (targetBlock === null) targetBlock = parent.blockNumber;
+    if (parent.blockNumber !== targetBlock) break;
+    if (
+      selectedSources.has(childSourceAddress) ||
+      selectedParents.has(parent.candidateId)
+    ) {
+      throw invalidInput("envio", "dynamic-parent-duplicate");
+    }
+    selectedSources.add(childSourceAddress);
+    selectedParents.add(parent.candidateId);
+    matches.push(Object.freeze({
+      parent,
+      childSourceAddress,
+      template,
+    }));
   }
-  return null;
+  return Object.freeze(matches);
 }
 
-function cursorImmediatelyBefore(
+function cursorAtStartOfBlock(
   candidate: EnvioCandidate,
+  current: EnvioCandidateCursor,
 ): EnvioCandidateCursor {
-  if (candidate.blockGlobalLogIndex === 0) {
-    return {
-      blockNumber: (BigInt(candidate.blockNumber) - 1n).toString(),
-      blockGlobalLogIndex: 0xffff_ffff,
-      candidateId: "",
-    };
-  }
-  const priorLogIndex = candidate.blockGlobalLogIndex - 1;
+  if (current.blockNumber === candidate.blockNumber) return current;
   return {
-    blockNumber: candidate.blockNumber,
-    blockGlobalLogIndex: priorLogIndex,
-    candidateId:
-      `1:${candidate.blockHash}:${candidate.transactionHash}:${priorLogIndex}`,
+    blockNumber: (BigInt(candidate.blockNumber) - 1n).toString(),
+    blockGlobalLogIndex: 0xffff_ffff,
+    candidateId: "",
   };
 }
 
@@ -161,6 +202,153 @@ function timeoutError() {
     code: "timeout",
     retryable: true,
     countsTowardCircuit: true,
+  });
+}
+
+type CoverageFilterShape = Readonly<{
+  addressCount: number;
+  topicCount: number;
+}>;
+
+function coverageFilterShape(input: Readonly<{
+  throughBlock: bigint;
+  dynamicSources: readonly VerifiedDynamicSourceLineage[];
+}>): CoverageFilterShape {
+  const binding = getDataPipelineReleaseBinding();
+  const sourceContracts = binding.sources
+    .filter(({ startBlock }) => BigInt(startBlock) <= input.throughBlock)
+    .map(({ address, contractName }) => ({ address, contractName }))
+    .concat(input.dynamicSources.map(({ sourceAddress, contractName }) => ({
+      address: sourceAddress,
+      contractName,
+    })));
+  const contractNames = new Set(sourceContracts.map(({ contractName }) => contractName));
+  return Object.freeze({
+    addressCount: new Set(sourceContracts.map(({ address }) => address)).size,
+    topicCount: new Set(
+      [...contractNames].flatMap((contractName) =>
+        manifestEventSelectors(contractName)
+      ),
+    ).size,
+  });
+}
+
+function estimatedProviderCallsForWindow(input: Readonly<{
+  candidates: readonly EnvioCandidate[];
+  cursor: EnvioCandidateCursor;
+  throughBlock: bigint;
+  filterShape: CoverageFilterShape;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+}>): readonly [number, number] {
+  const { addressCount, topicCount } = input.filterShape;
+  if (addressCount < 1 || topicCount < 1) {
+    throw invalidInput("config", "coverage-filter");
+  }
+  const cursorBlock = BigInt(input.cursor.blockNumber);
+  const effectiveFromBlock =
+    input.cursor.blockGlobalLogIndex === 0xffff_ffff &&
+      input.cursor.candidateId === ""
+      ? cursorBlock + 1n
+      : cursorBlock;
+  const blockCount = input.throughBlock - effectiveFromBlock + 1n;
+  if (blockCount < 1n || blockCount > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw invalidInput("config", "coverage-window");
+  }
+  const filterCount = Number(blockCount) *
+    Math.ceil(addressCount / MAXIMUM_LOG_FILTER_ADDRESSES) *
+    Math.ceil(topicCount / MAXIMUM_LOG_FILTER_TOPIC0);
+  if (!Number.isSafeInteger(filterCount) || filterCount < 1) {
+    throw invalidInput("config", "coverage-filter-budget");
+  }
+  const uniqueCandidateBlocks = new Set(
+    input.candidates.map(({ blockNumber }) => blockNumber),
+  ).size;
+  const uniqueTransactions = new Set(
+    input.candidates.map(({ transactionHash }) => transactionHash),
+  ).size;
+  const uniqueCodeRequests = new Set(
+    input.candidates.map(({ blockHash, sourceAddress }) =>
+      `${blockHash}:${sourceAddress}`
+    ),
+  ).size;
+  return input.providers.map(({ client }) => {
+    const blockCalls = client.getBlocks
+      ? Math.ceil((uniqueCandidateBlocks + 1) / MAXIMUM_JSON_RPC_BATCH_SIZE)
+      : uniqueCandidateBlocks + 1;
+    const receiptCalls = client.getTransactionReceipts
+      ? Math.ceil(uniqueTransactions / MAXIMUM_JSON_RPC_BATCH_SIZE)
+      : uniqueTransactions;
+    const codeCalls = client.getBytecodes
+      ? Math.ceil(uniqueCodeRequests / MAXIMUM_JSON_RPC_BATCH_SIZE)
+      : uniqueCodeRequests;
+    const logCalls = client.getLogsBatch
+      ? Math.ceil(filterCount / MAXIMUM_JSON_RPC_BATCH_SIZE)
+      : filterCount;
+    // chain/head, candidate blocks (including safe), receipts, code, exact
+    // through-block header and the bounded log filters.
+    return 2 + blockCalls + receiptCalls + codeCalls + 1 + logCalls;
+  }) as [number, number];
+}
+
+function fitCompleteCoverageWindow(input: Readonly<{
+  candidates: readonly EnvioCandidate[];
+  cursor: EnvioCandidateCursor;
+  desiredThroughBlock: string;
+  dynamicSources: readonly VerifiedDynamicSourceLineage[];
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+}>): Readonly<{
+  candidates: readonly EnvioCandidate[];
+  throughBlock: string;
+}> {
+  // Unit-level callers may inject the verifier and deliberately omit concrete
+  // providers. Production configuration always supplies exactly two clients;
+  // only that path can be budgeted from transport capabilities.
+  if (input.providers.length !== 2) {
+    return Object.freeze({
+      candidates: Object.freeze([...input.candidates]),
+      throughBlock: input.desiredThroughBlock,
+    });
+  }
+  const cursorBlock = BigInt(input.cursor.blockNumber);
+  const minimumThrough =
+    input.cursor.blockGlobalLogIndex === 0xffff_ffff &&
+      input.cursor.candidateId === ""
+      ? cursorBlock + 1n
+      : cursorBlock;
+  let low = minimumThrough;
+  let high = BigInt(input.desiredThroughBlock);
+  let selected: bigint | null = null;
+  const filterShape = coverageFilterShape({
+    throughBlock: high,
+    dynamicSources: input.dynamicSources,
+  });
+  while (low <= high) {
+    const middle = low + (high - low) / 2n;
+    const candidates = input.candidates.filter(
+      ({ blockNumber }) => BigInt(blockNumber) <= middle,
+    );
+    const calls = estimatedProviderCallsForWindow({
+      candidates,
+      cursor: input.cursor,
+      throughBlock: middle,
+      filterShape,
+      providers: input.providers,
+    });
+    if (calls.every((count) => count <= MAXIMUM_PROVIDER_CALLS)) {
+      selected = middle;
+      low = middle + 1n;
+    } else {
+      high = middle - 1n;
+    }
+  }
+  if (selected === null) {
+    throw invalidInput("rpc", "provider-call-budget");
+  }
+  return Object.freeze({
+    candidates: Object.freeze(input.candidates.filter(
+      ({ blockNumber }) => BigInt(blockNumber) <= selected!,
+    )),
+    throughBlock: selected.toString(),
   });
 }
 
@@ -188,7 +376,9 @@ export async function runProjectorCycle(input: {
   deadlineMs?: number;
   captureSafeHead?: CaptureSafeHead;
   verifyWindow?: VerifyWindow;
+  verifyDynamicRuntimes?: VerifyDynamicRuntimes;
   verifyDynamicRuntime?: VerifyDynamicRuntime;
+  findCanonicalAncestor?: FindCanonicalAncestor;
 }) {
   const deadlineMs = input.deadlineMs ?? MAXIMUM_DEADLINE_MS;
   if (
@@ -209,22 +399,77 @@ export async function runProjectorCycle(input: {
     input.verifyWindow ?? verifyEnvioCandidateWindowWithDualRpc;
   const verifyDynamicRuntime =
     input.verifyDynamicRuntime ?? verifyDynamicRuntimeAtBlockWithDualRpc;
+  const verifyDynamicRuntimes =
+    input.verifyDynamicRuntimes ??
+    (input.verifyDynamicRuntime === undefined
+      ? verifyDynamicRuntimesAtBlockWithDualRpc
+      : null);
+  const findCanonicalAncestor =
+    input.findCanonicalAncestor ?? findCanonicalAncestorWithDualRpc;
 
   return withOverallDeadline(deadlineMs, async () => {
     // Each store method owns and closes its database transaction. All Envio
     // and RPC work deliberately occurs between these two calls.
     const plan = await input.store.readPlan();
-    const safeHead = await captureSafeHead({
-      providers: input.providers,
-      cursor: {
-        blockNumber: plan.cursor.blockNumber,
-        blockHash: plan.cursor.blockHash,
-      },
-      rpcPolicy: {
-        hardDeadlineMs: remaining(),
-        maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
-      },
-    });
+    let safeHead;
+    try {
+      safeHead = await captureSafeHead({
+        providers: input.providers,
+        cursor: {
+          blockNumber: plan.cursor.blockNumber,
+          blockHash: plan.cursor.blockHash,
+        },
+        rpcPolicy: {
+          hardDeadlineMs: remaining(),
+          maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
+        },
+      });
+    } catch (error) {
+      if (
+        !(error instanceof DataPipelineError) ||
+        error.code !== "validation_failed" ||
+        error.safeMetadata?.operation !== "safe-head-cursor-orphaned"
+      ) {
+        throw error;
+      }
+      const recoveryState = await input.store.readReorgRecoveryState({
+        plan,
+        maximumDepth: 128,
+      });
+      if (
+        recoveryState.currentReorgGeneration !==
+          plan.database.reorgGeneration
+      ) {
+        throw invalidInput("postgres", "reorg-generation");
+      }
+      const target = await findCanonicalAncestor({
+        providers: input.providers,
+        ancestors: recoveryState.ancestors,
+        genesis: recoveryState.genesis,
+        policy: {
+          maximumDepth: 128,
+          maxProviderCalls: MAXIMUM_PROVIDER_CALLS,
+          deadlineMs: remaining(),
+        },
+      });
+      const recovery = buildEnvioCursorRecoveryPlan({
+        expectedGeneration: plan.cursor.generation,
+        currentReorgGeneration: recoveryState.currentReorgGeneration,
+        target,
+      });
+      const recovered = await input.store.recoverCanonicalReorg({
+        plan,
+        recovery,
+      });
+      return {
+        status: "recovered-reorg" as const,
+        candidateCount: 0,
+        generation: recovered.generation,
+        reorgGeneration: recovered.reorgGeneration,
+        releaseCheckpointCount: recovered.releaseCheckpointCount,
+        snapshotBlock: recovery.targetBlockNumber,
+      };
+    }
     const progress = await input.envio.readProgress({
       requiredBlock: safeHead.safeBlockNumber,
     });
@@ -261,8 +506,12 @@ export async function runProjectorCycle(input: {
     const collected: EnvioCandidate[] = [];
     let pageCursor = cursor;
     let reachedTerminalBoundary = false;
-    while (collected.length < MAXIMUM_CANDIDATES_PER_COMMIT) {
-      const capacity = MAXIMUM_CANDIDATES_PER_COMMIT - collected.length;
+    // Read one sentinel beyond the atomic ceiling. An empty sentinel proves an
+    // exact-size block ended; a real sentinel lets us either cut back to the
+    // preceding complete block or fail closed when one block exceeds 4096.
+    while (collected.length <= MAXIMUM_CANDIDATES_PER_COMMIT) {
+      const capacity =
+        MAXIMUM_CANDIDATES_PER_COMMIT + 1 - collected.length;
       const limit = Math.min(PROJECTOR_PAGE_LIMIT, capacity);
       const page = await input.envio.readCandidatesWindow({
         cursor: pageCursor,
@@ -308,36 +557,40 @@ export async function runProjectorCycle(input: {
         completeBlock = prefix[prefix.length - 1]!.blockNumber;
       }
     }
-    const provisionalParent = dynamicParentForReplay(
-      exceededSingleBlockBudget ? collected : candidates,
+    if (exceededSingleBlockBudget) {
+      throw dataPipelineError({
+        dependency: "envio",
+        code: "response_oversize",
+        retryable: false,
+        countsTowardCircuit: true,
+      });
+    }
+    const provisionalParents = dynamicParentsForReplay(
+      candidates,
       plan.dynamicSources,
+      plan.provisionalSourceAddresses,
+      plan.dynamicSourceTemplates,
     );
-    if (provisionalParent) {
-      const matchingTemplates = plan.dynamicSourceTemplates.filter(
-        (template) =>
-          template.contractName === provisionalParent.childContractName &&
-          template.parentFactoryAddress ===
-            provisionalParent.parent.sourceAddress &&
-          template.parentFactoryContractName ===
-            provisionalParent.parent.contractName &&
-          template.factoryEventName === provisionalParent.parent.eventName,
-      );
-      if (matchingTemplates.length !== 1) {
-        throw invalidInput("config", "dynamic-runtime-template");
-      }
-      const dynamicTemplate = matchingTemplates[0]!;
-      const stageCursor = cursorImmediatelyBefore(provisionalParent.parent);
+    if (provisionalParents.length > 0) {
+      const parents = provisionalParents.map(({ parent }) => parent);
+      const firstParent = parents[0]!;
+      const stageCursor = cursorAtStartOfBlock(firstParent, cursor);
       const stageThrough: EnvioCandidateCursor = {
-        blockNumber: provisionalParent.parent.blockNumber,
-        blockGlobalLogIndex: provisionalParent.parent.blockGlobalLogIndex,
-        candidateId: provisionalParent.parent.candidateId,
+        blockNumber: firstParent.blockNumber,
+        blockGlobalLogIndex: 0xffff_ffff,
+        candidateId: "empty-page",
       };
       const stageEvidence = await verifyWindow({
-        candidates: [provisionalParent.parent],
+        candidates: parents,
         cursor: stageCursor,
         through: stageThrough,
         providers: input.providers,
         dynamicSources: plan.dynamicSources,
+        coverageSourceAddresses: Object.freeze([
+          ...new Set(parents.map(({ sourceAddress }) => sourceAddress)),
+        ]),
+        maximumCandidateCount:
+          PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
         coveragePolicy: {
           maximumBlockSpan: COVERAGE_BLOCK_SPAN,
           maximumRequests: 1,
@@ -347,37 +600,63 @@ export async function runProjectorCycle(input: {
           maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
         },
       });
-      const runtimeObservation = await verifyDynamicRuntime({
+      const runtimeItems = provisionalParents.map((provisionalParent) => ({
         parentCandidate: provisionalParent.parent,
         sourceAddress: provisionalParent.childSourceAddress,
         deploymentBlockNumber: provisionalParent.parent.blockNumber,
         deploymentBlockHash: provisionalParent.parent.blockHash,
-        template: dynamicTemplate,
-        parentEvidence: stageEvidence,
-        providers: input.providers,
-        deadlineMs: remaining(),
-      });
+        template: provisionalParent.template,
+      }));
+      const runtimeObservations: readonly DualRpcDynamicRuntimeObservation[] =
+        verifyDynamicRuntimes
+          ? await verifyDynamicRuntimes({
+              items: runtimeItems,
+              parentEvidence: stageEvidence,
+              providers: input.providers,
+              deadlineMs: remaining(),
+            })
+          : await Promise.all(runtimeItems.map((item) =>
+              verifyDynamicRuntime({
+                ...item,
+                parentEvidence: stageEvidence,
+                providers: input.providers,
+                deadlineMs: remaining(),
+              })
+            ));
       await input.store.stageVerifiedDynamicParents({
         plan,
-        snapshotBlock: provisionalParent.parent.blockNumber,
-        candidates: [provisionalParent.parent],
+        snapshotBlock: firstParent.blockNumber,
+        candidates: parents,
         evidence: stageEvidence,
-        runtimeObservations: [runtimeObservation],
+        runtimeObservations,
         blockComplete: false,
       });
       return {
         status: "staged-dynamic-parent" as const,
-        candidateCount: 1,
-        snapshotBlock: provisionalParent.parent.blockNumber,
+        candidateCount: parents.length,
+        snapshotBlock: firstParent.blockNumber,
       };
     }
-    if (exceededSingleBlockBudget) {
-      throw dataPipelineError({
-        dependency: "envio",
-        code: "response_oversize",
-        retryable: true,
-        countsTowardCircuit: true,
-      });
+    const fittedWindow = fitCompleteCoverageWindow({
+      candidates,
+      cursor,
+      desiredThroughBlock: completeBlock,
+      dynamicSources: plan.dynamicSources,
+      providers: input.providers,
+    });
+    candidates = fittedWindow.candidates;
+    completeBlock = fittedWindow.throughBlock;
+    // The durable non-empty cursor remains candidate-backed. Do not claim a
+    // trailing empty block in the same page: commit that reviewed candidate
+    // block first, then let the next empty-page cycle advance the verified
+    // block boundary. This preserves the database evidence shape and avoids a
+    // permanent candidate-at-N / safe-head-at-N+k validation loop.
+    const terminalCandidate = candidates.at(-1);
+    if (
+      terminalCandidate !== undefined &&
+      BigInt(completeBlock) > BigInt(terminalCandidate.blockNumber)
+    ) {
+      completeBlock = terminalCandidate.blockNumber;
     }
     const through: EnvioCandidateCursor = {
       blockNumber: completeBlock,
@@ -390,6 +669,8 @@ export async function runProjectorCycle(input: {
       through,
       providers: input.providers,
       dynamicSources: plan.dynamicSources,
+      maximumCandidateCount:
+        PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
       coveragePolicy: {
         maximumBlockSpan: COVERAGE_BLOCK_SPAN,
         maximumRequests: MAXIMUM_COVERAGE_REQUESTS,

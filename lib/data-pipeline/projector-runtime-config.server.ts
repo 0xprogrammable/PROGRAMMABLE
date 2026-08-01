@@ -37,7 +37,7 @@ import {
 type Environment = Readonly<Record<string, string | undefined>>;
 
 const PROJECTOR_DEADLINE_MS = 75_000;
-const INGESTION_DEADLINE_MS = 10_000;
+const INGESTION_DEADLINE_MS = 60_000;
 const RELEASE_PROJECTION_DEADLINE_MS = 10_000;
 const PROJECTOR_CLOSE_RESERVE_MS = 5_000;
 const MINIMUM_OPERATION_DEADLINE_MS = 250;
@@ -58,7 +58,7 @@ const BROWSER_FORBIDDEN_NAMES = Object.freeze([
 
 type StagedDynamicParentResult = Readonly<{
   status: "staged-dynamic-parent";
-  candidateCount: 1;
+  candidateCount: number;
   snapshotBlock: string;
 }>;
 
@@ -71,7 +71,10 @@ function parseStagedDynamicParentResult(
   const candidate = value as Record<string, unknown>;
   if (candidate.status !== "staged-dynamic-parent") return null;
   if (
-    candidate.candidateCount !== 1 ||
+    typeof candidate.candidateCount !== "number" ||
+    !Number.isSafeInteger(candidate.candidateCount) ||
+    candidate.candidateCount < 1 ||
+    candidate.candidateCount > PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP ||
     typeof candidate.snapshotBlock !== "string" ||
     !/^(?:0|[1-9]\d*)$/u.test(candidate.snapshotBlock) ||
     candidate.snapshotBlock.length > 78 ||
@@ -81,7 +84,7 @@ function parseStagedDynamicParentResult(
   }
   return Object.freeze({
     status: "staged-dynamic-parent" as const,
-    candidateCount: 1 as const,
+    candidateCount: candidate.candidateCount,
     snapshotBlock: candidate.snapshotBlock,
   });
 }
@@ -348,10 +351,14 @@ export async function runConfiguredProjectorCycle(
       const fairShare = Math.floor(available / operationsRemainingInRound);
       if (fairShare < MINIMUM_OPERATION_DEADLINE_MS) return null;
       return Math.min(
-        INGESTION_DEADLINE_MS,
         RELEASE_PROJECTION_DEADLINE_MS,
         fairShare,
       );
+    };
+    const ingestionOperationDeadline = () => {
+      const available = remainingRuntimeMs() - PROJECTOR_CLOSE_RESERVE_MS;
+      if (available < MINIMUM_OPERATION_DEADLINE_MS) return null;
+      return Math.min(INGESTION_DEADLINE_MS, available);
     };
     const ingestionStore = dependencies.createStore({
       executor: writerExecutor,
@@ -395,6 +402,7 @@ export async function runConfiguredProjectorCycle(
       pageCount: number;
       snapshotBlock: string | null;
       generation: string | null;
+      processedAtomicGroup: boolean;
     } = {
       failed: false,
       committed: false,
@@ -404,6 +412,7 @@ export async function runConfiguredProjectorCycle(
       pageCount: 0,
       snapshotBlock: null,
       generation: null,
+      processedAtomicGroup: false,
     };
     const projectionStates = config.releaseScopes.map((scope) => ({
       releaseId: scope.releaseId,
@@ -437,7 +446,7 @@ export async function runConfiguredProjectorCycle(
       let stopAfterIngestionFailure = false;
       let idleProjectionCount = 0;
 
-      const ingestionDeadline = operationDeadline(operationsRemaining);
+      const ingestionDeadline = ingestionOperationDeadline();
       if (ingestionDeadline === null) {
         stoppedForDeadline = true;
         break;
@@ -463,13 +472,16 @@ export async function runConfiguredProjectorCycle(
           if (
             !Number.isSafeInteger(result.candidateCount) ||
             result.candidateCount < 0 ||
-            result.candidateCount > PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+            result.candidateCount >
+              PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP
           ) {
             return invalidRuntimeConfig();
           }
           ingestionState.pageCount += 1;
           ingestionState.snapshotBlock = result.snapshotBlock;
           ingestionState.candidateCount += result.candidateCount;
+          ingestionState.processedAtomicGroup ||=
+            result.candidateCount > PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE;
           if (result.status === "committed") {
             ingestionState.committed = true;
             ingestionState.generation = result.generation;
@@ -575,6 +587,12 @@ export async function runConfiguredProjectorCycle(
       ) {
         break;
       }
+      if (ingestionState.processedAtomicGroup) {
+        // One oversized exact block is the final ingestion unit for this
+        // invocation. Remaining normal pages are deferred to the next lease.
+        terminalSweepComplete = false;
+        break;
+      }
     }
 
     if (
@@ -600,6 +618,7 @@ export async function runConfiguredProjectorCycle(
             candidateCount: ingestionState.candidateCount,
             pageCount: ingestionState.pageCount,
             snapshotBlock: ingestionState.snapshotBlock,
+            atomicGroupCount: 1 as const,
           })
         : ingestionState.committed
         ? Object.freeze({
@@ -608,6 +627,9 @@ export async function runConfiguredProjectorCycle(
             pageCount: ingestionState.pageCount,
             snapshotBlock: ingestionState.snapshotBlock,
             generation: ingestionState.generation,
+            ...(ingestionState.processedAtomicGroup
+              ? { atomicGroupCount: 1 as const }
+              : {}),
           })
         : ingestionState.committedEmpty
           ? Object.freeze({

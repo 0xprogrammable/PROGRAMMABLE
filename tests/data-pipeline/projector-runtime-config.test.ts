@@ -299,7 +299,7 @@ describe("configured projector runtime", () => {
         store: ingestionStore,
         envio,
         providers,
-        deadlineMs: 10_000,
+        deadlineMs: 60_000,
       }),
     );
     expect(createReleaseStore).toHaveBeenCalledTimes(10);
@@ -419,6 +419,7 @@ describe("configured projector runtime", () => {
         candidateCount: 1,
         pageCount: 1,
         snapshotBlock: "25650123",
+        atomicGroupCount: 1,
       },
       projections: [
         "classic-v2",
@@ -453,7 +454,7 @@ describe("configured projector runtime", () => {
     const executor = { close };
     const runCycle = vi.fn(async () => ({
       status: "staged-dynamic-parent" as const,
-      candidateCount: 2,
+      candidateCount: 4_097,
       snapshotBlock: "25650123",
     }));
     const runReleaseCycle = vi.fn();

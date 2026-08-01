@@ -30,6 +30,7 @@ type SafeCheckpoint = Readonly<{
   pageCount?: number;
   snapshotBlock?: string;
   generation?: string | null;
+  atomicGroupCount?: number;
 }>;
 
 const RELEASE_IDS = Object.freeze([
@@ -93,9 +94,24 @@ function safeCheckpoint(value: unknown): SafeCheckpoint {
     !Number.isSafeInteger(pageCount) ||
     pageCount < 1 ||
     pageCount > PROJECTOR_MAXIMUM_RUNTIME_ROUNDS ||
-    candidateCount >
-      pageCount * PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE ||
     snapshotBlock === null
+  ) {
+    throw new Error("Invalid projector checkpoint");
+  }
+  const atomicGroupCount = value.atomicGroupCount === undefined
+    ? 0
+    : typeof value.atomicGroupCount === "number"
+      ? value.atomicGroupCount
+      : Number.NaN;
+  const maximumCandidateCount =
+    atomicGroupCount * PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP +
+    (pageCount - atomicGroupCount) * PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE;
+  if (
+    !Number.isSafeInteger(atomicGroupCount) ||
+    atomicGroupCount < 0 ||
+    atomicGroupCount > 1 ||
+    atomicGroupCount > pageCount ||
+    candidateCount > maximumCandidateCount
   ) {
     throw new Error("Invalid projector checkpoint");
   }
@@ -103,8 +119,7 @@ function safeCheckpoint(value: unknown): SafeCheckpoint {
     if (
       candidateCount < 1 ||
       value.generation !== undefined ||
-      candidateCount >
-        pageCount * PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+      atomicGroupCount !== 1
     ) {
       throw new Error("Invalid projector checkpoint");
     }
@@ -113,10 +128,13 @@ function safeCheckpoint(value: unknown): SafeCheckpoint {
       candidateCount,
       pageCount,
       snapshotBlock,
+      atomicGroupCount: 1,
     });
   }
   if (status === "idle") {
-    if (candidateCount !== 0) throw new Error("Invalid projector checkpoint");
+    if (candidateCount !== 0 || atomicGroupCount !== 0) {
+      throw new Error("Invalid projector checkpoint");
+    }
     return Object.freeze({
       status,
       candidateCount,
@@ -129,7 +147,8 @@ function safeCheckpoint(value: unknown): SafeCheckpoint {
   if (
     generation === null ||
     (status === "committed" && candidateCount === 0) ||
-    (status === "committed-empty" && candidateCount !== 0)
+    (status === "committed-empty" &&
+      (candidateCount !== 0 || atomicGroupCount !== 0))
   ) {
     throw new Error("Invalid projector checkpoint");
   }
@@ -139,6 +158,7 @@ function safeCheckpoint(value: unknown): SafeCheckpoint {
     pageCount,
     snapshotBlock,
     generation,
+    ...(atomicGroupCount === 1 ? { atomicGroupCount } : {}),
   });
 }
 

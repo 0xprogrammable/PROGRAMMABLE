@@ -39,6 +39,7 @@ vi.mock(
 import {
   verifyDynamicRuntimeAtActivationWithDualRpc,
   verifyDynamicRuntimeAtBlockWithDualRpc,
+  verifyDynamicRuntimesAtBlockWithDualRpc,
   verifyEnvioCandidateWindowWithDualRpc,
   type CandidateRpcClient,
   type CandidateRpcLog,
@@ -360,7 +361,7 @@ function dynamicParentEvidence(
       fromBlockNumber: (BLOCK_NUMBER - 1n).toString(),
       throughBlockNumber: BLOCK_NUMBER.toString(),
       throughBlockHash: BLOCK_HASH,
-      throughBlockGlobalLogIndex: String(parent.blockGlobalLogIndex),
+      throughBlockGlobalLogIndex: String(0xffff_ffff),
       filterCommitment: `0x${"22".repeat(32)}`,
       providerLogCommitments: [
         `0x${"33".repeat(32)}`,
@@ -407,6 +408,21 @@ function canonicalLog(overrides: Partial<CandidateRpcLog> = {}): CandidateRpcLog
 }
 
 function client(logs: readonly CandidateRpcLog[]): CandidateRpcClient {
+  const filteredLogs = ({
+    addresses,
+    topic0,
+    fromBlock,
+    toBlock,
+  }: Parameters<NonNullable<CandidateRpcClient["getLogs"]>>[0]) =>
+    logs.filter(
+      (log) =>
+        log.blockNumber !== null &&
+        log.blockNumber >= fromBlock &&
+        log.blockNumber <= toBlock &&
+        addresses.includes(log.address as `0x${string}`) &&
+        log.topics[0] !== undefined &&
+        topic0.includes(log.topics[0] as `0x${string}`),
+    );
   return {
     getChainId: async () => 1,
     getBlockNumber: async () => SAFE_BLOCK_NUMBER + 12n,
@@ -431,13 +447,9 @@ function client(logs: readonly CandidateRpcLog[]): CandidateRpcClient {
       logs: [canonicalLog()],
     }),
     getBytecode: async () => "0x6001600055",
-    getLogs: vi.fn(async ({ fromBlock, toBlock }) =>
-      logs.filter(
-        (log) =>
-          log.blockNumber !== null &&
-          log.blockNumber >= fromBlock &&
-          log.blockNumber <= toBlock,
-      ),
+    getLogs: vi.fn(async (filter) => filteredLogs(filter)),
+    getLogsBatch: vi.fn(async ({ requests }) =>
+      requests.map(filteredLogs),
     ),
   };
 }
@@ -598,8 +610,103 @@ describe("dual-RPC exact Envio window coverage", () => {
     expect(second.getBytecode).toHaveBeenCalledTimes(1);
     expect(first.getBytecode).toHaveBeenCalledWith({
       address: DYNAMIC_CHILD,
-      blockNumber: BLOCK_NUMBER,
+      blockHash: BLOCK_HASH,
+      requireCanonical: true,
     });
+  });
+
+  it("batches more than 100 dynamic runtime reads without losing exact block binding", async () => {
+    const first = client([canonicalLog()]);
+    const second = client([canonicalLog()]);
+    const providers = [
+      provider("alchemy-mainnet", first),
+      provider("quicknode-mainnet", second),
+    ] as const;
+    const items = Array.from({ length: 101 }, (_, index) => {
+      const sourceAddress = `0x${(index + 1_000)
+        .toString(16)
+        .padStart(40, "0")}` as const;
+      const transactionHash = `0x${(index + 1)
+        .toString(16)
+        .padStart(64, "0")}` as const;
+      const parentCandidate = {
+        ...dynamicParentCandidate(),
+        candidateId: `1:${BLOCK_HASH}:${transactionHash}:${index}`,
+        transactionHash,
+        transactionIndex: index,
+        blockGlobalLogIndex: index,
+        decodedPayload: {
+          ...dynamicParentCandidate().decodedPayload,
+          vault: sourceAddress,
+        },
+      } satisfies EnvioCandidate;
+      return {
+        parentCandidate,
+        sourceAddress,
+        deploymentBlockNumber: BLOCK_NUMBER.toString(),
+        deploymentBlockHash: BLOCK_HASH,
+        template: dynamicTemplate(),
+      } as const;
+    });
+    const baseParentEvidence = dynamicParentEvidence(providers);
+    const baseCandidateEvidence = baseParentEvidence.candidates[0]!;
+    const parentEvidence: DualRpcCandidateWindowEvidence = {
+      ...baseParentEvidence,
+      executionTrace: {
+        ...baseParentEvidence.executionTrace,
+        candidateBatchSize: items.length,
+      },
+      candidates: items.map(({ parentCandidate }) => ({
+        ...baseCandidateEvidence,
+        candidateId: parentCandidate.candidateId,
+        payloadHash: parentCandidate.payloadHash,
+        transactionHash: parentCandidate.transactionHash,
+        transactionIndex: parentCandidate.transactionIndex,
+        receiptLogOrdinal: parentCandidate.blockGlobalLogIndex,
+      })),
+      coveredCandidateCount: items.length,
+    };
+    const installBatchReader = (rpcClient: CandidateRpcClient) => {
+      rpcClient.getBytecode = vi.fn(rpcClient.getBytecode);
+      rpcClient.getBytecodes = vi.fn(async (
+        { requests }:
+          Parameters<NonNullable<CandidateRpcClient["getBytecodes"]>>[0],
+      ) => requests.map(({ address }) => address));
+    };
+    installBatchReader(first);
+    installBatchReader(second);
+
+    const observations = await verifyDynamicRuntimesAtBlockWithDualRpc({
+      items,
+      parentEvidence,
+      providers,
+      deadlineMs: 2_000,
+    });
+
+    expect(observations).toHaveLength(101);
+    expect(observations.map(({ sourceAddress }) => sourceAddress)).toEqual(
+      items.map(({ sourceAddress }) => sourceAddress),
+    );
+    for (const rpcClient of [first, second]) {
+      expect(rpcClient.getBytecodes).toHaveBeenCalledTimes(2);
+      expect(rpcClient.getBytecode).not.toHaveBeenCalled();
+      const requests = vi.mocked(rpcClient.getBytecodes!).mock.calls.flatMap(
+        ([input]) => input.requests,
+      );
+      expect(requests).toHaveLength(101);
+      expect(
+        vi.mocked(rpcClient.getBytecodes!).mock.calls.map(
+          ([input]) => input.requests.length,
+        ),
+      ).toEqual([100, 1]);
+      expect(requests).toEqual(
+        items.map(({ sourceAddress }) => ({
+          address: sourceAddress,
+          blockHash: BLOCK_HASH,
+          requireCanonical: true,
+        })),
+      );
+    }
   });
 
   it("fails closed when providers disagree on the dynamic child bytecode", async () => {
@@ -737,6 +844,39 @@ describe("dual-RPC exact Envio window coverage", () => {
     ).rejects.toMatchObject({ dependency: "rpc", code: "validation_failed" });
   });
 
+  it("fails closed on a provider page above the exact 10,000-log cap", async () => {
+    const oversizedPage = Array.from(
+      { length: 10_001 },
+      () => canonicalLog(),
+    );
+    const first = client([canonicalLog()]);
+    const second = client([canonicalLog()]);
+    first.getLogsBatch = vi.fn(async ({ requests }) =>
+      requests.map(() => oversizedPage),
+    );
+
+    await expect(
+      verifyEnvioCandidateWindowWithDualRpc({
+        candidates: [candidate()],
+        cursor: {
+          blockNumber: (BLOCK_NUMBER - 1n).toString(),
+          blockGlobalLogIndex: -1,
+          candidateId: "",
+        },
+        through: {
+          blockNumber: BLOCK_NUMBER.toString(),
+          blockGlobalLogIndex: 7,
+          candidateId: candidate().candidateId,
+        },
+        providers: [
+          provider("alchemy-mainnet", first),
+          provider("quicknode-mainnet", second),
+        ],
+        rpcPolicy: { maxAttempts: 1 },
+      }),
+    ).rejects.toMatchObject({ dependency: "rpc", code: "validation_failed" });
+  });
+
   it("bounds getLogs block ranges and request count", async () => {
     const first = client([canonicalLog()]);
     const second = client([canonicalLog()]);
@@ -760,10 +900,16 @@ describe("dual-RPC exact Envio window coverage", () => {
       rpcPolicy: { maxAttempts: 1 },
     });
     for (const rpcClient of [first, second]) {
-      const getLogs = vi.mocked(rpcClient.getLogs!);
-      expect(getLogs).toHaveBeenCalledTimes(3);
-      for (const [request] of getLogs.mock.calls) {
-        expect(request.toBlock - request.fromBlock + 1n).toBeLessThanOrEqual(500n);
+      const getLogsBatch = vi.mocked(rpcClient.getLogsBatch!);
+      expect(getLogsBatch).toHaveBeenCalledTimes(13);
+      for (const [batch] of getLogsBatch.mock.calls) {
+        expect(batch.requests.length).toBeLessThanOrEqual(100);
+        for (const request of batch.requests) {
+          expect(request.toBlock - request.fromBlock + 1n).toBe(1n);
+          expect(request.addresses.length).toBeLessThanOrEqual(512);
+          expect(request.topic0.length).toBeGreaterThan(0);
+          expect(request.topic0.length).toBeLessThanOrEqual(64);
+        }
       }
     }
   });
@@ -771,6 +917,8 @@ describe("dual-RPC exact Envio window coverage", () => {
   it("fails closed when the provider call budget is insufficient", async () => {
     const first = client([canonicalLog()]);
     const second = client([canonicalLog()]);
+    first.getLogsBatch = undefined;
+    second.getLogsBatch = undefined;
     await expect(
       verifyEnvioCandidateWindowWithDualRpc({
         candidates: [candidate()],
@@ -796,6 +944,8 @@ describe("dual-RPC exact Envio window coverage", () => {
   it("does not let getLogs retries amplify past the physical call cap", async () => {
     const first = client([canonicalLog()]);
     const second = client([canonicalLog()]);
+    first.getLogsBatch = undefined;
+    second.getLogsBatch = undefined;
     first.getLogs = vi
       .fn<NonNullable<CandidateRpcClient["getLogs"]>>()
       .mockRejectedValueOnce(new Error("429"))
@@ -830,10 +980,12 @@ describe("dual-RPC exact Envio window coverage", () => {
         },
       }),
     ).rejects.toMatchObject({
-      code: "dependency_unavailable",
+      code: "invalid_input",
     });
-    expect(first.getLogs).toHaveBeenCalledTimes(1);
-    expect(second.getLogs).toHaveBeenCalledTimes(1);
+    // Preflight accounts for the whole physical shape and rejects before a
+    // retryable provider call can amplify beyond the configured budget.
+    expect(first.getLogs).not.toHaveBeenCalled();
+    expect(second.getLogs).not.toHaveBeenCalled();
   });
 
   it("enforces one hard deadline across batch and coverage", async () => {

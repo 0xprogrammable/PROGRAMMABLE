@@ -345,6 +345,11 @@ describe("dual-RPC Envio candidate verification", () => {
       expect(rpcClient.getBlock).toHaveBeenCalledTimes(2);
       expect(rpcClient.getTransactionReceipt).toHaveBeenCalledTimes(1);
       expect(rpcClient.getBytecode).toHaveBeenCalledTimes(1);
+      expect(rpcClient.getBytecode).toHaveBeenCalledWith({
+        address: SOURCE,
+        blockHash: BLOCK_HASH,
+        requireCanonical: true,
+      });
     }
   });
 
@@ -389,6 +394,187 @@ describe("dual-RPC Envio candidate verification", () => {
     expect(batch.candidates).toHaveLength(40);
     expect(batch.executionTrace.candidateBatchSize).toBe(40);
     expect(batch.executionTrace.providerCallCounts).toEqual([6, 6]);
+  });
+
+  it("verifies a hot block with more than 128 distinct transactions through bounded RPC batches", async () => {
+    const candidates = Array.from({ length: 256 }, (_, index) => {
+      const transactionHash = `0x${(index + 1)
+        .toString(16)
+        .padStart(64, "0")}` as const;
+      return {
+        ...candidate(),
+        candidateId: `1:${BLOCK_HASH}:${transactionHash}:${index}`,
+        transactionHash,
+        transactionIndex: index,
+        blockGlobalLogIndex: index,
+      } satisfies EnvioCandidate;
+    });
+    const receipts = new Map(
+      candidates.map((entry) => [
+        entry.transactionHash,
+        {
+          status: "success" as const,
+          blockNumber: CANDIDATE_BLOCK,
+          blockHash: BLOCK_HASH,
+          transactionHash: entry.transactionHash,
+          transactionIndex: entry.transactionIndex,
+          logs: [{
+            address: SOURCE,
+            blockNumber: CANDIDATE_BLOCK,
+            blockHash: BLOCK_HASH,
+            transactionHash: entry.transactionHash,
+            transactionIndex: entry.transactionIndex,
+            logIndex: entry.blockGlobalLogIndex,
+            removed: false,
+            topics: [TOPIC],
+            data: RAW_DATA,
+          }],
+        } satisfies CandidateRpcReceipt,
+      ] as const),
+    );
+    const batchedClient = () => {
+      const value = client();
+      value.getTransactionReceipt = vi.fn(value.getTransactionReceipt);
+      value.getBytecode = vi.fn(value.getBytecode);
+      value.getTransactionReceipts = vi.fn(async ({ hashes }) =>
+        hashes.map((hash: `0x${string}`) => receipts.get(hash)!),
+      );
+      value.getBytecodes = vi.fn(async ({ requests }) =>
+        requests.map(() => "0x60016000" as const),
+      );
+      return value;
+    };
+    const first = batchedClient();
+    const second = batchedClient();
+
+    const batch = await verifyEnvioCandidateBatchWithDualRpc({
+      candidates,
+      maximumCandidateCount: 4_096,
+      providers: [
+        provider("alchemy-mainnet", first),
+        provider("quicknode-mainnet", second),
+      ],
+      rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
+    });
+
+    expect(batch.candidates).toHaveLength(256);
+    expect(batch.executionTrace.providerCallCounts).toEqual([8, 8]);
+    for (const rpcClient of [first, second]) {
+      expect(rpcClient.getTransactionReceipts).toHaveBeenCalledTimes(3);
+      expect(rpcClient.getBytecodes).toHaveBeenCalledTimes(1);
+      expect(rpcClient.getTransactionReceipt).not.toHaveBeenCalled();
+      expect(rpcClient.getBytecode).not.toHaveBeenCalled();
+      expect(rpcClient.getBytecodes).toHaveBeenCalledWith({
+        requests: [{
+          address: SOURCE,
+          blockHash: BLOCK_HASH,
+          requireCanonical: true,
+        }],
+      });
+    }
+  });
+
+  it("verifies a sparse backlog spanning more than 128 candidate blocks through bounded RPC batches", async () => {
+    const blockCount = 256;
+    const candidates = Array.from({ length: blockCount }, (_, index) => {
+      const blockNumber = CANDIDATE_BLOCK + BigInt(index);
+      const blockHash = `0x${(10_000 + index)
+        .toString(16)
+        .padStart(64, "0")}` as const;
+      const transactionHash = `0x${(20_000 + index)
+        .toString(16)
+        .padStart(64, "0")}` as const;
+      return {
+        ...candidate(),
+        candidateId: `1:${blockHash}:${transactionHash}:0`,
+        blockNumber: blockNumber.toString(),
+        blockHash,
+        blockTimestamp: String(1_785_480_000 + index),
+        transactionHash,
+        transactionIndex: 0,
+        blockGlobalLogIndex: 0,
+      } satisfies EnvioCandidate;
+    });
+    const byBlock = new Map(candidates.map((entry) => [
+      entry.blockNumber,
+      entry,
+    ] as const));
+    const receipts = new Map(candidates.map((entry) => [
+      entry.transactionHash,
+      {
+        status: "success" as const,
+        blockNumber: BigInt(entry.blockNumber),
+        blockHash: entry.blockHash,
+        transactionHash: entry.transactionHash,
+        transactionIndex: 0,
+        logs: [{
+          address: SOURCE,
+          blockNumber: BigInt(entry.blockNumber),
+          blockHash: entry.blockHash,
+          transactionHash: entry.transactionHash,
+          transactionIndex: 0,
+          logIndex: 0,
+          removed: false,
+          topics: [TOPIC],
+          data: RAW_DATA,
+        }],
+      } satisfies CandidateRpcReceipt,
+    ] as const));
+    const safeBlock = CANDIDATE_BLOCK + BigInt(blockCount) + 2n;
+    const batchedClient = () => {
+      const value = client();
+      value.getBlockNumber = vi.fn(async () => safeBlock + 12n);
+      value.getBlock = vi.fn(value.getBlock);
+      value.getTransactionReceipt = vi.fn(value.getTransactionReceipt);
+      value.getBytecode = vi.fn(value.getBytecode);
+      value.getBlocks = vi.fn(async ({ blockNumbers }) =>
+        blockNumbers.map((blockNumber: bigint) => {
+          if (blockNumber === safeBlock) {
+            return {
+              number: safeBlock,
+              hash: SAFE_BLOCK_HASH,
+              timestamp: 1_785_481_000n,
+            };
+          }
+          const entry = byBlock.get(blockNumber.toString())!;
+          return {
+            number: blockNumber,
+            hash: entry.blockHash,
+            timestamp: BigInt(entry.blockTimestamp),
+          };
+        }),
+      );
+      value.getTransactionReceipts = vi.fn(async ({ hashes }) =>
+        hashes.map((hash: `0x${string}`) => receipts.get(hash)!),
+      );
+      value.getBytecodes = vi.fn(async ({ requests }) =>
+        requests.map(() => "0x60016000" as const),
+      );
+      return value;
+    };
+    const first = batchedClient();
+    const second = batchedClient();
+
+    const batch = await verifyEnvioCandidateBatchWithDualRpc({
+      candidates,
+      maximumCandidateCount: 4_096,
+      providers: [
+        provider("alchemy-mainnet", first),
+        provider("quicknode-mainnet", second),
+      ],
+      rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
+    });
+
+    expect(batch.candidates).toHaveLength(blockCount);
+    expect(batch.executionTrace.providerCallCounts).toEqual([11, 11]);
+    for (const rpcClient of [first, second]) {
+      expect(rpcClient.getBlocks).toHaveBeenCalledTimes(3);
+      expect(rpcClient.getTransactionReceipts).toHaveBeenCalledTimes(3);
+      expect(rpcClient.getBytecodes).toHaveBeenCalledTimes(3);
+      expect(rpcClient.getBlock).not.toHaveBeenCalled();
+      expect(rpcClient.getTransactionReceipt).not.toHaveBeenCalled();
+      expect(rpcClient.getBytecode).not.toHaveBeenCalled();
+    }
   });
 
   it("proves a finalized candidate against matching blocks, receipts, logs, and code", async () => {
@@ -460,6 +646,55 @@ describe("dual-RPC Envio candidate verification", () => {
       sourceCodeHash: keccak256(DYNAMIC_CODE),
     });
     expect(result).not.toHaveProperty("factoryOccurrenceFingerprint");
+  });
+
+  it("rejects same-height child logs from a fork that does not contain the activation", async () => {
+    const replacementHash = `0x${"ab".repeat(32)}` as const;
+    const replacementCandidate: EnvioCandidate = {
+      ...dynamicCandidate(),
+      candidateId:
+        `1:${replacementHash}:${DYNAMIC_TRANSACTION_HASH}:5`,
+      blockHash: replacementHash,
+      blockGlobalLogIndex: 5,
+    };
+
+    await expect(
+      verifyEnvioCandidateBatchWithDualRpc({
+        candidates: [replacementCandidate],
+        dynamicSources: [{
+          attestationId: "10000000-0000-4000-8000-000000000001",
+          sourceAddress: DYNAMIC_SOURCE,
+          contractName: "ClassicV3RewardVault",
+          model: "classic",
+          releaseVersion: "classic-v3",
+          factoryAddress:
+            "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
+          factoryContractName: "ClassicV3RewardVaultFactory",
+          parentOccurrenceId: "10000000-0000-4000-8000-000000000002",
+          factoryBlockNumber: DYNAMIC_BLOCK.toString(),
+          factoryBlockGlobalLogIndex: "3",
+          activationCandidateId:
+            `1:${DYNAMIC_BLOCK_HASH}:${DYNAMIC_TRANSACTION_HASH}:4`,
+          activationBlockNumber: DYNAMIC_BLOCK.toString(),
+          activationBlockHash: DYNAMIC_BLOCK_HASH,
+          activationBlockGlobalLogIndex: "4",
+          expectedExactRuntimeCodeHash: keccak256(DYNAMIC_CODE),
+          expectedNormalizedRuntimeCodeHash: keccak256(DYNAMIC_CODE),
+          expectedImmutableReferencesCommitment: `0x${"bc".repeat(32)}`,
+          expectedRuntimeByteLength: "5",
+          immutableReferences: [],
+        }],
+        requireDynamicLineage: true,
+        providers: [
+          provider("alchemy-mainnet", dynamicClient()),
+          provider("quicknode-mainnet", dynamicClient()),
+        ],
+      }),
+    ).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+      safeMetadata: { operation: "dynamic-source-lineage" },
+    });
   });
 
   it("keeps shared static hook and factory events release-neutral", async () => {
@@ -869,6 +1104,113 @@ describe("dual-RPC Envio candidate verification", () => {
     expect(second.getChainId).toHaveBeenCalledTimes(2);
   });
 
+  it("fails closed when a provider changes the safe block during a same-height cursor read", async () => {
+    const replacementHash = `0x${"44".repeat(32)}` as const;
+    const temporallyInconsistentClient = () =>
+      client({
+        getBlock: vi
+          .fn<CandidateRpcClient["getBlock"]>()
+          .mockResolvedValueOnce({
+            number: SAFE_BLOCK,
+            hash: SAFE_BLOCK_HASH,
+            timestamp: 1785480003n,
+          })
+          .mockResolvedValueOnce({
+            number: SAFE_BLOCK,
+            hash: replacementHash,
+            timestamp: 1785480004n,
+          }),
+      });
+
+    await expect(
+      readDualRpcSafeHead({
+        cursor: {
+          blockNumber: SAFE_BLOCK.toString(),
+          blockHash: SAFE_BLOCK_HASH,
+        },
+        providers: [
+          provider("alchemy-mainnet", temporallyInconsistentClient()),
+          provider("quicknode-mainnet", temporallyInconsistentClient()),
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "validation_failed",
+      safeMetadata: { operation: "safe-head-provider-disagreement" },
+    });
+  });
+
+  it("distinguishes a jointly observed orphaned cursor from provider disagreement", async () => {
+    const replacementHash = `0x${"44".repeat(32)}` as const;
+    const orphanAwareClient = () =>
+      client({
+        getBlock: vi.fn(async ({ blockNumber }) =>
+          blockNumber === SAFE_BLOCK
+            ? {
+                number: SAFE_BLOCK,
+                hash: SAFE_BLOCK_HASH,
+                timestamp: 1785480003n,
+              }
+            : {
+                number: CANDIDATE_BLOCK,
+                hash: replacementHash,
+                timestamp: 1785480000n,
+              },
+        ),
+      });
+
+    await expect(
+      readDualRpcSafeHead({
+        cursor: {
+          blockNumber: CANDIDATE_BLOCK.toString(),
+          blockHash: BLOCK_HASH,
+        },
+        providers: [
+          provider("alchemy-mainnet", orphanAwareClient()),
+          provider("quicknode-mainnet", orphanAwareClient()),
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "validation_failed",
+      safeMetadata: { operation: "safe-head-cursor-orphaned" },
+    });
+  });
+
+  it("never treats provider disagreement as a recoverable cursor orphan", async () => {
+    const replacementHash = `0x${"44".repeat(32)}` as const;
+    const first = client();
+    const second = client({
+      getBlock: vi.fn(async ({ blockNumber }) =>
+        blockNumber === SAFE_BLOCK
+          ? {
+              number: SAFE_BLOCK,
+              hash: SAFE_BLOCK_HASH,
+              timestamp: 1785480003n,
+            }
+          : {
+              number: CANDIDATE_BLOCK,
+              hash: replacementHash,
+              timestamp: 1785480000n,
+            },
+      ),
+    });
+
+    await expect(
+      readDualRpcSafeHead({
+        cursor: {
+          blockNumber: CANDIDATE_BLOCK.toString(),
+          blockHash: BLOCK_HASH,
+        },
+        providers: [
+          provider("alchemy-mainnet", first),
+          provider("quicknode-mainnet", second),
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "validation_failed",
+      safeMetadata: { operation: "safe-head-provider-disagreement" },
+    });
+  });
+
   it("charges both metadata eth_calls on every physical retry", async () => {
     const first = client();
     const second = client();
@@ -883,7 +1225,11 @@ describe("dual-RPC Envio candidate verification", () => {
 
     await expect(
       readDualRpcTokenMetadata({
-        tokens: [{ token: SOURCE, blockNumber: CANDIDATE_BLOCK.toString() }],
+        tokens: [{
+          token: SOURCE,
+          blockNumber: CANDIDATE_BLOCK.toString(),
+          blockHash: BLOCK_HASH,
+        }],
         providers: [
           provider("alchemy-mainnet", first),
           provider("quicknode-mainnet", second),
@@ -900,6 +1246,16 @@ describe("dual-RPC Envio candidate verification", () => {
     });
     expect(first.readErc20Metadata).toHaveBeenCalledTimes(1);
     expect(second.readErc20Metadata).toHaveBeenCalledTimes(1);
+    expect(first.readErc20Metadata).toHaveBeenCalledWith({
+      address: SOURCE,
+      blockHash: BLOCK_HASH,
+      requireCanonical: true,
+    });
+    expect(second.readErc20Metadata).toHaveBeenCalledWith({
+      address: SOURCE,
+      blockHash: BLOCK_HASH,
+      requireCanonical: true,
+    });
   });
 
   it("rejects a forged candidate envelope or an unpinned runtime", async () => {

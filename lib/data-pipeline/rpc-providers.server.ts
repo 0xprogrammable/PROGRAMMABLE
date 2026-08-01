@@ -3,14 +3,19 @@ import "server-only";
 import {
   createPublicClient,
   http,
+  numberToHex,
   type Hex,
+  type RpcLog,
 } from "viem";
 import { mainnet } from "viem/chains";
 
 import type {
   CandidateRpcRewardSnapshot,
   CandidateRpcClient,
+  CandidateRpcLog,
+  CandidateRpcLogFilter,
   CandidateRpcProvider,
+  CandidateRpcReceipt,
 } from "./dual-rpc";
 import { invalidInput } from "./errors";
 import {
@@ -171,6 +176,75 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
       timeout: 5_000,
     }),
   });
+  const batchClient = createPublicClient({
+    chain: mainnet,
+    transport: http(endpoint, {
+      batch: { batchSize: 100, wait: 0 },
+      fetchOptions: { redirect: "error" },
+      retryCount: 0,
+      timeout: 5_000,
+    }),
+  });
+  const normalizeReceipt = (
+    receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>>,
+  ): CandidateRpcReceipt => ({
+    status: receipt.status,
+    blockNumber: receipt.blockNumber,
+    blockHash: receipt.blockHash,
+    transactionHash: receipt.transactionHash,
+    transactionIndex: receipt.transactionIndex,
+    logs: receipt.logs.map((log) => ({
+      address: log.address,
+      blockNumber: log.blockNumber,
+      blockHash: log.blockHash,
+      transactionHash: log.transactionHash,
+      transactionIndex: log.transactionIndex,
+      logIndex: log.logIndex,
+      removed: log.removed ?? false,
+      topics: log.topics as readonly Hex[],
+      data: log.data,
+    })),
+  });
+  const normalizeRpcLog = (log: RpcLog): CandidateRpcLog => ({
+    address: log.address,
+    blockNumber: log.blockNumber === null ? null : BigInt(log.blockNumber),
+    blockHash: log.blockHash,
+    transactionHash: log.transactionHash,
+    transactionIndex:
+      log.transactionIndex === null
+        ? null
+        : Number(BigInt(log.transactionIndex)),
+    logIndex: log.logIndex === null ? null : Number(BigInt(log.logIndex)),
+    removed: log.removed,
+    topics: log.topics as readonly Hex[],
+    data: log.data,
+  });
+  const readFilteredLogs = async (
+    rpcClient: typeof client,
+    filter: CandidateRpcLogFilter,
+  ): Promise<readonly CandidateRpcLog[]> => {
+    if (
+      filter.addresses.length < 1 ||
+      filter.addresses.length > 512 ||
+      filter.topic0.length < 1 ||
+      filter.topic0.length > 64 ||
+      filter.fromBlock < 0n ||
+      filter.toBlock < filter.fromBlock ||
+      filter.toBlock - filter.fromBlock + 1n > 1n
+    ) {
+      throw invalidInput("rpc", "log-filter");
+    }
+    const logs = await rpcClient.request({
+      method: "eth_getLogs",
+      params: [{
+        address: [...filter.addresses],
+        topics: [[...filter.topic0]],
+        fromBlock: numberToHex(filter.fromBlock),
+        toBlock: numberToHex(filter.toBlock),
+      }],
+    });
+    return logs.map(normalizeRpcLog);
+  };
 
   return Object.freeze({
     getChainId: () => client.getChainId(),
@@ -183,26 +257,36 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         timestamp: block.timestamp,
       };
     },
+    async getBlocks({ blockNumbers }) {
+      if (blockNumbers.length < 1 || blockNumbers.length > 100) {
+        throw invalidInput("rpc", "block-batch-size");
+      }
+      return Promise.all(
+        blockNumbers.map(async (blockNumber) => {
+          const block = await batchClient.getBlock({ blockNumber });
+          return {
+            number: block.number,
+            hash: block.hash,
+            timestamp: block.timestamp,
+          };
+        }),
+      );
+    },
     async getTransactionReceipt({ hash }) {
       const receipt = await client.getTransactionReceipt({ hash });
-      return {
-        status: receipt.status,
-        blockNumber: receipt.blockNumber,
-        blockHash: receipt.blockHash,
-        transactionHash: receipt.transactionHash,
-        transactionIndex: receipt.transactionIndex,
-        logs: receipt.logs.map((log) => ({
-          address: log.address,
-          blockNumber: log.blockNumber,
-          blockHash: log.blockHash,
-          transactionHash: log.transactionHash,
-          transactionIndex: log.transactionIndex,
-          logIndex: log.logIndex,
-          removed: log.removed ?? false,
-          topics: log.topics as readonly Hex[],
-          data: log.data,
-        })),
-      };
+      return normalizeReceipt(receipt);
+    },
+    async getTransactionReceipts({ hashes }) {
+      if (hashes.length < 1 || hashes.length > 100) {
+        throw invalidInput("rpc", "receipt-batch-size");
+      }
+      return Promise.all(
+        hashes.map(async (hash) =>
+          normalizeReceipt(
+            await batchClient.getTransactionReceipt({ hash }),
+          )
+        ),
+      );
     },
     getBytecode: (request) =>
       "blockHash" in request && request.blockHash !== undefined
@@ -215,19 +299,29 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
             address: request.address,
             blockNumber: request.blockNumber,
           }),
-    async readErc20Metadata({ address, blockNumber }) {
+    getBytecodes({ requests }) {
+      if (requests.length < 1 || requests.length > 100) {
+        throw invalidInput("rpc", "bytecode-batch-size");
+      }
+      return Promise.all(
+        requests.map((request) => batchClient.getBytecode(request)),
+      );
+    },
+    async readErc20Metadata({ address, blockHash, requireCanonical }) {
       const [name, symbol] = await Promise.all([
         client.readContract({
           address,
           abi: ERC20_METADATA_ABI,
           functionName: "name",
-          blockNumber,
+          blockHash,
+          requireCanonical,
         }),
         client.readContract({
           address,
           abi: ERC20_METADATA_ABI,
           functionName: "symbol",
-          blockNumber,
+          blockHash,
+          requireCanonical,
         }),
       ]);
       return { name, symbol };
@@ -376,23 +470,16 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         rpcCallCount,
       });
     },
-    async getLogs({ addresses, fromBlock, toBlock }) {
-      const logs = await client.getLogs({
-        address: [...addresses],
-        fromBlock,
-        toBlock,
-      });
-      return logs.map((log) => ({
-        address: log.address,
-        blockNumber: log.blockNumber,
-        blockHash: log.blockHash,
-        transactionHash: log.transactionHash,
-        transactionIndex: log.transactionIndex,
-        logIndex: log.logIndex,
-        removed: log.removed ?? false,
-        topics: log.topics as readonly Hex[],
-        data: log.data,
-      }));
+    getLogs(filter) {
+      return readFilteredLogs(client, filter);
+    },
+    async getLogsBatch({ requests }) {
+      if (requests.length < 1 || requests.length > 100) {
+        throw invalidInput("rpc", "log-batch-size");
+      }
+      return Promise.all(
+        requests.map((filter) => readFilteredLogs(batchClient, filter)),
+      );
     },
   });
 }

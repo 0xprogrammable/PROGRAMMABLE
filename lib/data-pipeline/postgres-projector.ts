@@ -36,6 +36,10 @@ import type {
 } from "./postgres";
 import type { ProjectorPlan, ProjectorStore } from "./projector";
 import type {
+  ReorgGenesisAnchor,
+  ReorgHistoryAncestor,
+} from "./projector-reorg";
+import type {
   ReleaseProjectionPlan,
   ReleaseProjectionStore,
   StoredProjectionCandidate,
@@ -1084,6 +1088,91 @@ function parseCursor(rows: readonly Record<string, unknown>[]) {
   });
 }
 
+function parseReorgTargets(rows: readonly Record<string, unknown>[]): Readonly<{
+  ancestors: readonly ReorgHistoryAncestor[];
+  genesis: ReorgGenesisAnchor;
+  currentReorgGeneration: string;
+}> {
+  if (rows.length < 1 || rows.length > 128) {
+    return projectorValidationFailure();
+  }
+  const ancestors: ReorgHistoryAncestor[] = [];
+  let genesis: ReorgGenesisAnchor | undefined;
+  let currentReorgGeneration: string | undefined;
+  for (const row of rows) {
+    const rowReorgGeneration = integerText(row.current_reorg_generation);
+    if (
+      currentReorgGeneration !== undefined &&
+      currentReorgGeneration !== rowReorgGeneration
+    ) {
+      return projectorValidationFailure();
+    }
+    currentReorgGeneration = rowReorgGeneration;
+    const blockNumber = integerText(row.block_number);
+    const blockHash = databaseBytes32(row.block_hash);
+    if (row.target_kind === "genesis") {
+      if (
+        genesis !== undefined ||
+        integerText(row.history_generation) !== "0" ||
+        row.block_global_log_index !== null ||
+        row.candidate_id !== null
+      ) {
+        return projectorValidationFailure();
+      }
+      genesis = Object.freeze({
+        kind: "genesis",
+        historyGeneration: "0",
+        genesisPointId: exactUuid(row.genesis_point_id),
+        blockNumber,
+        blockHash,
+        blockGlobalLogIndex: null,
+        candidateId: null,
+      });
+      continue;
+    }
+    if (row.target_kind !== "history" || row.genesis_point_id !== null) {
+      return projectorValidationFailure();
+    }
+    const blockGlobalLogIndex = row.block_global_log_index === null
+      ? null
+      : Number(integerText(row.block_global_log_index));
+    if (
+      blockGlobalLogIndex !== null &&
+      (!Number.isSafeInteger(blockGlobalLogIndex) ||
+        blockGlobalLogIndex < 0 ||
+        blockGlobalLogIndex > 0xffff_ffff)
+    ) {
+      return projectorValidationFailure();
+    }
+    const candidateId = row.candidate_id === null
+      ? null
+      : exactText(
+          row.candidate_id,
+          /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9]\d*)$/u,
+          192,
+        );
+    if ((blockGlobalLogIndex === null) !== (candidateId === null)) {
+      return projectorValidationFailure();
+    }
+    ancestors.push(Object.freeze({
+      kind: "history",
+      historyGeneration: integerText(row.history_generation),
+      blockNumber,
+      blockHash,
+      blockGlobalLogIndex,
+      candidateId,
+    }));
+  }
+  if (!genesis || currentReorgGeneration === undefined) {
+    return projectorValidationFailure();
+  }
+  return Object.freeze({
+    ancestors: Object.freeze(ancestors),
+    genesis,
+    currentReorgGeneration,
+  });
+}
+
 function exactIdResult(
   rows: readonly Record<string, unknown>[],
   expected: string,
@@ -1142,24 +1231,15 @@ function sameStringPair(
   return left[0] === right[0] && left[1] === right[1];
 }
 
-function provisionalParentInput(input: {
+function provisionalParentItem(input: {
   plan: ProjectorPlan;
   snapshotBlock: string;
-  candidates: readonly EnvioCandidate[];
   evidence: DualRpcCandidateWindowEvidence;
-  runtimeObservations: readonly DualRpcDynamicRuntimeObservation[];
+  candidate: EnvioCandidate;
+  verified: DualRpcCandidateWindowEvidence["candidates"][number];
+  runtime: DualRpcDynamicRuntimeObservation;
 }) {
-  if (
-    input.candidates.length !== 1 ||
-    input.evidence.candidates.length !== 1 ||
-    input.evidence.coveredCandidateCount !== 1 ||
-    input.runtimeObservations.length !== 1
-  ) {
-    return projectorValidationFailure();
-  }
-  const candidate = input.candidates[0]!;
-  const verified = input.evidence.candidates[0]!;
-  const runtime = input.runtimeObservations[0]!;
+  const { candidate, verified, runtime } = input;
   const matchingTemplates = input.plan.dynamicSourceTemplates.filter(
     (template) =>
       template.templateId === runtime.template.templateId &&
@@ -1262,7 +1342,7 @@ function provisionalParentInput(input: {
     input.evidence.coverage.throughBlockNumber !== candidate.blockNumber ||
     input.evidence.coverage.throughBlockHash !== candidate.blockHash ||
     input.evidence.coverage.throughBlockGlobalLogIndex !==
-      String(candidate.blockGlobalLogIndex) ||
+      String(0xffff_ffff) ||
     runtime.chainId !== 1 ||
     runtime.parentCandidateId !== candidate.candidateId ||
     runtime.sourceAddress !== sourceAddress ||
@@ -1343,6 +1423,65 @@ function provisionalParentInput(input: {
     runtimeByteLength,
     eventSignature,
   });
+}
+
+function provisionalParentInputs(input: {
+  plan: ProjectorPlan;
+  snapshotBlock: string;
+  candidates: readonly EnvioCandidate[];
+  evidence: DualRpcCandidateWindowEvidence;
+  runtimeObservations: readonly DualRpcDynamicRuntimeObservation[];
+}) {
+  const count = input.candidates.length;
+  if (
+    count < 1 ||
+    count > PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP ||
+    input.evidence.coveredCandidateCount !== count ||
+    input.evidence.candidates.length !== count ||
+    input.runtimeObservations.length !== count
+  ) {
+    return projectorValidationFailure();
+  }
+  const verifiedByCandidate = new Map(
+    input.evidence.candidates.map((verified) => [
+      verified.candidateId,
+      verified,
+    ] as const),
+  );
+  const runtimeByCandidate = new Map(
+    input.runtimeObservations.map((runtime) => [
+      runtime.parentCandidateId,
+      runtime,
+    ] as const),
+  );
+  if (
+    verifiedByCandidate.size !== count ||
+    runtimeByCandidate.size !== count ||
+    new Set(input.candidates.map(({ candidateId }) => candidateId)).size !== count
+  ) {
+    return projectorValidationFailure();
+  }
+  const parsed = input.candidates.map((candidate) => {
+    const verified = verifiedByCandidate.get(candidate.candidateId);
+    const runtime = runtimeByCandidate.get(candidate.candidateId);
+    if (verified === undefined || runtime === undefined) {
+      return projectorValidationFailure();
+    }
+    return provisionalParentItem({
+      plan: input.plan,
+      snapshotBlock: input.snapshotBlock,
+      evidence: input.evidence,
+      candidate,
+      verified,
+      runtime,
+    });
+  });
+  if (
+    new Set(parsed.map(({ sourceAddress }) => sourceAddress)).size !== count
+  ) {
+    return projectorValidationFailure();
+  }
+  return Object.freeze(parsed);
 }
 
 const COMMIT_ENVIO_PAGE_SQL = `select programmable_private.commit_envio_ingestion_page_v1(
@@ -1430,6 +1569,13 @@ export function createPostgresProjectorStore(input: {
           ["1", envioProviderDeploymentId, streamId],
         );
         const cursor = parseCursor(cursorRows);
+        const reorgRows = await transaction.query<{ generation: unknown }>(
+          "select programmable_private.get_projector_reorg_generation_v1()::text as generation",
+        );
+        if (reorgRows.length !== 1) return projectorValidationFailure();
+        const currentReorgGeneration = integerText(
+          reorgRows[0]?.generation,
+        );
         const dynamicSources: VerifiedDynamicSourceLineage[] = [];
         const dynamicSourceTemplates: ProjectorDynamicSourceTemplate[] = [];
         for (const scope of releaseScopes) {
@@ -1485,30 +1631,36 @@ export function createPostgresProjectorStore(input: {
           "select * from programmable_private.get_current_provisional_dynamic_sources_v1($1)",
           [RELEASE_PROJECTOR_VERSION],
         );
-        dynamicSources.push(
-          ...parseCurrentProvisionalDynamicSources({
-            rows: provisionalRows,
-            templates: dynamicSourceTemplates,
-            cursor,
-            neutral,
-            envioProviderDeploymentId,
-            rpcProviderDeploymentIds,
-          }),
-        );
+        const provisionalSourceAddresses = parseCurrentProvisionalDynamicSources({
+          rows: provisionalRows,
+          templates: dynamicSourceTemplates,
+          cursor,
+          neutral,
+          envioProviderDeploymentId,
+          rpcProviderDeploymentIds,
+        }).map(({ sourceAddress }) => sourceAddress);
         if (
           new Set(dynamicSources.map(({ sourceAddress }) => sourceAddress)).size !==
-          dynamicSources.length
+            dynamicSources.length ||
+          new Set(provisionalSourceAddresses).size !==
+            provisionalSourceAddresses.length ||
+          provisionalSourceAddresses.some((address) =>
+            dynamicSources.some(({ sourceAddress }) => sourceAddress === address)
+          )
         ) {
           return projectorValidationFailure();
         }
         return Object.freeze({
           cursor,
           dynamicSources: Object.freeze(dynamicSources),
+          provisionalSourceAddresses: Object.freeze(
+            provisionalSourceAddresses,
+          ),
           dynamicSourceTemplates: Object.freeze(dynamicSourceTemplates),
           database: Object.freeze({
             epochId: neutral.epochId,
             pointerGeneration: neutral.pointerGeneration,
-            reorgGeneration: neutral.reorgGeneration,
+            reorgGeneration: currentReorgGeneration,
             envioProviderDeploymentId,
             rpcProviderDeploymentIds: Object.freeze(
               rpcProviderDeploymentIds,
@@ -1518,33 +1670,304 @@ export function createPostgresProjectorStore(input: {
       });
     },
 
+    async readReorgRecoveryState(recoveryInput) {
+      if (
+        !Number.isSafeInteger(recoveryInput.maximumDepth) ||
+        recoveryInput.maximumDepth < 1 ||
+        recoveryInput.maximumDepth > 128
+      ) {
+        return projectorValidationFailure();
+      }
+      return gateway.transaction(async (transaction) => {
+        await assertRuntimeFence(transaction, runtimeFence);
+        const runtime = await readRuntimeState({
+          transaction,
+          scope: ENVIO_CONTROL_SCOPE,
+          providers,
+        });
+        const envioProviderDeploymentId =
+          runtime.providerDeploymentIds[envioIndexes[0]!.index]!;
+        if (
+          runtime.epochId !== recoveryInput.plan.database.epochId ||
+          runtime.pointerGeneration !==
+            recoveryInput.plan.database.pointerGeneration ||
+          envioProviderDeploymentId !==
+            recoveryInput.plan.database.envioProviderDeploymentId
+        ) {
+          return projectorValidationFailure();
+        }
+        const rows = await transaction.query(
+          "select * from programmable_private.get_projector_reorg_targets_v1($1::uuid, $2, $3::integer)",
+          [
+            envioProviderDeploymentId,
+            streamId,
+            recoveryInput.maximumDepth,
+          ],
+        );
+        const parsed = parseReorgTargets(rows);
+        if (
+          parsed.currentReorgGeneration !==
+            recoveryInput.plan.database.reorgGeneration
+        ) {
+          return projectorValidationFailure();
+        }
+        return parsed;
+      });
+    },
+
+    async recoverCanonicalReorg(recoveryInput) {
+      const { plan, recovery } = recoveryInput;
+      const timestamp = now().toISOString();
+      const rpcProviderBindings = rpcIndexes.map(({ index }) => providers[index]!) as [
+        ProjectorProviderDatabaseBinding,
+        ProjectorProviderDatabaseBinding,
+      ];
+      const targetBlockHash = canonicalBytes32(recovery.targetBlockHash);
+      const safeBlockHash = canonicalBytes32(recovery.safeBlockHash);
+      const providerSafeBlockHashes = recovery.providerSafeBlockHashes.map(
+        canonicalBytes32,
+      ) as [HexBytes32, HexBytes32];
+      const providerBlockHashes = recovery.providerBlockHashes.map(
+        canonicalBytes32,
+      ) as [HexBytes32, HexBytes32];
+      const expectedCursorGeneration = integerText(
+        recovery.expectedGeneration,
+      );
+      const nextCursorGeneration = integerText(recovery.nextGeneration);
+      const expectedReorgGeneration = integerText(
+        recovery.expectedReorgGeneration,
+      );
+      const nextReorgGeneration = integerText(recovery.nextReorgGeneration);
+      const targetHistoryGeneration = integerText(
+        recovery.targetHistoryGeneration,
+      );
+      const targetBlockNumber = integerText(recovery.targetBlockNumber);
+      const safeBlockNumber = integerText(recovery.safeBlockNumber);
+      if (
+        recovery.action !== "rewind-and-replay" ||
+        plan.cursor.generation !== expectedCursorGeneration ||
+        plan.database.reorgGeneration !== expectedReorgGeneration ||
+        nextCursorGeneration !==
+          (BigInt(expectedCursorGeneration) + 1n).toString() ||
+        nextReorgGeneration !==
+          (BigInt(expectedReorgGeneration) + 1n).toString() ||
+        BigInt(targetHistoryGeneration) >= BigInt(expectedCursorGeneration) ||
+        targetBlockHash !== providerBlockHashes[0] ||
+        targetBlockHash !== providerBlockHashes[1] ||
+        safeBlockHash !== providerSafeBlockHashes[0] ||
+        safeBlockHash !== providerSafeBlockHashes[1] ||
+        recovery.finalityDepth !== "12" ||
+        recovery.providerChainIds[0] !== 1 ||
+        recovery.providerChainIds[1] !== 1 ||
+        recovery.providerIdentities[0] !==
+          rpcProviderBindings[0].redactedIdentity ||
+        recovery.providerIdentities[1] !==
+          rpcProviderBindings[1].redactedIdentity ||
+        (recovery.targetBlockGlobalLogIndex === null) !==
+          (recovery.targetCandidateId === null) ||
+        (targetHistoryGeneration === "0") !==
+          (recovery.genesisPointId !== null)
+      ) {
+        return projectorValidationFailure();
+      }
+      const ids = Object.freeze({
+        recovery: exactUuid(uuid()),
+        run: exactUuid(uuid()),
+        observation: exactUuid(uuid()),
+        block: exactUuid(uuid()),
+        outcome: exactUuid(uuid()),
+      });
+      const safeEvidence = providerEvidenceV2("safe_head", {
+        chain_id: "1",
+        epoch_id: plan.database.epochId,
+        pointer_generation: plan.database.pointerGeneration,
+        provider_a_id: plan.database.rpcProviderDeploymentIds[0],
+        provider_b_id: plan.database.rpcProviderDeploymentIds[1],
+        reported_chain_id_a: "1",
+        reported_chain_id_b: "1",
+        head_a: integerText(recovery.providerHeads[0]),
+        head_b: integerText(recovery.providerHeads[1]),
+        finality_depth: "12",
+        safe_block_number: safeBlockNumber,
+        safe_block_hash_a: providerSafeBlockHashes[0],
+        safe_block_hash_b: providerSafeBlockHashes[1],
+      });
+      const blockEvidence = providerEvidenceV2("block", {
+        chain_id: "1",
+        epoch_id: plan.database.epochId,
+        pointer_generation: plan.database.pointerGeneration,
+        observation_id: ids.observation,
+        block_number: targetBlockNumber,
+        provider_a_block_hash: providerBlockHashes[0],
+        provider_b_block_hash: providerBlockHashes[1],
+      });
+      const reasonCommitment = keccak256(toBytes(JSON.stringify([
+        "projector-reorg-recovery-v1",
+        plan.cursor.generation,
+        plan.cursor.blockNumber,
+        plan.cursor.blockHash,
+        recovery,
+      ])));
+      const requestCommitment = reasonCommitment;
+      const resultCommitment = keccak256(toBytes(JSON.stringify([
+        nextCursorGeneration,
+        nextReorgGeneration,
+        targetHistoryGeneration,
+        targetBlockNumber,
+        targetBlockHash,
+      ])));
+      return gateway.transaction(async (transaction) => {
+        await assertRuntimeFence(transaction, runtimeFence);
+        exactIdResult(await transaction.query(
+          "select programmable_private.open_run($1::uuid, 'rewind', '1', $2, $3, $4, $5::uuid, $6, $7, $8::bytea, $9::timestamptz) as id",
+          [
+            ids.run,
+            ENVIO_CONTROL_SCOPE.releaseId,
+            ENVIO_CONTROL_SCOPE.modelId,
+            ENVIO_CONTROL_SCOPE.sourceGroup,
+            plan.database.epochId,
+            plan.database.pointerGeneration,
+            ENVIO_CONTROL_SCOPE.projectorVersion,
+            hexToBytes(requestCommitment),
+            timestamp,
+          ],
+        ), ids.run);
+        exactIdResult(await transaction.query(
+          "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, '1', '1', $5::numeric, $6::numeric, 12, $7::numeric, $8::bytea, $9::bytea, $10, $11::bytea, $12::bytea, $13::timestamptz) as id",
+          [
+            ids.observation,
+            ids.run,
+            plan.database.rpcProviderDeploymentIds[0],
+            plan.database.rpcProviderDeploymentIds[1],
+            recovery.providerHeads[0],
+            recovery.providerHeads[1],
+            safeBlockNumber,
+            hexToBytes(providerSafeBlockHashes[0]),
+            hexToBytes(providerSafeBlockHashes[1]),
+            safeEvidence.encodingVersion,
+            safeEvidence.canonicalPreimage,
+            hexToBytes(safeEvidence.contentFingerprint),
+            timestamp,
+          ],
+        ), ids.observation);
+        exactIdResult(await transaction.query(
+          "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
+          [
+            ids.block,
+            ids.observation,
+            ids.run,
+            targetBlockNumber,
+            hexToBytes(providerBlockHashes[0]),
+            hexToBytes(providerBlockHashes[1]),
+            blockEvidence.encodingVersion,
+            blockEvidence.canonicalPreimage,
+            hexToBytes(blockEvidence.contentFingerprint),
+            timestamp,
+          ],
+        ), ids.block);
+        exactIdResult(await transaction.query(
+          "select programmable_private.append_run_outcome($1::uuid, $2::uuid, 'succeeded', $3::bytea, $4::timestamptz) as id",
+          [ids.outcome, ids.run, hexToBytes(resultCommitment), timestamp],
+        ), ids.outcome);
+        const rows = await transaction.query<{
+          cursor_generation: unknown;
+          reorg_generation: unknown;
+          release_checkpoint_count: unknown;
+        }>(
+          "select * from programmable_private.recover_projector_reorg_v1($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid, $7, $8::bigint, $9::bigint, $10::bigint, $11::bigint, $12::bigint, $13::numeric, $14::bytea, $15::numeric, $16, $17::uuid, $18, $19::bigint, $20::bytea, $21::bytea, $22::timestamptz)",
+          [
+            ids.recovery,
+            ids.run,
+            ids.outcome,
+            ids.observation,
+            ids.block,
+            plan.database.envioProviderDeploymentId,
+            streamId,
+            expectedCursorGeneration,
+            nextCursorGeneration,
+            targetHistoryGeneration,
+            expectedReorgGeneration,
+            nextReorgGeneration,
+            targetBlockNumber,
+            hexToBytes(targetBlockHash),
+            recovery.targetBlockGlobalLogIndex,
+            recovery.targetCandidateId,
+            recovery.genesisPointId,
+            runtimeFence.holderId,
+            runtimeFence.generation,
+            hexToBytes(runtimeFence.tokenHash),
+            hexToBytes(reasonCommitment),
+            timestamp,
+          ],
+        );
+        if (rows.length !== 1) return projectorValidationFailure();
+        const generation = integerText(rows[0]?.cursor_generation);
+        const reorgGeneration = integerText(rows[0]?.reorg_generation);
+        const releaseCheckpointCount = Number(
+          integerText(rows[0]?.release_checkpoint_count),
+        );
+        if (
+          generation !== nextCursorGeneration ||
+          reorgGeneration !== nextReorgGeneration ||
+          !Number.isSafeInteger(releaseCheckpointCount) ||
+          releaseCheckpointCount !== releaseScopes.length
+        ) {
+          return projectorValidationFailure();
+        }
+        return Object.freeze({
+          generation,
+          reorgGeneration,
+          releaseCheckpointCount,
+        });
+      });
+    },
+
     async stageVerifiedDynamicParents(stageInput): Promise<void> {
       const timestamp = now().toISOString();
-      const parsed = provisionalParentInput(stageInput);
-      const { candidate, verified, template } = parsed;
+      const parsedItems = provisionalParentInputs(stageInput);
+      const first = parsedItems[0]!;
+      const { candidate: firstCandidate, template: firstTemplate } = first;
+      const scope = firstTemplate.database.scope;
       if (
         stageInput.blockComplete !== false ||
-        template.database.envioProviderDeploymentId !==
-          stageInput.plan.database.envioProviderDeploymentId ||
-        template.database.rpcProviderDeploymentIds[0] !==
-          stageInput.plan.database.rpcProviderDeploymentIds[0] ||
-        template.database.rpcProviderDeploymentIds[1] !==
-          stageInput.plan.database.rpcProviderDeploymentIds[1] ||
-        stageInput.plan.dynamicSources.some(
-          ({ sourceAddress }) => sourceAddress === parsed.sourceAddress,
+        parsedItems.some(
+          ({ sourceAddress, template }) =>
+            template.database.scope.releaseId !== scope.releaseId ||
+            template.database.scope.modelId !== scope.modelId ||
+            template.database.scope.sourceGroup !== scope.sourceGroup ||
+            template.database.epochId !== firstTemplate.database.epochId ||
+            template.database.pointerGeneration !==
+              firstTemplate.database.pointerGeneration ||
+            template.database.reorgGeneration !==
+              firstTemplate.database.reorgGeneration ||
+            template.database.envioProviderDeploymentId !==
+              stageInput.plan.database.envioProviderDeploymentId ||
+            template.database.rpcProviderDeploymentIds[0] !==
+              stageInput.plan.database.rpcProviderDeploymentIds[0] ||
+            template.database.rpcProviderDeploymentIds[1] !==
+              stageInput.plan.database.rpcProviderDeploymentIds[1] ||
+            stageInput.plan.dynamicSources.some(
+              (known) => known.sourceAddress === sourceAddress,
+            ),
         )
       ) {
         return projectorValidationFailure();
       }
       const identity = [
-        template.database.epochId,
-        template.database.pointerGeneration,
-        template.database.reorgGeneration,
+        firstTemplate.database.epochId,
+        firstTemplate.database.pointerGeneration,
+        firstTemplate.database.reorgGeneration,
         stageInput.plan.cursor.generation,
-        candidate.candidateId,
-        parsed.sourceAddress,
-        parsed.runtimeCodeHashA,
-        template.templateId,
+        firstCandidate.blockNumber,
+        firstCandidate.blockHash,
+        JSON.stringify(
+          parsedItems.map(({ candidate, sourceAddress, runtimeCodeHashA, template }) => [
+            candidate.candidateId,
+            sourceAddress,
+            runtimeCodeHashA,
+            template.templateId,
+          ]),
+        ),
       ] as const;
       const ids = Object.freeze({
         run: deterministicUuid("provisional-dynamic-parent-run", ...identity),
@@ -1556,19 +1979,7 @@ export function createPostgresProjectorStore(input: {
           "provisional-dynamic-parent-block",
           ...identity,
         ),
-        runtime: deterministicUuid(
-          "provisional-dynamic-parent-runtime",
-          ...identity,
-        ),
         page: deterministicUuid("provisional-dynamic-parent-page", ...identity),
-        lineage: deterministicUuid(
-          "provisional-dynamic-parent-lineage",
-          ...identity,
-        ),
-        attestation: deterministicUuid(
-          "provisional-dynamic-source-attestation",
-          ...identity,
-        ),
         outcome: deterministicUuid(
           "provisional-dynamic-parent-outcome",
           ...identity,
@@ -1594,60 +2005,88 @@ export function createPostgresProjectorStore(input: {
         epoch_id: stageInput.plan.database.epochId,
         pointer_generation: stageInput.plan.database.pointerGeneration,
         observation_id: ids.observation,
-        block_number: candidate.blockNumber,
-        provider_a_block_hash: candidate.blockHash,
-        provider_b_block_hash: candidate.blockHash,
+        block_number: firstCandidate.blockNumber,
+        provider_a_block_hash: firstCandidate.blockHash,
+        provider_b_block_hash: firstCandidate.blockHash,
       });
-      const runtimeEvidence = providerEvidenceV2("runtime_code", {
-        chain_id: "1",
-        release_id: template.database.scope.releaseId,
-        model_id: template.database.scope.modelId,
-        source_group: template.database.scope.sourceGroup,
-        epoch_id: template.database.epochId,
-        pointer_generation: template.database.pointerGeneration,
-        source_address: parsed.sourceAddress,
-        deployment_block_evidence_id: ids.block,
-        deployment_block_number: candidate.blockNumber,
-        deployment_block_hash: candidate.blockHash,
-        provider_a_id: stageInput.plan.database.rpcProviderDeploymentIds[0],
-        provider_b_id: stageInput.plan.database.rpcProviderDeploymentIds[1],
-        runtime_code_hash_a: parsed.runtimeCodeHashA,
-        runtime_code_hash_b: parsed.runtimeCodeHashB,
-        runtime_code_a: parsed.runtimeCodeA,
-        runtime_code_b: parsed.runtimeCodeB,
-        normalized_runtime_code_hash_a:
-          parsed.normalizedRuntimeCodeHashA,
-        normalized_runtime_code_hash_b:
-          parsed.normalizedRuntimeCodeHashB,
-        immutable_references_commitment:
-          parsed.immutableReferencesCommitment,
-        immutable_values: parsed.immutableValues,
-        immutable_values_commitment: parsed.immutableValuesCommitment,
-        reconstructed_runtime_code: parsed.reconstructedRuntimeCode,
-        reconstructed_runtime_code_hash:
-          parsed.reconstructedRuntimeCodeHash,
-      });
-      const parentCandidate = Object.freeze({
-        candidateId: candidate.candidateId,
-        blockNumber: candidate.blockNumber,
-        blockHash: candidate.blockHash,
-        transactionHash: candidate.transactionHash,
-        transactionIndex: String(candidate.transactionIndex),
-        blockGlobalLogIndex: String(candidate.blockGlobalLogIndex),
-        sourceAddress: candidate.sourceAddress,
-        eventSignature: parsed.eventSignature,
-        eventType: candidate.eventName,
-        decodedPayload: canonicalOccurrenceJson(candidate.decodedPayload),
-        payloadHash: candidate.payloadHash,
-        contentCommitment: verified.rawLogCommitment,
-        contractName: candidate.contractName,
-      });
-      const provisionalSource = Object.freeze({
-        dynamicSourceAttestationId: ids.attestation,
-        parentCandidateId: candidate.candidateId,
-        provisionalLineageId: ids.lineage,
-        runtimeCodeEvidenceId: ids.runtime,
-        templateId: template.templateId,
+      const records = parsedItems.map((parsed) => {
+        const itemIdentity = [
+          ids.page,
+          parsed.candidate.candidateId,
+          parsed.sourceAddress,
+          parsed.runtimeCodeHashA,
+          parsed.template.templateId,
+        ] as const;
+        const itemIds = Object.freeze({
+          runtime: deterministicUuid(
+            "provisional-dynamic-parent-runtime",
+            ...itemIdentity,
+          ),
+          lineage: deterministicUuid(
+            "provisional-dynamic-parent-lineage",
+            ...itemIdentity,
+          ),
+          attestation: deterministicUuid(
+            "provisional-dynamic-source-attestation",
+            ...itemIdentity,
+          ),
+        });
+        const runtimeEvidence = providerEvidenceV2("runtime_code", {
+          chain_id: "1",
+          release_id: parsed.template.database.scope.releaseId,
+          model_id: parsed.template.database.scope.modelId,
+          source_group: parsed.template.database.scope.sourceGroup,
+          epoch_id: parsed.template.database.epochId,
+          pointer_generation: parsed.template.database.pointerGeneration,
+          source_address: parsed.sourceAddress,
+          deployment_block_evidence_id: ids.block,
+          deployment_block_number: parsed.candidate.blockNumber,
+          deployment_block_hash: parsed.candidate.blockHash,
+          provider_a_id: stageInput.plan.database.rpcProviderDeploymentIds[0],
+          provider_b_id: stageInput.plan.database.rpcProviderDeploymentIds[1],
+          runtime_code_hash_a: parsed.runtimeCodeHashA,
+          runtime_code_hash_b: parsed.runtimeCodeHashB,
+          runtime_code_a: parsed.runtimeCodeA,
+          runtime_code_b: parsed.runtimeCodeB,
+          normalized_runtime_code_hash_a: parsed.normalizedRuntimeCodeHashA,
+          normalized_runtime_code_hash_b: parsed.normalizedRuntimeCodeHashB,
+          immutable_references_commitment:
+            parsed.immutableReferencesCommitment,
+          immutable_values: parsed.immutableValues,
+          immutable_values_commitment: parsed.immutableValuesCommitment,
+          reconstructed_runtime_code: parsed.reconstructedRuntimeCode,
+          reconstructed_runtime_code_hash:
+            parsed.reconstructedRuntimeCodeHash,
+        });
+        return Object.freeze({
+          parsed,
+          ids: itemIds,
+          runtimeEvidence,
+          parentCandidate: Object.freeze({
+            candidateId: parsed.candidate.candidateId,
+            blockNumber: parsed.candidate.blockNumber,
+            blockHash: parsed.candidate.blockHash,
+            transactionHash: parsed.candidate.transactionHash,
+            transactionIndex: String(parsed.candidate.transactionIndex),
+            blockGlobalLogIndex: String(parsed.candidate.blockGlobalLogIndex),
+            sourceAddress: parsed.candidate.sourceAddress,
+            eventSignature: parsed.eventSignature,
+            eventType: parsed.candidate.eventName,
+            decodedPayload: canonicalOccurrenceJson(
+              parsed.candidate.decodedPayload,
+            ),
+            payloadHash: parsed.candidate.payloadHash,
+            contentCommitment: parsed.verified.rawLogCommitment,
+            contractName: parsed.candidate.contractName,
+          }),
+          provisionalSource: Object.freeze({
+            dynamicSourceAttestationId: itemIds.attestation,
+            parentCandidateId: parsed.candidate.candidateId,
+            provisionalLineageId: itemIds.lineage,
+            runtimeCodeEvidenceId: itemIds.runtime,
+            templateId: parsed.template.templateId,
+          }),
+        });
       });
       const executionTraceCommitment =
         projectionExecutionTraceCommitmentV1(
@@ -1658,11 +2097,13 @@ export function createPostgresProjectorStore(input: {
           JSON.stringify([
             "provisional-dynamic-parent-v2",
             ids.page,
-            template.database,
+            firstTemplate.database,
             stageInput.plan.cursor,
-            parentCandidate,
-            provisionalSource,
-            runtimeEvidence.contentFingerprint,
+            records.map(({ parentCandidate }) => parentCandidate),
+            records.map(({ provisionalSource }) => provisionalSource),
+            records.map(
+              ({ runtimeEvidence }) => runtimeEvidence.contentFingerprint,
+            ),
           ]),
         ),
       );
@@ -1670,9 +2111,11 @@ export function createPostgresProjectorStore(input: {
         toBytes(
           JSON.stringify([
             ids.page,
-            ids.runtime,
-            ids.attestation,
-            runtimeEvidence.contentFingerprint,
+            records.map(({ ids: itemIds }) => itemIds.runtime),
+            records.map(({ ids: itemIds }) => itemIds.attestation),
+            records.map(
+              ({ runtimeEvidence }) => runtimeEvidence.contentFingerprint,
+            ),
           ]),
         ),
       );
@@ -1729,9 +2172,9 @@ export function createPostgresProjectorStore(input: {
               ids.block,
               ids.observation,
               ids.run,
-              candidate.blockNumber,
-              hexToBytes(candidate.blockHash),
-              hexToBytes(candidate.blockHash),
+              firstCandidate.blockNumber,
+              hexToBytes(firstCandidate.blockHash),
+              hexToBytes(firstCandidate.blockHash),
               blockEvidence.encodingVersion,
               blockEvidence.canonicalPreimage,
               hexToBytes(blockEvidence.contentFingerprint),
@@ -1740,51 +2183,54 @@ export function createPostgresProjectorStore(input: {
           ),
           ids.block,
         );
-        exactIdResult(
-          await transaction.query(
-            "select programmable_private.append_dual_rpc_runtime_code_evidence($1::uuid, $2::uuid, $3::bytea, $4::uuid, $5::uuid, $6::uuid, $7::bytea, $8::bytea, $9::bytea, $10::bytea, $11::numeric, $12::numeric, $13::bytea, $14::bytea, $15::bytea, $16::bytea[], $17::bytea, $18::bytea, $19::bytea, $20, $21::bytea, $22::bytea, $23::bytea, $24::timestamptz) as id",
-            [
-              ids.runtime,
-              ids.run,
-              hexToBytes(parsed.sourceAddress),
-              ids.block,
-              stageInput.plan.database.rpcProviderDeploymentIds[0],
-              stageInput.plan.database.rpcProviderDeploymentIds[1],
-              hexToBytes(parsed.runtimeCodeHashA),
-              hexToBytes(parsed.runtimeCodeHashB),
-              hexToBytes(parsed.runtimeCodeA),
-              hexToBytes(parsed.runtimeCodeB),
-              parsed.runtimeByteLength,
-              parsed.runtimeByteLength,
-              hexToBytes(parsed.normalizedRuntimeCodeHashA),
-              hexToBytes(parsed.normalizedRuntimeCodeHashB),
-              hexToBytes(parsed.immutableReferencesCommitment),
-              parsed.immutableValues.map(hexToBytes),
-              hexToBytes(parsed.immutableValuesCommitment),
-              hexToBytes(parsed.reconstructedRuntimeCode),
-              hexToBytes(parsed.reconstructedRuntimeCodeHash),
-              runtimeEvidence.encodingVersion,
-              runtimeEvidence.canonicalPreimage,
-              hexToBytes(runtimeEvidence.contentFingerprint),
-              hexToBytes(runtimeEvidence.contentFingerprint),
-              timestamp,
-            ],
-          ),
-          ids.runtime,
-        );
+        for (const record of records) {
+          const { parsed, ids: itemIds, runtimeEvidence } = record;
+          exactIdResult(
+            await transaction.query(
+              "select programmable_private.append_dual_rpc_runtime_code_evidence($1::uuid, $2::uuid, $3::bytea, $4::uuid, $5::uuid, $6::uuid, $7::bytea, $8::bytea, $9::bytea, $10::bytea, $11::numeric, $12::numeric, $13::bytea, $14::bytea, $15::bytea, $16::bytea[], $17::bytea, $18::bytea, $19::bytea, $20, $21::bytea, $22::bytea, $23::bytea, $24::timestamptz) as id",
+              [
+                itemIds.runtime,
+                ids.run,
+                hexToBytes(parsed.sourceAddress),
+                ids.block,
+                stageInput.plan.database.rpcProviderDeploymentIds[0],
+                stageInput.plan.database.rpcProviderDeploymentIds[1],
+                hexToBytes(parsed.runtimeCodeHashA),
+                hexToBytes(parsed.runtimeCodeHashB),
+                hexToBytes(parsed.runtimeCodeA),
+                hexToBytes(parsed.runtimeCodeB),
+                parsed.runtimeByteLength,
+                parsed.runtimeByteLength,
+                hexToBytes(parsed.normalizedRuntimeCodeHashA),
+                hexToBytes(parsed.normalizedRuntimeCodeHashB),
+                hexToBytes(parsed.immutableReferencesCommitment),
+                parsed.immutableValues.map(hexToBytes),
+                hexToBytes(parsed.immutableValuesCommitment),
+                hexToBytes(parsed.reconstructedRuntimeCode),
+                hexToBytes(parsed.reconstructedRuntimeCodeHash),
+                runtimeEvidence.encodingVersion,
+                runtimeEvidence.canonicalPreimage,
+                hexToBytes(runtimeEvidence.contentFingerprint),
+                hexToBytes(runtimeEvidence.contentFingerprint),
+                timestamp,
+              ],
+            ),
+            itemIds.runtime,
+          );
+        }
         exactIdResult(
           await transaction.query(
             "select programmable_private.stage_verified_dynamic_parents_v2($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8::bigint, $9::bigint, $10::bigint, $11::bytea, $12::uuid, $13, $14::uuid, $15::uuid, $16::uuid, $17::uuid, $18::numeric, $19::bytea, $20::bytea, $21::bytea[], $22::bytea[], $23::jsonb, $24::bytea, $25::jsonb, $26::jsonb, $27::timestamptz) as id",
             [
               ids.page,
               ids.run,
-              template.database.scope.releaseId,
-              template.database.scope.modelId,
-              template.database.scope.sourceGroup,
+              scope.releaseId,
+              scope.modelId,
+              scope.sourceGroup,
               RELEASE_PROJECTOR_VERSION,
-              template.database.epochId,
-              template.database.pointerGeneration,
-              template.database.reorgGeneration,
+              firstTemplate.database.epochId,
+              firstTemplate.database.pointerGeneration,
+              firstTemplate.database.reorgGeneration,
               stageInput.plan.cursor.generation,
               hexToBytes(stageInput.plan.cursor.blockHash),
               stageInput.plan.database.envioProviderDeploymentId,
@@ -1793,15 +2239,23 @@ export function createPostgresProjectorStore(input: {
               stageInput.plan.database.rpcProviderDeploymentIds[1],
               ids.observation,
               ids.block,
-              candidate.blockNumber,
-              hexToBytes(candidate.blockHash),
+              firstCandidate.blockNumber,
+              hexToBytes(firstCandidate.blockHash),
               hexToBytes(stageInput.evidence.coverage.filterCommitment),
-              [hexToBytes(verified.rawLogCommitment)],
-              [hexToBytes(verified.rawLogCommitment)],
+              records.map(({ parsed }) =>
+                hexToBytes(parsed.verified.rawLogCommitment)
+              ),
+              records.map(({ parsed }) =>
+                hexToBytes(parsed.verified.rawLogCommitment)
+              ),
               JSON.stringify(stageInput.evidence.executionTrace),
               hexToBytes(executionTraceCommitment),
-              JSON.stringify([parentCandidate]),
-              JSON.stringify([provisionalSource]),
+              JSON.stringify(
+                records.map(({ parentCandidate }) => parentCandidate),
+              ),
+              JSON.stringify(
+                records.map(({ provisionalSource }) => provisionalSource),
+              ),
               timestamp,
             ],
           ),
@@ -2066,22 +2520,36 @@ function parseProjectionRuntimeState(
   const leaseGeneration = integerText(row.lease_generation);
   const checkpointGeneration = integerText(row.checkpoint_generation);
   const reorgGeneration = integerText(row.reorg_generation);
-  const checkpointFields = [
+  const checkpointIdentityFields = [
     row.checkpoint_id,
     row.checkpoint_block_number,
     row.checkpoint_block_hash,
+  ];
+  const checkpointCursorFields = [
     row.checkpoint_cursor_block_global_log_index,
     row.checkpoint_cursor_candidate_id,
   ];
-  const checkpointAbsent = checkpointFields.every((value) => value === null);
+  const checkpointAbsent = checkpointIdentityFields.every(
+    (value) => value === null,
+  );
+  const checkpointIdentityComplete = checkpointIdentityFields.every(
+    (value) => value !== null,
+  );
+  const checkpointCursorAbsent = checkpointCursorFields.every(
+    (value) => value === null,
+  );
+  const checkpointCursorComplete = checkpointCursorFields.every(
+    (value) => value !== null,
+  );
   if (
-    !checkpointAbsent &&
-    checkpointFields.some((value) => value === null)
+    (!checkpointAbsent && !checkpointIdentityComplete) ||
+    (!checkpointCursorAbsent && !checkpointCursorComplete) ||
+    (checkpointAbsent && !checkpointCursorAbsent)
   ) {
     return projectorValidationFailure();
   }
   let checkpoint: ReleaseProjectionPlan["checkpoint"] = null;
-  if (!checkpointAbsent) {
+  if (!checkpointAbsent && checkpointCursorComplete) {
     exactUuid(row.checkpoint_id);
     const blockGlobalLogIndex = Number(
       integerText(row.checkpoint_cursor_block_global_log_index),
@@ -2105,7 +2573,13 @@ function parseProjectionRuntimeState(
         192,
       ),
     });
-  } else if (checkpointGeneration !== "0" || reorgGeneration !== "0") {
+  } else if (!checkpointAbsent) {
+    exactUuid(row.checkpoint_id);
+    integerText(row.checkpoint_block_number);
+    databaseBytes32(row.checkpoint_block_hash);
+    if (checkpointGeneration === "0") return projectorValidationFailure();
+  } else if (checkpointAbsent &&
+    (checkpointGeneration !== "0" || reorgGeneration !== "0")) {
     return projectorValidationFailure();
   }
   return Object.freeze({

@@ -12,7 +12,16 @@ const RPC_METHOD_CONTRACT_V1 = Object.freeze({
   chainId: 1,
   transport: Object.freeze({
     protocol: "ethereum-json-rpc",
-    batch: false,
+    batch: Object.freeze({
+      maximumSize: 100,
+      waitMs: 0,
+      methods: Object.freeze([
+        "eth_getBlockByNumber",
+        "eth_getTransactionReceipt",
+        "eth_getCode",
+        "eth_getLogs",
+      ]),
+    }),
     redirects: "error",
     retryCount: 0,
     timeoutMs: 5_000,
@@ -21,16 +30,31 @@ const RPC_METHOD_CONTRACT_V1 = Object.freeze({
   methods: Object.freeze([
     Object.freeze(["eth_chainId"]),
     Object.freeze(["eth_blockNumber"]),
-    Object.freeze(["eth_getBlockByNumber", "number,transactions=false"]),
-    Object.freeze(["eth_getTransactionReceipt", "transaction-hash"]),
-    Object.freeze(["eth_getCode", "address,eip-1898-canonical-block-hash"]),
-    Object.freeze(["eth_call", "erc20-name-or-symbol,exact-block-number"]),
+    Object.freeze([
+      "eth_getBlockByNumber",
+      "number,transactions=false,bounded-json-rpc-batch<=100",
+    ]),
+    Object.freeze([
+      "eth_getTransactionReceipt",
+      "transaction-hash,bounded-json-rpc-batch<=100",
+    ]),
+    Object.freeze([
+      "eth_getCode",
+      "address,eip-1898-block-hash,require-canonical=true,bounded-json-rpc-batch<=100",
+    ]),
+    Object.freeze([
+      "eth_call",
+      "erc20-name-or-symbol,eip-1898-block-hash,require-canonical=true",
+    ]),
     Object.freeze([
       "eth_call",
       "reward-vault-snapshot",
       PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1,
     ]),
-    Object.freeze(["eth_getLogs", "address-set,from-block,to-block"]),
+    Object.freeze([
+      "eth_getLogs",
+      "address-set<=512,topic0-or-set<=64,single-block,bounded-json-rpc-batch<=100",
+    ]),
   ]),
   acceptedEvidence: Object.freeze([
     "safe_head",

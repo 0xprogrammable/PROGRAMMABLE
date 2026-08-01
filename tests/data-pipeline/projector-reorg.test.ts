@@ -115,8 +115,43 @@ describe("projector reorg recovery", () => {
       checkedDepth: 2,
       providerBlockHashes: [HASH_90, HASH_90],
     });
-    expect(pair[0].client.getBlock).toHaveBeenCalledTimes(3);
-    expect(pair[1].client.getBlock).toHaveBeenCalledTimes(3);
+    expect(pair[0].client.getBlock).toHaveBeenCalledTimes(4);
+    expect(pair[1].client.getBlock).toHaveBeenCalledTimes(4);
+  });
+
+  it("rejects an ancestor proof when the agreed safe head changes during the search", async () => {
+    const changedSafeHash = `0x${"77".repeat(32)}` as const;
+    const driftingClient = () => {
+      const value = client({});
+      let safeReads = 0;
+      value.getBlock = vi.fn(async ({ blockNumber }) => {
+        if (blockNumber === 108n) {
+          safeReads += 1;
+          return block(
+            108n,
+            safeReads === 1 ? ORPHAN : changedSafeHash,
+          );
+        }
+        if (blockNumber === 90n) return block(90n, HASH_90);
+        return block(blockNumber, ORPHAN);
+      });
+      return value;
+    };
+
+    await expect(
+      findCanonicalAncestorWithDualRpc({
+        providers: [
+          provider("alchemy-mainnet", driftingClient()),
+          provider("quicknode-mainnet", driftingClient()),
+        ],
+        ancestors: [ancestor("4", "90", HASH_90)],
+        policy: { maxAttempts: 1 },
+      }),
+    ).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+      safeMetadata: { operation: "reorg-safe-head-changed" },
+    });
   });
 
   it("fails closed immediately when providers disagree", async () => {

@@ -232,6 +232,7 @@ describe("projector operations route", () => {
         candidateCount: 1,
         pageCount: 1,
         snapshotBlock: "25650123",
+        atomicGroupCount: 1,
       },
       projections: deferredProjections,
       readiness: readiness("progressed", "25650123", {
@@ -249,6 +250,7 @@ describe("projector operations route", () => {
         candidateCount: 1,
         pageCount: 1,
         snapshotBlock: "25650123",
+        atomicGroupCount: 1,
       },
       projections: deferredProjections,
       readiness: readiness("progressed", "25650123", {

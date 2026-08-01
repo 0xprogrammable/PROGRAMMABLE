@@ -87,13 +87,32 @@ export type CandidateRpcReceipt = {
   logs: readonly CandidateRpcLog[];
 };
 
+export type CandidateRpcLogFilter = Readonly<{
+  addresses: readonly HexAddress[];
+  topic0: readonly HexBytes32[];
+  fromBlock: bigint;
+  toBlock: bigint;
+}>;
+
 export type CandidateRpcClient = {
   getChainId(): Promise<number>;
   getBlockNumber(): Promise<bigint>;
   getBlock(input: { blockNumber: bigint }): Promise<CandidateRpcBlock>;
+  /** Exact block headers carried by one physical JSON-RPC batch. */
+  getBlocks?(input: {
+    blockNumbers: readonly bigint[];
+  }): Promise<readonly CandidateRpcBlock[]>;
   getTransactionReceipt(input: {
     hash: HexBytes32;
   }): Promise<CandidateRpcReceipt>;
+  /**
+   * One physical JSON-RPC batch. The verifier never supplies more than 100
+   * hashes, retains the input order, and counts the whole batch as one traced
+   * provider call.
+   */
+  getTransactionReceipts?(input: {
+    hashes: readonly HexBytes32[];
+  }): Promise<readonly CandidateRpcReceipt[]>;
   getBytecode(input: {
     address: HexAddress;
   } & (
@@ -108,6 +127,14 @@ export type CandidateRpcClient = {
         requireCanonical: true;
       }
   )): Promise<Hex | undefined>;
+  /** Exact-state eth_getCode requests carried by one physical JSON-RPC batch. */
+  getBytecodes?(input: {
+    requests: readonly Readonly<{
+      address: HexAddress;
+      blockHash: HexBytes32;
+      requireCanonical: true;
+    }>[];
+  }): Promise<readonly (Hex | undefined)[]>;
   /**
    * Reads immutable launch-token display metadata at the launch block. The
    * projector accepts the values only when both independent providers return
@@ -116,7 +143,8 @@ export type CandidateRpcClient = {
    */
   readErc20Metadata?(input: {
     address: HexAddress;
-    blockNumber: bigint;
+    blockHash: HexBytes32;
+    requireCanonical: true;
   }): Promise<Readonly<{ name: unknown; symbol: unknown }>>;
   /**
    * Executes only the frozen reward-vault call shapes at one exact block.
@@ -129,11 +157,11 @@ export type CandidateRpcClient = {
     blockHash: HexBytes32;
     balanceAccounts: readonly HexAddress[];
   }): Promise<CandidateRpcRewardSnapshot>;
-  getLogs?(input: {
-    addresses: readonly HexAddress[];
-    fromBlock: bigint;
-    toBlock: bigint;
-  }): Promise<readonly CandidateRpcLog[]>;
+  getLogs?(input: CandidateRpcLogFilter): Promise<readonly CandidateRpcLog[]>;
+  /** Up to 100 exact eth_getLogs filters in one physical JSON-RPC batch. */
+  getLogsBatch?(input: {
+    requests: readonly CandidateRpcLogFilter[];
+  }): Promise<readonly (readonly CandidateRpcLog[])[]>;
 };
 
 export type CandidateRpcRewardSnapshot = Readonly<{
@@ -258,6 +286,7 @@ export type DualRpcDynamicRuntimeActivationObservation = Readonly<{
 export type DualRpcTokenMetadata = Readonly<{
   token: HexAddress;
   blockNumber: string;
+  blockHash: HexBytes32;
   name: string;
   symbol: string;
 }>;
@@ -474,6 +503,10 @@ const DEFAULT_RPC_DEADLINE_MS = 75_000;
 const DEFAULT_MAXIMUM_PROVIDER_CALLS = 48;
 const DEFAULT_COVERAGE_BLOCK_SPAN = 500;
 const DEFAULT_COVERAGE_MAXIMUM_REQUESTS = 64;
+const MAXIMUM_JSON_RPC_BATCH_SIZE = 100;
+const MAXIMUM_LOG_FILTER_ADDRESSES = 512;
+const MAXIMUM_LOG_FILTER_TOPIC0 = 64;
+const MAXIMUM_LOG_FILTER_BLOCK_SPAN = 1n;
 
 function safeInteger(value: unknown, operation: string) {
   if (
@@ -887,6 +920,20 @@ async function boundedRpcMap<Input, Output>(
   return output;
 }
 
+function boundedRpcChunks<Input>(
+  values: readonly Input[],
+  size = MAXIMUM_JSON_RPC_BATCH_SIZE,
+): readonly (readonly Input[])[] {
+  if (!Number.isSafeInteger(size) || size < 1) {
+    throw invalidInput("rpc", "batch-size");
+  }
+  const chunks: Input[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return Object.freeze(chunks.map((chunk) => Object.freeze(chunk)));
+}
+
 function validateCandidateBoundary(
   candidate: EnvioCandidate,
   dynamicSources: ReadonlyMap<HexAddress, VerifiedDynamicSourceLineage>,
@@ -1013,14 +1060,25 @@ function validateCandidateBoundary(
       throw validationError("rpc", "dynamic-source-lineage");
     }
     if (dynamicSourceLineage) {
+      const boundaryBlockNumber =
+        dynamicSourceLineage.activationBlockNumber ??
+        dynamicSourceLineage.factoryBlockNumber;
+      const boundaryBlockHash =
+        dynamicSourceLineage.activationBlockHash;
+      const boundaryLogIndex =
+        dynamicSourceLineage.activationBlockGlobalLogIndex ??
+        dynamicSourceLineage.factoryBlockGlobalLogIndex;
+      const isActivationBlock =
+        dynamicSourceLineage.activationBlockNumber !== undefined &&
+        BigInt(dynamicSourceLineage.activationBlockNumber) === blockNumber;
       const parentBeforeChild =
-        BigInt(dynamicSourceLineage.factoryBlockNumber) < blockNumber ||
-        (dynamicSourceLineage.factoryBlockGlobalLogIndex !== undefined &&
-          BigInt(dynamicSourceLineage.factoryBlockNumber) === blockNumber &&
-          BigInt(dynamicSourceLineage.factoryBlockGlobalLogIndex) <
-            BigInt(logIndex));
+        BigInt(boundaryBlockNumber) < blockNumber ||
+        (boundaryLogIndex !== undefined &&
+          BigInt(boundaryBlockNumber) === blockNumber &&
+          BigInt(boundaryLogIndex) < BigInt(logIndex));
       if (
         dynamicSourceLineage.contractName !== candidate.contractName ||
+        (isActivationBlock && boundaryBlockHash !== blockHash) ||
         !parentBeforeChild
       ) {
         throw validationError("rpc", "dynamic-source-lineage");
@@ -1148,9 +1206,20 @@ export async function readDualRpcSafeHead(input: {
       blocks[0]!.safe.hash !== blocks[1]!.safe.hash ||
       blocks[0]!.safe.timestamp !== blocks[1]!.safe.timestamp ||
       blocks[0]!.cursor.hash !== blocks[1]!.cursor.hash ||
-      blocks[0]!.cursor.hash !== expectedCursorHash
+      blocks[0]!.cursor.timestamp !== blocks[1]!.cursor.timestamp ||
+      (safeBlockNumber === cursorBlockNumber &&
+        (blocks[0]!.safe.hash !== blocks[0]!.cursor.hash ||
+          blocks[0]!.safe.timestamp !== blocks[0]!.cursor.timestamp ||
+          blocks[1]!.safe.hash !== blocks[1]!.cursor.hash ||
+          blocks[1]!.safe.timestamp !== blocks[1]!.cursor.timestamp))
     ) {
-      throw validationError("rpc", "safe-head-agreement");
+      throw validationError("rpc", "safe-head-provider-disagreement");
+    }
+    if (blocks[0]!.cursor.hash !== expectedCursorHash) {
+      // Both independent providers agree on the canonical block, but the
+      // durable cursor names another hash. Only this exact shape may enter the
+      // bounded rewind path; provider disagreement always fails closed.
+      throw validationError("rpc", "safe-head-cursor-orphaned");
     }
     return Object.freeze({
       providerHeads: Object.freeze([
@@ -1198,6 +1267,7 @@ export async function readDualRpcTokenMetadata(input: {
   tokens: readonly Readonly<{
     token: HexAddress;
     blockNumber: string;
+    blockHash: HexBytes32;
   }>[];
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   rpcPolicy?: RpcExecutionPolicyInput;
@@ -1243,6 +1313,10 @@ export async function readDualRpcTokenMetadata(input: {
           } catch {
             throw invalidInput("rpc", "erc20-block");
           }
+          const blockHash = rpcBytes32(
+            requested.blockHash,
+            "erc20-block-hash",
+          );
           if (seen.has(token)) {
             throw invalidInput("rpc", "erc20-metadata-duplicate");
           }
@@ -1251,7 +1325,8 @@ export async function readDualRpcTokenMetadata(input: {
             retryRpc(
               () => first.client.readErc20Metadata!({
                 address: token,
-                blockNumber,
+                blockHash,
+                requireCanonical: true,
               }),
               policy,
               providerBudgets[0],
@@ -1260,7 +1335,8 @@ export async function readDualRpcTokenMetadata(input: {
             retryRpc(
               () => second.client.readErc20Metadata!({
                 address: token,
-                blockNumber,
+                blockHash,
+                requireCanonical: true,
               }),
               policy,
               providerBudgets[1],
@@ -1277,6 +1353,7 @@ export async function readDualRpcTokenMetadata(input: {
           return Object.freeze({
             token,
             blockNumber: blockNumber.toString(),
+            blockHash,
             name: leftName,
             symbol: leftSymbol,
           });
@@ -2398,21 +2475,36 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
     previousLogIndex = logIndex;
     return validated;
   });
-  const estimatedCallsPerProvider =
+  const uniqueCandidateBlocks = new Set(
+    candidates.map(({ blockNumber }) => blockNumber.toString()),
+  ).size;
+  const uniqueTransactions = new Set(
+    candidates.map(({ candidate }) => candidate.transactionHash),
+  ).size;
+  const uniqueCodeRequests = new Set(
+    candidates.map(
+      ({ candidate }) => `${candidate.blockHash}:${candidate.sourceAddress}`,
+    ),
+  ).size;
+  const estimatedCallsByProvider = clients.map((client) =>
     2 +
-    new Set(candidates.map(({ blockNumber }) => blockNumber.toString()))
-      .size +
-    1 +
-    new Set(
-      candidates.map(({ candidate }) => candidate.transactionHash),
-    ).size +
-    new Set(
-      candidates.map(
-        ({ candidate, blockNumber }) =>
-          `${blockNumber}:${candidate.sourceAddress}`,
-      ),
-    ).size;
-  if (estimatedCallsPerProvider > policy.maxCallsPerProvider) {
+    (client.getBlocks === undefined
+      ? uniqueCandidateBlocks + 1
+      : Math.ceil(
+          (uniqueCandidateBlocks + 1) / MAXIMUM_JSON_RPC_BATCH_SIZE,
+        )) +
+    (client.getTransactionReceipts === undefined
+      ? uniqueTransactions
+      : Math.ceil(uniqueTransactions / MAXIMUM_JSON_RPC_BATCH_SIZE)) +
+    (client.getBytecodes === undefined
+      ? uniqueCodeRequests
+      : Math.ceil(uniqueCodeRequests / MAXIMUM_JSON_RPC_BATCH_SIZE)),
+  );
+  if (
+    estimatedCallsByProvider.some(
+      (estimated) => estimated > policy.maxCallsPerProvider,
+    )
+  ) {
     throw invalidInput("rpc", "provider-call-budget");
   }
 
@@ -2481,11 +2573,12 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
     ];
     const codeRequests = [
       ...new Map(
-        candidates.map(({ candidate, blockNumber }) => [
-          `${blockNumber}:${candidate.sourceAddress}`,
+        candidates.map(({ candidate }) => [
+          `${candidate.blockHash}:${candidate.sourceAddress}`,
           {
             address: candidate.sourceAddress,
-            blockNumber,
+            blockHash: candidate.blockHash,
+            requireCanonical: true as const,
           },
         ]),
       ).entries(),
@@ -2493,45 +2586,113 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
     const providerData = await Promise.all(
       clients.map(async (client, providerIndex) => {
         const traceContext = traceContexts[providerIndex]!;
-        const blocks = await boundedRpcMap(
-          blockNumbers,
-          policy.maxConcurrency,
-          async (blockNumber) => [
-            blockNumber.toString(),
-            await retryTracedRpc(
-              "getBlock",
-              () => client.getBlock({ blockNumber }),
-              policy,
-              traceContext,
-            ),
-          ] as const,
-        );
-        const receipts = await boundedRpcMap(
-          transactionHashes,
-          policy.maxConcurrency,
-          async (transactionHash) => [
-            transactionHash,
-            await retryTracedRpc(
-              "getTransactionReceipt",
-              () => client.getTransactionReceipt({ hash: transactionHash }),
-              policy,
-              traceContext,
-            ),
-          ] as const,
-        );
-        const bytecodes = await boundedRpcMap(
-          codeRequests,
-          policy.maxConcurrency,
-          async ([key, request]) => [
-            key,
-            await retryTracedRpc(
-              "getBytecode",
-              () => client.getBytecode(request),
-              policy,
-              traceContext,
-            ),
-          ] as const,
-        );
+        const blocks = client.getBlocks === undefined
+          ? await boundedRpcMap(
+              blockNumbers,
+              policy.maxConcurrency,
+              async (blockNumber) => [
+                blockNumber.toString(),
+                await retryTracedRpc(
+                  "getBlock",
+                  () => client.getBlock({ blockNumber }),
+                  policy,
+                  traceContext,
+                ),
+              ] as const,
+            )
+          : (
+              await boundedRpcMap(
+                boundedRpcChunks(blockNumbers),
+                policy.maxConcurrency,
+                async (numbers) => {
+                  const values = await retryTracedRpc(
+                    "getBlock",
+                    () => client.getBlocks!({ blockNumbers: numbers }),
+                    policy,
+                    traceContext,
+                  );
+                  if (!Array.isArray(values) || values.length !== numbers.length) {
+                    throw validationError("rpc", "block-batch-shape");
+                  }
+                  return numbers.map(
+                    (number, index) => [
+                      number.toString(),
+                      values[index]!,
+                    ] as const,
+                  );
+                },
+              )
+            ).flat();
+        const receipts = client.getTransactionReceipts === undefined
+          ? await boundedRpcMap(
+              transactionHashes,
+              policy.maxConcurrency,
+              async (transactionHash) => [
+                transactionHash,
+                await retryTracedRpc(
+                  "getTransactionReceipt",
+                  () => client.getTransactionReceipt({ hash: transactionHash }),
+                  policy,
+                  traceContext,
+                ),
+              ] as const,
+            )
+          : (
+              await boundedRpcMap(
+                boundedRpcChunks(transactionHashes),
+                policy.maxConcurrency,
+                async (hashes) => {
+                  const values = await retryTracedRpc(
+                    "getTransactionReceipt",
+                    () => client.getTransactionReceipts!({ hashes }),
+                    policy,
+                    traceContext,
+                  );
+                  if (!Array.isArray(values) || values.length !== hashes.length) {
+                    throw validationError("rpc", "receipt-batch-shape");
+                  }
+                  return hashes.map(
+                    (hash, index) => [hash, values[index]!] as const,
+                  );
+                },
+              )
+            ).flat();
+        const bytecodes = client.getBytecodes === undefined
+          ? await boundedRpcMap(
+              codeRequests,
+              policy.maxConcurrency,
+              async ([key, request]) => [
+                key,
+                await retryTracedRpc(
+                  "getBytecode",
+                  () => client.getBytecode(request),
+                  policy,
+                  traceContext,
+                ),
+              ] as const,
+            )
+          : (
+              await boundedRpcMap(
+                boundedRpcChunks(codeRequests),
+                policy.maxConcurrency,
+                async (entries) => {
+                  const values = await retryTracedRpc(
+                    "getBytecode",
+                    () => client.getBytecodes!({
+                      requests: entries.map(([, request]) => request),
+                    }),
+                    policy,
+                    traceContext,
+                  );
+                  if (!Array.isArray(values) || values.length !== entries.length) {
+                    throw validationError("rpc", "bytecode-batch-shape");
+                  }
+                  return entries.map(
+                    ([key], index) => [key, values[index]] as const,
+                  );
+                },
+              )
+            ).flat();
         return {
           blocks: new Map(blocks),
           receipts: new Map(receipts),
@@ -2611,7 +2772,7 @@ export async function verifyEnvioCandidateBatchWithDualRpc(input: {
         throw validationError("rpc", "receipt-agreement");
       }
 
-      const codeKey = `${blockNumber}:${candidate.sourceAddress}`;
+      const codeKey = `${candidate.blockHash}:${candidate.sourceAddress}`;
       const code = providerData.map((data) => {
         const value = data.bytecodes.get(codeKey);
         if (value === undefined) throw validationError("rpc", "source-code");
@@ -2855,6 +3016,8 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     maximumRequests?: number;
   };
   dynamicSources?: readonly VerifiedDynamicSourceLineage[];
+  coverageSourceAddresses?: readonly HexAddress[];
+  maximumCandidateCount?: number;
 }): Promise<DualRpcCandidateWindowEvidence> {
   const windowStartedAt = Date.now();
   const cursor = coverageCursor(input.cursor, "coverage-cursor");
@@ -2919,6 +3082,7 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     rpcPolicy: input.rpcPolicy,
     dynamicSources: input.dynamicSources,
     requireDynamicLineage: true,
+    maximumCandidateCount: input.maximumCandidateCount,
   });
   if (BigInt(through.blockNumber) > BigInt(batch.safeBlockNumber)) {
     throw validationError("rpc", "coverage-finality");
@@ -2927,7 +3091,7 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
   const dynamicSources = canonicalDynamicSourceLineages(
     input.dynamicSources,
   );
-  const sources = RELEASE_BINDING.sources
+  const configuredSources = RELEASE_BINDING.sources
     .filter(({ startBlock }) => BigInt(startBlock) <= BigInt(through.blockNumber))
     .map(({ address, contractName }) => ({
       address: rpcAddress(address, "coverage-source"),
@@ -2947,10 +3111,48 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
         ),
       })),
     );
+  const mergedSelectors = new Map<HexAddress, Set<HexBytes32>>();
+  for (const { address, selectors } of configuredSources) {
+    const current = mergedSelectors.get(address) ?? new Set<HexBytes32>();
+    for (const selector of selectors) current.add(selector);
+    mergedSelectors.set(address, current);
+  }
+  let sources = [...mergedSelectors.entries()]
+    .map(([address, selectors]) => ({ address, selectors }))
+    .sort((left, right) => left.address.localeCompare(right.address));
+  if (input.coverageSourceAddresses !== undefined) {
+    if (
+      !Array.isArray(input.coverageSourceAddresses) ||
+      input.coverageSourceAddresses.length < 1 ||
+      input.coverageSourceAddresses.length >
+        PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP
+    ) {
+      throw invalidInput("rpc", "coverage-source-addresses");
+    }
+    const requested = new Set(
+      input.coverageSourceAddresses.map((address) =>
+        rpcAddress(address, "coverage-source-address"),
+      ),
+    );
+    if (requested.size !== input.coverageSourceAddresses.length) {
+      throw invalidInput("rpc", "coverage-source-addresses");
+    }
+    const available = new Set(sources.map(({ address }) => address));
+    if ([...requested].some((address) => !available.has(address))) {
+      throw invalidInput("rpc", "coverage-source-addresses");
+    }
+    sources = sources.filter(({ address }) => requested.has(address));
+  }
   const selectorsByAddress = new Map(
     sources.map(({ address, selectors }) => [address, selectors] as const),
   );
   const addresses = sources.map(({ address }) => address);
+  const topic0 = [
+    ...new Set(sources.flatMap(({ selectors }) => [...selectors])),
+  ].sort();
+  if (addresses.length < 1 || topic0.length < 1) {
+    throw invalidInput("rpc", "coverage-filter");
+  }
   const filterCommitment = keccak256(
     toBytes(
       JSON.stringify(
@@ -2980,6 +3182,37 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
   if (ranges.length > maximumRequests) {
     throw invalidInput("rpc", "coverage-request-budget");
   }
+  const logFilters: CandidateRpcLogFilter[] = [];
+  const addressChunks = boundedRpcChunks(
+    addresses,
+    MAXIMUM_LOG_FILTER_ADDRESSES,
+  );
+  const topicChunks = boundedRpcChunks(topic0, MAXIMUM_LOG_FILTER_TOPIC0);
+  for (const range of ranges) {
+    for (
+      let block = range.fromBlock;
+      block <= range.toBlock;
+      block += MAXIMUM_LOG_FILTER_BLOCK_SPAN
+    ) {
+      const filterToBlock =
+        block + MAXIMUM_LOG_FILTER_BLOCK_SPAN - 1n < range.toBlock
+          ? block + MAXIMUM_LOG_FILTER_BLOCK_SPAN - 1n
+          : range.toBlock;
+      for (const addressChunk of addressChunks) {
+        for (const topicChunk of topicChunks) {
+          logFilters.push(Object.freeze({
+            addresses: addressChunk,
+            topic0: topicChunk,
+            fromBlock: block,
+            toBlock: filterToBlock,
+          }));
+        }
+      }
+    }
+  }
+  if (logFilters.length < 1) {
+    throw invalidInput("rpc", "coverage-filter");
+  }
   const remainingDeadlineMs =
     (input.rpcPolicy?.hardDeadlineMs ??
       input.rpcPolicy?.deadlineMs ??
@@ -2998,12 +3231,13 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     hardDeadlineMs: remainingDeadlineMs,
     deadlineMs: undefined,
   });
-  if (
-    batch.executionTrace.providerCallCounts.some(
-      (count) =>
-        count + 1 + ranges.length > coveragePolicy.maxCallsPerProvider,
-    )
-  ) {
+  if (input.providers.some(({ client }, providerIndex) => {
+    const logCallCount = typeof client.getLogsBatch === "function"
+      ? Math.ceil(logFilters.length / MAXIMUM_JSON_RPC_BATCH_SIZE)
+      : logFilters.length;
+    return batch.executionTrace.providerCallCounts[providerIndex]! +
+      1 + logCallCount > coveragePolicy.maxCallsPerProvider;
+  })) {
     throw invalidInput("rpc", "provider-call-budget");
   }
 
@@ -3037,20 +3271,35 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     }
     const providerLogs = await Promise.all(
       input.providers.map(async ({ client }, providerIndex) => {
-        if (typeof client.getLogs !== "function") {
+        if (
+          typeof client.getLogs !== "function" &&
+          typeof client.getLogsBatch !== "function"
+        ) {
           throw invalidInput("rpc", "coverage-get-logs");
         }
-        const pages = await boundedRpcMap(
-          ranges,
-          coveragePolicy.maxConcurrency,
-          (range) =>
-            retryRpc(
-              () => client.getLogs!({ addresses, ...range }),
-              coveragePolicy,
-              providerBudgets[providerIndex],
-            ),
-        );
-        const seen = new Set<string>();
+        const pages = typeof client.getLogsBatch === "function"
+          ? (await boundedRpcMap(
+              boundedRpcChunks(logFilters),
+              coveragePolicy.maxConcurrency,
+              (requests) => retryRpc(
+                () => client.getLogsBatch!({ requests }),
+                coveragePolicy,
+                providerBudgets[providerIndex],
+              ),
+            )).flat()
+          : await boundedRpcMap(
+              logFilters,
+              coveragePolicy.maxConcurrency,
+              (filter) => retryRpc(
+                () => client.getLogs!(filter),
+                coveragePolicy,
+                providerBudgets[providerIndex],
+              ),
+            );
+        if (pages.length !== logFilters.length) {
+          throw validationError("rpc", "coverage-batch-shape");
+        }
+        const seen = new Map<string, HexBytes32>();
         const logs: CanonicalCoverageLog[] = [];
         for (const page of pages) {
           if (!Array.isArray(page) || page.length > 10_000) {
@@ -3071,10 +3320,14 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
               continue;
             }
             const key = coverageLogPlacementKey(log);
-            if (seen.has(key)) {
-              throw validationError("rpc", "coverage-duplicate");
+            const existingCommitment = seen.get(key);
+            if (existingCommitment !== undefined) {
+              if (existingCommitment !== log.commitment) {
+                throw validationError("rpc", "coverage-duplicate");
+              }
+              continue;
             }
-            seen.add(key);
+            seen.set(key, log.commitment);
             logs.push(log);
           }
         }
@@ -3446,7 +3699,7 @@ function dynamicImmutableEvidence(input: {
  * provider. A transient failure therefore fails closed and is retried by the
  * next projector cycle without advancing the canonical cursor.
  */
-export async function verifyDynamicRuntimeAtBlockWithDualRpc(input: {
+async function verifyDynamicRuntimeAtBlockWithDualRpcInternal(input: {
   parentCandidate: EnvioCandidate;
   sourceAddress: HexAddress;
   deploymentBlockNumber: string;
@@ -3455,8 +3708,10 @@ export async function verifyDynamicRuntimeAtBlockWithDualRpc(input: {
   parentEvidence: DualRpcCandidateWindowEvidence;
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   deadlineMs?: number;
-}): Promise<DualRpcDynamicRuntimeObservation> {
-  assertProductionDualRpcProviders(input.providers);
+}, preloaded?: Readonly<{
+  rawCodes: readonly [Hex | undefined, Hex | undefined];
+  startedAtMs: number;
+}>): Promise<DualRpcDynamicRuntimeObservation> {
   const template = canonicalDynamicSourceTemplate(input.template);
   const sourceAddress = rpcAddress(
     input.sourceAddress,
@@ -3479,17 +3734,26 @@ export async function verifyDynamicRuntimeAtBlockWithDualRpc(input: {
     typeof input.parentCandidate !== "object" ||
     !CANDIDATE_ID_PATTERN.test(input.parentCandidate.candidateId) ||
     input.parentEvidence.chainId !== RELEASE_BINDING.chainId ||
-    input.parentEvidence.coveredCandidateCount !== 1 ||
-    input.parentEvidence.candidates.length !== 1 ||
+    input.parentEvidence.coveredCandidateCount !==
+      input.parentEvidence.candidates.length ||
+    input.parentEvidence.candidates.length < 1 ||
+    input.parentEvidence.candidates.length >
+      PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP ||
     input.parentEvidence.coverage.throughBlockNumber !==
       deploymentBlockNumber ||
     input.parentEvidence.coverage.throughBlockHash !== deploymentBlockHash ||
-    input.parentEvidence.coverage.throughBlockGlobalLogIndex ===
+    input.parentEvidence.coverage.throughBlockGlobalLogIndex !==
       String(0xffff_ffff)
   ) {
     throw invalidInput("rpc", "dynamic-runtime-parent-evidence");
   }
-  const parent = input.parentEvidence.candidates[0]!;
+  const matchingParents = input.parentEvidence.candidates.filter(
+    ({ candidateId }) => candidateId === input.parentCandidate.candidateId,
+  );
+  if (matchingParents.length !== 1) {
+    throw validationError("rpc", "dynamic-runtime-parent-binding");
+  }
+  const parent = matchingParents[0]!;
   if (
     parent.candidateId !== input.parentCandidate.candidateId ||
     parent.candidateBlockNumber !== deploymentBlockNumber ||
@@ -3555,15 +3819,16 @@ export async function verifyDynamicRuntimeAtBlockWithDualRpc(input: {
     hardDeadlineMs: input.deadlineMs,
     maxCallsPerProvider: 1,
   });
-  const startedAtMs = Date.now();
+  const startedAtMs = preloaded?.startedAtMs ?? Date.now();
   try {
-    const rawCodes = await Promise.all(
+    const rawCodes = preloaded?.rawCodes ?? await Promise.all(
       input.providers.map(({ client }) =>
         withinRpcDeadline(
           () =>
             client.getBytecode({
               address: sourceAddress,
-              blockNumber: BigInt(deploymentBlockNumber),
+              blockHash: deploymentBlockHash,
+              requireCanonical: true,
             }),
           policy,
         ),
@@ -3668,6 +3933,131 @@ export async function verifyDynamicRuntimeAtBlockWithDualRpc(input: {
       hardDeadlineMs: policy.hardDeadlineMs,
       providerCallCounts: Object.freeze([1, 1]) as readonly [1, 1],
     });
+  } catch (error) {
+    if (error instanceof DataPipelineError) throw error;
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "dependency_unavailable",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
+}
+
+export async function verifyDynamicRuntimeAtBlockWithDualRpc(input: {
+  parentCandidate: EnvioCandidate;
+  sourceAddress: HexAddress;
+  deploymentBlockNumber: string;
+  deploymentBlockHash: HexBytes32;
+  template: ProjectorDynamicSourceTemplate;
+  parentEvidence: DualRpcCandidateWindowEvidence;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  deadlineMs?: number;
+}): Promise<DualRpcDynamicRuntimeObservation> {
+  assertProductionDualRpcProviders(input.providers);
+  return verifyDynamicRuntimeAtBlockWithDualRpcInternal(input);
+}
+
+/**
+ * Verifies every provisional runtime through bounded EIP-1898 eth_getCode
+ * batches. Each item is still validated against its exact parent candidate and
+ * template, while a physical provider call carries at most 100 requests.
+ */
+export async function verifyDynamicRuntimesAtBlockWithDualRpc(input: {
+  items: readonly Readonly<{
+    parentCandidate: EnvioCandidate;
+    sourceAddress: HexAddress;
+    deploymentBlockNumber: string;
+    deploymentBlockHash: HexBytes32;
+    template: ProjectorDynamicSourceTemplate;
+  }>[];
+  parentEvidence: DualRpcCandidateWindowEvidence;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  deadlineMs?: number;
+}): Promise<readonly DualRpcDynamicRuntimeObservation[]> {
+  assertProductionDualRpcProviders(input.providers);
+  if (
+    !Array.isArray(input.items) ||
+    input.items.length < 1 ||
+    input.items.length > PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP ||
+    new Set(input.items.map(({ parentCandidate }) => parentCandidate.candidateId))
+      .size !== input.items.length ||
+    new Set(input.items.map(({ sourceAddress }) => sourceAddress)).size !==
+      input.items.length
+  ) {
+    throw invalidInput("rpc", "dynamic-runtime-batch");
+  }
+  const policy = rpcExecutionPolicy({
+    maxConcurrency: 2,
+    maxAttempts: 1,
+    baseBackoffMs: 0,
+    hardDeadlineMs: input.deadlineMs,
+    maxCallsPerProvider: 128,
+  });
+  const requests = input.items.map((item) => Object.freeze({
+    address: rpcAddress(item.sourceAddress, "dynamic-runtime-source"),
+    blockHash: rpcBytes32(
+      item.deploymentBlockHash,
+      "dynamic-runtime-block",
+    ),
+    requireCanonical: true as const,
+  }));
+  const chunks: Readonly<{ start: number; requests: typeof requests }>[] = [];
+  for (let start = 0; start < requests.length; start += MAXIMUM_JSON_RPC_BATCH_SIZE) {
+    chunks.push(Object.freeze({
+      start,
+      requests: requests.slice(start, start + MAXIMUM_JSON_RPC_BATCH_SIZE),
+    }));
+  }
+  if (chunks.length > policy.maxCallsPerProvider) {
+    throw validationError("rpc", "dynamic-runtime-call-budget");
+  }
+  const startedAtMs = Date.now();
+  try {
+    const providerCodes = await Promise.all(
+      input.providers.map(async ({ client }) => {
+        const output: (Hex | undefined)[] = new Array(requests.length);
+        for (const chunk of chunks) {
+          const values = client.getBytecodes
+            ? await withinRpcDeadline(
+                () => client.getBytecodes!({ requests: chunk.requests }),
+                policy,
+              )
+            : chunk.requests.length === 1
+              ? [await withinRpcDeadline(
+                  () => client.getBytecode(chunk.requests[0]!),
+                  policy,
+                )]
+              : (() => {
+                  throw validationError(
+                    "rpc",
+                    "dynamic-runtime-batch-unavailable",
+                  );
+                })();
+          if (values.length !== chunk.requests.length) {
+            throw validationError("rpc", "dynamic-runtime-batch-size");
+          }
+          values.forEach((value, offset) => {
+            output[chunk.start + offset] = value;
+          });
+        }
+        return output;
+      }),
+    );
+    return Object.freeze(await Promise.all(input.items.map((item, index) =>
+      verifyDynamicRuntimeAtBlockWithDualRpcInternal({
+        ...item,
+        parentEvidence: input.parentEvidence,
+        providers: input.providers,
+        deadlineMs: policy.hardDeadlineMs,
+      }, {
+        rawCodes: Object.freeze([
+          providerCodes[0]![index],
+          providerCodes[1]![index],
+        ]) as readonly [Hex | undefined, Hex | undefined],
+        startedAtMs,
+      }),
+    )));
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;
     throw dataPipelineError({

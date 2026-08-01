@@ -29,7 +29,7 @@ const POSTGRES_BIGINT_MAXIMUM = 9_223_372_036_854_775_807n;
 const FINALITY_DEPTH = 12n;
 const DEFAULT_MAXIMUM_DEPTH = 64;
 const MAXIMUM_DEPTH = 128;
-const DEFAULT_MAXIMUM_PROVIDER_CALLS = 67;
+const DEFAULT_MAXIMUM_PROVIDER_CALLS = 68;
 const MAXIMUM_PROVIDER_CALLS = 128;
 const DEFAULT_MAXIMUM_ATTEMPTS = 2;
 const DEFAULT_DEADLINE_MS = 75_000;
@@ -622,6 +622,30 @@ export async function findCanonicalAncestorWithDualRpc(input: {
       throw validationError("rpc", "reorg-provider-disagreement");
     }
     if (first.hash !== target.blockHash) continue;
+
+    // Pin the safe head for the complete ancestor search. A reorg can happen
+    // after the initial safe-block sample but before the matching history
+    // target is read; returning that temporally mixed proof would make the
+    // database recovery decision depend on two different canonical views.
+    const finalRawSafeBlocks = await paired((provider) =>
+      provider.client.getBlock({ blockNumber: safeBlockNumber }),
+    );
+    const finalFirstSafe = canonicalProviderBlock(
+      finalRawSafeBlocks[0],
+      safeBlockNumber,
+    );
+    const finalSecondSafe = canonicalProviderBlock(
+      finalRawSafeBlocks[1],
+      safeBlockNumber,
+    );
+    if (
+      finalFirstSafe.hash !== finalSecondSafe.hash ||
+      finalFirstSafe.timestamp !== finalSecondSafe.timestamp ||
+      finalFirstSafe.hash !== firstSafe.hash ||
+      finalFirstSafe.timestamp !== firstSafe.timestamp
+    ) {
+      throw validationError("rpc", "reorg-safe-head-changed");
+    }
 
     return Object.freeze({
       ...target,

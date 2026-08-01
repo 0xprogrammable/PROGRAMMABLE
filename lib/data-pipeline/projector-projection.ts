@@ -313,7 +313,11 @@ function planRewardVerifications(
 function launchMetadataRequests(candidates: readonly EnvioCandidate[]) {
   const requests = new Map<
     string,
-    Readonly<{ token: `0x${string}`; blockNumber: string }>
+    Readonly<{
+      token: `0x${string}`;
+      blockNumber: string;
+      blockHash: `0x${string}`;
+    }>
   >();
   for (const candidate of candidates) {
     if (!LAUNCH_EVENTS.has(candidate.eventName)) continue;
@@ -330,6 +334,7 @@ function launchMetadataRequests(candidates: readonly EnvioCandidate[]) {
       Object.freeze({
         token: token as `0x${string}`,
         blockNumber: candidate.blockNumber,
+        blockHash: candidate.blockHash,
       }),
     );
   }

@@ -86,6 +86,7 @@ function candidate(
     contractName?: string;
     eventName?: string;
     decodedPayload?: Record<string, unknown>;
+    releaseHint?: EnvioCandidate["releaseHint"];
   } = {},
 ): EnvioCandidate {
   const blockNumber = input.blockNumber ?? 101;
@@ -106,7 +107,13 @@ function candidate(
       input.sourceAddress ?? "0xd240d06f8586eb799f20056054e5b527405e6bad",
     contractName: input.contractName ?? "ClassicV2Launcher",
     eventName: input.eventName ?? "MemeTokenLaunched",
-    releaseHint: { model: "classic", releaseVersion: "classic-v2" },
+    releaseHint: input.releaseHint ?? {
+      model: "classic",
+      releaseVersion:
+        input.contractName === "ClassicV3RewardVaultFactory"
+          ? "classic-v3"
+          : "classic-v2",
+    },
     orderedTopics: [`0x${"55".repeat(32)}`],
     rawData: "0x",
     decodedPayload: input.decodedPayload ?? {},
@@ -130,6 +137,7 @@ function fixtures() {
           isBlockBoundary: false,
         },
         dynamicSources: [],
+        provisionalSourceAddresses: [],
         dynamicSourceTemplates: [dynamicTemplate()],
         database: {
           epochId: "70000000-0000-0000-0000-000000000002",
@@ -144,6 +152,24 @@ function fixtures() {
         },
       };
     }),
+    readReorgRecoveryState: vi.fn(async () => ({
+      ancestors: [],
+      genesis: {
+        kind: "genesis" as const,
+        historyGeneration: "0" as const,
+        genesisPointId: "70000000-0000-4000-8000-000000000006",
+        blockNumber: "0",
+        blockHash: CURSOR_HASH,
+        blockGlobalLogIndex: null,
+        candidateId: null,
+      },
+      currentReorgGeneration: "0",
+    })),
+    recoverCanonicalReorg: vi.fn(async () => ({
+      generation: "6",
+      reorgGeneration: "1",
+      releaseCheckpointCount: 5,
+    })),
     stageVerifiedDynamicParents: vi.fn(async () => {
       expect(databaseTransactionOpen).toBe(false);
     }),
@@ -160,7 +186,8 @@ function fixtures() {
       expect(databaseTransactionOpen).toBe(false);
       return { progressBlock: "200" };
     }),
-    readCandidatesWindow: vi.fn(async () => {
+    readCandidatesWindow: vi.fn(async (input: { limit: number }) => {
+      void input;
       expect(databaseTransactionOpen).toBe(false);
       candidatePage += 1;
       return candidatePage === 1 ? [candidate()] : [];
@@ -267,14 +294,14 @@ describe("projector runtime boundary", () => {
       status: "committed",
       candidateCount: 1,
       generation: "6",
-      snapshotBlock: "200",
+      snapshotBlock: "101",
     });
     expect(input.store.commitVerifiedPage).toHaveBeenCalledTimes(1);
     expect(input.verifyWindow).toHaveBeenCalledWith(
       expect.objectContaining({
         candidates: [expect.objectContaining({ candidateId: candidate().candidateId })],
         through: {
-          blockNumber: "200",
+          blockNumber: "101",
           blockGlobalLogIndex: 0xffff_ffff,
           candidateId: "empty-page",
         },
@@ -287,16 +314,103 @@ describe("projector runtime boundary", () => {
     );
     expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
       expect.objectContaining({
-        snapshotBlock: "200",
+        snapshotBlock: "101",
         blockComplete: true,
         evidence: expect.objectContaining({
           coverage: expect.objectContaining({
-            throughBlockNumber: "200",
-            throughBlockHash: SAFE_HASH,
+            throughBlockNumber: "101",
+            throughBlockHash: CANDIDATE_HASH,
             throughBlockGlobalLogIndex: "4294967295",
           }),
         }),
       }),
+    );
+  });
+
+  it("commits a trailing candidate block before advancing later empty blocks", async () => {
+    const input = fixtures();
+    const onlyCandidate = candidate();
+    await expect(runProjectorCycle({
+      ...input,
+      providers: [] as never,
+      deadlineMs: 1_000,
+    })).resolves.toMatchObject({
+      status: "committed",
+      candidateCount: 1,
+      snapshotBlock: "101",
+    });
+    input.store.readPlan.mockResolvedValue({
+      ...(await input.store.readPlan()),
+      cursor: {
+        generation: "6",
+        blockNumber: "101",
+        blockHash: onlyCandidate.blockHash,
+        blockGlobalLogIndex: onlyCandidate.blockGlobalLogIndex,
+        candidateId: onlyCandidate.candidateId,
+        isBlockBoundary: false,
+      },
+    });
+    input.envio.readCandidatesWindow.mockReset().mockResolvedValue([]);
+    input.store.commitVerifiedPage.mockClear();
+    await expect(runProjectorCycle({
+      ...input,
+      providers: [] as never,
+      deadlineMs: 1_000,
+    })).resolves.toMatchObject({
+      status: "committed-empty",
+      candidateCount: 0,
+      snapshotBlock: "200",
+    });
+    expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: [],
+        snapshotBlock: "200",
+        blockComplete: true,
+      }),
+    );
+  });
+
+  it("shrinks a long quiet window to a provider-safe prefix for 10,000 sources", async () => {
+    const input = fixtures();
+    input.store.readPlan.mockResolvedValue({
+      ...(await input.store.readPlan()),
+      dynamicSources: Array.from({ length: 10_000 }, (_value, index) => ({
+        sourceAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+        contractName: "ClassicV3RewardVault",
+      })) as never,
+      provisionalSourceAddresses: [],
+    });
+    input.captureSafeHead.mockResolvedValue({
+      providerHeads: ["10012", "10013"],
+      safeBlockNumber: "10000",
+      safeBlockHash: SAFE_HASH,
+      cursorBlockHash: CURSOR_HASH,
+    } as never);
+    input.envio.readProgress.mockResolvedValue({ progressBlock: "10000" });
+    input.envio.readCandidatesWindow.mockReset().mockResolvedValue([]);
+    const batchingClient = {
+      getBlocks: vi.fn(),
+      getTransactionReceipts: vi.fn(),
+      getBytecodes: vi.fn(),
+      getLogsBatch: vi.fn(),
+    };
+
+    await runProjectorCycle({
+      ...input,
+      providers: [
+        { client: batchingClient } as never,
+        { client: { ...batchingClient } } as never,
+      ],
+      deadlineMs: 1_000,
+    });
+
+    const request = input.verifyWindow.mock.calls.at(-1)?.[0];
+    const throughBlock = BigInt(request?.through.blockNumber ?? "0");
+    expect(throughBlock).toBeGreaterThanOrEqual(100n);
+    expect(throughBlock).toBeLessThan(4_599n);
+    expect(throughBlock - 100n + 1n).toBeLessThanOrEqual(620n);
+    expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
+      expect.objectContaining({ snapshotBlock: throughBlock.toString() }),
     );
   });
 
@@ -312,6 +426,124 @@ describe("projector runtime boundary", () => {
         deadlineMs: 1_000,
       }),
     ).rejects.toMatchObject({ code: "validation_failed" });
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
+
+  it("enters bounded recovery only for a cursor orphan agreed by both providers", async () => {
+    const input = fixtures();
+    input.captureSafeHead.mockRejectedValue(
+      validationError("rpc", "safe-head-cursor-orphaned"),
+    );
+    const target = {
+      kind: "genesis" as const,
+      historyGeneration: "0" as const,
+      genesisPointId: "70000000-0000-4000-8000-000000000006",
+      blockNumber: "0",
+      blockHash: CURSOR_HASH,
+      blockGlobalLogIndex: null,
+      candidateId: null,
+      providerIdentities: ["alchemy-mainnet", "quicknode-mainnet"] as const,
+      providerEndpointCommitments: [SAFE_HASH, CURSOR_HASH] as const,
+      providerOriginCommitments: [SAFE_HASH, CURSOR_HASH] as const,
+      providerBlockHashes: [CURSOR_HASH, CURSOR_HASH] as const,
+      providerBlockTimestamps: ["1000", "1000"] as const,
+      providerChainIds: [1, 1] as const,
+      providerHeads: ["220", "221"] as const,
+      finalityDepth: "12",
+      safeBlockNumber: "208",
+      safeBlockHash: SAFE_HASH,
+      providerSafeBlockHashes: [SAFE_HASH, SAFE_HASH] as const,
+      checkedDepth: 1,
+    };
+    const findCanonicalAncestor = vi.fn(async () => target);
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        findCanonicalAncestor: findCanonicalAncestor as never,
+        deadlineMs: 1_000,
+      }),
+    ).resolves.toEqual({
+      status: "recovered-reorg",
+      candidateCount: 0,
+      generation: "6",
+      reorgGeneration: "1",
+      releaseCheckpointCount: 5,
+      snapshotBlock: "0",
+    });
+    expect(input.store.readReorgRecoveryState).toHaveBeenCalledTimes(1);
+    expect(findCanonicalAncestor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ancestors: [],
+        genesis: expect.objectContaining({ historyGeneration: "0" }),
+        policy: expect.objectContaining({
+          maximumDepth: 128,
+          maxProviderCalls: 128,
+        }),
+      }),
+    );
+    expect(input.store.recoverCanonicalReorg).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recovery: expect.objectContaining({
+          expectedGeneration: "5",
+          nextGeneration: "6",
+          expectedReorgGeneration: "0",
+          nextReorgGeneration: "1",
+          targetHistoryGeneration: "0",
+          targetBlockNumber: "0",
+        }),
+      }),
+    );
+    expect(input.envio.readProgress).not.toHaveBeenCalled();
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
+
+  it("never enters recovery on provider disagreement", async () => {
+    const input = fixtures();
+    input.captureSafeHead.mockRejectedValue(
+      validationError("rpc", "safe-head-provider-disagreement"),
+    );
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+      }),
+    ).rejects.toMatchObject({
+      code: "validation_failed",
+      safeMetadata: { operation: "safe-head-provider-disagreement" },
+    });
+    expect(input.store.readReorgRecoveryState).not.toHaveBeenCalled();
+    expect(input.store.recoverCanonicalReorg).not.toHaveBeenCalled();
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the recovery generation changes after the plan read", async () => {
+    const input = fixtures();
+    input.captureSafeHead.mockRejectedValue(
+      validationError("rpc", "safe-head-cursor-orphaned"),
+    );
+    input.store.readReorgRecoveryState.mockResolvedValue({
+      ...(await input.store.readReorgRecoveryState()),
+      currentReorgGeneration: "1",
+    });
+    const findCanonicalAncestor = vi.fn();
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        findCanonicalAncestor: findCanonicalAncestor as never,
+        deadlineMs: 1_000,
+      }),
+    ).rejects.toMatchObject({
+      dependency: "postgres",
+      code: "invalid_input",
+    });
+    expect(findCanonicalAncestor).not.toHaveBeenCalled();
+    expect(input.store.recoverCanonicalReorg).not.toHaveBeenCalled();
     expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
   });
 
@@ -371,15 +603,17 @@ describe("projector runtime boundary", () => {
       expect.objectContaining({
         candidates: [parent],
         cursor: {
-          blockNumber: "101",
-          blockGlobalLogIndex: 6,
-          candidateId: `1:${parent.blockHash}:${parent.transactionHash}:6`,
+          blockNumber: "100",
+          blockGlobalLogIndex: 0xffff_ffff,
+          candidateId: "",
         },
         through: {
           blockNumber: "101",
-          blockGlobalLogIndex: 7,
-          candidateId: parent.candidateId,
+          blockGlobalLogIndex: 0xffff_ffff,
+          candidateId: "empty-page",
         },
+        coverageSourceAddresses: [CLASSIC_V3_FACTORY],
+        maximumCandidateCount: 4096,
       }),
     );
     expect(input.verifyDynamicRuntime).toHaveBeenCalledWith(
@@ -396,6 +630,63 @@ describe("projector runtime boundary", () => {
       }),
     );
   });
+
+  it.each([2, 32, 33])(
+    "stages all %i previously unknown parents from one block as one page",
+    async (count) => {
+      const input = fixtures();
+      const parents = Array.from({ length: count }, (_, index) =>
+        candidate({
+          blockNumber: 101,
+          logIndex: index,
+          sourceAddress: CLASSIC_V3_FACTORY,
+          contractName: "ClassicV3RewardVaultFactory",
+          eventName: "ClassicRewardVaultDeployed",
+          decodedPayload: {
+            vault: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+            configurationHash: CURSOR_HASH,
+          },
+        }),
+      );
+      let offset = 0;
+      input.envio.readCandidatesWindow.mockReset().mockImplementation(
+        async ({ limit }: { limit: number }) => {
+          const page = parents.slice(offset, offset + limit);
+          offset += page.length;
+          return page;
+        },
+      );
+
+      await expect(
+        runProjectorCycle({
+          ...input,
+          providers: [] as never,
+          deadlineMs: 75_000,
+        }),
+      ).resolves.toEqual({
+        status: "staged-dynamic-parent",
+        candidateCount: count,
+        snapshotBlock: "101",
+      });
+
+      expect(input.store.stageVerifiedDynamicParents).toHaveBeenCalledTimes(1);
+      expect(input.store.stageVerifiedDynamicParents).toHaveBeenCalledWith(
+        expect.objectContaining({
+          candidates: parents,
+          runtimeObservations: expect.arrayContaining(
+            parents.map((parent) =>
+              expect.objectContaining({
+                parentCandidateId: parent.candidateId,
+              }),
+            ),
+          ),
+          blockComplete: false,
+        }),
+      );
+      expect(input.verifyDynamicRuntime).toHaveBeenCalledTimes(count);
+      expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+    },
+  );
 
   it("does not stage or advance when the child runtime cannot be proved", async () => {
     const input = fixtures();
@@ -499,6 +790,7 @@ describe("projector runtime boundary", () => {
         isBlockBoundary: false,
       },
       dynamicSources: [],
+      provisionalSourceAddresses: [],
       dynamicSourceTemplates: [dynamicTemplate()],
       database: {
         epochId: "70000000-0000-4000-8000-000000000002",
@@ -517,6 +809,7 @@ describe("projector runtime boundary", () => {
       .mockResolvedValueOnce({
         ...basePlan,
         dynamicSources: [{ sourceAddress: vault } as never],
+        provisionalSourceAddresses: [],
       });
     input.envio.readCandidatesWindow
       .mockReset()
@@ -539,7 +832,7 @@ describe("projector runtime boundary", () => {
     ).resolves.toMatchObject({
       status: "committed",
       candidateCount: 2,
-      snapshotBlock: "200",
+      snapshotBlock: "101",
     });
 
     expect(input.store.stageVerifiedDynamicParents).toHaveBeenCalledTimes(1);
@@ -555,7 +848,7 @@ describe("projector runtime boundary", () => {
   it("collects split Envio pages but publishes only one verified block boundary", async () => {
     const input = fixtures();
     const values = [
-      ...Array.from({ length: 12 }, (_, index) =>
+      ...Array.from({ length: 32 }, (_, index) =>
         candidate({ blockNumber: 101, logIndex: index }),
       ),
       ...Array.from({ length: 7 }, (_, index) =>
@@ -564,8 +857,8 @@ describe("projector runtime boundary", () => {
     ];
     input.envio.readCandidatesWindow
       .mockReset()
-      .mockResolvedValueOnce(values.slice(0, 12))
-      .mockResolvedValueOnce(values.slice(12))
+      .mockResolvedValueOnce(values.slice(0, 32))
+      .mockResolvedValueOnce(values.slice(32))
       .mockResolvedValueOnce([]);
 
     await expect(
@@ -576,15 +869,15 @@ describe("projector runtime boundary", () => {
       }),
     ).resolves.toMatchObject({
       status: "committed",
-      candidateCount: 19,
-      snapshotBlock: "200",
+      candidateCount: 39,
+      snapshotBlock: "102",
     });
 
     expect(input.verifyWindow).toHaveBeenCalledWith(
       expect.objectContaining({
         candidates: values,
         through: {
-          blockNumber: "200",
+          blockNumber: "102",
           blockGlobalLogIndex: 0xffff_ffff,
           candidateId: "empty-page",
         },
@@ -594,7 +887,7 @@ describe("projector runtime boundary", () => {
 
   it("does not infer that an exact-size final candidate page ends its block", async () => {
     const input = fixtures();
-    const values = Array.from({ length: 12 }, (_, index) =>
+    const values = Array.from({ length: 32 }, (_, index) =>
       candidate({ blockNumber: 101, logIndex: index }),
     );
     input.envio.readCandidatesWindow
@@ -612,7 +905,7 @@ describe("projector runtime boundary", () => {
     expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
       expect.objectContaining({
         candidates: values,
-        snapshotBlock: "200",
+        snapshotBlock: "101",
         blockComplete: true,
       }),
     );
@@ -623,21 +916,24 @@ describe("projector runtime boundary", () => {
     const firstBlock = Array.from({ length: 20 }, (_, index) =>
       candidate({ blockNumber: 101, logIndex: index }),
     );
-    const nextBlock = Array.from({ length: 12 }, (_, index) =>
+    const nextBlock = Array.from({ length: 4077 }, (_, index) =>
       candidate({ blockNumber: 102, logIndex: index }),
     );
     const values = [...firstBlock, ...nextBlock];
-    input.envio.readCandidatesWindow
-      .mockReset()
-      .mockResolvedValueOnce(values.slice(0, 12))
-      .mockResolvedValueOnce(values.slice(12, 24))
-      .mockResolvedValueOnce(values.slice(24));
+    let offset = 0;
+    input.envio.readCandidatesWindow.mockReset().mockImplementation(
+      async ({ limit }: { limit: number }) => {
+        const page = values.slice(offset, offset + limit);
+        offset += page.length;
+        return page;
+      },
+    );
 
     await expect(
       runProjectorCycle({
         ...input,
         providers: [] as never,
-        deadlineMs: 1_000,
+        deadlineMs: 75_000,
       }),
     ).resolves.toMatchObject({
       candidateCount: 20,
@@ -652,26 +948,69 @@ describe("projector runtime boundary", () => {
     );
   });
 
-  it("fails closed when one block alone exceeds the verification budget", async () => {
+  it.each([32, 33, 4096])(
+    "commits an exactly complete %i-candidate block",
+    async (count) => {
+      const input = fixtures();
+      const values = Array.from({ length: count }, (_, index) =>
+        candidate({ blockNumber: 101, logIndex: index }),
+      );
+      let offset = 0;
+      input.envio.readCandidatesWindow.mockReset().mockImplementation(
+        async ({ limit }: { limit: number }) => {
+          const page = values.slice(offset, offset + limit);
+          offset += page.length;
+          return page;
+        },
+      );
+
+      await expect(
+        runProjectorCycle({
+          ...input,
+          providers: [] as never,
+          deadlineMs: 75_000,
+        }),
+      ).resolves.toMatchObject({
+        status: "committed",
+        candidateCount: count,
+        snapshotBlock: "101",
+      });
+      expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          candidates: values,
+          blockComplete: true,
+        }),
+      );
+      if (count === 4096) {
+        expect(input.envio.readCandidatesWindow).toHaveBeenCalledTimes(129);
+      }
+    },
+  );
+
+  it("fails closed when one block contains 4097 candidates", async () => {
     const input = fixtures();
-    const values = Array.from({ length: 32 }, (_, index) =>
+    const values = Array.from({ length: 4097 }, (_, index) =>
       candidate({ blockNumber: 101, logIndex: index }),
     );
-    input.envio.readCandidatesWindow
-      .mockReset()
-      .mockResolvedValueOnce(values.slice(0, 12))
-      .mockResolvedValueOnce(values.slice(12, 24))
-      .mockResolvedValueOnce(values.slice(24));
+    let offset = 0;
+    input.envio.readCandidatesWindow.mockReset().mockImplementation(
+      async ({ limit }: { limit: number }) => {
+        const page = values.slice(offset, offset + limit);
+        offset += page.length;
+        return page;
+      },
+    );
 
     await expect(
       runProjectorCycle({
         ...input,
         providers: [] as never,
-        deadlineMs: 1_000,
+        deadlineMs: 75_000,
       }),
     ).rejects.toMatchObject({
       dependency: "envio",
       code: "response_oversize",
+      retryable: false,
     });
     expect(input.verifyWindow).not.toHaveBeenCalled();
     expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
@@ -685,7 +1024,7 @@ describe("projector runtime boundary", () => {
       deadlineMs: 1_000,
     });
     expect(input.envio.readCandidatesWindow).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 12 }),
+      expect.objectContaining({ limit: 32 }),
     );
   });
 

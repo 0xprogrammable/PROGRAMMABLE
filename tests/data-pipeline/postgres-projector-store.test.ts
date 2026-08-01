@@ -115,9 +115,16 @@ type QueryRecord = { text: string; values: readonly PostgresParameter[] };
 class StoreExecutor implements PostgresExecutor {
   readonly queries: QueryRecord[] = [];
   readonly close = vi.fn(async () => undefined);
+  transactionCount = 0;
   commitGeneration = "8";
   includeHistoricalStock = false;
   provisionalRows: readonly Record<string, unknown>[] = [];
+  reorgTargetRows: readonly Record<string, unknown>[] = [];
+  reorgRecoveryRows: readonly Record<string, unknown>[] = [{
+    cursor_generation: "8",
+    reorg_generation: "1",
+    release_checkpoint_count: "5",
+  }];
   omitReorgGeneration = false;
   classicNormalizedRuntimeCodeHash = bytes32("e");
   classicImmutableReferencesCommitment = bytes32("f");
@@ -125,6 +132,7 @@ class StoreExecutor implements PostgresExecutor {
   async transaction<T>(
     work: (transaction: PostgresTransaction) => Promise<T>,
   ): Promise<T> {
+    this.transactionCount += 1;
     return work({
       query: async <Row extends Record<string, unknown>>(
         text: string,
@@ -409,6 +417,15 @@ class StoreExecutor implements PostgresExecutor {
         if (text.includes("get_current_provisional_dynamic_sources_v1")) {
           return this.provisionalRows as unknown as Row[];
         }
+        if (text.includes("get_projector_reorg_generation_v1")) {
+          return [{ generation: "0" }] as unknown as Row[];
+        }
+        if (text.includes("get_projector_reorg_targets_v1")) {
+          return this.reorgTargetRows as unknown as Row[];
+        }
+        if (text.includes("recover_projector_reorg_v1")) {
+          return this.reorgRecoveryRows as unknown as Row[];
+        }
         if (
           text.includes("open_run") ||
           text.includes("append_dual_rpc_runtime_code_evidence") ||
@@ -453,6 +470,60 @@ function candidate(): EnvioCandidate {
     rawData: "0x",
     decodedPayload: {},
     payloadHash: bytes32("1"),
+  };
+}
+
+function reorgPlan() {
+  return {
+    cursor: {
+      generation: "7",
+      blockNumber: "25650000",
+      blockHash: bytes32("7"),
+      blockGlobalLogIndex: 9,
+      candidateId: `1:${bytes32("7")}:${bytes32("8")}:9`,
+      isBlockBoundary: false,
+    },
+    dynamicSources: [],
+    provisionalSourceAddresses: [],
+    dynamicSourceTemplates: [],
+    database: {
+      epochId: "70000000-0000-4000-8000-000000000002",
+      pointerGeneration: "1",
+      reorgGeneration: "0",
+      envioProviderDeploymentId: IDS[0],
+      rpcProviderDeploymentIds: [IDS[1], IDS[2]] as const,
+    },
+  } as const;
+}
+
+function reorgRecovery() {
+  return {
+    action: "rewind-and-replay" as const,
+    expectedGeneration: "7",
+    nextGeneration: "8",
+    targetHistoryGeneration: "6",
+    targetBlockNumber: "25650000",
+    targetBlockHash: bytes32("7"),
+    targetBlockGlobalLogIndex: 9,
+    targetCandidateId: `1:${bytes32("7")}:${bytes32("8")}:9`,
+    genesisPointId: null,
+    expectedReorgGeneration: "0",
+    nextReorgGeneration: "1",
+    providerIdentities: [
+      "rpc:1:alchemy",
+      "rpc:1:quicknode",
+    ] as const,
+    providerEndpointCommitments: [bytes32("3"), bytes32("5")] as const,
+    providerOriginCommitments: [bytes32("4"), bytes32("6")] as const,
+    providerBlockHashes: [bytes32("7"), bytes32("7")] as const,
+    providerBlockTimestamps: ["1750000000", "1750000000"] as const,
+    providerChainIds: [1, 1] as const,
+    providerHeads: ["25650020", "25650021"] as const,
+    finalityDepth: "12" as const,
+    safeBlockNumber: "25650008",
+    safeBlockHash: bytes32("9"),
+    providerSafeBlockHashes: [bytes32("9"), bytes32("9")] as const,
+    checkedDepth: 1,
   };
 }
 
@@ -538,6 +609,137 @@ describe("concrete projector Postgres store", () => {
     });
   });
 
+  it("reads bounded reorg history together with the registered genesis anchor", async () => {
+    const executor = new StoreExecutor();
+    executor.reorgTargetRows = [
+      {
+        target_kind: "history",
+        history_generation: "6",
+        block_number: "25650000",
+        block_hash: bytes(bytes32("7")),
+        block_global_log_index: "9",
+        candidate_id: `1:${bytes32("7")}:${bytes32("8")}:9`,
+        genesis_point_id: null,
+        current_reorg_generation: "0",
+      },
+      {
+        target_kind: "genesis",
+        history_generation: "0",
+        block_number: "0",
+        block_hash: bytes(bytes32("1")),
+        block_global_log_index: null,
+        candidate_id: null,
+        genesis_point_id: "70000000-0000-4000-8000-000000000006",
+        current_reorg_generation: "0",
+      },
+    ];
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+    });
+
+    await expect(store.readReorgRecoveryState({
+      plan: reorgPlan(),
+      maximumDepth: 128,
+    })).resolves.toEqual({
+      ancestors: [{
+        kind: "history",
+        historyGeneration: "6",
+        blockNumber: "25650000",
+        blockHash: bytes32("7"),
+        blockGlobalLogIndex: 9,
+        candidateId: `1:${bytes32("7")}:${bytes32("8")}:9`,
+      }],
+      genesis: {
+        kind: "genesis",
+        historyGeneration: "0",
+        genesisPointId: "70000000-0000-4000-8000-000000000006",
+        blockNumber: "0",
+        blockHash: bytes32("1"),
+        blockGlobalLogIndex: null,
+        candidateId: null,
+      },
+      currentReorgGeneration: "0",
+    });
+    const query = executor.queries.find(({ text }) =>
+      text.includes("get_projector_reorg_targets_v1"),
+    );
+    expect(query?.values).toEqual([IDS[0], "canonical-events", 128]);
+  });
+
+  it("persists one CAS-bound recovery and all provider evidence in one transaction", async () => {
+    const executor = new StoreExecutor();
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+      uuid: (() => {
+        let suffix = 1;
+        return () =>
+          `62000000-0000-4000-8000-${String(suffix++).padStart(12, "0")}`;
+      })(),
+      now: () => new Date("2026-08-01T03:00:00.000Z"),
+    });
+
+    await expect(store.recoverCanonicalReorg({
+      plan: reorgPlan(),
+      recovery: reorgRecovery(),
+    })).resolves.toEqual({
+      generation: "8",
+      reorgGeneration: "1",
+      releaseCheckpointCount: 5,
+    });
+    expect(executor.transactionCount).toBe(1);
+    const statements = executor.queries.map(({ text }) => text);
+    expect(statements).toEqual(expect.arrayContaining([
+      expect.stringContaining("assert_projector_runtime_lease_v1"),
+      expect.stringContaining("open_run"),
+      expect.stringContaining("append_safe_head_observation"),
+      expect.stringContaining("append_dual_rpc_block_evidence"),
+      expect.stringContaining("append_run_outcome"),
+      expect.stringContaining("recover_projector_reorg_v1"),
+    ]));
+    expect(statements.at(-1)).toContain("recover_projector_reorg_v1");
+    const recoveryQuery = executor.queries.at(-1)!;
+    expect(recoveryQuery.values.slice(7, 12)).toEqual([
+      "7",
+      "8",
+      "6",
+      "0",
+      "1",
+    ]);
+    expect(recoveryQuery.values.slice(17, 19)).toEqual([
+      RUNTIME_FENCE.holderId,
+      RUNTIME_FENCE.generation,
+    ]);
+    expect(
+      Buffer.from(recoveryQuery.values[19] as Uint8Array),
+    ).toEqual(bytes(RUNTIME_FENCE.tokenHash));
+  });
+
+  it("rejects a recovery result that does not advance every release checkpoint", async () => {
+    const executor = new StoreExecutor();
+    executor.reorgRecoveryRows = [{
+      cursor_generation: "8",
+      reorg_generation: "1",
+      release_checkpoint_count: "4",
+    }];
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+    });
+
+    await expect(store.recoverCanonicalReorg({
+      plan: reorgPlan(),
+      recovery: reorgRecovery(),
+    })).rejects.toMatchObject({ disposition: "fatal-codec-or-caller" });
+  });
+
   it("keeps historical Stock lineage readable without exposing a Stock discovery template", async () => {
     const executor = new StoreExecutor();
     executor.includeHistoricalStock = true;
@@ -565,7 +767,7 @@ describe("concrete projector Postgres store", () => {
     );
   });
 
-  it("reads only an exact current Classic provisional lineage", async () => {
+  it("keeps an exact current Classic provisional parent outside dynamic coverage", async () => {
     const executor = new StoreExecutor();
     executor.provisionalRows = [
       {
@@ -620,16 +822,12 @@ describe("concrete projector Postgres store", () => {
 
     const plan = await store.readPlan();
 
-    expect(plan.dynamicSources).toEqual(
+    expect(plan.dynamicSources).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          attestationId: "42000000-0000-4000-8000-000000000004",
-          sourceAddress: address("f"),
-          factoryCandidateId: `1:${bytes32("d")}:${bytes32("e")}:4`,
-          expectedExactRuntimeCodeHash: bytes32("6"),
-        }),
+        expect.objectContaining({ sourceAddress: address("f") }),
       ]),
     );
+    expect(plan.provisionalSourceAddresses).toEqual([address("f")]);
   });
 
   it("fails closed when a provisional lineage is pinned to a stale cursor", async () => {
@@ -787,7 +985,7 @@ describe("concrete projector Postgres store", () => {
         fromBlockNumber: parent.blockNumber,
         throughBlockNumber: parent.blockNumber,
         throughBlockHash: parent.blockHash,
-        throughBlockGlobalLogIndex: "10",
+        throughBlockGlobalLogIndex: String(0xffff_ffff),
         filterCommitment: bytes32("a"),
         providerLogCommitments: [bytes32("2"), bytes32("2")],
       },
@@ -931,6 +1129,7 @@ describe("concrete projector Postgres store", () => {
       isBlockBoundary: false,
       },
       dynamicSources: [],
+      provisionalSourceAddresses: [],
       dynamicSourceTemplates: [],
       database: {
         epochId: "70000000-0000-4000-8000-000000000002",
@@ -1046,6 +1245,7 @@ describe("concrete projector Postgres store", () => {
         isBlockBoundary: false,
       },
       dynamicSources: [],
+      provisionalSourceAddresses: [],
       dynamicSourceTemplates: [],
       database: {
         epochId: "70000000-0000-0000-0000-000000000002",
