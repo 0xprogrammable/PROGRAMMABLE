@@ -764,6 +764,58 @@ export function analyzeJavaScriptModuleDependencies(source, importer, declaredPa
     .map((entry) => Object.freeze({ ...entry }));
 }
 
+export function assertNoUnboundBrowserRuntimeLoaders(source, importer) {
+  if (typeof source !== "string" || !isCanonicalReviewTargetPath(importer)) {
+    throw new Error("JavaScript runtime-closure analysis input is invalid");
+  }
+  const tokens = tokenizeJavaScript(source, importer);
+  const unsupportedIdentifiers = new Map([
+    ["DOMParser", "runtime DOM parsing"],
+    ["SharedWorker", "Worker construction"],
+    ["WebAssembly", "WebAssembly loading"],
+    ["Worker", "Worker construction"],
+    ["createContextualFragment", "dynamic DOM markup injection"],
+    ["createElement", "dynamic DOM element construction"],
+    ["importScripts", "worker importScripts"],
+    ["innerHTML", "dynamic DOM markup injection"],
+    ["insertAdjacentHTML", "dynamic DOM markup injection"],
+    ["outerHTML", "dynamic DOM markup injection"],
+    ["serviceWorker", "service-worker registration"]
+  ]);
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.type !== "identifier") continue;
+    const next = tokens[index + 1]?.value;
+    const afterNext = tokens[index + 2]?.value;
+    const label = unsupportedIdentifiers.get(token.value);
+    if (label !== undefined) unsupportedBrowserLoader(label, importer);
+    if (token.value === "fetch") {
+      unsupportedBrowserLoader("fetch-based runtime loading", importer);
+    }
+    if (
+      (token.value === "src" || token.value === "href")
+      && tokens[index - 1]?.value === "."
+      && next === "="
+    ) unsupportedBrowserLoader("dynamic DOM resource assignment", importer);
+    if (token.value === "setAttribute" && next === "(") {
+      unsupportedBrowserLoader("dynamic DOM attribute assignment", importer);
+    }
+    if (
+      token.value === "document"
+      && next === "."
+      && (afterNext === "write" || afterNext === "writeln")
+      && tokens[index + 3]?.value === "("
+    ) unsupportedBrowserLoader("document markup injection", importer);
+  }
+}
+
+function unsupportedBrowserLoader(label, importer) {
+  throw new UnsupportedClosureError(
+    "JAVASCRIPT_RUNTIME_LOADER_UNPROVEN",
+    `${label} is outside the static JavaScript closure method: ${importer}`
+  );
+}
+
 function rejectUnsupportedRuntimeLoaders(tokens, importer) {
   const runtimeLoaders = new Set([
     "createRequire",

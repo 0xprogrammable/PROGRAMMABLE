@@ -470,6 +470,7 @@ export async function preparePullRequest({
     }),
     companions: companionManifestBindings.map((binding) => ({
       ...binding.source,
+      manifestPath: binding.path,
       ...(binding.manifestV2 === null ? {} : { companionManifestV2: binding.manifestV2 })
     })),
     exactObjectResolver,
@@ -976,6 +977,7 @@ function readCompanionManifestsFromHead({
   }
   const normalized = normalizeCompanionDescriptors(parsed.map((binding) => ({
     ...binding.source,
+    manifestPath: binding.path,
     ...(binding.manifestV2 === null ? {} : { companionManifestV2: binding.manifestV2 })
   })));
   return parsed.map((binding, index) => Object.freeze({
@@ -1012,6 +1014,7 @@ function assertCompanionClosureVerification(bindings, attestations) {
     const verified = verifiedByRepository.get(binding.manifestV2.repositoryUri);
     if (
       verified?.status !== "verified"
+      || verified.manifestPath !== binding.path
       || verified.numericRepositoryId !== binding.manifestV2.numericRepositoryId
       || verified.revisionObjectId !== binding.manifestV2.revisionObjectId
       || verified.treeObjectId !== binding.manifestV2.treeObjectId

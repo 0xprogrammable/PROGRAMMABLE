@@ -145,6 +145,7 @@
         "schemaVersion",
         "status",
         "closureMethod",
+        "manifestPath",
         "repositoryUri",
         "numericRepositoryId",
         "revisionObjectId",
@@ -159,13 +160,16 @@
       ],
       "properties": {
         "schemaVersion": {
-          "const": "1.0.0"
+          "const": "2.0.0"
         },
         "status": {
           "const": "verified"
         },
         "closureMethod": {
           "const": "npm-package-lock-v3-static-module-closure-v1"
+        },
+        "manifestPath": {
+          "$ref": "#/$defs/githubSource__RepositoryPath"
         },
         "repositoryUri": {
           "$ref": "#/$defs/githubSource__CanonicalRepositoryUri"

@@ -170,10 +170,11 @@ and separately asserted source match. Builder evidence remains untrusted until a
   application path, prior revision, and next revision;
 - `github.sourceRequest`: the immutable primary authority and zero to eight sorted companion authorities;
 - `github.companionClosure`: one verified exact-closure receipt per v2 companion; v1 has no receipt and retains its
-  proposal closure diagnostic;
+  proposal closure diagnostic. Each v2 receipt binds its exact manifest path in primary HEAD;
 - `centralPackage`: exactly six canonical application files with byte lengths and SHA-256 digests; its
   `application.json.companionClosure` durably carries the same canonical v2 receipts and is checked against the exact
-  companion authorities and Actions run ids by downstream intake;
+  companion authorities, immutable package/workflow objects and Actions run ids by downstream intake, which
+  independently recomputes the canonical receipt rather than trusting its declared hash or counts;
 - a copy-ready draft pull-request `title`, `body`, and confirmation `checklist`;
 - `localWritesPerformed`: empty unless an explicit output directory was requested;
 - `externalActionsPerformed`: always empty; and
