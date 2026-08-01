@@ -268,9 +268,14 @@ requests remain on their existing CI path without loading candidate application 
 
 Before changing the state to `open`, maintainers record live GitHub evidence that `main` requires the trusted
 `public-intake` check, normal security and Foundry checks, CODEOWNER review, resolved conversations, and either a
-strictly up-to-date branch or a merge queue. These rules force a second pull request for the same application to rerun
-against the first merged revision instead of overwriting history from a stale green check. Local configuration or a
-documented target is not evidence that the live repository is protected.
+strictly up-to-date branch or a merge queue. For non-administrator Builder pull requests, these rules force a second
+pull request for the same application to rerun against the first merged revision instead of overwriting history from a
+stale green check. Local configuration or a documented target is not evidence that the live repository is protected.
+
+Repository administrators remain the GitHub trust root and can change or bypass repository settings. Programmable's
+solo-maintainer release path retains the administrator exception for owner-authored maintenance that GitHub does not
+allow the same account to self-approve. It must never be used for a Builder application. Every application needs the
+visible trusted checks, latest-base result and maintainer review; applicants receive no bypass authority.
 
 ## Review and repair loop
 

@@ -155,6 +155,11 @@ The state may move to `open` only after live `main` protection requires the trus
 checks, CODEOWNER review, resolved conversations, and strict up-to-date branches or a merge queue. This serializes two
 updates that target the same prior application revision; a stale check cannot authorize an overwrite.
 
+Repository administrators remain the GitHub trust root and can change or bypass repository settings. Programmable's
+solo-maintainer release path therefore keeps the administrator exception for owner-authored maintenance that cannot be
+self-approved. It must never be used to merge a Builder application: every application requires the visible trusted
+checks, current-base result and maintainer review described here. Applicants have no bypass authority.
+
 ## Public and private boundaries
 
 The project repository, application pull request, evidence and review discussion are public and non-confidential.
