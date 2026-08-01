@@ -90,7 +90,7 @@ function directProvisioningSql(secretObservations) {
           },
         ]);
       }
-      if (query.includes("from pg_catalog.pg_authid")) {
+      if (query.includes("pg_catalog.pg_authid")) {
         return pending(rolePosture(rotationCount === ROLE_SPECS.length).rows);
       }
       if (query.includes("from pg_catalog.pg_auth_members")) {

@@ -225,20 +225,22 @@ async function readRolePosture(sql, { requirePasswords }) {
   const rows = await sql.unsafe(
     `
       select
-        rolname,
-        rolcanlogin,
-        rolsuper,
-        rolcreatedb,
-        rolcreaterole,
-        rolinherit,
-        rolreplication,
-        rolbypassrls,
-        rolconnlimit,
-        rolconfig,
-        rolpassword is not null as has_password
-      from pg_catalog.pg_authid
-      where rolname = any($1::text[])
-      order by rolname
+        roles.rolname,
+        roles.rolcanlogin,
+        roles.rolsuper,
+        roles.rolcreatedb,
+        roles.rolcreaterole,
+        roles.rolinherit,
+        roles.rolreplication,
+        roles.rolbypassrls,
+        roles.rolconnlimit,
+        roles.rolconfig,
+        auth.rolpassword is not null as has_password
+      from pg_catalog.pg_roles as roles
+      join pg_catalog.pg_authid as auth
+        on auth.rolname = roles.rolname
+      where roles.rolname = any($1::text[])
+      order by roles.rolname
     `,
     [names],
   );
