@@ -11,7 +11,13 @@ import {
   validateGitHubPublicSourceRequestV1
 } from "./github-public-source-core.mjs";
 import { createAnonymousGitHubExactObjectResolverV1 } from "./github-exact-object-resolver.mjs";
+import {
+  normalizeCompanionManifest,
+  verifyCompanionManifestV2Closure
+} from "./companion-manifest-contract.mjs";
 import { CliFailure } from "./cli-runtime.mjs";
+import { isCanonicalReviewTargetPath } from "./review-target-contract.mjs";
+import { canonicalJson } from "./submission-core.mjs";
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const MAX_BOOTSTRAP_RESPONSE_BYTES = 1_048_576;
@@ -188,6 +194,27 @@ export async function resolvePublicGitHubSource({
   }
   const trustedExactObjectResolver = exactObjectResolver
     ?? (fetchImplementation === globalThis.fetch ? createAnonymousGitHubExactObjectResolverV1() : null);
+  const companionV2 = normalizedCompanions.filter(({ companionManifestV2 }) => companionManifestV2 !== null);
+  if (companionV2.length > 0 && trustedExactObjectResolver === null) {
+    throw new CliFailure(
+      "TOOLING_BLOCKED",
+      "companion manifest v2 requires the bounded exact Git object resolver",
+      { exitCode: 1, details: { validationState: "TOOLING_BLOCKED" } }
+    );
+  }
+  const capturedCompanionRecords = new Map();
+  const closureAwareExactObjectResolver = companionV2.length === 0
+    ? trustedExactObjectResolver
+    : async (request) => {
+        const result = await trustedExactObjectResolver(request);
+        const records = result instanceof Map ? result : result?.records;
+        if (records instanceof Map) {
+          const prior = capturedCompanionRecords.get(request.repositoryUri) ?? new Map();
+          for (const [filePath, record] of records) prior.set(filePath, record);
+          capturedCompanionRecords.set(request.repositoryUri, prior);
+        }
+        return result;
+      };
   const requestBudget = { remaining: MAX_PUBLIC_REQUESTS };
   const budgetedFetchImplementation = async (...args) => {
     if (requestBudget.remaining <= 0) {
@@ -211,8 +238,9 @@ export async function resolvePublicGitHubSource({
         sourcePaths,
         contractPaths,
         primaryBlobBytes,
-        exactObjectResolver: trustedExactObjectResolver,
+        exactObjectResolver: closureAwareExactObjectResolver,
         companions: normalizedCompanions,
+        capturedCompanionRecords,
         fetchImplementation: budgetedFetchImplementation,
         timeoutMs
       });
@@ -235,6 +263,7 @@ async function resolveOnce({
   primaryBlobBytes,
   exactObjectResolver,
   companions,
+  capturedCompanionRecords,
   fetchImplementation,
   timeoutMs
 }) {
@@ -286,17 +315,35 @@ async function resolveOnce({
       deadline,
       resourceKind: "commit"
     });
-    const companionTreeObjectId = extractCommitTreeObjectId(commitResponse.body);
+    const observedCompanionTreeObjectId = extractCommitTreeObjectId(commitResponse.body);
+    if (
+      companion.numericRepositoryId !== null
+      && companion.numericRepositoryId !== companionRepositoryId
+    ) {
+      throw new GitHubPublicSourceError(
+        "GITHUB_REPOSITORY_ID_MISMATCH",
+        "GitHub companion repository identity did not match manifest v2"
+      );
+    }
+    if (
+      companion.treeObjectId !== null
+      && companion.treeObjectId !== observedCompanionTreeObjectId
+    ) {
+      throw new GitHubPublicSourceError(
+        "GITHUB_TREE_MISMATCH",
+        "GitHub companion root tree did not match manifest v2"
+      );
+    }
     cachedResponses.set(companionApiUrl, metadataResponse);
     cachedResponses.set(commitApiUrl, commitResponse);
     return {
       repositoryUri: companion.repositoryUri,
-      numericRepositoryId: companionRepositoryId,
+      numericRepositoryId: companion.numericRepositoryId ?? companionRepositoryId,
       revisionObjectId: companion.revisionObjectId,
-      treeObjectId: companionTreeObjectId,
+      treeObjectId: companion.treeObjectId ?? observedCompanionTreeObjectId,
       sourcePaths: companion.sourcePaths,
       contractPaths: companion.contractPaths,
-      githubActionsRunIds: []
+      githubActionsRunIds: companion.githubActionsRunIds
     };
   });
 
@@ -340,6 +387,32 @@ async function resolveOnce({
   );
   const primary = resolution.primary;
   const canonicalSourceRequest = sourceRequestFromResolution(resolution);
+  const companionClosure = companions
+    .filter(({ companionManifestV2 }) => companionManifestV2 !== null)
+    .map((companion) => {
+      const resolved = resolution.companions.find(
+        ({ display }) => display.repositoryUri === companion.repositoryUri
+      );
+      if (resolved === undefined) {
+        throw new CliFailure("COMPANION_MANIFEST_INVALID", "companion v2 public source result is missing", { exitCode: 1 });
+      }
+      try {
+        return verifyCompanionManifestV2Closure(
+          companion.companionManifestV2,
+          capturedCompanionRecords.get(companion.repositoryUri),
+          resolved.githubActionsEvidence,
+          { manifestPath: companion.manifestPath }
+        );
+      } catch (error) {
+        throw new CliFailure(
+          error?.code === "COMPANION_STATIC_CLOSURE_UNSUPPORTED"
+            ? "COMPANION_CLOSURE_REVIEW_REQUIRED"
+            : "COMPANION_MANIFEST_INVALID",
+          error?.message ?? "companion v2 closure verification failed",
+          { exitCode: 1 }
+        );
+      }
+    });
   const sourceResolutionHash = `sha256:${crypto
     .createHash("sha256")
     .update(serializeGitHubPublicSourceV1(resolution))
@@ -356,7 +429,8 @@ async function resolveOnce({
     publicCommitReachable: true,
     sourceRequest: canonicalSourceRequest,
     sourceResolutionHash,
-    sourceResolution: resolution
+    sourceResolution: resolution,
+    companionClosure
   };
 }
 
@@ -396,16 +470,37 @@ export function normalizeCompanionDescriptors(companions) {
   const repositoryUris = new Set();
   for (const companion of companions) {
     try {
+      const manifestV2 = companion?.companionManifestV2 ?? null;
+      const manifestPath = companion?.manifestPath ?? null;
+      if (manifestV2 !== null && !isCanonicalReviewTargetPath(manifestPath)) {
+        throw new Error("companion v2 descriptor is missing its exact primary manifest path");
+      }
+      let expected;
+      if (manifestV2 !== null) {
+        expected = normalizeCompanionManifest(manifestV2);
+        const receivedSource = {
+          repositoryUri: companion?.repositoryUri,
+          numericRepositoryId: companion?.numericRepositoryId,
+          revisionObjectId: companion?.revisionObjectId,
+          treeObjectId: companion?.treeObjectId,
+          sourcePaths: companion?.sourcePaths,
+          contractPaths: companion?.contractPaths,
+          githubActionsRunIds: companion?.githubActionsRunIds
+        };
+        if (canonicalJson(receivedSource) !== canonicalJson(expected.source)) {
+          throw new Error("companion v2 descriptor does not match its manifest");
+        }
+      }
       const request = validateGitHubPublicSourceRequestV1({
         schemaVersion: GITHUB_PUBLIC_SOURCE_CONTRACT_V1.schemaVersion,
         primary: {
           repositoryUri: companion?.repositoryUri,
-          numericRepositoryId: "1",
+          numericRepositoryId: companion?.numericRepositoryId ?? "1",
           revisionObjectId: companion?.revisionObjectId,
-          treeObjectId: "0".repeat(40),
+          treeObjectId: companion?.treeObjectId ?? "0".repeat(40),
           sourcePaths: companion?.sourcePaths,
           contractPaths: companion?.contractPaths,
-          githubActionsRunIds: []
+          githubActionsRunIds: companion?.githubActionsRunIds ?? []
         },
         companions: []
       }).primary;
@@ -415,9 +510,14 @@ export function normalizeCompanionDescriptors(companions) {
       repositoryUris.add(request.repositoryUri);
       normalized.push(Object.freeze({
         repositoryUri: request.repositoryUri,
+        numericRepositoryId: manifestV2 === null ? null : request.numericRepositoryId,
         revisionObjectId: request.revisionObjectId,
+        treeObjectId: manifestV2 === null ? null : request.treeObjectId,
         sourcePaths: request.sourcePaths,
-        contractPaths: request.contractPaths
+        contractPaths: request.contractPaths,
+        githubActionsRunIds: request.githubActionsRunIds,
+        manifestPath,
+        companionManifestV2: manifestV2 === null ? null : expected.manifestV2
       }));
     } catch (error) {
       if (error instanceof CliFailure) throw error;
@@ -624,6 +724,7 @@ function skipWhitespace(source, start) {
 }
 
 function isRetryable(error) {
+  if (error instanceof CliFailure) return false;
   return !(error instanceof GitHubPublicSourceError) || error.retryable === true;
 }
 

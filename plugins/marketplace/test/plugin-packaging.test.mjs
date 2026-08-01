@@ -27,7 +27,7 @@ import {
 } from "../scripts/generate-plugin.mjs";
 
 const goldenHashes = {
-  skillTree: "004314e6c97f14cf78cfa10b26f7f04ed33ed3c8ae27420dc44eb8a729bcfb4c",
+  skillTree: "d854b618f18aba0b7679349bf898d0d21601d4e220efde767a790e9d6bee5efc",
   codexManifest: "6f5dbf19ab2a124312a9fab9ba08cb038160e68165bc1dd71211d442f2fd3354",
   claudeManifest: "09011068e632beffedf3059ba0c79646cd023499ffd77fae1273db2239e368e7",
   codexMarketplace: "f51e251087f6d26c75308aeff915485de9493b619c31b5a59baca072d725d0c0",

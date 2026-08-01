@@ -50,6 +50,7 @@ const fixtureCommit = childProcess.spawnSync("git", ["-C", repositoryRoot, "comm
 assert.equal(fixtureCommit.status, 0, fixtureCommit.stderr);
 test.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
 const template = JSON.parse(fs.readFileSync(path.join(skillRoot, "assets", "templates", "submission.example.json"), "utf8"));
+const noHookArchitectureTemplate = JSON.parse(fs.readFileSync(path.join(skillRoot, "assets", "templates", "no-hook-architecture.example.json"), "utf8"));
 const schema = JSON.parse(fs.readFileSync(path.join(skillRoot, "references", "submission.schema.json"), "utf8"));
 
 test("complete standard proposal is prototype ready", () => {
@@ -90,6 +91,257 @@ test("ordinary fixed-supply launch is ready without a custom hook", () => {
   assert.equal(submission.assets.filter(({ role }) => role === "launched").length, 1);
   assert.equal(submission.pool.canonical, true);
   assert.equal(report.requiredGates.some(({ id }) => id.startsWith("callback-")), false);
+});
+
+test("transparent transfer-tax and auto-liquidity token enters model-specific no-hook review", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.hookPermissionMask, null);
+  assert.deepEqual(report.risk.featureTriggers, [
+    "auto-liquidity",
+    "autonomous",
+    "external-calls",
+    "non-standard-token",
+    "price-impact",
+    "transfer-tax"
+  ]);
+  for (const gateId of [
+    "model-specific-no-hook-architecture-review",
+    "transfer-tax-accounting-and-liveness-tests",
+    "auto-liquidity-lifecycle-and-reentrancy-tests",
+    "auto-liquidity-custody-and-exit-review",
+    "independent-no-hook-provider-approval"
+  ]) assert.ok(report.requiredGates.some(({ id }) => id === gateId), gateId);
+});
+
+test("auto-liquidity accepts a bounded launch allocation without requiring transfer tax", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  submission.noHookArchitecture.transferTax = officialNoHookArchitecture().transferTax;
+  submission.assets.find(({ role }) => role === "launched").behaviors = ["standard"];
+  submission.valueFlows.push({
+    id: "auto-liquidity-launch-allocation",
+    action: "reserve an immutable launch allocation for later canonical liquidity",
+    asset: "launched-token",
+    from: "the fixed token supply allocation committed at creation",
+    to: "the separately accounted automatic-liquidity bucket",
+    amountRule: "Credit no more than the immutable constructor allocation and never debit a holder, recipient or unrelated treasury balance.",
+    settlement: "Record the allocation before trading and debit only actual amounts used by the bounded swap and liquidity-add lifecycle.",
+    failure: "A failed allocation or later liquidity action cannot mint, confiscate, borrow or redirect any user balance."
+  });
+  submission.noHookArchitecture.autoLiquidity.fundingSources = [{
+    id: "immutable-launch-allocation",
+    kind: "launcher-allocation",
+    assetId: "launched-token",
+    source: "An immutable fixed-supply allocation reserved by the reviewed token constructor before trading begins.",
+    transferTaxRecipientId: null,
+    authorityRole: null,
+    valueFlowIds: ["auto-liquidity-launch-allocation", "auto-liquidity-swap", "auto-liquidity-add"],
+    custody: "The token contract keeps the allocation in a separately accounted balance used only by the bounded liquidity lifecycle.",
+    accountingRule: "Track initial credit, each actual router debit, each added amount and every retryable remainder without mixing beneficiary or user balances.",
+    fundingLimit: "The source can never exceed the immutable constructor allocation and exposes no mint, pull, tax or confiscation path.",
+    withdrawalRule: "No creator or administrator can withdraw or redirect this allocation outside the declared canonical-liquidity lifecycle.",
+    failureRule: "Failure leaves the exact unspent allocation retryable and cannot block transfers or debit another account."
+  }];
+  submission.noHookArchitecture.autoLiquidity.valueFlowIds.push("auto-liquidity-launch-allocation");
+  submission.risk.featureTriggers = submission.risk.featureTriggers.filter((trigger) => !["non-standard-token", "transfer-tax"].includes(trigger));
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.findings.some(({ code }) => code === "AUTO_LIQUIDITY_WITHOUT_FUNDING_TAX"), false);
+  assert.equal(report.risk.featureTriggers.includes("transfer-tax"), false);
+});
+
+test("unknown token behavior remains reviewable through the open structured extension", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  const launchedAsset = submission.assets.find(({ role }) => role === "launched");
+  const capability = submission.projectCapabilities.find(({ id }) => id === "canonical-pool-state");
+  launchedAsset.behaviors.push("time-weighted-vote-checkpoint");
+  submission.tokenBehaviorExtensions = [{
+    id: "time-weighted-vote-checkpoint",
+    assetId: launchedAsset.id,
+    behavior: "time-weighted-vote-checkpoint",
+    summary: "Record a non-transferable time-weighted governance checkpoint without changing balances, supply, transfer liveness or pool settlement.",
+    projectCapabilityId: capability.id,
+    authorityRefs: [],
+    valueFlowIds: [],
+    mutable: false,
+    visibility: "fully-disclosed",
+    supplyImpact: "none",
+    transferImpact: "none",
+    failureRule: "A checkpoint write failure reverts only the governance checkpoint action and cannot alter or block an ordinary transfer, buy or sell.",
+    providerImpact: {
+      routing: "Routers may ignore the checkpoint because it does not change transferred amounts, token approvals or pool settlement.",
+      quoting: "Quotes remain based on the exact ordinary transfer and pool amounts, with the existing visible tax handled separately.",
+      indexing: "Indexers may consume the new checkpoint event only when they opt into the exact published schema and source revision.",
+      status: "requires-provider-review",
+      evidence: [],
+      limitations: ["Passing this check does not make an external router, indexer, scanner or listing understand the new checkpoint event."],
+      fallback: "Keep routing independent from the checkpoint and expose the feature only through a client that verifies the exact event schema."
+    },
+    securityTriggers: structuredClone(capability.securityTriggers),
+    requiredProfiles: [...capability.requiredProfiles],
+    sourcePaths: [],
+    testPaths: [],
+    evidencePaths: [],
+    testScenarios: ["Checkpoint creation and failure cannot change balances, supply, transfer liveness or canonical pool settlement."]
+  }];
+  submission.risk.featureTriggers.push("novel-token-behavior");
+  submission.risk.featureTriggers.sort();
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code, severity }) => code === "TOKEN_BEHAVIOR_REQUIRES_ARCHITECTURE_REVIEW" && severity === "warning"));
+  assert.ok(report.requiredGates.some(({ id }) => id === "novel-token-behavior-architecture-review"));
+  assert.ok(report.requiredGates.some(({ id }) => id === "novel-token-behavior-provider-review"));
+});
+
+test("open token behavior path still rejects hidden controls", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  const launchedAsset = submission.assets.find(({ role }) => role === "launched");
+  const capability = submission.projectCapabilities.find(({ id }) => id === "canonical-pool-state");
+  launchedAsset.behaviors.push("concealed-balance-rule");
+  submission.tokenBehaviorExtensions = [{
+    id: "concealed-balance-rule",
+    assetId: launchedAsset.id,
+    behavior: "concealed-balance-rule",
+    summary: "This negative fixture declares an intentionally concealed balance rule so the hard policy boundary is exercised.",
+    projectCapabilityId: capability.id,
+    authorityRefs: [],
+    valueFlowIds: [],
+    mutable: false,
+    visibility: "undisclosed-or-obfuscated",
+    supplyImpact: "none",
+    transferImpact: "none",
+    failureRule: "The negative fixture does not define a safe public failure rule because its behavior is intentionally concealed from users.",
+    providerImpact: {
+      routing: "No router can safely evaluate an intentionally concealed balance rule without exact public behavior and source.",
+      quoting: "No quoter can safely predict final received amounts while a balance rule remains intentionally concealed.",
+      indexing: "No indexer can reconstruct balances while the behavior and controlling state remain intentionally concealed.",
+      status: "unsupported",
+      evidence: [],
+      limitations: ["The hidden rule prevents truthful transfer, quote, routing and balance reconstruction claims."],
+      fallback: "Remove the hidden behavior and publish the exact authority, state, value and failure rules before review."
+    },
+    securityTriggers: structuredClone(capability.securityTriggers),
+    requiredProfiles: [...capability.requiredProfiles],
+    sourcePaths: [],
+    testPaths: [],
+    evidencePaths: [],
+    testScenarios: ["The negative fixture proves intentionally hidden behavior cannot enter architecture review as a safe extension."]
+  }];
+  submission.risk.featureTriggers.push("novel-token-behavior");
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "UNSUPPORTED");
+  assert.ok(report.findings.some(({ code, severity }) => code === "HIDDEN_TOKEN_BEHAVIOR" && severity === "hard"));
+});
+
+test("model-specific no-hook path rejects concealed sell restrictions", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  submission.noHookArchitecture.transferPolicy.poolSellsAllowed = false;
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "UNSUPPORTED");
+  assert.ok(report.findings.some(({ code, severity }) => code === "HIDDEN_TRANSFER_OR_SELL_RESTRICTION" && severity === "hard"));
+});
+
+test("model-specific no-hook tax requires exact bounds, value flows, provider limits and tests", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  submission.noHookArchitecture.transferTax.maximumHundredthsOfBip = 20000;
+  submission.noHookArchitecture.transferTax.recipientValueFlowIds = ["missing-flow"];
+  submission.noHookArchitecture.providerCompatibility.limitations = [];
+  submission.noHookArchitecture.testScenarios = [];
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "REDESIGN_REQUIRED");
+  for (const code of [
+    "TRANSFER_TAX_RATE_ABOVE_MAXIMUM",
+    "TRANSFER_TAX_VALUE_FLOW_UNKNOWN",
+    "NO_HOOK_PROVIDER_LIMITS_MISSING",
+    "NO_HOOK_TEST_SCENARIO_MISSING"
+  ]) assert.ok(report.findings.some((finding) => finding.code === code), code);
+});
+
+test("mutable transfer tax binds one explicit bounded authority and delay", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  submission.noHookArchitecture.transferTax.mutable = true;
+  submission.noHookArchitecture.transferTax.authorityRole = "fee-policy-admin";
+  submission.noHookArchitecture.transferTax.changeDelay = "Every change executes only after the immutable seven-day timelock and cannot exceed the fixed maximum.";
+  submission.noHookArchitecture.testScenarios.push("authority-and-delay");
+  submission.authorities = [{
+    role: "fee-policy-admin",
+    controller: "The exact immutable timelock contract named by chain address in the dependency records.",
+    capabilities: ["Change buy, sell and peer tax rates or recipient shares only inside the immutable maximum and conservation rules."],
+    mutable: true,
+    delay: "Seven days from an onchain scheduled change event to permissionless execution.",
+    userExitImpact: "Users retain unrestricted transfers and sells during the delay and after every bounded fee update."
+  }];
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.requiredGates.some(({ id }) => id === "transfer-tax-authority-and-timelock-review"));
+});
+
+test("mutable public token metadata requires a disclosed owner", () => {
+  const submission = readySubmission();
+  submission.publicMetadata.token.metadataMutable = true;
+  submission.publicMetadata.token.metadataOwner = null;
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.ok(report.findings.some(({ code, path }) => code === "PUBLIC_METADATA_OWNER_MISSING" && path === "$.publicMetadata.token.metadataOwner"));
+});
+
+test("Unicode confusables enter identity review instead of automatic rejection", () => {
+  const submission = readySubmission();
+  submission.publicMetadata.project.name = "Un\u0456swap Garden";
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PUBLIC_METADATA_UNICODE_REVIEW_REQUIRED"));
+  assert.ok(report.requiredGates.some(({ id }) => id === "public-metadata-unicode-and-affiliation-review"));
+});
+
+test("claimed affiliations require evidence and remain review-owned", () => {
+  const submission = readySubmission();
+  submission.publicMetadata.claimedAffiliations.push({
+    organization: "Example Provider",
+    relationship: "partner",
+    evidenceUri: null
+  });
+
+  const missingEvidence = analyzeSubmission(submission, { schema });
+  assert.ok(missingEvidence.findings.some(({ code }) => code === "PUBLIC_AFFILIATION_EVIDENCE_MISSING"));
+
+  submission.publicMetadata.claimedAffiliations.at(-1).evidenceUri = "https://provider.example/partnerships/project";
+  const evidenced = analyzeSubmission(submission, { schema });
+  assert.equal(evidenced.decision, "PROTOTYPE_READY", JSON.stringify(evidenced.findings));
+  assert.ok(evidenced.findings.some(({ code }) => code === "PUBLIC_AFFILIATION_REQUIRES_REVIEW"));
+});
+
+test("unknown provider support creates review only and does not reject the project", () => {
+  const submission = readySubmission();
+  submission.publicMetadata.providerPresentations.push({
+    provider: "new-provider",
+    supportStatus: "unknown",
+    tags: ["onchain-game"],
+    labels: ["Onchain game"],
+    evidenceUri: null
+  });
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ severity, code }) => severity === "warning" && code === "PROVIDER_SUPPORT_REVIEW_REQUIRED"));
+  assert.ok(report.requiredGates.some(({ id, stage }) => id === "provider-presentation-and-support-review" && stage === "external"));
 });
 
 test("external-call gate describes the declared model when no custom hook is used", () => {
@@ -141,6 +393,12 @@ test("ordinary no-hook prototype needs no Solidity, Foundry build-info or callba
       compilerBuildInfoPaths: [],
       dependencyLockPath: null
     };
+    bindSingleProjectSurface(submission, {
+      sourcePaths: submission.implementation.sourcePaths,
+      testPaths: submission.implementation.testPaths,
+      schemaPaths: [submission.implementation.specificationPath],
+      evidencePaths: [submission.implementation.testEvidencePath]
+    });
 
     const report = analyzeSubmission(submission, { schema });
 
@@ -246,6 +504,12 @@ test("ordinary no-hook prototype package verifies without an included client or 
       compilerBuildInfoPaths: [],
       dependencyLockPath: null
     };
+    bindSingleProjectSurface(submission, {
+      sourcePaths: submission.implementation.sourcePaths,
+      testPaths: submission.implementation.testPaths,
+      schemaPaths: [submission.implementation.specificationPath],
+      evidencePaths: [submission.implementation.testEvidencePath]
+    });
     rewritePrototypePackageArtifacts(complete.modelRoot, submission);
 
     const result = childProcess.spawnSync(
@@ -322,7 +586,7 @@ test("no-custom-hook route rejects dynamic LP fees", () => {
   assert.ok(report.findings.some(({ code }) => code === "NO_CUSTOM_HOOK_DYNAMIC_FEE_CONFLICT"));
 });
 
-test("no-custom-hook route requires an exact committed official launch profile id", () => {
+test("official-launchpad no-hook route requires an exact committed profile id", () => {
   const submission = noCustomHookSubmission();
   submission.target.officialLaunchProfileId = null;
 
@@ -417,6 +681,22 @@ test("hard security violations are unsupported", () => {
 
   assert.equal(report.decision, "UNSUPPORTED");
   assert.ok(report.findings.some(({ code, severity }) => code === "TX_ORIGIN_AUTHORIZATION" && severity === "hard"));
+});
+
+test("repairable implementation defects require changes without rejecting the product category", () => {
+  for (const [field, code] of [
+    ["unboundedCriticalLoop", "UNBOUNDED_CRITICAL_LOOP"],
+    ["ignoredCallResults", "IGNORED_CALL_RESULT"],
+    ["assumesOnchainSecrecy", "ONCHAIN_SECRECY_ASSUMPTION"]
+  ]) {
+    const submission = readySubmission();
+    submission.security[field] = true;
+
+    const report = analyzeSubmission(submission, { schema });
+
+    assert.equal(report.decision, "REDESIGN_REQUIRED");
+    assert.ok(report.findings.some((finding) => finding.code === code && finding.severity === "blocker"));
+  }
 });
 
 test("permissionless issuer controls are unsupported", () => {
@@ -859,16 +1139,16 @@ test("schema rejects unknown fields and out-of-range risk dimensions", () => {
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_MAXIMUM" && path.endsWith("externalDependencies")));
 });
 
-test("chain-scope semantics are a versioned 1.1.0 standard rather than a silent 1.0.0 mutation", () => {
-  assert.equal(schema.$id, "urn:programmable:v4-hook-submission:1.1.0");
-  assert.equal(schema.properties.standardVersion.const, "1.1.0");
+test("project-surface and no-hook semantics are a versioned 1.2.0 standard rather than a silent 1.1.0 mutation", () => {
+  assert.equal(schema.$id, "urn:programmable:v4-hook-submission:1.2.0");
+  assert.equal(schema.properties.standardVersion.const, "1.2.0");
   const report = analyzeSubmission(readySubmission(), { schema });
   assert.equal(report.reportVersion, 2);
-  assert.equal(report.standardVersion, "1.1.0");
+  assert.equal(report.standardVersion, "1.2.0");
 
   const stale = readySubmission();
-  stale.$schema = "urn:programmable:v4-hook-submission:1.0.0";
-  stale.standardVersion = "1.0.0";
+  stale.$schema = "urn:programmable:v4-hook-submission:1.1.0";
+  stale.standardVersion = "1.1.0";
   const findings = validateAgainstSchema(stale, schema);
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_CONST" && path === "$.$schema"));
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_CONST" && path === "$.standardVersion"));
@@ -1711,7 +1991,7 @@ test("scaffolder creates an isolated package and never touches the model registr
   }
 });
 
-test("proposal package verifier preserves a fresh redesign report without executing code", () => {
+test("proposal package verifier rejects an unchanged scaffold after identity fields are filled", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-package-test-"));
   const modelRoot = path.join(destinationRoot, "open-design");
   try {
@@ -1748,14 +2028,72 @@ test("proposal package verifier preserves a fresh redesign report without execut
       [path.join(skillRoot, "scripts", "verify-package.mjs"), modelRoot],
       { cwd: repositoryRoot, encoding: "utf8", shell: false }
     );
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.status, 1, result.stderr || result.stdout);
     const report = JSON.parse(result.stdout);
-    assert.equal(report.intakeValidated, true);
+    assert.equal(report.intakeValidated, false);
     assert.equal(report.accepted, false);
     assert.equal(report.releaseEligible, false);
     assert.equal(report.preflightDecision, "REDESIGN_REQUIRED");
     assert.equal(report.designReadyForPrototype, false);
     assert.equal(report.prototypeIntakeValidated, false);
+    assert.ok(report.errors.some((error) => error.includes("replace the scaffold idea")), JSON.stringify(report.errors));
+    assert.ok(report.errors.some((error) => error.includes("PROPOSAL.md is still substantially")), JSON.stringify(report.errors));
+    assert.ok(report.errors.some((error) => error.includes("specific named architecture questions")), JSON.stringify(report.errors));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("proposal package verifier accepts a concrete design with one named architecture question", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-package-ready-test-"));
+  const modelRoot = path.join(destinationRoot, "open-design");
+  try {
+    let result = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "scaffold-submission.mjs"), "open-design", "--destination", destinationRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    const publicSubmission = readySubmission();
+    publicSubmission.model.id = "open-design";
+    publicSubmission.model.name = "Open Design";
+    publicSubmission.builder.github = "gardenbuilder";
+    publicSubmission.builder.contact = "@gardenbuilder";
+    publicSubmission.builder.licenseDeclaration = "I own this proposal and submit it under the repository MIT License.";
+    publicSubmission.unresolved = [
+      "Should the observer event remain aggregate-only, or include a separately authenticated application actor for this exact pool?"
+    ];
+    fs.writeFileSync(
+      path.join(modelRoot, "submission.json"),
+      `${JSON.stringify(publicSubmission, null, 2)}\n`
+    );
+    writeConcreteProposalDocuments(modelRoot, publicSubmission.model.name);
+
+    result = childProcess.spawnSync(
+      process.execPath,
+      [
+        path.join(skillRoot, "scripts", "validate-submission.mjs"),
+        path.join(modelRoot, "submission.json"),
+        "--repository-root",
+        repositoryRoot,
+        "--write-report",
+        path.join(modelRoot, "compatibility-report.json")
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    result = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.intakeValidated, true, JSON.stringify(report.errors));
+    assert.equal(report.preflightDecision, "REDESIGN_REQUIRED");
+    assert.equal(report.designReadyForPrototype, false);
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
   }
@@ -1819,6 +2157,26 @@ test("novel project categories and capability extensions enter architecture revi
     testPaths: ["service/tests/test_rewards.py"],
     evidencePaths: ["evidence/game-boundary.md"]
   }];
+  submission.projectCapabilities.push({
+    id: "player-elimination-reward",
+    kind: "server-authoritative-elimination-reward",
+    summary: "Represent the novel player elimination reward as an open capability with explicit project security triggers.",
+    surfaceIds: ["canonical-pool-model"],
+    securityTriggers: {
+      authority: true,
+      valueFlow: false,
+      sourceOfTruth: true,
+      signaturesReplay: false,
+      externalCalls: false,
+      custody: false,
+      piiGeolocation: false,
+      secretBoundary: false,
+      sourceTestSchema: true,
+      failureRecovery: true
+    },
+    requiredProfiles: ["authority", "failure-recovery", "source-of-truth", "source-test-schema"]
+  });
+  submission.projectSurfaces[0].capabilityIds.push("player-elimination-reward");
 
   const report = analyzeSubmission(submission, { schema });
 
@@ -2582,16 +2940,136 @@ test("prototype intake rejects build info that omits a reviewed Solidity source"
   }
 });
 
-test("unsupported provider claims are rejected anywhere in the package", () => {
+test("unsupported provider claims are rejected in declared shipped package content", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-claim-scan-test-"));
   try {
-    const { modelRoot } = createPrototypePackage(destinationRoot);
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
     fs.mkdirSync(path.join(modelRoot, "notes"));
-    fs.writeFileSync(path.join(modelRoot, "notes", "marketing.md"), "This model is officially verified by Uniswap.\n");
+    const marketingPath = path.join(modelRoot, "notes", "marketing.md");
+    fs.writeFileSync(marketingPath, "This model is officially verified by Uniswap.\n");
+    const repositoryPath = path.relative(repositoryRoot, marketingPath).replaceAll(path.sep, "/");
+    submission.implementation.sourcePaths.push(repositoryPath);
+    submission.integration.platformHandoff.uiSourcePaths.push(repositoryPath);
+    rewritePrototypePackageArtifacts(modelRoot, submission);
     const result = childProcess.spawnSync(process.execPath, [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot], { cwd: repositoryRoot, encoding: "utf8", shell: false });
     assert.notEqual(result.status, 0);
     const report = JSON.parse(result.stdout);
     assert.ok(report.errors.some((message) => /notes\/marketing\.md contains an unsupported/.test(message)), JSON.stringify(report.errors));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("public UI source claims are checked while comments and test sources are ignored", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-ui-claim-scan-test-"));
+  try {
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
+    const uiPath = path.resolve(repositoryRoot, submission.integration.platformHandoff.uiSourcePaths[0]);
+    const testPath = path.resolve(repositoryRoot, submission.integration.platformHandoff.testPaths[0]);
+    fs.writeFileSync(uiPath, "// This hook is officially approved by Uniswap.\nexport const publicCopy = 'Prototype evidence only.';\n");
+    fs.writeFileSync(testPath, "export const forbiddenCopyFixture = 'This hook is unruggable.';\n");
+    rewritePrototypePackageArtifacts(modelRoot, submission);
+
+    const commentAndTestOnly = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(commentAndTestOnly.status, 0, commentAndTestOnly.stderr || commentAndTestOnly.stdout);
+
+    fs.writeFileSync(uiPath, "export const publicCopy = 'This hook is officially approved by Uniswap.';\n");
+    rewritePrototypePackageArtifacts(modelRoot, submission);
+    const visibleClaim = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.notEqual(visibleClaim.status, 0);
+    const report = JSON.parse(visibleClaim.stdout);
+    assert.ok(report.errors.some((message) => /ui\.tsx contains an unsupported Uniswap verification/.test(message)), JSON.stringify(report.errors));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("declared locale and shipped content files are checked without scanning tests or tool configuration as public copy", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-content-claim-scan-test-"));
+  try {
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
+    const contentDirectory = path.join(modelRoot, "app", "content");
+    const localeDirectory = path.join(modelRoot, "app", "locales");
+    fs.mkdirSync(contentDirectory, { recursive: true });
+    fs.mkdirSync(localeDirectory, { recursive: true });
+
+    const jsonPath = path.join(localeDirectory, "en.json");
+    const yamlPath = path.join(localeDirectory, "de.yml");
+    const markdownPath = path.join(contentDirectory, "status.md");
+    const configPath = path.join(modelRoot, "app", "tsconfig.json");
+    const fixturePath = path.join(modelRoot, "app", "claims.test.json");
+    writeJson(jsonPath, {
+      "This hook is unruggable.": "translation-key-is-not-copy",
+      status: "This hook is not audited and is not deployed."
+    });
+    fs.writeFileSync(yamlPath, "# This hook is approved by Programmable.\nstatus: No Uniswap approval is claimed.\n");
+    fs.writeFileSync(markdownPath, "```text\nThis hook is guaranteed safe.\n```\n\nPrototype evidence only.\n");
+    writeJson(configPath, { compilerMessage: "This hook is approved by Uniswap." });
+    writeJson(fixturePath, { fixture: "This hook is unruggable." });
+
+    const repositoryPaths = [jsonPath, yamlPath, markdownPath, configPath, fixturePath]
+      .map((target) => path.relative(repositoryRoot, target).replaceAll(path.sep, "/"));
+    submission.implementation.sourcePaths.push(...repositoryPaths);
+    submission.integration.platformHandoff.uiSourcePaths.push(...repositoryPaths.slice(0, 2));
+    submission.integration.appSourcePaths.push(...repositoryPaths.slice(3));
+    const browserSurface = structuredClone(submission.projectSurfaces[0]);
+    Object.assign(browserSurface, {
+      id: "public-status-content",
+      kind: "web-app",
+      name: "Public status content",
+      summary: "A browser surface renders the declared public status Markdown as user-facing project copy.",
+      executionBoundary: "browser",
+      capabilityIds: ["public-status-display"],
+      sourcePaths: [repositoryPaths[2]],
+      testPaths: [submission.integration.platformHandoff.testPaths[0]],
+      schemaPaths: [],
+      evidencePaths: []
+    });
+    const browserCapability = structuredClone(submission.projectCapabilities[0]);
+    Object.assign(browserCapability, {
+      id: "public-status-display",
+      kind: "state-observation",
+      summary: "Render the declared project status content without changing pool, token or user state.",
+      surfaceIds: [browserSurface.id]
+    });
+    submission.projectSurfaces.push(browserSurface);
+    submission.projectCapabilities.push(browserCapability);
+    rewritePrototypePackageArtifacts(modelRoot, submission);
+
+    const nonPublicExamples = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(nonPublicExamples.status, 0, nonPublicExamples.stderr || nonPublicExamples.stdout);
+
+    const forbiddenByPath = [
+      [jsonPath, () => writeJson(jsonPath, { hero: "This hook is approved by Uniswap." }), /en\.json contains an unsupported Uniswap verification/],
+      [yamlPath, () => fs.writeFileSync(yamlPath, "hero: This hook is unruggable.\n"), /de\.yml contains an unsupported Safety, rug-free or risk-free status/],
+      [markdownPath, () => fs.writeFileSync(markdownPath, "The submitted project is live on mainnet.\n"), /status\.md contains an unsupported Deployment, launch or availability/]
+    ];
+    for (const [target, writeForbidden, expected] of forbiddenByPath) {
+      const original = fs.readFileSync(target, "utf8");
+      writeForbidden();
+      rewritePrototypePackageArtifacts(modelRoot, submission);
+      const visibleClaim = childProcess.spawnSync(
+        process.execPath,
+        [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+        { cwd: repositoryRoot, encoding: "utf8", shell: false }
+      );
+      assert.notEqual(visibleClaim.status, 0);
+      const report = JSON.parse(visibleClaim.stdout);
+      assert.ok(report.errors.some((message) => expected.test(message)), JSON.stringify(report.errors));
+      fs.writeFileSync(target, original);
+    }
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
   }
@@ -2808,6 +3286,36 @@ function completeSignatureScheme({ erc1271 }) {
   };
 }
 
+function completePublicMetadata() {
+  return {
+    project: {
+      name: "Swap Observer",
+      description: "A public project that exposes a pool-scoped aggregate after each completed canonical-pool swap.",
+      projectUri: "https://example.invalid/swap-observer",
+      logoUri: "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3g3t3u7v6d2v4x5y6z7a8b9c0/project-logo.svg",
+      logoContentHash: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      metadataMutable: false,
+      metadataOwner: null
+    },
+    token: {
+      name: "Observer Token",
+      symbol: "OBS",
+      metadataUri: "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3g3t3u7v6d2v4x5y6z7a8b9c0/token.json",
+      metadataContentHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      logoUri: "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3g3t3u7v6d2v4x5y6z7a8b9c0/token-logo.svg",
+      logoContentHash: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      metadataMutable: false,
+      metadataOwner: null
+    },
+    claimedAffiliations: [{
+      organization: "Uniswap",
+      relationship: "technology-use",
+      evidenceUri: null
+    }],
+    providerPresentations: []
+  };
+}
+
 function readySubmission() {
   const submission = structuredClone(template);
   submission.assets[1].initialSupply = "1000000000000000000000000000";
@@ -2820,6 +3328,7 @@ function readySubmission() {
     category: "market-structure",
     whyV4: "The aggregate is updated atomically after the canonical pool completes each swap and remains scoped by PoolId."
   };
+  submission.publicMetadata = completePublicMetadata();
   submission.pool = {
     currency0: "eth",
     currency1: "launched-token",
@@ -2990,6 +3499,7 @@ function readySubmission() {
 function noCustomHookSubmission() {
   const submission = readySubmission();
   submission.target.officialLaunchProfileId = "official-cca-lbp-new-token-ethereum";
+  submission.noHookArchitecture = officialNoHookArchitecture();
   const hook = structuredClone(template.hook);
   hook.used = false;
   for (const permission of Object.keys(hook.permissions)) hook.permissions[permission] = false;
@@ -3067,6 +3577,197 @@ function noCustomHookSubmission() {
   return submission;
 }
 
+function officialNoHookArchitecture() {
+  return {
+    route: "official-launchpad",
+    rationale: "Use the committed official launchpad profile as the safer ordinary-token default without custom token transfer mechanics.",
+    transferPolicy: {
+      peerTransfersAllowed: true,
+      poolBuysAllowed: true,
+      poolSellsAllowed: true,
+      maxTransactionAmount: null,
+      maxWalletAmount: null,
+      cooldownSeconds: null,
+      allowlist: false,
+      denylist: false
+    },
+    transferTax: {
+      used: false,
+      buyHundredthsOfBip: null,
+      sellHundredthsOfBip: null,
+      peerTransferHundredthsOfBip: null,
+      maximumHundredthsOfBip: null,
+      mutable: null,
+      authorityRole: null,
+      changeDelay: null,
+      recipients: [],
+      recipientValueFlowIds: [],
+      exemptions: [],
+      appliesToPoolManagerTransfers: null,
+      poolManagerTransferPolicy: null,
+      liquidityOperationTreatment: null,
+      alternativePoolTreatment: null,
+      event: null,
+      failureRule: null
+    },
+    autoLiquidity: {
+      used: false,
+      fundingSources: [],
+      triggerMode: null,
+      triggerThreshold: null,
+      maximumSwapAmount: null,
+      slippageHundredthsOfBip: null,
+      deadlineSeconds: null,
+      executionActor: null,
+      poolTransferSuppression: null,
+      reentrancyGuard: null,
+      underlyingTransferFailurePolicy: null,
+      mutable: null,
+      authorityRole: null,
+      valueFlowIds: [],
+      custody: null,
+      lpPositionCustodian: null,
+      lpPositionTransferable: null,
+      exitPolicy: null,
+      emergencyRecovery: null,
+      event: null,
+      failureRule: null
+    },
+    providerCompatibility: {
+      routing: "The selected external routing provider must evaluate the exact token and canonical PoolKey independently.",
+      quoting: "Quotes use ordinary token amounts and remain subject to exact runtime and chain verification.",
+      indexing: "Indexers must bind the exact official launcher, token and canonical pool events for this release.",
+      status: "requires-provider-review",
+      evidence: [],
+      limitations: ["An official launch profile is not proof of routing, quoting, indexing or listing availability."],
+      fallback: "Keep the project reviewable without an availability claim until every selected provider confirms support."
+    },
+    testScenarios: []
+  };
+}
+
+function modelSpecificTaxTokenSubmission() {
+  const submission = noCustomHookSubmission();
+  submission.target.officialLaunchProfileId = null;
+  submission.target.dependencyBaseline = "model-specific-pinned";
+  submission.noHookArchitecture = structuredClone(noHookArchitectureTemplate);
+  submission.model = {
+    id: "transparent-tax-auto-liquidity-token",
+    name: "Transparent Tax Auto-Liquidity Token",
+    summary: "Create one fixed-supply token with bounded visible transfer taxes and an immutable automatic liquidity lifecycle outside custom PoolManager callbacks.",
+    userOutcome: "A creator can launch a taxed token whose rates, recipients, liquidity custody, execution bounds and provider limitations are explicit before trading.",
+    category: "permissionless-token",
+    whyV4: "The token forms one canonical Uniswap v4 pool while tax collection and automatic liquidity remain ordinary token and router actions rather than custom hook callbacks."
+  };
+  const launchedAsset = submission.assets.find(({ role }) => role === "launched");
+  launchedAsset.behaviors = ["fee-on-transfer"];
+  submission.launchLifecycle = completeNoCustomHookLaunchLifecycle();
+  submission.launchLifecycle.tokenCreation.actor = "The model-specific factory deploys one immutable fixed-supply transfer-tax token from the reviewed source and constructor configuration.";
+  submission.launchLifecycle.feesAndClaims = lifecyclePhase(
+    "The immutable token allocates each visible transfer tax to the declared recipient buckets.",
+    "A bounded portion funds automatic liquidity while the remaining portion reaches the exact beneficiary value flow."
+  );
+  submission.launchLifecycle.liquidityFormation = lifecyclePhase(
+    "The model-specific launcher creates the initial position and the token may later add bounded automatic liquidity.",
+    "Initial assets and later collected liquidity tax enter only the canonical PoolKey under the disclosed custody and exit policy."
+  );
+  submission.valueFlows = [
+    {
+      id: "transfer-tax-collection",
+      action: "collect visible transfer tax",
+      asset: "launched-token",
+      from: "each taxed sender gross transfer amount",
+      to: "the two immutable recipient buckets declared by id",
+      amountRule: "Apply the exact direction rate and allocate the resulting tax by the declared 6000 and 4000 basis-point shares.",
+      settlement: "Update the net recipient amount and both tax buckets in the same token transfer before emitting the complete event.",
+      failure: "Revert the complete transfer if any amount, bound or recipient allocation cannot be preserved."
+    },
+    {
+      id: "transfer-tax-treasury",
+      action: "deliver treasury share",
+      asset: "launched-token",
+      from: "treasury-beneficiary tax bucket",
+      to: "the immutable builder beneficiary address",
+      amountRule: "Deliver exactly 4000 basis points of every collected tax with no redirect or administrator override.",
+      settlement: "Credit the beneficiary during the originating transfer and record gross tax, share and destination.",
+      failure: "Revert the complete transfer instead of retaining an unaccounted treasury balance."
+    },
+    {
+      id: "auto-liquidity-swap",
+      action: "swap bounded liquidity-tax inventory",
+      asset: "launched-token",
+      from: "liquidity-bucket token contract balance",
+      to: "the exact reviewed router and canonical PoolKey",
+      amountRule: "Swap no more than the immutable maximum after the threshold, enforcing the declared final-received slippage and deadline bounds.",
+      settlement: "Complete the reviewed router call under a non-reentrant execution lock and measure actual quote received.",
+      failure: "Leave the bucket retryable and continue the underlying user transfer without a partial router or liquidity state."
+    },
+    {
+      id: "auto-liquidity-add",
+      action: "add bounded canonical liquidity",
+      asset: "launched-token and native ETH quote proceeds",
+      from: "the remaining token half and actual quote received by the automatic swap",
+      to: "the exact canonical Uniswap v4 PoolKey",
+      amountRule: "Add only the actual balances produced by the bounded lifecycle and enforce nonzero minimum amounts.",
+      settlement: "Mint or increase the exact position owned by the immutable liquidity custody contract.",
+      failure: "Revert the automatic liquidity action and retain retryable bucket accounting without blocking the user transfer."
+    },
+    {
+      id: "auto-liquidity-position",
+      action: "custody automatic liquidity position",
+      asset: "the exact canonical v4 position",
+      from: "the automatic liquidity add action",
+      to: "the immutable liquidity custody contract",
+      amountRule: "Bind every added amount and position identifier to the canonical PoolId and the no-transfer exit policy.",
+      settlement: "Record the position id, custody destination and actual token amounts in the execution event.",
+      failure: "Do not mint the position to an administrator, creator wallet or undeclared destination."
+    }
+  ];
+  submission.capabilities.externalCalls = {
+    used: true,
+    targets: ["The exact reviewed Universal Router and v4 position-management contracts pinned in the dependency lock."],
+    callSites: ["The bounded automatic liquidity lifecycle may swap and add canonical liquidity after the immutable threshold."],
+    reentrancyPolicy: "A dedicated execution lock prevents token transfers and router callbacks from entering the automatic liquidity lifecycle recursively.",
+    stateDriftPolicy: "The action binds one canonical PoolKey, current bucket balance, minimum received amounts and finite deadline before external execution.",
+    returnValuePolicy: "The contract measures actual token and quote balances and validates the exact position identifier rather than trusting nominal router return values.",
+    failureAtomicity: "Any router or position failure reverts only the automatic liquidity sub-action and leaves its disclosed bucket retryable without blocking the user transfer."
+  };
+  configureNoIncludedSwapClient(submission, "not-planned");
+  submission.integration.routingAndDiscoverability.standardRouterCompatible = false;
+  submission.risk = {
+    dimensions: {
+      complexity: 2,
+      customMath: 0,
+      externalDependencies: 1,
+      externalLiquidity: 0,
+      valueAtRisk: 1,
+      teamMaturity: 1,
+      upgradeability: 0,
+      autonomy: 1,
+      priceImpact: 1
+    },
+    rationales: {
+      complexity: "Transfer direction classification, recipient conservation and bounded automatic liquidity create multiple interacting but explicit states.",
+      customMath: "All rates use bounded basis arithmetic without a custom price curve, oracle formula or PoolManager return delta.",
+      externalDependencies: "Automatic liquidity calls the exact reviewed router and position manager under pinned runtime and failure assumptions.",
+      externalLiquidity: "The model owns only its disclosed canonical v4 position and no vault, wrapper, collateral or off-pool liquidity inventory.",
+      valueAtRisk: "Collected tax balances and the resulting canonical liquidity position remain exposed to token, router and custody defects.",
+      teamMaturity: "A conservative nonzero process score remains until independent contract, economic and integration reviews are complete.",
+      upgradeability: "Token rates, bounds, recipients, router bindings and liquidity custody are immutable and use no proxy or rescue authority.",
+      autonomy: "An ordinary transfer may trigger one bounded automatic liquidity action without a keeper or administrator decision.",
+      priceImpact: "Transfer taxes and the bounded automatic swap affect actual received amounts and execution price despite standard pool math."
+    },
+    declaredTotal: 7,
+    declaredTier: "high",
+    featureTriggers: ["auto-liquidity", "autonomous", "external-calls", "non-standard-token", "price-impact", "transfer-tax"]
+  };
+  submission.disclosures = [
+    "Every buy, sell and transfer stays permitted, but the exact visible rate may reduce the recipient amount.",
+    "Passing Programmable checks does not prove routing, quoting, indexer, scanner or listing support for this token."
+  ];
+  return submission;
+}
+
 function completeNoCustomHookLaunchLifecycle() {
   return {
     tokenCreation: lifecyclePhase("The official launcher creates one immutable fixed-supply token.", "The exact supply is minted once into the declared launch allocation."),
@@ -3129,6 +3830,47 @@ function completeCustomAccounting() {
     failureIsolation: "A settlement or backing failure reverts the atomic action without consuming another pool's balance.",
     withdrawalOrdering: "Liability state is reduced before the external transfer and the complete withdrawal reverts on transfer failure."
   };
+}
+
+function writeConcreteProposalDocuments(modelRoot, modelName) {
+  const documents = {
+    "PROPOSAL.md": [
+      `# ${modelName}`,
+      "",
+      "## Outcome and architecture",
+      "The project launches one fixed-supply token and records a PoolId-scoped aggregate after each completed canonical-pool swap. One immutable hook uses only afterSwap, returns no delta, changes no price or fee, and has no administrator, proxy, rescue path, keeper, oracle, or signing authority.",
+      "",
+      "## Value flow and failure",
+      "The standard router and PoolManager move and settle both pool currencies. The observer takes no custody and creates no beneficiary liability. Invalid pool admission or a failed storage update reverts the complete swap, while existing liquidity positions keep their standard exit path.",
+      "",
+      "## Open architecture question",
+      "Should the observer event remain aggregate-only, or include a separately authenticated application actor for this exact pool?",
+      ""
+    ].join("\n"),
+    "THREAT_MODEL.md": [
+      `# ${modelName} threat model`,
+      "",
+      "The assets at risk are the two PoolManager currencies and the canonical liquidity position. The hook never owns either asset and cannot return a settlement delta. PoolManager authentication, exact PoolId admission, router state and event reconstruction are separate trust boundaries.",
+      "",
+      "A direct callback, wrong PoolId, unexpected permission mask or failed storage write reverts atomically. The immutable design has no mutable controller; users retain the standard swap and liquidity-removal paths.",
+      ""
+    ].join("\n"),
+    "TEST_PLAN.md": [
+      `# ${modelName} test plan`,
+      "",
+      "Planned checks cover PoolManager authentication, exact PoolId admission, the afterSwap selector, zero returned deltas, all four swap quadrants, callback reverts, event reconstruction and preservation of standard liquidity exits. The open event-identity choice must be fixed before implementation evidence is marked passed.",
+      ""
+    ].join("\n"),
+    "EVIDENCE.md": [
+      `# ${modelName} evidence`,
+      "",
+      "The current record contains the deterministic compatibility report for this proposal. Contract, fuzz, invariant, static-analysis, deployment, routing and availability evidence is planned and is not claimed as completed.",
+      ""
+    ].join("\n")
+  };
+  for (const [fileName, contents] of Object.entries(documents)) {
+    fs.writeFileSync(path.join(modelRoot, fileName), contents);
+  }
 }
 
 function verifyPrototypeProcess(modelRoot, targetRepositoryRoot = repositoryRoot) {
@@ -3389,6 +4131,12 @@ function createPrototypePackage(destinationRoot, {
     gateStatusPath: `${repositoryPackagePath}/evidence/gate-status.json`,
     reviewTargetPath: `${repositoryPackagePath}/evidence/review-target.json`
   };
+  bindSingleProjectSurface(submission, {
+    sourcePaths: [`${repositoryPackagePath}/src/Observer.sol`],
+    testPaths: [`${repositoryPackagePath}/test/Observer.t.sol`],
+    schemaPaths: [submission.implementation.specificationPath],
+    evidencePaths: [submission.implementation.testEvidencePath]
+  });
   writeJson(path.join(modelRoot, "submission.json"), submission);
 
   const preflight = analyzeRepositorySubmission(submission, modelRoot, targetRepositoryRoot);
@@ -3408,6 +4156,16 @@ function createPrototypePackage(destinationRoot, {
     ).stdout.trim()
   });
   return { modelRoot, submission, preflight };
+}
+
+function bindSingleProjectSurface(submission, { sourcePaths, testPaths, schemaPaths, evidencePaths }) {
+  assert.equal(submission.projectSurfaces.length, 1);
+  Object.assign(submission.projectSurfaces[0], {
+    sourcePaths: [...sourcePaths],
+    testPaths: [...testPaths],
+    schemaPaths: [...schemaPaths],
+    evidencePaths: [...evidencePaths]
+  });
 }
 
 function rewritePrototypePackageArtifacts(modelRoot, submission) {

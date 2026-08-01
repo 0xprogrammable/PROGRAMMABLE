@@ -115,6 +115,11 @@ Reviewers evaluate the exact revision, not the idea's popularity and not the cur
 An unfamiliar mechanic enters **architecture discussion**. Reviewers ask what it does, where value moves, who controls
 it, what it trusts and how it fails. Lack of a catalog label is not a rejection.
 
+The safer no-hook default uses the pinned official Launchpad profile, but it is not a launch-type allowlist. A
+model-specific ordinary token or launcher, including transparent bounded transfer tax and automatic liquidity, may
+enter review with its own exact source and dependencies. It must preserve transfer and sell liveness and disclose fee
+bounds, recipients, authority, value flows, liquidity custody and exit, provider limits, and test evidence.
+
 An objective finding includes:
 
 - the exact affected revision and location;
@@ -155,6 +160,11 @@ The state may move to `open` only after live `main` protection requires the trus
 checks, CODEOWNER review, resolved conversations, and strict up-to-date branches or a merge queue. This serializes two
 updates that target the same prior application revision; a stale check cannot authorize an overwrite.
 
+Repository administrators remain the GitHub trust root and can change or bypass repository settings. Programmable's
+solo-maintainer release path therefore keeps the administrator exception for owner-authored maintenance that cannot be
+self-approved. It must never be used to merge a Builder application: every application requires the visible trusted
+checks, current-base result and maintainer review described here. Applicants have no bypass authority.
+
 ## Public and private boundaries
 
 The project repository, application pull request, evidence and review discussion are public and non-confidential.
@@ -183,6 +193,10 @@ A local check, generated package, GitHub review or merged beta record is not:
 - provider routing, indexing or support evidence;
 - Uniswap Labs or Uniswap Foundation endorsement; or
 - a promise of fees, revenue, grants, review time or future integration.
+
+Large non-executable game and app data is declared through the versioned runtime-asset manifest, not disguised as
+source. Exact repository blobs are bound without executing the asset; external or unavailable content is routed to
+attributable review rather than automatic rejection. Executable project surfaces keep the strict code and test limits.
 
 Any later candidate decision, implementation review, integration, deployment, source verification, runtime matching,
 provider work or public release is separate and must bind its own exact revision and evidence.

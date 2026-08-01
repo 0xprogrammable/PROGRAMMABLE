@@ -109,6 +109,11 @@ Freeze:
 - router generation, swap modes, partial fills, slippage, deadline, Permit2, events, and state reads
 - intended UI, API, indexer, quote, trade, claim, and monitoring surfaces, each with a source of truth, input, output,
   error behavior, unsupported state, and owner; contributor-proposed repository paths and tests when known
+- open `projectSurfaces` and `projectCapabilities` declarations with bidirectional ids, explicit exposure booleans,
+  derived security profiles and exact source, test, schema and evidence paths; use
+  [project-surfaces-and-capabilities.md](project-surfaces-and-capabilities.md)
+- separate signed offchain source production from an optional onchain oracle verifier; never combine them into one
+  surface or require a verifier when the actual architecture does not use one
 - active indexer reconstruction and recovery evidence, or a fully inactive `dataReconstruction: not-applicable` profile
   when no accounting, claim, external-liquidity or indexer requirement exists
 - `submission.json.integration.platformHandoff`: `intended`, `websiteRegistryPath`, `uiSourcePaths`, `apiSourcePaths`,

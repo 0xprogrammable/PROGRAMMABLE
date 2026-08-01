@@ -60,6 +60,12 @@ The project can be a focused hook repository or a larger application that includ
 games, indexers or external dependencies. An unfamiliar mechanic is not rejected merely because it lacks a catalog
 name. Reviewers open an architecture discussion to understand its value flow, authority, trust and failure behavior.
 
+The no-hook path is also open. The official Launchpad profile is the safer default, while a separately pinned
+model-specific token or launcher may apply without inventing a hook. Transparent transfer taxes and automatic liquidity
+must disclose exact bounds, recipients, mutability and authority, value flows, PoolManager received-amount behavior, LP
+custody and exit, provider limitations, and tests. Hidden fees, sell blocks, address lists, wallet or transaction caps,
+cooldowns, and a tax bound that can consume the complete transfer are not eligible for the permissionless path.
+
 The target may be any positive JavaScript-safe EVM chain. Known chain ids must use their canonical network slug; an
 unknown chain opens an architecture review instead of an automatic safety rejection. This makes the project eligible to
 apply, not eligible to launch. The current Programmable launch integration is Ethereum Mainnet-only. Base, Unichain,
@@ -133,8 +139,13 @@ project merely to fit a template.
 ### 2. Run `doctor`
 
 `doctor` checks local readiness. It reports actionable blockers such as a missing Git repository, unsupported GitHub
-remote, unpushed revision, unavailable required tools or a dirty source state. Live public reachability remains
+remote, unpushed revision, unavailable required tools, missing exact-object Git capability or a dirty source state. Live public reachability remains
 `notChecked` until `prepare-pr`. It does not create an application or claim that the project passed review.
+
+Before build or package checks, the agent inspects pinned dependency files and materializes the declared dependency
+closure. A clean clone can still need a lockfile-driven install before OpenZeppelin, generated bindings, Foundry
+libraries or other imports exist locally. Inspect install scripts first and use an isolated environment without
+credentials for untrusted code. `doctor` does not claim that project dependencies are installed.
 
 ### 3. Use `scaffold` only when needed
 
@@ -165,11 +176,22 @@ symlink, Gitlink, unmaterialized LFS object, or exceeded limit remain hard error
 and generates the small six-file Programmable application record plus a copy-ready pull-request body. It does not
 publish source, push a branch or open a pull request without the builder's explicit confirmation.
 
+When using `--output-dir`, create its parent first, keep it outside the builder repository, avoid symbolic-link aliases,
+and pass the canonical real path. On macOS, use `/private/tmp/...` instead of the `/tmp` alias.
+
 Projects may span the primary repository plus up to eight explicitly declared public companion repositories. Each
 companion is pinned to a full commit and independently resolved; branches and repository names are not authority. The
 output clearly separates the builder's `sourceHead` from the observed central `main` target. New applications start at
 revision 1. A merged revision n authorizes one pending n+1 update when primary or companion source authority differs
 from main; further commits in that same open pull request remain on the pending revision until merge.
+
+Companion manifest v2 removes the blanket incomplete-closure result for a supported npm game, app, or service only
+after `prepare-pr` verifies the declared numeric repository id, commit, root tree, source/test/runtime/build paths,
+static module graph, complete package-lock v3 dependency closure and a successful Actions run of the closed
+install/build/test workflow bound to that exact revision. Its receipt is preserved in central `application.json` for
+downstream authority checks. Manifest v1 remains proposal-compatible and enters architecture review. A v2 closure
+result is not an audit or approval; see the
+canonical `references/companion-manifests.md` contract in the installed skill.
 
 The source check supports broad repositories without spending one anonymous GitHub API call per declared file. It
 binds the public repository, commit and direct root-tree object first, then reads all declared Git objects in one
@@ -203,6 +225,13 @@ group: the leader and helpers inherit a 64 MiB regular-file limit and a 20 CPU-s
 a 512 MiB address-space limit, and output plus aggregate temporary storage stay bounded. The 64 MiB aggregate
 repository guard is process-monitored rather than a native filesystem quota, so multiple fast writes can briefly
 overshoot it; any limit failure kills the complete process group and the temporary repository is removed.
+
+Those limits remain strict for code, tests, shaders, WebAssembly and build inputs. Large non-executable models, audio,
+textures, levels, maps, tiles and media use the separate runtime-assets v1 manifest. It records the repository path,
+exact Git blob, SHA-256 where verifiable, MIME, size, loading behavior, license and provenance. `prepare-pr` binds the
+small manifest and its blob declarations to the exact public commit and root tree without fetching or executing the
+assets. Unmaterialized LFS objects and external HTTPS/IPFS resources enter attributable asset review; that status is
+not an unsafe-code conclusion and does not alone block structural prototype readiness.
 
 ### 7. Open one draft pull request
 
@@ -260,9 +289,14 @@ requests remain on their existing CI path without loading candidate application 
 
 Before changing the state to `open`, maintainers record live GitHub evidence that `main` requires the trusted
 `public-intake` check, normal security and Foundry checks, CODEOWNER review, resolved conversations, and either a
-strictly up-to-date branch or a merge queue. These rules force a second pull request for the same application to rerun
-against the first merged revision instead of overwriting history from a stale green check. Local configuration or a
-documented target is not evidence that the live repository is protected.
+strictly up-to-date branch or a merge queue. For non-administrator Builder pull requests, these rules force a second
+pull request for the same application to rerun against the first merged revision instead of overwriting history from a
+stale green check. Local configuration or a documented target is not evidence that the live repository is protected.
+
+Repository administrators remain the GitHub trust root and can change or bypass repository settings. Programmable's
+solo-maintainer release path retains the administrator exception for owner-authored maintenance that GitHub does not
+allow the same account to self-approve. It must never be used for a Builder application. Every application needs the
+visible trusted checks, latest-base result and maintainer review; applicants receive no bypass authority.
 
 ## Review and repair loop
 

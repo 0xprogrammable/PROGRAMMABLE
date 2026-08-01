@@ -8,6 +8,7 @@ import {
   GITHUB_PUBLIC_SOURCE_CONTRACT_V1,
   GitHubPublicSourceError,
   isCanonicalGitHubRepositoryPathV1,
+  parseBoundedLosslessJson,
   resolveGitHubPublicSourceV1,
   validateGitHubPublicSourceRequestV1
 } from "../skills/programmable-v4-hook-builder/scripts/github-public-source-core.mjs";
@@ -16,8 +17,13 @@ import {
   GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1
 } from "../skills/programmable-v4-hook-builder/scripts/github-exact-object-resolver.mjs";
 import { findUnsupportedPublicClaims } from "../skills/programmable-v4-hook-builder/scripts/public-claims-core.mjs";
+import {
+  normalizeCompanionManifest,
+  validateCompanionClosureReceipts,
+  verifyCompanionManifestV2Closure
+} from "../skills/programmable-v4-hook-builder/scripts/companion-manifest-contract.mjs";
 
-export const VALIDATOR_VERSION = "1.6.1";
+export const VALIDATOR_VERSION = "1.8.0";
 export const PUBLIC_APPLICATION_SCHEMA_ID = "https://programmable.money/schemas/public-pr-application-v1.json";
 export const PUBLIC_BETA_DISCLAIMER =
   "Builder-declared compatibility evidence; not an audit, approval, deployment, Uniswap endorsement, or launch.";
@@ -1371,6 +1377,7 @@ export async function verifyPublicHookApplication({
   expectedMergeCommit,
   resolveSource,
   resolveEvidence,
+  resolveCompanionClosure,
   limits: limitOverrides = {}
 }) {
   const limits = mergeLimits(limitOverrides);
@@ -1420,6 +1427,9 @@ export async function verifyPublicHookApplication({
   }
   if (resolveEvidence !== undefined && typeof resolveEvidence !== "function") {
     systemBlocked("EVIDENCE_RESOLVER_UNAVAILABLE", "The trusted public-evidence resolver is unavailable.");
+  }
+  if (resolveCompanionClosure !== undefined && typeof resolveCompanionClosure !== "function") {
+    systemBlocked("COMPANION_CLOSURE_RESOLVER_UNAVAILABLE", "The trusted companion-closure resolver is unavailable.");
   }
   const normalizedBuilderLogin = normalizeExpectedBuilderLogin(expectedBuilderLogin);
   const normalizedBuilderUserId = normalizeExpectedBuilderUserId(expectedBuilderUserId);
@@ -1479,14 +1489,18 @@ export async function verifyPublicHookApplication({
   );
   if (resolveSource === undefined && resolveEvidence === undefined) {
     const session = createTrustedPublicApplicationResolutionSessionV1({
-      primary: application.source.primary,
+      source: application.source,
       evidence: blobEvidence
     });
     resolveSource = session.resolveSource;
     resolveEvidence = session.resolveEvidence;
+    resolveCompanionClosure = session.resolveCompanionClosure;
   } else {
     resolveSource ??= resolvePublicGitHubSource;
     resolveEvidence ??= resolvePublicApplicationEvidence;
+    resolveCompanionClosure ??= application.companionClosure.length === 0
+      ? async () => []
+      : resolvePublicCompanionClosure;
   }
 
   let sourceObservation;
@@ -1496,6 +1510,28 @@ export async function verifyPublicHookApplication({
     translateSourceResolutionError(error);
   }
   validateSourceObservation(application.source, sourceObservation);
+
+  let recomputedCompanionClosure;
+  try {
+    recomputedCompanionClosure = await resolveCompanionClosure({
+      source: application.source,
+      sourceObservation,
+      companionClosure: application.companionClosure
+    });
+  } catch (error) {
+    if (error instanceof PublicIntakeError) throw error;
+    if (error instanceof GitHubPublicSourceError) translateSourceResolutionError(error);
+    systemBlocked(
+      "COMPANION_CLOSURE_RESOLUTION_FAILED",
+      "The trusted companion-closure resolver failed unexpectedly."
+    );
+  }
+  if (canonicalJson(recomputedCompanionClosure) !== canonicalJson(application.companionClosure)) {
+    reject(
+      "COMPANION_CLOSURE_RECEIPT_RECOMPUTE_MISMATCH",
+      "Companion closure receipts must equal the trusted result recomputed from exact Git objects and Actions evidence."
+    );
+  }
 
   let blobObservations = [];
   if (blobEvidence.length > 0) {
@@ -2248,6 +2284,7 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
     "applicationId",
     "applicationRevision",
     "builder",
+    "companionClosure",
     "declarations",
     "reviewPackage",
     "schemaVersion",
@@ -2284,6 +2321,15 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
   }
 
   validateApplicationSource(application.source);
+  let normalizedCompanionClosure;
+  try {
+    normalizedCompanionClosure = validateCompanionClosureReceipts(application.companionClosure, application.source);
+  } catch {
+    reject("COMPANION_CLOSURE_RECEIPT_INVALID", "Companion closure receipts must match every exact v2 source authority and Actions run.");
+  }
+  if (canonicalJson(normalizedCompanionClosure) !== canonicalJson(application.companionClosure)) {
+    reject("COMPANION_CLOSURE_RECEIPT_NONCANONICAL", "Companion closure receipts must use canonical ordering and fields.");
+  }
 
   if (!Array.isArray(application.reviewPackage) || application.reviewPackage.length !== REVIEW_FILES.length) {
     reject("REVIEW_PACKAGE_INDEX_INVALID", "The manifest must index every review file exactly once.");
@@ -2547,30 +2593,36 @@ function sameSourceAuthority(left, right) {
 
 /**
  * One application-scoped resolver session shares the anonymous REST transport
- * and retains only exact primary-source blobs that the evidence index already
- * names. Source validation therefore pays for each REST control-plane object
- * once, while evidence reuses the same inert Git bytes without another REST
- * tree walk or another anonymous smart-Git fetch.
+ * and retains the exact declared primary and companion blobs returned during
+ * source validation. Evidence and companion-receipt recomputation reuse those
+ * inert Git bytes without another REST tree walk or anonymous smart-Git fetch.
  */
 export function createTrustedPublicApplicationResolutionSessionV1(
-  { primary, evidence },
+  { primary, source, evidence },
   {
     exactObjectResolver = createAnonymousGitHubExactObjectResolverV1(),
     transport = createTrustedGitHubActionsPublicTransportV1()
   } = {}
 ) {
+  const sourceRequest = source ?? (isPlainObject(primary) ? {
+    schemaVersion: GITHUB_PUBLIC_SOURCE_CONTRACT_V1.schemaVersion,
+    primary,
+    companions: []
+  } : null);
+  primary = sourceRequest?.primary;
   if (!isPlainObject(primary) || !Array.isArray(evidence)) {
     systemBlocked("EVIDENCE_RESOLUTION_INPUT_INVALID", "Trusted resolution session received malformed inputs.");
   }
   if (typeof exactObjectResolver !== "function" || typeof transport !== "function") {
     systemBlocked("RESOLVER_UNAVAILABLE", "The trusted application resolution session is unavailable.");
   }
-  const retainedPaths = new Set(evidence.map((record) => evidenceBlobPath(record.url, primary)));
+  const authorities = [primary, ...(sourceRequest.companions ?? [])].map((entry) => ({
+    repositoryUri: entry.repositoryUri,
+    revisionObjectId: entry.revisionObjectId,
+    treeObjectId: entry.treeObjectId
+  }));
   const sharedExactObjectResolver = createRetainedExactObjectResolverV1(exactObjectResolver, {
-    repositoryUri: primary.repositoryUri,
-    revisionObjectId: primary.revisionObjectId,
-    treeObjectId: primary.treeObjectId,
-    retainedPaths
+    authorities
   });
   return Object.freeze({
     resolveSource(request) {
@@ -2578,6 +2630,9 @@ export function createTrustedPublicApplicationResolutionSessionV1(
     },
     resolveEvidence(request) {
       return resolvePublicApplicationEvidence(request, { exactObjectResolver: sharedExactObjectResolver });
+    },
+    resolveCompanionClosure(request) {
+      return resolvePublicCompanionClosure(request, { exactObjectResolver: sharedExactObjectResolver });
     }
   });
 }
@@ -2585,11 +2640,13 @@ export function createTrustedPublicApplicationResolutionSessionV1(
 function createRetainedExactObjectResolverV1(delegate, authority) {
   const retainedRecords = new Map();
   return async (request) => {
-    if (sameExactObjectAuthority(request, authority)) {
+    const retainedAuthority = authority.authorities.some((entry) => sameExactObjectAuthority(request, entry));
+    const authorityKey = exactObjectAuthorityKey(request);
+    if (retainedAuthority) {
       const cached = new Map();
       let cachedBytes = 0;
       for (const filePath of request.paths) {
-        const record = retainedRecords.get(filePath);
+        const record = retainedRecords.get(`${authorityKey}\0${filePath}`);
         if (record === undefined) break;
         cachedBytes += record.bytes.length;
         if (record.bytes.length > request.maximumFileBytes || cachedBytes > request.maximumTotalBytes) break;
@@ -2600,16 +2657,19 @@ function createRetainedExactObjectResolverV1(delegate, authority) {
 
     const result = await delegate(request);
     const records = result instanceof Map ? result : result?.records;
-    if (sameExactObjectAuthority(request, authority) && records instanceof Map) {
-      for (const filePath of authority.retainedPaths) {
-        const record = records.get(filePath);
+    if (retainedAuthority && records instanceof Map) {
+      for (const [filePath, record] of records) {
         if (isEvidenceExactObjectRecord(record)) {
-          retainedRecords.set(filePath, cloneExactObjectRecord(record));
+          retainedRecords.set(`${authorityKey}\0${filePath}`, cloneExactObjectRecord(record));
         }
       }
     }
     return result;
   };
+}
+
+function exactObjectAuthorityKey(value) {
+  return `${value?.repositoryUri ?? ""}\0${value?.revisionObjectId ?? ""}\0${value?.treeObjectId ?? ""}`;
 }
 
 function sameExactObjectAuthority(request, authority) {
@@ -2639,6 +2699,126 @@ export async function resolvePublicGitHubSource(request, options = {}) {
     resolverOptions.exactObjectResolver = createAnonymousGitHubExactObjectResolverV1();
   }
   return resolveGitHubPublicSourceV1(request, resolverOptions);
+}
+
+export async function resolvePublicCompanionClosure(
+  { source, sourceObservation, companionClosure },
+  { exactObjectResolver = createAnonymousGitHubExactObjectResolverV1() } = {}
+) {
+  if (typeof exactObjectResolver !== "function") {
+    systemBlocked("COMPANION_CLOSURE_RESOLVER_UNAVAILABLE", "The exact companion-object resolver is unavailable.");
+  }
+  let normalizedReceipts;
+  try {
+    normalizedReceipts = validateCompanionClosureReceipts(companionClosure, source);
+  } catch {
+    reject("COMPANION_CLOSURE_RECEIPT_INVALID", "Companion closure receipts do not match the exact source contract.");
+  }
+  if (normalizedReceipts.length === 0) return [];
+  validateSourceObservation(source, sourceObservation);
+
+  const output = [];
+  for (const [index, receipt] of normalizedReceipts.entries()) {
+    const companion = source.companions.find((entry) => entry.repositoryUri === receipt.repositoryUri);
+    const observation = sourceObservation.companions.find(
+      (entry) => entry.display.repositoryUri === receipt.repositoryUri
+    );
+    if (!companion || !observation) {
+      systemBlocked("COMPANION_CLOSURE_OBSERVATION_INVALID", "A v2 companion observation is unavailable.");
+    }
+    const manifestRecord = await resolveExactCompanionRecords(
+      exactObjectResolver,
+      source.primary,
+      [receipt.manifestPath]
+    );
+    let manifest;
+    try {
+      const manifestSource = UTF8_DECODER.decode(manifestRecord.get(receipt.manifestPath).bytes);
+      manifest = parseBoundedLosslessJson(manifestSource);
+      if (manifestSource !== `${canonicalJson(manifest)}\n`) throw new Error("manifest JSON is not canonical");
+    } catch {
+      reject(
+        "COMPANION_CLOSURE_MANIFEST_INVALID",
+        `Companion closure receipt ${index + 1} does not point to canonical bounded manifest JSON in the exact primary source.`
+      );
+    }
+    let normalizedManifest;
+    try {
+      normalizedManifest = normalizeCompanionManifest(manifest);
+    } catch {
+      reject("COMPANION_CLOSURE_MANIFEST_INVALID", "The exact primary-source companion manifest is invalid.");
+    }
+    if (
+      normalizedManifest.manifestV2 === null
+      || canonicalJson(normalizedManifest.source) !== canonicalJson(companion)
+    ) {
+      reject(
+        "COMPANION_CLOSURE_MANIFEST_SOURCE_MISMATCH",
+        "The exact primary-source manifest does not bind the declared v2 companion authority and paths."
+      );
+    }
+    const closurePaths = [
+      ...normalizedManifest.manifestV2.sourcePaths,
+      ...normalizedManifest.manifestV2.testPaths,
+      ...normalizedManifest.manifestV2.runtimePaths,
+      ...normalizedManifest.manifestV2.build.configurationPaths,
+      normalizedManifest.manifestV2.build.packageManifestPath,
+      normalizedManifest.manifestV2.build.packageLockPath,
+      ...observation.githubActionsEvidence.map(({ workflowPath }) => workflowPath)
+    ].sort(compareUtf8);
+    const uniqueClosurePaths = [...new Set(closurePaths)];
+    let recomputed;
+    try {
+      const records = await resolveExactCompanionRecords(
+        exactObjectResolver,
+        companion,
+        uniqueClosurePaths
+      );
+      recomputed = verifyCompanionManifestV2Closure(
+        normalizedManifest.manifestV2,
+        records,
+        observation.githubActionsEvidence,
+        { manifestPath: receipt.manifestPath }
+      );
+    } catch (error) {
+      if (error instanceof GitHubPublicSourceError || error instanceof PublicIntakeError) throw error;
+      reject(
+        "COMPANION_CLOSURE_RECOMPUTE_FAILED",
+        "The exact companion objects, npm closure, runtime closure, workflow, and Actions evidence did not reproduce a v2 receipt."
+      );
+    }
+    if (canonicalJson(recomputed) !== canonicalJson(receipt)) {
+      reject(
+        "COMPANION_CLOSURE_RECEIPT_RECOMPUTE_MISMATCH",
+        "A declared companion receipt differs from the exact independently recomputed result."
+      );
+    }
+    output.push(recomputed);
+  }
+  return output;
+}
+
+async function resolveExactCompanionRecords(exactObjectResolver, authority, paths) {
+  let result;
+  try {
+    result = await exactObjectResolver({
+      repositoryUri: authority.repositoryUri,
+      revisionObjectId: authority.revisionObjectId,
+      treeObjectId: authority.treeObjectId,
+      paths,
+      timeoutMs: GITHUB_PUBLIC_SOURCE_CONTRACT_V1.limits.maximumTimeoutMs,
+      maximumFileBytes: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumFileBytes,
+      maximumTotalBytes: GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.maximumTotalBytes
+    });
+  } catch (error) {
+    if (error instanceof GitHubPublicSourceError) throw error;
+    systemBlocked("COMPANION_CLOSURE_OBJECT_RESOLUTION_FAILED", "Exact companion Git objects were unavailable.");
+  }
+  const records = result instanceof Map ? result : result?.records;
+  if (!(records instanceof Map) || records.size !== paths.length || paths.some((filePath) => !records.has(filePath))) {
+    systemBlocked("COMPANION_CLOSURE_OBJECT_RESOLUTION_INVALID", "The exact-object resolver returned an invalid companion path set.");
+  }
+  return records;
 }
 
 export async function resolvePublicApplicationEvidence({ primary, evidence, limits: limitOverrides = {} }, options = {}) {

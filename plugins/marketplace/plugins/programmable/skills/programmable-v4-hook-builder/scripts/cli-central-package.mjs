@@ -3,6 +3,7 @@ import { TextDecoder } from "node:util";
 import { canonicalJson } from "./submission-core.mjs";
 import { CliFailure } from "./cli-runtime.mjs";
 import { isClosedReviewTargetClosure } from "./review-target-contract.mjs";
+import { validateCompanionClosureReceipts } from "./companion-manifest-contract.mjs";
 
 export const CENTRAL_APPLICATION_FILES = Object.freeze([
   "application.json",
@@ -26,6 +27,7 @@ export function buildCentralApplicationPackage({
   submission,
   builderIdentity,
   source,
+  companionClosure = [],
   applicationRevision,
   packageResult,
   reviewTarget = null,
@@ -64,6 +66,12 @@ export function buildCentralApplicationPackage({
   }
 
   const primary = source?.primary;
+  let normalizedCompanionClosure;
+  try {
+    normalizedCompanionClosure = validateCompanionClosureReceipts(companionClosure, source);
+  } catch (error) {
+    invalid(error?.message ?? "companion closure receipts are invalid");
+  }
   const compatibilityRepositoryPath = `${packagePath}/compatibility-report.json`;
   const committedCompatibility = headFiles.get(compatibilityRepositoryPath);
   if (!Buffer.isBuffer(committedCompatibility)) {
@@ -142,6 +150,7 @@ export function buildCentralApplicationPackage({
       contact: publicContact(submission.builder.contact, githubLogin)
     },
     source,
+    companionClosure: normalizedCompanionClosure,
     reviewPackage: REVIEW_FILES.map((name) => fileRecord(name, files.get(name))),
     declarations: {
       publicInformationAcknowledged: true,

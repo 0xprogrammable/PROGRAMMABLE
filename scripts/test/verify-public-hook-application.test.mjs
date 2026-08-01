@@ -18,6 +18,7 @@ import {
   PUBLIC_INTAKE_STATES,
   PublicIntakeError,
   resolvePublicApplicationEvidence,
+  resolvePublicCompanionClosure,
   resolvePublicGitHubSource,
   validatePublicApplicationPackageFiles,
   verifyPublicHookApplication,
@@ -28,6 +29,10 @@ import {
   serializePublicApplicationSchema
 } from "../../skills/programmable-v4-hook-builder/scripts/generate-public-pr-application-schema.mjs";
 import { GitHubPublicSourceError } from "../../skills/programmable-v4-hook-builder/scripts/github-public-source-core.mjs";
+import {
+  COMPANION_MANIFEST_V2,
+  verifyCompanionManifestV2Closure
+} from "../../skills/programmable-v4-hook-builder/scripts/companion-manifest-contract.mjs";
 
 const PRIMARY = Object.freeze({
   repositoryUri: "https://github.com/alice/example-hook",
@@ -44,7 +49,7 @@ const EVIDENCE_BYTES = Buffer.from("exact builder-owned compatibility evidence f
 const EVIDENCE_SHA256 = `sha256:${crypto.createHash("sha256").update(EVIDENCE_BYTES).digest("hex")}`;
 
 test("the frozen six-file package and public schema identity are exported", () => {
-  assert.equal(VALIDATOR_VERSION, "1.6.1");
+  assert.equal(VALIDATOR_VERSION, "1.8.0");
   assert.deepEqual(PUBLIC_APPLICATION_FILES, [
     "application.json",
     "PROPOSAL.md",
@@ -147,6 +152,7 @@ test("the public application schema rejects adversarial source and package manif
   const validApplication = makeSchemaApplication();
   const cases = [
     ["stage is mandatory", (value) => { delete value.stage; }],
+    ["companion closure receipt index is mandatory", (value) => { delete value.companionClosure; }],
     ["stage cannot claim candidate readiness", (value) => { value.stage = "candidate"; }],
     ["numeric repository ids are opaque strings", (value) => { value.source.primary.numericRepositoryId = 9007199254740992; }],
     ["leading-zero repository ids are non-canonical", (value) => { value.source.primary.numericRepositoryId = "0123"; }],
@@ -195,6 +201,80 @@ test("trusted intake accepts one new application and verifies exact public sourc
   });
   assert.equal(report.evidenceBindings[0].sha256, EVIDENCE_SHA256);
   assert.equal(report.evidenceBindings[0].statusAuthority, "builder-declared-untrusted");
+});
+
+test("trusted intake independently recomputes an exact companion v2 receipt", async (t) => {
+  const closure = makeCompanionClosureFixture();
+  const fixture = createRevisionPair(t);
+  writePackage(fixture.candidate, makePackage({
+    primary: closure.primary,
+    mutateApplication(application) {
+      application.source = makeSourceRequest(closure.primary, [closure.companion]);
+      application.companionClosure = [closure.receipt];
+    }
+  }));
+  const candidateCommit = commitAll(fixture.candidate, "add exact companion closure application");
+  const report = await verifyPublicHookApplication({
+    ...inputFor(fixture, candidateCommit),
+    resolveCompanionClosure(request) {
+      return resolvePublicCompanionClosure(request, {
+        exactObjectResolver: closure.exactObjectResolver
+      });
+    }
+  });
+  assert.equal(report.result, "valid-public-application-package");
+  assert.equal(closure.requests.length, 2);
+  assert.deepEqual(closure.requests[0].paths, [closure.manifestPath]);
+  assert.deepEqual(closure.requests[1].paths, [
+    ".github/workflows/ci.yml",
+    "index.html",
+    "package-lock.json",
+    "package.json",
+    "src/main.js",
+    "src/math.js",
+    "test/main.test.js"
+  ]);
+});
+
+test("a handcrafted six-file PR cannot forge companion receipt facts", async (t) => {
+  const mutations = [
+    ["status", (receipt) => { receipt.status = "builder-verified"; }, "COMPANION_CLOSURE_RECEIPT_INVALID"],
+    ["closure hash", (receipt) => { receipt.closureHash = `sha256:${"f".repeat(64)}`; }],
+    ["file count", (receipt) => { receipt.fileCount += 1; }],
+    ["package count", (receipt) => { receipt.packageCount += 1; }],
+    ["dependency count", (receipt) => { receipt.dependencyEdgeCount += 1; }],
+    ["module count", (receipt) => { receipt.moduleResolutionCount += 1; }],
+    ["workflow object", (receipt) => { receipt.workflowReceipts[0].workflowObjectId = "f".repeat(40); }],
+    ["build script", (receipt) => { receipt.workflowReceipts[0].buildScript = "forged-build"; }],
+    ["test script", (receipt) => { receipt.workflowReceipts[0].testScript = "forged-test"; }]
+  ];
+  for (const [label, mutate, expectedCode = "COMPANION_CLOSURE_RECEIPT_RECOMPUTE_MISMATCH"] of mutations) {
+    await t.test(label, async (subtest) => {
+      const closure = makeCompanionClosureFixture();
+      const receipt = structuredClone(closure.receipt);
+      mutate(receipt);
+      const fixture = createRevisionPair(subtest);
+      writePackage(fixture.candidate, makePackage({
+        primary: closure.primary,
+        mutateApplication(application) {
+          application.source = makeSourceRequest(closure.primary, [closure.companion]);
+          application.companionClosure = [receipt];
+        }
+      }));
+      const candidateCommit = commitAll(fixture.candidate, `forge companion ${label}`);
+      await rejectsCode(
+        () => verifyPublicHookApplication({
+          ...inputFor(fixture, candidateCommit),
+          resolveCompanionClosure(request) {
+            return resolvePublicCompanionClosure(request, {
+              exactObjectResolver: closure.exactObjectResolver
+            });
+          }
+        }),
+        expectedCode
+      );
+    });
+  }
 });
 
 test("trusted intake accepts a prototype that remains in architecture review", async (t) => {
@@ -1947,6 +2027,131 @@ test("the application adapter uses the frozen credential-free GitHubPublicSource
   assert.ok(requests.every((entry) => entry.headers["X-GitHub-Api-Version"] === "2026-03-10"));
 });
 
+function makeCompanionClosureFixture() {
+  const manifestPath = ".programmable/companions/game.json";
+  const primary = {
+    ...PRIMARY,
+    sourcePaths: [manifestPath, ...PRIMARY.sourcePaths].sort(compareUtf8)
+  };
+  const companion = {
+    repositoryUri: "https://github.com/alice/example-game",
+    numericRepositoryId: "987654321",
+    revisionObjectId: "c".repeat(40),
+    treeObjectId: "d".repeat(40),
+    sourcePaths: ["index.html", "src/main.js", "src/math.js", "test/main.test.js"],
+    contractPaths: ["package-lock.json", "package.json"],
+    githubActionsRunIds: ["7001"]
+  };
+  const manifest = {
+    build: {
+      buildScript: "build",
+      configurationPaths: [],
+      packageLockPath: "package-lock.json",
+      packageManifestPath: "package.json",
+      testScript: "test"
+    },
+    closureMethod: COMPANION_MANIFEST_V2.closureMethod,
+    githubActionsRunIds: [...companion.githubActionsRunIds],
+    numericRepositoryId: companion.numericRepositoryId,
+    repositoryUri: companion.repositoryUri,
+    revisionObjectId: companion.revisionObjectId,
+    runtimePaths: ["index.html"],
+    schemaVersion: "2.0.0",
+    sourcePaths: ["src/main.js", "src/math.js"],
+    testPaths: ["test/main.test.js"],
+    treeObjectId: companion.treeObjectId
+  };
+  const workflow = `${JSON.stringify({
+    name: "Programmable companion closure",
+    on: ["push"],
+    permissions: { contents: "read" },
+    jobs: {
+      "programmable-companion-closure": {
+        "runs-on": "ubuntu-24.04",
+        "timeout-minutes": 15,
+        steps: [
+          { uses: `actions/checkout@${"1".repeat(40)}` },
+          {
+            uses: `actions/setup-node@${"2".repeat(40)}`,
+            with: {
+              "node-version": "22.17.0",
+              cache: "npm",
+              "cache-dependency-path": "package-lock.json"
+            }
+          },
+          { run: "npm ci --ignore-scripts --no-audit --no-fund" },
+          { run: "npm run build" },
+          { run: "npm run test" }
+        ]
+      }
+    }
+  }, null, 2)}\n`;
+  const companionFiles = new Map(Object.entries({
+    ".github/workflows/ci.yml": workflow,
+    "index.html": '<script type="module" src="/src/main.js"></script>\n',
+    "package-lock.json": `${JSON.stringify({
+      name: "example-game",
+      version: "1.0.0",
+      lockfileVersion: 3,
+      packages: { "": { name: "example-game", version: "1.0.0" } }
+    }, null, 2)}\n`,
+    "package.json": `${JSON.stringify({
+      name: "example-game",
+      version: "1.0.0",
+      scripts: {
+        build: "node --check src/main.js",
+        test: "node --test test/main.test.js"
+      }
+    }, null, 2)}\n`,
+    "src/main.js": 'import { add } from "./math.js";\nexport const score = add(1, 2);\n',
+    "src/math.js": "export const add = (left, right) => left + right;\n",
+    "test/main.test.js": 'import { score } from "../src/main.js";\nif (score !== 3) throw new Error("bad score");\n'
+  }).map(([filePath, source]) => [filePath, exactObjectRecord(Buffer.from(source, "utf8"))]));
+  const manifestBytes = Buffer.from(`${canonicalJson(manifest)}\n`, "utf8");
+  const primaryFiles = new Map([[manifestPath, exactObjectRecord(manifestBytes)]]);
+  const actionsEvidence = [{
+    runId: "7001",
+    status: "completed",
+    conclusion: "success",
+    headRevision: companion.revisionObjectId,
+    headTree: companion.treeObjectId,
+    event: "push",
+    workflowPath: ".github/workflows/ci.yml"
+  }];
+  const receipt = verifyCompanionManifestV2Closure(
+    manifest,
+    companionFiles,
+    actionsEvidence,
+    { manifestPath }
+  );
+  const requests = [];
+  const exactObjectResolver = async (request) => {
+    requests.push(request);
+    const repositoryFiles = request.repositoryUri === primary.repositoryUri
+      ? primaryFiles
+      : request.repositoryUri === companion.repositoryUri
+        ? companionFiles
+        : null;
+    assert.ok(repositoryFiles, `unexpected exact repository ${request.repositoryUri}`);
+    return {
+      records: new Map(request.paths.map((filePath) => {
+        const record = repositoryFiles.get(filePath);
+        assert.ok(record, `unexpected exact path ${filePath}`);
+        return [filePath, { ...record, bytes: Buffer.from(record.bytes) }];
+      }))
+    };
+  };
+  return { companion, exactObjectResolver, manifestPath, primary, receipt, requests };
+}
+
+function exactObjectRecord(bytes) {
+  return {
+    bytes,
+    mode: "100644",
+    objectId: gitBlobObjectId(bytes)
+  };
+}
+
 function makePackage({
   applicationId = "example-hook",
   revision = 1,
@@ -2011,6 +2216,7 @@ function makePackage({
       contact: "https://github.com/alice"
     },
     source: makeSourceRequest(primary),
+    companionClosure: [],
     reviewPackage: reviewRecords(files),
     declarations: {
       publicInformationAcknowledged: true,
@@ -2266,7 +2472,7 @@ function resetClone(fixture) {
 }
 
 function cloneRepository(source, destination) {
-  const result = childProcess.spawnSync("git", ["clone", "--quiet", "--no-hardlinks", source, destination], {
+  const result = childProcess.spawnSync("git", ["clone", "--quiet", "--no-local", source, destination], {
     encoding: "utf8",
     shell: false
   });

@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parseCli } from "../cli-args.mjs";
+import { materializeExample } from "../example-materializer-core.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(testDirectory, "..", "..");
@@ -202,6 +203,42 @@ test("package delegates to the existing package verifier", () => {
   }
 });
 
+test("companion command validates v2 structure and atomically writes canonical JSON without network", () => {
+  const fixture = createRepository();
+  const manifestPath = path.join(fixture.repository, "companion.json");
+  try {
+    const example = JSON.parse(fs.readFileSync(
+      path.join(skillRoot, "assets", "templates", "companion-manifest-v2.example.json"),
+      "utf8"
+    ));
+    fs.writeFileSync(manifestPath, `${JSON.stringify(example, null, 2)}\n`);
+    let result = runCli([
+      "companion",
+      manifestPath,
+      "--write-canonical",
+      "--repository-root",
+      fixture.repository
+    ]);
+    assert.equal(result.status, 0, result.stdout || result.stderr);
+    let output = JSON.parse(result.stdout);
+    assert.equal(output.result.schemaVersion, "2.0.0");
+    assert.equal(output.result.closureStatus, "declared");
+    assert.equal(output.result.rewritten, true);
+    assert.equal(output.result.networkAccessed, false);
+    assert.equal(output.result.prototypeClosureVerified, false);
+    const canonical = fs.readFileSync(manifestPath, "utf8");
+    assert.equal(canonical.split("\n").length, 2);
+
+    result = runCli(["companion", manifestPath, "--repository-root", fixture.repository]);
+    assert.equal(result.status, 0, result.stdout || result.stderr);
+    output = JSON.parse(result.stdout);
+    assert.equal(output.result.canonical, true);
+    assert.equal(output.result.rewritten, false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("check writes unsupported proposal closure diagnostics and require-ready blocks the prototype", () => {
   const fixture = createReadyProposalRepository();
   try {
@@ -302,11 +339,18 @@ function createReadyProposalRepository() {
   assert.equal(scaffold.status, 0, scaffold.stderr);
   const packageRoot = path.join(fixture.repository, "submissions", "ready-model");
   const submissionPath = path.join(packageRoot, "submission.json");
-  const submission = JSON.parse(fs.readFileSync(submissionPath, "utf8"));
+  const submission = materializeExample({
+    skillRoot,
+    exampleId: "transparent-pool-scoped-fee",
+    stepId: "fully-specified"
+  });
+  submission.model.id = "ready-model";
+  submission.model.name = "Ready Model";
   submission.builder.github = "example-builder";
   submission.builder.contact = "@example-builder";
   submission.builder.licenseDeclaration = "I own this work and submit it under MIT.";
   fs.writeFileSync(submissionPath, `${JSON.stringify(submission, null, 2)}\n`);
+  writeConcreteProposalDocuments(packageRoot, submission.model.name);
   const validation = childProcess.spawnSync(
     process.execPath,
     [
@@ -321,6 +365,18 @@ function createReadyProposalRepository() {
   );
   assert.equal(validation.status, 0, validation.stderr);
   return { ...fixture, packageRoot };
+}
+
+function writeConcreteProposalDocuments(packageRoot, modelName) {
+  const documents = {
+    "PROPOSAL.md": `# ${modelName}\n\nThe project launches one token and uses one immutable pool-scoped hook to collect a visible fixed fee for an immutable beneficiary. The exact PoolManager settlement, beneficiary liability, claim path and failure behavior are recorded in submission.json. The hook has no administrator, proxy, pause, rescue or redirect authority.\n`,
+    "THREAT_MODEL.md": `# ${modelName} threat model\n\nThe reviewed assets are both pool currencies and each PoolId-scoped beneficiary liability. PoolManager authentication, exact PoolId admission, token transfers, recipient claims and indexer reconstruction are separate trust boundaries. Every settlement or transfer failure reverts without borrowing another pool's balance.\n`,
+    "TEST_PLAN.md": `# ${modelName} test plan\n\nPlanned checks cover permission bits, PoolManager authentication, all swap quadrants, exact fee rounding, zero final deltas, PoolId liability isolation, hostile token behavior, failed claims, event reconstruction and standard liquidity exits.\n`,
+    "EVIDENCE.md": `# ${modelName} evidence\n\nThe deterministic compatibility report is recorded for this proposal. Contract, fuzz, invariant, static-analysis, deployment, routing and availability evidence remains planned and is not reported as completed.\n`
+  };
+  for (const [fileName, contents] of Object.entries(documents)) {
+    fs.writeFileSync(path.join(packageRoot, fileName), contents);
+  }
 }
 
 function createRepository() {

@@ -43,11 +43,22 @@ tool result merely to fill a section.
 
 ## Ordinary no-hook path, when `hook.used` is false
 
-- Prove selection of the current pinned ordinary launch profile and canonical pool lifecycle.
+- Prove explicit selection of `official-launchpad` or `model-specific-no-hook` and the canonical pool lifecycle. For the
+  official route, bind the current pinned profile. For the model-specific route, bind its own exact source, compiler,
+  dependency closure and constructor configuration without borrowing the official profile identity.
 - Confirm that the declared project does not introduce custom callbacks, a hook permission mask, or a hook CREATE2
   address, and that its proposal, submission, threat model, and tests agree on that boundary.
 - Test any separately declared token, app, game, service, integration, or launch configuration on its own merits. No
   custom Solidity or hook test is required merely because the project uses a Uniswap v4 pool.
+
+When a model-specific no-hook transfer tax is used, test `buy-sell-peer-tax-rates`, `zero-tax-path`,
+`immutable-maximum-tax-bound`, `recipient-split-conservation`, `exemption-boundaries`,
+`poolmanager-requested-versus-received`, `poolmanager-liquidity-and-alternative-pool-classification`,
+`quote-execution-received-amount`, and
+`unrestricted-buy-sell-transfer-liveness`; add `authority-and-delay` when mutable. When automatic liquidity is used,
+also test `auto-liquidity-threshold-boundaries`, `auto-liquidity-maximum-swap-bound`,
+`auto-liquidity-slippage-and-deadline`, `auto-liquidity-reentrancy`, `auto-liquidity-failure-atomicity`, and
+`lp-custody-and-exit`. Exercise provider-supported and unsupported routes without turning a local canary into approval.
 
 ## App or game, when declared
 

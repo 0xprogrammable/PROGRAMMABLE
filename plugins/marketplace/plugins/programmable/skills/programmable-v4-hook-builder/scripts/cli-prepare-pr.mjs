@@ -13,6 +13,7 @@ import {
   deriveApplicationRevision,
   resolveCentralApplicationBase
 } from "./cli-central-base.mjs";
+import { normalizeCompanionManifest } from "./companion-manifest-contract.mjs";
 import { buildCentralApplicationPackage } from "./cli-central-package.mjs";
 import {
   normalizeCompanionDescriptors,
@@ -30,6 +31,9 @@ import {
 import {
   isCanonicalGitHubRepositoryPathV1
 } from "./github-public-source-core.mjs";
+import {
+  GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1
+} from "./github-exact-object-resolver.mjs";
 import { snapshotLocalDraftPackage } from "./cli-local-draft.mjs";
 import { canonicalJson, STANDARD_VERSION, submissionHash } from "./submission-core.mjs";
 import {
@@ -48,6 +52,7 @@ import {
   REVIEW_TARGET_CLOSURE_METHOD_V1,
   REVIEW_TARGET_CONTRACT_V1
 } from "./review-target-contract.mjs";
+import { isClosedRuntimeAssetReview } from "./runtime-assets-core.mjs";
 
 export { CliFailure } from "./cli-runtime.mjs";
 
@@ -59,17 +64,11 @@ const SAFE_BRANCH_PATTERN = /^(?!\/)(?!.*(?:\.\.|\/\/|@\{|\\|[\u0000-\u0020\u007
 const REVIEW_DIGEST_PATTERN = /^[0-9a-f]{64}$/u;
 const MAX_COMPANION_MANIFESTS = 8;
 const MAX_COMPANION_MANIFEST_BYTES = 65_536;
-const COMPANION_MANIFEST_KEYS = Object.freeze([
-  "contractPaths",
-  "repositoryUri",
-  "revisionObjectId",
-  "schemaVersion",
-  "sourcePaths"
-]);
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = runGit) {
   const blocked = (status, reason) => ({ status, reason });
+  const exactObjectTooling = inspectExactObjectGitTooling();
   let topLevel;
   try {
     topLevel = fs.realpathSync(git(repositoryRoot, ["rev-parse", "--show-toplevel"], gitImplementation));
@@ -80,6 +79,7 @@ export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = run
       : "selected directory is not a Git worktree";
     return {
       gitRepository: blocked(toolingBlocked ? "toolingBlocked" : "missing", unavailableReason),
+      exactObjectTooling,
       cleanWorktree: blocked("notChecked", unavailableReason),
       namedBranch: blocked("notChecked", unavailableReason),
       upstream: blocked("notChecked", unavailableReason),
@@ -93,6 +93,7 @@ export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = run
   if (topLevel !== repositoryRoot) {
     return {
       gitRepository: blocked("wrongRoot", "selected directory is not the Git worktree root"),
+      exactObjectTooling,
       cleanWorktree: blocked("notChecked", "select the exact worktree root"),
       namedBranch: blocked("notChecked", "select the exact worktree root"),
       upstream: blocked("notChecked", "select the exact worktree root"),
@@ -131,9 +132,15 @@ export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = run
   const upstreamReady = upstreamCommit !== null && remoteName !== null;
   const pushed = upstreamReady && headCommit === upstreamCommit;
   const githubReady = github !== null;
-  const localReady = clean && branch !== null && upstreamReady && pushed && githubReady;
+  const localReady = clean
+    && branch !== null
+    && upstreamReady
+    && pushed
+    && githubReady
+    && exactObjectTooling.status === "ready";
   return {
     gitRepository: { status: "ready", root: topLevel },
+    exactObjectTooling,
     cleanWorktree: clean
       ? { status: "ready" }
       : blocked("dirty", "commit or remove every tracked, untracked and ignored package change before prepare-pr"),
@@ -155,6 +162,58 @@ export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = run
     readyForPreparePrLocal: localReady,
     readyForPublicBeta: false
   };
+}
+
+export function inspectExactObjectGitTooling(gitProbe = spawnSafeGitSync) {
+  const minimum = GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.minimumGitVersion;
+  const versionResult = gitProbe(["--version"], {
+    encoding: "utf8",
+    timeout: 5000,
+    maxBuffer: 65_536
+  });
+  const version = parseGitVersion(versionResult?.stdout);
+  if (versionResult?.status !== 0 || version === null || compareVersion(version, minimum) < 0) {
+    return {
+      status: "toolingBlocked",
+      version,
+      reason: `Git ${minimum} or newer is required for exact public-source verification`
+    };
+  }
+
+  const backfillResult = gitProbe(["backfill", "-h"], {
+    encoding: "utf8",
+    timeout: 5000,
+    maxBuffer: 65_536
+  });
+  const backfillOutput = `${backfillResult?.stdout ?? ""}\n${backfillResult?.stderr ?? ""}`;
+  if (!/(?:^|\n)usage: git backfill(?: |\n)/u.test(backfillOutput)) {
+    return {
+      status: "toolingBlocked",
+      version,
+      reason: "git backfill --sparse is required for exact public-source verification"
+    };
+  }
+
+  return {
+    status: "ready",
+    version,
+    capability: "git backfill --sparse"
+  };
+}
+
+function parseGitVersion(output) {
+  if (typeof output !== "string") return null;
+  const match = /^git version ([0-9]+\.[0-9]+\.[0-9]+)(?:[^0-9.]|$)/u.exec(output.trim());
+  return match?.[1] ?? null;
+}
+
+function compareVersion(left, right) {
+  const leftParts = left.split(".").map(Number);
+  const rightParts = right.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) return leftParts[index] - rightParts[index];
+  }
+  return 0;
 }
 
 export async function preparePullRequest({
@@ -274,11 +333,13 @@ export async function preparePullRequest({
     gitImplementation,
     gitBinaryImplementation
   });
-  const companionClosureDiagnostics = companionManifestBindings.map((binding) => ({
-    code: "COMPANION_CLOSURE_REVIEW_REQUIRED",
-    detail: "The exact companion revision and declared files are bound, but the closed v1 companion manifest does not prove its semantic dependency and build closure.",
-    path: binding.path
-  }));
+  const companionClosureDiagnostics = companionManifestBindings
+    .filter((binding) => binding.closureStatus === "incomplete")
+    .map((binding) => ({
+      code: "COMPANION_CLOSURE_REVIEW_REQUIRED",
+      detail: "The exact companion revision and declared files are bound, but companion manifest v1 does not prove semantic dependency, test, and build closure.",
+      path: binding.path
+    }));
 
   const relativePackage = relativeRepositoryPath(repositoryRoot, packageRoot);
   const reviewTarget = buildReviewTargetDocument(
@@ -407,7 +468,11 @@ export async function preparePullRequest({
       declaredPaths,
       gitBinaryImplementation
     }),
-    companions: companionManifestBindings.map((binding) => binding.source),
+    companions: companionManifestBindings.map((binding) => ({
+      ...binding.source,
+      manifestPath: binding.path,
+      ...(binding.manifestV2 === null ? {} : { companionManifestV2: binding.manifestV2 })
+    })),
     exactObjectResolver,
     fetchImplementation,
     sleepImplementation,
@@ -415,6 +480,7 @@ export async function preparePullRequest({
     timeoutMs: publicTimeoutMs
   });
   const github = { ...configuredGithub, ...publicGithub };
+  assertCompanionClosureVerification(companionManifestBindings, github.companionClosure);
   const builderIdentity = await publicBuilderResolver({
     login: submission.builder.github,
     fetchImplementation,
@@ -505,6 +571,7 @@ export async function preparePullRequest({
     submission,
     builderIdentity,
     source: github.sourceRequest,
+    companionClosure: github.companionClosure,
     applicationRevision,
     packageResult,
     reviewTarget,
@@ -686,7 +753,8 @@ export function buildPullRequestDocument({
       publicCommitReachable: true,
       sourceRequest: github.sourceRequest,
       sourceResolutionHash: github.sourceResolutionHash,
-      sourceResolution: github.sourceResolution
+      sourceResolution: github.sourceResolution,
+      companionClosure: github.companionClosure ?? []
     },
     submission: {
       package: relativePackage,
@@ -887,18 +955,6 @@ function readCompanionManifestsFromHead({
         exitCode: 1
       });
     }
-    const keys = Object.keys(value).sort(compareUtf8);
-    if (
-      keys.length !== COMPANION_MANIFEST_KEYS.length
-      || keys.some((key, index) => key !== COMPANION_MANIFEST_KEYS[index])
-      || value.schemaVersion !== "1.0.0"
-    ) {
-      throw new CliFailure(
-        "COMPANION_MANIFEST_INVALID",
-        "companion manifest fields do not match the closed v1 contract",
-        { exitCode: 1 }
-      );
-    }
     const canonicalBytes = Buffer.from(`${canonicalJson(value)}\n`, "utf8");
     if (!bytes.equals(canonicalBytes)) {
       throw new CliFailure(
@@ -907,13 +963,69 @@ function readCompanionManifestsFromHead({
         { exitCode: 1 }
       );
     }
-    parsed.push({ path: manifestPath, source: value });
+    let normalized;
+    try {
+      normalized = normalizeCompanionManifest(value);
+    } catch (error) {
+      throw new CliFailure(
+        "COMPANION_MANIFEST_INVALID",
+        sanitizeMessage(error?.message ?? "companion manifest is invalid"),
+        { exitCode: 1 }
+      );
+    }
+    parsed.push({ path: manifestPath, ...normalized });
   }
-  const normalized = normalizeCompanionDescriptors(parsed.map((binding) => binding.source));
+  const normalized = normalizeCompanionDescriptors(parsed.map((binding) => ({
+    ...binding.source,
+    manifestPath: binding.path,
+    ...(binding.manifestV2 === null ? {} : { companionManifestV2: binding.manifestV2 })
+  })));
   return parsed.map((binding, index) => Object.freeze({
     path: binding.path,
-    source: normalized[index]
+    schemaVersion: binding.schemaVersion,
+    source: Object.freeze({
+      repositoryUri: normalized[index].repositoryUri,
+      revisionObjectId: normalized[index].revisionObjectId,
+      sourcePaths: normalized[index].sourcePaths,
+      contractPaths: normalized[index].contractPaths,
+      ...(normalized[index].numericRepositoryId === null ? {} : {
+        numericRepositoryId: normalized[index].numericRepositoryId,
+        treeObjectId: normalized[index].treeObjectId,
+        githubActionsRunIds: normalized[index].githubActionsRunIds
+      })
+    }),
+    manifestV2: binding.manifestV2,
+    closureStatus: binding.closureStatus
   }));
+}
+
+function assertCompanionClosureVerification(bindings, attestations) {
+  const required = bindings.filter(({ manifestV2 }) => manifestV2 !== null);
+  if (required.length === 0) return;
+  if (!Array.isArray(attestations)) {
+    throw new CliFailure(
+      "TOOLING_BLOCKED",
+      "companion manifest v2 requires exact remote closure verification",
+      { exitCode: 1 }
+    );
+  }
+  const verifiedByRepository = new Map(attestations.map((entry) => [entry?.repositoryUri, entry]));
+  for (const binding of required) {
+    const verified = verifiedByRepository.get(binding.manifestV2.repositoryUri);
+    if (
+      verified?.status !== "verified"
+      || verified.manifestPath !== binding.path
+      || verified.numericRepositoryId !== binding.manifestV2.numericRepositoryId
+      || verified.revisionObjectId !== binding.manifestV2.revisionObjectId
+      || verified.treeObjectId !== binding.manifestV2.treeObjectId
+    ) {
+      throw new CliFailure(
+        "PACKAGE_INVALID",
+        "companion manifest v2 did not verify the exact repository, commit, tree, source, test, build, and dependency closure",
+        { exitCode: 1, details: { path: binding.path } }
+      );
+    }
+  }
 }
 
 function buildReviewTargetDocument(repositoryRoot, packageRoot, additionalClosureDiagnostics = []) {
@@ -952,7 +1064,8 @@ export function validatePreparePrReviewTarget(reviewTarget) {
     "reviewTargetHash",
     "schemaVersion",
     "standardVersion",
-    "submissionHash"
+    "submissionHash",
+    ...(Object.hasOwn(reviewTarget ?? {}, "runtimeAssets") ? ["runtimeAssets"] : [])
   ];
   if (
     !isPlainObject(reviewTarget)
@@ -969,6 +1082,7 @@ export function validatePreparePrReviewTarget(reviewTarget) {
     || !Array.isArray(reviewTarget.externalImports)
     || !Array.isArray(reviewTarget.importResolutions)
     || !Array.isArray(reviewTarget.javascriptImportResolutions)
+    || (Object.hasOwn(reviewTarget, "runtimeAssets") && !isClosedRuntimeAssetReview(reviewTarget.runtimeAssets))
     || reviewTarget.reviewTargetHash !== calculateReviewTargetHash(reviewTarget)
   ) {
     throw new CliFailure("REVIEW_TARGET_INVALID", "the review target did not produce a bounded exact identity", { exitCode: 1 });

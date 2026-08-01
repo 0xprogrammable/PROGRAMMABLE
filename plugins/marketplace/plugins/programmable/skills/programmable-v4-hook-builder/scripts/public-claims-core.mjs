@@ -1,14 +1,10 @@
+import { normalizeConfusableText } from "./metadata-core.mjs";
+
 const submittedArtifact = String.raw`(?:application|builder|code|contract|evidence|model|project|release|report|skill|submission|token|hook|platform|launch(?:pad|\s+model)?)`;
 const selfReference = String.raw`(?:this|our|my|the\s+(?:submitted|proposed))`;
 const stateVerb = String.raw`(?:was|is|has\s+been|became|remains)`;
 const endorsementVerb = String.raw`(?:verified|approved|certified|endorsed|reviewed)`;
 const endorsementNoun = String.raw`(?:verification|approval|certification|endorsement|official\s+status)`;
-const confusableCharacters = new Map(Object.entries({
-  "\u0391": "A", "\u0392": "B", "\u0395": "E", "\u0397": "H", "\u0399": "I", "\u039a": "K", "\u039c": "M", "\u039d": "N", "\u039f": "O", "\u03a1": "P", "\u03a4": "T", "\u03a5": "Y", "\u03a7": "X",
-  "\u03b1": "a", "\u03b2": "b", "\u03b5": "e", "\u03b9": "i", "\u03ba": "k", "\u03bd": "v", "\u03bf": "o", "\u03c1": "p", "\u03c4": "t", "\u03c5": "y", "\u03c7": "x",
-  "\u0410": "A", "\u0412": "B", "\u0415": "E", "\u0406": "I", "\u041a": "K", "\u041c": "M", "\u041d": "H", "\u041e": "O", "\u0420": "P", "\u0421": "C", "\u0422": "T", "\u0425": "X", "\u0405": "S", "\u042c": "b",
-  "\u0430": "a", "\u0435": "e", "\u0456": "i", "\u0458": "j", "\u043e": "o", "\u0440": "p", "\u0441": "c", "\u0445": "x", "\u0443": "y", "\u044c": "b"
-}));
 
 function providerEndorsementPatterns(provider) {
   return [
@@ -132,16 +128,11 @@ const providerRules = [
 export function findUnsupportedPublicClaims(text) {
   if (typeof text !== "string" || text.length === 0) return [];
   const findings = [];
-  const normalized = text
-    .normalize("NFKC")
-    .replace(/[\u0391-\u03c7\u0405\u0406\u0410-\u0458]/gu, (character) => confusableCharacters.get(character) ?? character)
+  const normalized = normalizeConfusableText(text)
     .replace(/\[([^\]\n]{0,1000})\]\([^\n)]{0,1000}\)/gu, "$1")
     .replace(/\[([^\]\n]{0,1000})\]\[[^\]\n]{0,1000}\]/gu, "$1")
     .replace(/\\([\\`*_{}\[\]()#+.!~-])/gu, "$1")
-    .replace(/[*_~`]/gu, "")
-    .replace(/[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/gu, "")
-    .replace(/[’‘]/gu, "'")
-    .replace(/[‐‑‒–—]/gu, "-");
+    .replace(/[*_~`]/gu, "");
   const segments = normalized.replace(/\s+/gu, " ").split(/[.!?;]+/).map((segment) => segment.trim()).filter(Boolean);
 
   for (const segment of segments) {
@@ -157,4 +148,232 @@ export function findUnsupportedPublicClaims(text) {
     if (genericAuditIndex !== -1) findings.splice(genericAuditIndex, 1);
   }
   return findings;
+}
+
+export function extractPublicClaimText(source, extension) {
+  if (typeof source !== "string" || source.length === 0) return "";
+  const normalizedExtension = String(extension ?? "").toLowerCase();
+  if (normalizedExtension === ".json") return extractJsonPublicText(source);
+  if ([".yaml", ".yml"].includes(normalizedExtension)) return extractYamlPublicText(source);
+  if ([".md", ".mdx", ".markdown"].includes(normalizedExtension)) return extractMarkdownPublicText(source);
+  if ([".html", ".htm"].includes(normalizedExtension)) return extractHtmlPublicText(source);
+  if ([".vue", ".svelte"].includes(normalizedExtension)) {
+    const scripts = [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/giu)]
+      .map((match) => extractJavascriptPublicText(match[1]));
+    return [extractHtmlPublicText(source), ...scripts].filter(Boolean).join("\n");
+  }
+  if ([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"].includes(normalizedExtension)) {
+    return extractJavascriptPublicText(source);
+  }
+  return source;
+}
+
+function extractJsonPublicText(source) {
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return "";
+  }
+  const strings = [];
+  const pending = [value];
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    if (typeof entry === "string") {
+      strings.push(entry);
+      continue;
+    }
+    if (Array.isArray(entry)) {
+      for (let index = entry.length - 1; index >= 0; index -= 1) pending.push(entry[index]);
+    } else if (entry && typeof entry === "object") {
+      const items = Object.values(entry);
+      for (let index = items.length - 1; index >= 0; index -= 1) pending.push(items[index]);
+    }
+  }
+  return strings.join("\n");
+}
+
+function extractYamlPublicText(source) {
+  const lines = source.split(/\r?\n/u);
+  const values = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || trimmed.startsWith("#") || /^(?:---|\.\.\.)$/u.test(trimmed)) continue;
+
+    const separator = yamlMappingSeparator(line);
+    let scalar = separator === -1 ? trimmed.replace(/^-\s+/u, "") : line.slice(separator + 1).trim();
+    if (/^[>|][+-]?[0-9]?$/u.test(scalar)) {
+      const indentation = leadingWhitespace(line);
+      const block = [];
+      while (index + 1 < lines.length) {
+        const next = lines[index + 1];
+        if (next.trim().length > 0 && leadingWhitespace(next) <= indentation) break;
+        index += 1;
+        if (next.trim().length > 0) block.push(next.trim());
+      }
+      if (block.length > 0) values.push(block.join(" "));
+      continue;
+    }
+    scalar = stripYamlComment(scalar).trim();
+    if (scalar.length === 0 || scalar === "{}" || scalar === "[]") continue;
+    values.push(decodeYamlScalar(scalar));
+  }
+  return values.join("\n");
+}
+
+function extractMarkdownPublicText(source) {
+  const frontmatterMatch = source.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/u);
+  const frontmatter = frontmatterMatch ? extractYamlPublicText(frontmatterMatch[1]) : "";
+  const body = (frontmatterMatch ? source.slice(frontmatterMatch[0].length) : source)
+    .replace(/<!--[^]*?-->/gu, " ")
+    .replace(/\{\/\*[^]*?\*\/\}/gu, " ")
+    .replace(/^(?: {0,3})(`{3,}|~{3,})[^\n]*\n[^]*?^ {0,3}\1\s*$/gmu, " ")
+    .replace(/^ {4}.*$/gmu, " ")
+    .replace(/^(?:import|export)\s+[^\n]*$/gmu, " ")
+    .replace(/`[^`\n]*`/gu, " ");
+  return [frontmatter, body].filter(Boolean).join("\n");
+}
+
+function yamlMappingSeparator(line) {
+  let quote = null;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (quote) {
+      if (character === quote) {
+        if (quote === "'" && line[index + 1] === "'") index += 1;
+        else quote = null;
+      } else if (quote === '"' && character === "\\") index += 1;
+      continue;
+    }
+    if (character === "'" || character === '"') quote = character;
+    else if (character === ":") return index;
+  }
+  return -1;
+}
+
+function stripYamlComment(value) {
+  let quote = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote) {
+        if (quote === "'" && value[index + 1] === "'") index += 1;
+        else quote = null;
+      } else if (quote === '"' && character === "\\") index += 1;
+      continue;
+    }
+    if (character === "'" || character === '"') quote = character;
+    else if (character === "#" && (index === 0 || /\s/u.test(value[index - 1]))) return value.slice(0, index);
+  }
+  return value;
+}
+
+function decodeYamlScalar(value) {
+  if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1).replace(/''/gu, "'");
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
+}
+
+function leadingWhitespace(value) {
+  return value.match(/^\s*/u)?.[0].length ?? 0;
+}
+
+function extractHtmlPublicText(source) {
+  const withoutCommentsOrCode = source
+    .replace(/<!--[\s\S]*?-->/gu, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/giu, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/giu, " ");
+  const attributes = [...withoutCommentsOrCode.matchAll(/\b(?:alt|aria-label|content|placeholder|title)\s*=\s*(["'])(.*?)\1/giu)]
+    .map((match) => decodeCommonEntities(match[2]));
+  const visible = decodeCommonEntities(withoutCommentsOrCode.replace(/<[^>]*>/gu, " "));
+  return [...attributes, visible].filter(Boolean).join("\n");
+}
+
+function extractJavascriptPublicText(source) {
+  const literals = [];
+  let visibleCode = "";
+  let index = 0;
+  while (index < source.length) {
+    const current = source[index];
+    const next = source[index + 1];
+    if (current === "/" && next === "/") {
+      const newline = source.indexOf("\n", index + 2);
+      index = newline === -1 ? source.length : newline;
+      visibleCode += " ";
+      continue;
+    }
+    if (current === "/" && next === "*") {
+      const close = source.indexOf("*/", index + 2);
+      index = close === -1 ? source.length : close + 2;
+      visibleCode += " ";
+      continue;
+    }
+    if (current === "'" || current === '"' || current === "`") {
+      const quote = current;
+      let literal = "";
+      index += 1;
+      while (index < source.length) {
+        const character = source[index];
+        if (character === "\\") {
+          const decoded = decodeJavascriptEscape(source, index);
+          literal += decoded.value;
+          index = decoded.nextIndex;
+          continue;
+        }
+        if (character === quote) {
+          index += 1;
+          break;
+        }
+        literal += character;
+        index += 1;
+      }
+      literals.push(literal);
+      visibleCode += " ";
+      continue;
+    }
+    visibleCode += current;
+    index += 1;
+  }
+  const jsxText = [...visibleCode.matchAll(/>([^<>{}]{2,})</gu)].map((match) => match[1]);
+  return [...literals, ...jsxText].filter(Boolean).join("\n");
+}
+
+function decodeJavascriptEscape(source, slashIndex) {
+  const escaped = source[slashIndex + 1];
+  if (escaped === undefined) return { value: "", nextIndex: source.length };
+  const simple = new Map([["n", "\n"], ["r", "\r"], ["t", "\t"], ["b", "\b"], ["f", "\f"], ["v", "\v"]]);
+  if (simple.has(escaped)) return { value: simple.get(escaped), nextIndex: slashIndex + 2 };
+  if (escaped === "x") {
+    const digits = source.slice(slashIndex + 2, slashIndex + 4);
+    if (/^[0-9a-f]{2}$/iu.test(digits)) return { value: String.fromCodePoint(Number.parseInt(digits, 16)), nextIndex: slashIndex + 4 };
+  }
+  if (escaped === "u" && source[slashIndex + 2] === "{") {
+    const close = source.indexOf("}", slashIndex + 3);
+    const digits = close === -1 ? "" : source.slice(slashIndex + 3, close);
+    if (/^[0-9a-f]{1,6}$/iu.test(digits) && Number.parseInt(digits, 16) <= 0x10ffff) {
+      return { value: String.fromCodePoint(Number.parseInt(digits, 16)), nextIndex: close + 1 };
+    }
+  }
+  if (escaped === "u") {
+    const digits = source.slice(slashIndex + 2, slashIndex + 6);
+    if (/^[0-9a-f]{4}$/iu.test(digits)) return { value: String.fromCodePoint(Number.parseInt(digits, 16)), nextIndex: slashIndex + 6 };
+  }
+  return { value: escaped, nextIndex: slashIndex + 2 };
+}
+
+function decodeCommonEntities(value) {
+  return value
+    .replace(/&nbsp;/giu, " ")
+    .replace(/&amp;/giu, "&")
+    .replace(/&lt;/giu, "<")
+    .replace(/&gt;/giu, ">")
+    .replace(/&quot;/giu, '"')
+    .replace(/&#39;/giu, "'");
 }

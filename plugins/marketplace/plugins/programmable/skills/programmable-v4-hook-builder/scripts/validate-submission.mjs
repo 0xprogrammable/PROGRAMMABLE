@@ -6,7 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseCliOrExit } from "./cli-args.mjs";
 import { applyRepositoryClosureToReport } from "./closure-report-core.mjs";
-import { analyzeRepositoryClosure } from "./review-target-core.mjs";
+import { analyzeRepositoryReview } from "./review-target-core.mjs";
 import { assertInsideRepository, resolveRepositoryRoot } from "./repository-root.mjs";
 import { analyzeSubmission } from "./submission-core.mjs";
 
@@ -49,12 +49,15 @@ if (
   && !report.findings.some(({ code, severity }) => code.startsWith("SCHEMA_") && severity !== "warning")
 ) {
   try {
-    const closure = analyzeRepositoryClosure({
+    const repositoryReview = analyzeRepositoryReview({
       repositoryRoot,
       packageRoot: path.dirname(submissionPath),
       submission
     });
-    report = applyRepositoryClosureToReport(report, closure, { stage: submission.stage });
+    report = applyRepositoryClosureToReport(report, repositoryReview.closure, {
+      stage: submission.stage,
+      runtimeAssets: repositoryReview.runtimeAssets
+    });
   } catch (error) {
     fail(`repository closure: ${error.message}`, 2);
   }

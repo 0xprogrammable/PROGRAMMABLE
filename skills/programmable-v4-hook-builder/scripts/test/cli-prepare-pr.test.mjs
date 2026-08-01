@@ -8,11 +8,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   CliFailure,
+  inspectExactObjectGitTooling,
   inspectLocalGitReadiness,
   preparePullRequest,
   validatePreparePrReviewTarget
 } from "../cli-prepare-pr.mjs";
 import { resolvePublicGitHubSource, resolvePublicGitHubUser } from "../cli-github-source.mjs";
+import { materializeExample } from "../example-materializer-core.mjs";
 import { GitHubPublicSourceError } from "../github-public-source-core.mjs";
 import { calculateReviewTargetHash } from "../review-target-core.mjs";
 import { REVIEW_TARGET_CLOSURE_METHOD_V1 } from "../review-target-contract.mjs";
@@ -30,6 +32,68 @@ const API_ORIGIN = "https://api.github.com";
 const centralBaseCommit = "c".repeat(40);
 const centralBaseTree = "d".repeat(40);
 
+test("doctor reports exact-object Git capability before prepare-pr", () => {
+  const ready = inspectExactObjectGitTooling((args) => {
+    if (args[0] === "--version") return { status: 0, stdout: "git version 2.50.1\n", stderr: "" };
+    return { status: 129, stdout: "", stderr: "usage: git backfill [--sparse]\n" };
+  });
+  assert.deepEqual(ready, {
+    status: "ready",
+    version: "2.50.1",
+    capability: "git backfill --sparse"
+  });
+
+  const old = inspectExactObjectGitTooling((args) => ({
+    status: 0,
+    stdout: args[0] === "--version" ? "git version 2.48.9\n" : "",
+    stderr: ""
+  }));
+  assert.deepEqual(old, {
+    status: "toolingBlocked",
+    version: "2.48.9",
+    reason: "Git 2.49.0 or newer is required for exact public-source verification"
+  });
+
+  const missingBackfill = inspectExactObjectGitTooling((args) => ({
+    status: args[0] === "--version" ? 0 : 1,
+    stdout: args[0] === "--version" ? "git version 2.50.1\n" : "",
+    stderr: args[0] === "--version" ? "" : "git: 'backfill' is not a git command\n"
+  }));
+  assert.deepEqual(missingBackfill, {
+    status: "toolingBlocked",
+    version: "2.50.1",
+    reason: "git backfill --sparse is required for exact public-source verification"
+  });
+});
+
+function companionClosureWorkflow() {
+  return `${JSON.stringify({
+    name: "Programmable companion closure",
+    on: ["push"],
+    permissions: { contents: "read" },
+    jobs: {
+      "programmable-companion-closure": {
+        "runs-on": "ubuntu-24.04",
+        "timeout-minutes": 15,
+        steps: [
+          { uses: `actions/checkout@${"a".repeat(40)}` },
+          {
+            uses: `actions/setup-node@${"b".repeat(40)}`,
+            with: {
+              "node-version": "22.17.0",
+              cache: "npm",
+              "cache-dependency-path": "package-lock.json"
+            }
+          },
+          { run: "npm ci --ignore-scripts --no-audit --no-fund" },
+          { run: "npm run build" },
+          { run: "npm run test" }
+        ]
+      }
+    }
+  }, null, 2)}\n`;
+}
+
 function companionDefinition(index, overrides = {}) {
   return {
     repositoryUri: `https://github.com/example-builder/companion-${index}`,
@@ -38,8 +102,32 @@ function companionDefinition(index, overrides = {}) {
     treeObjectId: crypto.createHash("sha1").update(`companion-tree-${index}`).digest("hex"),
     sourcePaths: [`src/companion-${index}.ts`],
     contractPaths: [],
+    githubActions: [],
     files: {},
     modes: {},
+    ...overrides
+  };
+}
+
+function companionManifestV2(companion, overrides = {}) {
+  return {
+    build: {
+      buildScript: "build",
+      configurationPaths: ["vite.config.ts"],
+      packageLockPath: "package-lock.json",
+      packageManifestPath: "package.json",
+      testScript: "test"
+    },
+    closureMethod: "npm-package-lock-v3-static-module-closure-v1",
+    githubActionsRunIds: companion.githubActions.map(({ runId }) => runId),
+    numericRepositoryId: companion.numericRepositoryId,
+    repositoryUri: companion.repositoryUri,
+    revisionObjectId: companion.revisionObjectId,
+    runtimePaths: ["index.html"],
+    schemaVersion: "2.0.0",
+    sourcePaths: [...companion.sourcePaths],
+    testPaths: ["test/main.test.ts"],
+    treeObjectId: companion.treeObjectId,
     ...overrides
   };
 }
@@ -55,7 +143,11 @@ function companionManifest(companion) {
 }
 
 function companionBlobRecords(companion) {
-  return [...new Set([...companion.sourcePaths, ...companion.contractPaths])].sort().map((recordPath) => {
+  return [...new Set([
+    ...companion.sourcePaths,
+    ...companion.contractPaths,
+    ...companion.githubActions.map(({ workflowPath }) => workflowPath)
+  ])].sort().map((recordPath) => {
     const bytes = Buffer.from(companion.files[recordPath] ?? `source for ${recordPath}\n`, "utf8");
     const mode = companion.modes[recordPath] ?? "100644";
     const sha = mode === "160000"
@@ -346,10 +438,10 @@ test("prepare-pr deterministically binds the pushed public GitHub revision witho
       contact: "https://github.com/Example-Builder"
     });
     assert.equal(centralValidation.application.stage, "proposal");
-    assert.equal(centralValidation.compatibility.result, "changes-required");
+    assert.equal(centralValidation.compatibility.result, "architecture-review-required");
     assert.ok(centralValidation.compatibility.findings.length > 0);
     assert.equal(centralValidation.evidenceIndex.evidence.length, 1);
-    assert.equal(centralValidation.evidenceIndex.evidence[0].status, "failed");
+    assert.equal(centralValidation.evidenceIndex.evidence[0].status, "blocked");
     assert.equal(
       centralValidation.evidenceIndex.evidence[0].url,
       `https://github.com/example-builder/programmable-proposal/blob/${head}/submissions/ready-model/compatibility-report.json`
@@ -754,7 +846,7 @@ test("prepare-pr binds one canonical HEAD companion manifest and preserves a 64-
       result.centralPackage.files.find(({ path: filePath }) => filePath === "compatibility-report.json").content
     );
     assert.deepEqual(centralApplication.source.companions, result.github.sourceRequest.companions);
-    assert.equal(centralCompatibility.result, "changes-required");
+    assert.equal(centralCompatibility.result, "architecture-review-required");
     assert.ok(centralCompatibility.findings.some(({ code }) => code === "COMPANION_CLOSURE_REVIEW_REQUIRED"));
     assert.match(result.body, /Companion repositories: `1` exact public bindings/u);
     assert.equal(
@@ -800,6 +892,117 @@ test("prepare-pr blocks a prototype companion before public network access until
       }
     );
     assert.equal(fetches, 0);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("prepare-pr verifies companion manifest v2 without the blanket incomplete-closure finding", async () => {
+  const integrityA = `sha512-${Buffer.alloc(64, 7).toString("base64")}`;
+  const integrityB = `sha512-${Buffer.alloc(64, 9).toString("base64")}`;
+  const companion = companionDefinition(1, {
+    sourcePaths: ["index.html", "src/main.ts", "src/math.ts", "test/main.test.ts"],
+    contractPaths: ["package-lock.json", "package.json", "vite.config.ts"],
+    githubActions: [{ runId: "7001", workflowPath: ".github/workflows/ci.yml" }],
+    files: {
+      ".github/workflows/ci.yml": companionClosureWorkflow(),
+      "index.html": '<script type="module" src="/src/main.ts"></script>\n',
+      "package.json": `${JSON.stringify({
+        name: "closed-game",
+        version: "1.0.0",
+        scripts: { build: "vite build", test: "node --test" },
+        dependencies: { three: "^0.185.0" },
+        devDependencies: { vite: "^7.0.0" }
+      }, null, 2)}\n`,
+      "package-lock.json": `${JSON.stringify({
+        name: "closed-game",
+        version: "1.0.0",
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          "": {
+            name: "closed-game",
+            version: "1.0.0",
+            dependencies: { three: "^0.185.0" },
+            devDependencies: { vite: "^7.0.0" }
+          },
+          "node_modules/three": {
+            version: "0.185.0",
+            resolved: "https://registry.npmjs.org/three/-/three-0.185.0.tgz",
+            integrity: integrityA
+          },
+          "node_modules/vite": {
+            version: "7.0.1",
+            resolved: "https://registry.npmjs.org/vite/-/vite-7.0.1.tgz",
+            integrity: integrityB,
+            dev: true
+          }
+        }
+      }, null, 2)}\n`,
+      "src/main.ts": 'import "three";\nimport { add } from "./math";\nexport const score = add(1, 2);\n',
+      "src/math.ts": "export const add = (left: number, right: number) => left + right;\n",
+      "test/main.test.ts": 'import { score } from "../src/main";\nif (score !== 3) throw new Error("bad score");\n',
+      "vite.config.ts": 'import { defineConfig } from "vite";\nexport default defineConfig({});\n'
+    }
+  });
+  const manifestPath = ".programmable/companions/game.json";
+  const manifest = companionManifestV2(companion, {
+    sourcePaths: ["src/main.ts", "src/math.ts"]
+  });
+  const fixture = createReadyRepository({
+    companionManifests: [{ path: manifestPath, value: manifest }]
+  });
+  try {
+    const result = await preparePullRequest({
+      repositoryRoot: fixture.repository,
+      packageInput: fixture.packageRoot,
+      companionManifestInputs: [manifestPath],
+      exactObjectResolver: async (request) => {
+        assert.equal(request.repositoryUri, companion.repositoryUri);
+        const available = new Map(companionBlobRecords(companion).map((record) => [
+          record.path,
+          { bytes: record.bytes, mode: record.mode, objectId: record.sha }
+        ]));
+        return { records: new Map(request.paths.map((filePath) => [filePath, available.get(filePath)])) };
+      },
+      fetchImplementation: async (url) => githubResponse(fixture, url, [companion]),
+      sleepImplementation: async () => {}
+    });
+    assert.equal(result.github.companionClosure.length, 1);
+    assert.equal(result.github.companionClosure[0].status, "verified");
+    assert.equal(result.github.companionClosure[0].numericRepositoryId, companion.numericRepositoryId);
+    assert.deepEqual(result.github.sourceRequest.companions[0].githubActionsRunIds, ["7001"]);
+    const centralFiles = new Map(result.centralPackage.files.map(({ path: filePath, content }) => [
+      filePath,
+      Buffer.from(content, "utf8")
+    ]));
+    const centralValidation = validatePublicApplicationPackageFiles({
+      applicationId: "ready-model",
+      packageFiles: centralFiles
+    });
+    assert.equal(centralValidation.application.companionClosure.length, 1);
+    assert.equal(
+      centralValidation.application.companionClosure[0].closureHash,
+      result.github.companionClosure[0].closureHash
+    );
+    const tamperedApplication = structuredClone(centralValidation.application);
+    tamperedApplication.companionClosure[0].numericRepositoryId = "999999";
+    centralFiles.set("application.json", Buffer.from(`${canonicalJson(tamperedApplication)}\n`, "utf8"));
+    assert.throws(
+      () => validatePublicApplicationPackageFiles({ applicationId: "ready-model", packageFiles: centralFiles }),
+      (error) => error?.code === "COMPANION_CLOSURE_RECEIPT_INVALID"
+    );
+    const missingReceiptApplication = structuredClone(centralValidation.application);
+    delete missingReceiptApplication.companionClosure;
+    centralFiles.set("application.json", Buffer.from(`${canonicalJson(missingReceiptApplication)}\n`, "utf8"));
+    assert.throws(
+      () => validatePublicApplicationPackageFiles({ applicationId: "ready-model", packageFiles: centralFiles }),
+      (error) => error?.code === "OBJECT_NOT_CLOSED"
+    );
+    const compatibility = JSON.parse(
+      result.centralPackage.files.find(({ path: filePath }) => filePath === "compatibility-report.json").content
+    );
+    assert.equal(compatibility.findings.some(({ code }) => code === "COMPANION_CLOSURE_REVIEW_REQUIRED"), false);
   } finally {
     fixture.cleanup();
   }
@@ -1689,9 +1892,16 @@ function createReadyRepository({
   );
   assert.equal(scaffold.status, 0, scaffold.stderr);
   const packageRoot = path.join(repository, "submissions", "ready-model");
+  writeConcreteProposalDocuments(packageRoot, modelName);
   if (proposalText !== null) fs.writeFileSync(path.join(packageRoot, "PROPOSAL.md"), proposalText);
   const submissionPath = path.join(packageRoot, "submission.json");
-  const submission = JSON.parse(fs.readFileSync(submissionPath, "utf8"));
+  const submission = materializeExample({
+    skillRoot,
+    exampleId: "transparent-pool-scoped-fee",
+    stepId: "fully-specified"
+  });
+  submission.model.id = "ready-model";
+  submission.model.name = modelName;
   submission.builder.github = "example-builder";
   submission.builder.contact = "@example-builder";
   submission.builder.licenseDeclaration = "I own this work and submit it under MIT.";
@@ -1750,6 +1960,18 @@ function createReadyRepository({
       fs.rmSync(container, { recursive: true, force: true });
     }
   };
+}
+
+function writeConcreteProposalDocuments(packageRoot, modelName) {
+  const documents = {
+    "PROPOSAL.md": `# ${modelName}\n\nThe project launches one token and uses one immutable pool-scoped hook to collect a visible fixed fee for an immutable beneficiary. The exact PoolManager settlement, beneficiary liability, claim path and failure behavior are recorded in submission.json. The hook has no administrator, proxy, pause, rescue or redirect authority.\n`,
+    "THREAT_MODEL.md": `# ${modelName} threat model\n\nThe reviewed assets are both pool currencies and each PoolId-scoped beneficiary liability. PoolManager authentication, exact PoolId admission, token transfers, recipient claims and indexer reconstruction are separate trust boundaries. Every settlement or transfer failure reverts without borrowing another pool's balance.\n`,
+    "TEST_PLAN.md": `# ${modelName} test plan\n\nPlanned checks cover permission bits, PoolManager authentication, all swap quadrants, exact fee rounding, zero final deltas, PoolId liability isolation, hostile token behavior, failed claims, event reconstruction and standard liquidity exits.\n`,
+    "EVIDENCE.md": `# ${modelName} evidence\n\nThe deterministic compatibility report is recorded for this proposal. Contract, fuzz, invariant, static-analysis, deployment, routing and availability evidence remains planned and is not reported as completed.\n`
+  };
+  for (const [fileName, contents] of Object.entries(documents)) {
+    fs.writeFileSync(path.join(packageRoot, fileName), contents);
+  }
 }
 
 async function rejectsCode(operation, code) {
@@ -1877,6 +2099,23 @@ function githubResponse(fixture, url, companions = []) {
         sha: companion.revisionObjectId,
         tree: { sha: companion.treeObjectId }
       }));
+    }
+    for (const action of companion.githubActions) {
+      if (url === `${companionRepositoryUrl}/actions/runs/${action.runId}`) {
+        return response(200, JSON.stringify({
+          id: Number(action.runId),
+          repository: { id: Number(companion.numericRepositoryId) },
+          head_sha: companion.revisionObjectId,
+          head_commit: { id: companion.revisionObjectId, tree_id: companion.treeObjectId },
+          path: action.workflowPath,
+          workflow_id: Number(action.workflowId ?? "5001"),
+          run_attempt: Number(action.runAttempt ?? "1"),
+          event: action.event ?? "push",
+          status: action.status ?? "completed",
+          conclusion: action.conclusion ?? "success",
+          html_url: `${companion.repositoryUri}/actions/runs/${action.runId}`
+        }));
+      }
     }
     const records = companionBlobRecords(companion);
     if (url === `${companionRepositoryUrl}/git/trees/${companion.treeObjectId}`) {
