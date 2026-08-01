@@ -1,6 +1,6 @@
 begin;
 
-select plan(22);
+select plan(24);
 
 select ok(
   to_regprocedure(
@@ -341,6 +341,96 @@ select throws_ok(
   $sql$,
   '42501',
   'the API reader cannot execute the corpus capability'
+);
+
+reset role;
+
+select is(
+  (
+    select pg_catalog.count(*)
+    from programmable_private.route_checkpoint_parity_bindings
+  ) + (
+    select pg_catalog.count(*)
+    from programmable_private.parity_records
+  ),
+  0::bigint,
+  'the bootstrap execution fixture has no prior route or parity binding'
+);
+
+-- Exercise the corpus body without manufacturing the otherwise extensive
+-- checkpoint fixture.  The replacement is transaction-local and preserves the
+-- production signature: it returns one exact empty contract, allowing the
+-- reader to reach and plan every direct projection join before it fails closed
+-- on the expected zero-launch cardinality guard.
+create or replace function programmable_private.get_reconciler_preparity_contract_v1(
+  p_chain_id bigint,
+  p_release_id text,
+  p_model_id text,
+  p_source_group text,
+  p_epoch_id uuid,
+  p_pointer_generation bigint,
+  p_checkpoint_id uuid,
+  p_checkpoint_block_number numeric,
+  p_checkpoint_block_hash bytea,
+  p_maximum_entity_count integer default 10000
+)
+returns table (
+  chain_id bigint,
+  release_id text,
+  model_id text,
+  source_group text,
+  projector_version text,
+  epoch_id uuid,
+  pointer_generation bigint,
+  checkpoint_id uuid,
+  checkpoint_generation bigint,
+  reorg_generation bigint,
+  checkpoint_block_number bigint,
+  checkpoint_block_hash bytea,
+  route_keys text[],
+  route_contract jsonb,
+  projection_contract jsonb,
+  current_entities jsonb
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select
+    p_chain_id,
+    p_release_id,
+    p_model_id,
+    p_source_group,
+    'projector-v1'::text,
+    p_epoch_id,
+    p_pointer_generation,
+    p_checkpoint_id,
+    1::bigint,
+    0::bigint,
+    p_checkpoint_block_number::bigint,
+    p_checkpoint_block_hash,
+    array[
+      'explore-list', 'explore-token', 'explore-chart', 'creator-profile'
+    ]::text[],
+    '{}'::jsonb,
+    '{}'::jsonb,
+    '[]'::jsonb
+$function$;
+
+set local role programmable_reconciler;
+
+select throws_ok(
+  $sql$
+    select * from programmable_private.get_reconciler_route_corpus_v1(
+      1, 'classic-v2', 'classic', 'core',
+      '14000000-0000-0000-0000-000000000001', 1,
+      '14000000-0000-0000-0000-000000000002', 100,
+      decode(repeat('14', 32), 'hex'), 100
+    )
+  $sql$,
+  '54000',
+  'the direct corpus executes without prior parity and then fails closed on an empty launch manifest'
 );
 
 reset role;
