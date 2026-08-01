@@ -257,7 +257,7 @@ export async function runConfiguredCandidateRawBackfill(input) {
               store,
               envio,
               providers,
-              deadlineMs: 60_000,
+              deadlineMs: 75_000,
               preferredCandidatesPerCommit:
                 CUTOVER_CANDIDATES_PER_COMMIT,
             });
