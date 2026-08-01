@@ -51,6 +51,8 @@ type Environment = Readonly<Record<string, string | undefined>>;
 const CHAIN_ID = 1;
 const GRAPH_GATEWAY = "https://gateway.thegraph.com";
 const MARKET_PROJECTOR_VERSION = "market-projector-v1";
+const MARKET_PROJECTOR_LOGIN_ROLE = "programmable_reconciler_login";
+const MARKET_PROJECTOR_CAPABILITY_ROLE = "programmable_reconciler";
 const CHAINLINK_ETH_USD =
   "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419" as HexAddress;
 const LATEST_ROUND_DATA_SELECTOR = "0xfeaf968c";
@@ -517,10 +519,66 @@ function parsePoolCursor(row: Record<string, unknown>): MarketCursor | null {
   });
 }
 
-async function setReconcilerRole(transaction: PostgresTransaction) {
-  await transaction.query("set local role programmable_reconciler");
+function marketGatewayIdentityFailure(): DataPipelineError {
+  return invalidInput("postgres", "market-gateway-membership");
+}
+
+async function assertMarketGatewayLogin(
+  transaction: PostgresTransaction,
+): Promise<void> {
+  const rows = await transaction.query<{ session_user: unknown }>(
+    "select session_user::text as session_user",
+  );
+  if (
+    rows.length !== 1 ||
+    rows[0]?.session_user !== MARKET_PROJECTOR_LOGIN_ROLE
+  ) {
+    throw marketGatewayIdentityFailure();
+  }
+}
+
+async function assumeAndVerifyMarketCapabilityRole(
+  transaction: PostgresTransaction,
+): Promise<void> {
+  try {
+    await transaction.query("set local role programmable_reconciler");
+  } catch {
+    throw marketGatewayIdentityFailure();
+  }
   await transaction.query("set local statement_timeout = '900ms'");
   await transaction.query("set local lock_timeout = '200ms'");
+  await transaction.query(
+    "set local idle_in_transaction_session_timeout = '2000ms'",
+  );
+  const rows = await transaction.query<{
+    session_user: unknown;
+    current_role: unknown;
+  }>(
+    "select session_user::text as session_user, current_role::text as current_role",
+  );
+  if (
+    rows.length !== 1 ||
+    rows[0]?.session_user !== MARKET_PROJECTOR_LOGIN_ROLE ||
+    rows[0]?.current_role !== MARKET_PROJECTOR_CAPABILITY_ROLE
+  ) {
+    throw marketGatewayIdentityFailure();
+  }
+}
+
+export function createMarketProjectorDatabaseGateway(input: {
+  executor: PostgresExecutor;
+}) {
+  return Object.freeze({
+    async transaction<T>(
+      work: (transaction: PostgresTransaction) => Promise<T>,
+    ): Promise<T> {
+      return input.executor.transaction(async (transaction) => {
+        await assertMarketGatewayLogin(transaction);
+        await assumeAndVerifyMarketCapabilityRole(transaction);
+        return work(transaction);
+      });
+    },
+  });
 }
 
 export function createPostgresMarketProjectorStore(
@@ -540,6 +598,9 @@ export function createPostgresMarketProjectorStore(
     input.marketProjectorVersion ?? MARKET_PROJECTOR_VERSION;
   const nextUuid = input.uuid ?? randomUUID;
   const now = input.now ?? (() => new Date());
+  const gateway = createMarketProjectorDatabaseGateway({
+    executor: input.executor,
+  });
   let activeLease: MarketProjectorLease | null = null;
 
   return Object.freeze({
@@ -560,8 +621,7 @@ export function createPostgresMarketProjectorStore(
         requestedAt: requestedAt.toISOString(),
         requestedExpiry: requestedExpiry.toISOString(),
       });
-      const rows = await input.executor.transaction(async (transaction) => {
-        await setReconcilerRole(transaction);
+      const rows = await gateway.transaction(async (transaction) => {
         return transaction.query(
           "select * from programmable_private.try_acquire_market_projector_runtime_lease_v1($1,$2::bytea,$3::timestamptz,$4::timestamptz,$5::bytea)",
           [
@@ -606,8 +666,7 @@ export function createPostgresMarketProjectorStore(
         tokenHash: lease.tokenHash,
         releasedAt: releasedAt.toISOString(),
       });
-      const rows = await input.executor.transaction(async (transaction) => {
-        await setReconcilerRole(transaction);
+      const rows = await gateway.transaction(async (transaction) => {
         return transaction.query<{ released: unknown }>(
           "select programmable_private.release_market_projector_runtime_lease_v1($1,$2::bigint,$3::bytea,$4::timestamptz,$5::bytea) as released",
           [
@@ -626,8 +685,7 @@ export function createPostgresMarketProjectorStore(
     },
 
     async loadPlans() {
-      return input.executor.transaction(async (transaction) => {
-        await setReconcilerRole(transaction);
+      return gateway.transaction(async (transaction) => {
         const plans: MarketPoolPlan[] = [];
         for (const scope of RELEASE_SCOPES) {
           const rows = await transaction.query(
@@ -692,8 +750,7 @@ export function createPostgresMarketProjectorStore(
       toBlockInclusive,
       limit,
     }) {
-      return input.executor.transaction(async (transaction) => {
-        await setReconcilerRole(transaction);
+      return gateway.transaction(async (transaction) => {
         const rows = await transaction.query(
           "select * from programmable_private.list_market_close_anchors_v1($1::bigint,$2,$3,$4,$5,$6::bytea,$7::numeric,$8::numeric,$9::integer,$10::numeric)",
           [
@@ -728,8 +785,7 @@ export function createPostgresMarketProjectorStore(
     },
 
     async resolveGraphProvider(provider) {
-      return input.executor.transaction(async (transaction) => {
-        await setReconcilerRole(transaction);
+      return gateway.transaction(async (transaction) => {
         const rows = await transaction.query<{ id: unknown }>(
           "select programmable_private.resolve_market_graph_provider_v1($1,$2::bytea,$3::bytea) as id",
           [
@@ -746,8 +802,7 @@ export function createPostgresMarketProjectorStore(
 
     async commit(page) {
       const startedAt = Date.now();
-      return input.executor.transaction(async (transaction) => {
-        await setReconcilerRole(transaction);
+      return gateway.transaction(async (transaction) => {
         if (!activeLease) {
           throw validationError("postgres", "market-lease-missing");
         }

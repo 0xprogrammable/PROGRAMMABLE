@@ -605,6 +605,22 @@ describe("market projector runtime", () => {
         values: readonly PostgresParameter[] = [],
       ) {
         calls.push({ text, values });
+        if (text === "select session_user::text as session_user") {
+          return [
+            { session_user: "programmable_reconciler_login" },
+          ] as unknown as readonly Row[];
+        }
+        if (
+          text ===
+          "select session_user::text as session_user, current_role::text as current_role"
+        ) {
+          return [
+            {
+              session_user: "programmable_reconciler_login",
+              current_role: "programmable_reconciler",
+            },
+          ] as unknown as readonly Row[];
+        }
         if (text.includes("get_market_global_snapshot_v1")) {
           return [{ id: globalId }] as unknown as readonly Row[];
         }
@@ -698,6 +714,23 @@ describe("market projector runtime", () => {
     );
     expect(detail?.values[5]).toBe("7.5");
     expect(detail?.values[6]).toBe("9");
+    expect(
+      calls.filter(
+        ({ text }) => text === "select session_user::text as session_user",
+      ),
+    ).toHaveLength(3);
+    expect(
+      calls.filter(
+        ({ text }) => text === "set local role programmable_reconciler",
+      ),
+    ).toHaveLength(3);
+    expect(
+      calls.filter(
+        ({ text }) =>
+          text ===
+          "select session_user::text as session_user, current_role::text as current_role",
+      ),
+    ).toHaveLength(3);
   });
 
   it("rebuilds from launch when the source reorg generation advances", async () => {
