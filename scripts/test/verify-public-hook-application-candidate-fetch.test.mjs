@@ -521,7 +521,6 @@ test("paused-new preflight rejects foreign, mixed, renamed, and deleted applicat
           baseRoot: fixture.base,
           expectedBaseCommit: fixture.baseCommit,
           expectedCandidateCommit: candidateCommit,
-          expectedMergeCommit: mergeCommit,
           repository: "central/repository",
           pullRequestNumber: PULL_REQUEST_NUMBER,
           readToken: "test-read-token"
@@ -551,7 +550,6 @@ test("candidate preflight binds exact GitHub base and head without removed merge
           baseRoot: fixture.base,
           expectedBaseCommit: fixture.baseCommit,
           expectedCandidateCommit: candidateCommit,
-          expectedMergeCommit: mergeCommit,
           repository: "central/repository",
           pullRequestNumber: PULL_REQUEST_NUMBER,
           readToken: "test-read-token"
