@@ -972,6 +972,11 @@ function quoteIdentifier(value) {
 }
 
 async function captureDatabaseManifest(sql) {
+  // JSON serialization of timestamptz follows the session timezone. Normalize
+  // both the hosted source and isolated restore before hashing so identical
+  // instants cannot fail verification solely because the hosts use different
+  // timezone settings.
+  await sql.unsafe("set timezone = 'UTC'").simple();
   const objects = await sql.unsafe(
     `
       select
