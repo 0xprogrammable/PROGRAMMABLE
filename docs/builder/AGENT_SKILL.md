@@ -61,7 +61,7 @@ First preview a fixed revision:
 
 ```bash
 gh skill preview 0xprogrammable/programmable \
-  skills/programmable-v4-hook-builder@FULL_COMMIT_SHA
+  programmable-v4-hook-builder@FULL_COMMIT_SHA
 ```
 
 Then install that same full commit for your agent:

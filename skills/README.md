@@ -30,7 +30,7 @@ branch name or a moving tag.
 
 ```bash
 gh skill preview 0xprogrammable/programmable \
-  skills/programmable-v4-hook-builder@FULL_COMMIT_SHA
+  programmable-v4-hook-builder@FULL_COMMIT_SHA
 ```
 
 Install the same revision for one supported host:

@@ -103,7 +103,7 @@ test("candidate data is an exact base-repository PR merge in a bare blobless obj
   assert.match(candidateFetchStep, /--base-root "\$GITHUB_WORKSPACE\/trusted"/u);
   assert.match(candidateFetchStep, /--expected-base-commit "\$\{\{ github\.event\.pull_request\.base\.sha \}\}"/u);
   assert.match(candidateFetchStep, /--expected-candidate-commit "\$\{\{ github\.event\.pull_request\.head\.sha \}\}"/u);
-  assert.match(candidateFetchStep, /--expected-merge-commit "\$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}"/u);
+  assert.doesNotMatch(candidateFetchStep, /--expected-merge-commit/u);
   assert.match(candidateFetchStep, /--candidate-root "\$GITHUB_WORKSPACE\/candidate\.git"/u);
   assert.match(validatorCore, /init", "--quiet", "--bare", "--object-format=sha1"/u);
   assert.match(validatorCore, /`\+refs\/pull\/\$\{pullRequestNumber\}\/merge:refs\/heads\/candidate-merge`/u);
@@ -112,7 +112,8 @@ test("candidate data is an exact base-repository PR merge in a bare blobless obj
   assert.match(validatorCore, /\\tpromisor = true/u);
   assert.match(validatorCore, /\\tpartialclonefilter = blob:none/u);
   assert.match(validatorCore, /runBoundedHydrationGitProcess/u);
-  assert.match(validatorCore, /observedMergeCommit !== expectedMergeCommit/u);
+  assert.match(validatorCore, /inspectExactPullRequestMergeIdentity\(gitDirectory/u);
+  assert.match(validatorCore, /parents\[0\] !== expectedBaseCommit \|\| parents\[1\] !== expectedCandidateCommit/u);
   assert.match(validatorCore, /await preflightPublicApplicationCandidateFetch/u);
   assert.ok(
     validatorCore.indexOf("await preflightPublicApplicationCandidateFetch")
@@ -183,16 +184,14 @@ test("the central read credential is scoped, isolated from public resolution, an
   assert.doesNotMatch(builderMaintenanceStep, /github\.token|CANDIDATE_READ_TOKEN/u);
 });
 
-test("workflow fails before candidate fetch when GitHub cannot provide an immutable PR merge", () => {
-  const mergePreflight = publicJob.slice(
-    publicJob.indexOf("- name: Require immutable PR merge identity"),
-    publicJob.indexOf("- name: Fetch exact candidate merge as blobless data")
-  );
-  assert.match(mergePreflight, /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/u);
-  assert.match(mergePreflight, /HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/u);
-  assert.match(mergePreflight, /MERGE_SHA: \$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}/u);
-  assert.match(mergePreflight, /\^\[a-f0-9\]\{40\}\$/u);
-  assert.match(mergePreflight, /Resolve merge conflicts and retry/u);
+test("workflow derives the immutable merge identity from the fetched Git ref", () => {
+  assert.match(candidateFetchStep, /id: candidate_fetch/u);
+  assert.match(candidateFetchStep, /fetch_report="\$\(timeout --signal=KILL 90s node/u);
+  assert.match(candidateFetchStep, /report\.result !== "exact-blobless-candidate-fetched"/u);
+  assert.match(candidateFetchStep, /\^\[a-f0-9\]\{40\}\$/u);
+  assert.match(candidateFetchStep, /merge_commit=\$merge_commit/u);
+  assert.doesNotMatch(publicJob, /--resolve-merge-commit|steps\.merge_identity/u);
+  assert.doesNotMatch(publicJob, /github\.event\.pull_request\.merge_commit_sha/u);
 });
 
 test("classification and validation execute only trusted base-branch validators", () => {
@@ -201,7 +200,7 @@ test("classification and validation execute only trusted base-branch validators"
   assert.match(publicJob, /--classify/u);
   assert.match(publicJob, /--expected-base-commit "\$\{\{ github\.event\.pull_request\.base\.sha \}\}"/u);
   assert.match(publicJob, /--expected-candidate-commit "\$\{\{ github\.event\.pull_request\.head\.sha \}\}"/u);
-  assert.match(publicJob, /--expected-merge-commit "\$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}"/u);
+  assert.match(publicJob, /--expected-merge-commit "\$\{\{ steps\.candidate_fetch\.outputs\.merge_commit \}\}"/u);
   assert.match(publicJob, /timeout --signal=KILL 30s/u);
   assert.match(publicJob, /timeout --signal=KILL 120s/u);
 });

@@ -577,9 +577,7 @@ test("bounded runner kills a TERM-resistant process tree on timeout", async (t) 
     "wait",
     ""
   ].join("\n"));
-  const result = await runBoundedExactGitProcessV1(boundedRunnerOptions(fixtureRoot, executable, {
-    timeoutMs: 250
-  }));
+  const result = await runBoundedExactGitProcessV1(boundedRunnerOptions(fixtureRoot, executable));
   assert.equal(result.timedOut, true);
   assert.equal(result.cpuExceeded, false);
   await waitForProcessExit(Number(fs.readFileSync(childPidPath, "utf8").trim()));

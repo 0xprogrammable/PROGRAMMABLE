@@ -17,7 +17,7 @@ import {
 } from "../skills/programmable-v4-hook-builder/scripts/github-exact-object-resolver.mjs";
 import { findUnsupportedPublicClaims } from "../skills/programmable-v4-hook-builder/scripts/public-claims-core.mjs";
 
-export const VALIDATOR_VERSION = "1.6.0";
+export const VALIDATOR_VERSION = "1.6.1";
 export const PUBLIC_APPLICATION_SCHEMA_ID = "https://programmable.money/schemas/public-pr-application-v1.json";
 export const PUBLIC_BETA_DISCLAIMER =
   "Builder-declared compatibility evidence; not an audit, approval, deployment, Uniswap endorsement, or launch.";
@@ -245,19 +245,13 @@ export async function preflightPublicApplicationCandidateFetch({
   baseRoot,
   expectedBaseCommit,
   expectedCandidateCommit,
-  expectedMergeCommit,
   repository,
   pullRequestNumber,
   readToken,
   limits: limitOverrides = {}
 }, dependencies = {}) {
   validateHydrationAuthority({ repository, readToken });
-  validateCandidateFetchIdentity({
-    pullRequestNumber,
-    expectedBaseCommit,
-    expectedCandidateCommit,
-    expectedMergeCommit
-  });
+  validateCandidateHeadIdentity({ pullRequestNumber, expectedBaseCommit, expectedCandidateCommit });
   const limits = mergeLimits(limitOverrides);
   const base = inspectGitRevision(baseRoot, expectedBaseCommit, limits);
   const intakeStatus = readTrustedIntakeStatus(base);
@@ -275,7 +269,6 @@ export async function preflightPublicApplicationCandidateFetch({
     pullRequestNumber,
     expectedBaseCommit,
     expectedCandidateCommit,
-    expectedMergeCommit,
     readToken,
     maximumChangedFiles: limits.maximumChangedFiles,
     fetchImplementation: dependencies.fetchImplementation ?? globalThis.fetch,
@@ -354,16 +347,14 @@ export async function fetchPublicApplicationCandidate({
   pullRequestNumber,
   expectedBaseCommit,
   expectedCandidateCommit,
-  expectedMergeCommit,
   readToken
 }, dependencies = {}) {
   validateHydrationAuthority({ repository, readToken });
-  validateCandidateFetchIdentity({ pullRequestNumber, expectedBaseCommit, expectedCandidateCommit, expectedMergeCommit });
+  validateCandidateHeadIdentity({ pullRequestNumber, expectedBaseCommit, expectedCandidateCommit });
   await preflightPublicApplicationCandidateFetch({
     baseRoot,
     expectedBaseCommit,
     expectedCandidateCommit,
-    expectedMergeCommit,
     repository,
     pullRequestNumber,
     readToken
@@ -435,10 +426,10 @@ export async function fetchPublicApplicationCandidate({
       systemBlocked("CANDIDATE_FETCH_BOUNDED_FAILURE", "The exact blobless PR merge exceeded trusted fetch bounds or was unavailable.");
     }
     runGit(gitDirectory, ["symbolic-ref", "HEAD", "refs/heads/candidate-merge"], 1024);
-    const observedMergeCommit = runGitText(gitDirectory, ["rev-parse", "HEAD^{commit}"], 128).trim();
-    if (observedMergeCommit !== expectedMergeCommit) {
-      systemBlocked("CANDIDATE_FETCH_ID_MISMATCH", "The base-repository PR merge ref moved after the workflow event.");
-    }
+    const { mergeCommit: observedMergeCommit } = inspectExactPullRequestMergeIdentity(gitDirectory, {
+      expectedBaseCommit,
+      expectedCandidateCommit
+    });
     complete = true;
     return {
       schemaVersion: 1,
@@ -608,13 +599,19 @@ function validateCandidateFetchIdentity({
   expectedCandidateCommit,
   expectedMergeCommit
 }) {
+  validateCandidateHeadIdentity({ pullRequestNumber, expectedBaseCommit, expectedCandidateCommit });
+  if (!SHA1_PATTERN.test(expectedMergeCommit ?? "")) {
+    systemBlocked("CANDIDATE_FETCH_ID_INVALID", "The expected pull-request merge commit is missing or malformed.");
+  }
+}
+
+function validateCandidateHeadIdentity({ pullRequestNumber, expectedBaseCommit, expectedCandidateCommit }) {
   if (typeof pullRequestNumber !== "string" || !PULL_REQUEST_NUMBER_PATTERN.test(pullRequestNumber)) {
     systemBlocked("CANDIDATE_FETCH_ID_INVALID", "The pull-request number is missing or malformed.");
   }
   for (const [label, objectId] of [
     ["base", expectedBaseCommit],
-    ["head", expectedCandidateCommit],
-    ["merge", expectedMergeCommit]
+    ["head", expectedCandidateCommit]
   ]) {
     if (!SHA1_PATTERN.test(objectId ?? "")) {
       systemBlocked("CANDIDATE_FETCH_ID_INVALID", `The expected pull-request ${label} commit is missing or malformed.`);
@@ -627,7 +624,6 @@ async function resolveCentralPullRequestChangedFiles({
   pullRequestNumber,
   expectedBaseCommit,
   expectedCandidateCommit,
-  expectedMergeCommit,
   readToken,
   maximumChangedFiles,
   fetchImplementation,
@@ -661,7 +657,6 @@ async function resolveCentralPullRequestChangedFiles({
     || pullRequest.state !== "open"
     || pullRequest.base?.sha !== expectedBaseCommit
     || pullRequest.head?.sha !== expectedCandidateCommit
-    || pullRequest.merge_commit_sha !== expectedMergeCommit
     || typeof pullRequest.base?.repo?.full_name !== "string"
     || pullRequest.base.repo.full_name.toLowerCase() !== repository.toLowerCase()
     || !Number.isInteger(pullRequest.changed_files)
@@ -1990,23 +1985,54 @@ function inspectPullRequestMergeRevision(rootInput, {
   expectedMergeCommit,
   limits
 }) {
+  const { root, mergeCommit } = inspectExactPullRequestMergeIdentity(rootInput, {
+    expectedBaseCommit,
+    expectedCandidateCommit,
+    expectedMergeCommit
+  });
+  const output = runGit(root, ["ls-tree", "-rz", "--full-tree", "HEAD"], limits.maximumGitTreeBytes);
+  const entries = parseGitTree(output, limits);
+  return {
+    root,
+    commit: expectedCandidateCommit,
+    mergeCommit,
+    entries
+  };
+}
+
+/**
+ * Bind the fetched GitHub-owned refs/pull/N/merge object directly to the exact
+ * workflow base and head. GitHub API version 2026-03-10 intentionally omits
+ * merge_commit_sha, so the immutable Git object and its ordered parents are
+ * the source of truth instead of mutable or removed REST response metadata.
+ */
+function inspectExactPullRequestMergeIdentity(rootInput, {
+  expectedBaseCommit,
+  expectedCandidateCommit,
+  expectedMergeCommit = null
+}) {
   for (const [label, commit] of [
     ["base", expectedBaseCommit],
-    ["candidate", expectedCandidateCommit],
-    ["merge", expectedMergeCommit]
+    ["candidate", expectedCandidateCommit]
   ]) {
     if (!SHA1_PATTERN.test(commit ?? "")) {
       systemBlocked("EXPECTED_COMMIT_INVALID", `The workflow did not provide an exact lowercase ${label} commit id.`);
     }
   }
+  if (expectedMergeCommit !== null && !SHA1_PATTERN.test(expectedMergeCommit ?? "")) {
+    systemBlocked("EXPECTED_COMMIT_INVALID", "The workflow did not provide an exact lowercase merge commit id.");
+  }
 
   const root = resolveGitRoot(rootInput);
-  const checkoutCommit = runGitText(root, ["rev-parse", "HEAD^{commit}"], 1024).trim();
-  if (checkoutCommit !== expectedMergeCommit) {
+  const mergeCommit = runGitText(root, ["rev-parse", "HEAD^{commit}"], 1024).trim();
+  if (!SHA1_PATTERN.test(mergeCommit)) {
+    systemBlocked("PR_MERGE_COMMIT_MALFORMED", "GitHub's PR merge ref did not resolve to one exact SHA-1 commit id.");
+  }
+  if (expectedMergeCommit !== null && mergeCommit !== expectedMergeCommit) {
     systemBlocked("CHECKOUT_COMMIT_MISMATCH", "The candidate-data checkout does not match GitHub's immutable PR merge commit.");
   }
 
-  const commitObject = runGitText(root, ["cat-file", "-p", "HEAD^{commit}"], 1024 * 1024);
+  const commitObject = runGitText(root, ["cat-file", "-p", `${mergeCommit}^{commit}`], 1024 * 1024);
   const headerEnd = commitObject.indexOf("\n\n");
   if (headerEnd === -1) {
     systemBlocked("PR_MERGE_COMMIT_MALFORMED", "GitHub's PR merge commit has no canonical commit header boundary.");
@@ -2026,15 +2052,7 @@ function inspectPullRequestMergeRevision(rootInput, {
   if (parents[0] !== expectedBaseCommit || parents[1] !== expectedCandidateCommit) {
     systemBlocked("PR_MERGE_PARENT_MISMATCH", "GitHub's PR merge parents do not match the event's exact base and head commits.");
   }
-
-  const output = runGit(root, ["ls-tree", "-rz", "--full-tree", "HEAD"], limits.maximumGitTreeBytes);
-  const entries = parseGitTree(output, limits);
-  return {
-    root,
-    commit: expectedCandidateCommit,
-    mergeCommit: expectedMergeCommit,
-    entries
-  };
+  return { root, mergeCommit };
 }
 
 function inspectGitRevision(rootInput, expectedCommit, limits) {

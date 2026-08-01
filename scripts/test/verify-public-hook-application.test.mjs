@@ -44,7 +44,7 @@ const EVIDENCE_BYTES = Buffer.from("exact builder-owned compatibility evidence f
 const EVIDENCE_SHA256 = `sha256:${crypto.createHash("sha256").update(EVIDENCE_BYTES).digest("hex")}`;
 
 test("the frozen six-file package and public schema identity are exported", () => {
-  assert.equal(VALIDATOR_VERSION, "1.6.0");
+  assert.equal(VALIDATOR_VERSION, "1.6.1");
   assert.deepEqual(PUBLIC_APPLICATION_FILES, [
     "application.json",
     "PROPOSAL.md",
@@ -488,6 +488,35 @@ test("a PR merge checkout whose parents differ from the GitHub event fails close
   const input = inputFor(fixture, candidateCommit);
   assert.throws(
     () => classifyPublicIntakePullRequest({ ...input, expectedCandidateCommit: "c".repeat(40) }),
+    (error) => error instanceof PublicIntakeError
+      && error.kind === "system"
+      && error.code === "PR_MERGE_PARENT_MISMATCH"
+  );
+});
+
+test("a PR merge checkout with reversed base and head parents fails closed", (t) => {
+  const fixture = createRevisionPair(t);
+  writePackage(fixture.candidate, makePackage());
+  const candidateCommit = commitAll(fixture.candidate, "candidate application");
+  git(fixture.candidate, ["fetch", "--quiet", "--no-tags", fixture.base, fixture.baseCommit]);
+  const mergedTree = git(fixture.candidate, ["merge-tree", "--write-tree", fixture.baseCommit, candidateCommit]);
+  const reversedMergeCommit = git(fixture.candidate, [
+    "commit-tree",
+    mergedTree,
+    "-p", candidateCommit,
+    "-p", fixture.baseCommit,
+    "-m", "Synthetic merge with reversed parents"
+  ]);
+  git(fixture.candidate, ["reset", "--hard", reversedMergeCommit]);
+
+  assert.throws(
+    () => classifyPublicIntakePullRequest({
+      baseRoot: fixture.base,
+      candidateRoot: fixture.candidate,
+      expectedBaseCommit: fixture.baseCommit,
+      expectedCandidateCommit: candidateCommit,
+      expectedMergeCommit: reversedMergeCommit
+    }),
     (error) => error instanceof PublicIntakeError
       && error.kind === "system"
       && error.code === "PR_MERGE_PARENT_MISMATCH"
