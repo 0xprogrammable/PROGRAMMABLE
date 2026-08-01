@@ -364,13 +364,13 @@ Return `UNSUPPORTED` for the current design when any condition below is true:
 - `tx.origin` authorization
 - User-controlled or unexplained `delegatecall`
 - Arbitrary target and calldata executed with protocol authority
-- Unbounded storage-dependent loop on a critical path
 - Unverifiable custody, solvency source, or value flow
-- Ignored call or token-transfer result
-- Floating or unknown dependency provenance
-- Signature authority without replay, domain, action, parameter, and deadline binding
-- Runtime, CREATE2, or permission claims that cannot be reproduced
-- A requested mainnet, audit, approval, routing, or availability claim without its separate evidence
+
+Repairable implementation defects and missing evidence block the current revision as `REDESIGN_REQUIRED` or a tooling
+state; they do not make the product category unsupported. This includes unbounded critical loops, ignored call or
+token-transfer results, floating dependency pins, incomplete signature bindings, missing runtime/CREATE2/permission
+evidence, and unsupported mainnet, audit, approval, routing, or availability wording. Name the exact correction and
+rerun the invalidated checks. Return `UNSUPPORTED` only when the requested behavior itself depends on the hard conflict.
 
 ## Sources
 

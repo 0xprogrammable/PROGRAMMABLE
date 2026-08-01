@@ -23,14 +23,14 @@ candidate.
 
 Read the [builder guide](../docs/builder/AGENT_SKILL.md) before using it on production code.
 
-## Install a pinned revision
+## Install the protected Builder release
 
-Inspect the skill before installing it. `FULL_COMMIT_SHA` below means the complete commit hash you reviewed, not a
-branch name or a moving tag.
+Inspect the skill before installing it. The release tag below is protected against update and deletion. A full reviewed
+commit SHA remains an equivalent pin when an organization requires commit-only policy.
 
 ```bash
 gh skill preview 0xprogrammable/programmable \
-  programmable-v4-hook-builder@FULL_COMMIT_SHA
+  programmable-v4-hook-builder@programmable-v4-builder-v0.1.0
 ```
 
 Install the same revision for one supported host:
@@ -41,28 +41,30 @@ gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent codex \
   --scope user \
-  --pin FULL_COMMIT_SHA
+  --pin programmable-v4-builder-v0.1.0
 
 # Claude Code
 gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent claude-code \
   --scope user \
-  --pin FULL_COMMIT_SHA
+  --pin programmable-v4-builder-v0.1.0
 
 # GitHub Copilot
 gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent github-copilot \
   --scope user \
-  --pin FULL_COMMIT_SHA
+  --pin programmable-v4-builder-v0.1.0
 ```
 
 The `gh skill` command chooses the host-specific destination. Its skill commands are currently a preview feature, and
 host behavior still depends on each agent's sandbox, tool permissions, and Agent Skills implementation. Installation
 does not grant wallet access, deployment authority, review approval, or permission to publish external changes.
 
-For repository-scoped use, change `--scope user` to `--scope project`. To test an unpublished local checkout, run:
+For repository-scoped use, change `--scope user` to `--scope project` only when the generated `.agents/` directory is
+intentionally committed or excluded from Git; otherwise it makes the project worktree dirty and blocks `prepare-pr`.
+To test an unpublished local checkout, run:
 
 ```bash
 gh skill install ./skills programmable-v4-hook-builder \

@@ -61,7 +61,7 @@ const commandSpecs = new Map([
         valueName: "path",
         description: "Bind one canonical companion manifest committed in the primary repository HEAD. Repeat up to eight times."
       },
-      { name: "--output-dir", key: "outputDirectory", type: "value", valueName: "path", description: "Materialize the frozen six-file package in the exact application-id directory." },
+      { name: "--output-dir", key: "outputDirectory", type: "value", valueName: "path", description: "Materialize the frozen six-file package below an existing real parent directory outside the project repository." },
       { name: "--replace-existing", key: "replaceExisting", type: "boolean", description: "Create the first next-revision draft by replacing only an exact package from immutable main." },
       { name: "--replace-draft", key: "replaceDraft", type: "boolean", description: "Replace one self-consistent local draft while keeping the revision authorized by immutable main." }
     ],

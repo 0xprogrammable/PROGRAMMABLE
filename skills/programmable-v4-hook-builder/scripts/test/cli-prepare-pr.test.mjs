@@ -8,6 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   CliFailure,
+  inspectExactObjectGitTooling,
   inspectLocalGitReadiness,
   preparePullRequest,
   validatePreparePrReviewTarget
@@ -29,6 +30,40 @@ const builderUserId = "900719925474099312346";
 const API_ORIGIN = "https://api.github.com";
 const centralBaseCommit = "c".repeat(40);
 const centralBaseTree = "d".repeat(40);
+
+test("doctor reports exact-object Git capability before prepare-pr", () => {
+  const ready = inspectExactObjectGitTooling((args) => {
+    if (args[0] === "--version") return { status: 0, stdout: "git version 2.50.1\n", stderr: "" };
+    return { status: 129, stdout: "", stderr: "usage: git backfill [--sparse]\n" };
+  });
+  assert.deepEqual(ready, {
+    status: "ready",
+    version: "2.50.1",
+    capability: "git backfill --sparse"
+  });
+
+  const old = inspectExactObjectGitTooling((args) => ({
+    status: 0,
+    stdout: args[0] === "--version" ? "git version 2.48.9\n" : "",
+    stderr: ""
+  }));
+  assert.deepEqual(old, {
+    status: "toolingBlocked",
+    version: "2.48.9",
+    reason: "Git 2.49.0 or newer is required for exact public-source verification"
+  });
+
+  const missingBackfill = inspectExactObjectGitTooling((args) => ({
+    status: args[0] === "--version" ? 0 : 1,
+    stdout: args[0] === "--version" ? "git version 2.50.1\n" : "",
+    stderr: args[0] === "--version" ? "" : "git: 'backfill' is not a git command\n"
+  }));
+  assert.deepEqual(missingBackfill, {
+    status: "toolingBlocked",
+    version: "2.50.1",
+    reason: "git backfill --sparse is required for exact public-source verification"
+  });
+});
 
 function companionDefinition(index, overrides = {}) {
   return {

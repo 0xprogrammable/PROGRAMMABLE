@@ -57,25 +57,27 @@ Skills layout and keeps portable frontmatter to `name`, `description` and the SP
 license text remains in `LICENSE.txt`. Host-specific UI metadata is optional and does not control the skill's security
 policy.
 
-First preview a fixed revision:
+First preview the protected Builder release tag:
 
 ```bash
 gh skill preview 0xprogrammable/programmable \
-  programmable-v4-hook-builder@FULL_COMMIT_SHA
+  programmable-v4-hook-builder@programmable-v4-builder-v0.1.0
 ```
 
-Then install that same full commit for your agent:
+Then install that same release for your agent. User scope is the beginner default because it keeps the project
+repository clean while the installed package remains pinned:
 
 ```bash
 gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent codex \
-  --scope project \
-  --pin FULL_COMMIT_SHA
+  --scope user \
+  --pin programmable-v4-builder-v0.1.0
 ```
 
-Replace `codex` with `claude-code` or `github-copilot` when appropriate. User-scoped installation is also available by
-changing `--scope project` to `--scope user`.
+Replace `codex` with `claude-code` or `github-copilot` when appropriate. Use `--scope project` only when the project
+intentionally tracks the installed `.agents/` package or excludes that complete generated directory from Git. An
+untracked project-scoped installation makes the worktree dirty and correctly blocks `prepare-pr`.
 
 From the installed skill directory, run `node scripts/verify-skill.mjs --installed`; it accepts the bounded source
 tracking fields added by `gh skill` while keeping the rest of the portable package checks unchanged. Those fields are
@@ -142,8 +144,13 @@ is unknown, keep it in architecture discussion until the smallest material quest
 ### 2. Run `doctor`
 
 `doctor` checks local readiness. It reports actionable blockers such as a missing Git repository, unsupported GitHub
-remote, unpushed revision, unavailable required tool or dirty source state. It leaves live public reachability as
+remote, unpushed revision, unavailable required tool, missing exact-object Git capability or dirty source state. It leaves live public reachability as
 `notChecked`; only `prepare-pr` resolves that fact. It does not create an application or make a review claim.
+
+Before build or package checks, the agent must inspect the repository's pinned dependency files and materialize the
+required dependency closure. For example, a clean Node project may need its lockfile-driven install before imported
+OpenZeppelin files exist locally. Inspect install scripts first and use an isolated environment without credentials for
+untrusted source. Tool presence in `doctor` never proves that project dependencies are installed.
 
 ### 3. Use `scaffold` only for a new project
 
@@ -183,7 +190,9 @@ repositories. The result keeps the builder source head separate from the exact o
 next application revision, and refuses inconsistent revision updates. Use `--replace-existing` once to replace the
 byte-exact merged-main package with the first pending update draft. Use `--replace-draft` for every later iteration of
 that same open pull request. A new application remains revision 1; an update remains main n+1 until merge. The explicit
-output directory must be outside the builder source repository.
+output directory must be outside the builder source repository. Its parent must already exist, must not be a
+symbolic-link alias, and should be supplied using its canonical real path (for example `/private/tmp/...` rather than
+macOS's `/tmp` alias).
 
 Preparing a pull request is local work. Publishing source, pushing a branch or opening the pull request is an external
 action and still needs the builder's explicit confirmation.

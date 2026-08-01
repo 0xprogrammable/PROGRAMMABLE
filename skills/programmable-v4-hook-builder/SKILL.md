@@ -363,6 +363,12 @@ packages must use their exact `Uniswap/sdks` release source. Local `node_modules
 locally hash-bound evidence only. They never enter the primary GitHub source paths and are not centrally source- or
 integrity-verified without the separate package-lock and closure verification gate.
 
+Before `check` or `package`, inspect the project's pinned dependency files and materialize the declared dependency
+closure. A clean clone may still be incomplete because `node_modules`, Foundry libraries, generated bindings, or other
+locked artifacts have not been installed. Inspect install scripts first and run untrusted installs and builds only in
+an isolated environment without credentials or wallet access. `doctor` proves tool and Git readiness, not that project
+dependencies already exist.
+
 Derive client gates from `integration.routingAndDiscoverability.routingMode`: `programmable-app` and
 `custom-reviewed` mean the project includes a swap client; `uniswap-interface-api` and `uniswapx-filler` mean the
 client is external; `not-planned` means no client is supplied. Only an included client must bind Universal Router,
@@ -419,7 +425,9 @@ revision authority: a new application stays at revision 1 throughout its open pu
 revision n stays at n+1 until merge. Use `--replace-existing` once to turn a byte-exact local copy of merged main n into
 the first n+1 draft. Use `--replace-draft` for every later iteration of that same open pull request, including a new
 source commit or a package-only correction. Both modes require an explicit output directory outside the builder source
-repository and perform no GitHub write. Never treat the local draft or a moving branch as revision authority.
+repository. Its parent must already exist, contain no symbolic-link path component, and be supplied by its canonical
+real path (for example `/private/tmp/...` rather than the macOS `/tmp` alias). The command performs no GitHub write.
+Never treat the local draft or a moving branch as revision authority.
 
 For this beta, `applicationId` is the stable lower-case project slug and central directory name; the pull-request
 number is the review thread. Neither is a connected-service identity or approval record.

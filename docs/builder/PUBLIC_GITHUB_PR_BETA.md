@@ -133,8 +133,13 @@ project merely to fit a template.
 ### 2. Run `doctor`
 
 `doctor` checks local readiness. It reports actionable blockers such as a missing Git repository, unsupported GitHub
-remote, unpushed revision, unavailable required tools or a dirty source state. Live public reachability remains
+remote, unpushed revision, unavailable required tools, missing exact-object Git capability or a dirty source state. Live public reachability remains
 `notChecked` until `prepare-pr`. It does not create an application or claim that the project passed review.
+
+Before build or package checks, the agent inspects pinned dependency files and materializes the declared dependency
+closure. A clean clone can still need a lockfile-driven install before OpenZeppelin, generated bindings, Foundry
+libraries or other imports exist locally. Inspect install scripts first and use an isolated environment without
+credentials for untrusted code. `doctor` does not claim that project dependencies are installed.
 
 ### 3. Use `scaffold` only when needed
 
@@ -164,6 +169,9 @@ symlink, Gitlink, unmaterialized LFS object, or exceeded limit remain hard error
 `prepare-pr` requires a clean pushed revision, independently resolves its public GitHub repository id, commit and tree,
 and generates the small six-file Programmable application record plus a copy-ready pull-request body. It does not
 publish source, push a branch or open a pull request without the builder's explicit confirmation.
+
+When using `--output-dir`, create its parent first, keep it outside the builder repository, avoid symbolic-link aliases,
+and pass the canonical real path. On macOS, use `/private/tmp/...` instead of the `/tmp` alias.
 
 Projects may span the primary repository plus up to eight explicitly declared public companion repositories. Each
 companion is pinned to a full commit and independently resolved; branches and repository names are not authority. The

@@ -419,6 +419,22 @@ test("hard security violations are unsupported", () => {
   assert.ok(report.findings.some(({ code, severity }) => code === "TX_ORIGIN_AUTHORIZATION" && severity === "hard"));
 });
 
+test("repairable implementation defects require changes without rejecting the product category", () => {
+  for (const [field, code] of [
+    ["unboundedCriticalLoop", "UNBOUNDED_CRITICAL_LOOP"],
+    ["ignoredCallResults", "IGNORED_CALL_RESULT"],
+    ["assumesOnchainSecrecy", "ONCHAIN_SECRECY_ASSUMPTION"]
+  ]) {
+    const submission = readySubmission();
+    submission.security[field] = true;
+
+    const report = analyzeSubmission(submission, { schema });
+
+    assert.equal(report.decision, "REDESIGN_REQUIRED");
+    assert.ok(report.findings.some((finding) => finding.code === code && finding.severity === "blocker"));
+  }
+});
+
 test("permissionless issuer controls are unsupported", () => {
   const submission = readySubmission();
   submission.model.category = "permissionless-token";

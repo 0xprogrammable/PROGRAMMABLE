@@ -1704,15 +1704,30 @@ export function analyzeSubmission(submission, { schema } = {}) {
     usesTxOrigin: ["TX_ORIGIN_AUTHORIZATION", "tx.origin authorization is forbidden."],
     userControlledDelegatecall: ["USER_CONTROLLED_DELEGATECALL", "User-controlled delegatecall is forbidden."],
     arbitraryExecution: ["ARBITRARY_PROTOCOL_EXECUTION", "Arbitrary target and calldata execution with protocol authority is forbidden."],
-    unboundedCriticalLoop: ["UNBOUNDED_CRITICAL_LOOP", "Unbounded storage-dependent work on a callback or exit path is forbidden."],
-    ignoredCallResults: ["IGNORED_CALL_RESULT", "Ignored low-level or token-transfer results are forbidden."],
     hiddenControls: ["HIDDEN_CONTROLS", "Undisclosed control or payout behavior is forbidden."],
-    assumesOnchainSecrecy: ["ONCHAIN_SECRECY_ASSUMPTION", "Onchain data cannot be treated as secret."],
     bypassesHookAddressValidation: ["HOOK_ADDRESS_VALIDATION_BYPASS", "Production hooks may not bypass BaseHook address and permission validation."]
   };
   for (const [field, [code, message]] of Object.entries(hardSecurity)) {
     if (security[field] === true) add("hard", code, `$.security.${field}`, message, "Remove the behavior or redesign the model with an explicit, reviewable mechanism.");
     else if (security[field] !== false) add("blocker", "SECURITY_ASSERTION_UNRESOLVED", `$.security.${field}`, "This security assertion must be explicitly true or false.", "Inspect the design and source before answering.");
+  }
+  const repairableSecurity = {
+    unboundedCriticalLoop: ["UNBOUNDED_CRITICAL_LOOP", "The current revision has unbounded storage-dependent work on a callback or exit path."],
+    ignoredCallResults: ["IGNORED_CALL_RESULT", "The current revision ignores a low-level or token-transfer result."],
+    assumesOnchainSecrecy: ["ONCHAIN_SECRECY_ASSUMPTION", "The current revision treats public onchain data as secret."]
+  };
+  for (const [field, [code, message]] of Object.entries(repairableSecurity)) {
+    if (security[field] === true) {
+      add(
+        "blocker",
+        code,
+        `$.security.${field}`,
+        message,
+        "Repair this revision with bounded work, checked results, or an explicit public-data design, then rerun the affected checks."
+      );
+    } else if (security[field] !== false) {
+      add("blocker", "SECURITY_ASSERTION_UNRESOLVED", `$.security.${field}`, "This security assertion must be explicitly true or false.", "Inspect the design and source before answering.");
+    }
   }
   const signature = objectAt(security, "signatureScheme");
   if (typeof signature.used !== "boolean") add("blocker", "SIGNATURE_USAGE_UNRESOLVED", "$.security.signatureScheme.used", "Signature usage is unresolved.", "State whether offchain signatures authorize any action.");

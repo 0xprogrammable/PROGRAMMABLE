@@ -30,6 +30,9 @@ import {
 import {
   isCanonicalGitHubRepositoryPathV1
 } from "./github-public-source-core.mjs";
+import {
+  GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1
+} from "./github-exact-object-resolver.mjs";
 import { snapshotLocalDraftPackage } from "./cli-local-draft.mjs";
 import { canonicalJson, STANDARD_VERSION, submissionHash } from "./submission-core.mjs";
 import {
@@ -70,6 +73,7 @@ const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = runGit) {
   const blocked = (status, reason) => ({ status, reason });
+  const exactObjectTooling = inspectExactObjectGitTooling();
   let topLevel;
   try {
     topLevel = fs.realpathSync(git(repositoryRoot, ["rev-parse", "--show-toplevel"], gitImplementation));
@@ -80,6 +84,7 @@ export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = run
       : "selected directory is not a Git worktree";
     return {
       gitRepository: blocked(toolingBlocked ? "toolingBlocked" : "missing", unavailableReason),
+      exactObjectTooling,
       cleanWorktree: blocked("notChecked", unavailableReason),
       namedBranch: blocked("notChecked", unavailableReason),
       upstream: blocked("notChecked", unavailableReason),
@@ -93,6 +98,7 @@ export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = run
   if (topLevel !== repositoryRoot) {
     return {
       gitRepository: blocked("wrongRoot", "selected directory is not the Git worktree root"),
+      exactObjectTooling,
       cleanWorktree: blocked("notChecked", "select the exact worktree root"),
       namedBranch: blocked("notChecked", "select the exact worktree root"),
       upstream: blocked("notChecked", "select the exact worktree root"),
@@ -131,9 +137,15 @@ export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = run
   const upstreamReady = upstreamCommit !== null && remoteName !== null;
   const pushed = upstreamReady && headCommit === upstreamCommit;
   const githubReady = github !== null;
-  const localReady = clean && branch !== null && upstreamReady && pushed && githubReady;
+  const localReady = clean
+    && branch !== null
+    && upstreamReady
+    && pushed
+    && githubReady
+    && exactObjectTooling.status === "ready";
   return {
     gitRepository: { status: "ready", root: topLevel },
+    exactObjectTooling,
     cleanWorktree: clean
       ? { status: "ready" }
       : blocked("dirty", "commit or remove every tracked, untracked and ignored package change before prepare-pr"),
@@ -155,6 +167,58 @@ export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = run
     readyForPreparePrLocal: localReady,
     readyForPublicBeta: false
   };
+}
+
+export function inspectExactObjectGitTooling(gitProbe = spawnSafeGitSync) {
+  const minimum = GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1.minimumGitVersion;
+  const versionResult = gitProbe(["--version"], {
+    encoding: "utf8",
+    timeout: 5000,
+    maxBuffer: 65_536
+  });
+  const version = parseGitVersion(versionResult?.stdout);
+  if (versionResult?.status !== 0 || version === null || compareVersion(version, minimum) < 0) {
+    return {
+      status: "toolingBlocked",
+      version,
+      reason: `Git ${minimum} or newer is required for exact public-source verification`
+    };
+  }
+
+  const backfillResult = gitProbe(["backfill", "-h"], {
+    encoding: "utf8",
+    timeout: 5000,
+    maxBuffer: 65_536
+  });
+  const backfillOutput = `${backfillResult?.stdout ?? ""}\n${backfillResult?.stderr ?? ""}`;
+  if (!/(?:^|\n)usage: git backfill(?: |\n)/u.test(backfillOutput)) {
+    return {
+      status: "toolingBlocked",
+      version,
+      reason: "git backfill --sparse is required for exact public-source verification"
+    };
+  }
+
+  return {
+    status: "ready",
+    version,
+    capability: "git backfill --sparse"
+  };
+}
+
+function parseGitVersion(output) {
+  if (typeof output !== "string") return null;
+  const match = /^git version ([0-9]+\.[0-9]+\.[0-9]+)(?:[^0-9.]|$)/u.exec(output.trim());
+  return match?.[1] ?? null;
+}
+
+function compareVersion(left, right) {
+  const leftParts = left.split(".").map(Number);
+  const rightParts = right.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) return leftParts[index] - rightParts[index];
+  }
+  return 0;
 }
 
 export async function preparePullRequest({
