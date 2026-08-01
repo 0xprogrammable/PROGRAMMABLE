@@ -51,13 +51,28 @@ Ethereum Mainnet-only. Base, Unichain, Sepolia and unknown EVM chains remain rev
 or release gates and no launch claim. Exact official deployment references preserve their runtime-unverified trust tier;
 they are not silently promoted to Programmable-tested deployments.
 
-## Install the exact revision you reviewed
+## Install the Builder
 
 The canonical package is
 [`skills/programmable-v4-hook-builder`](../../skills/programmable-v4-hook-builder/SKILL.md). It uses the common Agent
 Skills layout and keeps portable frontmatter to `name`, `description` and the SPDX license identifier. The complete
 license text remains in `LICENSE.txt`. Host-specific UI metadata is optional and does not control the skill's security
 policy.
+
+For an interactive install, use the repository-only command:
+
+```bash
+gh skill install 0xprogrammable/programmable
+```
+
+To preselect the Builder while keeping the agent setup interactive:
+
+```bash
+gh skill install 0xprogrammable/programmable programmable-v4-hook-builder
+```
+
+Without a version argument, `gh skill` selects the latest tagged release. For reproducible review work, preview and
+install the exact protected revision below.
 
 First preview the protected Builder release tag:
 

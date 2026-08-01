@@ -127,6 +127,18 @@ Bring an idea or an existing public Uniswap v4 project. The portable
 [Programmable v4 Builder skill](skills/programmable-v4-hook-builder/SKILL.md) helps a compatible coding agent build
 and repair the project, bind one exact revision and prepare a small public application pull request.
 
+Install it interactively with one command:
+
+```bash
+gh skill install 0xprogrammable/programmable
+```
+
+To preselect the Builder while keeping the agent setup interactive:
+
+```bash
+gh skill install 0xprogrammable/programmable programmable-v4-hook-builder
+```
+
 The complete project stays in the builder-controlled public GitHub repository. `package` validates its local review
 package. `prepare-pr` then resolves the clean pushed revision and generates exactly six central files under
 [`submissions/`](submissions/), binding the immutable GitHub numeric repository id, full commit, full tree and evidence
