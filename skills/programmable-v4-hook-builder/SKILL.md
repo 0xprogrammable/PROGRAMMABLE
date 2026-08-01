@@ -212,7 +212,7 @@ numeric score. Never lower a tier manually in prose.
 Before presenting `PROTOTYPE_READY`, independently check that the design card, structured submission, worked numerical
 examples, value conservation, failure behavior, proposal, threat model, and test plan agree. Free-text length and schema
 validity do not prove that a rule is meaningful or true.
-Compare public UI/application strings with `publicMetadata`; scan declared JS/TS/HTML/UI source while excluding comments and declared tests, and never hide approval, audit, safety, deployment or availability claims in user-facing copy.
+Compare public UI/application strings with `publicMetadata`; scan declared public UI, browser/mobile surface, locale and shipped content paths across JS/TS/HTML/component, JSON, YAML and Markdown/text content. Exclude comments, code examples, declared tests, recognized tool configuration and lockfiles rather than scanning arbitrary repository text. Never hide approval, audit, safety, deployment or availability claims in user-facing copy.
 
 ### 4. Lock the architecture
 

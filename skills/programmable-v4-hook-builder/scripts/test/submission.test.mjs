@@ -2815,12 +2815,17 @@ test("prototype intake rejects build info that omits a reviewed Solidity source"
   }
 });
 
-test("unsupported provider claims are rejected anywhere in the package", () => {
+test("unsupported provider claims are rejected in declared shipped package content", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-claim-scan-test-"));
   try {
-    const { modelRoot } = createPrototypePackage(destinationRoot);
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
     fs.mkdirSync(path.join(modelRoot, "notes"));
-    fs.writeFileSync(path.join(modelRoot, "notes", "marketing.md"), "This model is officially verified by Uniswap.\n");
+    const marketingPath = path.join(modelRoot, "notes", "marketing.md");
+    fs.writeFileSync(marketingPath, "This model is officially verified by Uniswap.\n");
+    const repositoryPath = path.relative(repositoryRoot, marketingPath).replaceAll(path.sep, "/");
+    submission.implementation.sourcePaths.push(repositoryPath);
+    submission.integration.platformHandoff.uiSourcePaths.push(repositoryPath);
+    rewritePrototypePackageArtifacts(modelRoot, submission);
     const result = childProcess.spawnSync(process.execPath, [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot], { cwd: repositoryRoot, encoding: "utf8", shell: false });
     assert.notEqual(result.status, 0);
     const report = JSON.parse(result.stdout);
@@ -2857,6 +2862,89 @@ test("public UI source claims are checked while comments and test sources are ig
     assert.notEqual(visibleClaim.status, 0);
     const report = JSON.parse(visibleClaim.stdout);
     assert.ok(report.errors.some((message) => /ui\.tsx contains an unsupported Uniswap verification/.test(message)), JSON.stringify(report.errors));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("declared locale and shipped content files are checked without scanning tests or tool configuration as public copy", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-content-claim-scan-test-"));
+  try {
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
+    const contentDirectory = path.join(modelRoot, "app", "content");
+    const localeDirectory = path.join(modelRoot, "app", "locales");
+    fs.mkdirSync(contentDirectory, { recursive: true });
+    fs.mkdirSync(localeDirectory, { recursive: true });
+
+    const jsonPath = path.join(localeDirectory, "en.json");
+    const yamlPath = path.join(localeDirectory, "de.yml");
+    const markdownPath = path.join(contentDirectory, "status.md");
+    const configPath = path.join(modelRoot, "app", "tsconfig.json");
+    const fixturePath = path.join(modelRoot, "app", "claims.test.json");
+    writeJson(jsonPath, {
+      "This hook is unruggable.": "translation-key-is-not-copy",
+      status: "This hook is not audited and is not deployed."
+    });
+    fs.writeFileSync(yamlPath, "# This hook is approved by Programmable.\nstatus: No Uniswap approval is claimed.\n");
+    fs.writeFileSync(markdownPath, "```text\nThis hook is guaranteed safe.\n```\n\nPrototype evidence only.\n");
+    writeJson(configPath, { compilerMessage: "This hook is approved by Uniswap." });
+    writeJson(fixturePath, { fixture: "This hook is unruggable." });
+
+    const repositoryPaths = [jsonPath, yamlPath, markdownPath, configPath, fixturePath]
+      .map((target) => path.relative(repositoryRoot, target).replaceAll(path.sep, "/"));
+    submission.implementation.sourcePaths.push(...repositoryPaths);
+    submission.integration.platformHandoff.uiSourcePaths.push(...repositoryPaths.slice(0, 2));
+    submission.integration.appSourcePaths.push(...repositoryPaths.slice(3));
+    const browserSurface = structuredClone(submission.projectSurfaces[0]);
+    Object.assign(browserSurface, {
+      id: "public-status-content",
+      kind: "web-app",
+      name: "Public status content",
+      summary: "A browser surface renders the declared public status Markdown as user-facing project copy.",
+      executionBoundary: "browser",
+      capabilityIds: ["public-status-display"],
+      sourcePaths: [repositoryPaths[2]],
+      testPaths: [submission.integration.platformHandoff.testPaths[0]],
+      schemaPaths: [],
+      evidencePaths: []
+    });
+    const browserCapability = structuredClone(submission.projectCapabilities[0]);
+    Object.assign(browserCapability, {
+      id: "public-status-display",
+      kind: "state-observation",
+      summary: "Render the declared project status content without changing pool, token or user state.",
+      surfaceIds: [browserSurface.id]
+    });
+    submission.projectSurfaces.push(browserSurface);
+    submission.projectCapabilities.push(browserCapability);
+    rewritePrototypePackageArtifacts(modelRoot, submission);
+
+    const nonPublicExamples = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(nonPublicExamples.status, 0, nonPublicExamples.stderr || nonPublicExamples.stdout);
+
+    const forbiddenByPath = [
+      [jsonPath, () => writeJson(jsonPath, { hero: "This hook is approved by Uniswap." }), /en\.json contains an unsupported Uniswap verification/],
+      [yamlPath, () => fs.writeFileSync(yamlPath, "hero: This hook is unruggable.\n"), /de\.yml contains an unsupported Safety, rug-free or risk-free status/],
+      [markdownPath, () => fs.writeFileSync(markdownPath, "The submitted project is live on mainnet.\n"), /status\.md contains an unsupported Deployment, launch or availability/]
+    ];
+    for (const [target, writeForbidden, expected] of forbiddenByPath) {
+      const original = fs.readFileSync(target, "utf8");
+      writeForbidden();
+      rewritePrototypePackageArtifacts(modelRoot, submission);
+      const visibleClaim = childProcess.spawnSync(
+        process.execPath,
+        [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+        { cwd: repositoryRoot, encoding: "utf8", shell: false }
+      );
+      assert.notEqual(visibleClaim.status, 0);
+      const report = JSON.parse(visibleClaim.stdout);
+      assert.ok(report.errors.some((message) => expected.test(message)), JSON.stringify(report.errors));
+      fs.writeFileSync(target, original);
+    }
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
   }
