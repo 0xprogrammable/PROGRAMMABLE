@@ -1,5 +1,5 @@
 begin;
-select plan(38);
+select plan(39);
 
 create function public.projection_trace_fixture_v1(
   p_candidate_batch_size integer default 1,
@@ -892,6 +892,19 @@ select ok(
   ) > 0,
   'only final exact promotion can consume complete provider-matched parent lineage'
 );
+
+set local role programmable_projector;
+select is(
+  (
+    select pg_catalog.count(*)
+    from programmable_private.get_current_provisional_dynamic_sources_v1(
+      'projector-v1'
+    )
+  ),
+  0::bigint,
+  'current provisional source reader executes against release generation columns'
+);
+reset role;
 
 select * from finish();
 rollback;
