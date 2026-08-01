@@ -65,6 +65,7 @@ export function LaunchExperience() {
     const model = resolveImplementedLaunchModel(candidate);
     if (
       !model ||
+      model === "deep" ||
       model === "stock-paired" ||
       (model === "classic-v3" && !classicV3LaunchAvailable)
     ) {

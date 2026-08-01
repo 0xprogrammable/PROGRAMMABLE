@@ -16,7 +16,6 @@ import {
 
 import { useWallet } from "@/components/wallet-provider";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
-import { isConfiguredDeepV3ReleaseReady } from "@/lib/deep-v3-release";
 import { prepareAvatarImage } from "@/lib/profile/avatar";
 import {
   EMPTY_CLASSIC_V3_PROFILE,
@@ -36,7 +35,6 @@ import {
 import {
   EMPTY_DEEP_PROFILE,
   fetchDeepProfileRewards,
-  isConfiguredDeepReleaseReady,
   prepareDeepRewardAction,
   type DeepProfileRewards,
   type DeepReward,
@@ -89,9 +87,8 @@ const profileEnvironment =
     : "production";
 const classicV3ReleaseAvailable =
   isConfiguredClassicV3ReleaseReady(profileEnvironment);
-const deepReleaseAvailable = isConfiguredDeepReleaseReady();
-const deepV3ReleaseAvailable =
-  isConfiguredDeepV3ReleaseReady(profileEnvironment);
+const deepReleaseAvailable = false;
+const deepV3ReleaseAvailable = false;
 const stockPairedReleaseAvailable =
   isConfiguredStockPairedRewardsReady();
 
@@ -683,6 +680,41 @@ function getEmptyProfileSnapshot() {
   return "";
 }
 
+export function withoutClosedDeepProfileData(
+  data: ProfileOnchainData,
+): ProfileOnchainData {
+  const closedTokenAddresses = new Set(
+    data.tokens
+      .filter((token) => token.launchModel === "deep")
+      .map((token) => token.address.toLowerCase()),
+  );
+  if (closedTokenAddresses.size === 0) return data;
+
+  const referencesClosedToken = (value: string) => {
+    const normalized = value.toLowerCase();
+    return [...closedTokenAddresses].some((address) =>
+      normalized.includes(address),
+    );
+  };
+
+  return {
+    ...data,
+    tokens: data.tokens.filter((token) => token.launchModel !== "deep"),
+    positions: data.positions.filter(
+      (position) =>
+        !closedTokenAddresses.has(position.tokenAddress.toLowerCase()),
+    ),
+    claims: data.claims.filter(
+      (claim) => !closedTokenAddresses.has(claim.tokenAddress.toLowerCase()),
+    ),
+    activity: data.activity.filter(
+      (activity) =>
+        !referencesClosedToken(activity.href) &&
+        !/\bdeep\b/iu.test(`${activity.label} ${activity.detail}`),
+    ),
+  };
+}
+
 export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const { wallet, openWallet, sendTransaction } = useWallet();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1041,7 +1073,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     }
   }
 
-  const requestedOnchainData = onchainData ?? remoteOnchainData;
+  const requestedOnchainData = withoutClosedDeepProfileData(
+    onchainData ?? remoteOnchainData,
+  );
   const scopedOnchainData = account
     ? isProfileDataForAccount(requestedOnchainData, account)
       ? requestedOnchainData

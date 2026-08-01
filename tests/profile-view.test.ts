@@ -19,6 +19,7 @@ import {
   sortProfileTokensByMarketCap,
   upsertPendingProfileTransactionRecords,
   waitForTransaction,
+  withoutClosedDeepProfileData,
   type PendingProfileTransactionRecord,
 } from "../components/profile-view";
 import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
@@ -142,6 +143,59 @@ const deepV3Token = {
 } satisfies DeepV3CreatorToken;
 
 describe("profile reward grouping", () => {
+  it("removes closed Deep data from the public profile surface", () => {
+    const deepToken: ProfileToken = {
+      address: thirdAddress,
+      name: "Historical Deep",
+      symbol: "DEEP",
+      launchedAt: "Jul 29, 2026",
+      href: `/token/${thirdAddress}`,
+      launchModel: "deep",
+    };
+    const filtered = withoutClosedDeepProfileData({
+      status: "ready",
+      account: firstAddress,
+      chainId: 1,
+      tokens: [...tokens, deepToken],
+      positions: [
+        {
+          id: `0x${"31".repeat(32)}`,
+          tokenAddress: thirdAddress,
+          tokenName: deepToken.name,
+          tokenSymbol: deepToken.symbol,
+          positionRecipient: firstAddress,
+          positionTokenId: "7",
+          lockStatus: "permanently-locked",
+          href: deepToken.href,
+        },
+      ],
+      claims: [
+        {
+          ...claim,
+          id: `0x${"41".repeat(32)}`,
+          tokenAddress: thirdAddress,
+          tokenName: deepToken.name,
+          tokenSymbol: deepToken.symbol,
+          href: deepToken.href,
+        },
+      ],
+      activity: [
+        {
+          id: "deep-activity",
+          label: "Deep launch",
+          detail: "Historical launch",
+          occurredAt: "Jul 29, 2026",
+          href: deepToken.href,
+        },
+      ],
+    });
+
+    expect(filtered.tokens).toEqual(tokens);
+    expect(filtered.positions).toEqual([]);
+    expect(filtered.claims).toEqual([]);
+    expect(filtered.activity).toEqual([]);
+  });
+
   it("keeps deployed-token order and attaches each reward to its token", () => {
     const grouped = groupProfileRewards(tokens, [claim]);
 

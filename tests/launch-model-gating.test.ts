@@ -246,7 +246,7 @@ describe("unreleased launch model gating", () => {
     expect(resolveImplementedLaunchModel("classic")).toBe("classic");
     expect(resolveImplementedLaunchModel("classic-v3")).toBe("classic-v3");
     expect(resolveImplementedLaunchModel("adaptive")).toBeNull();
-    expect(resolveImplementedLaunchModel("deep")).toBe("deep");
+    expect(resolveImplementedLaunchModel("deep")).toBeNull();
     expect(resolveImplementedLaunchModel("liquidity-growth")).toBeNull();
     expect(resolveImplementedLaunchModel("unknown")).toBeNull();
     expect(resolveReservedLaunchModel("deep")).toBeNull();
@@ -366,9 +366,10 @@ describe("unreleased launch model gating", () => {
       });
 
       const result = await POST(request);
-      expect(result.status).toBe(400);
+      expect(result.status).toBe(410);
       await expect(result.json()).resolves.toEqual({
-        error: "Deep is not enabled by a verified release manifest",
+        code: "deep_launches_closed",
+        error: "New Deep launches are not available",
       });
     },
   );

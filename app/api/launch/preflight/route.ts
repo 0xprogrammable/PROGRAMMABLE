@@ -340,6 +340,34 @@ function errorResponse(message: string, status = 400) {
   );
 }
 
+function deepLaunchClosedResponse() {
+  return NextResponse.json(
+    {
+      code: "deep_launches_closed",
+      error: "New Deep launches are not available",
+    },
+    {
+      status: 410,
+      headers: { "Cache-Control": "no-store" },
+    },
+  );
+}
+
+function requestsClosedDeepLaunch(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return false;
+  }
+  const model = (input as Record<string, unknown>).launchModel;
+  if (typeof model !== "string") return false;
+  const normalized = model.trim().toLowerCase();
+  return (
+    normalized === "deep" ||
+    normalized.startsWith("deep-") ||
+    normalized === "liquidity-growth" ||
+    normalized.startsWith("liquidity-growth-")
+  );
+}
+
 function parseDraft(input: unknown): LaunchDraft {
   if (!input || typeof input !== "object") {
     throw new LaunchInputError("The launch setup is missing");
@@ -1404,6 +1432,9 @@ async function prepareClassicV3Launch(
   });
 }
 
+// Retained as historical release evidence. The public route closes Deep before
+// this transaction builder can be reached.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function prepareDeepLaunch(
   account: Address,
   draft: LaunchDraft,
@@ -2706,6 +2737,9 @@ export async function POST(request: NextRequest) {
     }
 
     const record = body as Record<string, unknown>;
+    if (requestsClosedDeepLaunch(record.draft)) {
+      return deepLaunchClosedResponse();
+    }
     if (typeof record.account !== "string" || !isAddress(record.account)) {
       return errorResponse("Connect a valid Ethereum wallet");
     }
@@ -2730,7 +2764,7 @@ export async function POST(request: NextRequest) {
       );
     }
     if (draft.launchModel === "deep") {
-      return await prepareDeepLaunch(account, draft, connectedWalletCheck);
+      return deepLaunchClosedResponse();
     }
     if (draft.launchModel === "stock-paired") {
       return NextResponse.json(

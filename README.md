@@ -12,7 +12,6 @@ Programmable is an interface for launching tokens whose market behavior is defin
 | --- | --- | --- |
 | Classic | Live on Ethereum Mainnet | Fixed supply, permanently locked one-sided liquidity and creator rewards in ETH |
 | Stock-Paired | Historical, new launches closed | Fixed supply traded against an allowlisted Ondo tokenized stock or ETF quote asset |
-| Deep | Design only, unavailable | A proposed growth-fee model for adding both assets to the original permanently locked pool |
 
 Only models with a completed deployment manifest, matching runtime code and verified lifecycle are exposed for production launches.
 
@@ -76,8 +75,6 @@ releases. Their public indexer records preserve the quote asset, v4 pool
 ordering, hook, fees and exact release. Existing token pages, trading, profile
 history and reward claims remain supported while new launches stay closed.
 
-Deep V3 is not deployed. Its automated keeper has been removed, and the model remains unavailable while its execution design is reconsidered. A passing local test suite is not a production release.
-
 There has been no external smart-contract audit or public security contest. This repository does not promise that a token is immune to abuse or accepted by third-party scanners.
 
 ## Local development
@@ -106,7 +103,5 @@ Key references:
 - [`docs/uniswap-source-provenance.md`](./docs/uniswap-source-provenance.md)
 - [`contracts/security/MAINNET-READINESS.md`](./contracts/security/MAINNET-READINESS.md)
 - [`contracts/security/CLASSIC-V3.md`](./contracts/security/CLASSIC-V3.md)
-- [`contracts/security/DEEP-V3.md`](./contracts/security/DEEP-V3.md)
-- [`contracts/release/DEEP-FULL-RANGE-V3.md`](./contracts/release/DEEP-FULL-RANGE-V3.md)
 - [`docs/frontend-transaction-preflight.md`](./docs/frontend-transaction-preflight.md)
 - [`docs/public-indexer-feed.md`](./docs/public-indexer-feed.md)

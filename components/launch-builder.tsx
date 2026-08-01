@@ -38,7 +38,6 @@ import {
   validateDeepV3LaunchDraft,
 } from "@/lib/deep-v3";
 import { validatePreparedDeepV3LaunchTransaction } from "@/lib/deep-v3-launch-validation";
-import { isConfiguredDeepV3ReleaseReady } from "@/lib/deep-v3-release";
 import { validatePreparedStockPairedLaunchTransaction } from "@/lib/stock-paired-launch-validation";
 import { isStockPairedLocalPreviewEnabled } from "@/lib/stock-paired-access";
 import {
@@ -74,7 +73,6 @@ import {
   CLASSIC_TOTAL_SWAP_FEE_BPS,
   CLASSIC_TOTAL_SWAP_FEE_PERCENT,
   createClassicV3Draft,
-  createDeepDraft,
   createEmptyDraft,
   createStockPairedDraft,
   getClassicInitialBuyPreview,
@@ -183,7 +181,6 @@ const SUPPORTED_LAUNCH_MODELS = new Set<LaunchModel>([
   "classic",
   "classic-v3",
   "adaptive",
-  "deep",
   "stock-paired",
 ]);
 
@@ -882,7 +879,6 @@ const classicV3LaunchAvailable =
   (process.env.NODE_ENV !== "production" &&
     process.env.NEXT_PUBLIC_CLASSIC_V3_UI_PREVIEW === "true") ||
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
-const deepLaunchAvailable = isConfiguredDeepV3ReleaseReady(launchEnvironment);
 function browserPendingLaunchStorages(): PendingLaunchStorage[] {
   if (typeof window === "undefined") return [];
   const storages: PendingLaunchStorage[] = [];
@@ -1037,14 +1033,14 @@ export function LaunchBuilderForm({
   onBackToModels: () => void;
   stockPairedPublicLaunchEnabled: boolean;
 }) {
+  if (model === "deep") return null;
+
   const initialDraft =
-    model === "deep"
-      ? createDeepDraft()
-      : model === "stock-paired"
-        ? normalizeStockPairedDraft(createStockPairedDraft())
-        : model === "classic-v3"
-          ? createClassicV3Draft()
-          : normalizeStandardDraft(createEmptyDraft());
+    model === "stock-paired"
+      ? normalizeStockPairedDraft(createStockPairedDraft())
+      : model === "classic-v3"
+        ? createClassicV3Draft()
+        : normalizeStandardDraft(createEmptyDraft());
 
   return (
     <LaunchBuilderFormView
@@ -1968,25 +1964,22 @@ function LaunchBuilderFormView({
         !pendingRestoreComplete ||
         launching ||
         (model === "classic-v3" && !classicV3LaunchAvailable) ||
-        (model === "deep" && !deepLaunchAvailable) ||
         (model === "stock-paired" && !stockPairedLaunchAllowed)
       }
     >
-      {model === "deep" && !deepLaunchAvailable
-        ? "Deep is being finalized"
-        : model === "stock-paired" && !stockPairedLaunchAllowed
-          ? "Stock-Paired is coming soon"
-          : model === "classic-v3" && !classicV3LaunchAvailable
-            ? "Classic is not deployed"
-            : !pendingRestoreComplete
-              ? "Checking launch status"
-              : launchPhase === "preparing"
-                ? "Preparing launch"
-                : launchPhase === "confirming"
-                  ? "Confirm in wallet"
-                  : wallet
-                    ? "Launch token"
-                    : "Connect wallet"}
+      {model === "stock-paired" && !stockPairedLaunchAllowed
+        ? "Stock-Paired is coming soon"
+        : model === "classic-v3" && !classicV3LaunchAvailable
+          ? "Classic is not deployed"
+          : !pendingRestoreComplete
+            ? "Checking launch status"
+            : launchPhase === "preparing"
+              ? "Preparing launch"
+              : launchPhase === "confirming"
+                ? "Confirm in wallet"
+                : wallet
+                  ? "Launch token"
+                  : "Connect wallet"}
     </button>
   );
 
