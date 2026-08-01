@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   createStagedWorkers,
   exactStagedTarget,
-  verifyStagedSchedulersDisabled,
+  inspectUnexposedStagedDeployment,
 } from "./cutover-http.mjs";
 
 const DEPLOYMENT = "dpl_12345678901234567890";
@@ -72,29 +72,68 @@ test("staged worker rejects cacheable and failed responses", async () => {
   await assert.rejects(failed.runSourceProjector(), /worker failed/u);
 });
 
-test("scheduler drain accepts only both exact disabled worker states", async () => {
-  const result = await verifyStagedSchedulersDisabled({
-    runSourceProjector: async () => ({
-      ok: true,
-      status: "disabled",
-      readiness: { status: "disabled", activationReady: false, lagging: true },
-    }),
-    runMarketProjector: async () => ({
-      status: "disabled",
-      caughtUp: false,
-      lagBlocks: "0",
-    }),
+test("staged exposure gate accepts only the exact unaliased deployment", async () => {
+  const candidateCommit = "a".repeat(40);
+  const productionCommit = "b".repeat(40);
+  const projectId = "prj_12345678";
+  const candidate = {
+    id: DEPLOYMENT,
+    url: "launcher-abc.vercel.app",
+    readyState: "READY",
+    target: "production",
+    projectId,
+    alias: [],
+    meta: { githubCommitSha: candidateCommit },
+  };
+  const production = {
+    id: "dpl_09876543210987654321",
+    url: "launcher-live.vercel.app",
+    readyState: "READY",
+    target: "production",
+    projectId,
+    alias: ["programmable.family"],
+    meta: { githubCommitSha: productionCommit },
+  };
+  const fetchDeployment = async ({ idOrUrl }) =>
+    idOrUrl === DEPLOYMENT ? candidate : production;
+  const result = await inspectUnexposedStagedDeployment({
+    targetUrl: "https://launcher-abc.vercel.app/",
+    deploymentId: DEPLOYMENT,
+    productCommit: candidateCommit,
+    projectId,
+    token: "v".repeat(32),
+    teamId: "team_123",
+    fetchDeployment,
   });
-  assert.equal(result.source.status, "disabled");
+  assert.equal(result.schedulerExposure, false);
+  assert.equal(result.currentProduction.deploymentId, production.id);
+
+  candidate.alias = ["programmable.family"];
   await assert.rejects(
-    verifyStagedSchedulersDisabled({
-      runSourceProjector: async () => ({
-        ok: true,
-        status: "disabled",
-        readiness: { status: "disabled", activationReady: false },
-      }),
-      runMarketProjector: async () => ({ status: "committed", caughtUp: true }),
+    inspectUnexposedStagedDeployment({
+      targetUrl: "https://launcher-abc.vercel.app/",
+      deploymentId: DEPLOYMENT,
+      productCommit: candidateCommit,
+      projectId,
+      token: "v".repeat(32),
+      teamId: "team_123",
+      fetchDeployment,
     }),
-    /scheduling is not stopped/u,
+    /exposed, aliased or not exactly bound/u,
+  );
+
+  candidate.alias = [];
+  production.id = DEPLOYMENT;
+  await assert.rejects(
+    inspectUnexposedStagedDeployment({
+      targetUrl: "https://launcher-abc.vercel.app/",
+      deploymentId: DEPLOYMENT,
+      productCommit: candidateCommit,
+      projectId,
+      token: "v".repeat(32),
+      teamId: "team_123",
+      fetchDeployment,
+    }),
+    /exposed, aliased or not exactly bound/u,
   );
 });

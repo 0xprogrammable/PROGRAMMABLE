@@ -185,6 +185,29 @@ test("fails closed when checked-in candidate evidence is altered", async (t) => 
   );
 });
 
+test("canonical release must bind the candidate while rollback stays in audited evidence", async (t) => {
+  const workspace = await fixtureWorkspace(t);
+  const releasePath = path.join(workspace, "config/data-pipeline-release.v1.json");
+  const release = JSON.parse(await readFile(releasePath, "utf8"));
+  release.envio = {
+    deploymentLabel: "production-1e7c381",
+    graphqlEndpoint: "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
+    schemaVersion: "1",
+    sourceCommit: "1e7c38125714e2f485f8be0c665b12e7d7fb1809",
+    configSha256: "0x378e3a799c762cb31107792c7123f5f90b54b5826884c398995e7465176fe1c2",
+    schemaSha256: "0x3217def060af2d1053ec3bca854187ff547fb43d91b113bc87a9f3285489362d",
+    handlerSha256: "0x241e18c3eda104b96eec4142826459c41c39cbce0474322634b5ea161d2fdf3e",
+    sourceRegistrySha256: "0x552e941d2ad7fea1184bf1efb97f840bdce9835c647b76f753f1326c6afe211f",
+    eventSetSha256: "0x7481d6fa986d706e46b9834e40574dd84f21be80b041d35e7d47dbfa59d69243",
+    eventCount: 51,
+  };
+  await writeFile(releasePath, `${JSON.stringify(release, null, 2)}\n`);
+  await assert.rejects(
+    loadEnvioCutoverIdentity({ workspace }),
+    /release\/candidate|reviewed candidate endpoint/u,
+  );
+});
+
 test("fails closed when an audited inventory artifact no longer matches its file commitment", async (t) => {
   const workspace = await fixtureWorkspace(t);
   const auditPath = path.join(

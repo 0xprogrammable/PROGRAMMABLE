@@ -16,11 +16,11 @@ describe("data pipeline release binding", () => {
       chainId: 1,
       startBlock: 25_624_130,
       envio: {
-        deploymentLabel: "production-1e7c381",
+        deploymentLabel: "production-7f24e63",
         graphqlEndpoint:
-          "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
+          "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
         schemaVersion: "1",
-        sourceCommit: "1e7c38125714e2f485f8be0c665b12e7d7fb1809",
+        sourceCommit: "7f24e6380d5cf17092f5ade7cbad678465e3ef95",
         eventCount: 51,
       },
       uniswapV4Subgraph: {

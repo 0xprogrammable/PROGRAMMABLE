@@ -33,6 +33,14 @@ test("builds a complete deterministic candidate-only bootstrap plan", async () =
     left.providerBindings[0].redactedIdentity,
     "envio:production-7f24e63",
   );
+  assert.equal(
+    left.candidateIsolation.canonicalReleaseEnvioIdentity,
+    left.providerBindings[0].redactedIdentity,
+  );
+  assert.equal(
+    left.candidateIsolation.canonicalReleaseEnvioEndpoint,
+    "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
+  );
   assert.equal(left.candidateIsolation.legacyProductionDeploymentRegistered, false);
   assert.equal(left.releases.length, 5);
   assert.equal(
@@ -71,6 +79,29 @@ test("builds a complete deterministic candidate-only bootstrap plan", async () =
       release.projectionEventRules.length,
     );
   }
+});
+
+test("rejects a bootstrap plan whose canonical release is not the candidate", async () => {
+  const plan = await createBootstrapPlan({
+    repositoryCommit,
+    environment,
+    createdAt,
+  });
+  const identity = structuredClone(plan);
+  identity.candidateIsolation.canonicalReleaseEnvioIdentity =
+    "envio:production-legacy";
+  assert.throws(
+    () => validateReviewedBootstrapPlan(recommit(identity)),
+    /candidate database isolation is invalid/u,
+  );
+
+  const endpoint = structuredClone(plan);
+  endpoint.candidateIsolation.canonicalReleaseEnvioEndpoint =
+    "https://indexer.hyperindex.xyz/legacy1/v1/graphql";
+  assert.throws(
+    () => validateReviewedBootstrapPlan(recommit(endpoint)),
+    /candidate initialization input drifted/u,
+  );
 });
 
 function recommit(plan) {

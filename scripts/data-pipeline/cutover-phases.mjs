@@ -1,6 +1,8 @@
 import { canonicalJson, sha256 } from "./hosted-db-operator-core.mjs";
 
 const BYTES32 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
+const COMMIT = /^[0-9a-f]{40}$/u;
+const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]{20,80}$/u;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const RELEASES = Object.freeze([
@@ -69,6 +71,19 @@ export function assertCandidateFence(value, expectedState = "fenced") {
   if (expectedState === "attested" && !promoted) {
     throw new Error("candidate database promotion is not attested");
   }
+  if (
+    promoted &&
+    (!COMMIT.test(input.productCommit ?? "") ||
+      !DEPLOYMENT_ID.test(input.stagedDeploymentId ?? ""))
+  ) {
+    throw new Error("candidate database deployment binding is invalid");
+  }
+  if (
+    !promoted &&
+    (input.productCommit !== null || input.stagedDeploymentId !== null)
+  ) {
+    throw new Error("fenced candidate database already has a deployment binding");
+  }
   return Object.freeze({
     databaseMode: "candidate-only",
     envioProviderDeploymentId: input.envioProviderDeploymentId,
@@ -82,6 +97,8 @@ export function assertCandidateFence(value, expectedState = "fenced") {
             input.promotionAttestationCommitment,
             "database promotion attestation",
           ),
+    productCommit: input.productCommit,
+    stagedDeploymentId: input.stagedDeploymentId,
   });
 }
 
@@ -230,6 +247,12 @@ function marketCaughtUp(result) {
 
 export async function runPostAttestationStagedGates(input) {
   const fence = assertCandidateFence(await input.inspectFence(), "attested");
+  if (
+    fence.productCommit !== input.productCommit ||
+    fence.stagedDeploymentId !== input.stagedDeploymentId
+  ) {
+    throw new Error("staged runtime does not match the database deployment binding");
+  }
   const maximumWorkerCycles = input.maximumWorkerCycles ?? 256;
   if (
     !Number.isSafeInteger(maximumWorkerCycles) ||

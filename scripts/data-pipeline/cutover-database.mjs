@@ -82,6 +82,8 @@ export async function inspectCandidateDatabase(sql) {
     select control.database_mode::text as database_mode,
            control.envio_provider_deployment_id::text as envio_provider_deployment_id,
            control.promotion_attestation_commitment,
+           control.product_commit,
+           control.staged_deployment_id,
            control.promoted_at,
            (select pg_catalog.count(*)::text
               from programmable_private.projection_publications) as publication_count
@@ -100,13 +102,15 @@ export async function inspectCandidateDatabase(sql) {
       row.promotion_attestation_commitment === null
         ? null
         : rowBytes(row.promotion_attestation_commitment, "database promotion attestation"),
+    productCommit: row.product_commit,
+    stagedDeploymentId: row.staged_deployment_id,
   });
 }
 
 export async function attestCandidateDatabasePromotion({ sql, promotion }) {
   return sql.begin(async (transaction) => {
     await transaction.unsafe(
-      "set local role programmable_operator; set local lock_timeout = '4s'; set local statement_timeout = '30s'",
+      "set local lock_timeout = '4s'; set local statement_timeout = '30s'",
     ).simple();
     const [lock] = await transaction.unsafe(`
       select pg_catalog.pg_try_advisory_xact_lock(
@@ -116,6 +120,29 @@ export async function attestCandidateDatabasePromotion({ sql, promotion }) {
     if (lock?.acquired !== true) {
       throw new Error("another candidate cutover operator holds the database lock");
     }
+    const [sourceLease] = await transaction.unsafe(`
+      select lease_generation::text as lease_generation,
+             expires_at,
+             released_at,
+             pg_catalog.clock_timestamp() as observed_at
+        from programmable_private.projector_runtime_lease_current
+       where singleton_key = 'canonical-projector-runtime-v1'
+       for update
+    `);
+    const [marketLease] = await transaction.unsafe(`
+      select lease_generation::text as lease_generation,
+             expires_at,
+             released_at,
+             pg_catalog.clock_timestamp() as observed_at
+        from programmable_private.market_projector_runtime_lease_current
+       where singleton_key = 'canonical-market-projector-runtime-v1'
+       for update
+    `);
+    assertPromotionLeaseRowsDrained([
+      { projector: "source", ...sourceLease },
+      { projector: "market", ...marketLease },
+    ]);
+    await transaction.unsafe("set local role programmable_operator").simple();
     const [result] = await transaction`
       select programmable_private.attest_candidate_database_promotion(
         ${promotion.envioProviderDeploymentId}::uuid,
@@ -123,6 +150,8 @@ export async function attestCandidateDatabasePromotion({ sql, promotion }) {
         ${bytes(promotion.candidateInventoryParityCommitment, "candidate inventory parity commitment")}::bytea,
         ${bytes(promotion.envioPromotionAttestationCommitment, "Envio promotion attestation")}::bytea,
         ${bytes(promotion.inputCommitment, "database promotion input commitment")}::bytea,
+        ${promotion.productCommit}::text,
+        ${promotion.stagedDeploymentId}::text,
         ${promotion.promotedAt}::timestamptz
       ) as changed
     `;
@@ -131,6 +160,34 @@ export async function attestCandidateDatabasePromotion({ sql, promotion }) {
     }
     return Object.freeze({ changed: result.changed });
   });
+}
+
+export function assertPromotionLeaseRowsDrained(rows) {
+  if (!Array.isArray(rows) || rows.length !== 2) {
+    throw new Error("promotion lease rows are incomplete");
+  }
+  const seen = new Set();
+  for (const row of rows) {
+    if (
+      !row ||
+      !["source", "market"].includes(row.projector) ||
+      seen.has(row.projector)
+    ) {
+      throw new Error("promotion lease rows are invalid");
+    }
+    seen.add(row.projector);
+    const generation = integer(row.lease_generation, "lease generation");
+    const observedAt = new Date(timestamp(row.observed_at, "lease observation timestamp"));
+    const released = row.released_at !== null && row.released_at !== undefined;
+    const expired =
+      row.expires_at !== null &&
+      row.expires_at !== undefined &&
+      new Date(timestamp(row.expires_at, "lease expiry timestamp")) <= observedAt;
+    if (generation !== "0" && !released && !expired) {
+      throw new Error(`active ${row.projector} projector lease blocks promotion`);
+    }
+  }
+  return true;
 }
 
 export async function readCheckpointInventory(sql) {

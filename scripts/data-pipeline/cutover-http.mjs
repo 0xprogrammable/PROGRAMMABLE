@@ -3,6 +3,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import {
+  deploymentCommit,
+  fetchVercelDeployment,
+} from "../perf/read-model-live-verifier.mjs";
+
 const execute = promisify(execFile);
 const MAXIMUM_RESPONSE_BYTES = 2 * 1024 * 1024;
 
@@ -85,24 +90,96 @@ export function createStagedWorkers(input) {
   });
 }
 
-export async function verifyStagedSchedulersDisabled(workers) {
-  const [source, market] = await Promise.all([
-    workers.runSourceProjector(),
-    workers.runMarketProjector(),
-  ]);
+function deploymentAliases(deployment) {
+  const values = [deployment?.alias, deployment?.aliases].flatMap((value) =>
+    Array.isArray(value) ? value : value === undefined ? [] : [value],
+  );
+  return values.map((value) => {
+    const candidate =
+      typeof value === "string"
+        ? value
+        : value && typeof value === "object"
+          ? value.alias ?? value.domain
+          : undefined;
+    return typeof candidate === "string" ? candidate.toLowerCase() : "";
+  }).filter(Boolean).sort();
+}
+
+export async function inspectUnexposedStagedDeployment(input) {
+  const target = exactStagedTarget(input.targetUrl, input.deploymentId);
   if (
-    source?.ok !== true ||
-    source?.status !== "disabled" ||
-    source?.readiness?.status !== "disabled" ||
-    source?.readiness?.activationReady !== false ||
-    market?.status !== "disabled" ||
-    market?.caughtUp !== false
+    !/^[0-9a-f]{40}$/u.test(input.productCommit ?? "") ||
+    !/^prj_[A-Za-z0-9]{8,80}$/u.test(input.projectId ?? "") ||
+    typeof input.token !== "string" ||
+    input.token.length < 16 ||
+    typeof input.teamId !== "string" ||
+    input.teamId.length < 3
   ) {
-    throw new Error("candidate projector scheduling is not stopped");
+    throw new Error("staged Vercel control-plane input is invalid");
+  }
+  const productionDomain = (input.productionDomain ?? "programmable.family").toLowerCase();
+  if (!/^[a-z0-9.-]+$/u.test(productionDomain)) {
+    throw new Error("production domain is invalid");
+  }
+  const lookup = input.fetchDeployment ?? fetchVercelDeployment;
+  const [candidate, production] = await Promise.all([
+    lookup({
+      idOrUrl: input.deploymentId,
+      token: input.token,
+      teamId: input.teamId,
+      fetchImpl: input.fetchImpl,
+    }),
+    lookup({
+      idOrUrl: productionDomain,
+      token: input.token,
+      teamId: input.teamId,
+      fetchImpl: input.fetchImpl,
+    }),
+  ]);
+  const candidateHost = String(candidate?.url ?? "")
+    .replace(/^https?:\/\//u, "")
+    .replace(/\/$/u, "");
+  const aliases = deploymentAliases(candidate);
+  const projectMatches =
+    candidate?.projectId === input.projectId ||
+    candidate?.project?.id === input.projectId;
+  const productionProjectMatches =
+    production?.projectId === input.projectId ||
+    production?.project?.id === input.projectId;
+  const productionAliases = deploymentAliases(production);
+  const productionDomainAssigned = aliases.includes(productionDomain);
+  const schedulerExposure = candidate?.id === production?.id;
+  if (
+    candidate?.id !== input.deploymentId ||
+    candidateHost !== target.hostname ||
+    candidate?.readyState !== "READY" ||
+    candidate?.target !== "production" ||
+    !projectMatches ||
+    deploymentCommit(candidate) !== input.productCommit ||
+    aliases.length !== 0 ||
+    productionDomainAssigned ||
+    schedulerExposure ||
+    production?.readyState !== "READY" ||
+    production?.target !== "production" ||
+    !productionProjectMatches ||
+    !productionAliases.includes(productionDomain) ||
+    !/^[0-9a-f]{40}$/u.test(deploymentCommit(production) ?? "")
+  ) {
+    throw new Error("staged deployment is exposed, aliased or not exactly bound");
   }
   return Object.freeze({
-    source: Object.freeze({ status: "disabled", activationReady: false }),
-    market: Object.freeze({ status: "disabled", caughtUp: false }),
+    stagedDeploymentId: input.deploymentId,
+    stagedTarget: target.toString(),
+    productCommit: input.productCommit,
+    projectId: input.projectId,
+    productionDomain,
+    productionDomainAssigned,
+    schedulerExposure,
+    assignedAliases: Object.freeze(aliases),
+    currentProduction: Object.freeze({
+      deploymentId: production.id,
+      productCommit: deploymentCommit(production),
+    }),
   });
 }
 

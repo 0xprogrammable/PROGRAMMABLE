@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  assertPromotionLeaseRowsDrained,
+  attestCandidateDatabasePromotion,
   buildDatabasePromotionInput,
   waitForProjectorLeaseDrain,
 } from "./cutover-database.mjs";
@@ -81,4 +83,116 @@ test("lease drain fails closed when an active lease survives the deadline", asyn
     }),
     /did not drain/u,
   );
+});
+
+test("database promotion rechecks current leases under its transaction before mutation", async () => {
+  const observedAt = "2026-08-01T08:00:00.000Z";
+  assert.throws(
+    () => assertPromotionLeaseRowsDrained([
+      {
+        projector: "source",
+        lease_generation: "3",
+        expires_at: "2026-08-01T08:01:00.000Z",
+        released_at: null,
+        observed_at: observedAt,
+      },
+      {
+        projector: "market",
+        lease_generation: "0",
+        expires_at: null,
+        released_at: null,
+        observed_at: observedAt,
+      },
+    ]),
+    /active source projector lease/u,
+  );
+
+  let promotionMutationCalls = 0;
+  const transaction = async () => {
+    promotionMutationCalls += 1;
+    return [{ changed: true }];
+  };
+  transaction.unsafe = (query) => {
+    if (query.startsWith("set local")) {
+      return { simple: async () => undefined };
+    }
+    if (query.includes("pg_try_advisory_xact_lock")) {
+      return Promise.resolve([{ acquired: true }]);
+    }
+    if (query.includes("projector_runtime_lease_current")) {
+      return Promise.resolve([{
+        lease_generation: "4",
+        expires_at: "2026-08-01T08:01:00.000Z",
+        released_at: null,
+        observed_at: observedAt,
+      }]);
+    }
+    return Promise.resolve([{
+      lease_generation: "0",
+      expires_at: null,
+      released_at: null,
+      observed_at: observedAt,
+    }]);
+  };
+  const sql = { begin: async (operation) => operation(transaction) };
+  await assert.rejects(
+    attestCandidateDatabasePromotion({
+      sql,
+      promotion: buildDatabasePromotionInput({
+        candidateEndpointIdentity: "envio:d7a39a2",
+        envioProviderDeploymentId: "123e4567-e89b-42d3-a456-426614174000",
+        baselineCommitment: HASH,
+        candidateInventoryParityCommitment: `0x${"2".repeat(64)}`,
+        envioPromotionAttestationCommitment: `0x${"3".repeat(64)}`,
+        productCommit: "a".repeat(40),
+        stagedDeploymentId: "dpl_12345678901234567890",
+        promotedAt: observedAt,
+      }),
+    }),
+    /active source projector lease/u,
+  );
+  assert.equal(promotionMutationCalls, 0);
+});
+
+test("database promotion atomically persists the reviewed commit and deployment", async () => {
+  const observedAt = "2026-08-01T08:00:00.000Z";
+  const productCommit = "a".repeat(40);
+  const stagedDeploymentId = "dpl_12345678901234567890";
+  let mutationValues;
+  const transaction = async (_strings, ...values) => {
+    mutationValues = values;
+    return [{ changed: true }];
+  };
+  transaction.unsafe = (query) => {
+    if (query.startsWith("set local")) {
+      return { simple: async () => undefined };
+    }
+    if (query.includes("pg_try_advisory_xact_lock")) {
+      return Promise.resolve([{ acquired: true }]);
+    }
+    return Promise.resolve([{
+      lease_generation: "0",
+      expires_at: null,
+      released_at: null,
+      observed_at: observedAt,
+    }]);
+  };
+  const sql = { begin: async (operation) => operation(transaction) };
+  const result = await attestCandidateDatabasePromotion({
+    sql,
+    promotion: buildDatabasePromotionInput({
+      candidateEndpointIdentity: "envio:d7a39a2",
+      envioProviderDeploymentId: "123e4567-e89b-42d3-a456-426614174000",
+      baselineCommitment: HASH,
+      candidateInventoryParityCommitment: `0x${"2".repeat(64)}`,
+      envioPromotionAttestationCommitment: `0x${"3".repeat(64)}`,
+      productCommit,
+      stagedDeploymentId,
+      promotedAt: observedAt,
+    }),
+  });
+  assert.equal(result.changed, true);
+  assert.equal(mutationValues[5], productCommit);
+  assert.equal(mutationValues[6], stagedDeploymentId);
+  assert.equal(mutationValues.length, 8);
 });

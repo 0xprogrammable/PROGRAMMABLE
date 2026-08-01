@@ -37,7 +37,7 @@ import {
   captureAndGateStagedReadModel,
   createStagedWorkers,
   exactStagedTarget,
-  verifyStagedSchedulersDisabled,
+  inspectUnexposedStagedDeployment,
 } from "./cutover-http.mjs";
 import {
   assertCandidateFence,
@@ -66,7 +66,7 @@ export const HELP = `Usage:
   node scripts/data-pipeline/cutover-operator.mjs envio-attest --observation FILE --drain-evidence FILE --output FILE
   node scripts/data-pipeline/cutover-operator.mjs database-plan --expected-project-ref REF --envio-attestation FILE --drain-evidence FILE --staged-deployment-id ID --output FILE
   node scripts/data-pipeline/cutover-operator.mjs database-apply --expected-project-ref REF --envio-attestation FILE --drain-evidence FILE --plan FILE --confirm-apply SHA256 --output FILE
-  node scripts/data-pipeline/cutover-operator.mjs staged-gates --expected-project-ref REF --target-url URL --deployment-id ID --output-directory DIR --output FILE [--maximum-cycles N]
+  node scripts/data-pipeline/cutover-operator.mjs staged-gates --expected-project-ref REF --target-url URL --deployment-id ID --drain-evidence FILE --output-directory DIR --output FILE [--maximum-cycles N]
   node scripts/data-pipeline/cutover-operator.mjs rollback-plan --envio-attestation FILE --backup-evidence FILE --vercel-deployment-id ID --vercel-product-commit COMMIT --output FILE
   node scripts/data-pipeline/cutover-operator.mjs rollback-verify --plan FILE --observation FILE --output FILE
 
@@ -269,8 +269,13 @@ export function assertProjectorDrainEvidence(value, commit, stagedDeploymentId) 
     (stagedDeploymentId !== undefined &&
       evidence.stagedDeploymentId !== stagedDeploymentId) ||
     evidence.publicationFence !== "closed" ||
-    evidence.schedulers?.source?.status !== "disabled" ||
-    evidence.schedulers?.market?.status !== "disabled" ||
+    evidence.stageExposure?.stagedDeploymentId !== evidence.stagedDeploymentId ||
+    evidence.stageExposure?.stagedTarget !== evidence.stagedTarget ||
+    evidence.stageExposure?.productCommit !== commit ||
+    evidence.stageExposure?.productionDomainAssigned !== false ||
+    evidence.stageExposure?.schedulerExposure !== false ||
+    !Array.isArray(evidence.stageExposure?.assignedAliases) ||
+    evidence.stageExposure.assignedAliases.length !== 0 ||
     evidence.leaseDrain?.drained !== true ||
     !SHA256.test(evidence.releaseGateEvidenceSha256 ?? "") ||
     !SHA256.test(evidence.evidenceSha256 ?? "")
@@ -282,6 +287,36 @@ export function assertProjectorDrainEvidence(value, commit, stagedDeploymentId) 
     throw new Error("projector drain evidence commitment is invalid");
   }
   return evidence;
+}
+
+export function assertStagedGateMatchesDrain(
+  value,
+  commit,
+  stagedDeploymentId,
+  targetUrl,
+) {
+  const evidence = assertProjectorDrainEvidence(value, commit, stagedDeploymentId);
+  const target = exactStagedTarget(targetUrl, stagedDeploymentId);
+  if (evidence.stagedTarget !== target.toString()) {
+    throw new Error("staged gate target differs from the drained deployment");
+  }
+  return evidence;
+}
+
+async function reverifyUnexposedStage(evidence, environment) {
+  const observed = await inspectUnexposedStagedDeployment({
+    targetUrl: evidence.stagedTarget,
+    deploymentId: evidence.stagedDeploymentId,
+    productCommit: evidence.productCommit,
+    projectId: environment.VERCEL_PROJECT_ID,
+    token: environment.VERCEL_TOKEN,
+    teamId: environment.VERCEL_ORG_ID,
+    productionDomain: evidence.stageExposure.productionDomain,
+  });
+  if (canonicalJson(observed) !== canonicalJson(evidence.stageExposure)) {
+    throw new Error("staged deployment exposure changed after the drain gate");
+  }
+  return observed;
 }
 
 async function createDatabasePlan({
@@ -308,6 +343,7 @@ async function createDatabasePlan({
   if (attestation.releaseGateEvidenceSha256 !== drain.evidenceSha256) {
     throw new Error("Envio attestation is not bound to the projector drain gate");
   }
+  await reverifyUnexposedStage(drain, environment);
   return withDirectOperatorDatabase(
     directDatabase(environment, expectedProjectRef),
     async (sql) => {
@@ -400,16 +436,18 @@ async function runCommand(command, flags, environment) {
     ]);
     const commit = await assertCleanCheckout();
     const target = exactStagedTarget(flags.get("--target-url"), flags.get("--deployment-id"));
-    const workers = createStagedWorkers({
+    const gate = await readArtifact(flags.get("--release-gate"));
+    const stageExposure = await inspectUnexposedStagedDeployment({
       targetUrl: target.toString(),
       deploymentId: flags.get("--deployment-id"),
-      cronSecret: environment.CRON_SECRET,
+      productCommit: commit,
+      projectId: environment.VERCEL_PROJECT_ID,
+      token: environment.VERCEL_TOKEN,
+      teamId: environment.VERCEL_ORG_ID,
     });
-    const gate = await readArtifact(flags.get("--release-gate"));
     const result = await withDirectOperatorDatabase(
       directDatabase(environment, flags.get("--expected-project-ref")),
       async (sql) => {
-        const schedulers = await verifyStagedSchedulersDisabled(workers);
         const fence = assertCandidateFence(await inspectCandidateDatabase(sql), "fenced");
         const leaseDrain = await waitForProjectorLeaseDrain({
           inspect: () => inspectProjectorLeaseDrain(sql),
@@ -424,7 +462,7 @@ async function runCommand(command, flags, environment) {
           releaseGateEvidenceSha256: evidenceCommitment(gate, "release gate evidence"),
           publicationFence: "closed",
           envioProviderDeploymentId: fence.envioProviderDeploymentId,
-          schedulers,
+          stageExposure,
           leaseDrain,
           completedAt: new Date().toISOString(),
         };
@@ -509,6 +547,12 @@ async function runCommand(command, flags, environment) {
         if (state.promotionAttestationCommitment !== rebuilt.envioPromotionAttestationCommitment) {
           throw new Error("database promotion attestation did not persist exactly");
         }
+        if (
+          state.productCommit !== rebuilt.productCommit ||
+          state.stagedDeploymentId !== rebuilt.stagedDeploymentId
+        ) {
+          throw new Error("database promotion deployment binding did not persist exactly");
+        }
         return {
           kind: "programmable-database-promotion-result",
           schemaVersion: 1,
@@ -528,12 +572,20 @@ async function runCommand(command, flags, environment) {
         "--expected-project-ref",
         "--target-url",
         "--deployment-id",
+        "--drain-evidence",
         "--output-directory",
         "--output",
       ],
       ["--maximum-cycles"],
     );
     const commit = await assertCleanCheckout();
+    const drain = assertStagedGateMatchesDrain(
+      await readArtifact(flags.get("--drain-evidence"), { privateFile: true }),
+      commit,
+      flags.get("--deployment-id"),
+      flags.get("--target-url"),
+    );
+    await reverifyUnexposedStage(drain, environment);
     const target = exactStagedTarget(flags.get("--target-url"), flags.get("--deployment-id"));
     const workers = createStagedWorkers({
       targetUrl: target.toString(),

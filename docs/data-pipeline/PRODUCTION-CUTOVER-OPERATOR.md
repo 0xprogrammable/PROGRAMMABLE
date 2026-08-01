@@ -57,6 +57,9 @@ PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN
 PROGRAMMABLE_SHADOW_PROBE_TOKEN
 PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN
 CRON_SECRET
+VERCEL_TOKEN
+VERCEL_ORG_ID
+VERCEL_PROJECT_ID
 ```
 
 The five generated role passwords must be distinct printable values of at
@@ -129,28 +132,33 @@ flags remain false. Auto-assignment of the production domain must be disabled.
 
 The staged deployment must bind the reviewed candidate endpoint and the exact
 product commit. Do not use a branch alias for any following check.
+It must not depend on promotion values created later in the cutover. Its
+immutable `VERCEL_GIT_COMMIT_SHA` and `VERCEL_DEPLOYMENT_ID` are the runtime
+identity inputs.
 
 Create a release-gate evidence file from the reviewed staged binding and raw
 backfill checks. It must carry one non-zero `evidenceSha256` or
 `releaseEvidenceSha256` commitment.
 
-The exact staged deployment used for promotion safety must have both projector
-activation values set to `false`. Prove that both worker routes report disabled
-and that every source and market lease has drained before touching Envio:
+The exact staged deployment may have both projector workers enabled, but it
+must remain unassigned to every production domain and scheduler. Prove its
+control-plane identity, the unchanged live production binding and that every
+source and market lease has drained before touching Envio:
 
 ```sh
 node scripts/data-pipeline/cutover-operator.mjs projector-drain \
   --expected-project-ref <project-ref> \
-  --target-url https://<disabled-candidate>.vercel.app/ \
-  --deployment-id <disabled-candidate-dpl-id> \
+  --target-url https://<exact-candidate>.vercel.app/ \
+  --deployment-id <candidate-dpl-id> \
   --release-gate /secure/cutover/pre-promotion-release-gate.json \
   --output /secure/cutover/projector-drain.json
 ```
 
-Leave that deployment and its scheduler configuration unchanged through Envio
-and database attestation. The gate waits for both singleton leases to be
-released or expired and records the database clock observation without
-exposing holder or token values.
+Leave that deployment unassigned through Envio and database attestation. The
+gate never invokes either worker. It verifies through the Vercel control plane
+that the production domain still resolves to a different deployment, then
+waits for both singleton leases to be released or expired. Lease state is
+observed using the database clock without exposing holder or token values.
 
 ## 5. Promote and attest Envio
 
@@ -199,7 +207,7 @@ node scripts/data-pipeline/cutover-operator.mjs database-plan \
   --expected-project-ref <project-ref> \
   --envio-attestation /secure/cutover/envio-promotion-attestation.json \
   --drain-evidence /secure/cutover/projector-drain.json \
-  --staged-deployment-id <disabled-candidate-dpl-id> \
+  --staged-deployment-id <candidate-dpl-id> \
   --output /secure/cutover/database-promotion-plan.json
 ```
 
@@ -217,21 +225,28 @@ node scripts/data-pipeline/cutover-operator.mjs database-apply \
 ```
 
 This is the step that opens the database publication fence. The operator holds
-an advisory transaction lock, requires the same stopped-scheduler/drained-lease
-gate as Envio promotion and verifies the exact persisted attestation.
+an advisory transaction lock, rechecks both lease rows using database time
+inside the same transaction, and atomically stores the exact product commit and
+staged `dpl_...` ID with the promotion attestation. It then reads those values
+back before accepting the result. A stale drain receipt cannot authorize
+promotion after a lease was reacquired.
 
 ## 7. Staged projectors, reconciliation and load gate
 
-Create or reuse an exact staged deployment of the same product commit with the
-source and market workers enabled and every public indexed-read flag still
-false. This post-attestation deployment is the only deployment eligible for
-the final Vercel promotion.
+Use the exact same staged deployment and `dpl_...` ID from the drain evidence.
+Its source and market workers may now be invoked directly while every public
+indexed-read flag remains false. No second deployment can replace it between
+drain, database attestation, gates and final promotion.
+Every worker request must prove that the deployment's immutable Vercel commit
+and deployment ID equal the database-bound values. No dynamically generated
+promotion environment variables are part of this gate.
 
 ```sh
 node scripts/data-pipeline/cutover-operator.mjs staged-gates \
   --expected-project-ref <project-ref> \
   --target-url https://<exact-deployment>.vercel.app/ \
-  --deployment-id <post-attestation-dpl-id> \
+  --deployment-id <candidate-dpl-id> \
+  --drain-evidence /secure/cutover/projector-drain.json \
   --output-directory /secure/cutover/read-model-capture \
   --maximum-cycles 512 \
   --output /secure/cutover/staged-gates.json

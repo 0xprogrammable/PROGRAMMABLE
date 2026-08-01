@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   assertAttestationMatchesIdentity,
   assertProjectorDrainEvidence,
+  assertStagedGateMatchesDrain,
   credentialsFromEnvironment,
   evidenceCommitment,
   parseArguments,
@@ -107,10 +108,15 @@ test("projector drain evidence binds stopped schedulers, drained leases and stag
     schemaVersion: 1,
     productCommit: commit,
     stagedDeploymentId: "dpl_12345678901234567890",
+    stagedTarget: "https://launcher-abc.vercel.app/",
     publicationFence: "closed",
-    schedulers: {
-      source: { status: "disabled" },
-      market: { status: "disabled" },
+    stageExposure: {
+      stagedDeploymentId: "dpl_12345678901234567890",
+      stagedTarget: "https://launcher-abc.vercel.app/",
+      productCommit: commit,
+      productionDomainAssigned: false,
+      schedulerExposure: false,
+      assignedAliases: [],
     },
     leaseDrain: { drained: true },
     releaseGateEvidenceSha256: `0x${"b".repeat(64)}`,
@@ -127,6 +133,15 @@ test("projector drain evidence binds stopped schedulers, drained leases and stag
     ),
     evidence,
   );
+  assert.equal(
+    assertStagedGateMatchesDrain(
+      evidence,
+      commit,
+      "dpl_12345678901234567890",
+      "https://launcher-abc.vercel.app/",
+    ),
+    evidence,
+  );
   assert.throws(
     () => assertProjectorDrainEvidence(
       { ...evidence, leaseDrain: { drained: false } },
@@ -134,5 +149,22 @@ test("projector drain evidence binds stopped schedulers, drained leases and stag
       "dpl_12345678901234567890",
     ),
     /drain evidence/u,
+  );
+  assert.throws(
+    () => assertProjectorDrainEvidence(
+      evidence,
+      commit,
+      "dpl_09876543210987654321",
+    ),
+    /drain evidence/u,
+  );
+  assert.throws(
+    () => assertStagedGateMatchesDrain(
+      evidence,
+      commit,
+      "dpl_12345678901234567890",
+      "https://other.vercel.app/",
+    ),
+    /differs from the drained deployment/u,
   );
 });

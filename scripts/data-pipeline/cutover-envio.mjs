@@ -448,15 +448,15 @@ export async function loadEnvioCutoverIdentity({ workspace }) {
       eventSetSha256: release.envio?.eventSetSha256,
       eventCount: release.envio?.eventCount,
     },
-    "release rollback identity",
+    "release candidate identity",
   );
   same(
     releaseRuntimeIdentity,
-    rollbackRuntimeIdentity,
-    "release/rollback runtime identity",
+    candidateRuntimeIdentity,
+    "release/candidate runtime identity",
   );
-  if (release.envio?.graphqlEndpoint !== rollbackEndpoint.endpoint) {
-    throw new Error("release binding is not the recorded rollback endpoint");
+  if (release.envio?.graphqlEndpoint !== candidateEndpoint.endpoint) {
+    throw new Error("release binding is not the reviewed candidate endpoint");
   }
   const rollbackInventory = parseInventory(
     baseline.inventory,

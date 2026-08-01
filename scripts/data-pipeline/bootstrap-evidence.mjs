@@ -375,7 +375,14 @@ function validateCandidateEnvioEvidence(evidence) {
       "status",
       "deploymentLabel",
       "graphqlEndpoint",
+      "schemaVersion",
       "sourceCommit",
+      "configSha256",
+      "schemaSha256",
+      "handlerSha256",
+      "sourceRegistrySha256",
+      "eventSetSha256",
+      "eventCount",
       "redactedIdentity",
       "deploymentCommitment",
       "schemaCommitment",
@@ -388,12 +395,20 @@ function validateCandidateEnvioEvidence(evidence) {
     evidence.path !== "config/data-pipeline-envio-candidate.v1.json" ||
     !NONZERO_BYTES32.test(evidence.fileSha256 ?? "") ||
     evidence.status !== "deployed-synced-audited-not-promoted" ||
+    evidence.schemaVersion !== "1" ||
     !/^[a-z0-9][a-z0-9-]{0,127}$/u.test(evidence.deploymentLabel ?? "") ||
     evidence.redactedIdentity !== `envio:${evidence.deploymentLabel}` ||
     !/^https:\/\/indexer\.hyperindex\.xyz\/[a-z0-9]{7,64}\/v1\/graphql$/u.test(
       evidence.graphqlEndpoint ?? "",
     ) ||
     !/^[0-9a-f]{40}$/u.test(evidence.sourceCommit ?? "") ||
+    !NONZERO_BYTES32.test(evidence.configSha256 ?? "") ||
+    !NONZERO_BYTES32.test(evidence.schemaSha256 ?? "") ||
+    !NONZERO_BYTES32.test(evidence.handlerSha256 ?? "") ||
+    !NONZERO_BYTES32.test(evidence.sourceRegistrySha256 ?? "") ||
+    !NONZERO_BYTES32.test(evidence.eventSetSha256 ?? "") ||
+    !Number.isSafeInteger(evidence.eventCount) ||
+    evidence.eventCount < 1 ||
     !NONZERO_BYTES32.test(evidence.deploymentCommitment ?? "") ||
     !NONZERO_BYTES32.test(evidence.schemaCommitment ?? "") ||
     !NONZERO_BYTES32.test(evidence.auditEvidenceCommitment ?? "") ||
@@ -401,6 +416,49 @@ function validateCandidateEnvioEvidence(evidence) {
   ) {
     throw new Error("candidate Envio evidence is invalid");
   }
+}
+
+function validateCanonicalReleaseCandidate(binding, candidateEnvioEvidence) {
+  const canonical = binding?.envio;
+  exactObjectKeys(
+    canonical,
+    [
+      "deploymentLabel",
+      "graphqlEndpoint",
+      "schemaVersion",
+      "sourceCommit",
+      "configSha256",
+      "schemaSha256",
+      "handlerSha256",
+      "sourceRegistrySha256",
+      "eventSetSha256",
+      "eventCount",
+    ],
+    "canonical Envio release binding",
+  );
+  const candidate = {
+    deploymentLabel: candidateEnvioEvidence.deploymentLabel,
+    graphqlEndpoint: candidateEnvioEvidence.graphqlEndpoint,
+    schemaVersion: candidateEnvioEvidence.schemaVersion,
+    sourceCommit: candidateEnvioEvidence.sourceCommit,
+    configSha256: candidateEnvioEvidence.configSha256,
+    schemaSha256: candidateEnvioEvidence.schemaSha256,
+    handlerSha256: candidateEnvioEvidence.handlerSha256,
+    sourceRegistrySha256: candidateEnvioEvidence.sourceRegistrySha256,
+    eventSetSha256: candidateEnvioEvidence.eventSetSha256,
+    eventCount: candidateEnvioEvidence.eventCount,
+  };
+  if (
+    canonicalJson(canonical) !== canonicalJson(candidate) ||
+    `envio:${canonical.deploymentLabel}` !==
+      candidateEnvioEvidence.redactedIdentity
+  ) {
+    throw new Error("canonical Envio release binding is not the audited candidate");
+  }
+  return Object.freeze({
+    identity: candidateEnvioEvidence.redactedIdentity,
+    endpoint: candidateEnvioEvidence.graphqlEndpoint,
+  });
 }
 
 function validateProviderSet(providers, candidateEnvioEvidence) {
@@ -856,6 +914,10 @@ export async function buildReviewedBootstrapPlan({
   };
 
   validateProviderSet(providers, candidateEnvioEvidence);
+  const canonicalReleaseEnvio = validateCanonicalReleaseCandidate(
+    binding,
+    candidateEnvioEvidence,
+  );
   const providerBindings = providers.map((provider) =>
     providerBinding(provider, createdAt),
   );
@@ -881,6 +943,8 @@ export async function buildReviewedBootstrapPlan({
         candidateEnvioEvidence.auditEvidenceCommitment,
       policyCommitment: candidateEnvioEvidence.policyCommitment,
       sourceCommit: candidateEnvioEvidence.sourceCommit,
+      canonicalReleaseEnvioIdentity: canonicalReleaseEnvio.identity,
+      canonicalReleaseEnvioEndpoint: canonicalReleaseEnvio.endpoint,
       initializedAt: createdAt,
     },
   );
@@ -1248,7 +1312,8 @@ export async function buildReviewedBootstrapPlan({
       candidateEnvioProviderDeploymentId:
         candidateEnvioProvider.providerDeploymentId,
       candidateInitializationInputCommitment,
-      legacyProductionEnvioIdentity: `envio:${binding.envio.deploymentLabel}`,
+      canonicalReleaseEnvioIdentity: canonicalReleaseEnvio.identity,
+      canonicalReleaseEnvioEndpoint: canonicalReleaseEnvio.endpoint,
       legacyProductionDeploymentRegistered: false,
       publicationAllowedBeforePromotion: false,
       promotionPolicy: "atomic-attestation-then-vercel-cutover",
@@ -2088,7 +2153,8 @@ export function validateReviewedBootstrapPlan(plan) {
       "candidateEnvioIdentity",
       "candidateEnvioProviderDeploymentId",
       "candidateInitializationInputCommitment",
-      "legacyProductionEnvioIdentity",
+      "canonicalReleaseEnvioIdentity",
+      "canonicalReleaseEnvioEndpoint",
       "legacyProductionDeploymentRegistered",
       "publicationAllowedBeforePromotion",
       "promotionPolicy",
@@ -2112,11 +2178,11 @@ export function validateReviewedBootstrapPlan(plan) {
     !/^[0-9a-f]{40}$/u.test(
       plan.candidateIsolation.candidateSourceCommit ?? "",
     ) ||
-    !/^envio:[a-z0-9][a-z0-9-]{0,127}$/u.test(
-      plan.candidateIsolation.legacyProductionEnvioIdentity ?? "",
-    ) ||
-    plan.candidateIsolation.legacyProductionEnvioIdentity ===
+    plan.candidateIsolation.canonicalReleaseEnvioIdentity !==
       candidate.redactedIdentity ||
+    !/^https:\/\/indexer\.hyperindex\.xyz\/[a-z0-9]{7,64}\/v1\/graphql$/u.test(
+      plan.candidateIsolation.canonicalReleaseEnvioEndpoint ?? "",
+    ) ||
     plan.candidateIsolation.legacyProductionDeploymentRegistered !== false ||
     plan.candidateIsolation.publicationAllowedBeforePromotion !== false ||
     plan.candidateIsolation.promotionPolicy !==
@@ -2140,6 +2206,10 @@ export function validateReviewedBootstrapPlan(plan) {
       policyCommitment:
         plan.candidateIsolation.candidatePolicyCommitment,
       sourceCommit: plan.candidateIsolation.candidateSourceCommit,
+      canonicalReleaseEnvioIdentity:
+        plan.candidateIsolation.canonicalReleaseEnvioIdentity,
+      canonicalReleaseEnvioEndpoint:
+        plan.candidateIsolation.canonicalReleaseEnvioEndpoint,
       initializedAt: plan.createdAt,
     },
   );

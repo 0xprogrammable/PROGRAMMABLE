@@ -26,6 +26,8 @@ function fence(promoted = false) {
     promoted,
     publicationCount: promoted ? 5 : 0,
     promotionAttestationCommitment: promoted ? ATTESTATION : null,
+    productCommit: promoted ? "a".repeat(40) : null,
+    stagedDeploymentId: promoted ? "dpl_12345678901234567890" : null,
   };
 }
 
@@ -157,6 +159,18 @@ test("post-attestation gates require source, market, every parity and load evide
   assert.equal(output.reconciliations.length, 5);
   assert.equal(output.sourceProjectorCycles, 2);
   assert.equal(output.marketProjectorCycles, 2);
+});
+
+test("post-attestation gates reject a runtime that is not the database-bound deployment", async () => {
+  await assert.rejects(
+    runPostAttestationStagedGates({
+      candidateEndpointIdentity: "envio:d7a39a2",
+      stagedDeploymentId: "dpl_09876543210987654321",
+      productCommit: "a".repeat(40),
+      inspectFence: async () => fence(true),
+    }),
+    /does not match the database deployment binding/u,
+  );
 });
 
 test("post-attestation gates reject one mismatched release", async () => {
