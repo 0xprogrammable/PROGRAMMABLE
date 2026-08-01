@@ -1,13 +1,13 @@
 # Envio release candidate
 
-Candidate `3c785e4` is prepared but not deployed. It retains the existing
+Candidate `fad4601` is prepared but not deployed. It retains the existing
 Classic V2/V3 and Stock-Paired V1/V2/V3 history. It does not add or activate a
 new Stock launch path.
 
 The candidate fixes the authenticated Stock coordinator creator transition,
 adds the complete runtime artifact identity and widens log placement fields to
 their exact uint32 domain. Its source and rollback identities are pinned in
-[`envio-candidate-3c785e4.json`](./envio-candidate-3c785e4.json).
+[`envio-candidate-fad4601.json`](./envio-candidate-fad4601.json).
 
 ## Local source gate
 
@@ -15,15 +15,15 @@ Use a clean checkout at the exact source commit. Do not generate the mirror
 from a later working tree.
 
 ```bash
-git worktree add --detach /private/tmp/programmable-envio-source-3c785e4 \
-  3c785e473f5ca903c461018417e65c32d1b39a3d
-cd /private/tmp/programmable-envio-source-3c785e4/indexer
+git worktree add --detach /private/tmp/programmable-envio-source-fad4601 \
+  fad46018c9c6289a2ad0c89371b03faef31b5c25
+cd /private/tmp/programmable-envio-source-fad4601/indexer
 pnpm install --frozen-lockfile
 pnpm codegen
 pnpm typecheck
 pnpm test
 node scripts/release-candidate.mjs identity \
-  --source-commit 3c785e473f5ca903c461018417e65c32d1b39a3d
+  --source-commit fad46018c9c6289a2ad0c89371b03faef31b5c25
 ```
 
 The identity output must match the candidate JSON byte for byte at every
@@ -33,7 +33,7 @@ identity field.
 
 The private `0xprogrammable/programmable-indexer` repository is the only Envio
 deployment mirror. Create a review branch there, replace only `indexer/` with
-the tree from source commit `3c785e4`, and set its root `SOURCE_COMMIT` to the
+the tree from source commit `fad4601`, and set its root `SOURCE_COMMIT` to the
 full source SHA. Keep the existing deployment manifests unchanged. Review the
 tree diff before committing and pushing that branch.
 
@@ -48,8 +48,8 @@ deployment. Confirm the values with `indexer env list` before continuing.
 ```bash
 npx --yes envio-cloud@0.10.0 indexer env set \
   programmable-indexer 0xprogrammable \
-  ENVIO_DEPLOYMENT_LABEL=production-3c785e4 \
-  ENVIO_SOURCE_COMMIT=3c785e473f5ca903c461018417e65c32d1b39a3d \
+  ENVIO_DEPLOYMENT_LABEL=production-fad4601 \
+  ENVIO_SOURCE_COMMIT=fad46018c9c6289a2ad0c89371b03faef31b5c25 \
   ENVIO_CONFIG_SHA256=0x378e3a799c762cb31107792c7123f5f90b54b5826884c398995e7465176fe1c2 \
   ENVIO_SCHEMA_SHA256=0xdf3d65e033e96d7ebbe62b6f114b6a30f10c8944e5c6fca6b020c3130bb738c0 \
   ENVIO_HANDLER_SHA256=0x9f68d05cc8907f1c422cb2584b338ed42375eb4b6033cbec1338d00577267491 \
