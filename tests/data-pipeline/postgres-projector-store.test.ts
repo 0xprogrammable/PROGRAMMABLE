@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { keccak256 } from "viem";
+import { concat, encodeAbiParameters, keccak256, toBytes } from "viem";
 
 vi.mock("server-only", () => ({}));
 
@@ -18,6 +18,7 @@ import type { EnvioCandidate } from "../../lib/data-pipeline/envio";
 import type { DualRpcCandidateWindowEvidence } from "../../lib/data-pipeline/dual-rpc";
 import { projectorOccurrenceUuid } from "../../lib/data-pipeline/projector-ids";
 import { foldProjectorRewardState } from "../../lib/data-pipeline/projector-reward-fold";
+import { runtimeBytecodeEvidence } from "../../lib/data-pipeline/runtime-bytecode";
 
 const bytes32 = (byte: string) => `0x${byte.repeat(64)}` as `0x${string}`;
 const address = (byte: string) => `0x${byte.repeat(40)}` as `0x${string}`;
@@ -118,6 +119,8 @@ class StoreExecutor implements PostgresExecutor {
   includeHistoricalStock = false;
   provisionalRows: readonly Record<string, unknown>[] = [];
   omitReorgGeneration = false;
+  classicNormalizedRuntimeCodeHash = bytes32("e");
+  classicImmutableReferencesCommitment = bytes32("f");
 
   async transaction<T>(
     work: (transaction: PostgresTransaction) => Promise<T>,
@@ -288,9 +291,11 @@ class StoreExecutor implements PostgresExecutor {
                   deployed_address_field: "vault",
                   deployed_source_role: "reward_vault",
                   deployed_artifact_creation_code_commitment: bytes32("d"),
-                  normalized_runtime_code_hash: bytes32("e"),
+                  normalized_runtime_code_hash:
+                    this.classicNormalizedRuntimeCodeHash,
                   expected_instance_runtime_code_hash: null,
-                  immutable_references_commitment: bytes32("f"),
+                  immutable_references_commitment:
+                    this.classicImmutableReferencesCommitment,
                   immutable_binding_spec: {
                     factoryConfigurationField: "configurationCommitment",
                     bindings: [
@@ -358,10 +363,14 @@ class StoreExecutor implements PostgresExecutor {
               deployed_source_role: "reward_vault",
               deployment_block_number: "25645000",
               runtime_code_hash: bytes(bytes32("4")),
-              normalized_runtime_code_hash: bytes(bytes32("e")),
+              normalized_runtime_code_hash: bytes(
+                this.classicNormalizedRuntimeCodeHash,
+              ),
               expected_instance_runtime_code_hash: null,
               runtime_code_length: "200",
-              immutable_references_commitment: bytes(bytes32("f")),
+              immutable_references_commitment: bytes(
+                this.classicImmutableReferencesCommitment,
+              ),
               immutable_binding_spec: {
                 factoryConfigurationField: "configurationCommitment",
                 bindings: [
@@ -683,6 +692,19 @@ describe("concrete projector Postgres store", () => {
 
   it("stages one exact Classic parent and runtime without advancing the ingestion cursor", async () => {
     const executor = new StoreExecutor();
+    const sourceAddress = address("f");
+    const rawRuntimeBytes = Buffer.alloc(200, 0x60);
+    bytes(sourceAddress).copy(rawRuntimeBytes, 4);
+    const rawRuntimeCode = `0x${rawRuntimeBytes.toString("hex")}` as const;
+    const canonicalRuntimeEvidence = runtimeBytecodeEvidence({
+      runtimeBytecode: rawRuntimeCode,
+      expectedByteLength: 200,
+      immutableReferences: [{ start: 4, length: 20 }],
+    });
+    executor.classicNormalizedRuntimeCodeHash =
+      canonicalRuntimeEvidence.normalizedRuntimeCodeHash;
+    executor.classicImmutableReferencesCommitment =
+      canonicalRuntimeEvidence.immutableReferencesCommitment;
     const store = createPostgresProjectorStore({
       executor,
       providers: PROVIDERS,
@@ -693,9 +715,13 @@ describe("concrete projector Postgres store", () => {
     const plan = await store.readPlan();
     executor.queries.splice(0);
     const template = plan.dynamicSourceTemplates[0]!;
-    const sourceAddress = address("f");
-    const rawRuntimeCode = `0x${"60".repeat(200)}` as `0x${string}`;
     const runtimeCodeHash = keccak256(rawRuntimeCode);
+    const immutableValuesCommitment = keccak256(
+      concat([
+        toBytes("programmable:data-pipeline:immutable-values:v1\0"),
+        encodeAbiParameters([{ type: "bytes[]" }], [[sourceAddress]]),
+      ]),
+    );
     const parent: EnvioCandidate = {
       candidateId: `1:${bytes32("d")}:${bytes32("e")}:10`,
       chainId: 1,
@@ -766,62 +792,115 @@ describe("concrete projector Postgres store", () => {
         providerLogCommitments: [bytes32("2"), bytes32("2")],
       },
     };
+    const runtimeObservation = {
+      chainId: 1 as const,
+      parentCandidateId: parent.candidateId,
+      sourceAddress,
+      deploymentBlockNumber: parent.blockNumber,
+      deploymentBlockHash: parent.blockHash,
+      providerIdentities: ["alchemy", "quicknode"] as const,
+      providerVendorGroups: ["alchemy", "quicknode"] as const,
+      providerEndpointCommitments: [bytes32("3"), bytes32("4")] as const,
+      providerOriginCommitments: [bytes32("5"), bytes32("6")] as const,
+      rawRuntimeCodeA: rawRuntimeCode,
+      rawRuntimeCodeB: rawRuntimeCode,
+      runtimeCodeHashA: runtimeCodeHash,
+      runtimeCodeHashB: runtimeCodeHash,
+      normalizedRuntimeCodeHashA:
+        template.expectedNormalizedRuntimeCodeHash,
+      normalizedRuntimeCodeHashB:
+        template.expectedNormalizedRuntimeCodeHash,
+      runtimeByteLengthA: "200",
+      runtimeByteLengthB: "200",
+      immutableReferences: template.immutableReferences,
+      immutableReferencesCommitment:
+        template.expectedImmutableReferencesCommitment,
+      immutableValues: [sourceAddress],
+      immutableValuesCommitment,
+      reconstructedRuntimeCode: rawRuntimeCode,
+      reconstructedRuntimeCodeHash: runtimeCodeHash,
+      factoryConfigurationCommitment: bytes32("9"),
+      template,
+      startedAtMs: 1,
+      completedAtMs: 2,
+      elapsedMs: 1,
+      hardDeadlineMs: 75_000,
+      providerCallCounts: [1, 1] as const,
+    };
+    const stageInput = {
+      plan,
+      snapshotBlock: parent.blockNumber,
+      candidates: [parent],
+      evidence,
+      runtimeObservations: [runtimeObservation],
+      blockComplete: false,
+    } as const;
 
     await expect(
       store.stageVerifiedDynamicParents({
-        plan,
-        snapshotBlock: parent.blockNumber,
-        candidates: [parent],
-        evidence,
-        runtimeObservations: [
-          {
-            chainId: 1,
-            parentCandidateId: parent.candidateId,
-            sourceAddress,
-            deploymentBlockNumber: parent.blockNumber,
-            deploymentBlockHash: parent.blockHash,
-            providerIdentities: ["alchemy", "quicknode"],
-            providerVendorGroups: ["alchemy", "quicknode"],
-            providerEndpointCommitments: [bytes32("3"), bytes32("4")],
-            providerOriginCommitments: [bytes32("5"), bytes32("6")],
-            rawRuntimeCodeA: rawRuntimeCode,
-            rawRuntimeCodeB: rawRuntimeCode,
-            runtimeCodeHashA: runtimeCodeHash,
-            runtimeCodeHashB: runtimeCodeHash,
-            normalizedRuntimeCodeHashA:
-              template.expectedNormalizedRuntimeCodeHash,
-            normalizedRuntimeCodeHashB:
-              template.expectedNormalizedRuntimeCodeHash,
-            runtimeByteLengthA: "200",
-            runtimeByteLengthB: "200",
-            immutableReferences: template.immutableReferences,
-            immutableReferencesCommitment:
-              template.expectedImmutableReferencesCommitment,
-            immutableValues: [sourceAddress],
-            immutableValuesCommitment: bytes32("8"),
-            reconstructedRuntimeCode: rawRuntimeCode,
-            reconstructedRuntimeCodeHash: runtimeCodeHash,
-            factoryConfigurationCommitment: bytes32("9"),
-            template,
-            startedAtMs: 1,
-            completedAtMs: 2,
-            elapsedMs: 1,
-            hardDeadlineMs: 75_000,
-            providerCallCounts: [1, 1],
-          },
-        ],
-        blockComplete: false,
+        ...stageInput,
+        runtimeObservations: [{
+          ...runtimeObservation,
+          immutableValuesCommitment: bytes32("8"),
+        }],
       }),
+    ).rejects.toMatchObject({ disposition: "fatal-codec-or-caller" });
+    expect(
+      executor.queries.some(({ text }) => text.includes("open_run")),
+    ).toBe(false);
+
+    await expect(
+      store.stageVerifiedDynamicParents(stageInput),
     ).resolves.toBeUndefined();
 
     const statements = executor.queries.map(({ text }) => text);
     expect(statements.some((text) =>
       text.includes("append_dual_rpc_runtime_code_evidence"),
     )).toBe(true);
+    const runtimeWrite = executor.queries.find(({ text }) =>
+      text.includes("append_dual_rpc_runtime_code_evidence"),
+    );
+    expect(runtimeWrite?.values).toHaveLength(24);
+    expect(Buffer.from(runtimeWrite?.values[2] as Uint8Array)).toEqual(
+      bytes(sourceAddress),
+    );
+    expect(runtimeWrite?.values[4]).toBe(IDS[1]);
+    expect(runtimeWrite?.values[5]).toBe(IDS[2]);
+    expect(runtimeWrite?.values[10]).toBe("200");
+    expect(runtimeWrite?.values[11]).toBe("200");
+    expect(
+      (runtimeWrite?.values[15] as readonly Uint8Array[]).map((value) =>
+        Buffer.from(value)
+      ),
+    ).toEqual([bytes(sourceAddress)]);
+    expect(Buffer.from(runtimeWrite?.values[16] as Uint8Array)).toEqual(
+      bytes(immutableValuesCommitment),
+    );
+    expect(runtimeWrite?.values[22]).toEqual(runtimeWrite?.values[21]);
     const stage = executor.queries.find(({ text }) =>
       text.includes("stage_verified_dynamic_parents_v2"),
     );
     expect(stage?.values).toHaveLength(27);
+    expect(stage?.values.slice(2, 10)).toEqual([
+      "classic-v3",
+      "classic",
+      "core",
+      "projector-v1",
+      "70000000-0000-4000-8000-000000000010",
+      "1",
+      "0",
+      "7",
+    ]);
+    expect(stage?.values[11]).toBe(IDS[0]);
+    expect(stage?.values[12]).toBe("canonical-events");
+    expect(stage?.values.slice(13, 15)).toEqual([IDS[1], IDS[2]]);
+    expect(stage?.values[17]).toBe(parent.blockNumber);
+    expect(
+      (stage?.values[20] as readonly Uint8Array[]).map((value) =>
+        Buffer.from(value)
+      ),
+    ).toEqual([bytes(bytes32("2"))]);
+    expect(stage?.values[21]).toEqual(stage?.values[20]);
     expect(statements.some((text) =>
       text.includes("commit_envio_ingestion_page_v1"),
     )).toBe(false);

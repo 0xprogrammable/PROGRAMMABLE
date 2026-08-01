@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { encodeAbiParameters, keccak256, toBytes } from "viem";
+import { concat, encodeAbiParameters, keccak256, toBytes } from "viem";
 
 import {
   canonicalFingerprintPreimageV1,
@@ -67,6 +67,7 @@ import {
   PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
   PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
 } from "./projector-runtime-limits";
+import { runtimeBytecodeEvidence } from "./runtime-bytecode";
 import {
   projectionExecutionTraceCommitmentV1,
   providerEvidenceV2,
@@ -85,6 +86,9 @@ const ENVIO_CONTROL_SCOPE = Object.freeze({
   projectorVersion: "envio-adapter-v1",
 });
 const RELEASE_PROJECTOR_VERSION = "projector-v1";
+const IMMUTABLE_VALUES_DOMAIN = toBytes(
+  "programmable:data-pipeline:immutable-values:v1\0",
+);
 
 export type ProjectorProviderDatabaseBinding = Readonly<{
   type: "rpc_provider" | "envio_deployment" | "uniswap_subgraph";
@@ -1206,6 +1210,37 @@ function provisionalParentInput(input: {
   const immutableValues = runtime.immutableValues.map((value) =>
     canonicalRawData(value),
   );
+  let canonicalRuntimeEvidence: ReturnType<typeof runtimeBytecodeEvidence>;
+  let observedImmutableValues: readonly `0x${string}`[];
+  let recomputedImmutableValuesCommitment: HexBytes32;
+  try {
+    canonicalRuntimeEvidence = runtimeBytecodeEvidence({
+      runtimeBytecode: runtimeCodeA,
+      expectedByteLength: Number(runtimeByteLength),
+      immutableReferences: template.immutableReferences,
+    });
+    const runtimeBytes = hexToBytes(runtimeCodeA);
+    observedImmutableValues = Object.freeze(
+      template.immutableReferences.map(({ start, length }) =>
+        canonicalRawData(
+          `0x${Array.from(
+            runtimeBytes.slice(start, start + length),
+            (byte) => byte.toString(16).padStart(2, "0"),
+          ).join("")}`,
+        ),
+      ),
+    );
+    recomputedImmutableValuesCommitment = canonicalBytes32(
+      keccak256(
+        concat([
+          IMMUTABLE_VALUES_DOMAIN,
+          encodeAbiParameters([{ type: "bytes[]" }], [immutableValues]),
+        ]),
+      ),
+    );
+  } catch {
+    return projectorValidationFailure();
+  }
   if (
     candidate.chainId !== 1 ||
     candidate.contractName !== "ClassicV3RewardVaultFactory" ||
@@ -1250,10 +1285,14 @@ function provisionalParentInput(input: {
     runtimeCodeA !== reconstructedRuntimeCode ||
     runtimeCodeHashA !== runtimeCodeHashB ||
     runtimeCodeHashA !== reconstructedRuntimeCodeHash ||
-    keccak256(runtimeCodeA) !== runtimeCodeHashA ||
+    canonicalRuntimeEvidence.exactRuntimeCodeHash !== runtimeCodeHashA ||
     normalizedRuntimeCodeHashA !== normalizedRuntimeCodeHashB ||
+    canonicalRuntimeEvidence.normalizedRuntimeCodeHash !==
+      normalizedRuntimeCodeHashA ||
     normalizedRuntimeCodeHashA !==
       template.expectedNormalizedRuntimeCodeHash ||
+    canonicalRuntimeEvidence.immutableReferencesCommitment !==
+      immutableReferencesCommitment ||
     immutableReferencesCommitment !==
       template.expectedImmutableReferencesCommitment ||
     JSON.stringify(runtime.immutableReferences) !==
@@ -1261,6 +1300,11 @@ function provisionalParentInput(input: {
     runtimeByteLength !== runtime.runtimeByteLengthA ||
     runtimeByteLength !== runtime.runtimeByteLengthB ||
     runtimeByteLength !== template.expectedRuntimeByteLength ||
+    immutableValues.length !== observedImmutableValues.length ||
+    immutableValues.some(
+      (value, index) => value !== observedImmutableValues[index],
+    ) ||
+    immutableValuesCommitment !== recomputedImmutableValuesCommitment ||
     factoryConfigurationCommitment !==
       canonicalBytes32(runtime.factoryConfigurationCommitment) ||
     runtime.providerCallCounts[0] !== 1 ||
