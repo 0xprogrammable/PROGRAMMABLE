@@ -27,11 +27,25 @@ end
 $bootstrap_projector_runtime_roles$;
 
 alter role programmable_projector_runtime
-  nologin nosuperuser nocreatedb nocreaterole noinherit
-  noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
 alter role programmable_projector_runtime_login
-  login password null nosuperuser nocreatedb nocreaterole noinherit
-  noreplication nobypassrls;
+  login password null nocreatedb nocreaterole noinherit;
+
+do $posture$
+begin
+  if exists (
+    select 1
+    from pg_catalog.pg_roles
+    where rolname = any (array[
+      'programmable_projector_runtime',
+      'programmable_projector_runtime_login'
+    ]::name[])
+      and (rolsuper or rolreplication or rolbypassrls)
+  ) then
+    raise exception 'programmable projector-runtime role posture is privileged';
+  end if;
+end
+$posture$;
 
 grant programmable_projector_runtime to programmable_projector_runtime_login
   with inherit false, set true;

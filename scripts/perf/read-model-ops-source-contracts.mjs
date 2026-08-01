@@ -41,7 +41,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       migrations: Object.freeze([
         Object.freeze({
           path: "supabase/migrations/20260731203900_projector_runtime_singleton_lease.sql",
-          sha256: "4849bb4a7e8683ce88acbe74e43d38f00c758388509b9ab8ac9fda426a5ebc09",
+          sha256: "068f27a70ec6df57b84bf336fc2c46b316a7d10d40b9d489fc47e95acb6f74b0",
         }),
         Object.freeze({
           path: "supabase/migrations/20260731224000_projector_provider_evidence_binding.sql",
@@ -49,7 +49,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "supabase/migrations/20260801090000_bootstrap_dynamic_evidence_and_launch_requirements.sql",
-          sha256: "d4883ef60590c54c2a1bc9cd4834958fb22004a49e4e98dc9fd9a08311c7fbed",
+          sha256: "e095d128feb12c8962c81be003e693dd67417cfed209144c998ab57d5e8786aa",
         }),
         Object.freeze({
           path: "supabase/migrations/20260801091000_candidate_projector_unpromoted_gate.sql",

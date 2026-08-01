@@ -59,27 +59,52 @@ end
 $bootstrap$;
 
 alter role programmable_migrator
-  nologin nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
 alter role programmable_projector
-  nologin nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
 alter role programmable_reconciler
-  nologin nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
 alter role programmable_api_reader
-  nologin nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
 alter role programmable_profile_binder
-  nologin nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
 alter role programmable_profile_recovery
-  nologin nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
 alter role programmable_profile_writer
-  nologin nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
 alter role programmable_maintenance
-  nologin nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
 alter role programmable_api_reader_login
-  login nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  login nocreatedb nocreaterole noinherit;
 alter role programmable_projector_login
-  login nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  login nocreatedb nocreaterole noinherit;
 alter role programmable_reconciler_login
-  login nosuperuser nocreatedb nocreaterole noinherit noreplication nobypassrls;
+  login nocreatedb nocreaterole noinherit;
+
+do $posture$
+begin
+  if exists (
+    select 1
+    from pg_catalog.pg_roles
+    where rolname = any (array[
+      'programmable_migrator',
+      'programmable_projector',
+      'programmable_reconciler',
+      'programmable_api_reader',
+      'programmable_profile_binder',
+      'programmable_profile_recovery',
+      'programmable_profile_writer',
+      'programmable_maintenance',
+      'programmable_api_reader_login',
+      'programmable_projector_login',
+      'programmable_reconciler_login'
+    ]::name[])
+      and (rolsuper or rolreplication or rolbypassrls)
+  ) then
+    raise exception 'programmable role posture is privileged';
+  end if;
+end
+$posture$;
 
 grant programmable_api_reader to programmable_api_reader_login
   with inherit false, set true;
@@ -88,8 +113,22 @@ grant programmable_projector to programmable_projector_login
 grant programmable_reconciler to programmable_reconciler_login
   with inherit false, set true;
 
--- The local/hosted migration connection must be able to SET ROLE for all later DDL.
-grant programmable_migrator to postgres with admin option;
+-- PostgreSQL 17 records the CREATEROLE creator as grantor, so granting ADMIN
+-- back to that same role is rejected. Grant only the SET capability needed by
+-- the migration connection and then verify it explicitly.
+grant programmable_migrator to postgres with inherit false, set true;
+
+do $migrator_membership$
+begin
+  if not pg_catalog.pg_has_role(
+    current_user,
+    'programmable_migrator',
+    'set'
+  ) then
+    raise exception 'migration connection cannot set programmable_migrator';
+  end if;
+end
+$migrator_membership$;
 
 create schema if not exists programmable_private authorization programmable_migrator;
 alter schema programmable_private owner to programmable_migrator;
@@ -761,11 +800,11 @@ alter default privileges for role programmable_migrator in schema programmable_p
     programmable_profile_binder, programmable_profile_recovery,
     programmable_profile_writer, programmable_maintenance;
 
-reset role;
-
 revoke all on all tables in schema programmable_private
   from public, anon, authenticated, service_role;
 revoke all on all sequences in schema programmable_private
   from public, anon, authenticated, service_role;
 revoke all on all functions in schema programmable_private
   from public, anon, authenticated, service_role;
+
+reset role;

@@ -16,8 +16,20 @@ end
 $bootstrap_operator$;
 
 alter role programmable_operator
-  nologin nosuperuser nocreatedb nocreaterole noinherit
-  noreplication nobypassrls;
+  nologin nocreatedb nocreaterole noinherit;
+
+do $posture$
+begin
+  if exists (
+    select 1
+    from pg_catalog.pg_roles
+    where rolname = 'programmable_operator'
+      and (rolsuper or rolreplication or rolbypassrls)
+  ) then
+    raise exception 'programmable operator role posture is privileged';
+  end if;
+end
+$posture$;
 
 grant programmable_operator to postgres with inherit false, set true;
 
