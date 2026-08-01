@@ -14,6 +14,7 @@ import {
   validatePreparePrReviewTarget
 } from "../cli-prepare-pr.mjs";
 import { resolvePublicGitHubSource, resolvePublicGitHubUser } from "../cli-github-source.mjs";
+import { materializeExample } from "../example-materializer-core.mjs";
 import { GitHubPublicSourceError } from "../github-public-source-core.mjs";
 import { calculateReviewTargetHash } from "../review-target-core.mjs";
 import { REVIEW_TARGET_CLOSURE_METHOD_V1 } from "../review-target-contract.mjs";
@@ -381,10 +382,10 @@ test("prepare-pr deterministically binds the pushed public GitHub revision witho
       contact: "https://github.com/Example-Builder"
     });
     assert.equal(centralValidation.application.stage, "proposal");
-    assert.equal(centralValidation.compatibility.result, "changes-required");
+    assert.equal(centralValidation.compatibility.result, "architecture-review-required");
     assert.ok(centralValidation.compatibility.findings.length > 0);
     assert.equal(centralValidation.evidenceIndex.evidence.length, 1);
-    assert.equal(centralValidation.evidenceIndex.evidence[0].status, "failed");
+    assert.equal(centralValidation.evidenceIndex.evidence[0].status, "blocked");
     assert.equal(
       centralValidation.evidenceIndex.evidence[0].url,
       `https://github.com/example-builder/programmable-proposal/blob/${head}/submissions/ready-model/compatibility-report.json`
@@ -789,7 +790,7 @@ test("prepare-pr binds one canonical HEAD companion manifest and preserves a 64-
       result.centralPackage.files.find(({ path: filePath }) => filePath === "compatibility-report.json").content
     );
     assert.deepEqual(centralApplication.source.companions, result.github.sourceRequest.companions);
-    assert.equal(centralCompatibility.result, "changes-required");
+    assert.equal(centralCompatibility.result, "architecture-review-required");
     assert.ok(centralCompatibility.findings.some(({ code }) => code === "COMPANION_CLOSURE_REVIEW_REQUIRED"));
     assert.match(result.body, /Companion repositories: `1` exact public bindings/u);
     assert.equal(
@@ -1724,9 +1725,16 @@ function createReadyRepository({
   );
   assert.equal(scaffold.status, 0, scaffold.stderr);
   const packageRoot = path.join(repository, "submissions", "ready-model");
+  writeConcreteProposalDocuments(packageRoot, modelName);
   if (proposalText !== null) fs.writeFileSync(path.join(packageRoot, "PROPOSAL.md"), proposalText);
   const submissionPath = path.join(packageRoot, "submission.json");
-  const submission = JSON.parse(fs.readFileSync(submissionPath, "utf8"));
+  const submission = materializeExample({
+    skillRoot,
+    exampleId: "transparent-pool-scoped-fee",
+    stepId: "fully-specified"
+  });
+  submission.model.id = "ready-model";
+  submission.model.name = modelName;
   submission.builder.github = "example-builder";
   submission.builder.contact = "@example-builder";
   submission.builder.licenseDeclaration = "I own this work and submit it under MIT.";
@@ -1785,6 +1793,18 @@ function createReadyRepository({
       fs.rmSync(container, { recursive: true, force: true });
     }
   };
+}
+
+function writeConcreteProposalDocuments(packageRoot, modelName) {
+  const documents = {
+    "PROPOSAL.md": `# ${modelName}\n\nThe project launches one token and uses one immutable pool-scoped hook to collect a visible fixed fee for an immutable beneficiary. The exact PoolManager settlement, beneficiary liability, claim path and failure behavior are recorded in submission.json. The hook has no administrator, proxy, pause, rescue or redirect authority.\n`,
+    "THREAT_MODEL.md": `# ${modelName} threat model\n\nThe reviewed assets are both pool currencies and each PoolId-scoped beneficiary liability. PoolManager authentication, exact PoolId admission, token transfers, recipient claims and indexer reconstruction are separate trust boundaries. Every settlement or transfer failure reverts without borrowing another pool's balance.\n`,
+    "TEST_PLAN.md": `# ${modelName} test plan\n\nPlanned checks cover permission bits, PoolManager authentication, all swap quadrants, exact fee rounding, zero final deltas, PoolId liability isolation, hostile token behavior, failed claims, event reconstruction and standard liquidity exits.\n`,
+    "EVIDENCE.md": `# ${modelName} evidence\n\nThe deterministic compatibility report is recorded for this proposal. Contract, fuzz, invariant, static-analysis, deployment, routing and availability evidence remains planned and is not reported as completed.\n`
+  };
+  for (const [fileName, contents] of Object.entries(documents)) {
+    fs.writeFileSync(path.join(packageRoot, fileName), contents);
+  }
 }
 
 async function rejectsCode(operation, code) {

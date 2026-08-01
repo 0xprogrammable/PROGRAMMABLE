@@ -364,6 +364,8 @@ Wrong paths, missing literal relative imports, symlinks, Git LFS pointers and re
 source-binding errors. Compiler AST or build-info evidence must separately prove Solidity compiler source closure. A
 successful intake result is `intakeValidated`, never `verified`, `accepted`, or `releaseEligible`.
 
+Proposal packaging requires a concrete outcome, architecture, lifecycle, value flow, authority evidence, failure handling, and project-specific documents; specific open architecture questions remain allowed, but generic or substantially unchanged templates fail.
+
 The backward-compatible `integration.sdkDependencies` field records every exact registry package used by JavaScript,
 TypeScript, or package-backed Solidity, not only SDKs. Package name, exact version, and sha512 integrity are mandatory.
 Source repository and 40-character commit are either both present or both null; official documented Uniswap SDK

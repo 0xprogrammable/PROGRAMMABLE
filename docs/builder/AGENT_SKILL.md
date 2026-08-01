@@ -186,6 +186,11 @@ preparation remain blocked. Do not describe direct document-only validation as a
 `package` validates the complete local review package, its declared files, hashes, source closure and evidence without
 executing project code. It does not call GitHub and does not claim that the revision is public or pushed.
 
+A proposal may keep a specific architecture-changing question open, but it must already replace the scaffold with a
+concrete idea, architecture, lifecycle, value flows, authority and failure model, and project-specific review
+documents. A practically unchanged scaffold or generic placeholder list fails `package` and cannot reach
+`prepare-pr`.
+
 ### 6. Run `prepare-pr`
 
 The exact project commit must now be clean, pushed and publicly reachable. `prepare-pr` independently resolves the

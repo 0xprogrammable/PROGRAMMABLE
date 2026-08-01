@@ -1866,7 +1866,7 @@ test("scaffolder creates an isolated package and never touches the model registr
   }
 });
 
-test("proposal package verifier preserves a fresh redesign report without executing code", () => {
+test("proposal package verifier rejects an unchanged scaffold after identity fields are filled", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-package-test-"));
   const modelRoot = path.join(destinationRoot, "open-design");
   try {
@@ -1903,14 +1903,72 @@ test("proposal package verifier preserves a fresh redesign report without execut
       [path.join(skillRoot, "scripts", "verify-package.mjs"), modelRoot],
       { cwd: repositoryRoot, encoding: "utf8", shell: false }
     );
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.status, 1, result.stderr || result.stdout);
     const report = JSON.parse(result.stdout);
-    assert.equal(report.intakeValidated, true);
+    assert.equal(report.intakeValidated, false);
     assert.equal(report.accepted, false);
     assert.equal(report.releaseEligible, false);
     assert.equal(report.preflightDecision, "REDESIGN_REQUIRED");
     assert.equal(report.designReadyForPrototype, false);
     assert.equal(report.prototypeIntakeValidated, false);
+    assert.ok(report.errors.some((error) => error.includes("replace the scaffold idea")), JSON.stringify(report.errors));
+    assert.ok(report.errors.some((error) => error.includes("PROPOSAL.md is still substantially")), JSON.stringify(report.errors));
+    assert.ok(report.errors.some((error) => error.includes("specific named architecture questions")), JSON.stringify(report.errors));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
+test("proposal package verifier accepts a concrete design with one named architecture question", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-package-ready-test-"));
+  const modelRoot = path.join(destinationRoot, "open-design");
+  try {
+    let result = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "scaffold-submission.mjs"), "open-design", "--destination", destinationRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    const publicSubmission = readySubmission();
+    publicSubmission.model.id = "open-design";
+    publicSubmission.model.name = "Open Design";
+    publicSubmission.builder.github = "gardenbuilder";
+    publicSubmission.builder.contact = "@gardenbuilder";
+    publicSubmission.builder.licenseDeclaration = "I own this proposal and submit it under the repository MIT License.";
+    publicSubmission.unresolved = [
+      "Should the observer event remain aggregate-only, or include a separately authenticated application actor for this exact pool?"
+    ];
+    fs.writeFileSync(
+      path.join(modelRoot, "submission.json"),
+      `${JSON.stringify(publicSubmission, null, 2)}\n`
+    );
+    writeConcreteProposalDocuments(modelRoot, publicSubmission.model.name);
+
+    result = childProcess.spawnSync(
+      process.execPath,
+      [
+        path.join(skillRoot, "scripts", "validate-submission.mjs"),
+        path.join(modelRoot, "submission.json"),
+        "--repository-root",
+        repositoryRoot,
+        "--write-report",
+        path.join(modelRoot, "compatibility-report.json")
+      ],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr);
+
+    result = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.intakeValidated, true, JSON.stringify(report.errors));
+    assert.equal(report.preflightDecision, "REDESIGN_REQUIRED");
+    assert.equal(report.designReadyForPrototype, false);
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
   }
@@ -3559,6 +3617,47 @@ function completeCustomAccounting() {
     failureIsolation: "A settlement or backing failure reverts the atomic action without consuming another pool's balance.",
     withdrawalOrdering: "Liability state is reduced before the external transfer and the complete withdrawal reverts on transfer failure."
   };
+}
+
+function writeConcreteProposalDocuments(modelRoot, modelName) {
+  const documents = {
+    "PROPOSAL.md": [
+      `# ${modelName}`,
+      "",
+      "## Outcome and architecture",
+      "The project launches one fixed-supply token and records a PoolId-scoped aggregate after each completed canonical-pool swap. One immutable hook uses only afterSwap, returns no delta, changes no price or fee, and has no administrator, proxy, rescue path, keeper, oracle, or signing authority.",
+      "",
+      "## Value flow and failure",
+      "The standard router and PoolManager move and settle both pool currencies. The observer takes no custody and creates no beneficiary liability. Invalid pool admission or a failed storage update reverts the complete swap, while existing liquidity positions keep their standard exit path.",
+      "",
+      "## Open architecture question",
+      "Should the observer event remain aggregate-only, or include a separately authenticated application actor for this exact pool?",
+      ""
+    ].join("\n"),
+    "THREAT_MODEL.md": [
+      `# ${modelName} threat model`,
+      "",
+      "The assets at risk are the two PoolManager currencies and the canonical liquidity position. The hook never owns either asset and cannot return a settlement delta. PoolManager authentication, exact PoolId admission, router state and event reconstruction are separate trust boundaries.",
+      "",
+      "A direct callback, wrong PoolId, unexpected permission mask or failed storage write reverts atomically. The immutable design has no mutable controller; users retain the standard swap and liquidity-removal paths.",
+      ""
+    ].join("\n"),
+    "TEST_PLAN.md": [
+      `# ${modelName} test plan`,
+      "",
+      "Planned checks cover PoolManager authentication, exact PoolId admission, the afterSwap selector, zero returned deltas, all four swap quadrants, callback reverts, event reconstruction and preservation of standard liquidity exits. The open event-identity choice must be fixed before implementation evidence is marked passed.",
+      ""
+    ].join("\n"),
+    "EVIDENCE.md": [
+      `# ${modelName} evidence`,
+      "",
+      "The current record contains the deterministic compatibility report for this proposal. Contract, fuzz, invariant, static-analysis, deployment, routing and availability evidence is planned and is not claimed as completed.",
+      ""
+    ].join("\n")
+  };
+  for (const [fileName, contents] of Object.entries(documents)) {
+    fs.writeFileSync(path.join(modelRoot, fileName), contents);
+  }
 }
 
 function verifyPrototypeProcess(modelRoot, targetRepositoryRoot = repositoryRoot) {

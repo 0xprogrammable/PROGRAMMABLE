@@ -182,6 +182,13 @@ Commit the generated report. If the design changes, regenerate it. CI should fai
 submission contents or standard version. A proposal package may preserve a `REDESIGN_REQUIRED` or `UNSUPPORTED`
 decision so reviewers can discuss the design. Prototype packages require `PROTOTYPE_READY`.
 
+`REDESIGN_REQUIRED` does not make an empty scaffold application-ready. A proposal package must replace the generated
+instructions with a concrete idea, base architecture, lifecycle, value flows, authority inventory or explicit
+no-authority statement, failure response, and project-specific proposal, threat model, test plan, and evidence status.
+It may retain specific named architecture questions in `unresolved`; each question must identify the actual decision
+instead of repeating a generic template task. `package` rejects placeholder fields and substantially unchanged scaffold
+documents before `prepare-pr` performs any public-source work.
+
 `check` also records `closure.status` and closed diagnostics for the exact repository. A proposal may retain an
 incomplete closure for aliases, bundler globs, runtime module selection, a language without a bundled scanner, a
 non-Foundry Solidity build profile, or a separately pinned companion repository; its central result remains
