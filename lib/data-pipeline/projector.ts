@@ -149,6 +149,7 @@ type DynamicParentForReplay = Readonly<{
 }>;
 
 const MAXIMUM_DYNAMIC_PARENT_BLOCKS_PER_CYCLE = 8;
+const MAXIMUM_DYNAMIC_ACTIVATION_BLOCKS_PER_CYCLE = 8;
 
 function dynamicParentsForReplay(
   candidates: readonly EnvioCandidate[],
@@ -829,78 +830,98 @@ export async function runProjectorCycle(input: {
         return leftBlock < rightBlock ? -1 : leftBlock > rightBlock ? 1 : 0;
       },
     );
-    const group = orderedActivationGroups[0];
-    if (group) {
-      const activationBlock = group[0]!.launchCandidate.blockNumber;
-      const activationCandidates = candidates.filter(
-        (candidate) => BigInt(candidate.blockNumber) <= BigInt(activationBlock),
-      );
-      const dynamicSources = dynamicSourcesWithActivationBoundaries(
-        plan.dynamicSources,
-        pendingActivations.filter(
-          (pending) =>
-            BigInt(pending.launchCandidate.blockNumber) <=
-            BigInt(activationBlock),
-        ),
-      );
-      const activationEvidence = await verifyWindow({
-        candidates: activationCandidates,
-        cursor,
-        through: {
-          blockNumber: activationBlock,
-          blockGlobalLogIndex: 0xffff_ffff,
-          candidateId: "empty-page",
-        },
-        providers: input.providers,
-        dynamicSources,
-        maximumCandidateCount:
-          PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
-        coveragePolicy: {
-          maximumBlockSpan: COVERAGE_BLOCK_SPAN,
-          maximumRequests: MAXIMUM_COVERAGE_REQUESTS,
-        },
-        rpcPolicy: {
-          hardDeadlineMs: remaining(),
-          maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
-        },
-      });
-      const verifiedActivations = await Promise.all(
-        group.map(async (pending) => {
-          const verification = await verifyClassicV3Activation({
-            activationId: pending.activationId,
-            parentCandidate: pending.historicalParentCandidate,
-            launchCandidate: pending.launchCandidate,
-            sameBlockVaultEvents: activationCandidates.filter(
-              (candidate) =>
-                candidate.blockNumber === activationBlock &&
-                candidate.sourceAddress === pending.sourceAddress &&
-                candidate.contractName === "ClassicV3RewardVault",
+    const selectedActivationGroups = orderedActivationGroups.slice(
+      0,
+      MAXIMUM_DYNAMIC_ACTIVATION_BLOCKS_PER_CYCLE,
+    );
+    if (selectedActivationGroups.length > 0) {
+      const verifiedGroups = await Promise.all(
+        selectedActivationGroups.map(async (group) => {
+          const activationBlock = group[0]!.launchCandidate.blockNumber;
+          const activationCandidates = candidates.filter(
+            (candidate) =>
+              BigInt(candidate.blockNumber) <= BigInt(activationBlock),
+          );
+          const dynamicSources = dynamicSourcesWithActivationBoundaries(
+            plan.dynamicSources,
+            pendingActivations.filter(
+              (pending) =>
+                BigInt(pending.launchCandidate.blockNumber) <=
+                BigInt(activationBlock),
             ),
-            candidateEvidence: activationEvidence,
-            sourceAddress: pending.sourceAddress,
-            template: pending.template,
-            canonicalDeployment: pending.canonicalDeployment,
+          );
+          const activationEvidence = await verifyWindow({
+            candidates: activationCandidates,
+            cursor,
+            through: {
+              blockNumber: activationBlock,
+              blockGlobalLogIndex: 0xffff_ffff,
+              candidateId: "empty-page",
+            },
             providers: input.providers,
-            deadlineMs: remaining(),
+            dynamicSources,
+            maximumCandidateCount:
+              PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
+            coveragePolicy: {
+              maximumBlockSpan: COVERAGE_BLOCK_SPAN,
+              maximumRequests: MAXIMUM_COVERAGE_REQUESTS,
+            },
+            rpcPolicy: {
+              hardDeadlineMs: remaining(),
+              maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
+            },
           });
+          const verifiedActivations = await Promise.all(
+            group.map(async (pending) => {
+              const verification = await verifyClassicV3Activation({
+                activationId: pending.activationId,
+                parentCandidate: pending.historicalParentCandidate,
+                launchCandidate: pending.launchCandidate,
+                sameBlockVaultEvents: activationCandidates.filter(
+                  (candidate) =>
+                    candidate.blockNumber === activationBlock &&
+                    candidate.sourceAddress === pending.sourceAddress &&
+                    candidate.contractName === "ClassicV3RewardVault",
+                ),
+                candidateEvidence: activationEvidence,
+                sourceAddress: pending.sourceAddress,
+                template: pending.template,
+                canonicalDeployment: pending.canonicalDeployment,
+                providers: input.providers,
+                deadlineMs: remaining(),
+              });
+              return Object.freeze({
+                pending,
+                runtimeObservation: verification.runtimeObservation,
+                modelVerificationEvidence:
+                  verification.modelVerificationEvidence,
+              });
+            }),
+          );
           return Object.freeze({
-            pending,
-            runtimeObservation: verification.runtimeObservation,
-            modelVerificationEvidence:
-              verification.modelVerificationEvidence,
+            activationBlock,
+            activationCandidates,
+            activationEvidence,
+            verifiedActivations,
           });
         }),
       );
-      await input.store.stageVerifiedDynamicSourceActivations({
-        candidates: activationCandidates,
-        evidence: activationEvidence,
-        activations: verifiedActivations,
-        blockComplete: false,
-      });
+      for (const group of verifiedGroups) {
+        await input.store.stageVerifiedDynamicSourceActivations({
+          candidates: group.activationCandidates,
+          evidence: group.activationEvidence,
+          activations: group.verifiedActivations,
+          blockComplete: false,
+        });
+      }
+      const lastGroup = verifiedGroups.at(-1)!;
       return {
         status: "staged-dynamic-parent" as const,
-        candidateCount: group.length,
-        snapshotBlock: activationBlock,
+        candidateCount: verifiedGroups.reduce(
+          (sum, group) => sum + group.verifiedActivations.length,
+          0,
+        ),
+        snapshotBlock: lastGroup.activationBlock,
       };
     }
     const evidence = await verifyWindow({

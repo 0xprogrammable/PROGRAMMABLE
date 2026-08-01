@@ -126,9 +126,11 @@ function pendingActivation(input: {
   parent: EnvioCandidate;
   launch: EnvioCandidate;
   sourceAddress: `0x${string}`;
+  activationId?: string;
 }): PendingDynamicSourceActivation {
   return {
-    activationId: "10000000-0000-4000-8000-000000000099",
+    activationId:
+      input.activationId ?? "10000000-0000-4000-8000-000000000099",
     historicalParentCandidate: input.parent,
     launchCandidate: input.launch,
     sourceAddress: input.sourceAddress,
@@ -704,6 +706,146 @@ describe("projector runtime boundary", () => {
         activations: [expect.objectContaining({ pending })],
       }),
     );
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
+
+  it("verifies independent activation blocks before staging them in one cycle", async () => {
+    const input = fixtures();
+    const firstVault = "0x4cfe000000000000000000000000000000000001" as const;
+    const secondVault = "0x4cfe000000000000000000000000000000000002" as const;
+    const firstParent = candidate({
+      blockNumber: 101,
+      logIndex: 7,
+      sourceAddress: CLASSIC_V3_FACTORY,
+      contractName: "ClassicV3RewardVaultFactory",
+      eventName: "ClassicRewardVaultDeployed",
+      decodedPayload: { vault: firstVault },
+    });
+    const firstLaunch = candidate({
+      blockNumber: 101,
+      logIndex: 9,
+      contractName: "ClassicV3Launcher",
+      eventName: "MemeTokenLaunchedV2",
+      decodedPayload: { rewardVault: firstVault },
+    });
+    const firstChild = candidate({
+      blockNumber: 101,
+      logIndex: 10,
+      sourceAddress: firstVault,
+      contractName: "ClassicV3RewardVault",
+      eventName: "CreatorFeesCheckpointed",
+    });
+    const secondParent = candidate({
+      blockNumber: 102,
+      logIndex: 7,
+      sourceAddress: CLASSIC_V3_FACTORY,
+      contractName: "ClassicV3RewardVaultFactory",
+      eventName: "ClassicRewardVaultDeployed",
+      decodedPayload: { vault: secondVault },
+    });
+    const secondLaunch = candidate({
+      blockNumber: 102,
+      logIndex: 9,
+      contractName: "ClassicV3Launcher",
+      eventName: "MemeTokenLaunchedV2",
+      decodedPayload: { rewardVault: secondVault },
+    });
+    const secondChild = candidate({
+      blockNumber: 102,
+      logIndex: 10,
+      sourceAddress: secondVault,
+      contractName: "ClassicV3RewardVault",
+      eventName: "CreatorFeesCheckpointed",
+    });
+    const allCandidates = [
+      firstParent,
+      firstLaunch,
+      firstChild,
+      secondParent,
+      secondLaunch,
+      secondChild,
+    ];
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce(allCandidates)
+      .mockResolvedValueOnce([]);
+    const baseReadPlan = input.store.readPlan.getMockImplementation()!;
+    input.store.readPlan.mockImplementation((async () => ({
+      ...(await baseReadPlan()),
+      dynamicSources: [
+        { sourceAddress: firstVault } as never,
+        { sourceAddress: secondVault } as never,
+      ],
+    })) as never);
+    const firstPending = pendingActivation({
+      parent: firstParent,
+      launch: firstLaunch,
+      sourceAddress: firstVault,
+      activationId: "10000000-0000-4000-8000-000000000098",
+    });
+    const secondPending = pendingActivation({
+      parent: secondParent,
+      launch: secondLaunch,
+      sourceAddress: secondVault,
+      activationId: "10000000-0000-4000-8000-000000000099",
+    });
+    input.store.resolvePendingDynamicSourceActivations.mockResolvedValue([
+      secondPending,
+      firstPending,
+    ]);
+    const order: string[] = [];
+    const verifyClassicV3Activation = vi.fn(async ({ activationId }) => {
+      order.push(`verify:${activationId}`);
+      return {
+        runtimeObservation: {},
+        modelVerificationEvidence: [],
+      } as never;
+    });
+    input.store.stageVerifiedDynamicSourceActivations.mockImplementation((async (
+      stageInput: {
+        activations: readonly {
+          pending: PendingDynamicSourceActivation;
+        }[];
+      },
+    ) => {
+      order.push(`stage:${stageInput.activations[0]!.pending.activationId}`);
+    }) as never);
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+        verifyClassicV3Activation,
+      }),
+    ).resolves.toEqual({
+      status: "staged-dynamic-parent",
+      candidateCount: 2,
+      snapshotBlock: "102",
+    });
+
+    expect(verifyClassicV3Activation).toHaveBeenCalledTimes(2);
+    expect(
+      input.store.stageVerifiedDynamicSourceActivations,
+    ).toHaveBeenCalledTimes(2);
+    expect(input.store.stageVerifiedDynamicSourceActivations)
+      .toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          candidates: [firstParent, firstLaunch, firstChild],
+        }),
+      );
+    expect(input.store.stageVerifiedDynamicSourceActivations)
+      .toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ candidates: allCandidates }),
+      );
+    expect(order.slice(0, 2).every((entry) => entry.startsWith("verify:")))
+      .toBe(true);
+    expect(order.slice(2)).toEqual([
+      `stage:${firstPending.activationId}`,
+      `stage:${secondPending.activationId}`,
+    ]);
     expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
   });
 
