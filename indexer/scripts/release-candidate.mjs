@@ -231,8 +231,26 @@ function assertFrozenBaseline(launches, baseline) {
   ) {
     throw new Error("--baseline must be a non-empty v1 launch inventory baseline");
   }
+  const frozenCanonical = Buffer.from(
+    `${baseline.entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+  );
+  if (
+    baseline.inventory?.count !== baseline.entries.length ||
+    baseline.inventory?.sha256 !== sha256(frozenCanonical)
+  ) {
+    throw new Error("frozen launch inventory count or digest does not match its entries");
+  }
+  const frozenIds = new Set();
   const current = new Map(launches.map((row) => [row.id, row]));
   for (const expected of baseline.entries) {
+    if (
+      frozenIds.has(expected.id) ||
+      !RELEASES.includes(expected.releaseVersion) ||
+      expected.model !== MODELS[expected.releaseVersion]
+    ) {
+      throw new Error(`invalid frozen launch identity ${expected.id}`);
+    }
+    frozenIds.add(expected.id);
     const actual = current.get(expected.id);
     if (
       actual === undefined ||
