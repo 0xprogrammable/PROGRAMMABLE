@@ -482,6 +482,367 @@ begin
 end
 $migration$;
 
+-- A reorg boundary is an exact chain placement, not only a block height. At
+-- the target height, rows from another block hash are always invalid. For a
+-- history target on the same block, rows after the target log are invalid too.
+-- A genesis target has no log boundary, so only its exact block hash survives.
+create function programmable_private.projector_reorg_invalidates_placement_v1(
+  p_block_number bigint,
+  p_block_hash bytea,
+  p_block_global_log_index bigint,
+  p_target_block_number bigint,
+  p_target_block_hash bytea,
+  p_target_block_global_log_index bigint
+)
+returns boolean
+language sql
+immutable
+security invoker
+set search_path = ''
+as $function$
+  select
+    p_block_number > p_target_block_number
+    or (
+      p_block_number = p_target_block_number
+      and (
+        p_block_hash <> p_target_block_hash
+        or (
+          p_target_block_global_log_index is not null
+          and p_block_global_log_index > p_target_block_global_log_index
+        )
+      )
+    )
+$function$;
+
+-- Projection rows inherit their exact replay boundary from the checkpoint that
+-- published their run. This preserves legacy mid-block checkpoints: a row
+-- published later in the same block is rebuilt even when its promoted block
+-- number and hash match the selected ancestor.
+create function programmable_private.projector_reorg_invalidates_projection_run_v1(
+  p_projection_run_id uuid,
+  p_promoted_block_number bigint,
+  p_promoted_block_hash bytea,
+  p_ancestor_block_number bigint,
+  p_ancestor_block_hash bytea,
+  p_ancestor_block_global_log_index bigint
+)
+returns boolean
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $function$
+declare
+  publication record;
+begin
+  if p_ancestor_block_number is null
+     and p_ancestor_block_hash is null
+     and p_ancestor_block_global_log_index is null
+  then
+    return true;
+  end if;
+  if p_projection_run_id is null
+     or p_promoted_block_number is null
+     or p_promoted_block_hash is null
+     or p_ancestor_block_number is null
+     or p_ancestor_block_hash is null
+     or p_ancestor_block_global_log_index is null
+  then
+    return true;
+  end if;
+
+  select
+    projection_publication.target_block_number,
+    projection_publication.target_block_hash,
+    checkpoint.block_number as checkpoint_block_number,
+    checkpoint.block_hash as checkpoint_block_hash,
+    checkpoint.cursor_block_global_log_index,
+    checkpoint.is_neutral
+  into publication
+  from programmable_private.projection_publications
+    as projection_publication
+  join programmable_private.projector_checkpoints as checkpoint
+    on checkpoint.checkpoint_id = projection_publication.checkpoint_id
+  where projection_publication.run_id = p_projection_run_id;
+
+  if not found
+     or publication.is_neutral
+     or publication.cursor_block_global_log_index is null
+     or publication.target_block_number <> p_promoted_block_number
+     or publication.target_block_hash <> p_promoted_block_hash
+     or publication.checkpoint_block_number <>
+       publication.target_block_number
+     or publication.checkpoint_block_hash <>
+       publication.target_block_hash
+  then
+    return true;
+  end if;
+
+  return programmable_private.projector_reorg_invalidates_placement_v1(
+    publication.checkpoint_block_number,
+    publication.checkpoint_block_hash,
+    publication.cursor_block_global_log_index,
+    p_ancestor_block_number,
+    p_ancestor_block_hash,
+    p_ancestor_block_global_log_index
+  );
+end
+$function$;
+
+-- Rebuildable projection rows are removed in strict foreign-key order. The
+-- reward-vault snapshot chain is self-referential, so leaves are removed
+-- before their baselines. A surviving child of an invalid baseline fails the
+-- recovery closed instead of silently preserving inconsistent state.
+create function programmable_private.delete_projector_projection_replay_scope_v1(
+  p_chain_id bigint,
+  p_release_id text,
+  p_model_id text,
+  p_ancestor_block_number bigint,
+  p_ancestor_block_hash bytea,
+  p_ancestor_block_global_log_index bigint
+)
+returns bigint
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $function$
+declare
+  affected_rows bigint;
+  deleted_rows bigint := 0;
+begin
+  if p_chain_id is null or p_chain_id <> 1
+     or p_release_id is null
+     or pg_catalog.octet_length(p_release_id) not between 1 and 128
+     or p_model_id is null
+     or pg_catalog.octet_length(p_model_id) not between 1 and 128
+     or (p_ancestor_block_number is null) <>
+       (p_ancestor_block_hash is null)
+     or (p_ancestor_block_number is null) <>
+       (p_ancestor_block_global_log_index is null)
+     or (
+       p_ancestor_block_number is not null
+       and (
+         p_ancestor_block_number < 0
+         or pg_catalog.octet_length(p_ancestor_block_hash) <> 32
+         or p_ancestor_block_global_log_index < 0
+         or p_ancestor_block_global_log_index > 4294967295
+       )
+     )
+  then
+    raise exception using
+      errcode = '22023', message = 'invalid projection replay scope';
+  end if;
+
+  delete from programmable_private.initial_buy_vesting_projections
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.initial_buy_custody_projections
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.account_reward_balances
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.payout_change_projections
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.claim_projections
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.reward_allocation_projections
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  loop
+    delete from programmable_private.reward_vault_projections as vault
+    where vault.chain_id = p_chain_id
+      and vault.release_id = p_release_id
+      and vault.model_id = p_model_id
+      and programmable_private.projector_reorg_invalidates_projection_run_v1(
+        vault.projection_run_id,
+        vault.promoted_block_number, vault.promoted_block_hash,
+        p_ancestor_block_number, p_ancestor_block_hash,
+        p_ancestor_block_global_log_index
+      )
+      and not exists (
+        select 1
+        from programmable_private.reward_vault_projections as child
+        where child.baseline_reward_vault_projection_id =
+          vault.reward_vault_projection_id
+      );
+    get diagnostics affected_rows = row_count;
+    deleted_rows := deleted_rows + affected_rows;
+    exit when affected_rows = 0;
+  end loop;
+  if exists (
+    select 1
+    from programmable_private.reward_vault_projections as vault
+    where vault.chain_id = p_chain_id
+      and vault.release_id = p_release_id
+      and vault.model_id = p_model_id
+      and programmable_private.projector_reorg_invalidates_projection_run_v1(
+        vault.projection_run_id,
+        vault.promoted_block_number, vault.promoted_block_hash,
+        p_ancestor_block_number, p_ancestor_block_hash,
+        p_ancestor_block_global_log_index
+      )
+  ) then
+    raise exception using
+      errcode = '23503',
+      message = 'invalid reward snapshot retains a dependent child';
+  end if;
+
+  delete from programmable_private.pool_fee_totals
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.fee_accrual_facts
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.pool_fee_configurations
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.pool_projections
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.launch_position_liquidity_facts as position
+  using programmable_private.launch_projections as launch
+  where position.launch_projection_id = launch.launch_projection_id
+    and launch.chain_id = p_chain_id
+    and launch.release_id = p_release_id
+    and launch.model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      position.projection_run_id,
+      launch.promoted_block_number, launch.promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.launch_projection_occurrence_roles as role
+  using programmable_private.launch_projections as launch
+  where role.launch_projection_id = launch.launch_projection_id
+    and launch.chain_id = p_chain_id
+    and launch.release_id = p_release_id
+    and launch.model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      role.projection_run_id,
+      launch.promoted_block_number, launch.promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.launch_projection_conditions as condition
+  using programmable_private.launch_projections as launch
+  where condition.launch_projection_id = launch.launch_projection_id
+    and launch.chain_id = p_chain_id
+    and launch.release_id = p_release_id
+    and launch.model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      condition.projection_run_id,
+      launch.promoted_block_number, launch.promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  delete from programmable_private.launch_projections
+  where chain_id = p_chain_id and release_id = p_release_id
+    and model_id = p_model_id
+    and programmable_private.projector_reorg_invalidates_projection_run_v1(
+      projection_run_id, promoted_block_number, promoted_block_hash,
+      p_ancestor_block_number, p_ancestor_block_hash,
+      p_ancestor_block_global_log_index
+    );
+  get diagnostics affected_rows = row_count;
+  deleted_rows := deleted_rows + affected_rows;
+
+  return deleted_rows;
+end
+$function$;
+
 create function programmable_private.recover_projector_reorg_v1(
   p_recovery_id uuid,
   p_run_id uuid,
@@ -528,7 +889,6 @@ declare
   new_checkpoint_id uuid;
   next_checkpoint_generation bigint;
   next_release_reorg_generation bigint;
-  scope_anchor bigint;
   created_audit_id uuid;
   route_record record;
   route_history_id uuid;
@@ -668,14 +1028,13 @@ begin
       limit 1
     ) as materialization on true
     where occurrence.chain_id = 1
-      and (
-        occurrence.block_number > p_target_block_number::bigint
-        or (
-          occurrence.block_number = p_target_block_number::bigint
-          and p_target_block_global_log_index is not null
-          and occurrence.block_global_log_index >
-            p_target_block_global_log_index::bigint
-        )
+      and programmable_private.projector_reorg_invalidates_placement_v1(
+        occurrence.block_number,
+        occurrence.block_hash,
+        occurrence.block_global_log_index,
+        p_target_block_number::bigint,
+        p_target_block_hash,
+        p_target_block_global_log_index::bigint
       )
     for update of selected
   loop
@@ -704,12 +1063,13 @@ begin
       on fact.allocation_fact_id = seed.allocation_fact_id
     join programmable_private.chain_event_occurrences as occurrence
       on occurrence.occurrence_id = fact.factory_occurrence_id
-    where fact.creation_block_number > p_target_block_number::bigint
-      or (
-        fact.creation_block_number = p_target_block_number::bigint
-        and p_target_block_global_log_index is not null
-        and occurrence.block_global_log_index >
-          p_target_block_global_log_index::bigint
+    where programmable_private.projector_reorg_invalidates_placement_v1(
+        fact.creation_block_number,
+        occurrence.block_hash,
+        occurrence.block_global_log_index,
+        p_target_block_number::bigint,
+        p_target_block_hash,
+        p_target_block_global_log_index::bigint
       )
     for update of seed
   loop
@@ -795,7 +1155,6 @@ begin
 
     new_checkpoint_id := pg_catalog.gen_random_uuid();
     if ancestor.checkpoint_id is null then
-      scope_anchor := -1;
       insert into programmable_private.projector_checkpoints (
         checkpoint_id, chain_id, release_id, model_id, source_group,
         projector_version, epoch_id, pointer_generation, lease_generation,
@@ -814,7 +1173,6 @@ begin
         p_recovered_at, true
       );
     else
-      scope_anchor := ancestor.block_number;
       insert into programmable_private.projector_checkpoints (
         checkpoint_id, chain_id, release_id, model_id, source_group,
         projector_version, epoch_id, pointer_generation, lease_generation,
@@ -922,68 +1280,17 @@ begin
             )
         )
       );
-    delete from programmable_private.initial_buy_vesting_projections
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.initial_buy_custody_projections
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.account_reward_balances
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.payout_change_projections
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.claim_projections
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.reward_allocation_projections
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.reward_vault_projections
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.pool_fee_totals
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.fee_accrual_facts
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.pool_fee_configurations
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.pool_projections
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
-    delete from programmable_private.launch_projection_occurrence_roles as role
-    using programmable_private.launch_projections as launch
-      where role.launch_projection_id = launch.launch_projection_id
-        and launch.chain_id = 1
-        and launch.release_id = release_epoch.release_id
-        and launch.model_id = release_epoch.model_id
-        and launch.promoted_block_number > scope_anchor;
-    delete from programmable_private.launch_projection_conditions as condition
-    using programmable_private.launch_projections as launch
-      where condition.launch_projection_id = launch.launch_projection_id
-        and launch.chain_id = 1
-        and launch.release_id = release_epoch.release_id
-        and launch.model_id = release_epoch.model_id
-        and launch.promoted_block_number > scope_anchor;
-    delete from programmable_private.launch_projections
-      where chain_id = 1 and release_id = release_epoch.release_id
-        and model_id = release_epoch.model_id
-        and promoted_block_number > scope_anchor;
+    perform programmable_private.delete_projector_projection_replay_scope_v1(
+      1,
+      release_epoch.release_id,
+      release_epoch.model_id,
+      case when ancestor.checkpoint_id is null
+        then null else ancestor.block_number end,
+      case when ancestor.checkpoint_id is null
+        then null else ancestor.block_hash end,
+      case when ancestor.checkpoint_id is null
+        then null else ancestor.cursor_block_global_log_index end
+    );
     release_count := release_count + 1;
   end loop;
 
@@ -1030,6 +1337,18 @@ revoke all on function programmable_private.get_projector_reorg_generation_v1()
   from public, anon, authenticated, service_role;
 grant execute on function programmable_private.get_projector_reorg_generation_v1()
   to programmable_projector;
+revoke all on function
+  programmable_private.projector_reorg_invalidates_placement_v1(
+    bigint, bytea, bigint, bigint, bytea, bigint
+  ) from public, anon, authenticated, service_role;
+revoke all on function
+  programmable_private.projector_reorg_invalidates_projection_run_v1(
+    uuid, bigint, bytea, bigint, bytea, bigint
+  ) from public, anon, authenticated, service_role;
+revoke all on function
+  programmable_private.delete_projector_projection_replay_scope_v1(
+    bigint, text, text, bigint, bytea, bigint
+  ) from public, anon, authenticated, service_role;
 revoke all on function programmable_private.recover_projector_reorg_v1(
   uuid, uuid, uuid, uuid, uuid, uuid, text, bigint, bigint, bigint,
   bigint, bigint, numeric, bytea, numeric, text, uuid, text, bigint,

@@ -1,5 +1,5 @@
 begin;
-select plan(156);
+select plan(162);
 
 -- Preserve behavioral coverage for the retired v1/v2 promotion bodies while
 -- production keeps both capabilities revoked. pgTAP rolls these grants back.
@@ -5217,6 +5217,148 @@ select is(
   'published route DTO view fails closed with the same stale checkpoint'
 );
 reset role;
+
+select ok(
+  exists (
+    select 1
+    from programmable_private.launch_position_liquidity_facts as position
+    join programmable_private.launch_projections as launch
+      on launch.launch_projection_id = position.launch_projection_id
+    where launch.chain_id = 1
+      and launch.release_id = 'classic-v3'
+      and launch.model_id = 'classic-v3'
+      and launch.promoted_block_number > 25639599
+  )
+  and exists (
+    select 1
+    from programmable_private.reward_vault_projections as current_snapshot
+    join programmable_private.reward_vault_projections as baseline_snapshot
+      on baseline_snapshot.reward_vault_projection_id =
+        current_snapshot.baseline_reward_vault_projection_id
+    where current_snapshot.chain_id = 1
+      and current_snapshot.release_id = 'classic-v3'
+      and current_snapshot.model_id = 'classic-v3'
+      and current_snapshot.snapshot_kind = 'exact_current'
+      and baseline_snapshot.snapshot_kind in ('initial_seed', 'exact_current')
+  ),
+  'reorg cleanup fixture contains launch liquidity and a reward snapshot chain'
+);
+
+select ok(
+  exists (
+    select 1
+    from programmable_private.launch_projections as launch
+    join programmable_private.launch_position_liquidity_facts as position
+      on position.launch_projection_id = launch.launch_projection_id
+    join programmable_private.launch_projection_occurrence_roles as role
+      on role.launch_projection_id = launch.launch_projection_id
+    join programmable_private.launch_projection_conditions as condition
+      on condition.launch_projection_id = launch.launch_projection_id
+    where launch.projection_run_id =
+      '97000000-0000-0000-0000-000000000001'
+  )
+  and exists (
+    select 1
+    from programmable_private.launch_projections as launch
+    join programmable_private.launch_projection_occurrence_roles as role
+      on role.launch_projection_id = launch.launch_projection_id
+    join programmable_private.launch_projection_conditions as condition
+      on condition.launch_projection_id = launch.launch_projection_id
+    where launch.projection_run_id in (
+      '97000000-0000-0000-0000-000000000002',
+      '97000000-0000-0000-0000-000000000005'
+    )
+  ),
+  'mid-block replay fixture contains earlier and later published launch graphs'
+);
+
+set local role programmable_migrator;
+select lives_ok(
+  $sql$
+    select programmable_private.delete_projector_projection_replay_scope_v1(
+      1, 'classic-v3', 'classic-v3', 25639600,
+      pg_catalog.decode(pg_catalog.repeat('99', 32), 'hex'), 13
+    )
+  $sql$,
+  'projection replay cleanup accepts an exact legacy mid-block ancestor'
+);
+reset role;
+
+select ok(
+  exists (
+    select 1
+    from programmable_private.launch_projections as launch
+    join programmable_private.launch_position_liquidity_facts as position
+      on position.launch_projection_id = launch.launch_projection_id
+    join programmable_private.launch_projection_occurrence_roles as role
+      on role.launch_projection_id = launch.launch_projection_id
+    join programmable_private.launch_projection_conditions as condition
+      on condition.launch_projection_id = launch.launch_projection_id
+    where launch.projection_run_id =
+      '97000000-0000-0000-0000-000000000001'
+  )
+  and not exists (
+    select 1
+    from programmable_private.launch_projections
+    where projection_run_id in (
+      '97000000-0000-0000-0000-000000000002',
+      '97000000-0000-0000-0000-000000000005'
+    )
+  )
+  and not exists (
+    select 1
+    from programmable_private.launch_projection_occurrence_roles
+    where projection_run_id in (
+      '97000000-0000-0000-0000-000000000002',
+      '97000000-0000-0000-0000-000000000005'
+    )
+  )
+  and not exists (
+    select 1
+    from programmable_private.launch_projection_conditions
+    where projection_run_id in (
+      '97000000-0000-0000-0000-000000000002',
+      '97000000-0000-0000-0000-000000000005'
+    )
+  ),
+  'mid-block cleanup preserves the ancestor launch graph and removes later runs'
+);
+
+set local role programmable_migrator;
+select lives_ok(
+  $sql$
+    select programmable_private.delete_projector_projection_replay_scope_v1(
+      1, 'classic-v3', 'classic-v3', 25639599,
+      pg_catalog.decode(pg_catalog.repeat('aa', 32), 'hex'), 0
+    )
+  $sql$,
+  'projection replay cleanup removes populated FK graphs in dependency order'
+);
+reset role;
+
+select ok(
+  not exists (
+    select 1
+    from programmable_private.launch_position_liquidity_facts
+    where chain_id = 1 and release_id = 'classic-v3'
+      and model_id = 'classic-v3'
+  )
+  and not exists (
+    select 1
+    from programmable_private.reward_vault_projections
+    where chain_id = 1 and release_id = 'classic-v3'
+      and model_id = 'classic-v3'
+      and promoted_block_number > 25639599
+  )
+  and not exists (
+    select 1
+    from programmable_private.launch_projections
+    where chain_id = 1 and release_id = 'classic-v3'
+      and model_id = 'classic-v3'
+      and promoted_block_number > 25639599
+  ),
+  'replay cleanup leaves no invalid launch-liquidity or reward snapshot rows'
+);
 
 select * from finish();
 rollback;

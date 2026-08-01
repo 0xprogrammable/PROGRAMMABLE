@@ -615,7 +615,7 @@ describe("dual-RPC exact Envio window coverage", () => {
     });
   });
 
-  it("batches more than 100 dynamic runtime reads without losing exact block binding", async () => {
+  it("batches more than 100 dynamic runtimes while preserving exact provider binding", async () => {
     const first = client([canonicalLog()]);
     const second = client([canonicalLog()]);
     const providers = [
@@ -707,6 +707,28 @@ describe("dual-RPC exact Envio window coverage", () => {
         })),
       );
     }
+
+    const divergentRuntime =
+      "0xffffffffffffffffffffffffffffffffffffffff" as const;
+    second.getBytecodes = vi.fn(async (
+      { requests }:
+        Parameters<NonNullable<CandidateRpcClient["getBytecodes"]>>[0],
+    ) => requests.map(({ address }) =>
+      address === items[0]!.sourceAddress ? divergentRuntime : address,
+    ));
+    await expect(
+      verifyDynamicRuntimesAtBlockWithDualRpc({
+        items,
+        parentEvidence,
+        providers,
+        deadlineMs: 2_000,
+      }),
+    ).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+      safeMetadata: { operation: "dynamic-runtime-code-agreement" },
+    });
+    expect(second.getBytecodes).toHaveBeenCalledTimes(2);
   });
 
   it("fails closed when providers disagree on the dynamic child bytecode", async () => {

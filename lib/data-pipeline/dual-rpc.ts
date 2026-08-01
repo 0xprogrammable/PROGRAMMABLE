@@ -4044,20 +4044,22 @@ export async function verifyDynamicRuntimesAtBlockWithDualRpc(input: {
         return output;
       }),
     );
-    return Object.freeze(await Promise.all(input.items.map((item, index) =>
-      verifyDynamicRuntimeAtBlockWithDualRpcInternal({
+    return Object.freeze(await Promise.all(input.items.map((item, index) => {
+      const providerACode = providerCodes[0]![index];
+      const providerBCode = providerCodes[1]![index];
+      return verifyDynamicRuntimeAtBlockWithDualRpcInternal({
         ...item,
         parentEvidence: input.parentEvidence,
         providers: input.providers,
         deadlineMs: policy.hardDeadlineMs,
       }, {
         rawCodes: Object.freeze([
-          providerCodes[0]![index],
-          providerCodes[1]![index],
+          providerACode,
+          providerBCode,
         ]) as readonly [Hex | undefined, Hex | undefined],
         startedAtMs,
-      }),
-    )));
+      });
+    })));
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;
     throw dataPipelineError({
