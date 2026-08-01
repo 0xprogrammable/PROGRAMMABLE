@@ -6,7 +6,12 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseCliOrExit } from "./cli-args.mjs";
-import { validateAgainstSchema } from "./submission-core.mjs";
+import {
+  isSafeGitReference,
+  isSupportedGitHubRepositoryUrl,
+  parseCanonicalProvenanceScalar,
+  validateAgainstSchema
+} from "./submission-core.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const canonicalSkillRoot = path.resolve(scriptDirectory, "..");
@@ -509,52 +514,6 @@ function validateProvenanceScalar(key, value, maximumBytes) {
   return findings;
 }
 
-function isSupportedGitHubRepositoryUrl(value) {
-  if (Buffer.byteLength(value, "utf8") > 2048) return false;
-  try {
-    const parsed = new URL(value);
-    const hostname = parsed.hostname.toLowerCase();
-    const supportedHost = hostname === "github.com"
-      || /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ghe\.com$/u.test(hostname);
-    const segments = parsed.pathname.split("/").filter(Boolean);
-    return supportedHost
-      && parsed.href === value
-      && parsed.protocol === "https:"
-      && parsed.username === ""
-      && parsed.password === ""
-      && parsed.port === ""
-      && parsed.search === ""
-      && parsed.hash === ""
-      && !parsed.pathname.endsWith("/")
-      && segments.length === 2
-      && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}[A-Za-z0-9])?$/u.test(segments[0])
-      && /^[A-Za-z0-9._-]{1,100}$/u.test(segments[1]);
-  } catch {
-    return false;
-  }
-}
-
-function isSafeGitReference(value) {
-  if (Buffer.byteLength(value, "utf8") > 2048) return false;
-  if (
-    value === "@"
-    || value.startsWith("/")
-    || value.endsWith("/")
-    || value.endsWith(".")
-    || value.includes("..")
-    || value.includes("//")
-    || value.includes("@{")
-    || /[\u0000-\u0020\u007f~^:?*[\\\u202a-\u202e\u2066-\u2069]/u.test(value)
-  ) {
-    return false;
-  }
-  return value.split("/").every((segment) => (
-    segment !== ""
-    && !segment.startsWith(".")
-    && !segment.endsWith(".lock")
-  ));
-}
-
 function redactInstalledLocalPathForPortableScan(source, parsedFrontmatter) {
   if (
     !parsedFrontmatter
@@ -574,6 +533,7 @@ function redactInstalledLocalPathForPortableScan(source, parsedFrontmatter) {
 }
 
 function parseCanonicalYamlString(source, type) {
+  if (type === "provenance-string") return parseCanonicalProvenanceScalar(source);
   if (source.startsWith('"')) {
     try {
       const value = JSON.parse(source);
@@ -583,40 +543,6 @@ function parseCanonicalYamlString(source, type) {
     } catch {
       return { ok: false, error: "contains an invalid double-quoted string" };
     }
-  }
-  if (type === "provenance-string" && source.startsWith("'")) {
-    if (!source.endsWith("'") || source.length < 2) {
-      return { ok: false, error: "contains an invalid single-quoted string" };
-    }
-    const inner = source.slice(1, -1);
-    let value = "";
-    for (let index = 0; index < inner.length; index += 1) {
-      if (inner[index] !== "'") {
-        value += inner[index];
-        continue;
-      }
-      if (inner[index + 1] !== "'") {
-        return { ok: false, error: "contains an invalid single-quoted string" };
-      }
-      value += "'";
-      index += 1;
-    }
-    if (value.length === 0) return { ok: false, error: "requires a non-empty string value" };
-    return { ok: true, value };
-  }
-  if (type === "provenance-string") {
-    if (
-      source.length === 0
-      || source !== source.trim()
-      || /^(?:null|true|false|yes|no|on|off|~)$/iu.test(source)
-      || /^(?:[!&*|>@`]|[-?:]\s)/u.test(source)
-      || /[\[\]{}]/u.test(source)
-      || /(?:^|\s)#/u.test(source)
-      || /:\s|:$/u.test(source)
-    ) {
-      return { ok: false, error: "contains a non-canonical plain string" };
-    }
-    return { ok: true, value: source };
   }
   if (type === "quoted-string") {
     return { ok: false, error: "requires a double-quoted string value" };
