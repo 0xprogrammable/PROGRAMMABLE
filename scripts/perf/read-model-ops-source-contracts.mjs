@@ -10,7 +10,13 @@ const APPROVED_OPERATIONS = Object.freeze({
     schedule: "*/5 * * * *",
     retainedUntil: "indexed-read-cutover",
     route: "app/api/ops/index-v2/route.ts",
-    sha256: "5f1bca899c729689827bbcf1edeea2ec101f0770f0326bc60af529ba8a6cadaa",
+    sha256: "9638ec482ff66c5f3b1377c60b946e6348fb895769b6f8596fca2dc8cfbac535",
+    closedAlias: Object.freeze({
+      path: "/api/ops/index",
+      route: "app/api/ops/index/route.ts",
+      status: 410,
+      sha256: "bb498b00334df908029a588bec552516f281fdc0dfc3185bc5cd820984a9ee1f",
+    }),
   }),
   workers: Object.freeze([
     Object.freeze({
@@ -20,11 +26,11 @@ const APPROVED_OPERATIONS = Object.freeze({
       activationEnvironment: "PROGRAMMABLE_PROJECTOR_ACTIVE",
       route: Object.freeze({
         path: "app/api/ops/projector/route.ts",
-        sha256: "2d76bc9d6b4cf4168a80b87a374b0e54edb8a6b8fdf6f67dcf74ab18f5d92376",
+        sha256: "bea509d5f2a7f2a35c2a49dacc4001074307b4b917d3ac4cb8647310cbd28417",
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "a8fd4a36af8cde2c24698ff39810b55a757510fb68a66395d322b894534df2d5",
+        sha256: "d9d34f8faee5926ec35bf7bc7433aad451741195948026fa17072ce34ca96e02",
       }),
       migrations: Object.freeze([
         Object.freeze({
@@ -33,7 +39,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "supabase/migrations/20260731224000_projector_provider_evidence_binding.sql",
-          sha256: "11e86d218c67a59ed6dd049491c42de1e3527a245cf50a33346013b017d8f875",
+          sha256: "0404f7c610a34af23fe536f021927efec4e0aede235068b70be04331c58f03af",
         }),
       ]),
     }),
@@ -142,6 +148,16 @@ function routeIsAuthenticatedAndFailClosed(source) {
   );
 }
 
+function routeIsPermanentlyClosed(source, binding) {
+  return (
+    typeof source === "string" &&
+    binding?.status === 410 &&
+    source.includes('code: "legacy_index_route_closed"') &&
+    /status\s*:\s*410\b/u.test(source) &&
+    /["']Cache-Control["']\s*:\s*["']no-store["']/u.test(source)
+  );
+}
+
 function activationIsExplicitAndSafe(source, environmentName) {
   return (
     typeof source === "string" &&
@@ -242,6 +258,21 @@ export function evaluateReadModelOperationsSourceContracts(
           expectedSha256Overrides,
         ),
     "the five-minute legacy route remains byte-bound until indexed-read cutover",
+  );
+  const closedLegacyAlias = APPROVED_OPERATIONS.legacyIndexer.closedAlias;
+  check(
+    "ops-legacy-alias-closed",
+    !crons?.has(closedLegacyAlias.path) &&
+      exactJson(
+        operations?.legacyIndexer?.closedAlias,
+        closedLegacyAlias,
+      ) &&
+      sha256(source(closedLegacyAlias.route)) === closedLegacyAlias.sha256 &&
+      routeIsPermanentlyClosed(
+        source(closedLegacyAlias.route),
+        closedLegacyAlias,
+      ),
+    "the former legacy writer alias is byte-bound to a permanent 410 response",
   );
 
   for (const approvedWorker of APPROVED_OPERATIONS.workers) {

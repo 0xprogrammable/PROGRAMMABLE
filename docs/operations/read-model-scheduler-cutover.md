@@ -20,6 +20,9 @@ state. Both routes require Vercel's `CRON_SECRET` bearer token. Missing or exact
 active value. Any other non-empty value is a configuration error and must fail
 closed.
 
+`/api/ops/index-v2` is the only legacy writer route. The former
+`/api/ops/index` alias is permanently closed and is not scheduled.
+
 The route, runtime and migration SHA-256 values in
 `config/read-model-operations.v1.json` are release inputs, not documentation.
 The operations gate rejects any byte drift until the changed source is reviewed

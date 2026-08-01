@@ -120,6 +120,8 @@ describe("read-model operations source contract", () => {
     const drift = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         ...integratedOverrides(),
+        "app/api/ops/index/route.ts":
+          'export { GET } from "../index-v2/route";',
         "vercel.json": readFileSync(vercelPath, "utf8")
           .replace('"* * * * *"', '"*/2 * * * *"')
           .replace(
@@ -138,6 +140,7 @@ describe("read-model operations source contract", () => {
     expect(drift.failures.map(({ id }: { id: string }) => id)).toEqual(
       expect.arrayContaining([
         "ops-cron-exact-set",
+        "ops-legacy-alias-closed",
         "ops-source-projector-schedule",
         "ops-source-projector-route-auth",
         "ops-market-projector-activation",
