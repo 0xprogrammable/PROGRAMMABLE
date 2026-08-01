@@ -2190,6 +2190,11 @@ export function createPostgresProjectorStore(input: {
             candidate.blockGlobalLogIndex > parent.blockGlobalLogIndex
           );
         });
+        // The vault factory is permissionless. A direct factory deployment is
+        // not a Programmable launch and therefore has no launcher event to
+        // bind. Complete-window RPC verification still detects a genuinely
+        // missing Envio launch event before the cursor can advance.
+        if (launchMatches.length === 0) continue;
         if (launchMatches.length !== 1) return projectorValidationFailure();
         const launch = launchMatches[0]!;
         const parentOccurrenceId = projectorOccurrenceUuid({

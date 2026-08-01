@@ -982,6 +982,49 @@ describe("concrete projector Postgres store", () => {
     ).resolves.toEqual([]);
   });
 
+  it("ignores a permissionless vault deployment without a launcher event", async () => {
+    const executor = new StoreExecutor();
+    const parentCandidateId = `1:${bytes32("d")}:${bytes32("e")}:10`;
+    executor.pendingActivationResolutionRows = [{
+      parent_candidate_id: parentCandidateId,
+      source_address: bytes(address("f")),
+      dynamic_source_template_id:
+        "30000000-0000-4000-8000-000000000001",
+      release_epoch_id: "70000000-0000-4000-8000-000000000010",
+      release_pointer_generation: "1",
+      reorg_generation: "0",
+      parent_receipt_log_ordinal: "10",
+    }];
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+    });
+    const plan = await store.readPlan();
+    const template = plan.dynamicSourceTemplates[0]!;
+    const parent: EnvioCandidate = {
+      ...candidate(),
+      candidateId: parentCandidateId,
+      sourceAddress: template.parentFactoryAddress,
+      contractName: template.parentFactoryContractName,
+      eventName: template.factoryEventName,
+      decodedPayload: {
+        vault: address("f"),
+        configurationCommitment: bytes32("9"),
+      },
+    };
+
+    await expect(
+      store.resolvePendingDynamicSourceActivations({
+        expectedCursorGeneration: plan.cursor.generation,
+        expectedCursorBlockHash: plan.cursor.blockHash,
+        expectedReorgGeneration: plan.database.reorgGeneration,
+        candidates: [parent],
+      }),
+    ).resolves.toEqual([]);
+  });
+
   it("stages one exact Classic parent and runtime without advancing the ingestion cursor", async () => {
     const executor = new StoreExecutor();
     const sourceAddress = address("f");
