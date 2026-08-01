@@ -191,6 +191,12 @@ concrete idea, architecture, lifecycle, value flows, authority and failure model
 documents. A practically unchanged scaffold or generic placeholder list fails `package` and cannot reach
 `prepare-pr`.
 
+Large non-executable GLB, audio, texture, level, map, tile and media files use the skill's versioned runtime-asset
+manifest instead of source/test path arrays. Repository assets are bound to exact Git blobs, size, MIME and SHA-256;
+load, license and provenance metadata stay visible. LFS content that is not materialized and external resources enter
+attributable asset review rather than being labelled unsafe. Code, tests, shaders, WebAssembly and build inputs keep
+the strict source-closure limits.
+
 ### 6. Run `prepare-pr`
 
 The exact project commit must now be clean, pushed and publicly reachable. `prepare-pr` independently resolves the

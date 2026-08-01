@@ -1,0 +1,64 @@
+{
+  "$schema": "urn:programmable:runtime-assets:1",
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "id": "arena-world",
+      "source": "repository",
+      "repositoryPath": "public/assets/arena-world.glb",
+      "externalUri": null,
+      "gitBlob": "0000000000000000000000000000000000000000",
+      "sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "mime": "model/gltf-binary",
+      "bytes": 1,
+      "load": {
+        "phase": "level-on-demand",
+        "mechanism": "http-fetch",
+        "reference": "/assets/arena-world.glb",
+        "integrityEnforced": true,
+        "failureBehavior": "Keep the level unavailable and show a retryable asset-load error; never settle rewards from a partially loaded level."
+      },
+      "license": {
+        "status": "declared",
+        "expression": "CC-BY-4.0",
+        "evidencePath": "docs/assets/arena-world-license.md",
+        "url": null
+      },
+      "provenance": {
+        "kind": "third-party-licensed",
+        "source": "Record the original asset URL or purchase receipt reference without including secrets.",
+        "creator": "Example Studio",
+        "evidencePath": "docs/assets/arena-world-provenance.md"
+      }
+    },
+    {
+      "id": "map-provider-style",
+      "source": "external",
+      "repositoryPath": null,
+      "externalUri": "https://example.com/maps/style.json",
+      "gitBlob": null,
+      "sha256": null,
+      "mime": "application/json",
+      "bytes": 1,
+      "load": {
+        "phase": "runtime-on-demand",
+        "mechanism": "map-provider",
+        "reference": "The provider style URL is selected by the reviewed runtime configuration.",
+        "integrityEnforced": null,
+        "failureBehavior": "Disable the map-backed game mode when the provider resource is unavailable or changes outside the accepted policy."
+      },
+      "license": {
+        "status": "review-required",
+        "expression": null,
+        "evidencePath": null,
+        "url": "https://example.com/terms"
+      },
+      "provenance": {
+        "kind": "provider-supplied",
+        "source": "Example map provider style endpoint.",
+        "creator": null,
+        "evidencePath": null
+      }
+    }
+  ]
+}

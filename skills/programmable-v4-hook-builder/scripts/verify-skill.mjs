@@ -76,6 +76,8 @@ const required = [
   "references/output-contract.md",
   "references/public-pr-application.schema.json",
   "references/routing-and-discovery.md",
+  "references/runtime-assets-v1.schema.json",
+  "references/runtime-assets.md",
   "references/scenario-matrix.md",
   "references/security-and-evidence.md",
   "references/submission-workflow.md",
@@ -90,6 +92,7 @@ const required = [
   "assets/examples/unsafe-hidden-curve.json",
   "assets/templates/submission.example.json",
   "assets/templates/no-hook-architecture.example.json",
+  "assets/templates/runtime-assets.example.json",
   "assets/templates/deployment-evidence.example.json",
   "assets/templates/dependency-lock.example.json",
   "assets/templates/gate-status.example.json",
@@ -124,6 +127,7 @@ const required = [
   "scripts/resolve-deployment.mjs",
   "scripts/review-target-contract.mjs",
   "scripts/review-target-core.mjs",
+  "scripts/runtime-assets-core.mjs",
   "scripts/scaffold-submission.mjs",
   "scripts/submission-core.mjs",
   "scripts/test/application-api-schema.test.mjs",
@@ -145,6 +149,7 @@ const required = [
   "scripts/test/public-claims.test.mjs",
   "scripts/test/review-target-contract.test.mjs",
   "scripts/test/review-target.test.mjs",
+  "scripts/test/runtime-assets-core.test.mjs",
   "scripts/test/schema-security.test.mjs",
   "scripts/test/submission.test.mjs",
   "scripts/test/upstream-drift.test.mjs",
@@ -292,6 +297,15 @@ try {
   for (const finding of schemaFindings) errors.push(`template ${finding.path}: ${finding.message}`);
 } catch (error) {
   errors.push(`schema or template JSON: ${error.message}`);
+}
+
+try {
+  const runtimeSchema = JSON.parse(read("references/runtime-assets-v1.schema.json"));
+  const runtimeExample = JSON.parse(read("assets/templates/runtime-assets.example.json"));
+  const runtimeFindings = validateAgainstSchema(runtimeExample, runtimeSchema);
+  for (const finding of runtimeFindings) errors.push(`runtime asset template ${finding.path}: ${finding.message}`);
+} catch (error) {
+  errors.push(`runtime asset schema or template JSON: ${error.message}`);
 }
 
 try {

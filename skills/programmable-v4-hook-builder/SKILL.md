@@ -107,8 +107,8 @@ Read these files before the corresponding phase:
   [submission-workflow.md](references/submission-workflow.md)
 - Official model-pattern comparison: `references/official-model-patterns.md`; load it only after the model category or
   triggered capability is known.
-- Routing, discovery, and indexing: `references/routing-and-discovery.md`; load it for Uniswap or third-party discovery,
-  indexed data, quotes, swaps, Hooklist or routing work, and every accepted-model platform handoff.
+- Routing, discovery, and indexing: `references/routing-and-discovery.md`; load it for Uniswap or third-party discovery, indexed data, quotes, swaps, Hooklist or routing work, and every accepted-model platform handoff.
+- Large non-executable game, Three.js, audio, level, map, media, or provider data: [runtime-assets.md](references/runtime-assets.md); load it before declaring runtime-only data outside source/test closure.
 
 Do not load every reference by default. A pattern is evidence about one pinned implementation, not approval for a
 derived model. Routing or indexer support is a provider state, not protocol compatibility.

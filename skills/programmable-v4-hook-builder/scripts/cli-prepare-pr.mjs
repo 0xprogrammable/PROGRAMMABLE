@@ -51,6 +51,7 @@ import {
   REVIEW_TARGET_CLOSURE_METHOD_V1,
   REVIEW_TARGET_CONTRACT_V1
 } from "./review-target-contract.mjs";
+import { isClosedRuntimeAssetReview } from "./runtime-assets-core.mjs";
 
 export { CliFailure } from "./cli-runtime.mjs";
 
@@ -1016,7 +1017,8 @@ export function validatePreparePrReviewTarget(reviewTarget) {
     "reviewTargetHash",
     "schemaVersion",
     "standardVersion",
-    "submissionHash"
+    "submissionHash",
+    ...(Object.hasOwn(reviewTarget ?? {}, "runtimeAssets") ? ["runtimeAssets"] : [])
   ];
   if (
     !isPlainObject(reviewTarget)
@@ -1033,6 +1035,7 @@ export function validatePreparePrReviewTarget(reviewTarget) {
     || !Array.isArray(reviewTarget.externalImports)
     || !Array.isArray(reviewTarget.importResolutions)
     || !Array.isArray(reviewTarget.javascriptImportResolutions)
+    || (Object.hasOwn(reviewTarget, "runtimeAssets") && !isClosedRuntimeAssetReview(reviewTarget.runtimeAssets))
     || reviewTarget.reviewTargetHash !== calculateReviewTargetHash(reviewTarget)
   ) {
     throw new CliFailure("REVIEW_TARGET_INVALID", "the review target did not produce a bounded exact identity", { exitCode: 1 });

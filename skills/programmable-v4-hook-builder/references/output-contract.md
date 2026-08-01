@@ -249,6 +249,11 @@ decision, and all still-open independent gates. Contributor tooling cannot creat
 `review-status.json` uses factual states such as `not-started`, `required`, `in-progress`, and `completed-with-report`.
 It never stores `safe`, `approved`, or a self-assigned security score.
 
+When `implementation.runtimeAssetManifestPath` is present, the review target also carries the closed runtime-asset
+summary: exact repository blob identities, declared sizes and MIME types, bounded integrity state, and review-required
+diagnostics for external, transformed or unmaterialized content. The large asset bytes are not copied into the central
+application package and are never executed by deterministic checks.
+
 ## Accepted-model platform handoff
 
 Create this output only after a maintainer acceptance record binds the exact model id, version, prototype commit,

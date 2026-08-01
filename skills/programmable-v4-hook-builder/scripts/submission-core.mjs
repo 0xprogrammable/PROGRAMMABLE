@@ -114,7 +114,9 @@ const approvedSchemaPatterns = new Set([
   "^[-_a-zA-Z0-9]{1,32}$",
   "^(?:https://|ipfs://|ar://)[^\\s]{1,2024}$",
   "^https://[^\\s]{1,2024}$",
-  "^sha256:[0-9a-f]{64}$"
+  "^sha256:[0-9a-f]{64}$",
+  "^[0-9a-f]{40}$",
+  "^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$"
 ]);
 const policyBundlePaths = [
   "SKILL.md",
@@ -126,6 +128,8 @@ const policyBundlePaths = [
   "references/output-contract.md",
   "references/project-surfaces-and-capabilities.md",
   "references/routing-and-discovery.md",
+  "references/runtime-assets-v1.schema.json",
+  "references/runtime-assets.md",
   "references/scenario-matrix.md",
   "references/security-and-evidence.md",
   "references/submission-workflow.md",
@@ -136,7 +140,8 @@ const policyBundlePaths = [
   "scripts/package-dependency-contract.mjs",
   "scripts/metadata-core.mjs",
   "scripts/public-claims-core.mjs",
-  "scripts/project-surfaces-core.mjs"
+  "scripts/project-surfaces-core.mjs",
+  "scripts/runtime-assets-core.mjs"
 ].map((relativePath) => path.resolve(skillRoot, relativePath));
 
 export function canonicalJson(value) {

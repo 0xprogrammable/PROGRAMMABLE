@@ -1,4 +1,5 @@
 import { isClosedReviewTargetClosure } from "./review-target-contract.mjs";
+import { isClosedRuntimeAssetReview } from "./runtime-assets-core.mjs";
 
 const CLOSURE_FINDING_CODES = new Set([
   "COMPANION_CLOSURE_REVIEW_REQUIRED",
@@ -56,8 +57,12 @@ const guidance = Object.freeze({
   }
 });
 
-export function applyRepositoryClosureToReport(report, closure, { stage }) {
-  if (!isPlainObject(report) || !isClosedReviewTargetClosure(closure)) {
+export function applyRepositoryClosureToReport(report, closure, { stage, runtimeAssets = null }) {
+  if (
+    !isPlainObject(report)
+    || !isClosedReviewTargetClosure(closure)
+    || (runtimeAssets !== null && !isClosedRuntimeAssetReview(runtimeAssets))
+  ) {
     throw new Error("repository closure report input is invalid");
   }
   const prototype = stage === "prototype";
@@ -78,6 +83,15 @@ export function applyRepositoryClosureToReport(report, closure, { stage }) {
       path: `$.closure.${code}`,
       message: `${rule.message} ${diagnostics.length} diagnostic${diagnostics.length === 1 ? "" : "s"} recorded; first path: ${diagnostics[0].path}.`,
       remediation: rule.remediation
+    });
+  }
+  for (const diagnostic of runtimeAssets?.diagnostics ?? []) {
+    findings.push({
+      severity: "warning",
+      code: diagnostic.code,
+      path: `$.runtimeAssets.${diagnostic.assetId}`,
+      message: diagnostic.detail,
+      remediation: "Keep the exact asset declaration and complete attributable content, provider, provenance or license review for the bound project revision."
     });
   }
   findings.sort(compareFindings);
@@ -101,6 +115,13 @@ export function applyRepositoryClosureToReport(report, closure, { stage }) {
           reason: "The exact proposal is source-bound, but unsupported closure mechanics require architecture and tooling review before prototype readiness."
         });
   }
+  if (runtimeAssets?.status === "review-required") {
+    requiredGates.push({
+      id: "runtime-assets-attributable-review",
+      stage: "candidate",
+      reason: "External, transformed or non-materialized runtime asset content needs attributable review; this is not a source-closure or unsafe-code finding."
+    });
+  }
   requiredGates.sort((left, right) => compareUtf8(left.stage, right.stage) || compareUtf8(left.id, right.id));
 
   const decision = findings.some(({ severity }) => severity === "hard")
@@ -112,6 +133,7 @@ export function applyRepositoryClosureToReport(report, closure, { stage }) {
     ...report,
     decision,
     closure,
+    ...(runtimeAssets === null ? {} : { runtimeAssets }),
     findings,
     requiredGates
   };

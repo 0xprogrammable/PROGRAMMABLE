@@ -591,7 +591,8 @@
     "testEvidencePath": null,
     "dependencyLockPath": null,
     "gateStatusPath": null,
-    "reviewTargetPath": null
+    "reviewTargetPath": null,
+    "runtimeAssetManifestPath": null
   },
   "risk": {
     "dimensions": {

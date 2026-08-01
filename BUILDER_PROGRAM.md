@@ -194,6 +194,10 @@ A local check, generated package, GitHub review or merged beta record is not:
 - Uniswap Labs or Uniswap Foundation endorsement; or
 - a promise of fees, revenue, grants, review time or future integration.
 
+Large non-executable game and app data is declared through the versioned runtime-asset manifest, not disguised as
+source. Exact repository blobs are bound without executing the asset; external or unavailable content is routed to
+attributable review rather than automatic rejection. Executable project surfaces keep the strict code and test limits.
+
 Any later candidate decision, implementation review, integration, deployment, source verification, runtime matching,
 provider work or public release is separate and must bind its own exact revision and evidence.
 

@@ -16,7 +16,7 @@ import {
 } from "./deployment-core.mjs";
 import {
   buildReviewTarget,
-  analyzeRepositoryClosure,
+  analyzeRepositoryReview,
   parseRemappings,
   validateDependencyLock
 } from "./review-target-core.mjs";
@@ -126,11 +126,11 @@ try {
   submission = readJson(path.join(packageRoot, "submission.json"));
   preflight = analyzeSubmission(submission, { schema });
   if (!preflight.findings.some(({ code, severity }) => code.startsWith("SCHEMA_") && severity !== "warning")) {
-    preflight = applyRepositoryClosureToReport(
-      preflight,
-      analyzeRepositoryClosure({ repositoryRoot, packageRoot, submission }),
-      { stage: submission.stage }
-    );
+    const repositoryReview = analyzeRepositoryReview({ repositoryRoot, packageRoot, submission });
+    preflight = applyRepositoryClosureToReport(preflight, repositoryReview.closure, {
+      stage: submission.stage,
+      runtimeAssets: repositoryReview.runtimeAssets
+    });
   }
 } catch (error) {
   errors.push(`submission.json: ${error.message}`);
@@ -178,6 +178,7 @@ if (submission) {
     submission.implementation?.dependencyLockPath,
     submission.implementation?.gateStatusPath,
     submission.implementation?.reviewTargetPath,
+    submission.implementation?.runtimeAssetManifestPath,
     ...(submission.capabilityExtensions ?? []).flatMap((extension) => [
       extension?.schemaPath,
       ...(extension?.evidencePaths ?? [])

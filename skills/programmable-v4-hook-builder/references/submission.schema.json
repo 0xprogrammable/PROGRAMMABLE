@@ -714,7 +714,8 @@
         "testEvidencePath": { "type": ["string", "null"] },
         "dependencyLockPath": { "type": ["string", "null"] },
         "gateStatusPath": { "type": ["string", "null"] },
-        "reviewTargetPath": { "type": ["string", "null"] }
+        "reviewTargetPath": { "type": ["string", "null"] },
+        "runtimeAssetManifestPath": { "type": ["string", "null"], "description": "Optional path to the closed runtime-assets v1 manifest. Large data assets declared there stay outside the strict source/test byte closure." }
       }
     },
     "risk": {

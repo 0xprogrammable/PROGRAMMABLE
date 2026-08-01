@@ -218,6 +218,13 @@ a 512 MiB address-space limit, and output plus aggregate temporary storage stay 
 repository guard is process-monitored rather than a native filesystem quota, so multiple fast writes can briefly
 overshoot it; any limit failure kills the complete process group and the temporary repository is removed.
 
+Those limits remain strict for code, tests, shaders, WebAssembly and build inputs. Large non-executable models, audio,
+textures, levels, maps, tiles and media use the separate runtime-assets v1 manifest. It records the repository path,
+exact Git blob, SHA-256 where verifiable, MIME, size, loading behavior, license and provenance. `prepare-pr` binds the
+small manifest and its blob declarations to the exact public commit and root tree without fetching or executing the
+assets. Unmaterialized LFS objects and external HTTPS/IPFS resources enter attributable asset review; that status is
+not an unsafe-code conclusion and does not alone block structural prototype readiness.
+
 ### 7. Open one draft pull request
 
 Open a draft pull request against `0xprogrammable/programmable:main` with a title beginning `[Builder Beta]`. Complete
