@@ -1344,7 +1344,7 @@ function hydrationGitEnvironment() {
   return environment;
 }
 
-function measureHydrationDirectory(directory) {
+export function measureHydrationDirectory(directory) {
   const root = path.resolve(directory ?? "");
   if (!fs.statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
     systemBlocked("HYDRATION_STORAGE_INVALID", "The candidate object store is missing.");
@@ -1354,16 +1354,28 @@ function measureHydrationDirectory(directory) {
   let totalBytes = 0;
   while (pending.length > 0) {
     const current = pending.pop();
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+    let entriesInDirectory;
+    try {
+      entriesInDirectory = fs.readdirSync(current, { withFileTypes: true });
+    } catch (error) {
+      // Git creates, renames, and removes temporary pack directories while a
+      // bounded fetch is active. A child that disappears between traversal
+      // steps is harmless; the stable final measurement still runs after Git
+      // exits. The object-store root itself must always remain present.
+      if (current !== root && error?.code === "ENOENT") continue;
+      throw error;
+    }
+    for (const entry of entriesInDirectory) {
       entries += 1;
       if (entries > HYDRATION_MAXIMUM_ENTRIES) {
         systemBlocked("HYDRATION_STORAGE_INVALID", "The candidate object store exceeds its trusted entry bound.");
       }
       const entryPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
+      const status = fs.lstatSync(entryPath, { throwIfNoEntry: false });
+      if (status === undefined) continue;
+      if (status.isDirectory()) {
         pending.push(entryPath);
       } else {
-        const status = fs.lstatSync(entryPath);
         if (status.isFile() || status.isSymbolicLink()) totalBytes += status.size;
       }
       if (!Number.isSafeInteger(totalBytes)) {
