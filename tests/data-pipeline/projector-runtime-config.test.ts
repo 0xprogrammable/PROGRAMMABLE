@@ -7,6 +7,7 @@ vi.mock("server-only", () => ({}));
 import {
   assertProjectorRuntimeProviderCommitments,
   loadProjectorRuntimeConfig,
+  projectorRuntimeActivationState,
   runConfiguredProjectorCycle,
 } from "../../lib/data-pipeline/projector-runtime-config.server";
 import {
@@ -50,6 +51,7 @@ function environment(
   overrides: Record<string, string | undefined> = {},
 ): Record<string, string | undefined> {
   return {
+    PROGRAMMABLE_PROJECTOR_ACTIVE: "true",
     PROGRAMMABLE_PROJECTOR_DATABASE_URL:
       "postgresql://programmable_projector_login:password@db.example:5432/postgres?sslmode=verify-full",
     PROGRAMMABLE_PROJECTOR_RUNTIME_DATABASE_URL:
@@ -65,6 +67,49 @@ function environment(
 }
 
 describe("configured projector runtime", () => {
+  it("keeps the runtime disabled by default without opening dependencies", async () => {
+    const createExecutor = vi.fn();
+    const dependencies = {
+      createExecutor,
+      createLeaseController: vi.fn(),
+      createProviders: vi.fn(),
+      assertProviders: vi.fn(),
+      createEnvio: vi.fn(),
+      createStore: vi.fn(),
+      createReleaseStore: vi.fn(),
+      runCycle: vi.fn(),
+      runReleaseCycle: vi.fn(),
+    } as never;
+
+    await expect(runConfiguredProjectorCycle({
+      env: environment({ PROGRAMMABLE_PROJECTOR_ACTIVE: undefined }),
+      dependencies,
+    })).resolves.toEqual({
+      ok: true,
+      status: "disabled",
+      readiness: {
+        status: "disabled",
+        activationReady: false,
+        lagging: true,
+      },
+    });
+    expect(createExecutor).not.toHaveBeenCalled();
+  });
+
+  it("requires the exact activation value and fails closed otherwise", () => {
+    expect(projectorRuntimeActivationState(
+      environment({ PROGRAMMABLE_PROJECTOR_ACTIVE: "false" }),
+    )).toBe("disabled");
+    expect(projectorRuntimeActivationState(
+      environment({ PROGRAMMABLE_PROJECTOR_ACTIVE: "true" }),
+    )).toBe("active");
+    for (const value of ["TRUE", "1", " true", "false "]) {
+      expect(() => projectorRuntimeActivationState(
+        environment({ PROGRAMMABLE_PROJECTOR_ACTIVE: value }),
+      )).toThrow();
+    }
+  });
+
   it("builds the exact provider set and every frozen release scope", () => {
     const config = loadProjectorRuntimeConfig(environment());
 

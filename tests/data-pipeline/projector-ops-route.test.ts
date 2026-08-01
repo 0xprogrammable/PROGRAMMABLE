@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  projectorRuntimeActivationState: vi.fn(),
   runConfiguredProjectorCycle: vi.fn(),
 }));
 
@@ -10,6 +11,7 @@ vi.mock("server-only", () => ({}));
 vi.mock(
   "../../lib/data-pipeline/projector-runtime-config.server",
   () => ({
+    projectorRuntimeActivationState: mocks.projectorRuntimeActivationState,
     runConfiguredProjectorCycle: mocks.runConfiguredProjectorCycle,
   }),
 );
@@ -58,6 +60,8 @@ function request(token?: string) {
 describe("projector operations route", () => {
   beforeEach(() => {
     vi.stubEnv("CRON_SECRET", SECRET);
+    mocks.projectorRuntimeActivationState.mockReset();
+    mocks.projectorRuntimeActivationState.mockReturnValue("active");
     mocks.runConfiguredProjectorCycle.mockReset();
   });
 
@@ -70,6 +74,45 @@ describe("projector operations route", () => {
     expect(dynamic).toBe("force-dynamic");
     expect(maxDuration).toBe(90);
     expect(runtime).toBe("nodejs");
+  });
+
+  it("returns a bounded disabled status without opening the runtime", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    mocks.projectorRuntimeActivationState.mockReturnValue("disabled");
+
+    const response = await GET(request(SECRET));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      status: "disabled",
+      readiness: {
+        status: "disabled",
+        activationReady: false,
+        lagging: true,
+      },
+    });
+    expect(mocks.runConfiguredProjectorCycle).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledWith(
+      "Programmable projector cycle completed",
+      expect.objectContaining({ status: "disabled" }),
+    );
+  });
+
+  it("fails closed for an invalid activation value without running", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.projectorRuntimeActivationState.mockImplementation(() => {
+      throw new Error("invalid activation");
+    });
+
+    const response = await GET(request(SECRET));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Projector cycle failed",
+    });
+    expect(mocks.runConfiguredProjectorCycle).not.toHaveBeenCalled();
   });
 
   it.each([

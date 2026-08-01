@@ -49,6 +49,7 @@ const EXACT_RELEASE_SCOPES = Object.freeze([
   Object.freeze({ releaseId: "stock-paired-v3", modelId: "stock-paired", sourceGroup: "core" }),
 ] satisfies readonly ProjectorReleaseDatabaseScope[]);
 const BROWSER_FORBIDDEN_NAMES = Object.freeze([
+  "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_ACTIVE",
   "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_DATABASE_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_RUNTIME_DATABASE_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_POSTGRES_SSL_CA_PEM",
@@ -57,6 +58,17 @@ const BROWSER_FORBIDDEN_NAMES = Object.freeze([
 
 function invalidRuntimeConfig(): never {
   throw invalidInput("config", "projector-runtime-config");
+}
+
+export function projectorRuntimeActivationState(
+  env: Environment = process.env,
+): "active" | "disabled" {
+  const value = env.PROGRAMMABLE_PROJECTOR_ACTIVE;
+  if (value === undefined || value === "" || value === "false") {
+    return "disabled";
+  }
+  if (value === "true") return "active";
+  return invalidRuntimeConfig();
 }
 
 function requiredText(
@@ -238,6 +250,17 @@ export async function runConfiguredProjectorCycle(
 ) {
   const env = input.env ?? process.env;
   const dependencies = input.dependencies ?? DEFAULT_DEPENDENCIES;
+  if (projectorRuntimeActivationState(env) === "disabled") {
+    return Object.freeze({
+      ok: true as const,
+      status: "disabled" as const,
+      readiness: Object.freeze({
+        status: "disabled" as const,
+        activationReady: false as const,
+        lagging: true as const,
+      }),
+    });
+  }
   const config = loadProjectorRuntimeConfig(env);
   const runtimeExecutor = dependencies.createExecutor({
     connectionString: config.database.runtimeConnectionString,

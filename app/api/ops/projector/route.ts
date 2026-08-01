@@ -2,7 +2,10 @@ import { timingSafeEqual } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { runConfiguredProjectorCycle } from "../../../../lib/data-pipeline/projector-runtime-config.server";
+import {
+  projectorRuntimeActivationState,
+  runConfiguredProjectorCycle,
+} from "../../../../lib/data-pipeline/projector-runtime-config.server";
 import {
   PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
   PROJECTOR_MAXIMUM_CANDIDATES_PER_CYCLE,
@@ -256,19 +259,19 @@ function safeRuntimeResult(value: unknown) {
   if (
     isRecord(value) &&
     value.ok === true &&
-    value.status === "busy" &&
+    (value.status === "busy" || value.status === "disabled") &&
     Object.keys(value).length === 3 &&
     isRecord(value.readiness) &&
-    value.readiness.status === "busy" &&
+    value.readiness.status === value.status &&
     value.readiness.activationReady === false &&
     value.readiness.lagging === true &&
     Object.keys(value.readiness).length === 3
   ) {
     return Object.freeze({
       ok: true as const,
-      status: "busy" as const,
+      status: value.status,
       readiness: Object.freeze({
-        status: "busy" as const,
+        status: value.status,
         activationReady: false as const,
         lagging: true as const,
       }),
@@ -330,6 +333,26 @@ export async function GET(request: NextRequest) {
 
   const startedAt = Date.now();
   try {
+    if (projectorRuntimeActivationState() === "disabled") {
+      const disabled = Object.freeze({
+        ok: true as const,
+        status: "disabled" as const,
+        readiness: Object.freeze({
+          status: "disabled" as const,
+          activationReady: false as const,
+          lagging: true as const,
+        }),
+      });
+      console.info("Programmable projector cycle completed", {
+        durationMs: Math.min(90_000, Math.max(0, Date.now() - startedAt)),
+        status: "disabled",
+        readiness: disabled.readiness,
+      });
+      return NextResponse.json(disabled, {
+        status: 200,
+        headers: NO_STORE_HEADERS,
+      });
+    }
     const cycle = safeRuntimeResult(await runConfiguredProjectorCycle());
     const durationMs = Math.min(
       90_000,
@@ -338,7 +361,7 @@ export async function GET(request: NextRequest) {
     if ("status" in cycle) {
       console.info("Programmable projector cycle completed", {
         durationMs,
-        status: "busy",
+        status: cycle.status,
         readiness: cycle.readiness,
       });
     } else {
