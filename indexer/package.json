@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "release:identity": "node scripts/release-candidate.mjs identity",
+    "release:snapshot": "node scripts/release-candidate.mjs snapshot",
     "release:audit": "node scripts/release-candidate.mjs audit"
   },
   "dependencies": {

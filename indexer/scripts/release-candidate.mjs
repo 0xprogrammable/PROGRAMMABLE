@@ -183,6 +183,18 @@ const PROGRESS_QUERY = `
   }
 `;
 
+const BASELINE_PROGRESS_QUERY = `
+  query ProgrammableReleaseBaselineProgress {
+    _meta(where: { chainId: { _eq: 1 } }) {
+      chainId progressBlock bufferBlock sourceBlock isReady eventsProcessed
+    }
+    IndexerState_by_pk(id: "ethereum-mainnet") {
+      id schemaVersion deployment chainId progressBlock progressBlockHash
+      progressTimestamp progressTransactionHash progressOccurrenceId
+    }
+  }
+`;
+
 const INVENTORY_QUERY = `
   query ProgrammableReleaseCandidateInventory($afterId: String!, $first: Int!) {
     Launch(
@@ -234,20 +246,7 @@ function assertFrozenBaseline(launches, baseline) {
   }
 }
 
-async function auditCandidate(endpoint, expected, baseline) {
-  const progress = await graphql(endpoint, PROGRESS_QUERY);
-  if (!Array.isArray(progress?._meta) || progress._meta.length !== 1) {
-    throw new Error("candidate returned an invalid Ethereum _meta row");
-  }
-  const meta = progress._meta[0];
-  if (meta.chainId !== 1 || meta.isReady !== true) {
-    throw new Error("candidate is not ready on Ethereum Mainnet");
-  }
-  if (progress.IndexerState_by_pk?.schemaVersion !== "1") {
-    throw new Error("candidate IndexerState schema is not v1");
-  }
-  sameIdentity(progress.IndexerState_by_pk, expected);
-
+async function readInventory(endpoint) {
   const launches = [];
   let afterId = "";
   for (;;) {
@@ -262,6 +261,68 @@ async function auditCandidate(endpoint, expected, baseline) {
     }
     if (rows.length < 250) break;
   }
+  return launches;
+}
+
+async function snapshotBaseline(endpoint) {
+  const [progress, launches] = await Promise.all([
+    graphql(endpoint, BASELINE_PROGRESS_QUERY),
+    readInventory(endpoint),
+  ]);
+  if (!Array.isArray(progress?._meta) || progress._meta.length !== 1) {
+    throw new Error("baseline returned an invalid Ethereum _meta row");
+  }
+  const meta = progress._meta[0];
+  if (meta.chainId !== 1 || meta.isReady !== true || launches.length === 0) {
+    throw new Error("baseline is not a ready non-empty Ethereum inventory");
+  }
+  const entries = launches.map(({ id, model, releaseVersion, launchHash, token }) => ({
+    id,
+    model,
+    releaseVersion,
+    launchHash,
+    token,
+  }));
+  const releaseSet = new Set(entries.map(({ releaseVersion }) => releaseVersion));
+  if (RELEASES.some((release) => !releaseSet.has(release))) {
+    throw new Error("baseline does not contain every reviewed historical release");
+  }
+  const canonical = Buffer.from(`${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+  return {
+    schemaVersion: 1,
+    kind: "envio-launch-inventory-baseline",
+    endpoint,
+    capturedAt: new Date().toISOString(),
+    deployment: progress.IndexerState_by_pk?.deployment,
+    anchor: {
+      progressBlock: String(meta.progressBlock),
+      bufferBlock: String(meta.bufferBlock),
+      sourceBlock: String(meta.sourceBlock),
+      eventsProcessed: String(meta.eventsProcessed),
+      stateProgressBlock: String(progress.IndexerState_by_pk?.progressBlock),
+      stateProgressBlockHash: progress.IndexerState_by_pk?.progressBlockHash,
+      stateProgressOccurrenceId: progress.IndexerState_by_pk?.progressOccurrenceId,
+    },
+    inventory: { count: entries.length, sha256: sha256(canonical) },
+    entries,
+  };
+}
+
+async function auditCandidate(endpoint, expected, baseline) {
+  const progress = await graphql(endpoint, PROGRESS_QUERY);
+  if (!Array.isArray(progress?._meta) || progress._meta.length !== 1) {
+    throw new Error("candidate returned an invalid Ethereum _meta row");
+  }
+  const meta = progress._meta[0];
+  if (meta.chainId !== 1 || meta.isReady !== true) {
+    throw new Error("candidate is not ready on Ethereum Mainnet");
+  }
+  if (progress.IndexerState_by_pk?.schemaVersion !== "1") {
+    throw new Error("candidate IndexerState schema is not v1");
+  }
+  sameIdentity(progress.IndexerState_by_pk, expected);
+
+  const launches = await readInventory(endpoint);
   if (launches.length === 0) throw new Error("candidate inventory is empty");
 
   const ids = new Set();
@@ -319,6 +380,15 @@ async function main() {
   if (command === "identity") {
     const identity = localIdentity(exactCommit(values["source-commit"]));
     process.stdout.write(`${JSON.stringify(identity, null, 2)}\n`);
+    return;
+  }
+  if (command === "snapshot") {
+    const endpoint = exactUrl(values.endpoint);
+    if (!values.output) throw new Error("--output is required");
+    const baseline = await snapshotBaseline(endpoint);
+    writeFileSync(path.resolve(values.output), `${JSON.stringify(baseline, null, 2)}\n`, {
+      flag: "wx",
+    });
     return;
   }
   if (command === "audit") {
