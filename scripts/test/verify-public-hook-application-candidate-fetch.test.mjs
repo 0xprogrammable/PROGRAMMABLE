@@ -15,6 +15,7 @@ import {
   preflightPublicApplicationCandidateFetch,
   PUBLIC_BETA_DISCLAIMER,
   runBoundedHydrationGitProcess,
+  validatePublicApplicationPackageFiles,
   verifyPublicHookApplication
 } from "../verify-public-hook-application-core.mjs";
 
@@ -113,6 +114,17 @@ test("trusted application validation hydrates only the six closed package blobs"
   assert.ok(packageObjectIds.every((objectId) => hasObjectWithoutLazyFetch(candidateData, objectId)));
   assert.equal(hasObjectWithoutLazyFetch(candidateData, unrelatedBaseObjectId), false);
   assert.equal(fs.existsSync(path.join(candidateData, "submissions")), false);
+});
+
+test("candidate package cannot remove the mandatory companion closure receipt index", () => {
+  const packageFiles = makePackage();
+  const application = JSON.parse(packageFiles.get("application.json").toString("utf8"));
+  delete application.companionClosure;
+  packageFiles.set("application.json", jsonBytes(application));
+  assert.throws(
+    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles }),
+    (error) => error?.code === "OBJECT_NOT_CLOSED" && error?.kind === "candidate"
+  );
 });
 
 test("an allowlisted 100 MB blob is rejected from metadata before hydration", async (t) => {
@@ -738,6 +750,7 @@ function makePackage() {
       primary: { ...PRIMARY, sourcePaths: [...PRIMARY.sourcePaths], contractPaths: [...PRIMARY.contractPaths], githubActionsRunIds: [...PRIMARY.githubActionsRunIds] },
       companions: []
     },
+    companionClosure: [],
     reviewPackage: reviewRecords(files),
     declarations: {
       publicInformationAcknowledged: true,
