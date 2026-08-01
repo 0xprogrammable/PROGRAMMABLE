@@ -8,31 +8,17 @@ license: MIT
 
 ## Purpose
 
-Give a builder and their coding agent one end-to-end path from a plain-language idea or existing repository to a reviewable public GitHub application. The skill helps choose the architecture, build or repair the project, create evidence,
-run deterministic checks, bind one exact public source revision, and prepare the application. It does not
-approve, deploy, publish, route, list, or launch a project.
+Give a builder and their coding agent one end-to-end path from a plain-language idea or existing repository to a reviewable public GitHub application. The skill helps choose the architecture, build or repair the project, create evidence, run deterministic checks, bind one exact public source revision, and prepare the application. It does not approve, deploy, publish, route, list, or launch a project.
 
-This is a v4 project builder, not a hook-at-all-costs generator. First determine whether any requested behavior must run
-atomically with a pool action. A plain fixed-supply token with ordinary price discovery and liquidity should use the
-current pinned official Uniswap Liquidity Launchpad path and no custom hook. That is the safer default, not the only no-hook architecture. A model-specific ordinary token, including a transparent transfer tax or bounded automatic liquidity lifecycle, may enter architecture review when fees, recipients, mutability, authority, value flows, custody, exit, provider limits, and tests are explicit. Build a custom hook only when the confirmed mechanism needs one. A game, map, browser experience, wallet-action product, server, keeper, indexer, or other application may be part of the same project and review target.
+This is a v4 project builder, not a hook-at-all-costs generator. First determine whether any requested behavior must run atomically with a pool action. A plain fixed-supply token with ordinary price discovery and liquidity should use the current pinned official Uniswap Liquidity Launchpad path and no custom hook. That is the safer default, not the only no-hook architecture. A model-specific ordinary token, including a transparent transfer tax or bounded automatic liquidity lifecycle, may enter architecture review when fees, recipients, mutability, authority, value flows, custody, exit, provider limits, and tests are explicit. Build a custom hook only when the confirmed mechanism needs one. A game, map, browser experience, wallet-action product, server, keeper, indexer, or other application may be part of the same project and review target.
 
-There is no launch-type allowlist. An unfamiliar mechanism enters architecture discussion so its authority, value flow,
-trust boundary, failure behavior, and evidence can be understood. Novelty is not a security finding. Automatic adverse
-results must be tied to a reproducible objective conflict, not a missing catalog label or parser limitation.
+There is no launch-type allowlist. An unfamiliar mechanism enters architecture discussion so its authority, value flow, trust boundary, failure behavior, and evidence can be understood. Novelty is not a security finding. Automatic adverse results must be tied to a reproducible objective conflict, not a missing catalog label or parser limitation.
 
-For the Programmable launch path, the project still defines one launched token, one canonical Uniswap v4 launch pool,
-and the complete creation-to-retirement lifecycle. A reusable component for arbitrary existing pools may be built and
-reviewed, but it cannot claim platform-launch compatibility until that launch lifecycle and integration boundary are
-defined. Alternative pools never inherit the canonical pool's behavior by implication.
+For the Programmable launch path, the project still defines one launched token, one canonical Uniswap v4 launch pool, and the complete creation-to-retirement lifecycle. A reusable component for arbitrary existing pools may be built and reviewed, but it cannot claim platform-launch compatibility until that launch lifecycle and integration boundary are defined. Alternative pools never inherit the canonical pool's behavior by implication.
 
-Any positive JavaScript-safe EVM chain may be submitted. Known ids bind to canonical slugs: Ethereum `1/ethereum`,
-Unichain `130/unichain`, Base `8453/base`, and Sepolia `11155111/sepolia`. An unknown chain enters architecture review;
-it is not automatically unsafe or unsupported. Application eligibility is not launch eligibility: the current
-Programmable launch runtime is Ethereum Mainnet-only. Every other chain stays behind a maintainer-owned platform
-integration release gate, even when an exact official Uniswap deployment reference exists.
+Any positive JavaScript-safe EVM chain may be submitted. Known ids bind to canonical slugs: Ethereum `1/ethereum`, Unichain `130/unichain`, Base `8453/base`, and Sepolia `11155111/sepolia`. An unknown chain enters architecture review; it is not automatically unsafe or unsupported. Application eligibility is not launch eligibility: the current Programmable launch runtime is Ethereum Mainnet-only. Every other chain stays behind a maintainer-owned platform integration release gate, even when an exact official Uniswap deployment reference exists.
 
-The builder may be non-technical. Ask in plain language, derive technical fields where the answer is unambiguous, and
-explain every blocker with a safer or simpler redesign. Never lower a gate because the user does not know the jargon.
+The builder may be non-technical. Ask in plain language, derive technical fields where the answer is unambiguous, and explain every blocker with a safer or simpler redesign. Never lower a gate because the user does not know the jargon.
 
 For a non-technical builder:
 
