@@ -1,5 +1,5 @@
 begin;
-select plan(24);
+select plan(38);
 
 create function public.projection_trace_fixture_v1(
   p_candidate_batch_size integer default 1,
@@ -77,6 +77,91 @@ as $function$
     )
   )
 $function$;
+
+create function public.reward_trace_fixture_multi_v1(
+  p_chunk_count integer,
+  p_aggregate_call_count integer
+)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $function$
+  select pg_catalog.jsonb_build_object(
+    'startedAtMs', 1775000000000,
+    'completedAtMs', 1775000000010,
+    'candidateBatchSize', 0,
+    'hardDeadlineMs', 75000,
+    'maxCallsPerProvider', 128,
+    'elapsedMs', 10,
+    'providerCallCounts', pg_catalog.jsonb_build_array(
+      p_aggregate_call_count, p_aggregate_call_count
+    ),
+    'calls', (
+      select pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_object(
+          'providerIdentity', case provider_ordinal
+            when 1 then
+              'alchemy-mainnet-11111111111111111111111111111111'
+            else
+              'quicknode-mainnet-55555555555555555555555555555555'
+          end,
+          'providerVendorGroup', case provider_ordinal
+            when 1 then 'alchemy' else 'quicknode'
+          end,
+          'providerEndpointCommitment', '0x' || case provider_ordinal
+            when 1 then pg_catalog.repeat('33', 32)
+            else pg_catalog.repeat('55', 32)
+          end,
+          'providerOriginCommitment', '0x' || case provider_ordinal
+            when 1 then pg_catalog.repeat('44', 32)
+            else pg_catalog.repeat('66', 32)
+          end,
+          'operation', 'readRewardSnapshot',
+          'attempt', 1,
+          'startedOffsetMs', chunk_ordinal - 1,
+          'durationMs', 1,
+          'outcome', 'success'
+        )
+        order by provider_ordinal, chunk_ordinal
+      )
+      from pg_catalog.generate_series(1, 2) as providers(provider_ordinal)
+      cross join pg_catalog.generate_series(
+        1, p_chunk_count
+      ) as chunks(chunk_ordinal)
+    )
+  )
+$function$;
+
+set local role programmable_projector;
+
+select programmable_private.register_rpc_provider_deployment(
+  '10000000-0000-4000-8000-000000000002', 1,
+  'alchemy', 'provider-evidence-test-v1',
+  pg_catalog.decode(pg_catalog.repeat('33', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('44', 32), 'hex'),
+  'rpc-endpoint-commitments-v1',
+  pg_catalog.decode(pg_catalog.repeat('31', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('11', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('32', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('34', 32), 'hex'),
+  '2026-08-01T00:00:00Z'
+);
+
+select programmable_private.register_rpc_provider_deployment(
+  '10000000-0000-4000-8000-000000000003', 1,
+  'quicknode', 'provider-evidence-test-v1',
+  pg_catalog.decode(pg_catalog.repeat('55', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('66', 32), 'hex'),
+  'rpc-endpoint-commitments-v1',
+  pg_catalog.decode(pg_catalog.repeat('51', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('55', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('52', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('54', 32), 'hex'),
+  '2026-08-01T00:00:01Z'
+);
+
+reset role;
 
 select is(
   pg_catalog.encode(version.definition_commitment, 'hex'),
@@ -331,8 +416,23 @@ select ok(
     'programmable_projector',
     'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'::regprocedure,
     'EXECUTE'
+  )
+  and pg_catalog.has_function_privilege(
+    'programmable_projector',
+    'programmable_private.stage_verified_dynamic_parents_v2(uuid,uuid,text,text,text,text,uuid,bigint,bigint,bigint,bytea,uuid,text,uuid,uuid,uuid,uuid,numeric,bytea,bytea,bytea[],bytea[],jsonb,bytea,jsonb,jsonb,timestamp with time zone)'::regprocedure,
+    'EXECUTE'
+  )
+  and pg_catalog.has_function_privilege(
+    'programmable_projector',
+    'programmable_private.get_current_provisional_dynamic_sources_v1(text)'::regprocedure,
+    'EXECUTE'
+  )
+  and not pg_catalog.has_function_privilege(
+    'programmable_projector',
+    'programmable_private.consume_matching_provisional_sources_v1(uuid,uuid,uuid,uuid,uuid[],timestamp with time zone)'::regprocedure,
+    'EXECUTE'
   ),
-  'the projector receives only the staged commitment, stage-v2 and v3 promotion capabilities'
+  'the projector can stage and read private parents but cannot consume them outside v3 promotion'
 );
 
 select ok(
@@ -455,6 +555,342 @@ select ok(
     'programmable_private.projection_provider_binding_preimage_v1(uuid,uuid,text,uuid,uuid[],timestamp with time zone)'
   ) is not null,
   'all three structural commitment domains have explicit SQL codecs'
+);
+
+select lives_ok(
+  $sql$
+    select programmable_private.validate_reward_snapshot_execution_trace_v1(
+      public.reward_trace_fixture_multi_v1(2, 129),
+      '10000000-0000-4000-8000-000000000002',
+      '10000000-0000-4000-8000-000000000003',
+      129, 129
+    )
+  $sql$,
+  'reward traces support ordered multi-chunk reads above one execution-call window'
+);
+
+select throws_ok(
+  $sql$
+    select programmable_private.validate_reward_snapshot_execution_trace_v1(
+      pg_catalog.jsonb_set(
+        public.reward_trace_fixture_multi_v1(2, 129),
+        '{calls,1}',
+        public.reward_trace_fixture_multi_v1(2, 129) #> '{calls,2}'
+      ),
+      '10000000-0000-4000-8000-000000000002',
+      '10000000-0000-4000-8000-000000000003',
+      129, 129
+    )
+  $sql$,
+  '23514',
+  'reward traces reject provider interleaving across chunk boundaries'
+);
+
+select lives_ok(
+  $sql$
+    select programmable_private.assert_reward_verification_chunk_manifest_v1(
+      array(
+        select pg_catalog.decode(
+          pg_catalog.lpad(pg_catalog.to_hex(account_number), 40, '0'),
+          'hex'
+        )
+        from pg_catalog.generate_series(1, 49) as accounts(account_number)
+      ),
+      array[48, 49],
+      array[
+        pg_catalog.decode(pg_catalog.repeat('a1', 32), 'hex'),
+        pg_catalog.decode(pg_catalog.repeat('a2', 32), 'hex')
+      ],
+      array[
+        pg_catalog.decode(pg_catalog.repeat('a1', 32), 'hex'),
+        pg_catalog.decode(pg_catalog.repeat('a2', 32), 'hex')
+      ],
+      array[128, 1], array[128, 1], 129, 129
+    )
+  $sql$,
+  'a 49-account reward read persists as two exact ordered chunks'
+);
+
+select throws_ok(
+  $sql$
+    select programmable_private.assert_reward_verification_chunk_manifest_v1(
+      array(
+        select pg_catalog.decode(
+          pg_catalog.lpad(pg_catalog.to_hex(account_number), 40, '0'),
+          'hex'
+        )
+        from pg_catalog.generate_series(49, 1, -1)
+          as accounts(account_number)
+      ),
+      array[48, 49],
+      array[
+        pg_catalog.decode(pg_catalog.repeat('a1', 32), 'hex'),
+        pg_catalog.decode(pg_catalog.repeat('a2', 32), 'hex')
+      ],
+      array[
+        pg_catalog.decode(pg_catalog.repeat('a1', 32), 'hex'),
+        pg_catalog.decode(pg_catalog.repeat('a2', 32), 'hex')
+      ],
+      array[128, 1], array[128, 1], 129, 129
+    )
+  $sql$,
+  '22023',
+  'reward account order is canonical across chunk boundaries'
+);
+
+select lives_ok(
+  $sql$
+    select programmable_private.assert_reward_verification_chunk_manifest_v1(
+      array(
+        select pg_catalog.decode(
+          pg_catalog.lpad(pg_catalog.to_hex(account_number), 40, '0'),
+          'hex'
+        )
+        from pg_catalog.generate_series(1, 4096)
+          as accounts(account_number)
+      ),
+      array(
+        select least(chunk_number * 48, 4096)
+        from pg_catalog.generate_series(1, 86) as chunks(chunk_number)
+      ),
+      array(
+        select pg_catalog.decode(pg_catalog.repeat('ab', 32), 'hex')
+        from pg_catalog.generate_series(1, 86)
+      ),
+      array(
+        select pg_catalog.decode(pg_catalog.repeat('ab', 32), 'hex')
+        from pg_catalog.generate_series(1, 86)
+      ),
+      array(
+        select 128 from pg_catalog.generate_series(1, 86)
+      ),
+      array(
+        select 128 from pg_catalog.generate_series(1, 86)
+      ),
+      11008, 11008
+    )
+  $sql$,
+  'reward evidence accepts the full 4096-account and 11008-call boundary'
+);
+
+select ok(
+  (
+    select pg_catalog.string_agg(
+      pg_catalog.pg_get_constraintdef(constraint_row.oid), ' '
+    )
+    from pg_catalog.pg_constraint as constraint_row
+    where constraint_row.conrelid =
+      'programmable_private.projection_provider_execution_evidence'::regclass
+  ) like '%128%'
+  and (
+    select pg_catalog.string_agg(
+      pg_catalog.pg_get_constraintdef(constraint_row.oid), ' '
+    )
+    from pg_catalog.pg_constraint as constraint_row
+    where constraint_row.conrelid =
+      'programmable_private.projection_provider_execution_evidence'::regclass
+  ) not like '%11008%'
+  and (
+    select pg_catalog.string_agg(
+      pg_catalog.pg_get_constraintdef(constraint_row.oid), ' '
+    )
+    from pg_catalog.pg_constraint as constraint_row
+    where constraint_row.conrelid =
+      'programmable_private.reward_snapshot_provider_evidence'::regclass
+  ) like '%11008%',
+  'projection calls remain capped at 128 while reward aggregates reach 11008'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'::regprocedure
+    ),
+    'p_promotion_mode <> ''exact_incremental'''
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'::regprocedure
+    ),
+    'reward-bearing promotion events are not in chain order'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'::regprocedure
+    ),
+    '''full_launch'''
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'::regprocedure
+    ),
+    'promotion cursor is not the exact configured-provider block terminal'
+  ) > 0,
+  'v3 exposes exact incremental promotion with mixed-event ordering and an exact terminal watermark'
+);
+
+select ok(
+  (
+    select pg_catalog.string_agg(
+      pg_catalog.pg_get_constraintdef(constraint_row.oid), ' '
+    )
+    from pg_catalog.pg_constraint as constraint_row
+    where constraint_row.conrelid =
+      'programmable_private.projection_publication_provider_bindings'::regclass
+  ) like '%exact_incremental%'
+  and (
+    select pg_catalog.string_agg(
+      pg_catalog.pg_get_constraintdef(constraint_row.oid), ' '
+    )
+    from pg_catalog.pg_constraint as constraint_row
+    where constraint_row.conrelid =
+      'programmable_private.projection_publication_provider_bindings'::regclass
+  ) not like '%reward_snapshot_delta%',
+  'public provider bindings cannot expose legacy reward or launch modes'
+);
+
+select is(
+  (
+    select pg_catalog.count(*)::integer
+    from pg_catalog.pg_class as relation
+    join pg_catalog.pg_namespace as namespace
+      on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'programmable_private'
+      and relation.relname in (
+        'provisional_dynamic_parent_pages',
+        'provisional_dynamic_source_lineages',
+        'provisional_dynamic_parent_consumptions'
+      )
+      and relation.relrowsecurity
+      and relation.relforcerowsecurity
+      and exists (
+        select 1
+        from pg_catalog.pg_policies as policy
+        where policy.schemaname = namespace.nspname
+          and policy.tablename = relation.relname
+          and policy.roles = array['programmable_migrator'::name]
+          and policy.cmd = 'ALL'
+      )
+  ),
+  3,
+  'all provisional lineage tables force RLS with migrator-only policies'
+);
+
+select is(
+  (
+    select pg_catalog.count(*)::integer
+    from pg_catalog.pg_trigger as trigger
+    join pg_catalog.pg_class as relation on relation.oid = trigger.tgrelid
+    join pg_catalog.pg_namespace as namespace
+      on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'programmable_private'
+      and relation.relname in (
+        'provisional_dynamic_parent_pages',
+        'provisional_dynamic_source_lineages',
+        'provisional_dynamic_parent_consumptions'
+      )
+      and not trigger.tgisinternal
+      and trigger.tgname like '%_immutable'
+  ),
+  3,
+  'provisional page, lineage and consumption records are immutable'
+);
+
+select ok(
+  not pg_catalog.has_table_privilege(
+    'public',
+    'programmable_private.provisional_dynamic_parent_pages',
+    'SELECT,INSERT,UPDATE,DELETE'
+  )
+  and not pg_catalog.has_table_privilege(
+    'authenticated',
+    'programmable_private.provisional_dynamic_source_lineages',
+    'SELECT,INSERT,UPDATE,DELETE'
+  )
+  and not pg_catalog.has_table_privilege(
+    'service_role',
+    'programmable_private.provisional_dynamic_parent_consumptions',
+    'SELECT,INSERT,UPDATE,DELETE'
+  ),
+  'provisional dynamic parents never become a browser or service capability'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_parents_v2(uuid,uuid,text,text,text,text,uuid,bigint,bigint,bigint,bytea,uuid,text,uuid,uuid,uuid,uuid,numeric,bytea,bytea,bytea[],bytea[],jsonb,bytea,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'provisional child runtime is not template-attested'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_parents_v2(uuid,uuid,text,text,text,text,uuid,bigint,bigint,bigint,bytea,uuid,text,uuid,uuid,uuid,uuid,numeric,bytea,bytea,bytea[],bytea[],jsonb,bytea,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'insert into programmable_private.projector_checkpoints'
+  ) = 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_parents_v2(uuid,uuid,text,text,text,text,uuid,bigint,bigint,bigint,bytea,uuid,text,uuid,uuid,uuid,uuid,numeric,bytea,bytea,bytea[],bytea[],jsonb,bytea,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'insert into programmable_private.projection_publications'
+  ) = 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_parents_v2(uuid,uuid,text,text,text,text,uuid,bigint,bigint,bigint,bytea,uuid,text,uuid,uuid,uuid,uuid,numeric,bytea,bytea,bytea[],bytea[],jsonb,bytea,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'dual_rpc_log_coverage_evidence'
+  ) = 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_parents_v2(uuid,uuid,text,text,text,text,uuid,bigint,bigint,bigint,bytea,uuid,text,uuid,uuid,uuid,uuid,numeric,bytea,bytea,bytea[],bytea[],jsonb,bytea,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'envio_candidate_inbox'
+  ) = 0,
+  'provisional staging proves child runtime without reserving canonical coverage or moving public state'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_current_provisional_dynamic_sources_v1(text)'::regprocedure
+    ),
+    'release_epoch_current'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_current_provisional_dynamic_sources_v1(text)'::regprocedure
+    ),
+    'envio_ingestion_cursor_current'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_current_provisional_dynamic_sources_v1(text)'::regprocedure
+    ),
+    'provisional_dynamic_parent_consumptions'
+  ) > 0,
+  'provisional reads are scoped to the current epoch, cursor and unconsumed lineage'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.consume_matching_provisional_sources_v1(uuid,uuid,uuid,uuid,uuid[],timestamp with time zone)'::regprocedure
+    ),
+    'final block omitted a provisional child attestation'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.consume_matching_provisional_sources_v1(uuid,uuid,uuid,uuid,uuid[],timestamp with time zone)'::regprocedure
+    ),
+    'final_runtime.runtime_code_a = staged_runtime.runtime_code_a'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'::regprocedure
+    ),
+    'consume_matching_provisional_sources_v1'
+  ) > 0,
+  'only final exact promotion can consume complete provider-matched parent lineage'
 );
 
 select * from finish();

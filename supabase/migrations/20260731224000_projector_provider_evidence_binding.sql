@@ -274,6 +274,160 @@ create table programmable_private.projection_publication_reward_evidence (
   ) on delete restrict
 );
 
+create table programmable_private.provisional_dynamic_parent_pages (
+  provisional_page_id uuid primary key,
+  staging_run_id uuid not null,
+  chain_id programmable_private.chain_id_value not null,
+  release_id programmable_private.release_identifier not null,
+  model_id programmable_private.model_identifier not null,
+  source_group programmable_private.source_identifier not null,
+  projector_version programmable_private.projector_identifier not null,
+  release_epoch_id uuid not null,
+  release_pointer_generation bigint not null
+    check (release_pointer_generation > 0),
+  ingestion_epoch_id uuid not null,
+  ingestion_pointer_generation bigint not null
+    check (ingestion_pointer_generation > 0),
+  reorg_generation bigint not null check (reorg_generation >= 0),
+  expected_cursor_generation bigint not null
+    check (expected_cursor_generation >= 0),
+  expected_cursor_block_hash programmable_private.bytes32_value not null,
+  envio_provider_deployment_id uuid not null
+    references programmable_private.provider_deployments(
+      provider_deployment_id
+    ) on delete restrict,
+  stream_id programmable_private.source_identifier not null,
+  safe_head_observation_id uuid not null,
+  target_block_evidence_id uuid not null,
+  provider_a_id uuid not null
+    references programmable_private.provider_deployments(
+      provider_deployment_id
+    ) on delete restrict,
+  provider_b_id uuid not null
+    references programmable_private.provider_deployments(
+      provider_deployment_id
+    ) on delete restrict,
+  filter_commitment programmable_private.bytes32_value not null,
+  provider_a_parent_commitments
+    programmable_private.bytes32_value[] not null,
+  provider_b_parent_commitments
+    programmable_private.bytes32_value[] not null,
+  execution_trace jsonb not null,
+  execution_trace_preimage bytea not null,
+  execution_trace_commitment programmable_private.bytes32_value not null,
+  coverage_commitment programmable_private.bytes32_value not null,
+  snapshot_block_number programmable_private.block_number_value not null,
+  snapshot_block_hash programmable_private.bytes32_value not null,
+  parent_candidate_ids
+    programmable_private.envio_candidate_identifier[] not null,
+  parent_candidate_commitments
+    programmable_private.bytes32_value[] not null,
+  parent_candidates jsonb not null,
+  parent_set_commitment programmable_private.bytes32_value not null,
+  staged_at timestamptz not null,
+  foreign key (
+    staging_run_id, ingestion_epoch_id, ingestion_pointer_generation
+  )
+    references programmable_private.run_headers(
+      run_id, epoch_id, captured_pointer_generation
+    ) on delete restrict,
+  foreign key (
+    release_epoch_id, chain_id, release_id, model_id, source_group
+  ) references programmable_private.release_epochs(
+    epoch_id, chain_id, release_id, model_id, source_group
+  ) on delete restrict,
+  foreign key (
+    target_block_evidence_id, safe_head_observation_id,
+    ingestion_epoch_id, chain_id, ingestion_pointer_generation
+  ) references programmable_private.dual_rpc_block_evidence(
+    block_evidence_id, observation_id, epoch_id, chain_id,
+    pointer_generation
+  ) on delete restrict,
+  unique (
+    chain_id, release_id, model_id, source_group, projector_version,
+    release_epoch_id, release_pointer_generation, reorg_generation,
+    snapshot_block_number, snapshot_block_hash
+  ),
+  unique (
+    release_epoch_id, release_pointer_generation, parent_set_commitment
+  ),
+  check (provider_a_id <> provider_b_id),
+  check (
+    provider_a_parent_commitments = provider_b_parent_commitments
+    and provider_a_parent_commitments = parent_candidate_commitments
+    and pg_catalog.cardinality(provider_a_parent_commitments)
+      between 1 and 32
+    and programmable_private.valid_topics(
+      provider_a_parent_commitments
+    )
+  ),
+  check (
+    execution_trace_commitment =
+      pg_catalog.sha256(execution_trace_preimage)
+    and coverage_commitment <>
+      pg_catalog.decode(pg_catalog.repeat('00', 32), 'hex')
+  ),
+  check (
+    pg_catalog.cardinality(parent_candidate_ids) between 1 and 32
+    and pg_catalog.cardinality(parent_candidate_ids) =
+      pg_catalog.cardinality(parent_candidate_commitments)
+    and pg_catalog.cardinality(parent_candidate_ids) =
+      pg_catalog.jsonb_array_length(parent_candidates)
+  ),
+  check (
+    parent_set_commitment <>
+      pg_catalog.decode(pg_catalog.repeat('00', 32), 'hex')
+  )
+);
+
+create table programmable_private.provisional_dynamic_source_lineages (
+  provisional_lineage_id uuid primary key,
+  provisional_page_id uuid not null
+    references programmable_private.provisional_dynamic_parent_pages(
+      provisional_page_id
+    ) on delete restrict,
+  lineage_ordinal smallint not null check (lineage_ordinal >= 1),
+  dynamic_source_attestation_id uuid not null unique,
+  dynamic_source_template_id uuid not null
+    references programmable_private.release_dynamic_source_templates(
+      dynamic_source_template_id
+    ) on delete restrict,
+  runtime_code_evidence_id uuid not null unique
+    references programmable_private.dual_rpc_runtime_code_evidence(
+      runtime_code_evidence_id
+    ) on delete restrict,
+  parent_candidate_id
+    programmable_private.envio_candidate_identifier not null,
+  parent_candidate_commitment programmable_private.bytes32_value not null,
+  deployed_source_address programmable_private.eth_address not null,
+  unique (provisional_page_id, lineage_ordinal),
+  unique (provisional_page_id, parent_candidate_id),
+  unique (provisional_page_id, deployed_source_address),
+  check (
+    parent_candidate_commitment <>
+      pg_catalog.decode(pg_catalog.repeat('00', 32), 'hex')
+  )
+);
+
+create table programmable_private.provisional_dynamic_parent_consumptions (
+  provisional_page_id uuid primary key
+    references programmable_private.provisional_dynamic_parent_pages(
+      provisional_page_id
+    ) on delete restrict,
+  final_run_id uuid not null,
+  publication_id uuid not null
+    references programmable_private.projection_publications(publication_id)
+    on delete restrict,
+  final_execution_evidence_id uuid not null,
+  final_target_block_evidence_id uuid not null,
+  consumed_at timestamptz not null,
+  foreign key (final_execution_evidence_id, final_run_id)
+    references programmable_private.projection_provider_execution_evidence(
+      execution_evidence_id, run_id
+    ) on delete restrict,
+  unique (final_run_id, provisional_page_id)
+);
+
 alter table programmable_private.projection_provider_execution_evidence
   enable row level security;
 alter table programmable_private.projection_provider_execution_evidence
@@ -289,6 +443,18 @@ alter table programmable_private.projection_publication_provider_bindings
 alter table programmable_private.projection_publication_reward_evidence
   enable row level security;
 alter table programmable_private.projection_publication_reward_evidence
+  force row level security;
+alter table programmable_private.provisional_dynamic_parent_pages
+  enable row level security;
+alter table programmable_private.provisional_dynamic_parent_pages
+  force row level security;
+alter table programmable_private.provisional_dynamic_source_lineages
+  enable row level security;
+alter table programmable_private.provisional_dynamic_source_lineages
+  force row level security;
+alter table programmable_private.provisional_dynamic_parent_consumptions
+  enable row level security;
+alter table programmable_private.provisional_dynamic_parent_consumptions
   force row level security;
 
 create policy projection_provider_execution_evidence_migrator_all
@@ -305,6 +471,18 @@ for all to programmable_migrator using (true) with check (true);
 
 create policy projection_publication_reward_evidence_migrator_all
 on programmable_private.projection_publication_reward_evidence
+for all to programmable_migrator using (true) with check (true);
+
+create policy provisional_dynamic_parent_pages_migrator_all
+on programmable_private.provisional_dynamic_parent_pages
+for all to programmable_migrator using (true) with check (true);
+
+create policy provisional_dynamic_source_lineages_migrator_all
+on programmable_private.provisional_dynamic_source_lineages
+for all to programmable_migrator using (true) with check (true);
+
+create policy provisional_dynamic_parent_consumptions_migrator_all
+on programmable_private.provisional_dynamic_parent_consumptions
 for all to programmable_migrator using (true) with check (true);
 
 create trigger projection_provider_execution_evidence_immutable
@@ -325,6 +503,21 @@ for each row execute function programmable_private.reject_immutable_mutation();
 create trigger projection_publication_reward_evidence_immutable
 before update or delete
 on programmable_private.projection_publication_reward_evidence
+for each row execute function programmable_private.reject_immutable_mutation();
+
+create trigger provisional_dynamic_parent_pages_immutable
+before update or delete
+on programmable_private.provisional_dynamic_parent_pages
+for each row execute function programmable_private.reject_immutable_mutation();
+
+create trigger provisional_dynamic_source_lineages_immutable
+before update or delete
+on programmable_private.provisional_dynamic_source_lineages
+for each row execute function programmable_private.reject_immutable_mutation();
+
+create trigger provisional_dynamic_parent_consumptions_immutable
+before update or delete
+on programmable_private.provisional_dynamic_parent_consumptions
 for each row execute function programmable_private.reject_immutable_mutation();
 
 -- The trace commitment is a frozen structural binary encoding. JSON is only
@@ -862,7 +1055,7 @@ begin
 
   for chunk_index in 1..chunk_count loop
     if p_verification_account_chunk_end_offsets[chunk_index]
-         is distinct from pg_catalog.least(chunk_index * 48, account_count)
+         is distinct from least(chunk_index * 48, account_count)
        or pg_catalog.octet_length(
          p_provider_a_verification_chunk_commitments[chunk_index]
        ) <> 32
@@ -1269,6 +1462,7 @@ declare
   metadata programmable_private.rpc_provider_deployment_metadata%rowtype;
   call_item jsonb;
   call_ordinal bigint;
+  provider_index integer;
   expected_identity text;
   expected_endpoint text;
   expected_origin text;
@@ -2496,10 +2690,27 @@ begin
   chunk_count := pg_catalog.cardinality(
     p_verification_account_chunk_end_offsets
   );
+  if pg_catalog.jsonb_array_length(p_execution_trace -> 'calls') <>
+       chunk_count * 2
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'reward execution trace does not exactly cover chunks';
+  end if;
+  perform programmable_private.assert_reward_verification_chunk_manifest_v1(
+    p_verification_accounts,
+    p_verification_account_chunk_end_offsets,
+    p_provider_a_verification_chunk_commitments,
+    p_provider_b_verification_chunk_commitments,
+    p_provider_a_verification_chunk_call_counts,
+    p_provider_b_verification_chunk_call_counts,
+    p_provider_a_call_count,
+    p_provider_b_call_count
+  );
   for chunk_index in 1..chunk_count loop
     if p_verification_account_chunk_end_offsets[chunk_index] < 1
        or p_verification_account_chunk_end_offsets[chunk_index] <>
-         pg_catalog.least(
+         least(
            chunk_index * 48,
            pg_catalog.cardinality(p_verification_accounts)
          )
@@ -2853,6 +3064,977 @@ begin
     p_content_fingerprint, p_run_id, p_verified_at
   );
   return p_reward_snapshot_evidence_id;
+end
+$function$;
+
+create function programmable_private.stage_verified_dynamic_parents_v2(
+  p_provisional_page_id uuid,
+  p_run_id uuid,
+  p_release_id text,
+  p_model_id text,
+  p_source_group text,
+  p_projector_version text,
+  p_release_epoch_id uuid,
+  p_release_pointer_generation bigint,
+  p_reorg_generation bigint,
+  p_expected_cursor_generation bigint,
+  p_expected_cursor_block_hash bytea,
+  p_envio_provider_deployment_id uuid,
+  p_stream_id text,
+  p_provider_a_id uuid,
+  p_provider_b_id uuid,
+  p_safe_head_observation_id uuid,
+  p_target_block_evidence_id uuid,
+  p_snapshot_block_number numeric,
+  p_snapshot_block_hash bytea,
+  p_filter_commitment bytea,
+  p_provider_a_parent_commitments bytea[],
+  p_provider_b_parent_commitments bytea[],
+  p_execution_trace jsonb,
+  p_execution_trace_commitment bytea,
+  p_parent_candidates jsonb,
+  p_provisional_dynamic_sources jsonb,
+  p_staged_at timestamptz default pg_catalog.clock_timestamp()
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+declare
+  ingestion_header programmable_private.run_headers%rowtype;
+  current_cursor
+    programmable_private.envio_ingestion_cursor_current%rowtype;
+  current_checkpoint
+    programmable_private.projector_checkpoint_current%rowtype;
+  existing programmable_private.provisional_dynamic_parent_pages%rowtype;
+  template programmable_private.release_dynamic_source_templates%rowtype;
+  runtime programmable_private.dual_rpc_runtime_code_evidence%rowtype;
+  parent_candidate_ids text[];
+  parent_candidate_commitments bytea[];
+  parent_set_commitment bytea;
+  execution_trace_preimage bytea;
+  coverage_commitment bytea;
+  candidate_item jsonb;
+  candidate_ordinal bigint;
+  candidate_keys text[];
+  expected_candidate_keys text[] := array[
+    'blockGlobalLogIndex', 'blockHash', 'blockNumber', 'candidateId',
+    'contentCommitment', 'contractName', 'decodedPayload', 'eventSignature',
+    'eventType', 'payloadHash', 'sourceAddress', 'transactionHash',
+    'transactionIndex'
+  ];
+  source_item jsonb;
+  source_ordinal bigint;
+  source_keys text[];
+  expected_source_keys text[] := array[
+    'dynamicSourceAttestationId', 'parentCandidateId',
+    'provisionalLineageId', 'runtimeCodeEvidenceId', 'templateId'
+  ];
+  deployed_source_address bytea;
+  stored_dynamic_sources jsonb;
+  prior_log_index bigint := -1;
+  snapshot_block bigint;
+  audit_id uuid;
+begin
+  perform programmable_private.assert_caller('programmable_projector');
+  if p_provisional_page_id is null
+     or p_run_id is null
+     or p_release_id is null
+     or p_model_id is null
+     or p_source_group is null
+     or p_projector_version is null
+     or p_release_epoch_id is null
+     or p_release_pointer_generation < 1
+     or p_reorg_generation < 0
+     or p_expected_cursor_generation < 0
+     or pg_catalog.octet_length(p_expected_cursor_block_hash) <> 32
+     or p_envio_provider_deployment_id is null
+     or p_stream_id is null
+     or p_provider_a_id is null
+     or p_provider_b_id is null
+     or p_provider_a_id = p_provider_b_id
+     or p_safe_head_observation_id is null
+     or p_target_block_evidence_id is null
+     or p_snapshot_block_number <> pg_catalog.trunc(p_snapshot_block_number)
+     or p_snapshot_block_number < 0
+     or p_snapshot_block_number > 9223372036854775807
+     or pg_catalog.octet_length(p_snapshot_block_hash) <> 32
+     or pg_catalog.octet_length(p_filter_commitment) <> 32
+     or p_provider_a_parent_commitments is null
+     or p_provider_b_parent_commitments is null
+     or p_provider_a_parent_commitments <>
+       p_provider_b_parent_commitments
+     or not programmable_private.valid_topics(
+       p_provider_a_parent_commitments
+     )
+     or p_execution_trace is null
+     or pg_catalog.octet_length(p_execution_trace_commitment) <> 32
+     or p_parent_candidates is null
+     or pg_catalog.jsonb_typeof(p_parent_candidates) <> 'array'
+     or p_provisional_dynamic_sources is null
+     or pg_catalog.jsonb_typeof(p_provisional_dynamic_sources) <> 'array'
+     or p_staged_at is null
+  then
+    raise exception using
+      errcode = '22023', message = 'invalid provisional dynamic-source page';
+  end if;
+  if pg_catalog.jsonb_array_length(p_parent_candidates) not between 1 and 32
+     or coalesce(pg_catalog.cardinality(
+       p_provider_a_parent_commitments
+     ), 0) <> pg_catalog.jsonb_array_length(p_parent_candidates)
+     or pg_catalog.octet_length(p_parent_candidates::text) > 262144
+     or pg_catalog.jsonb_array_length(p_provisional_dynamic_sources) <>
+       pg_catalog.jsonb_array_length(p_parent_candidates)
+     or pg_catalog.octet_length(p_provisional_dynamic_sources::text) > 65536
+  then
+    raise exception using
+      errcode = '22023', message = 'invalid provisional dynamic-source page';
+  end if;
+  snapshot_block := p_snapshot_block_number::bigint;
+
+  select * into ingestion_header
+  from programmable_private.run_headers
+  where run_id = p_run_id
+    and run_kind = 'ingestion'
+  for share;
+  if not found
+     or exists (
+       select 1 from programmable_private.run_lifecycle_outcomes
+       where run_id = p_run_id
+     )
+  then
+    raise exception using
+      errcode = '55000', message = 'provisional ingestion run is not open';
+  end if;
+  perform programmable_private.assert_current_epoch(
+    ingestion_header.chain_id, p_release_id, p_model_id, p_source_group,
+    p_release_epoch_id, p_release_pointer_generation
+  );
+  if p_stream_id <> ingestion_header.source_group then
+    raise exception using
+      errcode = '23514', message = 'provisional ingestion stream changed';
+  end if;
+
+  if not exists (
+       select 1
+       from programmable_private.dual_rpc_block_evidence as block_evidence
+       join programmable_private.safe_head_observations as observation
+         on observation.observation_id =
+           block_evidence.observation_id
+        and observation.epoch_id = block_evidence.epoch_id
+        and observation.pointer_generation =
+          block_evidence.pointer_generation
+       where block_evidence.block_evidence_id = p_target_block_evidence_id
+         and block_evidence.observation_id = p_safe_head_observation_id
+         and block_evidence.epoch_id = ingestion_header.epoch_id
+         and block_evidence.chain_id = ingestion_header.chain_id
+         and block_evidence.pointer_generation =
+           ingestion_header.captured_pointer_generation
+         and block_evidence.block_number = snapshot_block
+         and block_evidence.agreed_block_hash = p_snapshot_block_hash
+         and observation.provider_a_id = p_provider_a_id
+         and observation.provider_b_id = p_provider_b_id
+     )
+     or not exists (
+       select 1
+       from programmable_private.provider_deployments as provider
+       where provider.provider_deployment_id =
+           p_envio_provider_deployment_id
+         and provider.provider_type = 'envio_deployment'
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'provisional parent provider evidence changed';
+  end if;
+
+  execution_trace_preimage :=
+    programmable_private.projection_execution_trace_preimage_v1(
+      p_execution_trace
+    );
+  if p_execution_trace_commitment <>
+       pg_catalog.sha256(execution_trace_preimage)
+     or (p_execution_trace ->> 'candidateBatchSize')::numeric <>
+       pg_catalog.jsonb_array_length(p_parent_candidates)
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'provisional parent execution trace changed';
+  end if;
+  perform programmable_private.validate_projection_execution_trace_v1(
+    p_execution_trace, p_provider_a_id, p_provider_b_id
+  );
+
+  select * into current_cursor
+  from programmable_private.envio_ingestion_cursor_current
+  where chain_id = ingestion_header.chain_id
+    and provider_deployment_id = p_envio_provider_deployment_id
+    and stream_id = p_stream_id;
+  if not found
+     or current_cursor.generation <> p_expected_cursor_generation
+     or current_cursor.block_hash <> p_expected_cursor_block_hash
+  then
+    raise exception using
+      errcode = '40001', message = 'provisional parent cursor changed';
+  end if;
+  select * into current_checkpoint
+  from programmable_private.projector_checkpoint_current
+  where chain_id = ingestion_header.chain_id
+    and release_id = p_release_id
+    and model_id = p_model_id
+    and source_group = p_source_group
+    and projector_version = p_projector_version;
+  if coalesce(current_checkpoint.reorg_generation, 0) <>
+       p_reorg_generation
+  then
+    raise exception using
+      errcode = '40001', message = 'provisional parent reorg generation changed';
+  end if;
+
+  for candidate_item, candidate_ordinal in
+    select value, ordinality
+    from pg_catalog.jsonb_array_elements(p_parent_candidates)
+      with ordinality as candidates(value, ordinality)
+  loop
+    if pg_catalog.jsonb_typeof(candidate_item) <> 'object' then
+      raise exception using
+        errcode = '23514', message = 'invalid provisional parent candidate';
+    end if;
+    select pg_catalog.array_agg(key order by key) into candidate_keys
+    from pg_catalog.jsonb_object_keys(candidate_item) as key;
+    if candidate_keys is distinct from expected_candidate_keys
+       or candidate_item ->> 'candidateId'
+         !~ '^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(0|[1-9][0-9]*)$'
+       or candidate_item ->> 'blockNumber' !~ '^(0|[1-9][0-9]*)$'
+       or candidate_item ->> 'blockHash' !~ '^0x[0-9a-f]{64}$'
+       or candidate_item ->> 'transactionHash' !~ '^0x[0-9a-f]{64}$'
+       or candidate_item ->> 'transactionIndex' !~ '^(0|[1-9][0-9]*)$'
+       or candidate_item ->> 'blockGlobalLogIndex'
+         !~ '^(0|[1-9][0-9]*)$'
+       or candidate_item ->> 'sourceAddress' !~ '^0x[0-9a-f]{40}$'
+       or candidate_item ->> 'eventSignature' !~ '^0x[0-9a-f]{64}$'
+       or candidate_item ->> 'payloadHash' !~ '^0x[0-9a-f]{64}$'
+       or candidate_item ->> 'contentCommitment' !~ '^0x[0-9a-f]{64}$'
+       or pg_catalog.jsonb_typeof(candidate_item -> 'decodedPayload')
+         <> 'object'
+       or candidate_item ->> 'contractName' not in (
+         'ClassicV3RewardVaultFactory', 'StockV1RewardVaultFactory',
+         'StockV2V3RewardVaultFactory'
+       )
+       or candidate_item ->> 'eventType' not in (
+         'ClassicRewardVaultDeployed',
+         'QuoteAssetFeeSplitVaultDeployed'
+       )
+       or (candidate_item ->> 'blockNumber')::numeric <> snapshot_block
+       or candidate_item ->> 'blockHash' <>
+         '0x' || pg_catalog.encode(p_snapshot_block_hash, 'hex')
+       or (candidate_item ->> 'blockGlobalLogIndex')::numeric <=
+         prior_log_index
+       or candidate_item ->> 'candidateId' <>
+         '1:' || (candidate_item ->> 'blockHash') || ':' ||
+         (candidate_item ->> 'transactionHash') || ':' ||
+         (candidate_item ->> 'blockGlobalLogIndex')
+       or pg_catalog.decode(
+         pg_catalog.substring(candidate_item ->> 'contentCommitment', 3),
+         'hex'
+       ) <> p_provider_a_parent_commitments[candidate_ordinal::integer]
+    then
+      raise exception using
+        errcode = '23514', message = 'invalid provisional parent candidate';
+    end if;
+    parent_candidate_ids := pg_catalog.array_append(
+      parent_candidate_ids, candidate_item ->> 'candidateId'
+    );
+    parent_candidate_commitments := pg_catalog.array_append(
+      parent_candidate_commitments,
+      pg_catalog.decode(
+        pg_catalog.substring(candidate_item ->> 'contentCommitment', 3),
+        'hex'
+      )
+    );
+    prior_log_index :=
+      (candidate_item ->> 'blockGlobalLogIndex')::bigint;
+  end loop;
+
+  for source_item, source_ordinal in
+    select value, ordinality
+    from pg_catalog.jsonb_array_elements(p_provisional_dynamic_sources)
+      with ordinality as sources(value, ordinality)
+  loop
+    if pg_catalog.jsonb_typeof(source_item) <> 'object' then
+      raise exception using
+        errcode = '22023', message = 'invalid provisional child lineage';
+    end if;
+    select pg_catalog.array_agg(key order by key) into source_keys
+    from pg_catalog.jsonb_object_keys(source_item) as key;
+    if source_keys is distinct from expected_source_keys
+       or source_item ->> 'provisionalLineageId' !~
+         '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       or source_item ->> 'dynamicSourceAttestationId' !~
+         '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       or source_item ->> 'runtimeCodeEvidenceId' !~
+         '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       or source_item ->> 'templateId' !~
+         '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       or source_item ->> 'parentCandidateId' is distinct from
+         parent_candidate_ids[source_ordinal::integer]
+    then
+      raise exception using
+        errcode = '22023', message = 'invalid provisional child lineage';
+    end if;
+    select value into candidate_item
+    from pg_catalog.jsonb_array_elements(p_parent_candidates)
+      with ordinality as candidates(value, ordinality)
+    where ordinality = source_ordinal;
+    select template_row.*
+    into template
+    from programmable_private.release_dynamic_source_templates
+      as template_row
+    join programmable_private.release_source_bindings as binding
+      on binding.binding_id =
+        template_row.parent_factory_release_binding_id
+     and binding.epoch_id = template_row.epoch_id
+    where template_row.dynamic_source_template_id =
+        (source_item ->> 'templateId')::uuid
+      and template_row.epoch_id = p_release_epoch_id
+      and binding.source_name = candidate_item ->> 'contractName'
+      and binding.source_address = pg_catalog.decode(
+        pg_catalog.substring(candidate_item ->> 'sourceAddress', 3), 'hex'
+      )
+      and binding.binding_commitment =
+        template_row.parent_factory_binding_commitment
+      and template_row.factory_event_type = candidate_item ->> 'eventType';
+    if template.dynamic_source_template_id is null then
+      raise exception using
+        errcode = '23514', message = 'provisional parent template changed';
+    end if;
+    if candidate_item -> 'decodedPayload' ->>
+         template.deployed_address_field !~ '^0x[0-9a-f]{40}$'
+       or candidate_item -> 'decodedPayload' ->>
+         (template.immutable_binding_spec ->> 'factoryConfigurationField')
+         !~ '^0x[0-9a-f]{64}$'
+    then
+      raise exception using
+        errcode = '23514', message = 'provisional parent payload changed';
+    end if;
+    deployed_source_address := pg_catalog.decode(
+      pg_catalog.substring(
+        candidate_item -> 'decodedPayload' ->>
+          template.deployed_address_field,
+        3
+      ), 'hex'
+    );
+    select * into runtime
+    from programmable_private.dual_rpc_runtime_code_evidence
+    where runtime_code_evidence_id =
+        (source_item ->> 'runtimeCodeEvidenceId')::uuid
+      and verification_run_id = p_run_id
+      and chain_id = ingestion_header.chain_id
+      and epoch_id = ingestion_header.epoch_id
+      and pointer_generation = ingestion_header.captured_pointer_generation
+      and source_address = deployed_source_address
+      and deployment_block_evidence_id = p_target_block_evidence_id
+      and deployment_block_number = snapshot_block
+      and deployment_block_hash = p_snapshot_block_hash
+      and provider_a_id = p_provider_a_id
+      and provider_b_id = p_provider_b_id
+      and agreed_runtime_code_length = template.runtime_code_length
+      and agreed_normalized_runtime_code_hash =
+        template.normalized_runtime_code_hash
+      and immutable_references_commitment =
+        template.immutable_references_commitment
+      and reconstructed_runtime_code = runtime_code_a
+      and reconstructed_runtime_code_hash = agreed_runtime_code_hash;
+    if runtime.runtime_code_evidence_id is null
+       or (
+         template.expected_instance_runtime_code_hash is not null
+         and runtime.agreed_runtime_code_hash <>
+           template.expected_instance_runtime_code_hash
+       )
+       or not programmable_private.immutable_values_match_binding_spec(
+         template.immutable_binding_spec,
+         candidate_item -> 'decodedPayload',
+         deployed_source_address,
+         runtime.immutable_values
+       )
+    then
+      raise exception using
+        errcode = '23514',
+        message = 'provisional child runtime is not template-attested';
+    end if;
+  end loop;
+
+  coverage_commitment := pg_catalog.sha256(
+    pg_catalog.convert_to(
+      pg_catalog.jsonb_build_object(
+        'chainId', ingestion_header.chain_id::text,
+        'runId', p_run_id::text,
+        'ingestionEpochId', ingestion_header.epoch_id::text,
+        'ingestionPointerGeneration',
+          ingestion_header.captured_pointer_generation::text,
+        'expectedCursorGeneration', p_expected_cursor_generation::text,
+        'expectedCursorBlockHash',
+          '0x' || pg_catalog.encode(p_expected_cursor_block_hash, 'hex'),
+        'envioProviderDeploymentId',
+          p_envio_provider_deployment_id::text,
+        'streamId', p_stream_id,
+        'safeHeadObservationId', p_safe_head_observation_id::text,
+        'targetBlockEvidenceId', p_target_block_evidence_id::text,
+        'snapshotBlockNumber', snapshot_block::text,
+        'snapshotBlockHash',
+          '0x' || pg_catalog.encode(p_snapshot_block_hash, 'hex'),
+        'providerAId', p_provider_a_id::text,
+        'providerBId', p_provider_b_id::text,
+        'filterCommitment',
+          '0x' || pg_catalog.encode(p_filter_commitment, 'hex'),
+        'parentCommitments', to_jsonb(p_provider_a_parent_commitments),
+        'executionTraceCommitment',
+          '0x' || pg_catalog.encode(
+            p_execution_trace_commitment, 'hex'
+          )
+      )::text,
+      'UTF8'
+    )
+  );
+  parent_set_commitment := pg_catalog.sha256(
+    pg_catalog.convert_to(
+      'programmable:provisional-dynamic-parent-page:v2', 'UTF8'
+    ) || coverage_commitment || coalesce((
+      select pg_catalog.string_agg(commitment, ''::bytea order by ordinal)
+      from pg_catalog.unnest(parent_candidate_commitments)
+        with ordinality as commitments(commitment, ordinal)
+    ), ''::bytea) || pg_catalog.convert_to(
+      p_provisional_dynamic_sources::text, 'UTF8'
+    )
+  );
+  select * into existing
+  from programmable_private.provisional_dynamic_parent_pages
+  where chain_id = ingestion_header.chain_id
+    and release_id = p_release_id
+    and model_id = p_model_id
+    and source_group = p_source_group
+    and projector_version = p_projector_version
+    and release_epoch_id = p_release_epoch_id
+    and release_pointer_generation = p_release_pointer_generation
+    and reorg_generation = p_reorg_generation
+    and snapshot_block_number = snapshot_block
+    and snapshot_block_hash = p_snapshot_block_hash;
+  if found then
+    select pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'provisionalLineageId', lineage.provisional_lineage_id::text,
+        'dynamicSourceAttestationId',
+          lineage.dynamic_source_attestation_id::text,
+        'runtimeCodeEvidenceId', lineage.runtime_code_evidence_id::text,
+        'templateId', lineage.dynamic_source_template_id::text,
+        'parentCandidateId', lineage.parent_candidate_id::text
+      ) order by lineage.lineage_ordinal
+    ) into stored_dynamic_sources
+    from programmable_private.provisional_dynamic_source_lineages as lineage
+    where lineage.provisional_page_id = existing.provisional_page_id;
+    if existing.provisional_page_id <> p_provisional_page_id
+       or existing.staging_run_id <> p_run_id
+       or existing.ingestion_epoch_id <> ingestion_header.epoch_id
+       or existing.ingestion_pointer_generation <>
+         ingestion_header.captured_pointer_generation
+       or existing.expected_cursor_generation <>
+         p_expected_cursor_generation
+       or existing.expected_cursor_block_hash <>
+         p_expected_cursor_block_hash
+       or existing.safe_head_observation_id <>
+         p_safe_head_observation_id
+       or existing.target_block_evidence_id <>
+         p_target_block_evidence_id
+       or existing.envio_provider_deployment_id <>
+         p_envio_provider_deployment_id
+       or existing.stream_id <> p_stream_id
+       or existing.provider_a_id <> p_provider_a_id
+       or existing.provider_b_id <> p_provider_b_id
+       or existing.filter_commitment <> p_filter_commitment
+       or existing.provider_a_parent_commitments <>
+         p_provider_a_parent_commitments::
+           programmable_private.bytes32_value[]
+       or existing.provider_b_parent_commitments <>
+         p_provider_b_parent_commitments::
+           programmable_private.bytes32_value[]
+       or existing.execution_trace <> p_execution_trace
+       or existing.execution_trace_preimage <>
+         execution_trace_preimage
+       or existing.execution_trace_commitment <>
+         p_execution_trace_commitment
+       or existing.coverage_commitment <> coverage_commitment
+       or existing.parent_candidate_ids <> parent_candidate_ids
+       or existing.parent_candidate_commitments <>
+         parent_candidate_commitments
+       or existing.parent_candidates <> p_parent_candidates
+       or existing.parent_set_commitment <> parent_set_commitment
+       or stored_dynamic_sources is distinct from
+         p_provisional_dynamic_sources
+    then
+      raise exception using
+        errcode = '23505',
+        message = 'provisional dynamic-source replay changed content';
+    end if;
+    return existing.provisional_page_id;
+  end if;
+
+  audit_id := programmable_private.append_mutation_audit(
+    'projection.dynamic_parent.provisional_stage_v2',
+    parent_set_commitment, p_run_id, p_staged_at
+  );
+  insert into programmable_private.provisional_dynamic_parent_pages (
+    provisional_page_id, staging_run_id, chain_id, release_id, model_id,
+    source_group, projector_version, release_epoch_id,
+    release_pointer_generation, ingestion_epoch_id,
+    ingestion_pointer_generation, reorg_generation,
+    expected_cursor_generation, expected_cursor_block_hash,
+    envio_provider_deployment_id, stream_id,
+    safe_head_observation_id, target_block_evidence_id,
+    provider_a_id, provider_b_id, filter_commitment,
+    provider_a_parent_commitments, provider_b_parent_commitments,
+    execution_trace, execution_trace_preimage,
+    execution_trace_commitment, coverage_commitment,
+    snapshot_block_number, snapshot_block_hash,
+    parent_candidate_ids, parent_candidate_commitments,
+    parent_candidates, parent_set_commitment, staged_at
+  ) values (
+    p_provisional_page_id, p_run_id, ingestion_header.chain_id,
+    p_release_id::programmable_private.release_identifier,
+    p_model_id::programmable_private.model_identifier,
+    p_source_group::programmable_private.source_identifier,
+    p_projector_version::programmable_private.projector_identifier,
+    p_release_epoch_id, p_release_pointer_generation,
+    ingestion_header.epoch_id,
+    ingestion_header.captured_pointer_generation,
+    p_reorg_generation, p_expected_cursor_generation,
+    p_expected_cursor_block_hash, p_envio_provider_deployment_id,
+    p_stream_id::programmable_private.source_identifier,
+    p_safe_head_observation_id, p_target_block_evidence_id,
+    p_provider_a_id, p_provider_b_id, p_filter_commitment,
+    p_provider_a_parent_commitments::
+      programmable_private.bytes32_value[],
+    p_provider_b_parent_commitments::
+      programmable_private.bytes32_value[],
+    p_execution_trace, execution_trace_preimage,
+    p_execution_trace_commitment, coverage_commitment,
+    snapshot_block::programmable_private.block_number_value,
+    p_snapshot_block_hash::programmable_private.bytes32_value,
+    parent_candidate_ids::programmable_private.envio_candidate_identifier[],
+    parent_candidate_commitments::programmable_private.bytes32_value[],
+    p_parent_candidates, parent_set_commitment, p_staged_at
+  );
+  for source_item, source_ordinal in
+    select value, ordinality
+    from pg_catalog.jsonb_array_elements(p_provisional_dynamic_sources)
+      with ordinality as sources(value, ordinality)
+  loop
+    select value into candidate_item
+    from pg_catalog.jsonb_array_elements(p_parent_candidates)
+      with ordinality as candidates(value, ordinality)
+    where ordinality = source_ordinal;
+    select * into template
+    from programmable_private.release_dynamic_source_templates
+    where dynamic_source_template_id =
+      (source_item ->> 'templateId')::uuid;
+    deployed_source_address := pg_catalog.decode(
+      pg_catalog.substring(
+        candidate_item -> 'decodedPayload' ->>
+          template.deployed_address_field,
+        3
+      ), 'hex'
+    );
+    insert into programmable_private.provisional_dynamic_source_lineages (
+      provisional_lineage_id, provisional_page_id, lineage_ordinal,
+      dynamic_source_attestation_id, dynamic_source_template_id,
+      runtime_code_evidence_id, parent_candidate_id,
+      parent_candidate_commitment, deployed_source_address
+    ) values (
+      (source_item ->> 'provisionalLineageId')::uuid,
+      p_provisional_page_id, source_ordinal::smallint,
+      (source_item ->> 'dynamicSourceAttestationId')::uuid,
+      (source_item ->> 'templateId')::uuid,
+      (source_item ->> 'runtimeCodeEvidenceId')::uuid,
+      (source_item ->> 'parentCandidateId')::
+        programmable_private.envio_candidate_identifier,
+      parent_candidate_commitments[source_ordinal::integer]::
+        programmable_private.bytes32_value,
+      deployed_source_address::programmable_private.eth_address
+    );
+  end loop;
+  return p_provisional_page_id;
+end
+$function$;
+
+create function programmable_private.get_current_provisional_dynamic_sources_v1(
+  p_projector_version text
+)
+returns table (
+  provisional_page_id uuid,
+  provisional_lineage_id uuid,
+  release_epoch_id uuid,
+  release_pointer_generation bigint,
+  ingestion_epoch_id uuid,
+  ingestion_pointer_generation bigint,
+  reorg_generation bigint,
+  snapshot_block_number bigint,
+  snapshot_block_hash bytea,
+  expected_cursor_generation bigint,
+  expected_cursor_block_hash bytea,
+  envio_provider_deployment_id uuid,
+  rpc_provider_a_id uuid,
+  rpc_provider_b_id uuid,
+  provisional_coverage_commitment bytea,
+  runtime_code_evidence_id uuid,
+  dynamic_source_template_id uuid,
+  dynamic_source_attestation_id uuid,
+  deployed_source_address bytea,
+  contract_name text,
+  model text,
+  release_version text,
+  factory_address bytea,
+  factory_contract_name text,
+  factory_candidate_id text,
+  factory_block_number bigint,
+  factory_block_hash bytea,
+  factory_block_global_log_index bigint,
+  parent_candidate_commitment bytea,
+  expected_exact_runtime_code_hash bytea,
+  expected_normalized_runtime_code_hash bytea,
+  expected_immutable_references_commitment bytea,
+  expected_runtime_byte_length bigint,
+  immutable_references jsonb,
+  staged_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+begin
+  perform programmable_private.assert_caller('programmable_projector');
+  if p_projector_version is null then
+    raise exception using
+      errcode = '22023', message = 'invalid projector version';
+  end if;
+  return query
+  select page.provisional_page_id,
+    lineage.provisional_lineage_id,
+    page.release_epoch_id,
+    page.release_pointer_generation,
+    page.ingestion_epoch_id,
+    page.ingestion_pointer_generation,
+    page.reorg_generation,
+    page.snapshot_block_number::bigint,
+    page.snapshot_block_hash::bytea,
+    page.expected_cursor_generation,
+    page.expected_cursor_block_hash::bytea,
+    page.envio_provider_deployment_id,
+    page.provider_a_id,
+    page.provider_b_id,
+    page.coverage_commitment::bytea,
+    runtime.runtime_code_evidence_id,
+    template.dynamic_source_template_id,
+    lineage.dynamic_source_attestation_id,
+    lineage.deployed_source_address::bytea,
+    case page.release_id
+      when 'classic-v3' then 'ClassicV3RewardVault'
+      when 'stock-paired-v1' then 'StockV1RewardVault'
+      when 'stock-paired-v2' then 'StockV2V3RewardVault'
+      when 'stock-paired-v3' then 'StockV2V3RewardVault'
+    end,
+    page.model_id::text,
+    page.release_id::text,
+    factory_binding.source_address::bytea,
+    factory_binding.source_name::text,
+    lineage.parent_candidate_id::text,
+    (parent.item ->> 'blockNumber')::bigint,
+    pg_catalog.decode(
+      pg_catalog.substring(parent.item ->> 'blockHash', 3), 'hex'
+    ),
+    (parent.item ->> 'blockGlobalLogIndex')::bigint,
+    lineage.parent_candidate_commitment::bytea,
+    runtime.agreed_runtime_code_hash::bytea,
+    runtime.agreed_normalized_runtime_code_hash::bytea,
+    runtime.immutable_references_commitment::bytea,
+    runtime.agreed_runtime_code_length,
+    references_json.items,
+    page.staged_at
+  from programmable_private.provisional_dynamic_parent_pages as page
+  join programmable_private.provisional_dynamic_source_lineages as lineage
+    on lineage.provisional_page_id = page.provisional_page_id
+  join programmable_private.release_epoch_current as current_release
+    on current_release.chain_id = page.chain_id
+   and current_release.release_id = page.release_id
+   and current_release.model_id = page.model_id
+   and current_release.source_group = page.source_group
+   and current_release.epoch_id = page.release_epoch_id
+   and current_release.pointer_generation = page.release_pointer_generation
+  join programmable_private.run_headers as ingestion_header
+    on ingestion_header.run_id = page.staging_run_id
+   and ingestion_header.epoch_id = page.ingestion_epoch_id
+   and ingestion_header.captured_pointer_generation =
+     page.ingestion_pointer_generation
+  join programmable_private.release_epoch_current as current_ingestion
+    on current_ingestion.chain_id = ingestion_header.chain_id
+   and current_ingestion.release_id = ingestion_header.release_id
+   and current_ingestion.model_id = ingestion_header.model_id
+   and current_ingestion.source_group = ingestion_header.source_group
+   and current_ingestion.epoch_id = page.ingestion_epoch_id
+   and current_ingestion.pointer_generation =
+     page.ingestion_pointer_generation
+  join programmable_private.envio_ingestion_cursor_current as cursor
+    on cursor.chain_id = page.chain_id
+   and cursor.provider_deployment_id =
+     page.envio_provider_deployment_id
+   and cursor.stream_id = page.stream_id
+   and cursor.generation = page.expected_cursor_generation
+   and cursor.block_hash = page.expected_cursor_block_hash
+  join programmable_private.release_dynamic_source_templates as template
+    on template.dynamic_source_template_id =
+      lineage.dynamic_source_template_id
+   and template.epoch_id = page.release_epoch_id
+  join programmable_private.release_source_bindings as factory_binding
+    on factory_binding.binding_id =
+      template.parent_factory_release_binding_id
+   and factory_binding.epoch_id = template.epoch_id
+  join programmable_private.dual_rpc_runtime_code_evidence as runtime
+    on runtime.runtime_code_evidence_id = lineage.runtime_code_evidence_id
+   and runtime.verification_run_id = page.staging_run_id
+   and runtime.source_address = lineage.deployed_source_address
+   and runtime.deployment_block_number = page.snapshot_block_number
+   and runtime.deployment_block_hash = page.snapshot_block_hash
+  cross join lateral (
+    select value as item
+    from pg_catalog.jsonb_array_elements(page.parent_candidates)
+    where value ->> 'candidateId' = lineage.parent_candidate_id::text
+  ) as parent
+  cross join lateral (
+    select coalesce(
+      pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_object(
+          'start', (binding ->> 'offset')::integer,
+          'length', (binding ->> 'length')::integer
+        ) order by (binding ->> 'ordinal')::integer
+      ),
+      '[]'::jsonb
+    ) as items
+    from pg_catalog.jsonb_array_elements(
+      template.immutable_binding_spec -> 'bindings'
+    ) as binding
+  ) as references_json
+  left join programmable_private.projector_checkpoint_current as checkpoint
+    on checkpoint.chain_id = page.chain_id
+   and checkpoint.release_id = page.release_id
+   and checkpoint.model_id = page.model_id
+   and checkpoint.source_group = page.source_group
+   and checkpoint.projector_version = page.projector_version
+  where page.projector_version = p_projector_version
+    and coalesce(checkpoint.reorg_generation, 0) = page.reorg_generation
+    and not exists (
+      select 1
+      from programmable_private.provisional_dynamic_parent_consumptions
+        as consumed
+      where consumed.provisional_page_id = page.provisional_page_id
+    )
+  order by page.snapshot_block_number, page.provisional_page_id,
+    lineage.lineage_ordinal;
+end
+$function$;
+
+create function programmable_private.consume_matching_provisional_sources_v1(
+  p_final_run_id uuid,
+  p_publication_id uuid,
+  p_final_execution_evidence_id uuid,
+  p_final_target_block_evidence_id uuid,
+  p_occurrence_ids uuid[],
+  p_consumed_at timestamptz
+)
+returns integer
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+declare
+  header programmable_private.run_headers%rowtype;
+  publication programmable_private.projection_publications%rowtype;
+  final_execution
+    programmable_private.projection_provider_execution_evidence%rowtype;
+  page programmable_private.provisional_dynamic_parent_pages%rowtype;
+  lineage programmable_private.provisional_dynamic_source_lineages%rowtype;
+  consumed_count integer := 0;
+begin
+  perform programmable_private.assert_caller('programmable_projector');
+  select * into header
+  from programmable_private.run_headers
+  where run_id = p_final_run_id
+    and run_kind = 'projection';
+  select * into publication
+  from programmable_private.projection_publications
+  where publication_id = p_publication_id
+    and run_id = p_final_run_id
+    and published_at = p_consumed_at;
+  select * into final_execution
+  from programmable_private.projection_provider_execution_evidence
+  where execution_evidence_id = p_final_execution_evidence_id
+    and run_id = p_final_run_id;
+  if header.run_id is null
+     or publication.publication_id is null
+     or final_execution.execution_evidence_id is null
+     or not exists (
+       select 1
+       from programmable_private.dual_rpc_block_evidence as evidence
+       where evidence.block_evidence_id = p_final_target_block_evidence_id
+         and evidence.observation_id =
+           final_execution.safe_head_observation_id
+         and evidence.epoch_id = header.epoch_id
+         and evidence.chain_id = header.chain_id
+         and evidence.pointer_generation =
+           header.captured_pointer_generation
+         and evidence.block_number = publication.target_block_number
+         and evidence.agreed_block_hash = publication.target_block_hash
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'final provisional-source evidence changed';
+  end if;
+
+  for page in
+    select staged.*
+    from programmable_private.provisional_dynamic_parent_pages as staged
+    left join programmable_private.provisional_dynamic_parent_consumptions
+      as consumed
+      on consumed.provisional_page_id = staged.provisional_page_id
+    where staged.chain_id = header.chain_id
+      and staged.release_id = header.release_id
+      and staged.model_id = header.model_id
+      and staged.source_group = header.source_group
+      and staged.release_epoch_id = header.epoch_id
+      and staged.release_pointer_generation =
+        header.captured_pointer_generation
+      and staged.snapshot_block_number = publication.target_block_number
+      and staged.snapshot_block_hash = publication.target_block_hash
+      and consumed.provisional_page_id is null
+  loop
+    if page.reorg_generation <> coalesce((
+         select checkpoint.reorg_generation
+         from programmable_private.projector_checkpoint_current as checkpoint
+         where checkpoint.chain_id = header.chain_id
+           and checkpoint.release_id = header.release_id
+           and checkpoint.model_id = header.model_id
+           and checkpoint.source_group = header.source_group
+           and checkpoint.projector_version = page.projector_version
+       ), 0)
+       or page.envio_provider_deployment_id <>
+         final_execution.envio_provider_deployment_id
+       or page.provider_a_id <> final_execution.provider_a_id
+       or page.provider_b_id <> final_execution.provider_b_id
+    then
+      raise exception using
+        errcode = '23514',
+        message = 'provisional source provider context changed';
+    end if;
+
+    for lineage in
+      select staged_lineage.*
+      from programmable_private.provisional_dynamic_source_lineages
+        as staged_lineage
+      where staged_lineage.provisional_page_id = page.provisional_page_id
+      order by staged_lineage.lineage_ordinal
+    loop
+      if not exists (
+        select 1
+        from programmable_private.dynamic_source_attestations as attestation
+        join programmable_private.dual_rpc_runtime_code_evidence
+          as final_runtime
+          on final_runtime.runtime_code_evidence_id =
+            attestation.runtime_code_evidence_id
+        join programmable_private.dual_rpc_runtime_code_evidence
+          as staged_runtime
+          on staged_runtime.runtime_code_evidence_id =
+            lineage.runtime_code_evidence_id
+        join programmable_private.chain_event_occurrences as parent
+          on parent.occurrence_id =
+            attestation.parent_factory_occurrence_id
+        join programmable_private.chain_event_occurrence_materializations
+          as materialization
+          on materialization.occurrence_id = parent.occurrence_id
+         and materialization.epoch_id = header.epoch_id
+         and materialization.pointer_generation =
+           header.captured_pointer_generation
+        where attestation.dynamic_source_attestation_id =
+            lineage.dynamic_source_attestation_id
+          and attestation.verification_run_id = p_final_run_id
+          and attestation.chain_id = header.chain_id
+          and attestation.release_id = header.release_id
+          and attestation.model_id = header.model_id
+          and attestation.source_group = header.source_group
+          and attestation.epoch_id = header.epoch_id
+          and attestation.pointer_generation =
+            header.captured_pointer_generation
+          and attestation.dynamic_source_template_id =
+            lineage.dynamic_source_template_id
+          and attestation.deployed_source_address =
+            lineage.deployed_source_address
+          and parent.occurrence_id = any(p_occurrence_ids)
+          and parent.block_number = page.snapshot_block_number
+          and parent.block_hash = page.snapshot_block_hash
+          and parent.content_commitment =
+            lineage.parent_candidate_commitment
+          and coalesce(
+            materialization.first_seen_neutral_candidate_id::text,
+            materialization.first_seen_envio_candidate_id::text
+          ) = lineage.parent_candidate_id::text
+          and final_runtime.verification_run_id = p_final_run_id
+          and final_runtime.deployment_block_evidence_id =
+            p_final_target_block_evidence_id
+          and final_runtime.provider_a_id = final_execution.provider_a_id
+          and final_runtime.provider_b_id = final_execution.provider_b_id
+          and final_runtime.source_address =
+            staged_runtime.source_address
+          and final_runtime.deployment_block_number =
+            staged_runtime.deployment_block_number
+          and final_runtime.deployment_block_hash =
+            staged_runtime.deployment_block_hash
+          and final_runtime.runtime_code_a = staged_runtime.runtime_code_a
+          and final_runtime.runtime_code_b = staged_runtime.runtime_code_b
+          and final_runtime.agreed_runtime_code_hash =
+            staged_runtime.agreed_runtime_code_hash
+          and final_runtime.agreed_runtime_code_length =
+            staged_runtime.agreed_runtime_code_length
+          and final_runtime.agreed_normalized_runtime_code_hash =
+            staged_runtime.agreed_normalized_runtime_code_hash
+          and final_runtime.immutable_references_commitment =
+            staged_runtime.immutable_references_commitment
+          and final_runtime.immutable_values =
+            staged_runtime.immutable_values
+          and final_runtime.immutable_values_commitment =
+            staged_runtime.immutable_values_commitment
+          and final_runtime.reconstructed_runtime_code =
+            staged_runtime.reconstructed_runtime_code
+          and final_runtime.reconstructed_runtime_code_hash =
+            staged_runtime.reconstructed_runtime_code_hash
+      ) then
+        raise exception using
+          errcode = '23514',
+          message = 'final block omitted a provisional child attestation';
+      end if;
+    end loop;
+    insert into programmable_private.provisional_dynamic_parent_consumptions (
+      provisional_page_id, final_run_id, publication_id,
+      final_execution_evidence_id, final_target_block_evidence_id,
+      consumed_at
+    ) values (
+      page.provisional_page_id, p_final_run_id, p_publication_id,
+      p_final_execution_evidence_id, p_final_target_block_evidence_id,
+      p_consumed_at
+    );
+    consumed_count := consumed_count + 1;
+  end loop;
+  return consumed_count;
 end
 $function$;
 
@@ -4073,7 +5255,7 @@ begin
       errcode = '23514', message = 'target block evidence changed';
   end if;
   perform programmable_private.assert_projection_provider_evidence_v1(
-    'reward_snapshot_delta', p_run_id, p_safe_head_observation_id,
+    'exact_incremental', p_run_id, p_safe_head_observation_id,
     p_target_block_evidence_id, target_block, p_target_block_hash,
     p_execution_evidence_id, p_reward_snapshot_evidence_ids
   );
@@ -5252,8 +6434,526 @@ begin
   end loop;
   perform programmable_private.bind_projection_publication_provider_evidence_v1(
     p_provider_binding_id, p_publication_id, p_run_id,
-    'reward_snapshot_delta', p_execution_evidence_id,
+    'exact_incremental', p_execution_evidence_id,
     p_reward_snapshot_evidence_ids, p_provider_binding_commitment,
+    p_published_at
+  );
+  return p_publication_id;
+end
+$function$;
+
+create function programmable_private.promote_projection_cursor_only_v1(
+  p_publication_id uuid,
+  p_checkpoint_id uuid,
+  p_outcome_id uuid,
+  p_run_id uuid,
+  p_projector_version text,
+  p_lease_generation bigint,
+  p_lease_token_hash bytea,
+  p_expected_checkpoint_generation bigint,
+  p_next_checkpoint_generation bigint,
+  p_reorg_generation bigint,
+  p_safe_head_observation_id uuid,
+  p_target_block_evidence_id uuid,
+  p_target_block_number numeric,
+  p_target_block_hash bytea,
+  p_cursor_block_global_log_index numeric,
+  p_cursor_candidate_id text,
+  p_occurrence_ids uuid[],
+  p_allocation_fact_ids uuid[],
+  p_allocation_evidence_ids uuid[],
+  p_candidate_disposition_ids uuid[],
+  p_route_keys text[],
+  p_result_commitment bytea,
+  p_execution_evidence_id uuid,
+  p_reward_snapshot_evidence_ids uuid[],
+  p_provider_binding_id uuid,
+  p_provider_binding_commitment bytea,
+  p_published_at timestamptz
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $function$
+declare
+  header programmable_private.run_headers%rowtype;
+  observation programmable_private.safe_head_observations%rowtype;
+  target_evidence programmable_private.dual_rpc_block_evidence%rowtype;
+  execution
+    programmable_private.projection_provider_execution_evidence%rowtype;
+  current_checkpoint
+    programmable_private.projector_checkpoint_current%rowtype;
+  previous_checkpoint programmable_private.projector_checkpoints%rowtype;
+  target_block bigint;
+  cursor_log_index bigint;
+  required_disposition_ids uuid[];
+  ordered_disposition_ids uuid[];
+  ordered_route_keys text[];
+  ordered_projection_rows text[];
+  audit_id uuid;
+  route_history_id uuid;
+  selected_route_key text;
+begin
+  perform programmable_private.assert_caller('programmable_projector');
+  select * into header
+  from programmable_private.run_headers
+  where run_id = p_run_id
+    and run_kind = 'projection'
+  for update;
+  if not found
+     or exists (
+       select 1 from programmable_private.run_lifecycle_outcomes
+       where run_id = p_run_id
+     )
+  then
+    raise exception using
+      errcode = '55000', message = 'cursor-only projection run is not open';
+  end if;
+  perform programmable_private.assert_current_epoch(
+    header.chain_id, header.release_id, header.model_id,
+    header.source_group, header.epoch_id,
+    header.captured_pointer_generation
+  );
+  if not exists (
+    select 1
+    from programmable_private.projector_lease_current as lease
+    where lease.chain_id = header.chain_id
+      and lease.release_id = header.release_id
+      and lease.model_id = header.model_id
+      and lease.source_group = header.source_group
+      and lease.projector_version = p_projector_version
+      and lease.epoch_id = header.epoch_id
+      and lease.pointer_generation = header.captured_pointer_generation
+      and lease.lease_generation = p_lease_generation
+      and lease.lease_token_hash = p_lease_token_hash
+      and lease.expires_at >= p_published_at
+  ) then
+    raise exception using
+      errcode = '40001', message = 'stale projector lease';
+  end if;
+  if p_publication_id is null
+     or p_checkpoint_id is null
+     or p_outcome_id is null
+     or p_provider_binding_id is null
+     or p_target_block_number <> pg_catalog.trunc(p_target_block_number)
+     or p_target_block_number < 0
+     or p_target_block_number > 9223372036854775807
+     or pg_catalog.octet_length(p_target_block_hash) <> 32
+     or p_cursor_block_global_log_index < 0
+     or p_cursor_block_global_log_index <>
+       pg_catalog.trunc(p_cursor_block_global_log_index)
+     or p_cursor_block_global_log_index > 4294967295
+     or p_cursor_candidate_id is null
+     or pg_catalog.octet_length(p_result_commitment) <> 32
+     or pg_catalog.octet_length(p_provider_binding_commitment) <> 32
+     or p_provider_binding_commitment =
+       pg_catalog.decode(pg_catalog.repeat('00', 32), 'hex')
+     or p_next_checkpoint_generation <>
+       p_expected_checkpoint_generation + 1
+     or coalesce(pg_catalog.cardinality(p_occurrence_ids), 0) <> 0
+     or coalesce(pg_catalog.cardinality(p_allocation_fact_ids), 0) <> 0
+     or coalesce(pg_catalog.cardinality(p_allocation_evidence_ids), 0) <> 0
+     or coalesce(pg_catalog.cardinality(p_reward_snapshot_evidence_ids), 0) <> 0
+     or coalesce(pg_catalog.cardinality(p_candidate_disposition_ids), 0)
+       not between 1 and 4096
+     or coalesce(pg_catalog.cardinality(p_route_keys), 0)
+       not between 1 and 32
+  then
+    raise exception using
+      errcode = '22023', message = 'invalid cursor-only promotion request';
+  end if;
+  select pg_catalog.array_agg(item order by item)
+  into ordered_disposition_ids
+  from (
+    select distinct item
+    from pg_catalog.unnest(p_candidate_disposition_ids) as item
+  ) as unique_items;
+  select pg_catalog.array_agg(item order by item)
+  into ordered_route_keys
+  from (
+    select distinct item
+    from pg_catalog.unnest(p_route_keys) as item
+  ) as unique_items;
+  if p_candidate_disposition_ids is distinct from ordered_disposition_ids
+     or p_route_keys is distinct from ordered_route_keys
+     or exists (
+       select 1 from pg_catalog.unnest(p_candidate_disposition_ids) as item
+       where item is null
+     )
+     or exists (
+       select 1 from pg_catalog.unnest(p_route_keys) as item
+       where item is null
+     )
+  then
+    raise exception using
+      errcode = '22023',
+      message = 'cursor-only manifests are not canonical';
+  end if;
+  if exists (
+    select 1
+    from (
+      select projection_run_id from programmable_private.launch_projections
+      union all
+      select projection_run_id from programmable_private.pool_projections
+      union all
+      select projection_run_id
+      from programmable_private.pool_fee_configurations
+      union all
+      select projection_run_id from programmable_private.fee_accrual_facts
+      union all
+      select projection_run_id from programmable_private.pool_fee_totals
+      union all
+      select projection_run_id
+      from programmable_private.reward_vault_projections
+      union all
+      select projection_run_id
+      from programmable_private.reward_allocation_projections
+      union all
+      select projection_run_id
+      from programmable_private.account_reward_balances
+      union all
+      select projection_run_id from programmable_private.claim_projections
+      union all
+      select projection_run_id
+      from programmable_private.payout_change_projections
+      union all
+      select projection_run_id
+      from programmable_private.initial_buy_custody_projections
+      union all
+      select projection_run_id
+      from programmable_private.initial_buy_vesting_projections
+    ) as staged
+    where staged.projection_run_id = p_run_id
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'cursor-only promotion contains staged projection rows';
+  end if;
+
+  target_block := p_target_block_number::bigint;
+  cursor_log_index := p_cursor_block_global_log_index::bigint;
+  select * into observation
+  from programmable_private.safe_head_observations
+  where observation_id = p_safe_head_observation_id
+    and epoch_id = header.epoch_id
+    and chain_id = header.chain_id
+    and release_id = header.release_id
+    and model_id = header.model_id
+    and source_group = header.source_group
+    and pointer_generation = header.captured_pointer_generation;
+  if not found or target_block > observation.safe_block_number then
+    raise exception using
+      errcode = '23514', message = 'target is outside accepted safe head';
+  end if;
+  select * into target_evidence
+  from programmable_private.dual_rpc_block_evidence
+  where block_evidence_id = p_target_block_evidence_id
+    and observation_id = p_safe_head_observation_id
+    and epoch_id = header.epoch_id
+    and chain_id = header.chain_id
+    and pointer_generation = header.captured_pointer_generation
+    and block_number = target_block
+    and agreed_block_hash = p_target_block_hash;
+  if not found then
+    raise exception using
+      errcode = '23514', message = 'target block evidence changed';
+  end if;
+  select * into execution
+  from programmable_private.projection_provider_execution_evidence
+  where execution_evidence_id = p_execution_evidence_id
+    and run_id = p_run_id;
+  if not found
+     or execution.candidate_batch_size <>
+       pg_catalog.cardinality(p_candidate_disposition_ids)
+  then
+    raise exception using
+      errcode = '23514', message = 'cursor-only execution evidence changed';
+  end if;
+
+  select * into current_checkpoint
+  from programmable_private.projector_checkpoint_current
+  where chain_id = header.chain_id
+    and release_id = header.release_id
+    and model_id = header.model_id
+    and source_group = header.source_group
+    and projector_version = p_projector_version
+  for update;
+  if found then
+    if current_checkpoint.checkpoint_generation <>
+         p_expected_checkpoint_generation
+       or current_checkpoint.reorg_generation <> p_reorg_generation
+    then
+      raise exception using
+        errcode = '40001', message = 'cursor-only checkpoint CAS lost';
+    end if;
+    select * into previous_checkpoint
+    from programmable_private.projector_checkpoints
+    where checkpoint_id = current_checkpoint.checkpoint_id;
+    if not found
+       or previous_checkpoint.epoch_id <> header.epoch_id
+       or previous_checkpoint.pointer_generation <>
+         header.captured_pointer_generation
+       or (target_block, cursor_log_index, p_cursor_candidate_id) <= (
+         previous_checkpoint.block_number::bigint,
+         previous_checkpoint.cursor_block_global_log_index::bigint,
+         previous_checkpoint.cursor_candidate_id::text
+       )
+    then
+      raise exception using
+        errcode = '23514', message = 'cursor-only cursor did not advance';
+    end if;
+  elsif p_expected_checkpoint_generation <> 0
+     or p_reorg_generation <> 0
+  then
+    raise exception using
+      errcode = '40001', message = 'cursor-only checkpoint CAS lost';
+  end if;
+  if not exists (
+    select 1
+    from programmable_private.envio_candidate_inbox as candidate
+    where candidate.candidate_id = p_cursor_candidate_id
+      and candidate.chain_id = header.chain_id
+      and candidate.provider_deployment_id =
+        execution.envio_provider_deployment_id
+      and candidate.block_number = target_block
+      and candidate.block_hash = p_target_block_hash
+      and candidate.block_global_log_index = cursor_log_index
+  ) or exists (
+    select 1
+    from programmable_private.envio_candidate_inbox as candidate
+    where candidate.chain_id = header.chain_id
+      and candidate.provider_deployment_id =
+        execution.envio_provider_deployment_id
+      and candidate.block_number = target_block
+      and (
+        candidate.block_global_log_index::bigint,
+        candidate.candidate_id::text
+      ) > (cursor_log_index, p_cursor_candidate_id)
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'cursor-only cursor is not the verified block terminal';
+  end if;
+  if exists (
+    select 1
+    from programmable_private.envio_candidate_inbox as candidate
+    left join programmable_private.envio_candidate_status_current as status
+      on status.candidate_id = candidate.candidate_id
+     and status.epoch_id = header.epoch_id
+     and status.pointer_generation = header.captured_pointer_generation
+    where candidate.chain_id = header.chain_id
+      and candidate.provider_deployment_id =
+        execution.envio_provider_deployment_id
+      and (
+        previous_checkpoint.checkpoint_id is null
+        or (
+          candidate.block_number::bigint,
+          candidate.block_global_log_index::bigint,
+          candidate.candidate_id::text
+        ) > (
+          previous_checkpoint.block_number::bigint,
+          previous_checkpoint.cursor_block_global_log_index::bigint,
+          previous_checkpoint.cursor_candidate_id::text
+        )
+      )
+      and (
+        candidate.block_number::bigint,
+        candidate.block_global_log_index::bigint,
+        candidate.candidate_id::text
+      ) <= (target_block, cursor_log_index, p_cursor_candidate_id)
+      and coalesce(status.status::text, 'pending') not in (
+        'resolved', 'ignored', 'quarantined'
+      )
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'cursor-only cursor cannot pass a pending candidate';
+  end if;
+  select pg_catalog.array_agg(status.decision_id order by status.decision_id)
+  into required_disposition_ids
+  from programmable_private.envio_candidate_inbox as candidate
+  join programmable_private.envio_candidate_status_current as status
+    on status.candidate_id = candidate.candidate_id
+   and status.epoch_id = header.epoch_id
+   and status.pointer_generation = header.captured_pointer_generation
+   and status.status in ('resolved', 'ignored', 'quarantined')
+  where candidate.chain_id = header.chain_id
+    and candidate.provider_deployment_id =
+      execution.envio_provider_deployment_id
+    and (
+      previous_checkpoint.checkpoint_id is null
+      or (
+        candidate.block_number::bigint,
+        candidate.block_global_log_index::bigint,
+        candidate.candidate_id::text
+      ) > (
+        previous_checkpoint.block_number::bigint,
+        previous_checkpoint.cursor_block_global_log_index::bigint,
+        previous_checkpoint.cursor_candidate_id::text
+      )
+    )
+    and (
+      candidate.block_number::bigint,
+      candidate.block_global_log_index::bigint,
+      candidate.candidate_id::text
+    ) <= (target_block, cursor_log_index, p_cursor_candidate_id);
+  if p_candidate_disposition_ids is distinct from
+       coalesce(required_disposition_ids, array[]::uuid[])
+  then
+    raise exception using
+      errcode = '23514',
+      message = 'cursor-only disposition manifest is incomplete';
+  end if;
+
+  audit_id := programmable_private.append_mutation_audit(
+    'projection.promote.cursor_only', p_result_commitment,
+    p_run_id, p_published_at
+  );
+  select pg_catalog.array_agg(
+    'candidate_disposition:' || item::text order by item
+  ) into ordered_projection_rows
+  from pg_catalog.unnest(p_candidate_disposition_ids) as item;
+  insert into programmable_private.projection_fold_manifests (
+    run_id, epoch_id, pointer_generation, target_block_number,
+    target_block_hash, ordered_occurrence_ids,
+    ordered_allocation_fact_ids, ordered_allocation_evidence_ids,
+    ordered_candidate_disposition_ids, ordered_route_keys,
+    cursor_block_global_log_index, cursor_candidate_id,
+    ordered_projection_rows, projection_row_count,
+    result_commitment, created_at, audit_id
+  ) values (
+    p_run_id, header.epoch_id, header.captured_pointer_generation,
+    target_block::programmable_private.block_number_value,
+    p_target_block_hash::programmable_private.bytes32_value,
+    array[]::uuid[], array[]::uuid[], array[]::uuid[],
+    p_candidate_disposition_ids, p_route_keys,
+    cursor_log_index::programmable_private.block_log_index_value,
+    p_cursor_candidate_id::programmable_private.envio_candidate_identifier,
+    ordered_projection_rows,
+    pg_catalog.cardinality(ordered_projection_rows),
+    p_result_commitment::programmable_private.bytes32_value,
+    p_published_at, audit_id
+  );
+  insert into programmable_private.run_lifecycle_outcomes (
+    outcome_id, run_id, status, result_commitment, caller_role,
+    finished_at, audit_id
+  ) values (
+    p_outcome_id, p_run_id, 'succeeded',
+    p_result_commitment::programmable_private.bytes32_value,
+    programmable_private.caller_role_name(), p_published_at, audit_id
+  );
+  insert into programmable_private.projector_checkpoints (
+    checkpoint_id, chain_id, release_id, model_id, source_group,
+    projector_version, epoch_id, pointer_generation, lease_generation,
+    checkpoint_generation, reorg_generation, block_number, block_hash,
+    cursor_block_global_log_index, cursor_candidate_id,
+    safe_head_observation_id, target_block_evidence_id, run_id,
+    terminal_outcome_id, created_at
+  ) values (
+    p_checkpoint_id, header.chain_id, header.release_id, header.model_id,
+    header.source_group,
+    p_projector_version::programmable_private.projector_identifier,
+    header.epoch_id, header.captured_pointer_generation,
+    p_lease_generation, p_next_checkpoint_generation,
+    p_reorg_generation,
+    target_block::programmable_private.block_number_value,
+    p_target_block_hash::programmable_private.bytes32_value,
+    cursor_log_index::programmable_private.block_log_index_value,
+    p_cursor_candidate_id::programmable_private.envio_candidate_identifier,
+    p_safe_head_observation_id, p_target_block_evidence_id,
+    p_run_id, p_outcome_id, p_published_at
+  );
+  if current_checkpoint.checkpoint_id is null then
+    insert into programmable_private.projector_checkpoint_current (
+      chain_id, release_id, model_id, source_group, projector_version,
+      checkpoint_id, checkpoint_generation, reorg_generation, changed_at
+    ) values (
+      header.chain_id, header.release_id, header.model_id,
+      header.source_group,
+      p_projector_version::programmable_private.projector_identifier,
+      p_checkpoint_id, p_next_checkpoint_generation,
+      p_reorg_generation, p_published_at
+    );
+  else
+    update programmable_private.projector_checkpoint_current
+    set checkpoint_id = p_checkpoint_id,
+        checkpoint_generation = p_next_checkpoint_generation,
+        reorg_generation = p_reorg_generation,
+        changed_at = p_published_at
+    where chain_id = header.chain_id
+      and release_id = header.release_id
+      and model_id = header.model_id
+      and source_group = header.source_group
+      and projector_version = p_projector_version
+      and checkpoint_generation = p_expected_checkpoint_generation
+      and reorg_generation = p_reorg_generation;
+    if not found then
+      raise exception using
+        errcode = '40001', message = 'cursor-only checkpoint CAS lost';
+    end if;
+  end if;
+  insert into programmable_private.projection_publications (
+    publication_id, run_id, epoch_id, pointer_generation, checkpoint_id,
+    terminal_outcome_id, target_block_number, target_block_hash,
+    published_at, audit_id
+  ) values (
+    p_publication_id, p_run_id, header.epoch_id,
+    header.captured_pointer_generation, p_checkpoint_id, p_outcome_id,
+    target_block::programmable_private.block_number_value,
+    p_target_block_hash::programmable_private.bytes32_value,
+    p_published_at, audit_id
+  );
+  foreach selected_route_key in array p_route_keys loop
+    route_history_id := pg_catalog.gen_random_uuid();
+    insert into programmable_private.route_eligibility_history (
+      route_eligibility_history_id, route_key, chain_id, release_id,
+      model_id, source_group, epoch_id, pointer_generation, status,
+      route_mode, checkpoint_id, reason_commitment, changed_by_run_id,
+      changed_at, audit_id
+    ) values (
+      route_history_id,
+      selected_route_key::programmable_private.source_identifier,
+      header.chain_id, header.release_id, header.model_id,
+      header.source_group, header.epoch_id,
+      header.captured_pointer_generation, 'eligible', 'indexed',
+      p_checkpoint_id,
+      p_result_commitment::programmable_private.bytes32_value,
+      p_run_id, p_published_at, audit_id
+    );
+    insert into programmable_private.route_eligibility_current (
+      route_key, chain_id, release_id, model_id, source_group, epoch_id,
+      pointer_generation, status, route_mode, checkpoint_id, history_id,
+      changed_at
+    ) values (
+      selected_route_key::programmable_private.source_identifier,
+      header.chain_id, header.release_id, header.model_id,
+      header.source_group, header.epoch_id,
+      header.captured_pointer_generation, 'eligible', 'indexed',
+      p_checkpoint_id, route_history_id, p_published_at
+    )
+    on conflict (
+      route_key, chain_id, release_id, model_id, source_group
+    ) do update
+      set epoch_id = excluded.epoch_id,
+          pointer_generation = excluded.pointer_generation,
+          status = excluded.status,
+          route_mode = excluded.route_mode,
+          checkpoint_id = excluded.checkpoint_id,
+          history_id = excluded.history_id,
+          changed_at = excluded.changed_at
+      where programmable_private.route_eligibility_current
+        .pointer_generation <= excluded.pointer_generation;
+    if not found then
+      raise exception using
+        errcode = '40001', message = 'stale route eligibility generation';
+    end if;
+  end loop;
+  perform programmable_private.bind_projection_publication_provider_evidence_v1(
+    p_provider_binding_id, p_publication_id, p_run_id,
+    'exact_incremental', p_execution_evidence_id,
+    array[]::uuid[], p_provider_binding_commitment,
     p_published_at
   );
   return p_publication_id;
@@ -5298,11 +6998,25 @@ set search_path = ''
 as $function$
 declare
   publication_id uuid;
+  execution
+    programmable_private.projection_provider_execution_evidence%rowtype;
+  has_launch_rows boolean;
+  has_reward_evidence boolean;
+  chain_ordered_occurrence_ids uuid[];
+  internal_occurrence_ids uuid[];
 begin
   perform programmable_private.assert_caller('programmable_projector');
-  if p_target_block_number <> pg_catalog.trunc(p_target_block_number)
+  if p_promotion_mode <> 'exact_incremental'
+     or p_target_block_number is null
+     or p_target_block_number <> pg_catalog.trunc(p_target_block_number)
      or p_target_block_number < 0
      or p_target_block_number > 9223372036854775807
+     or p_cursor_block_global_log_index is null
+     or p_cursor_block_global_log_index < 0
+     or p_cursor_block_global_log_index <>
+       pg_catalog.trunc(p_cursor_block_global_log_index)
+     or p_cursor_block_global_log_index > 4294967295
+     or p_cursor_candidate_id is null
   then
     raise exception using
       errcode = '22023', message = 'invalid promotion target block';
@@ -5313,13 +7027,11 @@ begin
     p_target_block_hash, p_execution_evidence_id,
     p_reward_snapshot_evidence_ids
   );
-  if (
-       select evidence.candidate_batch_size
-       from programmable_private.projection_provider_execution_evidence
-         as evidence
-       where evidence.execution_evidence_id = p_execution_evidence_id
-         and evidence.run_id = p_run_id
-     ) <> coalesce(
+  select * into execution
+  from programmable_private.projection_provider_execution_evidence
+  where execution_evidence_id = p_execution_evidence_id
+    and run_id = p_run_id;
+  if execution.candidate_batch_size <> coalesce(
        pg_catalog.cardinality(p_candidate_disposition_ids), 0
      )
   then
@@ -5327,8 +7039,66 @@ begin
       errcode = '23514',
       message = 'promotion candidate count changed';
   end if;
+  if not exists (
+       select 1
+       from programmable_private.envio_candidate_inbox as candidate
+       where candidate.candidate_id = p_cursor_candidate_id
+         and candidate.chain_id = execution.chain_id
+         and candidate.provider_deployment_id =
+           execution.envio_provider_deployment_id
+         and candidate.block_number = p_target_block_number::bigint
+         and candidate.block_hash = p_target_block_hash
+         and candidate.block_global_log_index =
+           p_cursor_block_global_log_index::bigint
+     )
+     or exists (
+       select 1
+       from programmable_private.envio_candidate_inbox as candidate
+       where candidate.chain_id = execution.chain_id
+         and candidate.provider_deployment_id =
+           execution.envio_provider_deployment_id
+         and candidate.block_number = p_target_block_number::bigint
+         and (
+           candidate.block_global_log_index::bigint,
+           candidate.candidate_id::text
+         ) > (
+           p_cursor_block_global_log_index::bigint,
+           p_cursor_candidate_id
+         )
+     )
+  then
+    raise exception using
+      errcode = '23514',
+      message =
+        'promotion cursor is not the exact configured-provider block terminal';
+  end if;
 
-  if p_promotion_mode = 'reward_snapshot_delta' then
+  has_launch_rows := exists (
+    select 1
+    from programmable_private.launch_projections
+    where projection_run_id = p_run_id
+  );
+  has_reward_evidence := coalesce(
+    pg_catalog.cardinality(p_reward_snapshot_evidence_ids), 0
+  ) > 0;
+  if has_reward_evidence then
+    select pg_catalog.array_agg(
+      source.occurrence_id
+      order by source.block_number, source.block_global_log_index,
+        source.transaction_index, source.receipt_log_ordinal,
+        source.occurrence_id
+    ) into chain_ordered_occurrence_ids
+    from pg_catalog.unnest(p_occurrence_ids) as requested(occurrence_id)
+    join programmable_private.chain_event_occurrences as source
+      on source.occurrence_id = requested.occurrence_id;
+    if p_occurrence_ids is distinct from chain_ordered_occurrence_ids then
+      raise exception using
+        errcode = '23514',
+        message = 'reward-bearing promotion events are not in chain order';
+    end if;
+  end if;
+
+  if has_reward_evidence and not has_launch_rows then
     return programmable_private.promote_reward_block_group_v1(
       p_publication_id, p_checkpoint_id, p_outcome_id, p_run_id,
       p_projector_version, p_lease_generation, p_lease_token_hash,
@@ -5344,24 +7114,51 @@ begin
     );
   end if;
 
+  if not has_launch_rows then
+    return programmable_private.promote_projection_cursor_only_v1(
+      p_publication_id, p_checkpoint_id, p_outcome_id, p_run_id,
+      p_projector_version, p_lease_generation, p_lease_token_hash,
+      p_expected_checkpoint_generation, p_next_checkpoint_generation,
+      p_reorg_generation, p_safe_head_observation_id,
+      p_target_block_evidence_id, p_target_block_number,
+      p_target_block_hash, p_cursor_block_global_log_index,
+      p_cursor_candidate_id, p_occurrence_ids, p_allocation_fact_ids,
+      p_allocation_evidence_ids, p_candidate_disposition_ids,
+      p_route_keys, p_result_commitment, p_execution_evidence_id,
+      p_reward_snapshot_evidence_ids, p_provider_binding_id,
+      p_provider_binding_commitment, p_published_at
+    );
+  end if;
+
+  select pg_catalog.array_agg(item order by item)
+  into internal_occurrence_ids
+  from (
+    select distinct item
+    from pg_catalog.unnest(p_occurrence_ids) as item
+  ) as unique_items;
   publication_id := programmable_private.promote_projection_run_v2(
-    p_promotion_mode, p_publication_id, p_checkpoint_id,
+    'full_launch', p_publication_id, p_checkpoint_id,
     p_outcome_id, p_run_id, p_projector_version,
     p_lease_generation, p_lease_token_hash,
     p_expected_checkpoint_generation, p_next_checkpoint_generation,
     p_reorg_generation, p_safe_head_observation_id,
     p_target_block_evidence_id, p_target_block_number,
     p_target_block_hash, p_cursor_block_global_log_index,
-    p_cursor_candidate_id, p_occurrence_ids,
+    p_cursor_candidate_id,
+    coalesce(internal_occurrence_ids, array[]::uuid[]),
     p_allocation_fact_ids, p_allocation_evidence_ids,
     p_candidate_disposition_ids, p_route_keys,
     p_result_commitment, p_published_at
   );
   perform programmable_private.bind_projection_publication_provider_evidence_v1(
     p_provider_binding_id, publication_id, p_run_id,
-    p_promotion_mode, p_execution_evidence_id,
+    'exact_incremental', p_execution_evidence_id,
     p_reward_snapshot_evidence_ids, p_provider_binding_commitment,
     p_published_at
+  );
+  perform programmable_private.consume_matching_provisional_sources_v1(
+    p_run_id, publication_id, p_execution_evidence_id,
+    p_target_block_evidence_id, p_occurrence_ids, p_published_at
   );
   return publication_id;
 end
@@ -5379,7 +7176,10 @@ revoke all on table
   programmable_private.projection_provider_execution_evidence,
   programmable_private.reward_snapshot_provider_evidence,
   programmable_private.projection_publication_provider_bindings,
-  programmable_private.projection_publication_reward_evidence
+  programmable_private.projection_publication_reward_evidence,
+  programmable_private.provisional_dynamic_parent_pages,
+  programmable_private.provisional_dynamic_source_lineages,
+  programmable_private.provisional_dynamic_parent_consumptions
 from public, anon, authenticated, service_role,
   programmable_projector, programmable_reconciler,
   programmable_api_reader, programmable_profile_binder,
@@ -5442,6 +7242,12 @@ revoke all on function
     text, uuid[], uuid[], uuid[], uuid[], text[], bytea, uuid,
     uuid[], uuid, bytea, timestamptz
   ),
+  programmable_private.promote_projection_cursor_only_v1(
+    uuid, uuid, uuid, uuid, text, bigint, bytea,
+    bigint, bigint, bigint, uuid, uuid, numeric, bytea, numeric,
+    text, uuid[], uuid[], uuid[], uuid[], text[], bytea, uuid,
+    uuid[], uuid, bytea, timestamptz
+  ),
   programmable_private.append_projection_provider_execution_evidence_v1(
     uuid, uuid, uuid, uuid[], jsonb, bytea, smallint,
     bytea, bytea, timestamptz
@@ -5451,6 +7257,15 @@ revoke all on function
     bytea, bytea, integer, integer, bytea[], integer[], bytea[],
     bytea[], integer[], integer[], bytea, jsonb, bytea, smallint,
     bytea, bytea, timestamptz
+  ),
+  programmable_private.stage_verified_dynamic_parents_v2(
+    uuid, uuid, text, text, text, text, uuid, bigint, bigint, bigint,
+    bytea, uuid, text, uuid, uuid, uuid, uuid, numeric, bytea, bytea,
+    bytea[], bytea[], jsonb, bytea, jsonb, jsonb, timestamptz
+  ),
+  programmable_private.get_current_provisional_dynamic_sources_v1(text),
+  programmable_private.consume_matching_provisional_sources_v1(
+    uuid, uuid, uuid, uuid, uuid[], timestamptz
   ),
   programmable_private.promote_projection_run_v3(
     text, uuid, uuid, uuid, uuid, text, bigint, bytea,
@@ -5492,6 +7307,12 @@ grant execute on function
     integer[], bytea[], bytea[], numeric[], bytea[], bytea[],
     numeric[], numeric[], uuid, uuid[], numeric, bytea, timestamptz
   ),
+  programmable_private.stage_verified_dynamic_parents_v2(
+    uuid, uuid, text, text, text, text, uuid, bigint, bigint, bigint,
+    bytea, uuid, text, uuid, uuid, uuid, uuid, numeric, bytea, bytea,
+    bytea[], bytea[], jsonb, bytea, jsonb, jsonb, timestamptz
+  ),
+  programmable_private.get_current_provisional_dynamic_sources_v1(text),
   programmable_private.promote_projection_run_v3(
     text, uuid, uuid, uuid, uuid, text, bigint, bytea,
     bigint, bigint, bigint, uuid, uuid, numeric, bytea, numeric,
