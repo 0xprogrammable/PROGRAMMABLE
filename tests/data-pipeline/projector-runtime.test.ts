@@ -5,10 +5,10 @@ vi.mock("server-only", () => ({}));
 import { runProjectorCycle } from "../../lib/data-pipeline/projector";
 import { validationError } from "../../lib/data-pipeline/errors";
 import type { EnvioCandidate } from "../../lib/data-pipeline/envio";
+import type { ProjectorDynamicSourceTemplate } from "../../lib/data-pipeline/dual-rpc";
 
 const CURSOR_HASH = `0x${"11".repeat(32)}` as const;
 const SAFE_HASH = `0x${"22".repeat(32)}` as const;
-const TX_HASH = `0x${"33".repeat(32)}` as const;
 const CANDIDATE_HASH = `0x${"44".repeat(32)}` as const;
 const executionTrace = (candidateBatchSize = 0) => ({
   startedAtMs: 1,
@@ -20,24 +20,96 @@ const executionTrace = (candidateBatchSize = 0) => ({
   providerCallCounts: [0, 0] as const,
   calls: [],
 });
+const CLASSIC_V3_FACTORY =
+  "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a" as const;
 
-function candidate(): EnvioCandidate {
+function dynamicTemplate(): ProjectorDynamicSourceTemplate {
   return {
-    candidateId: `1:${CANDIDATE_HASH}:${TX_HASH}:7`,
+    templateId: "10000000-0000-4000-8000-000000000001",
+    contractName: "ClassicV3RewardVault" as const,
+    model: "classic" as const,
+    releaseVersion: "classic-v3" as const,
+    parentFactoryAddress: CLASSIC_V3_FACTORY,
+    parentFactoryContractName: "ClassicV3RewardVaultFactory" as const,
+    parentFactoryBindingId: "10000000-0000-4000-8000-000000000002",
+    parentFactoryBindingCommitment: SAFE_HASH,
+    parentSourceRole: "vault_factory",
+    factoryEventName: "ClassicRewardVaultDeployed" as const,
+    deployedAddressField: "vault" as const,
+    deployedSourceRole: "reward_vault" as const,
+    deployedArtifactCreationCodeCommitment: CURSOR_HASH,
+    expectedExactRuntimeCodeHash: null,
+    expectedNormalizedRuntimeCodeHash: SAFE_HASH,
+    expectedImmutableReferencesCommitment: CURSOR_HASH,
+    expectedRuntimeByteLength: "2",
+    immutableReferences: [{ start: 0, length: 1 }],
+    immutableBindingSpec: {
+      factoryConfigurationField: "configurationHash",
+      bindings: [
+        {
+          ordinal: "0",
+          offset: "0",
+          length: "1",
+          source: "constant",
+          encoding: "bytes",
+          value: "0x60",
+        },
+      ],
+    },
+    immutableBindingCommitment: SAFE_HASH,
+    abiEventSetCommitment: CURSOR_HASH,
+    templateCommitment: SAFE_HASH,
+    database: {
+      scope: {
+        releaseId: "classic-v3",
+        modelId: "classic",
+        sourceGroup: "canonical-events",
+      },
+      epochId: "10000000-0000-4000-8000-000000000003",
+      pointerGeneration: "1",
+      reorgGeneration: "0",
+      envioProviderDeploymentId:
+        "10000000-0000-4000-8000-000000000004",
+      rpcProviderDeploymentIds: [
+        "10000000-0000-4000-8000-000000000005",
+        "10000000-0000-4000-8000-000000000006",
+      ] as const,
+    },
+  };
+}
+
+function candidate(
+  input: {
+    blockNumber?: number;
+    logIndex?: number;
+    sourceAddress?: `0x${string}`;
+    contractName?: string;
+    eventName?: string;
+    decodedPayload?: Record<string, unknown>;
+  } = {},
+): EnvioCandidate {
+  const blockNumber = input.blockNumber ?? 101;
+  const logIndex = input.logIndex ?? 7;
+  const transactionHash = `0x${(blockNumber * 10_000 + logIndex + 1)
+    .toString(16)
+    .padStart(64, "0")}` as const;
+  return {
+    candidateId: `1:${CANDIDATE_HASH}:${transactionHash}:${logIndex}`,
     chainId: 1,
-    blockNumber: "101",
+    blockNumber: String(blockNumber),
     blockHash: CANDIDATE_HASH,
     blockTimestamp: "1000",
-    transactionHash: TX_HASH,
+    transactionHash,
     transactionIndex: 0,
-    blockGlobalLogIndex: 7,
-    sourceAddress: "0xd240d06f8586eb799f20056054e5b527405e6bad",
-    contractName: "ClassicV2Launcher",
-    eventName: "MemeTokenLaunched",
+    blockGlobalLogIndex: logIndex,
+    sourceAddress:
+      input.sourceAddress ?? "0xd240d06f8586eb799f20056054e5b527405e6bad",
+    contractName: input.contractName ?? "ClassicV2Launcher",
+    eventName: input.eventName ?? "MemeTokenLaunched",
     releaseHint: { model: "classic", releaseVersion: "classic-v2" },
     orderedTopics: [`0x${"55".repeat(32)}`],
     rawData: "0x",
-    decodedPayload: {},
+    decodedPayload: input.decodedPayload ?? {},
     payloadHash: `0x${"66".repeat(32)}`,
   };
 }
@@ -58,9 +130,11 @@ function fixtures() {
           isBlockBoundary: false,
         },
         dynamicSources: [],
+        dynamicSourceTemplates: [dynamicTemplate()],
         database: {
           epochId: "70000000-0000-0000-0000-000000000002",
           pointerGeneration: "1",
+          reorgGeneration: "0",
           envioProviderDeploymentId:
             "70000000-0000-4000-8000-000000000003",
           rpcProviderDeploymentIds: [
@@ -70,6 +144,9 @@ function fixtures() {
         },
       };
     }),
+    stageVerifiedDynamicParents: vi.fn(async () => {
+      expect(databaseTransactionOpen).toBe(false);
+    }),
     commitVerifiedPage: vi.fn(async () => {
       expect(databaseTransactionOpen).toBe(false);
       databaseTransactionOpen = true;
@@ -77,6 +154,7 @@ function fixtures() {
       return { generation: "6" };
     }),
   };
+  let candidatePage = 0;
   const envio = {
     readProgress: vi.fn(async () => {
       expect(databaseTransactionOpen).toBe(false);
@@ -84,7 +162,8 @@ function fixtures() {
     }),
     readCandidatesWindow: vi.fn(async () => {
       expect(databaseTransactionOpen).toBe(false);
-      return [candidate()];
+      candidatePage += 1;
+      return candidatePage === 1 ? [candidate()] : [];
     }),
   };
   const captureSafeHead = vi.fn(async () => {
@@ -96,8 +175,14 @@ function fixtures() {
       cursorBlockHash: CURSOR_HASH,
     };
   });
-  const verifyWindow = vi.fn(async () => {
+  const verifyWindow = vi.fn(async (request: {
+    candidates: readonly EnvioCandidate[];
+    through: { blockNumber: string; blockGlobalLogIndex: number };
+  }) => {
     expect(databaseTransactionOpen).toBe(false);
+    const throughCandidate = [...request.candidates]
+      .reverse()
+      .find((item) => item.blockNumber === request.through.blockNumber);
     return {
       chainId: 1 as const,
       providerIdentities: ["alchemy", "quicknode"] as const,
@@ -112,15 +197,61 @@ function fixtures() {
       coveredCandidateCount: 1,
       coverage: {
         fromBlockNumber: "100",
-        throughBlockNumber: "101",
-        throughBlockHash: CANDIDATE_HASH,
-        throughBlockGlobalLogIndex: "7",
+        throughBlockNumber: request.through.blockNumber,
+        throughBlockHash: throughCandidate?.blockHash ?? SAFE_HASH,
+        throughBlockGlobalLogIndex: String(
+          request.through.blockGlobalLogIndex,
+        ),
         filterCommitment: SAFE_HASH,
         providerLogCommitments: [SAFE_HASH, SAFE_HASH] as const,
       },
     };
   });
-  return { store, envio, captureSafeHead, verifyWindow };
+  const verifyDynamicRuntime = vi.fn(async (request: {
+    parentCandidate: EnvioCandidate;
+    sourceAddress: `0x${string}`;
+    deploymentBlockNumber: string;
+    deploymentBlockHash: `0x${string}`;
+    template: ProjectorDynamicSourceTemplate;
+  }) => ({
+    chainId: 1 as const,
+    parentCandidateId: request.parentCandidate.candidateId,
+    sourceAddress: request.sourceAddress,
+    deploymentBlockNumber: request.deploymentBlockNumber,
+    deploymentBlockHash: request.deploymentBlockHash,
+    providerIdentities: ["alchemy", "quicknode"] as const,
+    providerVendorGroups: ["alchemy", "quicknode"] as const,
+    providerEndpointCommitments: [SAFE_HASH, CURSOR_HASH] as const,
+    providerOriginCommitments: [SAFE_HASH, CURSOR_HASH] as const,
+    rawRuntimeCodeA: "0x6000" as const,
+    rawRuntimeCodeB: "0x6000" as const,
+    runtimeCodeHashA: SAFE_HASH,
+    runtimeCodeHashB: SAFE_HASH,
+    normalizedRuntimeCodeHashA: SAFE_HASH,
+    normalizedRuntimeCodeHashB: SAFE_HASH,
+    runtimeByteLengthA: "2",
+    runtimeByteLengthB: "2",
+    immutableReferences: request.template.immutableReferences,
+    immutableReferencesCommitment: CURSOR_HASH,
+    immutableValues: ["0x60" as const],
+    immutableValuesCommitment: SAFE_HASH,
+    reconstructedRuntimeCode: "0x6000" as const,
+    reconstructedRuntimeCodeHash: SAFE_HASH,
+    factoryConfigurationCommitment: CURSOR_HASH,
+    template: request.template,
+    startedAtMs: 1,
+    completedAtMs: 2,
+    elapsedMs: 1,
+    hardDeadlineMs: 1_000,
+    providerCallCounts: [1, 1] as const,
+  }));
+  return {
+    store,
+    envio,
+    captureSafeHead,
+    verifyWindow,
+    verifyDynamicRuntime,
+  };
 }
 
 describe("projector runtime boundary", () => {
@@ -142,11 +273,28 @@ describe("projector runtime boundary", () => {
     expect(input.verifyWindow).toHaveBeenCalledWith(
       expect.objectContaining({
         candidates: [expect.objectContaining({ candidateId: candidate().candidateId })],
-        through: expect.objectContaining({ candidateId: candidate().candidateId }),
+        through: {
+          blockNumber: "200",
+          blockGlobalLogIndex: 0xffff_ffff,
+          candidateId: "empty-page",
+        },
         dynamicSources: [],
         rpcPolicy: expect.objectContaining({
           maxCallsPerProvider: 128,
           hardDeadlineMs: expect.any(Number),
+        }),
+      }),
+    );
+    expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshotBlock: "200",
+        blockComplete: true,
+        evidence: expect.objectContaining({
+          coverage: expect.objectContaining({
+            throughBlockNumber: "200",
+            throughBlockHash: SAFE_HASH,
+            throughBlockGlobalLogIndex: "4294967295",
+          }),
         }),
       }),
     );
@@ -167,7 +315,369 @@ describe("projector runtime boundary", () => {
     expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
   });
 
-  it("uses the full validated Envio page with a worst-case RPC budget", async () => {
+  it("stages a same-block factory parent without advancing public state", async () => {
+    const input = fixtures();
+    const vault = "0x4cfe000000000000000000000000000000000001" as const;
+    const parent = candidate({
+      blockNumber: 101,
+      logIndex: 7,
+      sourceAddress: CLASSIC_V3_FACTORY,
+      contractName: "ClassicV3RewardVaultFactory",
+      eventName: "ClassicRewardVaultDeployed",
+      decodedPayload: { vault },
+    });
+    const child = candidate({
+      blockNumber: 101,
+      logIndex: 8,
+      sourceAddress: vault,
+      contractName: "ClassicV3RewardVault",
+      eventName: "CreatorFeesCheckpointed",
+    });
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce([parent, child])
+      .mockResolvedValueOnce([]);
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+      }),
+    ).resolves.toEqual({
+      status: "staged-dynamic-parent",
+      candidateCount: 1,
+      snapshotBlock: "101",
+    });
+
+    expect(input.store.stageVerifiedDynamicParents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshotBlock: "101",
+        candidates: [parent],
+        runtimeObservations: [
+          expect.objectContaining({
+            parentCandidateId: parent.candidateId,
+            sourceAddress: vault,
+            deploymentBlockNumber: "101",
+            deploymentBlockHash: parent.blockHash,
+            providerCallCounts: [1, 1],
+          }),
+        ],
+        blockComplete: false,
+      }),
+    );
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+    expect(input.verifyWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: [parent],
+        cursor: {
+          blockNumber: "101",
+          blockGlobalLogIndex: 6,
+          candidateId: `1:${parent.blockHash}:${parent.transactionHash}:6`,
+        },
+        through: {
+          blockNumber: "101",
+          blockGlobalLogIndex: 7,
+          candidateId: parent.candidateId,
+        },
+      }),
+    );
+    expect(input.verifyDynamicRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentCandidate: parent,
+        sourceAddress: vault,
+        deploymentBlockNumber: "101",
+        deploymentBlockHash: parent.blockHash,
+        template: expect.objectContaining({
+          templateId: dynamicTemplate().templateId,
+        }),
+        parentEvidence: expect.any(Object),
+        deadlineMs: expect.any(Number),
+      }),
+    );
+  });
+
+  it("does not stage or advance when the child runtime cannot be proved", async () => {
+    const input = fixtures();
+    const vault = "0x4cfe000000000000000000000000000000000001" as const;
+    const parent = candidate({
+      blockNumber: 101,
+      logIndex: 7,
+      sourceAddress: CLASSIC_V3_FACTORY,
+      contractName: "ClassicV3RewardVaultFactory",
+      eventName: "ClassicRewardVaultDeployed",
+      decodedPayload: { vault },
+    });
+    const child = candidate({
+      blockNumber: 101,
+      logIndex: 8,
+      sourceAddress: vault,
+      contractName: "ClassicV3RewardVault",
+      eventName: "CreatorFeesCheckpointed",
+    });
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce([parent, child])
+      .mockResolvedValueOnce([]);
+    input.verifyDynamicRuntime.mockRejectedValue(
+      validationError("rpc", "dynamic-runtime-code-agreement"),
+    );
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    expect(input.store.stageVerifiedDynamicParents).not.toHaveBeenCalled();
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
+
+  it("does not stage a child emitted before its claimed factory parent", async () => {
+    const input = fixtures();
+    const vault = "0x4cfe000000000000000000000000000000000001" as const;
+    const child = candidate({
+      blockNumber: 101,
+      logIndex: 7,
+      sourceAddress: vault,
+      contractName: "ClassicV3RewardVault",
+      eventName: "CreatorFeesCheckpointed",
+    });
+    const parent = candidate({
+      blockNumber: 101,
+      logIndex: 8,
+      sourceAddress: CLASSIC_V3_FACTORY,
+      contractName: "ClassicV3RewardVaultFactory",
+      eventName: "ClassicRewardVaultDeployed",
+      decodedPayload: { vault },
+    });
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce([child, parent])
+      .mockResolvedValueOnce([]);
+    input.verifyWindow.mockRejectedValue(
+      validationError("rpc", "dynamic-source-lineage"),
+    );
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    expect(input.store.stageVerifiedDynamicParents).not.toHaveBeenCalled();
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
+
+  it("replays the complete block after staged lineage becomes current", async () => {
+    const input = fixtures();
+    const vault = "0x4cfe000000000000000000000000000000000001" as const;
+    const parent = candidate({
+      blockNumber: 101,
+      logIndex: 7,
+      sourceAddress: "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
+      contractName: "ClassicV3RewardVaultFactory",
+      eventName: "ClassicRewardVaultDeployed",
+      decodedPayload: { vault },
+    });
+    const child = candidate({
+      blockNumber: 101,
+      logIndex: 8,
+      sourceAddress: vault,
+      contractName: "ClassicV3RewardVault",
+      eventName: "CreatorFeesCheckpointed",
+    });
+    const basePlan = {
+      cursor: {
+        generation: "5",
+        blockNumber: "100",
+        blockHash: CURSOR_HASH,
+        blockGlobalLogIndex: -1,
+        candidateId: "",
+        isBlockBoundary: false,
+      },
+      dynamicSources: [],
+      dynamicSourceTemplates: [dynamicTemplate()],
+      database: {
+        epochId: "70000000-0000-4000-8000-000000000002",
+        pointerGeneration: "1",
+        reorgGeneration: "0",
+        envioProviderDeploymentId:
+          "70000000-0000-4000-8000-000000000003",
+        rpcProviderDeploymentIds: [
+          "70000000-0000-4000-8000-000000000004",
+          "70000000-0000-4000-8000-000000000005",
+        ] as const,
+      },
+    };
+    input.store.readPlan
+      .mockResolvedValueOnce(basePlan)
+      .mockResolvedValueOnce({
+        ...basePlan,
+        dynamicSources: [{ sourceAddress: vault } as never],
+      });
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce([parent, child])
+      .mockResolvedValueOnce([parent, child]);
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+      }),
+    ).resolves.toMatchObject({ status: "staged-dynamic-parent" });
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+      }),
+    ).resolves.toMatchObject({
+      status: "committed",
+      candidateCount: 2,
+      snapshotBlock: "200",
+    });
+
+    expect(input.store.stageVerifiedDynamicParents).toHaveBeenCalledTimes(1);
+    expect(input.store.commitVerifiedPage).toHaveBeenCalledTimes(1);
+    expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: [parent, child],
+        blockComplete: true,
+      }),
+    );
+  });
+
+  it("collects split Envio pages but publishes only one verified block boundary", async () => {
+    const input = fixtures();
+    const values = [
+      ...Array.from({ length: 12 }, (_, index) =>
+        candidate({ blockNumber: 101, logIndex: index }),
+      ),
+      ...Array.from({ length: 7 }, (_, index) =>
+        candidate({ blockNumber: 102, logIndex: index }),
+      ),
+    ];
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce(values.slice(0, 12))
+      .mockResolvedValueOnce(values.slice(12))
+      .mockResolvedValueOnce([]);
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+      }),
+    ).resolves.toMatchObject({
+      status: "committed",
+      candidateCount: 19,
+      snapshotBlock: "200",
+    });
+
+    expect(input.verifyWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: values,
+        through: {
+          blockNumber: "200",
+          blockGlobalLogIndex: 0xffff_ffff,
+          candidateId: "empty-page",
+        },
+      }),
+    );
+  });
+
+  it("does not infer that an exact-size final candidate page ends its block", async () => {
+    const input = fixtures();
+    const values = Array.from({ length: 12 }, (_, index) =>
+      candidate({ blockNumber: 101, logIndex: index }),
+    );
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce(values)
+      .mockResolvedValueOnce([]);
+
+    await runProjectorCycle({
+      ...input,
+      providers: [] as never,
+      deadlineMs: 1_000,
+    });
+
+    expect(input.envio.readCandidatesWindow).toHaveBeenCalledTimes(2);
+    expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: values,
+        snapshotBlock: "200",
+        blockComplete: true,
+      }),
+    );
+  });
+
+  it("cuts a capped Envio window back to the last complete block", async () => {
+    const input = fixtures();
+    const firstBlock = Array.from({ length: 20 }, (_, index) =>
+      candidate({ blockNumber: 101, logIndex: index }),
+    );
+    const nextBlock = Array.from({ length: 12 }, (_, index) =>
+      candidate({ blockNumber: 102, logIndex: index }),
+    );
+    const values = [...firstBlock, ...nextBlock];
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce(values.slice(0, 12))
+      .mockResolvedValueOnce(values.slice(12, 24))
+      .mockResolvedValueOnce(values.slice(24));
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+      }),
+    ).resolves.toMatchObject({
+      candidateCount: 20,
+      snapshotBlock: "101",
+    });
+    expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: firstBlock,
+        snapshotBlock: "101",
+        blockComplete: true,
+      }),
+    );
+  });
+
+  it("fails closed when one block alone exceeds the verification budget", async () => {
+    const input = fixtures();
+    const values = Array.from({ length: 32 }, (_, index) =>
+      candidate({ blockNumber: 101, logIndex: index }),
+    );
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce(values.slice(0, 12))
+      .mockResolvedValueOnce(values.slice(12, 24))
+      .mockResolvedValueOnce(values.slice(24));
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+      }),
+    ).rejects.toMatchObject({
+      dependency: "envio",
+      code: "response_oversize",
+    });
+    expect(input.verifyWindow).not.toHaveBeenCalled();
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
+
+  it("caps each Envio query below the atomic commit ceiling", async () => {
     const input = fixtures();
     await runProjectorCycle({
       ...input,
@@ -175,7 +685,7 @@ describe("projector runtime boundary", () => {
       deadlineMs: 1_000,
     });
     expect(input.envio.readCandidatesWindow).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 32 }),
+      expect.objectContaining({ limit: 12 }),
     );
   });
 

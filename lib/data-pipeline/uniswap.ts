@@ -17,19 +17,16 @@ import {
   validationError,
   type DataPipelineErrorCode,
 } from "./errors";
-import {
-  boundedJsonRequest,
-  type DataPipelineFetcher,
-} from "./request";
+import { boundedJsonRequest, type DataPipelineFetcher } from "./request";
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
+import { UNISWAP_ANALYTICS_PARSER_BINDING } from "./uniswap-parser-binding";
 
 const RELEASE_BINDING = getDataPipelineReleaseBinding();
 export const OFFICIAL_V4_SUBGRAPH_ID =
   RELEASE_BINDING.uniswapV4Subgraph.subgraphId;
 export const OFFICIAL_V4_SUBGRAPH_DEPLOYMENT =
   RELEASE_BINDING.uniswapV4Subgraph.deployment;
-const OFFICIAL_V4_SUBGRAPH_GATEWAY_BASE_URL =
-  "https://gateway.thegraph.com";
+const OFFICIAL_V4_SUBGRAPH_GATEWAY_BASE_URL = "https://gateway.thegraph.com";
 
 // Conservative query spans keep each fixed subgraph request bounded before
 // entity pagination: six hours of swaps, 31 days of hourly candles, and one
@@ -210,6 +207,20 @@ const DAY_QUERY = `
   }
 `;
 
+// This is the canonical provenance input for consumers that persist Graph
+// facts. It deliberately references the exact documents executed below. Any
+// parser behavior change must ship with a new parser contract version so a
+// registered schema commitment cannot silently describe different semantics.
+export const UNISWAP_ANALYTICS_QUERY_CONTRACT = Object.freeze({
+  parser: UNISWAP_ANALYTICS_PARSER_BINDING,
+  queries: Object.freeze({
+    poolSnapshot: POOL_QUERY,
+    swaps: SWAP_QUERY,
+    hourSeries: HOUR_QUERY,
+    daySeries: DAY_QUERY,
+  }),
+});
+
 export type VerifiedPoolKey = {
   poolId: string;
   currency0: string;
@@ -297,11 +308,7 @@ function safeInteger(value: unknown, minimum: number, maximum: number) {
       : typeof value === "string" && /^-?(0|[1-9]\d*)$/.test(value)
         ? Number(value)
         : Number.NaN;
-  if (
-    !Number.isSafeInteger(parsed) ||
-    parsed < minimum ||
-    parsed > maximum
-  ) {
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
     throw validationError("uniswap", "integer");
   }
   return parsed;
@@ -337,7 +344,10 @@ function responseData(
   };
 }
 
-function parseMeta(value: unknown, block: { number: string; hash: string }): Meta {
+function parseMeta(
+  value: unknown,
+  block: { number: string; hash: string },
+): Meta {
   if (
     !isRecord(value) ||
     !onlyKeys(value, ["deployment", "hasIndexingErrors", "block"]) ||
@@ -396,8 +406,7 @@ function canonicalPoolKey(value: VerifiedPoolKey): CanonicalPoolKey {
   if (
     BigInt(currency0) >= BigInt(currency1) ||
     !Number.isSafeInteger(value.fee) ||
-    (value.fee !== 0x80_00_00 &&
-      (value.fee < 0 || value.fee > 1_000_000)) ||
+    (value.fee !== 0x80_00_00 && (value.fee < 0 || value.fee > 1_000_000)) ||
     !Number.isSafeInteger(value.tickSpacing) ||
     value.tickSpacing < 1 ||
     value.tickSpacing > 32_767 ||
@@ -419,13 +428,7 @@ function canonicalPoolKey(value: VerifiedPoolKey): CanonicalPoolKey {
         { type: "int24" },
         { type: "address" },
       ],
-      [
-        currency0,
-        currency1,
-        value.fee,
-        value.tickSpacing,
-        hooks,
-      ],
+      [currency0, currency1, value.fee, value.tickSpacing, hooks],
     ),
   );
   if (recomputed !== poolId) throw invalidInput("uniswap", "pool-id");
@@ -543,9 +546,7 @@ function parsePool(value: unknown, key: CanonicalPoolKey): PoolSnapshot {
     liquidity: unsigned(value.liquidity),
     sqrtPriceX96: unsigned(value.sqrtPrice),
     tick:
-      value.tick === null
-        ? null
-        : safeInteger(value.tick, -887_272, 887_272),
+      value.tick === null ? null : safeInteger(value.tick, -887_272, 887_272),
     transactionCount: unsigned(value.txCount),
     marketVolumeToken0: decimal(value.volumeToken0),
     marketVolumeToken1: decimal(value.volumeToken1),
@@ -752,8 +753,7 @@ export function priceRatiosFromSqrtPriceX96(input: {
     throw invalidInput("uniswap", "price-decimals");
   }
   const directNumerator = sqrt * sqrt * 10n ** BigInt(input.token0Decimals);
-  const directDenominator =
-    2n ** 192n * 10n ** BigInt(input.token1Decimals);
+  const directDenominator = 2n ** 192n * 10n ** BigInt(input.token1Decimals);
   const divisor = gcd(directNumerator, directDenominator);
   const numerator = directNumerator / divisor;
   const denominator = directDenominator / divisor;
@@ -833,7 +833,10 @@ function* splitIntWindow(
   }
 }
 
-function pending(error: unknown): { status: "pending"; reason: DataPipelineErrorCode } {
+function pending(error: unknown): {
+  status: "pending";
+  reason: DataPipelineErrorCode;
+} {
   if (error instanceof DataPipelineError) {
     return { status: "pending", reason: error.code };
   }
@@ -1136,13 +1139,7 @@ export function createUniswapAnalyticsClient(options: {
               ...split,
             },
             parse: (value: unknown) =>
-              parseCandle(
-                value,
-                key,
-                "date",
-                split.from,
-                split.toExclusive,
-              ),
+              parseCandle(value, key, "date", split.from, split.toExclusive),
           };
         }
       }

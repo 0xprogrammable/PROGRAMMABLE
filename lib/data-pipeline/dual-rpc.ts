@@ -1,6 +1,14 @@
 import "server-only";
 
-import { encodeAbiParameters, keccak256, toBytes, type Hex } from "viem";
+import {
+  bytesToHex,
+  concat,
+  encodeAbiParameters,
+  hexToBytes,
+  keccak256,
+  toBytes,
+  type Hex,
+} from "viem";
 
 import {
   canonicalAddress,
@@ -43,7 +51,13 @@ import type {
   ProjectorRewardSnapshot,
 } from "./projector-reward-fold";
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
-import { runtimeBytecodeEvidence } from "./runtime-bytecode";
+import {
+  canonicalImmutableReferences,
+  immutableReferencesCommitment,
+  normalizeRuntimeBytecode,
+  runtimeBytecodeEvidence,
+  type ImmutableReference,
+} from "./runtime-bytecode";
 import { assertProductionDualRpcProviders } from "./rpc-providers.server";
 
 export type CandidateRpcBlock = {
@@ -285,6 +299,83 @@ export type DualRpcCandidateWindowEvidence =
     };
   };
 
+export type ProjectorDynamicSourceTemplate = Readonly<{
+  templateId: string;
+  contractName: "ClassicV3RewardVault";
+  model: "classic";
+  releaseVersion: "classic-v3";
+  parentFactoryAddress: HexAddress;
+  parentFactoryContractName: "ClassicV3RewardVaultFactory";
+  parentFactoryBindingId: string;
+  parentFactoryBindingCommitment: HexBytes32;
+  parentSourceRole: string;
+  factoryEventName: "ClassicRewardVaultDeployed";
+  deployedAddressField: "vault";
+  deployedSourceRole: "reward_vault";
+  deployedArtifactCreationCodeCommitment: HexBytes32;
+  expectedExactRuntimeCodeHash: HexBytes32 | null;
+  expectedNormalizedRuntimeCodeHash: HexBytes32;
+  expectedImmutableReferencesCommitment: HexBytes32;
+  expectedRuntimeByteLength: string;
+  immutableReferences: readonly ImmutableReference[];
+  immutableBindingSpec: Readonly<Record<string, unknown>>;
+  immutableBindingCommitment: HexBytes32;
+  abiEventSetCommitment: HexBytes32;
+  templateCommitment: HexBytes32;
+  database: Readonly<{
+    scope: Readonly<{
+      releaseId: string;
+      modelId: string;
+      sourceGroup: string;
+    }>;
+    epochId: string;
+    pointerGeneration: string;
+    reorgGeneration: string;
+    envioProviderDeploymentId: string;
+    rpcProviderDeploymentIds: readonly [string, string];
+  }>;
+}>;
+
+/**
+ * A deliberately small, run-scoped observation used only to bridge a factory
+ * deployment event and the first event emitted by the newly deployed dynamic
+ * source in the same block. The parent window already owns the safe-head,
+ * block and log-coverage proof. This observation adds one exact-block
+ * `getBytecode` read per independent provider and nothing else.
+ */
+export type DualRpcDynamicRuntimeObservation = Readonly<{
+  chainId: 1;
+  parentCandidateId: string;
+  sourceAddress: HexAddress;
+  deploymentBlockNumber: string;
+  deploymentBlockHash: HexBytes32;
+  providerIdentities: readonly [string, string];
+  providerVendorGroups: readonly [string, string];
+  providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
+  providerOriginCommitments: readonly [HexBytes32, HexBytes32];
+  rawRuntimeCodeA: Hex;
+  rawRuntimeCodeB: Hex;
+  runtimeCodeHashA: HexBytes32;
+  runtimeCodeHashB: HexBytes32;
+  normalizedRuntimeCodeHashA: HexBytes32;
+  normalizedRuntimeCodeHashB: HexBytes32;
+  runtimeByteLengthA: string;
+  runtimeByteLengthB: string;
+  immutableReferences: readonly ImmutableReference[];
+  immutableReferencesCommitment: HexBytes32;
+  immutableValues: readonly Hex[];
+  immutableValuesCommitment: HexBytes32;
+  reconstructedRuntimeCode: Hex;
+  reconstructedRuntimeCodeHash: HexBytes32;
+  factoryConfigurationCommitment: HexBytes32;
+  template: ProjectorDynamicSourceTemplate;
+  startedAtMs: number;
+  completedAtMs: number;
+  elapsedMs: number;
+  hardDeadlineMs: number;
+  providerCallCounts: readonly [1, 1];
+}>;
+
 export type DualRpcSafeHeadEvidence = Readonly<{
   providerHeads: readonly [string, string];
   safeBlockNumber: string;
@@ -296,6 +387,12 @@ const RELEASE_BINDING = getDataPipelineReleaseBinding();
 const PROVIDER_IDENTITY_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const CANDIDATE_ID_PATTERN =
   /^1:(0x[0-9a-f]{64}):(0x[0-9a-f]{64}):(0|[1-9]\d*)$/;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const IMMUTABLE_VALUES_DOMAIN = toBytes(
+  "programmable:data-pipeline:immutable-values:v1\0",
+);
+const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
 const DEFAULT_RPC_CONCURRENCY = 4;
 const DEFAULT_RPC_ATTEMPTS = 3;
 const DEFAULT_RPC_BACKOFF_MS = 50;
@@ -2162,6 +2259,7 @@ export async function verifyEnvioCandidateWithDualRpc(input: {
 function coverageCursor(
   value: EnvioCandidateCursor,
   operation: string,
+  terminalBoundary = false,
 ) {
   if (value === null || typeof value !== "object") {
     throw invalidInput("rpc", operation);
@@ -2179,8 +2277,19 @@ function coverageCursor(
   const blockGlobalLogIndex = Number(
     canonicalUint32DecimalText(logIndex, operation),
   );
-  if (blockGlobalLogIndex === 0xffff_ffff && value.candidateId === "") {
+  if (
+    !terminalBoundary &&
+    blockGlobalLogIndex === 0xffff_ffff &&
+    value.candidateId === ""
+  ) {
     return { blockNumber, blockGlobalLogIndex, candidateId: "" };
+  }
+  if (
+    terminalBoundary &&
+    blockGlobalLogIndex === 0xffff_ffff &&
+    value.candidateId === "empty-page"
+  ) {
+    return { blockNumber, blockGlobalLogIndex, candidateId: "empty-page" };
   }
   if (
     typeof value.candidateId !== "string" ||
@@ -2242,7 +2351,7 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
 }): Promise<DualRpcCandidateWindowEvidence> {
   const windowStartedAt = Date.now();
   const cursor = coverageCursor(input.cursor, "coverage-cursor");
-  const through = coverageCursor(input.through, "coverage-through");
+  const through = coverageCursor(input.through, "coverage-through", true);
   if (comparePlacement(cursor, through) >= 0) {
     throw invalidInput("rpc", "coverage-window");
   }
@@ -2265,8 +2374,23 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     throw invalidInput("rpc", "coverage-candidates");
   }
   const lastCandidate = input.candidates[input.candidates.length - 1];
+  const throughIsBlockComplete =
+    through.blockGlobalLogIndex === 0xffff_ffff &&
+    through.candidateId === "empty-page";
   if (lastCandidate) {
-    if (
+    if (throughIsBlockComplete) {
+      if (
+        comparePlacement(
+          {
+            blockNumber: lastCandidate.blockNumber,
+            blockGlobalLogIndex: lastCandidate.blockGlobalLogIndex,
+          },
+          through,
+        ) >= 0
+      ) {
+        throw invalidInput("rpc", "coverage-through-boundary");
+      }
+    } else if (
       comparePlacement(
         {
           blockNumber: lastCandidate.blockNumber,
@@ -2278,10 +2402,7 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     ) {
       throw invalidInput("rpc", "coverage-through-candidate");
     }
-  } else if (
-    through.blockGlobalLogIndex !== 0xffff_ffff ||
-    through.candidateId !== ""
-  ) {
+  } else if (!throughIsBlockComplete) {
     throw invalidInput("rpc", "coverage-empty-through");
   }
 
@@ -2371,19 +2492,10 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     deadlineMs: undefined,
   });
   if (
-    ranges.length +
-      2 +
-      new Set(input.candidates.map(({ blockNumber }) => blockNumber)).size +
-      1 +
-      new Set(input.candidates.map(({ transactionHash }) => transactionHash))
-        .size +
-      new Set(
-        input.candidates.map(
-          ({ blockNumber, sourceAddress }) => `${blockNumber}:${sourceAddress}`,
-        ),
-      ).size +
-      (lastCandidate ? 0 : 1) >
-    coveragePolicy.maxCallsPerProvider
+    batch.executionTrace.providerCallCounts.some(
+      (count) =>
+        count + 1 + ranges.length > coveragePolicy.maxCallsPerProvider,
+    )
   ) {
     throw invalidInput("rpc", "provider-call-budget");
   }
@@ -2393,6 +2505,29 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
       used: batch.executionTrace.providerCallCounts[providerIndex]!,
       maximum: coveragePolicy.maxCallsPerProvider,
     }));
+    const throughBlocks = await Promise.all(
+      input.providers.map(({ client }, providerIndex) =>
+        retryRpc(
+          () => client.getBlock({ blockNumber: BigInt(through.blockNumber) }),
+          coveragePolicy,
+          providerBudgets[providerIndex],
+        ),
+      ),
+    );
+    const canonicalThroughBlocks = throughBlocks.map((block) =>
+      canonicalBlock(
+        block,
+        BigInt(through.blockNumber),
+        "coverage-through-block",
+      ),
+    );
+    if (
+      canonicalThroughBlocks[0]!.hash !== canonicalThroughBlocks[1]!.hash ||
+      canonicalThroughBlocks[0]!.timestamp !==
+        canonicalThroughBlocks[1]!.timestamp
+    ) {
+      throw validationError("rpc", "coverage-through-block-agreement");
+    }
     const providerLogs = await Promise.all(
       input.providers.map(async ({ client }, providerIndex) => {
         if (typeof client.getLogs !== "function") {
@@ -2463,42 +2598,568 @@ export async function verifyEnvioCandidateWindowWithDualRpc(input: {
     ) {
       throw validationError("rpc", "coverage-agreement");
     }
-    let throughBlockHash: HexBytes32;
-    if (lastCandidate) {
-      throughBlockHash = lastCandidate.blockHash;
-    } else {
-      const terminalBlocks = await Promise.all(
-        input.providers.map(({ client }, providerIndex) =>
-          retryRpc(
-            () => client.getBlock({ blockNumber: toBlock }),
-            coveragePolicy,
-            providerBudgets[providerIndex],
-          ),
-        ),
-      );
-      const canonicalTerminalBlocks = terminalBlocks.map((block) =>
-        canonicalBlock(block, toBlock, "coverage-terminal-block"),
-      );
-      if (
-        canonicalTerminalBlocks[0]!.hash !== canonicalTerminalBlocks[1]!.hash ||
-        canonicalTerminalBlocks[0]!.timestamp !==
-          canonicalTerminalBlocks[1]!.timestamp
-      ) {
-        throw validationError("rpc", "coverage-terminal-block-agreement");
-      }
-      throughBlockHash = canonicalTerminalBlocks[0]!.hash;
-    }
     return Object.freeze({
       ...batch,
       coveredCandidateCount: expected.length,
       coverage: Object.freeze({
         fromBlockNumber: effectiveFromBlock.toString(),
         throughBlockNumber: through.blockNumber,
-        throughBlockHash,
+        throughBlockHash: canonicalThroughBlocks[0]!.hash,
         throughBlockGlobalLogIndex: String(through.blockGlobalLogIndex),
         filterCommitment,
         providerLogCommitments: Object.freeze(commitments),
       }),
+    });
+  } catch (error) {
+    if (error instanceof DataPipelineError) throw error;
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "dependency_unavailable",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
+}
+
+const DYNAMIC_TEMPLATE_BINDINGS = Object.freeze({
+  ClassicV3RewardVault: Object.freeze({
+    model: "classic",
+    releaseVersions: Object.freeze(["classic-v3"]),
+    factoryContractName: "ClassicV3RewardVaultFactory",
+    factoryEventName: "ClassicRewardVaultDeployed",
+  }),
+} as const);
+
+function canonicalDynamicSourceTemplate(
+  value: ProjectorDynamicSourceTemplate,
+): ProjectorDynamicSourceTemplate {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw invalidInput("rpc", "dynamic-runtime-template");
+  }
+  const expected = DYNAMIC_TEMPLATE_BINDINGS[value.contractName];
+  let parentFactoryAddress: HexAddress;
+  let parentFactoryBindingCommitment: HexBytes32;
+  let deployedArtifactCreationCodeCommitment: HexBytes32;
+  let expectedExactRuntimeCodeHash: HexBytes32 | null;
+  let expectedNormalizedRuntimeCodeHash: HexBytes32;
+  let expectedImmutableReferencesCommitment: HexBytes32;
+  let immutableBindingCommitment: HexBytes32;
+  let abiEventSetCommitment: HexBytes32;
+  let templateCommitment: HexBytes32;
+  let expectedRuntimeByteLength: string;
+  let pointerGeneration: string;
+  let reorgGeneration: string;
+  try {
+    parentFactoryAddress = canonicalAddress(value.parentFactoryAddress);
+    parentFactoryBindingCommitment = canonicalBytes32(
+      value.parentFactoryBindingCommitment,
+    );
+    deployedArtifactCreationCodeCommitment = canonicalBytes32(
+      value.deployedArtifactCreationCodeCommitment,
+    );
+    expectedExactRuntimeCodeHash =
+      value.expectedExactRuntimeCodeHash === null
+        ? null
+        : canonicalBytes32(value.expectedExactRuntimeCodeHash);
+    expectedNormalizedRuntimeCodeHash = canonicalBytes32(
+      value.expectedNormalizedRuntimeCodeHash,
+    );
+    expectedImmutableReferencesCommitment = canonicalBytes32(
+      value.expectedImmutableReferencesCommitment,
+    );
+    immutableBindingCommitment = canonicalBytes32(
+      value.immutableBindingCommitment,
+    );
+    abiEventSetCommitment = canonicalBytes32(value.abiEventSetCommitment);
+    templateCommitment = canonicalBytes32(value.templateCommitment);
+    expectedRuntimeByteLength = parseNonnegativeIntegerText(
+      value.expectedRuntimeByteLength,
+    );
+    pointerGeneration = parseNonnegativeIntegerText(
+      value.database.pointerGeneration,
+    );
+    reorgGeneration = parseNonnegativeIntegerText(
+      value.database.reorgGeneration,
+    );
+  } catch {
+    throw invalidInput("rpc", "dynamic-runtime-template");
+  }
+  const byteLength = Number(expectedRuntimeByteLength);
+  const immutableReferences = canonicalImmutableReferences(
+    value.immutableReferences,
+    byteLength,
+  );
+  const scopePattern = /^[a-z][a-z0-9-]{0,95}$/;
+  if (
+    !expected ||
+    value.model !== expected.model ||
+    !(expected.releaseVersions as readonly string[]).includes(
+      value.releaseVersion,
+    ) ||
+    value.parentFactoryContractName !== expected.factoryContractName ||
+    value.factoryEventName !== expected.factoryEventName ||
+    value.deployedAddressField !== "vault" ||
+    value.deployedSourceRole !== "reward_vault" ||
+    !UUID_PATTERN.test(value.templateId) ||
+    !UUID_PATTERN.test(value.parentFactoryBindingId) ||
+    !UUID_PATTERN.test(value.database.epochId) ||
+    !UUID_PATTERN.test(value.database.envioProviderDeploymentId) ||
+    value.database.rpcProviderDeploymentIds.length !== 2 ||
+    value.database.rpcProviderDeploymentIds.some(
+      (providerId) => !UUID_PATTERN.test(providerId),
+    ) ||
+    value.database.rpcProviderDeploymentIds[0] ===
+      value.database.rpcProviderDeploymentIds[1] ||
+    !scopePattern.test(value.database.scope.releaseId) ||
+    !scopePattern.test(value.database.scope.modelId) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(
+      value.database.scope.sourceGroup,
+    ) ||
+    value.database.scope.releaseId !== value.releaseVersion ||
+    BigInt(pointerGeneration) < 1n ||
+    !Number.isSafeInteger(byteLength) ||
+    byteLength < 1 ||
+    byteLength > 24_576 ||
+    expectedNormalizedRuntimeCodeHash === ZERO_BYTES32 ||
+    expectedImmutableReferencesCommitment === ZERO_BYTES32 ||
+    parentFactoryBindingCommitment === ZERO_BYTES32 ||
+    deployedArtifactCreationCodeCommitment === ZERO_BYTES32 ||
+    immutableBindingCommitment === ZERO_BYTES32 ||
+    abiEventSetCommitment === ZERO_BYTES32 ||
+    templateCommitment === ZERO_BYTES32 ||
+    (expectedExactRuntimeCodeHash !== null &&
+      expectedExactRuntimeCodeHash === ZERO_BYTES32) ||
+    immutableReferencesCommitment(immutableReferences, byteLength) !==
+      expectedImmutableReferencesCommitment ||
+    value.immutableBindingSpec === null ||
+    typeof value.immutableBindingSpec !== "object" ||
+    Array.isArray(value.immutableBindingSpec)
+  ) {
+    throw validationError("rpc", "dynamic-runtime-template");
+  }
+  return Object.freeze({
+    ...value,
+    parentFactoryAddress,
+    parentFactoryBindingCommitment,
+    deployedArtifactCreationCodeCommitment,
+    expectedExactRuntimeCodeHash,
+    expectedNormalizedRuntimeCodeHash,
+    expectedImmutableReferencesCommitment,
+    expectedRuntimeByteLength,
+    immutableReferences,
+    immutableBindingCommitment,
+    abiEventSetCommitment,
+    templateCommitment,
+    database: Object.freeze({
+      ...value.database,
+      pointerGeneration,
+      reorgGeneration,
+      rpcProviderDeploymentIds: Object.freeze([
+        value.database.rpcProviderDeploymentIds[0],
+        value.database.rpcProviderDeploymentIds[1],
+      ]) as readonly [string, string],
+    }),
+  });
+}
+
+function dynamicImmutableEvidence(input: {
+  template: ProjectorDynamicSourceTemplate;
+  parentCandidate: EnvioCandidate;
+  sourceAddress: HexAddress;
+  runtimeBytecode: Hex;
+}) {
+  const { template, parentCandidate, sourceAddress, runtimeBytecode } = input;
+  const spec = template.immutableBindingSpec;
+  const bindings = spec.bindings;
+  const factoryConfigurationField = spec.factoryConfigurationField;
+  if (
+    !Array.isArray(bindings) ||
+    bindings.length !== template.immutableReferences.length ||
+    bindings.length < 1 ||
+    bindings.length > 64 ||
+    typeof factoryConfigurationField !== "string" ||
+    !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(factoryConfigurationField)
+  ) {
+    throw validationError("rpc", "dynamic-runtime-binding-spec");
+  }
+  const deployedAddress = parentCandidate.decodedPayload[
+    template.deployedAddressField
+  ];
+  if (
+    typeof deployedAddress !== "string" ||
+    canonicalAddress(deployedAddress) !== sourceAddress
+  ) {
+    throw validationError("rpc", "dynamic-runtime-deployed-address");
+  }
+  const factoryConfigurationValue =
+    parentCandidate.decodedPayload[factoryConfigurationField];
+  let factoryConfigurationCommitment: HexBytes32;
+  try {
+    factoryConfigurationCommitment = canonicalBytes32(
+      factoryConfigurationValue,
+    );
+  } catch {
+    throw validationError("rpc", "dynamic-runtime-factory-configuration");
+  }
+  const runtimeBytes = hexToBytes(runtimeBytecode);
+  const immutableValues = bindings.map((rawBinding, index) => {
+    if (
+      rawBinding === null ||
+      typeof rawBinding !== "object" ||
+      Array.isArray(rawBinding)
+    ) {
+      throw validationError("rpc", "dynamic-runtime-binding-spec");
+    }
+    const binding = rawBinding as Record<string, unknown>;
+    const reference = template.immutableReferences[index]!;
+    let ordinal: string;
+    let offset: string;
+    let length: string;
+    try {
+      ordinal = parseNonnegativeIntegerText(binding.ordinal);
+      offset = parseNonnegativeIntegerText(binding.offset);
+      length = parseNonnegativeIntegerText(binding.length);
+    } catch {
+      throw validationError("rpc", "dynamic-runtime-binding-spec");
+    }
+    if (
+      ordinal !== String(index) ||
+      offset !== String(reference.start) ||
+      length !== String(reference.length)
+    ) {
+      throw validationError("rpc", "dynamic-runtime-binding-spec");
+    }
+    const source = binding.source;
+    const encoding = binding.encoding;
+    if (
+      (source !== "factory_event" &&
+        source !== "constant" &&
+        source !== "deployed_address") ||
+      (encoding !== "address" && encoding !== "bytes") ||
+      (encoding === "address" &&
+        reference.length !== 20 &&
+        reference.length !== 32)
+    ) {
+      throw validationError("rpc", "dynamic-runtime-binding-spec");
+    }
+    let expected: Hex;
+    if (source === "deployed_address") {
+      if (
+        binding.field !== undefined ||
+        binding.value !== undefined ||
+        encoding !== "address"
+      ) {
+        throw validationError("rpc", "dynamic-runtime-binding-spec");
+      }
+      expected =
+        reference.length === 20
+          ? sourceAddress
+          : bytesToHex(
+              Uint8Array.from([
+                ...new Uint8Array(12),
+                ...hexToBytes(sourceAddress),
+              ]),
+            );
+    } else if (source === "constant") {
+      if (
+        binding.field !== undefined ||
+        typeof binding.value !== "string"
+      ) {
+        throw validationError("rpc", "dynamic-runtime-binding-spec");
+      }
+      expected = rpcData(binding.value, "dynamic-runtime-binding-constant");
+    } else {
+      if (
+        typeof binding.field !== "string" ||
+        !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(binding.field) ||
+        binding.value !== undefined
+      ) {
+        throw validationError("rpc", "dynamic-runtime-binding-spec");
+      }
+      const payloadValue = parentCandidate.decodedPayload[binding.field];
+      if (encoding === "address") {
+        const address = canonicalAddress(payloadValue);
+        expected =
+          reference.length === 20
+            ? address
+            : bytesToHex(
+                Uint8Array.from([
+                  ...new Uint8Array(12),
+                  ...hexToBytes(address),
+                ]),
+              );
+      } else {
+        expected = rpcData(payloadValue, "dynamic-runtime-binding-field");
+      }
+    }
+    if ((expected.length - 2) / 2 !== reference.length) {
+      throw validationError("rpc", "dynamic-runtime-binding-length");
+    }
+    const observed = bytesToHex(
+      runtimeBytes.slice(reference.start, reference.start + reference.length),
+    );
+    if (observed !== expected) {
+      throw validationError("rpc", "dynamic-runtime-immutable-value");
+    }
+    return observed;
+  });
+  const immutableValuesCommitment = keccak256(
+    concat([
+      IMMUTABLE_VALUES_DOMAIN,
+      encodeAbiParameters([{ type: "bytes[]" }], [immutableValues]),
+    ]),
+  );
+  const normalizedRuntimeCode = normalizeRuntimeBytecode({
+    runtimeBytecode,
+    expectedByteLength: Number(template.expectedRuntimeByteLength),
+    immutableReferences: template.immutableReferences,
+  });
+  const reconstructedBytes = hexToBytes(normalizedRuntimeCode);
+  immutableValues.forEach((value, index) => {
+    const reference = template.immutableReferences[index]!;
+    reconstructedBytes.set(hexToBytes(value), reference.start);
+  });
+  const reconstructedRuntimeCode = bytesToHex(reconstructedBytes);
+  if (reconstructedRuntimeCode !== runtimeBytecode) {
+    throw validationError("rpc", "dynamic-runtime-reconstruction");
+  }
+  return Object.freeze({
+    immutableValues: Object.freeze(immutableValues),
+    immutableValuesCommitment,
+    reconstructedRuntimeCode,
+    reconstructedRuntimeCodeHash: keccak256(reconstructedRuntimeCode),
+    factoryConfigurationCommitment,
+  });
+}
+
+/**
+ * Reads a just-deployed dynamic source at the exact factory-event block from
+ * the same two providers that proved the parent window. There are no retries:
+ * the evidence contract is exactly one successful `getBytecode` call per
+ * provider. A transient failure therefore fails closed and is retried by the
+ * next projector cycle without advancing the canonical cursor.
+ */
+export async function verifyDynamicRuntimeAtBlockWithDualRpc(input: {
+  parentCandidate: EnvioCandidate;
+  sourceAddress: HexAddress;
+  deploymentBlockNumber: string;
+  deploymentBlockHash: HexBytes32;
+  template: ProjectorDynamicSourceTemplate;
+  parentEvidence: DualRpcCandidateWindowEvidence;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  deadlineMs?: number;
+}): Promise<DualRpcDynamicRuntimeObservation> {
+  assertProductionDualRpcProviders(input.providers);
+  const template = canonicalDynamicSourceTemplate(input.template);
+  const sourceAddress = rpcAddress(
+    input.sourceAddress,
+    "dynamic-runtime-source",
+  );
+  const deploymentBlockHash = rpcBytes32(
+    input.deploymentBlockHash,
+    "dynamic-runtime-block",
+  );
+  let deploymentBlockNumber: string;
+  try {
+    deploymentBlockNumber = parseNonnegativeIntegerText(
+      input.deploymentBlockNumber,
+    );
+  } catch {
+    throw invalidInput("rpc", "dynamic-runtime-block");
+  }
+  if (
+    input.parentCandidate === null ||
+    typeof input.parentCandidate !== "object" ||
+    !CANDIDATE_ID_PATTERN.test(input.parentCandidate.candidateId) ||
+    input.parentEvidence.chainId !== RELEASE_BINDING.chainId ||
+    input.parentEvidence.coveredCandidateCount !== 1 ||
+    input.parentEvidence.candidates.length !== 1 ||
+    input.parentEvidence.coverage.throughBlockNumber !==
+      deploymentBlockNumber ||
+    input.parentEvidence.coverage.throughBlockHash !== deploymentBlockHash ||
+    input.parentEvidence.coverage.throughBlockGlobalLogIndex ===
+      String(0xffff_ffff)
+  ) {
+    throw invalidInput("rpc", "dynamic-runtime-parent-evidence");
+  }
+  const parent = input.parentEvidence.candidates[0]!;
+  if (
+    parent.candidateId !== input.parentCandidate.candidateId ||
+    parent.candidateBlockNumber !== deploymentBlockNumber ||
+    parent.candidateBlockHash !== deploymentBlockHash ||
+    parent.sourceAddress === sourceAddress ||
+    input.parentCandidate.blockNumber !== deploymentBlockNumber ||
+    input.parentCandidate.blockHash !== deploymentBlockHash ||
+    input.parentCandidate.sourceAddress !== parent.sourceAddress ||
+    input.parentCandidate.contractName !== parent.contractName ||
+    input.parentCandidate.eventName !== parent.eventName ||
+    template.parentFactoryAddress !== parent.sourceAddress ||
+    template.parentFactoryContractName !== parent.contractName ||
+    template.factoryEventName !== parent.eventName
+  ) {
+    throw validationError("rpc", "dynamic-runtime-parent-binding");
+  }
+
+  const providerIdentities = input.providers.map(({ identity }) =>
+    providerIdentity(identity),
+  ) as [string, string];
+  const providerVendorGroups = input.providers.map(({ vendorGroup }) =>
+    providerIdentity(vendorGroup),
+  ) as [string, string];
+  const providerEndpointCommitments = input.providers.map(
+    ({ endpointCommitment }) =>
+      rpcBytes32(endpointCommitment, "provider-endpoint-commitment"),
+  ) as [HexBytes32, HexBytes32];
+  const providerOriginCommitments = input.providers.map(
+    ({ endpointOriginCommitment }) =>
+      rpcBytes32(endpointOriginCommitment, "provider-origin-commitment"),
+  ) as [HexBytes32, HexBytes32];
+  const exactTuple = (
+    actual: readonly string[],
+    expected: readonly string[],
+  ) =>
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index]);
+  if (
+    !exactTuple(
+      providerIdentities,
+      input.parentEvidence.providerIdentities,
+    ) ||
+    !exactTuple(
+      providerVendorGroups,
+      input.parentEvidence.providerVendorGroups,
+    ) ||
+    !exactTuple(
+      providerEndpointCommitments,
+      input.parentEvidence.providerEndpointCommitments,
+    ) ||
+    !exactTuple(
+      providerOriginCommitments,
+      input.parentEvidence.providerOriginCommitments,
+    )
+  ) {
+    throw validationError("rpc", "dynamic-runtime-provider-binding");
+  }
+
+  const policy = rpcExecutionPolicy({
+    maxConcurrency: 2,
+    maxAttempts: 1,
+    baseBackoffMs: 0,
+    hardDeadlineMs: input.deadlineMs,
+    maxCallsPerProvider: 1,
+  });
+  const startedAtMs = Date.now();
+  try {
+    const rawCodes = await Promise.all(
+      input.providers.map(({ client }) =>
+        withinRpcDeadline(
+          () =>
+            client.getBytecode({
+              address: sourceAddress,
+              blockNumber: BigInt(deploymentBlockNumber),
+            }),
+          policy,
+        ),
+      ),
+    );
+    const code = rawCodes.map((value) => {
+      if (value === undefined) {
+        throw validationError("rpc", "dynamic-runtime-code");
+      }
+      const canonical = rpcData(value, "dynamic-runtime-code");
+      const byteLength = (canonical.length - 2) / 2;
+      if (
+        canonical === "0x" ||
+        !Number.isSafeInteger(byteLength) ||
+        byteLength < 1 ||
+        byteLength > 24_576
+      ) {
+        throw validationError("rpc", "dynamic-runtime-code");
+      }
+      return Object.freeze({ canonical, byteLength });
+    });
+    if (
+      code[0]!.canonical !== code[1]!.canonical ||
+      code[0]!.byteLength !== code[1]!.byteLength
+    ) {
+      throw validationError("rpc", "dynamic-runtime-code-agreement");
+    }
+    if (
+      code[0]!.byteLength !== Number(template.expectedRuntimeByteLength)
+    ) {
+      throw validationError("rpc", "dynamic-runtime-template-length");
+    }
+    const runtimeEvidence = runtimeBytecodeEvidence({
+      runtimeBytecode: code[0]!.canonical,
+      expectedByteLength: code[0]!.byteLength,
+      immutableReferences: template.immutableReferences,
+    });
+    if (
+      runtimeEvidence.normalizedRuntimeCodeHash !==
+        template.expectedNormalizedRuntimeCodeHash ||
+      runtimeEvidence.immutableReferencesCommitment !==
+        template.expectedImmutableReferencesCommitment ||
+      (template.expectedExactRuntimeCodeHash !== null &&
+        runtimeEvidence.exactRuntimeCodeHash !==
+          template.expectedExactRuntimeCodeHash)
+    ) {
+      throw validationError("rpc", "dynamic-runtime-template-mismatch");
+    }
+    const immutableEvidence = dynamicImmutableEvidence({
+      template,
+      parentCandidate: input.parentCandidate,
+      sourceAddress,
+      runtimeBytecode: code[0]!.canonical,
+    });
+    const completedAtMs = Date.now();
+    return Object.freeze({
+      chainId: 1 as const,
+      parentCandidateId: input.parentCandidate.candidateId,
+      sourceAddress,
+      deploymentBlockNumber,
+      deploymentBlockHash,
+      providerIdentities: Object.freeze(providerIdentities) as readonly [
+        string,
+        string,
+      ],
+      providerVendorGroups: Object.freeze(providerVendorGroups) as readonly [
+        string,
+        string,
+      ],
+      providerEndpointCommitments: Object.freeze(
+        providerEndpointCommitments,
+      ) as readonly [HexBytes32, HexBytes32],
+      providerOriginCommitments: Object.freeze(
+        providerOriginCommitments,
+      ) as readonly [HexBytes32, HexBytes32],
+      rawRuntimeCodeA: code[0]!.canonical,
+      rawRuntimeCodeB: code[1]!.canonical,
+      runtimeCodeHashA: runtimeEvidence.exactRuntimeCodeHash,
+      runtimeCodeHashB: runtimeEvidence.exactRuntimeCodeHash,
+      normalizedRuntimeCodeHashA:
+        runtimeEvidence.normalizedRuntimeCodeHash,
+      normalizedRuntimeCodeHashB:
+        runtimeEvidence.normalizedRuntimeCodeHash,
+      runtimeByteLengthA: String(code[0]!.byteLength),
+      runtimeByteLengthB: String(code[1]!.byteLength),
+      immutableReferences: template.immutableReferences,
+      immutableReferencesCommitment:
+        runtimeEvidence.immutableReferencesCommitment,
+      immutableValues: immutableEvidence.immutableValues,
+      immutableValuesCommitment:
+        immutableEvidence.immutableValuesCommitment,
+      reconstructedRuntimeCode:
+        immutableEvidence.reconstructedRuntimeCode,
+      reconstructedRuntimeCodeHash:
+        immutableEvidence.reconstructedRuntimeCodeHash,
+      factoryConfigurationCommitment:
+        immutableEvidence.factoryConfigurationCommitment,
+      template,
+      startedAtMs,
+      completedAtMs,
+      elapsedMs: completedAtMs - startedAtMs,
+      hardDeadlineMs: policy.hardDeadlineMs,
+      providerCallCounts: Object.freeze([1, 1]) as readonly [1, 1],
     });
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;

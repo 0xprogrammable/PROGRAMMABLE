@@ -391,11 +391,13 @@ function canonicalCandidateCursor(
       : null;
   const isGenesisCursor =
     blockGlobalLogIndex === -1 && candidateId === "";
+  const isTerminalBlockCursor =
+    blockGlobalLogIndex === UINT32_MAXIMUM && candidateId === "empty-page";
   const isPlacedCursor =
     blockGlobalLogIndex >= 0 &&
     candidateMatch !== null &&
     BigInt(candidateMatch[3]) === BigInt(blockGlobalLogIndex);
-  if (!isGenesisCursor && !isPlacedCursor) {
+  if (!isGenesisCursor && !isTerminalBlockCursor && !isPlacedCursor) {
     throw invalidInput("envio", "candidate-cursor");
   }
   return {
