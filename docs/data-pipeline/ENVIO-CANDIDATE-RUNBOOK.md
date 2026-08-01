@@ -1,8 +1,30 @@
 # Envio release candidate
 
-Candidate `7f24e63` is prepared but not deployed. It retains the existing
-Classic V2/V3 and Stock-Paired V1/V2/V3 history. It does not add or activate a
-new Stock launch path.
+## Current provider state
+
+Candidate `7f24e63` is deployed at mirror commit
+`7ffd15c2a28c481a2d3632e30b315262c2471b2e`, fully synced and audited, but
+it is not promoted. The active production deployment remains
+`production-1e7c381` at mirror commit
+`2cb1c35c7738fea63e656ad11589664dc93d785d`.
+
+The paired baseline and candidate audit were captured at the same provider checkpoint and are recorded in:
+
+- [`envio-candidate-7f24e63-baseline-20260801T042058Z.json`](./envio-candidate-7f24e63-baseline-20260801T042058Z.json)
+- [`envio-candidate-7f24e63-audit-20260801T042059Z.json`](./envio-candidate-7f24e63-audit-20260801T042059Z.json)
+- [`envio-candidate-7f24e63-deployment-7ffd15c.json`](./envio-candidate-7f24e63-deployment-7ffd15c.json)
+
+The deployment evidence also records the rejected
+`6f2f408e137ce3c01450a13ed11f477ae4ac7240` deployment and the direct push to
+the mirror's unprotected `production` branch. Neither deployment changes the
+product binding. Promotion remains blocked by the Postgres, reconciliation,
+performance and staged-deployment gates below.
+
+## Historical preparation record
+
+Candidate `7f24e63` was originally prepared but not deployed. It retains the
+existing Classic V2/V3 and Stock-Paired V1/V2/V3 history. It does not add or
+activate a new Stock launch path.
 
 The candidate fixes the authenticated Stock coordinator creator transition,
 adds the complete runtime artifact identity and widens log placement fields to
