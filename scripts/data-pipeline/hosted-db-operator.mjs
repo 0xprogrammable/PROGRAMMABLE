@@ -24,6 +24,8 @@ import {
 
 const run = promisify(execFile);
 const workspace = fileURLToPath(new URL("../../", import.meta.url));
+const CREDENTIAL_ENVIRONMENT_NAME =
+  /(?:DATABASE_URL|PASSWORD|API_KEY|TOKEN|SECRET|SSL_CA(?:_PEM)?|RPC_URL)$/u;
 
 const HELP = `Usage:
   node scripts/data-pipeline/hosted-db-operator.mjs plan [--output FILE]
@@ -142,15 +144,7 @@ async function readReviewedBootstrapPlan(planPath) {
 
 function outputSecrets(environment) {
   return Object.entries(environment)
-    .filter(
-      ([name]) =>
-        name.includes("DATABASE_URL") ||
-        name.includes("API_KEY") ||
-        name.includes("TOKEN") ||
-        name.includes("SECRET") ||
-        name.includes("SSL_CA") ||
-        name.endsWith("RPC_URL"),
-    )
+    .filter(([name]) => CREDENTIAL_ENVIRONMENT_NAME.test(name))
     .map(([, value]) => value)
     .filter(Boolean);
 }

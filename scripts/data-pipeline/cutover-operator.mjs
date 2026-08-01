@@ -54,6 +54,8 @@ import { validateStagedReleaseAttestation } from "../perf/read-model-deploy-poli
 
 const execute = promisify(execFile);
 const workspace = fileURLToPath(new URL("../../", import.meta.url));
+const CREDENTIAL_ENVIRONMENT_NAME =
+  /(?:DATABASE_URL|PASSWORD|API_KEY|TOKEN|SECRET|SSL_CA(?:_PEM)?|RPC_URL)$/u;
 const SHA256 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
 const COMMIT = /^[0-9a-f]{40}$/u;
 const PRIVATE_MODE = 0o600;
@@ -139,9 +141,7 @@ export function credentialsFromEnvironment(environment) {
 
 function secretValues(environment) {
   return Object.entries(environment)
-    .filter(([name]) =>
-      /(?:DATABASE_URL|PASSWORD|API_KEY|TOKEN|SECRET|SSL_CA|RPC_URL)$/u.test(name),
-    )
+    .filter(([name]) => CREDENTIAL_ENVIRONMENT_NAME.test(name))
     .map(([, value]) => value)
     .filter((value) => typeof value === "string" && value.length > 0);
 }
