@@ -157,6 +157,91 @@ describe("production reward-vault RPC reader", () => {
     expect(maximumInFlight).toBeLessThanOrEqual(8);
   });
 
+  it("shares one eight-call limit across mixed single and batch reads", async () => {
+    const blockHash = bytes32("9");
+    const transactionHash = bytes32("8");
+    const token = address("7");
+    let inFlight = 0;
+    let maximumInFlight = 0;
+    const physical = async <T>(value: T): Promise<T> => {
+      inFlight += 1;
+      maximumInFlight = Math.max(maximumInFlight, inFlight);
+      await new Promise<void>((resolve) => setTimeout(resolve, 1));
+      inFlight -= 1;
+      return value;
+    };
+    const block = { number: 100n, hash: blockHash, timestamp: 1_000n };
+    const receipt = {
+      status: "success" as const,
+      blockNumber: 100n,
+      blockHash,
+      transactionHash,
+      transactionIndex: 0,
+      logs: [],
+    };
+    const singleClient = {
+      getBlock: vi.fn(async () => physical(block)),
+      getTransactionReceipt: vi.fn(async () => physical(receipt)),
+      getBytecode: vi.fn(async () => physical("0x60" as const)),
+      request: vi.fn(async () => physical([])),
+      readContract: mocks.readContract,
+    };
+    const batchClient = {
+      getBlock: vi.fn(async () => physical(block)),
+      getTransactionReceipt: vi.fn(async () => physical(receipt)),
+      getBytecode: vi.fn(async () => physical("0x60" as const)),
+      request: vi.fn(async () => physical([])),
+      readContract: mocks.readContract,
+    };
+    mocks.createPublicClient
+      .mockReset()
+      .mockReturnValueOnce(singleClient)
+      .mockReturnValueOnce(batchClient)
+      .mockReturnValueOnce(singleClient)
+      .mockReturnValueOnce(batchClient);
+    const providers = createProductionDualRpcProviders({
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
+    });
+    const blockNumbers = Array.from({ length: 20 }, (_value, index) =>
+      BigInt(101 + index)
+    );
+    const hashes = Array.from({ length: 20 }, (_value, index) =>
+      `0x${(index + 1).toString(16).padStart(64, "0")}` as `0x${string}`
+    );
+    const bytecodeRequests = blockNumbers.map(() => ({
+      address: token,
+      blockHash,
+      requireCanonical: true as const,
+    }));
+    const logFilter = {
+      addresses: [token],
+      topic0: [bytes32("6")],
+      fromBlock: 100n,
+      toBlock: 100n,
+    };
+
+    await Promise.all([
+      providers[0].client.getBlock({ blockNumber: 100n }),
+      providers[0].client.getBlocks!({ blockNumbers }),
+      providers[0].client.getTransactionReceipt({ hash: transactionHash }),
+      providers[0].client.getTransactionReceipts!({ hashes }),
+      providers[0].client.getBytecode({ address: token, blockNumber: 100n }),
+      providers[0].client.getBytecodes!({ requests: bytecodeRequests }),
+      providers[0].client.getLogs!(logFilter),
+      providers[0].client.getLogsBatch!({
+        requests: Array.from({ length: 20 }, () => logFilter),
+      }),
+    ]);
+
+    expect(maximumInFlight).toBeGreaterThan(1);
+    expect(maximumInFlight).toBeLessThanOrEqual(8);
+    expect(batchClient.getBlock).toHaveBeenCalledTimes(20);
+    expect(batchClient.getTransactionReceipt).toHaveBeenCalledTimes(20);
+    expect(batchClient.getBytecode).toHaveBeenCalledTimes(20);
+    expect(batchClient.request).toHaveBeenCalledTimes(20);
+  });
+
   it("reads factory authentication and CREATE2 helpers at the exact block", async () => {
     const factory = address("6");
     const vault = address("7");
