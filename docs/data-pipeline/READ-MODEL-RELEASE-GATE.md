@@ -32,6 +32,61 @@ The load run uses deterministic samples selected from the real cardinality datas
 
 These lists are repeated during the load run. They are not padded to match the full launch count. A repeated load sample and a complete launch inventory are different evidence.
 
+### Complete Explore activation matrix
+
+The 1,000-request throughput corpus remains a latency and capacity sample. It is
+not accepted as proof that Explore pagination is complete. After that load run,
+the capture therefore records a separate aggregate matrix in:
+
+- `explore-matrix-evidence.v1.json`
+- `explore-matrix-pages.v1.jsonl`
+
+The matrix is derived from the complete `eligibleLaunches` inventory returned by
+the same protected runtime capture. It never repeats a sampled token to make a
+coverage count look complete. The manifest binds the release profile, capture
+nonce, staged Vercel URL and deployment id, exact Git SHA, dataset file digest,
+dataset timestamp, per-release counts, canonical inventory digest, one snapshot
+block/hash commitment, query-case commitments, page artifact digest, and final
+corpus digest.
+
+For the normalized empty query, the capture walks every real six-token page and
+one `Number.MAX_SAFE_INTEGER` clamp for each supported sort:
+
+- `newest`
+- `oldest`
+- `market-cap`
+- `market-cap-asc`
+
+Those page calls exercise every adjacent indexed cursor through the public route.
+The route adapter validates each internal start/end cursor before returning, and
+the signed shadow comparison must still match the independently produced legacy
+response. The gate additionally reconstructs each traversal from the page
+evidence and rejects any gap, duplicate token, missing token, unexpected token,
+wrong page count, or clamp that does not resolve to the final real page.
+
+The capture also commits exactly eight unique cases per query kind for real token
+names, symbols, and addresses. Cases are selected deterministically from the frozen
+inventory, use trimmed mixed-case input (and `$`-prefixed symbol input), and are
+accepted only when their normalized query matches their committed source token.
+Each selected case is bounded to one real page, then exercised under all four
+sorts plus the same maximum-page clamp. A corpus with fewer than eight distinct
+bounded real cases in any query kind is rejected; synthetic values and duplicate
+padding are rejected.
+
+The empty-query traversal must reproduce every token from each of these release
+families under every sort:
+
+- `classic-v2`
+- `classic-v3`
+- `stock-paired-v1`
+- `stock-paired-v2`
+- `stock-paired-v3`
+
+All matrix pages must share one public snapshot checkpoint. If the projector
+advances during capture, the checkpoint commitments differ and the release gate
+fails; operators must take a fresh coherent capture instead of combining pages
+from different snapshots.
+
 ## Database boundary
 
 The corpus comes from `programmable_private.get_read_model_performance_dataset_v1(bigint)` and its private view. The capture must record the database identity checks from the same runtime transaction.
@@ -92,13 +147,21 @@ The release is rejected if any of these conditions occur:
 - any missing or true `x-programmable-live-fallback` value
 - fewer than 880 signed comparison samples
 - any projector deadline, retry, provider, candidate, or commitment mismatch
+- any missing Explore matrix sidecar or digest mismatch
+- any matrix response that is cached, non-200, non-`match`, missing a signed
+  probe measurement, or reports a fallback
+- any missing sort, query case, real page, internal-cursor traversal, clamp, token,
+  release family, or single-checkpoint binding
 
 ## Release sequence
 
 1. Build a clean integration commit.
 2. Deploy that exact commit to a deployment-specific Vercel URL without assigning the production domain.
-3. Capture the private runtime dataset, raw dual-RPC trace, and signed HTTP samples.
-4. Verify artifact digests, Git SHA, deployment ID, Vercel project, response identities, cache contracts, latency, parity, and fallback state.
+3. Capture the private runtime dataset, raw dual-RPC trace, signed throughput
+   samples, and the separately committed complete Explore matrix.
+4. Verify artifact digests, Git SHA, deployment ID, Vercel project, response
+   identities, cache contracts, latency, parity, fallback state, inventory/page
+   completeness, clamping, and the single matrix checkpoint.
 5. Promote only when every check passes and the integration owner has approved publication.
 
 A local test, simulation, preview build, or successful provider request is not production activation evidence.
