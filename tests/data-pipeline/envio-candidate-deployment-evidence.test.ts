@@ -21,6 +21,40 @@ async function fileSha256(path: string) {
 }
 
 describe("Envio candidate deployment evidence", () => {
+  it("contains public chain evidence without service credentials", async () => {
+    const baseline = await readJson(
+      "docs/data-pipeline/envio-candidate-7f24e63-baseline-20260801T042058Z.json",
+    );
+    const audit = await readJson(
+      "docs/data-pipeline/envio-candidate-7f24e63-audit-20260801T042059Z.json",
+    );
+    const serialized = JSON.stringify({ baseline, audit }).toLowerCase();
+
+    for (const forbidden of [
+      "alchemy.com",
+      "quiknode.pro",
+      "supabase.co",
+      "api_key",
+      "apikey",
+      "authorization",
+      "bearer ",
+      "privatekey",
+      "mnemonic",
+      "password",
+      "secret",
+      "token=",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+
+    expect(baseline.endpoint).toBe(
+      "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
+    );
+    expect(audit.endpoint).toBe(
+      "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
+    );
+  });
+
   it("binds the paired baseline and audit to one exact checkpoint", async () => {
     const evidence = await readJson(evidencePath);
     const artifacts = evidence.artifacts as Record<

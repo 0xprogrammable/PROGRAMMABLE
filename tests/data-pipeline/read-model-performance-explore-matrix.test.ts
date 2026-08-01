@@ -201,7 +201,7 @@ async function acceptedBundle() {
     profileId: "read-model-release-v1",
     gitHead: GIT_HEAD,
     captureNonce: CAPTURE_NONCE,
-    shadowProbeToken: "shadow-probe-secret-that-is-32-bytes",
+    shadowProbeToken: "shadow-probe-secret-that-is-32-bytes", // gitleaks:allow
     probeTimeoutMs: 30_000,
     concurrency: 20,
     datasetManifest: source.datasetManifest,
