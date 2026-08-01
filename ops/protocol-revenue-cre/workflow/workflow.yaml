@@ -1,0 +1,7 @@
+production-settings:
+  user-workflow:
+    workflow-name: "revenue-v1"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.production.json"
+    secrets-path: ""

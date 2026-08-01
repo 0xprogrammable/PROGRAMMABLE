@@ -11,6 +11,7 @@ Programmable/
 ├── contracts/    Foundry contracts, tests, scripts, specifications, and evidence
 ├── config/       Shared application configuration
 ├── scripts/      Development, verification, and release utilities
+├── ops/          Versioned external workflow and operations configuration
 ├── tests/        Application and integration tests
 ├── docs/         Maintained product, security, and operations documentation
 ├── outputs/      Research reports and ignored QA output
@@ -21,7 +22,7 @@ Programmable/
 
 ## Source directories
 
-`app/`, `components/`, `lib/`, `contracts/`, `config/`, `scripts/`, `tests/`, `docs/`, and referenced files in `public/` are product source. Changes in these paths belong in a scoped branch and must pass their relevant checks.
+`app/`, `components/`, `lib/`, `contracts/`, `config/`, `scripts/`, `ops/`, `tests/`, `docs/`, and referenced files in `public/` are product source. Changes in these paths belong in a scoped branch and must pass their relevant checks.
 
 ## Branch model
 

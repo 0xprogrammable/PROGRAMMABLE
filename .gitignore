@@ -1,5 +1,6 @@
 # dependencies
 /node_modules
+**/node_modules/
 
 # next.js
 /.next/
@@ -29,6 +30,8 @@
 /.superpowers/
 /.worktrees/
 *.tsbuildinfo
+**/.cre_build_tmp.*
+**/binary.wasm
 
 # Local publishing masters and article drafts
 /docs/programmable-x-launch-article*.md

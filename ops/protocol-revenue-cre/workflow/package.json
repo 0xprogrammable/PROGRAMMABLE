@@ -1,0 +1,22 @@
+{
+  "name": "programmable-protocol-revenue-cre",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test workflow.test.ts"
+  },
+  "dependencies": {
+    "@chainlink/cre-sdk": "1.16.0",
+    "viem": "2.55.10",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "ws": "8.21.0"
+  }
+}
