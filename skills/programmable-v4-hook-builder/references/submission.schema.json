@@ -1,0 +1,1667 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:v4-hook-submission:1.1.0",
+  "title": "Programmable v4 model submission preflight",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "standardVersion",
+    "stage",
+    "model",
+    "builder",
+    "target",
+    "assets",
+    "launchLifecycle",
+    "pool",
+    "hook",
+    "valueFlows",
+    "authorities",
+    "dependencies",
+    "operations",
+    "integration",
+    "capabilities",
+    "security",
+    "implementation",
+    "risk",
+    "disclosures",
+    "unresolved"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:programmable:v4-hook-submission:1.1.0" },
+    "schemaVersion": { "const": 1 },
+    "standardVersion": { "const": "1.1.0" },
+    "stage": { "enum": ["proposal", "prototype"] },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "summary", "userOutcome", "category", "whyV4"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "summary": { "type": "string", "minLength": 20, "maxLength": 500 },
+        "userOutcome": { "type": ["string", "null"], "minLength": 20, "maxLength": 500 },
+        "category": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 80,
+          "description": "Open project category. Known values accelerate review; a new slug enters architecture review instead of being rejected by an enum."
+        },
+        "whyV4": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 }
+      }
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["github", "contact", "beneficiary", "licenseDeclaration"],
+      "properties": {
+        "github": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$" },
+        "contact": { "type": ["string", "null"], "maxLength": 200 },
+        "beneficiary": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
+        "licenseDeclaration": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chainId", "network", "solidityVersion", "evmVersion", "dependencyBaseline", "officialLaunchProfileId"],
+      "properties": {
+        "chainId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "Positive JavaScript-safe EVM chain id. Application eligibility is independent from current Programmable launch-chain integration."
+        },
+        "network": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "maxLength": 64,
+          "description": "Canonical lowercase network slug. Known chain ids must use the standard's exact mapping; an unknown chain enters architecture review."
+        },
+        "solidityVersion": { "type": ["string", "null"], "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "evmVersion": { "type": ["string", "null"], "enum": ["cancun", null] },
+        "dependencyBaseline": { "enum": ["programmable-tested", "model-specific-pinned", "model-specific-reviewed", null] },
+        "officialLaunchProfileId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "description": "Exact profile id from the committed official launchpad deployment reference; required by policy for the ordinary no-custom-hook route." }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "role", "origin", "address", "decimals", "decimalsSource", "supplyPolicy", "initialSupply", "behaviors", "controls"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "role": { "enum": ["launched", "quote", "share", "reward", "collateral", "other"] },
+          "origin": {
+            "enum": [
+              "native-eth",
+              "new-fixed-supply",
+              "existing-erc20",
+              "vault-share",
+              "permissioned-adapter",
+              "external-wrapper",
+              "other"
+            ]
+          },
+          "address": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
+          "decimals": { "type": ["integer", "null"], "minimum": 0, "maximum": 255, "description": "Exact base-unit decimals. Native ETH is 18." },
+          "decimalsSource": { "enum": ["native-eth-protocol", "implementation-constant", "token-contract-observation", "issuer-documentation", null] },
+          "supplyPolicy": { "enum": ["native", "fixed-at-creation", "externally-managed", "mintable-reviewed", null] },
+          "initialSupply": { "type": ["string", "null"], "pattern": "^[0-9]+$", "maxLength": 78, "description": "Integer base units encoded as a string so large supplies remain exact; it must fit uint256." },
+          "behaviors": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "standard",
+                "fee-on-transfer",
+                "rebasing",
+                "callback-on-transfer",
+                "pausable",
+                "blacklistable",
+                "confiscatable",
+                "upgradeable",
+                "permit",
+                "erc4626",
+                "unknown"
+              ]
+            }
+          },
+          "controls": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 120 }
+          }
+        }
+      }
+    },
+    "launchLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tokenCreation", "poolInitialization", "liquidityFormation", "initialTransaction", "trading", "feesAndClaims", "dependencyFailure", "retirement"],
+      "properties": {
+        "tokenCreation": { "$ref": "#/$defs/lifecyclePhase" },
+        "poolInitialization": { "$ref": "#/$defs/lifecyclePhase" },
+        "liquidityFormation": { "$ref": "#/$defs/lifecyclePhase" },
+        "initialTransaction": { "$ref": "#/$defs/lifecyclePhase" },
+        "trading": { "$ref": "#/$defs/lifecyclePhase" },
+        "feesAndClaims": { "$ref": "#/$defs/lifecyclePhase" },
+        "dependencyFailure": { "$ref": "#/$defs/lifecyclePhase" },
+        "retirement": { "$ref": "#/$defs/lifecyclePhase" }
+      }
+    },
+    "pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency0", "currency1", "orderingRule", "tickSpacing", "lpFee", "canonical", "alternativePools"],
+      "properties": {
+        "currency0": { "type": ["string", "null"] },
+        "currency1": { "type": ["string", "null"] },
+        "orderingRule": { "type": ["string", "null"], "maxLength": 300 },
+        "tickSpacing": { "type": ["integer", "null"], "minimum": 1, "maximum": 32767 },
+        "lpFee": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "classification",
+            "mode",
+            "hundredthsOfBip",
+            "initialHundredthsOfBip",
+            "initializationPath",
+            "applicationMode",
+            "overrideFlagPolicy",
+            "persistentUpdateActor",
+            "persistentUpdateCallSites",
+            "rateLimit",
+            "updatePath",
+            "minimum",
+            "maximum",
+            "inputMetric",
+            "referenceAsset",
+            "measurementUnit",
+            "observationMode",
+            "observationWindow",
+            "curve",
+            "updateCadence",
+            "liquidityDecreaseBehavior",
+            "manipulationResistance",
+            "failureRule",
+            "recipient"
+          ],
+          "properties": {
+            "classification": { "const": "lp-fee" },
+            "mode": { "enum": ["static", "dynamic", null] },
+            "hundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "initialHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "initializationPath": { "enum": ["afterInitialize-updateDynamicLPFee", "factory-post-initialize-updateDynamicLPFee", "external-authorized-updateDynamicLPFee", null] },
+            "applicationMode": { "enum": ["before-swap-override", "persistent-update", "hybrid", null] },
+            "overrideFlagPolicy": { "type": ["string", "null"], "maxLength": 500 },
+            "persistentUpdateActor": { "type": ["string", "null"], "maxLength": 300 },
+            "persistentUpdateCallSites": { "type": "array", "uniqueItems": true, "items": { "enum": ["afterInitialize", "beforeSwap", "afterSwap", "external-hook-method"] } },
+            "rateLimit": { "type": ["string", "null"], "maxLength": 500 },
+            "updatePath": { "type": ["string", "null"], "maxLength": 800 },
+            "minimum": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "maximum": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "inputMetric": { "type": ["string", "null"], "maxLength": 500 },
+            "referenceAsset": { "type": ["string", "null"], "maxLength": 200 },
+            "measurementUnit": { "type": ["string", "null"], "maxLength": 200 },
+            "observationMode": { "enum": ["instantaneous", "delayed", "time-weighted", "external-reviewed", "other-reviewed", null] },
+            "observationWindow": { "type": ["string", "null"], "maxLength": 300 },
+            "curve": { "type": ["string", "null"], "maxLength": 800 },
+            "updateCadence": { "type": ["string", "null"], "maxLength": 300 },
+            "liquidityDecreaseBehavior": { "type": ["string", "null"], "maxLength": 500 },
+            "manipulationResistance": { "type": ["string", "null"], "maxLength": 800 },
+            "failureRule": { "type": ["string", "null"], "maxLength": 500 },
+            "recipient": { "enum": ["pool-liquidity-providers", null] }
+          }
+        },
+        "canonical": { "type": ["boolean", "null"] },
+        "alternativePools": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    },
+    "hook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "base", "upgradeable", "sharedAcrossPools", "poolNamespace", "poolAdmission", "permissions", "callbackPolicies", "hookData", "feeMechanism", "customAccounting", "returnDeltaAccounting", "postReturnDeltaAccounting", "erc6909Claims", "nestedActions"],
+      "properties": {
+        "used": { "type": ["boolean", "null"], "description": "True only when the canonical launch PoolKey uses a custom hook; false means the ordinary no-custom-hook launch route." },
+        "base": { "type": ["string", "null"], "maxLength": 100 },
+        "upgradeable": { "type": ["boolean", "null"] },
+        "sharedAcrossPools": { "type": ["boolean", "null"] },
+        "poolNamespace": { "type": ["string", "null"], "maxLength": 300 },
+        "poolAdmission": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enforcement", "factoryOrRegistry", "alternativePoolBehavior", "rejectionRule"],
+          "properties": {
+            "enforcement": { "type": ["string", "null"], "maxLength": 800 },
+            "factoryOrRegistry": { "type": ["string", "null"], "maxLength": 500 },
+            "alternativePoolBehavior": { "type": ["string", "null"], "maxLength": 800 },
+            "rejectionRule": { "type": ["string", "null"], "maxLength": 500 }
+          }
+        },
+        "permissions": { "$ref": "#/$defs/permissions" },
+        "callbackPolicies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/callbackPolicy" }
+        },
+        "hookData": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["used", "schema", "identitySource", "trustedRouterDeploymentRecordId", "callbackSenderRule", "validation"],
+          "properties": {
+            "used": { "type": ["boolean", "null"] },
+            "schema": { "type": ["string", "null"], "maxLength": 500 },
+            "identitySource": { "enum": ["none", "router-only", "trusted-router-decoded-user", "signature-bound-actor", "proof-bound-actor", null] },
+            "trustedRouterDeploymentRecordId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+            "callbackSenderRule": { "enum": ["pool-manager-callback-only", "pool-manager-callback-and-exact-router-binding", null] },
+            "validation": { "type": ["string", "null"], "maxLength": 500 }
+          }
+        },
+        "feeMechanism": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "used",
+            "classification",
+            "chargedCurrency",
+            "swapQuadrants",
+            "maximumHundredthsOfBip",
+            "collectionPath",
+            "collectionValueFlowId",
+            "liabilityKeyDimensions",
+            "collectionEvent",
+            "recipients",
+            "ownership",
+            "claimPolicy"
+          ],
+          "properties": {
+            "used": { "type": ["boolean", "null"] },
+            "classification": { "enum": ["none", "lp-fee", "hook-owned-fee", "both", null] },
+            "chargedCurrency": { "type": ["string", "null"], "maxLength": 500 },
+            "swapQuadrants": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "zeroForOneExactInput",
+                "zeroForOneExactOutput",
+                "oneForZeroExactInput",
+                "oneForZeroExactOutput"
+              ],
+              "properties": {
+                "zeroForOneExactInput": { "$ref": "#/$defs/hookFeeQuadrant" },
+                "zeroForOneExactOutput": { "$ref": "#/$defs/hookFeeQuadrant" },
+                "oneForZeroExactInput": { "$ref": "#/$defs/hookFeeQuadrant" },
+                "oneForZeroExactOutput": { "$ref": "#/$defs/hookFeeQuadrant" }
+              }
+            },
+            "maximumHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "collectionPath": { "enum": ["before-swap-return-delta", "after-swap-return-delta", null] },
+            "collectionValueFlowId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+            "liabilityKeyDimensions": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["chainId", "modelVersion", "poolId", "currency", "beneficiary", "position", "epoch"] }
+            },
+            "collectionEvent": { "type": ["string", "null"], "maxLength": 500 },
+            "recipients": { "type": "array", "items": { "$ref": "#/$defs/feeRecipient" } },
+            "ownership": { "type": ["string", "null"], "maxLength": 800 },
+            "claimPolicy": { "type": ["string", "null"], "maxLength": 800 }
+          }
+        },
+        "customAccounting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["used", "backingSource", "conservationEquation", "settlement", "partialFillBehavior", "liabilityNamespace", "liabilityKeyDimensions", "crossPoolNetting", "duplicateCurrencyPolicy", "failureIsolation", "withdrawalOrdering"],
+          "properties": {
+            "used": { "type": ["boolean", "null"] },
+            "backingSource": { "type": ["string", "null"], "maxLength": 500 },
+            "conservationEquation": { "type": ["string", "null"], "maxLength": 800 },
+            "settlement": { "type": ["string", "null"], "maxLength": 800 },
+            "partialFillBehavior": { "type": ["string", "null"], "maxLength": 500 },
+            "liabilityNamespace": { "type": ["string", "null"], "maxLength": 500 },
+            "liabilityKeyDimensions": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["chainId", "modelVersion", "poolId", "currency", "beneficiary", "position", "epoch"] }
+            },
+            "crossPoolNetting": { "type": ["boolean", "null"] },
+            "duplicateCurrencyPolicy": { "type": ["string", "null"], "maxLength": 800 },
+            "failureIsolation": { "type": ["string", "null"], "maxLength": 800 },
+            "withdrawalOrdering": { "type": ["string", "null"], "maxLength": 800 }
+          }
+        },
+        "returnDeltaAccounting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["used", "quadrants", "executionEvent"],
+          "properties": {
+            "used": { "type": ["boolean", "null"] },
+            "quadrants": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["zeroForOneExactInput", "zeroForOneExactOutput", "oneForZeroExactInput", "oneForZeroExactOutput"],
+              "properties": {
+                "zeroForOneExactInput": { "$ref": "#/$defs/returnDeltaQuadrant" },
+                "zeroForOneExactOutput": { "$ref": "#/$defs/returnDeltaQuadrant" },
+                "oneForZeroExactInput": { "$ref": "#/$defs/returnDeltaQuadrant" },
+                "oneForZeroExactOutput": { "$ref": "#/$defs/returnDeltaQuadrant" }
+              }
+            },
+            "executionEvent": { "type": ["string", "null"], "maxLength": 500 }
+          }
+        },
+        "postReturnDeltaAccounting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["afterSwap", "afterAddLiquidity", "afterRemoveLiquidity"],
+          "properties": {
+            "afterSwap": { "$ref": "#/$defs/postActionReturnDelta" },
+            "afterAddLiquidity": { "$ref": "#/$defs/postActionReturnDelta" },
+            "afterRemoveLiquidity": { "$ref": "#/$defs/postActionReturnDelta" }
+          }
+        },
+        "erc6909Claims": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["used", "currencyIdDerivation", "claimBalanceScope", "poolIdIncludedInClaimId", "owner", "operatorPolicy", "mintFlow", "burnFlow", "takeSettleFlow", "liabilityKeys", "liabilityKeyDimensions", "crossPoolNetting", "transferPolicy", "redemption", "roundingDust", "aggregateSolvencyEquation"],
+          "properties": {
+            "used": { "type": ["boolean", "null"] },
+            "currencyIdDerivation": { "enum": ["currency-address-uint160", null] },
+            "claimBalanceScope": { "enum": ["claim-owner-and-currency", null] },
+            "poolIdIncludedInClaimId": { "type": ["boolean", "null"] },
+            "owner": { "type": ["string", "null"], "maxLength": 300 },
+            "operatorPolicy": { "type": ["string", "null"], "maxLength": 500 },
+            "mintFlow": { "type": ["string", "null"], "maxLength": 800 },
+            "burnFlow": { "type": ["string", "null"], "maxLength": 800 },
+            "takeSettleFlow": { "type": ["string", "null"], "maxLength": 800 },
+            "liabilityKeys": { "type": ["string", "null"], "maxLength": 800 },
+            "liabilityKeyDimensions": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["chainId", "modelVersion", "poolId", "currency", "beneficiary", "position", "epoch"] }
+            },
+            "crossPoolNetting": { "type": ["boolean", "null"] },
+            "transferPolicy": { "type": ["string", "null"], "maxLength": 500 },
+            "redemption": { "type": ["string", "null"], "maxLength": 800 },
+            "roundingDust": { "type": ["string", "null"], "maxLength": 800 },
+            "aggregateSolvencyEquation": { "type": ["string", "null"], "maxLength": 1000 }
+          }
+        },
+        "nestedActions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["used", "directPoolManagerCalls", "routerCalls", "allowedActions", "samePoolPolicy", "crossPoolPolicy", "callbackSuppression", "directCallbackBehavior", "routerCallbackBehavior", "maximumDepth", "stateCommitOrder", "transientDeltaOwner", "syncInterleaving", "slippageAggregation", "failureAtomicity"],
+          "properties": {
+            "used": { "type": ["boolean", "null"] },
+            "directPoolManagerCalls": { "type": ["boolean", "null"] },
+            "routerCalls": { "type": ["boolean", "null"] },
+            "allowedActions": { "type": "array", "uniqueItems": true, "items": { "enum": ["swap", "modify-liquidity", "donate", "take", "settle", "settle-for", "mint-claim", "burn-claim"] } },
+            "samePoolPolicy": { "type": ["string", "null"], "maxLength": 800 },
+            "crossPoolPolicy": { "type": ["string", "null"], "maxLength": 800 },
+            "callbackSuppression": { "type": ["string", "null"], "maxLength": 800 },
+            "directCallbackBehavior": { "enum": ["self-call-hook-callbacks-skipped", null] },
+            "routerCallbackBehavior": { "enum": ["hook-callbacks-can-reenter", null] },
+            "maximumDepth": { "type": ["integer", "null"], "minimum": 1, "maximum": 8 },
+            "stateCommitOrder": { "type": ["string", "null"], "maxLength": 800 },
+            "transientDeltaOwner": { "type": ["string", "null"], "maxLength": 500 },
+            "syncInterleaving": { "type": ["string", "null"], "maxLength": 800 },
+            "slippageAggregation": { "type": ["string", "null"], "maxLength": 800 },
+            "failureAtomicity": { "type": ["string", "null"], "maxLength": 800 }
+          }
+        }
+      }
+    },
+    "valueFlows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "action", "asset", "from", "to", "amountRule", "settlement", "failure"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "action": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "asset": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "from": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "to": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "amountRule": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "settlement": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "failure": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "authorities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "controller", "capabilities", "mutable", "delay", "userExitImpact"],
+        "properties": {
+          "role": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "controller": { "type": ["string", "null"], "maxLength": 200 },
+          "capabilities": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+          "mutable": { "type": ["boolean", "null"] },
+          "delay": { "type": ["string", "null"], "maxLength": 200 },
+          "userExitImpact": { "type": ["string", "null"], "maxLength": 500 }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["onchain", "offchain"],
+      "properties": {
+        "onchain": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "offchain": { "type": "array", "items": { "$ref": "#/$defs/dependency" } }
+      }
+    },
+    "operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keeper", "oracle", "monitoring", "incidentResponse"],
+      "properties": {
+        "keeper": { "$ref": "#/$defs/operationalDependency" },
+        "oracle": { "$ref": "#/$defs/operationalDependency" },
+        "monitoring": { "type": ["string", "null"], "maxLength": 800 },
+        "incidentResponse": { "type": ["string", "null"], "maxLength": 800 }
+      }
+    },
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["routerGeneration", "routerDependencyId", "permit2DependencyId", "stateViewDependencyId", "quoterDependencyId", "sdkDependencies", "routerActionProfile", "appSourcePaths", "integrationTestPaths", "quoteExecutionParity", "swapModes", "partialFills", "slippage", "deadline", "permit2", "stateReads", "events", "routingAndDiscoverability", "dataReconstruction", "platformHandoff"],
+      "properties": {
+        "routerGeneration": { "enum": ["V2_0", "V2_1_1", "V2_2_0", "custom-reviewed", null] },
+        "routerDependencyId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "permit2DependencyId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "stateViewDependencyId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "quoterDependencyId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "sdkDependencies": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/packageDependency" } },
+        "routerActionProfile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["routerVersionExplicit", "universalRouterCommand", "v4Actions", "settlementMode", "permit2Mode", "finalSwapDeltaValidated"],
+          "properties": {
+            "routerVersionExplicit": { "type": ["boolean", "null"] },
+            "universalRouterCommand": { "enum": ["V4_SWAP", "custom-reviewed", null] },
+            "v4Actions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+            "settlementMode": { "type": ["string", "null"], "maxLength": 800 },
+            "permit2Mode": { "enum": ["allowance-transfer", "signature-transfer", "mixed", "native-only", "custom-reviewed", null] },
+            "finalSwapDeltaValidated": { "type": ["boolean", "null"] }
+          }
+        },
+        "appSourcePaths": { "type": "array", "maxItems": 512, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+        "integrationTestPaths": { "type": "array", "maxItems": 512, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+        "quoteExecutionParity": { "type": ["string", "null"], "maxLength": 1000 },
+        "swapModes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["zeroForOne-exactInput", "zeroForOne-exactOutput", "oneForZero-exactInput", "oneForZero-exactOutput"] }
+        },
+        "partialFills": { "type": ["string", "null"], "maxLength": 500 },
+        "slippage": { "type": ["string", "null"], "maxLength": 500 },
+        "deadline": { "type": ["string", "null"], "maxLength": 300 },
+        "permit2": { "type": ["string", "null"], "maxLength": 600 },
+        "stateReads": { "type": ["string", "null"], "maxLength": 500 },
+        "events": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 200 } },
+        "routingAndDiscoverability": { "$ref": "#/$defs/routingAndDiscoverability" },
+        "dataReconstruction": { "$ref": "#/$defs/dataReconstruction" },
+        "platformHandoff": { "$ref": "#/$defs/platformHandoff" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "externalCalls",
+        "permissionedAsset",
+        "oracle",
+        "keeper",
+        "proof",
+        "crossChain",
+        "externalLiquidity",
+        "asyncSwap",
+        "customCurve"
+      ],
+      "properties": {
+        "externalCalls": { "$ref": "#/$defs/externalCallsPolicy" },
+        "permissionedAsset": { "$ref": "#/$defs/permissionedAssetPolicy" },
+        "oracle": { "$ref": "#/$defs/oraclePolicy" },
+        "keeper": { "$ref": "#/$defs/keeperPolicy" },
+        "proof": { "$ref": "#/$defs/proofPolicy" },
+        "crossChain": { "$ref": "#/$defs/crossChainPolicy" },
+        "externalLiquidity": { "$ref": "#/$defs/externalLiquidityPolicy" },
+        "asyncSwap": { "$ref": "#/$defs/asyncSwapPolicy" },
+        "customCurve": { "$ref": "#/$defs/customCurvePolicy" }
+      }
+    },
+    "capabilityExtensions": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/capabilityExtension" },
+      "description": "Novel capabilities outside the current acceleration catalog. They enter architecture review and remain bound to exact source, schema and evidence paths."
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "usesTxOrigin",
+        "userControlledDelegatecall",
+        "arbitraryExecution",
+        "unboundedCriticalLoop",
+        "ignoredCallResults",
+        "hiddenControls",
+        "assumesOnchainSecrecy",
+        "bypassesHookAddressValidation",
+        "signatureScheme"
+      ],
+      "properties": {
+        "usesTxOrigin": { "type": ["boolean", "null"] },
+        "userControlledDelegatecall": { "type": ["boolean", "null"] },
+        "arbitraryExecution": { "type": ["boolean", "null"] },
+        "unboundedCriticalLoop": { "type": ["boolean", "null"] },
+        "ignoredCallResults": { "type": ["boolean", "null"] },
+        "hiddenControls": { "type": ["boolean", "null"] },
+        "assumesOnchainSecrecy": { "type": ["boolean", "null"] },
+        "bypassesHookAddressValidation": { "type": ["boolean", "null"] },
+        "signatureScheme": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["used", "standard", "nonce", "deadline", "chain", "verifyingContract", "action", "parameters", "erc1271"],
+          "properties": {
+            "used": { "type": ["boolean", "null"] },
+            "standard": { "enum": ["EIP-712", "ERC-191", "other-reviewed", null] },
+            "nonce": { "type": ["boolean", "null"] },
+            "deadline": { "type": ["boolean", "null"] },
+            "chain": { "type": ["boolean", "null"] },
+            "verifyingContract": { "type": ["boolean", "null"] },
+            "action": { "type": ["boolean", "null"] },
+            "parameters": { "type": ["boolean", "null"] },
+            "erc1271": { "type": ["boolean", "null"] }
+          }
+        }
+      }
+    },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourcePaths",
+        "testPaths",
+        "compilerBuildInfoPaths",
+        "specificationPath",
+        "testEvidencePath",
+        "dependencyLockPath",
+        "gateStatusPath",
+        "reviewTargetPath"
+      ],
+      "properties": {
+        "sourcePaths": { "type": "array", "maxItems": 512, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+        "testPaths": { "type": "array", "maxItems": 512, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+        "compilerBuildInfoPaths": {
+          "type": ["array", "null"],
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "specificationPath": { "type": ["string", "null"] },
+        "testEvidencePath": { "type": ["string", "null"] },
+        "dependencyLockPath": { "type": ["string", "null"] },
+        "gateStatusPath": { "type": ["string", "null"] },
+        "reviewTargetPath": { "type": ["string", "null"] }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimensions", "rationales", "declaredTotal", "declaredTier", "featureTriggers"],
+      "properties": {
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["complexity", "customMath", "externalDependencies", "externalLiquidity", "valueAtRisk", "teamMaturity", "upgradeability", "autonomy", "priceImpact"],
+          "properties": {
+            "complexity": { "type": ["integer", "null"], "minimum": 0, "maximum": 5 },
+            "customMath": { "type": ["integer", "null"], "minimum": 0, "maximum": 5 },
+            "externalDependencies": { "type": ["integer", "null"], "minimum": 0, "maximum": 3 },
+            "externalLiquidity": { "type": ["integer", "null"], "minimum": 0, "maximum": 3 },
+            "valueAtRisk": { "type": ["integer", "null"], "minimum": 0, "maximum": 5 },
+            "teamMaturity": { "type": ["integer", "null"], "minimum": 0, "maximum": 3 },
+            "upgradeability": { "type": ["integer", "null"], "minimum": 0, "maximum": 3 },
+            "autonomy": { "type": ["integer", "null"], "minimum": 0, "maximum": 3 },
+            "priceImpact": { "type": ["integer", "null"], "minimum": 0, "maximum": 3 }
+          }
+        },
+        "rationales": { "$ref": "#/$defs/riskRationales" },
+        "declaredTotal": { "type": ["integer", "null"], "minimum": 0, "maximum": 33 },
+        "declaredTier": { "enum": ["low", "medium", "high", null] },
+        "featureTriggers": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } }
+      }
+    },
+    "disclosures": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+    "unresolved": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500 } }
+  },
+  "$defs": {
+    "capabilityExtension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "summary",
+        "interactionRefs",
+        "trustBoundary",
+        "failureMode",
+        "schemaPath",
+        "sourcePaths",
+        "testPaths",
+        "evidencePaths"
+      ],
+      "properties": {
+        "capabilityId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 },
+        "summary": { "type": "string", "minLength": 20, "maxLength": 800 },
+        "interactionRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "trustBoundary": { "type": "string", "minLength": 20, "maxLength": 1200 },
+        "failureMode": { "type": "string", "minLength": 20, "maxLength": 1200 },
+        "schemaPath": { "type": ["string", "null"], "maxLength": 1024 },
+        "sourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "testPaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "evidencePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        }
+      }
+    },
+    "lifecyclePhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicable", "actor", "valueFlow", "custody", "failure", "event", "notApplicableReason"],
+      "properties": {
+        "applicable": { "type": ["boolean", "null"] },
+        "actor": { "type": ["string", "null"], "maxLength": 500 },
+        "valueFlow": { "type": ["string", "null"], "maxLength": 1000 },
+        "custody": { "type": ["string", "null"], "maxLength": 800 },
+        "failure": { "type": ["string", "null"], "maxLength": 800 },
+        "event": { "type": ["string", "null"], "maxLength": 500 },
+        "notApplicableReason": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    },
+    "callbackPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["callback", "necessity", "allowedReverts", "userExitImpact", "noSelfCallImpact"],
+      "properties": {
+        "callback": { "enum": ["beforeInitialize", "afterInitialize", "beforeAddLiquidity", "afterAddLiquidity", "beforeRemoveLiquidity", "afterRemoveLiquidity", "beforeSwap", "afterSwap", "beforeDonate", "afterDonate"] },
+        "necessity": { "type": "string", "minLength": 20, "maxLength": 800 },
+        "allowedReverts": { "type": "string", "minLength": 20, "maxLength": 800 },
+        "userExitImpact": { "type": "string", "minLength": 20, "maxLength": 800 },
+        "noSelfCallImpact": { "type": "string", "minLength": 20, "maxLength": 800 }
+      }
+    },
+    "riskRationales": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complexity", "customMath", "externalDependencies", "externalLiquidity", "valueAtRisk", "teamMaturity", "upgradeability", "autonomy", "priceImpact"],
+      "properties": {
+        "complexity": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 },
+        "customMath": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 },
+        "externalDependencies": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 },
+        "externalLiquidity": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 },
+        "valueAtRisk": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 },
+        "teamMaturity": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 },
+        "upgradeability": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 },
+        "autonomy": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 },
+        "priceImpact": { "type": ["string", "null"], "minLength": 20, "maxLength": 800 }
+      }
+    },
+    "hookFeeQuadrant": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["currency", "basis", "formula", "rounding", "maximumHundredthsOfBip"],
+      "properties": {
+        "currency": { "enum": ["currency0", "currency1"] },
+        "basis": { "enum": ["gross-input", "gross-output", "unspecified-amount", "custom-reviewed"] },
+        "formula": { "type": "string", "minLength": 12, "maxLength": 800 },
+        "rounding": { "enum": ["down", "up", "exact"] },
+        "maximumHundredthsOfBip": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+      }
+    },
+    "feeRecipient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "sharePpm", "addressSource", "address", "binding", "derivationRule", "mutable", "mutationController", "newAddressValidation", "mutationEvent"],
+      "properties": {
+        "role": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "sharePpm": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "addressSource": { "enum": ["launch-wallet", "fixed-address", "beneficiary-supplied", "derived-contract"] },
+        "address": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
+        "binding": { "enum": ["launch-transaction-sender", "exact-address", "beneficiary-at-launch", "immutable-derived-contract"] },
+        "derivationRule": { "type": ["string", "null"], "maxLength": 800 },
+        "mutable": { "type": "boolean" },
+        "mutationController": { "enum": ["none", "current-beneficiary-only"] },
+        "newAddressValidation": { "enum": ["none", "nonzero-ethereum-address"] },
+        "mutationEvent": { "type": ["string", "null"], "maxLength": 300 }
+      }
+    },
+    "externalCallsPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "targets", "callSites", "reentrancyPolicy", "stateDriftPolicy", "returnValuePolicy", "failureAtomicity"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "targets": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 300 } },
+        "callSites": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 300 } },
+        "reentrancyPolicy": { "type": ["string", "null"], "maxLength": 800 },
+        "stateDriftPolicy": { "type": ["string", "null"], "maxLength": 800 },
+        "returnValuePolicy": { "type": ["string", "null"], "maxLength": 500 },
+        "failureAtomicity": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    },
+    "settlementAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order", "actor", "operation", "currency", "assetKind", "deltaOwner", "deltaEffect", "counterparty", "authorizationRule", "msgValueRule", "amountRule", "completionDeadline"],
+      "properties": {
+        "order": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "actor": { "enum": ["hook", "router", "caller"] },
+        "operation": { "enum": ["sync", "transfer-to-pool-manager", "settle", "settle-for", "take", "mint-claim", "burn-claim", "clear-reviewed-dust", "internal-ledger-update"] },
+        "currency": { "enum": ["specified", "unspecified", "currency0", "currency1"] },
+        "assetKind": { "enum": ["native", "erc20"] },
+        "deltaOwner": { "enum": ["hook", "router", "caller", "other-declared"] },
+        "deltaEffect": { "enum": ["positive", "negative", "none"] },
+        "counterparty": { "enum": ["hook", "router", "caller", "PoolManager", "beneficiary", "other-declared", "not-applicable"] },
+        "authorizationRule": { "type": ["string", "null"], "maxLength": 500 },
+        "msgValueRule": { "type": ["string", "null"], "maxLength": 500 },
+        "amountRule": { "type": "string", "minLength": 12, "maxLength": 500 },
+        "completionDeadline": { "enum": ["before-hook-return", "after-hook-return-before-unlock-end"] }
+      }
+    },
+    "deltaComponentPolicy": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["mode", "formula", "minimum", "maximum", "minimumSign", "maximumSign", "positiveSettlementActions", "negativeSettlementActions"],
+      "properties": {
+        "mode": { "enum": ["zero-only", "positive-only", "negative-only", "signed-bounded"] },
+        "formula": { "type": ["string", "null"], "maxLength": 1000 },
+        "minimum": { "type": ["string", "null"], "maxLength": 300 },
+        "maximum": { "type": ["string", "null"], "maxLength": 300 },
+        "minimumSign": { "enum": ["negative", "zero", "positive"] },
+        "maximumSign": { "enum": ["negative", "zero", "positive"] },
+        "positiveSettlementActions": { "type": "array", "items": { "$ref": "#/$defs/settlementAction" } },
+        "negativeSettlementActions": { "type": "array", "items": { "$ref": "#/$defs/settlementAction" } }
+      }
+    },
+    "postActionReturnDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "returnedDeltaShape", "positiveMeaning", "negativeMeaning", "backingSource", "callerDeltaEquation", "componentPolicies", "bounds", "rounding", "slippageOrMinimums", "failureRule", "executionEvent"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "returnedDeltaShape": { "enum": ["unspecified-currency-int128", "currency0-and-currency1-balance-delta", null] },
+        "positiveMeaning": { "enum": ["hook-credit-caller-debit", null] },
+        "negativeMeaning": { "enum": ["hook-debt-caller-credit", null] },
+        "backingSource": { "type": ["string", "null"], "maxLength": 800 },
+        "callerDeltaEquation": { "enum": ["protocol-delta-minus-hook-delta", null] },
+        "componentPolicies": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unspecified", "currency0", "currency1"],
+          "properties": {
+            "unspecified": { "$ref": "#/$defs/deltaComponentPolicy" },
+            "currency0": { "$ref": "#/$defs/deltaComponentPolicy" },
+            "currency1": { "$ref": "#/$defs/deltaComponentPolicy" }
+          }
+        },
+        "bounds": { "type": ["string", "null"], "maxLength": 800 },
+        "rounding": { "type": ["string", "null"], "maxLength": 800 },
+        "slippageOrMinimums": { "type": ["string", "null"], "maxLength": 800 },
+        "failureRule": { "type": ["string", "null"], "maxLength": 800 },
+        "executionEvent": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    },
+    "returnDeltaQuadrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported", "specifiedCurrency", "unspecifiedCurrency", "amountSign", "specifiedComponent", "unspecifiedComponent", "residualAmmEquation", "finalCallerDeltaEquation", "specifiedDeltaCanConsumeEntireAmount", "rounding", "zeroAmmLeg", "partialFillRule", "slippageInvariant", "failureRule"],
+      "properties": {
+        "supported": { "type": ["boolean", "null"] },
+        "specifiedCurrency": { "enum": ["currency0", "currency1", null] },
+        "unspecifiedCurrency": { "enum": ["currency0", "currency1", null] },
+        "amountSign": { "enum": ["negative-exact-input", "positive-exact-output", null] },
+        "specifiedComponent": { "$ref": "#/$defs/deltaComponentPolicy" },
+        "unspecifiedComponent": { "$ref": "#/$defs/deltaComponentPolicy" },
+        "residualAmmEquation": { "enum": ["amountSpecified-plus-specifiedDelta", null] },
+        "finalCallerDeltaEquation": { "enum": ["pool-manager-swap-delta-minus-hook-delta", null] },
+        "specifiedDeltaCanConsumeEntireAmount": { "type": ["boolean", "null"] },
+        "rounding": { "type": ["string", "null"], "maxLength": 800 },
+        "zeroAmmLeg": { "enum": ["forbidden", "allowed-reviewed", "not-applicable", null] },
+        "partialFillRule": { "type": ["string", "null"], "maxLength": 800 },
+        "slippageInvariant": { "type": ["string", "null"], "maxLength": 800 },
+        "failureRule": { "type": ["string", "null"], "maxLength": 800 }
+      }
+    },
+    "permissionedAssetPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "officialUniswapPermissionedPool", "issuer", "jurisdiction", "legalDocuments", "underlyingClaim", "custodian", "adapter", "hooks", "positionManager", "swapEligibility", "liquidityEligibility", "positionTransferability", "pauseFreezeUnwind", "redemption", "routingLimitations"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "officialUniswapPermissionedPool": { "type": ["boolean", "null"] },
+        "issuer": { "type": ["string", "null"], "maxLength": 300 },
+        "jurisdiction": { "type": ["string", "null"], "maxLength": 300 },
+        "legalDocuments": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "underlyingClaim": { "type": ["string", "null"], "maxLength": 800 },
+        "custodian": { "type": ["string", "null"], "maxLength": 500 },
+        "adapter": { "type": ["string", "null"], "maxLength": 500 },
+        "hooks": { "type": ["string", "null"], "maxLength": 500 },
+        "positionManager": { "type": ["string", "null"], "maxLength": 500 },
+        "swapEligibility": { "type": ["string", "null"], "maxLength": 800 },
+        "liquidityEligibility": { "type": ["string", "null"], "maxLength": 800 },
+        "positionTransferability": { "type": ["string", "null"], "maxLength": 500 },
+        "pauseFreezeUnwind": { "type": ["string", "null"], "maxLength": 1000 },
+        "redemption": { "type": ["string", "null"], "maxLength": 1000 },
+        "routingLimitations": { "type": ["string", "null"], "maxLength": 800 }
+      }
+    },
+    "oraclePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "source", "value", "deployment", "runtimeHash", "decimals", "heartbeatSeconds", "maxAgeSeconds", "observationType", "windowSeconds", "minimumAnswer", "maximumAnswer", "maximumDeviation", "roundChecks", "manipulationResistance", "governance", "fallback", "maxFallbackAgeSeconds", "failureRule"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "source": { "type": ["string", "null"], "maxLength": 500 },
+        "value": { "type": ["string", "null"], "maxLength": 500 },
+        "deployment": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
+        "runtimeHash": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{64}$" },
+        "decimals": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
+        "heartbeatSeconds": { "type": ["integer", "null"], "minimum": 1 },
+        "maxAgeSeconds": { "type": ["integer", "null"], "minimum": 1 },
+        "observationType": { "enum": ["spot", "twap", "signed", "proof-backed", "other-reviewed", null] },
+        "windowSeconds": { "type": ["integer", "null"], "minimum": 0 },
+        "minimumAnswer": { "type": ["string", "null"], "maxLength": 200 },
+        "maximumAnswer": { "type": ["string", "null"], "maxLength": 200 },
+        "maximumDeviation": { "type": ["string", "null"], "maxLength": 300 },
+        "roundChecks": { "type": ["string", "null"], "maxLength": 800 },
+        "manipulationResistance": { "type": ["string", "null"], "maxLength": 800 },
+        "governance": { "type": ["string", "null"], "maxLength": 800 },
+        "fallback": { "enum": ["revert", "last-good-bounded", "static-safe-mode", "other-reviewed", null] },
+        "maxFallbackAgeSeconds": { "type": ["integer", "null"], "minimum": 0 },
+        "failureRule": { "type": ["string", "null"], "maxLength": 800 }
+      }
+    },
+    "keeperPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "executionMode", "minIntervalSeconds", "maxDelaySeconds", "permissionlessFallbackAfterSeconds", "idempotencyKey", "duplicateBehavior", "lastProcessedState", "boundedWork", "maxItems", "retryPolicy", "zeroWorkBehavior", "fundingSource", "minimumGasRunway", "alertThreshold", "maximumGas", "failureImpact", "userExitIndependent", "poolBinding", "slippage", "deadline", "mevPolicy"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "executionMode": { "enum": ["permissionless", "operator-with-permissionless-fallback", "operator-only-optional", "other-reviewed", null] },
+        "minIntervalSeconds": { "type": ["integer", "null"], "minimum": 1 },
+        "maxDelaySeconds": { "type": ["integer", "null"], "minimum": 1 },
+        "permissionlessFallbackAfterSeconds": { "type": ["integer", "null"], "minimum": 0 },
+        "idempotencyKey": { "type": ["string", "null"], "maxLength": 500 },
+        "duplicateBehavior": { "type": ["string", "null"], "maxLength": 500 },
+        "lastProcessedState": { "type": ["string", "null"], "maxLength": 500 },
+        "boundedWork": { "type": ["string", "null"], "maxLength": 800 },
+        "maxItems": { "type": ["integer", "null"], "minimum": 1 },
+        "retryPolicy": { "type": ["string", "null"], "maxLength": 500 },
+        "zeroWorkBehavior": { "type": ["string", "null"], "maxLength": 500 },
+        "fundingSource": { "type": ["string", "null"], "maxLength": 500 },
+        "minimumGasRunway": { "type": ["string", "null"], "maxLength": 300 },
+        "alertThreshold": { "type": ["string", "null"], "maxLength": 300 },
+        "maximumGas": { "type": ["integer", "null"], "minimum": 21000 },
+        "failureImpact": { "type": ["string", "null"], "maxLength": 800 },
+        "userExitIndependent": { "type": ["boolean", "null"] },
+        "poolBinding": { "type": ["string", "null"], "maxLength": 800 },
+        "slippage": { "type": ["string", "null"], "maxLength": 500 },
+        "deadline": { "type": ["string", "null"], "maxLength": 500 },
+        "mevPolicy": { "type": ["string", "null"], "maxLength": 800 }
+      }
+    },
+    "proofPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "proofSystem", "circuitRevision", "verifyingKeyHash", "verifierAddress", "runtimeHash", "setupType", "setupProvenance", "publicInputs", "domainBindings", "replayMode", "nullifierScope", "nullifierDerivation", "nullifierStorage", "atomicSpentCheck", "resetPolicy", "maximumProofBytes", "maximumVerificationGas", "verifierAuthority", "failureRule", "privacyClaim", "metadataLeakage"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "proofSystem": { "type": ["string", "null"], "maxLength": 200 },
+        "circuitRevision": { "type": ["string", "null"], "maxLength": 200 },
+        "verifyingKeyHash": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{64}$" },
+        "verifierAddress": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
+        "runtimeHash": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{64}$" },
+        "setupType": { "type": ["string", "null"], "maxLength": 200 },
+        "setupProvenance": { "type": ["string", "null"], "maxLength": 800 },
+        "publicInputs": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 300 } },
+        "domainBindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chainId", "verifyingContract", "modelVersion", "pool", "action", "actorOrRecipient", "amountBounds", "epochOrDeadline"],
+          "properties": {
+            "chainId": { "type": ["boolean", "null"] },
+            "verifyingContract": { "type": ["boolean", "null"] },
+            "modelVersion": { "type": ["boolean", "null"] },
+            "pool": { "type": ["boolean", "null"] },
+            "action": { "type": ["boolean", "null"] },
+            "actorOrRecipient": { "type": ["boolean", "null"] },
+            "amountBounds": { "type": ["boolean", "null"] },
+            "epochOrDeadline": { "type": ["boolean", "null"] }
+          }
+        },
+        "replayMode": { "enum": ["single-use", "bounded-reuse", "reusable-reviewed", null] },
+        "nullifierScope": { "type": ["string", "null"], "maxLength": 500 },
+        "nullifierDerivation": { "type": ["string", "null"], "maxLength": 500 },
+        "nullifierStorage": { "type": ["string", "null"], "maxLength": 500 },
+        "atomicSpentCheck": { "type": ["boolean", "null"] },
+        "resetPolicy": { "type": ["string", "null"], "maxLength": 500 },
+        "maximumProofBytes": { "type": ["integer", "null"], "minimum": 1 },
+        "maximumVerificationGas": { "type": ["integer", "null"], "minimum": 1 },
+        "verifierAuthority": { "type": ["string", "null"], "maxLength": 800 },
+        "failureRule": { "type": ["string", "null"], "maxLength": 500 },
+        "privacyClaim": { "type": ["string", "null"], "maxLength": 800 },
+        "metadataLeakage": { "type": ["string", "null"], "maxLength": 1000 }
+      }
+    },
+    "crossChainPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "used",
+        "bridgeDependencyId",
+        "source",
+        "destination",
+        "message",
+        "finality",
+        "ordering",
+        "staleness",
+        "failureBehavior",
+        "failureRule",
+        "fallback",
+        "quarantine"
+      ],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "bridgeDependencyId": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["network", "domain", "authenticatedSender"],
+          "properties": {
+            "network": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["namespace", "reference"],
+              "properties": {
+                "namespace": { "type": ["string", "null"], "pattern": "^[-a-z0-9]{3,8}$" },
+                "reference": { "type": ["string", "null"], "pattern": "^[-_a-zA-Z0-9]{1,32}$" }
+              }
+            },
+            "domain": { "type": ["string", "null"], "maxLength": 200 },
+            "authenticatedSender": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["encoding", "value", "canonicalizationRule"],
+              "properties": {
+                "encoding": {
+                  "enum": [
+                    "evm-address",
+                    "bytes32",
+                    "base58",
+                    "bech32",
+                    "bridge-native",
+                    null
+                  ]
+                },
+                "value": { "type": ["string", "null"], "maxLength": 200 },
+                "canonicalizationRule": { "type": ["string", "null"], "maxLength": 1000 }
+              }
+            }
+          }
+        },
+        "destination": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chainId", "domain", "receiver", "receiverDependencyId", "authenticatedBridgeCaller"],
+          "properties": {
+            "chainId": { "type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991 },
+            "domain": { "type": ["string", "null"], "maxLength": 200 },
+            "receiver": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
+            "receiverDependencyId": {
+              "type": ["string", "null"],
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "authenticatedBridgeCaller": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" }
+          }
+        },
+        "message": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "identifierDerivation",
+            "nonceDerivation",
+            "nonceScope",
+            "customNonceRule",
+            "payloadHashRule",
+            "idempotencyKeyRule",
+            "idempotencyStorage",
+            "atomicConsumption",
+            "duplicateBehavior",
+            "domainBindings"
+          ],
+          "properties": {
+            "identifierDerivation": { "type": ["string", "null"], "maxLength": 800 },
+            "nonceDerivation": { "type": ["string", "null"], "maxLength": 800 },
+            "nonceScope": {
+              "enum": [
+                "global",
+                "per-source-chain",
+                "per-source-sender",
+                "per-source-sender-and-channel",
+                "custom-reviewed",
+                null
+              ]
+            },
+            "customNonceRule": { "type": ["string", "null"], "maxLength": 1000 },
+            "payloadHashRule": { "type": ["string", "null"], "maxLength": 1000 },
+            "idempotencyKeyRule": { "type": ["string", "null"], "maxLength": 1000 },
+            "idempotencyStorage": { "type": ["string", "null"], "maxLength": 800 },
+            "atomicConsumption": { "type": ["boolean", "null"] },
+            "duplicateBehavior": {
+              "enum": [
+                "revert",
+                "ignore-after-authentication",
+                "return-recorded-result",
+                null
+              ]
+            },
+            "domainBindings": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "bridgeDependencyId",
+                "sourceNetwork",
+                "sourceDomain",
+                "sourceSender",
+                "destinationChainId",
+                "destinationDomain",
+                "receiver",
+                "receiverDependencyId",
+                "modelId",
+                "poolId",
+                "action",
+                "payloadHash",
+                "timestampOrExpiry",
+                "messageId",
+                "nonce"
+              ],
+              "properties": {
+                "bridgeDependencyId": { "type": ["boolean", "null"] },
+                "sourceNetwork": { "type": ["boolean", "null"] },
+                "sourceDomain": { "type": ["boolean", "null"] },
+                "sourceSender": { "type": ["boolean", "null"] },
+                "destinationChainId": { "type": ["boolean", "null"] },
+                "destinationDomain": { "type": ["boolean", "null"] },
+                "receiver": { "type": ["boolean", "null"] },
+                "receiverDependencyId": { "type": ["boolean", "null"] },
+                "modelId": { "type": ["boolean", "null"] },
+                "poolId": { "type": ["boolean", "null"] },
+                "action": { "type": ["boolean", "null"] },
+                "payloadHash": { "type": ["boolean", "null"] },
+                "timestampOrExpiry": { "type": ["boolean", "null"] },
+                "messageId": { "type": ["boolean", "null"] },
+                "nonce": { "type": ["boolean", "null"] }
+              }
+            }
+          }
+        },
+        "finality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "minimumSourceConfirmations", "challengePeriodSeconds", "attestationRule", "reorgBehavior", "customFinalityRule"],
+          "properties": {
+            "mode": {
+              "enum": [
+                "source-finalized",
+                "bridge-attested-finality",
+                "optimistic-challenge-window",
+                "custom-reviewed",
+                null
+              ]
+            },
+            "minimumSourceConfirmations": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "challengePeriodSeconds": { "type": ["integer", "null"], "minimum": 0, "maximum": 31536000 },
+            "attestationRule": { "type": ["string", "null"], "maxLength": 1000 },
+            "reorgBehavior": {
+              "enum": [
+                "reject-unfinalized",
+                "pause-and-reconcile-without-execution",
+                "bridge-native-finality",
+                null
+              ]
+            },
+            "customFinalityRule": { "type": ["string", "null"], "maxLength": 1500 }
+          }
+        },
+        "ordering": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "sequenceKey",
+            "outOfOrderBehavior",
+            "maximumPendingMessages",
+            "queueOverflowBehavior",
+            "pendingMessageExpirySeconds",
+            "cleanupRule",
+            "releaseRule"
+          ],
+          "properties": {
+            "mode": {
+              "enum": [
+                "strict-sequential",
+                "per-key-sequential",
+                "unordered-idempotent",
+                null
+              ]
+            },
+            "sequenceKey": { "type": ["string", "null"], "maxLength": 800 },
+            "outOfOrderBehavior": {
+              "enum": [
+                "revert",
+                "queue-bounded",
+                "ignore-after-authentication",
+                null
+              ]
+            },
+            "maximumPendingMessages": { "type": ["integer", "null"], "minimum": 0, "maximum": 1024 },
+            "queueOverflowBehavior": {
+              "enum": [
+                "reject-new",
+                "evict-expired-only",
+                null
+              ]
+            },
+            "pendingMessageExpirySeconds": { "type": ["integer", "null"], "minimum": 0, "maximum": 31536000 },
+            "cleanupRule": { "type": ["string", "null"], "maxLength": 1000 },
+            "releaseRule": { "type": ["string", "null"], "maxLength": 1500 }
+          }
+        },
+        "staleness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["timestampSource", "customTimestampRule", "maximumMessageAgeSeconds", "maximumFutureSkewSeconds", "staleMessageBehavior"],
+          "properties": {
+            "timestampSource": {
+              "enum": [
+                "source-block-time",
+                "bridge-attested-source-time",
+                "custom-reviewed",
+                null
+              ]
+            },
+            "customTimestampRule": { "type": ["string", "null"], "maxLength": 1000 },
+            "maximumMessageAgeSeconds": { "type": ["integer", "null"], "minimum": 1, "maximum": 31536000 },
+            "maximumFutureSkewSeconds": { "type": ["integer", "null"], "minimum": 0, "maximum": 86400 },
+            "staleMessageBehavior": {
+              "enum": [
+                "revert",
+                "ignore-after-authentication",
+                "quarantine-no-execution",
+                null
+              ]
+            }
+          }
+        },
+        "failureBehavior": {
+          "enum": [
+            "revert-no-state-change",
+            "quarantine-no-execution",
+            null
+          ]
+        },
+        "failureRule": { "type": ["string", "null"], "maxLength": 1000 },
+        "fallback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "authority", "rule"],
+          "properties": {
+            "mode": {
+              "enum": [
+                "none-fail-closed",
+                "pause-cross-chain-path",
+                "manual-reconciliation-no-execution",
+                null
+              ]
+            },
+            "authority": { "type": ["string", "null"], "maxLength": 300 },
+            "rule": { "type": ["string", "null"], "maxLength": 1000 }
+          }
+        },
+        "quarantine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "used",
+            "storageRule",
+            "maximumEntries",
+            "entryExpirySeconds",
+            "overflowBehavior",
+            "cleanupRule",
+            "releaseMode",
+            "releaseRule",
+            "releaseAuthority",
+            "atomicRelease"
+          ],
+          "properties": {
+            "used": { "type": ["boolean", "null"] },
+            "storageRule": { "type": ["string", "null"], "maxLength": 1200 },
+            "maximumEntries": { "type": ["integer", "null"], "minimum": 0, "maximum": 4096 },
+            "entryExpirySeconds": { "type": ["integer", "null"], "minimum": 0, "maximum": 31536000 },
+            "overflowBehavior": {
+              "enum": [
+                "reject-new",
+                "evict-expired-only",
+                null
+              ]
+            },
+            "cleanupRule": { "type": ["string", "null"], "maxLength": 1000 },
+            "releaseMode": {
+              "enum": [
+                "discard-only",
+                "revalidate-and-retry",
+                "manual-reconciliation-no-execution",
+                null
+              ]
+            },
+            "releaseRule": { "type": ["string", "null"], "maxLength": 1500 },
+            "releaseAuthority": { "type": ["string", "null"], "maxLength": 300 },
+            "atomicRelease": { "type": ["boolean", "null"] }
+          }
+        }
+      }
+    },
+    "externalLiquidityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "custody", "ownership", "shareAccounting", "solvencyEquation", "lossAllocation", "donationPolicy", "exitPath", "dependencyFailure"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "custody": { "type": ["string", "null"], "maxLength": 800 },
+        "ownership": { "type": ["string", "null"], "maxLength": 800 },
+        "shareAccounting": { "type": ["string", "null"], "maxLength": 1000 },
+        "solvencyEquation": { "type": ["string", "null"], "maxLength": 1000 },
+        "lossAllocation": { "type": ["string", "null"], "maxLength": 800 },
+        "donationPolicy": { "type": ["string", "null"], "maxLength": 800 },
+        "exitPath": { "type": ["string", "null"], "maxLength": 800 },
+        "dependencyFailure": { "type": ["string", "null"], "maxLength": 800 }
+      }
+    },
+    "asyncSwapPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "supportedExactness", "custody", "fillRule", "partialFillRule", "cancellation", "expiry", "refund", "queueBound", "liveness", "failureRule"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "supportedExactness": { "type": ["string", "null"], "maxLength": 300 },
+        "custody": { "type": ["string", "null"], "maxLength": 800 },
+        "fillRule": { "type": ["string", "null"], "maxLength": 800 },
+        "partialFillRule": { "type": ["string", "null"], "maxLength": 800 },
+        "cancellation": { "type": ["string", "null"], "maxLength": 800 },
+        "expiry": { "type": ["string", "null"], "maxLength": 500 },
+        "refund": { "type": ["string", "null"], "maxLength": 800 },
+        "queueBound": { "type": ["integer", "null"], "minimum": 1 },
+        "liveness": { "type": ["string", "null"], "maxLength": 800 },
+        "failureRule": { "type": ["string", "null"], "maxLength": 800 }
+      }
+    },
+    "customCurvePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "invariant", "domain", "rounding", "monotonicity", "discontinuities", "inverse", "differentialReference", "failureRule"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "invariant": { "type": ["string", "null"], "maxLength": 1000 },
+        "domain": { "type": ["string", "null"], "maxLength": 800 },
+        "rounding": { "type": ["string", "null"], "maxLength": 800 },
+        "monotonicity": { "type": ["string", "null"], "maxLength": 800 },
+        "discontinuities": { "type": ["string", "null"], "maxLength": 800 },
+        "inverse": { "type": ["string", "null"], "maxLength": 800 },
+        "differentialReference": { "type": ["string", "null"], "maxLength": 800 },
+        "failureRule": { "type": ["string", "null"], "maxLength": 800 }
+      }
+    },
+    "routingAndDiscoverability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routingMode",
+        "allowlistTriggers",
+        "uniswapRoutingStatus",
+        "hookRegistryStatus",
+        "customHookDataRequired",
+        "standardRouterCompatible",
+        "permissionedRouting",
+        "sourcePaths",
+        "testPaths"
+      ],
+      "properties": {
+        "routingMode": {
+          "enum": [
+            "uniswap-interface-api",
+            "uniswapx-filler",
+            "programmable-app",
+            "custom-reviewed",
+            "not-planned",
+            null
+          ]
+        },
+        "allowlistTriggers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["usesDeltaFlag", "addressStartsWith91", "targetsMajorPair", "permissionedPool"],
+          "properties": {
+            "usesDeltaFlag": { "type": ["boolean", "null"] },
+            "addressStartsWith91": { "type": ["boolean", "null"] },
+            "targetsMajorPair": { "type": ["boolean", "null"] },
+            "permissionedPool": { "type": ["boolean", "null"] }
+          }
+        },
+        "uniswapRoutingStatus": {
+          "enum": [
+            "not-required-by-published-triggers",
+            "required-not-submitted",
+            "submitted-unverified",
+            "not-applicable",
+            null
+          ]
+        },
+        "hookRegistryStatus": {
+          "enum": [
+            "not-submitted",
+            "submitted-unverified",
+            "listed-unverified",
+            "not-applicable",
+            null
+          ]
+        },
+        "customHookDataRequired": { "type": ["boolean", "null"] },
+        "standardRouterCompatible": { "type": ["boolean", "null"] },
+        "permissionedRouting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required",
+            "minimumRouterGeneration",
+            "adapterCurrencyUsed",
+            "allowedWrapperBindings",
+            "positionManagerBinding",
+            "routingAllowlistRequiredPerChain"
+          ],
+          "properties": {
+            "required": { "type": ["boolean", "null"] },
+            "minimumRouterGeneration": { "enum": ["V2_2_0", null] },
+            "adapterCurrencyUsed": { "type": ["boolean", "null"] },
+            "allowedWrapperBindings": { "type": ["string", "null"], "maxLength": 1000 },
+            "positionManagerBinding": { "type": ["string", "null"], "maxLength": 1000 },
+            "routingAllowlistRequiredPerChain": { "type": ["boolean", "null"] }
+          }
+        },
+        "sourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "testPaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        }
+      }
+    },
+    "dataReconstruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "eventCoverage",
+        "cursor",
+        "startBlockPolicy",
+        "finalityDepth",
+        "reorgPolicy",
+        "backfillPolicy",
+        "checkpointPolicy",
+        "freshnessTargetSeconds",
+        "staleAfterSeconds",
+        "freshnessMeasurement",
+        "reconciliation",
+        "reserveReconstruction",
+        "sourcePaths",
+        "testPaths"
+      ],
+      "properties": {
+        "mode": { "enum": ["events-with-confirmed-reads", "events-only", "not-applicable", null] },
+        "eventCoverage": { "type": ["string", "null"], "maxLength": 1200 },
+        "cursor": { "enum": ["block-number-transaction-index-log-index", null] },
+        "startBlockPolicy": { "type": ["string", "null"], "maxLength": 800 },
+        "finalityDepth": { "type": ["integer", "null"], "minimum": 1, "maximum": 100000 },
+        "reorgPolicy": { "type": ["string", "null"], "maxLength": 1200 },
+        "backfillPolicy": { "type": ["string", "null"], "maxLength": 1200 },
+        "checkpointPolicy": { "type": ["string", "null"], "maxLength": 1000 },
+        "freshnessTargetSeconds": { "type": ["integer", "null"], "minimum": 1 },
+        "staleAfterSeconds": { "type": ["integer", "null"], "minimum": 1 },
+        "freshnessMeasurement": { "type": ["string", "null"], "maxLength": 1000 },
+        "reconciliation": { "type": ["string", "null"], "maxLength": 1200 },
+        "reserveReconstruction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "used",
+            "balanceSources",
+            "liabilitySources",
+            "attributionKeys",
+            "solvencyEquation",
+            "poolLiquidityTreatment",
+            "donationAndDustPolicy",
+            "reconciliation"
+          ],
+          "properties": {
+            "used": { "type": ["boolean", "null"] },
+            "balanceSources": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 12, "maxLength": 800 }
+            },
+            "liabilitySources": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 12, "maxLength": 800 }
+            },
+            "attributionKeys": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": ["chainId", "modelVersion", "poolId", "currency", "beneficiary", "position", "epoch"]
+              }
+            },
+            "solvencyEquation": { "type": ["string", "null"], "maxLength": 1200 },
+            "poolLiquidityTreatment": { "enum": ["excluded-from-hook-reserves", null] },
+            "donationAndDustPolicy": { "type": ["string", "null"], "maxLength": 1000 },
+            "reconciliation": { "type": ["string", "null"], "maxLength": 1200 }
+          }
+        },
+        "sourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "testPaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        }
+      }
+    },
+    "platformHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intended",
+        "websiteRegistryPath",
+        "uiSourcePaths",
+        "apiSourcePaths",
+        "indexerSourcePaths",
+        "testPaths",
+        "reviewStatus",
+        "maintainerReviewRequired",
+        "selfApproval",
+        "availabilityClaimed",
+        "handoffNotes"
+      ],
+      "properties": {
+        "intended": { "type": ["boolean", "null"] },
+        "websiteRegistryPath": { "type": ["string", "null"], "maxLength": 1024 },
+        "uiSourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "apiSourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "indexerSourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "testPaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "reviewStatus": { "enum": ["not-requested", "pending-maintainer-review", null] },
+        "maintainerReviewRequired": { "type": ["boolean", "null"] },
+        "selfApproval": { "type": ["boolean", "null"] },
+        "availabilityClaimed": { "type": ["boolean", "null"] },
+        "handoffNotes": { "type": ["string", "null"], "maxLength": 1200 }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "beforeInitialize",
+        "afterInitialize",
+        "beforeAddLiquidity",
+        "afterAddLiquidity",
+        "beforeRemoveLiquidity",
+        "afterRemoveLiquidity",
+        "beforeSwap",
+        "afterSwap",
+        "beforeDonate",
+        "afterDonate",
+        "beforeSwapReturnDelta",
+        "afterSwapReturnDelta",
+        "afterAddLiquidityReturnDelta",
+        "afterRemoveLiquidityReturnDelta"
+      ],
+      "properties": {
+        "beforeInitialize": { "type": ["boolean", "null"] },
+        "afterInitialize": { "type": ["boolean", "null"] },
+        "beforeAddLiquidity": { "type": ["boolean", "null"] },
+        "afterAddLiquidity": { "type": ["boolean", "null"] },
+        "beforeRemoveLiquidity": { "type": ["boolean", "null"] },
+        "afterRemoveLiquidity": { "type": ["boolean", "null"] },
+        "beforeSwap": { "type": ["boolean", "null"] },
+        "afterSwap": { "type": ["boolean", "null"] },
+        "beforeDonate": { "type": ["boolean", "null"] },
+        "afterDonate": { "type": ["boolean", "null"] },
+        "beforeSwapReturnDelta": { "type": ["boolean", "null"] },
+        "afterSwapReturnDelta": { "type": ["boolean", "null"] },
+        "afterAddLiquidityReturnDelta": { "type": ["boolean", "null"] },
+        "afterRemoveLiquidityReturnDelta": { "type": ["boolean", "null"] }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "kind", "repository", "revision", "packageVersion", "license", "sourceProvenance", "deploymentRecordId", "chainAddress", "runtimeHash", "deploymentEvidencePath", "trust", "failure", "fallback"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "kind": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "repository": { "type": ["string", "null"], "format": "uri" },
+        "revision": { "type": ["string", "null"], "pattern": "^[a-fA-F0-9]{40}$" },
+        "packageVersion": { "type": ["string", "null"], "maxLength": 80 },
+        "license": { "type": ["string", "null"], "maxLength": 80 },
+        "sourceProvenance": { "enum": ["pinned-source", "verified-explorer-source", "maintainer-bytecode-exception", null] },
+        "deploymentRecordId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "chainAddress": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
+        "runtimeHash": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{64}$" },
+        "deploymentEvidencePath": { "type": ["string", "null"], "maxLength": 500 },
+        "trust": { "type": ["string", "null"], "maxLength": 500 },
+        "failure": { "type": ["string", "null"], "maxLength": 500 },
+        "fallback": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    },
+    "packageDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packageName", "version", "integrity", "repository", "revision"],
+      "properties": {
+        "packageName": { "type": "string", "maxLength": 214, "pattern": "^(?:@(?!\\.{1,2}/)[a-z0-9._~-]+/(?!\\.{1,2}$)[a-z0-9._~-]+|[a-z0-9~-][a-z0-9._~-]*)$" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$" },
+        "integrity": { "type": "string", "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$" },
+        "repository": { "type": ["string", "null"], "format": "uri" },
+        "revision": { "type": ["string", "null"], "pattern": "^[a-fA-F0-9]{40}$" }
+      }
+    },
+    "operationalDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "actor", "action", "cadence", "authentication", "funding", "failure", "fallback"],
+      "properties": {
+        "required": { "type": ["boolean", "null"] },
+        "actor": { "type": ["string", "null"], "maxLength": 200 },
+        "action": { "type": ["string", "null"], "maxLength": 500 },
+        "cadence": { "type": ["string", "null"], "maxLength": 200 },
+        "authentication": { "type": ["string", "null"], "maxLength": 500 },
+        "funding": { "type": ["string", "null"], "maxLength": 300 },
+        "failure": { "type": ["string", "null"], "maxLength": 500 },
+        "fallback": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    }
+  }
+}

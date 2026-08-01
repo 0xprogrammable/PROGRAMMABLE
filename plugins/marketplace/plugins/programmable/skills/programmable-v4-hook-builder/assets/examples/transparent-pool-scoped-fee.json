@@ -1,0 +1,376 @@
+{
+  "fixtureVersion": 1,
+  "id": "transparent-pool-scoped-fee",
+  "name": "transparent pool-scoped fee reaches structural prototype readiness",
+  "description": "A fixed hook-owned swap charge covers every swap quadrant, settles atomically and records immutable PoolId-scoped beneficiary liabilities without an administrator redirect.",
+  "steps": [
+    {
+      "id": "fully-specified",
+      "patch": {
+        "model": {
+          "id": "transparent-pool-scoped-fee",
+          "name": "Transparent Pool-Scoped Fee",
+          "summary": "Collect one immutable ten-basis-point swap charge for the launch wallet while keeping every liability isolated by PoolId and currency.",
+          "userOutcome": "A creator can launch a WETH-paired token with one visible fee, an immutable beneficiary and a permissionless view of accrued and claimed balances.",
+          "category": "market-structure",
+          "whyV4": "The afterSwap callback can debit the exact unspecified currency, settle the hook delta and record the matching beneficiary liability atomically."
+        },
+        "assets": [
+          {
+            "id": "weth",
+            "role": "quote",
+            "origin": "existing-erc20",
+            "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "decimals": 18,
+            "decimalsSource": "token-contract-observation",
+            "supplyPolicy": "externally-managed",
+            "initialSupply": null,
+            "behaviors": [
+              "standard"
+            ],
+            "controls": []
+          },
+          {
+            "id": "launched-token",
+            "role": "launched",
+            "origin": "new-fixed-supply",
+            "address": null,
+            "decimals": 18,
+            "decimalsSource": "implementation-constant",
+            "supplyPolicy": "fixed-at-creation",
+            "initialSupply": "1000000000000000000000000000",
+            "behaviors": [
+              "standard"
+            ],
+            "controls": []
+          }
+        ],
+        "launchLifecycle": {
+          "feesAndClaims": {
+            "actor": "The authenticated PoolManager callback accrues fees; only the immutable beneficiary can claim its own balance.",
+            "valueFlow": "Each swap charge moves from the caller delta into the hook contract and credits one PoolId, currency and beneficiary liability.",
+            "custody": "The hook contract contains only collected fee assets; canonical pool liquidity is never counted as backing for a beneficiary claim.",
+            "failure": "Fee settlement and liability accounting are atomic with the swap; a failed claim leaves both the liability and token balance unchanged.",
+            "event": "Emit FeeAccrued for each charge and FeeClaimed for each successful beneficiary withdrawal."
+          }
+        },
+        "pool": {
+          "currency0": "weth",
+          "currency1": "launched-token",
+          "orderingRule": "Mine the launched-token CREATE2 salt until its predicted address sorts after the fixed mainnet WETH address; otherwise rebuild the PoolKey."
+        },
+        "hook": {
+          "used": true,
+          "permissions": {
+            "afterSwapReturnDelta": true
+          },
+          "callbackPolicies": [
+            {
+              "callback": "afterSwap",
+              "necessity": "The callback computes one bounded charge from the completed swap's unspecified currency and records its beneficiary liability.",
+              "allowedReverts": "Only invalid PoolId admission, arithmetic bounds, settlement failure or an atomic liability write may revert the complete swap.",
+              "userExitImpact": "The callback affects swaps only; standard liquidity removal remains available and beneficiary claims cannot block another user.",
+              "noSelfCallImpact": "PoolManager take does not initiate another swap, liquidity action or callback to this hook."
+            }
+          ],
+          "feeMechanism": {
+            "used": true,
+            "classification": "hook-owned-fee",
+            "chargedCurrency": "The unspecified swap currency: gross output for exact-input swaps and gross input for exact-output swaps.",
+            "swapQuadrants": {
+              "zeroForOneExactInput": {
+                "currency": "currency1",
+                "basis": "gross-output",
+                "formula": "floor(gross currency1 output times 1000 divided by 1000000)",
+                "rounding": "down",
+                "maximumHundredthsOfBip": 1000
+              },
+              "zeroForOneExactOutput": {
+                "currency": "currency0",
+                "basis": "gross-input",
+                "formula": "ceil(net PoolManager currency0 input times 1000 divided by (1000000 minus 1000))",
+                "rounding": "up",
+                "maximumHundredthsOfBip": 1000
+              },
+              "oneForZeroExactInput": {
+                "currency": "currency0",
+                "basis": "gross-output",
+                "formula": "floor(gross currency0 output times 1000 divided by 1000000)",
+                "rounding": "down",
+                "maximumHundredthsOfBip": 1000
+              },
+              "oneForZeroExactOutput": {
+                "currency": "currency1",
+                "basis": "gross-input",
+                "formula": "ceil(net PoolManager currency1 input times 1000 divided by (1000000 minus 1000))",
+                "rounding": "up",
+                "maximumHundredthsOfBip": 1000
+              }
+            },
+            "maximumHundredthsOfBip": 1000,
+            "collectionPath": "after-swap-return-delta",
+            "collectionValueFlowId": "pool-scoped-fee-accrual",
+            "liabilityKeyDimensions": [
+              "poolId",
+              "currency",
+              "beneficiary"
+            ],
+            "collectionEvent": "FeeAccrued(bytes32 indexed poolId,address indexed currency,address indexed beneficiary,uint256 amount)",
+            "recipients": [
+              {
+                "role": "launch beneficiary",
+                "sharePpm": 1000000,
+                "addressSource": "launch-wallet",
+                "address": null,
+                "binding": "launch-transaction-sender",
+                "derivationRule": null,
+                "mutable": false,
+                "mutationController": "none",
+                "newAddressValidation": "none",
+                "mutationEvent": null
+              }
+            ],
+            "ownership": "The launch transaction sender is recorded once as the sole beneficiary; no administrator, factory or operator can redirect accrued value.",
+            "claimPolicy": "Only the recorded beneficiary may claim its own PoolId and currency balance; the claim transfers to that immutable address after decrementing the liability."
+          },
+          "customAccounting": {
+            "used": true,
+            "backingSource": "Each fee debit is taken with claims=false into the hook contract before its matching beneficiary liability is credited.",
+            "conservationEquation": "For every currency, the hook contract token balance must be at least the sum of liabilities across all PoolId and beneficiary keys for that currency.",
+            "settlement": "afterSwap returns one positive unspecified-currency delta, takes the exact amount from PoolManager into the hook contract and records the same amount in the beneficiary ledger before returning.",
+            "partialFillBehavior": "The fee is calculated only from the final executed swap amount; an unfilled amount creates neither a charge nor a liability.",
+            "liabilityNamespace": "Each liability key is keccak256(modelVersion, PoolId, currency, beneficiary), and every view, accrual and claim uses the same key.",
+            "liabilityKeyDimensions": [
+              "poolId",
+              "currency",
+              "beneficiary"
+            ],
+            "crossPoolNetting": false,
+            "duplicateCurrencyPolicy": "Two pools using the same currency share a gross contract balance but retain separate PoolId liabilities; neither pool can spend or claim another pool's attribution.",
+            "failureIsolation": "Any failed take, ledger update or token transfer reverts the complete action; no catch path records an unfunded liability or consumes another PoolId balance.",
+            "withdrawalOrdering": "A claim checks msg.sender against the immutable beneficiary, decrements only that exact liability, transfers the exact currency amount and reverts the decrement if transfer fails."
+          },
+          "postReturnDeltaAccounting": {
+            "afterSwap": {
+              "used": true,
+              "returnedDeltaShape": "unspecified-currency-int128",
+              "positiveMeaning": "hook-credit-caller-debit",
+              "negativeMeaning": "hook-debt-caller-credit",
+              "backingSource": "The hook takes the exact positive delta from PoolManager with claims=false before the callback returns and then records the equal beneficiary liability.",
+              "callerDeltaEquation": "protocol-delta-minus-hook-delta",
+              "componentPolicies": {
+                "unspecified": {
+                  "mode": "positive-only",
+                  "formula": "The fixed ten-basis-point fee calculated from the executed quadrant basis and capped below the executed amount.",
+                  "minimum": "zero base units",
+                  "maximum": "the lower of the immutable ten-basis-point cap and the nonzero executed amount minus one base unit",
+                  "minimumSign": "zero",
+                  "maximumSign": "positive",
+                  "positiveSettlementActions": [
+                    {
+                      "order": 1,
+                      "actor": "hook",
+                      "operation": "take",
+                      "currency": "unspecified",
+                      "assetKind": "erc20",
+                      "deltaOwner": "hook",
+                      "deltaEffect": "negative",
+                      "counterparty": "hook",
+                      "authorizationRule": null,
+                      "msgValueRule": null,
+                      "amountRule": "Take exactly the positive unspecified-currency delta returned by afterSwap with claims=false.",
+                      "completionDeadline": "before-hook-return"
+                    },
+                    {
+                      "order": 2,
+                      "actor": "hook",
+                      "operation": "internal-ledger-update",
+                      "currency": "unspecified",
+                      "assetKind": "erc20",
+                      "deltaOwner": "hook",
+                      "deltaEffect": "none",
+                      "counterparty": "not-applicable",
+                      "authorizationRule": null,
+                      "msgValueRule": null,
+                      "amountRule": "Credit the same taken amount to the exact PoolId, currency and beneficiary liability.",
+                      "completionDeadline": "before-hook-return"
+                    }
+                  ],
+                  "negativeSettlementActions": []
+                },
+                "currency0": null,
+                "currency1": null
+              },
+              "bounds": "The return delta is nonnegative, never exceeds ten basis points of the executed quadrant basis and cannot consume the complete executed amount.",
+              "rounding": "Exact-input output charges round down; exact-output input surcharges round up, with checked uint256 to int128 conversion.",
+              "slippageOrMinimums": "The router applies minimum output or maximum input to the final caller delta after the hook charge, not to a pre-fee quote.",
+              "failureRule": "A zero executed amount returns zero; any cap, conversion, take or ledger failure reverts the entire swap before unlock ends.",
+              "executionEvent": "FeeAccrued(bytes32 indexed poolId,address indexed currency,address indexed beneficiary,uint256 amount)"
+            }
+          }
+        },
+        "valueFlows": [
+          {
+            "id": "pool-scoped-fee-accrual",
+            "action": "accrue hook-owned swap fee",
+            "asset": "the unspecified WETH or launched-token currency for the executed swap quadrant",
+            "from": "the final caller swap delta after core execution",
+            "to": "the hook contract balance attributed to the immutable launch beneficiary",
+            "amountRule": "Charge ten basis points of gross output for exact input or gross input for exact output, using the declared rounding rule and immutable cap.",
+            "settlement": "The afterSwap positive delta debits the caller, PoolManager take with claims=false cancels the hook credit and the internal ledger records the equal beneficiary liability.",
+            "failure": "Any arithmetic, take or ledger failure reverts the complete swap and leaves no fee or liability behind."
+          },
+          {
+            "id": "pool-scoped-fee-claim",
+            "action": "claim accrued beneficiary fee",
+            "asset": "the exact currency selected by the PoolId and beneficiary liability key",
+            "from": "the hook contract token balance",
+            "to": "the immutable launch beneficiary",
+            "amountRule": "Transfer no more than the caller's recorded liability for the selected PoolId and currency.",
+            "settlement": "Checks and effects precede the ERC-20 transfer; a failed transfer reverts the liability decrement.",
+            "failure": "An unauthorized caller, zero claim or transfer failure reverts without changing another key."
+          }
+        ],
+        "operations": {
+          "monitoring": "Index FeeAccrued and FeeClaimed by PoolId, currency and beneficiary; alert when confirmed gross balances fall below reconstructed liabilities.",
+          "incidentResponse": "The immutable hook has no pause, rescue or redirect authority; stop new launches and publish exact affected PoolIds if a solvency mismatch is confirmed."
+        },
+        "integration": {
+          "partialFills": "Use only the final executed amount reported by PoolManager; unfilled input or output is excluded from both the fee basis and liability.",
+          "slippage": "Quotes and execution apply the hook charge before enforcing the user's final minimum output or maximum input.",
+          "events": [
+            "FeeAccrued(bytes32 indexed poolId,address indexed currency,address indexed beneficiary,uint256 amount)",
+            "FeeClaimed(bytes32 indexed poolId,address indexed currency,address indexed beneficiary,uint256 amount)"
+          ],
+          "routingAndDiscoverability": {
+            "allowlistTriggers": {
+              "usesDeltaFlag": true
+            }
+          },
+          "dataReconstruction": {
+            "eventCoverage": "FeeAccrued reconstructs every PoolId, currency and beneficiary liability increase; FeeClaimed reconstructs every decrease; confirmed token balances reconcile backing.",
+            "reconciliation": "At one confirmed block, compare event-derived liabilities with claimable views and each currency balance; quarantine stale or undercollateralized results.",
+            "reserveReconstruction": {
+              "used": true,
+              "balanceSources": [
+                "ERC-20 balanceOf(hook) for WETH and each launched token at one confirmed block"
+              ],
+              "liabilitySources": [
+                "FeeAccrued and FeeClaimed logs plus claimable(poolId,currency,beneficiary) contract reads"
+              ],
+              "attributionKeys": [
+                "poolId",
+                "currency",
+                "beneficiary"
+              ],
+              "solvencyEquation": "For each currency, confirmed ERC-20 balanceOf(hook) must be greater than or equal to the sum of all reconstructed PoolId and beneficiary liabilities.",
+              "poolLiquidityTreatment": "excluded-from-hook-reserves",
+              "donationAndDustPolicy": "A direct token transfer creates no beneficiary liability and is excluded from claimable amounts; no administrator can sweep or attribute the excess.",
+              "reconciliation": "Rebuild liabilities from finalized events, compare them with claimable views and gross balances, and withhold results whenever any value disagrees."
+            }
+          }
+        },
+        "capabilities": {
+          "externalCalls": {
+            "used": true,
+            "targets": [
+              "The exact WETH or launched-token ERC-20 address stored in the selected liability key"
+            ],
+            "callSites": [
+              "claim(poolId,currency) transfers the selected accrued balance after its liability is decremented"
+            ],
+            "reentrancyPolicy": "The claim entry point is non-reentrant and follows checks, effects and interaction; callbacks cannot observe an unchanged claimable balance.",
+            "stateDriftPolicy": "Only standard WETH and the immutable fixed-supply launch token are supported; the transfer must reduce the exact selected contract balance by the claimed amount.",
+            "returnValuePolicy": "Use SafeERC20 and require a successful standard ERC-20 transfer or revert the complete claim.",
+            "failureAtomicity": "A reverted or malformed token transfer reverts the prior liability decrement and cannot change another PoolId, currency or beneficiary key."
+          }
+        },
+        "risk": {
+          "dimensions": {
+            "complexity": 2,
+            "customMath": 0,
+            "externalDependencies": 1,
+            "externalLiquidity": 0,
+            "valueAtRisk": 2,
+            "teamMaturity": 1,
+            "upgradeability": 0,
+            "autonomy": 0,
+            "priceImpact": 1
+          },
+          "rationales": {
+            "complexity": "The model combines one afterSwap delta, exact PoolManager settlement, a beneficiary ledger and a claim path.",
+            "customMath": "The only arithmetic is a fixed bounded basis-point calculation with explicit directional rounding.",
+            "externalDependencies": "Claims call the exact standard WETH or immutable launched-token contract through SafeERC20.",
+            "externalLiquidity": "No external inventory, vault or third-party collateral backs the accrued fee liabilities.",
+            "valueAtRisk": "Collected fees remain in the immutable hook contract until the recorded beneficiary claims them.",
+            "teamMaturity": "A conservative nonzero process score remains until independent accounting and security reviews finish.",
+            "upgradeability": "The hook, fee rate, beneficiary binding and liability namespace are immutable for the pool.",
+            "autonomy": "No keeper, oracle, scheduler or autonomous parameter can change the fee or move a beneficiary balance.",
+            "priceImpact": "The bounded charge changes the caller's final input or output but never replaces core price formation."
+          },
+          "declaredTotal": 7,
+          "declaredTier": "high",
+          "featureTriggers": [
+            "custom-accounting",
+            "external-calls",
+            "price-impact",
+            "return-delta"
+          ]
+        },
+        "disclosures": [
+          "This proposal is not deployed, reviewed or available through Programmable.",
+          "The fee is separate from the pool LP fee and belongs only to the immutable launch beneficiary.",
+          "The hook cannot redirect a beneficiary, change the fee, use pool liquidity as backing or claim another PoolId balance."
+        ]
+      },
+      "expected": {
+        "decision": "PROTOTYPE_READY",
+        "hookPermissionMask": "0x0044",
+        "risk": {
+          "score": 7,
+          "baseTier": "medium",
+          "effectiveTier": "high",
+          "featureTriggers": [
+            "custom-accounting",
+            "external-calls",
+            "price-impact",
+            "return-delta"
+          ]
+        },
+        "findingKeys": [
+          "warning|BUILDER_FIELD_PENDING|$.builder.contact",
+          "warning|BUILDER_FIELD_PENDING|$.builder.github",
+          "warning|BUILDER_FIELD_PENDING|$.builder.licenseDeclaration"
+        ],
+        "gateKeys": [
+          "candidate|human-economic-and-security-review",
+          "candidate|independent-security-review-one",
+          "candidate|independent-specialist-review",
+          "candidate|pinned-fork-and-current-head-smoke",
+          "candidate|programmable-indexer-integration-review",
+          "candidate|programmable-integration-test-review",
+          "candidate|programmable-registry-integration-review",
+          "candidate|programmable-ui-integration-review",
+          "candidate|specialist-accounting-review",
+          "external|independent-routing-provider-approval",
+          "prototype|after-swap-return-delta-invariants",
+          "prototype|callback-authentication-and-permission-mask",
+          "prototype|callback-selector-return-length-and-self-call-tests",
+          "prototype|delta-conservation-invariants",
+          "prototype|event-reorg-backfill-freshness-tests",
+          "prototype|external-call-reentrancy-and-failure-tests",
+          "prototype|fee-four-quadrant-tests",
+          "prototype|format-build-size-warnings",
+          "prototype|reserve-reconstruction-and-solvency-tests",
+          "prototype|static-analysis",
+          "prototype|unit-integration-fuzz-invariant-tests",
+          "release|independent-security-review-two",
+          "release|monitoring-and-lifecycle-evidence",
+          "release|production-anomaly-monitoring",
+          "release|public-bug-bounty",
+          "release|runtime-source-config-verification"
+        ]
+      }
+    }
+  ]
+}
