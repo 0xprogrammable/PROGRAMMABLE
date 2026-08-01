@@ -181,14 +181,14 @@ export async function runConfiguredCandidateRawBackfill(input) {
       sslCaPem,
       maxConnections: 1,
       connectTimeoutMs: 2_000,
-      idleTimeoutMs: 5_000,
+      idleTimeoutMs: 60_000,
     });
     const writerExecutor = modules.postgresModule.createPostgresExecutor({
       connectionString: writerConnection,
       sslCaPem,
       maxConnections: 1,
       connectTimeoutMs: 2_000,
-      idleTimeoutMs: 5_000,
+      idleTimeoutMs: 60_000,
     });
     const lease = modules.leaseModule.createProjectorRuntimeLeaseController({
       executor: runtimeExecutor,

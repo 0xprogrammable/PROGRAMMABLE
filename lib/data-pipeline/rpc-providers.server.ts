@@ -29,6 +29,10 @@ import {
   PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1,
   type ProjectorRewardRpcModel,
 } from "./projector-reward-rpc-contract";
+import {
+  PROJECTOR_JSON_RPC_BATCH_SIZE,
+  PROJECTOR_MAXIMUM_RPC_STARTS_PER_SECOND,
+} from "./projector-runtime-limits";
 import { rpcProviderCommitment } from "./rpc-provider-commitments";
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -39,6 +43,7 @@ const BROWSER_FORBIDDEN_RPC_NAMES = [
 ] as const;
 const PRODUCTION_PROVIDER_PAIRS = new WeakSet<object>();
 const MAXIMUM_PHYSICAL_RPC_CALLS_IN_FLIGHT_PER_PROVIDER = 8;
+const RPC_RATE_WINDOW_MS = 1_000;
 const ERC20_METADATA_ABI = [
   {
     type: "function",
@@ -193,22 +198,59 @@ const CLASSIC_REWARD_VAULT_FACTORY_ABI = [
 type RewardFunctionName =
   (typeof REWARD_VAULT_ABI)[number]["name"];
 
-function boundedRpcExecutor(maximumInFlight: number) {
-  if (!Number.isSafeInteger(maximumInFlight) || maximumInFlight < 1) {
+export function boundedRpcExecutor(maximumInFlight: number) {
+  if (
+    !Number.isSafeInteger(maximumInFlight) ||
+    maximumInFlight < 1 ||
+    maximumInFlight > PROJECTOR_MAXIMUM_RPC_STARTS_PER_SECOND
+  ) {
     throw invalidInput("rpc", "rpc-concurrency");
   }
   let inFlight = 0;
   const waiters: Array<() => void> = [];
-  const acquire = async (): Promise<void> => {
-    if (inFlight < maximumInFlight) {
-      inFlight += 1;
-      return;
+  const starts: number[] = [];
+  let wakeup: ReturnType<typeof setTimeout> | undefined;
+  const prune = (now: number) => {
+    while (
+      starts.length > 0 &&
+      starts[0]! <= now - RPC_RATE_WINDOW_MS
+    ) {
+      starts.shift();
     }
+  };
+  const schedule = () => {
+    const now = Date.now();
+    prune(now);
+    while (
+      waiters.length > 0 &&
+      inFlight < maximumInFlight &&
+      starts.length < PROJECTOR_MAXIMUM_RPC_STARTS_PER_SECOND
+    ) {
+      const next = waiters.shift()!;
+      inFlight += 1;
+      starts.push(now);
+      next();
+    }
+    if (
+      waiters.length > 0 &&
+      inFlight < maximumInFlight &&
+      starts.length >= PROJECTOR_MAXIMUM_RPC_STARTS_PER_SECOND &&
+      wakeup === undefined
+    ) {
+      const delay = Math.max(
+        1,
+        starts[0]! + RPC_RATE_WINDOW_MS - now,
+      );
+      wakeup = setTimeout(() => {
+        wakeup = undefined;
+        schedule();
+      }, delay);
+    }
+  };
+  const acquire = async (): Promise<void> => {
     await new Promise<void>((resolve) => {
-      waiters.push(() => {
-        inFlight += 1;
-        resolve();
-      });
+      waiters.push(resolve);
+      schedule();
     });
   };
   return async <T>(operation: () => Promise<T>): Promise<T> => {
@@ -217,8 +259,7 @@ function boundedRpcExecutor(maximumInFlight: number) {
       return await operation();
     } finally {
       inFlight -= 1;
-      const next = waiters.shift();
-      if (next) next();
+      schedule();
     }
   };
 }
@@ -252,7 +293,7 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
   const batchClient = createPublicClient({
     chain: mainnet,
     transport: http(endpoint, {
-      batch: { batchSize: 100, wait: 0 },
+      batch: { batchSize: PROJECTOR_JSON_RPC_BATCH_SIZE, wait: 0 },
       fetchOptions: { redirect: "error" },
       retryCount: 0,
       timeout: 5_000,

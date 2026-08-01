@@ -32,7 +32,69 @@ export type PostgresParameter =
   | string
   | Date
   | Uint8Array
+  | PostgresJsonParameter
   | readonly PostgresParameter[];
+
+export type PostgresJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly PostgresJsonValue[]
+  | Readonly<{ [key: string]: PostgresJsonValue }>;
+
+export type PostgresJsonParameter = Readonly<{
+  kind: "programmable-postgres-json-v1";
+  value: PostgresJsonValue;
+}>;
+
+function isPostgresJsonValue(
+  value: unknown,
+  ancestors: Set<object> = new Set(),
+): value is PostgresJsonValue {
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "string"
+  ) {
+    return true;
+  }
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value !== "object" || ancestors.has(value)) return false;
+  ancestors.add(value);
+  const valid = Array.isArray(value)
+    ? value.every((item) => isPostgresJsonValue(item, ancestors))
+    : (Object.getPrototypeOf(value) === Object.prototype ||
+        Object.getPrototypeOf(value) === null) &&
+      Object.values(value).every((item) =>
+        isPostgresJsonValue(item, ancestors)
+      );
+  ancestors.delete(value);
+  return valid;
+}
+
+export function postgresJson(value: unknown): PostgresJsonParameter {
+  try {
+    if (!isPostgresJsonValue(value) || JSON.stringify(value) === undefined) {
+      throw new TypeError("JSON value is not serializable");
+    }
+  } catch {
+    throw invalidInput("postgres", "json-parameter");
+  }
+  return Object.freeze({ kind: "programmable-postgres-json-v1", value });
+}
+
+function isPostgresJsonParameter(
+  value: PostgresParameter,
+): value is PostgresJsonParameter {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !(value instanceof Date) &&
+    !(value instanceof Uint8Array) &&
+    Reflect.get(value, "kind") === "programmable-postgres-json-v1"
+  );
+}
 
 export type PostgresTransaction = {
   query<Row extends Record<string, unknown>>(
@@ -159,7 +221,17 @@ export function createPostgresExecutor(input: {
             values: readonly PostgresParameter[] = [],
           ) {
             const driverValues = values.map((value) =>
-              Array.isArray(value) ? sql.array([...value]) : value,
+              Array.isArray(value)
+                ? sql.array([...value])
+                : isPostgresJsonParameter(value)
+                  ? sql.json(value.value)
+                  : value as
+                    | null
+                    | boolean
+                    | number
+                    | string
+                    | Date
+                    | Uint8Array,
             );
             const result = await transaction.unsafe<Row[]>(
               text,

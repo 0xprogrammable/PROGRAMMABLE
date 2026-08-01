@@ -31,7 +31,11 @@ import {
   type ReorgGenesisAnchor,
   type ReorgHistoryAncestor,
 } from "./projector-reorg";
-import { PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP } from "./projector-runtime-limits";
+import {
+  PROJECTOR_JSON_RPC_BATCH_SIZE,
+  PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
+  PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT,
+} from "./projector-runtime-limits";
 import { manifestEventSelectors } from "./event-manifest";
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
 
@@ -41,13 +45,15 @@ import { getDataPipelineReleaseBinding } from "./release-binding.server";
  * ceiling for one block-complete commit.
  */
 const PROJECTOR_PAGE_LIMIT = 32;
-const MAXIMUM_CANDIDATES_PER_COMMIT =
-  PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP;
 const MAXIMUM_PROVIDER_CALLS = 128;
+// The paid secondary provider meters each request inside a JSON-RPC batch.
+// Keep the real request starts below twenty seconds of sustained allowance so
+// database work, provider jitter and the final atomic commit retain headroom.
+const MAXIMUM_PROVIDER_RPC_STARTS = 400;
 const COVERAGE_BLOCK_SPAN = 500;
 const MAXIMUM_COVERAGE_REQUESTS = 9;
 const MAXIMUM_DEADLINE_MS = 75_000;
-const MAXIMUM_JSON_RPC_BATCH_SIZE = 100;
+const MAXIMUM_JSON_RPC_BATCH_SIZE = PROJECTOR_JSON_RPC_BATCH_SIZE;
 const MAXIMUM_LOG_FILTER_ADDRESSES = 512;
 const MAXIMUM_LOG_FILTER_TOPIC0 = 64;
 
@@ -319,6 +325,56 @@ function estimatedProviderCallsForWindow(input: Readonly<{
   }) as [number, number];
 }
 
+function estimatedProviderStartsForWindow(input: Readonly<{
+  candidates: readonly EnvioCandidate[];
+  cursor: EnvioCandidateCursor;
+  throughBlock: bigint;
+  filterShape: CoverageFilterShape;
+}>): number {
+  const { addressCount, topicCount } = input.filterShape;
+  const cursorBlock = BigInt(input.cursor.blockNumber);
+  const effectiveFromBlock =
+    input.cursor.blockGlobalLogIndex === 0xffff_ffff &&
+      input.cursor.candidateId === ""
+      ? cursorBlock + 1n
+      : cursorBlock;
+  const blockCount = input.throughBlock - effectiveFromBlock + 1n;
+  if (
+    addressCount < 1 ||
+    topicCount < 1 ||
+    blockCount < 1n ||
+    blockCount > BigInt(Number.MAX_SAFE_INTEGER)
+  ) {
+    throw invalidInput("config", "coverage-start-budget");
+  }
+  const filterCount = Number(blockCount) *
+    Math.ceil(addressCount / MAXIMUM_LOG_FILTER_ADDRESSES) *
+    Math.ceil(topicCount / MAXIMUM_LOG_FILTER_TOPIC0);
+  const uniqueCandidateBlocks = new Set(
+    input.candidates.map(({ blockNumber }) => blockNumber),
+  ).size;
+  const uniqueTransactions = new Set(
+    input.candidates.map(({ transactionHash }) => transactionHash),
+  ).size;
+  const uniqueCodeRequests = new Set(
+    input.candidates.map(({ blockHash, sourceAddress }) =>
+      `${blockHash}:${sourceAddress}`
+    ),
+  ).size;
+  const starts =
+    2 +
+    uniqueCandidateBlocks +
+    1 +
+    uniqueTransactions +
+    uniqueCodeRequests +
+    1 +
+    filterCount;
+  if (!Number.isSafeInteger(starts) || starts < 1) {
+    throw invalidInput("config", "coverage-start-budget");
+  }
+  return starts;
+}
+
 function fitCompleteCoverageWindow(input: Readonly<{
   candidates: readonly EnvioCandidate[];
   cursor: EnvioCandidateCursor;
@@ -363,7 +419,16 @@ function fitCompleteCoverageWindow(input: Readonly<{
       filterShape,
       providers: input.providers,
     });
-    if (calls.every((count) => count <= MAXIMUM_PROVIDER_CALLS)) {
+    const starts = estimatedProviderStartsForWindow({
+      candidates,
+      cursor: input.cursor,
+      throughBlock: middle,
+      filterShape,
+    });
+    if (
+      starts <= MAXIMUM_PROVIDER_RPC_STARTS &&
+      calls.every((count) => count <= MAXIMUM_PROVIDER_CALLS)
+    ) {
       selected = middle;
       low = middle + 1n;
     } else {
@@ -538,12 +603,13 @@ export async function runProjectorCycle(input: {
     const collected: EnvioCandidate[] = [];
     let pageCursor = cursor;
     let reachedTerminalBoundary = false;
+    let collectionCeiling = PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT;
     // Read one sentinel beyond the atomic ceiling. An empty sentinel proves an
     // exact-size block ended; a real sentinel lets us either cut back to the
     // preceding complete block or fail closed when one block exceeds 4096.
-    while (collected.length <= MAXIMUM_CANDIDATES_PER_COMMIT) {
+    while (collected.length <= collectionCeiling) {
       const capacity =
-        MAXIMUM_CANDIDATES_PER_COMMIT + 1 - collected.length;
+        collectionCeiling + 1 - collected.length;
       const limit = Math.min(PROJECTOR_PAGE_LIMIT, capacity);
       const page = await input.envio.readCandidatesWindow({
         cursor: pageCursor,
@@ -561,6 +627,20 @@ export async function runProjectorCycle(input: {
         blockGlobalLogIndex: last.blockGlobalLogIndex,
         candidateId: last.candidateId,
       };
+      if (
+        collectionCeiling === PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT &&
+        collected.length > PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT
+      ) {
+        const boundaryBlock = collected.at(-1)!.blockNumber;
+        const completePrefixExists = collected.some(
+          ({ blockNumber }) => BigInt(blockNumber) < BigInt(boundaryBlock),
+        );
+        if (completePrefixExists) break;
+        // Only a single oversized first block may exceed the preferred
+        // ceiling. Continue just far enough to prove its complete boundary,
+        // while retaining the hard 4096-candidate fail-closed limit.
+        collectionCeiling = PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP;
+      }
     }
 
     // A returned candidate is never treated as proof that its block ended. A

@@ -34,9 +34,10 @@ import type {
 } from "./dual-rpc";
 import type { EnvioCandidate } from "./envio";
 import { DataPipelineError } from "./errors";
-import type {
-  PostgresExecutor,
-  PostgresTransaction,
+import {
+  postgresJson,
+  type PostgresExecutor,
+  type PostgresTransaction,
 } from "./postgres";
 import type { ProjectorPlan, ProjectorStore } from "./projector";
 import type {
@@ -3479,6 +3480,44 @@ export function createPostgresProjectorStore(input: {
         provider_a_block_hash: finalBlockHash,
         provider_b_block_hash: finalBlockHash,
       });
+      const candidateBlocks = new Map<string, HexBytes32>();
+      for (const candidate of commitInput.candidates) {
+        const blockHash = canonicalBytes32(candidate.blockHash);
+        const existing = candidateBlocks.get(candidate.blockNumber);
+        if (existing !== undefined && existing !== blockHash) {
+          return projectorValidationFailure();
+        }
+        candidateBlocks.set(candidate.blockNumber, blockHash);
+      }
+      if (candidateBlocks.size === 0) {
+        candidateBlocks.set(finalBlockNumber, finalBlockHash);
+      }
+      if (candidateBlocks.get(finalBlockNumber) !== finalBlockHash) {
+        return projectorValidationFailure();
+      }
+      const blockEvidenceRecords = Object.freeze(
+        [...candidateBlocks].map(([blockNumber, blockHash]) => {
+          const evidenceId = blockNumber === finalBlockNumber
+            ? ids.block
+            : exactUuid(uuid());
+          return Object.freeze({
+            evidenceId,
+            blockNumber,
+            blockHash,
+            evidence: blockNumber === finalBlockNumber
+              ? blockEvidence
+              : providerEvidenceV2("block", {
+                  chain_id: "1",
+                  epoch_id: plan.database.epochId,
+                  pointer_generation: plan.database.pointerGeneration,
+                  observation_id: ids.observation,
+                  block_number: blockNumber,
+                  provider_a_block_hash: blockHash,
+                  provider_b_block_hash: blockHash,
+                }),
+          });
+        }),
+      );
       const coverageEvidence = providerEvidenceV2("log_coverage", {
         chain_id: "1",
         epoch_id: plan.database.epochId,
@@ -3569,22 +3608,24 @@ export function createPostgresProjectorStore(input: {
           ],
         );
         exactIdResult(observationRows, ids.observation);
-        const blockRows = await transaction.query(
-          "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
-          [
-            ids.block,
-            ids.observation,
-            ids.run,
-            finalBlockNumber,
-            hexToBytes(finalBlockHash),
-            hexToBytes(finalBlockHash),
-            blockEvidence.encodingVersion,
-            blockEvidence.canonicalPreimage,
-            hexToBytes(blockEvidence.contentFingerprint),
-            timestamp,
-          ],
-        );
-        exactIdResult(blockRows, ids.block);
+        for (const blockRecord of blockEvidenceRecords) {
+          const blockRows = await transaction.query(
+            "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
+            [
+              blockRecord.evidenceId,
+              ids.observation,
+              ids.run,
+              blockRecord.blockNumber,
+              hexToBytes(blockRecord.blockHash),
+              hexToBytes(blockRecord.blockHash),
+              blockRecord.evidence.encodingVersion,
+              blockRecord.evidence.canonicalPreimage,
+              hexToBytes(blockRecord.evidence.contentFingerprint),
+              timestamp,
+            ],
+          );
+          exactIdResult(blockRows, blockRecord.evidenceId);
+        }
         const commitRows = await transaction.query<{ generation: unknown }>(
           COMMIT_ENVIO_PAGE_SQL,
           [
@@ -3596,7 +3637,7 @@ export function createPostgresProjectorStore(input: {
             plan.cursor.generation,
             (BigInt(plan.cursor.generation) + 1n).toString(),
             evidence.coverage.fromBlockNumber,
-            JSON.stringify(candidateJson),
+            postgresJson(candidateJson),
             ids.observation,
             ids.block,
             plan.database.rpcProviderDeploymentIds[0],

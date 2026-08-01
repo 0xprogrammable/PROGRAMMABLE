@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import {
   assertProductionDualRpcProviders,
+  boundedRpcExecutor,
   createProductionDualRpcProviders,
 } from "../../lib/data-pipeline/rpc-providers.server";
 
@@ -13,6 +14,30 @@ const QUICKNODE =
   "https://programmable.ethereum.quiknode.pro/quicknode-test-token/";
 
 describe("production dual-RPC providers", () => {
+  it("paces provider calls below the sustained request ceiling", async () => {
+    vi.useFakeTimers();
+    try {
+      const execute = boundedRpcExecutor(20);
+      const starts: number[] = [];
+      const calls = Array.from({ length: 21 }, () =>
+        execute(async () => {
+          starts.push(Date.now());
+        })
+      );
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(starts).toHaveLength(20);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(starts).toHaveLength(20);
+      await vi.advanceTimersByTimeAsync(1);
+      await Promise.all(calls);
+      expect(starts).toHaveLength(21);
+      expect(starts[20]! - starts[0]!).toBeGreaterThanOrEqual(1_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("derives fixed independent identities from exact paid-provider URLs", () => {
     const providers = createProductionDualRpcProviders({
       PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,

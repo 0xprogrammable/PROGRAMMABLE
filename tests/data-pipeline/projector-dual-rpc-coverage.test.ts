@@ -803,7 +803,7 @@ describe("dual-RPC exact Envio window coverage", () => {
       items.map(({ sourceAddress }) => sourceAddress),
     );
     for (const rpcClient of [first, second]) {
-      expect(rpcClient.getBytecodes).toHaveBeenCalledTimes(2);
+      expect(rpcClient.getBytecodes).toHaveBeenCalledTimes(6);
       expect(rpcClient.getBytecode).not.toHaveBeenCalled();
       const requests = vi.mocked(rpcClient.getBytecodes!).mock.calls.flatMap(
         ([input]) => input.requests,
@@ -813,7 +813,7 @@ describe("dual-RPC exact Envio window coverage", () => {
         vi.mocked(rpcClient.getBytecodes!).mock.calls.map(
           ([input]) => input.requests.length,
         ),
-      ).toEqual([100, 1]);
+      ).toEqual([20, 20, 20, 20, 20, 1]);
       expect(requests).toEqual(
         items.map(({ sourceAddress }) => ({
           address: sourceAddress,
@@ -843,7 +843,7 @@ describe("dual-RPC exact Envio window coverage", () => {
       code: "validation_failed",
       safeMetadata: { operation: "dynamic-runtime-code-agreement" },
     });
-    expect(second.getBytecodes).toHaveBeenCalledTimes(2);
+    expect(second.getBytecodes).toHaveBeenCalledTimes(6);
   });
 
   it("fails closed when providers disagree on the dynamic child bytecode", async () => {
@@ -1164,13 +1164,13 @@ describe("dual-RPC exact Envio window coverage", () => {
         provider("quicknode-mainnet", second),
       ],
       coveragePolicy: { maximumBlockSpan: 500, maximumRequests: 8 },
-      rpcPolicy: { maxAttempts: 1 },
+      rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 128 },
     });
     for (const rpcClient of [first, second]) {
       const getLogsBatch = vi.mocked(rpcClient.getLogsBatch!);
-      expect(getLogsBatch).toHaveBeenCalledTimes(13);
+      expect(getLogsBatch).toHaveBeenCalledTimes(61);
       for (const [batch] of getLogsBatch.mock.calls) {
-        expect(batch.requests.length).toBeLessThanOrEqual(100);
+        expect(batch.requests.length).toBeLessThanOrEqual(20);
         for (const request of batch.requests) {
           expect(request.toBlock - request.fromBlock + 1n).toBe(1n);
           expect(request.addresses.length).toBeLessThanOrEqual(512);

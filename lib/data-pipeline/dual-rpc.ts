@@ -45,6 +45,7 @@ import {
   type ProjectorRewardRpcModel,
 } from "./projector-reward-rpc-contract";
 import {
+  PROJECTOR_JSON_RPC_BATCH_SIZE,
   PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
   PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
 } from "./projector-runtime-limits";
@@ -573,7 +574,7 @@ const DEFAULT_RPC_DEADLINE_MS = 75_000;
 const DEFAULT_MAXIMUM_PROVIDER_CALLS = 48;
 const DEFAULT_COVERAGE_BLOCK_SPAN = 500;
 const DEFAULT_COVERAGE_MAXIMUM_REQUESTS = 64;
-const MAXIMUM_JSON_RPC_BATCH_SIZE = 100;
+const MAXIMUM_JSON_RPC_BATCH_SIZE = PROJECTOR_JSON_RPC_BATCH_SIZE;
 const MAXIMUM_LOG_FILTER_ADDRESSES = 512;
 const MAXIMUM_LOG_FILTER_TOPIC0 = 64;
 const MAXIMUM_LOG_FILTER_BLOCK_SPAN = 1n;
@@ -899,7 +900,14 @@ async function retryTracedRpc<T>(
       }
     }
   }
-  throw lastError;
+  if (lastError instanceof DataPipelineError) throw lastError;
+  throw dataPipelineError({
+    dependency: "rpc",
+    code: "dependency_unavailable",
+    retryable: true,
+    countsTowardCircuit: true,
+    metadata: { operation: operationName },
+  });
 }
 
 async function withinRpcDeadline<T>(

@@ -155,7 +155,7 @@ describe("production reward-vault RPC reader", () => {
     expect(mocks.readContract).toHaveBeenCalledTimes(104);
     expect(maximumInFlight).toBeGreaterThan(1);
     expect(maximumInFlight).toBeLessThanOrEqual(8);
-  });
+  }, 10_000);
 
   it("shares one eight-call limit across mixed single and batch reads", async () => {
     const blockHash = bytes32("9");
@@ -240,7 +240,7 @@ describe("production reward-vault RPC reader", () => {
     expect(batchClient.getTransactionReceipt).toHaveBeenCalledTimes(20);
     expect(batchClient.getBytecode).toHaveBeenCalledTimes(20);
     expect(batchClient.request).toHaveBeenCalledTimes(20);
-  });
+  }, 10_000);
 
   it("reads factory authentication and CREATE2 helpers at the exact block", async () => {
     const factory = address("6");

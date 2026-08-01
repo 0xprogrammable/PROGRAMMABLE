@@ -337,7 +337,7 @@ export async function runConfiguredProjectorCycle(
     sslCaPem: config.database.sslCaPem,
     maxConnections: 1,
     connectTimeoutMs: 2_000,
-    idleTimeoutMs: 5_000,
+    idleTimeoutMs: 60_000,
   });
   const leaseController = dependencies.createLeaseController({
     executor: runtimeExecutor,
@@ -367,7 +367,7 @@ export async function runConfiguredProjectorCycle(
       sslCaPem: config.database.sslCaPem,
       maxConnections: 1,
       connectTimeoutMs: 2_000,
-      idleTimeoutMs: 5_000,
+      idleTimeoutMs: 60_000,
     });
     executor = writerExecutor;
     if (config.binding.candidate) {

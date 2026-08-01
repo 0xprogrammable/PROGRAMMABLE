@@ -458,9 +458,9 @@ describe("dual-RPC Envio candidate verification", () => {
     });
 
     expect(batch.candidates).toHaveLength(256);
-    expect(batch.executionTrace.providerCallCounts).toEqual([8, 8]);
+    expect(batch.executionTrace.providerCallCounts).toEqual([18, 18]);
     for (const rpcClient of [first, second]) {
-      expect(rpcClient.getTransactionReceipts).toHaveBeenCalledTimes(3);
+      expect(rpcClient.getTransactionReceipts).toHaveBeenCalledTimes(13);
       expect(rpcClient.getBytecodes).toHaveBeenCalledTimes(1);
       expect(rpcClient.getTransactionReceipt).not.toHaveBeenCalled();
       expect(rpcClient.getBytecode).not.toHaveBeenCalled();
@@ -566,11 +566,11 @@ describe("dual-RPC Envio candidate verification", () => {
     });
 
     expect(batch.candidates).toHaveLength(blockCount);
-    expect(batch.executionTrace.providerCallCounts).toEqual([11, 11]);
+    expect(batch.executionTrace.providerCallCounts).toEqual([41, 41]);
     for (const rpcClient of [first, second]) {
-      expect(rpcClient.getBlocks).toHaveBeenCalledTimes(3);
-      expect(rpcClient.getTransactionReceipts).toHaveBeenCalledTimes(3);
-      expect(rpcClient.getBytecodes).toHaveBeenCalledTimes(3);
+      expect(rpcClient.getBlocks).toHaveBeenCalledTimes(13);
+      expect(rpcClient.getTransactionReceipts).toHaveBeenCalledTimes(13);
+      expect(rpcClient.getBytecodes).toHaveBeenCalledTimes(13);
       expect(rpcClient.getBlock).not.toHaveBeenCalled();
       expect(rpcClient.getTransactionReceipt).not.toHaveBeenCalled();
       expect(rpcClient.getBytecode).not.toHaveBeenCalled();

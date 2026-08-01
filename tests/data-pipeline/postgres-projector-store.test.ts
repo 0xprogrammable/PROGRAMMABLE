@@ -1168,8 +1168,20 @@ describe("concrete projector Postgres store", () => {
         rpcProviderDeploymentIds: [IDS[1], IDS[2]] as const,
       },
     };
-    const item = candidate();
-    const rawLogCommitment = bytes32("2");
+    const first = candidate();
+    const second: EnvioCandidate = {
+      ...candidate(),
+      candidateId: `1:${bytes32("c")}:${bytes32("b")}:11`,
+      blockNumber: "25650002",
+      blockHash: bytes32("c"),
+      blockTimestamp: "1750000012",
+      transactionHash: bytes32("b"),
+      transactionIndex: 0,
+      blockGlobalLogIndex: 11,
+      payloadHash: bytes32("2"),
+    };
+    const firstRawLogCommitment = bytes32("2");
+    const secondRawLogCommitment = bytes32("1");
     const evidence: DualRpcCandidateWindowEvidence = {
       chainId: 1,
       providerIdentities: ["alchemy", "quicknode"],
@@ -1179,19 +1191,19 @@ describe("concrete projector Postgres store", () => {
       providerHeads: ["25650020", "25650021"],
       safeBlockNumber: "25650008",
       safeBlockHash: bytes32("9"),
-      executionTrace: executionTrace(1),
+      executionTrace: executionTrace(2),
       candidates: [
         {
           chainId: 1,
-          candidateId: item.candidateId,
-          sourceAddress: item.sourceAddress,
-          contractName: item.contractName,
-          eventName: item.eventName,
+          candidateId: first.candidateId,
+          sourceAddress: first.sourceAddress,
+          contractName: first.contractName,
+          eventName: first.eventName,
           sourceKind: "static",
           model: "classic",
           releaseVersion: "classic-v3",
-          payloadHash: item.payloadHash,
-          rawLogCommitment,
+          payloadHash: first.payloadHash,
+          rawLogCommitment: firstRawLogCommitment,
           providerIdentities: ["alchemy", "quicknode"],
           providerVendorGroups: ["alchemy", "quicknode"],
           providerEndpointCommitments: [bytes32("3"), bytes32("4")],
@@ -1199,22 +1211,49 @@ describe("concrete projector Postgres store", () => {
           providerHeads: ["25650020", "25650021"],
           safeBlockNumber: "25650008",
           safeBlockHash: bytes32("9"),
-          candidateBlockNumber: item.blockNumber,
-          candidateBlockHash: item.blockHash,
-          candidateBlockTimestamp: item.blockTimestamp,
-          transactionHash: item.transactionHash,
-          transactionIndex: item.transactionIndex,
+          candidateBlockNumber: first.blockNumber,
+          candidateBlockHash: first.blockHash,
+          candidateBlockTimestamp: first.blockTimestamp,
+          transactionHash: first.transactionHash,
+          transactionIndex: first.transactionIndex,
           receiptCommitment: bytes32("7"),
           sourceCodeHash: bytes32("8"),
           receiptLogOrdinal: 0,
         },
+        {
+          chainId: 1,
+          candidateId: second.candidateId,
+          sourceAddress: second.sourceAddress,
+          contractName: second.contractName,
+          eventName: second.eventName,
+          sourceKind: "static",
+          model: "classic",
+          releaseVersion: "classic-v3",
+          payloadHash: second.payloadHash,
+          rawLogCommitment: secondRawLogCommitment,
+          providerIdentities: ["alchemy", "quicknode"],
+          providerVendorGroups: ["alchemy", "quicknode"],
+          providerEndpointCommitments: [bytes32("3"), bytes32("4")],
+          providerOriginCommitments: [bytes32("5"), bytes32("6")],
+          providerHeads: ["25650020", "25650021"],
+          safeBlockNumber: "25650008",
+          safeBlockHash: bytes32("9"),
+          candidateBlockNumber: second.blockNumber,
+          candidateBlockHash: second.blockHash,
+          candidateBlockTimestamp: second.blockTimestamp,
+          transactionHash: second.transactionHash,
+          transactionIndex: second.transactionIndex,
+          receiptCommitment: bytes32("6"),
+          sourceCodeHash: bytes32("8"),
+          receiptLogOrdinal: 0,
+        },
       ],
-      coveredCandidateCount: 1,
+      coveredCandidateCount: 2,
       coverage: {
         fromBlockNumber: plan.cursor.blockNumber,
-        throughBlockNumber: item.blockNumber,
-        throughBlockHash: item.blockHash,
-        throughBlockGlobalLogIndex: "10",
+        throughBlockNumber: second.blockNumber,
+        throughBlockHash: second.blockHash,
+        throughBlockGlobalLogIndex: "11",
         filterCommitment: bytes32("a"),
         providerLogCommitments: [bytes32("b"), bytes32("b")],
       },
@@ -1223,8 +1262,8 @@ describe("concrete projector Postgres store", () => {
     await expect(
       store.commitVerifiedPage({
         plan,
-        snapshotBlock: item.blockNumber,
-        candidates: [item],
+        snapshotBlock: second.blockNumber,
+        candidates: [first, second],
         evidence,
         blockComplete: true,
       }),
@@ -1234,6 +1273,13 @@ describe("concrete projector Postgres store", () => {
     expect(statements.some((text) => text.includes("open_run"))).toBe(true);
     expect(statements.some((text) => text.includes("append_safe_head_observation"))).toBe(true);
     expect(statements.some((text) => text.includes("append_dual_rpc_block_evidence"))).toBe(true);
+    const blockWrites = executor.queries.filter(({ text }) =>
+      text.includes("append_dual_rpc_block_evidence"),
+    );
+    expect(blockWrites.map(({ values }) => values[3])).toEqual([
+      first.blockNumber,
+      second.blockNumber,
+    ]);
     expect(statements.at(-1)).toContain("commit_envio_ingestion_page_v1");
     const commit = executor.queries.at(-1)!;
     expect(
@@ -1243,7 +1289,8 @@ describe("concrete projector Postgres store", () => {
           value.some(
             (item) =>
               item instanceof Uint8Array &&
-              `0x${Buffer.from(item).toString("hex")}` === rawLogCommitment,
+              `0x${Buffer.from(item).toString("hex")}` ===
+                firstRawLogCommitment,
           ),
       ),
     ).toBe(true);
@@ -1317,7 +1364,10 @@ describe("concrete projector Postgres store", () => {
     ).resolves.toEqual({ generation: "8" });
     const commit = executor.queries.at(-1)!;
     expect(commit.text).toContain("commit_envio_ingestion_page_v1");
-    expect(commit.values[8]).toBe("[]");
+    expect(commit.values[8]).toEqual({
+      kind: "programmable-postgres-json-v1",
+      value: [],
+    });
     expect(commit.values[14]).toEqual([]);
     expect(commit.values[15]).toEqual([]);
   });

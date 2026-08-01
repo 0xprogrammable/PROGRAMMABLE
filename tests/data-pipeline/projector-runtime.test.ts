@@ -1067,7 +1067,7 @@ describe("projector runtime boundary", () => {
     );
   });
 
-  it("collects split Envio pages but publishes only one verified block boundary", async () => {
+  it("publishes the preferred complete block before the next page", async () => {
     const input = fixtures();
     const values = [
       ...Array.from({ length: 32 }, (_, index) =>
@@ -1080,8 +1080,7 @@ describe("projector runtime boundary", () => {
     input.envio.readCandidatesWindow
       .mockReset()
       .mockResolvedValueOnce(values.slice(0, 32))
-      .mockResolvedValueOnce(values.slice(32))
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(values.slice(32, 33));
 
     await expect(
       runProjectorCycle({
@@ -1091,15 +1090,15 @@ describe("projector runtime boundary", () => {
       }),
     ).resolves.toMatchObject({
       status: "committed",
-      candidateCount: 39,
-      snapshotBlock: "102",
+      candidateCount: 32,
+      snapshotBlock: "101",
     });
 
     expect(input.verifyWindow).toHaveBeenCalledWith(
       expect.objectContaining({
-        candidates: values,
+        candidates: values.slice(0, 32),
         through: {
-          blockNumber: "102",
+          blockNumber: "101",
           blockGlobalLogIndex: 0xffff_ffff,
           candidateId: "empty-page",
         },
@@ -1159,6 +1158,43 @@ describe("projector runtime boundary", () => {
       }),
     ).resolves.toMatchObject({
       candidateCount: 20,
+      snapshotBlock: "101",
+    });
+    expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: firstBlock,
+        snapshotBlock: "101",
+        blockComplete: true,
+      }),
+    );
+  });
+
+  it("commits a preferred-size complete prefix before the atomic ceiling", async () => {
+    const input = fixtures();
+    const firstBlock = Array.from({ length: 30 }, (_, index) =>
+      candidate({ blockNumber: 101, logIndex: index }),
+    );
+    const nextBlock = Array.from({ length: 20 }, (_, index) =>
+      candidate({ blockNumber: 102, logIndex: index }),
+    );
+    const values = [...firstBlock, ...nextBlock];
+    let offset = 0;
+    input.envio.readCandidatesWindow.mockReset().mockImplementation(
+      async ({ limit }: { limit: number }) => {
+        const page = values.slice(offset, offset + limit);
+        offset += page.length;
+        return page;
+      },
+    );
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 75_000,
+      }),
+    ).resolves.toMatchObject({
+      candidateCount: 30,
       snapshotBlock: "101",
     });
     expect(input.store.commitVerifiedPage).toHaveBeenCalledWith(
