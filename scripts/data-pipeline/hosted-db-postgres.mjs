@@ -528,7 +528,7 @@ export async function applyReviewedBootstrap({ sql, plan }) {
   validateReviewedBootstrapPlan(plan);
   return sql.begin(async (transaction) => {
     await transaction.unsafe(
-      "set local role programmable_projector; set local lock_timeout = '4s'; set local statement_timeout = '15min'",
+      "set local lock_timeout = '4s'; set local statement_timeout = '15min'",
     ).simple();
     const [lock] = await transaction.unsafe(`
       select pg_catalog.pg_try_advisory_xact_lock(
@@ -547,6 +547,7 @@ export async function applyReviewedBootstrap({ sql, plan }) {
       await assertBootstrapMatches(transaction, plan);
       return Object.freeze({ status: "current", changed: false, footprint });
     }
+    await transaction.unsafe("set local role programmable_projector").simple();
     for (const provider of plan.providerBindings) {
       await registerBootstrapProvider(transaction, provider);
     }
@@ -568,6 +569,7 @@ export async function applyReviewedBootstrap({ sql, plan }) {
     for (const release of plan.releases) {
       await applyReleaseBootstrap(transaction, release, plan.createdAt);
     }
+    await transaction.unsafe("reset role").simple();
     await assertBootstrapMatches(transaction, plan);
     return Object.freeze({
       status: "current",
