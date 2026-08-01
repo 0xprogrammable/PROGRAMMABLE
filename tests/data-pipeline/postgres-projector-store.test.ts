@@ -206,7 +206,7 @@ class StoreExecutor implements PostgresExecutor {
                   {
                     binding_id: "21000000-0000-4000-8000-000000000001",
                     source_name: "StockV1RewardVaultFactory",
-                    source_role: "reward_vault_factory",
+                    source_role: "vault_factory",
                     source_type: "ethereum_contract",
                     source_address:
                       "0xd430d9162c153afdf9e4caca6d2317e72a044441",
@@ -222,7 +222,7 @@ class StoreExecutor implements PostgresExecutor {
                     parent_factory_release_binding_id:
                       "21000000-0000-4000-8000-000000000001",
                     parent_factory_binding_commitment: bytes32("5"),
-                    parent_source_role: "reward_vault_factory",
+                    parent_source_role: "vault_factory",
                     factory_event_type: "QuoteAssetFeeSplitVaultDeployed",
                     deployed_address_field: "vault",
                     deployed_source_role: "reward_vault",
@@ -277,7 +277,7 @@ class StoreExecutor implements PostgresExecutor {
                 {
                   binding_id: "20000000-0000-4000-8000-000000000001",
                   source_name: "ClassicV3RewardVaultFactory",
-                  source_role: "reward_vault_factory",
+                  source_role: "vault_factory",
                   source_type: "ethereum_contract",
                   source_address: "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
                   recovery_selector: null,
@@ -294,7 +294,7 @@ class StoreExecutor implements PostgresExecutor {
                   parent_factory_release_binding_id:
                     "20000000-0000-4000-8000-000000000001",
                   parent_factory_binding_commitment: bytes32("c"),
-                  parent_source_role: "reward_vault_factory",
+                  parent_source_role: "vault_factory",
                   factory_event_type: "ClassicRewardVaultDeployed",
                   deployed_address_field: "vault",
                   deployed_source_role: "reward_vault",
@@ -1018,6 +1018,7 @@ describe("concrete projector Postgres store", () => {
       reconstructedRuntimeCode: rawRuntimeCode,
       reconstructedRuntimeCodeHash: runtimeCodeHash,
       factoryConfigurationCommitment: bytes32("9"),
+      deferredAllocationEvidenceCommitment: null,
       template,
       startedAtMs: 1,
       completedAtMs: 2,
@@ -1960,7 +1961,7 @@ describe("release-scoped projector Postgres commit", () => {
       source_bindings: [{
         binding_id: "20000000-0000-4000-8000-000000000001",
         source_name: "ClassicV3RewardVaultFactory",
-        source_role: "reward_vault_factory",
+        source_role: "vault_factory",
         source_type: "ethereum_contract",
         source_address: "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
         inclusive_start_block: "25640000",
@@ -1973,7 +1974,7 @@ describe("release-scoped projector Postgres commit", () => {
         parent_factory_release_binding_id:
           "20000000-0000-4000-8000-000000000001",
         parent_factory_binding_commitment: bytes32("c"),
-        parent_source_role: "reward_vault_factory",
+        parent_source_role: "vault_factory",
         factory_event_type: "ClassicRewardVaultDeployed",
         deployed_address_field: "vault",
         deployed_source_role: "reward_vault",

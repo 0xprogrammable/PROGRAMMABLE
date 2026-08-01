@@ -1058,6 +1058,34 @@ export function projectorFoldManifestCoverage() {
   return Object.freeze(manifest.map((entry) => Object.freeze(entry)));
 }
 
+/**
+ * Exact projector rule authority used by the hosted bootstrap planner.
+ *
+ * Contract names remain part of this boundary so a semantic source role is
+ * never reconstructed from a display name or naming convention.
+ */
+export function projectorFoldProjectionRules() {
+  projectorFoldManifestCoverage();
+  return Object.freeze(
+    Object.entries(EVENT_SPECS)
+      .flatMap(([contractName, events]) =>
+        Object.entries(events).map(([eventName, eventSpec]) =>
+          Object.freeze({
+            contractName,
+            eventName,
+            sourceRole: eventSpec.sourceRole,
+            projectionKind: eventSpec.kind,
+          }),
+        ),
+      )
+      .sort((left, right) =>
+        `${left.contractName}:${left.eventName}`.localeCompare(
+          `${right.contractName}:${right.eventName}`,
+        ),
+      ),
+  );
+}
+
 projectorFoldManifestCoverage();
 
 type Registration = Readonly<{

@@ -404,15 +404,27 @@ export type DualRpcCandidateWindowEvidence =
 
 export type ProjectorDynamicSourceTemplate = Readonly<{
   templateId: string;
-  contractName: "ClassicV3RewardVault";
-  model: "classic";
-  releaseVersion: "classic-v3";
+  contractName:
+    | "ClassicV3RewardVault"
+    | "StockV1RewardVault"
+    | "StockV2V3RewardVault";
+  model: "classic" | "stock-paired";
+  releaseVersion:
+    | "classic-v3"
+    | "stock-paired-v1"
+    | "stock-paired-v2"
+    | "stock-paired-v3";
   parentFactoryAddress: HexAddress;
-  parentFactoryContractName: "ClassicV3RewardVaultFactory";
+  parentFactoryContractName:
+    | "ClassicV3RewardVaultFactory"
+    | "StockV1RewardVaultFactory"
+    | "StockV2V3RewardVaultFactory";
   parentFactoryBindingId: string;
   parentFactoryBindingCommitment: HexBytes32;
   parentSourceRole: string;
-  factoryEventName: "ClassicRewardVaultDeployed";
+  factoryEventName:
+    | "ClassicRewardVaultDeployed"
+    | "QuoteAssetFeeSplitVaultDeployed";
   deployedAddressField: "vault";
   deployedSourceRole: "reward_vault";
   deployedArtifactCreationCodeCommitment: HexBytes32;
@@ -437,6 +449,18 @@ export type ProjectorDynamicSourceTemplate = Readonly<{
     envioProviderDeploymentId: string;
     rpcProviderDeploymentIds: readonly [string, string];
   }>;
+}>;
+
+export type VerifiedDeferredAllocationEvidence = Readonly<{
+  source: "dual-rpc-reward-allocation";
+  vault: HexAddress;
+  blockNumber: string;
+  blockHash: HexBytes32;
+  configurationHash: HexBytes32;
+  beneficiaryCount: string;
+  providerIdentities: readonly [string, string];
+  providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
+  evidenceCommitment: HexBytes32;
 }>;
 
 /**
@@ -471,6 +495,7 @@ export type DualRpcDynamicRuntimeObservation = Readonly<{
   reconstructedRuntimeCode: Hex;
   reconstructedRuntimeCodeHash: HexBytes32;
   factoryConfigurationCommitment: HexBytes32;
+  deferredAllocationEvidenceCommitment: HexBytes32 | null;
   template: ProjectorDynamicSourceTemplate;
   startedAtMs: number;
   completedAtMs: number;
@@ -3388,6 +3413,18 @@ const DYNAMIC_TEMPLATE_BINDINGS = Object.freeze({
     factoryContractName: "ClassicV3RewardVaultFactory",
     factoryEventName: "ClassicRewardVaultDeployed",
   }),
+  StockV1RewardVault: Object.freeze({
+    model: "stock-paired",
+    releaseVersions: Object.freeze(["stock-paired-v1"]),
+    factoryContractName: "StockV1RewardVaultFactory",
+    factoryEventName: "QuoteAssetFeeSplitVaultDeployed",
+  }),
+  StockV2V3RewardVault: Object.freeze({
+    model: "stock-paired",
+    releaseVersions: Object.freeze(["stock-paired-v2", "stock-paired-v3"]),
+    factoryContractName: "StockV2V3RewardVaultFactory",
+    factoryEventName: "QuoteAssetFeeSplitVaultDeployed",
+  }),
 } as const);
 
 function canonicalDynamicSourceTemplate(
@@ -3527,18 +3564,23 @@ function dynamicImmutableEvidence(input: {
   parentCandidate: EnvioCandidate;
   sourceAddress: HexAddress;
   runtimeBytecode: Hex;
+  deferredAllocationEvidence?: VerifiedDeferredAllocationEvidence;
 }) {
   const { template, parentCandidate, sourceAddress, runtimeBytecode } = input;
   const spec = template.immutableBindingSpec;
   const bindings = spec.bindings;
   const factoryConfigurationField = spec.factoryConfigurationField;
+  const deferred = input.deferredAllocationEvidence;
   if (
     !Array.isArray(bindings) ||
     bindings.length !== template.immutableReferences.length ||
     bindings.length < 1 ||
     bindings.length > 64 ||
-    typeof factoryConfigurationField !== "string" ||
-    !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(factoryConfigurationField)
+    !(
+      (typeof factoryConfigurationField === "string" &&
+        /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(factoryConfigurationField)) ||
+      factoryConfigurationField === null
+    )
   ) {
     throw validationError("rpc", "dynamic-runtime-binding-spec");
   }
@@ -3551,13 +3593,13 @@ function dynamicImmutableEvidence(input: {
   ) {
     throw validationError("rpc", "dynamic-runtime-deployed-address");
   }
-  const factoryConfigurationValue =
-    parentCandidate.decodedPayload[factoryConfigurationField];
   let factoryConfigurationCommitment: HexBytes32;
   try {
-    factoryConfigurationCommitment = canonicalBytes32(
-      factoryConfigurationValue,
-    );
+    factoryConfigurationCommitment = factoryConfigurationField === null
+      ? canonicalBytes32(deferred?.configurationHash)
+      : canonicalBytes32(
+          parentCandidate.decodedPayload[factoryConfigurationField],
+        );
   } catch {
     throw validationError("rpc", "dynamic-runtime-factory-configuration");
   }
@@ -3594,7 +3636,8 @@ function dynamicImmutableEvidence(input: {
     if (
       (source !== "factory_event" &&
         source !== "constant" &&
-        source !== "deployed_address") ||
+        source !== "deployed_address" &&
+        source !== "deferred_allocation_evidence") ||
       (encoding !== "address" && encoding !== "bytes") ||
       (encoding === "address" &&
         reference.length !== 20 &&
@@ -3603,7 +3646,33 @@ function dynamicImmutableEvidence(input: {
       throw validationError("rpc", "dynamic-runtime-binding-spec");
     }
     let expected: Hex;
-    if (source === "deployed_address") {
+    if (source === "deferred_allocation_evidence") {
+      if (
+        !deferred || binding.field !== undefined || binding.value !== undefined ||
+        encoding !== "bytes" || reference.length !== 32 ||
+        (binding.evidenceRole !== "configuration_hash" &&
+          binding.evidenceRole !== "beneficiary_count")
+      ) {
+        throw validationError("rpc", "dynamic-runtime-deferred-allocation");
+      }
+      if (binding.evidenceRole === "configuration_hash") {
+        expected = canonicalBytes32(deferred.configurationHash);
+      } else {
+        let beneficiaryCount: string;
+        try {
+          beneficiaryCount = parseNonnegativeIntegerText(
+            deferred.beneficiaryCount,
+          );
+        } catch {
+          throw validationError("rpc", "dynamic-runtime-deferred-allocation");
+        }
+        const integer = BigInt(beneficiaryCount);
+        if (integer < 1n || integer > 64n) {
+          throw validationError("rpc", "dynamic-runtime-deferred-allocation");
+        }
+        expected = `0x${integer.toString(16).padStart(64, "0")}`;
+      }
+    } else if (source === "deployed_address") {
       if (
         binding.field !== undefined ||
         binding.value !== undefined ||
@@ -3689,6 +3758,10 @@ function dynamicImmutableEvidence(input: {
     reconstructedRuntimeCode,
     reconstructedRuntimeCodeHash: keccak256(reconstructedRuntimeCode),
     factoryConfigurationCommitment,
+    deferredAllocationEvidenceCommitment:
+      deferred === undefined
+        ? null
+        : canonicalBytes32(deferred.evidenceCommitment),
   });
 }
 
@@ -3707,6 +3780,7 @@ async function verifyDynamicRuntimeAtBlockWithDualRpcInternal(input: {
   template: ProjectorDynamicSourceTemplate;
   parentEvidence: DualRpcCandidateWindowEvidence;
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  deferredAllocationEvidence?: VerifiedDeferredAllocationEvidence;
   deadlineMs?: number;
 }, preloaded?: Readonly<{
   rawCodes: readonly [Hex | undefined, Hex | undefined];
@@ -3785,6 +3859,22 @@ async function verifyDynamicRuntimeAtBlockWithDualRpcInternal(input: {
     ({ endpointOriginCommitment }) =>
       rpcBytes32(endpointOriginCommitment, "provider-origin-commitment"),
   ) as [HexBytes32, HexBytes32];
+  if (input.deferredAllocationEvidence !== undefined) {
+    const deferred = input.deferredAllocationEvidence;
+    if (
+      deferred.source !== "dual-rpc-reward-allocation" ||
+      canonicalAddress(deferred.vault) !== sourceAddress ||
+      parseNonnegativeIntegerText(deferred.blockNumber) !== deploymentBlockNumber ||
+      canonicalBytes32(deferred.blockHash) !== deploymentBlockHash ||
+      deferred.providerIdentities[0] !== providerIdentities[0] ||
+      deferred.providerIdentities[1] !== providerIdentities[1] ||
+      deferred.providerEndpointCommitments[0] !== providerEndpointCommitments[0] ||
+      deferred.providerEndpointCommitments[1] !== providerEndpointCommitments[1] ||
+      canonicalBytes32(deferred.evidenceCommitment) === ZERO_BYTES32
+    ) {
+      throw validationError("rpc", "dynamic-runtime-deferred-allocation");
+    }
+  }
   const exactTuple = (
     actual: readonly string[],
     expected: readonly string[],
@@ -3882,6 +3972,7 @@ async function verifyDynamicRuntimeAtBlockWithDualRpcInternal(input: {
       parentCandidate: input.parentCandidate,
       sourceAddress,
       runtimeBytecode: code[0]!.canonical,
+      deferredAllocationEvidence: input.deferredAllocationEvidence,
     });
     const completedAtMs = Date.now();
     return Object.freeze({
@@ -3926,6 +4017,8 @@ async function verifyDynamicRuntimeAtBlockWithDualRpcInternal(input: {
         immutableEvidence.reconstructedRuntimeCodeHash,
       factoryConfigurationCommitment:
         immutableEvidence.factoryConfigurationCommitment,
+      deferredAllocationEvidenceCommitment:
+        immutableEvidence.deferredAllocationEvidenceCommitment,
       template,
       startedAtMs,
       completedAtMs,

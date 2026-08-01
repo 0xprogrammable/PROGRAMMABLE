@@ -851,14 +851,31 @@ function parseDynamicAttestations(input: {
   });
 }
 
-function classicDynamicTemplatesForPlan(input: {
+function dynamicTemplatesForPlan(input: {
   manifest: ParsedManifest;
   scope: ProjectorReleaseDatabaseScope;
   state: RuntimeState;
   envioProviderDeploymentId: string;
   rpcProviderDeploymentIds: readonly [string, string];
 }): ProjectorDynamicSourceTemplate[] {
-  if (input.scope.releaseId !== "classic-v3") return [];
+  const descriptor = input.scope.releaseId === "classic-v3"
+    ? {
+        contractName: "ClassicV3RewardVault" as const,
+        model: "classic" as const,
+        releaseVersion: "classic-v3" as const,
+        parentFactoryContractName: "ClassicV3RewardVaultFactory" as const,
+        factoryEventName: "ClassicRewardVaultDeployed" as const,
+      }
+    : null;
+  if (descriptor === null) {
+    if (input.scope.modelId === "stock-paired") {
+      return [];
+    }
+    if (input.manifest.templates.length !== 0) {
+      return projectorValidationFailure();
+    }
+    return [];
+  }
   if (input.manifest.templates.length !== 1) {
     return projectorValidationFailure();
   }
@@ -868,11 +885,11 @@ function classicDynamicTemplatesForPlan(input: {
   );
   if (
     !parent ||
-    parent.sourceName !== "ClassicV3RewardVaultFactory" ||
-    parent.sourceRole !== "reward_vault_factory" ||
+    parent.sourceName !== descriptor.parentFactoryContractName ||
+    parent.sourceRole !== "vault_factory" ||
     template.parentSourceRole !== parent.sourceRole ||
     template.parentBindingCommitment !== parent.bindingCommitment ||
-    template.factoryEventType !== "ClassicRewardVaultDeployed" ||
+    template.factoryEventType !== descriptor.factoryEventName ||
     template.deployedAddressField !== "vault" ||
     template.deployedSourceRole !== "reward_vault"
   ) {
@@ -881,15 +898,15 @@ function classicDynamicTemplatesForPlan(input: {
   return [
     Object.freeze({
       templateId: template.templateId,
-      contractName: "ClassicV3RewardVault",
-      model: "classic",
-      releaseVersion: "classic-v3",
+      contractName: descriptor.contractName,
+      model: descriptor.model,
+      releaseVersion: descriptor.releaseVersion,
       parentFactoryAddress: parent.sourceAddress,
-      parentFactoryContractName: "ClassicV3RewardVaultFactory",
+      parentFactoryContractName: descriptor.parentFactoryContractName,
       parentFactoryBindingId: parent.bindingId,
       parentFactoryBindingCommitment: parent.bindingCommitment,
       parentSourceRole: template.parentSourceRole,
-      factoryEventName: "ClassicRewardVaultDeployed",
+      factoryEventName: descriptor.factoryEventName,
       deployedAddressField: "vault",
       deployedSourceRole: "reward_vault",
       deployedArtifactCreationCodeCommitment:
@@ -982,8 +999,6 @@ function parseCurrentProvisionalDynamicSources(input: {
     const referenceShape = JSON.stringify(references);
     if (
       !template ||
-      template.contractName !== "ClassicV3RewardVault" ||
-      template.releaseVersion !== "classic-v3" ||
       exactUuid(row.release_epoch_id) !== template.database.epochId ||
       integerText(row.release_pointer_generation) !==
         template.database.pointerGeneration ||
@@ -1255,7 +1270,7 @@ function provisionalParentItem(input: {
   const configurationValue =
     typeof configurationField === "string"
       ? candidate.decodedPayload[configurationField]
-      : undefined;
+      : runtime.factoryConfigurationCommitment;
   let sourceAddress: HexAddress;
   let factoryConfigurationCommitment: HexBytes32;
   try {
@@ -1323,10 +1338,10 @@ function provisionalParentItem(input: {
   }
   if (
     candidate.chainId !== 1 ||
-    candidate.contractName !== "ClassicV3RewardVaultFactory" ||
-    candidate.eventName !== "ClassicRewardVaultDeployed" ||
-    candidate.releaseHint.model !== "classic" ||
-    candidate.releaseHint.releaseVersion !== "classic-v3" ||
+    candidate.contractName !== template.parentFactoryContractName ||
+    candidate.eventName !== template.factoryEventName ||
+    candidate.releaseHint.model !== template.model ||
+    candidate.releaseHint.releaseVersion !== template.releaseVersion ||
     candidate.blockNumber !== input.snapshotBlock ||
     verified.candidateId !== candidate.candidateId ||
     verified.sourceAddress !== candidate.sourceAddress ||
@@ -1337,8 +1352,8 @@ function provisionalParentItem(input: {
     verified.transactionHash !== candidate.transactionHash ||
     verified.payloadHash !== candidate.payloadHash ||
     verified.sourceKind !== "static" ||
-    verified.model !== "classic" ||
-    verified.releaseVersion !== "classic-v3" ||
+    verified.model !== template.model ||
+    verified.releaseVersion !== template.releaseVersion ||
     input.evidence.coverage.throughBlockNumber !== candidate.blockNumber ||
     input.evidence.coverage.throughBlockHash !== candidate.blockHash ||
     input.evidence.coverage.throughBlockGlobalLogIndex !==
@@ -1387,6 +1402,9 @@ function provisionalParentItem(input: {
     immutableValuesCommitment !== recomputedImmutableValuesCommitment ||
     factoryConfigurationCommitment !==
       canonicalBytes32(runtime.factoryConfigurationCommitment) ||
+    (configurationField === null
+      ? runtime.deferredAllocationEvidenceCommitment === null
+      : runtime.deferredAllocationEvidenceCommitment !== null) ||
     runtime.providerCallCounts[0] !== 1 ||
     runtime.providerCallCounts[1] !== 1 ||
     (template.expectedExactRuntimeCodeHash !== null &&
@@ -1618,7 +1636,7 @@ export function createPostgresProjectorStore(input: {
             }),
           );
           dynamicSourceTemplates.push(
-            ...classicDynamicTemplatesForPlan({
+            ...dynamicTemplatesForPlan({
               manifest,
               scope,
               state,

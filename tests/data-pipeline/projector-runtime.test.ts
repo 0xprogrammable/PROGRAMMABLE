@@ -265,6 +265,7 @@ function fixtures() {
     reconstructedRuntimeCode: "0x6000" as const,
     reconstructedRuntimeCodeHash: SAFE_HASH,
     factoryConfigurationCommitment: CURSOR_HASH,
+    deferredAllocationEvidenceCommitment: null,
     template: request.template,
     startedAtMs: 1,
     completedAtMs: 2,
