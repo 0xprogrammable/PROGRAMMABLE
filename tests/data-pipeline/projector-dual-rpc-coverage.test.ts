@@ -200,6 +200,16 @@ function dynamicParentEvidence(
     ],
     safeBlockNumber: SAFE_BLOCK_NUMBER.toString(),
     safeBlockHash: SAFE_BLOCK_HASH,
+    executionTrace: {
+      startedAtMs: 1,
+      completedAtMs: 2,
+      candidateBatchSize: 1,
+      hardDeadlineMs: 1_000,
+      maxCallsPerProvider: 128,
+      elapsedMs: 1,
+      providerCallCounts: [0, 0],
+      calls: [],
+    },
     candidates: [
       {
         chainId: 1,
