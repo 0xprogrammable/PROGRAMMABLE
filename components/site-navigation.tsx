@@ -29,7 +29,15 @@ const navItems = [
 ];
 
 function isCurrent(pathname: string, href: string) {
-  return href === "/" ? pathname === href : pathname.startsWith(href);
+  if (href === "/") {
+    return (
+      pathname === href ||
+      pathname.startsWith("/projects/") ||
+      pathname.startsWith("/token/")
+    );
+  }
+
+  return pathname.startsWith(href);
 }
 
 function subscribeToTheme(callback: () => void) {
@@ -102,7 +110,6 @@ export function SiteHeader() {
             />
             <span className="wordmark-copy">
               <strong>Programmable</strong>
-              <small>Ethereum · Uniswap v4</small>
             </span>
           </Link>
           <a

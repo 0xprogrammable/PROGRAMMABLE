@@ -9,19 +9,21 @@ body {
 }
 
 html[data-theme="light"] {
-  --accent: #e887b2;
-  --accent-hover: #dd77a6;
-  --accent-strong: #944a70;
-  --accent-ink: #2b1721;
-  --accent-soft: rgba(232, 135, 178, 0.13);
-  --accent-wash: rgba(232, 135, 178, 0.1);
-  --body-background: #f7fafb;
-  --border: rgba(44, 66, 74, 0.105);
-  --border-strong: rgba(44, 66, 74, 0.18);
-  --canvas: #f8fbfc;
-  --control-border: rgba(59, 80, 88, 0.16);
-  --dim: #758188;
-  --focus: #a64f7a;
+  --accent: oklch(0.72 0.13 355);
+  --accent-hover: oklch(0.67 0.14 355);
+  --accent-deep: oklch(0.43 0.105 355);
+  --accent-strong: var(--accent-deep);
+  --accent-ink: oklch(0.26 0.04 355);
+  --brand-pink: var(--accent);
+  --accent-soft: oklch(0.94 0.035 355 / 0.8);
+  --accent-wash: oklch(0.96 0.022 355 / 0.72);
+  --body-background: oklch(0.985 0.004 75);
+  --border: oklch(0.3 0.015 250 / 0.105);
+  --border-strong: oklch(0.3 0.015 250 / 0.18);
+  --canvas: oklch(0.988 0.004 75);
+  --control-border: oklch(0.3 0.015 250 / 0.16);
+  --dim: oklch(0.56 0.013 250);
+  --focus: oklch(0.48 0.14 355);
   --glass-70: rgba(255, 255, 255, 0.64);
   --glass-72: rgba(255, 255, 255, 0.68);
   --glass-76: rgba(255, 255, 255, 0.72);
@@ -33,19 +35,19 @@ html[data-theme="light"] {
   --glass-94: rgba(255, 255, 255, 0.91);
   --glass-96: rgba(255, 255, 255, 0.94);
   --glass-98: rgba(255, 255, 255, 0.97);
-  --header-background: rgba(249, 252, 253, 0.72);
-  --header-border: rgba(59, 80, 88, 0.1);
-  --muted: #647278;
-  --panel-border: rgba(59, 80, 88, 0.14);
-  --panel-border-soft: rgba(59, 80, 88, 0.105);
-  --popover-border: rgba(59, 80, 88, 0.17);
-  --surface: #f7fafb;
-  --surface-raised: #ffffff;
-  --surface-soft: #eef4f6;
-  --surface-tint: rgba(232, 243, 248, 0.58);
-  --surface-tint-strong: rgba(245, 249, 250, 0.94);
-  --text: #172126;
-  --text-soft: #405058;
+  --header-background: oklch(0.995 0.002 75 / 0.76);
+  --header-border: oklch(0.3 0.015 250 / 0.1);
+  --muted: oklch(0.55 0.013 250);
+  --panel-border: oklch(0.3 0.015 250 / 0.14);
+  --panel-border-soft: oklch(0.3 0.015 250 / 0.105);
+  --popover-border: oklch(0.3 0.015 250 / 0.17);
+  --surface: oklch(0.985 0.004 75);
+  --surface-raised: oklch(1 0 0);
+  --surface-soft: oklch(0.96 0.008 240);
+  --surface-tint: oklch(0.96 0.018 230 / 0.58);
+  --surface-tint-strong: oklch(0.98 0.007 230 / 0.94);
+  --text: oklch(0.22 0.015 250);
+  --text-soft: oklch(0.41 0.016 250);
   --warning-background: rgba(255, 247, 236, 0.76);
   --warning-border: rgba(173, 111, 42, 0.14);
   --warning-text: #75501f;
@@ -60,30 +62,22 @@ html[data-theme="light"] {
 
 html[data-theme="light"] body {
   background: var(--body-background);
-  letter-spacing: -0.008em;
+  letter-spacing: -0.006em;
 }
 
 html[data-theme="light"] ::selection {
-  background: rgba(232, 135, 178, 0.28);
+  background: oklch(0.82 0.09 355 / 0.34);
 }
 
 html[data-theme="light"] .app-frame::before {
-  background-color: #f8fbfc;
+  background-color: var(--body-background);
   background-image:
-    linear-gradient(
-      180deg,
-      rgba(249, 252, 253, 0.23) 0%,
-      rgba(249, 252, 253, 0.3) 32%,
-      rgba(249, 252, 253, 0.8) 67%,
-      #f8fbfc 100%
-    ),
-    image-set(
-      url("/brand/programmable-floral-headquarters-3000-v1.webp") 1x,
-      url("/brand/programmable-floral-headquarters-6000-v1.webp") 2x
-    );
-  background-position: center, center top;
+    radial-gradient(circle at 86% 2%, oklch(0.94 0.035 355 / 0.34), transparent 27%),
+    radial-gradient(circle at 6% 38%, oklch(0.95 0.025 225 / 0.32), transparent 25%),
+    linear-gradient(180deg, oklch(0.995 0.002 75), var(--body-background));
+  background-position: center;
   background-repeat: no-repeat;
-  background-size: 100% 100%, 100% auto;
+  background-size: cover;
 }
 
 html[data-theme="light"] .site-atmosphere {
@@ -143,7 +137,7 @@ html[data-theme="light"] .wordmark-copy small {
 }
 
 html[data-theme="light"] .header-social-link {
-  color: var(--accent-strong);
+  color: var(--accent-deep);
   height: 40px;
   width: 40px;
 }
@@ -191,8 +185,8 @@ html[data-theme="light"] .wallet-button {
 }
 
 html[data-theme="light"] .wallet-button {
-  background: rgba(247, 224, 235, 0.62);
-  border-color: rgba(231, 142, 180, 0.22);
+  background: oklch(0.93 0.04 355 / 0.68);
+  border-color: oklch(0.66 0.12 355 / 0.22);
   color: var(--accent-ink);
 }
 

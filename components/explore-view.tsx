@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Copy,
   Search,
+  Send,
   SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +19,11 @@ import {
   AnimatedMarketCap,
   type MarketCapMetric,
 } from "@/components/animated-market-cap";
+import { XBrandIcon } from "@/components/brand-icons";
+import { showcaseProjects } from "@/components/project-showcase-data";
 import { SiteFooter } from "@/components/site-footer";
+import { WebsiteLinkIcon } from "@/components/website-link-icon";
+import styles from "@/components/explore-experience.module.css";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -33,6 +38,8 @@ type TokenCard = {
   usesFallbackImage: boolean;
   tokenAddress: `0x${string}`;
   marketCap?: MarketCapMetric;
+  description: string;
+  links: TokenLink[];
 };
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -90,7 +97,6 @@ const TOKENS_PER_PAGE = 10;
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
 export const EXPLORE_REFRESH_INTERVAL_MS = 10_000;
-const PROGRAMMABLE_TOKEN_ADDRESS = "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
   "/brand/programmable-token-fallback-01-dawn.webp",
   "/brand/programmable-token-fallback-02-moon.webp",
@@ -399,7 +405,19 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     usesFallbackImage: !token.imageUrl?.trim(),
     tokenAddress: token.tokenAddress,
     marketCap: getMarketCap(token),
+    description:
+      token.description?.trim() ||
+      "Open the project profile to inspect its hook and pool configuration.",
+    links: token.links ?? [],
   }));
+}
+
+function TokenLinkIcon({ kind }: { kind: TokenLink["kind"] }) {
+  if (kind === "x") return <XBrandIcon />;
+  if (kind === "telegram") {
+    return <Send aria-hidden="true" size={16} strokeWidth={1.7} />;
+  }
+  return <WebsiteLinkIcon />;
 }
 
 export function ExploreView() {
@@ -588,18 +606,19 @@ export function ExploreView() {
       (state.phase === "error" && state.requestKey !== requestKey)
     ) {
       return (
-        <div className="token-empty" role="status">
-          <p>Loading tokens</p>
+        <div className={styles.directoryState} role="status">
+          <span className={styles.loadingLine} aria-hidden="true" />
+          <p>Loading projects…</p>
         </div>
       );
     }
 
     if (state.phase === "error") {
       return (
-        <div className="token-empty" role="alert">
+        <div className={styles.directoryState} role="alert">
           <p>{state.message}</p>
           <button
-            className="text-button"
+            className={styles.textAction}
             type="button"
             onClick={() => setRetryKey((value) => value + 1)}
           >
@@ -611,8 +630,18 @@ export function ExploreView() {
 
     if (state.payload.status === "not-deployed") {
       return (
-        <div className="token-empty">
-          <p>No verified tokens yet</p>
+        <div className={styles.directoryState}>
+          <div>
+            <span className={styles.stateLabel}>Live directory</span>
+            <h3>No indexed launches yet</h3>
+            <p>
+              Verified launches will appear here automatically. The project
+              previews above demonstrate the complete profile structure.
+            </p>
+          </div>
+          <Link className={styles.textAction} href="/launch">
+            Open launch builder
+          </Link>
         </div>
       );
     }
@@ -620,10 +649,10 @@ export function ExploreView() {
     if (cards.length === 0) {
       if (debouncedQuery) {
         return (
-          <div className="token-empty">
+          <div className={styles.directoryState}>
             <p>No tokens match this search</p>
             <button
-              className="text-button"
+              className={styles.textAction}
               type="button"
               onClick={() => {
                 setQuery("");
@@ -637,13 +666,17 @@ export function ExploreView() {
       }
 
       return (
-        <div className="token-empty token-empty-initial">
+        <div className={styles.directoryState}>
           <div>
-            <h2>No public tokens yet</h2>
-            <p>The first public launch will appear here.</p>
+            <span className={styles.stateLabel}>Live directory</span>
+            <h3>No indexed launches yet</h3>
+            <p>
+              Verified launches will appear here automatically. The project
+              previews above demonstrate the complete profile structure.
+            </p>
           </div>
-          <Link className="text-button" href="/launch">
-            Launch a token
+          <Link className={styles.textAction} href="/launch">
+            Open launch builder
           </Link>
         </div>
       );
@@ -651,7 +684,7 @@ export function ExploreView() {
 
     return (
       <div
-        className="token-card-grid"
+        className={styles.tokenGrid}
         key={`${activePage}:${sort}:${debouncedQuery}`}
       >
         {cards.map((token, index) => {
@@ -659,49 +692,92 @@ export function ExploreView() {
           const imageSource = getTokenCardImageSource(token.imageUrl);
 
           return (
-            <article className="token-card" key={token.id}>
+            <article className={styles.tokenCard} key={token.id}>
               <Link
-                className="token-card-hit-area"
+                className={styles.tokenCardHitArea}
                 href={href}
                 aria-label={`View ${token.name}`}
               />
 
-              <span className="token-card-art">
+              <span className={styles.tokenArtwork}>
                 <Image
-                  className="token-card-image"
+                  className={styles.tokenImage}
                   src={imageSource}
                   alt={
                     token.usesFallbackImage ? "" : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 800px) 46vw, 104px"
+                  sizes="(max-width: 900px) 92vw, 30vw"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                 />
+                <span className={styles.indexedBadge}>Indexed launch</span>
               </span>
 
-              <div className="token-card-body">
-                <header className="token-card-heading">
-                  <span className="token-card-title">
+              <div className={styles.tokenBody}>
+                <header className={styles.tokenHeading}>
+                  <span>Uniswap v4 project</span>
+                  <div>
                     <h3>{token.name}</h3>
-                    <span>${token.symbol}</span>
-                  </span>
+                    <strong>${token.symbol}</strong>
+                  </div>
                 </header>
 
-                {token.marketCap ? (
-                  <span className="token-card-market-cap">
-                    <AnimatedMarketCap
-                      delay={index * 18}
-                      metric={token.marketCap}
-                      replayKey={`${activePage}:${sort}:${debouncedQuery}`}
-                    />
-                    <span>Market cap</span>
+                <p className={styles.tokenDescription}>{token.description}</p>
+
+                <footer className={styles.tokenFooter}>
+                  {token.marketCap ? (
+                    <span className={styles.marketCap}>
+                      <span>Market cap</span>
+                      <AnimatedMarketCap
+                        delay={index * 18}
+                        metric={token.marketCap}
+                        replayKey={`${activePage}:${sort}:${debouncedQuery}`}
+                      />
+                    </span>
+                  ) : (
+                    <span className={styles.marketCap}>
+                      <span>Market cap</span>
+                      <strong>—</strong>
+                    </span>
+                  )}
+
+                  <span className={styles.tokenLinks}>
+                    <button
+                      type="button"
+                      aria-label={
+                        copiedAddress === token.tokenAddress
+                          ? `${token.name} contract address copied`
+                          : `Copy ${token.name} contract address`
+                      }
+                      title={
+                        copiedAddress === token.tokenAddress
+                          ? "Copied"
+                          : "Copy contract address"
+                      }
+                      onClick={() => copyAddress(token.tokenAddress)}
+                    >
+                      {copiedAddress === token.tokenAddress ? (
+                        <Check aria-hidden="true" size={15} />
+                      ) : (
+                        <Copy aria-hidden="true" size={15} />
+                      )}
+                    </button>
+                    {token.links.slice(0, 3).map((link) => (
+                      <a
+                        key={`${link.kind}:${link.url}`}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`${token.name} ${link.kind}`}
+                      >
+                        <TokenLinkIcon kind={link.kind} />
+                      </a>
+                    ))}
+                    <span className={styles.profileArrow} aria-hidden="true">
+                      <ArrowRight size={16} />
+                    </span>
                   </span>
-                ) : (
-                  <span className="token-card-market-cap token-card-market-cap-pending">
-                    <strong>—</strong>
-                    <span>Market cap</span>
-                  </span>
-                )}
+                </footer>
               </div>
             </article>
           );
@@ -712,95 +788,123 @@ export function ExploreView() {
 
   return (
     <>
-      <div className="explore-page page-width">
-        <section className="explore-intro">
-          <div className="explore-intro-copy">
-            <span className="explore-eyebrow">Programmable · Ethereum</span>
-            <h1>Uniswap v4 token infrastructure.</h1>
+      <main className={styles.page}>
+        <section className={styles.hero}>
+          <div className={styles.heroCopy}>
+            <h1>The home of Uniswap v4 projects.</h1>
             <p>
-              Explore indexed launches, inspect their onchain configuration,
-              and create tokens with defined rules.
+              Discover tokens as complete projects — their idea, hook, market,
+              creator, and community in one place.
             </p>
-            <div className="explore-intro-actions">
-              <Link className="explore-primary-action" href="/launch">
-                Launch a token
+            <div className={styles.heroActions}>
+              <a className={styles.primaryAction} href="#projects">
+                Explore projects
                 <ArrowRight aria-hidden="true" size={16} />
-              </Link>
-              <a className="explore-secondary-action" href="#tokens">
-                View projects
               </a>
+              <Link className={styles.secondaryAction} href="/launch">
+                Launch a project
+              </Link>
             </div>
           </div>
 
-          <aside className="explore-protocol-card" aria-label="Protocol record">
-            <div className="explore-protocol-brand">
-              <Image
-                className="explore-brand-logo"
-                src="/brand/loop/programmable-loop-mark-transparent-v1.png"
-                alt=""
-                width={1254}
-                height={1254}
-                priority
-              />
-              <div>
-                <strong>Programmable</strong>
-                <span>Token systems</span>
-              </div>
+          <aside className={styles.heroIndex} aria-label="Project preview index">
+            <div className={styles.heroIndexHeading}>
+              <span>Project atlas</span>
+              <strong>Preview</strong>
             </div>
-            <dl className="explore-protocol-facts">
-              <div>
-                <dt>Network</dt>
-                <dd>Ethereum</dd>
-              </div>
-              <div>
-                <dt>Liquidity</dt>
-                <dd>Uniswap v4</dd>
-              </div>
-              <div>
-                <dt>Execution</dt>
-                <dd>Your wallet</dd>
-              </div>
-            </dl>
-            <button
-              className="explore-token-address"
-              type="button"
-              aria-label={
-                copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                  ? "Programmable token address copied"
-                  : "Copy Programmable token address"
-              }
-              title={
-                copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                  ? "Copied"
-                  : "Copy token address"
-              }
-              onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
-            >
-              <span>Programmable token</span>
-              <code>{PROGRAMMABLE_TOKEN_ADDRESS}</code>
-              {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
-                <Check aria-hidden="true" size={13} />
-              ) : (
-                <Copy aria-hidden="true" size={13} />
-              )}
-            </button>
+            <ol>
+              {showcaseProjects.map((project, index) => (
+                <li key={project.slug}>
+                  <Link href={`/projects/${project.slug}`}>
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <strong>{project.name}</strong>
+                    <small>{project.category}</small>
+                    <ArrowRight aria-hidden="true" size={15} />
+                  </Link>
+                </li>
+              ))}
+            </ol>
           </aside>
         </section>
 
-        <section className="token-section" id="tokens" aria-busy={busy}>
-          <div className="token-section-heading">
-            <div className="token-section-title">
-              <span>Project directory</span>
-              <h2>Explore launches</h2>
+        <section className={styles.showcase} id="projects">
+          <header className={styles.sectionHeading}>
+            <div>
+              <span className={styles.eyebrow}>Project previews</span>
+              <h2>Every token gets a room.</h2>
+            </div>
+            <p>
+              Illustrative profiles for the new project experience. These
+              concepts are not deployed tokens or live markets.
+            </p>
+          </header>
+
+          <div className={styles.showcaseFeed}>
+            {showcaseProjects.map((project, index) => (
+              <article
+                className={`${styles.showcaseCard} ${
+                  index % 2 === 1 ? styles.showcaseCardReverse : ""
+                }`}
+                data-palette={project.palette}
+                key={project.slug}
+              >
+                <Link
+                  className={styles.showcaseHitArea}
+                  href={`/projects/${project.slug}`}
+                  aria-label={`Open ${project.name} project preview`}
+                />
+                <div className={styles.showcaseArtwork}>
+                  <Image
+                    src={project.image}
+                    alt={`${project.name} project artwork`}
+                    fill
+                    loading="eager"
+                    sizes="(max-width: 900px) 100vw, 55vw"
+                    unoptimized={project.slug === "studio-pass"}
+                  />
+                  <span>Interface preview</span>
+                </div>
+                <div className={styles.showcaseBody}>
+                  <div className={styles.showcaseTopline}>
+                    <span>{project.category}</span>
+                    <strong>${project.symbol}</strong>
+                  </div>
+                  <h3>{project.name}</h3>
+                  <p>{project.summary}</p>
+                  <div className={styles.showcaseMeta}>
+                    <span>
+                      <small>Model</small>
+                      <strong>{project.model}</strong>
+                    </span>
+                    <span>
+                      <small>Market cap</small>
+                      <strong>Not live</strong>
+                    </span>
+                  </div>
+                  <span className={styles.showcaseAction}>
+                    Open project profile
+                    <ArrowRight aria-hidden="true" size={16} />
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.directory} id="tokens" aria-busy={busy}>
+          <div className={styles.directoryHeading}>
+            <div className={styles.directoryTitle}>
+              <span className={styles.eyebrow}>Live directory</span>
+              <h2>Indexed launches</h2>
               <p>
                 {state.phase === "ready" && state.payload.total > 0
                   ? `${state.payload.total} indexed projects`
-                  : "Onchain launch records"}
+                  : "Verified onchain records"}
               </p>
             </div>
             {hasPublicTokens ? (
-              <div className="token-toolbar">
-                <label className="token-search">
+              <div className={styles.toolbar}>
+                <label className={styles.search}>
                   <Search aria-hidden="true" size={17} />
                   <span className="sr-only">
                     Search tokens by name, ticker or contract address
@@ -812,26 +916,26 @@ export function ExploreView() {
                   />
                 </label>
 
-                <details className="token-filter" ref={filterRef}>
+                <details className={styles.filter} ref={filterRef}>
                   <summary>
                     <SlidersHorizontal aria-hidden="true" size={16} />
-                    <span>Filter</span>
+                    <span>Sort</span>
                     <ChevronDown
-                      className="token-filter-chevron"
+                      className={styles.filterChevron}
                       aria-hidden="true"
                       size={15}
                     />
                   </summary>
                   <div
-                    className="token-filter-menu"
+                    className={styles.filterMenu}
                     role="group"
                     aria-label="Sort tokens"
                   >
                     {sortOptions.map((option) => (
                       <button
                         key={option.id}
-                        className={sort === option.id ? "active" : undefined}
                         type="button"
+                        data-active={sort === option.id ? "true" : undefined}
                         aria-pressed={sort === option.id}
                         onClick={() => {
                           setSort(option.id);
@@ -854,7 +958,7 @@ export function ExploreView() {
                 state.payload.status === "ready" &&
                 state.payload.total > 0 &&
                 cards.length > 0 ? (
-                  <nav className="token-pagination" aria-label="Token pages">
+                  <nav className={styles.pagination} aria-label="Token pages">
                     <button
                       type="button"
                       aria-label="Previous token page"
@@ -866,13 +970,13 @@ export function ExploreView() {
                       <ChevronLeft aria-hidden="true" size={15} />
                     </button>
 
-                    <div className="token-pagination-pages">
+                    <div className={styles.paginationPages}>
                       {paginationItems.map((item) =>
                         typeof item === "number" ? (
                           <button
                             key={item}
-                            className={
-                              activePage === item ? "active" : undefined
+                            data-active={
+                              activePage === item ? "true" : undefined
                             }
                             type="button"
                             aria-label={`Token page ${item}`}
@@ -913,7 +1017,7 @@ export function ExploreView() {
           </div>
 
           {state.phase === "ready" && state.refreshError ? (
-            <div className="token-refresh-warning" role="status">
+            <div className={styles.refreshWarning} role="status">
               <span>Prices may be out of date</span>
               <button
                 type="button"
@@ -931,7 +1035,7 @@ export function ExploreView() {
           ) : null}
           {renderTokenState()}
         </section>
-      </div>
+      </main>
       <SiteFooter />
       {copyError ? (
         <div className="toast-region" aria-live="assertive" aria-atomic="true">

@@ -119,7 +119,7 @@
 .socials a {
   align-items: center;
   border-radius: 50%;
-  color: var(--brand-pink);
+  color: var(--accent-deep);
   display: inline-flex;
   height: 44px;
   justify-content: center;
