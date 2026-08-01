@@ -476,8 +476,12 @@ function poolerConnectionUrl(target, spec, password) {
 
 async function openPoolerDatabase({ target, spec, password, sslCaPem }) {
   const connectionUrl = poolerConnectionUrl(target, spec, password);
-  connectionUrl.searchParams.delete("sslmode");
-  const sql = postgres(connectionUrl.toString(), {
+  const sql = postgres({
+    host: connectionUrl.hostname,
+    port: Number(connectionUrl.port),
+    database: connectionUrl.pathname.slice(1),
+    username: decodeURIComponent(connectionUrl.username),
+    password: decodeURIComponent(connectionUrl.password),
     ssl: { rejectUnauthorized: true, ca: sslCaPem },
     max: 1,
     prepare: false,

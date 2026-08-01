@@ -64,19 +64,28 @@ const CANDIDATES_AFTER_QUERY = `
   ) {
     ChainEvent(
       where: {
-        _or: [
-          { blockNumber: { _gt: $afterBlock } }
+        _and: [
           {
-            _and: [
-              { blockNumber: { _eq: $afterBlock } }
-              { blockGlobalLogIndex: { _gt: $afterLogIndex } }
-            ]
+            contractName: {
+              _nin: ["StockV1RewardVault", "StockV2V3RewardVault"]
+            }
           }
           {
-            _and: [
-              { blockNumber: { _eq: $afterBlock } }
-              { blockGlobalLogIndex: { _eq: $afterLogIndex } }
-              { id: { _gt: $afterCandidateId } }
+            _or: [
+              { blockNumber: { _gt: $afterBlock } }
+              {
+                _and: [
+                  { blockNumber: { _eq: $afterBlock } }
+                  { blockGlobalLogIndex: { _gt: $afterLogIndex } }
+                ]
+              }
+              {
+                _and: [
+                  { blockNumber: { _eq: $afterBlock } }
+                  { blockGlobalLogIndex: { _eq: $afterLogIndex } }
+                  { id: { _gt: $afterCandidateId } }
+                ]
+              }
             ]
           }
         ]
@@ -122,6 +131,11 @@ const CANDIDATES_WINDOW_QUERY = `
     ChainEvent(
       where: {
         _and: [
+          {
+            contractName: {
+              _nin: ["StockV1RewardVault", "StockV2V3RewardVault"]
+            }
+          }
           { blockNumber: { _lte: $throughBlock } }
           {
             _or: [

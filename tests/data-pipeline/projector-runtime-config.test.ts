@@ -1043,4 +1043,75 @@ describe("configured projector runtime", () => {
     expect([...releaseCalls.values()]).toEqual([10, 10, 10, 10, 10]);
     expect(close).toHaveBeenCalledTimes(4);
   });
+
+  it("runs one larger ingestion-only cutover page without projecting releases", async () => {
+    const close = vi.fn(async () => undefined);
+    const executor = { close };
+    const runCycle = vi.fn(async () => ({
+      status: "committed" as const,
+      candidateCount: 512,
+      snapshotBlock: "25650512",
+      generation: "73",
+    }));
+    const runReleaseCycle = vi.fn();
+    const dependencies = {
+      createExecutor: vi.fn(() => executor),
+      assertPromotedDatabase: vi.fn(async () => undefined),
+      createLeaseController: vi.fn(() => ({
+        tryAcquire: vi.fn(async () => ({
+          status: "acquired",
+          fence: {
+            holderId: "projector-runtime-test",
+            generation: "1",
+            tokenHash: bytes32("a"),
+          },
+          acquiredAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2026-07-31T18:01:25.000Z",
+        })),
+        release: vi.fn(async () => true),
+      })),
+      createProviders: vi.fn(() => RUNTIME_PROVIDERS),
+      assertProviders: vi.fn(),
+      createEnvio: vi.fn(() => ({})),
+      createStore: vi.fn(() => ({})),
+      createReleaseStore: vi.fn(({ scope }) => ({ scope })),
+      runCycle,
+      runReleaseCycle,
+    } as never;
+
+    await expect(runConfiguredProjectorCycle({
+      env: environment(),
+      dependencies,
+      ingestionOnly: true,
+      preferredCandidatesPerCommit: 512,
+    })).resolves.toMatchObject({
+      ok: true,
+      ingestion: {
+        status: "committed",
+        candidateCount: 512,
+        pageCount: 1,
+        snapshotBlock: "25650512",
+        generation: "73",
+        atomicGroupCount: 1,
+      },
+      projections: [
+        { releaseId: "classic-v2", status: "deferred", pageCount: 0 },
+        { releaseId: "classic-v3", status: "deferred", pageCount: 0 },
+        { releaseId: "stock-paired-v1", status: "deferred", pageCount: 0 },
+        { releaseId: "stock-paired-v2", status: "deferred", pageCount: 0 },
+        { releaseId: "stock-paired-v3", status: "deferred", pageCount: 0 },
+      ],
+      readiness: {
+        status: "progressed",
+        activationReady: false,
+        lagging: true,
+        completedRounds: 1,
+      },
+    });
+    expect(runCycle).toHaveBeenCalledWith(expect.objectContaining({
+      preferredCandidatesPerCommit: 512,
+    }));
+    expect(runReleaseCycle).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(2);
+  });
 });

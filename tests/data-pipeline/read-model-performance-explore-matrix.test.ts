@@ -134,7 +134,9 @@ function fixture() {
   };
   let clock = 1_800_000_000_000;
   const now = () => clock++;
-  const fetchImpl = async (request: URL | RequestInfo) => {
+  const observedHeaders: Headers[] = [];
+  const fetchImpl = async (request: URL | RequestInfo, init?: RequestInit) => {
+    observedHeaders.push(new Headers(init?.headers));
     const url = new URL(
       request instanceof URL
         ? request.toString()
@@ -186,7 +188,7 @@ function fixture() {
       },
     });
   };
-  return { tokens, datasetManifest, now, fetchImpl };
+  return { tokens, datasetManifest, now, fetchImpl, observedHeaders };
 }
 
 function sha256Bytes(value: string | Uint8Array) {
@@ -202,6 +204,7 @@ async function acceptedBundle() {
     gitHead: GIT_HEAD,
     captureNonce: CAPTURE_NONCE,
     shadowProbeToken: "shadow-probe-secret-that-is-32-bytes", // gitleaks:allow
+    automationBypassSecret: "vercel-bypass-secret-that-is-32-bytes", // gitleaks:allow
     probeTimeoutMs: 30_000,
     concurrency: 20,
     datasetManifest: source.datasetManifest,
@@ -209,6 +212,12 @@ async function acceptedBundle() {
     fetchImpl: source.fetchImpl,
     now: source.now,
   })) as { manifest: MatrixManifest; pages: MatrixPage[] };
+  expect(source.observedHeaders.length).toBeGreaterThan(0);
+  for (const headers of source.observedHeaders) {
+    expect(headers.get("x-vercel-protection-bypass")).toBe(
+      "vercel-bypass-secret-that-is-32-bytes",
+    );
+  }
   const matrixBundle: MatrixBundle = {
     manifest: structuredClone(captured.manifest),
     pages: structuredClone(captured.pages),

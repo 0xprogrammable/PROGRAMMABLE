@@ -51,7 +51,7 @@ const EXACT = Object.freeze({
     "0x5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1",
   providerDeploymentId: "d08b62a6-74fb-5e0a-a698-dc6877150db4",
   initializationInputCommitment:
-    "0x8945e310f60754716ca0015bcdcdf4a39f9db07ab1c6d9c6bf59fee2b701dca9",
+    "0xe3218e30a2a95927427fe5e523a8f721fa0d7826dffaecb7140a126a56d17a44",
   initializedAt: "2026-08-01T09:00:00.000Z",
 } as const);
 

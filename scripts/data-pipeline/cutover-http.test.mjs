@@ -9,6 +9,7 @@ import {
 
 const DEPLOYMENT = "dpl_12345678901234567890";
 const SECRET = "s".repeat(32);
+const BYPASS_SECRET = "b".repeat(32);
 
 test("staged target accepts only a deployment-specific Vercel origin", () => {
   assert.equal(
@@ -31,6 +32,7 @@ test("staged worker authorization stays in headers and responses must be no-stor
     targetUrl: "https://launcher-abc.vercel.app/",
     deploymentId: DEPLOYMENT,
     cronSecret: SECRET,
+    automationBypassSecret: BYPASS_SECRET,
     fetchImpl: async (url, options) => {
       observed.push({ url: String(url), options });
       return new Response(
@@ -47,8 +49,14 @@ test("staged worker authorization stays in headers and responses must be no-stor
   await workers.runReconciler({ checkpointId: "x" });
   assert.equal(observed.length, 2);
   assert.equal(observed[0].options.headers.Authorization, `Bearer ${SECRET}`);
+  assert.equal(
+    observed[0].options.headers["x-vercel-protection-bypass"],
+    BYPASS_SECRET,
+  );
   assert.equal(observed[0].url.includes(SECRET), false);
+  assert.equal(observed[0].url.includes(BYPASS_SECRET), false);
   assert.equal(observed[1].options.body.includes(SECRET), false);
+  assert.equal(observed[1].options.body.includes(BYPASS_SECRET), false);
 });
 
 test("staged worker rejects cacheable and failed responses", async () => {
@@ -56,6 +64,7 @@ test("staged worker rejects cacheable and failed responses", async () => {
     targetUrl: "https://launcher-abc.vercel.app/",
     deploymentId: DEPLOYMENT,
     cronSecret: SECRET,
+    automationBypassSecret: BYPASS_SECRET,
     fetchImpl: async () => new Response("{}", { status: 200 }),
   });
   await assert.rejects(cacheable.runSourceProjector(), /unsafe response/u);
@@ -64,6 +73,7 @@ test("staged worker rejects cacheable and failed responses", async () => {
     targetUrl: "https://launcher-abc.vercel.app/",
     deploymentId: DEPLOYMENT,
     cronSecret: SECRET,
+    automationBypassSecret: BYPASS_SECRET,
     fetchImpl: async () => new Response("{}", {
       status: 503,
       headers: { "Cache-Control": "no-store" },
@@ -96,6 +106,10 @@ test("staged exposure gate accepts only the exact unaliased deployment", async (
   };
   const fetchDeployment = async ({ idOrUrl }) =>
     idOrUrl === DEPLOYMENT ? candidate : production;
+  const resolveAlias = async ({ alias }) =>
+    candidate.alias.includes(alias)
+      ? { alias, deploymentId: DEPLOYMENT }
+      : undefined;
   const result = await inspectUnexposedStagedDeployment({
     targetUrl: "https://launcher-abc.vercel.app/",
     deploymentId: DEPLOYMENT,
@@ -104,6 +118,7 @@ test("staged exposure gate accepts only the exact unaliased deployment", async (
     token: "v".repeat(32),
     teamId: "team_123",
     fetchDeployment,
+    resolveAlias,
   });
   assert.equal(result.schedulerExposure, false);
   assert.equal(result.currentProduction.deploymentId, production.id);
@@ -118,6 +133,7 @@ test("staged exposure gate accepts only the exact unaliased deployment", async (
       token: "v".repeat(32),
       teamId: "team_123",
       fetchDeployment,
+      resolveAlias,
     }),
     /exposed, aliased or not exactly bound/u,
   );
@@ -133,6 +149,7 @@ test("staged exposure gate accepts only the exact unaliased deployment", async (
       token: "v".repeat(32),
       teamId: "team_123",
       fetchDeployment,
+      resolveAlias,
     }),
     /exposed, aliased or not exactly bound/u,
   );

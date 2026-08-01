@@ -181,7 +181,7 @@ export type ReconcilerPreParityStore = Readonly<{
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
-const PROVIDER_IDENTITY_PATTERN = /^[a-z0-9][a-z0-9-]{0,95}$/u;
+const PROVIDER_IDENTITY_PATTERN = /^[a-z0-9][a-z0-9:-]{0,95}$/u;
 const MAXIMUM_ENTITY_COUNT = 10_000;
 const MAXIMUM_ROUTE_DTO_BYTES = 512 * 1024;
 const MAXIMUM_ALL_ROUTE_DTO_BYTES = 4 * 1024 * 1024;

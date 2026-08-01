@@ -49,17 +49,29 @@ function readiness(
   };
 }
 
-function request(token?: string) {
+function request(token?: string, cutover = false) {
   return new NextRequest("https://programmable.family/api/ops/projector", {
-    headers: token === undefined
+    headers: token === undefined && !cutover
       ? undefined
-      : { authorization: `Bearer ${token}` },
+      : {
+          ...(token === undefined
+            ? {}
+            : { authorization: `Bearer ${token}` }),
+          ...(cutover
+            ? { "x-programmable-cutover-mode": "raw-backfill-v1" }
+            : {}),
+        },
   });
 }
 
 describe("projector operations route", () => {
   beforeEach(() => {
     vi.stubEnv("CRON_SECRET", SECRET);
+    vi.stubEnv("PROGRAMMABLE_CUTOVER_BACKFILL_ACTIVE", "false");
+    vi.stubEnv(
+      "PROGRAMMABLE_CUTOVER_OPERATOR_SECRET",
+      "cutover-operator-secret-at-least-32-bytes",
+    );
     mocks.projectorRuntimeActivationState.mockReset();
     mocks.projectorRuntimeActivationState.mockReturnValue("active");
     mocks.runConfiguredProjectorCycle.mockReset();
@@ -136,6 +148,41 @@ describe("projector operations route", () => {
 
     expect(response.status).toBe(401);
     expect(mocks.runConfiguredProjectorCycle).not.toHaveBeenCalled();
+  });
+
+  it("keeps the larger ingestion-only window behind an independent cutover secret", async () => {
+    const cutoverSecret = "cutover-operator-secret-at-least-32-bytes";
+    vi.stubEnv("PROGRAMMABLE_CUTOVER_BACKFILL_ACTIVE", "true");
+    mocks.runConfiguredProjectorCycle.mockResolvedValue({
+      ok: true,
+      ingestion: {
+        status: "committed",
+        candidateCount: 512,
+        pageCount: 1,
+        generation: "43",
+        snapshotBlock: "25650512",
+        atomicGroupCount: 1,
+      },
+      projections: projections.map(({ releaseId }) => ({
+        releaseId,
+        status: "deferred",
+        pageCount: 0,
+      })),
+      readiness: readiness("progressed", "25650512", {
+        terminalSweepComplete: false,
+      }),
+    });
+
+    const rejected = await GET(request(SECRET, true));
+    expect(rejected.status).toBe(401);
+    expect(mocks.runConfiguredProjectorCycle).not.toHaveBeenCalled();
+
+    const response = await GET(request(cutoverSecret, true));
+    expect(response.status).toBe(200);
+    expect(mocks.runConfiguredProjectorCycle).toHaveBeenCalledWith({
+      ingestionOnly: true,
+      preferredCandidatesPerCommit: 512,
+    });
   });
 
   it("runs exactly one configured cycle and returns only bounded status data", async () => {

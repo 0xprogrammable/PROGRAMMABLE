@@ -21,16 +21,16 @@
       "activationEnvironment": "PROGRAMMABLE_PROJECTOR_ACTIVE",
       "route": {
         "path": "app/api/ops/projector/route.ts",
-        "sha256": "c2dadbbab4dce88fea349c98adf50eb3566bbd9957529b3bfc3fad594a704b92"
+        "sha256": "9b12168cbbadf0addac351c45f71931f3c04370bcd6cabe6174d21daeb00a94d"
       },
       "runtime": {
         "path": "lib/data-pipeline/projector-runtime-config.server.ts",
-        "sha256": "739338890666f863be9590f4f5c9b8116879372d4a2600b06c9e398e60c132e4"
+        "sha256": "f54859e55f35b99784eebd6cef58a40a5848904be21417249f3bff5bf1c88637"
       },
       "dependencies": [
         {
           "path": "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-          "sha256": "890ce8c7bea47e399b42c9c0228eef64bb139a1382e26fc68f3264ed6e3d8527"
+          "sha256": "32efa13d740614f7e66fd20a0158edf3383f4f6643a7fe34268fabda6261931c"
         }
       ],
       "migrations": [
@@ -61,6 +61,18 @@
         {
           "path": "supabase/migrations/20260801125441_reuse_safe_head_observations.sql",
           "sha256": "afbeea7bcf60e492e51bfd0c56517613f32a6f87a0182af00c48bdaef6569e74"
+        },
+        {
+          "path": "supabase/migrations/20260801144403_accept_uuid_v8_dynamic_source_lineage.sql",
+          "sha256": "85e0509d2a4fa49062a18d891e51cd0c64c1015926c3c3ef47a83ce16edb4170"
+        },
+        {
+          "path": "supabase/migrations/20260801155212_reuse_dual_rpc_block_evidence.sql",
+          "sha256": "51142370cf7fdf2bd60c2812978fe2cbbacf99f42b87c72f0ad1ac61b303cf51"
+        },
+        {
+          "path": "supabase/migrations/20260801204500_reuse_dual_rpc_block_evidence_constraint.sql",
+          "sha256": "92cc63189b41eda613ba9da21b7ef21bee650a93f1825f5ee063727ee6c06b11"
         }
       ]
     },

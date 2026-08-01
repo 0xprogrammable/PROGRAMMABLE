@@ -117,8 +117,11 @@ class StoreExecutor implements PostgresExecutor {
   readonly close = vi.fn(async () => undefined);
   transactionCount = 0;
   commitGeneration = "8";
+  cursorBlockNumber = "25650000";
   includeHistoricalStock = false;
   provisionalRows: readonly Record<string, unknown>[] = [];
+  provisionalActivationRows: readonly Record<string, unknown>[] = [];
+  pendingActivationResolutionRows: readonly Record<string, unknown>[] = [];
   reorgTargetRows: readonly Record<string, unknown>[] = [];
   reorgRecoveryRows: readonly Record<string, unknown>[] = [{
     cursor_generation: "8",
@@ -188,7 +191,7 @@ class StoreExecutor implements PostgresExecutor {
           return [
             {
               generation: "7",
-              block_number: "25650000",
+              block_number: this.cursorBlockNumber,
               block_hash: bytes(bytes32("7")),
               block_global_log_index: "9",
               candidate_id: `1:${bytes32("7")}:${bytes32("8")}:9`,
@@ -418,6 +421,16 @@ class StoreExecutor implements PostgresExecutor {
         if (text.includes("get_current_provisional_dynamic_sources_v1")) {
           return this.provisionalRows as unknown as Row[];
         }
+        if (
+          text.includes(
+            "get_current_provisional_activation_boundaries_v1",
+          )
+        ) {
+          return this.provisionalActivationRows as unknown as Row[];
+        }
+        if (text.includes("resolve_pending_dynamic_source_activations_v1")) {
+          return this.pendingActivationResolutionRows as unknown as Row[];
+        }
         if (text.includes("get_projector_reorg_generation_v1")) {
           return [{ generation: "0" }] as unknown as Row[];
         }
@@ -441,7 +454,7 @@ class StoreExecutor implements PostgresExecutor {
             id: this.reusedSafeHeadObservationId ?? values[0],
           }] as unknown as Row[];
         }
-        if (text.includes("append_dual_rpc_block_evidence")) {
+        if (text.includes("append_or_reuse_dual_rpc_block_evidence_v1")) {
           return [{ id: values[0] }] as unknown as Row[];
         }
         if (text.includes("append_projection_provider_execution_evidence_v1")) {
@@ -702,7 +715,7 @@ describe("concrete projector Postgres store", () => {
       expect.stringContaining("assert_projector_runtime_lease_v1"),
       expect.stringContaining("open_run"),
       expect.stringContaining("append_or_reuse_safe_head_observation_v1"),
-      expect.stringContaining("append_dual_rpc_block_evidence"),
+      expect.stringContaining("append_or_reuse_dual_rpc_block_evidence_v1"),
       expect.stringContaining("append_run_outcome"),
       expect.stringContaining("recover_projector_reorg_v1"),
     ]));
@@ -771,7 +784,7 @@ describe("concrete projector Postgres store", () => {
     );
   });
 
-  it("keeps an exact current Classic provisional parent outside dynamic coverage", async () => {
+  it("carries an exact current Classic provisional lineage into dynamic coverage", async () => {
     const executor = new StoreExecutor();
     executor.provisionalRows = [
       {
@@ -817,6 +830,22 @@ describe("concrete projector Postgres store", () => {
         staged_at: "2026-08-01T02:00:00.000Z",
       },
     ];
+    executor.provisionalActivationRows = [
+      {
+        provisional_lineage_id:
+          "42000000-0000-4000-8000-000000000002",
+        dynamic_source_attestation_id:
+          "42000000-0000-4000-8000-000000000004",
+        deployed_source_address: bytes(address("f")),
+        activation_candidate_id:
+          `1:${bytes32("d")}:${bytes32("e")}:10`,
+        activation_occurrence_id:
+          "42000000-0000-4000-8000-000000000005",
+        activation_block_number: "25650001",
+        activation_block_hash: bytes(bytes32("d")),
+        activation_block_global_log_index: "10",
+      },
+    ];
     const store = createPostgresProjectorStore({
       executor,
       providers: PROVIDERS,
@@ -826,15 +855,21 @@ describe("concrete projector Postgres store", () => {
 
     const plan = await store.readPlan();
 
-    expect(plan.dynamicSources).not.toEqual(
+    expect(plan.dynamicSources).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ sourceAddress: address("f") }),
+        expect.objectContaining({
+          sourceAddress: address("f"),
+          contractName: "ClassicV3RewardVault",
+          factoryBlockNumber: "25650001",
+          activationBlockNumber: "25650001",
+          activationBlockGlobalLogIndex: "10",
+        }),
       ]),
     );
     expect(plan.provisionalSourceAddresses).toEqual([address("f")]);
   });
 
-  it("fails closed when a provisional lineage is pinned to a stale cursor", async () => {
+  it("retains a future lineage across a cursor advance but rejects it after its block", async () => {
     const executor = new StoreExecutor();
     executor.provisionalRows = [
       {
@@ -887,6 +922,11 @@ describe("concrete projector Postgres store", () => {
       runtimeFence: RUNTIME_FENCE,
     });
 
+    await expect(store.readPlan()).resolves.toMatchObject({
+      provisionalSourceAddresses: [address("f")],
+    });
+
+    executor.cursorBlockNumber = "25650002";
     await expect(store.readPlan()).rejects.toMatchObject({
       disposition: "fatal-codec-or-caller",
     });
@@ -917,6 +957,29 @@ describe("concrete projector Postgres store", () => {
         text.includes("resolve_pending_dynamic_source_activations_v1")
       ),
     ).toBe(true);
+  });
+
+  it("defers a staged activation until its parent enters the candidate window", async () => {
+    const executor = new StoreExecutor();
+    executor.pendingActivationResolutionRows = [{
+      parent_candidate_id: `1:${bytes32("a")}:${bytes32("b")}:11`,
+    }];
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+    });
+    const plan = await store.readPlan();
+
+    await expect(
+      store.resolvePendingDynamicSourceActivations({
+        expectedCursorGeneration: plan.cursor.generation,
+        expectedCursorBlockHash: plan.cursor.blockHash,
+        expectedReorgGeneration: plan.database.reorgGeneration,
+        candidates: [candidate()],
+      }),
+    ).resolves.toEqual([]);
   });
 
   it("stages one exact Classic parent and runtime without advancing the ingestion cursor", async () => {
@@ -1110,6 +1173,15 @@ describe("concrete projector Postgres store", () => {
     const stage = executor.queries.find(({ text }) =>
       text.includes("stage_verified_dynamic_parents_v2"),
     );
+    expect(stage?.values[22]).toMatchObject({
+      kind: "programmable-postgres-json-v1",
+    });
+    expect(stage?.values[24]).toMatchObject({
+      kind: "programmable-postgres-json-v1",
+    });
+    expect(stage?.values[25]).toMatchObject({
+      kind: "programmable-postgres-json-v1",
+    });
     expect(stage?.values).toHaveLength(27);
     expect(stage?.values.slice(2, 10)).toEqual([
       "classic-v3",
@@ -1281,9 +1353,9 @@ describe("concrete projector Postgres store", () => {
         text.includes("append_or_reuse_safe_head_observation_v1")
       ),
     ).toBe(true);
-    expect(statements.some((text) => text.includes("append_dual_rpc_block_evidence"))).toBe(true);
+    expect(statements.some((text) => text.includes("append_or_reuse_dual_rpc_block_evidence_v1"))).toBe(true);
     const blockWrites = executor.queries.filter(({ text }) =>
-      text.includes("append_dual_rpc_block_evidence"),
+      text.includes("append_or_reuse_dual_rpc_block_evidence_v1"),
     );
     expect(blockWrites.map(({ values }) => values[3])).toEqual([
       first.blockNumber,
@@ -1528,7 +1600,7 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
         if (text.includes("append_or_reuse_safe_head_observation_v1")) {
           return [{ id: values[0] }] as unknown as Row[];
         }
-        if (text.includes("append_dual_rpc_block_evidence")) {
+        if (text.includes("append_or_reuse_dual_rpc_block_evidence_v1")) {
           return [{ id: values[0] }] as unknown as Row[];
         }
         if (text.includes("append_projection_provider_execution_evidence_v1")) {

@@ -558,11 +558,11 @@ export type DualRpcSafeHeadEvidence = Readonly<{
 }>;
 
 const RELEASE_BINDING = getDataPipelineReleaseBinding();
-const PROVIDER_IDENTITY_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const PROVIDER_IDENTITY_PATTERN = /^[a-z0-9][a-z0-9:-]{0,63}$/;
 const CANDIDATE_ID_PATTERN =
   /^1:(0x[0-9a-f]{64}):(0x[0-9a-f]{64}):(0|[1-9]\d*)$/;
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-58][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const IMMUTABLE_VALUES_DOMAIN = toBytes(
   "programmable:data-pipeline:immutable-values:v1\0",
 );
@@ -1130,11 +1130,14 @@ function validateCandidateBoundary(
         (release) => blockNumber < BigInt(release.activationBlock),
       )
     ) {
-      throw validationError("rpc", "dynamic-source-lineage");
+      throw validationError("rpc", "dynamic-source-release");
     }
     dynamicSourceLineage = dynamicSources.get(sourceAddress);
     if (requireDynamicLineage && !dynamicSourceLineage) {
-      throw validationError("rpc", "dynamic-source-lineage");
+      throw validationError(
+        "rpc",
+        `dynamic-source-lineage-missing:${sourceAddress}`,
+      );
     }
     if (dynamicSourceLineage) {
       const activationBeforeChild =
@@ -1150,7 +1153,7 @@ function validateCandidateBoundary(
         dynamicSourceLineage.contractName !== candidate.contractName ||
         !activationBeforeChild
       ) {
-        throw validationError("rpc", "dynamic-source-lineage");
+        throw validationError("rpc", "dynamic-source-lineage-boundary");
       }
       sourceKind = "dynamic-attested";
       expectedRuntimeCodeHash =

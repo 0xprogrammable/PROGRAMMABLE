@@ -113,7 +113,7 @@ select is(
     'd08b62a6-74fb-5e0a-a698-dc6877150db4',
     pg_catalog.decode('a4267153060a4b02b630d81063e0f84bb36f6f637a52ef71fb29c117c5384259', 'hex'),
     pg_catalog.decode('5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1', 'hex'),
-    pg_catalog.decode('8945e310f60754716ca0015bcdcdf4a39f9db07ab1c6d9c6bf59fee2b701dca9', 'hex'),
+    pg_catalog.decode('e3218e30a2a95927427fe5e523a8f721fa0d7826dffaecb7140a126a56d17a44', 'hex'),
     '2026-07-31T00:00:00Z'
   ),
   true,
@@ -208,7 +208,7 @@ select is(
     'd08b62a6-74fb-5e0a-a698-dc6877150db4',
     pg_catalog.decode('a4267153060a4b02b630d81063e0f84bb36f6f637a52ef71fb29c117c5384259', 'hex'),
     pg_catalog.decode('5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1', 'hex'),
-    pg_catalog.decode('8945e310f60754716ca0015bcdcdf4a39f9db07ab1c6d9c6bf59fee2b701dca9', 'hex'),
+    pg_catalog.decode('e3218e30a2a95927427fe5e523a8f721fa0d7826dffaecb7140a126a56d17a44', 'hex'),
     '2026-07-31T00:00:00Z',
     pg_catalog.repeat('a', 40),
     'dpl_12345678901234567890'
@@ -223,7 +223,7 @@ select throws_ok(
       'd08b62a6-74fb-5e0a-a698-dc6877150db4',
       decode('a4267153060a4b02b630d81063e0f84bb36f6f637a52ef71fb29c117c5384259', 'hex'),
       decode('5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1', 'hex'),
-      decode('8945e310f60754716ca0015bcdcdf4a39f9db07ab1c6d9c6bf59fee2b701dca9', 'hex'),
+      decode('e3218e30a2a95927427fe5e523a8f721fa0d7826dffaecb7140a126a56d17a44', 'hex'),
       '2026-07-31T00:00:00Z', repeat('b', 40),
       'dpl_12345678901234567890'
     )
@@ -239,7 +239,7 @@ select throws_ok(
       'd08b62a6-74fb-5e0a-a698-dc6877150db4',
       decode('a4267153060a4b02b630d81063e0f84bb36f6f637a52ef71fb29c117c5384259', 'hex'),
       decode('5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1', 'hex'),
-      decode('8945e310f60754716ca0015bcdcdf4a39f9db07ab1c6d9c6bf59fee2b701dca9', 'hex'),
+      decode('e3218e30a2a95927427fe5e523a8f721fa0d7826dffaecb7140a126a56d17a44', 'hex'),
       '2026-07-31T00:00:00Z', repeat('a', 40),
       'dpl_09876543210987654321'
     )

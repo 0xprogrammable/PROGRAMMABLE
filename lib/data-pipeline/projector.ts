@@ -148,6 +148,8 @@ type DynamicParentForReplay = Readonly<{
   template: ProjectorDynamicSourceTemplate;
 }>;
 
+const MAXIMUM_DYNAMIC_PARENT_BLOCKS_PER_CYCLE = 8;
+
 function dynamicParentsForReplay(
   candidates: readonly EnvioCandidate[],
   dynamicSources: readonly VerifiedDynamicSourceLineage[],
@@ -161,7 +163,7 @@ function dynamicParentsForReplay(
   const selectedSources = new Set<string>();
   const selectedParents = new Set<string>();
   const matches: DynamicParentForReplay[] = [];
-  let targetBlock: string | null = null;
+  const selectedBlocks = new Set<string>();
   for (const parent of candidates) {
     const matchingTemplates = templates.filter(
       (template) =>
@@ -184,8 +186,10 @@ function dynamicParentsForReplay(
     }
     const childSourceAddress = deployedAddress as `0x${string}`;
     if (known.has(childSourceAddress)) continue;
-    if (targetBlock === null) targetBlock = parent.blockNumber;
-    if (parent.blockNumber !== targetBlock) break;
+    if (!selectedBlocks.has(parent.blockNumber)) {
+      if (selectedBlocks.size >= MAXIMUM_DYNAMIC_PARENT_BLOCKS_PER_CYCLE) break;
+      selectedBlocks.add(parent.blockNumber);
+    }
     if (
       selectedSources.has(childSourceAddress) ||
       selectedParents.has(parent.candidateId)
@@ -468,6 +472,7 @@ export async function runProjectorCycle(input: {
   envio: ProjectorEnvio;
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   deadlineMs?: number;
+  preferredCandidatesPerCommit?: number;
   captureSafeHead?: CaptureSafeHead;
   verifyWindow?: VerifyWindow;
   verifyDynamicRuntimes?: VerifyDynamicRuntimes;
@@ -476,12 +481,25 @@ export async function runProjectorCycle(input: {
   verifyClassicV3Activation?: VerifyClassicV3Activation;
 }) {
   const deadlineMs = input.deadlineMs ?? MAXIMUM_DEADLINE_MS;
+  const preferredCandidatesPerCommit =
+    input.preferredCandidatesPerCommit ??
+    PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT;
   if (
     !Number.isSafeInteger(deadlineMs) ||
     deadlineMs < 10 ||
     deadlineMs > MAXIMUM_DEADLINE_MS
   ) {
     throw invalidInput("config", "projector-deadline");
+  }
+  if (
+    !Number.isSafeInteger(preferredCandidatesPerCommit) ||
+    preferredCandidatesPerCommit <
+      PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT ||
+    preferredCandidatesPerCommit >
+      PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP ||
+    preferredCandidatesPerCommit % PROJECTOR_PAGE_LIMIT !== 0
+  ) {
+    throw invalidInput("config", "projector-candidate-window");
   }
   const startedAt = Date.now();
   const remaining = () => {
@@ -603,7 +621,7 @@ export async function runProjectorCycle(input: {
     const collected: EnvioCandidate[] = [];
     let pageCursor = cursor;
     let reachedTerminalBoundary = false;
-    let collectionCeiling = PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT;
+    let collectionCeiling = preferredCandidatesPerCommit;
     // Read one sentinel beyond the atomic ceiling. An empty sentinel proves an
     // exact-size block ended; a real sentinel lets us either cut back to the
     // preceding complete block or fail closed when one block exceeds 4096.
@@ -628,8 +646,8 @@ export async function runProjectorCycle(input: {
         candidateId: last.candidateId,
       };
       if (
-        collectionCeiling === PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT &&
-        collected.length > PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT
+        collectionCeiling === preferredCandidatesPerCommit &&
+        collected.length > preferredCandidatesPerCommit
       ) {
         const boundaryBlock = collected.at(-1)!.blockNumber;
         const completePrefixExists = collected.some(
@@ -684,69 +702,81 @@ export async function runProjectorCycle(input: {
       plan.dynamicSourceTemplates,
     );
     if (provisionalParents.length > 0) {
-      const parents = provisionalParents.map(({ parent }) => parent);
-      const firstParent = parents[0]!;
-      const stageCursor = cursorAtStartOfBlock(firstParent, cursor);
-      const stageThrough: EnvioCandidateCursor = {
-        blockNumber: firstParent.blockNumber,
-        blockGlobalLogIndex: 0xffff_ffff,
-        candidateId: "empty-page",
-      };
-      const stageEvidence = await verifyWindow({
-        candidates: parents,
-        cursor: stageCursor,
-        through: stageThrough,
-        providers: input.providers,
-        dynamicSources: plan.dynamicSources,
-        coverageSourceAddresses: Object.freeze([
-          ...new Set(parents.map(({ sourceAddress }) => sourceAddress)),
-        ]),
-        maximumCandidateCount:
-          PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
-        coveragePolicy: {
-          maximumBlockSpan: COVERAGE_BLOCK_SPAN,
-          maximumRequests: 1,
-        },
-        rpcPolicy: {
-          hardDeadlineMs: remaining(),
-          maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
-        },
-      });
-      const runtimeItems = provisionalParents.map((provisionalParent) => ({
-        parentCandidate: provisionalParent.parent,
-        sourceAddress: provisionalParent.childSourceAddress,
-        deploymentBlockNumber: provisionalParent.parent.blockNumber,
-        deploymentBlockHash: provisionalParent.parent.blockHash,
-        template: provisionalParent.template,
-      }));
-      const runtimeObservations: readonly DualRpcDynamicRuntimeObservation[] =
-        verifyDynamicRuntimes
-          ? await verifyDynamicRuntimes({
-              items: runtimeItems,
-              parentEvidence: stageEvidence,
-              providers: input.providers,
-              deadlineMs: remaining(),
-            })
-          : await Promise.all(runtimeItems.map((item) =>
-              verifyDynamicRuntime({
-                ...item,
-                parentEvidence: stageEvidence,
-                providers: input.providers,
-                deadlineMs: remaining(),
-              })
-            ));
-      await input.store.stageVerifiedDynamicParents({
-        plan,
-        snapshotBlock: firstParent.blockNumber,
-        candidates: parents,
-        evidence: stageEvidence,
-        runtimeObservations,
-        blockComplete: false,
-      });
+      const groups = new Map<string, DynamicParentForReplay[]>();
+      for (const provisionalParent of provisionalParents) {
+        const group = groups.get(provisionalParent.parent.blockNumber) ?? [];
+        group.push(provisionalParent);
+        groups.set(provisionalParent.parent.blockNumber, group);
+      }
+      const verifiedGroups = await Promise.all(
+        [...groups.entries()].map(async ([blockNumber, group]) => {
+          const parents = group.map(({ parent }) => parent);
+          const firstParent = parents[0]!;
+          const stageEvidence = await verifyWindow({
+            candidates: parents,
+            cursor: cursorAtStartOfBlock(firstParent, cursor),
+            through: {
+              blockNumber,
+              blockGlobalLogIndex: 0xffff_ffff,
+              candidateId: "empty-page",
+            },
+            providers: input.providers,
+            dynamicSources: plan.dynamicSources,
+            coverageSourceAddresses: Object.freeze([
+              ...new Set(parents.map(({ sourceAddress }) => sourceAddress)),
+            ]),
+            maximumCandidateCount:
+              PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
+            coveragePolicy: {
+              maximumBlockSpan: COVERAGE_BLOCK_SPAN,
+              maximumRequests: 1,
+            },
+            rpcPolicy: {
+              hardDeadlineMs: remaining(),
+              maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
+            },
+          });
+          const runtimeItems = group.map((provisionalParent) => ({
+            parentCandidate: provisionalParent.parent,
+            sourceAddress: provisionalParent.childSourceAddress,
+            deploymentBlockNumber: provisionalParent.parent.blockNumber,
+            deploymentBlockHash: provisionalParent.parent.blockHash,
+            template: provisionalParent.template,
+          }));
+          const runtimeObservations:
+            readonly DualRpcDynamicRuntimeObservation[] = verifyDynamicRuntimes
+              ? await verifyDynamicRuntimes({
+                  items: runtimeItems,
+                  parentEvidence: stageEvidence,
+                  providers: input.providers,
+                  deadlineMs: remaining(),
+                })
+              : await Promise.all(runtimeItems.map((item) =>
+                  verifyDynamicRuntime({
+                    ...item,
+                    parentEvidence: stageEvidence,
+                    providers: input.providers,
+                    deadlineMs: remaining(),
+                  })
+                ));
+          return { blockNumber, parents, stageEvidence, runtimeObservations };
+        }),
+      );
+      for (const group of verifiedGroups) {
+        await input.store.stageVerifiedDynamicParents({
+          plan,
+          snapshotBlock: group.blockNumber,
+          candidates: group.parents,
+          evidence: group.stageEvidence,
+          runtimeObservations: group.runtimeObservations,
+          blockComplete: false,
+        });
+      }
+      const lastGroup = verifiedGroups.at(-1)!;
       return {
         status: "staged-dynamic-parent" as const,
-        candidateCount: parents.length,
-        snapshotBlock: firstParent.blockNumber,
+        candidateCount: provisionalParents.length,
+        snapshotBlock: lastGroup.blockNumber,
       };
     }
     const fittedWindow = fitCompleteCoverageWindow({
@@ -782,26 +812,6 @@ export async function runProjectorCycle(input: {
         expectedCursorBlockHash: plan.cursor.blockHash,
         expectedReorgGeneration: plan.database.reorgGeneration,
       });
-    const evidence = await verifyWindow({
-      candidates,
-      cursor,
-      through,
-      providers: input.providers,
-      dynamicSources: dynamicSourcesWithActivationBoundaries(
-        plan.dynamicSources,
-        pendingActivations,
-      ),
-      maximumCandidateCount:
-        PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
-      coveragePolicy: {
-        maximumBlockSpan: COVERAGE_BLOCK_SPAN,
-        maximumRequests: MAXIMUM_COVERAGE_REQUESTS,
-      },
-      rpcPolicy: {
-        hardDeadlineMs: remaining(),
-        maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
-      },
-    });
     const activationsByBlock = new Map<
       string,
       PendingDynamicSourceActivation[]
@@ -819,7 +829,8 @@ export async function runProjectorCycle(input: {
         return leftBlock < rightBlock ? -1 : leftBlock > rightBlock ? 1 : 0;
       },
     );
-    for (const group of orderedActivationGroups) {
+    const group = orderedActivationGroups[0];
+    if (group) {
       const activationBlock = group[0]!.launchCandidate.blockNumber;
       const activationCandidates = candidates.filter(
         (candidate) => BigInt(candidate.blockNumber) <= BigInt(activationBlock),
@@ -842,6 +853,8 @@ export async function runProjectorCycle(input: {
         },
         providers: input.providers,
         dynamicSources,
+        maximumCandidateCount:
+          PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
         coveragePolicy: {
           maximumBlockSpan: COVERAGE_BLOCK_SPAN,
           maximumRequests: MAXIMUM_COVERAGE_REQUESTS,
@@ -884,7 +897,29 @@ export async function runProjectorCycle(input: {
         activations: verifiedActivations,
         blockComplete: false,
       });
+      return {
+        status: "staged-dynamic-parent" as const,
+        candidateCount: group.length,
+        snapshotBlock: activationBlock,
+      };
     }
+    const evidence = await verifyWindow({
+      candidates,
+      cursor,
+      through,
+      providers: input.providers,
+      dynamicSources: plan.dynamicSources,
+      maximumCandidateCount:
+        PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
+      coveragePolicy: {
+        maximumBlockSpan: COVERAGE_BLOCK_SPAN,
+        maximumRequests: MAXIMUM_COVERAGE_REQUESTS,
+      },
+      rpcPolicy: {
+        hardDeadlineMs: remaining(),
+        maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
+      },
+    });
     const committed = await input.store.commitVerifiedPage({
       plan,
       snapshotBlock: completeBlock,

@@ -18,6 +18,8 @@ export const maxDuration = 90;
 export const runtime = "nodejs";
 
 const NO_STORE_HEADERS = Object.freeze({ "Cache-Control": "no-store" });
+const CUTOVER_CANDIDATES_PER_COMMIT = 512;
+const CUTOVER_MODE_HEADER = "raw-backfill-v1";
 
 type SafeCheckpoint = Readonly<{
   status:
@@ -320,7 +322,10 @@ function safeReadiness(
   });
 }
 
-function safeRuntimeResult(value: unknown) {
+function safeRuntimeResult(
+  value: unknown,
+  allowCutoverDeferred = false,
+) {
   if (
     isRecord(value) &&
     value.ok === true &&
@@ -356,7 +361,8 @@ function safeRuntimeResult(value: unknown) {
   );
   if (
     projections.some(({ status }) => status === "deferred") &&
-    ingestion.status !== "staged-dynamic-parent"
+    ingestion.status !== "staged-dynamic-parent" &&
+    !allowCutoverDeferred
   ) {
     throw new Error("Invalid projector runtime result");
   }
@@ -375,8 +381,7 @@ function safeRuntimeResult(value: unknown) {
   });
 }
 
-function isAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
+function matchesBearer(request: NextRequest, secret: unknown): boolean {
   const authorization = request.headers.get("authorization");
   if (
     typeof secret !== "string" ||
@@ -394,8 +399,28 @@ function isAuthorized(request: NextRequest): boolean {
   );
 }
 
+function authorizationMode(
+  request: NextRequest,
+): "standard" | "cutover" | null {
+  const requestedMode = request.headers.get("x-programmable-cutover-mode");
+  if (requestedMode !== null) {
+    return requestedMode === CUTOVER_MODE_HEADER &&
+      process.env.PROGRAMMABLE_CUTOVER_BACKFILL_ACTIVE === "true" &&
+      matchesBearer(
+        request,
+        process.env.PROGRAMMABLE_CUTOVER_OPERATOR_SECRET,
+      )
+      ? "cutover"
+      : null;
+  }
+  return matchesBearer(request, process.env.CRON_SECRET)
+    ? "standard"
+    : null;
+}
+
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  const mode = authorizationMode(request);
+  if (mode === null) {
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401, headers: NO_STORE_HEADERS },
@@ -424,7 +449,15 @@ export async function GET(request: NextRequest) {
         headers: NO_STORE_HEADERS,
       });
     }
-    const cycle = safeRuntimeResult(await runConfiguredProjectorCycle());
+    const cycle = safeRuntimeResult(
+      await (mode === "cutover"
+        ? runConfiguredProjectorCycle({
+            ingestionOnly: true,
+            preferredCandidatesPerCommit: CUTOVER_CANDIDATES_PER_COMMIT,
+          })
+        : runConfiguredProjectorCycle()),
+      mode === "cutover",
+    );
     const durationMs = Math.min(
       90_000,
       Math.max(0, Date.now() - startedAt),

@@ -47,7 +47,7 @@ describe("production reward-vault RPC reader", () => {
       if (functionName === "beneficiaryCount") return 2n;
       if (functionName === "beneficiaryAt") return bob;
       if (functionName === "shareBpsAt") {
-        return args[0] === 0n ? 4_000n : 6_000n;
+        return args[0] === 0n ? 4_000 : 6_000;
       }
       if (functionName === "claimable") {
         return args[0] === alice ? 0n : 9n;

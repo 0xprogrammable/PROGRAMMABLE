@@ -60,8 +60,12 @@ export async function openHostedDatabase({
 }) {
   const target = validateDirectSupabaseTarget(databaseUrl, expectedProjectRef);
   const connectionUrl = new URL(databaseUrl);
-  connectionUrl.searchParams.delete("sslmode");
-  const sql = postgres(connectionUrl.toString(), {
+  const sql = postgres({
+    host: connectionUrl.hostname,
+    port: Number(connectionUrl.port),
+    database: connectionUrl.pathname.slice(1),
+    username: decodeURIComponent(connectionUrl.username),
+    password: decodeURIComponent(connectionUrl.password),
     ssl: sslConfiguration(sslCaPem),
     max: 1,
     prepare: false,

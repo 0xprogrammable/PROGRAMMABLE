@@ -450,7 +450,7 @@ async function runCommand(command, flags, environment) {
         stagedDeploymentUrl: target.origin,
         productionOrigin: "https://programmable.family",
         requireWorkersActive: true,
-        requireIndexedFlagsFalse: true,
+        requireIndexedRoutesActive: true,
       },
     );
     const stageExposure = await inspectUnexposedStagedDeployment({
@@ -608,6 +608,7 @@ async function runCommand(command, flags, environment) {
       targetUrl: target.toString(),
       deploymentId: flags.get("--deployment-id"),
       cronSecret: environment.CRON_SECRET,
+      automationBypassSecret: environment.VERCEL_AUTOMATION_BYPASS_SECRET,
     });
     const result = await withDirectOperatorDatabase(
       directDatabase(environment, flags.get("--expected-project-ref")),

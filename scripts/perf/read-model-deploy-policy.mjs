@@ -16,6 +16,11 @@ export const RELEASE_GATED_FLAG_NAMES = Object.freeze([
   "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED",
   "INDEXED_READ_SHADOW_COMPARE_ENABLED",
 ]);
+const PUBLIC_INDEXED_ROUTE_FLAG_NAMES = Object.freeze(
+  RELEASE_GATED_FLAG_NAMES.filter(
+    (name) => name !== "INDEXED_READ_SHADOW_COMPARE_ENABLED",
+  ),
+);
 
 export const WORKER_ACTIVATION_FLAG_NAMES = Object.freeze([
   "PROGRAMMABLE_PROJECTOR_ACTIVE",
@@ -433,6 +438,13 @@ export function validateStagedReleaseAttestation(value, expectations = {}) {
     Object.values(indexedFlags).some(Boolean)
   ) {
     throw new Error("staged release attestation exposes indexed reads");
+  }
+  if (
+    expectations.requireIndexedRoutesActive === true &&
+    (PUBLIC_INDEXED_ROUTE_FLAG_NAMES.some((name) => indexedFlags[name] !== true) ||
+      indexedFlags.INDEXED_READ_SHADOW_COMPARE_ENABLED !== false)
+  ) {
+    throw new Error("staged release attestation does not activate exact indexed routes");
   }
   return Object.freeze({
     ...attestation,

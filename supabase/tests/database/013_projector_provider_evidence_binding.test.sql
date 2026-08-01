@@ -1,5 +1,5 @@
 begin;
-select plan(39);
+select plan(45);
 
 create function public.projection_trace_fixture_v1(
   p_candidate_batch_size integer default 1,
@@ -826,6 +826,12 @@ select ok(
     pg_catalog.pg_get_functiondef(
       'programmable_private.stage_verified_dynamic_parents_v2(uuid,uuid,text,text,text,text,uuid,bigint,bigint,bigint,bytea,uuid,text,uuid,uuid,uuid,uuid,numeric,bytea,bytea,bytea[],bytea[],jsonb,bytea,jsonb,jsonb,timestamp with time zone)'::regprocedure
     ),
+    '[1-58][0-9a-f]{3}'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_parents_v2(uuid,uuid,text,text,text,text,uuid,bigint,bigint,bigint,bytea,uuid,text,uuid,uuid,uuid,uuid,numeric,bytea,bytea,bytea[],bytea[],jsonb,bytea,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
     'insert into programmable_private.projector_checkpoints'
   ) = 0
   and pg_catalog.strpos(
@@ -852,6 +858,22 @@ select ok(
 select ok(
   pg_catalog.strpos(
     pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_provisional_parent_receipt_ordinals_v1(uuid,uuid,text[],numeric[],timestamp with time zone)'::regprocedure
+    ),
+    'unnest(p_candidate_ids, p_receipt_log_ordinals)'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_provisional_parent_receipt_ordinals_v1(uuid,uuid,text[],numeric[],timestamp with time zone)'::regprocedure
+    ),
+    'pg_catalog.unnest(p_candidate_ids, p_receipt_log_ordinals)'
+  ) = 0,
+  'provisional receipt ordinals use PostgreSQL multi-array unnest syntax'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
       'programmable_private.get_current_provisional_dynamic_sources_v1(text)'::regprocedure
     ),
     'release_epoch_current'
@@ -869,6 +891,92 @@ select ok(
     'provisional_dynamic_parent_consumptions'
   ) > 0,
   'provisional reads are scoped to the current epoch, cursor and unconsumed lineage'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_current_provisional_dynamic_sources_v1(text)'::regprocedure
+    ),
+    'dynamic_source_activation_staging'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_current_provisional_dynamic_sources_v1(text)'::regprocedure
+    ),
+    'cursor.generation > page.expected_cursor_generation'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_current_provisional_dynamic_sources_v1(text)'::regprocedure
+    ),
+    'cursor.block_number < page.snapshot_block_number'
+  ) > 0,
+  'activated provisional lineages remain readable after an exact cursor advance'
+);
+
+select is(
+  (
+    select pg_catalog.pg_get_userbyid(procedure.proowner)
+    from pg_catalog.pg_proc as procedure
+    where procedure.oid =
+      'programmable_private.get_current_provisional_activation_boundaries_v1(text)'::regprocedure
+  ),
+  (
+    select pg_catalog.pg_get_userbyid(relation.relowner)
+    from pg_catalog.pg_class as relation
+    where relation.oid =
+      'programmable_private.dynamic_source_activation_staging'::regclass
+  ),
+  'activation boundary reader is owned by the private staging table owner'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.resolve_pending_dynamic_source_activations_v1(text,bigint,bytea,bigint)'::regprocedure
+    ),
+    'cursor.generation = p_expected_cursor_generation'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.resolve_pending_dynamic_source_activations_v1(text,bigint,bytea,bigint)'::regprocedure
+    ),
+    'page.expected_cursor_generation = p_expected_cursor_generation'
+  ) = 0,
+  'activation resolution fences the current cursor without rejecting a future verified page'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_source_activations_v1(uuid,text,uuid,bigint,bigint,bigint,bytea,uuid,uuid,uuid,uuid,uuid,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'page.expected_cursor_generation <'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_source_activations_v1(uuid,text,uuid,bigint,bigint,bigint,bytea,uuid,uuid,uuid,uuid,uuid,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'cursor.block_number < page.snapshot_block_number'
+  ) > 0,
+  'activation staging independently accepts only an older fence for a future parent block'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_source_activations_v1(uuid,text,uuid,bigint,bigint,bigint,bytea,uuid,uuid,uuid,uuid,uuid,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'deployment.deployment_commitment'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.stage_verified_dynamic_source_activations_v1(uuid,text,uuid,bigint,bigint,bigint,bytea,uuid,uuid,uuid,uuid,uuid,jsonb,jsonb,timestamp with time zone)'::regprocedure
+    ),
+    'deployment.redacted_identity::text as identity'
+  ) = 0,
+  'activation proofs bind endpoint-derived provider identities rather than static labels'
 );
 
 select ok(
@@ -903,6 +1011,16 @@ select is(
   ),
   0::bigint,
   'current provisional source reader executes against release generation columns'
+);
+select is(
+  (
+    select pg_catalog.count(*)
+    from programmable_private.get_current_provisional_activation_boundaries_v1(
+      'projector-v1'
+    )
+  ),
+  0::bigint,
+  'current activation boundary reader executes through the projector capability'
 );
 reset role;
 

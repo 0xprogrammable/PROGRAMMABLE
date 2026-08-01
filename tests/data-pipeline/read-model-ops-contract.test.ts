@@ -18,16 +18,27 @@ const PROJECT_ID = "prj_programmable_test";
 
 const AUTHENTICATED_ROUTE = `
   import { timingSafeEqual } from "node:crypto";
-  function isAuthorized(request) {
-    const secret = process.env.CRON_SECRET;
+  function matchesBearer(request, secret) {
     const authorization = request.headers.get("authorization");
     if (!secret || Buffer.byteLength(secret, "utf8") < 32 || Buffer.byteLength(secret, "utf8") > 1_024 || !authorization?.startsWith("Bearer ")) return false;
     const provided = Buffer.from(authorization.slice(7), "utf8");
     const expected = Buffer.from(secret, "utf8");
     return provided.length === expected.length && timingSafeEqual(provided, expected);
   }
+  function authorizationMode(request) {
+    const requestedMode = request.headers.get("x-programmable-cutover-mode");
+    if (requestedMode !== null) {
+      return requestedMode === "raw-backfill-v1" &&
+        process.env.PROGRAMMABLE_CUTOVER_BACKFILL_ACTIVE === "true" &&
+        matchesBearer(request, process.env.PROGRAMMABLE_CUTOVER_OPERATOR_SECRET)
+        ? "cutover" : null;
+    }
+    return matchesBearer(request, process.env.CRON_SECRET) ? "standard" : null;
+  }
   export async function GET(request) {
-    if (!isAuthorized(request)) return { status: 401, headers: { "Cache-Control": "no-store" } };
+    const mode = authorizationMode(request);
+    if (mode === null) return { status: 401, headers: { "Cache-Control": "no-store" } };
+    if (mode === "cutover") runCutover();
     try { return { status: 200, headers: { "Cache-Control": "no-store" } }; }
     catch { return { status: 503, headers: { "Cache-Control": "no-store" } }; }
   }

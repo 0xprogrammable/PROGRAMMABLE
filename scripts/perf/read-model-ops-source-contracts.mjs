@@ -26,16 +26,16 @@ const APPROVED_OPERATIONS = Object.freeze({
       activationEnvironment: "PROGRAMMABLE_PROJECTOR_ACTIVE",
       route: Object.freeze({
         path: "app/api/ops/projector/route.ts",
-        sha256: "c2dadbbab4dce88fea349c98adf50eb3566bbd9957529b3bfc3fad594a704b92",
+        sha256: "9b12168cbbadf0addac351c45f71931f3c04370bcd6cabe6174d21daeb00a94d",
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "739338890666f863be9590f4f5c9b8116879372d4a2600b06c9e398e60c132e4",
+        sha256: "f54859e55f35b99784eebd6cef58a40a5848904be21417249f3bff5bf1c88637",
       }),
       dependencies: Object.freeze([
         Object.freeze({
           path: "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
-          sha256: "890ce8c7bea47e399b42c9c0228eef64bb139a1382e26fc68f3264ed6e3d8527",
+          sha256: "32efa13d740614f7e66fd20a0158edf3383f4f6643a7fe34268fabda6261931c",
         }),
       ]),
       migrations: Object.freeze([
@@ -66,6 +66,18 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "supabase/migrations/20260801125441_reuse_safe_head_observations.sql",
           sha256: "afbeea7bcf60e492e51bfd0c56517613f32a6f87a0182af00c48bdaef6569e74",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260801144403_accept_uuid_v8_dynamic_source_lineage.sql",
+          sha256: "85e0509d2a4fa49062a18d891e51cd0c64c1015926c3c3ef47a83ce16edb4170",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260801155212_reuse_dual_rpc_block_evidence.sql",
+          sha256: "51142370cf7fdf2bd60c2812978fe2cbbacf99f42b87c72f0ad1ac61b303cf51",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260801204500_reuse_dual_rpc_block_evidence_constraint.sql",
+          sha256: "92cc63189b41eda613ba9da21b7ef21bee650a93f1825f5ee063727ee6c06b11",
         }),
       ]),
     }),
@@ -151,23 +163,35 @@ function sourceBindingMatches(source, binding, expectedSha256Overrides) {
   );
 }
 
-function routeIsAuthenticatedAndFailClosed(source) {
-  const directUtf8Bounds =
+function routeIsAuthenticatedAndFailClosed(source, requireCutover = false) {
+  const directSecretBounds =
     /Buffer\.byteLength\(secret,\s*["']utf8["']\)\s*<\s*32/u.test(source) &&
     /Buffer\.byteLength\(secret,\s*["']utf8["']\)\s*>\s*1_024/u.test(source);
-  const namedUtf8Bounds =
+  const namedSecretBounds =
     /const\s+secretLength\s*=\s*secret\s*\?\s*Buffer\.byteLength\(secret,\s*["']utf8["']\)\s*:\s*0/u.test(source) &&
     /secretLength\s*<\s*32/u.test(source) &&
     /secretLength\s*>\s*1_024/u.test(source);
+  const standardAuthorization =
+    /matchesBearer\(request,\s*process\.env\.CRON_SECRET\)/u.test(source) ||
+    /const\s+secret\s*=\s*process\.env\.CRON_SECRET/u.test(source);
+  const cutoverAuthorization =
+    /PROGRAMMABLE_CUTOVER_BACKFILL_ACTIVE\s*===\s*["']true["']/u.test(source) &&
+    /process\.env\.PROGRAMMABLE_CUTOVER_OPERATOR_SECRET/u.test(source) &&
+    /x-programmable-cutover-mode/u.test(source) &&
+    /raw-backfill-v1/u.test(source);
   return (
     typeof source === "string" &&
-    /const\s+secret\s*=\s*process\.env\.CRON_SECRET/u.test(source) &&
     /request\.headers\.get\(["']authorization["']\)/u.test(source) &&
-    (directUtf8Bounds || namedUtf8Bounds) &&
+    (directSecretBounds || namedSecretBounds) &&
     /authorization(?:\?\.|\.)startsWith\(["']Bearer ["']\)/u.test(source) &&
     /provided\.length\s*===\s*expected\.length/u.test(source) &&
     /timingSafeEqual\(provided,\s*expected\)/u.test(source) &&
-    /if\s*\(\s*!isAuthorized\(request\)\s*\)/u.test(source) &&
+    standardAuthorization &&
+    (!requireCutover ||
+      (cutoverAuthorization &&
+        /mode\s*===\s*["']cutover["']/u.test(source))) &&
+    (/if\s*\(\s*!isAuthorized\(request\)\s*\)/u.test(source) ||
+      /if\s*\(\s*mode\s*===\s*null\s*\)/u.test(source)) &&
     /status\s*:\s*401\b/u.test(source) &&
     /status\s*:\s*503\b/u.test(source) &&
     /["']Cache-Control["']\s*:\s*["']no-store["']/u.test(source)
@@ -221,6 +245,37 @@ function migrationContract(id, source) {
       ) &&
       source.includes("for key share") &&
       source.includes("safe-head fingerprint replay conflicts with stored evidence") &&
+      /security definer/iu.test(source)
+    );
+  }
+  if (id === "source-projector-dynamic-lineage") {
+    return (
+      source.includes("accept_uuid_v8_dynamic_source_lineage") ||
+      (source.includes("dynamic_source") &&
+        source.includes("uuid") &&
+        /security definer/iu.test(source))
+    );
+  }
+  if (id === "source-projector-block-evidence-reuse") {
+    return (
+      source.includes("append_or_reuse_dual_rpc_block_evidence_v1") &&
+      source.includes(
+        "dual_rpc_block_evidence_epoch_id_content_fingerprint_key",
+      ) &&
+      source.includes("block-evidence fingerprint replay conflicts with stored evidence") &&
+      /security definer/iu.test(source)
+    );
+  }
+  if (id === "source-projector-block-evidence-conflict-fence") {
+    return (
+      source.includes("append_or_reuse_dual_rpc_block_evidence_v1") &&
+      source.includes(
+        "dual_rpc_block_evidence_epoch_id_content_fingerprint_key",
+      ) &&
+      source.includes(
+        "dual_rpc_block_evidence_observation_id_block_number_key",
+      ) &&
+      source.includes("for key share") &&
       /security definer/iu.test(source)
     );
   }
@@ -380,7 +435,10 @@ export function evaluateReadModelOperationsSourceContracts(
     );
     check(
       `ops-${approvedWorker.id}-route-auth`,
-      routeIsAuthenticatedAndFailClosed(route),
+      routeIsAuthenticatedAndFailClosed(
+        route,
+        approvedWorker.id === "source-projector",
+      ),
       `${approvedWorker.id} reads Authorization, compares CRON_SECRET safely and fails closed`,
     );
     check(
@@ -423,7 +481,7 @@ export function evaluateReadModelOperationsSourceContracts(
       source(sourceWorker.dependencies[0]?.path)?.includes(
         "verify_candidate_database_promoted_v2",
       ) &&
-      sourceWorker?.migrations?.length === 7 &&
+      sourceWorker?.migrations?.length === 10 &&
       migrationContract(
         "source-projector-lease",
         source(sourceWorker.migrations[0]?.path),
@@ -451,6 +509,18 @@ export function evaluateReadModelOperationsSourceContracts(
       migrationContract(
         "source-projector-safe-head-reuse",
         source(sourceWorker.migrations[6]?.path),
+      ) &&
+      migrationContract(
+        "source-projector-dynamic-lineage",
+        source(sourceWorker.migrations[7]?.path),
+      ) &&
+      migrationContract(
+        "source-projector-block-evidence-reuse",
+        source(sourceWorker.migrations[8]?.path),
+      ) &&
+      migrationContract(
+        "source-projector-block-evidence-conflict-fence",
+        source(sourceWorker.migrations[9]?.path),
       ),
     "the source worker is byte-bound to its runtime selector, database fence and provider evidence",
   );

@@ -10,6 +10,7 @@ import { runFencedRawBackfill } from "./cutover-phases.mjs";
 
 const run = promisify(execFile);
 const workspace = fileURLToPath(new URL("../../", import.meta.url));
+const CUTOVER_CANDIDATES_PER_COMMIT = 512;
 const CANDIDATE_ENDPOINT =
   "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql";
 
@@ -257,6 +258,8 @@ export async function runConfiguredCandidateRawBackfill(input) {
               envio,
               providers,
               deadlineMs: 60_000,
+              preferredCandidatesPerCommit:
+                CUTOVER_CANDIDATES_PER_COMMIT,
             });
           },
         }),

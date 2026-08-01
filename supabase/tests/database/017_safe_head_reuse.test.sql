@@ -49,7 +49,7 @@ select programmable_private.open_run(
 
 reset role;
 
-select plan(10);
+select plan(16);
 
 select ok(
   to_regprocedure(
@@ -98,6 +98,53 @@ select ok(
   'browser, runtime, reader, reconciler, profile, maintenance, and operator roles are denied safe-head reuse'
 );
 
+select ok(
+  to_regprocedure(
+    'programmable_private.append_or_reuse_dual_rpc_block_evidence_v1(uuid,uuid,uuid,numeric,bytea,bytea,smallint,bytea,bytea,timestamp with time zone)'
+  ) is not null,
+  'block-evidence reuse function exists at the frozen signature'
+);
+
+select ok(
+  (
+    select procedure.prosecdef
+      and procedure.provolatile = 'v'
+      and 'search_path=""' = any(procedure.proconfig)
+    from pg_catalog.pg_proc as procedure
+    where procedure.oid =
+      'programmable_private.append_or_reuse_dual_rpc_block_evidence_v1(uuid,uuid,uuid,numeric,bytea,bytea,smallint,bytea,bytea,timestamp with time zone)'::regprocedure
+  ),
+  'block-evidence reuse is volatile, SECURITY DEFINER, and has an empty search path'
+);
+
+select ok(
+  pg_catalog.has_function_privilege(
+    'programmable_projector',
+    'programmable_private.append_or_reuse_dual_rpc_block_evidence_v1(uuid,uuid,uuid,numeric,bytea,bytea,smallint,bytea,bytea,timestamp with time zone)',
+    'EXECUTE'
+  ),
+  'projector receives the block-evidence reuse capability'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_catalog.unnest(array[
+      'public', 'anon', 'authenticated', 'service_role',
+      'programmable_projector_runtime', 'programmable_reconciler',
+      'programmable_api_reader', 'programmable_profile_binder',
+      'programmable_profile_recovery', 'programmable_profile_writer',
+      'programmable_maintenance', 'programmable_operator'
+    ]) as denied(role_name)
+    where pg_catalog.has_function_privilege(
+      denied.role_name,
+      'programmable_private.append_or_reuse_dual_rpc_block_evidence_v1(uuid,uuid,uuid,numeric,bytea,bytea,smallint,bytea,bytea,timestamp with time zone)',
+      'EXECUTE'
+    )
+  ),
+  'browser, runtime, reader, reconciler, profile, maintenance, and operator roles are denied block-evidence reuse'
+);
+
 set local role programmable_projector;
 
 select is(
@@ -133,6 +180,7 @@ select is(
 );
 
 reset role;
+set local role programmable_migrator;
 
 select is(
   (select pg_catalog.count(*) from programmable_private.safe_head_observations),
@@ -166,6 +214,36 @@ select is(
   'e7000000-0000-4000-8000-000000000001'::uuid,
   'a later run can bind block evidence to the reused safe head'
 );
+
+select is(
+  programmable_private.append_or_reuse_dual_rpc_block_evidence_v1(
+    'e7000000-0000-4000-8000-000000000002',
+    'd7000000-0000-4000-8000-000000000001',
+    'c7000000-0000-4000-8000-000000000002',
+    88,
+    decode(repeat('88', 32), 'hex'), decode(repeat('88', 32), 'hex'),
+    2::smallint,
+    decode('70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000200', 'hex'),
+    decode(repeat('51', 32), 'hex'), '2026-08-01T12:01:04Z'
+  ),
+  'e7000000-0000-4000-8000-000000000001'::uuid,
+  'an exact block-evidence replay returns the immutable existing row'
+);
+
+reset role;
+set local role programmable_migrator;
+
+select is(
+  (
+    select pg_catalog.count(*)
+    from programmable_private.mutation_audits
+    where action = 'block_evidence.append'
+  ),
+  1::bigint,
+  'an exact block-evidence replay does not append a false mutation audit'
+);
+
+set local role programmable_projector;
 
 select throws_ok(
   $sql$

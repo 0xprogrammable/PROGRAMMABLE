@@ -21,6 +21,7 @@ import { createProjectorRuntimeLeaseController } from "./projector-runtime-lease
 import {
   PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
   PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
+  PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT,
   PROJECTOR_MAXIMUM_RUNTIME_ROUNDS,
 } from "./projector-runtime-limits";
 import {
@@ -314,10 +315,31 @@ export async function runConfiguredProjectorCycle(
   input: Readonly<{
     env?: Environment;
     dependencies?: ProjectorRuntimeDependencies;
+    ingestionOnly?: boolean;
+    preferredCandidatesPerCommit?: number;
   }> = {},
 ) {
   const env = input.env ?? process.env;
   const dependencies = input.dependencies ?? DEFAULT_DEPENDENCIES;
+  const ingestionOnly = input.ingestionOnly === true;
+  const preferredCandidatesPerCommit =
+    input.preferredCandidatesPerCommit ??
+    PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT;
+  if (
+    input.ingestionOnly !== undefined &&
+      typeof input.ingestionOnly !== "boolean" ||
+    !Number.isSafeInteger(preferredCandidatesPerCommit) ||
+    preferredCandidatesPerCommit <
+      PROJECTOR_PREFERRED_CANDIDATES_PER_COMMIT ||
+    preferredCandidatesPerCommit >
+      PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP ||
+    preferredCandidatesPerCommit %
+      PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE !== 0 ||
+    (!ingestionOnly &&
+      input.preferredCandidatesPerCommit !== undefined)
+  ) {
+    return invalidRuntimeConfig();
+  }
   if (projectorRuntimeActivationState(env) === "disabled") {
     return Object.freeze({
       ok: true as const,
@@ -482,7 +504,7 @@ export async function runConfiguredProjectorCycle(
       round < PROJECTOR_MAXIMUM_RUNTIME_ROUNDS;
       round += 1
     ) {
-      const operationCount = 1 + releaseStores.length;
+      const operationCount = ingestionOnly ? 1 : 1 + releaseStores.length;
       if (operationDeadline(operationCount) === null) {
         stoppedForDeadline = true;
         break;
@@ -506,6 +528,7 @@ export async function runConfiguredProjectorCycle(
           envio,
           providers,
           deadlineMs: ingestionDeadline,
+          preferredCandidatesPerCommit,
         });
         observedIngestionStatus = result.status;
         const stagedResult = parseStagedDynamicParentResult(result);
@@ -555,6 +578,13 @@ export async function runConfiguredProjectorCycle(
         // would materialize against a cursor/checkpoint that did not advance.
         completedRounds += 1;
         if (stagedDynamicParent) madeAnyProgress = true;
+        terminalSweepComplete = false;
+        break;
+      }
+
+      if (ingestionOnly) {
+        completedRounds += 1;
+        if (madeProgress) madeAnyProgress = true;
         terminalSweepComplete = false;
         break;
       }
@@ -701,7 +731,10 @@ export async function runConfiguredProjectorCycle(
         });
       }
       if (!state.committed) {
-        if (ingestionState.stagedDynamicParent && state.pageCount === 0) {
+        if (
+          (ingestionOnly || ingestionState.stagedDynamicParent) &&
+          state.pageCount === 0
+        ) {
           return Object.freeze({
             releaseId: state.releaseId,
             status: "deferred" as const,

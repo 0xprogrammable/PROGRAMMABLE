@@ -606,6 +606,9 @@ describe("Envio candidate cursor adapter", () => {
         variables: Record<string, unknown>;
       };
       expect(request.query).toContain("query ProgrammableCandidatesAfter");
+      expect(request.query).toContain(
+        '_nin: ["StockV1RewardVault", "StockV2V3RewardVault"]',
+      );
       expect(request.query).toContain("$afterBlock: numeric!");
       expect(request.query).toContain("$afterLogIndex: numeric!");
       expect(request.query).toContain("$afterCandidateId: String!");
@@ -655,6 +658,36 @@ describe("Envio candidate cursor adapter", () => {
       `1:${SECOND_BLOCK_HASH}:${SECOND_TRANSACTION_HASH}:0`,
     ]);
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps retired Stock reward-vault telemetry out of bounded source pages", async () => {
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as {
+        query: string;
+        variables: Record<string, unknown>;
+      };
+      expect(request.query).toContain("query ProgrammableCandidatesWindow");
+      expect(request.query).toContain(
+        '_nin: ["StockV1RewardVault", "StockV2V3RewardVault"]',
+      );
+      return json({ data: { ChainEvent: [] } });
+    });
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher,
+    });
+
+    await expect(
+      client.readCandidatesWindow({
+        cursor: {
+          blockNumber: "25624130",
+          blockGlobalLogIndex: -1,
+          candidateId: "",
+        },
+        throughBlock: "25650000",
+        limit: 32,
+      }),
+    ).resolves.toEqual([]);
   });
 
   it.each([

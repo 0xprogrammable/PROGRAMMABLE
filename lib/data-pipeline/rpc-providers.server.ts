@@ -471,8 +471,17 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         throw invalidInput("rpc", "reward-snapshot-request");
       }
       let rpcCallCount = 0;
-      const decimal = (value: unknown): unknown =>
-        typeof value === "bigint" ? value.toString() : value;
+      const decimal = (value: unknown): unknown => {
+        if (typeof value === "bigint") return value.toString();
+        if (
+          typeof value === "number" &&
+          Number.isSafeInteger(value) &&
+          value >= 0
+        ) {
+          return value.toString();
+        }
+        return value;
+      };
       const read = async (
         functionName: RewardFunctionName,
         args: readonly unknown[] = [],

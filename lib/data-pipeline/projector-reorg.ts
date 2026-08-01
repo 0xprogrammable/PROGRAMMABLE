@@ -17,7 +17,7 @@ import {
 } from "./errors";
 import { assertProductionDualRpcProviders } from "./rpc-providers.server";
 
-const PROVIDER_IDENTITY_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/u;
+const PROVIDER_IDENTITY_PATTERN = /^[a-z0-9][a-z0-9:-]{0,63}$/u;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const CANDIDATE_ID_PATTERN =

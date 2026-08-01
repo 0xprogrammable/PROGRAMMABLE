@@ -210,6 +210,12 @@ describe("read-model production deploy policy", () => {
   it("rejects stale, mutated or publicly exposed cutover attestations", () => {
     const policy = evaluateReadModelDeployPolicy(
       environmentFile({
+        indexed: Object.fromEntries(
+          RELEASE_GATED_FLAG_NAMES.map((name: string) => [
+            name,
+            name === "INDEXED_READ_SHADOW_COMPARE_ENABLED" ? "false" : "true",
+          ]),
+        ),
         workers: Object.fromEntries(
           WORKER_ACTIVATION_FLAG_NAMES.map((name: string) => [name, "true"]),
         ),
@@ -237,7 +243,7 @@ describe("read-model production deploy policy", () => {
       stagedDeploymentUrl: value.stagedDeploymentUrl,
       productionOrigin: value.productionOrigin,
       requireWorkersActive: true,
-      requireIndexedFlagsFalse: true,
+      requireIndexedRoutesActive: true,
       nowMs: Date.parse("2026-08-01T12:35:00.000Z"),
     };
     expect(() =>
@@ -252,12 +258,12 @@ describe("read-model production deploy policy", () => {
           ...value,
           indexedFlags: {
             ...value.indexedFlags,
-            INDEXED_EXPLORE_LIST_READS_ENABLED: true,
+            INDEXED_EXPLORE_LIST_READS_ENABLED: false,
           },
         },
         expected,
       ),
-    ).toThrow("exposes indexed reads");
+    ).toThrow("does not activate exact indexed routes");
     expect(() =>
       validateStagedReleaseAttestation(value, {
         ...expected,

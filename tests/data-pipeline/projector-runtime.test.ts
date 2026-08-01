@@ -579,7 +579,7 @@ describe("projector runtime boundary", () => {
     expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
   });
 
-  it("resolves, verifies and stages an activation before committing", async () => {
+  it("stages an activation in a bounded cycle before page commit", async () => {
     const input = fixtures();
     const vault = "0x4cfe000000000000000000000000000000000001" as const;
     const parent = candidate({
@@ -619,12 +619,9 @@ describe("projector runtime boundary", () => {
       sourceAddress: vault,
     });
     const order: string[] = [];
-    let verifyWindowCalls = 0;
     const baseVerifyWindow = input.verifyWindow.getMockImplementation()!;
     input.verifyWindow.mockImplementation(async (request) => {
-      order.push(
-        verifyWindowCalls++ === 0 ? "full-evidence" : "activation-evidence",
-      );
+      order.push("activation-evidence");
       return baseVerifyWindow(request);
     });
     input.store.resolvePendingDynamicSourceActivations.mockImplementation(
@@ -657,29 +654,33 @@ describe("projector runtime boundary", () => {
         deadlineMs: 1_000,
         verifyClassicV3Activation,
       }),
-    ).resolves.toMatchObject({ status: "committed" });
+    ).resolves.toEqual({
+      status: "staged-dynamic-parent",
+      candidateCount: 1,
+      snapshotBlock: "101",
+    });
 
     expect(order).toEqual([
       "resolve",
-      "full-evidence",
       "activation-evidence",
       "verify-model",
       "stage",
-      "commit",
     ]);
-    const fullVerification = input.verifyWindow.mock.calls[0]![0] as {
+    const activationVerification = input.verifyWindow.mock.calls[0]![0] as {
       dynamicSources?: readonly { sourceAddress: string }[];
+      maximumCandidateCount?: number;
     };
-    expect(fullVerification.dynamicSources).toEqual([
+    expect(activationVerification.dynamicSources).toEqual([
       pending.ephemeralLineage,
     ]);
+    expect(activationVerification.maximumCandidateCount).toBe(4096);
     expect(
       new Set(
-        fullVerification.dynamicSources?.map(
+        activationVerification.dynamicSources?.map(
           ({ sourceAddress }) => sourceAddress,
         ),
       ).size,
-    ).toBe(fullVerification.dynamicSources?.length);
+    ).toBe(activationVerification.dynamicSources?.length);
     expect(verifyClassicV3Activation).toHaveBeenCalledWith(
       expect.objectContaining({
         activationId: pending.activationId,
@@ -703,6 +704,7 @@ describe("projector runtime boundary", () => {
         activations: [expect.objectContaining({ pending })],
       }),
     );
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
   });
 
   it("does not stage or commit when activation evidence RPC verification fails", async () => {
@@ -717,10 +719,9 @@ describe("projector runtime boundary", () => {
     input.store.resolvePendingDynamicSourceActivations.mockResolvedValue([
       pendingActivation({ parent, launch, sourceAddress: vault }),
     ]);
-    const fullEvidence = input.verifyWindow.getMockImplementation()!;
-    input.verifyWindow
-      .mockImplementationOnce(fullEvidence)
-      .mockRejectedValueOnce(validationError("rpc", "coverage-omission"));
+    input.verifyWindow.mockRejectedValueOnce(
+      validationError("rpc", "coverage-omission"),
+    );
     const verifyClassicV3Activation = vi.fn();
 
     await expect(
@@ -909,6 +910,52 @@ describe("projector runtime boundary", () => {
       expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
     },
   );
+
+  it("verifies and stages several factory blocks in one cycle", async () => {
+    const input = fixtures();
+    const parents = [101, 102, 103].map((blockNumber, index) =>
+      candidate({
+        blockNumber,
+        logIndex: index,
+        sourceAddress: CLASSIC_V3_FACTORY,
+        contractName: "ClassicV3RewardVaultFactory",
+        eventName: "ClassicRewardVaultDeployed",
+        decodedPayload: {
+          vault: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+          configurationHash: CURSOR_HASH,
+        },
+      }),
+    );
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce(parents)
+      .mockResolvedValueOnce([]);
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 75_000,
+      }),
+    ).resolves.toEqual({
+      status: "staged-dynamic-parent",
+      candidateCount: 3,
+      snapshotBlock: "103",
+    });
+
+    expect(input.verifyWindow).toHaveBeenCalledTimes(3);
+    expect(input.store.stageVerifiedDynamicParents).toHaveBeenCalledTimes(3);
+    for (const parent of parents) {
+      expect(input.store.stageVerifiedDynamicParents).toHaveBeenCalledWith(
+        expect.objectContaining({
+          snapshotBlock: parent.blockNumber,
+          candidates: [parent],
+          blockComplete: false,
+        }),
+      );
+    }
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
 
   it("does not stage or advance when the child runtime cannot be proved", async () => {
     const input = fixtures();
@@ -1282,6 +1329,40 @@ describe("projector runtime boundary", () => {
       deadlineMs: 1_000,
     });
     expect(input.envio.readCandidatesWindow).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 32 }),
+    );
+  });
+
+  it("collects a larger reviewed cutover window without changing page size", async () => {
+    const input = fixtures();
+    const values = Array.from({ length: 512 }, (_, index) =>
+      candidate({
+        blockNumber: 101 + Math.floor(index / 32),
+        logIndex: index % 32,
+      }),
+    );
+    let offset = 0;
+    input.envio.readCandidatesWindow.mockReset().mockImplementation(
+      async ({ limit }: { limit: number }) => {
+        const page = values.slice(offset, offset + limit);
+        offset += page.length;
+        return page;
+      },
+    );
+
+    await expect(runProjectorCycle({
+      ...input,
+      providers: [] as never,
+      deadlineMs: 75_000,
+      preferredCandidatesPerCommit: 512,
+    })).resolves.toMatchObject({
+      status: "committed",
+      candidateCount: 512,
+      snapshotBlock: "116",
+    });
+    expect(input.envio.readCandidatesWindow).toHaveBeenCalledTimes(17);
+    expect(input.envio.readCandidatesWindow).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({ limit: 32 }),
     );
   });

@@ -167,8 +167,7 @@ function gitHead(rootDirectory) {
   }).trim();
 }
 
-function secret(environment, name) {
-  const value = environment[name];
+function requiredSecret(value, name) {
   if (
     typeof value !== "string" ||
     value.length < 32 ||
@@ -178,6 +177,10 @@ function secret(environment, name) {
     throw new Error(`${name} is required`);
   }
   return value;
+}
+
+function secret(environment, name) {
+  return requiredSecret(environment[name], name);
 }
 
 function deterministicSchedule(profile) {
@@ -687,6 +690,7 @@ async function captureExploreMatrixPage(input) {
   const response = await input.fetchImpl(new URL(requestPath, input.targetUrl), {
     headers: {
       Accept: "application/json",
+      "x-vercel-protection-bypass": input.automationBypassSecret,
       "x-programmable-shadow-probe": "1",
       "x-programmable-shadow-probe-signature": releaseProbe.signature,
     },
@@ -838,10 +842,15 @@ function inventoryFromEmptyPages(pages, releases) {
 
 export async function captureExploreMatrix(input) {
   const releases = eligibleLaunchIndex(input.datasetManifest.eligibleLaunches);
+  const automationBypassSecret = requiredSecret(
+    input.automationBypassSecret,
+    "VERCEL_AUTOMATION_BYPASS_SECRET",
+  );
   const common = {
     targetUrl: input.targetUrl,
     captureNonce: input.captureNonce,
     shadowProbeToken: input.shadowProbeToken,
+    automationBypassSecret,
     probeTimeoutMs: input.probeTimeoutMs,
     releases,
     fetchImpl: input.fetchImpl ?? fetch,
@@ -978,6 +987,7 @@ async function captureSample(input) {
   );
   const startedAtMs = Date.now();
   const headers = { Accept: "application/json" };
+  headers["x-vercel-protection-bypass"] = input.automationBypassSecret;
   const shadowProbe = SHADOW_PROBE_ROUTES.has(input.route);
   if (shadowProbe) {
     headers["x-programmable-shadow-probe"] = "1";
@@ -1116,6 +1126,7 @@ async function runtimeEvidence(input) {
         "x-programmable-performance-probe": "1",
         "x-programmable-performance-probe-token": input.performanceProbeToken,
         "x-programmable-release-capture-signature": `v1=${releaseSignature}`,
+        "x-vercel-protection-bypass": input.automationBypassSecret,
       },
       body: requestBody,
       redirect: "error",
@@ -1251,6 +1262,10 @@ export async function main(argv = process.argv.slice(2)) {
     process.env,
     "PROGRAMMABLE_SHADOW_PROBE_TOKEN",
   );
+  const automationBypassSecret = secret(
+    process.env,
+    "VERCEL_AUTOMATION_BYPASS_SECRET",
+  );
   const capturedRuntime = await runtimeEvidence({
     targetUrl,
     deploymentId: args["deployment-id"],
@@ -1258,6 +1273,7 @@ export async function main(argv = process.argv.slice(2)) {
     gitHead: currentGitHead,
     captureNonce,
     performanceProbeToken,
+    automationBypassSecret,
   });
   if (!Array.isArray(capturedRuntime.datasetManifest.eligibleLaunches)) {
     throw new Error("runtime dataset has no eligible launch corpus");
@@ -1325,6 +1341,7 @@ export async function main(argv = process.argv.slice(2)) {
           captureNonce,
           probeIssuedAtMs,
           shadowProbeToken,
+          automationBypassSecret,
           probeTimeoutMs: profile.load.probeTimeoutMs,
         }),
       ),
@@ -1349,6 +1366,7 @@ export async function main(argv = process.argv.slice(2)) {
     gitHead: currentGitHead,
     captureNonce,
     shadowProbeToken,
+    automationBypassSecret,
     probeTimeoutMs: profile.load.probeTimeoutMs,
     concurrency: profile.load.concurrency,
     datasetManifest: capturedRuntime.datasetManifest,

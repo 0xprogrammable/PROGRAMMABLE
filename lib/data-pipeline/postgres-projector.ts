@@ -987,15 +987,53 @@ function parseProvisionalImmutableReferences(value: unknown) {
 
 function parseCurrentProvisionalDynamicSources(input: {
   rows: readonly Record<string, unknown>[];
+  activationRows: readonly Record<string, unknown>[];
   templates: readonly ProjectorDynamicSourceTemplate[];
   cursor: ProjectorPlan["cursor"];
   neutral: RuntimeState;
   envioProviderDeploymentId: string;
   rpcProviderDeploymentIds: readonly [string, string];
 }): VerifiedDynamicSourceLineage[] {
-  return input.rows.map((row) => {
+  const activationByLineage = new Map<
+    string,
+    Readonly<{
+      attestationId: string;
+      sourceAddress: HexAddress;
+      candidateId: string;
+      occurrenceId: string;
+      blockNumber: string;
+      blockHash: HexBytes32;
+      blockGlobalLogIndex: string;
+    }>
+  >();
+  for (const row of input.activationRows) {
+    const provisionalLineageId = exactUuid(row.provisional_lineage_id);
+    if (activationByLineage.has(provisionalLineageId)) {
+      return projectorValidationFailure();
+    }
+    activationByLineage.set(
+      provisionalLineageId,
+      Object.freeze({
+        attestationId: exactUuid(row.dynamic_source_attestation_id),
+        sourceAddress: databaseAddress(row.deployed_source_address),
+        candidateId: exactText(
+          row.activation_candidate_id,
+          /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9]\d*)$/u,
+          192,
+        ),
+        occurrenceId: exactUuid(row.activation_occurrence_id),
+        blockNumber: integerText(row.activation_block_number),
+        blockHash: databaseBytes32(row.activation_block_hash),
+        blockGlobalLogIndex: integerText(
+          row.activation_block_global_log_index,
+        ),
+      }),
+    );
+  }
+  const consumedActivationLineages = new Set<string>();
+  const lineages = input.rows.map((row) => {
     exactUuid(row.provisional_page_id);
-    exactUuid(row.provisional_lineage_id);
+    const provisionalLineageId = exactUuid(row.provisional_lineage_id);
     exactUuid(row.runtime_code_evidence_id);
     const templateId = exactUuid(row.dynamic_source_template_id);
     const template = input.templates.find(
@@ -1020,6 +1058,28 @@ function parseCurrentProvisionalDynamicSources(input: {
     );
     const runtimeByteLength = integerText(row.expected_runtime_byte_length);
     const referenceShape = JSON.stringify(references);
+    const attestationId = exactUuid(row.dynamic_source_attestation_id);
+    const sourceAddress = databaseAddress(row.deployed_source_address);
+    const activation = activationByLineage.get(provisionalLineageId);
+    if (activation) consumedActivationLineages.add(provisionalLineageId);
+    const expectedCursorGeneration = integerText(
+      row.expected_cursor_generation,
+    );
+    const expectedCursorBlockHash = databaseBytes32(
+      row.expected_cursor_block_hash,
+    );
+    const cursorBindingValid =
+      expectedCursorGeneration === input.cursor.generation &&
+        expectedCursorBlockHash === input.cursor.blockHash ||
+      BigInt(input.cursor.generation) > BigInt(expectedCursorGeneration) &&
+        BigInt(input.cursor.blockNumber) < BigInt(snapshotBlockNumber) ||
+      activation !== undefined &&
+        BigInt(input.cursor.generation) > BigInt(expectedCursorGeneration) &&
+        (BigInt(input.cursor.blockNumber) > BigInt(activation.blockNumber) ||
+          BigInt(input.cursor.blockNumber) === BigInt(activation.blockNumber) &&
+            input.cursor.blockHash === activation.blockHash &&
+            BigInt(input.cursor.blockGlobalLogIndex) >=
+              BigInt(activation.blockGlobalLogIndex));
     if (
       !template ||
       exactUuid(row.release_epoch_id) !== template.database.epochId ||
@@ -1030,9 +1090,7 @@ function parseCurrentProvisionalDynamicSources(input: {
         input.neutral.pointerGeneration ||
       integerText(row.reorg_generation) !==
         template.database.reorgGeneration ||
-      integerText(row.expected_cursor_generation) !== input.cursor.generation ||
-      databaseBytes32(row.expected_cursor_block_hash) !==
-        input.cursor.blockHash ||
+      !cursorBindingValid ||
       exactUuid(row.envio_provider_deployment_id) !==
         input.envioProviderDeploymentId ||
       exactUuid(row.rpc_provider_a_id) !== input.rpcProviderDeploymentIds[0] ||
@@ -1058,12 +1116,20 @@ function parseCurrentProvisionalDynamicSources(input: {
         template.expectedImmutableReferencesCommitment ||
       runtimeByteLength !== template.expectedRuntimeByteLength ||
       referenceShape !== JSON.stringify(template.immutableReferences)
+      || activation !== undefined && (
+        activation.attestationId !== attestationId ||
+        activation.sourceAddress !== sourceAddress ||
+        BigInt(activation.blockNumber) < BigInt(factoryBlockNumber) ||
+        activation.blockHash !== databaseBytes32(row.factory_block_hash) ||
+        BigInt(activation.blockGlobalLogIndex) <=
+          BigInt(factoryBlockGlobalLogIndex)
+      )
     ) {
       return projectorValidationFailure();
     }
     return canonicalDynamicSourceLineage({
-      attestationId: exactUuid(row.dynamic_source_attestation_id),
-      sourceAddress: databaseAddress(row.deployed_source_address),
+      attestationId,
+      sourceAddress,
       contractName: template.contractName,
       model: template.model,
       releaseVersion: template.releaseVersion,
@@ -1076,6 +1142,10 @@ function parseCurrentProvisionalDynamicSources(input: {
       ),
       factoryBlockNumber,
       factoryBlockGlobalLogIndex,
+      activationCandidateId: activation?.candidateId,
+      activationBlockNumber: activation?.blockNumber,
+      activationBlockHash: activation?.blockHash,
+      activationBlockGlobalLogIndex: activation?.blockGlobalLogIndex,
       expectedExactRuntimeCodeHash: exactRuntimeCodeHash,
       expectedNormalizedRuntimeCodeHash: normalizedRuntimeCodeHash,
       expectedImmutableReferencesCommitment: immutableReferencesCommitment,
@@ -1083,6 +1153,10 @@ function parseCurrentProvisionalDynamicSources(input: {
       immutableReferences: references,
     });
   });
+  if (consumedActivationLineages.size !== activationByLineage.size) {
+    return projectorValidationFailure();
+  }
+  return lineages;
 }
 
 function parseCursor(rows: readonly Record<string, unknown>[]) {
@@ -1302,15 +1376,6 @@ export async function initializePostgresProjectorGenesis(input: {
       anchorBlockNumber,
       anchorBlockHash,
     ])));
-    const genesisCommitment = keccak256(toBytes(JSON.stringify([
-      "projector-genesis-anchor-v1",
-      envioProviderDeploymentId,
-      "canonical-events",
-      anchorBlockNumber,
-      anchorBlockHash,
-      ids.block,
-    ])));
-
     exactIdResult(await transaction.query(
       "select programmable_private.open_run($1::uuid, 'ingestion', '1', $2, $3, $4, $5::uuid, $6, $7, $8::bytea, $9::timestamptz) as id",
       [
@@ -1352,8 +1417,8 @@ export async function initializePostgresProjectorGenesis(input: {
       provider_a_block_hash: anchorBlockHash,
       provider_b_block_hash: anchorBlockHash,
     });
-    exactIdResult(await transaction.query(
-      "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
+    const blockEvidenceId = await appendOrReuseBlockEvidence(
+      transaction,
       [
         ids.block,
         observationId,
@@ -1366,7 +1431,15 @@ export async function initializePostgresProjectorGenesis(input: {
         hexToBytes(blockEvidence.contentFingerprint),
         timestamp,
       ],
-    ), ids.block);
+    );
+    const genesisCommitment = keccak256(toBytes(JSON.stringify([
+      "projector-genesis-anchor-v1",
+      envioProviderDeploymentId,
+      "canonical-events",
+      anchorBlockNumber,
+      anchorBlockHash,
+      blockEvidenceId,
+    ])));
     exactIdResult(await transaction.query(
       "select programmable_private.append_run_outcome($1::uuid, $2::uuid, 'succeeded', $3::bytea, $4::timestamptz) as id",
       [ids.outcome, ids.run, hexToBytes(resultCommitment), timestamp],
@@ -1378,7 +1451,7 @@ export async function initializePostgresProjectorGenesis(input: {
         ids.run,
         envioProviderDeploymentId,
         "canonical-events",
-        ids.block,
+        blockEvidenceId,
         hexToBytes(genesisCommitment),
         timestamp,
       ],
@@ -1499,6 +1572,18 @@ async function appendOrReuseSafeHeadObservation(
 ): Promise<string> {
   const rows = await transaction.query(
     "select programmable_private.append_or_reuse_safe_head_observation_v1($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7::numeric, $8::numeric, $9, $10::numeric, $11::bytea, $12::bytea, $13, $14::bytea, $15::bytea, $16::timestamptz) as id",
+    values,
+  );
+  if (rows.length !== 1) return projectorValidationFailure();
+  return exactUuid(rows[0]?.id);
+}
+
+async function appendOrReuseBlockEvidence(
+  transaction: PostgresTransaction,
+  values: readonly PostgresParameter[],
+): Promise<string> {
+  const rows = await transaction.query(
+    "select programmable_private.append_or_reuse_dual_rpc_block_evidence_v1($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
     values,
   );
   if (rows.length !== 1) return projectorValidationFailure();
@@ -1966,14 +2051,22 @@ export function createPostgresProjectorStore(input: {
           "select * from programmable_private.get_current_provisional_dynamic_sources_v1($1)",
           [RELEASE_PROJECTOR_VERSION],
         );
-        const provisionalSourceAddresses = parseCurrentProvisionalDynamicSources({
+        const provisionalActivationRows = await transaction.query(
+          "select * from programmable_private.get_current_provisional_activation_boundaries_v1($1)",
+          [RELEASE_PROJECTOR_VERSION],
+        );
+        const provisionalDynamicSources = parseCurrentProvisionalDynamicSources({
           rows: provisionalRows,
+          activationRows: provisionalActivationRows,
           templates: dynamicSourceTemplates,
           cursor,
           neutral,
           envioProviderDeploymentId,
           rpcProviderDeploymentIds,
-        }).map(({ sourceAddress }) => sourceAddress);
+        });
+        const provisionalSourceAddresses = provisionalDynamicSources.map(
+          ({ sourceAddress }) => sourceAddress,
+        );
         if (
           new Set(dynamicSources.map(({ sourceAddress }) => sourceAddress)).size !==
             dynamicSources.length ||
@@ -1987,7 +2080,10 @@ export function createPostgresProjectorStore(input: {
         }
         const plan = Object.freeze({
           cursor,
-          dynamicSources: Object.freeze(dynamicSources),
+          dynamicSources: Object.freeze([
+            ...dynamicSources,
+            ...provisionalDynamicSources,
+          ]),
           provisionalSourceAddresses: Object.freeze(
             provisionalSourceAddresses,
           ),
@@ -2045,6 +2141,11 @@ export function createPostgresProjectorStore(input: {
         const parentMatches = resolveInput.candidates.filter(
           ({ candidateId }) => candidateId === parentCandidateId,
         );
+        // Parent runtimes may be staged ahead of the durable ingestion cursor.
+        // A pending activation outside this exact candidate window is future
+        // work, not conflicting evidence. It is validated when its parent
+        // block becomes the current complete replay window.
+        if (parentMatches.length === 0) continue;
         const sourceAddress = databaseAddress(row.source_address);
         const templateId = exactUuid(row.dynamic_source_template_id);
         const templates = plan.dynamicSourceTemplates.filter(
@@ -2106,6 +2207,30 @@ export function createPostgresProjectorStore(input: {
           launch.candidateId,
           sourceAddress,
         );
+        const providerVendorGroups = Object.freeze([
+          exactText(row.provider_a_vendor, /^[a-z][a-z0-9_-]{0,31}$/u),
+          exactText(row.provider_b_vendor, /^[a-z][a-z0-9_-]{0,31}$/u),
+        ]) as readonly [string, string];
+        const providerEndpointCommitments = Object.freeze([
+          databaseBytes32(row.provider_a_endpoint_url_commitment),
+          databaseBytes32(row.provider_b_endpoint_url_commitment),
+        ]) as readonly [HexBytes32, HexBytes32];
+        const databaseProviderIdentities = Object.freeze([
+          exactText(row.provider_a_identity, /^[a-z0-9][a-z0-9._:/-]{0,95}$/u),
+          exactText(row.provider_b_identity, /^[a-z0-9][a-z0-9._:/-]{0,95}$/u),
+        ]) as readonly [string, string];
+        if (
+          databaseProviderIdentities[0] !==
+            `rpc:1:${providerVendorGroups[0]}` ||
+          databaseProviderIdentities[1] !==
+            `rpc:1:${providerVendorGroups[1]}`
+        ) {
+          return projectorValidationFailure();
+        }
+        const traceProviderIdentities = Object.freeze([
+          `${providerVendorGroups[0]}-mainnet-${providerEndpointCommitments[0].slice(2, 34)}`,
+          `${providerVendorGroups[1]}-mainnet-${providerEndpointCommitments[1].slice(2, 34)}`,
+        ]) as readonly [string, string];
         const canonicalDeployment: CanonicalDynamicSourceDeploymentEvidence =
           Object.freeze({
             provisionalPageId: exactUuid(row.provisional_page_id),
@@ -2145,18 +2270,9 @@ export function createPostgresProjectorStore(input: {
               exactUuid(row.provider_a_id),
               exactUuid(row.provider_b_id),
             ]) as readonly [string, string],
-            providerIdentities: Object.freeze([
-              exactText(row.provider_a_identity, /^[a-z0-9][a-z0-9._:/-]{0,95}$/u),
-              exactText(row.provider_b_identity, /^[a-z0-9][a-z0-9._:/-]{0,95}$/u),
-            ]) as readonly [string, string],
-            providerVendorGroups: Object.freeze([
-              exactText(row.provider_a_vendor, /^[a-z][a-z0-9_-]{0,31}$/u),
-              exactText(row.provider_b_vendor, /^[a-z][a-z0-9_-]{0,31}$/u),
-            ]) as readonly [string, string],
-            providerEndpointCommitments: Object.freeze([
-              databaseBytes32(row.provider_a_endpoint_url_commitment),
-              databaseBytes32(row.provider_b_endpoint_url_commitment),
-            ]) as readonly [HexBytes32, HexBytes32],
+            providerIdentities: traceProviderIdentities,
+            providerVendorGroups,
+            providerEndpointCommitments,
             providerOriginCommitments: Object.freeze([
               databaseBytes32(row.provider_a_endpoint_origin_commitment),
               databaseBytes32(row.provider_b_endpoint_origin_commitment),
@@ -2746,10 +2862,9 @@ export function createPostgresProjectorStore(input: {
           provider_a_block_hash: activationBlockHash,
           provider_b_block_hash: activationBlockHash,
         });
-        exactIdResult(
-          await transaction.query(
-            "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
-            [
+        const blockEvidenceId = await appendOrReuseBlockEvidence(
+          transaction,
+          [
               ids.block,
               observationId,
               ids.run,
@@ -2760,9 +2875,7 @@ export function createPostgresProjectorStore(input: {
               blockEvidence.canonicalPreimage,
               hexToBytes(blockEvidence.contentFingerprint),
               timestamp,
-            ],
-          ),
-          ids.block,
+          ],
         );
         const stagedRows = await transaction.query<{ staged_count: unknown }>(
           "select programmable_private.stage_verified_dynamic_source_activations_v1($1::uuid, $2, $3::uuid, $4::bigint, $5::bigint, $6::bigint, $7::bytea, $8::uuid, $9::uuid, $10::uuid, $11::uuid, $12::uuid, $13::jsonb, $14::jsonb, $15::timestamptz) as staged_count",
@@ -2778,9 +2891,9 @@ export function createPostgresProjectorStore(input: {
             plan.database.rpcProviderDeploymentIds[0],
             plan.database.rpcProviderDeploymentIds[1],
             observationId,
-            ids.block,
-            JSON.stringify(activationPayloads),
-            JSON.stringify(modelEvidencePayloads),
+            blockEvidenceId,
+            postgresJson(activationPayloads),
+            postgresJson(modelEvidencePayloads),
             timestamp,
           ],
         );
@@ -2986,8 +3099,8 @@ export function createPostgresProjectorStore(input: {
           provider_a_block_hash: providerBlockHashes[0],
           provider_b_block_hash: providerBlockHashes[1],
         });
-        exactIdResult(await transaction.query(
-          "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
+        const blockEvidenceId = await appendOrReuseBlockEvidence(
+          transaction,
           [
             ids.block,
             observationId,
@@ -3000,7 +3113,7 @@ export function createPostgresProjectorStore(input: {
             hexToBytes(blockEvidence.contentFingerprint),
             timestamp,
           ],
-        ), ids.block);
+        );
         exactIdResult(await transaction.query(
           "select programmable_private.append_run_outcome($1::uuid, $2::uuid, 'succeeded', $3::bytea, $4::timestamptz) as id",
           [ids.outcome, ids.run, hexToBytes(resultCommitment), timestamp],
@@ -3016,7 +3129,7 @@ export function createPostgresProjectorStore(input: {
             ids.run,
             ids.outcome,
             observationId,
-            ids.block,
+            blockEvidenceId,
             plan.database.envioProviderDeploymentId,
             streamId,
             expectedCursorGeneration,
@@ -3298,10 +3411,9 @@ export function createPostgresProjectorStore(input: {
           provider_a_block_hash: firstCandidate.blockHash,
           provider_b_block_hash: firstCandidate.blockHash,
         });
-        exactIdResult(
-          await transaction.query(
-            "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
-            [
+        const blockEvidenceId = await appendOrReuseBlockEvidence(
+          transaction,
+          [
               ids.block,
               observationId,
               ids.run,
@@ -3312,9 +3424,7 @@ export function createPostgresProjectorStore(input: {
               blockEvidence.canonicalPreimage,
               hexToBytes(blockEvidence.contentFingerprint),
               timestamp,
-            ],
-          ),
-          ids.block,
+          ],
         );
         for (const record of records) {
           const { parsed, ids: itemIds, runtimeEvidence } = record;
@@ -3325,7 +3435,7 @@ export function createPostgresProjectorStore(input: {
                 itemIds.runtime,
                 ids.run,
                 hexToBytes(parsed.sourceAddress),
-                ids.block,
+                blockEvidenceId,
                 stageInput.plan.database.rpcProviderDeploymentIds[0],
                 stageInput.plan.database.rpcProviderDeploymentIds[1],
                 hexToBytes(parsed.runtimeCodeHashA),
@@ -3371,7 +3481,7 @@ export function createPostgresProjectorStore(input: {
               stageInput.plan.database.rpcProviderDeploymentIds[0],
               stageInput.plan.database.rpcProviderDeploymentIds[1],
               observationId,
-              ids.block,
+              blockEvidenceId,
               firstCandidate.blockNumber,
               hexToBytes(firstCandidate.blockHash),
               hexToBytes(stageInput.evidence.coverage.filterCommitment),
@@ -3381,12 +3491,12 @@ export function createPostgresProjectorStore(input: {
               records.map(({ parsed }) =>
                 hexToBytes(parsed.verified.rawLogCommitment)
               ),
-              JSON.stringify(stageInput.evidence.executionTrace),
+              postgresJson(stageInput.evidence.executionTrace),
               hexToBytes(executionTraceCommitment),
-              JSON.stringify(
+              postgresJson(
                 records.map(({ parentCandidate }) => parentCandidate),
               ),
-              JSON.stringify(
+              postgresJson(
                 records.map(({ provisionalSource }) => provisionalSource),
               ),
               timestamp,
@@ -3572,6 +3682,28 @@ export function createPostgresProjectorStore(input: {
             });
           }),
         );
+        let finalBlockEvidenceId: string | undefined;
+        for (const blockRecord of blockEvidenceRecords) {
+          const storedBlockEvidenceId = await appendOrReuseBlockEvidence(
+            transaction,
+            [
+              blockRecord.evidenceId,
+              observationId,
+              ids.run,
+              blockRecord.blockNumber,
+              hexToBytes(blockRecord.blockHash),
+              hexToBytes(blockRecord.blockHash),
+              blockRecord.evidence.encodingVersion,
+              blockRecord.evidence.canonicalPreimage,
+              hexToBytes(blockRecord.evidence.contentFingerprint),
+              timestamp,
+            ],
+          );
+          if (blockRecord.blockNumber === finalBlockNumber) {
+            finalBlockEvidenceId = storedBlockEvidenceId;
+          }
+        }
+        if (!finalBlockEvidenceId) return projectorValidationFailure();
         const coverageEvidence = providerEvidenceV2("log_coverage", {
           chain_id: "1",
           epoch_id: plan.database.epochId,
@@ -3593,7 +3725,7 @@ export function createPostgresProjectorStore(input: {
           final_block_global_log_index: String(finalBlockGlobalLogIndex),
           final_candidate_id: finalCandidateId,
           safe_head_observation_id: observationId,
-          final_block_evidence_id: ids.block,
+          final_block_evidence_id: finalBlockEvidenceId,
           provider_a_id: plan.database.rpcProviderDeploymentIds[0],
           provider_b_id: plan.database.rpcProviderDeploymentIds[1],
           filter_commitment: evidence.coverage.filterCommitment,
@@ -3606,24 +3738,6 @@ export function createPostgresProjectorStore(input: {
             [pageCommitment, coverageEvidence.contentFingerprint],
           ),
         );
-        for (const blockRecord of blockEvidenceRecords) {
-          const blockRows = await transaction.query(
-            "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
-            [
-              blockRecord.evidenceId,
-              observationId,
-              ids.run,
-              blockRecord.blockNumber,
-              hexToBytes(blockRecord.blockHash),
-              hexToBytes(blockRecord.blockHash),
-              blockRecord.evidence.encodingVersion,
-              blockRecord.evidence.canonicalPreimage,
-              hexToBytes(blockRecord.evidence.contentFingerprint),
-              timestamp,
-            ],
-          );
-          exactIdResult(blockRows, blockRecord.evidenceId);
-        }
         const commitRows = await transaction.query<{ generation: unknown }>(
           COMMIT_ENVIO_PAGE_SQL,
           [
@@ -3637,7 +3751,7 @@ export function createPostgresProjectorStore(input: {
             evidence.coverage.fromBlockNumber,
             postgresJson(candidateJson),
             observationId,
-            ids.block,
+            finalBlockEvidenceId,
             plan.database.rpcProviderDeploymentIds[0],
             plan.database.rpcProviderDeploymentIds[1],
             hexToBytes(evidence.coverage.filterCommitment),
@@ -6704,10 +6818,9 @@ async function commitPostgresVerifiedProjection(input: {
         provider_a_block_hash: evidence.candidateBlockHash,
         provider_b_block_hash: evidence.candidateBlockHash,
       });
-      exactIdResult(
-        await transaction.query(
-          "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
-          [
+      const storedBlockEvidenceId = await appendOrReuseBlockEvidence(
+        transaction,
+        [
             blockEvidenceId,
             safeObservationId,
             privatePlan.runId,
@@ -6718,11 +6831,9 @@ async function commitPostgresVerifiedProjection(input: {
             blockEvidence.canonicalPreimage,
             hexToBytes(blockEvidence.contentFingerprint),
             verifiedAt,
-          ],
-        ),
-        blockEvidenceId,
+        ],
       );
-      blockEvidenceIds.set(key, blockEvidenceId);
+      blockEvidenceIds.set(key, storedBlockEvidenceId);
     }
     const targetBlockEvidenceId = blockEvidenceIds.get(
       `${targetBlockNumber}:${targetBlockHash}`,
@@ -6778,7 +6889,7 @@ async function commitPostgresVerifiedProjection(input: {
           privatePlan.runId,
           safeObservationId,
           configuredProviderDeploymentIds,
-          JSON.stringify(projection.evidence.executionTrace),
+          postgresJson(projection.evidence.executionTrace),
           hexToBytes(executionTraceCommitment),
           executionEvidence.encodingVersion,
           executionEvidence.canonicalPreimage,
@@ -7138,7 +7249,7 @@ async function commitPostgresVerifiedProjection(input: {
             chunkManifest.providerAChunkCallCounts,
             chunkManifest.providerBChunkCallCounts,
             hexToBytes(foldedSnapshotCommitment),
-            JSON.stringify(rewardEvidence.executionTrace),
+            postgresJson(rewardEvidence.executionTrace),
             hexToBytes(rewardExecutionTraceCommitment),
             encodedRewardEvidence.encodingVersion,
             encodedRewardEvidence.canonicalPreimage,

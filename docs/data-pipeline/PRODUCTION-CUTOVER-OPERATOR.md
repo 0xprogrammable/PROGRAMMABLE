@@ -21,8 +21,9 @@ deployment alias, mutable URL or different mirror commit.
 ## Safety rules
 
 1. Run from a clean checkout of the exact reviewed `production` commit.
-2. Keep every `INDEXED_*_ENABLED` public-read flag `false` until all staged
-   gates pass.
+2. Enable the reviewed indexed route flags only on the unaliased staged
+   deployment. The closed database publication fence keeps those routes on
+   legacy data until database attestation succeeds.
 3. Keep the production domain on the previous Vercel deployment until the
    final promotion step.
 4. Use only the direct Supabase TLS endpoint on port 5432 for migrations,
@@ -57,6 +58,7 @@ PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN
 PROGRAMMABLE_SHADOW_PROBE_TOKEN
 PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN
 CRON_SECRET
+VERCEL_AUTOMATION_BYPASS_SECRET
 VERCEL_TOKEN
 VERCEL_ORG_ID
 VERCEL_PROJECT_ID
@@ -127,8 +129,10 @@ appears, the provider UUID changes or the database becomes promoted.
 ## 4. Exact staged website
 
 Build one production-configured Vercel deployment with `--skip-domain` and
-record its immutable `dpl_...` ID and `.vercel.app` URL. Public indexed-read
-flags remain false. Auto-assignment of the production domain must be disabled.
+record its immutable `dpl_...` ID and `.vercel.app` URL. The reviewed indexed
+route flags are enabled, shadow comparison remains disabled, and the database
+publication fence remains closed. Auto-assignment of the production domain
+must be disabled.
 
 The staged deployment must bind the reviewed candidate endpoint and the exact
 product commit. Do not use a branch alias for any following check.
@@ -234,8 +238,8 @@ promotion after a lease was reacquired.
 ## 7. Staged projectors, reconciliation and load gate
 
 Use the exact same staged deployment and `dpl_...` ID from the drain evidence.
-Its source and market workers may now be invoked directly while every public
-indexed-read flag remains false. No second deployment can replace it between
+Its source and market workers may now be invoked directly while the production
+domain still points to the previous deployment. No second deployment can replace it between
 drain, database attestation, gates and final promotion.
 Every worker request must prove that the deployment's immutable Vercel commit
 and deployment ID equal the database-bound values. No dynamically generated
@@ -254,8 +258,8 @@ node scripts/data-pipeline/cutover-operator.mjs staged-gates \
 
 The command requires source and market projector catch-up, one exact
 checkpoint for each supported release, zero reconciliation mismatches and an
-accepted load/release gate. `CRON_SECRET` is sent only in the authorization
-header.
+accepted load/release gate. `CRON_SECRET` and the Vercel automation bypass are
+sent only in request headers and are never written to release evidence.
 
 Only after this file exists and has been independently reviewed may the exact
 staged Vercel deployment be promoted to the production domain. Run the existing

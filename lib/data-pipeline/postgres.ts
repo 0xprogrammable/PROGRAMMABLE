@@ -200,11 +200,17 @@ export function createPostgresExecutor(input: {
   };
   const factory: PostgresFactory =
     input.postgresFactory ??
-    ((connectionString, driverOptions) =>
-      postgres(
-        connectionString,
-        driverOptions,
-      ) as unknown as Sql<NoCustomPostgresTypes>);
+    ((connectionString, driverOptions) => {
+      const connectionUrl = new URL(connectionString);
+      return postgres({
+        ...driverOptions,
+        host: connectionUrl.hostname,
+        port: Number(connectionUrl.port),
+        database: connectionUrl.pathname.slice(1),
+        username: decodeURIComponent(connectionUrl.username),
+        password: decodeURIComponent(connectionUrl.password),
+      }) as unknown as Sql<NoCustomPostgresTypes>;
+    });
   const sql = factory(
     target.connectionString,
     options,

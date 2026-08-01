@@ -438,13 +438,13 @@ function canonicalDeploymentEvidence(
 ): CanonicalDynamicSourceDeploymentEvidence {
   const template = dynamicTemplate();
   return {
-    provisionalPageId: "20000000-0000-4000-8000-000000000001",
-    provisionalLineageId: "20000000-0000-4000-8000-000000000002",
+    provisionalPageId: "20000000-0000-8000-8000-000000000001",
+    provisionalLineageId: "20000000-0000-8000-8000-000000000002",
     dynamicSourceAttestationId:
-      "20000000-0000-4000-8000-000000000003",
-    runtimeCodeEvidenceId: "20000000-0000-4000-8000-000000000004",
+      "20000000-0000-8000-8000-000000000003",
+    runtimeCodeEvidenceId: "20000000-0000-8000-8000-000000000004",
     dynamicSourceTemplateId: template.templateId,
-    parentOccurrenceId: "20000000-0000-4000-8000-000000000005",
+    parentOccurrenceId: "20000000-0000-8000-8000-000000000005",
     parentCandidateId: parent.candidateId,
     parentBlockNumber: parent.blockNumber,
     parentBlockHash: parent.blockHash,
@@ -462,9 +462,9 @@ function canonicalDeploymentEvidence(
       ),
     ),
     canonicalStatusHistoryId:
-      "20000000-0000-4000-8000-000000000006",
-    safeHeadObservationId: "20000000-0000-4000-8000-000000000007",
-    blockEvidenceId: "20000000-0000-4000-8000-000000000008",
+      "20000000-0000-8000-8000-000000000006",
+    safeHeadObservationId: "20000000-0000-8000-8000-000000000007",
+    blockEvidenceId: "20000000-0000-8000-8000-000000000008",
     reorgGeneration: template.database.reorgGeneration,
     envioProviderDeploymentId: template.database.envioProviderDeploymentId,
     rpcProviderDeploymentIds: template.database.rpcProviderDeploymentIds,

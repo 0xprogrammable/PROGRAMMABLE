@@ -45,13 +45,34 @@ function cronSecret(value) {
   return value;
 }
 
-async function jsonRequest({ target, pathName, method = "GET", body, secret, fetchImpl = fetch }) {
+function automationBypassSecret(value) {
+  if (
+    typeof value !== "string" ||
+    Buffer.byteLength(value, "utf8") < 32 ||
+    Buffer.byteLength(value, "utf8") > 512 ||
+    /[\r\n]/u.test(value)
+  ) {
+    throw new Error("VERCEL_AUTOMATION_BYPASS_SECRET is required");
+  }
+  return value;
+}
+
+async function jsonRequest({
+  target,
+  pathName,
+  method = "GET",
+  body,
+  secret,
+  bypassSecret,
+  fetchImpl = fetch,
+}) {
   const response = await fetchImpl(new URL(pathName, target), {
     method,
     redirect: "error",
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${cronSecret(secret)}`,
+      "x-vercel-protection-bypass": automationBypassSecret(bypassSecret),
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -77,7 +98,8 @@ async function jsonRequest({ target, pathName, method = "GET", body, secret, fet
 export function createStagedWorkers(input) {
   const target = exactStagedTarget(input.targetUrl, input.deploymentId);
   const secret = cronSecret(input.cronSecret);
-  const common = { target, secret, fetchImpl: input.fetchImpl };
+  const bypassSecret = automationBypassSecret(input.automationBypassSecret);
+  const common = { target, secret, bypassSecret, fetchImpl: input.fetchImpl };
   return Object.freeze({
     runSourceProjector: () => jsonRequest({ ...common, pathName: "/api/ops/projector" }),
     runMarketProjector: () => jsonRequest({ ...common, pathName: "/api/ops/market-projector" }),
@@ -103,6 +125,47 @@ function deploymentAliases(deployment) {
           : undefined;
     return typeof candidate === "string" ? candidate.toLowerCase() : "";
   }).filter(Boolean).sort();
+}
+
+async function resolveVercelAlias(input) {
+  const endpoint = new URL(
+    `/v4/aliases/${encodeURIComponent(input.alias)}`,
+    "https://api.vercel.com",
+  );
+  endpoint.searchParams.set("teamId", input.teamId);
+  const response = await (input.fetchImpl ?? fetch)(endpoint, {
+    redirect: "error",
+    headers: { Authorization: `Bearer ${input.token}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (response.status === 404) return undefined;
+  const text = await response.text();
+  if (!response.ok || Buffer.byteLength(text, "utf8") > MAXIMUM_RESPONSE_BYTES) {
+    throw new Error("Vercel alias lookup failed");
+  }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error("Vercel alias lookup returned invalid JSON");
+  }
+  return value;
+}
+
+async function activeDeploymentAliases(input) {
+  const resolveAlias = input.resolveAlias ?? resolveVercelAlias;
+  const active = await Promise.all(
+    input.aliases.map(async (alias) => {
+      const value = await resolveAlias({
+        alias,
+        token: input.token,
+        teamId: input.teamId,
+        fetchImpl: input.fetchImpl,
+      });
+      return value?.deploymentId === input.deploymentId ? alias : undefined;
+    }),
+  );
+  return active.filter(Boolean).sort();
 }
 
 export async function inspectUnexposedStagedDeployment(input) {
@@ -139,7 +202,14 @@ export async function inspectUnexposedStagedDeployment(input) {
   const candidateHost = String(candidate?.url ?? "")
     .replace(/^https?:\/\//u, "")
     .replace(/\/$/u, "");
-  const aliases = deploymentAliases(candidate);
+  const aliases = await activeDeploymentAliases({
+    aliases: deploymentAliases(candidate),
+    deploymentId: input.deploymentId,
+    token: input.token,
+    teamId: input.teamId,
+    fetchImpl: input.fetchImpl,
+    resolveAlias: input.resolveAlias,
+  });
   const projectMatches =
     candidate?.projectId === input.projectId ||
     candidate?.project?.id === input.projectId;
