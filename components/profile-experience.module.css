@@ -225,12 +225,11 @@
 }
 
 .editButton {
-  background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
   border-radius: 12px;
   color: var(--text-soft);
   flex: none;
   font-size: 12px;
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 14px;
 }
 
@@ -268,7 +267,6 @@
 
 .imageAction,
 .editAction {
-  background: var(--surface-soft);
   border-radius: 12px;
   color: var(--text-soft);
   font-size: 12px;
@@ -294,8 +292,6 @@
 }
 
 .saveAction {
-  background: var(--accent);
-  border-color: var(--accent);
   color: var(--accent-ink);
 }
 
@@ -349,8 +345,7 @@
 
 .connectButton {
   align-items: center;
-  background: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent-strong) 42%, transparent);
+  border: 1px solid var(--control-glass-primary-border);
   border-radius: 14px;
   color: var(--accent-ink);
   display: inline-flex;
@@ -762,8 +757,6 @@
 }
 
 .claimButton {
-  background: var(--accent);
-  border-color: color-mix(in srgb, var(--accent-strong) 42%, transparent);
   color: var(--accent-ink);
 }
 
@@ -925,7 +918,6 @@
 }
 
 .secondaryAction {
-  background: var(--surface-soft);
   color: var(--text-soft);
 }
 
@@ -1016,12 +1008,36 @@
 }
 
 .retryButton {
-  background: var(--surface-soft);
   border-radius: 12px;
   font-size: 12px;
   margin-top: 16px;
   min-height: 44px;
   padding: 0 15px;
+}
+
+.editButton,
+.imageAction,
+.editAction,
+.secondaryAction,
+.retryButton,
+.openToken {
+  -webkit-backdrop-filter: var(--control-glass-filter);
+  backdrop-filter: var(--control-glass-filter);
+  background-color: var(--control-glass-neutral-bg);
+  background-image: var(--control-glass-sheen);
+  border-color: var(--control-glass-border);
+  box-shadow: var(--control-glass-shadow);
+}
+
+.connectButton,
+.claimButton,
+.saveAction {
+  -webkit-backdrop-filter: var(--control-glass-filter);
+  backdrop-filter: var(--control-glass-filter);
+  background-color: var(--control-glass-primary-bg);
+  background-image: var(--control-glass-primary-sheen);
+  border-color: var(--control-glass-primary-border);
+  box-shadow: var(--control-glass-primary-shadow);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1041,8 +1057,11 @@
   .openToken:hover,
   .secondaryAction:hover,
   .retryButton:hover {
-    border-color: var(--border-strong);
+    background-color: var(--control-glass-neutral-bg-hover);
+    border-color: var(--control-glass-border);
+    box-shadow: var(--control-glass-shadow-hover);
     color: var(--text);
+    transform: translateY(-1px);
   }
 
   .textAction:hover {
@@ -1051,7 +1070,15 @@
 
   .claimButton:not(:disabled):hover,
   .connectButton:hover {
-    background: var(--accent-hover);
+    background-color: var(--control-glass-primary-bg-hover);
+    box-shadow: var(--control-glass-primary-shadow-hover);
+    transform: translateY(-1px);
+  }
+
+  .saveAction:hover {
+    background-color: var(--control-glass-primary-bg-hover);
+    box-shadow: var(--control-glass-primary-shadow-hover);
+    transform: translateY(-1px);
   }
 }
 
@@ -1085,6 +1112,7 @@
   transition:
     background-color 150ms ease,
     border-color 150ms ease,
+    box-shadow 150ms ease,
     color 150ms ease,
     transform 120ms ease;
 }

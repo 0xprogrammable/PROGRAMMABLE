@@ -118,13 +118,20 @@
 
 .socials a {
   align-items: center;
+  -webkit-backdrop-filter: var(--control-glass-filter);
+  backdrop-filter: var(--control-glass-filter);
+  background-color: var(--control-glass-neutral-bg);
+  background-image: var(--control-glass-sheen);
+  border: 1px solid var(--control-glass-border);
   border-radius: 50%;
+  box-shadow: var(--control-glass-shadow);
   color: var(--accent-deep);
   display: inline-flex;
   height: 44px;
   justify-content: center;
   transition:
     background-color 150ms ease,
+    box-shadow 150ms ease,
     transform 160ms var(--ease-out);
   width: 44px;
 }
@@ -141,7 +148,9 @@
   }
 
   .socials a:hover {
-    background: var(--accent-soft);
+    background-color: var(--control-glass-neutral-bg-hover);
+    box-shadow: var(--control-glass-shadow-hover);
+    color: var(--text);
     transform: translateY(-1px);
   }
 }

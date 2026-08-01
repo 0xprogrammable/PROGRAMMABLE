@@ -102,23 +102,27 @@
 
 .primaryAction,
 .secondaryAction {
-  backdrop-filter: blur(20px) saturate(1.12);
+  -webkit-backdrop-filter: var(--control-glass-filter);
+  backdrop-filter: var(--control-glass-filter);
   border-radius: 14px;
-  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.72);
   gap: 9px;
   min-height: 48px;
   padding: 0 19px;
 }
 
 .primaryAction {
-  background: oklch(0.9 0.06 355 / 0.72);
-  border: 1px solid oklch(0.66 0.12 355 / 0.26);
+  background-color: var(--control-glass-primary-bg);
+  background-image: var(--control-glass-primary-sheen);
+  border: 1px solid var(--control-glass-primary-border);
+  box-shadow: var(--control-glass-primary-shadow);
   color: var(--accent-ink);
 }
 
 .secondaryAction {
-  background: oklch(1 0 0 / 0.64);
-  border: 1px solid oklch(0 0 0 / 0.08);
+  background-color: var(--control-glass-neutral-bg);
+  background-image: var(--control-glass-sheen);
+  border: 1px solid var(--control-glass-border);
+  box-shadow: var(--control-glass-shadow);
   color: var(--text);
 }
 
@@ -436,10 +440,12 @@
 .search,
 .filter > summary,
 .pagination {
-  backdrop-filter: blur(18px) saturate(1.08);
-  background: oklch(1 0 0 / 0.72);
-  border: 1px solid oklch(0 0 0 / 0.08);
-  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.8);
+  -webkit-backdrop-filter: var(--control-glass-filter);
+  backdrop-filter: var(--control-glass-filter);
+  background-color: var(--control-glass-neutral-bg);
+  background-image: var(--control-glass-sheen);
+  border: 1px solid var(--control-glass-border);
+  box-shadow: var(--control-glass-shadow);
 }
 
 .search {
@@ -808,19 +814,22 @@
 .tokenLinks a,
 .profileArrow {
   align-items: center;
-  border-radius: 10px;
+  border-radius: 13px;
   color: var(--muted);
   display: inline-flex;
-  height: 36px;
+  height: 44px;
   justify-content: center;
-  width: 36px;
+  width: 44px;
 }
 
 .tokenLinks button,
 .tokenLinks a {
-  background: oklch(0.98 0.004 250);
-  border: 0;
-  box-shadow: inset 0 0 0 1px oklch(0 0 0 / 0.07);
+  -webkit-backdrop-filter: var(--control-glass-filter);
+  backdrop-filter: var(--control-glass-filter);
+  background-color: var(--control-glass-neutral-bg);
+  background-image: var(--control-glass-sheen);
+  border: 1px solid var(--control-glass-border);
+  box-shadow: var(--control-glass-shadow);
 }
 
 .tokenLinks button svg,
@@ -855,21 +864,19 @@
 
   .primaryAction,
   .secondaryAction {
-    transition-property: background-color, box-shadow, scale;
+    transition-property: background-color, border-color, box-shadow, scale, transform;
   }
 
   .primaryAction:hover {
-    background: oklch(0.87 0.075 355 / 0.78);
-    box-shadow:
-      inset 0 1px 0 oklch(1 0 0 / 0.78),
-      0 12px 28px oklch(0.54 0.1 355 / 0.13);
+    background-color: var(--control-glass-primary-bg-hover);
+    box-shadow: var(--control-glass-primary-shadow-hover);
+    transform: translateY(-1px);
   }
 
   .secondaryAction:hover {
-    background: oklch(1 0 0 / 0.82);
-    box-shadow:
-      inset 0 1px 0 oklch(1 0 0 / 0.84),
-      0 11px 26px oklch(0.3 0.02 250 / 0.08);
+    background-color: var(--control-glass-neutral-bg-hover);
+    box-shadow: var(--control-glass-shadow-hover);
+    transform: translateY(-1px);
   }
 
   .primaryAction:active,
@@ -935,8 +942,14 @@
   .pagination button:not(:disabled):hover,
   .tokenLinks button:hover,
   .tokenLinks a:hover {
-    background: oklch(0.95 0.02 355);
+    background-color: var(--control-glass-neutral-bg-hover);
+    box-shadow: var(--control-glass-shadow-hover);
     color: var(--text);
+  }
+
+  .filter > summary:hover {
+    background-color: var(--control-glass-neutral-bg-hover);
+    box-shadow: var(--control-glass-shadow-hover);
   }
 
   .tokenCard:hover {
