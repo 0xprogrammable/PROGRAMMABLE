@@ -42,6 +42,11 @@ export type VerifiedDynamicSourceLineage = Readonly<{
   factoryCandidateId?: string;
   factoryBlockNumber: string;
   factoryBlockGlobalLogIndex?: string;
+  activationCandidateId?: string;
+  activationOccurrenceId?: string;
+  activationBlockNumber?: string;
+  activationBlockHash?: HexBytes32;
+  activationBlockGlobalLogIndex?: string;
   expectedExactRuntimeCodeHash: HexBytes32;
   expectedNormalizedRuntimeCodeHash: HexBytes32;
   expectedImmutableReferencesCommitment: HexBytes32;
@@ -89,6 +94,9 @@ export function canonicalDynamicSourceLineage(
   let expectedImmutableReferencesCommitment: HexBytes32;
   let factoryBlockNumber: string;
   let factoryBlockGlobalLogIndex: string | undefined;
+  let activationBlockNumber: string | undefined;
+  let activationBlockHash: HexBytes32 | undefined;
+  let activationBlockGlobalLogIndex: string | undefined;
   let expectedRuntimeByteLength: string;
   try {
     sourceAddress = canonicalAddress(value.sourceAddress);
@@ -111,6 +119,19 @@ export function canonicalDynamicSourceLineage(
         : canonicalUint32DecimalText(
             value.factoryBlockGlobalLogIndex,
             "dynamic-factory-log-index",
+          );
+    activationBlockNumber = value.activationBlockNumber === undefined
+      ? undefined
+      : parseNonnegativeIntegerText(value.activationBlockNumber);
+    activationBlockHash = value.activationBlockHash === undefined
+      ? undefined
+      : canonicalBytes32(value.activationBlockHash);
+    activationBlockGlobalLogIndex =
+      value.activationBlockGlobalLogIndex === undefined
+        ? undefined
+        : canonicalUint32DecimalText(
+            value.activationBlockGlobalLogIndex,
+            "dynamic-activation-log-index",
           );
     expectedRuntimeByteLength = canonicalUint32DecimalText(
       value.expectedRuntimeByteLength,
@@ -154,9 +175,51 @@ export function canonicalDynamicSourceLineage(
     ) {
       return dynamicLineageError();
     }
+  } else if (!UUID_PATTERN.test(value.parentOccurrenceId!)) {
+    return dynamicLineageError();
+  }
+  const activationShape = [
+    activationBlockNumber,
+    activationBlockHash,
+    activationBlockGlobalLogIndex,
+  ];
+  const hasActivationBoundary = activationShape.every(
+    (entry) => entry !== undefined,
+  );
+  if (
+    (!hasActivationBoundary &&
+      activationShape.some((entry) => entry !== undefined)) ||
+    (hasActivationBoundary &&
+      ((value.activationCandidateId === undefined) ===
+        (value.activationOccurrenceId === undefined)))
+  ) {
+    return dynamicLineageError();
+  }
+  if (hasActivationBoundary) {
+    const activationAfterFactory =
+      BigInt(activationBlockNumber!) > BigInt(factoryBlockNumber) ||
+      (BigInt(activationBlockNumber!) === BigInt(factoryBlockNumber) &&
+        factoryBlockGlobalLogIndex !== undefined &&
+        BigInt(activationBlockGlobalLogIndex!) >
+          BigInt(factoryBlockGlobalLogIndex));
+    const activationMatch = value.activationCandidateId === undefined
+      ? null
+      : CANDIDATE_ID_PATTERN.exec(value.activationCandidateId);
+    if (
+      !activationAfterFactory ||
+      (value.activationOccurrenceId !== undefined &&
+        !UUID_PATTERN.test(value.activationOccurrenceId)) ||
+      (activationMatch !== null &&
+        (activationMatch[1] !== activationBlockHash ||
+          BigInt(activationMatch[3]!) !==
+            BigInt(activationBlockGlobalLogIndex!))) ||
+      (value.activationCandidateId !== undefined && activationMatch === null)
+    ) {
+      return dynamicLineageError();
+    }
   } else if (
-    !UUID_PATTERN.test(value.parentOccurrenceId!) ||
-    factoryBlockGlobalLogIndex !== undefined
+    value.activationCandidateId !== undefined ||
+    value.activationOccurrenceId !== undefined
   ) {
     return dynamicLineageError();
   }
@@ -178,6 +241,19 @@ export function canonicalDynamicSourceLineage(
     ...(factoryBlockGlobalLogIndex === undefined
       ? {}
       : { factoryBlockGlobalLogIndex }),
+    ...(activationBlockNumber === undefined
+      ? {}
+      : {
+          ...(value.activationCandidateId
+            ? { activationCandidateId: value.activationCandidateId }
+            : {}),
+          ...(value.activationOccurrenceId
+            ? { activationOccurrenceId: value.activationOccurrenceId }
+            : {}),
+          activationBlockNumber,
+          activationBlockHash: activationBlockHash!,
+          activationBlockGlobalLogIndex: activationBlockGlobalLogIndex!,
+        }),
     expectedExactRuntimeCodeHash,
     expectedNormalizedRuntimeCodeHash,
     expectedImmutableReferencesCommitment,
