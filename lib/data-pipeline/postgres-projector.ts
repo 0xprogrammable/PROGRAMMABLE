@@ -2004,7 +2004,7 @@ export function createPostgresProjectorStore(input: {
         resolveInput.expectedReorgGeneration !==
           plan.database.reorgGeneration ||
         resolveInput.candidates.length >
-          PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+          PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP
       ) {
         return projectorValidationFailure();
       }

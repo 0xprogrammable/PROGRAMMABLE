@@ -889,6 +889,33 @@ describe("concrete projector Postgres store", () => {
     });
   });
 
+  it("resolves pending activations across more than one candidate page", async () => {
+    const executor = new StoreExecutor();
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+    });
+    const plan = await store.readPlan();
+    executor.queries.splice(0);
+
+    await expect(
+      store.resolvePendingDynamicSourceActivations({
+        expectedCursorGeneration: plan.cursor.generation,
+        expectedCursorBlockHash: plan.cursor.blockHash,
+        expectedReorgGeneration: plan.database.reorgGeneration,
+        candidates: Array.from({ length: 33 }, candidate),
+      }),
+    ).resolves.toEqual([]);
+
+    expect(
+      executor.queries.some(({ text }) =>
+        text.includes("resolve_pending_dynamic_source_activations_v1")
+      ),
+    ).toBe(true);
+  });
+
   it("stages one exact Classic parent and runtime without advancing the ingestion cursor", async () => {
     const executor = new StoreExecutor();
     const sourceAddress = address("f");
