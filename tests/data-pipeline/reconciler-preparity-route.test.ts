@@ -67,6 +67,13 @@ describe("reconciler pre-parity ops route", () => {
     const weakSecretResponse = await POST(request(BODY, "too-short"));
     expect(weakSecretResponse.status).toBe(401);
 
+    const overlongUtf8Secret = "🌸".repeat(300);
+    process.env.CRON_SECRET = overlongUtf8Secret;
+    const overlongUtf8Response = await POST(
+      request(BODY, SECRET),
+    );
+    expect(overlongUtf8Response.status).toBe(401);
+
     expect(runConfigured).not.toHaveBeenCalled();
   });
 

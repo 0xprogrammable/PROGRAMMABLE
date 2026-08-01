@@ -16,10 +16,13 @@ const MAXIMUM_REQUEST_BYTES = 16 * 1024;
 function isAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   const authorization = request.headers.get("authorization");
+  const secretLength = typeof secret === "string"
+    ? Buffer.byteLength(secret, "utf8")
+    : 0;
   if (
     typeof secret !== "string" ||
-    secret.length < 32 ||
-    secret.length > 1_024 ||
+    secretLength < 32 ||
+    secretLength > 1_024 ||
     !authorization?.startsWith("Bearer ")
   ) {
     return false;
