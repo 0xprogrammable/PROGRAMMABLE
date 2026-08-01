@@ -290,7 +290,7 @@ function progressPayload(input: {
       IndexerState_by_pk: {
         id: "ethereum-mainnet",
         schemaVersion: "1",
-        deployment: "production-1e7c381",
+        deployment: releaseBinding.envio.deploymentLabel,
         sourceCommit: releaseBinding.envio.sourceCommit,
         configSha256: releaseBinding.envio.configSha256,
         schemaSha256: releaseBinding.envio.schemaSha256,
@@ -860,7 +860,7 @@ describe("Envio progress adapter", () => {
       client.readProgress({ requiredBlock: "25650002" }),
     ).resolves.toEqual({
       chainId: 1,
-      deployment: "production-1e7c381",
+      deployment: "production-7f24e63",
       schemaVersion: "1",
       progressBlock: "25650010",
       bufferBlock: "25650010",

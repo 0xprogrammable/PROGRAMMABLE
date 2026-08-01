@@ -23,7 +23,10 @@ export const WORKER_ACTIVATION_FLAG_NAMES = Object.freeze([
 ]);
 
 export const REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES = Object.freeze([
+  "PROGRAMMABLE_ENVIO_GRAPHQL_URL",
+  "PROGRAMMABLE_PROJECTOR_BINDING_MODE",
   "PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY",
+  "PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT",
   "PROGRAMMABLE_SOURCE_PROJECTOR_VERSION",
   "PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL",
   "PROGRAMMABLE_UNISWAP_GRAPH_REDACTED_IDENTITY",
@@ -33,6 +36,9 @@ export const REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES = Object.freeze([
 
 const CANONICAL_PRODUCTION_ORIGIN = "https://programmable.family";
 const EXPECTED_SOURCE_PROJECTOR_VERSION = "projector-v1";
+const EXPECTED_PROJECTOR_BINDING_MODE = "release";
+const EXPECTED_PROJECTOR_ENVIO_MIRROR_COMMIT =
+  "7ffd15c2a28c481a2d3632e30b315262c2471b2e";
 const EXPECTED_UNISWAP_GRAPH_BASE_URL = "https://gateway.thegraph.com";
 const EXPECTED_UNISWAP_GRAPH_REDACTED_IDENTITY = "uniswap-v4-official";
 const EXPECTED_UNISWAP_GRAPH_DEPLOYMENT_COMMITMENT =
@@ -114,14 +120,23 @@ function parseReleaseExpectations(rootDirectory) {
   );
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const deploymentLabel = manifest?.envio?.deploymentLabel;
+  const graphqlEndpoint = manifest?.envio?.graphqlEndpoint;
   if (
     typeof deploymentLabel !== "string" ||
-    !/^[a-z0-9][a-z0-9._-]{0,95}$/u.test(deploymentLabel)
+    !/^[a-z0-9][a-z0-9._-]{0,95}$/u.test(deploymentLabel) ||
+    typeof graphqlEndpoint !== "string" ||
+    !/^https:\/\/indexer\.hyperindex\.xyz\/[a-z0-9]{7}\/(?:v1)\/graphql$/u.test(
+      graphqlEndpoint,
+    )
   ) {
-    throw new Error("data-pipeline release has an invalid Envio deployment label");
+    throw new Error("data-pipeline release has an invalid Envio binding");
   }
   return Object.freeze({
+    PROGRAMMABLE_ENVIO_GRAPHQL_URL: graphqlEndpoint,
+    PROGRAMMABLE_PROJECTOR_BINDING_MODE: EXPECTED_PROJECTOR_BINDING_MODE,
     PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY: `envio:${deploymentLabel}`,
+    PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
+      EXPECTED_PROJECTOR_ENVIO_MIRROR_COMMIT,
     PROGRAMMABLE_SOURCE_PROJECTOR_VERSION:
       EXPECTED_SOURCE_PROJECTOR_VERSION,
     PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL:
