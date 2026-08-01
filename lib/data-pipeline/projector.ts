@@ -149,7 +149,7 @@ type DynamicParentForReplay = Readonly<{
 }>;
 
 const MAXIMUM_DYNAMIC_PARENT_BLOCKS_PER_CYCLE = 8;
-const MAXIMUM_DYNAMIC_ACTIVATION_BLOCKS_PER_CYCLE = 4;
+const MAXIMUM_DYNAMIC_ACTIVATION_BLOCKS_PER_CYCLE = 2;
 
 function dynamicParentsForReplay(
   candidates: readonly EnvioCandidate[],
