@@ -2,6 +2,8 @@
 -- its first page. Until generation one exists, expose that immutable genesis
 -- point as the generation-zero cursor. A completely uninitialized scope keeps
 -- the all-NULL sentinel so the runtime cannot start without that evidence.
+set role programmable_migrator;
+
 create or replace function programmable_private.get_envio_ingestion_cursor_v1(
   p_chain_id bigint,
   p_provider_deployment_id uuid,
@@ -74,3 +76,5 @@ revoke all on function programmable_private.get_envio_ingestion_cursor_v1(
 grant execute on function programmable_private.get_envio_ingestion_cursor_v1(
   bigint, uuid, text
 ) to programmable_projector;
+
+reset role;
