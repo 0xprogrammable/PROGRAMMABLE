@@ -4,7 +4,7 @@
   "status": "prepared-not-deployed",
   "source": {
     "repository": "https://github.com/0xprogrammable/programmable",
-    "commit": "fad46018c9c6289a2ad0c89371b03faef31b5c25",
+    "commit": "7f24e6380d5cf17092f5ade7cbad678465e3ef95",
     "root": "indexer"
   },
   "deploymentMirror": {
@@ -13,8 +13,8 @@
     "candidateCommit": null
   },
   "identity": {
-    "deployment": "production-fad4601",
-    "sourceCommit": "fad46018c9c6289a2ad0c89371b03faef31b5c25",
+    "deployment": "production-7f24e63",
+    "sourceCommit": "7f24e6380d5cf17092f5ade7cbad678465e3ef95",
     "configSha256": "0x378e3a799c762cb31107792c7123f5f90b54b5826884c398995e7465176fe1c2",
     "schemaSha256": "0xdf3d65e033e96d7ebbe62b6f114b6a30f10c8944e5c6fca6b020c3130bb738c0",
     "handlerSha256": "0x9f68d05cc8907f1c422cb2584b338ed42375eb4b6033cbec1338d00577267491",
