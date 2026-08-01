@@ -96,6 +96,7 @@ jobs:
     needs: release-gate
     if: >-
       github.repository == '0xprogrammable/programmable' &&
+      github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production' &&
       needs.release-gate.outputs.verified_sha == github.sha
     runs-on: ubuntu-latest
