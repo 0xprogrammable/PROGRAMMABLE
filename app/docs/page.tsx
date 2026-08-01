@@ -50,7 +50,9 @@ export default function DocsPage() {
           <Link className={styles.modelCard} href="/docs/models/classic">
             <span className={styles.modelCardHeader}>
               <strong>Classic</strong>
-              <span className={styles.status}>Historical</span>
+              <span className={styles.status} data-status="live">
+                Live
+              </span>
             </span>
             <p>
               Set buy and sell fees, choose who receives creator rewards and
@@ -68,9 +70,7 @@ export default function DocsPage() {
           >
             <span className={styles.modelCardHeader}>
               <strong>Stock-Paired</strong>
-              <span className={styles.status} data-status="live">
-                Live
-              </span>
+              <span className={styles.status}>Historical</span>
             </span>
             <p>
               Existing tokens retain their recorded Ondo quote asset, pool,
