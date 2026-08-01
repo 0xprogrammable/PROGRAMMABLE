@@ -61,7 +61,7 @@ The beta pull request records:
 - the full commit and tree SHA;
 - the public check-evidence reference and digest;
 - what the project does and why it uses Uniswap v4;
-- value flows, fees, authorities, dependencies and failure behavior;
+- value flows, the mandatory Programmable fee, project fees, authorities, dependencies and failure behavior;
 - known limitations and unresolved architecture questions; and
 - source license, provenance and public builder contact.
 
@@ -115,10 +115,16 @@ Reviewers evaluate the exact revision, not the idea's popularity and not the cur
 An unfamiliar mechanic enters **architecture discussion**. Reviewers ask what it does, where value moves, who controls
 it, what it trusts and how it fails. Lack of a catalog label is not a rejection.
 
-The safer no-hook default uses the pinned official Launchpad profile, but it is not a launch-type allowlist. A
-model-specific ordinary token or launcher, including transparent bounded transfer tax and automatic liquidity, may
-enter review with its own exact source and dependencies. It must preserve transfer and sell liveness and disclose fee
-bounds, recipients, authority, value flows, liquidity custody and exit, provider limits, and test evidence.
+There is no launch-type allowlist. A no-hook, router-only, LP-fee-only, or transfer-tax-only design may enter proposal
+review, but it is not launch-ready. A simple project implements the standard Programmable fee-hook profile. A project
+that needs custom pool behavior integrates the profile into that single hook. Both require exact source, tests, and maintainer review.
+
+For every successful canonical-pool swap, the effective hook-owned total is `max(builder-selected total,10 bps)`.
+Exactly `10 bps` (`0.10%`) belongs to Programmable and the project receives the remainder. This is inclusive: selected
+`3%` remains `3%`, split `0.1% + 2.9%`, not `3.1%`. The basis is actually executed gross quote-side volume across
+both directions and exact-input/exact-output. The immutable owner and sole claim authority is
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`, which may claim anytime to itself or an owner-selected destination for
+that claim. Builders, projects, and administrators cannot mutate or claim that liability.
 
 An objective finding includes:
 
@@ -190,6 +196,7 @@ A local check, generated package, GitHub review or merged beta record is not:
 - a claim that the project is safe or rug-free;
 - acceptance as a Programmable launch model;
 - deployment, launch or transaction evidence;
+- proof that the mandatory fee is collected in production;
 - provider routing, indexing or support evidence;
 - Uniswap Labs or Uniswap Foundation endorsement; or
 - a promise of fees, revenue, grants, review time or future integration.
@@ -228,4 +235,4 @@ without the builder's explicit confirmation.
 
 Always pair that description with this boundary:
 
-> Beta review is not an audit, product approval, deployment, provider support or Uniswap endorsement.
+> Beta review is not an audit, product approval, deployment, proof of live fee collection, provider support or Uniswap endorsement.

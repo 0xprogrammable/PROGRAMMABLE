@@ -14,16 +14,14 @@ const submissionSchema = JSON.parse(
   fs.readFileSync(path.join(skillRoot, "references", "submission.schema.json"), "utf8")
 );
 
-test("official analyzer output cannot legitimately generate public prototype-ready before maintainer gates", () => {
+test("official analyzer output cannot project a pending platform-fee integration as ready", () => {
   const submission = materializeExample({
     skillRoot,
     exampleId: "dynamic-lp-fee"
   });
   const localReport = analyzeSubmission(submission, { schema: submissionSchema });
-  assert.equal(localReport.decision, "PROTOTYPE_READY", JSON.stringify(localReport.findings));
-  assert.ok(localReport.requiredGates.some(({ id, stage }) => (
-    id === "human-economic-and-security-review" && stage === "candidate"
-  )));
+  assert.equal(localReport.decision, "REDESIGN_REQUIRED", JSON.stringify(localReport.findings));
+  assert.ok(localReport.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_INTEGRATION_PENDING"));
 
   const central = buildFixture(localReport, {
     completedGateIds: localReport.requiredGates
@@ -32,11 +30,9 @@ test("official analyzer output cannot legitimately generate public prototype-rea
   });
   const validated = validateCentral(central);
 
-  assert.equal(validated.compatibility.result, "architecture-review-required");
+  assert.equal(validated.compatibility.result, "changes-required");
   assert.notEqual(validated.compatibility.result, "prototype-ready");
-  assert.ok(validated.compatibility.findings.some(({ path: findingPath }) => (
-    findingPath === "$.requiredGates.candidate.human-economic-and-security-review"
-  )));
+  assert.ok(validated.compatibility.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_INTEGRATION_PENDING"));
 });
 
 test("a manual candidate gate survives central projection as architecture review", () => {
@@ -150,6 +146,9 @@ function buildFixture(localReport, { completedGateIds = [], reviewTarget = null,
   const packagePath = `submissions/${applicationId}`;
   const gateStatusPath = `${packagePath}/evidence/gate-status.json`;
   const compatibilityPath = `${packagePath}/compatibility-report.json`;
+  const submissionPath = `${packagePath}/submission.json`;
+  const feeSourcePath = "src/ProgrammableFeeHook.sol";
+  const feeTestPath = "test/ProgrammableFeeHook.t.sol";
   const revisionObjectId = "a".repeat(40);
   const treeObjectId = "b".repeat(40);
   const source = {
@@ -159,17 +158,32 @@ function buildFixture(localReport, { completedGateIds = [], reviewTarget = null,
       numericRepositoryId: "123456789",
       revisionObjectId,
       treeObjectId,
-      sourcePaths: [compatibilityPath, gateStatusPath].sort(),
+      sourcePaths: [compatibilityPath, feeSourcePath, feeTestPath, gateStatusPath, submissionPath].sort(),
       contractPaths: [],
       githubActionsRunIds: []
     },
     companions: []
+  };
+  const programmableFee = implementedProgrammableFee({ feeSourcePath, feeTestPath });
+  const submission = {
+    schemaVersion: 1,
+    standardVersion: "1.3.0",
+    stage,
+    model: {
+      id: applicationId,
+      name: "Central Model",
+      summary: "A deterministic central compatibility projection fixture."
+    },
+    builder: { github: "example-builder", contact: "@example-builder" },
+    implementation: { gateStatusPath },
+    programmableFee
   };
   const headFiles = new Map([
     [`${packagePath}/PROPOSAL.md`, markdown("Proposal")],
     [`${packagePath}/TEST_PLAN.md`, markdown("Test plan")],
     [`${packagePath}/THREAT_MODEL.md`, markdown("Threat model")],
     [compatibilityPath, jsonBytes(localReport)],
+    [submissionPath, jsonBytes(submission)],
     [gateStatusPath, jsonBytes({
       schemaVersion: 1,
       gates: completedGateIds.map((id) => ({ id, status: "completed", evidence: [] }))
@@ -183,21 +197,76 @@ function buildFixture(localReport, { completedGateIds = [], reviewTarget = null,
       githubLogin: "example-builder",
       profileUrl: "https://github.com/example-builder"
     },
-    submission: {
-      stage,
-      model: {
-        id: applicationId,
-        name: "Central Model",
-        summary: "A deterministic central compatibility projection fixture."
-      },
-      builder: { github: "example-builder", contact: "@example-builder" },
-      implementation: { gateStatusPath }
-    },
+    submission,
     source,
     packageResult: { preflightDecision: localReport.decision },
     reviewTarget,
     headFiles
   });
+}
+
+function implementedProgrammableFee({ feeSourcePath, feeTestPath }) {
+  return {
+    policyId: "programmable-volume-fee-v1",
+    policyVersion: "1.0.0",
+    poolScope: "canonical-launch-pool-key",
+    rates: {
+      unit: "hundredths-of-bip",
+      selectedHundredthsOfBip: 30000,
+      minimumEffectiveHundredthsOfBip: 1000,
+      effectiveHundredthsOfBip: 30000,
+      platformHundredthsOfBip: 1000,
+      projectHundredthsOfBip: 29000,
+      formula: "effective=max(selected,1000);platform=1000;project=effective-1000",
+      lpFeeExcluded: true
+    },
+    basis: {
+      volume: "gross-quote-side-swap-volume",
+      quoteAsset: "canonical-pool-quote-asset"
+    },
+    ownership: {
+      owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      immutable: true,
+      claimAuthority: "owner-only",
+      claimAvailability: "anytime",
+      claimDestinationPolicy: "owner-or-owner-selected-per-claim",
+      storedMutableRecipient: false,
+      builderCanMutate: false,
+      projectCanMutate: false,
+      administratorCanMutate: false
+    },
+    collection: {
+      status: "implemented",
+      integration: "canonical-pool-hook",
+      enforcement: "non-bypassable",
+      hookFeeMechanismBinding: "hook.feeMechanism",
+      supportedSwapModes: [
+        "zeroForOne-exactInput",
+        "zeroForOne-exactOutput",
+        "oneForZero-exactInput",
+        "oneForZero-exactOutput"
+      ],
+      swapModePaths: {
+        zeroForOneExactInput: "after-swap-return-delta",
+        zeroForOneExactOutput: "after-swap-return-delta",
+        oneForZeroExactInput: "after-swap-return-delta",
+        oneForZeroExactOutput: "after-swap-return-delta"
+      },
+      selfCallPolicy: "same-pool-swap-forbidden"
+    },
+    accounting: {
+      accrualMode: "claimable-liability",
+      liabilityKeyDimensions: ["poolId", "currency", "owner"],
+      crossPoolNetting: false,
+      valueFlowId: "programmable-volume-fee",
+      collectionEvent: "ProgrammableFeeAccrued(bytes32,address,uint256)",
+      claimEvent: "ProgrammableFeeClaimed(address,address,uint256)"
+    },
+    evidence: {
+      sourcePaths: [feeSourcePath],
+      testPaths: [feeTestPath]
+    }
+  };
 }
 
 function validateCentral(central) {

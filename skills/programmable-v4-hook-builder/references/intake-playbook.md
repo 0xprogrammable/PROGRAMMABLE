@@ -10,8 +10,9 @@ may also include arbitrary applications, games, services, keepers, indexers, or 
 hook for existing pools can be built and reviewed, but remains outside platform-launch compatibility until its token
 creation, initialization, liquidity, trading, claim, failure, and retirement lifecycle is mapped.
 
-Before asking about callbacks, decide whether the confirmed behavior must execute atomically with a pool action. If not,
-prefer the current pinned official Liquidity Launchpad route and no custom hook. An unfamiliar mechanism is an
+Before asking about callbacks, decide whether a project-specific implementation of the standard Programmable fee-hook profile is sufficient or whether the
+confirmed behavior must be integrated into one custom hook. Every launch-ready canonical pool needs the mandatory fee
+hook. An unfamiliar mechanism is an
 architecture question, not a rejection category.
 
 The hook may be simple or highly specialized. Scope does not relax disclosure: behavior outside the canonical pool,
@@ -24,9 +25,9 @@ Ask only the first unresolved question. Never ask for protocol details the agent
 | Pass | Plain-language question | Builder must decide | Agent may derive | Common trigger |
 | --- | --- | --- | --- | --- |
 | 1 | What should a person be able to launch or experience? | Outcome and creator choices | Candidate category and whether v4 is necessary | none |
-| 2 | Must any part happen atomically inside a pool action? | Behavior that truly needs a hook, or confirmation that no custom hook is needed | Official Launchpad route or minimum callback family | launch-path and callback policy |
+| 2 | Does the project need any trade behavior beyond the fixed Programmable fee? | Behavior that requires a custom hook, or confirmation that the standard profile is sufficient | Project-specific standard-profile implementation or minimum integrated callback family | launch-path and callback policy |
 | 3 | What are the two assets? | Asset origin, issuer controls and economic meaning | Canonical ordering and native ETH encoding | permissioned asset, non-standard token |
-| 4 | Does any value move beyond an ordinary swap? | Fee class, amount basis, custody and ownership | Four-quadrant currency mapping | hook fee, custom accounting, external liquidity |
+| 4 | What total swap charge should the project select, and does any other value move? | Selected total, project fee class, custody and ownership | Fixed 10 bps platform allocation, effective floor and four-quadrant mapping | hook fee, custom accounting, external liquidity |
 | 5 | Who receives value and how can they leave? | Beneficiaries, split, claims, locks and exits | Exact share-sum and liability-key checks | custody, ERC-6909, position ownership |
 | 6 | Who can change anything later? | Mutable powers and controllers | Authority inventory and disclosure gates | upgradeability, pause, redirect |
 | 7 | What outside system can affect behavior? | Trusted dependency and failure preference | Exact source/deployment records from one coherent baseline | oracle, keeper, proof, bridge, router |
@@ -63,14 +64,15 @@ Confirmation means only that this card reflects product intent. It does not vali
 
 Propose these defaults together unless the idea requires something else:
 
-- Official token factory, CCA price discovery, Liquidity Launcher, and no custom hook when no behavior needs a callback
-- When a hook is required, one immutable hook instance per canonical pool
+- Official token factory, CCA price discovery, Liquidity Launcher, and a project-specific implementation of the standard Programmable fee-hook profile when no other callback behavior is needed
+- One immutable fee-enforcing hook instance per canonical pool; integrate custom behavior into that single hook
 - Standard fixed-supply token with no transfer tax, mint, freeze, blacklist, confiscation, proxy or rescue power
 - Native ETH or one exact standard ERC-20 quote asset
 - No hookData identity, external call, oracle, keeper, proof, bridge, nested action or return delta
 - Minimum callback permissions only
-- Static LP fee owned by pool liquidity providers
-- No separate hook-owned charge unless explicitly requested
+- Static LP fee owned by pool liquidity providers, separate from the mandatory platform charge
+- Effective total `max(selected,10 bps)`: immutable `10 bps` to Programmable and the remainder to the project
+- Immutable Programmable owner and sole claim authority `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`
 - Pull-based beneficiary claims with PoolId and currency scoped liabilities
 - No cross-pool netting
 - Fail closed on an unavailable dependency
@@ -81,8 +83,9 @@ Propose these defaults together unless the idea requires something else:
 The builder may confirm these defaults as a group. Any departure that changes economics, custody, authority,
 dependencies or exits requires separate confirmation.
 
-If the builder requests a token transfer tax or automatic liquidity, keep the official route as the comparison but do
-not force the idea into a hook or reject it for leaving the default. Select `model-specific-no-hook` and confirm, in this
+If the builder requests a token transfer tax or automatic liquidity, keep the official route as the comparison and do
+not reject the idea for leaving the default. A `model-specific-no-hook` proposal may be reviewed, but it remains
+changes-required until the standard fee-hook profile is implemented or the policy is integrated into one custom hook. Confirm, in this
 order: all buy/sell/peer rates and the immutable maximum; whether any ordinary transfer or sale can be blocked; every
 recipient and value flow; mutability, authority and delay; tax exemptions and PoolManager transfer scope; every
 automatic-liquidity funding source with custody, accounting, limit, withdrawal and failure rules; automatic swap
@@ -97,6 +100,7 @@ The agent derives without asking:
 - Currency sorting and native ETH as the zero address
 - Specified and unspecified currencies for all four swap quadrants
 - Whether a custom hook is required and, only when it is, the minimum permission mask from confirmed behavior
+- The fixed Programmable policy fields, 10 bps allocation, immutable owner, sole claim authority, and required tests
 - Irrelevant capability profiles as `used: false`
 - Official protocol addresses from one exact committed deployment record
 - Dependency pins from one coherent selected baseline
@@ -106,7 +110,7 @@ The agent derives without asking:
 
 The agent never silently decides:
 
-- Fee economics or recipient allocation
+- Project-selected total fee economics or project recipient allocation; the Programmable allocation is fixed policy
 - Custody, locks, beneficiaries or payout mutability
 - Issuer, admin or upgrade powers
 - External trust or fallback behavior
@@ -157,11 +161,10 @@ unsafe or rejected.
 
 ### Hook choice and callbacks
 
-Record `hook.used` explicitly. When it is false, keep the hook address/base, admission rules, callback policies,
-hookData, custom accounting, hook-owned fees, return deltas, claims, and nested actions disabled; all permission bits are
-false and there is no hook-address mask to mine. Select `official-launchpad` and bind its committed profile by default,
-or select `model-specific-no-hook`, keep the official profile null, and complete its separate token mechanics,
-dependencies and gates. When `hook.used` is true, apply every callback rule below.
+Record `hook.used` explicitly. When it is false, keep hook-only fields neutral, select the applicable proposal route,
+and keep `programmableFee.collection.status` at `pending-hook-integration`. The idea remains submit-able but cannot be
+prototype- or launch-ready. Before readiness, implement the standard fee-hook profile or integrate the policy into the
+project's one custom hook, with exact source, tests, and maintainer review. When `hook.used` is true, apply every callback rule below.
 
 Set all 14 permission fields to explicit booleans. Enable only callbacks required by confirmed behavior. Record:
 
@@ -185,6 +188,18 @@ or failure rule. A dynamic LP fee belongs to LPs; it does not create creator rev
 reject exact-output support unless the selected core behavior is proven compatible.
 
 ### Hook-owned fees and recipients
+
+First complete the root `programmableFee` record using
+[programmable-fee-policy.md](programmable-fee-policy.md). Apply `effective=max(selected,1000)`, allocate `1000`
+hundredths of a bip to Programmable, and allocate only the remainder to the project. Accrue on executed gross quote-side
+volume for every successful canonical-pool swap. Bind the immutable owner
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` as sole claim authority, permit its per-claim destination choice, and give
+the builder, project, and administrators no mutation or claim path. LP fees, transfer taxes, router charges, app
+payments, and alternative pools are not substitutes.
+
+Derive quadrant-dependent before/after return-delta paths from the canonical quote asset. Ask only whether the hook can
+initiate a same-pool swap: forbid that path, or require source and tests showing equivalent internal fee enforcement
+because v4 skips the hook's own callback.
 
 Record the charged currency in every supported swap quadrant, total fee bound, collection path, matching value-flow id,
 liability-key dimensions, collection event, rounding, recipient ids, and split sum in parts per million. For every
@@ -258,6 +273,8 @@ surface changes who can act, which trades work, where value appears, what can fa
 ## Plain-language fee translation
 
 - **LP fee:** paid to liquidity providers in that pool. It is not creator revenue.
+- **Programmable volume fee:** always 10 bps of executed gross quote-side volume on the canonical pool. It is included
+  inside the effective total, not added on top, and is owned and claimable only by the immutable Programmable owner.
 - **Hook-owned charge:** accounted by hook logic and owed to explicit recipients. Its currency can change by direction and exactness.
 - **Token transfer tax:** runs on ERC-20 transfers outside the pool too. It is not part of the conservative default, but
   a transparent bounded version may enter model-specific no-hook review with exact recipients, authority, custody,
@@ -288,6 +305,8 @@ Before presenting `PROTOTYPE_READY`, independently verify that:
 6. Every enabled callback is necessary and its allowed-revert behavior is disclosed.
 7. Every external fact is labelled as builder-stated, agent-derived, or evidence-backed.
 8. Every dependency id resolves to exactly one declared record and every referenced id exists.
+9. The mandatory fee is integrated into the canonical-pool hook, non-additive, bound to all four swap modes, and cannot
+   be claimed or redirected by the builder, project, or an administrator.
 
 If a material free-text claim lacks a causal explanation or supporting evidence, semantic review is incomplete. Report
 `REDESIGN_REQUIRED` in the human handoff even when the structural validator returns `PROTOTYPE_READY`.

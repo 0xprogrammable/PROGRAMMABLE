@@ -64,6 +64,95 @@ test("complete standard proposal is prototype ready", () => {
   assert.equal(report.findings.filter(({ severity }) => severity === "blocker").length, 0);
 });
 
+test("mandatory Programmable fee applies the non-additive minimum formula at 0, 5, 10 and 300 bips", () => {
+  for (const selectedBips of [0, 5, 10, 300]) {
+    const submission = readySubmission();
+    const selected = selectedBips * 100;
+    const effective = Math.max(selected, 1000);
+    submission.programmableFee.rates.selectedHundredthsOfBip = selected;
+    submission.programmableFee.rates.effectiveHundredthsOfBip = effective;
+    submission.programmableFee.rates.projectHundredthsOfBip = effective - 1000;
+
+    const report = analyzeSubmission(submission, { schema });
+
+    assert.equal(report.decision, "PROTOTYPE_READY", `${selectedBips} bips: ${JSON.stringify(report.findings)}`);
+    assert.equal(report.findings.some(({ code }) => code.startsWith("PROGRAMMABLE_FEE_") && code.endsWith("_INVALID")), false);
+  }
+});
+
+test("mandatory Programmable fee rejects additive 300-to-310 bips and any platform rate other than 10 bips", () => {
+  const additive = readySubmission();
+  additive.programmableFee.rates.selectedHundredthsOfBip = 30000;
+  additive.programmableFee.rates.effectiveHundredthsOfBip = 31000;
+  additive.programmableFee.rates.projectHundredthsOfBip = 30000;
+  let report = analyzeSubmission(additive, { schema });
+  assert.equal(report.decision, "REDESIGN_REQUIRED");
+  assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_EFFECTIVE_RATE_INVALID"));
+
+  for (const wrongBips of [9, 11]) {
+    const wrongPlatform = readySubmission();
+    wrongPlatform.programmableFee.rates.platformHundredthsOfBip = wrongBips * 100;
+    report = analyzeSubmission(wrongPlatform, { schema });
+    assert.equal(report.decision, "REDESIGN_REQUIRED");
+    assert.ok(report.findings.some(({ code, path }) => code === "SCHEMA_CONST" && path === "$.programmableFee.rates.platformHundredthsOfBip"));
+  }
+});
+
+test("mandatory Programmable fee owner and owner-only claim policy cannot be redirected or made mutable", () => {
+  for (const mutate of [
+    (submission) => { submission.programmableFee.ownership.owner = "0x1111111111111111111111111111111111111111"; },
+    (submission) => { submission.programmableFee.ownership.immutable = false; },
+    (submission) => { submission.programmableFee.ownership.claimAuthority = "builder-only"; },
+    (submission) => { submission.programmableFee.ownership.claimAvailability = "delayed"; },
+    (submission) => { submission.programmableFee.ownership.storedMutableRecipient = true; },
+    (submission) => { submission.programmableFee.ownership.administratorCanMutate = true; }
+  ]) {
+    const submission = readySubmission();
+    mutate(submission);
+    const report = analyzeSubmission(submission, { schema });
+    assert.equal(report.decision, "REDESIGN_REQUIRED");
+    assert.ok(report.findings.some(({ code, path }) => code === "SCHEMA_CONST" && path.startsWith("$.programmableFee.ownership.")), JSON.stringify(report.findings));
+  }
+});
+
+test("prototype fee cannot be replaced by LP or router accounting and binds modes, evidence, events and owner", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-platform-fee-negative-"));
+  try {
+    const { submission } = createPrototypePackage(destinationRoot);
+    assert.equal(analyzeSubmission(submission, { schema }).decision, "PROTOTYPE_READY");
+
+    const mutations = [
+      [(draft) => { draft.hook.feeMechanism.used = false; }, "PROGRAMMABLE_FEE_HOOK_MECHANISM_MISSING"],
+      [(draft) => { draft.hook.feeMechanism.collectionPath = null; }, "PROGRAMMABLE_FEE_COLLECTION_PATH_INVALID"],
+      [(draft) => { draft.hook.feeMechanism.swapQuadrants.oneForZeroExactOutput = null; }, "PROGRAMMABLE_FEE_QUOTE_QUADRANT_INVALID"],
+      [(draft) => { draft.programmableFee.collection.supportedSwapModes.pop(); }, "PROGRAMMABLE_FEE_SWAP_MODE_COVERAGE_INCOMPLETE"],
+      [(draft) => { draft.programmableFee.collection.swapModePaths.zeroForOneExactInput = "after-swap-return-delta"; }, "PROGRAMMABLE_FEE_SWAP_MODE_PATH_INVALID"],
+      [(draft) => { draft.programmableFee.evidence.sourcePaths = []; }, "PROGRAMMABLE_FEE_SOURCE_MISSING"],
+      [(draft) => { draft.programmableFee.evidence.testPaths = []; }, "PROGRAMMABLE_FEE_TESTS_MISSING"],
+      [(draft) => { draft.programmableFee.accounting.accrualMode = "automatic-transfer"; }, "SCHEMA_CONST"],
+      [(draft) => { draft.programmableFee.accounting.valueFlowId = "missing-platform-flow"; }, "PROGRAMMABLE_FEE_VALUE_FLOW_UNBOUND"],
+      [(draft) => { draft.programmableFee.accounting.collectionEvent = "WrongFeeEvent(bytes32)"; }, "PROGRAMMABLE_FEE_COLLECTION_EVENT_UNBOUND"],
+      [(draft) => { draft.programmableFee.accounting.claimEvent = "WrongClaimEvent(bytes32)"; }, "PROGRAMMABLE_FEE_CLAIM_EVENT_UNBOUND"],
+      [(draft) => { draft.hook.feeMechanism.recipients[0].address = "0x1111111111111111111111111111111111111111"; }, "PROGRAMMABLE_FEE_RECIPIENT_UNBOUND"],
+      [(draft) => { draft.hook.nestedActions.directPoolManagerCalls = true; }, "PROGRAMMABLE_FEE_SELF_CALL_BYPASS"]
+    ];
+    for (const [mutate, expectedCode] of mutations) {
+      const draft = structuredClone(submission);
+      mutate(draft);
+      const report = analyzeSubmission(draft, { schema });
+      assert.equal(report.decision, "REDESIGN_REQUIRED", expectedCode);
+      assert.ok(report.findings.some(({ code }) => code === expectedCode), `${expectedCode}: ${JSON.stringify(report.findings)}`);
+    }
+
+    const noHook = structuredClone(submission);
+    noHook.hook.used = false;
+    const noHookReport = analyzeSubmission(noHook, { schema });
+    assert.ok(noHookReport.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
 test("document-only validator cannot satisfy require-ready without repository closure", () => {
   const submissionPath = path.join(repositoryRoot, "models", "document-only-ready.json");
   writeJson(submissionPath, readySubmission());
@@ -82,11 +171,12 @@ test("document-only validator cannot satisfy require-ready without repository cl
   assert.equal(Object.hasOwn(report, "closure"), false);
 });
 
-test("ordinary fixed-supply launch is ready without a custom hook", () => {
+test("ordinary fixed-supply no-hook launch remains reviewable but is not prototype ready", () => {
   const submission = noCustomHookSubmission();
   const report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
   assert.equal(report.hookPermissionMask, null);
   assert.equal(submission.assets.filter(({ role }) => role === "launched").length, 1);
   assert.equal(submission.pool.canonical, true);
@@ -97,7 +187,8 @@ test("transparent transfer-tax and auto-liquidity token enters model-specific no
   const submission = modelSpecificTaxTokenSubmission();
   const report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_INTEGRATION_PENDING"));
   assert.equal(report.hookPermissionMask, null);
   assert.deepEqual(report.risk.featureTriggers, [
     "auto-liquidity",
@@ -149,7 +240,8 @@ test("auto-liquidity accepts a bounded launch allocation without requiring trans
 
   const report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
   assert.equal(report.findings.some(({ code }) => code === "AUTO_LIQUIDITY_WITHOUT_FUNDING_TAX"), false);
   assert.equal(report.risk.featureTriggers.includes("transfer-tax"), false);
 });
@@ -193,7 +285,8 @@ test("unknown token behavior remains reviewable through the open structured exte
 
   const report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
   assert.ok(report.findings.some(({ code, severity }) => code === "TOKEN_BEHAVIOR_REQUIRES_ARCHITECTURE_REVIEW" && severity === "warning"));
   assert.ok(report.requiredGates.some(({ id }) => id === "novel-token-behavior-architecture-review"));
   assert.ok(report.requiredGates.some(({ id }) => id === "novel-token-behavior-provider-review"));
@@ -286,7 +379,8 @@ test("mutable transfer tax binds one explicit bounded authority and delay", () =
 
   const report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
   assert.ok(report.requiredGates.some(({ id }) => id === "transfer-tax-authority-and-timelock-review"));
 });
 
@@ -363,11 +457,12 @@ test("external-call gate describes the declared model when no custom hook is use
   const report = analyzeSubmission(submission, { schema });
   const externalCallGate = report.requiredGates.find(({ id }) => id === "external-call-reentrancy-and-failure-tests");
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
   assert.equal(externalCallGate?.reason, "The declared model makes external calls.");
 });
 
-test("ordinary no-hook prototype needs no Solidity, Foundry build-info or callback gates", () => {
+test("ordinary no-hook prototype remains architecture discussion and cannot bypass the platform fee", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-no-hook-prototype-"));
   try {
     const complete = createPrototypePackage(destinationRoot).submission;
@@ -402,7 +497,9 @@ test("ordinary no-hook prototype needs no Solidity, Foundry build-info or callba
 
     const report = analyzeSubmission(submission, { schema });
 
-    assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+    assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+    assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
+    assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_PROTOTYPE_NOT_IMPLEMENTED"));
     assert.equal(report.hookPermissionMask, null);
     for (const forbiddenGate of [
       "callback-authentication-and-permission-mask",
@@ -423,16 +520,14 @@ test("ordinary no-hook prototype needs no Solidity, Foundry build-info or callba
   }
 });
 
-test("contract-only hook prototype is ready without an app, SDK or indexer surface", () => {
+test("fee-bearing hook prototype can omit an included swap client while retaining accounting evidence", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-contract-only-prototype-"));
   try {
     const submission = createPrototypePackage(destinationRoot).submission;
     configureNoIncludedSwapClient(submission, "not-planned");
-    configureDataNotApplicable(submission);
     clearOptionalPlatformSurfaces(submission);
+    submission.integration.routingAndDiscoverability.uniswapRoutingStatus = "not-applicable";
     submission.dependencies.onchain = [submission.dependencies.onchain[0]];
-    submission.implementation.sourcePaths = submission.implementation.sourcePaths.filter((entry) => entry.endsWith("/src/Observer.sol"));
-    submission.implementation.testPaths = submission.implementation.testPaths.filter((entry) => entry.endsWith("/test/Observer.t.sol"));
 
     const report = analyzeSubmission(submission, { schema });
 
@@ -440,25 +535,21 @@ test("contract-only hook prototype is ready without an app, SDK or indexer surfa
     assert.ok(report.requiredGates.some(({ id }) => id === "callback-authentication-and-permission-mask"));
     for (const forbiddenGate of [
       "sdk-lock-router-action-and-quote-parity-tests",
-      "event-reorg-backfill-freshness-tests",
-      "programmable-ui-integration-review",
-      "programmable-indexer-integration-review"
+      "programmable-ui-integration-review"
     ]) assert.equal(report.requiredGates.some(({ id }) => id === forbiddenGate), false, forbiddenGate);
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
   }
 });
 
-test("contract-only hook prototype package verifies without included-client protocol records", () => {
+test("fee-bearing hook prototype package verifies without included-client protocol records", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-contract-only-package-"));
   try {
     const { modelRoot, submission } = createPrototypePackage(destinationRoot);
     configureNoIncludedSwapClient(submission, "not-planned");
-    configureDataNotApplicable(submission);
     clearOptionalPlatformSurfaces(submission);
+    submission.integration.routingAndDiscoverability.uniswapRoutingStatus = "not-applicable";
     submission.dependencies.onchain = [submission.dependencies.onchain[0]];
-    submission.implementation.sourcePaths = submission.implementation.sourcePaths.filter((entry) => entry.endsWith("/src/Observer.sol"));
-    submission.implementation.testPaths = submission.implementation.testPaths.filter((entry) => entry.endsWith("/test/Observer.t.sol"));
     rewritePrototypePackageArtifacts(modelRoot, submission);
 
     const result = childProcess.spawnSync(
@@ -478,7 +569,7 @@ test("contract-only hook prototype package verifies without included-client prot
   }
 });
 
-test("ordinary no-hook prototype package verifies without an included client or Solidity", () => {
+test("ordinary no-hook prototype package remains reviewable but cannot verify as fee-complete", () => {
   const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-no-hook-package-"));
   try {
     const complete = createPrototypePackage(destinationRoot);
@@ -510,20 +601,10 @@ test("ordinary no-hook prototype package verifies without an included client or 
       schemaPaths: [submission.implementation.specificationPath],
       evidencePaths: [submission.implementation.testEvidencePath]
     });
-    rewritePrototypePackageArtifacts(complete.modelRoot, submission);
-
-    const result = childProcess.spawnSync(
-      process.execPath,
-      [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, complete.modelRoot],
-      { cwd: repositoryRoot, encoding: "utf8", shell: false }
-    );
-
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-    const report = JSON.parse(result.stdout);
-    assert.equal(report.prototypeIntakeValidated, true, JSON.stringify(report.errors));
-    for (const absentClientDependency of ["Universal Router", "Permit2", "StateView", "V4Quoter"]) {
-      assert.equal(report.errors.some((message) => message.includes(absentClientDependency)), false, absentClientDependency);
-    }
+    const report = analyzeSubmission(submission, { schema });
+    assert.equal(report.decision, "REDESIGN_REQUIRED");
+    assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
+    assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_PROTOTYPE_NOT_IMPLEMENTED"));
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
   }
@@ -624,8 +705,8 @@ test("Base is application-eligible through its exact profile but not platform-la
 
   const report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
-  assert.equal(report.findings.some(({ severity }) => severity === "blocker" || severity === "hard"), false);
+  assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
   assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_PLATFORM_CHAIN_NOT_CURRENTLY_INTEGRATED"));
   assert.equal(report.findings.some(({ code }) => code === "TARGET_CHAIN_REQUIRES_ARCHITECTURE_REVIEW"), false);
   assert.ok(report.requiredGates.some(({ id, stage }) => id === "programmable-platform-target-chain-integration" && stage === "release"));
@@ -641,8 +722,8 @@ test("Unichain is application-eligible while source conflict and platform launch
 
   const report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
-  assert.equal(report.findings.some(({ severity }) => severity === "blocker" || severity === "hard"), false);
+  assert.equal(report.decision, "REDESIGN_REQUIRED", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_FEE_HOOK_REQUIRED"));
   assert.ok(report.findings.some(({ code }) => code === "PROGRAMMABLE_PLATFORM_CHAIN_NOT_CURRENTLY_INTEGRATED"));
   assert.ok(report.requiredGates.some(({ id }) => id === "official-launch-profile-source-conflict-resolution"));
   assert.ok(report.requiredGates.some(({ id }) => id === "programmable-platform-target-chain-integration"));
@@ -1139,12 +1220,12 @@ test("schema rejects unknown fields and out-of-range risk dimensions", () => {
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_MAXIMUM" && path.endsWith("externalDependencies")));
 });
 
-test("project-surface and no-hook semantics are a versioned 1.2.0 standard rather than a silent 1.1.0 mutation", () => {
-  assert.equal(schema.$id, "urn:programmable:v4-hook-submission:1.2.0");
-  assert.equal(schema.properties.standardVersion.const, "1.2.0");
+test("mandatory fee and open project semantics are a versioned 1.3.0 standard rather than a silent 1.2.0 mutation", () => {
+  assert.equal(schema.$id, "urn:programmable:v4-hook-submission:1.3.0");
+  assert.equal(schema.properties.standardVersion.const, "1.3.0");
   const report = analyzeSubmission(readySubmission(), { schema });
   assert.equal(report.reportVersion, 2);
-  assert.equal(report.standardVersion, "1.2.0");
+  assert.equal(report.standardVersion, "1.3.0");
 
   const stale = readySubmission();
   stale.$schema = "urn:programmable:v4-hook-submission:1.1.0";
@@ -1352,11 +1433,9 @@ test("external routing does not invent an included-client app or SDK gate", () =
   try {
     const submission = createPrototypePackage(destinationRoot).submission;
     configureNoIncludedSwapClient(submission, "uniswap-interface-api");
-    configureDataNotApplicable(submission);
     clearOptionalPlatformSurfaces(submission);
+    submission.integration.routingAndDiscoverability.uniswapRoutingStatus = "required-not-submitted";
     submission.dependencies.onchain = [submission.dependencies.onchain[0]];
-    submission.implementation.sourcePaths = submission.implementation.sourcePaths.filter((entry) => entry.endsWith("/src/Observer.sol"));
-    submission.implementation.testPaths = submission.implementation.testPaths.filter((entry) => entry.endsWith("/test/Observer.t.sol"));
 
     const report = analyzeSubmission(submission, { schema });
     const codes = new Set(report.findings.map(({ code }) => code));
@@ -1984,7 +2063,11 @@ test("scaffolder creates an isolated package and never touches the model registr
       { cwd: repositoryRoot, encoding: "utf8", shell: false }
     );
     assert.equal(result.status, 0, result.stderr);
-    assert.ok(fs.existsSync(path.join(destinationRoot, "garden-fee", "submission.json")));
+    const scaffoldPath = path.join(destinationRoot, "garden-fee", "submission.json");
+    assert.ok(fs.existsSync(scaffoldPath));
+    const scaffold = JSON.parse(fs.readFileSync(scaffoldPath, "utf8"));
+    assert.equal(scaffold.programmableFee.ownership.claimAvailability, "anytime");
+    assert.equal(scaffold.programmableFee.accounting.accrualMode, "claimable-liability");
     assert.equal(fs.readFileSync(registryPath, "utf8"), before);
   } finally {
     fs.rmSync(destinationRoot, { recursive: true, force: true });
@@ -3460,8 +3543,36 @@ function readySubmission() {
     deadline: "The router command uses a user-visible finite deadline that is signed with the transaction intent.",
     permit2: "Permit2 approvals bind token, amount, spender, nonce, chain and expiration; contract wallets may use the approval path.",
     stateReads: "StateView and quote reads use the exact PoolKey and a coherent block before transaction preparation.",
-    events: ["SwapAggregateUpdated(bytes32 indexed poolId,uint256 swapCount)"]
+    events: [
+      "SwapAggregateUpdated(bytes32 indexed poolId,uint256 swapCount)",
+      "ProgrammableFeeAccrued(bytes32 indexed poolId,address indexed owner,address quoteAsset,uint256 grossQuoteVolume,uint256 platformAmount,uint256 projectAmount)",
+      "ProgrammableFeeClaimed(bytes32 indexed poolId,address indexed owner,address indexed destination,address quoteAsset,uint256 amount)"
+    ]
   };
+  submission.programmableFee.rates.selectedHundredthsOfBip = 0;
+  submission.programmableFee.rates.effectiveHundredthsOfBip = 1000;
+  submission.programmableFee.rates.projectHundredthsOfBip = 0;
+  submission.programmableFee.collection.status = "implemented";
+  submission.programmableFee.collection.supportedSwapModes = [...submission.integration.swapModes];
+  submission.programmableFee.collection.swapModePaths = {
+    zeroForOneExactInput: "before-swap-return-delta",
+    zeroForOneExactOutput: "after-swap-return-delta",
+    oneForZeroExactInput: "after-swap-return-delta",
+    oneForZeroExactOutput: "before-swap-return-delta"
+  };
+  submission.programmableFee.accounting.valueFlowId = "programmable-fee-accrual";
+  submission.programmableFee.accounting.collectionEvent = "ProgrammableFeeAccrued(bytes32 indexed poolId,address indexed owner,address quoteAsset,uint256 grossQuoteVolume,uint256 platformAmount,uint256 projectAmount)";
+  submission.programmableFee.accounting.claimEvent = "ProgrammableFeeClaimed(bytes32 indexed poolId,address indexed owner,address indexed destination,address quoteAsset,uint256 amount)";
+  submission.valueFlows.push({
+    id: "programmable-fee-accrual",
+    action: "accrue the mandatory Programmable volume fee",
+    asset: "the canonical pool quote asset",
+    from: "the gross quote-side amount of every supported canonical-pool swap",
+    to: "the PoolId-scoped immutable Programmable fee-owner liability",
+    amountRule: "Accrue exactly 1000 hundredths of a bip to Programmable and effective minus 1000 to the project without adding the minimum twice.",
+    settlement: "The canonical pool hook records quote-side liabilities before callback return and only the immutable owner may claim its exact balance.",
+    failure: "Any calculation, accrual or settlement failure reverts the complete swap so no supported route can bypass the fee."
+  });
   attachStageProfiles(submission);
   for (const policy of Object.values(submission.capabilities)) policy.used = false;
   submission.risk = {
@@ -3514,6 +3625,9 @@ function noCustomHookSubmission() {
   hook.nestedActions.directPoolManagerCalls = false;
   hook.nestedActions.routerCalls = false;
   submission.hook = hook;
+  submission.programmableFee.collection.status = "pending-hook-integration";
+  submission.programmableFee.collection.supportedSwapModes = [];
+  for (const mode of Object.keys(submission.programmableFee.collection.swapModePaths)) submission.programmableFee.collection.swapModePaths[mode] = null;
 
   submission.model = {
     id: "ordinary-fixed-supply-launch",
@@ -3575,6 +3689,108 @@ function noCustomHookSubmission() {
     "This project uses the ordinary no-custom-hook launch route; review readiness is not deployment, routing or listing approval."
   ];
   return submission;
+}
+
+function configureImplementedProgrammableFee(submission, { sourcePath, testPath }) {
+  submission.programmableFee.collection.status = "implemented";
+  submission.programmableFee.collection.supportedSwapModes = [...submission.integration.swapModes];
+  submission.programmableFee.evidence.sourcePaths = [sourcePath];
+  submission.programmableFee.evidence.testPaths = [testPath];
+  submission.hook.permissions.beforeSwap = true;
+  submission.hook.permissions.beforeSwapReturnDelta = true;
+  submission.hook.permissions.afterSwap = true;
+  submission.hook.permissions.afterSwapReturnDelta = true;
+  submission.hook.callbackPolicies.push(callbackPolicy("beforeSwap", "The mandatory fee calculates and accrues the exact quote-side liability before every supported canonical-pool swap."));
+  submission.hook.feeMechanism = {
+    used: true,
+    classification: "hook-owned-fee",
+    chargedCurrency: "The canonical pool quote asset for gross quote-side volume in every supported swap mode.",
+    swapQuadrants: {
+      zeroForOneExactInput: programmableFeeQuadrant("currency0", "gross-input"),
+      zeroForOneExactOutput: programmableFeeQuadrant("currency0", "gross-input"),
+      oneForZeroExactInput: programmableFeeQuadrant("currency0", "gross-output"),
+      oneForZeroExactOutput: programmableFeeQuadrant("currency0", "gross-output")
+    },
+    maximumHundredthsOfBip: 1000,
+    collectionPath: "quadrant-dependent-swap-return-delta",
+    collectionValueFlowId: submission.programmableFee.accounting.valueFlowId,
+    liabilityKeyDimensions: ["poolId", "currency", "beneficiary"],
+    collectionEvent: submission.programmableFee.accounting.collectionEvent,
+    recipients: [{
+      role: "programmable-platform",
+      sharePpm: 1000000,
+      addressSource: "fixed-address",
+      address: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      binding: "exact-address",
+      derivationRule: null,
+      mutable: false,
+      mutationController: "none",
+      newAddressValidation: "none",
+      mutationEvent: null
+    }],
+    ownership: "The exact immutable Programmable owner receives its PoolId-scoped quote-currency liability; no builder, project or administrator can redirect it.",
+    claimPolicy: "Only 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c may claim, either to itself or to a destination supplied by that owner in the claim call."
+  };
+  submission.hook.customAccounting = completeCustomAccounting();
+  submission.hook.returnDeltaAccounting = {
+    used: true,
+    quadrants: {
+      zeroForOneExactInput: programmableFeeReturnDeltaQuadrant("currency0", "currency1", "negative-exact-input", "specified"),
+      zeroForOneExactOutput: programmableFeeReturnDeltaQuadrant("currency1", "currency0", "positive-exact-output", "unspecified"),
+      oneForZeroExactInput: programmableFeeReturnDeltaQuadrant("currency1", "currency0", "negative-exact-input", "unspecified"),
+      oneForZeroExactOutput: programmableFeeReturnDeltaQuadrant("currency0", "currency1", "positive-exact-output", "specified")
+    },
+    executionEvent: "Emit the PoolId, quote asset, gross quote volume, effective rate, platform amount, project amount and final caller deltas."
+  };
+  submission.hook.postReturnDeltaAccounting.afterSwap = postReturnPolicy();
+  submission.risk.dimensions.complexity = 2;
+  submission.risk.dimensions.priceImpact = 1;
+  submission.risk.rationales.complexity = "The hook records one aggregate and one exact quote-side platform-fee liability after each supported swap.";
+  submission.risk.rationales.priceImpact = "The mandatory 0.1 percent hook charge changes final caller deltas through one bounded non-bypassable formula.";
+  submission.risk.declaredTotal = 4;
+  submission.risk.declaredTier = "high";
+  submission.risk.featureTriggers = ["custom-accounting", "price-impact", "return-delta"];
+  submission.integration.routingAndDiscoverability.allowlistTriggers.usesDeltaFlag = true;
+  enableReserveReconstruction(submission);
+}
+
+function programmableFeeQuadrant(currency, basis) {
+  return {
+    currency,
+    basis,
+    formula: "Apply effective=max(selected,1000), accrue exactly 1000 hundredths of a bip to Programmable, and accrue effective minus 1000 to the project against gross quote-side volume.",
+    rounding: "down",
+    maximumHundredthsOfBip: 1000
+  };
+}
+
+function programmableFeeReturnDeltaQuadrant(specifiedCurrency, unspecifiedCurrency, amountSign, quoteComponent) {
+  const zeroComponent = {
+    mode: "zero-only",
+    formula: null,
+    minimum: "0",
+    maximum: "0",
+    minimumSign: "zero",
+    maximumSign: "zero",
+    positiveSettlementActions: [],
+    negativeSettlementActions: []
+  };
+  return {
+    supported: true,
+    specifiedCurrency,
+    unspecifiedCurrency,
+    amountSign,
+    specifiedComponent: quoteComponent === "specified" ? signedDeltaComponent("specified") : zeroComponent,
+    unspecifiedComponent: quoteComponent === "unspecified" ? signedDeltaComponent("unspecified") : zeroComponent,
+    residualAmmEquation: "amountSpecified-plus-specifiedDelta",
+    finalCallerDeltaEquation: "pool-manager-swap-delta-minus-hook-delta",
+    specifiedDeltaCanConsumeEntireAmount: false,
+    rounding: "Round the fee down and preserve the nonzero residual AMM leg and exact PoolId-scoped liability.",
+    zeroAmmLeg: "forbidden",
+    partialFillRule: "Accrue only the exact gross quote-side volume represented by the final executed amount and revert if it cannot be determined atomically.",
+    slippageInvariant: "The router evaluates the user's maximum input or minimum output against the final caller delta after the mandatory fee.",
+    failureRule: "Revert the complete swap if fee calculation, accrual, settlement, owner binding or final caller-delta validation fails."
+  };
 }
 
 function officialNoHookArchitecture() {
@@ -4131,6 +4347,10 @@ function createPrototypePackage(destinationRoot, {
     gateStatusPath: `${repositoryPackagePath}/evidence/gate-status.json`,
     reviewTargetPath: `${repositoryPackagePath}/evidence/review-target.json`
   };
+  configureImplementedProgrammableFee(submission, {
+    sourcePath: `${repositoryPackagePath}/src/Observer.sol`,
+    testPath: `${repositoryPackagePath}/test/Observer.t.sol`
+  });
   bindSingleProjectSurface(submission, {
     sourcePaths: [`${repositoryPackagePath}/src/Observer.sol`],
     testPaths: [`${repositoryPackagePath}/test/Observer.t.sol`],

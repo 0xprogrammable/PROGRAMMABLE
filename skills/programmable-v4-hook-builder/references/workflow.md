@@ -17,8 +17,9 @@ platform-integration handoff. It does not accept, deploy, publish, list, or acti
 | Handoff | A maintainer acceptance record binds an exact prototype | Product surface specification and independent gate ledger |
 
 Do not skip Explore or Preflight because the user asks for code immediately. During Explore, choose the smallest route:
-official Liquidity Launchpad with no custom hook when callbacks add no product behavior, or a custom hook only for the
-confirmed atomic pool mechanism. Unknown mechanics remain architecture questions rather than automatic rejections.
+official Liquidity Launchpad components plus a project-specific implementation of the standard Programmable fee-hook
+profile when no other callback behavior is needed, or one custom hook that integrates both the fee policy and the confirmed mechanism. Exact source, tests, and maintainer review are required. A no-hook,
+router-only, LP-fee-only, or transfer-tax-only proposal remains open for architecture work but is not launch-ready.
 Do not enter Handoff because a PR was merged, tests passed, or a maintainer expressed interest. Require the exact
 acceptance record.
 
@@ -97,6 +98,9 @@ Freeze:
 - lifecycle, assets, PoolKey, canonical-pool policy, and alternative-pool disclosure
 - all 14 permissions, callback authentication, return shapes, hookData, and nested-action policy
 - LP fee and hook-owned fee classification
+- root `programmableFee` policy: non-additive 10 bps platform allocation, executed gross quote-side basis, canonical
+  PoolKey, all four quadrant-dependent before/after paths, same-pool self-call policy, immutable owner-only claims,
+  per-claim destination, liability keys, events, and evidence
 - dynamic-fee initialization, application mode, override rule, persistent actor and call sites, rate limit, bounds,
   metric, update path, manipulation resistance, and failure behavior
 - hook-fee collection path, value-flow id, liability keys, event, and recipient share, address source, launch binding,
@@ -127,8 +131,8 @@ Any change requires regenerated preflight and a new review target.
 Keep model-owned source, tests, specifications, documents, and evidence isolated. Implement in this order:
 
 1. Interfaces and immutable configuration
-2. Permission declaration and callback authentication
-3. Accounting and settlement
+2. Permission declaration, callback authentication, and exact canonical PoolKey binding
+3. Mandatory Programmable fee accounting, immutable ownership, claims, and settlement
 4. External integrations and failure isolation
 5. Events and indexer reconstruction
 6. Launcher, custody, claims, and exits
@@ -153,6 +157,8 @@ node "$SKILL_ROOT/scripts/verify-package.mjs" \
 ```
 
 The result is local intake validation, not security review, acceptance, deployment, routing approval, or availability.
+It also does not prove live fee collection. That claim requires reviewed source, an authorized deployment receipt,
+matched runtime, lifecycle evidence, and monitoring for the exact release.
 The contributor's `integration`, `operations`, and `gate-status.json` records remain declarations and local evidence.
 They cannot complete a maintainer or release gate.
 

@@ -19,6 +19,16 @@ List the exact compatibility report, review-target hash, compiler and dependency
 dispositions, fork block, gas and size results, permission mask, CREATE2 plan, and independent reviews. Mark missing,
 skipped, flaky, reverted, or unavailable checks as blockers.
 
+Record the complete root `programmableFee` policy, canonical PoolKey and quote asset, selected/effective/platform/project
+rates, exact source and test paths, hook mechanism binding, all four executed gross quote-side cases, rounding,
+liability/value-flow ids, collection and claim events, and no-cross-pool-netting result. Record owner-only claim tests
+for immutable `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`, including owner-selected per-claim destinations and failed builder,
+project, administrator, recipient, rescue, sweep, redirect, and mutation attempts.
+Show that `accounting.accrualMode` is `claimable-liability`, `claimAvailability` is `anytime`, and accrual plus partial or
+full owner claims reconcile to the remaining liability and backing balance.
+Record the quote-asset-derived before/after return-delta path for each swap mode and the tested self-call policy. If
+same-pool hook-initiated swaps are fee-enforced internally, bind the exact implementation and regression test.
+
 For a model-specific no-hook transfer tax or automatic liquidity lifecycle, also record the exact token source and
 constructor, direction rates and immutable maximum, recipient conservation, authority/delay result, requested-versus-
 received and actual-user-receipt cases, automatic-liquidity threshold/cap/slippage/deadline, reentrancy and failure
@@ -54,5 +64,5 @@ Use `programmable-registry-integration-review`, `programmable-ui-integration-rev
 when applicable, `permissioned-pool-routing-allowlist` external.
 
 Do not add credentials, signing material, unpatched vulnerability details, generated build directories, or claims that a
-local check proves audit, acceptance, product integration, deployment, verification, routing approval, provider support,
-or production availability.
+local check proves audit, acceptance, product integration, deployment, live fee collection, verification, routing
+approval, provider support, or production availability.

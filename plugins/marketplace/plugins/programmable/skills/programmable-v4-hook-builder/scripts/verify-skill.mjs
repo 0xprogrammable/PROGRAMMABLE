@@ -76,6 +76,7 @@ const required = [
   "references/official-launchpad-deployments.json",
   "references/official-model-patterns.md",
   "references/output-contract.md",
+  "references/programmable-fee-policy.md",
   "references/public-pr-application.schema.json",
   "references/routing-and-discovery.md",
   "references/runtime-assets-v1.schema.json",

@@ -236,7 +236,7 @@ function validateObservedPriorPackage({ applicationId, files }) {
       fileOrder: [...CENTRAL_APPLICATION_FILES],
       encoding: "utf8",
       generated: true,
-      validatorContract: "public-pr-application-v1",
+      validatorContract: "public-pr-application-v2",
       files: records
     })
   };
@@ -267,6 +267,7 @@ function validatePriorApplicationManifest(application, applicationId) {
     "builder",
     ...(Object.hasOwn(application ?? {}, "companionClosure") ? ["companionClosure"] : []),
     "declarations",
+    "programmableFee",
     "reviewPackage",
     "schemaVersion",
     "source",
@@ -276,7 +277,7 @@ function validatePriorApplicationManifest(application, applicationId) {
   ];
   if (
     !isExactObject(application, applicationKeys)
-    || application.schemaVersion !== 1
+    || application.schemaVersion !== 2
     || application.applicationId !== applicationId
     || !Number.isInteger(application.applicationRevision)
     || application.applicationRevision < 1

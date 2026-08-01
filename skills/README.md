@@ -9,8 +9,9 @@ load the same instructions, references, templates, and validation tools without 
 ### Programmable v4 Builder
 
 [`programmable-v4-hook-builder`](programmable-v4-hook-builder/SKILL.md) helps a builder move from an idea or partial
-prototype to a review-ready Programmable submission. It supports ordinary launches without a custom hook as well as
-custom hooks, games, interfaces, services, keepers, indexers and unfamiliar architectures. It runs compatibility
+prototype to a review-ready Programmable submission. It supports standard-fee-hook launches, custom hooks, games,
+interfaces, services, keepers, indexers and unfamiliar architectures. A no-hook idea remains proposal-eligible but
+cannot claim launch readiness until the mandatory fee is integrated. It runs compatibility
 preflight before implementation, makes trust and value flow explicit, derives hook permissions only when a hook is
 actually needed, and defines the evidence expected for the project's risk level. The package identifier keeps its
 original name for installation compatibility; the product name is Programmable v4 Builder.
@@ -47,7 +48,7 @@ commit SHA remains an equivalent pin when an organization requires commit-only p
 
 ```bash
 gh skill preview 0xprogrammable/programmable \
-  programmable-v4-hook-builder@programmable-v4-builder-v0.1.1
+  programmable-v4-hook-builder@programmable-v4-builder-v0.2.0
 ```
 
 Install the same revision for one supported host:
@@ -58,26 +59,29 @@ gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent codex \
   --scope user \
-  --pin programmable-v4-builder-v0.1.1
+  --pin programmable-v4-builder-v0.2.0
 
 # Claude Code
 gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent claude-code \
   --scope user \
-  --pin programmable-v4-builder-v0.1.1
+  --pin programmable-v4-builder-v0.2.0
 
 # GitHub Copilot
 gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent github-copilot \
   --scope user \
-  --pin programmable-v4-builder-v0.1.1
+  --pin programmable-v4-builder-v0.2.0
 ```
 
 The `gh skill` command chooses the host-specific destination. Its skill commands are currently a preview feature, and
 host behavior still depends on each agent's sandbox, tool permissions, and Agent Skills implementation. Installation
 does not grant wallet access, deployment authority, review approval, or permission to publish external changes.
+
+Builder `v0.1.1` remains available only to reproduce legacy review records. Use `v0.2.0` for new launch applications;
+it adds the mandatory Programmable fee policy and evidence gates.
 
 For repository-scoped use, change `--scope user` to `--scope project` only when the generated `.agents/` directory is
 intentionally committed or excluded from Git; otherwise it makes the project worktree dirty and blocks `prepare-pr`.

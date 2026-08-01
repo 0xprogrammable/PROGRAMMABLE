@@ -1,6 +1,6 @@
 {
   "name": "programmable",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Package the Programmable v4 Builder skill for coding agents.",
   "author": {
     "name": "Programmable"

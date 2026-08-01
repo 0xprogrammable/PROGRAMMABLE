@@ -1,8 +1,8 @@
 {
   "fixtureVersion": 1,
   "id": "dynamic-lp-fee",
-  "name": "bounded dynamic LP fee reaches structural prototype readiness",
-  "description": "A low numeric-risk fee model uses a fixed-size prior-block liquidity observation, no custody, no hook-owned charge and no return delta. Its dynamic price effect still forces the high feature-review tier.",
+  "name": "bounded dynamic LP fee remains blocked until the mandatory volume fee is integrated",
+  "description": "A dynamic LP fee can be structurally reviewable, but it belongs to LPs and cannot replace the mandatory Programmable hook-owned volume fee. This scenario remains changes-required until that fee is integrated into the same hook.",
   "steps": [
     {
       "id": "fully-specified",
@@ -117,13 +117,13 @@
           ]
         },
         "disclosures": [
-          "The LP fee belongs to liquidity providers; this model creates no creator fee or hook-owned claim.",
+          "The LP fee belongs to liquidity providers and does not satisfy the mandatory Programmable volume fee.",
           "The fee input uses exactly eight prior-block active-liquidity samples; it never scans positions, tick words or initialized ticks.",
           "A low numeric score does not override the high review tier imposed by automatic price-impacting behavior."
         ]
       },
       "expected": {
-        "decision": "PROTOTYPE_READY",
+        "decision": "REDESIGN_REQUIRED",
         "hookPermissionMask": "0x1080",
         "risk": {
           "score": 6,
@@ -136,6 +136,7 @@
           ]
         },
         "findingKeys": [
+          "blocker|PROGRAMMABLE_FEE_INTEGRATION_PENDING|$.programmableFee.collection.status",
           "warning|BUILDER_FIELD_PENDING|$.builder.contact",
           "warning|BUILDER_FIELD_PENDING|$.builder.github",
           "warning|BUILDER_FIELD_PENDING|$.builder.licenseDeclaration"
@@ -145,6 +146,7 @@
           "candidate|independent-security-review-one",
           "candidate|independent-specialist-review",
           "candidate|pinned-fork-and-current-head-smoke",
+          "candidate|programmable-fee-architecture-review",
           "candidate|programmable-indexer-integration-review",
           "candidate|programmable-integration-test-review",
           "candidate|programmable-registry-integration-review",

@@ -17,8 +17,8 @@ account.
 Use the skill to:
 
 - Turn a plain-language idea into an explicit architecture, or inspect an existing project before changing it.
-- Choose the safer official Launchpad no-hook default, a separately pinned model-specific no-hook token or launcher, or
-  a custom hook from the actual behavior instead of the repository name.
+- Choose official Launchpad components plus a project-specific implementation of the standard Programmable fee-hook
+  profile, or integrate the mandatory fee into the project's single custom hook. Require exact source, tests, and maintainer review.
 - Identify value flows, fees, custody, roles, dependencies, failure modes and unknowns.
 - Run `doctor` to expose environment and local Git-readiness blockers.
 - Use `scaffold` only when a new project needs a starting structure.
@@ -78,7 +78,7 @@ First preview the protected Builder release tag:
 
 ```bash
 gh skill preview 0xprogrammable/programmable \
-  programmable-v4-hook-builder@programmable-v4-builder-v0.1.1
+  programmable-v4-hook-builder@programmable-v4-builder-v0.2.0
 ```
 
 Then install that same release for your agent. User scope is the beginner default because it keeps the project
@@ -89,12 +89,15 @@ gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent codex \
   --scope user \
-  --pin programmable-v4-builder-v0.1.1
+  --pin programmable-v4-builder-v0.2.0
 ```
 
 Replace `codex` with `claude-code` or `github-copilot` when appropriate. Use `--scope project` only when the project
 intentionally tracks the installed `.agents/` package or excludes that complete generated directory from Git. An
 untracked project-scoped installation makes the worktree dirty and correctly blocks `prepare-pr`.
+
+Builder `v0.1.1` remains available only to reproduce legacy records. New launch applications use `v0.2.0`, whose
+mandatory fee policy is part of the schema, checker, templates, and evidence contract.
 
 From the installed skill directory, run `node scripts/verify-skill.mjs --installed`; it accepts the bounded source
 tracking fields added by `gh skill` while keeping the rest of the portable package checks unchanged. Those fields are
@@ -158,12 +161,16 @@ which decisions remain open.
 An unfamiliar mechanic is not forced into a preset category. When its intent, authority, value flow or failure behavior
 is unknown, keep it in architecture discussion until the smallest material question is answered.
 
-A no-hook token is not limited to the official fixed-supply profile. A transparent bounded transfer tax or automatic
-liquidity lifecycle can remain reviewable through `model-specific-no-hook` when ordinary transfers and sells stay
-permitted and the exact rates, maximum, recipients, authority, value flows, liquidity custody and exit, provider limits,
-and tests are explicit. Because the token sees the shared PoolManager rather than a trustworthy PoolId or
-swap-versus-liquidity label, the design must also disclose how liquidity operations and alternative pools are taxed. It
-does not inherit official-profile deployment or support claims.
+A no-hook token is not rejected merely for being unfamiliar. A transparent bounded transfer tax or automatic-liquidity
+idea can remain reviewable through `model-specific-no-hook`, but that route is proposal-only. Before prototype or launch
+readiness, implement the standard Programmable fee-hook profile or integrate the policy into one custom hook. Exact source, tests, and maintainer review remain required. The platform
+fee is not an LP fee, transfer tax, router charge, app payment, or alternative-pool charge.
+
+The fixed rule is `effective=max(selected total,10 bps)`: exactly `10 bps` of executed gross quote-side volume on every
+successful canonical-pool swap belongs to Programmable, and the project receives only the remainder. A selected `3%`
+therefore remains `3%` (`0.1% + 2.9%`), not `3.1%`. The immutable owner and sole claim authority is
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`; it may claim anytime to itself or a destination it selects for that claim.
+Builders, projects, and administrators cannot mutate or claim that liability.
 
 ### 2. Run `doctor`
 
@@ -301,7 +308,7 @@ state:
 6. The next action and its owner.
 
 Generation, local checks, a prepared application and a merged beta review record are not an audit, product approval,
-model acceptance, deployment, provider support or proof of availability. Never describe internally tested or generated
+model acceptance, deployment, proof of live fee collection, provider support or proof of availability. Never describe internally tested or generated
 code as safe, audited, verified, unruggable or live. Those words require evidence and authority outside the skill.
 
 ## Maintainer rule

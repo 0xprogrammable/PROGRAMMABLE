@@ -16,6 +16,8 @@ Before security work, record:
 - Stable dependency ids and exact trusted deployment record ids for supported onchain protocol contracts
 - Hook permission mask, constructor arguments, CREATE2 deployer, salt, initcode hash, expected address, and expected
   runtime hash
+- Root `programmableFee` record, canonical PoolKey and quote asset, exact rate split, hook mechanism binding, immutable
+  owner, claim path, liability namespace, value flow, collection and claim events, source, tests, and rounding rule
 - Exact router generation, SDK versions, chain ID, PoolManager, PositionManager, StateView, Quoter, and Permit2
 
 Any change to these values creates a new review target. Never carry a result across a changed target silently.
@@ -53,6 +55,8 @@ Write properties before or alongside implementation. At minimum cover:
 - Each privileged action has one explicit authorized capability set.
 - No role can gain an undisclosed capability through arbitrary calls, delegatecall, upgrades, rescue, or initializer reuse.
 - A recipient can claim or redirect only its own entitlement unless a disclosed model explicitly says otherwise.
+- Only `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` can claim the Programmable liability, either to itself or a destination
+  it selects for that claim; no builder, project, administrator, rescue, sweep, or mutable-recipient path can do so.
 
 ### Accounting
 
@@ -63,6 +67,9 @@ Write properties before or alongside implementation. At minimum cover:
 - Hook-returned deltas are balance-backed and cannot create unexplained credit.
 - Internal liabilities never exceed assets or PoolManager claims controlled by the responsible contract.
 - Fee, reward, share, liquidity, and dust accounting conserves value under explicit rounding rules.
+- Every successful canonical-pool swap accrues from executed gross quote-side volume in all four swap modes. The
+  effective total is `max(selected,10 bps)`, exactly 10 bps belongs to Programmable, and only the remainder belongs to
+  the project; the platform liability is keyed by `(poolId,currency,owner)` and never netted across pools.
 - Recipient shares sum to the disclosed total; duplicate, zero, reverting, and reentrant recipients cannot redirect or
   block another beneficiary's entitlement.
 - ERC-6909 aggregate liabilities remain bounded by the corresponding claim balance or redeemable underlying for every
@@ -72,6 +79,10 @@ Write properties before or alongside implementation. At minimum cover:
 
 - The registered PoolKey, fee mode, tick spacing, hook, asset ordering, beneficiaries, bounds, and custody match the
   compatibility lock.
+- A simple launch implements the standard Programmable fee-hook profile; a custom launch integrates the policy into its
+  one hook. Both require exact source, tests, and maintainer review. No router, LP fee, transfer tax, alternative pool, donation, or app payment can substitute for or bypass it.
+- Fee collection uses the declared quadrant-dependent before/after return-delta path. Same-pool hook-initiated swaps are
+  forbidden or charge the identical policy internally despite v4 skipping the hook's own callback.
 - Immutable values never change. Mutable values remain inside declared bounds and can only be changed by declared roles.
 - CREATE2 address and permission bits are reproducible from the exact creation code.
 
@@ -192,6 +203,17 @@ call sites, min and max, every update path, stale input, manipulation, liquidity
 failure behavior. Test both swap directions and exactness modes. A 100% maximum requires explicit proof of supported core
 semantics; do not assume exact-output compatibility.
 
+For the mandatory Programmable fee, test selected totals of zero, below 10 bps, exactly 10 bps, and above 10 bps,
+including `3% -> 0.1% Programmable + 2.9% project`, never `3.1%`. Test exact-input and exact-output in both directions,
+partial fills against actually executed gross quote volume, quote-asset denomination, rounding and dust, canonical
+PoolKey admission, alternative-pool isolation, no cross-pool netting, and event-to-liability reconciliation. Prove the
+immutable owner can claim at any time to itself or a per-claim destination, while every builder, project, administrator,
+stored recipient, arbitrary caller, rescue, and sweep path fails.
+
+For each swap mode, prove the declared before-swap path when quote is specified and after-swap path when quote is
+unspecified. Exercise hook-initiated PoolManager calls: prove same-pool swaps revert, or prove the exact internal
+accrual path applies the same fee despite callback skipping.
+
 For hook-owned fees, test the collection path, matching value-flow id, liability namespace, and collection event. For
 recipients test the parts-per-million total, address source and launch binding, exact or derived address, rounding
 remainder, duplicate and zero addresses, failed and reentrant recipients, beneficiary-only claim and redirect rules,
@@ -261,6 +283,10 @@ After separately authorized execution, capture:
 - Buy, sell, liquidity, claim, recovery, and model-specific lifecycle receipts
 - Independent RPC reconciliation
 - Monitoring state and remaining blockers
+
+The skill, schema, checker, and local test suite do not prove that production fees are collected. Claim live collection
+only after the exact reviewed hook is deployed with an authorized receipt, runtime and configuration match, canonical
+pool lifecycle receipts exercise accrual and claim, liabilities reconcile, and monitoring is active.
 
 ### Availability gate
 

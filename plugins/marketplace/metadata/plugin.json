@@ -3,7 +3,7 @@
   "marketplaceName": "programmable-repo",
   "marketplaceDisplayName": "Programmable",
   "pluginName": "programmable",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "Programmable v4 Builder",
   "description": "Package the Programmable v4 Builder skill for coding agents.",
   "shortDescription": "Build Uniswap v4 projects with Programmable",

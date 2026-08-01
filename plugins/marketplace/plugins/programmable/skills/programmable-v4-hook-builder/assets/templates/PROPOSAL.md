@@ -26,11 +26,10 @@
 
 Explain why the project uses Uniswap v4. State `hook.used` explicitly.
 
-- If false, select `official-launchpad` or `model-specific-no-hook` and explain why no custom pool callback is needed.
-  Keep the official Launchpad as the safer default. For a model-specific token or launcher, state that it does not inherit
-  an official profile identity and bind its own exact dependencies and review gates.
-- If true, explain which atomic pool-side behavior requires a custom hook and why an ordinary token, router, app, or
-  offchain service is insufficient.
+- If false, select the applicable proposal route, set `programmableFee.collection.status` to
+  `pending-hook-integration`, and state that the design is not prototype- or launch-ready.
+- If true, state whether the project implements the standard Programmable fee-hook profile or integrates the fee policy
+  into its one custom hook. Bind exact source and tests; neither path is pre-reviewed by this template.
 
 Also state which behavior belongs in contracts, the app or game, and any service, keeper, oracle, or indexer. Do not move
 an offchain concern into a hook merely to fill this template.
@@ -50,7 +49,7 @@ Permit2, state reads, and events.
 
 If `hook.used` is true, also record all 14 permission booleans, the derived mask, PoolManager authentication, callback
 sender meaning, hookData policy, return shapes, and nested-action suppression. If false, state that no custom callback,
-permission mask, or hook CREATE2 address applies; do not add placeholder callback details.
+permission mask, or hook CREATE2 address applies and that mandatory fee integration remains changes-required.
 
 ## Product integration plan
 
@@ -78,6 +77,20 @@ compatibility, local tests, or Programmable acceptance.
 
 ## Fees, recipients, and settlement
 
+Start with the root `programmableFee` record. State:
+
+- `effective=max(selected total,10 bps)`, exactly `10 bps` to Programmable, and only the remainder to the project;
+- the worked examples `0 -> 10 bps + 0` and `3% -> 0.1% + 2.9%`, never `3.1%`;
+- every successful canonical-PoolKey swap, executed gross quote-side basis after partial fills, and all four swap modes;
+- quadrant-dependent before/after return-delta paths, plus a same-pool self-call policy that forbids hook-initiated
+  same-pool swaps or proves equivalent internal fee enforcement;
+- project-specific standard-profile hook or single integrated custom hook, with no router, LP-fee, transfer-tax, or alternative-pool substitute;
+- immutable owner and sole claim authority `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`, able to claim anytime to itself or an owner-selected destination for that claim;
+- 10 bps accrued as a claimable liability, not merely auto-transferred, with `claimAvailability: anytime`;
+- no builder, project, administrator, stored mutable recipient, rescue, sweep, or redirect path; and
+- `(poolId,currency,owner)` liabilities, no cross-pool netting, value-flow id, collection event, claim event, rounding,
+  source paths, and test paths.
+
 Distinguish LP fees, hook-owned charges, token transfer taxes, app or game payments, and service-controlled value. Include
 only mechanisms the design uses. For dynamic LP fees, state initial value, initialization, application and update paths,
 override rule, persistent actor and call sites, rate limit, bounds, metric, unit, observation, cadence, manipulation
@@ -100,8 +113,7 @@ approval; name the tested fallback when an external provider does not support th
 
 Provide one numerical example for each fee or accounting rule the project introduces, including rounding, value
 conservation, and one failure case. If the project changes or mediates swap behavior, cover all four swap quadrants or
-state which modes are rejected and why. Otherwise state that the ordinary pool path introduces no custom swap
-accounting.
+state which modes are rejected and why. The mandatory Programmable fee always covers all four modes for launch readiness.
 
 ## Fact provenance
 
@@ -112,5 +124,6 @@ technical evidence.
 
 List architecture-changing questions that remain unresolved. Do not hide them in implementation notes.
 
-This is a public, non-confidential proposal. Acceptance, independent review, product integration, deployment, routing,
+This is a public, non-confidential proposal. The skill and local checker do not prove that fees are collected live.
+Acceptance, independent review, product integration, deployment, runtime matching, lifecycle evidence, monitoring, routing,
 listing, scheduling and availability require separate evidence records.

@@ -220,7 +220,7 @@ function makePriorPackage({ applicationRevision = 1, source = makeSource() } = {
     ["evidence-index.json", Buffer.from("{\"evidence\":[]}\n")]
   ]);
   const application = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     applicationId: "example-app",
     applicationRevision,
     stage: "proposal",
@@ -232,6 +232,7 @@ function makePriorPackage({ applicationRevision = 1, source = makeSource() } = {
       contact: "https://github.com/example"
     },
     source,
+    programmableFee: {},
     reviewPackage: CENTRAL_APPLICATION_FILES.slice(1).map((name) => ({
       path: name,
       sha256: digest(files.get(name)),

@@ -1,7 +1,7 @@
 {
-  "$schema": "urn:programmable:v4-hook-submission:1.2.0",
+  "$schema": "urn:programmable:v4-hook-submission:1.3.0",
   "schemaVersion": 1,
-  "standardVersion": "1.2.0",
+  "standardVersion": "1.3.0",
   "stage": "proposal",
   "model": {
     "id": "example-model",
@@ -117,6 +117,62 @@
     },
     "canonical": true,
     "alternativePools": "Alternative pools may exist and do not inherit this model's behavior."
+  },
+  "programmableFee": {
+    "policyId": "programmable-volume-fee-v1",
+    "policyVersion": "1.0.0",
+    "poolScope": "canonical-launch-pool-key",
+    "rates": {
+      "unit": "hundredths-of-bip",
+      "selectedHundredthsOfBip": null,
+      "minimumEffectiveHundredthsOfBip": 1000,
+      "effectiveHundredthsOfBip": null,
+      "platformHundredthsOfBip": 1000,
+      "projectHundredthsOfBip": null,
+      "formula": "effective=max(selected,1000);platform=1000;project=effective-1000",
+      "lpFeeExcluded": true
+    },
+    "basis": {
+      "volume": "gross-quote-side-swap-volume",
+      "quoteAsset": "canonical-pool-quote-asset"
+    },
+    "ownership": {
+      "owner": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      "immutable": true,
+      "claimAuthority": "owner-only",
+      "claimAvailability": "anytime",
+      "claimDestinationPolicy": "owner-or-owner-selected-per-claim",
+      "storedMutableRecipient": false,
+      "builderCanMutate": false,
+      "projectCanMutate": false,
+      "administratorCanMutate": false
+    },
+    "collection": {
+      "status": "pending-hook-integration",
+      "integration": "canonical-pool-hook",
+      "enforcement": "non-bypassable",
+      "hookFeeMechanismBinding": "hook.feeMechanism",
+      "supportedSwapModes": [],
+      "swapModePaths": {
+        "zeroForOneExactInput": null,
+        "zeroForOneExactOutput": null,
+        "oneForZeroExactInput": null,
+        "oneForZeroExactOutput": null
+      },
+      "selfCallPolicy": "same-pool-swap-forbidden"
+    },
+    "accounting": {
+      "accrualMode": "claimable-liability",
+      "liabilityKeyDimensions": ["poolId", "currency", "owner"],
+      "crossPoolNetting": false,
+      "valueFlowId": null,
+      "collectionEvent": null,
+      "claimEvent": null
+    },
+    "evidence": {
+      "sourcePaths": [],
+      "testPaths": []
+    }
   },
   "hook": {
     "used": null,

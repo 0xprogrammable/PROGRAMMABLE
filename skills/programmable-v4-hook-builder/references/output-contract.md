@@ -7,7 +7,7 @@ Produce only the artifacts required at the current stage. Use explicit unknowns 
 ```text
 Idea brief
 ├── user outcome
-├── why Uniswap v4 is used and whether a custom hook is needed
+├── why Uniswap v4 is used and whether a standard-profile implementation is sufficient or custom behavior must be integrated
 ├── design card
 │   ├── pool and trade behavior
 │   ├── creator choices and fixed platform rules
@@ -52,10 +52,12 @@ The deterministic report must contain:
 - Errors, blockers, warnings, and required actions with stable codes
 - Required test, review, operational, integration, and disclosure gates
 - Structured public project/token metadata, mutable owners, affiliation claims, and provider-facing presentation review
+- Root `programmableFee` policy record, exact computed split, canonical-pool hook binding, immutable owner and claim
+  authority, liability keys, events, source paths, test paths, and pending-versus-implemented status
 
-Required gates are surface-derived. A contract-only, external-client, or ordinary no-hook project does not receive
+Required gates are surface-derived. A contract-only, external-client, or ordinary no-hook proposal does not receive
 included-client or indexer gates unless it actually declares those surfaces. Hook and value-safety gates remain based
-on behavior. A builder-pinned model-specific dependency baseline remains a candidate review item and never reports
+on behavior, and every launch-ready prototype requires the mandatory canonical-pool fee hook. A builder-pinned model-specific dependency baseline remains a candidate review item and never reports
 itself as maintainer reviewed.
 
 The report must say that it is not an audit, acceptance, deployment, routing approval, or availability proof.
@@ -66,6 +68,8 @@ Before a human handoff says `PROTOTYPE_READY`, the proposal also contains:
 
 - A semantic consistency statement separate from the deterministic report
 - A worked numerical example for every fee or accounting rule the design introduces
+- The fixed examples `0 selected -> 10 bps Programmable` and `3% selected -> 0.1% Programmable + 2.9% project`, never
+  an additive `3.1%`, plus all four executed gross quote-side swap modes
 - Value-conservation, rounding, and failure examples
 - Four-quadrant coverage or explicit rejection for designs that change or mediate swap behavior; otherwise a statement
   that the ordinary pool path introduces no custom swap callback behavior
@@ -92,8 +96,9 @@ submissions/<model-id>/evidence/
 └── <capability-triggered analysis and runtime evidence>
 ```
 
-Use the project's existing repository conventions. Do not add Solidity, Foundry, a custom hook, a browser app, or a
-service merely to match an example layout. Do not duplicate shared protocol contracts.
+Use the project's existing repository conventions. Add only a project-specific implementation of the standard fee-hook
+profile or the one custom hook that integrates the policy; require exact source, tests, and maintainer review, and do not add unrelated Solidity, a browser app, or a service merely to match an example
+layout. Do not duplicate shared protocol contracts.
 
 `test-evidence.json` records exact commands, tool versions, commit, status, test counts, fuzz runs, invariant runs and
 depth, useful calls, reverts, fork block, browser or API cases, gas, sizes, failures, skips, and timestamp where those
@@ -128,8 +133,8 @@ Capability-triggered evidence is additive:
   fork, fuzz, and invariant results.
 - A custom hook additionally requires callback authentication, permission-mask, CREATE2, PoolKey, delta, settlement,
   and lifecycle evidence for the callbacks it actually enables.
-- An ordinary no-hook project requires no custom Solidity, callback, permission-mask, or CREATE2 artifact unless another
-  declared contract surface independently needs it.
+- Every launch-ready prototype requires exact source and tests for a project-specific standard-profile hook or its single integrated custom
+  hook. A no-hook, router-only, LP-fee-only, or transfer-tax-only package remains proposal-eligible but changes-required.
 - A model-specific no-hook token requires its own exact source and dependency closure plus the declared transfer-tax,
   actual-received, authority, automatic-liquidity, custody, exit and provider-limit scenarios. It cannot reuse official
   Launchpad evidence or turn local provider canaries into routing, indexing, scanner or listing approval.
@@ -245,6 +250,8 @@ not-applicable reasons for omitted capability families:
 - Chain-specific protocol records and runtime expectations
 - Exact router generation and registry package versions when the project uses them
 - Hook permission mask when a custom hook is used
+- Mandatory Programmable fee policy, exact canonical PoolKey and quote asset, selected/effective/platform/project rates,
+  immutable owner-only claim configuration, liability namespace, events, source, tests, and hook mechanism binding
 - Constructor arguments and deployment/runtime bindings for each deployed contract; CREATE2 deployer, salt, initcode
   hash, and expected hook address only when the selected hook path requires them
 
@@ -311,6 +318,8 @@ The handoff must state the exact boundary for:
   final deltas, receipts, and failure states
 - Claim entitlement source, liability keys, preview, caller and recipient authorization, payout changes, transaction
   states, failed-recipient recovery, and historic rights
+- Programmable fee accrual and owner-only claim surface, including the owner's per-claim destination choice and the
+  absence of any builder, project, administrator, rescue, sweep, mutable-recipient, or cross-pool-netting path
 - Monitoring checks, thresholds, alerts, owner, runbook, escalation, fallback, dependency health, and drill evidence
 
 Blank required surfaces are blockers. A surface marked unused needs a reason tied to the accepted lifecycle.
@@ -372,3 +381,4 @@ The skill must never:
 - Open, merge, or publish a PR without exact authorization
 - Submit Hooklist, routing, explorer, indexer, legal, or marketplace forms automatically
 - Promise acceptance, review time, deployment, launch count, volume, or income
+- Claim live fee collection from a schema result, local checker, test, simulation, or deployment plan

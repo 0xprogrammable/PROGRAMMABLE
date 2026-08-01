@@ -42,7 +42,7 @@ The skill is the technical engine. In the current beta, the website may provide 
 points, while GitHub hosts the public source and application review thread. A later Connected Submission service may
 add human identity binding, service-backed application status, review results, and an approved launch handoff.
 
-The skill must make the declared project reviewable, whether it uses a custom hook, the ordinary no-hook launch path,
+The skill must make the declared project reviewable, whether it uses a launch-ready fee hook, a proposal-only no-hook path,
 or additional app, game, service, keeper, or indexer surfaces. It must never promise that generated code is perfect,
 safe, audited, accepted, deployed, or available.
 

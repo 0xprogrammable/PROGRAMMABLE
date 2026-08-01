@@ -438,10 +438,10 @@ test("prepare-pr deterministically binds the pushed public GitHub revision witho
       contact: "https://github.com/Example-Builder"
     });
     assert.equal(centralValidation.application.stage, "proposal");
-    assert.equal(centralValidation.compatibility.result, "architecture-review-required");
+    assert.equal(centralValidation.compatibility.result, "changes-required");
     assert.ok(centralValidation.compatibility.findings.length > 0);
-    assert.equal(centralValidation.evidenceIndex.evidence.length, 1);
-    assert.equal(centralValidation.evidenceIndex.evidence[0].status, "blocked");
+    assert.equal(centralValidation.evidenceIndex.evidence.length, 2);
+    assert.equal(centralValidation.evidenceIndex.evidence[0].status, "failed");
     assert.equal(
       centralValidation.evidenceIndex.evidence[0].url,
       `https://github.com/example-builder/programmable-proposal/blob/${head}/submissions/ready-model/compatibility-report.json`
@@ -846,7 +846,7 @@ test("prepare-pr binds one canonical HEAD companion manifest and preserves a 64-
       result.centralPackage.files.find(({ path: filePath }) => filePath === "compatibility-report.json").content
     );
     assert.deepEqual(centralApplication.source.companions, result.github.sourceRequest.companions);
-    assert.equal(centralCompatibility.result, "architecture-review-required");
+    assert.equal(centralCompatibility.result, "changes-required");
     assert.ok(centralCompatibility.findings.some(({ code }) => code === "COMPANION_CLOSURE_REVIEW_REQUIRED"));
     assert.match(result.body, /Companion repositories: `1` exact public bindings/u);
     assert.equal(
