@@ -23,14 +23,31 @@ candidate.
 
 Read the [builder guide](../docs/builder/AGENT_SKILL.md) before using it on production code.
 
-## Install the protected Builder release
+## Quick install
+
+Install interactively with one command:
+
+```bash
+gh skill install 0xprogrammable/programmable
+```
+
+To preselect the Builder while keeping the agent setup interactive:
+
+```bash
+gh skill install 0xprogrammable/programmable programmable-v4-hook-builder
+```
+
+Without a version argument, `gh skill` selects the repository's latest tagged release. Use the protected-release
+instructions below only when a review or organization policy requires an exact version pin.
+
+## Install an exact protected Builder release
 
 Inspect the skill before installing it. The release tag below is protected against update and deletion. A full reviewed
 commit SHA remains an equivalent pin when an organization requires commit-only policy.
 
 ```bash
 gh skill preview 0xprogrammable/programmable \
-  programmable-v4-hook-builder@programmable-v4-builder-v0.1.0
+  programmable-v4-hook-builder@programmable-v4-builder-v0.1.1
 ```
 
 Install the same revision for one supported host:
@@ -41,21 +58,21 @@ gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent codex \
   --scope user \
-  --pin programmable-v4-builder-v0.1.0
+  --pin programmable-v4-builder-v0.1.1
 
 # Claude Code
 gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent claude-code \
   --scope user \
-  --pin programmable-v4-builder-v0.1.0
+  --pin programmable-v4-builder-v0.1.1
 
 # GitHub Copilot
 gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent github-copilot \
   --scope user \
-  --pin programmable-v4-builder-v0.1.0
+  --pin programmable-v4-builder-v0.1.1
 ```
 
 The `gh skill` command chooses the host-specific destination. Its skill commands are currently a preview feature, and
