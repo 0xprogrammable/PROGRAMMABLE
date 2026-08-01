@@ -66,6 +66,26 @@ function environment(
   };
 }
 
+function candidateEnvironment() {
+  return environment({
+    PROGRAMMABLE_PROJECTOR_BINDING_MODE: "candidate-backfill",
+    PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
+      "7ffd15c2a28c481a2d3632e30b315262c2471b2e",
+    PROGRAMMABLE_ENVIO_GRAPHQL_URL:
+      "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
+    PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY:
+      "envio:production-7f24e63",
+    INDEXED_EXPLORE_LIST_READS_ENABLED: "false",
+    INDEXED_EXPLORE_TOKEN_READS_ENABLED: "false",
+    INDEXED_EXPLORE_CHART_READS_ENABLED: "false",
+    INDEXED_CREATOR_PROFILE_READS_ENABLED: "false",
+    INDEXED_CLASSIC_V3_PROFILE_READS_ENABLED: "false",
+    INDEXED_LAUNCH_LOOKUP_ENABLED: "false",
+    INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED: "false",
+    INDEXED_READ_SHADOW_COMPARE_ENABLED: "false",
+  });
+}
+
 describe("configured projector runtime", () => {
   it("keeps the runtime disabled by default without opening dependencies", async () => {
     const createExecutor = vi.fn();
@@ -113,6 +133,7 @@ describe("configured projector runtime", () => {
   it("builds the exact provider set and every frozen release scope", () => {
     const config = loadProjectorRuntimeConfig(environment());
 
+    expect(config.binding).toEqual({ mode: "release", candidate: null });
     expect(config.database).toEqual({
       projectorConnectionString:
         "postgresql://programmable_projector_login:password@db.example:5432/postgres?sslmode=verify-full",
@@ -151,6 +172,28 @@ describe("configured projector runtime", () => {
       { releaseId: "stock-paired-v2", modelId: "stock-paired", sourceGroup: "core" },
       { releaseId: "stock-paired-v3", modelId: "stock-paired", sourceGroup: "core" },
     ]);
+  });
+
+  it("loads the audited candidate only through the explicit backfill mode", () => {
+    const config = loadProjectorRuntimeConfig(candidateEnvironment());
+
+    expect(config.binding).toMatchObject({
+      mode: "candidate-backfill",
+      candidate: {
+        mirrorCommit: "7ffd15c2a28c481a2d3632e30b315262c2471b2e",
+      },
+    });
+    expect(config.envio.endpoint).toBe(
+      "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
+    );
+    expect(config.providers[0]).toEqual({
+      type: "envio_deployment",
+      redactedIdentity: "envio:production-7f24e63",
+      deploymentCommitment:
+        "0xa4267153060a4b02b630d81063e0f84bb36f6f637a52ef71fb29c117c5384259",
+      schemaCommitment:
+        "0x5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1",
+    });
   });
 
   it.each([

@@ -1,5 +1,11 @@
 import "server-only";
 
+import {
+  assertCandidateDatabaseBootstrapState,
+  CANDIDATE_PROJECTOR_RUNTIME_MODE,
+  loadCandidateProjectorRuntimeBinding,
+  type CandidateProjectorRuntimeBinding,
+} from "./candidate-projector-runtime-binding.server";
 import { createEnvioClient } from "./envio";
 import { invalidInput } from "./errors";
 import { createPostgresExecutor } from "./postgres";
@@ -54,6 +60,8 @@ const BROWSER_FORBIDDEN_NAMES = Object.freeze([
   "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_RUNTIME_DATABASE_URL",
   "NEXT_PUBLIC_PROGRAMMABLE_POSTGRES_SSL_CA_PEM",
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN",
+  "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_BINDING_MODE",
+  "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT",
 ] as const);
 
 type StagedDynamicParentResult = Readonly<{
@@ -144,6 +152,12 @@ function releaseScopes(): readonly ProjectorReleaseDatabaseScope[] {
 }
 
 export type ProjectorRuntimeConfig = Readonly<{
+  binding:
+    | Readonly<{ mode: "release"; candidate: null }>
+    | Readonly<{
+        mode: typeof CANDIDATE_PROJECTOR_RUNTIME_MODE;
+        candidate: CandidateProjectorRuntimeBinding;
+      }>;
   database: Readonly<{
     projectorConnectionString: string;
     runtimeConnectionString: string;
@@ -183,7 +197,23 @@ export function loadProjectorRuntimeConfig(
   if (BROWSER_FORBIDDEN_NAMES.some((name) => env[name])) {
     return invalidRuntimeConfig();
   }
-  const binding = getDataPipelineReleaseBinding();
+  const activeProductionBinding = getDataPipelineReleaseBinding();
+  const bindingMode = env.PROGRAMMABLE_PROJECTOR_BINDING_MODE;
+  const candidate = bindingMode === CANDIDATE_PROJECTOR_RUNTIME_MODE
+    ? loadCandidateProjectorRuntimeBinding({
+        env,
+        activeProductionBinding,
+      })
+    : null;
+  if (
+    bindingMode !== undefined &&
+    bindingMode !== "" &&
+    bindingMode !== "release" &&
+    candidate === null
+  ) {
+    return invalidRuntimeConfig();
+  }
+  const binding = candidate?.releaseBinding ?? activeProductionBinding;
   const envioEndpoint = canonicalProjectorEnvioEndpoint(
     env.PROGRAMMABLE_ENVIO_GRAPHQL_URL,
     binding.envio.graphqlEndpoint,
@@ -231,6 +261,12 @@ export function loadProjectorRuntimeConfig(
   ] satisfies readonly ProjectorProviderDatabaseBinding[]);
 
   return Object.freeze({
+    binding: candidate
+      ? Object.freeze({
+          mode: CANDIDATE_PROJECTOR_RUNTIME_MODE,
+          candidate,
+        })
+      : Object.freeze({ mode: "release" as const, candidate: null }),
     database: Object.freeze({
       projectorConnectionString: validatedPostgresConnectionString(
         env.PROGRAMMABLE_PROJECTOR_DATABASE_URL,
@@ -261,6 +297,7 @@ export type ProjectorRuntimeDependencies = Readonly<{
   createReleaseStore: typeof createPostgresReleaseProjectionStore;
   runCycle: typeof runProjectorCycle;
   runReleaseCycle: typeof runReleaseProjectionCycle;
+  assertCandidateDatabase: typeof assertCandidateDatabaseBootstrapState;
 }>;
 
 const DEFAULT_DEPENDENCIES: ProjectorRuntimeDependencies = Object.freeze({
@@ -273,6 +310,7 @@ const DEFAULT_DEPENDENCIES: ProjectorRuntimeDependencies = Object.freeze({
   createReleaseStore: createPostgresReleaseProjectionStore,
   runCycle: runProjectorCycle,
   runReleaseCycle: runReleaseProjectionCycle,
+  assertCandidateDatabase: assertCandidateDatabaseBootstrapState,
 });
 
 export async function runConfiguredProjectorCycle(
@@ -325,10 +363,6 @@ export async function runConfiguredProjectorCycle(
     if (!acquisition.fence) return invalidRuntimeConfig();
     const runtimeFence = acquisition.fence;
     acquiredFence = runtimeFence;
-    const providers = dependencies.createProviders(env);
-    dependencies.assertProviders(providers);
-    assertProjectorRuntimeProviderCommitments(config.providers, providers);
-    const envio = dependencies.createEnvio(config.envio);
     const writerExecutor = dependencies.createExecutor({
       connectionString: config.database.projectorConnectionString,
       sslCaPem: config.database.sslCaPem,
@@ -337,6 +371,16 @@ export async function runConfiguredProjectorCycle(
       idleTimeoutMs: 5_000,
     });
     executor = writerExecutor;
+    if (config.binding.candidate) {
+      await dependencies.assertCandidateDatabase({
+        executor: writerExecutor,
+        binding: config.binding.candidate,
+      });
+    }
+    const providers = dependencies.createProviders(env);
+    dependencies.assertProviders(providers);
+    assertProjectorRuntimeProviderCommitments(config.providers, providers);
+    const envio = dependencies.createEnvio(config.envio);
     const startedAt = Date.now();
     const remainingRuntimeMs = () =>
       PROJECTOR_DEADLINE_MS - (Date.now() - startedAt);
