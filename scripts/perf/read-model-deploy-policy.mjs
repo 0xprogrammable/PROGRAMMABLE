@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { appendFileSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { runtimeProductionProviderBindingsFromUrls } from "./read-model-provider-binding.mjs";
@@ -15,6 +16,29 @@ export const RELEASE_GATED_FLAG_NAMES = Object.freeze([
   "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED",
   "INDEXED_READ_SHADOW_COMPARE_ENABLED",
 ]);
+
+export const WORKER_ACTIVATION_FLAG_NAMES = Object.freeze([
+  "PROGRAMMABLE_PROJECTOR_ACTIVE",
+  "PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE",
+]);
+
+export const REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES = Object.freeze([
+  "PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY",
+  "PROGRAMMABLE_SOURCE_PROJECTOR_VERSION",
+  "PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL",
+  "PROGRAMMABLE_UNISWAP_GRAPH_REDACTED_IDENTITY",
+  "PROGRAMMABLE_UNISWAP_GRAPH_DEPLOYMENT_COMMITMENT",
+  "PROGRAMMABLE_UNISWAP_GRAPH_SCHEMA_COMMITMENT",
+]);
+
+const CANONICAL_PRODUCTION_ORIGIN = "https://programmable.family";
+const EXPECTED_SOURCE_PROJECTOR_VERSION = "projector-v1";
+const EXPECTED_UNISWAP_GRAPH_BASE_URL = "https://gateway.thegraph.com";
+const EXPECTED_UNISWAP_GRAPH_REDACTED_IDENTITY = "uniswap-v4-official";
+const EXPECTED_UNISWAP_GRAPH_DEPLOYMENT_COMMITMENT =
+  "0x44c8d7127503563653f7f53ea339caa383453e00224a6c33cf95fc29f5c3e35c";
+const EXPECTED_UNISWAP_GRAPH_SCHEMA_COMMITMENT =
+  "0xd0d2087059ca0a7c1e7c633999ff75ea34fcc00d42cee8985a79d0ef76e6813c";
 
 const COMMITMENT_NAMES = Object.freeze([
   "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT",
@@ -63,10 +87,106 @@ export function readReleaseGatedFlags(contents) {
   return readSelectedDotenvValues(contents, RELEASE_GATED_FLAG_NAMES);
 }
 
-export function evaluateReadModelDeployPolicy(contents, environment = {}) {
-  const flags = readReleaseGatedFlags(contents);
-  const nonLegacyFlags = RELEASE_GATED_FLAG_NAMES.filter(
-    (name) => flags[name] !== "false",
+function normalizedFlags(raw, names, missingIsFalse) {
+  const values = {};
+  const invalidNames = [];
+  for (const name of names) {
+    const value = raw[name];
+    if ((value === undefined || value === "") && missingIsFalse) {
+      values[name] = false;
+    } else if (value === "true" || value === "false") {
+      values[name] = value === "true";
+    } else {
+      values[name] = value !== "false";
+      invalidNames.push(name);
+    }
+  }
+  return Object.freeze({
+    values: Object.freeze(values),
+    invalidNames: Object.freeze(invalidNames),
+  });
+}
+
+function parseReleaseExpectations(rootDirectory) {
+  const manifestPath = resolve(
+    rootDirectory,
+    "config/data-pipeline-release.v1.json",
+  );
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const deploymentLabel = manifest?.envio?.deploymentLabel;
+  if (
+    typeof deploymentLabel !== "string" ||
+    !/^[a-z0-9][a-z0-9._-]{0,95}$/u.test(deploymentLabel)
+  ) {
+    throw new Error("data-pipeline release has an invalid Envio deployment label");
+  }
+  return Object.freeze({
+    PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY: `envio:${deploymentLabel}`,
+    PROGRAMMABLE_SOURCE_PROJECTOR_VERSION:
+      EXPECTED_SOURCE_PROJECTOR_VERSION,
+    PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL:
+      EXPECTED_UNISWAP_GRAPH_BASE_URL,
+    PROGRAMMABLE_UNISWAP_GRAPH_REDACTED_IDENTITY:
+      EXPECTED_UNISWAP_GRAPH_REDACTED_IDENTITY,
+    PROGRAMMABLE_UNISWAP_GRAPH_DEPLOYMENT_COMMITMENT:
+      EXPECTED_UNISWAP_GRAPH_DEPLOYMENT_COMMITMENT,
+    PROGRAMMABLE_UNISWAP_GRAPH_SCHEMA_COMMITMENT:
+      EXPECTED_UNISWAP_GRAPH_SCHEMA_COMMITMENT,
+  });
+}
+
+export function readReleasePolicyExpectations(
+  rootDirectory = process.cwd(),
+) {
+  return parseReleaseExpectations(rootDirectory);
+}
+
+function validateNonSecretRuntimeEnvironment(contents, expectations) {
+  if (!expectations) {
+    return Object.freeze({ ready: true, invalidNames: Object.freeze([]) });
+  }
+  const configured = readSelectedDotenvValues(
+    contents,
+    REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES,
+  );
+  const invalidNames = REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES.filter(
+    (name) =>
+      typeof configured[name] !== "string" ||
+      configured[name] === "" ||
+      configured[name] !== expectations[name],
+  );
+  return Object.freeze({
+    ready: invalidNames.length === 0,
+    invalidNames: Object.freeze(invalidNames),
+  });
+}
+
+export function evaluateReadModelDeployPolicy(
+  contents,
+  environment = {},
+  expectations,
+) {
+  const indexedFlags = normalizedFlags(
+    readReleaseGatedFlags(contents),
+    RELEASE_GATED_FLAG_NAMES,
+    false,
+  );
+  const workerFlags = normalizedFlags(
+    readSelectedDotenvValues(contents, WORKER_ACTIVATION_FLAG_NAMES),
+    WORKER_ACTIVATION_FLAG_NAMES,
+    true,
+  );
+  const nonLegacyFlags = [
+    ...RELEASE_GATED_FLAG_NAMES.filter((name) => indexedFlags.values[name]),
+    ...WORKER_ACTIVATION_FLAG_NAMES.filter((name) => workerFlags.values[name]),
+  ];
+  const invalidFlagNames = Object.freeze([
+    ...indexedFlags.invalidNames,
+    ...workerFlags.invalidNames,
+  ]);
+  const environmentPreflight = validateNonSecretRuntimeEnvironment(
+    contents,
+    expectations,
   );
   const evidenceRequired = nonLegacyFlags.length > 0;
   const invalidCommitments = evidenceRequired
@@ -123,6 +243,12 @@ export function evaluateReadModelDeployPolicy(contents, environment = {}) {
     mode: evidenceRequired ? "indexed-or-shadow" : "legacy-only",
     evidenceRequired,
     nonLegacyFlags,
+    indexedFlags: indexedFlags.values,
+    workerActivationFlags: workerFlags.values,
+    policyReady:
+      invalidFlagNames.length === 0 && environmentPreflight.ready,
+    invalidFlagNames,
+    invalidNonSecretEnvironmentNames: environmentPreflight.invalidNames,
     commitmentsReady:
       invalidCommitments.length === 0 && runtimeCommitmentsMatch,
     runtimeProviderBinding,
@@ -132,6 +258,109 @@ export function evaluateReadModelDeployPolicy(contents, environment = {}) {
         : runtimeCommitmentsMatch
           ? []
           : ["runtime-provider-commitment-mismatch"],
+  });
+}
+
+function exactHttpsOrigin(value, subject) {
+  let target;
+  try {
+    target = new URL(value);
+  } catch {
+    throw new Error(`${subject} must be an exact HTTPS origin`);
+  }
+  if (
+    target.protocol !== "https:" ||
+    target.username !== "" ||
+    target.password !== "" ||
+    target.pathname !== "/" ||
+    target.search !== "" ||
+    target.hash !== ""
+  ) {
+    throw new Error(`${subject} must be an exact HTTPS origin`);
+  }
+  return target;
+}
+
+function canonicalJson(value) {
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "string"
+  ) {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number" && Number.isSafeInteger(value)) {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+      .join(",")}}`;
+  }
+  throw new Error("release attestation contains a non-canonical value");
+}
+
+export function createStagedReleaseAttestation(input) {
+  if (!input.policy?.policyReady || !input.policy?.commitmentsReady) {
+    throw new Error("release policy must pass before attestation");
+  }
+  if (!/^[0-9a-f]{40}$/u.test(input.verifiedSha ?? "")) {
+    throw new Error("verified SHA must be an exact Git commit");
+  }
+  if (!/^prj_[A-Za-z0-9]{8,80}$/u.test(input.vercelProjectId ?? "")) {
+    throw new Error("Vercel project ID is invalid");
+  }
+  if (!/^dpl_[A-Za-z0-9]{20,80}$/u.test(input.stagedDeploymentId ?? "")) {
+    throw new Error("staged deployment ID is invalid");
+  }
+  const stagedTarget = exactHttpsOrigin(
+    input.stagedDeploymentUrl,
+    "staged deployment URL",
+  );
+  if (!stagedTarget.hostname.endsWith(".vercel.app")) {
+    throw new Error("staged deployment URL must use a deployment-specific Vercel host");
+  }
+  const productionTarget = exactHttpsOrigin(
+    input.productionOrigin,
+    "production origin",
+  );
+  if (
+    productionTarget.origin !== CANONICAL_PRODUCTION_ORIGIN ||
+    input.productionOrigin !== CANONICAL_PRODUCTION_ORIGIN
+  ) {
+    throw new Error("production origin is not the canonical Programmable domain");
+  }
+  if (
+    input.expectedMode !== undefined &&
+    input.expectedMode !== input.policy.mode
+  ) {
+    throw new Error("staged runtime mode differs from the preflight policy");
+  }
+  const timestamp = new Date(input.timestamp ?? Date.now());
+  if (!Number.isFinite(timestamp.getTime())) {
+    throw new Error("release attestation timestamp is invalid");
+  }
+  const attestation = Object.freeze({
+    schemaVersion: 1,
+    verifiedSha: input.verifiedSha,
+    vercelProjectId: input.vercelProjectId,
+    stagedDeploymentId: input.stagedDeploymentId,
+    stagedDeploymentUrl: stagedTarget.origin,
+    productionOrigin: CANONICAL_PRODUCTION_ORIGIN,
+    policyMode: input.policy.mode,
+    indexedFlags: input.policy.indexedFlags,
+    workerActivationFlags: input.policy.workerActivationFlags,
+    timestamp: timestamp.toISOString(),
+  });
+  const json = canonicalJson(attestation);
+  return Object.freeze({
+    attestation,
+    json,
+    sha256: createHash("sha256").update(json, "utf8").digest("hex"),
   });
 }
 
@@ -151,14 +380,73 @@ function argumentsFrom(argv) {
 
 function main() {
   const args = argumentsFrom(process.argv.slice(2));
+  const expectations = readReleasePolicyExpectations(process.cwd());
   const result = evaluateReadModelDeployPolicy(
     readFileSync(resolve(args["env-file"]), "utf8"),
     process.env,
+    expectations,
   );
+  if (!result.policyReady) {
+    throw new Error(
+      [
+        ...result.invalidFlagNames,
+        ...result.invalidNonSecretEnvironmentNames,
+      ].length > 0
+        ? `release environment preflight failed: ${[
+            ...result.invalidFlagNames,
+            ...result.invalidNonSecretEnvironmentNames,
+          ].join(", ")}`
+        : "release environment preflight failed",
+    );
+  }
+  if (!result.commitmentsReady) {
+    throw new Error(
+      `indexed/shadow release requires pinned commitments: ${result.invalidCommitmentNames.join(", ")}`,
+    );
+  }
+  let attestation;
+  if (args["attestation-output"]) {
+    const requiredAttestationArguments = [
+      "verified-sha",
+      "vercel-project-id",
+      "staged-deployment-id",
+      "staged-target-url",
+      "production-origin",
+      "expected-mode",
+    ];
+    const missing = requiredAttestationArguments.filter((name) => !args[name]);
+    if (missing.length > 0) {
+      throw new Error(`release attestation arguments missing: ${missing.join(", ")}`);
+    }
+    attestation = createStagedReleaseAttestation({
+      policy: result,
+      verifiedSha: args["verified-sha"],
+      vercelProjectId: args["vercel-project-id"],
+      stagedDeploymentId: args["staged-deployment-id"],
+      stagedDeploymentUrl: args["staged-target-url"],
+      productionOrigin: args["production-origin"],
+      expectedMode: args["expected-mode"],
+    });
+    writeFileSync(resolve(args["attestation-output"]), attestation.json, {
+      encoding: "utf8",
+      mode: 0o600,
+      flag: "wx",
+    });
+  }
   if (args["github-output"]) {
     appendFileSync(
       resolve(args["github-output"]),
-      `mode=${result.mode}\nevidence_required=${result.evidenceRequired}\n`,
+      [
+        `mode=${result.mode}`,
+        `evidence_required=${result.evidenceRequired}`,
+        ...(attestation
+          ? [
+              `attestation_path=${resolve(args["attestation-output"])}`,
+              `attestation_sha256=${attestation.sha256}`,
+            ]
+          : []),
+        "",
+      ].join("\n"),
       { encoding: "utf8", mode: 0o600 },
     );
   }
@@ -167,17 +455,19 @@ function main() {
       mode: result.mode,
       evidenceRequired: result.evidenceRequired,
       exactFalseFlags:
-        RELEASE_GATED_FLAG_NAMES.length - result.nonLegacyFlags.length,
+        RELEASE_GATED_FLAG_NAMES.filter(
+          (name) => result.indexedFlags[name] === false,
+        ).length,
       gatedFlags: result.nonLegacyFlags,
+      workerActivationFlags: result.workerActivationFlags,
+      policyReady: result.policyReady,
       commitmentsReady: result.commitmentsReady,
       runtimeProviderBinding: result.runtimeProviderBinding,
+      ...(attestation
+        ? { attestationSha256: attestation.sha256 }
+        : {}),
     })}\n`,
   );
-  if (!result.commitmentsReady) {
-    throw new Error(
-      `indexed/shadow release requires pinned commitments: ${result.invalidCommitmentNames.join(", ")}`,
-    );
-  }
 }
 
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {

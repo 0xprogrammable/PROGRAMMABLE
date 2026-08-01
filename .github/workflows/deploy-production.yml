@@ -181,6 +181,44 @@ jobs:
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
 
+      - name: Attest exact staged release policy
+        id: release-attestation
+        env:
+          PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_QUICKNODE_MAINNET_RPC_ENDPOINT_COMMITMENT }}
+          STAGED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          POLICY_MODE: ${{ steps.read-model-policy.outputs.mode }}
+        run: >-
+          npm run perf:read-model:deploy-policy --
+          --env-file .vercel/.env.production.local
+          --verified-sha "$GITHUB_SHA"
+          --vercel-project-id "$VERCEL_PROJECT_ID"
+          --staged-deployment-id "$STAGED_DEPLOYMENT_ID"
+          --staged-target-url "$STAGED_TARGET_URL"
+          --production-origin "https://programmable.family"
+          --expected-mode "$POLICY_MODE"
+          --attestation-output "$RUNNER_TEMP/staged-release-attestation.json"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Preserve staged release attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staged-release-attestation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.release-attestation.outputs.attestation_path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record staged release attestation
+        run: |
+          {
+            echo "## Staged release attestation"
+            echo
+            echo "- SHA-256: \`${{ steps.release-attestation.outputs.attestation_sha256 }}\`"
+            echo "- Runtime mode: \`${{ steps.read-model-policy.outputs.mode }}\`"
+            echo "- Production target: https://programmable.family"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Verify staged deployment
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
@@ -188,6 +226,113 @@ jobs:
           curl --fail --silent --show-error \
             --retry 12 --retry-all-errors --retry-delay 5 \
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
+
+      - name: Smoke legacy staged public APIs
+        if: steps.read-model-policy.outputs.evidence_required == 'false'
+        env:
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+        run: |
+          node --input-type=module <<'NODE'
+          const origin = new URL(process.env.STAGED_TARGET_URL);
+          if (
+            origin.protocol !== "https:" ||
+            !origin.hostname.endsWith(".vercel.app") ||
+            origin.pathname !== "/" ||
+            origin.search ||
+            origin.hash
+          ) {
+            throw new Error("legacy smoke target is not an exact Vercel origin");
+          }
+
+          const requestJson = async (path) => {
+            let lastError;
+            for (let attempt = 1; attempt <= 12; attempt += 1) {
+              try {
+                const response = await fetch(new URL(path, origin), {
+                  redirect: "error",
+                  headers: { Accept: "application/json" },
+                  signal: AbortSignal.timeout(30_000),
+                });
+                const text = await response.text();
+                if (!response.ok) {
+                  throw new Error(`${path} returned ${response.status}`);
+                }
+                if (Buffer.byteLength(text, "utf8") > 2 * 1024 * 1024) {
+                  throw new Error(`${path} returned an oversized response`);
+                }
+                return JSON.parse(text);
+              } catch (error) {
+                lastError = error;
+                if (attempt < 12) {
+                  await new Promise((resolve) => setTimeout(resolve, 5_000));
+                }
+              }
+            }
+            throw lastError ?? new Error(`${path} failed`);
+          };
+
+          const health = await requestJson("/api/ops/health");
+          if (health.status !== "healthy") {
+            throw new Error("legacy staged health is not healthy");
+          }
+          const explore = await requestJson(
+            "/api/explore?limit=6&page=1&sort=market-cap",
+          );
+          if (explore.status !== "ready" || !Array.isArray(explore.tokens)) {
+            throw new Error("legacy staged Explore is not ready");
+          }
+          const releaseToken = explore.tokens.find(
+            (token) =>
+              /^0x[0-9a-fA-F]{40}$/.test(token?.tokenAddress ?? "") &&
+              /^0x[0-9a-fA-F]{40}$/.test(token?.creatorAddress ?? ""),
+          );
+          if (!releaseToken) {
+            throw new Error("legacy staged Explore has no release-corpus identity");
+          }
+          const tokenList = await requestJson("/api/indexers/v1/token-list");
+          if (
+            !Array.isArray(tokenList.tokens) ||
+            !tokenList.tokens.some(
+              (token) =>
+                String(token?.address ?? token?.tokenAddress ?? "").toLowerCase() ===
+                releaseToken.tokenAddress.toLowerCase(),
+            )
+          ) {
+            throw new Error("legacy staged token list is not populated with the release token");
+          }
+          const tokenDetail = await requestJson(
+            `/api/explore/token?address=${encodeURIComponent(releaseToken.tokenAddress)}`,
+          );
+          if (
+            tokenDetail.status !== "ready" ||
+            tokenDetail.token?.tokenAddress?.toLowerCase() !==
+              releaseToken.tokenAddress.toLowerCase()
+          ) {
+            throw new Error("legacy staged token lookup did not resolve the release token");
+          }
+          const profile = await requestJson(
+            `/api/explore/profile?account=${encodeURIComponent(releaseToken.creatorAddress)}`,
+          );
+          if (
+            profile.status !== "ready" ||
+            profile.account?.toLowerCase() !== releaseToken.creatorAddress.toLowerCase() ||
+            !Array.isArray(profile.tokens) ||
+            !profile.tokens.some(
+              (token) =>
+                token?.tokenAddress?.toLowerCase() ===
+                releaseToken.tokenAddress.toLowerCase(),
+            )
+          ) {
+            throw new Error("legacy staged creator profile did not resolve the release token");
+          }
+          process.stdout.write(
+            `${JSON.stringify({
+              status: "verified-legacy-staged-public-apis",
+              tokenAddress: releaseToken.tokenAddress,
+              creatorAddress: releaseToken.creatorAddress,
+            })}\n`,
+          );
+          NODE
 
       - name: Record legacy-only read path
         if: steps.read-model-policy.outputs.evidence_required == 'false'
@@ -234,14 +379,31 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npm run perf:read-model:gate
 
+      - name: Reverify staged binding immediately before promotion
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          EXPECTED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+        run: |
+          binding_output="$RUNNER_TEMP/pre-promote-staged-binding"
+          test ! -e "$binding_output"
+          npm run perf:read-model:staged-deployment -- \
+            --target-url "$STAGED_TARGET_URL" \
+            --github-output "$binding_output"
+          grep -Fx "deployment_id=$EXPECTED_DEPLOYMENT_ID" "$binding_output"
+          grep -Fx "target_url=$STAGED_TARGET_URL" "$binding_output"
+
       - name: Promote verified staged deployment
         id: promote
+        continue-on-error: true
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
         run: vercel promote "$DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
 
       - name: Verify promoted production routes
+        id: post-promotion
+        if: steps.promote.outcome == 'success'
         env:
           EVIDENCE_REQUIRED: ${{ steps.read-model-policy.outputs.evidence_required }}
           EVIDENCE_PATH: ${{ steps.read-model-capture.outputs.evidence_path }}
@@ -261,27 +423,71 @@ jobs:
               --git-head "$GITHUB_SHA"
           fi
 
-      - name: Roll back a failed promotion
-        if: failure() && steps.promote.outcome == 'success'
+      - name: Reconcile an unsuccessful promotion attempt
+        if: >-
+          always() &&
+          steps.promote.outcome != 'skipped' &&
+          (steps.promote.outcome != 'success' ||
+          steps.post-promotion.outcome != 'success')
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          CANDIDATE_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           ROLLBACK_DEPLOYMENT_URL: ${{ steps.production-before.outputs.deployment_url }}
-        run: >-
-          vercel rollback "$ROLLBACK_DEPLOYMENT_URL"
-          --yes --timeout 60s --token="$VERCEL_TOKEN"
+          PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
+        run: |
+          observed_previous=false
+          for attempt in $(seq 1 12); do
+            binding_output="$RUNNER_TEMP/production-after-promote-$attempt"
+            if npm run perf:read-model:production-binding -- \
+              --target-url "https://programmable.family" \
+              --github-output "$binding_output"; then
+              current_deployment_id="$(sed -n 's/^deployment_id=//p' "$binding_output")"
+              if [ "$current_deployment_id" = "$CANDIDATE_DEPLOYMENT_ID" ]; then
+                if ! vercel rollback "$ROLLBACK_DEPLOYMENT_URL" \
+                  --yes --timeout 60s --token="$VERCEL_TOKEN"; then
+                  echo "Rollback command returned an uncertain result; verifying the live binding" >&2
+                fi
+                rollback_verified=false
+                for rollback_attempt in $(seq 1 12); do
+                  rollback_output="$RUNNER_TEMP/verified-rollback-binding-$rollback_attempt"
+                  if npm run perf:read-model:production-binding -- \
+                    --target-url "https://programmable.family" \
+                    --expected-deployment-id "$PREVIOUS_DEPLOYMENT_ID" \
+                    --expected-git-head "$PREVIOUS_GIT_HEAD" \
+                    --github-output "$rollback_output"; then
+                    rollback_verified=true
+                    break
+                  fi
+                  sleep 5
+                done
+                test "$rollback_verified" = "true"
+                exit 0
+              fi
+              if [ "$current_deployment_id" = "$PREVIOUS_DEPLOYMENT_ID" ]; then
+                observed_previous=true
+              else
+                echo "Production resolved to an unexpected deployment" >&2
+                exit 1
+              fi
+            fi
+            sleep 5
+          done
+          test "$observed_previous" = "true"
+          final_output="$RUNNER_TEMP/verified-previous-production-binding"
+          npm run perf:read-model:production-binding -- \
+            --target-url "https://programmable.family" \
+            --expected-deployment-id "$PREVIOUS_DEPLOYMENT_ID" \
+            --expected-git-head "$PREVIOUS_GIT_HEAD" \
+            --github-output "$final_output"
 
-      - name: Verify rollback binding
-        if: failure() && steps.promote.outcome == 'success'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          ROLLBACK_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
-          ROLLBACK_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
-        run: >-
-          npm run perf:read-model:production-binding --
-          --target-url "https://programmable.family"
-          --expected-deployment-id "$ROLLBACK_DEPLOYMENT_ID"
-          --expected-git-head "$ROLLBACK_GIT_HEAD"
-          --github-output "$RUNNER_TEMP/verified-rollback-binding"
+      - name: Fail an unsuccessful promotion attempt
+        if: >-
+          always() &&
+          steps.promote.outcome != 'skipped' &&
+          (steps.promote.outcome != 'success' ||
+          steps.post-promotion.outcome != 'success')
+        run: exit 1
 
       - name: Record deployment
         env:
