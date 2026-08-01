@@ -92,6 +92,61 @@ test("ordinary fixed-supply launch is ready without a custom hook", () => {
   assert.equal(report.requiredGates.some(({ id }) => id.startsWith("callback-")), false);
 });
 
+test("mutable public token metadata requires a disclosed owner", () => {
+  const submission = readySubmission();
+  submission.publicMetadata.token.metadataMutable = true;
+  submission.publicMetadata.token.metadataOwner = null;
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.ok(report.findings.some(({ code, path }) => code === "PUBLIC_METADATA_OWNER_MISSING" && path === "$.publicMetadata.token.metadataOwner"));
+});
+
+test("Unicode confusables enter identity review instead of automatic rejection", () => {
+  const submission = readySubmission();
+  submission.publicMetadata.project.name = "Un\u0456swap Garden";
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code }) => code === "PUBLIC_METADATA_UNICODE_REVIEW_REQUIRED"));
+  assert.ok(report.requiredGates.some(({ id }) => id === "public-metadata-unicode-and-affiliation-review"));
+});
+
+test("claimed affiliations require evidence and remain review-owned", () => {
+  const submission = readySubmission();
+  submission.publicMetadata.claimedAffiliations.push({
+    organization: "Example Provider",
+    relationship: "partner",
+    evidenceUri: null
+  });
+
+  const missingEvidence = analyzeSubmission(submission, { schema });
+  assert.ok(missingEvidence.findings.some(({ code }) => code === "PUBLIC_AFFILIATION_EVIDENCE_MISSING"));
+
+  submission.publicMetadata.claimedAffiliations.at(-1).evidenceUri = "https://provider.example/partnerships/project";
+  const evidenced = analyzeSubmission(submission, { schema });
+  assert.equal(evidenced.decision, "PROTOTYPE_READY", JSON.stringify(evidenced.findings));
+  assert.ok(evidenced.findings.some(({ code }) => code === "PUBLIC_AFFILIATION_REQUIRES_REVIEW"));
+});
+
+test("unknown provider support creates review only and does not reject the project", () => {
+  const submission = readySubmission();
+  submission.publicMetadata.providerPresentations.push({
+    provider: "new-provider",
+    supportStatus: "unknown",
+    tags: ["onchain-game"],
+    labels: ["Onchain game"],
+    evidenceUri: null
+  });
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ severity, code }) => severity === "warning" && code === "PROVIDER_SUPPORT_REVIEW_REQUIRED"));
+  assert.ok(report.requiredGates.some(({ id, stage }) => id === "provider-presentation-and-support-review" && stage === "external"));
+});
+
 test("external-call gate describes the declared model when no custom hook is used", () => {
   const submission = noCustomHookSubmission();
   submission.capabilities.externalCalls = {
@@ -2613,6 +2668,38 @@ test("unsupported provider claims are rejected anywhere in the package", () => {
   }
 });
 
+test("public UI source claims are checked while comments and test sources are ignored", () => {
+  const destinationRoot = fs.mkdtempSync(path.join(repositoryRoot, ".skill-ui-claim-scan-test-"));
+  try {
+    const { modelRoot, submission } = createPrototypePackage(destinationRoot);
+    const uiPath = path.resolve(repositoryRoot, submission.integration.platformHandoff.uiSourcePaths[0]);
+    const testPath = path.resolve(repositoryRoot, submission.integration.platformHandoff.testPaths[0]);
+    fs.writeFileSync(uiPath, "// This hook is officially approved by Uniswap.\nexport const publicCopy = 'Prototype evidence only.';\n");
+    fs.writeFileSync(testPath, "export const forbiddenCopyFixture = 'This hook is unruggable.';\n");
+    rewritePrototypePackageArtifacts(modelRoot, submission);
+
+    const commentAndTestOnly = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.equal(commentAndTestOnly.status, 0, commentAndTestOnly.stderr || commentAndTestOnly.stdout);
+
+    fs.writeFileSync(uiPath, "export const publicCopy = 'This hook is officially approved by Uniswap.';\n");
+    rewritePrototypePackageArtifacts(modelRoot, submission);
+    const visibleClaim = childProcess.spawnSync(
+      process.execPath,
+      [path.join(skillRoot, "scripts", "verify-package.mjs"), "--repository-root", repositoryRoot, modelRoot],
+      { cwd: repositoryRoot, encoding: "utf8", shell: false }
+    );
+    assert.notEqual(visibleClaim.status, 0);
+    const report = JSON.parse(visibleClaim.stdout);
+    assert.ok(report.errors.some((message) => /ui\.tsx contains an unsupported Uniswap verification/.test(message)), JSON.stringify(report.errors));
+  } finally {
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+  }
+});
+
 test("scaffolder rejects a symlinked destination inside the repository", () => {
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), "programmable-skill-symlink-outside-"));
   const link = path.join(repositoryRoot, ".skill-symlink-test");
@@ -2824,6 +2911,36 @@ function completeSignatureScheme({ erc1271 }) {
   };
 }
 
+function completePublicMetadata() {
+  return {
+    project: {
+      name: "Swap Observer",
+      description: "A public project that exposes a pool-scoped aggregate after each completed canonical-pool swap.",
+      projectUri: "https://example.invalid/swap-observer",
+      logoUri: "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3g3t3u7v6d2v4x5y6z7a8b9c0/project-logo.svg",
+      logoContentHash: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      metadataMutable: false,
+      metadataOwner: null
+    },
+    token: {
+      name: "Observer Token",
+      symbol: "OBS",
+      metadataUri: "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3g3t3u7v6d2v4x5y6z7a8b9c0/token.json",
+      metadataContentHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      logoUri: "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3g3t3u7v6d2v4x5y6z7a8b9c0/token-logo.svg",
+      logoContentHash: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      metadataMutable: false,
+      metadataOwner: null
+    },
+    claimedAffiliations: [{
+      organization: "Uniswap",
+      relationship: "technology-use",
+      evidenceUri: null
+    }],
+    providerPresentations: []
+  };
+}
+
 function readySubmission() {
   const submission = structuredClone(template);
   submission.assets[1].initialSupply = "1000000000000000000000000000";
@@ -2836,6 +2953,7 @@ function readySubmission() {
     category: "market-structure",
     whyV4: "The aggregate is updated atomically after the canonical pool completes each swap and remains scoped by PoolId."
   };
+  submission.publicMetadata = completePublicMetadata();
   submission.pool = {
     currency0: "eth",
     currency1: "launched-token",

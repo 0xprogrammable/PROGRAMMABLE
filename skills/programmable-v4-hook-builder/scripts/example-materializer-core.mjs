@@ -67,6 +67,7 @@ export function buildExampleBaseline(template) {
     category: "market-structure",
     whyV4: "The aggregate is updated atomically after the canonical pool completes each swap and remains scoped by PoolId."
   };
+  submission.publicMetadata = completePublicMetadata();
   submission.pool = {
     currency0: "eth",
     currency1: "launched-token",
@@ -359,6 +360,36 @@ function completeLaunchLifecycle() {
     feesAndClaims: lifecyclePhase("Pool liquidity providers receive the declared LP fee through core accounting.", "The hook creates no beneficiary liability or separate claim."),
     dependencyFailure: lifecyclePhase("The transaction caller encounters an atomic failure from one pinned dependency.", "A dependency failure reverts the complete action and leaves no partial hook or asset custody state."),
     retirement: lifecyclePhase("Users stop selecting this immutable model for new launches.", "Existing pools retain immutable behavior and users keep the declared exit paths.")
+  };
+}
+
+function completePublicMetadata() {
+  return {
+    project: {
+      name: "Swap Observer",
+      description: "A public project that exposes a pool-scoped aggregate after each completed canonical-pool swap.",
+      projectUri: "https://example.invalid/swap-observer",
+      logoUri: "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3g3t3u7v6d2v4x5y6z7a8b9c0/project-logo.svg",
+      logoContentHash: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      metadataMutable: false,
+      metadataOwner: null
+    },
+    token: {
+      name: "Observer Token",
+      symbol: "OBS",
+      metadataUri: "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3g3t3u7v6d2v4x5y6z7a8b9c0/token.json",
+      metadataContentHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      logoUri: "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3g3t3u7v6d2v4x5y6z7a8b9c0/token-logo.svg",
+      logoContentHash: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      metadataMutable: false,
+      metadataOwner: null
+    },
+    claimedAffiliations: [{
+      organization: "Uniswap",
+      relationship: "technology-use",
+      evidenceUri: null
+    }],
+    providerPresentations: []
   };
 }
 

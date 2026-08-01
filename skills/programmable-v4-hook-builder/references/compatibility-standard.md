@@ -256,6 +256,17 @@ fields empty or null. Do not add the event/reorg/backfill/freshness gate in that
 Quote and execute the same PoolKey, direction, amount semantics, and validated hookData. Router or SDK ambiguity is a
 blocking finding until an exact generation is selected.
 
+Bind public presentation separately from protocol behavior. Record the exact project name and description, token name
+and symbol, project/token URIs, logo URIs and content hashes, whether each metadata record is mutable, and the exact
+owner of every mutable record. Preserve Unicode names, but review compatibility forms, mixed-script confusables and
+protected provider lookalikes before display. Invisible controls and bidirectional overrides are not valid metadata.
+
+Record affiliations as structured relationships. `technology-use` means only that the project uses the named
+technology. Official, partner, sponsored, audit or other organizational claims require public attributable evidence and
+human verification. Record provider-facing tags and labels per provider with `not-requested`, `unknown`, or
+`provider-documented` support. Unknown support adds provider review only; it is not a compatibility rejection and must
+not be converted into a favorable support claim.
+
 Locally resolved package files are not primary GitHub source. Mark them as builder-declared local evidence, exclude
 them from primary source paths, and require a separate package-lock/install/closure gate before treating their version
 or integrity as verified.
@@ -318,6 +329,8 @@ self-assessment, not a badge. Programmable does not convert it into “safe.”
    conservation, failure behavior, proposal, threat model, and test plan agree.
 
 Schema-valid prose is not evidence that an equation is correct or a dependency claim is true.
+Review public UI and application strings as well as documents. Ignore comments and declared test fixtures, but reject
+unsupported approval, audit, safety, deployment and availability claims that would actually be shown to users.
 
 ## Platform profiles
 

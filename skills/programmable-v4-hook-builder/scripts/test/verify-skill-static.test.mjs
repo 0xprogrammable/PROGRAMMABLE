@@ -76,6 +76,7 @@ for (const requiredPath of [
   "scripts/example-materializer-core.mjs",
   "scripts/github-exact-object-resolver.mjs",
   "scripts/github-public-source-core.mjs",
+  "scripts/metadata-core.mjs",
   "scripts/public-claims-core.mjs",
   "scripts/verify-skill.mjs",
   "scripts/test/cross-chain-policy.test.mjs",

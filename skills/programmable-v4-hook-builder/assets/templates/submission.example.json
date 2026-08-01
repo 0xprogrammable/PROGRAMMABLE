@@ -17,6 +17,29 @@
     "beneficiary": null,
     "licenseDeclaration": null
   },
+  "publicMetadata": {
+    "project": {
+      "name": "Example Model",
+      "description": "Replace this example with the public project description shown to users and reviewers.",
+      "projectUri": null,
+      "logoUri": null,
+      "logoContentHash": null,
+      "metadataMutable": null,
+      "metadataOwner": null
+    },
+    "token": {
+      "name": "Example Token",
+      "symbol": "EXAMPLE",
+      "metadataUri": null,
+      "metadataContentHash": null,
+      "logoUri": null,
+      "logoContentHash": null,
+      "metadataMutable": null,
+      "metadataOwner": null
+    },
+    "claimedAffiliations": [],
+    "providerPresentations": []
+  },
   "target": {
     "chainId": 1,
     "network": "ethereum",

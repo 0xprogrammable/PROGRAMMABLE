@@ -22,7 +22,7 @@ import {
 } from "./review-target-core.mjs";
 import { validateFoundryBuildInfo } from "./build-info-core.mjs";
 import { parseCliOrExit } from "./cli-args.mjs";
-import { findUnsupportedPublicClaims } from "./public-claims-core.mjs";
+import { extractPublicClaimText, findUnsupportedPublicClaims } from "./public-claims-core.mjs";
 import {
   assertInsideRepository,
   resolveRepositoryRoot
@@ -679,15 +679,57 @@ function closingDelimiter(source, start, open, close) {
 }
 
 function rejectUnsupportedPublicClaims(claimErrors) {
-  const targets = packageEntries
+  const packageTargets = packageEntries
     .filter((entry) => entry.stat.isFile() && entry.stat.size <= MAX_FILE_BYTES && /\.(?:md|txt|json|sol|ya?ml)$/i.test(entry.path))
     .map((entry) => entry.path);
-  for (const target of targets) {
+  const scannedTargets = new Set();
+  for (const target of packageTargets) {
+    scannedTargets.add(path.resolve(target));
     const text = fs.readFileSync(target, "utf8");
     for (const finding of findUnsupportedPublicClaims(text)) {
       claimErrors.push(`${relative(target)} contains an unsupported ${finding} claim`);
     }
   }
+
+  for (const relativePath of declaredPublicSourcePaths(submission)) {
+    const extension = path.extname(relativePath).toLowerCase();
+    if (!/[.](?:[cm]?[jt]sx?|html?|vue|svelte)$/iu.test(extension)) continue;
+    if (!isCanonicalReviewTargetPath(relativePath)) continue;
+    const target = path.resolve(repositoryRoot, relativePath);
+    if (scannedTargets.has(target) || isTestLikePublicSourcePath(relativePath)) continue;
+    try {
+      const stat = fs.lstatSync(target);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FILE_BYTES) continue;
+      assertInsideRepository(repositoryRoot, target);
+    } catch {
+      continue;
+    }
+    scannedTargets.add(target);
+    const publicText = extractPublicClaimText(fs.readFileSync(target, "utf8"), extension);
+    for (const finding of findUnsupportedPublicClaims(publicText)) {
+      claimErrors.push(`${relativePath} contains an unsupported ${finding} claim in public UI or application text`);
+    }
+  }
+}
+
+function declaredPublicSourcePaths(value) {
+  const integration = value?.integration ?? {};
+  const routing = integration.routingAndDiscoverability ?? {};
+  const reconstruction = integration.dataReconstruction ?? {};
+  const handoff = integration.platformHandoff ?? {};
+  const testPaths = new Set([
+    ...(value?.implementation?.testPaths ?? []),
+    ...(integration.integrationTestPaths ?? []),
+    ...(routing.testPaths ?? []),
+    ...(reconstruction.testPaths ?? []),
+    ...(handoff.testPaths ?? []),
+    ...(value?.capabilityExtensions ?? []).flatMap((extension) => extension?.testPaths ?? [])
+  ]);
+  return declaredSourceAndTestPaths(value).filter((entry) => !testPaths.has(entry));
+}
+
+function isTestLikePublicSourcePath(value) {
+  return /(?:^|\/)(?:__tests__|test|tests|fixtures?|stories)(?:\/|$)|\.(?:test|spec|stories?|story)\.[^.\/]+$/iu.test(value);
 }
 
 function resolveRepositoryFile(

@@ -51,6 +51,7 @@ The deterministic report must contain:
 - Derived hook permission mask when `hook.used` is true, otherwise an explicit not-applicable result
 - Errors, blockers, warnings, and required actions with stable codes
 - Required test, review, operational, integration, and disclosure gates
+- Structured public project/token metadata, mutable owners, affiliation claims, and provider-facing presentation review
 
 Required gates are surface-derived. A contract-only, external-client, or ordinary no-hook project does not receive
 included-client or indexer gates unless it actually declares those surfaces. Hook and value-safety gates remain based
@@ -135,6 +136,11 @@ output, error behavior, unsupported state, dependency ids, source paths, executa
 records are plans and local evidence, not proof that the Programmable product or a third-party provider supports them.
 Contributor-controlled `submission.json`, `gate-status.json`, and evidence files cannot complete candidate,
 maintainer-review, deployment, verification, provider, or availability gates.
+
+Public metadata is part of the exact reviewed revision. Bind project and token names, symbol, URIs, logo content hashes,
+mutability and owners. Provider-facing tags and labels remain proposals until the named provider confirms them. Unknown
+provider support produces an external review gate, not a rejection. Scan visible copy in declared app and UI source;
+comments and declared test fixtures are not public claims.
 
 The machine-readable plan lives at `submission.json.integration.platformHandoff`. When `intended` is true, fill
 `handoffNotes`. Repository and test paths are optional contributor proposals until maintainers accept the exact

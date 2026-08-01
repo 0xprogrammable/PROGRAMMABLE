@@ -133,6 +133,19 @@ role, origin, exact chain address when it already exists, standard or non-standa
 upgrade path, and failure effect. Native ETH uses the zero address; WETH is a separate ERC-20 and must not be substituted
 silently.
 
+### Public project and token metadata
+
+Record the exact public project name and description, token name and symbol, project and token metadata URIs, logo URIs
+and byte hashes, mutability, and the owner of every mutable record. Do not silently normalize a builder's Unicode name.
+Instead, show the intended spelling and normalized identity for review when compatibility or cross-script confusable
+characters are present. Remove invisible and bidirectional control characters.
+
+Ask whether any organization is being presented as official, partner, sponsor, auditor, ecosystem affiliation, or only
+as technology used. Keep the exact relationship and public attributable evidence separate. For each intended external
+provider, record its slug, proposed tags and labels, and whether support is not requested, unknown, or documented by a
+provider-owned source. Unknown provider support remains an external review task; it never means the architecture is
+unsafe or rejected.
+
 ### Hook choice and callbacks
 
 Record `hook.used` explicitly. When it is false, keep the hook address/base, admission rules, callback policies,

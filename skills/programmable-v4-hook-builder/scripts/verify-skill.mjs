@@ -115,6 +115,7 @@ const required = [
   "scripts/github-exact-object-resolver.mjs",
   "scripts/github-public-source-core.mjs",
   "scripts/materialize-example.mjs",
+  "scripts/metadata-core.mjs",
   "scripts/official-launchpad-core.mjs",
   "scripts/package-dependency-contract.mjs",
   "scripts/public-claims-core.mjs",

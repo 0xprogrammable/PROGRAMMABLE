@@ -10,6 +10,7 @@
     "stage",
     "model",
     "builder",
+    "publicMetadata",
     "target",
     "assets",
     "launchLifecycle",
@@ -59,6 +60,82 @@
         "contact": { "type": ["string", "null"], "maxLength": 200 },
         "beneficiary": { "type": ["string", "null"], "pattern": "^0x[a-fA-F0-9]{40}$" },
         "licenseDeclaration": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    },
+    "publicMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "token", "claimedAffiliations", "providerPresentations"],
+      "properties": {
+        "project": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "description", "projectUri", "logoUri", "logoContentHash", "metadataMutable", "metadataOwner"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "description": { "type": "string", "minLength": 20, "maxLength": 500 },
+            "projectUri": { "type": ["string", "null"], "pattern": "^(?:https://|ipfs://|ar://)[^\\s]{1,2024}$" },
+            "logoUri": { "type": ["string", "null"], "pattern": "^(?:https://|ipfs://|ar://)[^\\s]{1,2024}$" },
+            "logoContentHash": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+            "metadataMutable": { "type": ["boolean", "null"] },
+            "metadataOwner": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 }
+          }
+        },
+        "token": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "symbol", "metadataUri", "metadataContentHash", "logoUri", "logoContentHash", "metadataMutable", "metadataOwner"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "symbol": { "type": "string", "minLength": 1, "maxLength": 16 },
+            "metadataUri": { "type": ["string", "null"], "pattern": "^(?:https://|ipfs://|ar://)[^\\s]{1,2024}$" },
+            "metadataContentHash": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+            "logoUri": { "type": ["string", "null"], "pattern": "^(?:https://|ipfs://|ar://)[^\\s]{1,2024}$" },
+            "logoContentHash": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+            "metadataMutable": { "type": ["boolean", "null"] },
+            "metadataOwner": { "type": ["string", "null"], "minLength": 1, "maxLength": 200 }
+          }
+        },
+        "claimedAffiliations": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["organization", "relationship", "evidenceUri"],
+            "properties": {
+              "organization": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "relationship": { "enum": ["none", "technology-use", "ecosystem", "official", "partner", "sponsored", "audited-by", "other"] },
+              "evidenceUri": { "type": ["string", "null"], "pattern": "^https://[^\\s]{1,2024}$" }
+            }
+          }
+        },
+        "providerPresentations": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["provider", "supportStatus", "tags", "labels", "evidenceUri"],
+            "properties": {
+              "provider": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 80 },
+              "supportStatus": { "enum": ["not-requested", "unknown", "provider-documented"] },
+              "tags": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 80 }
+              },
+              "labels": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1, "maxLength": 120 }
+              },
+              "evidenceUri": { "type": ["string", "null"], "pattern": "^https://[^\\s]{1,2024}$" }
+            }
+          }
+        }
       }
     },
     "target": {

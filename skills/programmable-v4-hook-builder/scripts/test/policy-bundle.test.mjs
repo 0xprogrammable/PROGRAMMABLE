@@ -13,6 +13,8 @@ for (const policyPath of [
   "references/official-launchpad-deployments.json",
   "references/official-model-patterns.md",
   "references/routing-and-discovery.md",
+  "scripts/metadata-core.mjs",
+  "scripts/public-claims-core.mjs",
   "scripts/official-launchpad-core.mjs"
 ]) {
   test(`policy bundle binds ${policyPath}`, () => {

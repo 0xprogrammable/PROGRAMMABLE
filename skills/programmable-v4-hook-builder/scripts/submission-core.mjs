@@ -4,6 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveOfficialLaunchProfile } from "./official-launchpad-core.mjs";
 import {
+  inspectPublicMetadataText,
+  PROTECTED_PROVIDER_KEYS,
+  publicIdentityKey,
+  publicResourceUriKind
+} from "./metadata-core.mjs";
+import {
   EXACT_PACKAGE_VERSION_PATTERN_SOURCE,
   isOfficialUniswapSdkPackage,
   NPM_PACKAGE_NAME_PATTERN_SOURCE,
@@ -14,6 +20,7 @@ import {
   declaredSoliditySourceAndTestPaths,
   isCanonicalReviewTargetPath
 } from "./review-target-contract.mjs";
+import { findUnsupportedPublicClaims } from "./public-claims-core.mjs";
 
 export const REPORT_VERSION = 2;
 export const STANDARD_VERSION = "1.1.0";
@@ -103,7 +110,10 @@ const approvedSchemaPatterns = new Set([
   EXACT_PACKAGE_VERSION_PATTERN_SOURCE,
   SHA512_INTEGRITY_PATTERN_SOURCE,
   "^[-a-z0-9]{3,8}$",
-  "^[-_a-zA-Z0-9]{1,32}$"
+  "^[-_a-zA-Z0-9]{1,32}$",
+  "^(?:https://|ipfs://|ar://)[^\\s]{1,2024}$",
+  "^https://[^\\s]{1,2024}$",
+  "^sha256:[0-9a-f]{64}$"
 ]);
 const policyBundlePaths = [
   "SKILL.md",
@@ -121,7 +131,9 @@ const policyBundlePaths = [
   "references/upstream-sources.md",
   "references/workflow.md",
   "scripts/official-launchpad-core.mjs",
-  "scripts/package-dependency-contract.mjs"
+  "scripts/package-dependency-contract.mjs",
+  "scripts/metadata-core.mjs",
+  "scripts/public-claims-core.mjs"
 ].map((relativePath) => path.resolve(skillRoot, relativePath));
 
 export function canonicalJson(value) {
@@ -365,6 +377,175 @@ export function analyzeSubmission(submission, { schema } = {}) {
       "Keep the category and describe the actors, value flows, authorities, failures and integration surfaces; do not force the project into an unrelated known profile."
     );
     gate("novel-project-architecture-review", "candidate", "The project uses a novel category that must be reviewed by behavior rather than rejected by label.");
+  }
+
+  const publicMetadata = objectAt(submission, "publicMetadata");
+  const projectMetadata = objectAt(publicMetadata, "project");
+  const tokenMetadata = objectAt(publicMetadata, "token");
+  for (const [field, value] of [
+    ["$.publicMetadata.project.name", projectMetadata.name],
+    ["$.publicMetadata.project.description", projectMetadata.description],
+    ["$.publicMetadata.token.name", tokenMetadata.name],
+    ["$.publicMetadata.token.symbol", tokenMetadata.symbol]
+  ]) requireResolvedText(value, field, "PUBLIC_METADATA_FIELD_UNRESOLVED", add);
+  if (projectMetadata.name === "Example Model" || tokenMetadata.name === "Example Token" || tokenMetadata.symbol === "EXAMPLE") {
+    add(
+      "blocker",
+      "PUBLIC_METADATA_TEMPLATE_VALUE",
+      "$.publicMetadata",
+      "The public metadata still contains a scaffold example value.",
+      "Replace the example project name, token name and symbol with the exact public values intended for review."
+    );
+  }
+
+  for (const [kind, metadata] of [["project", projectMetadata], ["token", tokenMetadata]]) {
+    const metadataPath = `$.publicMetadata.${kind}`;
+    if (typeof metadata.metadataMutable !== "boolean") {
+      add("blocker", "PUBLIC_METADATA_MUTABILITY_UNRESOLVED", `${metadataPath}.metadataMutable`, `The ${kind} metadata mutability is unresolved.`, "State whether the published metadata pointer or record can change after review.");
+    }
+    if (metadata.metadataMutable === true && !resolvedText(metadata.metadataOwner)) {
+      add("blocker", "PUBLIC_METADATA_OWNER_MISSING", `${metadataPath}.metadataOwner`, `Mutable ${kind} metadata has no disclosed owner.`, "Name the exact wallet, contract, multisig, GitHub owner or operating role that can change it.");
+    }
+  }
+
+  const publicResourceFields = [
+    ["$.publicMetadata.project.projectUri", projectMetadata.projectUri, null],
+    ["$.publicMetadata.project.logoUri", projectMetadata.logoUri, projectMetadata.logoContentHash],
+    ["$.publicMetadata.token.metadataUri", tokenMetadata.metadataUri, tokenMetadata.metadataContentHash],
+    ["$.publicMetadata.token.logoUri", tokenMetadata.logoUri, tokenMetadata.logoContentHash]
+  ];
+  for (const [field, uri, contentHash] of publicResourceFields) {
+    if (uri !== null && uri !== undefined && publicResourceUriKind(uri) === "unsupported") {
+      add("blocker", "PUBLIC_METADATA_URI_SCHEME_INVALID", field, "Public metadata resources must use HTTPS, IPFS or Arweave URIs.", "Use an https://, ipfs:// or ar:// URI and keep mutable ownership separate from the resource address.");
+    }
+    if (stage === "prototype" && resolvedText(uri) && !resolvedText(contentHash) && !field.endsWith("projectUri")) {
+      add(
+        "warning",
+        "PUBLIC_METADATA_CONTENT_HASH_PENDING",
+        field,
+        "A public logo or token metadata resource is declared without an exact SHA-256 content binding.",
+        "Record the fetched bytes as sha256:<digest> before candidate approval so reviewers can distinguish an asset change from an unchanged URI."
+      );
+      gate("public-metadata-resource-binding-review", "candidate", "At least one public metadata or logo resource needs exact byte and mutability review.");
+    }
+  }
+  if (stage === "prototype" && (!resolvedText(projectMetadata.logoUri) || !resolvedText(tokenMetadata.logoUri))) {
+    add(
+      "warning",
+      "PUBLIC_LOGO_PENDING",
+      "$.publicMetadata",
+      "The prototype does not yet bind both the public project and token logo resources.",
+      "A logo may remain pending during prototype work, but bind its URI, exact bytes, mutability and owner before provider or launch presentation."
+    );
+    gate("public-metadata-resource-binding-review", "candidate", "Public project and token presentation resources require exact binding before launch presentation.");
+  }
+
+  const publicTextFields = [
+    ["$.publicMetadata.project.name", projectMetadata.name, "public-name"],
+    ["$.publicMetadata.project.description", projectMetadata.description, "public-copy"],
+    ["$.publicMetadata.token.name", tokenMetadata.name, "public-name"],
+    ["$.publicMetadata.token.symbol", tokenMetadata.symbol, "public-name"]
+  ];
+  const affiliations = Array.isArray(publicMetadata.claimedAffiliations) ? publicMetadata.claimedAffiliations : [];
+  for (const [index, affiliation] of affiliations.entries()) {
+    publicTextFields.push([`$.publicMetadata.claimedAffiliations[${index}].organization`, affiliation?.organization, "affiliation"]);
+  }
+  const providerPresentations = Array.isArray(publicMetadata.providerPresentations) ? publicMetadata.providerPresentations : [];
+  for (const [index, presentation] of providerPresentations.entries()) {
+    for (const [labelIndex, label] of (presentation?.labels ?? []).entries()) {
+      publicTextFields.push([`$.publicMetadata.providerPresentations[${index}].labels[${labelIndex}]`, label, "provider-label"]);
+    }
+  }
+  for (const [field, value, role] of publicTextFields) {
+    if (typeof value !== "string") continue;
+    const inspection = inspectPublicMetadataText(value);
+    if (inspection.hasInvisibleOrBidi) {
+      add("hard", "PUBLIC_METADATA_CONTROL_CHARACTERS", field, "Public metadata contains invisible, control or bidirectional formatting characters.", "Remove invisible and bidirectional controls; public names and labels must render from explicit visible characters only.");
+    } else if (inspection.hasConfusableCharacters || inspection.hasCompatibilityCharacters) {
+      add(
+        "warning",
+        "PUBLIC_METADATA_UNICODE_REVIEW_REQUIRED",
+        field,
+        "Public metadata contains compatibility or cross-script characters that can resemble a different visible identity.",
+        "Keep the intended Unicode spelling, record its normalized display, and review it for impersonation instead of automatically rejecting a legitimate non-English name."
+      );
+      gate("public-metadata-unicode-and-affiliation-review", "candidate", "Unicode public names or labels require a human confusable and identity review.");
+    }
+    if (role !== "affiliation" && PROTECTED_PROVIDER_KEYS.has(inspection.identityKey)) {
+      add(
+        "warning",
+        "PROTECTED_PROVIDER_NAME_REQUIRES_REVIEW",
+        field,
+        `${value} normalizes to a protected provider identity.`,
+        "Use a distinct public name or add the exact structured affiliation and attributable evidence for human review; technology use does not imply endorsement."
+      );
+      gate("public-metadata-unicode-and-affiliation-review", "candidate", "A public name or provider-facing label overlaps a protected provider identity.");
+    }
+    for (const claim of findUnsupportedPublicClaims(value)) {
+      add("blocker", "PUBLIC_METADATA_UNSUPPORTED_CLAIM", field, `Public metadata contains an unsupported ${claim} claim.`, "Replace the claim with an exact factual status or a negative disclosure; external approval and availability remain separate evidence states.");
+    }
+  }
+
+  const affiliationKeys = new Set();
+  for (const [index, affiliation] of affiliations.entries()) {
+    const affiliationPath = `$.publicMetadata.claimedAffiliations[${index}]`;
+    const key = `${publicIdentityKey(affiliation?.organization)}\0${affiliation?.relationship ?? ""}`;
+    if (affiliationKeys.has(key)) add("blocker", "PUBLIC_AFFILIATION_DUPLICATE", affiliationPath, "The same public affiliation is declared more than once.", "Keep one exact relationship record per organization.");
+    affiliationKeys.add(key);
+    if (affiliation?.relationship === "none" && affiliation.evidenceUri !== null) {
+      add("blocker", "PUBLIC_AFFILIATION_NONE_CONFLICT", `${affiliationPath}.evidenceUri`, "A no-affiliation record cannot also present affiliation evidence.", "Remove the evidence URI or declare the exact claimed relationship for review.");
+    }
+    if (["official", "partner", "sponsored", "audited-by", "other"].includes(affiliation?.relationship) && !resolvedText(affiliation.evidenceUri)) {
+      add("blocker", "PUBLIC_AFFILIATION_EVIDENCE_MISSING", `${affiliationPath}.evidenceUri`, `The ${affiliation.relationship} relationship is claimed without public attributable evidence.`, "Link the provider-owned or otherwise attributable public evidence; a builder-authored statement is not confirmation.");
+    }
+    if (!["none", "technology-use"].includes(affiliation?.relationship)) {
+      add(
+        "warning",
+        "PUBLIC_AFFILIATION_REQUIRES_REVIEW",
+        affiliationPath,
+        `The submission declares a ${affiliation?.relationship ?? "missing"} relationship with ${affiliation?.organization ?? "an unnamed organization"}.`,
+        "Verify the evidence with the named organization before showing the relationship; the deterministic report does not confirm it."
+      );
+      gate("public-metadata-unicode-and-affiliation-review", "candidate", "Claimed public affiliations require attributable human verification.");
+    }
+  }
+
+  const providerKeys = new Set();
+  for (const [index, presentation] of providerPresentations.entries()) {
+    const presentationPath = `$.publicMetadata.providerPresentations[${index}]`;
+    if (providerKeys.has(presentation?.provider)) add("blocker", "PROVIDER_PRESENTATION_DUPLICATE", presentationPath, "One provider is declared more than once.", "Merge its requested tags, labels, support status and evidence into one provider record.");
+    providerKeys.add(presentation?.provider);
+    if (presentation?.supportStatus === "provider-documented" && !resolvedText(presentation.evidenceUri)) {
+      add("blocker", "PROVIDER_SUPPORT_EVIDENCE_MISSING", `${presentationPath}.evidenceUri`, "Provider support is marked documented without a public provider-owned source.", "Add the exact provider documentation or change supportStatus to unknown; unknown support enters review rather than rejection.");
+    }
+    if (presentation?.supportStatus === "unknown") {
+      add(
+        "warning",
+        "PROVIDER_SUPPORT_REVIEW_REQUIRED",
+        `${presentationPath}.supportStatus`,
+        `Support by ${presentation?.provider ?? "this provider"} is unknown and remains a provider review item, not a compatibility rejection.`,
+        "Keep the project in review, verify the provider's current public policy or contact path, and do not claim indexing, tags, routing or availability meanwhile."
+      );
+      gate("provider-presentation-and-support-review", "external", "At least one requested provider presentation has unknown support; only that provider can confirm it.");
+    } else if (presentation?.supportStatus === "provider-documented") {
+      add(
+        "warning",
+        "PROVIDER_SUPPORT_EVIDENCE_REVIEW_REQUIRED",
+        presentationPath,
+        `The builder linked documentation for ${presentation?.provider ?? "a provider"}, but the provider state has not been independently confirmed.`,
+        "Verify the exact provider-owned evidence, current revision, project eligibility, tag semantics and launch state before presenting support."
+      );
+      gate("provider-presentation-and-support-review", "external", "Provider-facing tags, labels and documented support require provider-attributable verification.");
+    } else if (((presentation?.tags?.length ?? 0) > 0 || (presentation?.labels?.length ?? 0) > 0) && presentation?.supportStatus === "not-requested") {
+      add(
+        "warning",
+        "PROVIDER_PRESENTATION_NOT_REQUESTED",
+        presentationPath,
+        "Provider-facing tags or labels are proposed even though provider support has not been requested.",
+        "Preserve the proposal for review without displaying it as provider metadata or support."
+      );
+      gate("provider-presentation-and-support-review", "external", "Proposed provider-facing labels require provider review before display.");
+    }
   }
 
   const target = objectAt(submission, "target");

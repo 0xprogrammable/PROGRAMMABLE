@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findUnsupportedPublicClaims } from "../public-claims-core.mjs";
+import { extractPublicClaimText, findUnsupportedPublicClaims } from "../public-claims-core.mjs";
+import { inspectPublicMetadataText, publicIdentityKey } from "../metadata-core.mjs";
 
 test("unrelated negation does not hide an unsupported provider claim", () => {
   const findings = findUnsupportedPublicClaims("Not a toy; audited by OpenZeppelin.");
@@ -152,4 +153,63 @@ test("Markdown styling and compatibility Unicode cannot hide an unsupported clai
   ]) {
     assert.ok(findUnsupportedPublicClaims(statement).length > 0, statement);
   }
+});
+
+test("JavaScript and JSX extraction keeps public strings while ignoring comments", () => {
+  const source = `
+    // This hook is approved by Uniswap.
+    /* This hook is unruggable. */
+    export const badge = "This hook is guaranteed safe.";
+    export const View = () => <p>This project is live on mainnet.</p>;
+  `;
+  const publicText = extractPublicClaimText(source, ".tsx");
+
+  assert.doesNotMatch(publicText, /approved by Uniswap/);
+  assert.doesNotMatch(publicText, /unruggable/);
+  assert.match(publicText, /guaranteed safe/);
+  assert.match(publicText, /live on mainnet/);
+  assert.deepEqual(findUnsupportedPublicClaims(publicText), [
+    "Safety, rug-free or risk-free status",
+    "Deployment, launch or availability"
+  ]);
+});
+
+test("HTML and component extraction checks visible copy and accessible labels", () => {
+  const html = `
+    <!-- This hook is approved by Uniswap. -->
+    <main><h1>This hook is unruggable.</h1><img alt="Production-ready hook"></main>
+    <script>const fixture = "Audited by Trail of Bits.";</script>
+  `;
+  const visible = extractPublicClaimText(html, ".html");
+
+  assert.doesNotMatch(visible, /approved by Uniswap/);
+  assert.doesNotMatch(visible, /Trail of Bits/);
+  assert.match(visible, /unruggable/);
+  assert.match(visible, /Production-ready/);
+});
+
+test("metadata identity inspection preserves legitimate Unicode while surfacing confusables", () => {
+  const japanese = inspectPublicMetadataText("東京トークン");
+  assert.equal(japanese.hasConfusableCharacters, false);
+  assert.equal(japanese.hasInvisibleOrBidi, false);
+
+  const cyrillic = inspectPublicMetadataText("Москва Токен");
+  assert.equal(cyrillic.hasConfusableCharacters, false);
+
+  const impersonation = inspectPublicMetadataText("Un\u0456swap");
+  assert.equal(impersonation.hasConfusableCharacters, true);
+  assert.equal(publicIdentityKey("Un\u0456swap"), "uniswap");
+
+  const hidden = inspectPublicMetadataText("UNI\u202eP");
+  assert.equal(hidden.hasInvisibleOrBidi, true);
+});
+
+test("escaped JavaScript strings cannot hide public claims", () => {
+  const publicText = extractPublicClaimText(
+    String.raw`export const copy = "This hook is \u0061pproved by Un\u0069swap.";`,
+    ".ts"
+  );
+  assert.deepEqual(findUnsupportedPublicClaims(publicText), [
+    "Uniswap verification, approval, certification or official status"
+  ]);
 });

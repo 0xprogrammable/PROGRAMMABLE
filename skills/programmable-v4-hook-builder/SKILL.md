@@ -63,6 +63,7 @@ For a non-technical builder:
 - Keep `prototype-tested`, `candidate-reviewed`, `deployed`, `source-verified`, `lifecycle-verified`, `routing-reviewed`,
   and `available` as separate states.
 - Never describe generated or internally tested code as safe, audited, approved, unruggable, verified, or live.
+- Bind public project/token names, symbol, URIs, logo bytes, mutability, owners, affiliations, and provider labels; Unicode confusables and unknown provider support go to review, not automatic architecture rejection.
 - Never sign, broadcast, deploy to any chain, open a pull request, submit to Hooklist, request routing, or publish without
   explicit human authorization for that exact external action.
 - The builder skill cannot accept its own submission. Only Programmable maintainers can create an acceptance record,
@@ -232,6 +233,7 @@ numeric score. Never lower a tier manually in prose.
 Before presenting `PROTOTYPE_READY`, independently check that the design card, structured submission, worked numerical
 examples, value conservation, failure behavior, proposal, threat model, and test plan agree. Free-text length and schema
 validity do not prove that a rule is meaningful or true.
+Compare public UI/application strings with `publicMetadata`; scan declared JS/TS/HTML/UI source while excluding comments and declared tests, and never hide approval, audit, safety, deployment or availability claims in user-facing copy.
 
 ### 4. Lock the architecture
 
