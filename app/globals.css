@@ -7765,6 +7765,5 @@ html[data-theme="dark"] .explore-intro > p {
 a[href],
 button:not(:disabled),
 summary {
-  cursor: pointer;
   touch-action: manipulation;
 }
