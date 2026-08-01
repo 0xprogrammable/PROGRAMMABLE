@@ -14,6 +14,7 @@ import {
   bytes32FromBytea,
   canonicalAddress,
   canonicalBytes32,
+  canonicalRawData,
   dataFromBytea,
   hexToBytes,
   parseNonnegativeIntegerText,
@@ -23,7 +24,9 @@ import {
 import type {
   CandidateRpcProvider,
   DualRpcCandidateWindowEvidence,
+  DualRpcDynamicRuntimeObservation,
   DualRpcRewardSnapshot,
+  ProjectorDynamicSourceTemplate,
 } from "./dual-rpc";
 import type { EnvioCandidate } from "./envio";
 import { DataPipelineError } from "./errors";
@@ -81,6 +84,7 @@ const ENVIO_CONTROL_SCOPE = Object.freeze({
   sourceGroup: "canonical-events",
   projectorVersion: "envio-adapter-v1",
 });
+const RELEASE_PROJECTOR_VERSION = "projector-v1";
 
 export type ProjectorProviderDatabaseBinding = Readonly<{
   type: "rpc_provider" | "envio_deployment" | "uniswap_subgraph";
@@ -517,6 +521,7 @@ type RuntimeState = Readonly<{
   epochId: string;
   pointerGeneration: string;
   providerDeploymentIds: readonly string[];
+  reorgGeneration: string;
 }>;
 
 function parseRuntimeState(
@@ -544,6 +549,7 @@ function parseRuntimeState(
     epochId: exactUuid(row.epoch_id),
     pointerGeneration: integerText(row.pointer_generation),
     providerDeploymentIds: Object.freeze(ids),
+    reorgGeneration: integerText(row.reorg_generation),
   });
 }
 
@@ -598,7 +604,11 @@ type ManifestDynamicTemplate = Readonly<{
   templateId: string;
   parentBindingId: string;
   parentBindingCommitment: HexBytes32;
+  parentSourceRole: string;
+  factoryEventType: string;
+  deployedAddressField: string;
   deployedSourceRole: string;
+  deployedArtifactCreationCodeCommitment: HexBytes32;
   normalizedRuntimeCodeHash: HexBytes32;
   expectedInstanceRuntimeCodeHash: HexBytes32 | null;
   immutableReferencesCommitment: HexBytes32;
@@ -625,7 +635,7 @@ function manifestHex(value: unknown): HexBytes32 {
 
 function parseManifest(
   rows: readonly Record<string, unknown>[],
-  state: RuntimeState,
+  state: Pick<RuntimeState, "epochId" | "pointerGeneration">,
 ): ParsedManifest {
   if (rows.length !== 1) return projectorValidationFailure();
   const row = rows[0]!;
@@ -666,9 +676,24 @@ function parseManifest(
       parentBindingCommitment: manifestHex(
         template.parent_factory_binding_commitment,
       ),
+      parentSourceRole: exactText(
+        template.parent_source_role,
+        /^[a-z][a-z0-9_/-]{0,95}$/u,
+      ),
+      factoryEventType: exactText(
+        template.factory_event_type,
+        /^[A-Za-z][A-Za-z0-9]{0,95}$/u,
+      ),
+      deployedAddressField: exactText(
+        template.deployed_address_field,
+        /^[A-Za-z][A-Za-z0-9]{0,95}$/u,
+      ),
       deployedSourceRole: exactText(
         template.deployed_source_role,
         /^(reward_vault|vesting_wallet)$/u,
+      ),
+      deployedArtifactCreationCodeCommitment: manifestHex(
+        template.deployed_artifact_creation_code_commitment,
       ),
       normalizedRuntimeCodeHash: manifestHex(
         template.normalized_runtime_code_hash,
@@ -818,6 +843,202 @@ function parseDynamicAttestations(input: {
   });
 }
 
+function classicDynamicTemplatesForPlan(input: {
+  manifest: ParsedManifest;
+  scope: ProjectorReleaseDatabaseScope;
+  state: RuntimeState;
+  envioProviderDeploymentId: string;
+  rpcProviderDeploymentIds: readonly [string, string];
+}): ProjectorDynamicSourceTemplate[] {
+  if (input.scope.releaseId !== "classic-v3") return [];
+  if (input.manifest.templates.length !== 1) {
+    return projectorValidationFailure();
+  }
+  const template = input.manifest.templates[0]!;
+  const parent = input.manifest.sources.find(
+    ({ bindingId }) => bindingId === template.parentBindingId,
+  );
+  if (
+    !parent ||
+    parent.sourceName !== "ClassicV3RewardVaultFactory" ||
+    parent.sourceRole !== "reward_vault_factory" ||
+    template.parentSourceRole !== parent.sourceRole ||
+    template.parentBindingCommitment !== parent.bindingCommitment ||
+    template.factoryEventType !== "ClassicRewardVaultDeployed" ||
+    template.deployedAddressField !== "vault" ||
+    template.deployedSourceRole !== "reward_vault"
+  ) {
+    return projectorValidationFailure();
+  }
+  return [
+    Object.freeze({
+      templateId: template.templateId,
+      contractName: "ClassicV3RewardVault",
+      model: "classic",
+      releaseVersion: "classic-v3",
+      parentFactoryAddress: parent.sourceAddress,
+      parentFactoryContractName: "ClassicV3RewardVaultFactory",
+      parentFactoryBindingId: parent.bindingId,
+      parentFactoryBindingCommitment: parent.bindingCommitment,
+      parentSourceRole: template.parentSourceRole,
+      factoryEventName: "ClassicRewardVaultDeployed",
+      deployedAddressField: "vault",
+      deployedSourceRole: "reward_vault",
+      deployedArtifactCreationCodeCommitment:
+        template.deployedArtifactCreationCodeCommitment,
+      expectedExactRuntimeCodeHash:
+        template.expectedInstanceRuntimeCodeHash,
+      expectedNormalizedRuntimeCodeHash:
+        template.normalizedRuntimeCodeHash,
+      expectedImmutableReferencesCommitment:
+        template.immutableReferencesCommitment,
+      expectedRuntimeByteLength: template.runtimeCodeLength,
+      immutableReferences: Object.freeze(
+        immutableReferencesFromSpec(template.immutableBindingSpec),
+      ),
+      immutableBindingSpec: Object.freeze(template.immutableBindingSpec),
+      immutableBindingCommitment: template.immutableBindingCommitment,
+      abiEventSetCommitment: template.abiEventSetCommitment,
+      templateCommitment: template.templateCommitment,
+      database: Object.freeze({
+        scope: Object.freeze({
+          releaseId: input.scope.releaseId,
+          modelId: input.scope.modelId,
+          sourceGroup: input.scope.sourceGroup,
+        }),
+        epochId: input.state.epochId,
+        pointerGeneration: input.state.pointerGeneration,
+        reorgGeneration: input.state.reorgGeneration,
+        envioProviderDeploymentId: input.envioProviderDeploymentId,
+        rpcProviderDeploymentIds: Object.freeze(
+          [...input.rpcProviderDeploymentIds],
+        ) as readonly [string, string],
+      }),
+    }),
+  ];
+}
+
+function parseProvisionalImmutableReferences(value: unknown) {
+  return Object.freeze(
+    exactArray(value, 64).map((entry) => {
+      const reference = exactRecord(entry);
+      const start = Number(integerText(reference.start));
+      const length = Number(integerText(reference.length));
+      if (
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(length) ||
+        start < 0 ||
+        length < 1
+      ) {
+        return projectorValidationFailure();
+      }
+      return Object.freeze({ start, length });
+    }),
+  );
+}
+
+function parseCurrentProvisionalDynamicSources(input: {
+  rows: readonly Record<string, unknown>[];
+  templates: readonly ProjectorDynamicSourceTemplate[];
+  cursor: ProjectorPlan["cursor"];
+  neutral: RuntimeState;
+  envioProviderDeploymentId: string;
+  rpcProviderDeploymentIds: readonly [string, string];
+}): VerifiedDynamicSourceLineage[] {
+  return input.rows.map((row) => {
+    exactUuid(row.provisional_page_id);
+    exactUuid(row.provisional_lineage_id);
+    exactUuid(row.runtime_code_evidence_id);
+    const templateId = exactUuid(row.dynamic_source_template_id);
+    const template = input.templates.find(
+      (candidate) => candidate.templateId === templateId,
+    );
+    const references = parseProvisionalImmutableReferences(
+      row.immutable_references,
+    );
+    const factoryBlockNumber = integerText(row.factory_block_number);
+    const factoryBlockGlobalLogIndex = integerText(
+      row.factory_block_global_log_index,
+    );
+    const snapshotBlockNumber = integerText(row.snapshot_block_number);
+    const exactRuntimeCodeHash = databaseBytes32(
+      row.expected_exact_runtime_code_hash,
+    );
+    const normalizedRuntimeCodeHash = databaseBytes32(
+      row.expected_normalized_runtime_code_hash,
+    );
+    const immutableReferencesCommitment = databaseBytes32(
+      row.expected_immutable_references_commitment,
+    );
+    const runtimeByteLength = integerText(row.expected_runtime_byte_length);
+    const referenceShape = JSON.stringify(references);
+    if (
+      !template ||
+      template.contractName !== "ClassicV3RewardVault" ||
+      template.releaseVersion !== "classic-v3" ||
+      exactUuid(row.release_epoch_id) !== template.database.epochId ||
+      integerText(row.release_pointer_generation) !==
+        template.database.pointerGeneration ||
+      exactUuid(row.ingestion_epoch_id) !== input.neutral.epochId ||
+      integerText(row.ingestion_pointer_generation) !==
+        input.neutral.pointerGeneration ||
+      integerText(row.reorg_generation) !==
+        template.database.reorgGeneration ||
+      integerText(row.expected_cursor_generation) !== input.cursor.generation ||
+      databaseBytes32(row.expected_cursor_block_hash) !==
+        input.cursor.blockHash ||
+      exactUuid(row.envio_provider_deployment_id) !==
+        input.envioProviderDeploymentId ||
+      exactUuid(row.rpc_provider_a_id) !== input.rpcProviderDeploymentIds[0] ||
+      exactUuid(row.rpc_provider_b_id) !== input.rpcProviderDeploymentIds[1] ||
+      databaseBytes32(row.snapshot_block_hash) !==
+        databaseBytes32(row.factory_block_hash) ||
+      snapshotBlockNumber !== factoryBlockNumber ||
+      databaseBytes32(row.provisional_coverage_commitment) ===
+        `0x${"00".repeat(32)}` ||
+      databaseBytes32(row.parent_candidate_commitment) ===
+        `0x${"00".repeat(32)}` ||
+      row.contract_name !== template.contractName ||
+      row.model !== template.model ||
+      row.release_version !== template.releaseVersion ||
+      databaseAddress(row.factory_address) !==
+        template.parentFactoryAddress ||
+      row.factory_contract_name !== template.parentFactoryContractName ||
+      exactRuntimeCodeHash !== template.expectedExactRuntimeCodeHash &&
+        template.expectedExactRuntimeCodeHash !== null ||
+      normalizedRuntimeCodeHash !==
+        template.expectedNormalizedRuntimeCodeHash ||
+      immutableReferencesCommitment !==
+        template.expectedImmutableReferencesCommitment ||
+      runtimeByteLength !== template.expectedRuntimeByteLength ||
+      referenceShape !== JSON.stringify(template.immutableReferences)
+    ) {
+      return projectorValidationFailure();
+    }
+    return canonicalDynamicSourceLineage({
+      attestationId: exactUuid(row.dynamic_source_attestation_id),
+      sourceAddress: databaseAddress(row.deployed_source_address),
+      contractName: template.contractName,
+      model: template.model,
+      releaseVersion: template.releaseVersion,
+      factoryAddress: template.parentFactoryAddress,
+      factoryContractName: template.parentFactoryContractName,
+      factoryCandidateId: exactText(
+        row.factory_candidate_id,
+        /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9]\d*)$/u,
+        192,
+      ),
+      factoryBlockNumber,
+      factoryBlockGlobalLogIndex,
+      expectedExactRuntimeCodeHash: exactRuntimeCodeHash,
+      expectedNormalizedRuntimeCodeHash: normalizedRuntimeCodeHash,
+      expectedImmutableReferencesCommitment: immutableReferencesCommitment,
+      expectedRuntimeByteLength: runtimeByteLength,
+      immutableReferences: references,
+    });
+  });
+}
+
 function parseCursor(rows: readonly Record<string, unknown>[]) {
   if (rows.length !== 1) return projectorValidationFailure();
   const row = rows[0]!;
@@ -910,6 +1131,176 @@ function candidatePageJson(input: {
   });
 }
 
+function sameStringPair(
+  left: readonly [string, string],
+  right: readonly [string, string],
+) {
+  return left[0] === right[0] && left[1] === right[1];
+}
+
+function provisionalParentInput(input: {
+  plan: ProjectorPlan;
+  snapshotBlock: string;
+  candidates: readonly EnvioCandidate[];
+  evidence: DualRpcCandidateWindowEvidence;
+  runtimeObservations: readonly DualRpcDynamicRuntimeObservation[];
+}) {
+  if (
+    input.candidates.length !== 1 ||
+    input.evidence.candidates.length !== 1 ||
+    input.evidence.coveredCandidateCount !== 1 ||
+    input.runtimeObservations.length !== 1
+  ) {
+    return projectorValidationFailure();
+  }
+  const candidate = input.candidates[0]!;
+  const verified = input.evidence.candidates[0]!;
+  const runtime = input.runtimeObservations[0]!;
+  const matchingTemplates = input.plan.dynamicSourceTemplates.filter(
+    (template) =>
+      template.templateId === runtime.template.templateId &&
+      template.parentFactoryAddress === candidate.sourceAddress &&
+      template.parentFactoryContractName === candidate.contractName &&
+      template.factoryEventName === candidate.eventName,
+  );
+  if (matchingTemplates.length !== 1) return projectorValidationFailure();
+  const template = matchingTemplates[0]!;
+  const deployedAddress = candidate.decodedPayload[template.deployedAddressField];
+  const configurationField = template.immutableBindingSpec
+    .factoryConfigurationField;
+  const configurationValue =
+    typeof configurationField === "string"
+      ? candidate.decodedPayload[configurationField]
+      : undefined;
+  let sourceAddress: HexAddress;
+  let factoryConfigurationCommitment: HexBytes32;
+  try {
+    sourceAddress = canonicalAddress(deployedAddress);
+    factoryConfigurationCommitment = canonicalBytes32(configurationValue);
+  } catch {
+    return projectorValidationFailure();
+  }
+  const runtimeCodeA = canonicalRawData(runtime.rawRuntimeCodeA);
+  const runtimeCodeB = canonicalRawData(runtime.rawRuntimeCodeB);
+  const reconstructedRuntimeCode = canonicalRawData(
+    runtime.reconstructedRuntimeCode,
+  );
+  const runtimeCodeHashA = canonicalBytes32(runtime.runtimeCodeHashA);
+  const runtimeCodeHashB = canonicalBytes32(runtime.runtimeCodeHashB);
+  const normalizedRuntimeCodeHashA = canonicalBytes32(
+    runtime.normalizedRuntimeCodeHashA,
+  );
+  const normalizedRuntimeCodeHashB = canonicalBytes32(
+    runtime.normalizedRuntimeCodeHashB,
+  );
+  const immutableReferencesCommitment = canonicalBytes32(
+    runtime.immutableReferencesCommitment,
+  );
+  const immutableValuesCommitment = canonicalBytes32(
+    runtime.immutableValuesCommitment,
+  );
+  const reconstructedRuntimeCodeHash = canonicalBytes32(
+    runtime.reconstructedRuntimeCodeHash,
+  );
+  const runtimeByteLength = String((runtimeCodeA.length - 2) / 2);
+  const immutableValues = runtime.immutableValues.map((value) =>
+    canonicalRawData(value),
+  );
+  if (
+    candidate.chainId !== 1 ||
+    candidate.contractName !== "ClassicV3RewardVaultFactory" ||
+    candidate.eventName !== "ClassicRewardVaultDeployed" ||
+    candidate.releaseHint.model !== "classic" ||
+    candidate.releaseHint.releaseVersion !== "classic-v3" ||
+    candidate.blockNumber !== input.snapshotBlock ||
+    verified.candidateId !== candidate.candidateId ||
+    verified.sourceAddress !== candidate.sourceAddress ||
+    verified.contractName !== candidate.contractName ||
+    verified.eventName !== candidate.eventName ||
+    verified.candidateBlockNumber !== candidate.blockNumber ||
+    verified.candidateBlockHash !== candidate.blockHash ||
+    verified.transactionHash !== candidate.transactionHash ||
+    verified.payloadHash !== candidate.payloadHash ||
+    verified.sourceKind !== "static" ||
+    verified.model !== "classic" ||
+    verified.releaseVersion !== "classic-v3" ||
+    input.evidence.coverage.throughBlockNumber !== candidate.blockNumber ||
+    input.evidence.coverage.throughBlockHash !== candidate.blockHash ||
+    input.evidence.coverage.throughBlockGlobalLogIndex !==
+      String(candidate.blockGlobalLogIndex) ||
+    runtime.chainId !== 1 ||
+    runtime.parentCandidateId !== candidate.candidateId ||
+    runtime.sourceAddress !== sourceAddress ||
+    runtime.deploymentBlockNumber !== candidate.blockNumber ||
+    runtime.deploymentBlockHash !== candidate.blockHash ||
+    !sameStringPair(runtime.providerIdentities, input.evidence.providerIdentities) ||
+    !sameStringPair(
+      runtime.providerVendorGroups,
+      input.evidence.providerVendorGroups,
+    ) ||
+    !sameStringPair(
+      runtime.providerEndpointCommitments,
+      input.evidence.providerEndpointCommitments,
+    ) ||
+    !sameStringPair(
+      runtime.providerOriginCommitments,
+      input.evidence.providerOriginCommitments,
+    ) ||
+    runtimeCodeA !== runtimeCodeB ||
+    runtimeCodeA !== reconstructedRuntimeCode ||
+    runtimeCodeHashA !== runtimeCodeHashB ||
+    runtimeCodeHashA !== reconstructedRuntimeCodeHash ||
+    keccak256(runtimeCodeA) !== runtimeCodeHashA ||
+    normalizedRuntimeCodeHashA !== normalizedRuntimeCodeHashB ||
+    normalizedRuntimeCodeHashA !==
+      template.expectedNormalizedRuntimeCodeHash ||
+    immutableReferencesCommitment !==
+      template.expectedImmutableReferencesCommitment ||
+    JSON.stringify(runtime.immutableReferences) !==
+      JSON.stringify(template.immutableReferences) ||
+    runtimeByteLength !== runtime.runtimeByteLengthA ||
+    runtimeByteLength !== runtime.runtimeByteLengthB ||
+    runtimeByteLength !== template.expectedRuntimeByteLength ||
+    factoryConfigurationCommitment !==
+      canonicalBytes32(runtime.factoryConfigurationCommitment) ||
+    runtime.providerCallCounts[0] !== 1 ||
+    runtime.providerCallCounts[1] !== 1 ||
+    (template.expectedExactRuntimeCodeHash !== null &&
+      runtimeCodeHashA !== template.expectedExactRuntimeCodeHash) ||
+    runtime.template.templateCommitment !== template.templateCommitment ||
+    runtime.template.database.epochId !== template.database.epochId ||
+    runtime.template.database.pointerGeneration !==
+      template.database.pointerGeneration ||
+    runtime.template.database.reorgGeneration !==
+      template.database.reorgGeneration
+  ) {
+    return projectorValidationFailure();
+  }
+  const eventSignature = candidate.orderedTopics[0];
+  if (!eventSignature) return projectorValidationFailure();
+  return Object.freeze({
+    candidate,
+    verified,
+    runtime,
+    template,
+    sourceAddress,
+    factoryConfigurationCommitment,
+    runtimeCodeA,
+    runtimeCodeB,
+    runtimeCodeHashA,
+    runtimeCodeHashB,
+    normalizedRuntimeCodeHashA,
+    normalizedRuntimeCodeHashB,
+    immutableReferencesCommitment,
+    immutableValues,
+    immutableValuesCommitment,
+    reconstructedRuntimeCode,
+    reconstructedRuntimeCodeHash,
+    runtimeByteLength,
+    eventSignature,
+  });
+}
+
 const COMMIT_ENVIO_PAGE_SQL = `select programmable_private.commit_envio_ingestion_page_v1(
   $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
   $6::bigint, $7::bigint, $8::numeric,
@@ -996,12 +1387,13 @@ export function createPostgresProjectorStore(input: {
         );
         const cursor = parseCursor(cursorRows);
         const dynamicSources: VerifiedDynamicSourceLineage[] = [];
+        const dynamicSourceTemplates: ProjectorDynamicSourceTemplate[] = [];
         for (const scope of releaseScopes) {
           const state = await readRuntimeState({
             transaction,
             scope: {
               ...scope,
-              projectorVersion: "projector-v1",
+              projectorVersion: RELEASE_PROJECTOR_VERSION,
             },
             providers,
           });
@@ -1035,7 +1427,30 @@ export function createPostgresProjectorStore(input: {
               scope,
             }),
           );
+          dynamicSourceTemplates.push(
+            ...classicDynamicTemplatesForPlan({
+              manifest,
+              scope,
+              state,
+              envioProviderDeploymentId,
+              rpcProviderDeploymentIds,
+            }),
+          );
         }
+        const provisionalRows = await transaction.query(
+          "select * from programmable_private.get_current_provisional_dynamic_sources_v1($1)",
+          [RELEASE_PROJECTOR_VERSION],
+        );
+        dynamicSources.push(
+          ...parseCurrentProvisionalDynamicSources({
+            rows: provisionalRows,
+            templates: dynamicSourceTemplates,
+            cursor,
+            neutral,
+            envioProviderDeploymentId,
+            rpcProviderDeploymentIds,
+          }),
+        );
         if (
           new Set(dynamicSources.map(({ sourceAddress }) => sourceAddress)).size !==
           dynamicSources.length
@@ -1045,9 +1460,11 @@ export function createPostgresProjectorStore(input: {
         return Object.freeze({
           cursor,
           dynamicSources: Object.freeze(dynamicSources),
+          dynamicSourceTemplates: Object.freeze(dynamicSourceTemplates),
           database: Object.freeze({
             epochId: neutral.epochId,
             pointerGeneration: neutral.pointerGeneration,
+            reorgGeneration: neutral.reorgGeneration,
             envioProviderDeploymentId,
             rpcProviderDeploymentIds: Object.freeze(
               rpcProviderDeploymentIds,
@@ -1057,7 +1474,314 @@ export function createPostgresProjectorStore(input: {
       });
     },
 
+    async stageVerifiedDynamicParents(stageInput): Promise<void> {
+      const timestamp = now().toISOString();
+      const parsed = provisionalParentInput(stageInput);
+      const { candidate, verified, template } = parsed;
+      if (
+        stageInput.blockComplete !== false ||
+        template.database.envioProviderDeploymentId !==
+          stageInput.plan.database.envioProviderDeploymentId ||
+        template.database.rpcProviderDeploymentIds[0] !==
+          stageInput.plan.database.rpcProviderDeploymentIds[0] ||
+        template.database.rpcProviderDeploymentIds[1] !==
+          stageInput.plan.database.rpcProviderDeploymentIds[1] ||
+        stageInput.plan.dynamicSources.some(
+          ({ sourceAddress }) => sourceAddress === parsed.sourceAddress,
+        )
+      ) {
+        return projectorValidationFailure();
+      }
+      const identity = [
+        template.database.epochId,
+        template.database.pointerGeneration,
+        template.database.reorgGeneration,
+        stageInput.plan.cursor.generation,
+        candidate.candidateId,
+        parsed.sourceAddress,
+        parsed.runtimeCodeHashA,
+        template.templateId,
+      ] as const;
+      const ids = Object.freeze({
+        run: deterministicUuid("provisional-dynamic-parent-run", ...identity),
+        observation: deterministicUuid(
+          "provisional-dynamic-parent-observation",
+          ...identity,
+        ),
+        block: deterministicUuid(
+          "provisional-dynamic-parent-block",
+          ...identity,
+        ),
+        runtime: deterministicUuid(
+          "provisional-dynamic-parent-runtime",
+          ...identity,
+        ),
+        page: deterministicUuid("provisional-dynamic-parent-page", ...identity),
+        lineage: deterministicUuid(
+          "provisional-dynamic-parent-lineage",
+          ...identity,
+        ),
+        attestation: deterministicUuid(
+          "provisional-dynamic-source-attestation",
+          ...identity,
+        ),
+        outcome: deterministicUuid(
+          "provisional-dynamic-parent-outcome",
+          ...identity,
+        ),
+      });
+      const safeEvidence = providerEvidenceV2("safe_head", {
+        chain_id: "1",
+        epoch_id: stageInput.plan.database.epochId,
+        pointer_generation: stageInput.plan.database.pointerGeneration,
+        provider_a_id: stageInput.plan.database.rpcProviderDeploymentIds[0],
+        provider_b_id: stageInput.plan.database.rpcProviderDeploymentIds[1],
+        reported_chain_id_a: "1",
+        reported_chain_id_b: "1",
+        head_a: stageInput.evidence.providerHeads[0],
+        head_b: stageInput.evidence.providerHeads[1],
+        finality_depth: "12",
+        safe_block_number: stageInput.evidence.safeBlockNumber,
+        safe_block_hash_a: stageInput.evidence.safeBlockHash,
+        safe_block_hash_b: stageInput.evidence.safeBlockHash,
+      });
+      const blockEvidence = providerEvidenceV2("block", {
+        chain_id: "1",
+        epoch_id: stageInput.plan.database.epochId,
+        pointer_generation: stageInput.plan.database.pointerGeneration,
+        observation_id: ids.observation,
+        block_number: candidate.blockNumber,
+        provider_a_block_hash: candidate.blockHash,
+        provider_b_block_hash: candidate.blockHash,
+      });
+      const runtimeEvidence = providerEvidenceV2("runtime_code", {
+        chain_id: "1",
+        release_id: template.database.scope.releaseId,
+        model_id: template.database.scope.modelId,
+        source_group: template.database.scope.sourceGroup,
+        epoch_id: template.database.epochId,
+        pointer_generation: template.database.pointerGeneration,
+        source_address: parsed.sourceAddress,
+        deployment_block_evidence_id: ids.block,
+        deployment_block_number: candidate.blockNumber,
+        deployment_block_hash: candidate.blockHash,
+        provider_a_id: stageInput.plan.database.rpcProviderDeploymentIds[0],
+        provider_b_id: stageInput.plan.database.rpcProviderDeploymentIds[1],
+        runtime_code_hash_a: parsed.runtimeCodeHashA,
+        runtime_code_hash_b: parsed.runtimeCodeHashB,
+        runtime_code_a: parsed.runtimeCodeA,
+        runtime_code_b: parsed.runtimeCodeB,
+        normalized_runtime_code_hash_a:
+          parsed.normalizedRuntimeCodeHashA,
+        normalized_runtime_code_hash_b:
+          parsed.normalizedRuntimeCodeHashB,
+        immutable_references_commitment:
+          parsed.immutableReferencesCommitment,
+        immutable_values: parsed.immutableValues,
+        immutable_values_commitment: parsed.immutableValuesCommitment,
+        reconstructed_runtime_code: parsed.reconstructedRuntimeCode,
+        reconstructed_runtime_code_hash:
+          parsed.reconstructedRuntimeCodeHash,
+      });
+      const parentCandidate = Object.freeze({
+        candidateId: candidate.candidateId,
+        blockNumber: candidate.blockNumber,
+        blockHash: candidate.blockHash,
+        transactionHash: candidate.transactionHash,
+        transactionIndex: String(candidate.transactionIndex),
+        blockGlobalLogIndex: String(candidate.blockGlobalLogIndex),
+        sourceAddress: candidate.sourceAddress,
+        eventSignature: parsed.eventSignature,
+        eventType: candidate.eventName,
+        decodedPayload: canonicalOccurrenceJson(candidate.decodedPayload),
+        payloadHash: candidate.payloadHash,
+        contentCommitment: verified.rawLogCommitment,
+        contractName: candidate.contractName,
+      });
+      const provisionalSource = Object.freeze({
+        dynamicSourceAttestationId: ids.attestation,
+        parentCandidateId: candidate.candidateId,
+        provisionalLineageId: ids.lineage,
+        runtimeCodeEvidenceId: ids.runtime,
+        templateId: template.templateId,
+      });
+      const executionTraceCommitment =
+        projectionExecutionTraceCommitmentV1(
+          stageInput.evidence.executionTrace,
+        );
+      const requestCommitment = keccak256(
+        toBytes(
+          JSON.stringify([
+            "provisional-dynamic-parent-v2",
+            ids.page,
+            template.database,
+            stageInput.plan.cursor,
+            parentCandidate,
+            provisionalSource,
+            runtimeEvidence.contentFingerprint,
+          ]),
+        ),
+      );
+      const resultCommitment = keccak256(
+        toBytes(
+          JSON.stringify([
+            ids.page,
+            ids.runtime,
+            ids.attestation,
+            runtimeEvidence.contentFingerprint,
+          ]),
+        ),
+      );
+
+      await gateway.transaction(async (transaction) => {
+        await assertRuntimeFence(transaction, runtimeFence);
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.open_run($1::uuid, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10::bytea, $11::timestamptz) as id",
+            [
+              ids.run,
+              "ingestion",
+              "1",
+              ENVIO_CONTROL_SCOPE.releaseId,
+              ENVIO_CONTROL_SCOPE.modelId,
+              ENVIO_CONTROL_SCOPE.sourceGroup,
+              stageInput.plan.database.epochId,
+              stageInput.plan.database.pointerGeneration,
+              ENVIO_CONTROL_SCOPE.projectorVersion,
+              hexToBytes(requestCommitment),
+              timestamp,
+            ],
+          ),
+          ids.run,
+        );
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7::numeric, $8::numeric, $9, $10::numeric, $11::bytea, $12::bytea, $13, $14::bytea, $15::bytea, $16::timestamptz) as id",
+            [
+              ids.observation,
+              ids.run,
+              stageInput.plan.database.rpcProviderDeploymentIds[0],
+              stageInput.plan.database.rpcProviderDeploymentIds[1],
+              "1",
+              "1",
+              stageInput.evidence.providerHeads[0],
+              stageInput.evidence.providerHeads[1],
+              12,
+              stageInput.evidence.safeBlockNumber,
+              hexToBytes(stageInput.evidence.safeBlockHash),
+              hexToBytes(stageInput.evidence.safeBlockHash),
+              safeEvidence.encodingVersion,
+              safeEvidence.canonicalPreimage,
+              hexToBytes(safeEvidence.contentFingerprint),
+              timestamp,
+            ],
+          ),
+          ids.observation,
+        );
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
+            [
+              ids.block,
+              ids.observation,
+              ids.run,
+              candidate.blockNumber,
+              hexToBytes(candidate.blockHash),
+              hexToBytes(candidate.blockHash),
+              blockEvidence.encodingVersion,
+              blockEvidence.canonicalPreimage,
+              hexToBytes(blockEvidence.contentFingerprint),
+              timestamp,
+            ],
+          ),
+          ids.block,
+        );
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.append_dual_rpc_runtime_code_evidence($1::uuid, $2::uuid, $3::bytea, $4::uuid, $5::uuid, $6::uuid, $7::bytea, $8::bytea, $9::bytea, $10::bytea, $11::numeric, $12::numeric, $13::bytea, $14::bytea, $15::bytea, $16::bytea[], $17::bytea, $18::bytea, $19::bytea, $20, $21::bytea, $22::bytea, $23::bytea, $24::timestamptz) as id",
+            [
+              ids.runtime,
+              ids.run,
+              hexToBytes(parsed.sourceAddress),
+              ids.block,
+              stageInput.plan.database.rpcProviderDeploymentIds[0],
+              stageInput.plan.database.rpcProviderDeploymentIds[1],
+              hexToBytes(parsed.runtimeCodeHashA),
+              hexToBytes(parsed.runtimeCodeHashB),
+              hexToBytes(parsed.runtimeCodeA),
+              hexToBytes(parsed.runtimeCodeB),
+              parsed.runtimeByteLength,
+              parsed.runtimeByteLength,
+              hexToBytes(parsed.normalizedRuntimeCodeHashA),
+              hexToBytes(parsed.normalizedRuntimeCodeHashB),
+              hexToBytes(parsed.immutableReferencesCommitment),
+              parsed.immutableValues.map(hexToBytes),
+              hexToBytes(parsed.immutableValuesCommitment),
+              hexToBytes(parsed.reconstructedRuntimeCode),
+              hexToBytes(parsed.reconstructedRuntimeCodeHash),
+              runtimeEvidence.encodingVersion,
+              runtimeEvidence.canonicalPreimage,
+              hexToBytes(runtimeEvidence.contentFingerprint),
+              hexToBytes(runtimeEvidence.contentFingerprint),
+              timestamp,
+            ],
+          ),
+          ids.runtime,
+        );
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.stage_verified_dynamic_parents_v2($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8::bigint, $9::bigint, $10::bigint, $11::bytea, $12::uuid, $13, $14::uuid, $15::uuid, $16::uuid, $17::uuid, $18::numeric, $19::bytea, $20::bytea, $21::bytea[], $22::bytea[], $23::jsonb, $24::bytea, $25::jsonb, $26::jsonb, $27::timestamptz) as id",
+            [
+              ids.page,
+              ids.run,
+              template.database.scope.releaseId,
+              template.database.scope.modelId,
+              template.database.scope.sourceGroup,
+              RELEASE_PROJECTOR_VERSION,
+              template.database.epochId,
+              template.database.pointerGeneration,
+              template.database.reorgGeneration,
+              stageInput.plan.cursor.generation,
+              hexToBytes(stageInput.plan.cursor.blockHash),
+              stageInput.plan.database.envioProviderDeploymentId,
+              streamId,
+              stageInput.plan.database.rpcProviderDeploymentIds[0],
+              stageInput.plan.database.rpcProviderDeploymentIds[1],
+              ids.observation,
+              ids.block,
+              candidate.blockNumber,
+              hexToBytes(candidate.blockHash),
+              hexToBytes(stageInput.evidence.coverage.filterCommitment),
+              [hexToBytes(verified.rawLogCommitment)],
+              [hexToBytes(verified.rawLogCommitment)],
+              JSON.stringify(stageInput.evidence.executionTrace),
+              hexToBytes(executionTraceCommitment),
+              JSON.stringify([parentCandidate]),
+              JSON.stringify([provisionalSource]),
+              timestamp,
+            ],
+          ),
+          ids.page,
+        );
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.append_run_outcome($1::uuid, $2::uuid, 'succeeded', $3::bytea, $4::timestamptz) as id",
+            [
+              ids.outcome,
+              ids.run,
+              hexToBytes(resultCommitment),
+              timestamp,
+            ],
+          ),
+          ids.outcome,
+        );
+      });
+    },
+
     async commitVerifiedPage(commitInput): Promise<{ generation: string }> {
+      if (commitInput.blockComplete !== true) {
+        return projectorValidationFailure();
+      }
       const timestamp = now().toISOString();
       const ids = {
         run: exactUuid(uuid()),
@@ -1832,7 +2556,6 @@ export function createPostgresReleaseProjectionStore(input: {
         const manifest = parseManifest(manifestRows, {
           epochId: runtime.epochId,
           pointerGeneration: runtime.pointerGeneration,
-          providerDeploymentIds: runtime.providerDeploymentIds,
         });
         const dynamicSources = parseDynamicAttestations({
           rows: dynamicRows,

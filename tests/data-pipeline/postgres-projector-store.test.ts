@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { keccak256 } from "viem";
 
 vi.mock("server-only", () => ({}));
 
@@ -114,6 +115,9 @@ class StoreExecutor implements PostgresExecutor {
   readonly queries: QueryRecord[] = [];
   readonly close = vi.fn(async () => undefined);
   commitGeneration = "8";
+  includeHistoricalStock = false;
+  provisionalRows: readonly Record<string, unknown>[] = [];
+  omitReorgGeneration = false;
 
   async transaction<T>(
     work: (transaction: PostgresTransaction) => Promise<T>,
@@ -142,31 +146,31 @@ class StoreExecutor implements PostgresExecutor {
         }
         if (text.includes("get_projector_runtime_state_v1")) {
           const release = values[1];
-          return [
-            {
-              epoch_id:
-                release === "envio-control"
-                  ? "70000000-0000-4000-8000-000000000002"
-                  : "70000000-0000-4000-8000-000000000010",
-              pointer_generation: "1",
-              provider_deployment_ids: IDS,
-              provider_types: PROVIDERS.map(({ type }) => type),
-              provider_redacted_identities: PROVIDERS.map(
-                ({ redactedIdentity }) => redactedIdentity,
-              ),
-              lease_generation: "0",
-              lease_holder_id: null,
-              lease_acquired_at: null,
-              lease_expires_at: null,
-              checkpoint_id: null,
-              checkpoint_generation: "0",
-              reorg_generation: "0",
-              checkpoint_block_number: null,
-              checkpoint_block_hash: null,
-              checkpoint_cursor_block_global_log_index: null,
-              checkpoint_cursor_candidate_id: null,
-            },
-          ] as unknown as Row[];
+          const row: Record<string, unknown> = {
+            epoch_id:
+              release === "envio-control"
+                ? "70000000-0000-4000-8000-000000000002"
+                : "70000000-0000-4000-8000-000000000010",
+            pointer_generation: "1",
+            provider_deployment_ids: IDS,
+            provider_types: PROVIDERS.map(({ type }) => type),
+            provider_redacted_identities: PROVIDERS.map(
+              ({ redactedIdentity }) => redactedIdentity,
+            ),
+            lease_generation: "0",
+            lease_holder_id: null,
+            lease_acquired_at: null,
+            lease_expires_at: null,
+            checkpoint_id: null,
+            checkpoint_generation: "0",
+            reorg_generation: "0",
+            checkpoint_block_number: null,
+            checkpoint_block_hash: null,
+            checkpoint_cursor_block_global_log_index: null,
+            checkpoint_cursor_candidate_id: null,
+          };
+          if (this.omitReorgGeneration) delete row.reorg_generation;
+          return [row] as unknown as Row[];
         }
         if (text.includes("get_envio_ingestion_cursor_v1")) {
           return [
@@ -180,6 +184,64 @@ class StoreExecutor implements PostgresExecutor {
           ] as unknown as Row[];
         }
         if (text.includes("get_projector_release_manifest_v1")) {
+          if (values[1] === "stock-paired-v1" && this.includeHistoricalStock) {
+            return [
+              {
+                epoch_id: "70000000-0000-4000-8000-000000000010",
+                pointer_generation: "1",
+                epoch_commitment: bytes(bytes32("9")),
+                artifact_creation_code_commitment: bytes(bytes32("a")),
+                source_bindings: [
+                  {
+                    binding_id: "21000000-0000-4000-8000-000000000001",
+                    source_name: "StockV1RewardVaultFactory",
+                    source_role: "reward_vault_factory",
+                    source_type: "ethereum_contract",
+                    source_address:
+                      "0xd430d9162c153afdf9e4caca6d2317e72a044441",
+                    inclusive_start_block: "25637469",
+                    abi_event_set_commitment: bytes32("4"),
+                    binding_commitment: bytes32("5"),
+                  },
+                ],
+                dynamic_source_templates: [
+                  {
+                    dynamic_source_template_id:
+                      "31000000-0000-4000-8000-000000000001",
+                    parent_factory_release_binding_id:
+                      "21000000-0000-4000-8000-000000000001",
+                    parent_factory_binding_commitment: bytes32("5"),
+                    parent_source_role: "reward_vault_factory",
+                    factory_event_type: "QuoteAssetFeeSplitVaultDeployed",
+                    deployed_address_field: "vault",
+                    deployed_source_role: "reward_vault",
+                    deployed_artifact_creation_code_commitment: bytes32("6"),
+                    normalized_runtime_code_hash: bytes32("7"),
+                    expected_instance_runtime_code_hash: null,
+                    immutable_references_commitment: bytes32("8"),
+                    immutable_binding_spec: {
+                      factoryConfigurationField: "configurationCommitment",
+                      bindings: [
+                        {
+                          ordinal: "0",
+                          offset: "4",
+                          length: "20",
+                          source: "deployed_address",
+                          encoding: "address",
+                        },
+                      ],
+                    },
+                    immutable_binding_commitment: bytes32("9"),
+                    runtime_code_length: "220",
+                    abi_event_set_commitment: bytes32("a"),
+                    template_commitment: bytes32("b"),
+                  },
+                ],
+                projection_event_rules: [],
+                launch_completeness_requirements: [],
+              },
+            ] as unknown as Row[];
+          }
           if (values[1] !== "classic-v3") {
             return [
               {
@@ -222,7 +284,7 @@ class StoreExecutor implements PostgresExecutor {
                     "20000000-0000-4000-8000-000000000001",
                   parent_factory_binding_commitment: bytes32("c"),
                   parent_source_role: "reward_vault_factory",
-                  factory_event_type: "RewardVaultDeployed",
+                  factory_event_type: "ClassicRewardVaultDeployed",
                   deployed_address_field: "vault",
                   deployed_source_role: "reward_vault",
                   deployed_artifact_creation_code_commitment: bytes32("d"),
@@ -253,6 +315,34 @@ class StoreExecutor implements PostgresExecutor {
           ] as unknown as Row[];
         }
         if (text.includes("get_projector_dynamic_source_attestations_v1")) {
+          if (values[1] === "stock-paired-v1" && this.includeHistoricalStock) {
+            return [
+              {
+                dynamic_source_attestation_id:
+                  "41000000-0000-4000-8000-000000000001",
+                dynamic_source_template_id:
+                  "31000000-0000-4000-8000-000000000001",
+                runtime_code_evidence_id:
+                  "41000000-0000-4000-8000-000000000002",
+                deployed_source_address: bytes(address("e")),
+                deployed_source_role: "reward_vault",
+                deployment_block_number: "25646000",
+                runtime_code_hash: bytes(bytes32("c")),
+                normalized_runtime_code_hash: bytes(bytes32("7")),
+                expected_instance_runtime_code_hash: null,
+                runtime_code_length: "220",
+                immutable_references_commitment: bytes(bytes32("8")),
+                immutable_binding_commitment: bytes(bytes32("9")),
+                abi_event_set_commitment: bytes(bytes32("a")),
+                template_commitment: bytes(bytes32("b")),
+                parent_factory_occurrence_id:
+                  "41000000-0000-4000-8000-000000000003",
+                parent_factory_release_binding_id:
+                  "21000000-0000-4000-8000-000000000001",
+                parent_factory_binding_commitment: bytes(bytes32("5")),
+              },
+            ] as unknown as Row[];
+          }
           if (values[1] !== "classic-v3") {
             return [] as unknown as Row[];
           }
@@ -306,6 +396,17 @@ class StoreExecutor implements PostgresExecutor {
               asset_binding_commitment: bytes(bytes32("7")),
             },
           ] as unknown as Row[];
+        }
+        if (text.includes("get_current_provisional_dynamic_sources_v1")) {
+          return this.provisionalRows as unknown as Row[];
+        }
+        if (
+          text.includes("open_run") ||
+          text.includes("append_dual_rpc_runtime_code_evidence") ||
+          text.includes("stage_verified_dynamic_parents_v2") ||
+          text.includes("append_run_outcome")
+        ) {
+          return [{ id: values[0] }] as unknown as Row[];
         }
         if (text.includes("append_safe_head_observation")) {
           return [{ id: values[0] }] as unknown as Row[];
@@ -400,6 +501,331 @@ describe("concrete projector Postgres store", () => {
         },
       ],
     });
+    expect(plan.dynamicSourceTemplates).toMatchObject([
+      {
+        contractName: "ClassicV3RewardVault",
+        parentFactoryContractName: "ClassicV3RewardVaultFactory",
+        factoryEventName: "ClassicRewardVaultDeployed",
+        database: {
+          scope: { releaseId: "classic-v3" },
+          reorgGeneration: "0",
+        },
+      },
+    ]);
+  });
+
+  it("rejects runtime state without an explicit reorg generation", async () => {
+    const executor = new StoreExecutor();
+    executor.omitReorgGeneration = true;
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+    });
+
+    await expect(store.readPlan()).rejects.toMatchObject({
+      disposition: "fatal-codec-or-caller",
+    });
+  });
+
+  it("keeps historical Stock lineage readable without exposing a Stock discovery template", async () => {
+    const executor = new StoreExecutor();
+    executor.includeHistoricalStock = true;
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+    });
+
+    const plan = await store.readPlan();
+
+    expect(plan.dynamicSources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          attestationId: "41000000-0000-4000-8000-000000000001",
+          contractName: "StockV1RewardVault",
+          releaseVersion: "stock-paired-v1",
+        }),
+      ]),
+    );
+    expect(plan.dynamicSourceTemplates).toHaveLength(1);
+    expect(plan.dynamicSourceTemplates[0]?.contractName).toBe(
+      "ClassicV3RewardVault",
+    );
+  });
+
+  it("reads only an exact current Classic provisional lineage", async () => {
+    const executor = new StoreExecutor();
+    executor.provisionalRows = [
+      {
+        provisional_page_id: "42000000-0000-4000-8000-000000000001",
+        provisional_lineage_id: "42000000-0000-4000-8000-000000000002",
+        release_epoch_id: "70000000-0000-4000-8000-000000000010",
+        release_pointer_generation: "1",
+        ingestion_epoch_id: "70000000-0000-4000-8000-000000000002",
+        ingestion_pointer_generation: "1",
+        reorg_generation: "0",
+        snapshot_block_number: "25650001",
+        snapshot_block_hash: bytes(bytes32("d")),
+        expected_cursor_generation: "7",
+        expected_cursor_block_hash: bytes(bytes32("7")),
+        envio_provider_deployment_id: IDS[0],
+        rpc_provider_a_id: IDS[1],
+        rpc_provider_b_id: IDS[2],
+        provisional_coverage_commitment: bytes(bytes32("1")),
+        runtime_code_evidence_id:
+          "42000000-0000-4000-8000-000000000003",
+        dynamic_source_template_id:
+          "30000000-0000-4000-8000-000000000001",
+        dynamic_source_attestation_id:
+          "42000000-0000-4000-8000-000000000004",
+        deployed_source_address: bytes(address("f")),
+        contract_name: "ClassicV3RewardVault",
+        model: "classic",
+        release_version: "classic-v3",
+        factory_address: bytes(
+          "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
+        ),
+        factory_contract_name: "ClassicV3RewardVaultFactory",
+        factory_candidate_id: `1:${bytes32("d")}:${bytes32("e")}:4`,
+        factory_block_number: "25650001",
+        factory_block_hash: bytes(bytes32("d")),
+        factory_block_global_log_index: "4",
+        parent_candidate_commitment: bytes(bytes32("2")),
+        expected_exact_runtime_code_hash: bytes(bytes32("6")),
+        expected_normalized_runtime_code_hash: bytes(bytes32("e")),
+        expected_immutable_references_commitment: bytes(bytes32("f")),
+        expected_runtime_byte_length: "200",
+        immutable_references: [{ start: "4", length: "20" }],
+        staged_at: "2026-08-01T02:00:00.000Z",
+      },
+    ];
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+    });
+
+    const plan = await store.readPlan();
+
+    expect(plan.dynamicSources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          attestationId: "42000000-0000-4000-8000-000000000004",
+          sourceAddress: address("f"),
+          factoryCandidateId: `1:${bytes32("d")}:${bytes32("e")}:4`,
+          expectedExactRuntimeCodeHash: bytes32("6"),
+        }),
+      ]),
+    );
+  });
+
+  it("fails closed when a provisional lineage is pinned to a stale cursor", async () => {
+    const executor = new StoreExecutor();
+    executor.provisionalRows = [
+      {
+        provisional_page_id: "42000000-0000-4000-8000-000000000001",
+        provisional_lineage_id: "42000000-0000-4000-8000-000000000002",
+        release_epoch_id: "70000000-0000-4000-8000-000000000010",
+        release_pointer_generation: "1",
+        ingestion_epoch_id: "70000000-0000-4000-8000-000000000002",
+        ingestion_pointer_generation: "1",
+        reorg_generation: "0",
+        snapshot_block_number: "25650001",
+        snapshot_block_hash: bytes(bytes32("d")),
+        expected_cursor_generation: "6",
+        expected_cursor_block_hash: bytes(bytes32("7")),
+        envio_provider_deployment_id: IDS[0],
+        rpc_provider_a_id: IDS[1],
+        rpc_provider_b_id: IDS[2],
+        provisional_coverage_commitment: bytes(bytes32("1")),
+        runtime_code_evidence_id:
+          "42000000-0000-4000-8000-000000000003",
+        dynamic_source_template_id:
+          "30000000-0000-4000-8000-000000000001",
+        dynamic_source_attestation_id:
+          "42000000-0000-4000-8000-000000000004",
+        deployed_source_address: bytes(address("f")),
+        contract_name: "ClassicV3RewardVault",
+        model: "classic",
+        release_version: "classic-v3",
+        factory_address: bytes(
+          "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
+        ),
+        factory_contract_name: "ClassicV3RewardVaultFactory",
+        factory_candidate_id: `1:${bytes32("d")}:${bytes32("e")}:4`,
+        factory_block_number: "25650001",
+        factory_block_hash: bytes(bytes32("d")),
+        factory_block_global_log_index: "4",
+        parent_candidate_commitment: bytes(bytes32("2")),
+        expected_exact_runtime_code_hash: bytes(bytes32("6")),
+        expected_normalized_runtime_code_hash: bytes(bytes32("e")),
+        expected_immutable_references_commitment: bytes(bytes32("f")),
+        expected_runtime_byte_length: "200",
+        immutable_references: [{ start: "4", length: "20" }],
+        staged_at: "2026-08-01T02:00:00.000Z",
+      },
+    ];
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+    });
+
+    await expect(store.readPlan()).rejects.toMatchObject({
+      disposition: "fatal-codec-or-caller",
+    });
+  });
+
+  it("stages one exact Classic parent and runtime without advancing the ingestion cursor", async () => {
+    const executor = new StoreExecutor();
+    const store = createPostgresProjectorStore({
+      executor,
+      providers: PROVIDERS,
+      releaseScopes: RELEASE_SCOPES,
+      runtimeFence: RUNTIME_FENCE,
+      now: () => new Date("2026-08-01T02:00:00.000Z"),
+    });
+    const plan = await store.readPlan();
+    executor.queries.splice(0);
+    const template = plan.dynamicSourceTemplates[0]!;
+    const sourceAddress = address("f");
+    const rawRuntimeCode = `0x${"60".repeat(200)}` as `0x${string}`;
+    const runtimeCodeHash = keccak256(rawRuntimeCode);
+    const parent: EnvioCandidate = {
+      candidateId: `1:${bytes32("d")}:${bytes32("e")}:10`,
+      chainId: 1,
+      blockNumber: "25650001",
+      blockHash: bytes32("d"),
+      blockTimestamp: "1750000000",
+      transactionHash: bytes32("e"),
+      transactionIndex: 2,
+      blockGlobalLogIndex: 10,
+      sourceAddress: template.parentFactoryAddress,
+      contractName: template.parentFactoryContractName,
+      eventName: template.factoryEventName,
+      releaseHint: { model: "classic", releaseVersion: "classic-v3" },
+      orderedTopics: [bytes32("f")],
+      rawData: "0x",
+      decodedPayload: {
+        vault: sourceAddress,
+        configurationCommitment: bytes32("9"),
+      },
+      payloadHash: bytes32("1"),
+    };
+    const evidence: DualRpcCandidateWindowEvidence = {
+      chainId: 1,
+      providerIdentities: ["alchemy", "quicknode"],
+      providerVendorGroups: ["alchemy", "quicknode"],
+      providerEndpointCommitments: [bytes32("3"), bytes32("4")],
+      providerOriginCommitments: [bytes32("5"), bytes32("6")],
+      providerHeads: ["25650020", "25650021"],
+      safeBlockNumber: "25650008",
+      safeBlockHash: bytes32("9"),
+      executionTrace: projectionExecutionTrace,
+      candidates: [
+        {
+          chainId: 1,
+          candidateId: parent.candidateId,
+          sourceAddress: parent.sourceAddress,
+          contractName: parent.contractName,
+          eventName: parent.eventName,
+          sourceKind: "static",
+          model: "classic",
+          releaseVersion: "classic-v3",
+          payloadHash: parent.payloadHash,
+          rawLogCommitment: bytes32("2"),
+          providerIdentities: ["alchemy", "quicknode"],
+          providerVendorGroups: ["alchemy", "quicknode"],
+          providerEndpointCommitments: [bytes32("3"), bytes32("4")],
+          providerOriginCommitments: [bytes32("5"), bytes32("6")],
+          providerHeads: ["25650020", "25650021"],
+          safeBlockNumber: "25650008",
+          safeBlockHash: bytes32("9"),
+          candidateBlockNumber: parent.blockNumber,
+          candidateBlockHash: parent.blockHash,
+          candidateBlockTimestamp: parent.blockTimestamp,
+          transactionHash: parent.transactionHash,
+          transactionIndex: parent.transactionIndex,
+          receiptCommitment: bytes32("7"),
+          sourceCodeHash: bytes32("8"),
+          receiptLogOrdinal: 0,
+        },
+      ],
+      coveredCandidateCount: 1,
+      coverage: {
+        fromBlockNumber: parent.blockNumber,
+        throughBlockNumber: parent.blockNumber,
+        throughBlockHash: parent.blockHash,
+        throughBlockGlobalLogIndex: "10",
+        filterCommitment: bytes32("a"),
+        providerLogCommitments: [bytes32("2"), bytes32("2")],
+      },
+    };
+
+    await expect(
+      store.stageVerifiedDynamicParents({
+        plan,
+        snapshotBlock: parent.blockNumber,
+        candidates: [parent],
+        evidence,
+        runtimeObservations: [
+          {
+            chainId: 1,
+            parentCandidateId: parent.candidateId,
+            sourceAddress,
+            deploymentBlockNumber: parent.blockNumber,
+            deploymentBlockHash: parent.blockHash,
+            providerIdentities: ["alchemy", "quicknode"],
+            providerVendorGroups: ["alchemy", "quicknode"],
+            providerEndpointCommitments: [bytes32("3"), bytes32("4")],
+            providerOriginCommitments: [bytes32("5"), bytes32("6")],
+            rawRuntimeCodeA: rawRuntimeCode,
+            rawRuntimeCodeB: rawRuntimeCode,
+            runtimeCodeHashA: runtimeCodeHash,
+            runtimeCodeHashB: runtimeCodeHash,
+            normalizedRuntimeCodeHashA:
+              template.expectedNormalizedRuntimeCodeHash,
+            normalizedRuntimeCodeHashB:
+              template.expectedNormalizedRuntimeCodeHash,
+            runtimeByteLengthA: "200",
+            runtimeByteLengthB: "200",
+            immutableReferences: template.immutableReferences,
+            immutableReferencesCommitment:
+              template.expectedImmutableReferencesCommitment,
+            immutableValues: [sourceAddress],
+            immutableValuesCommitment: bytes32("8"),
+            reconstructedRuntimeCode: rawRuntimeCode,
+            reconstructedRuntimeCodeHash: runtimeCodeHash,
+            factoryConfigurationCommitment: bytes32("9"),
+            template,
+            startedAtMs: 1,
+            completedAtMs: 2,
+            elapsedMs: 1,
+            hardDeadlineMs: 75_000,
+            providerCallCounts: [1, 1],
+          },
+        ],
+        blockComplete: false,
+      }),
+    ).resolves.toBeUndefined();
+
+    const statements = executor.queries.map(({ text }) => text);
+    expect(statements.some((text) =>
+      text.includes("append_dual_rpc_runtime_code_evidence"),
+    )).toBe(true);
+    const stage = executor.queries.find(({ text }) =>
+      text.includes("stage_verified_dynamic_parents_v2"),
+    );
+    expect(stage?.values).toHaveLength(27);
+    expect(statements.some((text) =>
+      text.includes("commit_envio_ingestion_page_v1"),
+    )).toBe(false);
+    expect(statements.at(-1)).toContain("append_run_outcome");
   });
 
   it("opens evidence and commits one verified page in a single final transaction", async () => {
@@ -426,9 +852,11 @@ describe("concrete projector Postgres store", () => {
       isBlockBoundary: false,
       },
       dynamicSources: [],
+      dynamicSourceTemplates: [],
       database: {
         epochId: "70000000-0000-4000-8000-000000000002",
         pointerGeneration: "1",
+        reorgGeneration: "0",
         envioProviderDeploymentId: IDS[0],
         rpcProviderDeploymentIds: [IDS[1], IDS[2]] as const,
       },
@@ -491,6 +919,7 @@ describe("concrete projector Postgres store", () => {
         snapshotBlock: item.blockNumber,
         candidates: [item],
         evidence,
+        blockComplete: true,
       }),
     ).resolves.toEqual({ generation: "8" });
 
@@ -538,9 +967,11 @@ describe("concrete projector Postgres store", () => {
         isBlockBoundary: false,
       },
       dynamicSources: [],
+      dynamicSourceTemplates: [],
       database: {
         epochId: "70000000-0000-0000-0000-000000000002",
         pointerGeneration: "1",
+        reorgGeneration: "0",
         envioProviderDeploymentId: IDS[0],
         rpcProviderDeploymentIds: [IDS[1], IDS[2]] as const,
       },
@@ -552,6 +983,7 @@ describe("concrete projector Postgres store", () => {
         plan,
         snapshotBlock: "25650002",
         candidates: [],
+        blockComplete: true,
         evidence: {
           chainId: 1,
           providerIdentities: ["alchemy", "quicknode"],
@@ -1262,11 +1694,16 @@ describe("release-scoped projector Postgres commit", () => {
         parent_factory_release_binding_id:
           "20000000-0000-4000-8000-000000000001",
         parent_factory_binding_commitment: bytes32("c"),
+        parent_source_role: "reward_vault_factory",
+        factory_event_type: "ClassicRewardVaultDeployed",
+        deployed_address_field: "vault",
         deployed_source_role: "reward_vault",
+        deployed_artifact_creation_code_commitment: bytes32("d"),
         normalized_runtime_code_hash: bytes32("e"),
         expected_instance_runtime_code_hash: null,
         immutable_references_commitment: bytes32("f"),
         immutable_binding_spec: {
+          factoryConfigurationField: "configurationCommitment",
           bindings: [{
             ordinal: "0",
             offset: "4",
