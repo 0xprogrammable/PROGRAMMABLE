@@ -23,6 +23,7 @@ import {
 import type {
   CandidateRpcProvider,
   DualRpcCandidateWindowEvidence,
+  DualRpcRewardSnapshot,
 } from "./dual-rpc";
 import type { EnvioCandidate } from "./envio";
 import { DataPipelineError } from "./errors";
@@ -55,6 +56,10 @@ import {
   type ProjectorRewardModel,
   type ProjectorRewardSnapshot,
 } from "./projector-reward-fold";
+import {
+  expectedRewardRpcCallCount,
+  PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1,
+} from "./projector-reward-rpc-contract";
 import {
   PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
   PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
@@ -1767,7 +1772,12 @@ export function createPostgresReleaseProjectionStore(input: {
         if (leaseRows.length !== 1 || leaseRows[0]?.acquired !== true) {
           return projectorValidationFailure();
         }
-        const [manifestRows, dynamicRows, candidateRows] = await Promise.all([
+        const [
+          manifestRows,
+          dynamicRows,
+          candidateRows,
+          ingestionCursorRows,
+        ] = await Promise.all([
           transaction.query(
             "select * from programmable_private.get_projector_release_manifest_v1($1, $2, $3, $4, $5::uuid, $6)",
             [
@@ -1809,7 +1819,16 @@ export function createPostgresReleaseProjectionStore(input: {
               acquiredAt.toISOString(),
             ],
           ),
+          transaction.query(
+            "select * from programmable_private.get_envio_ingestion_cursor_v1($1, $2::uuid, $3)",
+            [
+              "1",
+              runtime.providerDeploymentIds[envioIndex]!,
+              "canonical-events",
+            ],
+          ),
         ]);
+        const ingestionCursor = parseCursor(ingestionCursorRows);
         const manifest = parseManifest(manifestRows, {
           epochId: runtime.epochId,
           pointerGeneration: runtime.pointerGeneration,
@@ -1897,6 +1916,20 @@ export function createPostgresReleaseProjectionStore(input: {
               resolvedEntries.length;
             const next = await fetchAfter(last, Math.min(500, remaining));
             if (next.length === 0) {
+              const boundaryBlock = BigInt(ingestionCursor.blockNumber);
+              const groupBlock = BigInt(last.blockNumber);
+              if (
+                !ingestionCursor.isBlockBoundary ||
+                boundaryBlock < groupBlock
+              ) {
+                return null;
+              }
+              if (
+                boundaryBlock === groupBlock &&
+                ingestionCursor.blockHash !== last.blockHash
+              ) {
+                return projectorValidationFailure();
+              }
               return Object.freeze([...resolvedEntries]);
             }
             resolvedEntries = [...resolvedEntries, ...next];
@@ -1913,16 +1946,20 @@ export function createPostgresReleaseProjectionStore(input: {
           resolvedEntries[PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE]!.candidate
               .transactionHash === firstTransactionHash;
         if (firstTransactionIsOversized) {
-          entries = await completePrefix(
+          const completedTransaction = await completePrefix(
             (entry) =>
               entry.candidate.transactionHash === firstTransactionHash,
           );
+          if (completedTransaction === null) return null;
+          entries = completedTransaction;
           batchKind = "oversized-transaction";
           if (containsRewardProjection(entries, resolutions)) {
             const rewardBlockHash = first.candidate.blockHash;
-            entries = await completePrefix(
+            const completedRewardBlock = await completePrefix(
               (entry) => entry.candidate.blockHash === rewardBlockHash,
             );
+            if (completedRewardBlock === null) return null;
+            entries = completedRewardBlock;
             batchKind = "reward-block";
           }
         } else {
@@ -1936,9 +1973,11 @@ export function createPostgresReleaseProjectionStore(input: {
             containsRewardProjection(page, resolutions)
           ) {
             const rewardBlockHash = first.candidate.blockHash;
-            entries = await completePrefix(
+            const completedRewardBlock = await completePrefix(
               (entry) => entry.candidate.blockHash === rewardBlockHash,
             );
+            if (completedRewardBlock === null) return null;
+            entries = completedRewardBlock;
             batchKind = "reward-block";
           } else {
             entries = isolated;
@@ -2098,6 +2137,14 @@ const PROJECTION_ROUTE_KEYS = Object.freeze([
 
 const ZERO_ADDRESS: HexAddress =
   "0x0000000000000000000000000000000000000000";
+const ZERO_BYTES32: HexBytes32 =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
+const PROJECTOR_MAXIMUM_REWARD_VERIFICATION_ACCOUNTS = 4_096;
+const PROJECTOR_MAXIMUM_REWARD_VERIFICATION_CHUNKS = 86;
+const PROJECTOR_MAXIMUM_REWARD_CALLS_PER_CHUNK = 128;
+const PROJECTOR_MAXIMUM_REWARD_AGGREGATE_CALLS =
+  PROJECTOR_MAXIMUM_REWARD_VERIFICATION_CHUNKS *
+  PROJECTOR_MAXIMUM_REWARD_CALLS_PER_CHUNK;
 
 type OccurrenceWrite = Readonly<{
   occurrence: ProjectorOccurrenceFact;
@@ -3404,6 +3451,15 @@ async function stageIncrementalFacts(input: {
     allocationEvidenceId: string;
   }>> = [];
   for (const [vault, events] of rewardEvents) {
+    const occurrenceIds = orderedRewardOccurrenceIds(events, vault);
+    const eventByOccurrenceId = new Map(
+      events.map((event) => [event.occurrenceId, event]),
+    );
+    const orderedEvents = occurrenceIds.map((occurrenceId) => {
+      const event = eventByOccurrenceId.get(occurrenceId);
+      if (!event) return projectorValidationFailure();
+      return event;
+    });
     const staged = input.stagedRewardStates.get(vault);
     const state = staged ?? parseProjectorRewardStateRows({
       activeRows: await input.transaction.query(
@@ -3426,7 +3482,7 @@ async function stageIncrementalFacts(input: {
     const snapshot = foldProjectorRewardState({
       model: state.model,
       baseline: state.baseline,
-      events,
+      events: orderedEvents,
     });
     if (
       snapshot.activeConfigurationHash === null ||
@@ -3436,7 +3492,7 @@ async function stageIncrementalFacts(input: {
       return projectorValidationFailure();
     }
     const snapshotRows = await input.transaction.query<{ id: unknown }>(
-      "select programmable_private.stage_current_reward_snapshot_v1($1::uuid, $2::bytea, $3::bytea, $4::uuid, $5::bigint, $6::bytea, $7::numeric, $8::integer[], $9::bytea[], $10::bytea[], $11::numeric[], $12::bytea[], $13::bytea[], $14::numeric[], $15::numeric[], $16::uuid, $17::numeric, $18::bytea, $19::timestamptz) as id",
+      "select programmable_private.stage_current_reward_snapshot_v2($1::uuid, $2::bytea, $3::bytea, $4::uuid, $5::bigint, $6::bytea, $7::numeric, $8::integer[], $9::bytea[], $10::bytea[], $11::numeric[], $12::bytea[], $13::bytea[], $14::numeric[], $15::numeric[], $16::uuid, $17::uuid[], $18::numeric, $19::bytea, $20::timestamptz) as id",
       [
         input.runId,
         hexToBytes(snapshot.vault),
@@ -3454,6 +3510,7 @@ async function stageIncrementalFacts(input: {
         snapshot.balances.map(({ claimableAccrued }) => claimableAccrued),
         snapshot.balances.map(({ claimedTotal }) => claimedTotal),
         snapshot.snapshotSourceOccurrenceId,
+        occurrenceIds,
         input.targetBlockNumber,
         hexToBytes(input.targetBlockHash),
         input.verifiedAt,
@@ -3520,6 +3577,226 @@ async function stageIncrementalFacts(input: {
     rewardDeltas: Object.freeze(
       rewardDeltas.sort((left, right) => left.vault.localeCompare(right.vault)),
     ),
+  });
+}
+
+type RewardVerificationChunkManifest = Readonly<{
+  chunkEndOffsets: readonly number[];
+  providerAChunkCommitments: readonly HexBytes32[];
+  providerBChunkCommitments: readonly HexBytes32[];
+  providerAChunkCallCounts: readonly number[];
+  providerBChunkCallCounts: readonly number[];
+}>;
+
+function orderedRewardOccurrenceIds(
+  events: readonly ProjectorRewardEvent[],
+  vault: HexAddress,
+): readonly string[] {
+  const ordered = [...events].sort((left, right) => {
+    const blockOrder = BigInt(left.blockNumber) - BigInt(right.blockNumber);
+    if (blockOrder !== 0n) return blockOrder < 0n ? -1 : 1;
+    const transactionOrder =
+      BigInt(left.transactionIndex) - BigInt(right.transactionIndex);
+    if (transactionOrder !== 0n) return transactionOrder < 0n ? -1 : 1;
+    const logOrder =
+      BigInt(left.blockGlobalLogIndex) - BigInt(right.blockGlobalLogIndex);
+    if (logOrder !== 0n) return logOrder < 0n ? -1 : 1;
+    return left.occurrenceId.localeCompare(right.occurrenceId);
+  });
+  const occurrenceIds = ordered.map((event) => {
+    if (event.vault !== vault) return projectorValidationFailure();
+    return exactUuid(event.occurrenceId);
+  });
+  if (
+    occurrenceIds.length < 1 ||
+    occurrenceIds.length > PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP ||
+    new Set(occurrenceIds).size !== occurrenceIds.length
+  ) {
+    return projectorValidationFailure();
+  }
+  return Object.freeze(occurrenceIds);
+}
+
+function canonicalRewardVerificationChunkManifest(input: {
+  reward: DualRpcRewardSnapshot;
+  bindings: readonly [
+    Omit<CandidateRpcProvider, "client">,
+    Omit<CandidateRpcProvider, "client">,
+  ];
+}): RewardVerificationChunkManifest {
+  const { reward, bindings } = input;
+  const matches = (actual: readonly unknown[], expected: readonly unknown[]) =>
+    Array.isArray(actual) &&
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index]);
+  const expectedIdentities = bindings.map(({ identity }) => identity);
+  const expectedVendors = bindings.map(({ vendorGroup }) => vendorGroup);
+  const expectedEndpoints = bindings.map(
+    ({ endpointCommitment }) => endpointCommitment,
+  );
+  const expectedOrigins = bindings.map(
+    ({ endpointOriginCommitment }) => endpointOriginCommitment,
+  );
+  const verificationAccounts = reward.verificationAccounts;
+  const chunks = reward.chunks;
+  const maximumAccountsPerChunk =
+    PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1.models[reward.model]
+      .maximumBalanceAccounts;
+  if (
+    !Array.isArray(verificationAccounts) ||
+    verificationAccounts.length < 1 ||
+    verificationAccounts.length >
+      PROJECTOR_MAXIMUM_REWARD_VERIFICATION_ACCOUNTS ||
+    verificationAccounts.some((account, index) => {
+      try {
+        return canonicalAddress(account) !== account ||
+          (index > 0 && account <= verificationAccounts[index - 1]!);
+      } catch {
+        return true;
+      }
+    }) ||
+    !Array.isArray(chunks) ||
+    chunks.length < 1 ||
+    chunks.length > PROJECTOR_MAXIMUM_REWARD_VERIFICATION_CHUNKS ||
+    chunks.length !==
+      Math.ceil(verificationAccounts.length / maximumAccountsPerChunk) ||
+    !matches(reward.providerIdentities, expectedIdentities) ||
+    !matches(reward.providerVendorGroups, expectedVendors) ||
+    !matches(reward.providerEndpointCommitments, expectedEndpoints) ||
+    !matches(reward.providerOriginCommitments, expectedOrigins) ||
+    !Array.isArray(reward.providerCallCounts) ||
+    reward.providerCallCounts.length !== 2 ||
+    !Array.isArray(reward.providerSnapshotCommitments) ||
+    reward.providerSnapshotCommitments.length !== 2 ||
+    reward.providerSnapshotCommitments[0] !==
+      reward.providerSnapshotCommitments[1] ||
+    reward.providerSnapshotCommitments[0] === ZERO_BYTES32
+  ) {
+    return projectorValidationFailure();
+  }
+  try {
+    canonicalBytes32(reward.providerSnapshotCommitments[0]);
+    canonicalBytes32(reward.providerSnapshotCommitments[1]);
+  } catch {
+    return projectorValidationFailure();
+  }
+
+  const chunkEndOffsets: number[] = [];
+  const providerAChunkCommitments: HexBytes32[] = [];
+  const providerBChunkCommitments: HexBytes32[] = [];
+  const providerAChunkCallCounts: number[] = [];
+  const providerBChunkCallCounts: number[] = [];
+  let accountOffset = 0;
+  let aggregateCallCount = 0;
+  for (const [chunkIndex, chunk] of chunks.entries()) {
+    const remainingAccounts = verificationAccounts.length - accountOffset;
+    const expectedChunkSize = Math.min(
+      maximumAccountsPerChunk,
+      remainingAccounts,
+    );
+    const expectedAccounts = verificationAccounts.slice(
+      accountOffset,
+      accountOffset + expectedChunkSize,
+    );
+    const expectedCallCount = expectedRewardRpcCallCount(
+      reward.model,
+      reward.allocations.length,
+      expectedChunkSize,
+    );
+    if (
+      chunk.chunkIndex !== chunkIndex ||
+      !Array.isArray(chunk.verificationAccounts) ||
+      !matches(chunk.verificationAccounts, expectedAccounts) ||
+      !Array.isArray(chunk.providerCallCounts) ||
+      chunk.providerCallCounts.length !== 2 ||
+      chunk.providerCallCounts[0] !== expectedCallCount ||
+      chunk.providerCallCounts[1] !== expectedCallCount ||
+      expectedCallCount < 1 ||
+      expectedCallCount > PROJECTOR_MAXIMUM_REWARD_CALLS_PER_CHUNK ||
+      !Array.isArray(chunk.providerSnapshotCommitments) ||
+      chunk.providerSnapshotCommitments.length !== 2 ||
+      chunk.providerSnapshotCommitments[0] !==
+        chunk.providerSnapshotCommitments[1] ||
+      chunk.providerSnapshotCommitments[0] === ZERO_BYTES32
+    ) {
+      return projectorValidationFailure();
+    }
+    try {
+      canonicalBytes32(chunk.providerSnapshotCommitments[0]);
+      canonicalBytes32(chunk.providerSnapshotCommitments[1]);
+    } catch {
+      return projectorValidationFailure();
+    }
+    accountOffset += expectedChunkSize;
+    aggregateCallCount += expectedCallCount;
+    chunkEndOffsets.push(accountOffset);
+    providerAChunkCommitments.push(chunk.providerSnapshotCommitments[0]);
+    providerBChunkCommitments.push(chunk.providerSnapshotCommitments[1]);
+    providerAChunkCallCounts.push(expectedCallCount);
+    providerBChunkCallCounts.push(expectedCallCount);
+  }
+  if (
+    accountOffset !== verificationAccounts.length ||
+    aggregateCallCount < 1 ||
+    aggregateCallCount > PROJECTOR_MAXIMUM_REWARD_AGGREGATE_CALLS ||
+    reward.providerCallCounts[0] !== aggregateCallCount ||
+    reward.providerCallCounts[1] !== aggregateCallCount ||
+    reward.rpcCallCount !== aggregateCallCount * 2
+  ) {
+    return projectorValidationFailure();
+  }
+
+  const trace = reward.executionTrace;
+  if (
+    !Number.isSafeInteger(trace.startedAtMs) ||
+    trace.startedAtMs < 0 ||
+    !Number.isSafeInteger(trace.completedAtMs) ||
+    trace.completedAtMs < 0 ||
+    !Number.isSafeInteger(trace.elapsedMs) ||
+    trace.elapsedMs < 0 ||
+    !Number.isSafeInteger(trace.hardDeadlineMs) ||
+    trace.hardDeadlineMs < 1 ||
+    trace.candidateBatchSize !== 0 ||
+    trace.completedAtMs < trace.startedAtMs ||
+    trace.elapsedMs !== trace.completedAtMs - trace.startedAtMs ||
+    trace.elapsedMs > trace.hardDeadlineMs ||
+    !Number.isSafeInteger(trace.maxCallsPerProvider) ||
+    trace.maxCallsPerProvider < 1 ||
+    trace.maxCallsPerProvider > PROJECTOR_MAXIMUM_REWARD_CALLS_PER_CHUNK ||
+    providerAChunkCallCounts.some(
+      (count) => count > trace.maxCallsPerProvider,
+    ) ||
+    !matches(trace.providerCallCounts, reward.providerCallCounts) ||
+    !Array.isArray(trace.calls) ||
+    trace.calls.length !== chunks.length * 2 ||
+    trace.calls.some((call, callIndex) => {
+      const providerIndex = callIndex < chunks.length ? 0 : 1;
+      const binding = bindings[providerIndex];
+      return !binding ||
+        !Number.isSafeInteger(call.startedOffsetMs) ||
+        call.startedOffsetMs < 0 ||
+        call.startedOffsetMs > trace.elapsedMs ||
+        !Number.isSafeInteger(call.durationMs) ||
+        call.durationMs < 0 ||
+        call.durationMs > trace.hardDeadlineMs ||
+        call.operation !== "readRewardSnapshot" ||
+        call.attempt !== 1 ||
+        call.outcome !== "success" ||
+        call.providerIdentity !== binding.identity ||
+        call.providerVendorGroup !== binding.vendorGroup ||
+        call.providerEndpointCommitment !== binding.endpointCommitment ||
+        call.providerOriginCommitment !== binding.endpointOriginCommitment;
+    })
+  ) {
+    return projectorValidationFailure();
+  }
+
+  return Object.freeze({
+    chunkEndOffsets: Object.freeze(chunkEndOffsets),
+    providerAChunkCommitments: Object.freeze(providerAChunkCommitments),
+    providerBChunkCommitments: Object.freeze(providerBChunkCommitments),
+    providerAChunkCallCounts: Object.freeze(providerAChunkCallCounts),
+    providerBChunkCallCounts: Object.freeze(providerBChunkCallCounts),
   });
 }
 
@@ -3602,11 +3879,13 @@ function assertProjectionProviderEvidenceBindings(input: {
   const sortedRewardSnapshots = [...(input.projection.rewardSnapshots ?? [])].sort(
     (left, right) => left.vault.localeCompare(right.vault),
   );
-  if (
-    sortedRewardEvidence.length !== sortedRewardSnapshots.length ||
-    sortedRewardEvidence.some((reward, index) => {
-      const snapshot = sortedRewardSnapshots[index];
-      return !snapshot ||
+  if (sortedRewardEvidence.length !== sortedRewardSnapshots.length) {
+    return projectorValidationFailure();
+  }
+  for (const [index, reward] of sortedRewardEvidence.entries()) {
+    const snapshot = sortedRewardSnapshots[index];
+    if (
+      !snapshot ||
       reward.vault !== snapshot.vault ||
       reward.poolId !== snapshot.poolId ||
       reward.configurationEpoch !== snapshot.configurationEpoch ||
@@ -3615,33 +3894,11 @@ function assertProjectionProviderEvidenceBindings(input: {
         snapshot.totalCreatorFeesReceived ||
       JSON.stringify(reward.allocations) !==
         JSON.stringify(snapshot.allocations) ||
-      JSON.stringify(reward.balances) !== JSON.stringify(snapshot.balances) ||
-      !matches(reward.providerIdentities, expectedIdentities) ||
-      !matches(reward.providerVendorGroups, expectedVendors) ||
-      !matches(reward.providerEndpointCommitments, expectedEndpoints) ||
-      !matches(reward.providerOriginCommitments, expectedOrigins) ||
-      reward.providerCallCounts.some(
-        (count) => !Number.isSafeInteger(count) || count < 1 || count > 128,
-      ) ||
-      !matches(
-        reward.executionTrace.providerCallCounts,
-        reward.providerCallCounts,
-      ) ||
-      reward.executionTrace.calls.length !== 2 ||
-      reward.executionTrace.calls.some((call, providerIndex) => {
-        const binding = bindings[providerIndex];
-        return !binding ||
-          call.operation !== "readRewardSnapshot" ||
-          call.attempt !== 1 ||
-          call.outcome !== "success" ||
-          call.providerIdentity !== binding.identity ||
-          call.providerVendorGroup !== binding.vendorGroup ||
-          call.providerEndpointCommitment !== binding.endpointCommitment ||
-          call.providerOriginCommitment !== binding.endpointOriginCommitment;
-      })
-    })
-  ) {
-    return projectorValidationFailure();
+      JSON.stringify(reward.balances) !== JSON.stringify(snapshot.balances)
+    ) {
+      return projectorValidationFailure();
+    }
+    canonicalRewardVerificationChunkManifest({ reward, bindings });
   }
 }
 
@@ -4162,6 +4419,10 @@ async function commitPostgresVerifiedProjection(input: {
         privatePlan.runId,
         rewardDelta.vault,
       );
+      const chunkManifest = canonicalRewardVerificationChunkManifest({
+        reward: rewardEvidence,
+        bindings: input.rpcEvidenceBindings!,
+      });
       const encodedRewardEvidence = providerEvidenceV3("reward_snapshot", {
         chain_id: "1",
         release_id: input.scope.releaseId,
@@ -4185,12 +4446,22 @@ async function commitPostgresVerifiedProjection(input: {
         provider_a_call_count: rewardEvidence.providerCallCounts[0],
         provider_b_call_count: rewardEvidence.providerCallCounts[1],
         verification_accounts: rewardEvidence.verificationAccounts,
+        verification_account_chunk_end_offsets:
+          chunkManifest.chunkEndOffsets,
+        provider_a_verification_chunk_commitments:
+          chunkManifest.providerAChunkCommitments,
+        provider_b_verification_chunk_commitments:
+          chunkManifest.providerBChunkCommitments,
+        provider_a_verification_chunk_call_counts:
+          chunkManifest.providerAChunkCallCounts,
+        provider_b_verification_chunk_call_counts:
+          chunkManifest.providerBChunkCallCounts,
         folded_snapshot_commitment: foldedSnapshotCommitment,
         execution_trace_commitment: rewardExecutionTraceCommitment,
       });
       exactIdResult(
         await transaction.query(
-          "select programmable_private.append_reward_snapshot_provider_evidence_v1($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::bytea, $6, $7, $8::numeric, $9::bytea, $10::bytea, $11::bytea, $12::integer, $13::integer, $14::bytea[], $15::bytea, $16::jsonb, $17::bytea, $18::smallint, $19::bytea, $20::bytea, $21::timestamptz) as id",
+          "select programmable_private.append_reward_snapshot_provider_evidence_v1($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::bytea, $6, $7, $8::numeric, $9::bytea, $10::bytea, $11::bytea, $12::integer, $13::integer, $14::bytea[], $15::integer[], $16::bytea[], $17::bytea[], $18::integer[], $19::integer[], $20::bytea, $21::jsonb, $22::bytea, $23::smallint, $24::bytea, $25::bytea, $26::timestamptz) as id",
           [
             rewardEvidenceId,
             privatePlan.runId,
@@ -4206,6 +4477,11 @@ async function commitPostgresVerifiedProjection(input: {
             rewardEvidence.providerCallCounts[0],
             rewardEvidence.providerCallCounts[1],
             rewardEvidence.verificationAccounts.map(hexToBytes),
+            chunkManifest.chunkEndOffsets,
+            chunkManifest.providerAChunkCommitments.map(hexToBytes),
+            chunkManifest.providerBChunkCommitments.map(hexToBytes),
+            chunkManifest.providerAChunkCallCounts,
+            chunkManifest.providerBChunkCallCounts,
             hexToBytes(foldedSnapshotCommitment),
             JSON.stringify(rewardEvidence.executionTrace),
             hexToBytes(rewardExecutionTraceCommitment),
@@ -4329,9 +4605,7 @@ async function commitPostgresVerifiedProjection(input: {
     }
 
     const rewardDeltas = incrementalStage.rewardDeltas;
-    const promotionMode = rewardDeltas.length === 0
-      ? "full_launch" as const
-      : "reward_snapshot_delta" as const;
+    const promotionMode = "exact_incremental" as const;
     if (rewardDeltas.length > 0) {
       if (
         (projection.rewardSnapshots ?? []).length !== rewardDeltas.length ||
@@ -4346,15 +4620,43 @@ async function commitPostgresVerifiedProjection(input: {
         return projectorValidationFailure();
       }
     }
-    const occurrenceIds = promotionMode === "reward_snapshot_delta"
-      ? chainOrderedOccurrenceIds
-      : [...chainOrderedOccurrenceIds].sort();
+    const occurrenceIds = chainOrderedOccurrenceIds;
     allocationPairs.sort((left, right) =>
       left.factId.localeCompare(right.factId),
     );
     const checkpointGeneration = (
       BigInt(expectedCheckpoint?.generation ?? "0") + 1n
     ).toString();
+    const publicationId = deterministicUuid(
+      "projection-publication",
+      privatePlan.runId,
+    );
+    const providerBindingId = deterministicUuid(
+      "projection-provider-binding",
+      privatePlan.runId,
+    );
+    const rewardSnapshotEvidenceIds = [...rewardProviderEvidence]
+      .sort((left, right) => left.vault.localeCompare(right.vault))
+      .map(({ evidenceId }) => evidenceId);
+    const providerBindingRows = await transaction.query<{
+      commitment: unknown;
+    }>(
+      "select programmable_private.projection_provider_binding_commitment_v1($1::uuid, $2::uuid, $3, $4::uuid, $5::uuid[], $6::timestamptz) as commitment",
+      [
+        publicationId,
+        privatePlan.runId,
+        promotionMode,
+        executionEvidenceId,
+        rewardSnapshotEvidenceIds,
+        verifiedAt,
+      ],
+    );
+    if (providerBindingRows.length !== 1) {
+      return projectorValidationFailure();
+    }
+    const providerBindingCommitment = databaseBytes32(
+      providerBindingRows[0]!.commitment,
+    );
     const resultCommitment = keccak256(
       toBytes(
         JSON.stringify([
@@ -4376,17 +4678,17 @@ async function commitPostgresVerifiedProjection(input: {
           projection.rewardSnapshots ?? [],
           projection.rewardEvidence ?? [],
           rewardProviderEvidence,
+          {
+            providerBindingId,
+            providerBindingCommitment,
+          },
           PROJECTION_ROUTE_KEYS,
         ]),
       ),
     );
-    const publicationId = deterministicUuid(
-      "projection-publication",
-      privatePlan.runId,
-    );
     exactIdResult(
       await transaction.query(
-        "select programmable_private.promote_projection_run_v2($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7::bigint, $8::bytea, $9::bigint, $10::bigint, $11::bigint, $12::uuid, $13::uuid, $14::numeric, $15::bytea, $16::numeric, $17, $18::uuid[], $19::uuid[], $20::uuid[], $21::uuid[], $22::text[], $23::bytea, $24::timestamptz) as id",
+        "select programmable_private.promote_projection_run_v3($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7::bigint, $8::bytea, $9::bigint, $10::bigint, $11::bigint, $12::uuid, $13::uuid, $14::numeric, $15::bytea, $16::numeric, $17, $18::uuid[], $19::uuid[], $20::uuid[], $21::uuid[], $22::text[], $23::bytea, $24::uuid, $25::uuid[], $26::uuid, $27::bytea, $28::timestamptz) as id",
         [
           promotionMode,
           publicationId,
@@ -4411,6 +4713,10 @@ async function commitPostgresVerifiedProjection(input: {
           dispositionIds,
           [...PROJECTION_ROUTE_KEYS],
           hexToBytes(resultCommitment),
+          executionEvidenceId,
+          rewardSnapshotEvidenceIds,
+          providerBindingId,
+          hexToBytes(providerBindingCommitment),
           verifiedAt,
         ],
       ),

@@ -15,6 +15,8 @@ import {
 } from "../../lib/data-pipeline/postgres-projector";
 import type { EnvioCandidate } from "../../lib/data-pipeline/envio";
 import type { DualRpcCandidateWindowEvidence } from "../../lib/data-pipeline/dual-rpc";
+import { projectorOccurrenceUuid } from "../../lib/data-pipeline/projector-ids";
+import { foldProjectorRewardState } from "../../lib/data-pipeline/projector-reward-fold";
 
 const bytes32 = (byte: string) => `0x${byte.repeat(64)}` as `0x${string}`;
 const address = (byte: string) => `0x${byte.repeat(40)}` as `0x${string}`;
@@ -590,6 +592,12 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
   readonly decisionIds = new Map<string, string>();
   candidateRows: readonly Record<string, unknown>[] | null = null;
   checkpointRow: Record<string, unknown> | null = null;
+  manifestRow: Record<string, unknown> | null = null;
+  dynamicRows: readonly Record<string, unknown>[] | null = null;
+  poolBaselineRow: Record<string, unknown> | null = null;
+  rewardStateActiveRows: readonly Record<string, unknown>[] | null = null;
+  rewardStateBalanceRows: readonly Record<string, unknown>[] | null = null;
+  ingestionCursorRow: Record<string, unknown> | null = null;
   readonly candidateId = `1:${bytes32("d")}:${bytes32("e")}:10`;
 
   async transaction<T>(
@@ -641,11 +649,27 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
               this.checkpointRow?.checkpoint_cursor_candidate_id ?? null,
           }] as unknown as Row[];
         }
+        if (text.includes("get_envio_ingestion_cursor_v1")) {
+          if (this.ingestionCursorRow) {
+            return [this.ingestionCursorRow] as unknown as Row[];
+          }
+          const terminal = this.candidateRows?.at(-1);
+          return [{
+            generation: "8",
+            block_number: terminal?.block_number ?? "25650001",
+            block_hash: terminal?.block_hash ?? bytes(bytes32("d")),
+            block_global_log_index: null,
+            candidate_id: null,
+          }] as unknown as Row[];
+        }
         if (text.includes("acquire_projector_lease")) {
           this.leaseGeneration = "1";
           return [{ acquired: true }] as unknown as Row[];
         }
         if (text.includes("get_projector_release_manifest_v1")) {
+          if (this.manifestRow) {
+            return [this.manifestRow] as unknown as Row[];
+          }
           return [{
             epoch_id: "70000000-0000-4000-8000-000000000020",
             pointer_generation: "1",
@@ -658,7 +682,7 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
           }] as unknown as Row[];
         }
         if (text.includes("get_projector_dynamic_source_attestations_v1")) {
-          return [] as unknown as Row[];
+          return (this.dynamicRows ?? []) as unknown as Row[];
         }
         if (text.includes("list_projector_candidate_page_v1")) {
           if (this.candidateRows) {
@@ -707,6 +731,32 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
         if (text.includes("append_projection_provider_execution_evidence_v1")) {
           return [{ id: values[0] }] as unknown as Row[];
         }
+        if (text.includes("get_projector_pool_baseline_by_id_v1")) {
+          return (this.poolBaselineRow ? [this.poolBaselineRow] : []) as unknown as Row[];
+        }
+        if (text.includes("get_projector_reward_state_by_vault_v1")) {
+          return (this.rewardStateActiveRows ?? []) as unknown as Row[];
+        }
+        if (text.includes("get_projector_reward_balances_by_vault_v1")) {
+          return (this.rewardStateBalanceRows ?? []) as unknown as Row[];
+        }
+        if (text.includes("resolve_envio_candidate")) {
+          this.decisionIds.set(String(values[2]), String(values[0]));
+          return [{ id: values[0] }] as unknown as Row[];
+        }
+        if (text.includes("append_chain_event_occurrence")) {
+          return [{ id: values[1] }] as unknown as Row[];
+        }
+        if (
+          text.includes("append_creator_fee_checkpoint_fact") ||
+          text.includes("stage_current_reward_snapshot_v2") ||
+          text.includes("append_reward_snapshot_provider_evidence_v1")
+        ) {
+          return [{ id: values[0] }] as unknown as Row[];
+        }
+        if (text.includes("get_staged_reward_folded_commitment_v1")) {
+          return [{ commitment: bytes(bytes32("c")) }] as unknown as Row[];
+        }
         if (text.includes("ignore_envio_candidate_v1")) {
           this.decisionId = String(values[0]);
           this.decisionIds.set(String(values[2]), String(values[0]));
@@ -753,7 +803,10 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
             changed_at: "2026-07-31T18:00:00.000Z",
           }] as unknown as Row[];
         }
-        if (text.includes("promote_projection_run_v2")) {
+        if (text.includes("projection_provider_binding_commitment_v1")) {
+          return [{ commitment: bytes(bytes32("b")) }] as unknown as Row[];
+        }
+        if (text.includes("promote_projection_run_v3")) {
           return [{ id: values[1] }] as unknown as Row[];
         }
         if (text.includes("promote_projection_run")) {
@@ -1099,5 +1152,583 @@ describe("release-scoped projector Postgres commit", () => {
       "explore-token",
       "launch-lookup",
     ]);
+  });
+
+  it("does not treat an empty candidate fetch as a complete block", async () => {
+    const executor = new ReleaseProjectionExecutor();
+    const blockHash = bytes32("d");
+    const transactionHash = bytes32("e");
+    executor.candidateRows = Array.from({ length: 33 }, (_value, index) => ({
+      candidate_id: `1:${blockHash}:${transactionHash}:${index}`,
+      provider_deployment_id: IDS[0],
+      block_number: "25650001",
+      block_hash: bytes(blockHash),
+      transaction_hash: bytes(transactionHash),
+      transaction_index: "1",
+      block_global_log_index: String(index),
+      source_address: bytes(address("1")),
+      event_signature: bytes(bytes32("f")),
+      event_type: "UnknownEvent",
+      ordered_topics: [bytes(bytes32("f"))],
+      raw_data: Buffer.alloc(0),
+      decoded_payload: {},
+      payload_hash: bytes(bytes32("1")),
+      content_commitment: bytes(bytes32("2")),
+      contract_name: "UnknownContract",
+      status: "pending",
+      attempt_count: "0",
+    }));
+    executor.ingestionCursorRow = {
+      generation: "8",
+      block_number: "25650001",
+      block_hash: bytes(blockHash),
+      block_global_log_index: "32",
+      candidate_id: `1:${blockHash}:${transactionHash}:32`,
+    };
+    let sequence = 1;
+    const store = createPostgresReleaseProjectionStore({
+      executor,
+      providers: PROVIDERS,
+      rpcEvidenceBindings: RPC_EVIDENCE_BINDINGS,
+      scope: {
+        releaseId: "classic-v2",
+        modelId: "classic",
+        sourceGroup: "core",
+      },
+      runtimeFence: RUNTIME_FENCE,
+      uuid: () =>
+        `84000000-0000-4000-8000-${String(sequence++).padStart(12, "0")}`,
+      now: () => new Date("2026-07-31T18:00:00.000Z"),
+    });
+
+    await expect(store.readProjectionPlan()).resolves.toBeNull();
+    expect(
+      executor.queries.some(({ text }) => text.includes("open_run")),
+    ).toBe(false);
+  });
+
+  it("persists a 49-account reward snapshot through the exact v2/v3 contracts", async () => {
+    const executor = new ReleaseProjectionExecutor();
+    const rewardVault = address("a");
+    const poolId = bytes32("6");
+    const configurationHash = bytes32("4");
+    const blockHash = bytes32("d");
+    const transactionHashes = [bytes32("e"), bytes32("f")] as const;
+    const eventSignature = bytes32("9");
+    const candidateRows = transactionHashes.map((transactionHash, index) => ({
+      candidate_id: `1:${blockHash}:${transactionHash}:${10 + index}`,
+      provider_deployment_id: IDS[0],
+      block_number: "25650001",
+      block_hash: bytes(blockHash),
+      transaction_hash: bytes(transactionHash),
+      transaction_index: String(index + 1),
+      block_global_log_index: String(index + 10),
+      source_address: bytes(rewardVault),
+      event_signature: bytes(eventSignature),
+      event_type: "CreatorFeesCheckpointed",
+      ordered_topics: [bytes(eventSignature)],
+      raw_data: Buffer.alloc(0),
+      decoded_payload: {
+        poolId,
+        configurationEpoch: "1",
+        amount: "10",
+        totalCreatorFeesReceived: String((index + 1) * 10),
+      },
+      payload_hash: bytes(bytes32(index === 0 ? "1" : "2")),
+      content_commitment: bytes(bytes32(index === 0 ? "3" : "4")),
+      contract_name: "ClassicV3RewardVault",
+      status: "pending",
+      attempt_count: "0",
+    }));
+    executor.candidateRows = candidateRows;
+    executor.manifestRow = {
+      epoch_id: "70000000-0000-4000-8000-000000000020",
+      pointer_generation: "1",
+      epoch_commitment: bytes(bytes32("1")),
+      artifact_creation_code_commitment: bytes(bytes32("2")),
+      source_bindings: [{
+        binding_id: "20000000-0000-4000-8000-000000000001",
+        source_name: "ClassicV3RewardVaultFactory",
+        source_role: "reward_vault_factory",
+        source_type: "ethereum_contract",
+        source_address: "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
+        inclusive_start_block: "25640000",
+        abi_event_set_commitment: bytes32("b"),
+        binding_commitment: bytes32("c"),
+      }],
+      dynamic_source_templates: [{
+        dynamic_source_template_id:
+          "30000000-0000-4000-8000-000000000001",
+        parent_factory_release_binding_id:
+          "20000000-0000-4000-8000-000000000001",
+        parent_factory_binding_commitment: bytes32("c"),
+        deployed_source_role: "reward_vault",
+        normalized_runtime_code_hash: bytes32("e"),
+        expected_instance_runtime_code_hash: null,
+        immutable_references_commitment: bytes32("f"),
+        immutable_binding_spec: {
+          bindings: [{
+            ordinal: "0",
+            offset: "4",
+            length: "20",
+            source: "deployed_address",
+            encoding: "address",
+          }],
+        },
+        immutable_binding_commitment: bytes32("1"),
+        runtime_code_length: "200",
+        abi_event_set_commitment: bytes32("2"),
+        template_commitment: bytes32("3"),
+      }],
+      projection_event_rules: [{
+        projection_event_rule_id:
+          "30000000-0000-4000-8000-000000000002",
+        projection_kind: "creator-fee-checkpoint",
+        source_role: "reward_vault",
+        event_type: "CreatorFeesCheckpointed",
+        rule_commitment: bytes32("4"),
+      }],
+      launch_completeness_requirements: [],
+    };
+    executor.dynamicRows = [{
+      dynamic_source_attestation_id:
+        "40000000-0000-4000-8000-000000000001",
+      dynamic_source_template_id:
+        "30000000-0000-4000-8000-000000000001",
+      runtime_code_evidence_id:
+        "40000000-0000-4000-8000-000000000002",
+      deployed_source_address: bytes(rewardVault),
+      deployed_source_role: "reward_vault",
+      deployment_block_number: "25645000",
+      runtime_code_hash: bytes(bytes32("5")),
+      normalized_runtime_code_hash: bytes(bytes32("e")),
+      expected_instance_runtime_code_hash: null,
+      runtime_code_length: "200",
+      immutable_references_commitment: bytes(bytes32("f")),
+      immutable_binding_spec: {
+        bindings: [{
+          ordinal: "0",
+          offset: "4",
+          length: "20",
+          source: "deployed_address",
+          encoding: "address",
+        }],
+      },
+      immutable_binding_commitment: bytes(bytes32("1")),
+      abi_event_set_commitment: bytes(bytes32("2")),
+      template_commitment: bytes(bytes32("3")),
+      attestation_commitment: bytes(bytes32("5")),
+      parent_factory_occurrence_id:
+        "40000000-0000-4000-8000-000000000003",
+      parent_factory_release_binding_id:
+        "20000000-0000-4000-8000-000000000001",
+      parent_factory_binding_commitment: bytes(bytes32("c")),
+      dynamic_source_release_asset_binding_id:
+        "40000000-0000-4000-8000-000000000004",
+      launch_occurrence_id: "40000000-0000-4000-8000-000000000005",
+      pool_occurrence_id: "40000000-0000-4000-8000-000000000006",
+      token: bytes(address("b")),
+      pool_id: bytes(poolId),
+      hook: bytes(address("c")),
+      quote_asset: bytes(address("d")),
+      asset_binding_commitment: bytes(bytes32("7")),
+    }];
+    executor.poolBaselineRow = {
+      pool_projection_id: "50000000-0000-4000-8000-000000000001",
+      launch_projection_id: "50000000-0000-4000-8000-000000000002",
+      token: bytes(address("b")),
+      creator: bytes(address("8")),
+      reward_vault: bytes(rewardVault),
+      currency0: bytes(address("b")),
+      currency1: bytes(address("0")),
+      pool_key_fee: "10000",
+      tick_spacing: "200",
+      hook: bytes(address("c")),
+      pool_fee_configuration_id: null,
+      buy_swap_fee_bps: null,
+      sell_swap_fee_bps: null,
+      buy_creator_fee_bps: null,
+      sell_creator_fee_bps: null,
+      launcher_fee_bps: null,
+      transfer_tax_bps: null,
+      lp_fee_pips: null,
+      last_source_occurrence_id:
+        "50000000-0000-4000-8000-000000000003",
+    };
+    const beneficiary = `0x${"1".padStart(40, "0")}` as `0x${string}`;
+    const rewardHeader = {
+      chain_id: "1",
+      release_id: "classic-v3",
+      model_id: "classic",
+      source_group: "core",
+      epoch_id: "70000000-0000-4000-8000-000000000020",
+      pointer_generation: "1",
+      checkpoint_id: "51000000-0000-4000-8000-000000000001",
+      projector_version: "projector-v1",
+      checkpoint_generation: "1",
+      reorg_generation: "0",
+      checkpoint_block_number: "25650000",
+      checkpoint_block_hash: bytes(bytes32("7")),
+      reward_vault_projection_id:
+        "51000000-0000-4000-8000-000000000002",
+      allocation_fact_id: "51000000-0000-4000-8000-000000000003",
+      allocation_evidence_id: "51000000-0000-4000-8000-000000000004",
+      vault: bytes(rewardVault),
+      pool_id: bytes(poolId),
+      quote_asset: null,
+      configuration_hash: bytes(configurationHash),
+      active_configuration_hash: bytes(configurationHash),
+      total_creator_fees_received: "0",
+      configuration_epoch: "1",
+      baseline_projection_run_id:
+        "51000000-0000-4000-8000-000000000005",
+      baseline_publication_commitment: bytes(bytes32("8")),
+      baseline_promoted_block_number: "25650000",
+      baseline_promoted_block_hash: bytes(bytes32("7")),
+      vault_source_occurrence_id:
+        "51000000-0000-4000-8000-000000000006",
+      vault_source_logical_event_id:
+        "51000000-0000-4000-8000-000000000007",
+      vault_source_block_hash: bytes(bytes32("7")),
+    };
+    executor.rewardStateActiveRows = [{
+      ...rewardHeader,
+      allocation_index: "0",
+      beneficiary: bytes(beneficiary),
+      payout_address: bytes(beneficiary),
+      share_bps: "10000",
+      claimable_accrued: "0",
+      claimed_total: "0",
+      balance_projection_run_id:
+        "51000000-0000-4000-8000-000000000008",
+      balance_publication_commitment: bytes(bytes32("8")),
+      balance_promoted_block_number: "25650000",
+      balance_promoted_block_hash: bytes(bytes32("7")),
+      allocation_source_occurrence_id:
+        "51000000-0000-4000-8000-000000000009",
+      allocation_source_logical_event_id:
+        "51000000-0000-4000-8000-000000000010",
+      allocation_source_block_hash: bytes(bytes32("7")),
+      balance_source_occurrence_id:
+        "51000000-0000-4000-8000-000000000011",
+      balance_source_logical_event_id:
+        "51000000-0000-4000-8000-000000000012",
+      balance_source_block_hash: bytes(bytes32("7")),
+      verified_at: "2026-07-31T17:00:00.000Z",
+    }];
+    executor.rewardStateBalanceRows = [{
+      ...rewardHeader,
+      account_reward_balance_id:
+        "52000000-0000-4000-8000-000000000001",
+      account: bytes(beneficiary),
+      payout_address: bytes(beneficiary),
+      payout_source_kind: "initial",
+      payout_configuration_epoch: "1",
+      claimable_accrued: "0",
+      claimed_total: "0",
+      balance_projection_run_id:
+        "52000000-0000-4000-8000-000000000002",
+      balance_publication_commitment: bytes(bytes32("8")),
+      balance_promoted_block_number: "25650000",
+      balance_promoted_block_hash: bytes(bytes32("7")),
+      payout_projection_run_id:
+        "52000000-0000-4000-8000-000000000003",
+      payout_publication_commitment: bytes(bytes32("8")),
+      payout_promoted_block_number: "25650000",
+      payout_promoted_block_hash: bytes(bytes32("7")),
+      payout_source_occurrence_id:
+        "52000000-0000-4000-8000-000000000004",
+      payout_source_logical_event_id:
+        "52000000-0000-4000-8000-000000000005",
+      payout_source_block_hash: bytes(bytes32("7")),
+      balance_source_occurrence_id:
+        "52000000-0000-4000-8000-000000000006",
+      balance_source_logical_event_id:
+        "52000000-0000-4000-8000-000000000007",
+      balance_source_block_hash: bytes(bytes32("7")),
+      verified_at: "2026-07-31T17:00:00.000Z",
+    }];
+
+    let sequence = 1;
+    const store = createPostgresReleaseProjectionStore({
+      executor,
+      providers: PROVIDERS,
+      rpcEvidenceBindings: RPC_EVIDENCE_BINDINGS,
+      scope: {
+        releaseId: "classic-v3",
+        modelId: "classic",
+        sourceGroup: "core",
+      },
+      runtimeFence: RUNTIME_FENCE,
+      uuid: () =>
+        `83000000-0000-4000-8000-${String(sequence++).padStart(12, "0")}`,
+      now: () => new Date("2026-07-31T18:00:00.000Z"),
+    });
+    const plan = await store.readProjectionPlan();
+    expect(plan).toMatchObject({ batchKind: "reward-block" });
+    expect(plan?.entries).toHaveLength(2);
+
+    const freshCandidates = plan!.entries.map(({ candidate }, index) => ({
+      ...candidate,
+      blockTimestamp: "1750000000",
+      releaseHint: {
+        model: "classic" as const,
+        releaseVersion: "classic-v3",
+      },
+      decodedPayload: {
+        poolId,
+        configurationEpoch: "1",
+        amount: "10",
+        totalCreatorFeesReceived: String((index + 1) * 10),
+      },
+    }));
+    const occurrenceIds = freshCandidates.map((candidate) =>
+      projectorOccurrenceUuid({
+        transactionHash: candidate.transactionHash,
+        receiptLogOrdinal: "0",
+        blockHash: candidate.blockHash,
+      })
+    );
+    const baseline = {
+      vault: rewardVault,
+      poolId,
+      configurationEpoch: "1",
+      activeConfigurationHash: configurationHash,
+      totalCreatorFeesReceived: "0",
+      allocations: [{
+        allocationIndex: 0,
+        beneficiary,
+        payoutAddress: beneficiary,
+        shareBps: "10000",
+      }],
+      balances: [{
+        account: beneficiary,
+        payoutAddress: beneficiary,
+        claimableAccrued: "0",
+        claimedTotal: "0",
+      }],
+    } as const;
+    const rewardEvents = occurrenceIds.map((occurrenceId, index) => ({
+      occurrenceId,
+      vault: rewardVault,
+      blockNumber: "25650001",
+      transactionIndex: String(index + 1),
+      blockGlobalLogIndex: String(index + 10),
+      kind: "creator-fee-checkpoint" as const,
+      values: {
+        poolId,
+        configurationEpoch: "1",
+        amount: "10",
+        totalCreatorFeesReceived: String((index + 1) * 10),
+      },
+    }));
+    const rewardSnapshot = foldProjectorRewardState({
+      model: "classic-v3",
+      baseline,
+      events: rewardEvents,
+    });
+    const occurrences = freshCandidates.map((candidate, index) => ({
+      candidateId: candidate.candidateId,
+      chainId: "1" as const,
+      releaseId: "classic-v3" as const,
+      modelId: "classic" as const,
+      sourceGroup: "core" as const,
+      blockNumber: candidate.blockNumber,
+      blockHash: candidate.blockHash,
+      blockTimestamp: candidate.blockTimestamp,
+      transactionHash: candidate.transactionHash,
+      transactionIndex: String(candidate.transactionIndex),
+      receiptLogOrdinal: "0",
+      blockGlobalLogIndex: String(candidate.blockGlobalLogIndex),
+      sourceAddress: candidate.sourceAddress,
+      eventSignature,
+      eventType: "CreatorFeesCheckpointed",
+      orderedTopics: candidate.orderedTopics,
+      rawData: candidate.rawData,
+      decodedPayload: rewardEvents[index]!.values,
+      payloadHash: candidate.payloadHash,
+      dynamicSourceAttestationId:
+        "40000000-0000-4000-8000-000000000001",
+    }));
+    const facts = freshCandidates.map((candidate, index) => ({
+      sourceCandidateId: candidate.candidateId,
+      sourceRole: "reward_vault" as const,
+      kind: "creator-fee-checkpoint" as const,
+      procedure: "append_creator_fee_checkpoint_fact" as const,
+      values: rewardEvents[index]!.values,
+    }));
+    const candidateEvidence = freshCandidates.map((candidate, index) => ({
+      chainId: 1 as const,
+      candidateId: candidate.candidateId,
+      sourceAddress: candidate.sourceAddress,
+      contractName: candidate.contractName,
+      eventName: candidate.eventName,
+      sourceKind: "dynamic-attested" as const,
+      model: "classic" as const,
+      releaseVersion: "classic-v3",
+      payloadHash: candidate.payloadHash,
+      rawLogCommitment: bytes32(index === 0 ? "a" : "b"),
+      providerIdentities: ["alchemy", "quicknode"] as const,
+      providerVendorGroups: ["alchemy", "quicknode"] as const,
+      providerEndpointCommitments: [bytes32("3"), bytes32("5")] as const,
+      providerOriginCommitments: [bytes32("4"), bytes32("6")] as const,
+      providerHeads: ["25650020", "25650021"] as const,
+      safeBlockNumber: "25650008",
+      safeBlockHash: bytes32("8"),
+      candidateBlockNumber: candidate.blockNumber,
+      candidateBlockHash: candidate.blockHash,
+      candidateBlockTimestamp: candidate.blockTimestamp,
+      transactionHash: candidate.transactionHash,
+      transactionIndex: candidate.transactionIndex,
+      receiptCommitment: bytes32(index === 0 ? "c" : "d"),
+      sourceCodeHash: bytes32("e"),
+      receiptLogOrdinal: 0,
+      dynamicSourceAttestationId:
+        "40000000-0000-4000-8000-000000000001",
+      normalizedRuntimeCodeHash: bytes32("e"),
+      immutableReferencesCommitment: bytes32("f"),
+      runtimeByteLength: "200",
+    }));
+    const verificationAccounts = Array.from({ length: 49 }, (_value, index) =>
+      `0x${(index + 1).toString(16).padStart(40, "0")}` as `0x${string}`
+    );
+    const rewardCalls = [0, 0, 1, 1].map((providerIndex) => {
+      const binding = RPC_EVIDENCE_BINDINGS[providerIndex]!;
+      return {
+        providerIdentity: binding.identity,
+        providerVendorGroup: binding.vendorGroup,
+        providerEndpointCommitment: binding.endpointCommitment,
+        providerOriginCommitment: binding.endpointOriginCommitment,
+        operation: "readRewardSnapshot" as const,
+        attempt: 1,
+        startedOffsetMs: 0,
+        durationMs: 1,
+        outcome: "success" as const,
+      };
+    });
+    const rewardEvidence = {
+      ...rewardSnapshot,
+      model: "classic-v3" as const,
+      blockNumber: "25650001",
+      blockHash,
+      configurationHash,
+      totalCreatorFeesClaimed: "0",
+      rpcCallCount: 228,
+      verificationAccounts,
+      providerIdentities: ["alchemy", "quicknode"] as const,
+      providerVendorGroups: ["alchemy", "quicknode"] as const,
+      providerEndpointCommitments: [bytes32("3"), bytes32("5")] as const,
+      providerOriginCommitments: [bytes32("4"), bytes32("6")] as const,
+      providerCallCounts: [114, 114] as const,
+      providerSnapshotCommitments: [bytes32("7"), bytes32("7")] as const,
+      chunks: [{
+        chunkIndex: 0,
+        verificationAccounts: verificationAccounts.slice(0, 48),
+        providerCallCounts: [104, 104] as const,
+        providerSnapshotCommitments: [bytes32("8"), bytes32("8")] as const,
+      }, {
+        chunkIndex: 1,
+        verificationAccounts: verificationAccounts.slice(48),
+        providerCallCounts: [10, 10] as const,
+        providerSnapshotCommitments: [bytes32("9"), bytes32("9")] as const,
+      }],
+      executionTrace: {
+        startedAtMs: 1,
+        completedAtMs: 2,
+        candidateBatchSize: 0,
+        hardDeadlineMs: 75_000,
+        maxCallsPerProvider: 128,
+        elapsedMs: 1,
+        providerCallCounts: [114, 114] as const,
+        calls: rewardCalls,
+      },
+    } as const;
+    const projection = {
+      plan: plan!,
+      freshCandidates,
+      ignoredCandidateIds: [],
+      evidence: {
+        chainId: 1 as const,
+        providerIdentities: ["alchemy", "quicknode"] as const,
+        providerVendorGroups: ["alchemy", "quicknode"] as const,
+        providerEndpointCommitments: [bytes32("3"), bytes32("5")] as const,
+        providerOriginCommitments: [bytes32("4"), bytes32("6")] as const,
+        providerHeads: ["25650020", "25650021"] as const,
+        safeBlockNumber: "25650008",
+        safeBlockHash: bytes32("8"),
+        executionTrace: {
+          ...projectionExecutionTrace,
+          candidateBatchSize: 2,
+        },
+        candidates: candidateEvidence,
+      },
+      fold: {
+        occurrences,
+        facts,
+        launches: [],
+        knownPools: [],
+      },
+      rewardSnapshot,
+      rewardSnapshots: [rewardSnapshot],
+      rewardEvidence: [rewardEvidence],
+    } as const;
+
+    const malformedQueryStart = executor.queries.length;
+    await expect(
+      store.commitVerifiedProjection({
+        ...projection,
+        rewardEvidence: [{
+          ...rewardEvidence,
+          chunks: [
+            rewardEvidence.chunks[0],
+            { ...rewardEvidence.chunks[1], chunkIndex: 0 },
+          ],
+        }],
+      } as never),
+    ).rejects.toThrow();
+    expect(
+      executor.queries
+        .slice(malformedQueryStart)
+        .some(({ text }) => text.includes("open_run")),
+    ).toBe(false);
+
+    await expect(store.commitVerifiedProjection(projection)).resolves.toEqual({
+      checkpointGeneration: "1",
+    });
+    const stage = executor.queries.find(({ text }) =>
+      text.includes("stage_current_reward_snapshot_v2")
+    );
+    expect(stage?.values).toHaveLength(20);
+    expect(stage?.values[16]).toEqual(occurrenceIds);
+    expect(stage?.values[15]).toBe(occurrenceIds[1]);
+    expect(
+      executor.queries.some(({ text }) =>
+        text.includes("stage_current_reward_snapshot_v1")
+      ),
+    ).toBe(false);
+    const appended = executor.queries.find(({ text }) =>
+      text.includes("append_reward_snapshot_provider_evidence_v1")
+    );
+    expect(appended?.values).toHaveLength(26);
+    expect(appended?.values[11]).toBe(114);
+    expect(appended?.values[12]).toBe(114);
+    expect(appended?.values[13]).toHaveLength(49);
+    expect(appended?.values[14]).toEqual([48, 49]);
+    expect(appended?.values[17]).toEqual([104, 10]);
+    expect(appended?.values[18]).toEqual([104, 10]);
+    const binding = executor.queries.find(({ text }) =>
+      text.includes("projection_provider_binding_commitment_v1")
+    );
+    expect(binding?.values[2]).toBe("exact_incremental");
+    const promotion = executor.queries.at(-1)!;
+    expect(promotion.text).toContain("promote_projection_run_v3");
+    expect(promotion.values).toHaveLength(28);
+    expect(promotion.values[0]).toBe("exact_incremental");
+    expect(promotion.values[24]).toHaveLength(1);
+    expect(
+      executor.queries.some(({ text }) =>
+        text.includes("promote_projection_run_v2")
+      ),
+    ).toBe(false);
   });
 });
