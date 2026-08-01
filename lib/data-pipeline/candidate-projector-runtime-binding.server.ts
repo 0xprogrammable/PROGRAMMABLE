@@ -55,6 +55,27 @@ const EXACT = Object.freeze({
   initializedAt: "2026-08-01T09:00:00.000Z",
 } as const);
 
+const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
+
+export const CANDIDATE_PROMOTION_ENV_NAMES = Object.freeze({
+  providerDeploymentId:
+    "PROGRAMMABLE_PROJECTOR_CANDIDATE_PROVIDER_DEPLOYMENT_ID",
+  deploymentCommitment:
+    "PROGRAMMABLE_PROJECTOR_CANDIDATE_DEPLOYMENT_COMMITMENT",
+  schemaCommitment: "PROGRAMMABLE_PROJECTOR_CANDIDATE_SCHEMA_COMMITMENT",
+  initializationInputCommitment:
+    "PROGRAMMABLE_PROJECTOR_CANDIDATE_INITIALIZATION_INPUT_COMMITMENT",
+  initializedAt: "PROGRAMMABLE_PROJECTOR_CANDIDATE_INITIALIZED_AT",
+  baselineCommitment:
+    "PROGRAMMABLE_PROJECTOR_PROMOTION_BASELINE_COMMITMENT",
+  parityCommitment: "PROGRAMMABLE_PROJECTOR_PROMOTION_PARITY_COMMITMENT",
+  envioAttestationCommitment:
+    "PROGRAMMABLE_PROJECTOR_PROMOTION_ENVIO_ATTESTATION_COMMITMENT",
+  promotionInputCommitment:
+    "PROGRAMMABLE_PROJECTOR_PROMOTION_INPUT_COMMITMENT",
+  promotedAt: "PROGRAMMABLE_PROJECTOR_PROMOTED_AT",
+} as const);
+
 function invalidCandidateBinding(): never {
   throw invalidInput("config", "candidate-projector-runtime-binding");
 }
@@ -104,6 +125,160 @@ export type CandidateProjectorRuntimeBinding = Readonly<{
   }>;
 }>;
 
+export type CandidateDatabasePromotionBinding = Readonly<{
+  providerDeploymentId: string;
+  deploymentCommitment: HexBytes32;
+  schemaCommitment: HexBytes32;
+  initializationInputCommitment: HexBytes32;
+  initializedAt: string;
+  baselineCommitment: HexBytes32;
+  parityCommitment: HexBytes32;
+  envioAttestationCommitment: HexBytes32;
+  promotionInputCommitment: HexBytes32;
+  promotedAt: string;
+}>;
+
+export type ProjectorRuntimeBindingSelection =
+  | Readonly<{
+      mode: typeof CANDIDATE_PROJECTOR_RUNTIME_MODE;
+      releaseBinding: DataPipelineReleaseBinding;
+      candidate: CandidateProjectorRuntimeBinding;
+      promotedDatabase: null;
+    }>
+  | Readonly<{
+      mode: "release";
+      releaseBinding: DataPipelineReleaseBinding;
+      candidate: null;
+      promotedDatabase: CandidateDatabasePromotionBinding | null;
+    }>;
+
+function isExactCandidateReleaseBinding(
+  binding: DataPipelineReleaseBinding,
+): boolean {
+  const envio = binding.envio;
+  return (
+    envio.deploymentLabel === EXACT.deploymentLabel &&
+    envio.graphqlEndpoint === EXACT.endpoint &&
+    envio.schemaVersion === "1" &&
+    envio.sourceCommit === EXACT.sourceCommit &&
+    envio.configSha256 === EXACT.configSha256 &&
+    envio.schemaSha256 === EXACT.schemaSha256 &&
+    envio.handlerSha256 === EXACT.handlerSha256 &&
+    envio.sourceRegistrySha256 === EXACT.sourceRegistrySha256 &&
+    envio.eventSetSha256 === EXACT.eventSetSha256 &&
+    envio.eventCount === EXACT.eventCount
+  );
+}
+
+function candidateReleaseBinding(
+  activeProductionBinding: DataPipelineReleaseBinding,
+): DataPipelineReleaseBinding {
+  if (isExactCandidateReleaseBinding(activeProductionBinding)) {
+    return activeProductionBinding;
+  }
+  if (
+    activeProductionBinding.envio.deploymentLabel !==
+      EXACT.activeProductionLabel ||
+    activeProductionBinding.envio.graphqlEndpoint !==
+      EXACT.activeProductionEndpoint
+  ) {
+    return invalidCandidateBinding();
+  }
+  return Object.freeze({
+    ...activeProductionBinding,
+    envio: Object.freeze({
+      deploymentLabel: EXACT.deploymentLabel,
+      graphqlEndpoint: EXACT.endpoint,
+      schemaVersion: "1" as const,
+      sourceCommit: EXACT.sourceCommit,
+      configSha256: EXACT.configSha256,
+      schemaSha256: EXACT.schemaSha256,
+      handlerSha256: EXACT.handlerSha256,
+      sourceRegistrySha256: EXACT.sourceRegistrySha256,
+      eventSetSha256: EXACT.eventSetSha256,
+      eventCount: EXACT.eventCount,
+    }),
+  }) satisfies DataPipelineReleaseBinding;
+}
+
+function nonzeroBytes32(value: unknown): HexBytes32 {
+  if (
+    typeof value !== "string" ||
+    !/^0x[0-9a-f]{64}$/u.test(value) ||
+    value === ZERO_BYTES32
+  ) {
+    return invalidCandidateBinding();
+  }
+  return value as HexBytes32;
+}
+
+function canonicalTimestamp(value: unknown): string {
+  if (typeof value !== "string" || value.length > 32) {
+    return invalidCandidateBinding();
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== value) {
+    return invalidCandidateBinding();
+  }
+  return value;
+}
+
+function loadCandidateDatabasePromotionBinding(
+  env: Environment,
+): CandidateDatabasePromotionBinding {
+  const providerDeploymentId =
+    env[CANDIDATE_PROMOTION_ENV_NAMES.providerDeploymentId];
+  const deploymentCommitment = nonzeroBytes32(
+    env[CANDIDATE_PROMOTION_ENV_NAMES.deploymentCommitment],
+  );
+  const schemaCommitment = nonzeroBytes32(
+    env[CANDIDATE_PROMOTION_ENV_NAMES.schemaCommitment],
+  );
+  const initializationInputCommitment = nonzeroBytes32(
+    env[CANDIDATE_PROMOTION_ENV_NAMES.initializationInputCommitment],
+  );
+  const initializedAt = canonicalTimestamp(
+    env[CANDIDATE_PROMOTION_ENV_NAMES.initializedAt],
+  );
+  const baselineCommitment = nonzeroBytes32(
+    env[CANDIDATE_PROMOTION_ENV_NAMES.baselineCommitment],
+  );
+  const parityCommitment = nonzeroBytes32(
+    env[CANDIDATE_PROMOTION_ENV_NAMES.parityCommitment],
+  );
+  const envioAttestationCommitment = nonzeroBytes32(
+    env[CANDIDATE_PROMOTION_ENV_NAMES.envioAttestationCommitment],
+  );
+  const promotionInputCommitment = nonzeroBytes32(
+    env[CANDIDATE_PROMOTION_ENV_NAMES.promotionInputCommitment],
+  );
+  const promotedAt = canonicalTimestamp(
+    env[CANDIDATE_PROMOTION_ENV_NAMES.promotedAt],
+  );
+  if (
+    providerDeploymentId !== EXACT.providerDeploymentId ||
+    deploymentCommitment !== EXACT.deploymentCommitment ||
+    schemaCommitment !== EXACT.schemaCommitment ||
+    initializationInputCommitment !== EXACT.initializationInputCommitment ||
+    initializedAt !== EXACT.initializedAt ||
+    Date.parse(promotedAt) <= Date.parse(initializedAt)
+  ) {
+    return invalidCandidateBinding();
+  }
+  return Object.freeze({
+    providerDeploymentId,
+    deploymentCommitment,
+    schemaCommitment,
+    initializationInputCommitment,
+    initializedAt,
+    baselineCommitment,
+    parityCommitment,
+    envioAttestationCommitment,
+    promotionInputCommitment,
+    promotedAt,
+  });
+}
+
 export function loadCandidateProjectorRuntimeBinding(input: Readonly<{
   env: Environment;
   activeProductionBinding: DataPipelineReleaseBinding;
@@ -118,29 +293,16 @@ export function loadCandidateProjectorRuntimeBinding(input: Readonly<{
     input.env.PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY !==
       EXACT.redactedIdentity ||
     PUBLIC_INDEXED_FLAGS.some((name) => input.env[name] !== "false") ||
-    input.activeProductionBinding.envio.deploymentLabel !==
-      EXACT.activeProductionLabel ||
-    input.activeProductionBinding.envio.graphqlEndpoint !==
-      EXACT.activeProductionEndpoint
+    (!isExactCandidateReleaseBinding(input.activeProductionBinding) &&
+      (input.activeProductionBinding.envio.deploymentLabel !==
+        EXACT.activeProductionLabel ||
+        input.activeProductionBinding.envio.graphqlEndpoint !==
+          EXACT.activeProductionEndpoint))
   ) {
     return invalidCandidateBinding();
   }
 
-  const releaseBinding = Object.freeze({
-    ...input.activeProductionBinding,
-    envio: Object.freeze({
-      deploymentLabel: EXACT.deploymentLabel,
-      graphqlEndpoint: EXACT.endpoint,
-      schemaVersion: "1" as const,
-      sourceCommit: EXACT.sourceCommit,
-      configSha256: EXACT.configSha256,
-      schemaSha256: EXACT.schemaSha256,
-      handlerSha256: EXACT.handlerSha256,
-      sourceRegistrySha256: EXACT.sourceRegistrySha256,
-      eventSetSha256: EXACT.eventSetSha256,
-      eventCount: EXACT.eventCount,
-    }),
-  }) satisfies DataPipelineReleaseBinding;
+  const releaseBinding = candidateReleaseBinding(input.activeProductionBinding);
 
   if (
     projectorEnvioDeploymentCommitment({
@@ -171,6 +333,66 @@ export function loadCandidateProjectorRuntimeBinding(input: Readonly<{
       requiredCanonicalIdentity: EXACT.redactedIdentity,
       requiresDatabasePromotionAttestation: true as const,
     }),
+  });
+}
+
+export function selectProjectorRuntimeBinding(input: Readonly<{
+  env: Environment;
+  canonicalBinding: DataPipelineReleaseBinding;
+}>): ProjectorRuntimeBindingSelection {
+  if (
+    Object.values(CANDIDATE_PROMOTION_ENV_NAMES).some(
+      (name) => input.env[`NEXT_PUBLIC_${name}`] !== undefined,
+    )
+  ) {
+    return invalidCandidateBinding();
+  }
+  const mode = input.env.PROGRAMMABLE_PROJECTOR_BINDING_MODE;
+  if (mode === CANDIDATE_PROJECTOR_RUNTIME_MODE) {
+    const candidate = loadCandidateProjectorRuntimeBinding({
+      env: input.env,
+      activeProductionBinding: input.canonicalBinding,
+    });
+    return Object.freeze({
+      mode: CANDIDATE_PROJECTOR_RUNTIME_MODE,
+      releaseBinding: candidate.releaseBinding,
+      candidate,
+      promotedDatabase: null,
+    });
+  }
+  if (mode !== undefined && mode !== "" && mode !== "release") {
+    return invalidCandidateBinding();
+  }
+  if (!isExactCandidateReleaseBinding(input.canonicalBinding)) {
+    if (
+      input.canonicalBinding.envio.deploymentLabel !==
+        EXACT.activeProductionLabel ||
+      input.canonicalBinding.envio.graphqlEndpoint !==
+        EXACT.activeProductionEndpoint
+    ) {
+      return invalidCandidateBinding();
+    }
+    return Object.freeze({
+      mode: "release" as const,
+      releaseBinding: input.canonicalBinding,
+      candidate: null,
+      promotedDatabase: null,
+    });
+  }
+  if (
+    input.env.PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT !==
+      EXACT.mirrorCommit ||
+    input.env.PROGRAMMABLE_ENVIO_GRAPHQL_URL !== EXACT.endpoint ||
+    input.env.PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY !==
+      EXACT.redactedIdentity
+  ) {
+    return invalidCandidateBinding();
+  }
+  return Object.freeze({
+    mode: "release" as const,
+    releaseBinding: input.canonicalBinding,
+    candidate: null,
+    promotedDatabase: loadCandidateDatabasePromotionBinding(input.env),
   });
 }
 
@@ -229,6 +451,57 @@ export async function assertCandidateDatabaseBootstrapState(input: Readonly<{
         hexToBytes(input.binding.databaseBootstrap.schemaCommitment),
         hexToBytes(input.binding.databaseBootstrap.initializationInputCommitment),
         input.binding.databaseBootstrap.initializedAt,
+      ],
+    );
+    if (rows.length !== 1 || rows[0]?.verified !== true) {
+      return invalidCandidateBinding();
+    }
+  });
+}
+
+export async function assertCandidateDatabasePromotedState(input: Readonly<{
+  executor: PostgresExecutor;
+  binding: CandidateDatabasePromotionBinding;
+}>): Promise<void> {
+  await input.executor.transaction(async (transaction) => {
+    const login = await transaction.query<{ session_user: unknown }>(
+      "select session_user::text as session_user",
+    );
+    if (
+      login.length !== 1 ||
+      login[0]?.session_user !== "programmable_projector_login"
+    ) {
+      return invalidCandidateBinding();
+    }
+    await transaction.query("set local role programmable_projector");
+    await transaction.query("set local statement_timeout = '1000ms'");
+    await transaction.query("set local lock_timeout = '250ms'");
+    const role = await transaction.query<{
+      session_user: unknown;
+      current_role: unknown;
+    }>(
+      "select session_user::text as session_user, current_role::text as current_role",
+    );
+    if (
+      role.length !== 1 ||
+      role[0]?.session_user !== "programmable_projector_login" ||
+      role[0]?.current_role !== "programmable_projector"
+    ) {
+      return invalidCandidateBinding();
+    }
+    const rows = await transaction.query<{ verified: unknown }>(
+      "select programmable_private.verify_candidate_database_promoted_v1($1::uuid, $2::bytea, $3::bytea, $4::bytea, $5::timestamptz, $6::bytea, $7::bytea, $8::bytea, $9::bytea, $10::timestamptz) as verified",
+      [
+        input.binding.providerDeploymentId,
+        hexToBytes(input.binding.deploymentCommitment),
+        hexToBytes(input.binding.schemaCommitment),
+        hexToBytes(input.binding.initializationInputCommitment),
+        input.binding.initializedAt,
+        hexToBytes(input.binding.baselineCommitment),
+        hexToBytes(input.binding.parityCommitment),
+        hexToBytes(input.binding.envioAttestationCommitment),
+        hexToBytes(input.binding.promotionInputCommitment),
+        input.binding.promotedAt,
       ],
     );
     if (rows.length !== 1 || rows[0]?.verified !== true) {

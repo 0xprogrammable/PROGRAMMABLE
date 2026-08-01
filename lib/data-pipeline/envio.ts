@@ -19,7 +19,11 @@ import {
   validationError,
 } from "./errors";
 import { decodeManifestEvent } from "./event-manifest";
-import { getDataPipelineReleaseBinding } from "./release-binding.server";
+import {
+  getDataPipelineReleaseBinding,
+  parseDataPipelineReleaseBinding,
+  type DataPipelineReleaseBinding,
+} from "./release-binding.server";
 import {
   boundedJsonRequest,
   type DataPipelineFetcher,
@@ -202,7 +206,6 @@ const PROGRESS_QUERY = `
 
 const INDEXER_STATE_ID = "ethereum-mainnet";
 const SCHEMA_VERSION = "1";
-const RELEASE_BINDING = getDataPipelineReleaseBinding();
 
 type ReviewedModel = "classic" | "stock-paired";
 type ReviewedReleaseVersion =
@@ -241,8 +244,26 @@ function reviewedReleaseVersion(value: string): ReviewedReleaseVersion {
   return value as ReviewedReleaseVersion;
 }
 
-const REVIEWED_RELEASES: readonly ReviewedRelease[] =
-  RELEASE_BINDING.releases.map((release) => {
+type ReviewedEnvioBinding = Readonly<{
+  releaseBinding: DataPipelineReleaseBinding;
+  releases: readonly ReviewedRelease[];
+  staticSources: ReadonlyMap<
+    HexAddress,
+    Readonly<{
+      contractName: string;
+      startBlock: bigint;
+      releases: readonly ReviewedRelease[];
+    }>
+  >;
+  dynamicSources: ReadonlyMap<string, readonly ReviewedRelease[]>;
+}>;
+
+function reviewedEnvioBinding(
+  selectedBinding: DataPipelineReleaseBinding,
+): ReviewedEnvioBinding {
+  const releaseBinding = parseDataPipelineReleaseBinding(selectedBinding);
+  const releases: readonly ReviewedRelease[] = releaseBinding.releases.map(
+    (release) => {
     return {
       model: reviewedModel(release.model),
       releaseVersion: reviewedReleaseVersion(release.releaseVersion),
@@ -250,34 +271,41 @@ const REVIEWED_RELEASES: readonly ReviewedRelease[] =
       dynamicContracts: release.dynamicContracts,
       activationBlock: BigInt(release.activationBlock),
     };
-  });
-
-const REVIEWED_STATIC_SOURCES = new Map(
-  RELEASE_BINDING.sources.map((source) => {
-    const releases = REVIEWED_RELEASES.filter((release) =>
-      release.sourceContracts.includes(source.contractName),
-    );
-    if (releases.length === 0) {
-      throw new Error("Orphaned data pipeline source binding");
+    },
+  );
+  const staticSources = new Map(
+    releaseBinding.sources.map((source) => {
+      const sourceReleases = releases.filter((release) =>
+        release.sourceContracts.includes(source.contractName),
+      );
+      if (sourceReleases.length === 0) {
+        throw new Error("Orphaned data pipeline source binding");
+      }
+      return [
+        source.address,
+        Object.freeze({
+          contractName: source.contractName,
+          startBlock: BigInt(source.startBlock),
+          releases: Object.freeze(sourceReleases),
+        }),
+      ] as const;
+    }),
+  );
+  const dynamicSources = new Map<string, readonly ReviewedRelease[]>();
+  for (const release of releases) {
+    for (const contractName of release.dynamicContracts) {
+      dynamicSources.set(
+        contractName,
+        Object.freeze([...(dynamicSources.get(contractName) ?? []), release]),
+      );
     }
-    return [
-      source.address,
-      {
-        contractName: source.contractName,
-        startBlock: BigInt(source.startBlock),
-        releases,
-      },
-    ] as const;
-  }),
-);
-
-const REVIEWED_DYNAMIC_SOURCES = new Map<string, ReviewedRelease[]>();
-for (const release of REVIEWED_RELEASES) {
-  for (const contractName of release.dynamicContracts) {
-    const releases = REVIEWED_DYNAMIC_SOURCES.get(contractName) ?? [];
-    releases.push(release);
-    REVIEWED_DYNAMIC_SOURCES.set(contractName, releases);
   }
+  return Object.freeze({
+    releaseBinding,
+    releases: Object.freeze(releases),
+    staticSources,
+    dynamicSources,
+  });
 }
 
 const CANDIDATE_PATTERN =
@@ -430,8 +458,9 @@ function parseCandidatePage(input: {
   cursor: EnvioCandidateCursor;
   limit: number;
   throughBlock?: string;
+  reviewedBinding: ReviewedEnvioBinding;
 }): EnvioCandidate[] {
-  const { response, cursor, limit, throughBlock } = input;
+  const { response, cursor, limit, throughBlock, reviewedBinding } = input;
   if (
     !isRecord(response) ||
     !onlyKeys(response, ["data"]) ||
@@ -449,7 +478,7 @@ function parseCandidatePage(input: {
       if (!isRecord(row) || typeof row.id !== "string") {
         throw validationError("envio", "candidate-page-row");
       }
-      const parsed = parseCandidate(row, row.id);
+      const parsed = parseCandidate(row, row.id, reviewedBinding);
       if (
         !placementAfter(parsed, previous) ||
         (throughBlock !== undefined &&
@@ -479,8 +508,8 @@ function validateSource(input: {
   blockNumber: bigint;
   model: string;
   releaseVersion: string;
-}) {
-  const source = REVIEWED_STATIC_SOURCES.get(input.sourceAddress);
+}, reviewedBinding: ReviewedEnvioBinding) {
+  const source = reviewedBinding.staticSources.get(input.sourceAddress);
   if (source) {
     if (
       source.contractName !== input.contractName ||
@@ -510,7 +539,9 @@ function validateSource(input: {
     return;
   }
 
-  const dynamicReleases = REVIEWED_DYNAMIC_SOURCES.get(input.contractName);
+  const dynamicReleases = reviewedBinding.dynamicSources.get(
+    input.contractName,
+  );
   if (
     !dynamicReleases ||
     input.model !== "unresolved" ||
@@ -526,6 +557,7 @@ function validateSource(input: {
 function parseCandidate(
   value: unknown,
   requestedCandidateId: string,
+  reviewedBinding: ReviewedEnvioBinding,
 ): EnvioCandidate {
   const keys = [
     "id",
@@ -596,13 +628,16 @@ function parseCandidate(
     /^(classic-v[23]|stock-paired-v[123]|unresolved)$/,
     "release-version",
   );
-  validateSource({
-    sourceAddress,
-    contractName,
-    blockNumber: BigInt(blockNumber),
-    model,
-    releaseVersion,
-  });
+  validateSource(
+    {
+      sourceAddress,
+      contractName,
+      blockNumber: BigInt(blockNumber),
+      model,
+      releaseVersion,
+    },
+    reviewedBinding,
+  );
   if (
     !Array.isArray(value.topics) ||
     value.topics.length < 1 ||
@@ -692,6 +727,7 @@ function parseProgress(
   metaValue: unknown,
   value: unknown,
   requiredBlock: string,
+  releaseBinding: DataPipelineReleaseBinding,
 ): EnvioProgress {
   const keys = [
     "id",
@@ -717,15 +753,15 @@ function parseProgress(
     value.id !== INDEXER_STATE_ID ||
     value.schemaVersion !== SCHEMA_VERSION ||
     value.chainId !== 1 ||
-    value.deployment !== RELEASE_BINDING.envio.deploymentLabel ||
-    value.sourceCommit !== RELEASE_BINDING.envio.sourceCommit ||
-    value.configSha256 !== RELEASE_BINDING.envio.configSha256 ||
-    value.schemaSha256 !== RELEASE_BINDING.envio.schemaSha256 ||
-    value.handlerSha256 !== RELEASE_BINDING.envio.handlerSha256 ||
+    value.deployment !== releaseBinding.envio.deploymentLabel ||
+    value.sourceCommit !== releaseBinding.envio.sourceCommit ||
+    value.configSha256 !== releaseBinding.envio.configSha256 ||
+    value.schemaSha256 !== releaseBinding.envio.schemaSha256 ||
+    value.handlerSha256 !== releaseBinding.envio.handlerSha256 ||
     value.sourceRegistrySha256 !==
-      RELEASE_BINDING.envio.sourceRegistrySha256 ||
-    value.eventSetSha256 !== RELEASE_BINDING.envio.eventSetSha256 ||
-    value.eventCount !== RELEASE_BINDING.envio.eventCount ||
+      releaseBinding.envio.sourceRegistrySha256 ||
+    value.eventSetSha256 !== releaseBinding.envio.eventSetSha256 ||
+    value.eventCount !== releaseBinding.envio.eventCount ||
     !Array.isArray(metaValue) ||
     metaValue.length !== 1 ||
     !isRecord(metaValue[0]) ||
@@ -783,7 +819,7 @@ function parseProgress(
   const required = BigInt(canonicalRequired);
   return {
     chainId: 1,
-    deployment: RELEASE_BINDING.envio.deploymentLabel,
+    deployment: releaseBinding.envio.deploymentLabel,
     schemaVersion: "1",
     progressBlock: String(officialProgress),
     bufferBlock: String(bufferBlock),
@@ -805,9 +841,13 @@ function parseProgress(
 export function createEnvioClient(options: {
   endpoint: string;
   token?: string;
+  releaseBinding?: DataPipelineReleaseBinding;
   fetcher?: DataPipelineFetcher;
   circuit?: CircuitBreaker;
 }) {
+  const reviewedBinding = reviewedEnvioBinding(
+    options.releaseBinding ?? getDataPipelineReleaseBinding(),
+  );
   const config = loadDataPipelineConfig({
     PROGRAMMABLE_ENVIO_GRAPHQL_URL: options.endpoint,
     PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN: options.token,
@@ -852,7 +892,11 @@ export function createEnvioClient(options: {
         }
         if (response.data.ChainEvent_by_pk === null) return null;
         try {
-          return parseCandidate(response.data.ChainEvent_by_pk, candidateId);
+          return parseCandidate(
+            response.data.ChainEvent_by_pk,
+            candidateId,
+            reviewedBinding,
+          );
         } catch (error) {
           if (error instanceof DataPipelineError) {
             throw validationError("envio", "candidate-response");
@@ -887,7 +931,12 @@ export function createEnvioClient(options: {
             first: limit,
           },
         });
-        return parseCandidatePage({ response, cursor, limit });
+        return parseCandidatePage({
+          response,
+          cursor,
+          limit,
+          reviewedBinding,
+        });
       });
     },
 
@@ -930,6 +979,7 @@ export function createEnvioClient(options: {
           cursor,
           limit,
           throughBlock,
+          reviewedBinding,
         });
       });
     },
@@ -957,6 +1007,7 @@ export function createEnvioClient(options: {
             response.data._meta,
             response.data.IndexerState_by_pk,
             requiredBlock,
+            reviewedBinding.releaseBinding,
           );
         } catch (error) {
           if (error instanceof DataPipelineError) {

@@ -2,9 +2,10 @@ import "server-only";
 
 import {
   assertCandidateDatabaseBootstrapState,
-  CANDIDATE_PROJECTOR_RUNTIME_MODE,
-  loadCandidateProjectorRuntimeBinding,
-  type CandidateProjectorRuntimeBinding,
+  assertCandidateDatabasePromotedState,
+  CANDIDATE_PROMOTION_ENV_NAMES,
+  selectProjectorRuntimeBinding,
+  type ProjectorRuntimeBindingSelection,
 } from "./candidate-projector-runtime-binding.server";
 import { createEnvioClient } from "./envio";
 import { invalidInput } from "./errors";
@@ -23,7 +24,10 @@ import {
   PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
   PROJECTOR_MAXIMUM_RUNTIME_ROUNDS,
 } from "./projector-runtime-limits";
-import { getDataPipelineReleaseBinding } from "./release-binding.server";
+import {
+  getDataPipelineReleaseBinding,
+  type DataPipelineReleaseBinding,
+} from "./release-binding.server";
 import {
   canonicalProjectorEnvioEndpoint,
   projectorEnvioDeploymentCommitment,
@@ -62,6 +66,9 @@ const BROWSER_FORBIDDEN_NAMES = Object.freeze([
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN",
   "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_BINDING_MODE",
   "NEXT_PUBLIC_PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT",
+  ...Object.values(CANDIDATE_PROMOTION_ENV_NAMES).map(
+    (name) => `NEXT_PUBLIC_${name}`,
+  ),
 ] as const);
 
 type StagedDynamicParentResult = Readonly<{
@@ -134,8 +141,9 @@ function optionalSecret(value: unknown): string | undefined {
   return requiredText(value, /^[^\s]+$/u, 2_048);
 }
 
-function releaseScopes(): readonly ProjectorReleaseDatabaseScope[] {
-  const binding = getDataPipelineReleaseBinding();
+function releaseScopes(
+  binding: DataPipelineReleaseBinding,
+): readonly ProjectorReleaseDatabaseScope[] {
   if (
     binding.releases.length !== EXACT_RELEASE_SCOPES.length ||
     binding.releases.some((release, index) => {
@@ -152,12 +160,7 @@ function releaseScopes(): readonly ProjectorReleaseDatabaseScope[] {
 }
 
 export type ProjectorRuntimeConfig = Readonly<{
-  binding:
-    | Readonly<{ mode: "release"; candidate: null }>
-    | Readonly<{
-        mode: typeof CANDIDATE_PROJECTOR_RUNTIME_MODE;
-        candidate: CandidateProjectorRuntimeBinding;
-      }>;
+  binding: ProjectorRuntimeBindingSelection;
   database: Readonly<{
     projectorConnectionString: string;
     runtimeConnectionString: string;
@@ -166,6 +169,7 @@ export type ProjectorRuntimeConfig = Readonly<{
   envio: Readonly<{
     endpoint: string;
     token?: string;
+    releaseBinding: DataPipelineReleaseBinding;
   }>;
   providers: readonly ProjectorProviderDatabaseBinding[];
   releaseScopes: readonly ProjectorReleaseDatabaseScope[];
@@ -191,29 +195,18 @@ export function assertProjectorRuntimeProviderCommitments(
   }
 }
 
-export function loadProjectorRuntimeConfig(
-  env: Environment = process.env,
+export function loadProjectorRuntimeConfigForBinding(
+  env: Environment,
+  canonicalBinding: DataPipelineReleaseBinding,
 ): ProjectorRuntimeConfig {
   if (BROWSER_FORBIDDEN_NAMES.some((name) => env[name])) {
     return invalidRuntimeConfig();
   }
-  const activeProductionBinding = getDataPipelineReleaseBinding();
-  const bindingMode = env.PROGRAMMABLE_PROJECTOR_BINDING_MODE;
-  const candidate = bindingMode === CANDIDATE_PROJECTOR_RUNTIME_MODE
-    ? loadCandidateProjectorRuntimeBinding({
-        env,
-        activeProductionBinding,
-      })
-    : null;
-  if (
-    bindingMode !== undefined &&
-    bindingMode !== "" &&
-    bindingMode !== "release" &&
-    candidate === null
-  ) {
-    return invalidRuntimeConfig();
-  }
-  const binding = candidate?.releaseBinding ?? activeProductionBinding;
+  const selection = selectProjectorRuntimeBinding({
+    env,
+    canonicalBinding,
+  });
+  const binding = selection.releaseBinding;
   const envioEndpoint = canonicalProjectorEnvioEndpoint(
     env.PROGRAMMABLE_ENVIO_GRAPHQL_URL,
     binding.envio.graphqlEndpoint,
@@ -261,12 +254,7 @@ export function loadProjectorRuntimeConfig(
   ] satisfies readonly ProjectorProviderDatabaseBinding[]);
 
   return Object.freeze({
-    binding: candidate
-      ? Object.freeze({
-          mode: CANDIDATE_PROJECTOR_RUNTIME_MODE,
-          candidate,
-        })
-      : Object.freeze({ mode: "release" as const, candidate: null }),
+    binding: selection,
     database: Object.freeze({
       projectorConnectionString: validatedPostgresConnectionString(
         env.PROGRAMMABLE_PROJECTOR_DATABASE_URL,
@@ -281,10 +269,20 @@ export function loadProjectorRuntimeConfig(
     envio: Object.freeze({
       endpoint: envioEndpoint,
       token: optionalSecret(env.PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN),
+      releaseBinding: binding,
     }),
     providers,
-    releaseScopes: releaseScopes(),
+    releaseScopes: releaseScopes(binding),
   });
+}
+
+export function loadProjectorRuntimeConfig(
+  env: Environment = process.env,
+): ProjectorRuntimeConfig {
+  return loadProjectorRuntimeConfigForBinding(
+    env,
+    getDataPipelineReleaseBinding(),
+  );
 }
 
 export type ProjectorRuntimeDependencies = Readonly<{
@@ -298,6 +296,8 @@ export type ProjectorRuntimeDependencies = Readonly<{
   runCycle: typeof runProjectorCycle;
   runReleaseCycle: typeof runReleaseProjectionCycle;
   assertCandidateDatabase: typeof assertCandidateDatabaseBootstrapState;
+  assertPromotedDatabase: typeof assertCandidateDatabasePromotedState;
+  loadConfig?: typeof loadProjectorRuntimeConfig;
 }>;
 
 const DEFAULT_DEPENDENCIES: ProjectorRuntimeDependencies = Object.freeze({
@@ -311,6 +311,7 @@ const DEFAULT_DEPENDENCIES: ProjectorRuntimeDependencies = Object.freeze({
   runCycle: runProjectorCycle,
   runReleaseCycle: runReleaseProjectionCycle,
   assertCandidateDatabase: assertCandidateDatabaseBootstrapState,
+  assertPromotedDatabase: assertCandidateDatabasePromotedState,
 });
 
 export async function runConfiguredProjectorCycle(
@@ -332,7 +333,9 @@ export async function runConfiguredProjectorCycle(
       }),
     });
   }
-  const config = loadProjectorRuntimeConfig(env);
+  const config = dependencies.loadConfig
+    ? dependencies.loadConfig(env)
+    : loadProjectorRuntimeConfig(env);
   const runtimeExecutor = dependencies.createExecutor({
     connectionString: config.database.runtimeConnectionString,
     sslCaPem: config.database.sslCaPem,
@@ -375,6 +378,11 @@ export async function runConfiguredProjectorCycle(
       await dependencies.assertCandidateDatabase({
         executor: writerExecutor,
         binding: config.binding.candidate,
+      });
+    } else if (config.binding.promotedDatabase) {
+      await dependencies.assertPromotedDatabase({
+        executor: writerExecutor,
+        binding: config.binding.promotedDatabase,
       });
     }
     const providers = dependencies.createProviders(env);

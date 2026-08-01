@@ -7,6 +7,7 @@ import {
   type HexAddress,
   type HexBytes32,
 } from "./codecs";
+import { selectProjectorRuntimeBinding } from "./candidate-projector-runtime-binding.server";
 import { loadDataPipelineConfig } from "./config";
 import {
   verifyEnvioCandidateBatchWithDualRpc,
@@ -28,6 +29,7 @@ import {
   type PostgresExecutor,
 } from "./postgres";
 import { validatedPostgresConnectionString } from "./postgres-connection.server";
+import { getDataPipelineReleaseBinding } from "./release-binding.server";
 import { createProductionDualRpcProviders } from "./rpc-providers.server";
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -1368,9 +1370,19 @@ export async function captureReadModelPerformance(
   }
   const envioConfig = loadDataPipelineConfig(env).envio;
   if (!envioConfig.endpoint) return captureInputFailure();
+  const runtimeBinding = selectProjectorRuntimeBinding({
+    env,
+    canonicalBinding: getDataPipelineReleaseBinding(),
+  });
+  if (
+    envioConfig.endpoint !== runtimeBinding.releaseBinding.envio.graphqlEndpoint
+  ) {
+    return captureInputFailure();
+  }
   const envio = dependencies.createEnvio({
     endpoint: envioConfig.endpoint,
     token: envioConfig.token,
+    releaseBinding: runtimeBinding.releaseBinding,
   });
   const providers = dependencies.createProviders(env);
   const deadlineStartedAt = Date.now();

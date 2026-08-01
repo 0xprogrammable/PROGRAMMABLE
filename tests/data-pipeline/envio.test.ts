@@ -12,6 +12,7 @@ vi.mock("server-only", () => ({}));
 
 import { createEnvioClient } from "../../lib/data-pipeline/envio";
 import { DataPipelineError } from "../../lib/data-pipeline/errors";
+import { parseDataPipelineReleaseBinding } from "../../lib/data-pipeline/release-binding.server";
 import { canonicalPayloadJson } from "../../indexer/src/lib/payload-hash";
 import releaseBinding from "../../config/data-pipeline-release.v1.json";
 
@@ -366,6 +367,42 @@ describe("Envio candidate adapter", () => {
     expect(result).not.toHaveProperty("verified");
     expect(result).not.toHaveProperty("rewardAuthority");
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("builds source and release provenance from the selected client binding", async () => {
+    const selectedSource = "0xd240d06f8586eb799f20056054e5b527405e6bae";
+    const selectedBinding = parseDataPipelineReleaseBinding({
+      ...releaseBinding,
+      sources: releaseBinding.sources.map((source) =>
+        source.contractName === "ClassicV2Launcher"
+          ? { ...source, address: selectedSource }
+          : source,
+      ),
+    });
+    const fetcher = async () => json({
+      data: {
+        ChainEvent_by_pk: candidate({ sourceAddress: selectedSource }),
+      },
+    });
+    const selectedClient = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      releaseBinding: selectedBinding,
+      fetcher,
+    });
+
+    await expect(selectedClient.readCandidate(CANDIDATE_ID)).resolves.toMatchObject({
+      sourceAddress: selectedSource,
+      releaseHint: { model: "classic", releaseVersion: "classic-v2" },
+    });
+
+    const legacyClient = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      releaseBinding: parseDataPipelineReleaseBinding(releaseBinding),
+      fetcher,
+    });
+    await expect(legacyClient.readCandidate(CANDIDATE_ID)).rejects.toMatchObject({
+      code: "validation_failed",
+    });
   });
 
   it("supports an Envio public endpoint without sending an Authorization header", async () => {
