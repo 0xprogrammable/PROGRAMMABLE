@@ -219,6 +219,127 @@ describe("projector operations route", () => {
     });
   });
 
+  it("reports staged dynamic-parent progress without a generation or release work", async () => {
+    const deferredProjections = projections.map(({ releaseId }) => ({
+      releaseId,
+      status: "deferred",
+      pageCount: 0,
+    }));
+    mocks.runConfiguredProjectorCycle.mockResolvedValue({
+      ok: true,
+      ingestion: {
+        status: "staged-dynamic-parent",
+        candidateCount: 1,
+        pageCount: 1,
+        snapshotBlock: "25650123",
+      },
+      projections: deferredProjections,
+      readiness: readiness("progressed", "25650123", {
+        terminalSweepComplete: false,
+      }),
+    });
+
+    const response = await GET(request(SECRET));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      ingestion: {
+        status: "staged-dynamic-parent",
+        candidateCount: 1,
+        pageCount: 1,
+        snapshotBlock: "25650123",
+      },
+      projections: deferredProjections,
+      readiness: readiness("progressed", "25650123", {
+        terminalSweepComplete: false,
+      }),
+    });
+  });
+
+  it("fails closed if staged dynamic-parent progress includes a generation", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.runConfiguredProjectorCycle.mockResolvedValue({
+      ok: true,
+      ingestion: {
+        status: "staged-dynamic-parent",
+        candidateCount: 1,
+        pageCount: 1,
+        snapshotBlock: "25650123",
+        generation: "52",
+      },
+      projections: projections.map(({ releaseId }) => ({
+        releaseId,
+        status: "deferred",
+        pageCount: 0,
+      })),
+      readiness: readiness("progressed", "25650123", {
+        terminalSweepComplete: false,
+      }),
+    });
+
+    const response = await GET(request(SECRET));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Projector cycle failed",
+    });
+  });
+
+  it("fails closed if deferred projections are returned without staged ingestion", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.runConfiguredProjectorCycle.mockResolvedValue({
+      ok: true,
+      ingestion: {
+        status: "idle",
+        candidateCount: 0,
+        pageCount: 1,
+        snapshotBlock: "25650123",
+      },
+      projections: projections.map(({ releaseId }) => ({
+        releaseId,
+        status: "deferred",
+        pageCount: 0,
+      })),
+      readiness: readiness("incomplete", "25650123", {
+        terminalSweepComplete: false,
+      }),
+    });
+
+    const response = await GET(request(SECRET));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Projector cycle failed",
+    });
+  });
+
+  it("fails closed if staged ingestion claims caught-up readiness", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.runConfiguredProjectorCycle.mockResolvedValue({
+      ok: true,
+      ingestion: {
+        status: "staged-dynamic-parent",
+        candidateCount: 1,
+        pageCount: 1,
+        snapshotBlock: "25650123",
+      },
+      projections: projections.map(({ releaseId }) => ({
+        releaseId,
+        status: "deferred",
+        pageCount: 0,
+      })),
+      readiness: readiness("caught-up", "25650123"),
+    });
+
+    const response = await GET(request(SECRET));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Projector cycle failed",
+    });
+  });
+
   it("fails closed when the runtime returns a malformed checkpoint", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.runConfiguredProjectorCycle.mockResolvedValue({

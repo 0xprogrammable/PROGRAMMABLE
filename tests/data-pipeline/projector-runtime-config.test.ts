@@ -374,6 +374,132 @@ describe("configured projector runtime", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("stops before every release projection after staging a dynamic parent", async () => {
+    const close = vi.fn(async () => undefined);
+    const executor = { close };
+    const runCycle = vi.fn(async () => ({
+      status: "staged-dynamic-parent" as const,
+      candidateCount: 1 as const,
+      snapshotBlock: "25650123",
+    }));
+    const runReleaseCycle = vi.fn();
+    const dependencies = {
+      createExecutor: vi.fn(() => executor),
+      createLeaseController: vi.fn(() => ({
+        tryAcquire: vi.fn(async () => ({
+          status: "acquired",
+          fence: {
+            holderId: "projector-runtime-test",
+            generation: "1",
+            tokenHash: bytes32("a"),
+          },
+          acquiredAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2026-07-31T18:01:25.000Z",
+        })),
+        release: vi.fn(async () => true),
+      })),
+      createProviders: vi.fn(() => RUNTIME_PROVIDERS),
+      assertProviders: vi.fn(),
+      createEnvio: vi.fn(() => ({})),
+      createStore: vi.fn(() => ({})),
+      createReleaseStore: vi.fn(({ scope }) => ({ scope })),
+      runCycle,
+      runReleaseCycle,
+    } as never;
+
+    await expect(
+      runConfiguredProjectorCycle({
+        env: environment(),
+        dependencies,
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      ingestion: {
+        status: "staged-dynamic-parent",
+        candidateCount: 1,
+        pageCount: 1,
+        snapshotBlock: "25650123",
+      },
+      projections: [
+        "classic-v2",
+        "classic-v3",
+        "stock-paired-v1",
+        "stock-paired-v2",
+        "stock-paired-v3",
+      ].map((releaseId) => ({
+        releaseId,
+        status: "deferred",
+        pageCount: 0,
+      })),
+      readiness: {
+        status: "progressed",
+        activationReady: false,
+        lagging: true,
+        terminalSweepComplete: false,
+        stoppedForDeadline: false,
+        completedRounds: 1,
+        snapshotBlock: "25650123",
+      },
+      deadlineMs: 75_000,
+    });
+
+    expect(runCycle).toHaveBeenCalledOnce();
+    expect(runReleaseCycle).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed before release projection for malformed staged progress", async () => {
+    const close = vi.fn(async () => undefined);
+    const executor = { close };
+    const runCycle = vi.fn(async () => ({
+      status: "staged-dynamic-parent" as const,
+      candidateCount: 2,
+      snapshotBlock: "25650123",
+    }));
+    const runReleaseCycle = vi.fn();
+    const dependencies = {
+      createExecutor: vi.fn(() => executor),
+      createLeaseController: vi.fn(() => ({
+        tryAcquire: vi.fn(async () => ({
+          status: "acquired",
+          fence: {
+            holderId: "projector-runtime-test",
+            generation: "1",
+            tokenHash: bytes32("a"),
+          },
+          acquiredAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2026-07-31T18:01:25.000Z",
+        })),
+        release: vi.fn(async () => true),
+      })),
+      createProviders: vi.fn(() => RUNTIME_PROVIDERS),
+      assertProviders: vi.fn(),
+      createEnvio: vi.fn(() => ({})),
+      createStore: vi.fn(() => ({})),
+      createReleaseStore: vi.fn(({ scope }) => ({ scope })),
+      runCycle,
+      runReleaseCycle,
+    } as never;
+
+    const result = await runConfiguredProjectorCycle({
+      env: environment(),
+      dependencies,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!("ingestion" in result)) throw new Error("Expected projector result");
+    expect(result.ingestion).toEqual({ status: "failed" });
+    expect(result.readiness).toMatchObject({
+      status: "incomplete",
+      activationReady: false,
+      terminalSweepComplete: false,
+      completedRounds: 1,
+    });
+    expect(runCycle).toHaveBeenCalledOnce();
+    expect(runReleaseCycle).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(2);
+  });
+
   it("drains bounded pages without starving any release scope", async () => {
     const close = vi.fn(async () => undefined);
     const executor = { close };

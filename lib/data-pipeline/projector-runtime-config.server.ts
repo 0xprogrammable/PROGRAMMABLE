@@ -56,6 +56,36 @@ const BROWSER_FORBIDDEN_NAMES = Object.freeze([
   "NEXT_PUBLIC_PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN",
 ] as const);
 
+type StagedDynamicParentResult = Readonly<{
+  status: "staged-dynamic-parent";
+  candidateCount: 1;
+  snapshotBlock: string;
+}>;
+
+function parseStagedDynamicParentResult(
+  value: unknown,
+): StagedDynamicParentResult | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const candidate = value as Record<string, unknown>;
+  if (candidate.status !== "staged-dynamic-parent") return null;
+  if (
+    candidate.candidateCount !== 1 ||
+    typeof candidate.snapshotBlock !== "string" ||
+    !/^(?:0|[1-9]\d*)$/u.test(candidate.snapshotBlock) ||
+    candidate.snapshotBlock.length > 78 ||
+    Object.keys(candidate).length !== 3
+  ) {
+    return invalidRuntimeConfig();
+  }
+  return Object.freeze({
+    status: "staged-dynamic-parent" as const,
+    candidateCount: 1 as const,
+    snapshotBlock: candidate.snapshotBlock,
+  });
+}
+
 function invalidRuntimeConfig(): never {
   throw invalidInput("config", "projector-runtime-config");
 }
@@ -360,6 +390,7 @@ export async function runConfiguredProjectorCycle(
       failed: boolean;
       committed: boolean;
       committedEmpty: boolean;
+      stagedDynamicParent: boolean;
       candidateCount: number;
       pageCount: number;
       snapshotBlock: string | null;
@@ -368,6 +399,7 @@ export async function runConfiguredProjectorCycle(
       failed: false,
       committed: false,
       committedEmpty: false,
+      stagedDynamicParent: false,
       candidateCount: 0,
       pageCount: 0,
       snapshotBlock: null,
@@ -401,6 +433,8 @@ export async function runConfiguredProjectorCycle(
       let madeProgress = false;
       let operationsRemaining = operationCount;
       let ingestionIdle = false;
+      let stagedDynamicParent = false;
+      let stopAfterIngestionFailure = false;
       let idleProjectionCount = 0;
 
       const ingestionDeadline = operationDeadline(operationsRemaining);
@@ -408,6 +442,7 @@ export async function runConfiguredProjectorCycle(
         stoppedForDeadline = true;
         break;
       }
+      let observedIngestionStatus: unknown = null;
       try {
         const result = await dependencies.runCycle({
           store: ingestionStore,
@@ -415,31 +450,54 @@ export async function runConfiguredProjectorCycle(
           providers,
           deadlineMs: ingestionDeadline,
         });
-        if (
-          !Number.isSafeInteger(result.candidateCount) ||
-          result.candidateCount < 0 ||
-          result.candidateCount > PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
-        ) {
-          return invalidRuntimeConfig();
-        }
-        ingestionState.pageCount += 1;
-        ingestionState.snapshotBlock = result.snapshotBlock;
-        ingestionState.candidateCount += result.candidateCount;
-        if (result.status === "committed") {
-          ingestionState.committed = true;
-          ingestionState.generation = result.generation;
-          madeProgress = true;
-        } else if (result.status === "committed-empty") {
-          ingestionState.committedEmpty = true;
-          ingestionState.generation = result.generation;
+        observedIngestionStatus = result.status;
+        const stagedResult = parseStagedDynamicParentResult(result);
+        if (stagedResult) {
+          ingestionState.pageCount += 1;
+          ingestionState.snapshotBlock = stagedResult.snapshotBlock;
+          ingestionState.candidateCount += stagedResult.candidateCount;
+          ingestionState.stagedDynamicParent = true;
+          stagedDynamicParent = true;
           madeProgress = true;
         } else {
-          ingestionIdle = true;
+          if (
+            !Number.isSafeInteger(result.candidateCount) ||
+            result.candidateCount < 0 ||
+            result.candidateCount > PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+          ) {
+            return invalidRuntimeConfig();
+          }
+          ingestionState.pageCount += 1;
+          ingestionState.snapshotBlock = result.snapshotBlock;
+          ingestionState.candidateCount += result.candidateCount;
+          if (result.status === "committed") {
+            ingestionState.committed = true;
+            ingestionState.generation = result.generation;
+            madeProgress = true;
+          } else if (result.status === "committed-empty") {
+            ingestionState.committedEmpty = true;
+            ingestionState.generation = result.generation;
+            madeProgress = true;
+          } else {
+            ingestionIdle = true;
+          }
         }
       } catch {
         ingestionState.failed = true;
+        stopAfterIngestionFailure =
+          observedIngestionStatus === "staged-dynamic-parent";
       }
       operationsRemaining -= 1;
+
+      if (stagedDynamicParent || stopAfterIngestionFailure) {
+        // The parent and its child must be replayed from the unchanged source
+        // cursor on the next invocation. Running release projections here
+        // would materialize against a cursor/checkpoint that did not advance.
+        completedRounds += 1;
+        if (stagedDynamicParent) madeAnyProgress = true;
+        terminalSweepComplete = false;
+        break;
+      }
 
       for (let index = 0; index < releaseStores.length; index += 1) {
         const binding = releaseStores[index]!;
@@ -536,7 +594,14 @@ export async function runConfiguredProjectorCycle(
 
     const ingestion = ingestionState.failed
       ? Object.freeze({ status: "failed" as const })
-      : ingestionState.committed
+      : ingestionState.stagedDynamicParent
+        ? Object.freeze({
+            status: "staged-dynamic-parent" as const,
+            candidateCount: ingestionState.candidateCount,
+            pageCount: ingestionState.pageCount,
+            snapshotBlock: ingestionState.snapshotBlock,
+          })
+        : ingestionState.committed
         ? Object.freeze({
             status: "committed" as const,
             candidateCount: ingestionState.candidateCount,
@@ -566,6 +631,13 @@ export async function runConfiguredProjectorCycle(
         });
       }
       if (!state.committed) {
+        if (ingestionState.stagedDynamicParent && state.pageCount === 0) {
+          return Object.freeze({
+            releaseId: state.releaseId,
+            status: "deferred" as const,
+            pageCount: 0,
+          });
+        }
         return Object.freeze({
           releaseId: state.releaseId,
           status: "idle" as const,

@@ -20,7 +20,12 @@ export const runtime = "nodejs";
 const NO_STORE_HEADERS = Object.freeze({ "Cache-Control": "no-store" });
 
 type SafeCheckpoint = Readonly<{
-  status: "idle" | "committed" | "committed-empty" | "failed";
+  status:
+    | "idle"
+    | "committed"
+    | "committed-empty"
+    | "staged-dynamic-parent"
+    | "failed";
   candidateCount?: number;
   pageCount?: number;
   snapshotBlock?: string;
@@ -37,7 +42,7 @@ const RELEASE_IDS = Object.freeze([
 
 type SafeProjection = Readonly<{
   releaseId: (typeof RELEASE_IDS)[number];
-  status: "idle" | "committed" | "failed";
+  status: "idle" | "committed" | "deferred" | "failed";
   projectedCandidateCount?: number;
   ignoredCandidateCount?: number;
   pageCount?: number;
@@ -78,7 +83,8 @@ function safeCheckpoint(value: unknown): SafeCheckpoint {
   if (
     (status !== "idle" &&
       status !== "committed" &&
-      status !== "committed-empty") ||
+      status !== "committed-empty" &&
+      status !== "staged-dynamic-parent") ||
     typeof candidateCount !== "number" ||
     !Number.isSafeInteger(candidateCount) ||
     candidateCount < 0 ||
@@ -92,6 +98,22 @@ function safeCheckpoint(value: unknown): SafeCheckpoint {
     snapshotBlock === null
   ) {
     throw new Error("Invalid projector checkpoint");
+  }
+  if (status === "staged-dynamic-parent") {
+    if (
+      candidateCount < 1 ||
+      value.generation !== undefined ||
+      candidateCount >
+        pageCount * PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+    ) {
+      throw new Error("Invalid projector checkpoint");
+    }
+    return Object.freeze({
+      status,
+      candidateCount,
+      pageCount,
+      snapshotBlock,
+    });
   }
   if (status === "idle") {
     if (candidateCount !== 0) throw new Error("Invalid projector checkpoint");
@@ -127,6 +149,7 @@ function safeProjection(value: unknown, expectedReleaseId: string): SafeProjecti
     !RELEASE_IDS.includes(value.releaseId as (typeof RELEASE_IDS)[number]) ||
     (value.status !== "idle" &&
       value.status !== "committed" &&
+      value.status !== "deferred" &&
       value.status !== "failed")
   ) {
     throw new Error("Invalid release projection result");
@@ -136,6 +159,18 @@ function safeProjection(value: unknown, expectedReleaseId: string): SafeProjecti
     return Object.freeze({ releaseId, status: value.status });
   }
   const pageCount = value.pageCount;
+  if (value.status === "deferred") {
+    if (
+      pageCount !== 0 ||
+      value.projectedCandidateCount !== undefined ||
+      value.ignoredCandidateCount !== undefined ||
+      value.checkpointGeneration !== undefined ||
+      value.atomicGroupCount !== undefined
+    ) {
+      throw new Error("Invalid release projection result");
+    }
+    return Object.freeze({ releaseId, status: value.status, pageCount });
+  }
   if (
     typeof pageCount !== "number" ||
     !Number.isSafeInteger(pageCount) ||
@@ -213,9 +248,13 @@ function safeReadiness(
     projections.some(({ status: projectionStatus }) =>
       projectionStatus === "failed"
     );
+  const hasDeferredProjection = projections.some(
+    ({ status: projectionStatus }) => projectionStatus === "deferred",
+  );
   const progressed =
     ingestion.status === "committed" ||
     ingestion.status === "committed-empty" ||
+    ingestion.status === "staged-dynamic-parent" ||
     projections.some(({ status: projectionStatus }) =>
       projectionStatus === "committed"
     );
@@ -238,9 +277,15 @@ function safeReadiness(
     lagging === activationReady ||
     terminalSweepComplete !== (status === "caught-up") ||
     (status === "caught-up" &&
-      (failed || stoppedForDeadline || completedRounds < 1)) ||
+      (failed ||
+        stoppedForDeadline ||
+        completedRounds < 1 ||
+        ingestion.status === "staged-dynamic-parent" ||
+        hasDeferredProjection)) ||
     (status === "progressed" && (!progressed || failed)) ||
-    (status === "incomplete" && !failed && progressed)
+    (status === "incomplete" && !failed && progressed) ||
+    (ingestion.status === "staged-dynamic-parent" &&
+      status !== "progressed")
   ) {
     throw new Error("Invalid projector readiness");
   }
@@ -289,6 +334,12 @@ function safeRuntimeResult(value: unknown) {
   const projections = value.projections.map((projection, index) =>
     safeProjection(projection, RELEASE_IDS[index]!),
   );
+  if (
+    projections.some(({ status }) => status === "deferred") &&
+    ingestion.status !== "staged-dynamic-parent"
+  ) {
+    throw new Error("Invalid projector runtime result");
+  }
   const readiness = safeReadiness(value.readiness, ingestion, projections);
   const derivedOk =
     ingestion.status !== "failed" &&
