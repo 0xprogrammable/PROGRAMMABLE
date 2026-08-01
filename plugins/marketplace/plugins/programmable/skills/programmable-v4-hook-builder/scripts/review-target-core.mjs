@@ -39,6 +39,15 @@ const nodeBuiltinSpecifiers = new Set(builtinModules.flatMap((specifier) => (
   specifier.startsWith("node:") ? [specifier, specifier.slice(5)] : [specifier, `node:${specifier}`]
 )));
 
+function isNodeBuiltinSpecifier(specifier) {
+  // The node: protocol is runtime-owned and can never resolve to an npm
+  // package. Accept it independently of the validator host's Node release so
+  // a newer pinned companion runtime cannot be misclassified by an older
+  // central validator. Unsupported future built-ins still fail in the exact
+  // companion build/test workflow.
+  return specifier.startsWith("node:") || nodeBuiltinSpecifiers.has(specifier);
+}
+
 class UnsupportedClosureError extends Error {
   constructor(closureCode, message) {
     super(message);
@@ -740,7 +749,7 @@ function extractJavaScriptDependencies(source, importer, declaredPackages) {
     }
     if (
       !isLocalJavaScriptSpecifier(specifier)
-      && !nodeBuiltinSpecifiers.has(specifier)
+      && !isNodeBuiltinSpecifier(specifier)
       && ![...declaredPackageNames].some((packageName) => isExactDeclaredPackageSpecifier(specifier, packageName))
     ) {
       throw new UnsupportedClosureError(
