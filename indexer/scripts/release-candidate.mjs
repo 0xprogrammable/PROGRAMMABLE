@@ -210,7 +210,31 @@ function sameIdentity(actual, expected) {
   }
 }
 
-async function auditCandidate(endpoint, expected) {
+function assertFrozenBaseline(launches, baseline) {
+  if (
+    baseline?.schemaVersion !== 1 ||
+    baseline?.kind !== "envio-launch-inventory-baseline" ||
+    !Array.isArray(baseline.entries) ||
+    baseline.entries.length === 0
+  ) {
+    throw new Error("--baseline must be a non-empty v1 launch inventory baseline");
+  }
+  const current = new Map(launches.map((row) => [row.id, row]));
+  for (const expected of baseline.entries) {
+    const actual = current.get(expected.id);
+    if (
+      actual === undefined ||
+      actual.model !== expected.model ||
+      actual.releaseVersion !== expected.releaseVersion ||
+      actual.launchHash !== expected.launchHash ||
+      actual.token !== expected.token
+    ) {
+      throw new Error(`candidate omitted or changed frozen launch ${expected.id}`);
+    }
+  }
+}
+
+async function auditCandidate(endpoint, expected, baseline) {
   const progress = await graphql(endpoint, PROGRESS_QUERY);
   if (!Array.isArray(progress?._meta) || progress._meta.length !== 1) {
     throw new Error("candidate returned an invalid Ethereum _meta row");
@@ -265,6 +289,7 @@ async function auditCandidate(endpoint, expected) {
   for (const release of RELEASES) {
     if (perRelease[release] === 0) throw new Error(`candidate has no ${release} launches`);
   }
+  assertFrozenBaseline(launches, baseline);
 
   const canonical = Buffer.from(`${launches.map((row) => JSON.stringify(row)).join("\n")}\n`);
   return {
@@ -299,9 +324,12 @@ async function main() {
   if (command === "audit") {
     const endpoint = exactUrl(values.endpoint);
     const identityPath = values.identity;
+    const baselinePath = values.baseline;
     if (!identityPath) throw new Error("--identity is required");
+    if (!baselinePath) throw new Error("--baseline is required");
     const expected = JSON.parse(readFileSync(path.resolve(identityPath), "utf8"));
-    const evidence = await auditCandidate(endpoint, expected);
+    const baseline = JSON.parse(readFileSync(path.resolve(baselinePath), "utf8"));
+    const evidence = await auditCandidate(endpoint, expected, baseline);
     const output = `${JSON.stringify(evidence, null, 2)}\n`;
     if (values.output) writeFileSync(path.resolve(values.output), output, { flag: "wx" });
     else process.stdout.write(output);
