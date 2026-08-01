@@ -7,7 +7,7 @@ const call = (
   signature,
   selector: toFunctionSelector(signature),
   argumentShape,
-  blockTag: "exact-block-number" as const,
+  blockTag: "eip-1898-canonical-block-hash" as const,
 });
 
 /**

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { encodeAbiParameters, keccak256, type Hex } from "viem";
+import { encodeAbiParameters, keccak256, sha256, type Hex } from "viem";
 
 import {
   canonicalAddress,
@@ -14,17 +14,28 @@ import {
 import { invalidInput, validationError } from "./errors";
 
 const UINT32_MAXIMUM = 4_294_967_295n;
-const PROVIDER_EVIDENCE_PREFIX = Buffer.from(
+const PROVIDER_EVIDENCE_V2_PREFIX = Buffer.from(
   "programmable:provider-evidence:v2\0",
   "utf8",
 );
+const PROVIDER_EVIDENCE_V3_PREFIX = Buffer.from(
+  "programmable:provider-evidence:v3\0",
+  "utf8",
+);
+const PROJECTION_EXECUTION_TRACE_V1_PREFIX = Buffer.from(
+  "programmable:projection-execution-trace:v1\0",
+  "utf8",
+);
 
-type ProviderEvidenceSubtype =
+type ProviderEvidenceV2Subtype =
   | "safe_head"
   | "block"
   | "runtime_code"
   | "dynamic_attestation"
   | "log_coverage";
+type ProviderEvidenceV3Subtype =
+  | "projection_execution"
+  | "reward_snapshot";
 
 type ProviderEvidenceField = readonly [name: string, type: string];
 
@@ -34,8 +45,8 @@ function defineProviderEvidenceSchema<
   return fields;
 }
 
-const PROVIDER_EVIDENCE_SCHEMAS: Readonly<
-  Record<ProviderEvidenceSubtype, readonly ProviderEvidenceField[]>
+const PROVIDER_EVIDENCE_V2_SCHEMAS: Readonly<
+  Record<ProviderEvidenceV2Subtype, readonly ProviderEvidenceField[]>
 > = Object.freeze({
   safe_head: defineProviderEvidenceSchema([
     ["chain_id", "u64"],
@@ -135,13 +146,81 @@ const PROVIDER_EVIDENCE_SCHEMAS: Readonly<
   ]),
 });
 
-const PROVIDER_EVIDENCE_TAGS: Readonly<Record<ProviderEvidenceSubtype, number>> =
+const PROVIDER_EVIDENCE_V3_SCHEMAS: Readonly<
+  Record<ProviderEvidenceV3Subtype, readonly ProviderEvidenceField[]>
+> = Object.freeze({
+  projection_execution: defineProviderEvidenceSchema([
+    ["chain_id", "u64"],
+    ["release_id", "varutf8"],
+    ["model_id", "varutf8"],
+    ["source_group", "varutf8"],
+    ["epoch_id", "uuid16"],
+    ["pointer_generation", "u64"],
+    ["run_id", "uuid16"],
+    ["provider_a_id", "uuid16"],
+    ["provider_b_id", "uuid16"],
+    ["provider_a_identity", "varutf8"],
+    ["provider_b_identity", "varutf8"],
+    ["provider_a_vendor_group", "varutf8"],
+    ["provider_b_vendor_group", "varutf8"],
+    ["provider_a_endpoint_commitment", "bytes32"],
+    ["provider_b_endpoint_commitment", "bytes32"],
+    ["provider_a_origin_commitment", "bytes32"],
+    ["provider_b_origin_commitment", "bytes32"],
+    ["provider_a_call_count", "u32"],
+    ["provider_b_call_count", "u32"],
+    ["candidate_batch_size", "u32"],
+    ["hard_deadline_ms", "u32"],
+    ["maximum_calls_per_provider", "u32"],
+    ["elapsed_ms", "u32"],
+    ["execution_trace_commitment", "bytes32"],
+  ]),
+  reward_snapshot: defineProviderEvidenceSchema([
+    ["chain_id", "u64"],
+    ["release_id", "varutf8"],
+    ["model_id", "varutf8"],
+    ["source_group", "varutf8"],
+    ["epoch_id", "uuid16"],
+    ["pointer_generation", "u64"],
+    ["run_id", "uuid16"],
+    ["projection_execution_evidence_id", "uuid16"],
+    ["block_evidence_id", "uuid16"],
+    ["vault", "bytes20"],
+    ["reward_model", "varutf8"],
+    ["block_number", "u64"],
+    ["block_hash", "bytes32"],
+    ["provider_a_id", "uuid16"],
+    ["provider_b_id", "uuid16"],
+    ["provider_a_snapshot_commitment", "bytes32"],
+    ["provider_b_snapshot_commitment", "bytes32"],
+    ["provider_a_call_count", "u32"],
+    ["provider_b_call_count", "u32"],
+    ["verification_accounts", "array<bytes20>"],
+    ["verification_account_chunk_end_offsets", "array<u32>"],
+    ["provider_a_verification_chunk_commitments", "array<bytes32>"],
+    ["provider_b_verification_chunk_commitments", "array<bytes32>"],
+    ["provider_a_verification_chunk_call_counts", "array<u32>"],
+    ["provider_b_verification_chunk_call_counts", "array<u32>"],
+    ["folded_snapshot_commitment", "bytes32"],
+    ["execution_trace_commitment", "bytes32"],
+  ]),
+});
+
+const PROVIDER_EVIDENCE_V2_TAGS: Readonly<
+  Record<ProviderEvidenceV2Subtype, number>
+> =
   Object.freeze({
     safe_head: 1,
     block: 2,
     runtime_code: 3,
     dynamic_attestation: 4,
     log_coverage: 5,
+  });
+const PROVIDER_EVIDENCE_V3_TAGS: Readonly<
+  Record<ProviderEvidenceV3Subtype, number>
+> = Object.freeze({
+    projection_execution: 6,
+    reward_snapshot: 7,
   });
 
 export function providerEvidenceContractCommitment(): HexBytes32 {
@@ -154,9 +233,28 @@ export function providerEvidenceContractCommitment(): HexBytes32 {
       [
         "programmable:provider-evidence-contract:v2",
         JSON.stringify([
-          PROVIDER_EVIDENCE_PREFIX.toString("hex"),
-          PROVIDER_EVIDENCE_TAGS,
-          PROVIDER_EVIDENCE_SCHEMAS,
+          PROVIDER_EVIDENCE_V2_PREFIX.toString("hex"),
+          PROVIDER_EVIDENCE_V2_TAGS,
+          PROVIDER_EVIDENCE_V2_SCHEMAS,
+        ]),
+      ],
+    ),
+  );
+}
+
+export function providerEvidenceV3ContractCommitment(): HexBytes32 {
+  return keccak256(
+    encodeAbiParameters(
+      [
+        { type: "string" },
+        { type: "string" },
+      ],
+      [
+        "programmable:provider-evidence-contract:v3",
+        JSON.stringify([
+          PROVIDER_EVIDENCE_V3_PREFIX.toString("hex"),
+          PROVIDER_EVIDENCE_V3_TAGS,
+          PROVIDER_EVIDENCE_V3_SCHEMAS,
         ]),
       ],
     ),
@@ -206,6 +304,197 @@ function framed(value: Uint8Array): Buffer {
   return Buffer.concat([fixedUnsigned(value.length, 4), value]);
 }
 
+function exactFramedText(value: unknown): Buffer {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > 512 ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    throw invalidInput("rpc", "projection-execution-trace-text");
+  }
+  return framed(Buffer.from(value, "utf8"));
+}
+
+function exactSafeUnsignedNumber(
+  value: unknown,
+  width: 4 | 8,
+): Buffer {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 0
+  ) {
+    throw invalidInput("rpc", "projection-execution-trace-uint");
+  }
+  return fixedUnsigned(value, width);
+}
+
+function isSafeUnsignedNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): value is number {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= minimum &&
+    value <= maximum;
+}
+
+function assertExactRecordFields(
+  value: unknown,
+  expectedFields: readonly string[],
+  operation: string,
+): asserts value is Record<string, unknown> {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
+    throw invalidInput("rpc", operation);
+  }
+  const actualFields = Object.keys(value).sort();
+  const expected = [...expectedFields].sort();
+  if (
+    actualFields.length !== expected.length ||
+    actualFields.some((field, index) => field !== expected[index])
+  ) {
+    throw invalidInput("rpc", operation);
+  }
+}
+
+const PROJECTION_EXECUTION_TRACE_V1_FIELDS = Object.freeze([
+  "startedAtMs",
+  "completedAtMs",
+  "candidateBatchSize",
+  "hardDeadlineMs",
+  "maxCallsPerProvider",
+  "elapsedMs",
+  "providerCallCounts",
+  "calls",
+]);
+
+const PROJECTION_EXECUTION_CALL_V1_FIELDS = Object.freeze([
+  "providerIdentity",
+  "providerVendorGroup",
+  "providerEndpointCommitment",
+  "providerOriginCommitment",
+  "operation",
+  "attempt",
+  "startedOffsetMs",
+  "durationMs",
+  "outcome",
+]);
+
+const PROJECTION_EXECUTION_OPERATION_TAGS = Object.freeze({
+  getChainId: 1,
+  getBlockNumber: 2,
+  getBlock: 3,
+  getTransactionReceipt: 4,
+  getBytecode: 5,
+  readRewardSnapshot: 6,
+} as const);
+
+const PROJECTION_EXECUTION_OUTCOME_TAGS = Object.freeze({
+  success: 1,
+  error: 2,
+} as const);
+
+/**
+ * Canonical binary representation of one physical dual-RPC execution trace.
+ * Calls remain in their observed order; object-key order and JSON whitespace
+ * never influence the commitment that PostgreSQL recomputes.
+ */
+export function projectionExecutionTracePreimageV1(
+  trace: unknown,
+): Uint8Array {
+  assertExactRecordFields(
+    trace,
+    PROJECTION_EXECUTION_TRACE_V1_FIELDS,
+    "projection-execution-trace",
+  );
+  if (
+    !Array.isArray(trace.providerCallCounts) ||
+    trace.providerCallCounts.length !== 2 ||
+    !Array.isArray(trace.calls) ||
+    trace.calls.length < 1 ||
+    trace.calls.length > 256
+  ) {
+    throw invalidInput("rpc", "projection-execution-trace");
+  }
+  const providerACallCount = trace.providerCallCounts[0];
+  const providerBCallCount = trace.providerCallCounts[1];
+  if (
+    !isSafeUnsignedNumber(trace.startedAtMs, 0, Number.MAX_SAFE_INTEGER) ||
+    !isSafeUnsignedNumber(trace.completedAtMs, 0, Number.MAX_SAFE_INTEGER) ||
+    !isSafeUnsignedNumber(trace.candidateBatchSize, 0, 4_096) ||
+    !isSafeUnsignedNumber(trace.hardDeadlineMs, 10, 75_000) ||
+    !isSafeUnsignedNumber(trace.maxCallsPerProvider, 1, 128) ||
+    !isSafeUnsignedNumber(trace.elapsedMs, 0, 75_000) ||
+    trace.completedAtMs < trace.startedAtMs ||
+    trace.completedAtMs - trace.startedAtMs !== trace.elapsedMs ||
+    !isSafeUnsignedNumber(providerACallCount, 0, 11_008) ||
+    !isSafeUnsignedNumber(providerBCallCount, 0, 11_008)
+  ) {
+    throw invalidInput("rpc", "projection-execution-trace-call-count");
+  }
+  const calls = trace.calls.map((call) => {
+    assertExactRecordFields(
+      call,
+      PROJECTION_EXECUTION_CALL_V1_FIELDS,
+      "projection-execution-trace-call",
+    );
+    const operation =
+      PROJECTION_EXECUTION_OPERATION_TAGS[
+        call.operation as keyof typeof PROJECTION_EXECUTION_OPERATION_TAGS
+      ];
+    const outcome =
+      PROJECTION_EXECUTION_OUTCOME_TAGS[
+        call.outcome as keyof typeof PROJECTION_EXECUTION_OUTCOME_TAGS
+      ];
+    if (
+      operation === undefined ||
+      outcome === undefined ||
+      !isSafeUnsignedNumber(call.attempt, 1, 3) ||
+      !isSafeUnsignedNumber(call.startedOffsetMs, 0, 75_000) ||
+      !isSafeUnsignedNumber(call.durationMs, 0, 75_000)
+    ) {
+      throw invalidInput("rpc", "projection-execution-trace-call-enum");
+    }
+    return Buffer.concat([
+      exactFramedText(call.providerIdentity),
+      exactFramedText(call.providerVendorGroup),
+      exactHex(call.providerEndpointCommitment, 32),
+      exactHex(call.providerOriginCommitment, 32),
+      Buffer.from([operation]),
+      exactSafeUnsignedNumber(call.attempt, 4),
+      exactSafeUnsignedNumber(call.startedOffsetMs, 4),
+      exactSafeUnsignedNumber(call.durationMs, 4),
+      Buffer.from([outcome]),
+    ]);
+  });
+  return Buffer.concat([
+    PROJECTION_EXECUTION_TRACE_V1_PREFIX,
+    exactSafeUnsignedNumber(trace.startedAtMs, 8),
+    exactSafeUnsignedNumber(trace.completedAtMs, 8),
+    exactSafeUnsignedNumber(trace.candidateBatchSize, 4),
+    exactSafeUnsignedNumber(trace.hardDeadlineMs, 4),
+    exactSafeUnsignedNumber(trace.maxCallsPerProvider, 4),
+    exactSafeUnsignedNumber(trace.elapsedMs, 4),
+    exactSafeUnsignedNumber(providerACallCount, 4),
+    exactSafeUnsignedNumber(providerBCallCount, 4),
+    fixedUnsigned(calls.length, 4),
+    ...calls,
+  ]);
+}
+
+export function projectionExecutionTraceCommitmentV1(
+  trace: unknown,
+): HexBytes32 {
+  return sha256(projectionExecutionTracePreimageV1(trace));
+}
+
 function encodeProviderEvidenceType(type: string, value: unknown): Buffer {
   if (type === "u32") return fixedUnsigned(value, 4);
   if (type === "u64") return fixedUnsigned(value, 8);
@@ -235,7 +524,7 @@ function encodeProviderEvidenceType(type: string, value: unknown): Buffer {
   }
   const array = /^array<(.+)>$/u.exec(type);
   if (array) {
-    if (!Array.isArray(value) || value.length > 2_000) {
+    if (!Array.isArray(value) || value.length > 4_096) {
       throw invalidInput("rpc", "provider-evidence-array");
     }
     return Buffer.concat([
@@ -252,22 +541,34 @@ export type ProviderEvidenceV2 = Readonly<{
   contentFingerprint: HexBytes32;
 }>;
 
-export function providerEvidenceV2(
-  subtype: ProviderEvidenceSubtype,
-  input: Readonly<Record<string, unknown>>,
-): ProviderEvidenceV2 {
-  const schema = PROVIDER_EVIDENCE_SCHEMAS[subtype];
+export type ProviderEvidenceV3 = Readonly<{
+  encodingVersion: 3;
+  canonicalPreimage: Uint8Array;
+  contentFingerprint: HexBytes32;
+}>;
+
+function encodeProviderEvidence<Version extends 2 | 3>(input: Readonly<{
+  encodingVersion: Version;
+  prefix: Buffer;
+  tag: number;
+  schema: readonly ProviderEvidenceField[];
+  values: Readonly<Record<string, unknown>>;
+}>): Readonly<{
+  encodingVersion: Version;
+  canonicalPreimage: Uint8Array;
+  contentFingerprint: HexBytes32;
+}> {
+  const { schema, values } = input;
   if (
-    !schema ||
-    input === null ||
-    typeof input !== "object" ||
-    Array.isArray(input) ||
-    Object.getPrototypeOf(input) !== Object.prototype
+    values === null ||
+    typeof values !== "object" ||
+    Array.isArray(values) ||
+    Object.getPrototypeOf(values) !== Object.prototype
   ) {
     throw invalidInput("rpc", "provider-evidence");
   }
   const names = schema.map(([name]) => name);
-  const actualNames = Object.keys(input).sort();
+  const actualNames = Object.keys(values).sort();
   const expectedNames = [...names].sort();
   if (
     actualNames.length !== expectedNames.length ||
@@ -276,18 +577,44 @@ export function providerEvidenceV2(
     throw invalidInput("rpc", "provider-evidence-fields");
   }
   const canonicalPreimage = Buffer.concat([
-    PROVIDER_EVIDENCE_PREFIX,
-    Buffer.from([PROVIDER_EVIDENCE_TAGS[subtype]]),
+    input.prefix,
+    Buffer.from([input.tag]),
     ...schema.map(([name, type]) =>
-      encodeProviderEvidenceType(type, input[name]),
+      encodeProviderEvidenceType(type, values[name]),
     ),
   ]);
   return Object.freeze({
-    encodingVersion: 2 as const,
+    encodingVersion: input.encodingVersion,
     canonicalPreimage,
     contentFingerprint: keccak256(
       `0x${canonicalPreimage.toString("hex")}`,
     ),
+  });
+}
+
+export function providerEvidenceV2(
+  subtype: ProviderEvidenceV2Subtype,
+  input: Readonly<Record<string, unknown>>,
+): ProviderEvidenceV2 {
+  return encodeProviderEvidence({
+    encodingVersion: 2,
+    prefix: PROVIDER_EVIDENCE_V2_PREFIX,
+    tag: PROVIDER_EVIDENCE_V2_TAGS[subtype],
+    schema: PROVIDER_EVIDENCE_V2_SCHEMAS[subtype],
+    values: input,
+  });
+}
+
+export function providerEvidenceV3(
+  subtype: ProviderEvidenceV3Subtype,
+  input: Readonly<Record<string, unknown>>,
+): ProviderEvidenceV3 {
+  return encodeProviderEvidence({
+    encodingVersion: 3,
+    prefix: PROVIDER_EVIDENCE_V3_PREFIX,
+    tag: PROVIDER_EVIDENCE_V3_TAGS[subtype],
+    schema: PROVIDER_EVIDENCE_V3_SCHEMAS[subtype],
+    values: input,
   });
 }
 

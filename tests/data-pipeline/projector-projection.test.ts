@@ -111,7 +111,11 @@ describe("release projection orchestrator", () => {
   it("keeps provider work between the two database phases and commits ignored pages", async () => {
     const expected = candidate();
     const order: string[] = [];
-    const commitVerifiedProjection = vi.fn(async (projection) => {
+    const commitVerifiedProjection = vi.fn(async (
+      projection: Parameters<
+        ReleaseProjectionStore["commitVerifiedProjection"]
+      >[0],
+    ) => {
       order.push("commit");
       expect(projection.ignoredCandidateIds).toEqual([expected.candidateId]);
       expect(projection.fold.occurrences).toEqual([]);
@@ -160,6 +164,7 @@ describe("release projection orchestrator", () => {
       projectedCandidateCount: 0,
       ignoredCandidateCount: 1,
       checkpointGeneration: "1",
+      batchKind: "normal",
     });
   });
 
@@ -364,6 +369,172 @@ describe("release projection orchestrator", () => {
         rpcPolicy: expect.objectContaining({ maxAttempts: 1 }),
       }),
     );
+    expect(commitVerifiedProjection).toHaveBeenCalledOnce();
+  });
+
+  it("verifies every vault touched in one reward block before one atomic commit", async () => {
+    const blockHash = hash("1");
+    const eventSignature = toEventSelector(
+      "CreatorFeesCheckpointed(bytes32,uint64,uint256,uint256)",
+    );
+    const vaults = [address("7"), address("8")] as const;
+    const poolIds = [hash("3"), hash("4")] as const;
+    const amounts = ["10", "20"] as const;
+    const transactions = [hash("2"), hash("c")] as const;
+    const rewards = vaults.map((vault, index) =>
+      candidate({
+        candidateId:
+          `1:${blockHash}:${transactions[index]}:${4 + index}`,
+        blockNumber: "25639601",
+        blockHash,
+        transactionHash: transactions[index],
+        transactionIndex: 3 + index,
+        blockGlobalLogIndex: 4 + index,
+        sourceAddress: vault,
+        contractName: "ClassicV3RewardVault",
+        eventName: "CreatorFeesCheckpointed",
+        releaseHint: { model: "classic", releaseVersion: "classic-v3" },
+        orderedTopics: [eventSignature],
+        decodedPayload: {
+          poolId: poolIds[index],
+          configurationEpoch: "1",
+          amount: amounts[index],
+          totalCreatorFeesReceived: amounts[index],
+        },
+      }),
+    );
+    const rewardEvidence = rewards.map((reward, index) => ({
+      chainId: 1 as const,
+      candidateId: reward.candidateId,
+      sourceAddress: reward.sourceAddress,
+      contractName: reward.contractName,
+      eventName: reward.eventName,
+      sourceKind: "dynamic-attested" as const,
+      model: "classic" as const,
+      releaseVersion: "classic-v3",
+      payloadHash: reward.payloadHash,
+      rawLogCommitment: hash("5"),
+      providerIdentities: ["alchemy-test", "quicknode-test"] as const,
+      providerVendorGroups: ["alchemy", "quicknode"] as const,
+      providerEndpointCommitments: [hash("7"), hash("9")] as const,
+      providerOriginCommitments: [hash("8"), hash("a")] as const,
+      providerHeads: ["120", "121"] as const,
+      safeBlockNumber: "108",
+      safeBlockHash: hash("b"),
+      candidateBlockNumber: reward.blockNumber,
+      candidateBlockHash: reward.blockHash,
+      candidateBlockTimestamp: reward.blockTimestamp,
+      transactionHash: reward.transactionHash,
+      transactionIndex: reward.transactionIndex,
+      receiptCommitment: hash(index === 0 ? "c" : "d"),
+      sourceCodeHash: hash("d"),
+      receiptLogOrdinal: 0,
+      dynamicSourceAttestationId:
+        `80000000-0000-8000-8000-00000000000${index + 1}`,
+      normalizedRuntimeCodeHash: hash("e"),
+      immutableReferencesCommitment: hash("f"),
+      runtimeByteLength: "1",
+    }));
+    const alice = address("1");
+    const rewardPlan: ReleaseProjectionPlan = {
+      ...plan(rewards.map((reward) => ({
+        candidate: reward,
+        action: "project" as const,
+        attemptCount: "0",
+      }))),
+      scope: {
+        releaseId: "classic-v3",
+        modelId: "classic",
+        sourceGroup: "core",
+      },
+      knownPools: vaults.map((rewardVault, index) => ({
+        releaseVersion: "classic-v3",
+        poolId: poolIds[index],
+        token: address(index === 0 ? "5" : "6"),
+        quoteAsset: null,
+        rewardVault,
+      })),
+      rewardVerification: null,
+      rewardVerifications: vaults.map((vault, index) => ({
+        model: "classic-v3" as const,
+        baseline: {
+          vault,
+          poolId: poolIds[index],
+          configurationEpoch: "1",
+          activeConfigurationHash: hash(index === 0 ? "4" : "5"),
+          allocations: [{
+            allocationIndex: 0,
+            beneficiary: alice,
+            payoutAddress: alice,
+            shareBps: "10000",
+          }],
+          balances: [{
+            account: alice,
+            payoutAddress: alice,
+            claimableAccrued: "0",
+            claimedTotal: "0",
+          }],
+        },
+      })),
+      batchKind: "reward-block",
+    };
+    const readRewardSnapshot = vi.fn(async (input: {
+      expected: { vault: string; totalCreatorFeesReceived: string };
+      blockNumber: string;
+      blockHash: string;
+    }) => ({
+      ...input.expected,
+      model: "classic-v3" as const,
+      blockNumber: input.blockNumber,
+      blockHash: input.blockHash,
+      configurationHash: hash("4"),
+      totalCreatorFeesClaimed: "0",
+      rpcCallCount: 10,
+    }));
+    const commitVerifiedProjection = vi.fn(async (
+      projection: Parameters<
+        ReleaseProjectionStore["commitVerifiedProjection"]
+      >[0],
+    ) => {
+      expect(projection.rewardSnapshots).toHaveLength(2);
+      expect(
+        projection.rewardSnapshots?.map((snapshot) => [
+          snapshot.vault,
+          snapshot.totalCreatorFeesReceived,
+        ]),
+      ).toEqual([
+        [vaults[0], "10"],
+        [vaults[1], "20"],
+      ]);
+      expect(projection.rewardEvidence).toHaveLength(2);
+      return { checkpointGeneration: "1" };
+    });
+
+    await expect(
+      runReleaseProjectionCycle({
+        store: {
+          readProjectionPlan: async () => rewardPlan,
+          commitVerifiedProjection,
+        },
+        envio: {
+          readCandidate: async (candidateId) =>
+            rewards.find((reward) => reward.candidateId === candidateId) ?? null,
+        },
+        providers,
+        verifyBatch: async () => ({
+          ...emptyEvidence(),
+          candidates: rewardEvidence,
+          executionTrace: executionTrace(2),
+        }),
+        readMetadata: async () => [],
+        readRewardSnapshot: readRewardSnapshot as never,
+      }),
+    ).resolves.toMatchObject({
+      status: "committed",
+      batchKind: "reward-block",
+      projectedCandidateCount: 2,
+    });
+    expect(readRewardSnapshot).toHaveBeenCalledTimes(2);
     expect(commitVerifiedProjection).toHaveBeenCalledOnce();
   });
 });

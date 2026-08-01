@@ -304,6 +304,49 @@ describe("dual-RPC exact Envio window coverage", () => {
     ).rejects.toMatchObject({ code: "invalid_input" });
   });
 
+  it("does not let getLogs retries amplify past the physical call cap", async () => {
+    const first = client([canonicalLog()]);
+    const second = client([canonicalLog()]);
+    first.getLogs = vi
+      .fn<NonNullable<CandidateRpcClient["getLogs"]>>()
+      .mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue([canonicalLog()]);
+    second.getLogs = vi
+      .fn<NonNullable<CandidateRpcClient["getLogs"]>>()
+      .mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue([canonicalLog()]);
+
+    await expect(
+      verifyEnvioCandidateWindowWithDualRpc({
+        candidates: [candidate()],
+        cursor: {
+          blockNumber: (BLOCK_NUMBER - 1n).toString(),
+          blockGlobalLogIndex: -1,
+          candidateId: "",
+        },
+        through: {
+          blockNumber: BLOCK_NUMBER.toString(),
+          blockGlobalLogIndex: 7,
+          candidateId: candidate().candidateId,
+        },
+        providers: [
+          provider("alchemy-mainnet", first),
+          provider("quicknode-mainnet", second),
+        ],
+        rpcPolicy: {
+          maxAttempts: 2,
+          baseBackoffMs: 0,
+          maxCallsPerProvider: 7,
+          sleep: async () => undefined,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "dependency_unavailable",
+    });
+    expect(first.getLogs).toHaveBeenCalledTimes(1);
+    expect(second.getLogs).toHaveBeenCalledTimes(1);
+  });
+
   it("enforces one hard deadline across batch and coverage", async () => {
     const hanging = client([canonicalLog()]);
     hanging.getBlockNumber = () => new Promise(() => undefined);

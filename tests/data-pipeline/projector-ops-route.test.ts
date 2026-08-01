@@ -86,6 +86,15 @@ describe("projector operations route", () => {
     expect(mocks.runConfiguredProjectorCycle).not.toHaveBeenCalled();
   });
 
+  it("rejects a matching bearer when the configured cron secret is too short", async () => {
+    vi.stubEnv("CRON_SECRET", "short-secret");
+
+    const response = await GET(request("short-secret"));
+
+    expect(response.status).toBe(401);
+    expect(mocks.runConfiguredProjectorCycle).not.toHaveBeenCalled();
+  });
+
   it("runs exactly one configured cycle and returns only bounded status data", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     mocks.runConfiguredProjectorCycle.mockResolvedValue({
@@ -221,6 +230,48 @@ describe("projector operations route", () => {
           projectedCandidateCount: 200,
           ignoredCandidateCount: 56,
           pageCount: 8,
+        }),
+      ]),
+    });
+  });
+
+  it("accepts one explicitly reported atomic projection group", async () => {
+    mocks.runConfiguredProjectorCycle.mockResolvedValue({
+      ok: true,
+      ingestion: {
+        status: "committed-empty",
+        candidateCount: 0,
+        pageCount: 1,
+        generation: "51",
+        snapshotBlock: "25650101",
+      },
+      projections: projections.map(({ releaseId }) =>
+        releaseId === "classic-v3"
+          ? {
+              releaseId,
+              status: "committed",
+              projectedCandidateCount: 4_096,
+              ignoredCandidateCount: 0,
+              pageCount: 1,
+              atomicGroupCount: 1,
+              checkpointGeneration: "51",
+            }
+          : { releaseId, status: "idle", pageCount: 1 }
+      ),
+      readiness: readiness("progressed", "25650101", {
+        completedRounds: 1,
+      }),
+    });
+
+    const response = await GET(request(SECRET));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      projections: expect.arrayContaining([
+        expect.objectContaining({
+          releaseId: "classic-v3",
+          projectedCandidateCount: 4_096,
+          atomicGroupCount: 1,
         }),
       ]),
     });

@@ -227,6 +227,7 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
       model,
       vault,
       blockNumber,
+      blockHash,
       balanceAccounts,
     }): Promise<CandidateRpcRewardSnapshot> {
       const contract = PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1.models[model];
@@ -250,7 +251,8 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
           abi: REWARD_VAULT_ABI,
           functionName,
           args,
-          blockNumber,
+          blockHash,
+          requireCanonical: true,
         } as never);
       };
       const [
@@ -353,6 +355,7 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         model,
         vault,
         blockNumber: blockNumber.toString(),
+        blockHash,
         poolId,
         configurationEpoch: decimal(configurationEpoch),
         configurationHash,

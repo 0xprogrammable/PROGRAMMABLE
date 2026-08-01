@@ -13,6 +13,7 @@ import { runProjectorCycle } from "./projector";
 import { runReleaseProjectionCycle } from "./projector-projection";
 import { createProjectorRuntimeLeaseController } from "./projector-runtime-lease.server";
 import {
+  PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
   PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
   PROJECTOR_MAXIMUM_RUNTIME_ROUNDS,
 } from "./projector-runtime-limits";
@@ -311,6 +312,22 @@ export async function runConfiguredProjectorCycle(
         store: dependencies.createReleaseStore({
           executor: writerExecutor,
           providers: config.providers,
+          rpcEvidenceBindings: [
+            {
+              identity: providers[0].identity,
+              vendorGroup: providers[0].vendorGroup,
+              endpointCommitment: providers[0].endpointCommitment,
+              endpointOriginCommitment:
+                providers[0].endpointOriginCommitment,
+            },
+            {
+              identity: providers[1].identity,
+              vendorGroup: providers[1].vendorGroup,
+              endpointCommitment: providers[1].endpointCommitment,
+              endpointOriginCommitment:
+                providers[1].endpointOriginCommitment,
+            },
+          ] as const,
           scope,
           runtimeFence,
         }),
@@ -341,6 +358,7 @@ export async function runConfiguredProjectorCycle(
       ignoredCandidateCount: 0,
       pageCount: 0,
       checkpointGeneration: null as string | null,
+      processedAtomicGroup: false,
     }));
     let madeAnyProgress = false;
     let terminalSweepComplete = false;
@@ -403,6 +421,13 @@ export async function runConfiguredProjectorCycle(
       for (let index = 0; index < releaseStores.length; index += 1) {
         const binding = releaseStores[index]!;
         const state = projectionStates[index]!;
+        if (state.processedAtomicGroup) {
+          // An atomic group is intentionally the last unit processed for this
+          // release in one invocation. It is deferred, not proven idle, so it
+          // must keep the terminal sweep and activation readiness false.
+          operationsRemaining -= 1;
+          continue;
+        }
         const deadline = operationDeadline(operationsRemaining);
         if (deadline === null) {
           stoppedForDeadline = true;
@@ -423,13 +448,18 @@ export async function runConfiguredProjectorCycle(
             result.status === "committed"
               ? result.ignoredCandidateCount
               : 0;
+          const maximumResultCount =
+            result.status === "committed" &&
+              (result.batchKind ?? "normal") !== "normal"
+              ? PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP
+              : PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE;
           if (
             !Number.isSafeInteger(projectedCandidateCount) ||
             projectedCandidateCount < 0 ||
             !Number.isSafeInteger(ignoredCandidateCount) ||
             ignoredCandidateCount < 0 ||
             projectedCandidateCount + ignoredCandidateCount >
-              PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+              maximumResultCount
           ) {
             return invalidRuntimeConfig();
           }
@@ -439,6 +469,8 @@ export async function runConfiguredProjectorCycle(
             state.projectedCandidateCount += result.projectedCandidateCount;
             state.ignoredCandidateCount += result.ignoredCandidateCount;
             state.checkpointGeneration = result.checkpointGeneration;
+            state.processedAtomicGroup =
+              (result.batchKind ?? "normal") !== "normal";
             madeProgress = true;
           } else {
             idleProjectionCount += 1;
@@ -524,6 +556,7 @@ export async function runConfiguredProjectorCycle(
         ignoredCandidateCount: state.ignoredCandidateCount,
         pageCount: state.pageCount,
         checkpointGeneration: state.checkpointGeneration,
+        ...(state.processedAtomicGroup ? { atomicGroupCount: 1 } : {}),
       });
     });
     const failed =

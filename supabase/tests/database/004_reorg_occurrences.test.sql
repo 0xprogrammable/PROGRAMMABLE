@@ -1,5 +1,14 @@
 begin;
 
+-- Preserve regression coverage for the retired v1 promotion body without
+-- restoring its production capability. The grant is rolled back with pgTAP.
+set local role programmable_migrator;
+grant execute on function programmable_private.promote_projection_run(
+  uuid, uuid, uuid, uuid, text, bigint, bytea,
+  bigint, bigint, bigint, uuid, uuid, numeric, bytea, numeric,
+  text, uuid[], uuid[], uuid[], uuid[], text[], bytea, timestamptz
+) to programmable_projector;
+
 set local role programmable_projector;
 
 select programmable_private.create_release_epoch(

@@ -1,6 +1,21 @@
 begin;
 select plan(156);
 
+-- Preserve behavioral coverage for the retired v1/v2 promotion bodies while
+-- production keeps both capabilities revoked. pgTAP rolls these grants back.
+set local role programmable_migrator;
+grant execute on function programmable_private.promote_projection_run(
+  uuid, uuid, uuid, uuid, text, bigint, bytea,
+  bigint, bigint, bigint, uuid, uuid, numeric, bytea, numeric,
+  text, uuid[], uuid[], uuid[], uuid[], text[], bytea, timestamptz
+) to programmable_projector;
+grant execute on function programmable_private.promote_projection_run_v2(
+  text, uuid, uuid, uuid, uuid, text, bigint, bytea,
+  bigint, bigint, bigint, uuid, uuid, numeric, bytea, numeric,
+  text, uuid[], uuid[], uuid[], uuid[], text[], bytea, timestamptz
+) to programmable_projector;
+reset role;
+
 -- Test-only definer readers let the restricted projector replay a previously
 -- stored opaque pair without granting it base-table SELECT. The transaction
 -- rollback removes these helpers.

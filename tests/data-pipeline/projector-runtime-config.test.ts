@@ -447,6 +447,85 @@ describe("configured projector runtime", () => {
     expect(close).toHaveBeenCalledTimes(2);
   });
 
+  it("does not report an atomic-group release as terminally swept", async () => {
+    const close = vi.fn(async () => undefined);
+    const executor = { close };
+    const releaseCalls = new Map<string, number>();
+    const runCycle = vi.fn(async () => ({
+      status: "idle" as const,
+      candidateCount: 0,
+      snapshotBlock: "25650200",
+    }));
+    const runReleaseCycle = vi.fn(async ({ store }) => {
+      const releaseId = (store as { scope: { releaseId: string } }).scope
+        .releaseId;
+      releaseCalls.set(releaseId, (releaseCalls.get(releaseId) ?? 0) + 1);
+      if (releaseId === "classic-v3") {
+        return {
+          status: "committed" as const,
+          projectedCandidateCount: 96,
+          ignoredCandidateCount: 0,
+          checkpointGeneration: "1",
+          batchKind: "reward-block" as const,
+        };
+      }
+      return { status: "idle" as const };
+    });
+    const dependencies = {
+      createExecutor: vi.fn(() => executor),
+      createLeaseController: vi.fn(() => ({
+        tryAcquire: vi.fn(async () => ({
+          status: "acquired",
+          fence: {
+            holderId: "projector-runtime-test",
+            generation: "1",
+            tokenHash: bytes32("a"),
+          },
+          acquiredAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2026-07-31T18:01:25.000Z",
+        })),
+        release: vi.fn(async () => true),
+      })),
+      createProviders: vi.fn(() => RUNTIME_PROVIDERS),
+      assertProviders: vi.fn(),
+      createEnvio: vi.fn(() => ({})),
+      createStore: vi.fn(() => ({})),
+      createReleaseStore: vi.fn(({ scope }) => ({ scope })),
+      runCycle,
+      runReleaseCycle,
+    } as never;
+
+    const result = await runConfiguredProjectorCycle({
+      env: environment(),
+      dependencies,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      readiness: {
+        status: "progressed",
+        activationReady: false,
+        lagging: true,
+        terminalSweepComplete: false,
+      },
+    });
+    expect(
+      "projections" in result
+        ? result.projections.find(({ releaseId }) =>
+            releaseId === "classic-v3"
+          )
+        : null,
+    ).toMatchObject({
+      releaseId: "classic-v3",
+      status: "committed",
+      projectedCandidateCount: 96,
+      atomicGroupCount: 1,
+    });
+
+    expect(runCycle).toHaveBeenCalledTimes(2);
+    expect(releaseCalls.get("classic-v3")).toBe(1);
+    expect(releaseCalls.get("classic-v2")).toBe(2);
+  });
+
   it("finishes a 264-candidate corpus across two bounded runtime cycles", async () => {
     const close = vi.fn(async () => undefined);
     const executor = { close };

@@ -318,19 +318,24 @@ select ok(
 
 select ok(
   to_regprocedure(
-    'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'
+    'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'
   ) is not null
-  and pg_catalog.has_function_privilege(
+  and not pg_catalog.has_function_privilege(
     'programmable_projector',
     'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure,
     'EXECUTE'
   )
+  and pg_catalog.has_function_privilege(
+    'programmable_projector',
+    'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'::regprocedure,
+    'EXECUTE'
+  )
   and not pg_catalog.has_function_privilege(
     'service_role',
-    'programmable_private.promote_projection_run_v2(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure,
+    'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'::regprocedure,
     'EXECUTE'
   ),
-  'the additive promotion entrypoint exists and remains projector-only'
+  'provider-bound promotion replaces the retired v2 capability and remains projector-only'
 );
 
 select ok(

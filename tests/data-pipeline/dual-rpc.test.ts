@@ -32,6 +32,8 @@ vi.mock(
 );
 
 import {
+  readDualRpcSafeHead,
+  readDualRpcTokenMetadata,
   verifyEnvioCandidateBatchWithDualRpc,
   verifyEnvioCandidateWithDualRpc,
   type CandidateRpcClient,
@@ -344,6 +346,49 @@ describe("dual-RPC Envio candidate verification", () => {
       expect(rpcClient.getTransactionReceipt).toHaveBeenCalledTimes(1);
       expect(rpcClient.getBytecode).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it("verifies an explicitly bounded transaction with more than 32 events", async () => {
+    const candidates = Array.from({ length: 40 }, (_, index) => ({
+      ...candidate(),
+      candidateId: `1:${BLOCK_HASH}:${TRANSACTION_HASH}:${index}`,
+      blockGlobalLogIndex: index,
+    } satisfies EnvioCandidate));
+    const oversizedReceipt = (): CandidateRpcReceipt => ({
+      status: "success",
+      blockNumber: CANDIDATE_BLOCK,
+      blockHash: BLOCK_HASH,
+      transactionHash: TRANSACTION_HASH,
+      transactionIndex: 2,
+      logs: candidates.map((entry) => ({
+        address: SOURCE,
+        blockNumber: CANDIDATE_BLOCK,
+        blockHash: BLOCK_HASH,
+        transactionHash: TRANSACTION_HASH,
+        transactionIndex: 2,
+        logIndex: entry.blockGlobalLogIndex,
+        removed: false,
+        topics: [TOPIC],
+        data: RAW_DATA,
+      })),
+    });
+
+    const batch = await verifyEnvioCandidateBatchWithDualRpc({
+      candidates,
+      maximumCandidateCount: 4_096,
+      providers: [
+        provider("alchemy-mainnet", client({
+          getTransactionReceipt: async () => oversizedReceipt(),
+        })),
+        provider("quicknode-mainnet", client({
+          getTransactionReceipt: async () => oversizedReceipt(),
+        })),
+      ],
+    });
+
+    expect(batch.candidates).toHaveLength(40);
+    expect(batch.executionTrace.candidateBatchSize).toBe(40);
+    expect(batch.executionTrace.providerCallCounts).toEqual([6, 6]);
   });
 
   it("proves a finalized candidate against matching blocks, receipts, logs, and code", async () => {
@@ -786,6 +831,75 @@ describe("dual-RPC Envio candidate verification", () => {
     expect(first.maximumInFlight()).toBeLessThanOrEqual(2);
     expect(second.maximumInFlight()).toBeLessThanOrEqual(2);
     expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it("charges every safe-head retry against the physical provider budget", async () => {
+    const first = client();
+    const second = client();
+    first.getChainId = vi
+      .fn<() => Promise<number>>()
+      .mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue(1);
+    second.getChainId = vi
+      .fn<() => Promise<number>>()
+      .mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue(1);
+
+    await expect(
+      readDualRpcSafeHead({
+        cursor: {
+          blockNumber: CANDIDATE_BLOCK.toString(),
+          blockHash: BLOCK_HASH,
+        },
+        providers: [
+          provider("alchemy-mainnet", first),
+          provider("quicknode-mainnet", second),
+        ],
+        rpcPolicy: {
+          maxAttempts: 2,
+          baseBackoffMs: 0,
+          maxCallsPerProvider: 4,
+          sleep: async () => undefined,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "dependency_unavailable",
+    });
+    expect(first.getChainId).toHaveBeenCalledTimes(2);
+    expect(second.getChainId).toHaveBeenCalledTimes(2);
+  });
+
+  it("charges both metadata eth_calls on every physical retry", async () => {
+    const first = client();
+    const second = client();
+    first.readErc20Metadata = vi
+      .fn<() => Promise<{ name: string; symbol: string }>>()
+      .mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue({ name: "Token", symbol: "TKN" });
+    second.readErc20Metadata = vi
+      .fn<() => Promise<{ name: string; symbol: string }>>()
+      .mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue({ name: "Token", symbol: "TKN" });
+
+    await expect(
+      readDualRpcTokenMetadata({
+        tokens: [{ token: SOURCE, blockNumber: CANDIDATE_BLOCK.toString() }],
+        providers: [
+          provider("alchemy-mainnet", first),
+          provider("quicknode-mainnet", second),
+        ],
+        rpcPolicy: {
+          maxAttempts: 2,
+          baseBackoffMs: 0,
+          maxCallsPerProvider: 2,
+          sleep: async () => undefined,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "dependency_unavailable",
+    });
+    expect(first.readErc20Metadata).toHaveBeenCalledTimes(1);
+    expect(second.readErc20Metadata).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a forged candidate envelope or an unpinned runtime", async () => {

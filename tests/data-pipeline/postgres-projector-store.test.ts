@@ -50,6 +50,41 @@ const PROVIDERS: readonly ProjectorProviderDatabaseBinding[] = [
     schemaCommitment: bytes32("6"),
   },
 ] as const;
+const RPC_EVIDENCE_BINDINGS = [
+  {
+    identity: "alchemy",
+    vendorGroup: "alchemy",
+    endpointCommitment: bytes32("3"),
+    endpointOriginCommitment: bytes32("4"),
+  },
+  {
+    identity: "quicknode",
+    vendorGroup: "quicknode",
+    endpointCommitment: bytes32("5"),
+    endpointOriginCommitment: bytes32("6"),
+  },
+] as const;
+
+const projectionExecutionTrace = {
+  startedAtMs: 1,
+  completedAtMs: 2,
+  candidateBatchSize: 1,
+  hardDeadlineMs: 75_000,
+  maxCallsPerProvider: 48,
+  elapsedMs: 1,
+  providerCallCounts: [1, 1] as const,
+  calls: RPC_EVIDENCE_BINDINGS.map((binding) => ({
+    providerIdentity: binding.identity,
+    providerVendorGroup: binding.vendorGroup,
+    providerEndpointCommitment: binding.endpointCommitment,
+    providerOriginCommitment: binding.endpointOriginCommitment,
+    operation: "getChainId" as const,
+    attempt: 1,
+    startedOffsetMs: 0,
+    durationMs: 1,
+    outcome: "success" as const,
+  })),
+};
 
 const RELEASE_SCOPES = [
   { releaseId: "classic-v2", modelId: "classic", sourceGroup: "core" },
@@ -274,6 +309,9 @@ class StoreExecutor implements PostgresExecutor {
           return [{ id: values[0] }] as unknown as Row[];
         }
         if (text.includes("append_dual_rpc_block_evidence")) {
+          return [{ id: values[0] }] as unknown as Row[];
+        }
+        if (text.includes("append_projection_provider_execution_evidence_v1")) {
           return [{ id: values[0] }] as unknown as Row[];
         }
         if (text.includes("commit_envio_ingestion_page_v1")) {
@@ -549,6 +587,9 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
   leaseGeneration = "0";
   assertRuntimeFence = true;
   decisionId: string | null = null;
+  readonly decisionIds = new Map<string, string>();
+  candidateRows: readonly Record<string, unknown>[] | null = null;
+  checkpointRow: Record<string, unknown> | null = null;
   readonly candidateId = `1:${bytes32("d")}:${bytes32("e")}:10`;
 
   async transaction<T>(
@@ -585,13 +626,19 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
             lease_holder_id: null,
             lease_acquired_at: null,
             lease_expires_at: null,
-            checkpoint_id: null,
-            checkpoint_generation: "0",
+            checkpoint_id: this.checkpointRow?.checkpoint_id ?? null,
+            checkpoint_generation:
+              this.checkpointRow?.checkpoint_generation ?? "0",
             reorg_generation: "0",
-            checkpoint_block_number: null,
-            checkpoint_block_hash: null,
-            checkpoint_cursor_block_global_log_index: null,
-            checkpoint_cursor_candidate_id: null,
+            checkpoint_block_number:
+              this.checkpointRow?.checkpoint_block_number ?? null,
+            checkpoint_block_hash:
+              this.checkpointRow?.checkpoint_block_hash ?? null,
+            checkpoint_cursor_block_global_log_index:
+              this.checkpointRow?.checkpoint_cursor_block_global_log_index ??
+              null,
+            checkpoint_cursor_candidate_id:
+              this.checkpointRow?.checkpoint_cursor_candidate_id ?? null,
           }] as unknown as Row[];
         }
         if (text.includes("acquire_projector_lease")) {
@@ -614,6 +661,19 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
           return [] as unknown as Row[];
         }
         if (text.includes("list_projector_candidate_page_v1")) {
+          if (this.candidateRows) {
+            const afterCandidateId = values[11];
+            const limit = Number(values[12]);
+            const afterIndex = afterCandidateId === null
+              ? -1
+              : this.candidateRows.findIndex(
+                (row) => row.candidate_id === afterCandidateId,
+              );
+            return this.candidateRows.slice(
+              afterIndex + 1,
+              afterIndex + 1 + limit,
+            ) as unknown as Row[];
+          }
           return [{
             candidate_id: this.candidateId,
             provider_deployment_id: IDS[0],
@@ -644,11 +704,40 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
         if (text.includes("append_dual_rpc_block_evidence")) {
           return [{ id: values[0] }] as unknown as Row[];
         }
+        if (text.includes("append_projection_provider_execution_evidence_v1")) {
+          return [{ id: values[0] }] as unknown as Row[];
+        }
         if (text.includes("ignore_envio_candidate_v1")) {
           this.decisionId = String(values[0]);
+          this.decisionIds.set(String(values[2]), String(values[0]));
           return [{ id: values[0] }] as unknown as Row[];
         }
         if (text.includes("list_projector_candidate_dispositions_v1")) {
+          if (this.candidateRows) {
+            const afterCandidateId = values[11];
+            const limit = Number(values[12]);
+            const afterIndex = afterCandidateId === null
+              ? -1
+              : this.candidateRows.findIndex(
+                (row) => row.candidate_id === afterCandidateId,
+              );
+            return this.candidateRows
+              .slice(afterIndex + 1, afterIndex + 1 + limit)
+              .map((row) => ({
+                candidate_id: row.candidate_id,
+                block_number: row.block_number,
+                block_hash: row.block_hash,
+                transaction_hash: row.transaction_hash,
+                transaction_index: row.transaction_index,
+                block_global_log_index: row.block_global_log_index,
+                status: "ignored",
+                attempt_count: "0",
+                decision_id: this.decisionIds.get(String(row.candidate_id)),
+                reason_code: "outside-release-manifest",
+                reason_commitment: bytes(bytes32("3")),
+                changed_at: "2026-07-31T18:00:00.000Z",
+              })) as unknown as Row[];
+          }
           return [{
             candidate_id: this.candidateId,
             block_number: "25650001",
@@ -677,12 +766,210 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
 }
 
 describe("release-scoped projector Postgres commit", () => {
+  it("completes a transaction larger than 32 rows and advances to the following transaction", async () => {
+    const executor = new ReleaseProjectionExecutor();
+    const blockHash = bytes32("d");
+    const firstTransactionHash = bytes32("e");
+    const candidateRow = (
+      index: number,
+      transactionHash: `0x${string}`,
+      transactionIndex: number,
+    ) => ({
+      candidate_id: `1:${blockHash}:${transactionHash}:${index}`,
+      provider_deployment_id: IDS[0],
+      block_number: "25650001",
+      block_hash: bytes(blockHash),
+      transaction_hash: bytes(transactionHash),
+      transaction_index: String(transactionIndex),
+      block_global_log_index: String(index),
+      source_address: bytes(address("1")),
+      event_signature: bytes(bytes32("f")),
+      event_type: "UnknownEvent",
+      ordered_topics: [bytes(bytes32("f"))],
+      raw_data: Buffer.alloc(0),
+      decoded_payload: {},
+      payload_hash: bytes(bytes32("1")),
+      content_commitment: bytes(bytes32("2")),
+      contract_name: "UnknownContract",
+      status: "pending",
+      attempt_count: "0",
+    });
+    executor.candidateRows = [
+      ...Array.from({ length: 40 }, (_, index) =>
+        candidateRow(index, firstTransactionHash, 1)
+      ),
+      candidateRow(40, bytes32("a"), 2),
+      candidateRow(41, bytes32("b"), 3),
+    ];
+    let sequence = 1;
+    const store = createPostgresReleaseProjectionStore({
+      executor,
+      providers: PROVIDERS,
+      rpcEvidenceBindings: RPC_EVIDENCE_BINDINGS,
+      scope: {
+        releaseId: "classic-v2",
+        modelId: "classic",
+        sourceGroup: "core",
+      },
+      runtimeFence: RUNTIME_FENCE,
+      uuid: () =>
+        `81000000-0000-4000-8000-${String(sequence++).padStart(12, "0")}`,
+      now: () => new Date("2026-07-31T18:00:00.000Z"),
+    });
+
+    const oversized = await store.readProjectionPlan();
+    expect(oversized).toMatchObject({ batchKind: "oversized-transaction" });
+    expect(oversized?.entries).toHaveLength(40);
+    expect(
+      new Set(oversized?.entries.map(({ candidate }) =>
+        candidate.transactionHash
+      )),
+    ).toEqual(new Set([firstTransactionHash]));
+
+    const terminal = oversized!.entries.at(-1)!.candidate;
+    executor.checkpointRow = {
+      checkpoint_id: "82000000-0000-4000-8000-000000000001",
+      checkpoint_generation: "1",
+      checkpoint_block_number: terminal.blockNumber,
+      checkpoint_block_hash: bytes(terminal.blockHash),
+      checkpoint_cursor_block_global_log_index:
+        String(terminal.blockGlobalLogIndex),
+      checkpoint_cursor_candidate_id: terminal.candidateId,
+    };
+    const following = await store.readProjectionPlan();
+    expect(following).toMatchObject({ batchKind: "normal" });
+    expect(following?.entries.map(({ candidate }) =>
+      candidate.blockGlobalLogIndex
+    )).toEqual([40, 41]);
+  });
+
+  it.each([500, 501, 4_096])(
+    "pages exact dispositions for a %i-candidate atomic transaction",
+    async (candidateCount) => {
+      const executor = new ReleaseProjectionExecutor();
+      const blockHash = bytes32("d");
+      const transactionHash = bytes32("e");
+      executor.candidateRows = Array.from(
+        { length: candidateCount },
+        (_value, index) => ({
+          candidate_id: `1:${blockHash}:${transactionHash}:${index}`,
+          provider_deployment_id: IDS[0],
+          block_number: "25650001",
+          block_hash: bytes(blockHash),
+          transaction_hash: bytes(transactionHash),
+          transaction_index: "2",
+          block_global_log_index: String(index),
+          source_address: bytes(address("1")),
+          event_signature: bytes(bytes32("f")),
+          event_type: "UnknownEvent",
+          ordered_topics: [bytes(bytes32("f"))],
+          raw_data: Buffer.alloc(0),
+          decoded_payload: {},
+          payload_hash: bytes(bytes32("1")),
+          content_commitment: bytes(bytes32("2")),
+          contract_name: "UnknownContract",
+          status: "pending",
+          attempt_count: "0",
+        }),
+      );
+      let sequence = 1;
+      const store = createPostgresReleaseProjectionStore({
+        executor,
+        providers: PROVIDERS,
+        rpcEvidenceBindings: RPC_EVIDENCE_BINDINGS,
+        scope: {
+          releaseId: "classic-v2",
+          modelId: "classic",
+          sourceGroup: "core",
+        },
+        runtimeFence: RUNTIME_FENCE,
+        uuid: () =>
+          `83000000-0000-4000-8000-${String(sequence++).padStart(12, "0")}`,
+        now: () => new Date("2026-07-31T18:00:00.000Z"),
+      });
+      const plan = await store.readProjectionPlan();
+      expect(plan).toMatchObject({ batchKind: "oversized-transaction" });
+      expect(plan?.entries).toHaveLength(candidateCount);
+      const freshCandidates = plan!.entries.map(({ candidate }) => ({
+        ...candidate,
+        blockTimestamp: "1750000000",
+        releaseHint: { model: "unresolved" as const, releaseVersion: "unresolved" },
+      }));
+      const evidence = {
+        chainId: 1 as const,
+        providerIdentities: ["alchemy", "quicknode"] as const,
+        providerVendorGroups: ["alchemy", "quicknode"] as const,
+        providerEndpointCommitments: [bytes32("3"), bytes32("5")] as const,
+        providerOriginCommitments: [bytes32("4"), bytes32("6")] as const,
+        providerHeads: ["25650020", "25650021"] as const,
+        safeBlockNumber: "25650008",
+        safeBlockHash: bytes32("9"),
+        executionTrace: {
+          ...projectionExecutionTrace,
+          candidateBatchSize: candidateCount,
+        },
+        candidates: freshCandidates.map((candidate) => ({
+          chainId: 1 as const,
+          candidateId: candidate.candidateId,
+          sourceAddress: candidate.sourceAddress,
+          contractName: candidate.contractName,
+          eventName: candidate.eventName,
+          sourceKind: "static" as const,
+          model: "unresolved" as const,
+          releaseVersion: "unresolved",
+          payloadHash: candidate.payloadHash,
+          rawLogCommitment: bytes32("2"),
+          providerIdentities: ["alchemy", "quicknode"] as const,
+          providerVendorGroups: ["alchemy", "quicknode"] as const,
+          providerEndpointCommitments: [bytes32("3"), bytes32("5")] as const,
+          providerOriginCommitments: [bytes32("4"), bytes32("6")] as const,
+          providerHeads: ["25650020", "25650021"] as const,
+          safeBlockNumber: "25650008",
+          safeBlockHash: bytes32("9"),
+          candidateBlockNumber: candidate.blockNumber,
+          candidateBlockHash: candidate.blockHash,
+          candidateBlockTimestamp: candidate.blockTimestamp,
+          transactionHash: candidate.transactionHash,
+          transactionIndex: candidate.transactionIndex,
+          receiptCommitment: bytes32("7"),
+          sourceCodeHash: bytes32("8"),
+          receiptLogOrdinal: 0,
+        })),
+      };
+      const result = await store.commitVerifiedProjection({
+        plan: plan!,
+        freshCandidates,
+        ignoredCandidateIds: freshCandidates.map(({ candidateId }) =>
+          candidateId
+        ),
+        evidence,
+        fold: { occurrences: [], facts: [], launches: [], knownPools: [] },
+        rewardSnapshot: null,
+      });
+
+      expect(result).toEqual({ checkpointGeneration: "1" });
+      const dispositionQueries = executor.queries.filter(({ text }) =>
+        text.includes("list_projector_candidate_dispositions_v1")
+      );
+      expect(dispositionQueries).toHaveLength(Math.ceil(candidateCount / 500));
+      expect(dispositionQueries.at(-1)?.values[11]).toBe(
+        candidateCount <= 500
+          ? null
+          : executor.candidateRows[
+            Math.floor((candidateCount - 1) / 500) * 500 - 1
+          ]?.candidate_id,
+      );
+    },
+    30_000,
+  );
+
   it("atomically checkpoints an irrelevant candidate as ignored", async () => {
     const executor = new ReleaseProjectionExecutor();
     let sequence = 1;
     const store = createPostgresReleaseProjectionStore({
       executor,
       providers: PROVIDERS,
+      rpcEvidenceBindings: RPC_EVIDENCE_BINDINGS,
       scope: {
         releaseId: "classic-v2",
         modelId: "classic",
@@ -714,7 +1001,7 @@ describe("release-scoped projector Postgres commit", () => {
         providerHeads: ["25650020", "25650021"],
         safeBlockNumber: "25650008",
         safeBlockHash: bytes32("9"),
-        executionTrace: executionTrace(1),
+        executionTrace: projectionExecutionTrace,
         candidates: [{
           chainId: 1,
           candidateId: item.candidateId,
@@ -746,6 +1033,44 @@ describe("release-scoped projector Postgres commit", () => {
       fold: { occurrences: [], facts: [], launches: [], knownPools: [] },
       rewardSnapshot: null,
     } as const;
+
+    for (const forgedEvidence of [
+      {
+        ...projection.evidence,
+        providerEndpointCommitments: [bytes32("0"), bytes32("5")],
+      },
+      {
+        ...projection.evidence,
+        executionTrace: {
+          ...projection.evidence.executionTrace,
+          calls: projection.evidence.executionTrace.calls.map((call, index) =>
+            index === 0
+              ? { ...call, providerIdentity: "substituted-provider" }
+              : call
+          ),
+        },
+      },
+      {
+        ...projection.evidence,
+        executionTrace: {
+          ...projection.evidence.executionTrace,
+          candidateBatchSize: 0,
+        },
+      },
+    ]) {
+      const queryStart = executor.queries.length;
+      await expect(
+        store.commitVerifiedProjection({
+          ...projection,
+          evidence: forgedEvidence,
+        } as never),
+      ).rejects.toThrow();
+      expect(
+        executor.queries
+          .slice(queryStart)
+          .some(({ text }) => text.includes("open_run")),
+      ).toBe(false);
+    }
 
     executor.assertRuntimeFence = false;
     const staleQueryStart = executor.queries.length;

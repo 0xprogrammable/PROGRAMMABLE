@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { runConfiguredProjectorCycle } from "../../../../lib/data-pipeline/projector-runtime-config.server";
 import {
+  PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
   PROJECTOR_MAXIMUM_CANDIDATES_PER_CYCLE,
   PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
   PROJECTOR_MAXIMUM_RUNTIME_ROUNDS,
@@ -38,6 +39,7 @@ type SafeProjection = Readonly<{
   ignoredCandidateCount?: number;
   pageCount?: number;
   checkpointGeneration?: string;
+  atomicGroupCount?: number;
 }>;
 
 type SafeReadiness = Readonly<{
@@ -147,6 +149,14 @@ function safeProjection(value: unknown, expectedReleaseId: string): SafeProjecti
   const checkpointGeneration = canonicalNonnegativeInteger(
     value.checkpointGeneration,
   );
+  const atomicGroupCount = value.atomicGroupCount === undefined
+    ? 0
+    : typeof value.atomicGroupCount === "number"
+      ? value.atomicGroupCount
+      : -1;
+  const pageCapacity =
+    atomicGroupCount * PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP +
+    (pageCount - atomicGroupCount) * PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE;
   if (
     typeof projectedCandidateCount !== "number" ||
     !Number.isSafeInteger(projectedCandidateCount) ||
@@ -160,7 +170,11 @@ function safeProjection(value: unknown, expectedReleaseId: string): SafeProjecti
     projectedCandidateCount + ignoredCandidateCount >
       PROJECTOR_MAXIMUM_CANDIDATES_PER_CYCLE ||
     projectedCandidateCount + ignoredCandidateCount >
-      pageCount * PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE ||
+      pageCapacity ||
+    !Number.isSafeInteger(atomicGroupCount) ||
+    atomicGroupCount < 0 ||
+    atomicGroupCount > 1 ||
+    atomicGroupCount > pageCount ||
     checkpointGeneration === null
   ) {
     throw new Error("Invalid release projection result");
@@ -172,6 +186,7 @@ function safeProjection(value: unknown, expectedReleaseId: string): SafeProjecti
     ignoredCandidateCount,
     pageCount,
     checkpointGeneration,
+    ...(atomicGroupCount === 1 ? { atomicGroupCount } : {}),
   });
 }
 
@@ -291,8 +306,8 @@ function isAuthorized(request: NextRequest): boolean {
   const authorization = request.headers.get("authorization");
   if (
     typeof secret !== "string" ||
-    secret.length < 1 ||
-    secret.length > 1_024 ||
+    Buffer.byteLength(secret, "utf8") < 32 ||
+    Buffer.byteLength(secret, "utf8") > 1_024 ||
     !authorization?.startsWith("Bearer ")
   ) {
     return false;

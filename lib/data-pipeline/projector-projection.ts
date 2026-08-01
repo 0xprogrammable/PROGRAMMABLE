@@ -6,6 +6,7 @@ import {
   verifyEnvioCandidateBatchWithDualRpc,
   type CandidateRpcProvider,
   type DualRpcCandidateBatchEvidence,
+  type DualRpcRewardSnapshot,
 } from "./dual-rpc";
 import type { EnvioCandidate } from "./envio";
 import { dataPipelineError, invalidInput, validationError } from "./errors";
@@ -24,7 +25,10 @@ import {
   type ProjectorRewardSnapshot,
 } from "./projector-reward-fold";
 import type { ProjectorReleaseDatabaseScope } from "./postgres-projector";
-import { PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE } from "./projector-runtime-limits";
+import {
+  PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
+  PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
+} from "./projector-runtime-limits";
 
 const MAXIMUM_PROJECTION_DEADLINE_MS = 75_000;
 // A 32-row page can contain 32 distinct blocks, transactions and sources.
@@ -86,6 +90,11 @@ export type ReleaseProjectionPlan = Readonly<{
     model: ProjectorRewardModel;
     baseline: ProjectorRewardBaseline;
   }>;
+  rewardVerifications?: readonly Readonly<{
+    model: ProjectorRewardModel;
+    baseline: ProjectorRewardBaseline;
+  }>[];
+  batchKind?: "normal" | "oversized-transaction" | "reward-block";
 }>;
 
 export type VerifiedReleaseProjection = Readonly<{
@@ -95,6 +104,8 @@ export type VerifiedReleaseProjection = Readonly<{
   evidence: DualRpcCandidateBatchEvidence;
   fold: ProjectorFoldResult;
   rewardSnapshot: ProjectorRewardSnapshot | null;
+  rewardSnapshots?: readonly ProjectorRewardSnapshot[];
+  rewardEvidence?: readonly DualRpcRewardSnapshot[];
 }>;
 
 export type ReleaseProjectionStore = Readonly<{
@@ -204,14 +215,32 @@ function exactCandidateMatch(
 }
 
 function assertPlan(plan: ReleaseProjectionPlan): void {
+  const batchKind = plan.batchKind ?? "normal";
+  const maximum = batchKind === "normal"
+    ? PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+    : PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP;
   if (
     !Array.isArray(plan.entries) ||
     plan.entries.length < 1 ||
-    plan.entries.length > PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE ||
+    plan.entries.length > maximum ||
     !Array.isArray(plan.dynamicSources) ||
-    !Array.isArray(plan.knownPools)
+    !Array.isArray(plan.knownPools) ||
+    !["normal", "oversized-transaction", "reward-block"].includes(batchKind)
   ) {
     throw invalidInput("postgres", "projection-plan");
+  }
+  if (
+    batchKind === "oversized-transaction" &&
+    new Set(plan.entries.map(({ candidate }) => candidate.transactionHash))
+        .size !== 1
+  ) {
+    throw invalidInput("postgres", "projection-atomic-transaction");
+  }
+  if (
+    batchKind === "reward-block" &&
+    new Set(plan.entries.map(({ candidate }) => candidate.blockHash)).size !== 1
+  ) {
+    throw invalidInput("postgres", "projection-reward-block");
   }
   const ids = new Set<string>();
   let previous:
@@ -255,6 +284,30 @@ function assertPlan(plan: ReleaseProjectionPlan): void {
       throw invalidInput("postgres", "projection-transaction-classification");
     }
   }
+}
+
+function planRewardVerifications(
+  plan: ReleaseProjectionPlan,
+): readonly Readonly<{
+  model: ProjectorRewardModel;
+  baseline: ProjectorRewardBaseline;
+}>[] {
+  const plural = plan.rewardVerifications;
+  if (plural !== undefined) {
+    if (!Array.isArray(plural) || plan.rewardVerification !== null) {
+      throw invalidInput("postgres", "reward-verification-plan");
+    }
+    const vaults = plural.map(({ baseline }) => baseline.vault);
+    if (new Set(vaults).size !== vaults.length) {
+      throw invalidInput("postgres", "reward-verification-plan");
+    }
+    return Object.freeze([...plural].sort((left, right) =>
+      left.baseline.vault.localeCompare(right.baseline.vault)
+    ));
+  }
+  return plan.rewardVerification === null
+    ? Object.freeze([])
+    : Object.freeze([plan.rewardVerification]);
 }
 
 function launchMetadataRequests(candidates: readonly EnvioCandidate[]) {
@@ -398,6 +451,10 @@ export async function runReleaseProjectionCycle(input: {
         hardDeadlineMs: remaining(),
         maxCallsPerProvider: PROJECTOR_PROVIDER_CALL_BUDGET,
       },
+      maximumCandidateCount:
+        (plan.batchKind ?? "normal") === "normal"
+          ? PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+          : PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
     });
     const metadata = await readMetadata({
       tokens: launchMetadataRequests(projectedCandidates),
@@ -435,22 +492,38 @@ export async function runReleaseProjectionCycle(input: {
       knownPools: plan.knownPools,
     });
     const rewardEvents = projectedRewardEvents(fold);
-    let rewardSnapshot: ProjectorRewardSnapshot | null = null;
-    if (plan.rewardVerification !== null) {
-      if (rewardEvents.length < 1) {
+    const verifications = planRewardVerifications(plan);
+    const rewardEventsByVault = new Map<string, ProjectorRewardEvent[]>();
+    for (const event of rewardEvents) {
+      const current = rewardEventsByVault.get(event.vault) ?? [];
+      current.push(event);
+      rewardEventsByVault.set(event.vault, current);
+    }
+    if (verifications.length !== rewardEventsByVault.size) {
+      throw validationError("rpc", "reward-verification-missing");
+    }
+    const target = plan.entries.at(-1)?.candidate;
+    if (!target) throw validationError("rpc", "reward-target-block");
+    const rewardSnapshots: ProjectorRewardSnapshot[] = [];
+    const rewardEvidence: DualRpcRewardSnapshot[] = [];
+    for (const verification of verifications) {
+      const vaultEvents = rewardEventsByVault.get(
+        verification.baseline.vault,
+      );
+      if (!vaultEvents || vaultEvents.length < 1) {
         throw validationError("rpc", "reward-verification-empty");
       }
-      rewardSnapshot = foldProjectorRewardState({
-        model: plan.rewardVerification.model,
-        baseline: plan.rewardVerification.baseline,
-        events: rewardEvents,
+      const snapshot = foldProjectorRewardState({
+        model: verification.model,
+        baseline: verification.baseline,
+        events: vaultEvents,
       });
-      const target = plan.entries.at(-1)?.candidate;
-      if (!target) throw validationError("rpc", "reward-target-block");
-      await readRewardSnapshot({
-        model: plan.rewardVerification.model,
-        expected: rewardSnapshot,
+      const verifiedSnapshot = await readRewardSnapshot({
+        model: verification.model,
+        baseline: verification.baseline,
+        expected: snapshot,
         blockNumber: target.blockNumber,
+        blockHash: target.blockHash,
         providers: input.providers,
         rpcPolicy: {
           hardDeadlineMs: remaining(),
@@ -458,8 +531,8 @@ export async function runReleaseProjectionCycle(input: {
           maxCallsPerProvider: PROJECTOR_PROVIDER_CALL_BUDGET,
         },
       });
-    } else if (rewardEvents.length > 0) {
-      throw validationError("rpc", "reward-verification-missing");
+      rewardSnapshots.push(snapshot);
+      rewardEvidence.push(verifiedSnapshot);
     }
     const verified = Object.freeze({
       plan,
@@ -471,7 +544,9 @@ export async function runReleaseProjectionCycle(input: {
       ),
       evidence,
       fold,
-      rewardSnapshot,
+      rewardSnapshot: rewardSnapshots[0] ?? null,
+      rewardSnapshots: Object.freeze(rewardSnapshots),
+      rewardEvidence: Object.freeze(rewardEvidence),
     });
     const committed = await input.store.commitVerifiedProjection(verified);
     return Object.freeze({
@@ -480,6 +555,7 @@ export async function runReleaseProjectionCycle(input: {
       projectedCandidateCount: projectedCandidates.length,
       ignoredCandidateCount: verified.ignoredCandidateIds.length,
       checkpointGeneration: committed.checkpointGeneration,
+      batchKind: plan.batchKind ?? "normal",
     });
   });
 }

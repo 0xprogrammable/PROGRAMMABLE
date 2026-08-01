@@ -20,7 +20,10 @@ import {
   type HexAddress,
   type HexBytes32,
 } from "./codecs";
-import type { DualRpcCandidateWindowEvidence } from "./dual-rpc";
+import type {
+  CandidateRpcProvider,
+  DualRpcCandidateWindowEvidence,
+} from "./dual-rpc";
 import type { EnvioCandidate } from "./envio";
 import { DataPipelineError } from "./errors";
 import type {
@@ -52,7 +55,15 @@ import {
   type ProjectorRewardModel,
   type ProjectorRewardSnapshot,
 } from "./projector-reward-fold";
-import { providerEvidenceV2 } from "./provider-evidence";
+import {
+  PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
+  PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
+} from "./projector-runtime-limits";
+import {
+  projectionExecutionTraceCommitmentV1,
+  providerEvidenceV2,
+  providerEvidenceV3,
+} from "./provider-evidence";
 
 const PROJECTOR_LOGIN_ROLE = "programmable_projector_login";
 const PROJECTOR_CAPABILITY_ROLE = "programmable_projector";
@@ -1460,21 +1471,24 @@ function isolateRewardTransaction<T extends Readonly<{
       if (transactionStart > 0) {
         return Object.freeze(entries.slice(0, transactionStart));
       }
-      if (rewardSources.size !== 1) return projectorValidationFailure();
-      return Object.freeze(transaction);
+      // The caller supplies the complete remainder of this exact block when a
+      // reward transaction is first. Keeping every vault and every later
+      // reward occurrence is required because eth_call observes block-end
+      // state, not transaction-intermediate state.
+      return Object.freeze([...entries]);
     }
     transactionStart = transactionEnd;
   }
   return Object.freeze([...entries]);
 }
 
-function rewardVaultForProjection<T extends Readonly<{
+function rewardVaultsForProjection<T extends Readonly<{
   candidate: StoredProjectionCandidate;
   action: "project" | "ignore";
 }>>(
   entries: readonly T[],
   resolutions: ReadonlyMap<string, ProjectionResolution>,
-): HexAddress | null {
+): readonly HexAddress[] {
   const vaults = new Set<HexAddress>();
   for (const entry of entries) {
     const resolution = resolutions.get(entry.candidate.candidateId);
@@ -1486,8 +1500,17 @@ function rewardVaultForProjection<T extends Readonly<{
       vaults.add(entry.candidate.sourceAddress);
     }
   }
-  if (vaults.size > 1) return projectorValidationFailure();
-  return vaults.values().next().value ?? null;
+  return Object.freeze([...vaults].sort());
+}
+
+function containsRewardProjection<T extends Readonly<{
+  candidate: StoredProjectionCandidate;
+  action: "project" | "ignore";
+}>>(
+  entries: readonly T[],
+  resolutions: ReadonlyMap<string, ProjectionResolution>,
+): boolean {
+  return rewardVaultsForProjection(entries, resolutions).length > 0;
 }
 
 function projectionResolution(input: {
@@ -1618,6 +1641,10 @@ export function createPostgresReleaseProjectionStore(input: {
   providers: readonly ProjectorProviderDatabaseBinding[];
   scope: ProjectorReleaseDatabaseScope;
   runtimeFence: ProjectorRuntimeFence;
+  rpcEvidenceBindings?: readonly [
+    Omit<CandidateRpcProvider, "client">,
+    Omit<CandidateRpcProvider, "client">,
+  ];
   projectorVersion?: string;
   holderId?: string;
   uuid?: () => string;
@@ -1625,6 +1652,25 @@ export function createPostgresReleaseProjectionStore(input: {
 }): ReleaseProjectionStore {
   const gateway = createProjectorDatabaseGateway({ executor: input.executor });
   const providers = canonicalProviderBindings(input.providers);
+  const rpcEvidenceBindings = input.rpcEvidenceBindings === undefined
+    ? null
+    : Object.freeze(input.rpcEvidenceBindings.map((binding) => Object.freeze({
+        identity: exactText(
+          binding.identity,
+          /^[a-z0-9][a-z0-9-]{0,63}$/u,
+        ),
+        vendorGroup: exactText(
+          binding.vendorGroup,
+          /^[a-z0-9][a-z0-9-]{0,63}$/u,
+        ),
+        endpointCommitment: canonicalBytes32(binding.endpointCommitment),
+        endpointOriginCommitment: canonicalBytes32(
+          binding.endpointOriginCommitment,
+        ),
+      }))) as readonly [
+        Omit<CandidateRpcProvider, "client">,
+        Omit<CandidateRpcProvider, "client">,
+      ];
   const scope = canonicalReleaseScope(input.scope);
   const runtimeFence = canonicalRuntimeFence(input.runtimeFence);
   const projectorVersion = exactText(
@@ -1780,10 +1826,11 @@ export function createPostgresReleaseProjectionStore(input: {
             runtime.providerDeploymentIds[envioIndex]!,
           ),
         );
-        const page = transactionAlignedProjectionPage(parsedRows, 32);
-        if (page.length === 0) return null;
+        if (parsedRows.length === 0) return null;
         const resolutions = new Map<string, ProjectionResolution>();
-        const resolvedEntries = page.map(({ candidate, attemptCount }) => {
+        const resolveRows = (
+          rows: readonly (typeof parsedRows)[number][],
+        ) => rows.map(({ candidate, attemptCount }) => {
           const resolution = projectionResolution({
             candidate,
             manifest,
@@ -1796,17 +1843,122 @@ export function createPostgresReleaseProjectionStore(input: {
             attemptCount,
           });
         });
-        for (let index = 1; index < resolvedEntries.length; index += 1) {
+        let resolvedEntries = resolveRows(parsedRows);
+        const fetchAfter = async (
+          after: StoredProjectionCandidate,
+          limit: number,
+        ) => {
+          const rows = await transaction.query(
+            "select * from programmable_private.list_projector_candidate_page_v1($1, $2, $3, $4, $5::uuid, $6, $7, $8, $9::bytea, $10::numeric, $11::numeric, $12, $13, $14::timestamptz)",
+            [
+              "1",
+              scope.releaseId,
+              scope.modelId,
+              scope.sourceGroup,
+              runtime.epochId,
+              runtime.pointerGeneration,
+              projectorVersion,
+              nextLeaseGeneration,
+              hexToBytes(leaseTokenHash),
+              after.blockNumber,
+              after.blockGlobalLogIndex,
+              after.candidateId,
+              limit,
+              acquiredAt.toISOString(),
+            ],
+          );
+          return resolveRows(rows.map((row) =>
+            parseProjectionCandidateRow(
+              row,
+              runtime.providerDeploymentIds[envioIndex]!,
+            )
+          ));
+        };
+        const completePrefix = async (
+          belongsToGroup: (entry: (typeof resolvedEntries)[number]) => boolean,
+        ) => {
+          while (true) {
+            const boundary = resolvedEntries.findIndex(
+              (entry) => !belongsToGroup(entry),
+            );
+            if (boundary >= 0) {
+              return Object.freeze(resolvedEntries.slice(0, boundary));
+            }
+            if (
+              resolvedEntries.length >
+                PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP
+            ) {
+              return projectorValidationFailure();
+            }
+            const last = resolvedEntries.at(-1)?.candidate;
+            if (!last) return projectorValidationFailure();
+            const remaining =
+              PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP + 1 -
+              resolvedEntries.length;
+            const next = await fetchAfter(last, Math.min(500, remaining));
+            if (next.length === 0) {
+              return Object.freeze([...resolvedEntries]);
+            }
+            resolvedEntries = [...resolvedEntries, ...next];
+          }
+        };
+
+        let batchKind: NonNullable<ReleaseProjectionPlan["batchKind"]> =
+          "normal";
+        let entries: readonly (typeof resolvedEntries)[number][];
+        const first = resolvedEntries[0]!;
+        const firstTransactionHash = first.candidate.transactionHash;
+        const firstTransactionIsOversized =
+          resolvedEntries.length > PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE &&
+          resolvedEntries[PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE]!.candidate
+              .transactionHash === firstTransactionHash;
+        if (firstTransactionIsOversized) {
+          entries = await completePrefix(
+            (entry) =>
+              entry.candidate.transactionHash === firstTransactionHash,
+          );
+          batchKind = "oversized-transaction";
+          if (containsRewardProjection(entries, resolutions)) {
+            const rewardBlockHash = first.candidate.blockHash;
+            entries = await completePrefix(
+              (entry) => entry.candidate.blockHash === rewardBlockHash,
+            );
+            batchKind = "reward-block";
+          }
+        } else {
+          const page = transactionAlignedProjectionPage(
+            resolvedEntries,
+            PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
+          );
+          const isolated = isolateRewardTransaction(page, resolutions);
           if (
-            resolvedEntries[index - 1]!.candidate.transactionHash ===
-              resolvedEntries[index]!.candidate.transactionHash &&
-            resolvedEntries[index - 1]!.action !== resolvedEntries[index]!.action
+            isolated.length === page.length &&
+            containsRewardProjection(page, resolutions)
+          ) {
+            const rewardBlockHash = first.candidate.blockHash;
+            entries = await completePrefix(
+              (entry) => entry.candidate.blockHash === rewardBlockHash,
+            );
+            batchKind = "reward-block";
+          } else {
+            entries = isolated;
+          }
+        }
+        if (
+          entries.length < 1 ||
+          entries.length > PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP
+        ) {
+          return projectorValidationFailure();
+        }
+        for (let index = 1; index < entries.length; index += 1) {
+          if (
+            entries[index - 1]!.candidate.transactionHash ===
+              entries[index]!.candidate.transactionHash &&
+            entries[index - 1]!.action !== entries[index]!.action
           ) {
             return projectorValidationFailure();
           }
         }
-        const entries = isolateRewardTransaction(resolvedEntries, resolutions);
-        if (entries.length === 0) return projectorValidationFailure();
         const selectedCandidateIds = new Set(
           entries.map(({ candidate }) => candidate.candidateId),
         );
@@ -1821,6 +1973,7 @@ export function createPostgresReleaseProjectionStore(input: {
               runtime.epochId,
               runtime.pointerGeneration,
               nextLeaseGeneration,
+              batchKind,
               entries.map(({ candidate, action }) => [
                 candidate.candidateId,
                 action,
@@ -1861,10 +2014,11 @@ export function createPostgresReleaseProjectionStore(input: {
           );
           if (known) knownPools.push(known);
         }
-        const rewardVault = rewardVaultForProjection(entries, resolutions);
-        let rewardVerification: ReleaseProjectionPlan["rewardVerification"] =
-          null;
-        if (rewardVault !== null) {
+        const rewardVaults = rewardVaultsForProjection(entries, resolutions);
+        const rewardVerifications: NonNullable<
+          ReleaseProjectionPlan["rewardVerifications"]
+        >[number][] = [];
+        for (const rewardVault of rewardVaults) {
           const state = parseProjectorRewardStateRows({
             activeRows: await transaction.query(
               "select * from programmable_private.get_projector_reward_state_by_vault_v1($1::uuid, $2::bytea)",
@@ -1877,10 +2031,10 @@ export function createPostgresReleaseProjectionStore(input: {
             scope,
             vault: rewardVault,
           });
-          rewardVerification = Object.freeze({
+          rewardVerifications.push(Object.freeze({
             model: state.model,
             baseline: state.baseline,
-          });
+          }));
         }
         const plan = Object.freeze({
           scope,
@@ -1892,7 +2046,9 @@ export function createPostgresReleaseProjectionStore(input: {
             expiresAt: expiresAt.toISOString(),
           }),
           checkpoint: runtime.checkpoint,
-          rewardVerification,
+          rewardVerification: null,
+          rewardVerifications: Object.freeze(rewardVerifications),
+          batchKind,
         });
         privatePlans.set(
           plan,
@@ -1918,6 +2074,7 @@ export function createPostgresReleaseProjectionStore(input: {
       return commitPostgresVerifiedProjection({
         gateway,
         providers,
+        rpcEvidenceBindings,
         scope,
         projectorVersion,
         uuid,
@@ -2876,13 +3033,13 @@ async function stageIncrementalFacts(input: {
   targetBlockNumber: string;
   targetBlockHash: HexBytes32;
   verifiedAt: string;
-  verifiedRewardSnapshot: ProjectorRewardSnapshot | null;
+  verifiedRewardSnapshots: readonly ProjectorRewardSnapshot[];
 }): Promise<Readonly<{
-  rewardDelta: null | Readonly<{
+  rewardDeltas: readonly Readonly<{
     vault: HexAddress;
     allocationFactId: string;
     allocationEvidenceId: string;
-  }>;
+  }>[];
 }>> {
   const handledByLaunch = new Set([
     "launch",
@@ -3154,6 +3311,43 @@ async function stageIncrementalFacts(input: {
       continue;
     }
     if (fact.kind === "payout-change") {
+      const vault = write.occurrence.sourceAddress;
+      const isClassic = input.scope.releaseId === "classic-v3";
+      const previousPayoutAddress = factAddress(
+        fact,
+        isClassic ? "previousPayoutWallet" : "previousPayoutAddress",
+      );
+      const newPayoutAddress = factAddress(
+        fact,
+        isClassic ? "newPayoutWallet" : "newPayoutAddress",
+      );
+      const beneficiary = isClassic
+        ? previousPayoutAddress
+        : factAddress(fact, "beneficiary");
+      const payoutChangeId = deterministicUuid(
+        "payout-change",
+        input.runId,
+        occurrenceId,
+      );
+      exactIdResult(
+        await input.transaction.query(
+          "select programmable_private.stage_payout_change_projection($1::uuid, $2::uuid, $3::bytea, $4::bytea, $5::bytea, $6::bytea, $7::bigint, $8::uuid, $9::numeric, $10::bytea, $11::timestamptz) as id",
+          [
+            payoutChangeId,
+            input.runId,
+            hexToBytes(vault),
+            hexToBytes(beneficiary),
+            hexToBytes(previousPayoutAddress),
+            hexToBytes(newPayoutAddress),
+            isClassic ? factScalar(fact, "configurationEpoch") : null,
+            occurrenceId,
+            input.targetBlockNumber,
+            hexToBytes(input.targetBlockHash),
+            input.verifiedAt,
+          ],
+        ),
+        payoutChangeId,
+      );
       continue;
     }
     if (fact.kind === "reward-configuration-activation") {
@@ -3198,12 +3392,17 @@ async function stageIncrementalFacts(input: {
     return projectorValidationFailure();
   }
 
-  if (rewardEvents.size > 1) return projectorValidationFailure();
-  let rewardDelta: null | Readonly<{
+  const verifiedSnapshots = new Map(
+    input.verifiedRewardSnapshots.map((snapshot) => [snapshot.vault, snapshot]),
+  );
+  if (verifiedSnapshots.size !== input.verifiedRewardSnapshots.length) {
+    return projectorValidationFailure();
+  }
+  const rewardDeltas: Array<Readonly<{
     vault: HexAddress;
     allocationFactId: string;
     allocationEvidenceId: string;
-  }> = null;
+  }>> = [];
   for (const [vault, events] of rewardEvents) {
     const staged = input.stagedRewardStates.get(vault);
     const state = staged ?? parseProjectorRewardStateRows({
@@ -3231,8 +3430,8 @@ async function stageIncrementalFacts(input: {
     });
     if (
       snapshot.activeConfigurationHash === null ||
-      input.verifiedRewardSnapshot === null ||
-      JSON.stringify(snapshot) !== JSON.stringify(input.verifiedRewardSnapshot)
+      !verifiedSnapshots.has(vault) ||
+      JSON.stringify(snapshot) !== JSON.stringify(verifiedSnapshots.get(vault))
     ) {
       return projectorValidationFailure();
     }
@@ -3266,14 +3465,14 @@ async function stageIncrementalFacts(input: {
       factId: state.initialAllocationFactId,
       evidenceId: state.initialAllocationEvidenceId,
     });
-    rewardDelta = Object.freeze({
+    rewardDeltas.push(Object.freeze({
       vault,
       allocationFactId: state.initialAllocationFactId,
       allocationEvidenceId: state.initialAllocationEvidenceId,
-    });
+    }));
   }
 
-  if (rewardEvents.size === 0 && input.verifiedRewardSnapshot !== null) {
+  if (rewardEvents.size !== verifiedSnapshots.size) {
     return projectorValidationFailure();
   }
 
@@ -3317,12 +3516,142 @@ async function stageIncrementalFacts(input: {
       totalId,
     );
   }
-  return Object.freeze({ rewardDelta });
+  return Object.freeze({
+    rewardDeltas: Object.freeze(
+      rewardDeltas.sort((left, right) => left.vault.localeCompare(right.vault)),
+    ),
+  });
+}
+
+function assertProjectionProviderEvidenceBindings(input: {
+  projection: VerifiedReleaseProjection;
+  bindings: readonly [
+    Omit<CandidateRpcProvider, "client">,
+    Omit<CandidateRpcProvider, "client">,
+  ] | null;
+}): void {
+  const bindings = input.bindings;
+  if (bindings === null) return projectorValidationFailure();
+  const expectedIdentities = bindings.map(({ identity }) => identity);
+  const expectedVendors = bindings.map(({ vendorGroup }) => vendorGroup);
+  const expectedEndpoints = bindings.map(
+    ({ endpointCommitment }) => endpointCommitment,
+  );
+  const expectedOrigins = bindings.map(
+    ({ endpointOriginCommitment }) => endpointOriginCommitment,
+  );
+  const matches = (actual: readonly unknown[], expected: readonly unknown[]) =>
+    actual.length === 2 &&
+    actual.every((value, index) => value === expected[index]);
+  const evidence = input.projection.evidence;
+  const executionTrace = evidence.executionTrace;
+  if (
+    !matches(evidence.providerIdentities, expectedIdentities) ||
+    !matches(evidence.providerVendorGroups, expectedVendors) ||
+    !matches(evidence.providerEndpointCommitments, expectedEndpoints) ||
+    !matches(evidence.providerOriginCommitments, expectedOrigins) ||
+    executionTrace.candidateBatchSize !== input.projection.plan.entries.length ||
+    executionTrace.completedAtMs < executionTrace.startedAtMs ||
+    executionTrace.elapsedMs !==
+      executionTrace.completedAtMs - executionTrace.startedAtMs ||
+    executionTrace.elapsedMs > executionTrace.hardDeadlineMs ||
+    executionTrace.providerCallCounts.some(
+      (count) => !Number.isSafeInteger(count) || count < 1 || count > 128,
+    )
+  ) {
+    return projectorValidationFailure();
+  }
+  const tracedCounts = bindings.map((binding) =>
+    executionTrace.calls.filter((call) => {
+      if (
+        call.providerIdentity !== binding.identity ||
+        call.providerVendorGroup !== binding.vendorGroup ||
+        call.providerEndpointCommitment !== binding.endpointCommitment ||
+        call.providerOriginCommitment !== binding.endpointOriginCommitment
+      ) {
+        return false;
+      }
+      return true;
+    }).length
+  );
+  if (
+    !matches(tracedCounts, executionTrace.providerCallCounts) ||
+    executionTrace.calls.some((call, callIndex) => {
+      const providerIndex = callIndex < executionTrace.providerCallCounts[0]
+        ? 0
+        : 1;
+      const binding = bindings[providerIndex];
+      return !binding ||
+        call.providerIdentity !== binding.identity ||
+        call.providerVendorGroup !== binding.vendorGroup ||
+        call.providerEndpointCommitment !== binding.endpointCommitment ||
+        call.providerOriginCommitment !== binding.endpointOriginCommitment;
+    }) ||
+    evidence.candidates.some((candidate) =>
+      !matches(candidate.providerIdentities, expectedIdentities) ||
+      !matches(candidate.providerVendorGroups, expectedVendors) ||
+      !matches(candidate.providerEndpointCommitments, expectedEndpoints) ||
+      !matches(candidate.providerOriginCommitments, expectedOrigins)
+    )
+  ) {
+    return projectorValidationFailure();
+  }
+  const sortedRewardEvidence = [...(input.projection.rewardEvidence ?? [])].sort(
+    (left, right) => left.vault.localeCompare(right.vault),
+  );
+  const sortedRewardSnapshots = [...(input.projection.rewardSnapshots ?? [])].sort(
+    (left, right) => left.vault.localeCompare(right.vault),
+  );
+  if (
+    sortedRewardEvidence.length !== sortedRewardSnapshots.length ||
+    sortedRewardEvidence.some((reward, index) => {
+      const snapshot = sortedRewardSnapshots[index];
+      return !snapshot ||
+      reward.vault !== snapshot.vault ||
+      reward.poolId !== snapshot.poolId ||
+      reward.configurationEpoch !== snapshot.configurationEpoch ||
+      reward.configurationHash !== snapshot.activeConfigurationHash ||
+      reward.totalCreatorFeesReceived !==
+        snapshot.totalCreatorFeesReceived ||
+      JSON.stringify(reward.allocations) !==
+        JSON.stringify(snapshot.allocations) ||
+      JSON.stringify(reward.balances) !== JSON.stringify(snapshot.balances) ||
+      !matches(reward.providerIdentities, expectedIdentities) ||
+      !matches(reward.providerVendorGroups, expectedVendors) ||
+      !matches(reward.providerEndpointCommitments, expectedEndpoints) ||
+      !matches(reward.providerOriginCommitments, expectedOrigins) ||
+      reward.providerCallCounts.some(
+        (count) => !Number.isSafeInteger(count) || count < 1 || count > 128,
+      ) ||
+      !matches(
+        reward.executionTrace.providerCallCounts,
+        reward.providerCallCounts,
+      ) ||
+      reward.executionTrace.calls.length !== 2 ||
+      reward.executionTrace.calls.some((call, providerIndex) => {
+        const binding = bindings[providerIndex];
+        return !binding ||
+          call.operation !== "readRewardSnapshot" ||
+          call.attempt !== 1 ||
+          call.outcome !== "success" ||
+          call.providerIdentity !== binding.identity ||
+          call.providerVendorGroup !== binding.vendorGroup ||
+          call.providerEndpointCommitment !== binding.endpointCommitment ||
+          call.providerOriginCommitment !== binding.endpointOriginCommitment;
+      })
+    })
+  ) {
+    return projectorValidationFailure();
+  }
 }
 
 async function commitPostgresVerifiedProjection(input: {
   gateway: ReturnType<typeof createProjectorDatabaseGateway>;
   providers: readonly ProjectorProviderDatabaseBinding[];
+  rpcEvidenceBindings: readonly [
+    Omit<CandidateRpcProvider, "client">,
+    Omit<CandidateRpcProvider, "client">,
+  ] | null;
   scope: ProjectorReleaseDatabaseScope;
   projectorVersion: string;
   uuid: () => string;
@@ -3343,6 +3672,10 @@ async function commitPostgresVerifiedProjection(input: {
     return projectorValidationFailure();
   }
   const verifiedAt = timestamp.toISOString();
+  assertProjectionProviderEvidenceBindings({
+    projection,
+    bindings: input.rpcEvidenceBindings,
+  });
   const pairs = occurrencePair(projection);
   const evidenceByCandidate = new Map(
     projection.evidence.candidates.map((candidate) => [
@@ -3367,7 +3700,20 @@ async function commitPostgresVerifiedProjection(input: {
     .map((provider, index) => ({ provider, index }))
     .filter(({ provider }) => provider.type === "rpc_provider")
     .map(({ index }) => privatePlan.providerDeploymentIds[index]!);
-  if (rpcProviderIds.length !== 2) return projectorValidationFailure();
+  const envioProviderIds = input.providers
+    .map((provider, index) => ({ provider, index }))
+    .filter(({ provider }) => provider.type === "envio_deployment")
+    .map(({ index }) => privatePlan.providerDeploymentIds[index]!);
+  if (rpcProviderIds.length !== 2 || envioProviderIds.length !== 1) {
+    return projectorValidationFailure();
+  }
+  const configuredProviderDeploymentIds = Object.freeze([
+    envioProviderIds[0]!,
+    rpcProviderIds[0]!,
+    rpcProviderIds[1]!,
+  ]);
+  const rpcEvidenceBindings = input.rpcEvidenceBindings;
+  if (rpcEvidenceBindings === null) return projectorValidationFailure();
 
   return input.gateway.transaction(async (transaction) => {
     await assertRuntimeFence(transaction, input.runtimeFence);
@@ -3500,6 +3846,66 @@ async function commitPostgresVerifiedProjection(input: {
       `${targetBlockNumber}:${targetBlockHash}`,
     );
     if (!targetBlockEvidenceId) return projectorValidationFailure();
+
+    const executionEvidenceId = deterministicUuid(
+      "projection-provider-execution-evidence",
+      privatePlan.runId,
+    );
+    const executionTraceCommitment = projectionExecutionTraceCommitmentV1(
+      projection.evidence.executionTrace,
+    );
+    const executionEvidence = providerEvidenceV3("projection_execution", {
+      chain_id: "1",
+      release_id: input.scope.releaseId,
+      model_id: input.scope.modelId,
+      source_group: input.scope.sourceGroup,
+      epoch_id: privatePlan.epochId,
+      pointer_generation: privatePlan.pointerGeneration,
+      run_id: privatePlan.runId,
+      provider_a_id: rpcProviderIds[0]!,
+      provider_b_id: rpcProviderIds[1]!,
+      provider_a_identity: rpcEvidenceBindings[0].identity,
+      provider_b_identity: rpcEvidenceBindings[1].identity,
+      provider_a_vendor_group: rpcEvidenceBindings[0].vendorGroup,
+      provider_b_vendor_group: rpcEvidenceBindings[1].vendorGroup,
+      provider_a_endpoint_commitment:
+        rpcEvidenceBindings[0].endpointCommitment,
+      provider_b_endpoint_commitment:
+        rpcEvidenceBindings[1].endpointCommitment,
+      provider_a_origin_commitment:
+        rpcEvidenceBindings[0].endpointOriginCommitment,
+      provider_b_origin_commitment:
+        rpcEvidenceBindings[1].endpointOriginCommitment,
+      provider_a_call_count:
+        projection.evidence.executionTrace.providerCallCounts[0],
+      provider_b_call_count:
+        projection.evidence.executionTrace.providerCallCounts[1],
+      candidate_batch_size:
+        projection.evidence.executionTrace.candidateBatchSize,
+      hard_deadline_ms: projection.evidence.executionTrace.hardDeadlineMs,
+      maximum_calls_per_provider:
+        projection.evidence.executionTrace.maxCallsPerProvider,
+      elapsed_ms: projection.evidence.executionTrace.elapsedMs,
+      execution_trace_commitment: executionTraceCommitment,
+    });
+    exactIdResult(
+      await transaction.query(
+        "select programmable_private.append_projection_provider_execution_evidence_v1($1::uuid, $2::uuid, $3::uuid, $4::uuid[], $5::jsonb, $6::bytea, $7::smallint, $8::bytea, $9::bytea, $10::timestamptz) as id",
+        [
+          executionEvidenceId,
+          privatePlan.runId,
+          safeObservationId,
+          configuredProviderDeploymentIds,
+          JSON.stringify(projection.evidence.executionTrace),
+          hexToBytes(executionTraceCommitment),
+          executionEvidence.encodingVersion,
+          executionEvidence.canonicalPreimage,
+          hexToBytes(executionEvidence.contentFingerprint),
+          verifiedAt,
+        ],
+      ),
+      executionEvidenceId,
+    );
 
     const occurrenceWrites = new Map<string, OccurrenceWrite>();
     const pairByCandidate = new Map(
@@ -3688,76 +4094,6 @@ async function commitPostgresVerifiedProjection(input: {
       });
     }
 
-    const incrementalStage = await stageIncrementalFacts({
-      transaction,
-      runId: privatePlan.runId,
-      scope: input.scope,
-      occurrenceWrites,
-      stagedPools,
-      stagedRewardStates,
-      allocationPairs,
-      targetBlockNumber,
-      targetBlockHash,
-      verifiedAt,
-      verifiedRewardSnapshot: projection.rewardSnapshot,
-    });
-
-    const dispositionRows = await transaction.query(
-      "select * from programmable_private.list_projector_candidate_dispositions_v1($1, $2, $3, $4, $5::uuid, $6, $7, $8::bigint, $9::bytea, $10::numeric, $11::numeric, $12, $13, $14::timestamptz)",
-      [
-        "1",
-        input.scope.releaseId,
-        input.scope.modelId,
-        input.scope.sourceGroup,
-        privatePlan.epochId,
-        privatePlan.pointerGeneration,
-        input.projectorVersion,
-        projection.plan.lease.generation,
-        hexToBytes(privatePlan.leaseTokenHash),
-        expectedCheckpoint?.blockNumber ?? null,
-        expectedCheckpoint?.blockGlobalLogIndex ?? null,
-        expectedCheckpoint?.candidateId ?? null,
-        500,
-        verifiedAt,
-      ],
-    );
-    const targetKey = [
-      BigInt(targetBlockNumber),
-      BigInt(targetBlockGlobalLogIndex),
-      targetCandidateId,
-    ] as const;
-    const dispositionIds = dispositionRows
-      .filter((row) => {
-        const key = [
-          BigInt(integerText(row.block_number)),
-          BigInt(integerText(row.block_global_log_index)),
-          exactText(
-            row.candidate_id,
-            /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9]\d*)$/u,
-            192,
-          ),
-        ] as const;
-        return (
-          key[0] < targetKey[0] ||
-          (key[0] === targetKey[0] &&
-            (key[1] < targetKey[1] ||
-              (key[1] === targetKey[1] && key[2] <= targetKey[2])))
-        );
-      })
-      .map((row) => exactUuid(row.decision_id))
-      .sort();
-    const dispositionCandidates = new Set(
-      dispositionRows.map((row) => row.candidate_id),
-    );
-    if (
-      projection.plan.entries.some(
-        ({ candidate }) => !dispositionCandidates.has(candidate.candidateId),
-      ) ||
-      new Set(dispositionIds).size !== dispositionIds.length
-    ) {
-      return projectorValidationFailure();
-    }
-
     const chainOrderedOccurrenceIds = [...occurrenceWrites.values()]
       .sort((left, right) => {
         const blockOrder = BigInt(left.occurrence.blockNumber) -
@@ -3769,22 +4105,243 @@ async function commitPostgresVerifiedProjection(input: {
         return left.occurrenceId.localeCompare(right.occurrenceId);
       })
       .map(({ occurrenceId }) => occurrenceId);
-    const rewardDelta = incrementalStage.rewardDelta;
-    const promotionMode = rewardDelta === null
+
+    const incrementalStage = await stageIncrementalFacts({
+      transaction,
+      runId: privatePlan.runId,
+      scope: input.scope,
+      occurrenceWrites,
+      stagedPools,
+      stagedRewardStates,
+      allocationPairs,
+      targetBlockNumber,
+      targetBlockHash,
+      verifiedAt,
+      verifiedRewardSnapshots: projection.rewardSnapshots ?? [],
+    });
+
+    const rewardEvidenceByVault = new Map(
+      (projection.rewardEvidence ?? []).map((evidence) => [
+        evidence.vault,
+        evidence,
+      ]),
+    );
+    if (
+      rewardEvidenceByVault.size !== (projection.rewardEvidence ?? []).length ||
+      rewardEvidenceByVault.size !== incrementalStage.rewardDeltas.length
+    ) {
+      return projectorValidationFailure();
+    }
+    const rewardProviderEvidence: Array<Readonly<{
+      evidenceId: string;
+      fingerprint: HexBytes32;
+      vault: HexAddress;
+    }>> = [];
+    for (const rewardDelta of incrementalStage.rewardDeltas) {
+      const rewardEvidence = rewardEvidenceByVault.get(rewardDelta.vault);
+      if (
+        !rewardEvidence ||
+        rewardEvidence.blockNumber !== targetBlockNumber ||
+        rewardEvidence.blockHash !== targetBlockHash ||
+        rewardEvidence.model !== rewardModelForScope(input.scope)
+      ) {
+        return projectorValidationFailure();
+      }
+      const foldedRows = await transaction.query<{ commitment: unknown }>(
+        "select programmable_private.get_staged_reward_folded_commitment_v1($1::uuid, $2::bytea) as commitment",
+        [privatePlan.runId, hexToBytes(rewardDelta.vault)],
+      );
+      if (foldedRows.length !== 1) return projectorValidationFailure();
+      const foldedSnapshotCommitment = databaseBytes32(
+        foldedRows[0]!.commitment,
+      );
+      const rewardExecutionTraceCommitment =
+        projectionExecutionTraceCommitmentV1(rewardEvidence.executionTrace);
+      const rewardEvidenceId = deterministicUuid(
+        "reward-snapshot-provider-evidence",
+        privatePlan.runId,
+        rewardDelta.vault,
+      );
+      const encodedRewardEvidence = providerEvidenceV3("reward_snapshot", {
+        chain_id: "1",
+        release_id: input.scope.releaseId,
+        model_id: input.scope.modelId,
+        source_group: input.scope.sourceGroup,
+        epoch_id: privatePlan.epochId,
+        pointer_generation: privatePlan.pointerGeneration,
+        run_id: privatePlan.runId,
+        projection_execution_evidence_id: executionEvidenceId,
+        block_evidence_id: targetBlockEvidenceId,
+        vault: rewardEvidence.vault,
+        reward_model: rewardEvidence.model,
+        block_number: rewardEvidence.blockNumber,
+        block_hash: rewardEvidence.blockHash,
+        provider_a_id: rpcProviderIds[0]!,
+        provider_b_id: rpcProviderIds[1]!,
+        provider_a_snapshot_commitment:
+          rewardEvidence.providerSnapshotCommitments[0],
+        provider_b_snapshot_commitment:
+          rewardEvidence.providerSnapshotCommitments[1],
+        provider_a_call_count: rewardEvidence.providerCallCounts[0],
+        provider_b_call_count: rewardEvidence.providerCallCounts[1],
+        verification_accounts: rewardEvidence.verificationAccounts,
+        folded_snapshot_commitment: foldedSnapshotCommitment,
+        execution_trace_commitment: rewardExecutionTraceCommitment,
+      });
+      exactIdResult(
+        await transaction.query(
+          "select programmable_private.append_reward_snapshot_provider_evidence_v1($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::bytea, $6, $7, $8::numeric, $9::bytea, $10::bytea, $11::bytea, $12::integer, $13::integer, $14::bytea[], $15::bytea, $16::jsonb, $17::bytea, $18::smallint, $19::bytea, $20::bytea, $21::timestamptz) as id",
+          [
+            rewardEvidenceId,
+            privatePlan.runId,
+            executionEvidenceId,
+            targetBlockEvidenceId,
+            hexToBytes(rewardEvidence.vault),
+            input.scope.modelId,
+            rewardEvidence.model,
+            rewardEvidence.blockNumber,
+            hexToBytes(rewardEvidence.blockHash),
+            hexToBytes(rewardEvidence.providerSnapshotCommitments[0]),
+            hexToBytes(rewardEvidence.providerSnapshotCommitments[1]),
+            rewardEvidence.providerCallCounts[0],
+            rewardEvidence.providerCallCounts[1],
+            rewardEvidence.verificationAccounts.map(hexToBytes),
+            hexToBytes(foldedSnapshotCommitment),
+            JSON.stringify(rewardEvidence.executionTrace),
+            hexToBytes(rewardExecutionTraceCommitment),
+            encodedRewardEvidence.encodingVersion,
+            encodedRewardEvidence.canonicalPreimage,
+            hexToBytes(encodedRewardEvidence.contentFingerprint),
+            verifiedAt,
+          ],
+        ),
+        rewardEvidenceId,
+      );
+      rewardProviderEvidence.push(Object.freeze({
+        evidenceId: rewardEvidenceId,
+        fingerprint: encodedRewardEvidence.contentFingerprint,
+        vault: rewardEvidence.vault,
+      }));
+    }
+
+    const targetKey = [
+      BigInt(targetBlockNumber),
+      BigInt(targetBlockGlobalLogIndex),
+      targetCandidateId,
+    ] as const;
+    const keyForDisposition = (row: Record<string, unknown>) => [
+      BigInt(integerText(row.block_number)),
+      BigInt(integerText(row.block_global_log_index)),
+      exactText(
+        row.candidate_id,
+        /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9]\d*)$/u,
+        192,
+      ),
+    ] as const;
+    const compareDispositionKey = (
+      left: readonly [bigint, bigint, string],
+      right: readonly [bigint, bigint, string],
+    ) => left[0] < right[0]
+      ? -1
+      : left[0] > right[0]
+        ? 1
+        : left[1] < right[1]
+          ? -1
+          : left[1] > right[1]
+            ? 1
+            : left[2].localeCompare(right[2]);
+    const dispositionRows: Record<string, unknown>[] = [];
+    let dispositionAfterBlock = expectedCheckpoint?.blockNumber ?? null;
+    let dispositionAfterLog = expectedCheckpoint?.blockGlobalLogIndex ?? null;
+    let dispositionAfterCandidate = expectedCheckpoint?.candidateId ?? null;
+    for (
+      let pageIndex = 0;
+      pageIndex <= Math.ceil(
+        PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP / 500,
+      );
+      pageIndex += 1
+    ) {
+      const page = await transaction.query(
+        "select * from programmable_private.list_projector_candidate_dispositions_v1($1, $2, $3, $4, $5::uuid, $6, $7, $8::bigint, $9::bytea, $10::numeric, $11::numeric, $12, $13, $14::timestamptz)",
+        [
+          "1",
+          input.scope.releaseId,
+          input.scope.modelId,
+          input.scope.sourceGroup,
+          privatePlan.epochId,
+          privatePlan.pointerGeneration,
+          input.projectorVersion,
+          projection.plan.lease.generation,
+          hexToBytes(privatePlan.leaseTokenHash),
+          dispositionAfterBlock,
+          dispositionAfterLog,
+          dispositionAfterCandidate,
+          500,
+          verifiedAt,
+        ],
+      );
+      if (page.length === 0) break;
+      const previousKey = dispositionRows.length === 0
+        ? null
+        : keyForDisposition(dispositionRows.at(-1)!);
+      const pageKeys = page.map(keyForDisposition);
+      if (
+        pageKeys.some((key, index) =>
+          (index > 0 && compareDispositionKey(pageKeys[index - 1]!, key) >= 0) ||
+          (index === 0 && previousKey !== null &&
+            compareDispositionKey(previousKey, key) >= 0)
+        )
+      ) {
+        return projectorValidationFailure();
+      }
+      dispositionRows.push(...page);
+      const pageLast = pageKeys.at(-1)!;
+      if (compareDispositionKey(pageLast, targetKey) >= 0) break;
+      if (page.length < 500) break;
+      dispositionAfterBlock = pageLast[0].toString();
+      dispositionAfterLog = Number(pageLast[1]);
+      dispositionAfterCandidate = pageLast[2];
+    }
+    if (
+      dispositionRows.length >
+        PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP + 500
+    ) {
+      return projectorValidationFailure();
+    }
+    const boundedDispositionRows = dispositionRows.filter((row) =>
+      compareDispositionKey(keyForDisposition(row), targetKey) <= 0
+    );
+    const dispositionIds = boundedDispositionRows
+      .map((row) => exactUuid(row.decision_id))
+      .sort();
+    const dispositionCandidates = new Set(
+      boundedDispositionRows.map((row) => row.candidate_id),
+    );
+    if (
+      boundedDispositionRows.length !== projection.plan.entries.length ||
+      dispositionCandidates.size !== projection.plan.entries.length ||
+      projection.plan.entries.some(
+        ({ candidate }) => !dispositionCandidates.has(candidate.candidateId),
+      ) ||
+      new Set(dispositionIds).size !== dispositionIds.length
+    ) {
+      return projectorValidationFailure();
+    }
+
+    const rewardDeltas = incrementalStage.rewardDeltas;
+    const promotionMode = rewardDeltas.length === 0
       ? "full_launch" as const
       : "reward_snapshot_delta" as const;
-    if (rewardDelta !== null) {
-      const transactionHashes = new Set(
-        projection.plan.entries.map(({ candidate }) => candidate.transactionHash),
-      );
+    if (rewardDeltas.length > 0) {
       if (
-        projection.fold.launches.length !== 0 ||
-        transactionHashes.size !== 1 ||
-        projection.ignoredCandidateIds.length !== 0 ||
-        allocationPairs.length !== 1 ||
-        allocationPairs[0]!.factId !== rewardDelta.allocationFactId ||
-        allocationPairs[0]!.evidenceId !==
-          rewardDelta.allocationEvidenceId
+        (projection.rewardSnapshots ?? []).length !== rewardDeltas.length ||
+        (projection.rewardEvidence ?? []).length !== rewardDeltas.length ||
+        rewardDeltas.some((rewardDelta) =>
+          !allocationPairs.some((pair) =>
+            pair.factId === rewardDelta.allocationFactId &&
+            pair.evidenceId === rewardDelta.allocationEvidenceId
+          )
+        )
       ) {
         return projectorValidationFailure();
       }
@@ -3812,7 +4369,13 @@ async function commitPostgresVerifiedProjection(input: {
           occurrenceIds,
           dispositionIds,
           allocationPairs,
-          projection.rewardSnapshot,
+          {
+            evidenceId: executionEvidenceId,
+            fingerprint: executionEvidence.contentFingerprint,
+          },
+          projection.rewardSnapshots ?? [],
+          projection.rewardEvidence ?? [],
+          rewardProviderEvidence,
           PROJECTION_ROUTE_KEYS,
         ]),
       ),

@@ -37,6 +37,7 @@ describe("production reward-vault RPC reader", () => {
     const vault = address("7");
     const alice = address("1");
     const bob = address("2");
+    const blockHash = bytes32("9");
     mocks.readContract.mockImplementation(async ({ functionName, args }) => {
       if (functionName === "poolId") return bytes32("3");
       if (functionName === "configurationEpoch") return 2n;
@@ -65,6 +66,7 @@ describe("production reward-vault RPC reader", () => {
       model: "classic-v3",
       vault,
       blockNumber: 100n,
+      blockHash,
       balanceAccounts: [alice, bob],
     });
 
@@ -72,6 +74,7 @@ describe("production reward-vault RPC reader", () => {
       model: "classic-v3",
       vault,
       blockNumber: "100",
+      blockHash,
       beneficiaryCount: "2",
       rpcCallCount: 14,
       balances: [
@@ -81,7 +84,12 @@ describe("production reward-vault RPC reader", () => {
     });
     expect(mocks.readContract).toHaveBeenCalledTimes(14);
     for (const [request] of mocks.readContract.mock.calls) {
-      expect(request).toMatchObject({ address: vault, blockNumber: 100n });
+      expect(request).toMatchObject({
+        address: vault,
+        blockHash,
+        requireCanonical: true,
+      });
+      expect(request).not.toHaveProperty("blockNumber");
     }
     expect(
       [...new Set(
