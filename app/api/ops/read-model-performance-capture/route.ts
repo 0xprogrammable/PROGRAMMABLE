@@ -18,6 +18,12 @@ const PRIVATE_NO_STORE = Object.freeze({
   "Cache-Control": "private, no-store",
 });
 
+function isValidProbeSecret(secret: unknown): secret is string {
+  if (typeof secret !== "string") return false;
+  const byteLength = Buffer.byteLength(secret, "utf8");
+  return byteLength >= 32 && byteLength <= 1_024;
+}
+
 function isAuthorized(request: NextRequest): boolean {
   const secret = process.env.PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN;
   const provided = request.headers.get(
@@ -25,9 +31,7 @@ function isAuthorized(request: NextRequest): boolean {
   );
   if (
     request.headers.get("x-programmable-performance-probe") !== "1" ||
-    typeof secret !== "string" ||
-    secret.length < 32 ||
-    secret.length > 1_024 ||
+    !isValidProbeSecret(secret) ||
     provided === null
   ) {
     return false;
@@ -65,9 +69,7 @@ function releaseCaptureAuthorization(
     "x-programmable-release-capture-signature",
   );
   if (
-    typeof secret !== "string" ||
-    secret.length < 32 ||
-    secret.length > 1_024 ||
+    !isValidProbeSecret(secret) ||
     typeof supplied !== "string" ||
     !/^v1=[0-9a-f]{64}$/u.test(supplied)
   ) {

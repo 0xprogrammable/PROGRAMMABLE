@@ -114,6 +114,37 @@ describe("read-model performance capture route", () => {
     expect(mocks.captureReadModelPerformance).not.toHaveBeenCalled();
   });
 
+  it("enforces the probe secret limits in UTF-8 bytes", async () => {
+    const minimumUtf8Token = "é".repeat(16);
+    vi.stubEnv("PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN", minimumUtf8Token);
+    mocks.captureReadModelPerformance.mockResolvedValue({
+      schemaVersion: 1,
+      captureNonce: requestBody.captureNonce,
+      datasetManifest: { schemaVersion: 1 },
+      rpcTrace: { schemaVersion: 1 },
+    });
+
+    const accepted = await POST(
+      request({
+        probe: "1",
+        token: minimumUtf8Token,
+        contentType: "application/json",
+      }),
+    );
+    expect(accepted.status).toBe(200);
+
+    const overlongUtf8Token = "é".repeat(600);
+    vi.stubEnv("PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN", overlongUtf8Token);
+    const rejected = await POST(
+      request({
+        probe: "1",
+        token: overlongUtf8Token,
+        contentType: "application/json",
+      }),
+    );
+    expect(rejected.status).toBe(401);
+  });
+
   it("returns only the exact private capture payload", async () => {
     const payload = {
       schemaVersion: 1,
