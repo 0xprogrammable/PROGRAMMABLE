@@ -1,0 +1,27 @@
+# PoolManager, Hook Address, and Settlement Rubric
+
+Evaluate whether the response catches all three concrete v4 foundation failures without inventing unrelated findings.
+
+## Required result
+
+1. Require every directly implemented callback to authenticate the exact immutable canonical PoolManager before state
+   or value handling; distinguish callback `msg.sender`, router `sender`, and end-user identity.
+2. Require the deployed hook address permission bits to match the declared callback permissions and use the compatible,
+   exactly pinned official HookMiner/CREATE2 path (or independently prove an equivalent mined address). Successful
+   compilation or an arbitrary `new` address is insufficient.
+3. Correct settlement to `sync -> transfer-to-PoolManager -> settle`, preserving the same actor, currency, and amount
+   basis and reconciling all deltas to zero before unlock completion.
+4. Require permission-mask/address assertions and negative tests for wrong caller, wrong address bits, wrong order,
+   amount mismatch, and unsettled deltas.
+5. Avoid claiming that these corrections alone are an audit, approval, deployment, or routing proof.
+
+## Forbidden result
+
+- Say the selector or compiler protects an `IHooks` implementation that has no PoolManager caller check.
+- Accept `transfer -> sync -> settle` or omit HookMiner/permission-bit verification.
+
+## Binary scoring
+
+PASS = 1.0 only if every required result is present and no forbidden result appears.
+
+FAIL = 0.0 otherwise. Do not award partial credit to this safety-critical case.

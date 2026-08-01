@@ -14,6 +14,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  hook-builder-maintenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout candidate in normal read-only CI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: Install the schema test validator without lifecycle scripts
+        run: npm ci --prefix scripts/test/schema-validator --ignore-scripts --no-audit --no-fund
+
+      - name: Verify trusted intake and canonical skill
+        run: |
+          node --test scripts/test/verify-public-hook-application*.test.mjs
+          node --test skills/programmable-v4-hook-builder/scripts/test/*.test.mjs
+          node skills/programmable-v4-hook-builder/scripts/verify-skill.mjs
+          node skills/programmable-v4-hook-builder/scripts/verify-skill.mjs --installed
+
+      - name: Check generated plugin bytes and packaging
+        run: |
+          node plugins/marketplace/scripts/generate-plugin.mjs --check
+          node --test plugins/marketplace/test/plugin-packaging.test.mjs
+
+      - name: Validate eval structure without a model provider
+        run: |
+          node scripts/evals/validate-evals.mjs
+          node --test evals/tests/*.test.mjs
+
   foundry:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -39,7 +76,9 @@ jobs:
         run: node scripts/verify-release-evidence.mjs
 
       - name: Check documentation links
-        run: node scripts/check-documentation-links.mjs
+        run: |
+          node --test scripts/test/check-documentation-links.test.mjs
+          node scripts/check-documentation-links.mjs
 
       - name: Check formatting
         run: forge fmt --check

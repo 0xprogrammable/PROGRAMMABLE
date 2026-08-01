@@ -1,0 +1,238 @@
+name: Verify hook builder intake
+
+on:
+  pull_request_target:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths:
+      - README.md
+      - submissions/**
+      - skills/programmable-v4-hook-builder/**
+      - skills/README.md
+      - docs/builder/**
+      - scripts/test/verify-public-hook-application*.test.mjs
+      - scripts/verify-public-hook-application*.mjs
+      - .github/PULL_REQUEST_TEMPLATE.md
+      - .github/workflows/verify-hook-builder.yml
+      - BUILDER_PROGRAM.md
+      - CONTRIBUTING.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hook-builder-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-intake:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GIT_CONFIG_GLOBAL: /dev/null
+      GIT_CONFIG_NOSYSTEM: "1"
+      GIT_LFS_SKIP_SMUDGE: "1"
+      GIT_TERMINAL_PROMPT: "0"
+
+    steps:
+      - name: Checkout trusted validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Require immutable PR merge identity
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          sha_pattern='^[a-f0-9]{40}$'
+          if [[ ! "$BASE_SHA" =~ $sha_pattern || ! "$HEAD_SHA" =~ $sha_pattern || ! "$MERGE_SHA" =~ $sha_pattern ]]; then
+            echo "::error::GitHub did not provide an immutable merge commit for this PR. Resolve merge conflicts and retry."
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: Fetch exact candidate merge as blobless data
+        shell: bash
+        env:
+          CANDIDATE_READ_TOKEN: ${{ github.token }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$SERVER_URL" != "https://github.com" ]]; then
+            echo "::error::The central repository identity is outside the supported GitHub origin."
+            exit 1
+          fi
+
+          timeout --signal=KILL 90s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
+            --fetch-candidate \
+            --repository "${{ github.repository }}" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --base-root "$GITHUB_WORKSPACE/trusted" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+            --expected-merge-commit "${{ github.event.pull_request.merge_commit_sha }}"
+
+      - name: Classify candidate data with trusted base code
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          validator="$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs"
+          if [[ ! -f "$validator" ]]; then
+            echo "::error::The base branch does not yet contain the trusted public-intake classifier."
+            exit 1
+          fi
+          mode="$(timeout --signal=KILL 30s node "$validator" --classify \
+            --base-root "$GITHUB_WORKSPACE/trusted" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+            --expected-merge-commit "${{ github.event.pull_request.merge_commit_sha }}")"
+          case "$mode" in
+            application|builder-maintenance|no-op) ;;
+            *)
+              echo "::error::The trusted classifier returned an unsupported mode."
+              exit 1
+              ;;
+          esac
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Preflight and hydrate only bounded application blobs
+        if: steps.classify.outputs.mode == 'application'
+        shell: bash
+        env:
+          CANDIDATE_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          timeout --signal=KILL 90s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
+            --hydrate-candidate \
+            --repository "${{ github.repository }}" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --base-root "$GITHUB_WORKSPACE/trusted" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+            --expected-merge-commit "${{ github.event.pull_request.merge_commit_sha }}"
+
+      - name: Remove candidate fetch credential
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          candidate="$GITHUB_WORKSPACE/candidate.git"
+          if [[ ! -f "$candidate/config" ]]; then
+            exit 0
+          fi
+          git -C "$candidate" config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+          if git -C "$candidate" config --local --get-regexp '^(http\..*\.extraheader|credential\.)' >/dev/null; then
+            echo "::error::Candidate object-store credentials were not fully removed."
+            exit 1
+          fi
+
+      - name: Verify closed public application package
+        if: steps.classify.outputs.mode == 'application'
+        shell: bash
+        # Do not pass github.token/GITHUB_TOKEN to the source resolver. GitHub
+        # documents GITHUB_TOKEN as limited to this workflow repository, so it
+        # is not a reliable credential for arbitrary public builder repos:
+        # https://docs.github.com/en/actions/concepts/security/github_token
+        env:
+          GH_TOKEN: ""
+          GITHUB_TOKEN: ""
+          GIT_NO_LAZY_FETCH: "1"
+        run: |
+          set -euo pipefail
+
+          timeout --signal=KILL 120s node \
+            "$GITHUB_WORKSPACE/trusted/scripts/verify-public-hook-application.mjs" \
+            --pull-request-number "${{ github.event.pull_request.number }}" \
+            --base-root "$GITHUB_WORKSPACE/trusted" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate.git" \
+            --expected-base-commit "${{ github.event.pull_request.base.sha }}" \
+            --expected-builder-login "${{ github.event.pull_request.user.login }}" \
+            --expected-builder-user-id "${{ github.event.pull_request.user.id }}" \
+            --expected-candidate-commit "${{ github.event.pull_request.head.sha }}" \
+            --expected-merge-commit "${{ github.event.pull_request.merge_commit_sha }}"
+
+      - name: Defer executable builder-maintenance checks to read-only pull-request CI
+        if: steps.classify.outputs.mode == 'builder-maintenance'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Builder-maintenance paths are closed by the trusted base classifier."
+          echo "No maintenance blob is hydrated or parsed under pull_request_target."
+          echo "Candidate validators, generators, tests, workflows, and scripts run only in ordinary read-only pull-request CI."
+
+      - name: Preserve legacy pull-request compatibility
+        if: steps.classify.outputs.mode == 'no-op'
+        shell: bash
+        run: echo "No builder-beta intake content changed; existing model CI remains authoritative."
+
+  trusted-post-merge:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout trusted revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: Execute maintained skill tests
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npm ci --prefix scripts/test/schema-validator --ignore-scripts --no-audit --no-fund
+          node --test scripts/test/verify-public-hook-application*.test.mjs
+          node --test skills/programmable-v4-hook-builder/scripts/test/*.test.mjs
+          node skills/programmable-v4-hook-builder/scripts/verify-skill.mjs
+          node skills/programmable-v4-hook-builder/scripts/verify-skill.mjs --installed
+
+      - name: Validate maintained submissions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_root="$GITHUB_WORKSPACE/source"
+          node "$source_root/scripts/verify-public-hook-application.mjs" \
+            --verify-maintained \
+            --repository-root "$source_root"

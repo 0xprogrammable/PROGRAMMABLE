@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "attestation": "builder-declared-untrusted",
+  "standardVersion": "1.1.0",
+  "submissionHash": "sha256:replace-after-preflight",
+  "validatorSha256": "sha256:replace-after-preflight",
+  "schemaSha256": "sha256:replace-after-preflight",
+  "deploymentSnapshotSha256": "sha256:replace-after-preflight",
+  "officialDeploymentReferenceSha256": "sha256:replace-after-preflight",
+  "policyBundleSha256": "sha256:replace-after-preflight",
+  "reviewTargetHash": "sha256:replace-after-building-the-review-target",
+  "gates": [
+    {
+      "id": "replace-with-required-gate-id",
+      "status": "planned",
+      "evidence": [
+        {
+          "gateId": "replace-with-required-gate-id",
+          "result": "passed",
+          "scope": "Describe exactly what this artifact demonstrates and what it does not.",
+          "path": "submissions/example-model/evidence/replace-with-evidence.json",
+          "sha256": "sha256:replace-with-file-content-hash",
+          "command": "replace with the exact command that produced or verified this artifact",
+          "toolVersion": "replace with the exact tool version",
+          "commit": "replace with the exact 40-character evidence-origin commit",
+          "reviewTargetHash": "sha256:replace-with-the-same-review-target-hash"
+        }
+      ],
+      "note": "A planned check is not evidence that the gate passed."
+    }
+  ]
+}

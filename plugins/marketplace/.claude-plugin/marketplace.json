@@ -1,0 +1,13 @@
+{
+  "name": "programmable-repo",
+  "owner": {
+    "name": "Programmable"
+  },
+  "description": "Local repository marketplace for Programmable.",
+  "plugins": [
+    {
+      "name": "programmable",
+      "source": "./plugins/programmable"
+    }
+  ]
+}
