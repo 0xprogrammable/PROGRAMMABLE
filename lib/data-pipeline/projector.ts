@@ -209,6 +209,22 @@ function cursorAtStartOfBlock(
   };
 }
 
+function dynamicSourcesWithActivationBoundaries(
+  current: readonly VerifiedDynamicSourceLineage[],
+  pending: readonly PendingDynamicSourceActivation[],
+): readonly VerifiedDynamicSourceLineage[] {
+  const byAddress = new Map(
+    current.map((lineage) => [lineage.sourceAddress, lineage] as const),
+  );
+  for (const activation of pending) {
+    byAddress.set(
+      activation.ephemeralLineage.sourceAddress,
+      activation.ephemeralLineage,
+    );
+  }
+  return Object.freeze([...byAddress.values()]);
+}
+
 function timeoutError() {
   return dataPipelineError({
     dependency: "rpc",
@@ -679,12 +695,22 @@ export async function runProjectorCycle(input: {
       blockGlobalLogIndex: 0xffff_ffff,
       candidateId: "empty-page",
     };
+    const pendingActivations =
+      await input.store.resolvePendingDynamicSourceActivations({
+        candidates,
+        expectedCursorGeneration: plan.cursor.generation,
+        expectedCursorBlockHash: plan.cursor.blockHash,
+        expectedReorgGeneration: plan.database.reorgGeneration,
+      });
     const evidence = await verifyWindow({
       candidates,
       cursor,
       through,
       providers: input.providers,
-      dynamicSources: plan.dynamicSources,
+      dynamicSources: dynamicSourcesWithActivationBoundaries(
+        plan.dynamicSources,
+        pendingActivations,
+      ),
       maximumCandidateCount:
         PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
       coveragePolicy: {
@@ -696,13 +722,6 @@ export async function runProjectorCycle(input: {
         maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
       },
     });
-    const pendingActivations =
-      await input.store.resolvePendingDynamicSourceActivations({
-        candidates,
-        expectedCursorGeneration: plan.cursor.generation,
-        expectedCursorBlockHash: plan.cursor.blockHash,
-        expectedReorgGeneration: plan.database.reorgGeneration,
-      });
     const activationsByBlock = new Map<
       string,
       PendingDynamicSourceActivation[]
@@ -725,16 +744,14 @@ export async function runProjectorCycle(input: {
       const activationCandidates = candidates.filter(
         (candidate) => BigInt(candidate.blockNumber) <= BigInt(activationBlock),
       );
-      const dynamicSources = [
-        ...plan.dynamicSources,
-        ...pendingActivations
-          .filter(
-            (pending) =>
-              BigInt(pending.launchCandidate.blockNumber) <=
-              BigInt(activationBlock),
-          )
-          .map(({ ephemeralLineage }) => ephemeralLineage),
-      ];
+      const dynamicSources = dynamicSourcesWithActivationBoundaries(
+        plan.dynamicSources,
+        pendingActivations.filter(
+          (pending) =>
+            BigInt(pending.launchCandidate.blockNumber) <=
+            BigInt(activationBlock),
+        ),
+      );
       const activationEvidence = await verifyWindow({
         candidates: activationCandidates,
         cursor,

@@ -597,16 +597,27 @@ describe("projector runtime boundary", () => {
       eventName: "MemeTokenLaunchedV2",
       decodedPayload: { rewardVault: vault },
     });
+    const child = candidate({
+      blockNumber: 101,
+      logIndex: 10,
+      sourceAddress: vault,
+      contractName: "ClassicV3RewardVault",
+      eventName: "CreatorFeesCheckpointed",
+    });
     input.envio.readCandidatesWindow
       .mockReset()
-      .mockResolvedValueOnce([parent, launch])
+      .mockResolvedValueOnce([parent, launch, child])
       .mockResolvedValueOnce([]);
-    const pending = pendingActivation({ parent, launch, sourceAddress: vault });
     const baseReadPlan = input.store.readPlan.getMockImplementation()!;
     input.store.readPlan.mockImplementation((async () => ({
       ...(await baseReadPlan()),
-      provisionalSourceAddresses: [vault],
+      dynamicSources: [{ sourceAddress: vault } as never],
     })) as never);
+    const pending = pendingActivation({
+      parent,
+      launch,
+      sourceAddress: vault,
+    });
     const order: string[] = [];
     let verifyWindowCalls = 0;
     const baseVerifyWindow = input.verifyWindow.getMockImplementation()!;
@@ -649,18 +660,32 @@ describe("projector runtime boundary", () => {
     ).resolves.toMatchObject({ status: "committed" });
 
     expect(order).toEqual([
-      "full-evidence",
       "resolve",
+      "full-evidence",
       "activation-evidence",
       "verify-model",
       "stage",
       "commit",
     ]);
+    const fullVerification = input.verifyWindow.mock.calls[0]![0] as {
+      dynamicSources?: readonly { sourceAddress: string }[];
+    };
+    expect(fullVerification.dynamicSources).toEqual([
+      pending.ephemeralLineage,
+    ]);
+    expect(
+      new Set(
+        fullVerification.dynamicSources?.map(
+          ({ sourceAddress }) => sourceAddress,
+        ),
+      ).size,
+    ).toBe(fullVerification.dynamicSources?.length);
     expect(verifyClassicV3Activation).toHaveBeenCalledWith(
       expect.objectContaining({
         activationId: pending.activationId,
         parentCandidate: parent,
         launchCandidate: launch,
+        sameBlockVaultEvents: [child],
         candidateEvidence: expect.objectContaining({
           coverage: expect.objectContaining({
             throughBlockNumber: "101",
@@ -673,7 +698,7 @@ describe("projector runtime boundary", () => {
       input.store.stageVerifiedDynamicSourceActivations,
     ).toHaveBeenCalledWith(
       expect.objectContaining({
-        candidates: [parent, launch],
+        candidates: [parent, launch, child],
         blockComplete: false,
         activations: [expect.objectContaining({ pending })],
       }),
