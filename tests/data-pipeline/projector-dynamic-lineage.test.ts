@@ -74,6 +74,11 @@ function lineage(
       `1:0x${"55".repeat(32)}:0x${"66".repeat(32)}:3`,
     factoryBlockNumber: (BLOCK - 1n).toString(),
     factoryBlockGlobalLogIndex: "3",
+    activationCandidateId:
+      `1:${BLOCK_HASH}:0x${"77".repeat(32)}:3`,
+    activationBlockNumber: BLOCK.toString(),
+    activationBlockHash: BLOCK_HASH,
+    activationBlockGlobalLogIndex: "3",
     expectedExactRuntimeCodeHash: RUNTIME_EVIDENCE.exactRuntimeCodeHash,
     expectedNormalizedRuntimeCodeHash:
       RUNTIME_EVIDENCE.normalizedRuntimeCodeHash,
@@ -201,6 +206,31 @@ describe("two-phase dynamic source lineage", () => {
         lineage({
           factoryBlockNumber: BLOCK.toString(),
           factoryBlockGlobalLogIndex: "4",
+        }),
+      ]),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it("rejects a same-height activation from a replacement fork", async () => {
+    const replacementHash = `0x${"99".repeat(32)}` as const;
+    await expect(
+      verify([
+        lineage({
+          activationCandidateId:
+            `1:${replacementHash}:0x${"77".repeat(32)}:3`,
+          activationBlockHash: replacementHash,
+        }),
+      ]),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it("rejects a child at or before its launch activation boundary", async () => {
+    await expect(
+      verify([
+        lineage({
+          activationCandidateId:
+            `1:${BLOCK_HASH}:0x${"77".repeat(32)}:4`,
+          activationBlockGlobalLogIndex: "4",
         }),
       ]),
     ).rejects.toMatchObject({ code: "validation_failed" });

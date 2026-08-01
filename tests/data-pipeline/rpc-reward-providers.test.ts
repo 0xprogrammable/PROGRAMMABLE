@@ -110,4 +110,104 @@ describe("production reward-vault RPC reader", () => {
       "totalCreatorFeesReceived",
     ]);
   });
+
+  it("caps physical reward reads at eight in flight per provider", async () => {
+    const vault = address("7");
+    const beneficiary = address("1");
+    const blockHash = bytes32("9");
+    const accounts = Array.from({ length: 48 }, (_value, index) =>
+      `0x${(index + 1).toString(16).padStart(40, "0")}` as `0x${string}`
+    );
+    let inFlight = 0;
+    let maximumInFlight = 0;
+    mocks.readContract.mockImplementation(async ({ functionName }) => {
+      inFlight += 1;
+      maximumInFlight = Math.max(maximumInFlight, inFlight);
+      await new Promise<void>((resolve) => setTimeout(resolve, 1));
+      inFlight -= 1;
+      if (functionName === "poolId") return bytes32("3");
+      if (functionName === "configurationEpoch") return 1n;
+      if (functionName === "activeConfigurationHash") return bytes32("4");
+      if (functionName === "totalCreatorFeesReceived") return 0n;
+      if (functionName === "totalCreatorFeesClaimed") return 0n;
+      if (functionName === "beneficiaryCount") return 1n;
+      if (functionName === "beneficiaryAt") return beneficiary;
+      if (functionName === "shareBpsAt") return 10_000n;
+      if (functionName === "claimable" || functionName === "claimedBy") {
+        return 0n;
+      }
+      throw new Error("unexpected function");
+    });
+    const providers = createProductionDualRpcProviders({
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
+    });
+
+    const snapshot = await providers[0].client.readRewardSnapshot!({
+      model: "classic-v3",
+      vault,
+      blockNumber: 100n,
+      blockHash,
+      balanceAccounts: accounts,
+    });
+
+    expect(snapshot.rpcCallCount).toBe(104);
+    expect(mocks.readContract).toHaveBeenCalledTimes(104);
+    expect(maximumInFlight).toBeGreaterThan(1);
+    expect(maximumInFlight).toBeLessThanOrEqual(8);
+  });
+
+  it("reads factory authentication and CREATE2 helpers at the exact block", async () => {
+    const factory = address("6");
+    const vault = address("7");
+    const feeHook = address("8");
+    const alice = address("1");
+    const blockHash = bytes32("9");
+    const salt = bytes32("a");
+    const poolId = bytes32("3");
+    const configurationHash = bytes32("4");
+    const initCodeHash = bytes32("5");
+    mocks.readContract.mockImplementation(async ({ functionName }) => {
+      if (functionName === "configurationHashOf") return configurationHash;
+      if (functionName === "initCodeHash") return initCodeHash;
+      if (functionName === "predict") return vault;
+      throw new Error("unexpected function");
+    });
+    const providers = createProductionDualRpcProviders({
+      PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
+      PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
+    });
+
+    await expect(
+      providers[0].client.readClassicRewardFactorySnapshot!({
+        factory,
+        vault,
+        blockNumber: 100n,
+        blockHash,
+        salt,
+        feeHook,
+        poolId,
+        beneficiaries: [alice],
+        sharesBps: [10_000],
+      }),
+    ).resolves.toEqual({
+      factory,
+      vault,
+      blockNumber: "100",
+      blockHash,
+      configurationHash,
+      initCodeHash,
+      predictedVault: vault,
+      rpcCallCount: 3,
+    });
+    expect(mocks.readContract).toHaveBeenCalledTimes(3);
+    for (const [request] of mocks.readContract.mock.calls) {
+      expect(request).toMatchObject({
+        address: factory,
+        blockHash,
+        requireCanonical: true,
+      });
+      expect(request).not.toHaveProperty("blockNumber");
+    }
+  });
 });

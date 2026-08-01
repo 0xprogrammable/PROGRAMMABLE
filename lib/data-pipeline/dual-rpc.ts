@@ -4,6 +4,7 @@ import {
   bytesToHex,
   concat,
   encodeAbiParameters,
+  getContractAddress,
   hexToBytes,
   keccak256,
   toBytes,
@@ -26,7 +27,7 @@ import {
   validationError,
 } from "./errors";
 import type { EnvioCandidate, EnvioCandidateCursor } from "./envio";
-import { manifestEventSelectors } from "./event-manifest";
+import { decodeManifestEvent, manifestEventSelectors } from "./event-manifest";
 import {
   canonicalCoverageLog,
   canonicalUint32DecimalText,
@@ -37,6 +38,7 @@ import {
   canonicalDynamicSourceLineages,
   type VerifiedDynamicSourceLineage,
 } from "./projector-identities";
+import type { CanonicalDynamicSourceDeploymentEvidence } from "./projector-dynamic-activation";
 import {
   expectedRewardRpcCallCount,
   PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1,
@@ -157,6 +159,22 @@ export type CandidateRpcClient = {
     blockHash: HexBytes32;
     balanceAccounts: readonly HexAddress[];
   }): Promise<CandidateRpcRewardSnapshot>;
+  /**
+   * Reads the authenticated Classic vault-factory mapping and both CREATE2
+   * helpers at one exact canonical block. These are separate physical calls;
+   * their count is part of the activation evidence budget.
+   */
+  readClassicRewardFactorySnapshot?(input: {
+    factory: HexAddress;
+    vault: HexAddress;
+    blockNumber: bigint;
+    blockHash: HexBytes32;
+    salt: HexBytes32;
+    feeHook: HexAddress;
+    poolId: HexBytes32;
+    beneficiaries: readonly HexAddress[];
+    sharesBps: readonly number[];
+  }): Promise<CandidateRpcClassicRewardFactorySnapshot>;
   getLogs?(input: CandidateRpcLogFilter): Promise<readonly CandidateRpcLog[]>;
   /** Up to 100 exact eth_getLogs filters in one physical JSON-RPC batch. */
   getLogsBatch?(input: {
@@ -177,6 +195,17 @@ export type CandidateRpcRewardSnapshot = Readonly<{
   beneficiaryCount: unknown;
   allocations: unknown;
   balances: unknown;
+  rpcCallCount: unknown;
+}>;
+
+export type CandidateRpcClassicRewardFactorySnapshot = Readonly<{
+  factory: unknown;
+  vault: unknown;
+  blockNumber: unknown;
+  blockHash: unknown;
+  configurationHash: unknown;
+  initCodeHash: unknown;
+  predictedVault: unknown;
   rpcCallCount: unknown;
 }>;
 
@@ -219,7 +248,7 @@ export type DualRpcRewardSnapshot = Readonly<{
   executionTrace: DualRpcExecutionTrace;
 }>;
 
-export type DualRpcInitialRewardSeed = Readonly<{
+export type DualRpcInitialRewardConfigurationEvidence = Readonly<{
   parentCandidateId: string;
   launchCandidateId: string;
   vault: HexAddress;
@@ -230,7 +259,17 @@ export type DualRpcInitialRewardSeed = Readonly<{
   activationBlockHash: HexBytes32;
   activationBlockGlobalLogIndex: number;
   coveredRewardCandidateIds: readonly string[];
+  factory: HexAddress;
+  salt: HexBytes32;
+  factoryInputCommitment: HexBytes32;
+  deployedArtifactCreationCodeCommitment: HexBytes32;
   factoryConfigurationHash: HexBytes32;
+  providerFactoryConfigurationHashes: readonly [HexBytes32, HexBytes32];
+  providerInitCodeHashes: readonly [HexBytes32, HexBytes32];
+  providerPredictedVaults: readonly [HexAddress, HexAddress];
+  locallyPredictedVault: HexAddress;
+  factoryProviderCallCounts: readonly [3, 3];
+  factoryProviderSnapshotCommitments: readonly [HexBytes32, HexBytes32];
   initialActiveConfigurationHash: HexBytes32;
   allocations: readonly Readonly<{
     allocationIndex: number;
@@ -305,7 +344,8 @@ export type DualRpcOperation =
   | "getBlock"
   | "getTransactionReceipt"
   | "getBytecode"
-  | "readRewardSnapshot";
+  | "readRewardSnapshot"
+  | "readClassicRewardFactorySnapshot";
 
 export type DualRpcCallTrace = Readonly<{
   providerIdentity: string;
@@ -1085,26 +1125,18 @@ function validateCandidateBoundary(
       throw validationError("rpc", "dynamic-source-lineage");
     }
     if (dynamicSourceLineage) {
-      const boundaryBlockNumber =
-        dynamicSourceLineage.activationBlockNumber ??
-        dynamicSourceLineage.factoryBlockNumber;
-      const boundaryBlockHash =
-        dynamicSourceLineage.activationBlockHash;
-      const boundaryLogIndex =
-        dynamicSourceLineage.activationBlockGlobalLogIndex ??
-        dynamicSourceLineage.factoryBlockGlobalLogIndex;
-      const isActivationBlock =
+      const activationBeforeChild =
         dynamicSourceLineage.activationBlockNumber !== undefined &&
-        BigInt(dynamicSourceLineage.activationBlockNumber) === blockNumber;
-      const parentBeforeChild =
-        BigInt(boundaryBlockNumber) < blockNumber ||
-        (boundaryLogIndex !== undefined &&
-          BigInt(boundaryBlockNumber) === blockNumber &&
-          BigInt(boundaryLogIndex) < BigInt(logIndex));
+        dynamicSourceLineage.activationBlockHash !== undefined &&
+        dynamicSourceLineage.activationBlockGlobalLogIndex !== undefined &&
+        (BigInt(dynamicSourceLineage.activationBlockNumber) < blockNumber ||
+          (BigInt(dynamicSourceLineage.activationBlockNumber) === blockNumber &&
+            dynamicSourceLineage.activationBlockHash === candidate.blockHash &&
+            BigInt(dynamicSourceLineage.activationBlockGlobalLogIndex) <
+              BigInt(logIndex)));
       if (
         dynamicSourceLineage.contractName !== candidate.contractName ||
-        (isActivationBlock && boundaryBlockHash !== blockHash) ||
-        !parentBeforeChild
+        !activationBeforeChild
       ) {
         throw validationError("rpc", "dynamic-source-lineage");
       }
@@ -1639,6 +1671,61 @@ function assertRewardSnapshotMatchesProjection(
   }
 }
 
+function canonicalClassicRewardFactorySnapshot(
+  raw: CandidateRpcClassicRewardFactorySnapshot,
+  expected: Readonly<{
+    factory: HexAddress;
+    vault: HexAddress;
+    blockNumber: string;
+    blockHash: HexBytes32;
+  }>,
+) {
+  if (raw === null || typeof raw !== "object") {
+    throw validationError("rpc", "reward-factory-snapshot");
+  }
+  let blockNumber: string;
+  try {
+    blockNumber = parseNonnegativeIntegerText(raw.blockNumber);
+  } catch {
+    throw validationError("rpc", "reward-factory-snapshot");
+  }
+  const factory = rpcAddress(raw.factory, "reward-factory-address");
+  const vault = rpcAddress(raw.vault, "reward-factory-vault");
+  const blockHash = rpcBytes32(raw.blockHash, "reward-factory-block-hash");
+  const configurationHash = rpcBytes32(
+    raw.configurationHash,
+    "reward-factory-configuration-hash",
+  );
+  const initCodeHash = rpcBytes32(
+    raw.initCodeHash,
+    "reward-factory-init-code-hash",
+  );
+  const predictedVault = rpcAddress(
+    raw.predictedVault,
+    "reward-factory-predicted-vault",
+  );
+  if (
+    factory !== expected.factory ||
+    vault !== expected.vault ||
+    blockNumber !== expected.blockNumber ||
+    blockHash !== expected.blockHash ||
+    typeof raw.rpcCallCount !== "number" ||
+    raw.rpcCallCount !== 3
+  ) {
+    throw validationError("rpc", "reward-factory-snapshot");
+  }
+  return Object.freeze({
+    factory,
+    vault,
+    blockNumber,
+    blockHash,
+    configurationHash,
+    initCodeHash,
+    predictedVault,
+    rpcCallCount: 3 as const,
+  });
+}
+
 /**
  * Proves one folded reward delta against two independent exact-block vault
  * snapshots. Any provider, call-count, conservation or projected-state
@@ -2009,21 +2096,165 @@ function classicActiveConfigurationHash(input: {
   );
 }
 
+function sameOrderedTuple(
+  actual: readonly string[],
+  expected: readonly string[],
+): boolean {
+  return (
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index])
+  );
+}
+
+/**
+ * Binds a historical factory candidate to the canonical deployment row that
+ * survived the current reorg generation. The local ABI decode is intentional:
+ * neither a raw Envio object nor a matching candidate id is sufficient proof
+ * of the parent payload used to derive the vault configuration.
+ */
+function assertCanonicalDynamicDeploymentBinding(input: Readonly<{
+  parent: EnvioCandidate;
+  launch: EnvioCandidate;
+  sourceAddress: HexAddress;
+  template: ProjectorDynamicSourceTemplate;
+  canonicalDeployment: CanonicalDynamicSourceDeploymentEvidence;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+}>): void {
+  const {
+    parent,
+    launch,
+    sourceAddress,
+    template,
+    canonicalDeployment,
+  } = input;
+  const candidateMatch = CANDIDATE_ID_PATTERN.exec(parent.candidateId);
+  const providerIdentities = input.providers.map(({ identity }) =>
+    providerIdentity(identity)
+  );
+  const providerVendorGroups = input.providers.map(({ vendorGroup }) =>
+    providerIdentity(vendorGroup)
+  );
+  const providerEndpointCommitments = input.providers.map(
+    ({ endpointCommitment }) =>
+      rpcBytes32(endpointCommitment, "dynamic-deployment-provider-endpoint"),
+  );
+  const providerOriginCommitments = input.providers.map(
+    ({ endpointOriginCommitment }) =>
+      rpcBytes32(endpointOriginCommitment, "dynamic-deployment-provider-origin"),
+  );
+  let localPayloadHash: HexBytes32;
+  let localRawLogCommitment: HexBytes32;
+  try {
+    decodeManifestEvent({
+      contractName: parent.contractName,
+      eventName: parent.eventName,
+      topics: parent.orderedTopics,
+      data: parent.rawData,
+      providerPayload: parent.decodedPayload,
+    });
+    localPayloadHash = keccak256(
+      encodeAbiParameters(
+        [{ type: "bytes32[]" }, { type: "bytes" }],
+        [parent.orderedTopics, parent.rawData],
+      ),
+    );
+    localRawLogCommitment = keccak256(
+      encodeAbiParameters(
+        [{ type: "address" }, { type: "bytes32[]" }, { type: "bytes" }],
+        [parent.sourceAddress, parent.orderedTopics, parent.rawData],
+      ),
+    );
+  } catch {
+    throw validationError("rpc", "dynamic-deployment-parent-decode");
+  }
+  const parentBeforeLaunch =
+    BigInt(parent.blockNumber) < BigInt(launch.blockNumber) ||
+    (parent.blockNumber === launch.blockNumber &&
+      parent.blockHash === launch.blockHash &&
+      parent.blockGlobalLogIndex < launch.blockGlobalLogIndex);
+  if (
+    !candidateMatch ||
+    !parentBeforeLaunch ||
+    !UUID_PATTERN.test(canonicalDeployment.provisionalPageId) ||
+    !UUID_PATTERN.test(canonicalDeployment.provisionalLineageId) ||
+    !UUID_PATTERN.test(canonicalDeployment.dynamicSourceAttestationId) ||
+    !UUID_PATTERN.test(canonicalDeployment.runtimeCodeEvidenceId) ||
+    !UUID_PATTERN.test(canonicalDeployment.dynamicSourceTemplateId) ||
+    !UUID_PATTERN.test(canonicalDeployment.parentOccurrenceId) ||
+    !UUID_PATTERN.test(canonicalDeployment.canonicalStatusHistoryId) ||
+    !UUID_PATTERN.test(canonicalDeployment.safeHeadObservationId) ||
+    !UUID_PATTERN.test(canonicalDeployment.blockEvidenceId) ||
+    canonicalDeployment.parentCandidateId !== parent.candidateId ||
+    canonicalDeployment.parentBlockNumber !== parent.blockNumber ||
+    canonicalDeployment.parentBlockHash !== parent.blockHash ||
+    canonicalDeployment.parentBlockGlobalLogIndex !==
+      parent.blockGlobalLogIndex ||
+    canonicalDeployment.parentTransactionHash !== parent.transactionHash ||
+    canonicalDeployment.parentTransactionIndex !== parent.transactionIndex ||
+    canonicalDeployment.parentSourceAddress !== parent.sourceAddress ||
+    sourceAddress !==
+      rpcAddress(parent.decodedPayload.vault, "dynamic-deployment-source") ||
+    canonicalDeployment.parentContractName !== parent.contractName ||
+    canonicalDeployment.parentEventName !== parent.eventName ||
+    canonicalDeployment.parentPayloadHash !== parent.payloadHash ||
+    canonicalDeployment.parentPayloadHash !== localPayloadHash ||
+    canonicalDeployment.parentRawLogCommitment !== localRawLogCommitment ||
+    canonicalDeployment.dynamicSourceTemplateId !== template.templateId ||
+    canonicalDeployment.parentSourceAddress !==
+      template.parentFactoryAddress ||
+    canonicalDeployment.parentContractName !==
+      template.parentFactoryContractName ||
+    canonicalDeployment.parentEventName !== template.factoryEventName ||
+    canonicalDeployment.reorgGeneration !==
+      template.database.reorgGeneration ||
+    canonicalDeployment.envioProviderDeploymentId !==
+      template.database.envioProviderDeploymentId ||
+    !sameOrderedTuple(
+      canonicalDeployment.rpcProviderDeploymentIds,
+      template.database.rpcProviderDeploymentIds,
+    ) ||
+    !sameOrderedTuple(
+      canonicalDeployment.providerIdentities,
+      providerIdentities,
+    ) ||
+    !sameOrderedTuple(
+      canonicalDeployment.providerVendorGroups,
+      providerVendorGroups,
+    ) ||
+    !sameOrderedTuple(
+      canonicalDeployment.providerEndpointCommitments,
+      providerEndpointCommitments,
+    ) ||
+    !sameOrderedTuple(
+      canonicalDeployment.providerOriginCommitments,
+      providerOriginCommitments,
+    ) ||
+    candidateMatch[1] !== parent.blockHash ||
+    candidateMatch[2] !== parent.transactionHash ||
+    BigInt(candidateMatch[3]!) !== BigInt(parent.blockGlobalLogIndex)
+  ) {
+    throw validationError("rpc", "dynamic-deployment-canonical-binding");
+  }
+}
+
 /**
  * Reads a launch-bound Classic reward vault at the exact launch block from two
  * independent providers and reconstructs its activation state. Only vault
  * events strictly after the launch log may be reversed. A CTO allocation
  * replacement in that block is deliberately unsupported and fails closed.
  */
-export async function readDualRpcInitialRewardSeed(input: Readonly<{
+export async function readDualRpcInitialRewardConfiguration(input: Readonly<{
   parentCandidate: EnvioCandidate;
   launchCandidate: EnvioCandidate;
   sameBlockVaultEvents: readonly EnvioCandidate[];
-  candidateEvidence: DualRpcCandidateBatchEvidence;
+  candidateEvidence: DualRpcCandidateWindowEvidence;
+  canonicalDeployment: CanonicalDynamicSourceDeploymentEvidence;
+  template: ProjectorDynamicSourceTemplate;
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   rpcPolicy?: RpcExecutionPolicyInput;
-}>): Promise<DualRpcInitialRewardSeed> {
+}>): Promise<DualRpcInitialRewardConfigurationEvidence> {
   assertProductionDualRpcProviders(input.providers);
+  const template = canonicalDynamicSourceTemplate(input.template);
   const parent = input.parentCandidate;
   const launch = input.launchCandidate;
   const vault = rpcAddress(parent.decodedPayload.vault, "reward-seed-vault");
@@ -2072,6 +2303,36 @@ export async function readDualRpcInitialRewardSeed(input: Readonly<{
     launch.decodedPayload.rewardConfigurationHash,
     "reward-seed-launch-configuration",
   );
+  const factory = rpcAddress(
+    parent.sourceAddress,
+    "reward-seed-factory",
+  );
+  const salt = rpcBytes32(
+    parent.decodedPayload.salt,
+    "reward-seed-salt",
+  );
+  const token = rpcAddress(
+    launch.decodedPayload.token,
+    "reward-seed-token",
+  );
+  const deployer = rpcAddress(
+    launch.decodedPayload.deployer,
+    "reward-seed-deployer",
+  );
+  const expectedSalt = keccak256(
+    encodeAbiParameters(
+      [{ type: "string" }, { type: "address" }, { type: "address" }],
+      ["programmable.classic-reward-vault.v1", token, deployer],
+    ),
+  );
+  assertCanonicalDynamicDeploymentBinding({
+    parent,
+    launch,
+    sourceAddress: vault,
+    template,
+    canonicalDeployment: input.canonicalDeployment,
+    providers: input.providers,
+  });
   const providerIdentities = input.providers.map(({ identity }) =>
     providerIdentity(identity)
   ) as [string, string];
@@ -2104,13 +2365,16 @@ export async function readDualRpcInitialRewardSeed(input: Readonly<{
     launchPoolId !== poolId ||
     launchFeeHook !== feeHook ||
     launchConfigurationHash !== factoryConfigurationHash ||
+    salt !== expectedSalt ||
     input.providers[0].identity === input.providers[1].identity ||
     input.providers[0].vendorGroup === input.providers[1].vendorGroup ||
     providerEndpointCommitments[0] === providerEndpointCommitments[1] ||
     providerOriginCommitments[0] === providerOriginCommitments[1] ||
     input.providers[0].client === input.providers[1].client ||
     input.providers.some(
-      ({ client }) => typeof client.readRewardSnapshot !== "function",
+      ({ client }) =>
+        typeof client.readRewardSnapshot !== "function" ||
+        typeof client.readClassicRewardFactorySnapshot !== "function",
     ) ||
     !exactTuple(
       input.candidateEvidence.providerIdentities,
@@ -2213,7 +2477,8 @@ export async function readDualRpcInitialRewardSeed(input: Readonly<{
     ...input.rpcPolicy,
     maxAttempts: 1,
   });
-  const maximumCallCount = expectedRewardRpcCallCount("classic-v3", 5, 1);
+  const maximumCallCount =
+    expectedRewardRpcCallCount("classic-v3", 5, 1) + 3;
   if (maximumCallCount > policy.maxCallsPerProvider) {
     throw invalidInput("rpc", "provider-call-budget");
   }
@@ -2378,6 +2643,115 @@ export async function readDualRpcInitialRewardSeed(input: Readonly<{
       beneficiaries,
       sharesBps,
     });
+    const factoryInputCommitment = keccak256(
+      encodeAbiParameters(
+        [
+          { type: "bytes32" },
+          { type: "address" },
+          { type: "bytes32" },
+          { type: "address[]" },
+          { type: "uint16[]" },
+        ],
+        [
+          salt,
+          feeHook,
+          poolId,
+          beneficiaries,
+          sharesBps.map(Number),
+        ],
+      ),
+    );
+    const factoryRequest = Object.freeze({
+      factory,
+      vault,
+      blockNumber: BigInt(activationBlockNumber),
+      blockHash: activationBlockHash,
+      salt,
+      feeHook,
+      poolId,
+      beneficiaries: Object.freeze([...beneficiaries]),
+      sharesBps: Object.freeze(sharesBps.map(Number)),
+    });
+    const remainingDeadlineMs =
+      policy.hardDeadlineMs - (Date.now() - startedAtMs);
+    if (remainingDeadlineMs < 10) {
+      throw dataPipelineError({
+        dependency: "rpc",
+        code: "timeout",
+        retryable: true,
+        countsTowardCircuit: true,
+      });
+    }
+    const factoryPolicy = rpcExecutionPolicy({
+      ...input.rpcPolicy,
+      maxAttempts: 1,
+      hardDeadlineMs: remainingDeadlineMs,
+      maxCallsPerProvider: 3,
+    });
+    const factoryProviderBudgets = input.providers.map(() => ({
+      used: 0,
+      maximum: factoryPolicy.maxCallsPerProvider,
+    }));
+    const [leftFactoryRaw, rightFactoryRaw] = await Promise.all([
+      retryRpc(
+        () =>
+          input.providers[0].client.readClassicRewardFactorySnapshot!(
+            factoryRequest,
+          ),
+        factoryPolicy,
+        factoryProviderBudgets[0],
+        3,
+      ),
+      retryRpc(
+        () =>
+          input.providers[1].client.readClassicRewardFactorySnapshot!(
+            factoryRequest,
+          ),
+        factoryPolicy,
+        factoryProviderBudgets[1],
+        3,
+      ),
+    ]);
+    if (
+      factoryProviderBudgets[0]!.used !== 3 ||
+      factoryProviderBudgets[1]!.used !== 3
+    ) {
+      throw validationError("rpc", "reward-factory-call-budget");
+    }
+    const canonicalFactoryRequest = Object.freeze({
+      factory,
+      vault,
+      blockNumber: activationBlockNumber,
+      blockHash: activationBlockHash,
+    });
+    const leftFactory = canonicalClassicRewardFactorySnapshot(
+      leftFactoryRaw,
+      canonicalFactoryRequest,
+    );
+    const rightFactory = canonicalClassicRewardFactorySnapshot(
+      rightFactoryRaw,
+      canonicalFactoryRequest,
+    );
+    const locallyPredictedVault = rpcAddress(
+      getContractAddress({
+        bytecodeHash: leftFactory.initCodeHash,
+        from: factory,
+        opcode: "CREATE2",
+        salt,
+      }),
+      "reward-seed-local-prediction",
+    );
+    if (
+      JSON.stringify(leftFactory) !== JSON.stringify(rightFactory) ||
+      leftFactory.configurationHash !== factoryConfigurationHash ||
+      leftFactory.predictedVault !== vault ||
+      locallyPredictedVault !== vault
+    ) {
+      throw validationError("rpc", "reward-seed-factory-agreement");
+    }
+    const factorySnapshotCommitment = keccak256(
+      toBytes(JSON.stringify(leftFactory)),
+    );
     return Object.freeze({
       parentCandidateId: parent.candidateId,
       launchCandidateId: launch.candidateId,
@@ -2389,7 +2763,30 @@ export async function readDualRpcInitialRewardSeed(input: Readonly<{
       activationBlockHash,
       activationBlockGlobalLogIndex: launch.blockGlobalLogIndex,
       coveredRewardCandidateIds: Object.freeze(coveredRewardCandidateIds),
+      factory,
+      salt,
+      factoryInputCommitment,
+      deployedArtifactCreationCodeCommitment:
+        template.deployedArtifactCreationCodeCommitment,
       factoryConfigurationHash,
+      providerFactoryConfigurationHashes: Object.freeze([
+        leftFactory.configurationHash,
+        rightFactory.configurationHash,
+      ]) as readonly [HexBytes32, HexBytes32],
+      providerInitCodeHashes: Object.freeze([
+        leftFactory.initCodeHash,
+        rightFactory.initCodeHash,
+      ]) as readonly [HexBytes32, HexBytes32],
+      providerPredictedVaults: Object.freeze([
+        leftFactory.predictedVault,
+        rightFactory.predictedVault,
+      ]) as readonly [HexAddress, HexAddress],
+      locallyPredictedVault,
+      factoryProviderCallCounts: Object.freeze([3, 3]) as readonly [3, 3],
+      factoryProviderSnapshotCommitments: Object.freeze([
+        factorySnapshotCommitment,
+        factorySnapshotCommitment,
+      ]) as readonly [HexBytes32, HexBytes32],
       initialActiveConfigurationHash,
       allocations: Object.freeze(
         beneficiaries.map((beneficiary, allocationIndex) =>
@@ -4175,6 +4572,7 @@ export async function verifyDynamicRuntimeAtActivationWithDualRpc(input: {
   launchCandidate: EnvioCandidate;
   sourceAddress: HexAddress;
   template: ProjectorDynamicSourceTemplate;
+  canonicalDeployment: CanonicalDynamicSourceDeploymentEvidence;
   activationEvidence: DualRpcCandidateBatchEvidence;
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   deadlineMs?: number;
@@ -4231,6 +4629,14 @@ export async function verifyDynamicRuntimeAtActivationWithDualRpc(input: {
     launch.decodedPayload.rewardConfigurationHash,
     "dynamic-activation-launch-configuration",
   );
+  assertCanonicalDynamicDeploymentBinding({
+    parent,
+    launch,
+    sourceAddress,
+    template,
+    canonicalDeployment: input.canonicalDeployment,
+    providers: input.providers,
+  });
   const launchEvidence = input.activationEvidence.candidates.filter(
     ({ candidateId }) => candidateId === launch.candidateId,
   );

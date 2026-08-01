@@ -1,38 +1,70 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   encodeAbiParameters,
+  encodeEventTopics,
+  getContractAddress,
   keccak256,
+  parseAbiItem,
   toFunctionSelector,
+  type AbiParameter,
+  type Hex,
 } from "viem";
 
 vi.mock("server-only", () => ({}));
 
 import { verifyClassicV3ActivationModel } from "../../lib/data-pipeline/classic-v3-activation-model";
 import {
-  readDualRpcInitialRewardSeed,
+  readDualRpcInitialRewardConfiguration,
   readDualRpcRewardSnapshot,
   type CandidateRpcClient,
-  type DualRpcCandidateBatchEvidence,
+  type DualRpcCandidateWindowEvidence,
   type CandidateRpcProvider,
   type CandidateRpcRewardSnapshot,
 } from "../../lib/data-pipeline/dual-rpc";
 import type { EnvioCandidate } from "../../lib/data-pipeline/envio";
+import type { CanonicalDynamicSourceDeploymentEvidence } from "../../lib/data-pipeline/projector-dynamic-activation";
 import type { ProjectorRewardSnapshot } from "../../lib/data-pipeline/projector-reward-fold";
 import {
   expectedRewardRpcCallCount,
   PROJECTOR_REWARD_RPC_CALL_CONTRACT_V1,
 } from "../../lib/data-pipeline/projector-reward-rpc-contract";
+import { immutableReferencesCommitment } from "../../lib/data-pipeline/runtime-bytecode";
+import { canonicalPayloadJson } from "../../indexer/src/lib/payload-hash";
 
 const address = (digit: string) =>
   `0x${digit.repeat(40)}` as `0x${string}`;
 const bytes32 = (digit: string) =>
   `0x${digit.repeat(64)}` as `0x${string}`;
-const vault = address("7");
 const alice = address("1");
 const bob = address("2");
 const poolId = bytes32("3");
 const configurationHash = bytes32("4");
 const blockHash = bytes32("9");
+const rewardVaultFactory = address("f");
+const launchToken = address("a");
+const launchDeployer = address("b");
+const rewardVaultSalt = keccak256(
+  encodeAbiParameters(
+    [{ type: "string" }, { type: "address" }, { type: "address" }],
+    [
+      "programmable.classic-reward-vault.v1",
+      launchToken,
+      launchDeployer,
+    ],
+  ),
+);
+const rewardVaultInitCodeHash = bytes32("2");
+const vault = getContractAddress({
+  bytecodeHash: rewardVaultInitCodeHash,
+  from: rewardVaultFactory,
+  opcode: "CREATE2",
+  salt: rewardVaultSalt,
+}).toLowerCase() as `0x${string}`;
+const factoryEvent = parseAbiItem(
+  "event ClassicRewardVaultDeployed(address indexed vault, bytes32 indexed poolId, address indexed feeHook, bytes32 salt, bytes32 configurationHash)",
+);
+const classicV3Launcher =
+  "0xc3bd04aac2fb2ba58efd7eb673e544e0b80de770" as const;
 
 function classicActiveHash(
   epoch: bigint,
@@ -63,7 +95,7 @@ function seedCandidate(input: {
   contractName?: string;
 }): EnvioCandidate {
   const transactionHash = `0x${input.logIndex.toString(16).padStart(64, "0")}` as const;
-  return {
+  const candidate: EnvioCandidate = {
     candidateId: `1:${blockHash}:${transactionHash}:${input.logIndex}`,
     chainId: 1,
     blockNumber: "100",
@@ -81,6 +113,38 @@ function seedCandidate(input: {
     rawData: "0x",
     decodedPayload: input.decodedPayload,
     payloadHash: bytes32("b"),
+  };
+  if (input.eventName !== "ClassicRewardVaultDeployed") return candidate;
+  const args = {
+    vault: input.decodedPayload.vault,
+    poolId: input.decodedPayload.poolId,
+    feeHook: input.decodedPayload.feeHook,
+    salt: input.decodedPayload.salt ?? rewardVaultSalt,
+    configurationHash: input.decodedPayload.configurationHash,
+  };
+  const topics = encodeEventTopics({
+    abi: [factoryEvent],
+    eventName: factoryEvent.name,
+    args: args as never,
+  }) as readonly Hex[];
+  const nonIndexed = factoryEvent.inputs.filter(
+    (parameter) => !("indexed" in parameter) || parameter.indexed !== true,
+  ) as readonly AbiParameter[];
+  const data = encodeAbiParameters(
+    nonIndexed,
+    nonIndexed.map((parameter) => args[parameter.name as keyof typeof args]),
+  );
+  return {
+    ...candidate,
+    orderedTopics: [...topics],
+    rawData: data,
+    decodedPayload: JSON.parse(canonicalPayloadJson(args)),
+    payloadHash: keccak256(
+      encodeAbiParameters(
+        [{ type: "bytes32[]" }, { type: "bytes" }],
+        [topics, data],
+      ),
+    ),
   };
 }
 
@@ -187,20 +251,156 @@ function provider(
   identity: string,
   vendorGroup: string,
   readRewardSnapshot: CandidateRpcClient["readRewardSnapshot"],
+  factoryConfigurationHash: `0x${string}` = configurationHash,
+  factoryOverrides: Record<string, unknown> = {},
 ): CandidateRpcProvider {
   return {
     identity,
     vendorGroup,
     endpointCommitment: bytes32(vendorGroup === "alchemy" ? "5" : "6"),
     endpointOriginCommitment: bytes32(vendorGroup === "alchemy" ? "7" : "8"),
-    client: { readRewardSnapshot } as CandidateRpcClient,
+    client: {
+      readRewardSnapshot,
+      readClassicRewardFactorySnapshot: async (
+        request: Parameters<
+          NonNullable<
+            CandidateRpcClient["readClassicRewardFactorySnapshot"]
+          >
+        >[0],
+      ) => ({
+        factory: request.factory,
+        vault: request.vault,
+        blockNumber: request.blockNumber.toString(),
+        blockHash: request.blockHash,
+        configurationHash: factoryConfigurationHash,
+        initCodeHash: rewardVaultInitCodeHash,
+        predictedVault: vault,
+        rpcCallCount: 3,
+        ...factoryOverrides,
+      }),
+      getBytecode: async () => vault,
+    } as unknown as CandidateRpcClient,
+  };
+}
+
+function dynamicTemplate(
+  parentFactoryAddress: `0x${string}`,
+) {
+  const hash = bytes32("6");
+  const references = [{ start: 0, length: 20 }] as const;
+  return {
+    templateId: "30000000-0000-4000-8000-000000000001",
+    contractName: "ClassicV3RewardVault" as const,
+    model: "classic" as const,
+    releaseVersion: "classic-v3" as const,
+    parentFactoryAddress,
+    parentFactoryContractName: "ClassicV3RewardVaultFactory" as const,
+    parentFactoryBindingId: "30000000-0000-4000-8000-000000000002",
+    parentFactoryBindingCommitment: hash,
+    parentSourceRole: "vault_factory",
+    factoryEventName: "ClassicRewardVaultDeployed" as const,
+    deployedAddressField: "vault" as const,
+    deployedSourceRole: "reward_vault" as const,
+    deployedArtifactCreationCodeCommitment: hash,
+    expectedExactRuntimeCodeHash: null,
+    expectedNormalizedRuntimeCodeHash: keccak256(`0x${"00".repeat(20)}`),
+    expectedImmutableReferencesCommitment:
+      immutableReferencesCommitment(references, 20),
+    expectedRuntimeByteLength: "20",
+    immutableReferences: references,
+    immutableBindingSpec: {
+      factoryConfigurationField: "configurationHash",
+      bindings: [
+        {
+          ordinal: "0",
+          offset: "0",
+          length: "20",
+          source: "deployed_address",
+          encoding: "address",
+        },
+      ],
+    },
+    immutableBindingCommitment: hash,
+    abiEventSetCommitment: hash,
+    templateCommitment: hash,
+    database: {
+      scope: {
+        releaseId: "classic-v3",
+        modelId: "classic",
+        sourceGroup: "canonical-events",
+      },
+      epochId: "30000000-0000-4000-8000-000000000003",
+      pointerGeneration: "1",
+      reorgGeneration: "0",
+      envioProviderDeploymentId:
+        "30000000-0000-4000-8000-000000000004",
+      rpcProviderDeploymentIds: [
+        "30000000-0000-4000-8000-000000000005",
+        "30000000-0000-4000-8000-000000000006",
+      ] as const,
+    },
+  };
+}
+
+function canonicalDeploymentEvidence(
+  parent: EnvioCandidate,
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider],
+  overrides: Partial<CanonicalDynamicSourceDeploymentEvidence> = {},
+): CanonicalDynamicSourceDeploymentEvidence {
+  const template = dynamicTemplate(parent.sourceAddress);
+  return {
+    provisionalPageId: "40000000-0000-4000-8000-000000000001",
+    provisionalLineageId: "40000000-0000-4000-8000-000000000002",
+    dynamicSourceAttestationId:
+      "40000000-0000-4000-8000-000000000003",
+    runtimeCodeEvidenceId: "40000000-0000-4000-8000-000000000004",
+    dynamicSourceTemplateId: template.templateId,
+    parentOccurrenceId: "40000000-0000-4000-8000-000000000005",
+    parentCandidateId: parent.candidateId,
+    parentBlockNumber: parent.blockNumber,
+    parentBlockHash: parent.blockHash,
+    parentBlockGlobalLogIndex: parent.blockGlobalLogIndex,
+    parentTransactionHash: parent.transactionHash,
+    parentTransactionIndex: parent.transactionIndex,
+    parentSourceAddress: parent.sourceAddress,
+    parentContractName: parent.contractName,
+    parentEventName: parent.eventName,
+    parentPayloadHash: parent.payloadHash,
+    parentRawLogCommitment: keccak256(
+      encodeAbiParameters(
+        [{ type: "address" }, { type: "bytes32[]" }, { type: "bytes" }],
+        [parent.sourceAddress, parent.orderedTopics, parent.rawData],
+      ),
+    ),
+    canonicalStatusHistoryId:
+      "40000000-0000-4000-8000-000000000006",
+    safeHeadObservationId: "40000000-0000-4000-8000-000000000007",
+    blockEvidenceId: "40000000-0000-4000-8000-000000000008",
+    reorgGeneration: template.database.reorgGeneration,
+    envioProviderDeploymentId: template.database.envioProviderDeploymentId,
+    rpcProviderDeploymentIds: template.database.rpcProviderDeploymentIds,
+    providerIdentities: providers.map(({ identity }) => identity) as [
+      string,
+      string,
+    ],
+    providerVendorGroups: providers.map(({ vendorGroup }) => vendorGroup) as [
+      string,
+      string,
+    ],
+    providerEndpointCommitments: providers.map(
+      ({ endpointCommitment }) => endpointCommitment,
+    ) as [`0x${string}`, `0x${string}`],
+    providerOriginCommitments: providers.map(
+      ({ endpointOriginCommitment }) => endpointOriginCommitment,
+    ) as [`0x${string}`, `0x${string}`],
+    ...overrides,
   };
 }
 
 function candidateBatchEvidence(
   candidates: readonly EnvioCandidate[],
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider],
-): DualRpcCandidateBatchEvidence {
+): DualRpcCandidateWindowEvidence {
   const providerIdentities = providers.map(({ identity }) => identity) as [string, string];
   const providerVendorGroups = providers.map(({ vendorGroup }) => vendorGroup) as [string, string];
   const providerEndpointCommitments = providers.map(
@@ -256,6 +456,15 @@ function candidateBatchEvidence(
       elapsedMs: 1,
       providerCallCounts: [1, 1],
       calls: [],
+    },
+    coveredCandidateCount: candidates.length,
+    coverage: {
+      fromBlockNumber: "99",
+      throughBlockNumber: "100",
+      throughBlockHash: blockHash,
+      throughBlockGlobalLogIndex: "4294967295",
+      filterCommitment: bytes32("a"),
+      providerLogCommitments: [bytes32("b"), bytes32("b")],
     },
   };
 }
@@ -570,10 +779,12 @@ describe("dual-RPC exact-block reward snapshots", () => {
     });
     const launch = seedCandidate({
       eventName: "MemeTokenLaunchedV2",
-      sourceAddress: address("d"),
+      sourceAddress: classicV3Launcher,
       contractName: "ClassicV3Launcher",
       logIndex: 5,
       decodedPayload: {
+        deployer: launchDeployer,
+        token: launchToken,
         rewardVault: vault,
         poolId,
         feeHook: address("e"),
@@ -612,18 +823,26 @@ describe("dual-RPC exact-block reward snapshots", () => {
     const left = vi.fn(async () => raw);
     const right = vi.fn(async () => raw);
     const providers = [
-      provider("alchemy-seed", "alchemy", left),
-      provider("quicknode-seed", "quicknode", right),
+      provider("alchemy-seed", "alchemy", left, factoryConfigurationHash),
+      provider(
+        "quicknode-seed",
+        "quicknode",
+        right,
+        factoryConfigurationHash,
+      ),
     ] as const;
 
-    await expect(readDualRpcInitialRewardSeed({
+    const verified = await readDualRpcInitialRewardConfiguration({
       parentCandidate: parent,
       launchCandidate: launch,
       sameBlockVaultEvents: [payout],
       candidateEvidence: candidateBatchEvidence([launch, payout], providers),
+      canonicalDeployment: canonicalDeploymentEvidence(parent, providers),
+      template: dynamicTemplate(parent.sourceAddress),
       providers,
       rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 32 },
-    })).resolves.toMatchObject({
+    });
+    expect(verified).toMatchObject({
       vault,
       poolId,
       deploymentBlockNumber: "100",
@@ -632,7 +851,20 @@ describe("dual-RPC exact-block reward snapshots", () => {
       activationBlockHash: blockHash,
       activationBlockGlobalLogIndex: 5,
       coveredRewardCandidateIds: [payout.candidateId],
+      factory: rewardVaultFactory,
+      salt: rewardVaultSalt,
       factoryConfigurationHash,
+      providerFactoryConfigurationHashes: [
+        factoryConfigurationHash,
+        factoryConfigurationHash,
+      ],
+      providerInitCodeHashes: [
+        rewardVaultInitCodeHash,
+        rewardVaultInitCodeHash,
+      ],
+      providerPredictedVaults: [vault, vault],
+      locallyPredictedVault: vault,
+      factoryProviderCallCounts: [3, 3],
       initialActiveConfigurationHash: initialActiveHash,
       allocations: [
         { allocationIndex: 0, beneficiary: alice, shareBps: "4000" },
@@ -650,6 +882,36 @@ describe("dual-RPC exact-block reward snapshots", () => {
     expect(right).toHaveBeenCalledWith(
       expect.objectContaining({ blockHash, blockNumber: 100n, vault }),
     );
+
+    const disagreeingProviders = [
+      provider("alchemy-seed", "alchemy", left, factoryConfigurationHash),
+      provider(
+        "quicknode-seed",
+        "quicknode",
+        right,
+        factoryConfigurationHash,
+        { initCodeHash: bytes32("6") },
+      ),
+    ] as const;
+    await expect(readDualRpcInitialRewardConfiguration({
+      parentCandidate: parent,
+      launchCandidate: launch,
+      sameBlockVaultEvents: [payout],
+      candidateEvidence: candidateBatchEvidence(
+        [launch, payout],
+        disagreeingProviders,
+      ),
+      canonicalDeployment: canonicalDeploymentEvidence(
+        parent,
+        disagreeingProviders,
+      ),
+      template: dynamicTemplate(parent.sourceAddress),
+      providers: disagreeingProviders,
+      rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 32 },
+    })).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+    });
   });
 
   it("separately proves checkpoint, claim and payout state after activation", async () => {
@@ -681,10 +943,12 @@ describe("dual-RPC exact-block reward snapshots", () => {
     });
     const launch = seedCandidate({
       eventName: "MemeTokenLaunchedV2",
-      sourceAddress: address("d"),
+      sourceAddress: classicV3Launcher,
       contractName: "ClassicV3Launcher",
       logIndex: 5,
       decodedPayload: {
+        deployer: launchDeployer,
+        token: launchToken,
         rewardVault: vault,
         poolId,
         feeHook: address("e"),
@@ -794,8 +1058,13 @@ describe("dual-RPC exact-block reward snapshots", () => {
       ),
     }));
     const providers = [
-      provider("alchemy-seed", "alchemy", read),
-      provider("quicknode-seed", "quicknode", read),
+      provider("alchemy-seed", "alchemy", read, factoryConfigurationHash),
+      provider(
+        "quicknode-seed",
+        "quicknode",
+        read,
+        factoryConfigurationHash,
+      ),
     ] as const;
     const candidateEvidence = candidateBatchEvidence(
       [launch, checkpoint, claim, payout],
@@ -808,11 +1077,16 @@ describe("dual-RPC exact-block reward snapshots", () => {
       launchCandidate: launch,
       sameBlockVaultEvents: [checkpoint, claim, payout],
       candidateEvidence,
+      sourceAddress: vault,
+      template: dynamicTemplate(parent.sourceAddress),
+      canonicalDeployment: canonicalDeploymentEvidence(parent, providers),
       providers,
       deadlineMs: 1_000,
     });
 
-    expect(verified.seed.initialActiveConfigurationHash).toBe(
+    expect(
+      verified.initialConfiguration.initialActiveConfigurationHash,
+    ).toBe(
       initialActiveHash,
     );
     expect(verified.projectedSnapshot).toMatchObject({
@@ -831,10 +1105,32 @@ describe("dual-RPC exact-block reward snapshots", () => {
       verified.modelVerificationEvidence.map(({ evidenceKind }) =>
         evidenceKind),
     ).toEqual([
-      "classic-v3-initial-reward-seed-v1",
-      "classic-v3-launch-reward-snapshot-v1",
+      "classic-v3-runtime-activation-v1",
+      "classic-v3-initial-reward-configuration-v1",
+      "classic-v3-launch-reward-conservation-v1",
     ]);
-    expect(read).toHaveBeenCalledTimes(4);
+    const replayed = await verifyClassicV3ActivationModel({
+      activationId: "70000000-0000-4000-8000-000000000001",
+      parentCandidate: parent,
+      launchCandidate: launch,
+      sameBlockVaultEvents: [checkpoint, claim, payout],
+      candidateEvidence,
+      sourceAddress: vault,
+      template: dynamicTemplate(parent.sourceAddress),
+      canonicalDeployment: canonicalDeploymentEvidence(parent, providers),
+      providers,
+      deadlineMs: 1_000,
+    });
+    expect(
+      replayed.modelVerificationEvidence.map(
+        ({ evidenceCommitment }) => evidenceCommitment,
+      ),
+    ).toEqual(
+      verified.modelVerificationEvidence.map(
+        ({ evidenceCommitment }) => evidenceCommitment,
+      ),
+    );
+    expect(read).toHaveBeenCalledTimes(8);
   });
 
   it("fails closed when epoch one cannot be reconstructed", async () => {
@@ -860,10 +1156,12 @@ describe("dual-RPC exact-block reward snapshots", () => {
     });
     const launch = seedCandidate({
       eventName: "MemeTokenLaunchedV2",
-      sourceAddress: address("d"),
+      sourceAddress: classicV3Launcher,
       contractName: "ClassicV3Launcher",
       logIndex: 5,
       decodedPayload: {
+        deployer: launchDeployer,
+        token: launchToken,
         rewardVault: vault,
         poolId,
         feeHook: address("e"),
@@ -889,11 +1187,13 @@ describe("dual-RPC exact-block reward snapshots", () => {
       provider("alchemy-seed", "alchemy", async () => raw),
       provider("quicknode-seed", "quicknode", async () => raw),
     ] as const;
-    await expect(readDualRpcInitialRewardSeed({
+    await expect(readDualRpcInitialRewardConfiguration({
       parentCandidate: parent,
       launchCandidate: launch,
       sameBlockVaultEvents: [],
       candidateEvidence: candidateBatchEvidence([launch], providers),
+      canonicalDeployment: canonicalDeploymentEvidence(parent, providers),
+      template: dynamicTemplate(parent.sourceAddress),
       providers,
       rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 32 },
     })).rejects.toThrow();

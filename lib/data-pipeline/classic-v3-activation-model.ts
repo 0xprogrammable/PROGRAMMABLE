@@ -8,15 +8,19 @@ import {
 } from "./canonical-fingerprint";
 import type { HexAddress, HexBytes32 } from "./codecs";
 import {
-  readDualRpcInitialRewardSeed,
+  readDualRpcInitialRewardConfiguration,
   readDualRpcRewardSnapshot,
+  verifyDynamicRuntimeAtActivationWithDualRpc,
   type CandidateRpcProvider,
-  type DualRpcCandidateBatchEvidence,
-  type DualRpcInitialRewardSeed,
+  type DualRpcCandidateWindowEvidence,
+  type DualRpcDynamicRuntimeActivationObservation,
+  type DualRpcInitialRewardConfigurationEvidence,
   type DualRpcRewardSnapshot,
+  type ProjectorDynamicSourceTemplate,
 } from "./dual-rpc";
 import type { EnvioCandidate } from "./envio";
-import { validationError } from "./errors";
+import { dataPipelineError, invalidInput, validationError } from "./errors";
+import type { CanonicalDynamicSourceDeploymentEvidence } from "./projector-dynamic-activation";
 import { projectorOccurrenceUuid } from "./projector-ids";
 import {
   foldProjectorRewardState,
@@ -24,6 +28,7 @@ import {
   type ProjectorRewardEvent,
   type ProjectorRewardSnapshot,
 } from "./projector-reward-fold";
+import { expectedRewardRpcCallCount } from "./projector-reward-rpc-contract";
 
 const EVIDENCE_DOMAIN =
   "programmable:classic-v3-activation-model-evidence:v1\0";
@@ -31,18 +36,21 @@ const EVIDENCE_DOMAIN =
 export type ClassicV3ActivationModelEvidence = Readonly<{
   activationId: string;
   evidenceKind:
-    | "classic-v3-initial-reward-seed-v1"
-    | "classic-v3-launch-reward-snapshot-v1";
+    | "classic-v3-runtime-activation-v1"
+    | "classic-v3-initial-reward-configuration-v1"
+    | "classic-v3-launch-reward-conservation-v1";
   payload: CanonicalJsonValue;
   evidenceCommitment: HexBytes32;
 }>;
 
 export type ClassicV3ActivationModelVerification = Readonly<{
-  seed: DualRpcInitialRewardSeed;
+  runtimeObservation: DualRpcDynamicRuntimeActivationObservation;
+  initialConfiguration: DualRpcInitialRewardConfigurationEvidence;
   baseline: ProjectorRewardBaseline;
   projectedSnapshot: ProjectorRewardSnapshot;
   rewardEvidence: DualRpcRewardSnapshot;
   modelVerificationEvidence: readonly [
+    ClassicV3ActivationModelEvidence,
     ClassicV3ActivationModelEvidence,
     ClassicV3ActivationModelEvidence,
   ];
@@ -113,6 +121,45 @@ function modelEvidence(
   });
 }
 
+function deterministicRewardEvidence(
+  evidence: DualRpcRewardSnapshot,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(evidence).filter(([key]) => key !== "executionTrace"),
+    ),
+  );
+}
+
+function deterministicRuntimeEvidence(
+  evidence: DualRpcDynamicRuntimeActivationObservation,
+): Readonly<Record<string, unknown>> {
+  const nondeterministicKeys = new Set([
+    "startedAtMs",
+    "completedAtMs",
+    "elapsedMs",
+    "hardDeadlineMs",
+  ]);
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(evidence).filter(
+        ([key]) => !nondeterministicKeys.has(key),
+      ),
+    ),
+  );
+}
+
+function deterministicInitialConfigurationEvidence(
+  evidence: DualRpcInitialRewardConfigurationEvidence,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    ...evidence,
+    endConfigurationSnapshot: deterministicRewardEvidence(
+      evidence.endConfigurationSnapshot,
+    ),
+  });
+}
+
 function exactProviderTuple(
   actual: readonly string[],
   expected: readonly string[],
@@ -161,7 +208,7 @@ function rewardEventValues(
 
 function rewardEvents(input: {
   candidates: readonly EnvioCandidate[];
-  evidence: DualRpcCandidateBatchEvidence;
+  evidence: DualRpcCandidateWindowEvidence;
   vault: HexAddress;
 }): readonly ProjectorRewardEvent[] {
   const evidenceByCandidate = new Map(
@@ -206,39 +253,91 @@ function rewardEvents(input: {
 }
 
 /**
- * Produces the two model-specific evidences required before a staged Classic
- * activation can be committed. The first reconstructs epoch one. The second
- * independently folds every post-launch vault event and proves the complete
- * touched-account state at the exact canonical launch block.
+ * Produces all three model-specific evidences required before a staged Classic
+ * activation can be committed: exact runtime/immutables, epoch-one reward
+ * configuration, and independently folded full-account reward conservation at
+ * the exact canonical launch block. The three results share one deadline and
+ * one aggregate physical-call budget per provider.
  */
 export async function verifyClassicV3ActivationModel(input: Readonly<{
   activationId: string;
   parentCandidate: EnvioCandidate;
   launchCandidate: EnvioCandidate;
   sameBlockVaultEvents: readonly EnvioCandidate[];
-  candidateEvidence: DualRpcCandidateBatchEvidence;
+  candidateEvidence: DualRpcCandidateWindowEvidence;
+  sourceAddress: HexAddress;
+  template: ProjectorDynamicSourceTemplate;
+  canonicalDeployment: CanonicalDynamicSourceDeploymentEvidence;
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   deadlineMs?: number;
 }>): Promise<ClassicV3ActivationModelVerification> {
-  const seed = await readDualRpcInitialRewardSeed({
+  const hardDeadlineMs = input.deadlineMs ?? 75_000;
+  if (
+    !Number.isSafeInteger(hardDeadlineMs) ||
+    hardDeadlineMs < 10 ||
+    hardDeadlineMs > 75_000
+  ) {
+    throw invalidInput("rpc", "activation-model-deadline");
+  }
+  const deadlineAt = Date.now() + hardDeadlineMs;
+  const remaining = () => {
+    const value = deadlineAt - Date.now();
+    if (value < 10) {
+      throw dataPipelineError({
+        dependency: "rpc",
+        code: "timeout",
+        retryable: true,
+        countsTowardCircuit: true,
+      });
+    }
+    return value;
+  };
+  if (
+    input.candidateEvidence.coveredCandidateCount !==
+      input.candidateEvidence.candidates.length ||
+    input.candidateEvidence.coverage.throughBlockNumber !==
+      input.launchCandidate.blockNumber ||
+    input.candidateEvidence.coverage.throughBlockHash !==
+      input.launchCandidate.blockHash ||
+    input.candidateEvidence.coverage.throughBlockGlobalLogIndex !==
+      "4294967295"
+  ) {
+    throw validationError("rpc", "activation-model-block-coverage");
+  }
+  const runtimeObservation =
+    await verifyDynamicRuntimeAtActivationWithDualRpc({
+      parentCandidate: input.parentCandidate,
+      launchCandidate: input.launchCandidate,
+      sourceAddress: input.sourceAddress,
+      template: input.template,
+      canonicalDeployment: input.canonicalDeployment,
+      activationEvidence: input.candidateEvidence,
+      providers: input.providers,
+      deadlineMs: remaining(),
+    });
+  const initialConfiguration = await readDualRpcInitialRewardConfiguration({
     parentCandidate: input.parentCandidate,
     launchCandidate: input.launchCandidate,
     sameBlockVaultEvents: input.sameBlockVaultEvents,
     candidateEvidence: input.candidateEvidence,
+    canonicalDeployment: input.canonicalDeployment,
+    template: input.template,
     providers: input.providers,
     rpcPolicy: {
-      hardDeadlineMs: input.deadlineMs,
+      hardDeadlineMs: remaining(),
       maxAttempts: 1,
       maxCallsPerProvider: 128,
     },
   });
   const baseline: ProjectorRewardBaseline = Object.freeze({
-    vault: seed.vault,
-    poolId: seed.poolId,
+    vault: initialConfiguration.vault,
+    poolId: initialConfiguration.poolId,
     configurationEpoch: "1",
-    activeConfigurationHash: seed.initialActiveConfigurationHash,
+    activeConfigurationHash:
+      initialConfiguration.initialActiveConfigurationHash,
     allocations: Object.freeze(
-      seed.allocations.map(({ allocationIndex, beneficiary, shareBps }) =>
+      initialConfiguration.allocations.map(
+        ({ allocationIndex, beneficiary, shareBps }) =>
         Object.freeze({
           allocationIndex,
           beneficiary,
@@ -248,7 +347,7 @@ export async function verifyClassicV3ActivationModel(input: Readonly<{
       ),
     ),
     balances: Object.freeze(
-      seed.allocations.map(({ beneficiary }) =>
+      initialConfiguration.allocations.map(({ beneficiary }) =>
         Object.freeze({
           account: beneficiary,
           payoutAddress: beneficiary,
@@ -261,7 +360,7 @@ export async function verifyClassicV3ActivationModel(input: Readonly<{
   const events = rewardEvents({
     candidates: input.sameBlockVaultEvents,
     evidence: input.candidateEvidence,
-    vault: seed.vault,
+    vault: initialConfiguration.vault,
   });
   const launchEvidence = input.candidateEvidence.candidates.find(
     ({ candidateId }) => candidateId === input.launchCandidate.candidateId,
@@ -284,21 +383,42 @@ export async function verifyClassicV3ActivationModel(input: Readonly<{
           blockHash: input.launchCandidate.blockHash,
         }),
       });
+  const fullSnapshotCallCount = expectedRewardRpcCallCount(
+    "classic-v3",
+    projectedSnapshot.allocations.length,
+    projectedSnapshot.balances.length,
+  );
+  const configurationCallCount =
+    initialConfiguration.endConfigurationSnapshot.providerCallCounts[0] +
+    initialConfiguration.factoryProviderCallCounts[0];
+  const aggregateCallsPerProvider =
+    runtimeObservation.providerCallCounts[0] +
+    configurationCallCount +
+    fullSnapshotCallCount;
+  if (
+    projectedSnapshot.balances.length > 48 ||
+    aggregateCallsPerProvider > 128
+  ) {
+    throw validationError("rpc", "activation-model-call-budget");
+  }
   const rewardEvidence = await readDualRpcRewardSnapshot({
     model: "classic-v3",
     baseline,
     expected: projectedSnapshot,
-    blockNumber: seed.activationBlockNumber,
-    blockHash: seed.activationBlockHash,
+    blockNumber: initialConfiguration.activationBlockNumber,
+    blockHash: initialConfiguration.activationBlockHash,
     providers: input.providers,
     rpcPolicy: {
-      hardDeadlineMs: input.deadlineMs,
+      hardDeadlineMs: remaining(),
       maxAttempts: 1,
-      maxCallsPerProvider: 128,
+      maxCallsPerProvider: fullSnapshotCallCount,
     },
   });
-  const configuration = seed.endConfigurationSnapshot;
+  const configuration = initialConfiguration.endConfigurationSnapshot;
   if (
+    rewardEvidence.chunks.length !== 1 ||
+    rewardEvidence.providerCallCounts[0] !== fullSnapshotCallCount ||
+    rewardEvidence.providerCallCounts[1] !== fullSnapshotCallCount ||
     rewardEvidence.vault !== configuration.vault ||
     rewardEvidence.poolId !== configuration.poolId ||
     rewardEvidence.blockNumber !== configuration.blockNumber ||
@@ -331,25 +451,36 @@ export async function verifyClassicV3ActivationModel(input: Readonly<{
     throw validationError("rpc", "activation-reward-evidence-binding");
   }
   return Object.freeze({
-    seed,
+    runtimeObservation,
+    initialConfiguration,
     baseline,
     projectedSnapshot,
     rewardEvidence,
     modelVerificationEvidence: Object.freeze([
       modelEvidence(
         input.activationId,
-        "classic-v3-initial-reward-seed-v1",
-        seed,
+        "classic-v3-runtime-activation-v1",
+        Object.freeze({
+          canonicalDeployment: input.canonicalDeployment,
+          runtimeObservation:
+            deterministicRuntimeEvidence(runtimeObservation),
+        }),
       ),
       modelEvidence(
         input.activationId,
-        "classic-v3-launch-reward-snapshot-v1",
+        "classic-v3-initial-reward-configuration-v1",
+        deterministicInitialConfigurationEvidence(initialConfiguration),
+      ),
+      modelEvidence(
+        input.activationId,
+        "classic-v3-launch-reward-conservation-v1",
         Object.freeze({
           projectedSnapshot,
-          rewardEvidence,
+          rewardEvidence: deterministicRewardEvidence(rewardEvidence),
         }),
       ),
     ]) as readonly [
+      ClassicV3ActivationModelEvidence,
       ClassicV3ActivationModelEvidence,
       ClassicV3ActivationModelEvidence,
     ],

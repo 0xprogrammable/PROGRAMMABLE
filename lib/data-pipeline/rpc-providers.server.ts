@@ -10,6 +10,7 @@ import {
 import { mainnet } from "viem/chains";
 
 import type {
+  CandidateRpcClassicRewardFactorySnapshot,
   CandidateRpcRewardSnapshot,
   CandidateRpcClient,
   CandidateRpcLog,
@@ -37,6 +38,7 @@ const BROWSER_FORBIDDEN_RPC_NAMES = [
   "NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL",
 ] as const;
 const PRODUCTION_PROVIDER_PAIRS = new WeakSet<object>();
+const MAXIMUM_PHYSICAL_RPC_CALLS_IN_FLIGHT_PER_PROVIDER = 8;
 const ERC20_METADATA_ABI = [
   {
     type: "function",
@@ -146,9 +148,73 @@ const REWARD_VAULT_ABI = [
     outputs: [{ name: "", type: "uint256" }],
   },
 ] as const;
+const CLASSIC_REWARD_VAULT_FACTORY_ABI = [
+  {
+    type: "function",
+    name: "configurationHashOf",
+    stateMutability: "view",
+    inputs: [{ name: "vault", type: "address" }],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "initCodeHash",
+    stateMutability: "view",
+    inputs: [
+      { name: "feeHook", type: "address" },
+      { name: "poolId", type: "bytes32" },
+      { name: "beneficiaries", type: "address[]" },
+      { name: "sharesBps", type: "uint16[]" },
+    ],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "predict",
+    stateMutability: "view",
+    inputs: [
+      { name: "salt", type: "bytes32" },
+      { name: "feeHook", type: "address" },
+      { name: "poolId", type: "bytes32" },
+      { name: "beneficiaries", type: "address[]" },
+      { name: "sharesBps", type: "uint16[]" },
+    ],
+    outputs: [{ name: "", type: "address" }],
+  },
+] as const;
 
 type RewardFunctionName =
   (typeof REWARD_VAULT_ABI)[number]["name"];
+
+function boundedRpcExecutor(maximumInFlight: number) {
+  if (!Number.isSafeInteger(maximumInFlight) || maximumInFlight < 1) {
+    throw invalidInput("rpc", "rpc-concurrency");
+  }
+  let inFlight = 0;
+  const waiters: Array<() => void> = [];
+  const acquire = async (): Promise<void> => {
+    if (inFlight < maximumInFlight) {
+      inFlight += 1;
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      waiters.push(() => {
+        inFlight += 1;
+        resolve();
+      });
+    });
+  };
+  return async <T>(operation: () => Promise<T>): Promise<T> => {
+    await acquire();
+    try {
+      return await operation();
+    } finally {
+      inFlight -= 1;
+      const next = waiters.shift();
+      if (next) next();
+    }
+  };
+}
 
 export function assertProductionDualRpcProviders(
   providers: unknown,
@@ -245,12 +311,20 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
     });
     return logs.map(normalizeRpcLog);
   };
+  // One limiter is shared by every operation issued through this provider
+  // client, including every subrequest carried by the batched transport.
+  // Reward snapshots and replay windows may fan out concurrently; without
+  // this provider-wide fence they can exceed paid-RPC burst limits even while
+  // their aggregate request counts remain bounded.
+  const rpc = boundedRpcExecutor(
+    MAXIMUM_PHYSICAL_RPC_CALLS_IN_FLIGHT_PER_PROVIDER,
+  );
 
   return Object.freeze({
-    getChainId: () => client.getChainId(),
-    getBlockNumber: () => client.getBlockNumber(),
+    getChainId: () => rpc(() => client.getChainId()),
+    getBlockNumber: () => rpc(() => client.getBlockNumber()),
     async getBlock({ blockNumber }) {
-      const block = await client.getBlock({ blockNumber });
+      const block = await rpc(() => client.getBlock({ blockNumber }));
       return {
         number: block.number,
         hash: block.hash,
@@ -263,7 +337,9 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
       }
       return Promise.all(
         blockNumbers.map(async (blockNumber) => {
-          const block = await batchClient.getBlock({ blockNumber });
+          const block = await rpc(() =>
+            batchClient.getBlock({ blockNumber })
+          );
           return {
             number: block.number,
             hash: block.hash,
@@ -273,7 +349,9 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
       );
     },
     async getTransactionReceipt({ hash }) {
-      const receipt = await client.getTransactionReceipt({ hash });
+      const receipt = await rpc(() =>
+        client.getTransactionReceipt({ hash })
+      );
       return normalizeReceipt(receipt);
     },
     async getTransactionReceipts({ hashes }) {
@@ -283,12 +361,12 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
       return Promise.all(
         hashes.map(async (hash) =>
           normalizeReceipt(
-            await batchClient.getTransactionReceipt({ hash }),
+            await rpc(() => batchClient.getTransactionReceipt({ hash })),
           )
         ),
       );
     },
-    getBytecode: (request) =>
+    getBytecode: (request) => rpc(() =>
       "blockHash" in request && request.blockHash !== undefined
         ? client.getBytecode({
             address: request.address,
@@ -298,31 +376,34 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         : client.getBytecode({
             address: request.address,
             blockNumber: request.blockNumber,
-          }),
+          })
+    ),
     getBytecodes({ requests }) {
       if (requests.length < 1 || requests.length > 100) {
         throw invalidInput("rpc", "bytecode-batch-size");
       }
       return Promise.all(
-        requests.map((request) => batchClient.getBytecode(request)),
+        requests.map((request) =>
+          rpc(() => batchClient.getBytecode(request))
+        ),
       );
     },
     async readErc20Metadata({ address, blockHash, requireCanonical }) {
       const [name, symbol] = await Promise.all([
-        client.readContract({
+        rpc(() => client.readContract({
           address,
           abi: ERC20_METADATA_ABI,
           functionName: "name",
           blockHash,
           requireCanonical,
-        }),
-        client.readContract({
+        })),
+        rpc(() => client.readContract({
           address,
           abi: ERC20_METADATA_ABI,
           functionName: "symbol",
           blockHash,
           requireCanonical,
-        }),
+        })),
       ]);
       return { name, symbol };
     },
@@ -349,14 +430,14 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         args: readonly unknown[] = [],
       ): Promise<unknown> => {
         rpcCallCount += 1;
-        return client.readContract({
+        return rpc(() => client.readContract({
           address: vault,
           abi: REWARD_VAULT_ABI,
           functionName,
           args,
           blockHash,
           requireCanonical: true,
-        } as never);
+        } as never));
       };
       const [
         poolId,
@@ -470,15 +551,70 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         rpcCallCount,
       });
     },
+    async readClassicRewardFactorySnapshot({
+      factory,
+      vault,
+      blockNumber,
+      blockHash,
+      salt,
+      feeHook,
+      poolId,
+      beneficiaries,
+      sharesBps,
+    }): Promise<CandidateRpcClassicRewardFactorySnapshot> {
+      const exactBlock = { blockHash, requireCanonical: true } as const;
+      const [configurationHash, initCodeHash, predictedVault] =
+        await Promise.all([
+          rpc(() => client.readContract({
+            address: factory,
+            abi: CLASSIC_REWARD_VAULT_FACTORY_ABI,
+            functionName: "configurationHashOf",
+            args: [vault],
+            ...exactBlock,
+          })),
+          rpc(() => client.readContract({
+            address: factory,
+            abi: CLASSIC_REWARD_VAULT_FACTORY_ABI,
+            functionName: "initCodeHash",
+            args: [feeHook, poolId, [...beneficiaries], [...sharesBps]],
+            ...exactBlock,
+          })),
+          rpc(() => client.readContract({
+            address: factory,
+            abi: CLASSIC_REWARD_VAULT_FACTORY_ABI,
+            functionName: "predict",
+            args: [
+              salt,
+              feeHook,
+              poolId,
+              [...beneficiaries],
+              [...sharesBps],
+            ],
+            ...exactBlock,
+          })),
+        ]);
+      return Object.freeze({
+        factory,
+        vault,
+        blockNumber: blockNumber.toString(),
+        blockHash,
+        configurationHash,
+        initCodeHash,
+        predictedVault,
+        rpcCallCount: 3,
+      });
+    },
     getLogs(filter) {
-      return readFilteredLogs(client, filter);
+      return rpc(() => readFilteredLogs(client, filter));
     },
     async getLogsBatch({ requests }) {
       if (requests.length < 1 || requests.length > 100) {
         throw invalidInput("rpc", "log-batch-size");
       }
       return Promise.all(
-        requests.map((filter) => readFilteredLogs(batchClient, filter)),
+        requests.map((filter) =>
+          rpc(() => readFilteredLogs(batchClient, filter))
+        ),
       );
     },
   });

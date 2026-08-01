@@ -48,6 +48,7 @@ import {
   type ProjectorDynamicSourceTemplate,
 } from "../../lib/data-pipeline/dual-rpc";
 import type { EnvioCandidate } from "../../lib/data-pipeline/envio";
+import type { CanonicalDynamicSourceDeploymentEvidence } from "../../lib/data-pipeline/projector-dynamic-activation";
 import { immutableReferencesCommitment } from "../../lib/data-pipeline/runtime-bytecode";
 import { canonicalPayloadJson } from "../../indexer/src/lib/payload-hash";
 import { rpcProviderCommitment } from "../../lib/data-pipeline/rpc-provider-commitments";
@@ -111,26 +112,73 @@ const DYNAMIC_REFERENCES_COMMITMENT = immutableReferencesCommitment(
   20,
 );
 
-function dynamicParentCandidate(): EnvioCandidate {
+const DYNAMIC_PARENT_EVENT = parseAbiItem(
+  "event ClassicRewardVaultDeployed(address indexed vault, bytes32 indexed poolId, address indexed feeHook, bytes32 salt, bytes32 configurationHash)",
+);
+const DYNAMIC_LAUNCH_EVENT = parseAbiItem(
+  "event MemeTokenLaunchedV2(address indexed deployer, address indexed token, bytes32 indexed poolId, address feeHook, address rewardVault, address positionRecipient, uint256 positionTokenId, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, bytes32 rewardConfigurationHash, bytes32 launchHash)",
+);
+
+function encodedEventCandidate(input: {
+  event: typeof DYNAMIC_PARENT_EVENT | typeof DYNAMIC_LAUNCH_EVENT;
+  eventName: "ClassicRewardVaultDeployed" | "MemeTokenLaunchedV2";
+  args: Record<string, unknown>;
+  base: EnvioCandidate;
+}): EnvioCandidate {
+  const topics = encodeEventTopics({
+    abi: [input.event],
+    eventName: input.eventName,
+    args: input.args,
+  }) as readonly Hex[];
+  const nonIndexed = input.event.inputs.filter(
+    (parameter) => !("indexed" in parameter) || parameter.indexed !== true,
+  ) as readonly AbiParameter[];
+  const data = encodeAbiParameters(
+    nonIndexed,
+    nonIndexed.map(
+      (parameter) => input.args[parameter.name as keyof typeof input.args],
+    ),
+  );
   return {
+    ...input.base,
+    orderedTopics: [...topics],
+    rawData: data,
+    decodedPayload: JSON.parse(canonicalPayloadJson(input.args)),
+    payloadHash: keccak256(
+      encodeAbiParameters(
+        [{ type: "bytes32[]" }, { type: "bytes" }],
+        [topics, data],
+      ),
+    ),
+  };
+}
+
+function dynamicParentCandidate(): EnvioCandidate {
+  const base = {
     ...candidate(),
     sourceAddress: DYNAMIC_FACTORY,
     contractName: "ClassicV3RewardVaultFactory",
     eventName: "ClassicRewardVaultDeployed",
     releaseHint: { model: "classic", releaseVersion: "classic-v3" },
-    decodedPayload: {
+  } as EnvioCandidate;
+  return encodedEventCandidate({
+    event: DYNAMIC_PARENT_EVENT,
+    eventName: "ClassicRewardVaultDeployed",
+    base,
+    args: {
       vault: DYNAMIC_CHILD,
       poolId: DYNAMIC_POOL_ID,
       feeHook: DYNAMIC_FEE_HOOK,
+      salt: `0x${"87".repeat(32)}`,
       configurationHash: DYNAMIC_CONFIGURATION,
     },
-  };
+  });
 }
 
 function dynamicLaunchCandidate(
   overrides: Partial<EnvioCandidate["decodedPayload"]> = {},
 ): EnvioCandidate {
-  return {
+  const base = {
     ...candidate(),
     candidateId:
       `1:${ACTIVATION_BLOCK_HASH}:${ACTIVATION_TRANSACTION_HASH}:4`,
@@ -143,14 +191,26 @@ function dynamicLaunchCandidate(
     contractName: "ClassicV3Launcher",
     eventName: "MemeTokenLaunchedV2",
     releaseHint: { model: "classic", releaseVersion: "classic-v3" },
-    decodedPayload: {
-      rewardVault: DYNAMIC_CHILD,
+  } as EnvioCandidate;
+  return encodedEventCandidate({
+    event: DYNAMIC_LAUNCH_EVENT,
+    eventName: "MemeTokenLaunchedV2",
+    base,
+    args: {
+      deployer: "0x1111111111111111111111111111111111111111",
+      token: "0x2222222222222222222222222222222222222222",
       poolId: DYNAMIC_POOL_ID,
+      rewardVault: DYNAMIC_CHILD,
       feeHook: DYNAMIC_FEE_HOOK,
+      positionRecipient: "0x3333333333333333333333333333333333333333",
+      positionTokenId: 1n,
+      buySwapFeeBps: 100n,
+      sellSwapFeeBps: 100n,
       rewardConfigurationHash: DYNAMIC_CONFIGURATION,
+      launchHash: `0x${"89".repeat(32)}`,
       ...overrides,
     },
-  };
+  });
 }
 
 function dynamicActivationEvidence(
@@ -368,6 +428,61 @@ function dynamicParentEvidence(
         `0x${"33".repeat(32)}`,
       ],
     },
+  };
+}
+
+function canonicalDeploymentEvidence(
+  providers: readonly [ReturnType<typeof provider>, ReturnType<typeof provider>],
+  parent = dynamicParentCandidate(),
+  overrides: Partial<CanonicalDynamicSourceDeploymentEvidence> = {},
+): CanonicalDynamicSourceDeploymentEvidence {
+  const template = dynamicTemplate();
+  return {
+    provisionalPageId: "20000000-0000-4000-8000-000000000001",
+    provisionalLineageId: "20000000-0000-4000-8000-000000000002",
+    dynamicSourceAttestationId:
+      "20000000-0000-4000-8000-000000000003",
+    runtimeCodeEvidenceId: "20000000-0000-4000-8000-000000000004",
+    dynamicSourceTemplateId: template.templateId,
+    parentOccurrenceId: "20000000-0000-4000-8000-000000000005",
+    parentCandidateId: parent.candidateId,
+    parentBlockNumber: parent.blockNumber,
+    parentBlockHash: parent.blockHash,
+    parentBlockGlobalLogIndex: parent.blockGlobalLogIndex,
+    parentTransactionHash: parent.transactionHash,
+    parentTransactionIndex: parent.transactionIndex,
+    parentSourceAddress: parent.sourceAddress,
+    parentContractName: parent.contractName,
+    parentEventName: parent.eventName,
+    parentPayloadHash: parent.payloadHash,
+    parentRawLogCommitment: keccak256(
+      encodeAbiParameters(
+        [{ type: "address" }, { type: "bytes32[]" }, { type: "bytes" }],
+        [parent.sourceAddress, parent.orderedTopics, parent.rawData],
+      ),
+    ),
+    canonicalStatusHistoryId:
+      "20000000-0000-4000-8000-000000000006",
+    safeHeadObservationId: "20000000-0000-4000-8000-000000000007",
+    blockEvidenceId: "20000000-0000-4000-8000-000000000008",
+    reorgGeneration: template.database.reorgGeneration,
+    envioProviderDeploymentId: template.database.envioProviderDeploymentId,
+    rpcProviderDeploymentIds: template.database.rpcProviderDeploymentIds,
+    providerIdentities: providers.map(({ identity }) => identity) as [
+      string,
+      string,
+    ],
+    providerVendorGroups: providers.map(({ vendorGroup }) => vendorGroup) as [
+      string,
+      string,
+    ],
+    providerEndpointCommitments: providers.map(
+      ({ endpointCommitment }) => endpointCommitment,
+    ) as [`0x${string}`, `0x${string}`],
+    providerOriginCommitments: providers.map(
+      ({ endpointOriginCommitment }) => endpointOriginCommitment,
+    ) as [`0x${string}`, `0x${string}`],
+    ...overrides,
   };
 }
 
@@ -782,6 +897,10 @@ describe("dual-RPC exact Envio window coverage", () => {
         launchCandidate,
         sourceAddress: DYNAMIC_CHILD,
         template: dynamicTemplate(),
+        canonicalDeployment: canonicalDeploymentEvidence(
+          providers,
+          parentCandidate,
+        ),
         activationEvidence: dynamicActivationEvidence(
           providers,
           launchCandidate,
@@ -831,6 +950,10 @@ describe("dual-RPC exact Envio window coverage", () => {
         launchCandidate,
         sourceAddress: DYNAMIC_CHILD,
         template: dynamicTemplate(),
+        canonicalDeployment: canonicalDeploymentEvidence(
+          providers,
+          dynamicParentCandidate(),
+        ),
         activationEvidence: dynamicActivationEvidence(
           providers,
           launchCandidate,
@@ -844,6 +967,128 @@ describe("dual-RPC exact Envio window coverage", () => {
     });
     expect(first.getBytecode).not.toHaveBeenCalled();
     expect(second.getBytecode).not.toHaveBeenCalled();
+  });
+
+  it("rejects a canonical parent whose raw log no longer decodes to its payload", async () => {
+    const first = client([]);
+    const second = client([]);
+    const providers = [
+      provider("alchemy-mainnet", first),
+      provider("quicknode-mainnet", second),
+    ] as const;
+    const originalParent = dynamicParentCandidate();
+    const maliciousParent = {
+      ...originalParent,
+      rawData: "0x00" as const,
+    };
+    const launchCandidate = dynamicLaunchCandidate();
+    first.getBytecode = vi.fn(async () => DYNAMIC_CHILD);
+    second.getBytecode = vi.fn(async () => DYNAMIC_CHILD);
+
+    await expect(
+      verifyDynamicRuntimeAtActivationWithDualRpc({
+        parentCandidate: maliciousParent,
+        launchCandidate,
+        sourceAddress: DYNAMIC_CHILD,
+        template: dynamicTemplate(),
+        canonicalDeployment: canonicalDeploymentEvidence(
+          providers,
+          maliciousParent,
+        ),
+        activationEvidence: dynamicActivationEvidence(
+          providers,
+          launchCandidate,
+        ),
+        providers,
+        deadlineMs: 1_000,
+      }),
+    ).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+    });
+    expect(first.getBytecode).not.toHaveBeenCalled();
+    expect(second.getBytecode).not.toHaveBeenCalled();
+  });
+
+  it("rejects a same-height parent from a replacement fork", async () => {
+    const first = client([]);
+    const second = client([]);
+    const providers = [
+      provider("alchemy-mainnet", first),
+      provider("quicknode-mainnet", second),
+    ] as const;
+    const originalParent = dynamicParentCandidate();
+    const parentCandidate = {
+      ...originalParent,
+      candidateId:
+        `1:${BLOCK_HASH}:${originalParent.transactionHash}:3` as const,
+      blockNumber: ACTIVATION_BLOCK_NUMBER.toString(),
+      blockGlobalLogIndex: 3,
+    };
+    const launchCandidate = dynamicLaunchCandidate();
+
+    await expect(
+      verifyDynamicRuntimeAtActivationWithDualRpc({
+        parentCandidate,
+        launchCandidate,
+        sourceAddress: DYNAMIC_CHILD,
+        template: dynamicTemplate(),
+        canonicalDeployment: canonicalDeploymentEvidence(
+          providers,
+          parentCandidate,
+        ),
+        activationEvidence: dynamicActivationEvidence(
+          providers,
+          launchCandidate,
+        ),
+        providers,
+        deadlineMs: 1_000,
+      }),
+    ).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+    });
+  });
+
+  it("rejects a parent that appears after the launch in the same block", async () => {
+    const first = client([]);
+    const second = client([]);
+    const providers = [
+      provider("alchemy-mainnet", first),
+      provider("quicknode-mainnet", second),
+    ] as const;
+    const originalParent = dynamicParentCandidate();
+    const parentCandidate = {
+      ...originalParent,
+      candidateId:
+        `1:${ACTIVATION_BLOCK_HASH}:${originalParent.transactionHash}:5` as const,
+      blockNumber: ACTIVATION_BLOCK_NUMBER.toString(),
+      blockHash: ACTIVATION_BLOCK_HASH,
+      blockGlobalLogIndex: 5,
+    };
+    const launchCandidate = dynamicLaunchCandidate();
+
+    await expect(
+      verifyDynamicRuntimeAtActivationWithDualRpc({
+        parentCandidate,
+        launchCandidate,
+        sourceAddress: DYNAMIC_CHILD,
+        template: dynamicTemplate(),
+        canonicalDeployment: canonicalDeploymentEvidence(
+          providers,
+          parentCandidate,
+        ),
+        activationEvidence: dynamicActivationEvidence(
+          providers,
+          launchCandidate,
+        ),
+        providers,
+        deadlineMs: 1_000,
+      }),
+    ).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+    });
   });
 
   it("rejects an extra manifest event omitted by Envio", async () => {
