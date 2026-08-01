@@ -1215,6 +1215,7 @@ async function buildContribution(
   const values: unknown[] = [];
   const poolSwapLogs: DecodedLog[] = [];
   const timestamps = new Map<string, bigint>();
+  const timestampHashes = new Map<string, HexBytes32>();
   const verifiedQuoteAssets = new Set<string>();
   const completedCorpusPages: Array<(typeof corpusManifest.pages)[number]> = [];
   for (const page of corpusManifest.pages) {
@@ -1340,16 +1341,31 @@ async function buildContribution(
       input.blockHash,
       input.signal,
     ));
+    const timestampBindings = [];
     for (const launch of pageLaunches) {
       const key = launch.blockNumber.toString();
-      if (!timestamps.has(key)) {
-        timestamps.set(key, await pageRpc.getBlockTimestamp({
+      const knownHash = timestampHashes.get(key);
+      if (knownHash !== undefined && !sameHex(knownHash, launch.blockHash)) {
+        fail("stock-reconciler-launch-block-hash-conflict");
+      }
+      if (!timestamps.has(key) && knownHash === undefined) {
+        timestampHashes.set(key, launch.blockHash);
+        timestampBindings.push({
           blockNumber: launch.blockNumber,
           expectedHash: launch.blockHash,
-          signal: input.signal,
-        }));
+        });
       }
     }
+    const pageTimestamps = await pageRpc.getBlockTimestamps({
+      blocks: timestampBindings,
+      signal: input.signal,
+    });
+    if (pageTimestamps.length !== timestampBindings.length) {
+      fail("stock-reconciler-launch-timestamp-cardinality");
+    }
+    timestampBindings.forEach((binding, index) => {
+      timestamps.set(binding.blockNumber.toString(), pageTimestamps[index]!);
+    });
     await pageRpc.assertCheckpoint({
       blockNumber: input.blockNumber,
       blockHash: input.blockHash,

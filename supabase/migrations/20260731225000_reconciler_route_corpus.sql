@@ -8,6 +8,101 @@
 reset role;
 set role programmable_migrator;
 
+create function programmable_private.build_classic_v3_reconciler_reward_v1(
+  p_vault_address bytea,
+  p_pool_id bytea,
+  p_token_address bytea,
+  p_token_name text,
+  p_token_symbol text,
+  p_launch_transaction_hash bytea,
+  p_buy_swap_fee_bps integer,
+  p_sell_swap_fee_bps integer,
+  p_launcher_fee_bps integer,
+  p_configuration_hash bytea,
+  p_active_configuration_hash bytea,
+  p_configuration_epoch bigint,
+  p_total_creator_fees_received numeric,
+  p_total_creator_fees_claimed numeric,
+  p_pending_creator_fees numeric,
+  p_allocations jsonb,
+  p_entitlements jsonb,
+  p_events jsonb
+)
+returns jsonb
+language sql
+immutable
+security invoker
+set search_path = ''
+as $function$
+  with normalized_allocations as (
+    select coalesce(pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'allocationIndex', allocation.item -> 'allocationIndex',
+        'payoutAddress', allocation.item -> 'payoutAddress',
+        'shareBps', allocation.item -> 'shareBps'
+      ) order by allocation.ordinality
+    ), '[]'::jsonb) as value
+    from pg_catalog.jsonb_array_elements(p_allocations) with ordinality
+      as allocation(item, ordinality)
+  ), normalized_entitlements as (
+    select coalesce(pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'account', entitlement.item -> 'account',
+        'claimableWei', entitlement.item -> 'claimableWei',
+        'claimedWei', entitlement.item -> 'claimedWei'
+      ) order by entitlement.ordinality
+    ), '[]'::jsonb) as value
+    from pg_catalog.jsonb_array_elements(p_entitlements) with ordinality
+      as entitlement(item, ordinality)
+  )
+  select pg_catalog.jsonb_build_object(
+    'releaseVersion', 'classic-v3',
+    'modelId', 'classic',
+    'vaultAddress', '0x' || pg_catalog.encode(p_vault_address, 'hex'),
+    'poolId', '0x' || pg_catalog.encode(p_pool_id, 'hex'),
+    'tokenAddress', '0x' || pg_catalog.encode(p_token_address, 'hex'),
+    'tokenName', p_token_name,
+    'tokenSymbol', p_token_symbol,
+    'launchTransactionHash',
+      '0x' || pg_catalog.encode(p_launch_transaction_hash, 'hex'),
+    'buySwapFeeBps', p_buy_swap_fee_bps,
+    'sellSwapFeeBps', p_sell_swap_fee_bps,
+    'launcherFeeBps', p_launcher_fee_bps,
+    'configurationHash',
+      '0x' || pg_catalog.encode(p_configuration_hash, 'hex'),
+    'activeConfigurationHash',
+      '0x' || pg_catalog.encode(p_active_configuration_hash, 'hex'),
+    'configurationEpoch', p_configuration_epoch::text,
+    'totalCreatorFeesReceivedWei', p_total_creator_fees_received::text,
+    'totalCreatorFeesClaimedWei', p_total_creator_fees_claimed::text,
+    'pendingCreatorFeesWei', p_pending_creator_fees::text,
+    'allocations', normalized_allocations.value,
+    'entitlements', normalized_entitlements.value,
+    'events', p_events
+  )
+  from normalized_allocations cross join normalized_entitlements
+$function$;
+
+comment on function programmable_private.build_classic_v3_reconciler_reward_v1(
+  bytea, bytea, bytea, text, text, bytea, integer, integer, integer,
+  bytea, bytea, bigint, numeric, numeric, numeric, jsonb, jsonb, jsonb
+) is
+  'Builds the exact Classic V3 reward DTO shared by indexed and runtime reconciliation.';
+
+revoke all on function
+  programmable_private.build_classic_v3_reconciler_reward_v1(
+    bytea, bytea, bytea, text, text, bytea, integer, integer, integer,
+    bytea, bytea, bigint, numeric, numeric, numeric, jsonb, jsonb, jsonb
+  ) from public, anon, authenticated, service_role, programmable_projector,
+  programmable_api_reader, programmable_profile_binder,
+  programmable_profile_recovery, programmable_profile_writer,
+  programmable_maintenance;
+grant execute on function
+  programmable_private.build_classic_v3_reconciler_reward_v1(
+    bytea, bytea, bytea, text, text, bytea, integer, integer, integer,
+    bytea, bytea, bigint, numeric, numeric, numeric, jsonb, jsonb, jsonb
+  ) to programmable_reconciler;
+
 create function programmable_private.assemble_reconciler_routes_v1(
   p_tokens jsonb,
   p_charts jsonb,
@@ -685,6 +780,35 @@ begin
       fee.buy_swap_fee_bps,
       fee.sell_swap_fee_bps,
       fee.launcher_fee_bps,
+      vault.configuration_hash,
+      coalesce(
+        vault.active_configuration_hash,
+        vault.configuration_hash
+      ) as active_configuration_hash,
+      coalesce(
+        vault.configuration_epoch,
+        (
+          select pg_catalog.max(allocation.configuration_epoch)
+          from programmable_private.reward_allocation_projections
+            as allocation
+          where allocation.reward_vault_projection_id =
+              vault.reward_vault_projection_id
+            and allocation.allocation_fact_id =
+              vault.current_allocation_fact_id
+            and allocation.projection_run_id = vault.projection_run_id
+        )
+      ) as configuration_epoch,
+      coalesce(
+        vault.total_creator_fees_received,
+        entitlement_state.total_entitlement_value,
+        0
+      ) as total_creator_fees_received,
+      entitlement_state.total_creator_fees_claimed,
+      fee_total.creator_fee_total - coalesce(
+        vault.total_creator_fees_received,
+        entitlement_state.total_entitlement_value,
+        0
+      ) as pending_creator_fees,
       coalesce((
         select pg_catalog.jsonb_agg(
           pg_catalog.jsonb_build_object(
@@ -692,21 +816,10 @@ begin
             'payoutAddress', '0x' || pg_catalog.encode(
               allocation.payout_address, 'hex'
             ),
-            'shareBps', allocation.share_bps,
-            'claimableWei', coalesce(balance.claimable_accrued, 0)::text,
-            'claimedWei', coalesce(balance.claimed_total, 0)::text
+            'shareBps', allocation.share_bps
           ) order by allocation.allocation_index
         )
         from programmable_private.reward_allocation_projections as allocation
-        left join programmable_private.current_account_reward_balances_v1
-          as balance
-          on balance.chain_id = allocation.chain_id
-         and balance.release_id = allocation.release_id
-         and balance.model_id = allocation.model_id
-         and balance.epoch_id = allocation.epoch_id
-         and balance.pointer_generation = allocation.pointer_generation
-         and balance.account = allocation.payout_address
-         and balance.vault = vault.vault
         where allocation.reward_vault_projection_id =
           vault.reward_vault_projection_id
           and allocation.allocation_fact_id = vault.current_allocation_fact_id
@@ -718,7 +831,127 @@ begin
             or allocation.effective_to_block >=
               p_checkpoint_block_number::bigint
           )
-      ), '[]'::jsonb) as allocations
+      ), '[]'::jsonb) as allocations,
+      entitlement_state.entitlements,
+      coalesce((
+        select pg_catalog.jsonb_agg(
+          pg_catalog.jsonb_build_object(
+            'blockNumber', event.block_number::text,
+            'blockHash', '0x' || pg_catalog.encode(event.block_hash, 'hex'),
+            'transactionHash',
+              '0x' || pg_catalog.encode(event.transaction_hash, 'hex'),
+            'transactionIndex', event.transaction_index::integer,
+            'logIndex', event.block_global_log_index::integer,
+            'kind', case event.event_type
+              when 'CreatorFeesCheckpointed' then 'checkpoint'
+              when 'BeneficiaryFeesClaimed' then 'claim'
+              when 'PayoutWalletChanged' then 'payout-change'
+              when 'CtoRewardConfigurationActivated' then 'cto-activation'
+            end
+          ) || case event.event_type
+            when 'CreatorFeesCheckpointed' then
+              pg_catalog.jsonb_build_object(
+                'configurationEpoch',
+                  (event.decoded_payload ->> 'configurationEpoch')::numeric::text,
+                'amountWei',
+                  (event.decoded_payload ->> 'amount')::numeric::text,
+                'totalCreatorFeesReceivedWei',
+                  (event.decoded_payload ->>
+                    'totalCreatorFeesReceived')::numeric::text
+              )
+            when 'BeneficiaryFeesClaimed' then
+              pg_catalog.jsonb_build_object(
+                'beneficiary', pg_catalog.lower(
+                  event.decoded_payload ->> 'beneficiary'
+                ),
+                'amountWei',
+                  (event.decoded_payload ->> 'amount')::numeric::text,
+                'beneficiaryTotalClaimedWei',
+                  (event.decoded_payload ->>
+                    'beneficiaryTotalClaimed')::numeric::text,
+                'vaultTotalReceivedWei',
+                  (event.decoded_payload ->>
+                    'vaultTotalReceived')::numeric::text
+              )
+            when 'PayoutWalletChanged' then
+              pg_catalog.jsonb_build_object(
+                'allocationIndex',
+                  (event.decoded_payload ->> 'allocationIndex')::numeric::text,
+                'previousPayoutWallet', pg_catalog.lower(
+                  event.decoded_payload ->> 'previousPayoutWallet'
+                ),
+                'newPayoutWallet', pg_catalog.lower(
+                  event.decoded_payload ->> 'newPayoutWallet'
+                ),
+                'shareBps',
+                  (event.decoded_payload ->> 'shareBps')::integer,
+                'configurationEpoch',
+                  (event.decoded_payload ->> 'configurationEpoch')::numeric::text,
+                'activeConfigurationHash', pg_catalog.lower(
+                  event.decoded_payload ->> 'activeConfigurationHash'
+                ),
+                'effectiveTotalCreatorFeesReceivedWei',
+                  (event.decoded_payload ->>
+                    'effectiveTotalCreatorFeesReceived')::numeric::text
+              )
+            when 'CtoRewardConfigurationActivated' then
+              pg_catalog.jsonb_build_object(
+                'approvalReference', pg_catalog.lower(
+                  event.decoded_payload ->> 'approvalReference'
+                ),
+                'configurationEpoch',
+                  (event.decoded_payload ->> 'configurationEpoch')::numeric::text,
+                'previousConfigurationHash', pg_catalog.lower(
+                  event.decoded_payload ->> 'previousConfigurationHash'
+                ),
+                'newConfigurationHash', pg_catalog.lower(
+                  event.decoded_payload ->> 'newConfigurationHash'
+                ),
+                'allocations', coalesce((
+                  select pg_catalog.jsonb_agg(
+                    pg_catalog.jsonb_build_object(
+                      'beneficiary', pg_catalog.lower(
+                        beneficiary.item #>> '{}'
+                      ),
+                      'shareBps', (share.item #>> '{}')::integer
+                    ) order by beneficiary.ordinality
+                  )
+                  from pg_catalog.jsonb_array_elements(
+                    event.decoded_payload -> 'beneficiaries'
+                  ) with ordinality as beneficiary(item, ordinality)
+                  join pg_catalog.jsonb_array_elements(
+                    event.decoded_payload -> 'sharesBps'
+                  ) with ordinality as share(item, ordinality)
+                    on share.ordinality = beneficiary.ordinality
+                ), '[]'::jsonb),
+                'effectiveTotalCreatorFeesReceivedWei',
+                  (event.decoded_payload ->>
+                    'effectiveTotalCreatorFeesReceived')::numeric::text
+              )
+            else '{}'::jsonb
+          end
+          order by event.block_number, event.transaction_index,
+            event.block_global_log_index, event.transaction_hash
+        )
+        from programmable_private.chain_event_materialized_occurrences_v1
+          as event
+        join programmable_private.chain_event_current_canonical as canonical
+          on canonical.occurrence_id = event.occurrence_id
+         and canonical.logical_event_id = event.logical_event_id
+         and canonical.block_hash = event.block_hash
+        where event.chain_id = vault.chain_id
+          and event.release_id = vault.release_id
+          and event.model_id = vault.model_id
+          and event.source_group = p_source_group
+          and event.epoch_id = vault.epoch_id
+          and event.pointer_generation = vault.pointer_generation
+          and event.source_address = vault.vault
+          and event.block_number <= p_checkpoint_block_number::bigint
+          and event.event_type in (
+            'CreatorFeesCheckpointed', 'BeneficiaryFeesClaimed',
+            'PayoutWalletChanged', 'CtoRewardConfigurationActivated'
+          )
+      ), '[]'::jsonb) as events
     from programmable_private.current_reward_vault_projections_v1 as vault
     join programmable_private.current_launch_projections_v1 as launch
       on launch.launch_projection_id = vault.launch_projection_id
@@ -728,6 +961,42 @@ begin
     join programmable_private.pool_fee_configurations as fee
       on fee.pool_projection_id = pool.pool_projection_id
      and fee.projection_run_id = pool.projection_run_id
+    join programmable_private.current_pool_fee_totals_v1 as fee_total
+      on fee_total.chain_id = vault.chain_id
+     and fee_total.release_id = vault.release_id
+     and fee_total.model_id = vault.model_id
+     and fee_total.epoch_id = vault.epoch_id
+     and fee_total.pointer_generation = vault.pointer_generation
+     and fee_total.pool_id = vault.pool_id
+     and (
+       fee_total.quote_asset is null
+       or fee_total.quote_asset =
+         pg_catalog.decode(pg_catalog.repeat('00', 20), 'hex')
+     )
+     and fee_total.promoted_block_number <= p_checkpoint_block_number::bigint
+    cross join lateral (
+      select
+        coalesce(pg_catalog.jsonb_agg(
+          pg_catalog.jsonb_build_object(
+            'account', '0x' || pg_catalog.encode(balance.account, 'hex'),
+            'claimableWei', balance.claimable_accrued::text,
+            'claimedWei', balance.claimed_total::text
+          ) order by balance.account
+        ), '[]'::jsonb) as entitlements,
+        coalesce(pg_catalog.sum(balance.claimed_total), 0)
+          as total_creator_fees_claimed,
+        coalesce(pg_catalog.sum(
+          balance.claimable_accrued + balance.claimed_total
+        ), 0) as total_entitlement_value
+      from programmable_private.current_account_reward_balances_v1 as balance
+      where balance.chain_id = vault.chain_id
+        and balance.release_id = vault.release_id
+        and balance.model_id = vault.model_id
+        and balance.epoch_id = vault.epoch_id
+        and balance.pointer_generation = vault.pointer_generation
+        and balance.vault = vault.vault
+        and balance.promoted_block_number <= p_checkpoint_block_number::bigint
+    ) as entitlement_state
     where vault.chain_id = p_chain_id
       and p_release_id = 'classic-v3'
       and vault.release_id = p_release_id
@@ -742,22 +1011,28 @@ begin
   )
   select
     pg_catalog.count(*),
-    coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-      'releaseVersion', 'classic-v3',
-      'modelId', 'classic',
-      'vaultAddress', '0x' || pg_catalog.encode(vault, 'hex'),
-      'poolId', '0x' || pg_catalog.encode(pool_id, 'hex'),
-      'tokenAddress', '0x' || pg_catalog.encode(token, 'hex'),
-      'tokenName', token_name,
-      'tokenSymbol', token_symbol,
-      'launchTransactionHash', '0x' || pg_catalog.encode(
-        launch_transaction_hash, 'hex'
-      ),
-      'buySwapFeeBps', buy_swap_fee_bps,
-      'sellSwapFeeBps', sell_swap_fee_bps,
-      'launcherFeeBps', launcher_fee_bps,
-      'allocations', allocations
-    ) order by vault), '[]'::jsonb)
+    coalesce(pg_catalog.jsonb_agg(
+      programmable_private.build_classic_v3_reconciler_reward_v1(
+        vault,
+        pool_id,
+        token,
+        token_name,
+        token_symbol,
+        launch_transaction_hash,
+        buy_swap_fee_bps,
+        sell_swap_fee_bps,
+        launcher_fee_bps,
+        configuration_hash,
+        active_configuration_hash,
+        configuration_epoch,
+        total_creator_fees_received,
+        total_creator_fees_claimed,
+        pending_creator_fees,
+        allocations,
+        entitlements,
+        events
+      ) order by vault
+    ), '[]'::jsonb)
   into vault_count, reward_rows
   from ordered_vaults;
 
@@ -766,6 +1041,7 @@ begin
     or exists (
     select 1 from pg_catalog.jsonb_array_elements(reward_rows) as reward
     where pg_catalog.jsonb_array_length(reward -> 'allocations') = 0
+       or pg_catalog.jsonb_array_length(reward -> 'entitlements') = 0
   ) then
     raise exception using
       errcode = '55000',

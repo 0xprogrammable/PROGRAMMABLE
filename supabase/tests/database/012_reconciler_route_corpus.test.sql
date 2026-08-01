@@ -1,6 +1,56 @@
 begin;
 
-select plan(25);
+select plan(31);
+
+select ok(
+  to_regprocedure(
+    'programmable_private.build_classic_v3_reconciler_reward_v1(bytea,bytea,bytea,text,text,bytea,integer,integer,integer,bytea,bytea,bigint,numeric,numeric,numeric,jsonb,jsonb,jsonb)'
+  ) is not null,
+  'the exact Classic V3 reward DTO builder exists'
+);
+
+select ok(
+  (
+    select owner_role.rolname = 'programmable_migrator'
+      and not procedure.prosecdef
+      and 'search_path=""' = any(procedure.proconfig)
+    from pg_catalog.pg_proc as procedure
+    join pg_catalog.pg_namespace as namespace
+      on namespace.oid = procedure.pronamespace
+    join pg_catalog.pg_roles as owner_role
+      on owner_role.oid = procedure.proowner
+    where namespace.nspname = 'programmable_private'
+      and procedure.proname = 'build_classic_v3_reconciler_reward_v1'
+  ),
+  'the reward DTO builder is migrator-owned SECURITY INVOKER with an empty search path'
+);
+
+select ok(
+  pg_catalog.has_function_privilege(
+    'programmable_reconciler',
+    'programmable_private.build_classic_v3_reconciler_reward_v1(bytea,bytea,bytea,text,text,bytea,integer,integer,integer,bytea,bytea,bigint,numeric,numeric,numeric,jsonb,jsonb,jsonb)'::regprocedure,
+    'EXECUTE'
+  ),
+  'the reconciler capability can execute the reward DTO builder'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_catalog.unnest(array[
+      'public', 'anon', 'authenticated', 'service_role',
+      'programmable_projector', 'programmable_api_reader',
+      'programmable_profile_binder', 'programmable_profile_recovery',
+      'programmable_profile_writer', 'programmable_maintenance'
+    ]) as denied(role_name)
+    where pg_catalog.has_function_privilege(
+      denied.role_name,
+      'programmable_private.build_classic_v3_reconciler_reward_v1(bytea,bytea,bytea,text,text,bytea,integer,integer,integer,bytea,bytea,bigint,numeric,numeric,numeric,jsonb,jsonb,jsonb)'::regprocedure,
+      'EXECUTE'
+    )
+  ),
+  'unrelated capabilities cannot execute the reward DTO builder'
+);
 
 select ok(
   to_regprocedure(
@@ -74,6 +124,52 @@ select ok(
 );
 
 set local role programmable_reconciler;
+
+select is(
+  programmable_private.build_classic_v3_reconciler_reward_v1(
+    decode(repeat('11', 20), 'hex'),
+    decode(repeat('22', 32), 'hex'),
+    decode(repeat('33', 20), 'hex'),
+    'Reward Fixture',
+    'RWD',
+    decode(repeat('44', 32), 'hex'),
+    100,
+    200,
+    10,
+    decode(repeat('55', 32), 'hex'),
+    decode(repeat('66', 32), 'hex'),
+    2,
+    90,
+    10,
+    20,
+    '[{"allocationIndex":0,"payoutAddress":"0x7777777777777777777777777777777777777777","shareBps":10000,"claimableWei":"stale","claimedWei":"stale"}]'::jsonb,
+    '[{"account":"0x8888888888888888888888888888888888888888","claimableWei":"80","claimedWei":"10","legacy":true}]'::jsonb,
+    '[{"kind":"checkpoint"}]'::jsonb
+  ),
+  pg_catalog.jsonb_build_object(
+    'releaseVersion', 'classic-v3',
+    'modelId', 'classic',
+    'vaultAddress', '0x' || repeat('11', 20),
+    'poolId', '0x' || repeat('22', 32),
+    'tokenAddress', '0x' || repeat('33', 20),
+    'tokenName', 'Reward Fixture',
+    'tokenSymbol', 'RWD',
+    'launchTransactionHash', '0x' || repeat('44', 32),
+    'buySwapFeeBps', 100,
+    'sellSwapFeeBps', 200,
+    'launcherFeeBps', 10,
+    'configurationHash', '0x' || repeat('55', 32),
+    'activeConfigurationHash', '0x' || repeat('66', 32),
+    'configurationEpoch', '2',
+    'totalCreatorFeesReceivedWei', '90',
+    'totalCreatorFeesClaimedWei', '10',
+    'pendingCreatorFeesWei', '20',
+    'allocations', '[{"allocationIndex":0,"payoutAddress":"0x7777777777777777777777777777777777777777","shareBps":10000}]'::jsonb,
+    'entitlements', '[{"account":"0x8888888888888888888888888888888888888888","claimableWei":"80","claimedWei":"10"}]'::jsonb,
+    'events', '[{"kind":"checkpoint"}]'::jsonb
+  ),
+  'the SQL reward DTO exactly matches the runtime schema and strips stale nested fields'
+);
 
 select is(
   (
@@ -286,6 +382,34 @@ select ok(
     ) as corpus
   ),
   'launch DTOs bind direct current projections to run, publication, epoch and canonical source provenance'
+);
+
+select ok(
+  (
+    select
+      pg_catalog.strpos(
+        definition,
+        'build_classic_v3_reconciler_reward_v1'
+      ) > 0
+      and pg_catalog.strpos(
+        definition,
+        'current_account_reward_balances_v1'
+      ) > 0
+      and pg_catalog.strpos(
+        definition,
+        'chain_event_materialized_occurrences_v1'
+      ) > 0
+      and pg_catalog.strpos(
+        definition,
+        'chain_event_current_canonical'
+      ) > 0
+    from (
+      select pg_catalog.lower(pg_catalog.pg_get_functiondef(
+        'programmable_private.get_reconciler_route_corpus_v1(bigint,text,text,text,uuid,bigint,uuid,numeric,bytea,integer)'::regprocedure
+      )) as definition
+    ) as corpus
+  ),
+  'Classic V3 rewards use the exact DTO builder, current balances and canonical lifecycle events'
 );
 
 select ok(

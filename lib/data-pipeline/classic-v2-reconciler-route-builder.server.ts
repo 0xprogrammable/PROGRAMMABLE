@@ -1323,6 +1323,7 @@ export async function buildClassicV2ExactBlockContribution(input: {
   const stateValues: unknown[] = [];
   const poolSwapLogs: DecodedLog[] = [];
   const timestamps = new Map<string, bigint>();
+  const timestampHashes = new Map<string, HexBytes32>();
   const completedCorpusPages: Array<(typeof corpusManifest.pages)[number]> = [];
   for (const page of corpusManifest.pages) {
     const pageRpc = input.rpc.createPartitionClient(page);
@@ -1405,16 +1406,31 @@ export async function buildClassicV2ExactBlockContribution(input: {
       input.blockHash,
       input.signal,
     ));
+    const timestampBindings = [];
     for (const launch of pageLaunches) {
       const key = launch.blockNumber.toString();
-      if (!timestamps.has(key)) {
-        timestamps.set(key, await pageRpc.getBlockTimestamp({
+      const knownHash = timestampHashes.get(key);
+      if (knownHash !== undefined && !sameHex(knownHash, launch.blockHash)) {
+        fail("classic-v2-launch-block-hash-conflict");
+      }
+      if (!timestamps.has(key) && knownHash === undefined) {
+        timestampHashes.set(key, launch.blockHash);
+        timestampBindings.push({
           blockNumber: launch.blockNumber,
           expectedHash: launch.blockHash,
-          signal: input.signal,
-        }));
+        });
       }
     }
+    const pageTimestamps = await pageRpc.getBlockTimestamps({
+      blocks: timestampBindings,
+      signal: input.signal,
+    });
+    if (pageTimestamps.length !== timestampBindings.length) {
+      fail("classic-v2-launch-timestamp-cardinality");
+    }
+    timestampBindings.forEach((binding, index) => {
+      timestamps.set(binding.blockNumber.toString(), pageTimestamps[index]!);
+    });
     await pageRpc.assertCheckpoint({
       blockNumber: input.blockNumber,
       blockHash: input.blockHash,

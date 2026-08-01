@@ -584,6 +584,9 @@ function fixture(mutation: Mutation = "none") {
       return Object.freeze([swapLog]);
     },
     getBlockTimestamp: async () => 1_700_000_000n,
+    getBlockTimestamps: async ({ blocks }) => Object.freeze(
+      blocks.map(() => 1_700_000_000n),
+    ),
     getTransactionReceipt: async () => receipt,
     getTransactionReceipts: async () => Object.freeze([receipt]),
     getTransaction: async () => transaction,

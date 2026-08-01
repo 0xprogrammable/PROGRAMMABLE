@@ -536,6 +536,9 @@ async function readPoolSwapBatches(input: {
       poolIndex,
       poolIndex + MAXIMUM_POOLS_PER_LOG_REQUEST,
     );
+    const allowedPoolIds = new Set(
+      poolIds.map((poolId) => poolId.toLowerCase()),
+    );
     for (const { fromBlock, toBlock } of classicV3ReconcilerBlockRanges(
       input.fromBlock,
       input.toBlock,
@@ -548,6 +551,15 @@ async function readPoolSwapBatches(input: {
         toBlock,
         signal: input.signal,
       });
+      if (logs.some((log) =>
+        !sameHex(log.address, input.poolManager) ||
+        !sameHex(log.topics[0] ?? "0x", toEventSelector(swapEvent)) ||
+        !allowedPoolIds.has((log.topics[1] ?? "").toLowerCase()) ||
+        log.blockNumber < fromBlock ||
+        log.blockNumber > toBlock
+      )) {
+        fail("classic-v3-swap-log-filter-binding");
+      }
       output.push(...logs.map((log) => decodeKnownEvent(selectorMap, log)));
     }
   }
@@ -1509,6 +1521,7 @@ async function buildContribution(input: {
   const entitlementAccountsByLaunch: Address[][] = [];
   const balanceValues: unknown[] = [];
   const timestamps = new Map<string, bigint>();
+  const timestampHashes = new Map<string, HexBytes32>();
   const completedCorpusPages: Array<(typeof corpusManifest.pages)[number]> = [];
   for (const page of corpusManifest.pages) {
     const pageRpc = input.rpc.createPartitionClient(page);
@@ -1711,16 +1724,31 @@ async function buildContribution(input: {
       entitlementManifest,
       completedEntitlementPages,
     );
+    const timestampBindings = [];
     for (const launch of pageLaunches) {
       const key = launch.blockNumber.toString();
-      if (!timestamps.has(key)) {
-        timestamps.set(key, await pageRpc.getBlockTimestamp({
+      const knownHash = timestampHashes.get(key);
+      if (knownHash !== undefined && !sameHex(knownHash, launch.blockHash)) {
+        fail("classic-v3-launch-block-hash-conflict");
+      }
+      if (!timestamps.has(key) && knownHash === undefined) {
+        timestampHashes.set(key, launch.blockHash);
+        timestampBindings.push({
           blockNumber: launch.blockNumber,
           expectedHash: launch.blockHash,
-          signal: input.signal,
-        }));
+        });
       }
     }
+    const pageTimestamps = await pageRpc.getBlockTimestamps({
+      blocks: timestampBindings,
+      signal: input.signal,
+    });
+    if (pageTimestamps.length !== timestampBindings.length) {
+      fail("classic-v3-launch-timestamp-cardinality");
+    }
+    timestampBindings.forEach((binding, index) => {
+      timestamps.set(binding.blockNumber.toString(), pageTimestamps[index]!);
+    });
     await pageRpc.assertCheckpoint({
       blockNumber: input.blockNumber,
       blockHash: input.blockHash,

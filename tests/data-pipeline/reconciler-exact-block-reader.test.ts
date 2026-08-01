@@ -81,6 +81,14 @@ function block(hash = BLOCK_HASH) {
   };
 }
 
+function blockAt(blockNumber: bigint, hash: Hex, timestamp: bigint) {
+  return {
+    number: `0x${blockNumber.toString(16)}`,
+    hash,
+    timestamp: `0x${timestamp.toString(16)}`,
+  };
+}
+
 describe("exact-block reconciler RPC", () => {
   beforeEach(() => vi.restoreAllMocks());
 
@@ -179,7 +187,11 @@ describe("exact-block reconciler RPC", () => {
   });
 
   it("chunks eth_call batches and reconstructs results in request order", async () => {
-    const batches: Array<readonly Record<string, unknown>[]> = [];
+    const batches: Array<readonly {
+      id: number;
+      method: string;
+      params: readonly unknown[];
+    }[]> = [];
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Array<{
         id: number;
@@ -226,7 +238,109 @@ describe("exact-block reconciler RPC", () => {
     expect(rpc.logicalRequestCount()).toBe(3);
   });
 
-  it("issues independently bounded corpus clients in exact page order and aggregates usage", async () => {
+  it("reads 257 exact-hash-bound block timestamps in nine physical requests", async () => {
+    const firstBlock = 30_000_000n;
+    const bindings = Array.from({ length: 257 }, (_, index) => {
+      const blockNumber = firstBlock + BigInt(index);
+      const expectedHash = `0x${(index + 1).toString(16).padStart(64, "0")}` as const;
+      return Object.freeze({ blockNumber, expectedHash });
+    });
+    const batches: Array<readonly {
+      id: number;
+      method: string;
+      params: readonly unknown[];
+    }[]> = [];
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Array<{
+        id: number;
+        method: string;
+        params: readonly unknown[];
+      }>;
+      batches.push(body);
+      return rpcBatchResponse(body.map((request) => {
+        const blockNumber = BigInt(request.params[0] as string);
+        const index = Number(blockNumber - firstBlock);
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: blockAt(
+            blockNumber,
+            bindings[index]!.expectedHash,
+            1_700_000_000n + BigInt(index),
+          ),
+        };
+      }).reverse());
+    });
+    const rpc = createExactBlockRpcClient({
+      endpoint: ALCHEMY,
+      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpointOriginCommitment: rpcProviderCommitment(
+        "origin",
+        new URL(ALCHEMY).origin,
+      ),
+      maximumBatchSize: 32,
+      maximumRequests: 9,
+      maximumLogicalRequests: 257,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(rpc.getBlockTimestamps({
+      blocks: bindings,
+      signal: new AbortController().signal,
+    })).resolves.toEqual(Array.from(
+      { length: 257 },
+      (_, index) => 1_700_000_000n + BigInt(index),
+    ));
+
+    expect(batches.map((batch) => batch.length)).toEqual([
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      1,
+    ]);
+    expect(batches.flat().every((request) =>
+      request.method === "eth_getBlockByNumber" &&
+      request.params[1] === false
+    )).toBe(true);
+    expect(rpc.requestCount()).toBe(9);
+    expect(rpc.logicalRequestCount()).toBe(257);
+  });
+
+  it("fails closed when a batched timestamp block hash does not match its binding", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Array<{ id: number }>;
+      return rpcBatchResponse(body.map((request) => ({
+        jsonrpc: "2.0",
+        id: request.id,
+        result: blockAt(BLOCK_NUMBER, ALTERNATE_HASH, 100n),
+      })));
+    });
+    const rpc = createExactBlockRpcClient({
+      endpoint: ALCHEMY,
+      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpointOriginCommitment: rpcProviderCommitment(
+        "origin",
+        new URL(ALCHEMY).origin,
+      ),
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(rpc.getBlockTimestamps({
+      blocks: [{ blockNumber: BLOCK_NUMBER, expectedHash: BLOCK_HASH }],
+      signal: new AbortController().signal,
+    })).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+      safeMetadata: { operation: "reconciler-rpc-block-hash-mismatch" },
+    });
+  });
+
+  it("issues corpus clients in exact page order under one shared root budget", async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return rpcResponse(Number(body.id), "0x");
@@ -318,15 +432,20 @@ describe("exact-block reconciler RPC", () => {
       startIndex: 128,
       endIndexExclusive: 256,
     });
-    await second.call({
+    await expect(second.call({
       to: ADDRESS,
       data: totalSupplyCall,
       blockHash: BLOCK_HASH,
       signal: new AbortController().signal,
+    })).rejects.toMatchObject({
+      code: "response_oversize",
+      retryable: false,
+      safeMetadata: { operation: "reconciler-rpc-logical-budget" },
     });
 
     expect(rpc.requestCount()).toBe(2);
     expect(rpc.logicalRequestCount()).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(() => rpc.createPartitionClient({
       manifestCommitment,
       pageCommitment: `0x${"54".repeat(32)}`,

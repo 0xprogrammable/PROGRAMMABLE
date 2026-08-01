@@ -11,6 +11,41 @@ export const RECONCILER_ROUTE_CONTRACT =
 export const CLASSIC_V3_RECONCILER_ROUTE_CONTRACT =
   RECONCILER_ROUTE_CONTRACT;
 
+export const CLASSIC_V3_RECONCILER_REWARD_FIELDS = Object.freeze([
+  "releaseVersion",
+  "modelId",
+  "vaultAddress",
+  "poolId",
+  "tokenAddress",
+  "tokenName",
+  "tokenSymbol",
+  "launchTransactionHash",
+  "buySwapFeeBps",
+  "sellSwapFeeBps",
+  "launcherFeeBps",
+  "configurationHash",
+  "activeConfigurationHash",
+  "configurationEpoch",
+  "totalCreatorFeesReceivedWei",
+  "totalCreatorFeesClaimedWei",
+  "pendingCreatorFeesWei",
+  "allocations",
+  "entitlements",
+  "events",
+] as const);
+
+export const CLASSIC_V3_RECONCILER_REWARD_ALLOCATION_FIELDS = Object.freeze([
+  "allocationIndex",
+  "payoutAddress",
+  "shareBps",
+] as const);
+
+export const CLASSIC_V3_RECONCILER_REWARD_ENTITLEMENT_FIELDS = Object.freeze([
+  "account",
+  "claimableWei",
+  "claimedWei",
+] as const);
+
 const RELEASE_MODELS = Object.freeze({
   "classic-v2": "classic",
   "classic-v3": "classic",
@@ -327,28 +362,11 @@ function profile(value: CanonicalJsonValue): JsonRecord {
 
 function reward(value: CanonicalJsonValue): JsonRecord {
   const row = object(value, "reconciler-route-reward");
-  exactKeys(row, [
-    "releaseVersion",
-    "modelId",
-    "vaultAddress",
-    "poolId",
-    "tokenAddress",
-    "tokenName",
-    "tokenSymbol",
-    "launchTransactionHash",
-    "buySwapFeeBps",
-    "sellSwapFeeBps",
-    "launcherFeeBps",
-    "configurationHash",
-    "activeConfigurationHash",
-    "configurationEpoch",
-    "totalCreatorFeesReceivedWei",
-    "totalCreatorFeesClaimedWei",
-    "pendingCreatorFeesWei",
-    "allocations",
-    "entitlements",
-    "events",
-  ], "reconciler-route-reward-fields");
+  exactKeys(
+    row,
+    CLASSIC_V3_RECONCILER_REWARD_FIELDS,
+    "reconciler-route-reward-fields",
+  );
   releaseIdentity(row, "reconciler-route-reward-release");
   if (row.releaseVersion !== "classic-v3" || row.modelId !== "classic") {
     fail("reconciler-route-reward-release");
@@ -386,11 +404,11 @@ function reward(value: CanonicalJsonValue): JsonRecord {
   let shareTotal = 0;
   allocations.forEach((allocation, index) => {
     const item = object(allocation, "reconciler-route-reward-allocation");
-    exactKeys(item, [
-      "allocationIndex",
-      "payoutAddress",
-      "shareBps",
-    ], "reconciler-route-reward-allocation-fields");
+    exactKeys(
+      item,
+      CLASSIC_V3_RECONCILER_REWARD_ALLOCATION_FIELDS,
+      "reconciler-route-reward-allocation-fields",
+    );
     if (integer(item.allocationIndex, 0, 4,
       "reconciler-route-reward-allocation-index") !== index) {
       fail("reconciler-route-reward-allocation-order");
@@ -412,11 +430,11 @@ function reward(value: CanonicalJsonValue): JsonRecord {
   let claimedTotal = 0n;
   entitlements.forEach((entitlement) => {
     const item = object(entitlement, "reconciler-route-reward-entitlement");
-    exactKeys(item, [
-      "account",
-      "claimableWei",
-      "claimedWei",
-    ], "reconciler-route-reward-entitlement-fields");
+    exactKeys(
+      item,
+      CLASSIC_V3_RECONCILER_REWARD_ENTITLEMENT_FIELDS,
+      "reconciler-route-reward-entitlement-fields",
+    );
     const account = hex(
       item.account,
       20,

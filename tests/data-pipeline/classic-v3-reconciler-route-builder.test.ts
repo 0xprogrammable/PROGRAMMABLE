@@ -54,6 +54,7 @@ const CTO_BENEFICIARY = getAddress(`0x${"46".repeat(20)}`);
 const POSITION_RECIPIENT = getAddress(`0x${"55".repeat(20)}`);
 const SWAP_SENDER = getAddress(`0x${"66".repeat(20)}`);
 const POOL_ID = `0x${"77".repeat(32)}` as const;
+const WRONG_POOL_ID = `0x${"76".repeat(32)}` as const;
 const CONFIGURATION_HASH = `0x${"88".repeat(32)}` as const;
 const LAUNCH_HASH = `0x${"99".repeat(32)}` as const;
 const CREATOR_SALT = `0x${"aa".repeat(32)}` as const;
@@ -131,7 +132,11 @@ type Mutation =
   | "reordered-fees"
   | "payout-history"
   | "cto-history"
-  | "fully-claimed-history";
+  | "fully-claimed-history"
+  | "swap-filter-address"
+  | "swap-filter-selector"
+  | "swap-filter-pool"
+  | "swap-filter-range";
 
 function eventLog(input: {
   event: AbiEvent;
@@ -169,6 +174,20 @@ function encodedResult(
   result: unknown,
 ): Hex {
   return encodeFunctionResult({ abi, functionName, result } as never);
+}
+
+function topicsMatch(
+  logTopics: readonly Hex[],
+  requested: readonly (Hex | readonly Hex[] | null)[] | undefined,
+): boolean {
+  if (!requested) return true;
+  return requested.every((filter, index) => {
+    if (filter === null) return true;
+    const actual = (logTopics[index] ?? "").toLowerCase();
+    return Array.isArray(filter)
+      ? filter.some((candidate) => candidate.toLowerCase() === actual)
+      : (filter as Hex).toLowerCase() === actual;
+  });
 }
 
 function fixture(mutation: Mutation = "none") {
@@ -378,10 +397,10 @@ function fixture(mutation: Mutation = "none") {
     transactionIndex: 3,
     logIndex: 0,
   });
-  const swapLog = eventLog({
+  const encodedSwapLog = eventLog({
     event: swapEvent,
     args: {
-      id: POOL_ID,
+      id: mutation === "swap-filter-pool" ? WRONG_POOL_ID : POOL_ID,
       sender: SWAP_SENDER,
       amount0: 10_000n,
       amount1: -1n,
@@ -390,13 +409,26 @@ function fixture(mutation: Mutation = "none") {
       tick: 0,
       fee: 0,
     },
-    address: getAddress(dependencies.contracts.poolManager.address),
-    blockNumber: swapBlock,
+    address: mutation === "swap-filter-address"
+      ? TOKEN
+      : getAddress(dependencies.contracts.poolManager.address),
+    blockNumber: mutation === "swap-filter-range"
+      ? checkpointBlock + 1n
+      : swapBlock,
     blockHash: SWAP_BLOCK_HASH,
     transactionHash: SWAP_TRANSACTION,
     transactionIndex: 3,
     logIndex: mutation === "reordered-fees" ? 3 : 1,
   });
+  const swapLog: ExactBlockRpcLog = mutation === "swap-filter-selector"
+    ? Object.freeze({
+      ...encodedSwapLog,
+      topics: Object.freeze([
+        CONFIGURATION_HASH,
+        ...encodedSwapLog.topics.slice(1),
+      ]),
+    })
+    : encodedSwapLog;
   const tinySwapLog = eventLog({
     event: swapEvent,
     args: {
@@ -761,6 +793,9 @@ function fixture(mutation: Mutation = "none") {
       return Object.freeze([swapLog]);
     },
     getBlockTimestamp: async () => 1_700_000_000n,
+    getBlockTimestamps: async ({ blocks }) => Object.freeze(
+      blocks.map(() => 1_700_000_000n),
+    ),
     getTransactionReceipt: async () => receipt,
     getTransactionReceipts: async () => Object.freeze([receipt]),
     getTransaction: async () => transaction,
@@ -788,6 +823,617 @@ function fixture(mutation: Mutation = "none") {
     }],
   });
   return { rpc, contract, checkpointBlock };
+}
+
+function largeCorpusFixture(launchCount: number) {
+  const configured = getConfiguredClassicV3Release("production");
+  const app = configured.appManifest;
+  const launcher = getAddress(app.memeLaunchV2!);
+  const hook = getAddress(app.ethCreatorFeeHookV3!);
+  const vaultFactory = getAddress(app.classicRewardVaultFactoryV1!);
+  const poolManager = getAddress(dependencies.contracts.poolManager.address);
+  const stateView = getAddress(dependencies.contracts.stateView.address);
+  const startBlock = BigInt(app.deploymentBlocks!.memeLaunchV2!);
+  const checkpointBlock = startBlock + BigInt(launchCount) + 2n;
+  const indexedAddress = (domain: number, index: number) => getAddress(
+    `0x${((BigInt(domain) << 152n) | BigInt(index + 1)).toString(16).padStart(40, "0")}`,
+  );
+  const indexedBytes32 = (domain: number, index: number) =>
+    `0x${((BigInt(domain) << 248n) | BigInt(index + 1)).toString(16).padStart(64, "0")}` as const;
+  const activeConfigurationParameters = parseAbi([
+    "function f(uint256 chainId,address vault,bytes32 configurationHash,uint64 epoch,address[] beneficiaries,uint16[] sharesBps)",
+  ])[0]!.inputs;
+  const launcherLogs: ExactBlockRpcLog[] = [];
+  const hookLogs: ExactBlockRpcLog[] = [];
+  const factoryLogs: ExactBlockRpcLog[] = [];
+  const swapLogs: ExactBlockRpcLog[] = [];
+  const transactions = new Map<string, ExactBlockRpcTransaction>();
+  const receipts = new Map<string, ExactBlockRpcReceipt>();
+  const blockHashes = new Map<string, Hex>();
+  const callResults = new Map<string, Hex>();
+  const tokens: Address[] = [];
+
+  const registerCallResult = (
+    to: Address,
+    abi: Abi,
+    functionName: string,
+    args: readonly unknown[],
+    value: unknown,
+  ) => {
+    const data = encodeFunctionData({ abi, functionName, args } as never);
+    callResults.set(
+      `${to.toLowerCase()}:${data.toLowerCase()}`,
+      encodedResult(abi, functionName, value),
+    );
+  };
+
+  for (let index = 0; index < launchCount; index += 1) {
+    const token = indexedAddress(0x11, index);
+    const vault = indexedAddress(0x22, index);
+    const poolId = indexedBytes32(0x33, index);
+    const configurationHash = indexedBytes32(0x44, index);
+    const launchHash = indexedBytes32(0x55, index);
+    const creatorSalt = indexedBytes32(0x66, index);
+    const transactionHash = indexedBytes32(0x77, index);
+    const launchBlockHash = indexedBytes32(0x88, index);
+    const swapTransactionHash = indexedBytes32(0x99, index);
+    const launchBlock = startBlock + BigInt(index) + 1n;
+    const name = `Fixture Token ${index + 1}`;
+    const symbol = `F${index + 1}`;
+    const activeConfigurationHash = keccak256(encodeAbiParameters(
+      activeConfigurationParameters,
+      [1n, vault, configurationHash, 1n, [BENEFICIARY], [10_000]],
+    ));
+    tokens.push(token);
+    blockHashes.set(launchBlock.toString(), launchBlockHash);
+
+    const factoryLog = eventLog({
+      event: vaultDeployedEvent,
+      args: {
+        vault,
+        poolId,
+        feeHook: hook,
+        salt: creatorSalt,
+        configurationHash,
+      },
+      address: vaultFactory,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionHash,
+      transactionIndex: 2,
+      logIndex: 0,
+    });
+    const registrationLog = eventLog({
+      event: registeredEvent,
+      args: {
+        poolId,
+        token,
+        rewardVault: vault,
+        registrar: launcher,
+        buySwapFeeBps: 100,
+        sellSwapFeeBps: 100,
+        rewardConfigurationHash: configurationHash,
+      },
+      address: hook,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionHash,
+      transactionIndex: 2,
+      logIndex: 1,
+    });
+    const disclosureLog = eventLog({
+      event: disclosureEvent,
+      args: {
+        poolId,
+        token,
+        rewardVault: vault,
+        buySwapFeeBps: 100,
+        sellSwapFeeBps: 100,
+        buyCreatorFeeBps: 90,
+        sellCreatorFeeBps: 90,
+        launcherFeeBps: 10,
+        transferTaxBps: 0,
+        lpFeePips: 0,
+      },
+      address: hook,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionHash,
+      transactionIndex: 2,
+      logIndex: 2,
+    });
+    const liquidityLog = eventLog({
+      event: liquidityEvent,
+      args: {
+        token,
+        totalSupply: TOTAL_SUPPLY,
+        tokenLiquidityAmount: TOKEN_LIQUIDITY,
+        lockedTokenDust: 1n,
+        initialTick: 0,
+        tickLower: -887_220,
+        tickUpper: 0,
+        lpFeePips: 0,
+        launchHash,
+      },
+      address: launcher,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionHash,
+      transactionIndex: 2,
+      logIndex: 3,
+    });
+    const initialBuyLog = eventLog({
+      event: initialBuyEvent,
+      args: {
+        deployer: DEPLOYER,
+        token,
+        poolId,
+        nativeAmount: 1_000n,
+        tokenAmount: 10_000n,
+        launchHash,
+      },
+      address: launcher,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionHash,
+      transactionIndex: 2,
+      logIndex: 4,
+    });
+    const custodyLog = eventLog({
+      event: custodyEvent,
+      args: {
+        deployer: DEPLOYER,
+        token,
+        custody: ZERO_ADDRESS,
+        mode: 0,
+        durationDays: 0,
+        cliffDays: 0,
+        configurationHash,
+        launchHash,
+      },
+      address: launcher,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionHash,
+      transactionIndex: 2,
+      logIndex: 5,
+    });
+    const launchLog = eventLog({
+      event: launchedEvent,
+      args: {
+        deployer: DEPLOYER,
+        token,
+        poolId,
+        feeHook: hook,
+        rewardVault: vault,
+        positionRecipient: POSITION_RECIPIENT,
+        positionTokenId: BigInt(index + 1),
+        buySwapFeeBps: 100,
+        sellSwapFeeBps: 100,
+        rewardConfigurationHash: configurationHash,
+        launchHash,
+      },
+      address: launcher,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionHash,
+      transactionIndex: 2,
+      logIndex: 6,
+    });
+    const feeLog = eventLog({
+      event: feeAccruedEvent,
+      args: {
+        poolId,
+        swapSender: SWAP_SENDER,
+        isBuy: true,
+        appliedTotalSwapFeeBps: 100,
+        grossNativeAmount: 10_000n,
+        creatorFee: 90n,
+        launcherFee: 10n,
+      },
+      address: hook,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionHash: swapTransactionHash,
+      transactionIndex: 3,
+      logIndex: 0,
+    });
+    const swapLog = eventLog({
+      event: swapEvent,
+      args: {
+        id: poolId,
+        sender: SWAP_SENDER,
+        amount0: 10_000n,
+        amount1: -1n,
+        sqrtPriceX96: SQRT_PRICE_X96,
+        liquidity: 1_000_000n,
+        tick: 0,
+        fee: 0,
+      },
+      address: poolManager,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionHash: swapTransactionHash,
+      transactionIndex: 3,
+      logIndex: 1,
+    });
+    launcherLogs.push(liquidityLog, initialBuyLog, custodyLog, launchLog);
+    hookLogs.push(registrationLog, disclosureLog, feeLog);
+    factoryLogs.push(factoryLog);
+    swapLogs.push(swapLog);
+
+    const launchParameters = {
+      name,
+      symbol,
+      buySwapFeeBps: 100,
+      sellSwapFeeBps: 100,
+      creatorSalt,
+      metadata: {
+        description: "Fixture description",
+        website: "https://example.com",
+        image: "https://example.com/image.png",
+        extraData: "0x",
+      },
+      rewardBeneficiaries: [BENEFICIARY],
+      rewardSharesBps: [10_000],
+      initialBuyCustody: { mode: 0, durationDays: 0, cliffDays: 0 },
+    } as const;
+    transactions.set(transactionHash.toLowerCase(), Object.freeze({
+      transactionHash,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionIndex: 2,
+      from: DEPLOYER,
+      to: launcher,
+      input: encodeFunctionData({
+        abi: classicV3LaunchAbi,
+        functionName: "launch",
+        args: [launchParameters],
+      }),
+      value: 1_000n,
+    }));
+    const receiptLogs = [
+      factoryLog,
+      registrationLog,
+      disclosureLog,
+      liquidityLog,
+      initialBuyLog,
+      custodyLog,
+      launchLog,
+    ];
+    receipts.set(transactionHash.toLowerCase(), Object.freeze({
+      transactionHash,
+      blockNumber: launchBlock,
+      blockHash: launchBlockHash,
+      transactionIndex: 2,
+      status: 1n,
+      logs: Object.freeze(receiptLogs.map((entry, receiptLogIndex) =>
+        Object.freeze({ ...entry, receiptLogIndex })
+      )),
+    }));
+
+    registerCallResult(token, uerc20ReadAbi, "name", [], name);
+    registerCallResult(token, uerc20ReadAbi, "symbol", [], symbol);
+    registerCallResult(token, uerc20ReadAbi, "decimals", [], 18);
+    registerCallResult(token, uerc20ReadAbi, "totalSupply", [], TOTAL_SUPPLY);
+    registerCallResult(token, uerc20ReadAbi, "creator", [], launcher);
+    registerCallResult(token, uerc20ReadAbi, "metadata", [], [
+      "Fixture description",
+      "https://example.com",
+      "https://example.com/image.png",
+      "0x",
+    ]);
+    registerCallResult(stateView, stateViewReadAbi, "getSlot0", [poolId], [
+      SQRT_PRICE_X96,
+      0,
+      0,
+      0,
+    ]);
+    registerCallResult(
+      stateView,
+      stateViewReadAbi,
+      "getLiquidity",
+      [poolId],
+      1_000_000n,
+    );
+    registerCallResult(hook, classicV3HookAbi, "feeDisclosure", [poolId], [
+      100,
+      100,
+      90,
+      90,
+      10,
+      0,
+      0,
+      vault,
+    ]);
+    registerCallResult(hook, classicV3HookAbi, "poolFeeConfig", [poolId], [
+      vault,
+      launcher,
+      100,
+      100,
+      true,
+      0n,
+    ]);
+    registerCallResult(
+      launcher,
+      classicV3LaunchAbi,
+      "predictRewardVault",
+      [token, DEPLOYER, [BENEFICIARY], [10_000]],
+      vault,
+    );
+    registerCallResult(
+      vaultFactory,
+      vaultFactoryAbi,
+      "isFactoryVault",
+      [vault],
+      true,
+    );
+    registerCallResult(
+      vaultFactory,
+      vaultFactoryAbi,
+      "configurationHashOf",
+      [vault],
+      configurationHash,
+    );
+    registerCallResult(vault, classicRewardVaultAbi, "feeHook", [], hook);
+    registerCallResult(vault, classicRewardVaultAbi, "poolId", [], poolId);
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "configurationHash",
+      [],
+      configurationHash,
+    );
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "activeConfigurationHash",
+      [],
+      activeConfigurationHash,
+    );
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "configurationEpoch",
+      [],
+      1n,
+    );
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "beneficiaryCount",
+      [],
+      1n,
+    );
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "totalCreatorFeesReceived",
+      [],
+      90n,
+    );
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "totalCreatorFeesClaimed",
+      [],
+      0n,
+    );
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "beneficiaryAt",
+      [0n],
+      BENEFICIARY,
+    );
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "shareBpsAt",
+      [0n],
+      10_000,
+    );
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "claimable",
+      [BENEFICIARY],
+      90n,
+    );
+    registerCallResult(
+      vault,
+      classicRewardVaultAbi,
+      "claimedBy",
+      [BENEFICIARY],
+      0n,
+    );
+  }
+
+  const allLogs = Object.freeze([
+    ...launcherLogs,
+    ...hookLogs,
+    ...factoryLogs,
+    ...swapLogs,
+  ]);
+  const runtimeHashes = new Map<string, Hex>();
+  runtimeHashes.set(
+    getAddress(app.classicCtoAuthorityV1!).toLowerCase(),
+    app.runtimeCodeHashes!.classicCtoAuthorityV1! as Hex,
+  );
+  runtimeHashes.set(
+    launcher.toLowerCase(),
+    app.runtimeCodeHashes!.memeLaunchV2! as Hex,
+  );
+  runtimeHashes.set(
+    hook.toLowerCase(),
+    app.runtimeCodeHashes!.ethCreatorFeeHookV3! as Hex,
+  );
+  runtimeHashes.set(
+    vaultFactory.toLowerCase(),
+    app.runtimeCodeHashes!.classicRewardVaultFactoryV1! as Hex,
+  );
+  runtimeHashes.set(
+    getAddress(app.classicInitialBuyVestingWalletFactoryV1!).toLowerCase(),
+    app.runtimeCodeHashes!.classicInitialBuyVestingWalletFactoryV1! as Hex,
+  );
+  runtimeHashes.set(
+    getAddress(app.classicLaunchPolicyV1!).toLowerCase(),
+    app.runtimeCodeHashes!.classicLaunchPolicyV1! as Hex,
+  );
+  runtimeHashes.set(
+    getAddress(app.ethCreatorFeeHookFactoryV3!).toLowerCase(),
+    app.runtimeCodeHashes!.ethCreatorFeeHookFactoryV3! as Hex,
+  );
+  runtimeHashes.set(
+    getAddress(app.lockedPositionFeeForwarderFactory!).toLowerCase(),
+    app.runtimeCodeHashes!.lockedPositionFeeForwarderFactory! as Hex,
+  );
+  runtimeHashes.set(
+    poolManager.toLowerCase(),
+    dependencies.contracts.poolManager.runtimeCodeHash as Hex,
+  );
+  runtimeHashes.set(
+    stateView.toLowerCase(),
+    dependencies.contracts.stateView.runtimeCodeHash as Hex,
+  );
+  const budget = { physical: 0, logical: 0 };
+  const corpusPageSizes: number[] = [];
+  const timestampBatchSizes: number[] = [];
+  const charge = (physical: number, logical: number) => {
+    budget.physical += physical;
+    budget.logical += logical;
+    if (budget.physical > 512) {
+      throw new Error(`physical request budget exceeded: ${budget.physical}`);
+    }
+  };
+  const batchCharge = (logical: number) =>
+    charge(Math.ceil(logical / 32), logical);
+
+  const rpcAtDepth = (depth: number): ExactBlockRpcClient => Object.freeze({
+    endpointCommitment: `0x${"01".repeat(32)}`,
+    endpointOriginCommitment: `0x${"02".repeat(32)}`,
+    requestCount: () => budget.physical,
+    logicalRequestCount: () => budget.logical,
+    createPartitionClient: (binding) => {
+      if (depth === 0) {
+        corpusPageSizes.push(binding.endIndexExclusive - binding.startIndex);
+      }
+      return rpcAtDepth(depth + 1);
+    },
+    assertCheckpoint: async () => {
+      charge(1, 1);
+      return 1_700_000_000n;
+    },
+    call: async () => {
+      throw new Error("unexpected single call");
+    },
+    callMany: async ({ calls, blockHash }) => {
+      expect(blockHash).toBe(CHECKPOINT_HASH);
+      batchCharge(calls.length);
+      return Object.freeze(calls.map((call) => {
+        const resolved = callResults.get(
+          `${call.to.toLowerCase()}:${call.data.toLowerCase()}`,
+        );
+        if (!resolved) throw new Error(`missing call result ${call.to}:${call.data}`);
+        return resolved;
+      }));
+    },
+    getCodeHash: async ({ address, blockHash }) => {
+      expect(blockHash).toBe(CHECKPOINT_HASH);
+      charge(1, 1);
+      const resolved = runtimeHashes.get(address.toLowerCase());
+      if (!resolved) throw new Error(`missing runtime ${address}`);
+      return resolved;
+    },
+    getLogs: async ({ addresses, topics, fromBlock, toBlock }) => {
+      charge(1, 1);
+      const requestedAddresses = new Set(
+        (Array.isArray(addresses) ? addresses : [addresses])
+          .map((address) => address.toLowerCase()),
+      );
+      return Object.freeze(allLogs.filter((entry) =>
+        requestedAddresses.has(entry.address.toLowerCase()) &&
+        entry.blockNumber >= fromBlock &&
+        entry.blockNumber <= toBlock &&
+        topicsMatch(entry.topics, topics)
+      ));
+    },
+    getBlockTimestamp: async ({ blockNumber, expectedHash }) => {
+      charge(1, 1);
+      if (blockHashes.get(blockNumber.toString()) !== expectedHash) {
+        throw new Error("timestamp hash mismatch");
+      }
+      return 1_700_000_000n + blockNumber - startBlock;
+    },
+    getBlockTimestamps: async ({ blocks }) => {
+      batchCharge(blocks.length);
+      timestampBatchSizes.push(blocks.length);
+      return Object.freeze(blocks.map(({ blockNumber, expectedHash }) => {
+        if (blockHashes.get(blockNumber.toString()) !== expectedHash) {
+          throw new Error("timestamp hash mismatch");
+        }
+        return 1_700_000_000n + blockNumber - startBlock;
+      }));
+    },
+    getTransactionReceipt: async ({ transactionHash }) => {
+      charge(1, 1);
+      const resolved = receipts.get(transactionHash.toLowerCase());
+      if (!resolved) throw new Error("missing receipt");
+      return resolved;
+    },
+    getTransactionReceipts: async ({ receipts: bindings }) => {
+      batchCharge(bindings.length);
+      return Object.freeze(bindings.map(({ transactionHash }) => {
+        const resolved = receipts.get(transactionHash.toLowerCase());
+        if (!resolved) throw new Error("missing receipt");
+        return resolved;
+      }));
+    },
+    getTransaction: async ({ transactionHash }) => {
+      charge(1, 1);
+      const resolved = transactions.get(transactionHash.toLowerCase());
+      if (!resolved) throw new Error("missing transaction");
+      return resolved;
+    },
+    getTransactions: async ({ transactions: bindings }) => {
+      batchCharge(bindings.length);
+      return Object.freeze(bindings.map(({ transactionHash }) => {
+        const resolved = transactions.get(transactionHash.toLowerCase());
+        if (!resolved) throw new Error("missing transaction");
+        return resolved;
+      }));
+    },
+  });
+  const contract: ReconcilerPreParityContract = Object.freeze({
+    chainId: "1",
+    releaseId: "classic-v3",
+    modelId: "classic",
+    sourceGroup: "core",
+    projectorVersion: "projector-v1",
+    epochId: "10000000-0000-4000-8000-000000000001",
+    pointerGeneration: "1",
+    checkpointId: "10000000-0000-4000-8000-000000000002",
+    checkpointGeneration: "1",
+    reorgGeneration: "0",
+    checkpointBlockNumber: checkpointBlock.toString(),
+    checkpointBlockHash: CHECKPOINT_HASH,
+    routeKeys: RECONCILER_ROUTE_KEYS,
+    routeContract: {},
+    projectionContract: {},
+    currentEntities: tokens.map((token) => ({
+      entityKind: "launch",
+      entityKey: token.toLowerCase(),
+    })),
+  });
+  const rpc = rpcAtDepth(0);
+  return {
+    rpc,
+    contract,
+    checkpointBlock,
+    budget,
+    corpusPageSizes,
+    timestampBatchSizes,
+  };
 }
 
 describe("Classic V3 exact route builder", () => {
@@ -948,6 +1594,30 @@ describe("Classic V3 exact route builder", () => {
     })).rejects.toMatchObject({ code: "validation_failed" });
   });
 
+  it.each([
+    ["PoolManager address", "swap-filter-address"],
+    ["Swap selector", "swap-filter-selector"],
+    ["requested pool topic", "swap-filter-pool"],
+    ["requested block range", "swap-filter-range"],
+  ] as const)(
+    "fails before decoding a swap outside the %s filter",
+    async (_label, mutation) => {
+      const { rpc, contract, checkpointBlock } = fixture(mutation);
+      await expect(buildClassicV3ExactBlockRoutes({
+        rpc,
+        contract,
+        blockNumber: checkpointBlock,
+        blockHash: CHECKPOINT_HASH,
+        signal: new AbortController().signal,
+      })).rejects.toMatchObject({
+        code: "validation_failed",
+        safeMetadata: {
+          operation: "classic-v3-swap-log-filter-binding",
+        },
+      });
+    },
+  );
+
   it("uses non-overlapping provider-portable 10,000-block ranges", () => {
     expect(CLASSIC_V3_RECONCILER_LOG_BLOCK_RANGE).toBe(10_000n);
     expect(classicV3ReconcilerBlockRanges(100n, 10_099n)).toEqual([
@@ -964,5 +1634,25 @@ describe("Classic V3 exact route builder", () => {
       assertClassicV3ReconcilerLaunchCount,
     )).toEqual([128, 129, 186, 256, 257, 10_000]);
     expect(() => assertClassicV3ReconcilerLaunchCount(0)).toThrow();
+  });
+
+  it("builds a real 257-launch three-page corpus inside one global RPC budget", async () => {
+    const fixture = largeCorpusFixture(257);
+    const routes = await buildClassicV3ExactBlockRoutes({
+      rpc: fixture.rpc,
+      contract: fixture.contract,
+      blockNumber: fixture.checkpointBlock,
+      blockHash: CHECKPOINT_HASH,
+      signal: new AbortController().signal,
+    });
+
+    expect(routes.every(({ comparedCount }) => comparedCount === 257)).toBe(true);
+    expect(fixture.corpusPageSizes).toEqual([128, 128, 1]);
+    expect(fixture.timestampBatchSizes).toEqual([128, 128, 1]);
+    expect(fixture.budget).toEqual({ physical: 265, logical: 7_231 });
+    expect(fixture.budget.physical).toBeLessThanOrEqual(512);
+    expect(fixture.budget.logical).toBeLessThanOrEqual(512 * 32);
+    expect(fixture.rpc.requestCount()).toBe(265);
+    expect(fixture.rpc.logicalRequestCount()).toBe(7_231);
   });
 });

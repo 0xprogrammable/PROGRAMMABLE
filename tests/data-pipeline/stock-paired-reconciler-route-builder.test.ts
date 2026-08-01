@@ -14,6 +14,7 @@ import {
   type StockPairedReconcilerRelease,
 } from "../../lib/data-pipeline/stock-paired-reconciler-contribution";
 import {
+  stockPairedLargeCorpusFixture,
   stockPairedReconcilerRouteFixture,
   type StockPairedReconcilerFixture,
   type StockPairedReconcilerFixtureMutation,
@@ -48,6 +49,28 @@ async function build(
 }
 
 describe("Stock-Paired exact-block reconciler contribution", () => {
+  it("builds a real 257-launch three-page corpus inside both global RPC caps", async () => {
+    const fixture = stockPairedLargeCorpusFixture("stock-paired-v3", 257);
+    const contribution = await builders["stock-paired-v3"]({
+      rpc: fixture.rpc,
+      contract: fixture.contract,
+      blockNumber: fixture.blockNumber,
+      blockHash: fixture.blockHash,
+      signal: new AbortController().signal,
+    });
+
+    expect(contribution.tokens).toHaveLength(257);
+    expect(contribution.charts).toHaveLength(257);
+    expect(contribution.launches).toHaveLength(257);
+    expect(fixture.corpusPageSizes).toEqual([128, 128, 1]);
+    expect(fixture.timestampBatchSizes).toEqual([128, 128, 1]);
+    expect(fixture.budget).toEqual({ physical: 283, logical: 7_749 });
+    expect(fixture.budget.physical).toBeLessThanOrEqual(512);
+    expect(fixture.budget.logical).toBeLessThanOrEqual(512 * 32);
+    expect(fixture.rpc.requestCount()).toBe(283);
+    expect(fixture.rpc.logicalRequestCount()).toBe(7_749);
+  });
+
   it.each(releaseVersions)(
     "builds exact, release-labelled %s route parts",
     async (releaseVersion) => {

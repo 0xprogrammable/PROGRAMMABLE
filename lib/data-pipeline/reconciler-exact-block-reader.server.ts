@@ -138,6 +138,11 @@ export type ExactBlockRpcTransactionBinding = Readonly<{
   expectedTo: Address;
 }>;
 
+export type ExactBlockRpcTimestampBinding = Readonly<{
+  blockNumber: bigint;
+  expectedHash?: HexBytes32;
+}>;
+
 export type ExactBlockRpcCall = Readonly<{
   to: Address;
   data: Hex;
@@ -242,6 +247,10 @@ export type ExactBlockRpcClient = Readonly<{
     expectedHash?: HexBytes32;
     signal: AbortSignal;
   }): Promise<bigint>;
+  getBlockTimestamps(input: {
+    blocks: readonly ExactBlockRpcTimestampBinding[];
+    signal: AbortSignal;
+  }): Promise<readonly bigint[]>;
   getTransactionReceipt(input: {
     transactionHash: HexBytes32;
     expectedBlockNumber: bigint;
@@ -271,6 +280,11 @@ type JsonRpcRequest = Readonly<{
   method: string;
   params: readonly unknown[];
 }>;
+
+type ExactBlockRpcBudgetLedger = {
+  physicalRequests: number;
+  logicalRequests: number;
+};
 
 class ProviderLogLimitError extends Error {
   constructor() {
@@ -395,6 +409,8 @@ export function createExactBlockRpcClient(input: {
   timeoutMs?: number;
   /** @internal Root, corpus page, then one bounded nested-work page. */
   partitionDepth?: number;
+  /** @internal One budget shared by the root and every partition descendant. */
+  budgetLedger?: ExactBlockRpcBudgetLedger;
 }): ExactBlockRpcClient {
   const fetchImplementation = input.fetch ?? fetch;
   const maximumRequests = input.maximumRequests ?? DEFAULT_REQUEST_BUDGET;
@@ -403,6 +419,10 @@ export function createExactBlockRpcClient(input: {
   const maximumBatchSize = input.maximumBatchSize ?? DEFAULT_BATCH_SIZE;
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const partitionDepth = input.partitionDepth ?? 0;
+  const budgetLedger = input.budgetLedger ?? {
+    physicalRequests: 0,
+    logicalRequests: 0,
+  };
   if (
     !Number.isSafeInteger(maximumRequests) ||
     maximumRequests < 1 ||
@@ -423,8 +443,6 @@ export function createExactBlockRpcClient(input: {
     throw invalidInput("config", "reconciler-rpc-budget");
   }
   let nextId = 1;
-  let requests = 0;
-  let logicalRequests = 0;
   const partitionClients: ExactBlockRpcClient[] = [];
   const issuedPartitions = new Set<string>();
   let partitionManifestCommitment: HexBytes32 | null = null;
@@ -450,10 +468,10 @@ export function createExactBlockRpcClient(input: {
   // oversized batches atomic: they cannot spend a prefix of their budget and
   // then fail midway through the input.
   const reserve = (physicalCount: number, logicalCount: number) => {
-    const nextPhysicalCount = requests + physicalCount;
-    const nextLogicalCount = logicalRequests + logicalCount;
-    requests = nextPhysicalCount;
-    logicalRequests = nextLogicalCount;
+    const nextPhysicalCount = budgetLedger.physicalRequests + physicalCount;
+    const nextLogicalCount = budgetLedger.logicalRequests + logicalCount;
+    budgetLedger.physicalRequests = nextPhysicalCount;
+    budgetLedger.logicalRequests = nextLogicalCount;
     if (nextPhysicalCount > maximumRequests) {
       throw dataPipelineError({
         dependency: "rpc",
@@ -793,14 +811,8 @@ export function createExactBlockRpcClient(input: {
     return resolved;
   };
 
-  const readBlock = async (
-    blockNumber: bigint,
-    signal: AbortSignal,
-  ) => {
-    const result = object(
-      await rpc("eth_getBlockByNumber", [quantity(blockNumber), false], signal),
-      "reconciler-rpc-block",
-    );
+  const decodeBlock = (raw: unknown, blockNumber: bigint) => {
+    const result = object(raw, "reconciler-rpc-block");
     const number = parseQuantity(result.number, "reconciler-rpc-block-number");
     const hash = exactBlockHash(result.hash, "reconciler-rpc-block-hash");
     const timestamp = parseQuantity(
@@ -813,19 +825,21 @@ export function createExactBlockRpcClient(input: {
     return { number, hash, timestamp } as const;
   };
 
+  const readBlock = async (
+    blockNumber: bigint,
+    signal: AbortSignal,
+  ) => decodeBlock(
+    await rpc("eth_getBlockByNumber", [quantity(blockNumber), false], signal),
+    blockNumber,
+  );
+
   return Object.freeze({
     endpointCommitment: canonicalBytes32(input.endpointCommitment),
     endpointOriginCommitment: canonicalBytes32(
       input.endpointOriginCommitment,
     ),
-    requestCount: () => requests + partitionClients.reduce(
-      (total, client) => total + client.requestCount(),
-      0,
-    ),
-    logicalRequestCount: () => logicalRequests + partitionClients.reduce(
-      (total, client) => total + client.logicalRequestCount(),
-      0,
-    ),
+    requestCount: () => budgetLedger.physicalRequests,
+    logicalRequestCount: () => budgetLedger.logicalRequests,
     createPartitionClient(binding) {
       if (partitionDepth >= 2) {
         throw invalidInput("rpc", "reconciler-rpc-nested-partition");
@@ -889,6 +903,7 @@ export function createExactBlockRpcClient(input: {
         maximumBatchSize,
         timeoutMs,
         partitionDepth: partitionDepth + 1,
+        budgetLedger,
       });
       partitionClients.push(client);
       partitionNextStartIndex = binding.endIndexExclusive;
@@ -1064,6 +1079,53 @@ export function createExactBlockRpcClient(input: {
         throw validationError("rpc", "reconciler-rpc-block-hash-mismatch");
       }
       return block.timestamp;
+    },
+    async getBlockTimestamps({ blocks, signal }) {
+      assertNotAborted(signal);
+      if (!Array.isArray(blocks)) {
+        throw invalidInput("rpc", "reconciler-rpc-block-timestamps");
+      }
+      const bindings = blocks.map((binding) => {
+        if (binding.blockNumber < 0n) {
+          throw invalidInput("rpc", "reconciler-rpc-block-timestamp-number");
+        }
+        return Object.freeze({
+          blockNumber: binding.blockNumber,
+          expectedHash: binding.expectedHash === undefined
+            ? undefined
+            : canonicalBytes32(binding.expectedHash),
+        });
+      });
+      if (bindings.length === 0) return Object.freeze([]);
+      reserve(Math.ceil(bindings.length / maximumBatchSize), bindings.length);
+      const timestamps: bigint[] = [];
+      for (
+        let offset = 0;
+        offset < bindings.length;
+        offset += maximumBatchSize
+      ) {
+        const chunk = bindings.slice(offset, offset + maximumBatchSize);
+        const requestsForBatch = chunk.map((binding) => allocateRequest(
+          "eth_getBlockByNumber",
+          [quantity(binding.blockNumber), false],
+        ));
+        const results = await rpcBatch(requestsForBatch, signal);
+        for (let index = 0; index < results.length; index += 1) {
+          const binding = chunk[index]!;
+          const block = decodeBlock(results[index], binding.blockNumber);
+          if (
+            binding.expectedHash !== undefined &&
+            block.hash !== binding.expectedHash
+          ) {
+            throw validationError(
+              "rpc",
+              "reconciler-rpc-block-hash-mismatch",
+            );
+          }
+          timestamps.push(block.timestamp);
+        }
+      }
+      return Object.freeze(timestamps);
     },
     async getTransactionReceipt({
       transactionHash,

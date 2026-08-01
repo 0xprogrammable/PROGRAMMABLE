@@ -7,7 +7,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { canonicalizeFingerprintJson } from "../../lib/data-pipeline/canonical-fingerprint";
-import { assembleReconcilerRoutesFromContributions } from "../../lib/data-pipeline/classic-v3-reconciler-route-contract";
+import {
+  assembleReconcilerRoutesFromContributions,
+  CLASSIC_V3_RECONCILER_REWARD_ALLOCATION_FIELDS,
+  CLASSIC_V3_RECONCILER_REWARD_ENTITLEMENT_FIELDS,
+  CLASSIC_V3_RECONCILER_REWARD_FIELDS,
+  type ClassicV3ReconcilerRouteParts,
+} from "../../lib/data-pipeline/classic-v3-reconciler-route-contract";
 import type { ReconcilerRouteDto } from "../../lib/data-pipeline/reconciler-preparity";
 import {
   CLASSIC_V3_RECONCILER_ROUTE_FIXTURE_PARTS,
@@ -111,6 +117,82 @@ describe("SQL and live route corpus contract", () => {
       classicV3ReconcilerRouteFixture(),
       CLASSIC_V3_RECONCILER_ROUTE_FIXTURE_PARTS,
     );
+  });
+
+  it("builds the SQL Classic V3 reward with the exact runtime field contract", async () => {
+    const expected = CLASSIC_V3_RECONCILER_ROUTE_FIXTURE_PARTS.rewards[0] as
+      Record<string, unknown>;
+    const allocations = (expected.allocations as Array<Record<string, unknown>>)
+      .map((allocation) => ({
+        ...allocation,
+        claimableWei: "legacy-field-must-not-escape",
+        claimedWei: "legacy-field-must-not-escape",
+      }));
+    const result = await database.query<{ reward: Record<string, unknown> }>(`
+      select programmable_private.build_classic_v3_reconciler_reward_v1(
+        pg_catalog.decode($1::text, 'hex'),
+        pg_catalog.decode($2::text, 'hex'),
+        pg_catalog.decode($3::text, 'hex'),
+        $4::text,
+        $5::text,
+        pg_catalog.decode($6::text, 'hex'),
+        $7::integer,
+        $8::integer,
+        $9::integer,
+        pg_catalog.decode($10::text, 'hex'),
+        pg_catalog.decode($11::text, 'hex'),
+        $12::bigint,
+        $13::numeric,
+        $14::numeric,
+        $15::numeric,
+        $16::jsonb,
+        $17::jsonb,
+        $18::jsonb
+      ) as reward
+    `, [
+      String(expected.vaultAddress).slice(2),
+      String(expected.poolId).slice(2),
+      String(expected.tokenAddress).slice(2),
+      expected.tokenName,
+      expected.tokenSymbol,
+      String(expected.launchTransactionHash).slice(2),
+      expected.buySwapFeeBps,
+      expected.sellSwapFeeBps,
+      expected.launcherFeeBps,
+      String(expected.configurationHash).slice(2),
+      String(expected.activeConfigurationHash).slice(2),
+      expected.configurationEpoch,
+      expected.totalCreatorFeesReceivedWei,
+      expected.totalCreatorFeesClaimedWei,
+      expected.pendingCreatorFeesWei,
+      JSON.stringify(allocations),
+      JSON.stringify(expected.entitlements),
+      JSON.stringify(expected.events),
+    ]);
+    const reward = result.rows[0]!.reward;
+
+    expect(Object.keys(reward).sort()).toEqual(
+      [...CLASSIC_V3_RECONCILER_REWARD_FIELDS].sort(),
+    );
+    expect(Object.keys(
+      (reward.allocations as Array<Record<string, unknown>>)[0]!,
+    ).sort()).toEqual(
+      [...CLASSIC_V3_RECONCILER_REWARD_ALLOCATION_FIELDS].sort(),
+    );
+    expect(Object.keys(
+      (reward.entitlements as Array<Record<string, unknown>>)[0]!,
+    ).sort()).toEqual(
+      [...CLASSIC_V3_RECONCILER_REWARD_ENTITLEMENT_FIELDS].sort(),
+    );
+    expect(canonicalizeFingerprintJson(reward as never)).toEqual(
+      canonicalizeFingerprintJson(expected as never),
+    );
+
+    const parts: ClassicV3ReconcilerRouteParts = {
+      ...CLASSIC_V3_RECONCILER_ROUTE_FIXTURE_PARTS,
+      rewards: [reward as never],
+    };
+    await expectCanonicalParity(classicV3ReconcilerRouteFixture(), parts);
   });
 
   it.each([
