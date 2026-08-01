@@ -1,14 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
-import { toFunctionSelector } from "viem";
+import {
+  encodeAbiParameters,
+  keccak256,
+  toFunctionSelector,
+} from "viem";
 
 vi.mock("server-only", () => ({}));
 
+import { verifyClassicV3ActivationModel } from "../../lib/data-pipeline/classic-v3-activation-model";
 import {
+  readDualRpcInitialRewardSeed,
   readDualRpcRewardSnapshot,
   type CandidateRpcClient,
+  type DualRpcCandidateBatchEvidence,
   type CandidateRpcProvider,
   type CandidateRpcRewardSnapshot,
 } from "../../lib/data-pipeline/dual-rpc";
+import type { EnvioCandidate } from "../../lib/data-pipeline/envio";
 import type { ProjectorRewardSnapshot } from "../../lib/data-pipeline/projector-reward-fold";
 import {
   expectedRewardRpcCallCount,
@@ -25,6 +33,56 @@ const bob = address("2");
 const poolId = bytes32("3");
 const configurationHash = bytes32("4");
 const blockHash = bytes32("9");
+
+function classicActiveHash(
+  epoch: bigint,
+  beneficiaries: readonly `0x${string}`[],
+  shares: readonly number[],
+  factoryConfigurationHash: `0x${string}`,
+) {
+  return keccak256(
+    encodeAbiParameters(
+      [
+        { type: "uint256" },
+        { type: "address" },
+        { type: "bytes32" },
+        { type: "uint64" },
+        { type: "address[]" },
+        { type: "uint16[]" },
+      ],
+      [1n, vault, factoryConfigurationHash, epoch, [...beneficiaries], [...shares]],
+    ),
+  );
+}
+
+function seedCandidate(input: {
+  eventName: string;
+  sourceAddress: `0x${string}`;
+  logIndex: number;
+  decodedPayload: Record<string, unknown>;
+  contractName?: string;
+}): EnvioCandidate {
+  const transactionHash = `0x${input.logIndex.toString(16).padStart(64, "0")}` as const;
+  return {
+    candidateId: `1:${blockHash}:${transactionHash}:${input.logIndex}`,
+    chainId: 1,
+    blockNumber: "100",
+    blockHash,
+    blockTimestamp: "1000",
+    transactionHash,
+    transactionIndex: 0,
+    blockGlobalLogIndex: input.logIndex,
+    sourceAddress: input.sourceAddress,
+    contractName:
+      input.contractName ?? "ClassicV3RewardVault",
+    eventName: input.eventName,
+    releaseHint: { model: "classic", releaseVersion: "classic-v3" },
+    orderedTopics: [bytes32("a")],
+    rawData: "0x",
+    decodedPayload: input.decodedPayload,
+    payloadHash: bytes32("b"),
+  };
+}
 
 const expected: ProjectorRewardSnapshot = Object.freeze({
   vault,
@@ -136,6 +194,69 @@ function provider(
     endpointCommitment: bytes32(vendorGroup === "alchemy" ? "5" : "6"),
     endpointOriginCommitment: bytes32(vendorGroup === "alchemy" ? "7" : "8"),
     client: { readRewardSnapshot } as CandidateRpcClient,
+  };
+}
+
+function candidateBatchEvidence(
+  candidates: readonly EnvioCandidate[],
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider],
+): DualRpcCandidateBatchEvidence {
+  const providerIdentities = providers.map(({ identity }) => identity) as [string, string];
+  const providerVendorGroups = providers.map(({ vendorGroup }) => vendorGroup) as [string, string];
+  const providerEndpointCommitments = providers.map(
+    ({ endpointCommitment }) => endpointCommitment,
+  ) as [`0x${string}`, `0x${string}`];
+  const providerOriginCommitments = providers.map(
+    ({ endpointOriginCommitment }) => endpointOriginCommitment,
+  ) as [`0x${string}`, `0x${string}`];
+  return {
+    chainId: 1,
+    providerIdentities,
+    providerVendorGroups,
+    providerEndpointCommitments,
+    providerOriginCommitments,
+    providerHeads: ["200", "200"],
+    safeBlockNumber: "188",
+    safeBlockHash: bytes32("e"),
+    candidates: candidates.map((candidate) => ({
+      chainId: 1,
+      candidateId: candidate.candidateId,
+      sourceAddress: candidate.sourceAddress,
+      contractName: candidate.contractName,
+      eventName: candidate.eventName,
+      sourceKind: candidate.contractName === "ClassicV3RewardVault"
+        ? "dynamic-attested"
+        : "static",
+      model: "classic",
+      releaseVersion: "classic-v3",
+      payloadHash: candidate.payloadHash,
+      rawLogCommitment: bytes32("d"),
+      providerIdentities,
+      providerVendorGroups,
+      providerEndpointCommitments,
+      providerOriginCommitments,
+      providerHeads: ["200", "200"],
+      safeBlockNumber: "188",
+      safeBlockHash: bytes32("e"),
+      candidateBlockNumber: candidate.blockNumber,
+      candidateBlockHash: candidate.blockHash,
+      candidateBlockTimestamp: candidate.blockTimestamp,
+      transactionHash: candidate.transactionHash,
+      transactionIndex: candidate.transactionIndex,
+      receiptCommitment: bytes32("c"),
+      sourceCodeHash: bytes32("b"),
+      receiptLogOrdinal: candidate.blockGlobalLogIndex,
+    })),
+    executionTrace: {
+      startedAtMs: 1,
+      completedAtMs: 2,
+      candidateBatchSize: candidates.length,
+      hardDeadlineMs: 100,
+      maxCallsPerProvider: 128,
+      elapsedMs: 1,
+      providerCallCounts: [1, 1],
+      calls: [],
+    },
   };
 }
 
@@ -419,4 +540,362 @@ describe("dual-RPC exact-block reward snapshots", () => {
       })).rejects.toThrow();
     },
   );
+
+  it("reconstructs the immutable seed across a same-block payout change", async () => {
+    const carol = address("3");
+    const factoryConfigurationHash = bytes32("c");
+    const initialActiveHash = classicActiveHash(
+      1n,
+      [alice, bob],
+      [4000, 6000],
+      factoryConfigurationHash,
+    );
+    const currentActiveHash = classicActiveHash(
+      2n,
+      [carol, bob],
+      [4000, 6000],
+      factoryConfigurationHash,
+    );
+    const parent = seedCandidate({
+      eventName: "ClassicRewardVaultDeployed",
+      sourceAddress: address("f"),
+      contractName: "ClassicV3RewardVaultFactory",
+      logIndex: 4,
+      decodedPayload: {
+        vault,
+        poolId,
+        feeHook: address("e"),
+        configurationHash: factoryConfigurationHash,
+      },
+    });
+    const launch = seedCandidate({
+      eventName: "MemeTokenLaunchedV2",
+      sourceAddress: address("d"),
+      contractName: "ClassicV3Launcher",
+      logIndex: 5,
+      decodedPayload: {
+        rewardVault: vault,
+        poolId,
+        feeHook: address("e"),
+        rewardConfigurationHash: factoryConfigurationHash,
+      },
+    });
+    const payout = seedCandidate({
+      eventName: "PayoutWalletChanged",
+      sourceAddress: vault,
+      logIndex: 6,
+      decodedPayload: {
+        poolId,
+        allocationIndex: "0",
+        previousPayoutWallet: alice,
+        newPayoutWallet: carol,
+        shareBps: "4000",
+        configurationEpoch: "2",
+        activeConfigurationHash: currentActiveHash,
+        effectiveTotalCreatorFeesReceived: "0",
+      },
+    });
+    const raw = result({
+      configurationEpoch: "2",
+      configurationHash: currentActiveHash,
+      totalCreatorFeesReceived: "0",
+      totalCreatorFeesClaimed: "0",
+      allocations: [
+        { allocationIndex: 0, beneficiary: carol, payoutAddress: carol, shareBps: "4000" },
+        { allocationIndex: 1, beneficiary: bob, payoutAddress: bob, shareBps: "6000" },
+      ],
+      balances: [
+        { account: vault, payoutAddress: vault, claimableAccrued: "0", claimedTotal: "0" },
+      ],
+      rpcCallCount: expectedRewardRpcCallCount("classic-v3", 2, 1),
+    });
+    const left = vi.fn(async () => raw);
+    const right = vi.fn(async () => raw);
+    const providers = [
+      provider("alchemy-seed", "alchemy", left),
+      provider("quicknode-seed", "quicknode", right),
+    ] as const;
+
+    await expect(readDualRpcInitialRewardSeed({
+      parentCandidate: parent,
+      launchCandidate: launch,
+      sameBlockVaultEvents: [payout],
+      candidateEvidence: candidateBatchEvidence([launch, payout], providers),
+      providers,
+      rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 32 },
+    })).resolves.toMatchObject({
+      vault,
+      poolId,
+      deploymentBlockNumber: "100",
+      deploymentBlockHash: blockHash,
+      activationBlockNumber: "100",
+      activationBlockHash: blockHash,
+      activationBlockGlobalLogIndex: 5,
+      coveredRewardCandidateIds: [payout.candidateId],
+      factoryConfigurationHash,
+      initialActiveConfigurationHash: initialActiveHash,
+      allocations: [
+        { allocationIndex: 0, beneficiary: alice, shareBps: "4000" },
+        { allocationIndex: 1, beneficiary: bob, shareBps: "6000" },
+      ],
+      endConfigurationSnapshot: {
+        configurationEpoch: "2",
+        configurationHash: currentActiveHash,
+        providerCallCounts: [12, 12],
+      },
+    });
+    expect(left).toHaveBeenCalledWith(
+      expect.objectContaining({ blockHash, blockNumber: 100n, vault }),
+    );
+    expect(right).toHaveBeenCalledWith(
+      expect.objectContaining({ blockHash, blockNumber: 100n, vault }),
+    );
+  });
+
+  it("separately proves checkpoint, claim and payout state after activation", async () => {
+    const carol = address("3");
+    const factoryConfigurationHash = bytes32("c");
+    const initialActiveHash = classicActiveHash(
+      1n,
+      [alice, bob],
+      [4000, 6000],
+      factoryConfigurationHash,
+    );
+    const currentActiveHash = classicActiveHash(
+      2n,
+      [carol, bob],
+      [4000, 6000],
+      factoryConfigurationHash,
+    );
+    const parent = seedCandidate({
+      eventName: "ClassicRewardVaultDeployed",
+      sourceAddress: address("f"),
+      contractName: "ClassicV3RewardVaultFactory",
+      logIndex: 4,
+      decodedPayload: {
+        vault,
+        poolId,
+        feeHook: address("e"),
+        configurationHash: factoryConfigurationHash,
+      },
+    });
+    const launch = seedCandidate({
+      eventName: "MemeTokenLaunchedV2",
+      sourceAddress: address("d"),
+      contractName: "ClassicV3Launcher",
+      logIndex: 5,
+      decodedPayload: {
+        rewardVault: vault,
+        poolId,
+        feeHook: address("e"),
+        rewardConfigurationHash: factoryConfigurationHash,
+      },
+    });
+    const checkpoint = seedCandidate({
+      eventName: "CreatorFeesCheckpointed",
+      sourceAddress: vault,
+      logIndex: 6,
+      decodedPayload: {
+        poolId,
+        configurationEpoch: "1",
+        amount: "10",
+        totalCreatorFeesReceived: "10",
+      },
+    });
+    const claim = seedCandidate({
+      eventName: "BeneficiaryFeesClaimed",
+      sourceAddress: vault,
+      logIndex: 7,
+      decodedPayload: {
+        beneficiary: alice,
+        amount: "4",
+        beneficiaryTotalClaimed: "4",
+        vaultTotalReceived: "10",
+      },
+    });
+    const payout = seedCandidate({
+      eventName: "PayoutWalletChanged",
+      sourceAddress: vault,
+      logIndex: 8,
+      decodedPayload: {
+        poolId,
+        allocationIndex: "0",
+        previousPayoutWallet: alice,
+        newPayoutWallet: carol,
+        shareBps: "4000",
+        configurationEpoch: "2",
+        activeConfigurationHash: currentActiveHash,
+        effectiveTotalCreatorFeesReceived: "10",
+      },
+    });
+    const allocations = [
+      {
+        allocationIndex: 0,
+        beneficiary: carol,
+        payoutAddress: carol,
+        shareBps: "4000",
+      },
+      {
+        allocationIndex: 1,
+        beneficiary: bob,
+        payoutAddress: bob,
+        shareBps: "6000",
+      },
+    ];
+    const balances = [
+      {
+        account: alice,
+        payoutAddress: alice,
+        claimableAccrued: "0",
+        claimedTotal: "4",
+      },
+      {
+        account: bob,
+        payoutAddress: bob,
+        claimableAccrued: "6",
+        claimedTotal: "0",
+      },
+      {
+        account: carol,
+        payoutAddress: carol,
+        claimableAccrued: "0",
+        claimedTotal: "0",
+      },
+    ];
+    const read = vi.fn(async ({
+      balanceAccounts,
+    }: {
+      balanceAccounts: readonly `0x${string}`[];
+    }) => ({
+      model: "classic-v3",
+      vault,
+      blockNumber: "100",
+      blockHash,
+      poolId,
+      configurationEpoch: "2",
+      configurationHash: currentActiveHash,
+      totalCreatorFeesReceived: "10",
+      totalCreatorFeesClaimed: "4",
+      beneficiaryCount: "2",
+      allocations,
+      balances: balanceAccounts.map((account) =>
+        account === vault
+          ? {
+              account: vault,
+              payoutAddress: vault,
+              claimableAccrued: "0",
+              claimedTotal: "0",
+            }
+          : balances.find((balance) => balance.account === account)!),
+      rpcCallCount: expectedRewardRpcCallCount(
+        "classic-v3",
+        2,
+        balanceAccounts.length,
+      ),
+    }));
+    const providers = [
+      provider("alchemy-seed", "alchemy", read),
+      provider("quicknode-seed", "quicknode", read),
+    ] as const;
+    const candidateEvidence = candidateBatchEvidence(
+      [launch, checkpoint, claim, payout],
+      providers,
+    );
+
+    const verified = await verifyClassicV3ActivationModel({
+      activationId: "70000000-0000-4000-8000-000000000001",
+      parentCandidate: parent,
+      launchCandidate: launch,
+      sameBlockVaultEvents: [checkpoint, claim, payout],
+      candidateEvidence,
+      providers,
+      deadlineMs: 1_000,
+    });
+
+    expect(verified.seed.initialActiveConfigurationHash).toBe(
+      initialActiveHash,
+    );
+    expect(verified.projectedSnapshot).toMatchObject({
+      configurationEpoch: "2",
+      activeConfigurationHash: currentActiveHash,
+      totalCreatorFeesReceived: "10",
+      allocations,
+      balances,
+    });
+    expect(verified.rewardEvidence.verificationAccounts).toEqual([
+      alice,
+      bob,
+      carol,
+    ]);
+    expect(
+      verified.modelVerificationEvidence.map(({ evidenceKind }) =>
+        evidenceKind),
+    ).toEqual([
+      "classic-v3-initial-reward-seed-v1",
+      "classic-v3-launch-reward-snapshot-v1",
+    ]);
+    expect(read).toHaveBeenCalledTimes(4);
+  });
+
+  it("fails closed when epoch one cannot be reconstructed", async () => {
+    const carol = address("3");
+    const factoryConfigurationHash = bytes32("c");
+    const currentActiveHash = classicActiveHash(
+      2n,
+      [carol, bob],
+      [4000, 6000],
+      factoryConfigurationHash,
+    );
+    const parent = seedCandidate({
+      eventName: "ClassicRewardVaultDeployed",
+      sourceAddress: address("f"),
+      contractName: "ClassicV3RewardVaultFactory",
+      logIndex: 4,
+      decodedPayload: {
+        vault,
+        poolId,
+        feeHook: address("e"),
+        configurationHash: factoryConfigurationHash,
+      },
+    });
+    const launch = seedCandidate({
+      eventName: "MemeTokenLaunchedV2",
+      sourceAddress: address("d"),
+      contractName: "ClassicV3Launcher",
+      logIndex: 5,
+      decodedPayload: {
+        rewardVault: vault,
+        poolId,
+        feeHook: address("e"),
+        rewardConfigurationHash: factoryConfigurationHash,
+      },
+    });
+    const raw = result({
+      configurationEpoch: "2",
+      configurationHash: currentActiveHash,
+      totalCreatorFeesReceived: "0",
+      totalCreatorFeesClaimed: "0",
+      allocations: [
+        { allocationIndex: 0, beneficiary: carol, payoutAddress: carol, shareBps: "4000" },
+        { allocationIndex: 1, beneficiary: bob, payoutAddress: bob, shareBps: "6000" },
+      ],
+      balances: [
+        { account: vault, payoutAddress: vault, claimableAccrued: "0", claimedTotal: "0" },
+      ],
+      rpcCallCount: expectedRewardRpcCallCount("classic-v3", 2, 1),
+    });
+
+    const providers = [
+      provider("alchemy-seed", "alchemy", async () => raw),
+      provider("quicknode-seed", "quicknode", async () => raw),
+    ] as const;
+    await expect(readDualRpcInitialRewardSeed({
+      parentCandidate: parent,
+      launchCandidate: launch,
+      sameBlockVaultEvents: [],
+      candidateEvidence: candidateBatchEvidence([launch], providers),
+      providers,
+      rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 32 },
+    })).rejects.toThrow();
+  });
 });

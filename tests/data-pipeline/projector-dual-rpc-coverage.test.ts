@@ -37,10 +37,12 @@ vi.mock(
 );
 
 import {
+  verifyDynamicRuntimeAtActivationWithDualRpc,
   verifyDynamicRuntimeAtBlockWithDualRpc,
   verifyEnvioCandidateWindowWithDualRpc,
   type CandidateRpcClient,
   type CandidateRpcLog,
+  type DualRpcCandidateBatchEvidence,
   type DualRpcCandidateWindowEvidence,
   type ProjectorDynamicSourceTemplate,
 } from "../../lib/data-pipeline/dual-rpc";
@@ -91,6 +93,14 @@ const DYNAMIC_FACTORY =
 const DYNAMIC_CHILD =
   "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
 const DYNAMIC_CONFIGURATION = `0x${"88".repeat(32)}` as const;
+const DYNAMIC_POOL_ID = `0x${"98".repeat(32)}` as const;
+const DYNAMIC_FEE_HOOK =
+  "0x9999999999999999999999999999999999999999" as const;
+const CLASSIC_V3_LAUNCHER =
+  "0xc3bd04aac2fb2ba58efd7eb673e544e0b80de770" as const;
+const ACTIVATION_BLOCK_NUMBER = BLOCK_NUMBER + 20_000n;
+const ACTIVATION_BLOCK_HASH = `0x${"a1".repeat(32)}` as const;
+const ACTIVATION_TRANSACTION_HASH = `0x${"a2".repeat(32)}` as const;
 const DYNAMIC_REFERENCES = [{ start: 0, length: 20 }] as const;
 const DYNAMIC_NORMALIZED_HASH = keccak256(
   `0x${"00".repeat(20)}`,
@@ -109,8 +119,111 @@ function dynamicParentCandidate(): EnvioCandidate {
     releaseHint: { model: "classic", releaseVersion: "classic-v3" },
     decodedPayload: {
       vault: DYNAMIC_CHILD,
+      poolId: DYNAMIC_POOL_ID,
+      feeHook: DYNAMIC_FEE_HOOK,
       configurationHash: DYNAMIC_CONFIGURATION,
     },
+  };
+}
+
+function dynamicLaunchCandidate(
+  overrides: Partial<EnvioCandidate["decodedPayload"]> = {},
+): EnvioCandidate {
+  return {
+    ...candidate(),
+    candidateId:
+      `1:${ACTIVATION_BLOCK_HASH}:${ACTIVATION_TRANSACTION_HASH}:4`,
+    blockNumber: ACTIVATION_BLOCK_NUMBER.toString(),
+    blockHash: ACTIVATION_BLOCK_HASH,
+    transactionHash: ACTIVATION_TRANSACTION_HASH,
+    transactionIndex: 1,
+    blockGlobalLogIndex: 4,
+    sourceAddress: CLASSIC_V3_LAUNCHER,
+    contractName: "ClassicV3Launcher",
+    eventName: "MemeTokenLaunchedV2",
+    releaseHint: { model: "classic", releaseVersion: "classic-v3" },
+    decodedPayload: {
+      rewardVault: DYNAMIC_CHILD,
+      poolId: DYNAMIC_POOL_ID,
+      feeHook: DYNAMIC_FEE_HOOK,
+      rewardConfigurationHash: DYNAMIC_CONFIGURATION,
+      ...overrides,
+    },
+  };
+}
+
+function dynamicActivationEvidence(
+  providers: readonly [ReturnType<typeof provider>, ReturnType<typeof provider>],
+  launch = dynamicLaunchCandidate(),
+): DualRpcCandidateBatchEvidence {
+  const providerIdentities = providers.map(({ identity }) => identity) as [
+    string,
+    string,
+  ];
+  const providerVendorGroups = providers.map(({ vendorGroup }) => vendorGroup) as [
+    string,
+    string,
+  ];
+  const providerEndpointCommitments = providers.map(
+    ({ endpointCommitment }) => endpointCommitment,
+  ) as [`0x${string}`, `0x${string}`];
+  const providerOriginCommitments = providers.map(
+    ({ endpointOriginCommitment }) => endpointOriginCommitment,
+  ) as [`0x${string}`, `0x${string}`];
+  return {
+    chainId: 1,
+    providerIdentities,
+    providerVendorGroups,
+    providerEndpointCommitments,
+    providerOriginCommitments,
+    providerHeads: [
+      (ACTIVATION_BLOCK_NUMBER + 12n).toString(),
+      (ACTIVATION_BLOCK_NUMBER + 12n).toString(),
+    ],
+    safeBlockNumber: ACTIVATION_BLOCK_NUMBER.toString(),
+    safeBlockHash: ACTIVATION_BLOCK_HASH,
+    executionTrace: {
+      startedAtMs: 1,
+      completedAtMs: 2,
+      candidateBatchSize: 1,
+      hardDeadlineMs: 1_000,
+      maxCallsPerProvider: 128,
+      elapsedMs: 1,
+      providerCallCounts: [0, 0],
+      calls: [],
+    },
+    candidates: [
+      {
+        chainId: 1,
+        candidateId: launch.candidateId,
+        sourceAddress: launch.sourceAddress,
+        contractName: launch.contractName,
+        eventName: launch.eventName,
+        sourceKind: "static",
+        model: "classic",
+        releaseVersion: "classic-v3",
+        payloadHash: launch.payloadHash,
+        rawLogCommitment: `0x${"a3".repeat(32)}`,
+        providerIdentities,
+        providerVendorGroups,
+        providerEndpointCommitments,
+        providerOriginCommitments,
+        providerHeads: [
+          (ACTIVATION_BLOCK_NUMBER + 12n).toString(),
+          (ACTIVATION_BLOCK_NUMBER + 12n).toString(),
+        ],
+        safeBlockNumber: ACTIVATION_BLOCK_NUMBER.toString(),
+        safeBlockHash: ACTIVATION_BLOCK_HASH,
+        candidateBlockNumber: ACTIVATION_BLOCK_NUMBER.toString(),
+        candidateBlockHash: ACTIVATION_BLOCK_HASH,
+        candidateBlockTimestamp: launch.blockTimestamp,
+        transactionHash: launch.transactionHash,
+        transactionIndex: launch.transactionIndex,
+        receiptCommitment: `0x${"a4".repeat(32)}`,
+        sourceCodeHash: `0x${"a5".repeat(32)}`,
+        receiptLogOrdinal: 0,
+      },
+    ],
   };
 }
 
@@ -520,6 +633,88 @@ describe("dual-RPC exact Envio window coverage", () => {
     });
     expect(first.getBytecode).toHaveBeenCalledTimes(1);
     expect(second.getBytecode).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-verifies a staged reward vault at the exact canonical launch block", async () => {
+    const first = client([]);
+    const second = client([]);
+    const providers = [
+      provider("alchemy-mainnet", first),
+      provider("quicknode-mainnet", second),
+    ] as const;
+    const parentCandidate = dynamicParentCandidate();
+    const launchCandidate = dynamicLaunchCandidate();
+    first.getBytecode = vi.fn(async () => DYNAMIC_CHILD);
+    second.getBytecode = vi.fn(async () => DYNAMIC_CHILD);
+
+    await expect(
+      verifyDynamicRuntimeAtActivationWithDualRpc({
+        parentCandidate,
+        launchCandidate,
+        sourceAddress: DYNAMIC_CHILD,
+        template: dynamicTemplate(),
+        activationEvidence: dynamicActivationEvidence(
+          providers,
+          launchCandidate,
+        ),
+        providers,
+        deadlineMs: 1_000,
+      }),
+    ).resolves.toMatchObject({
+      parentCandidateId: parentCandidate.candidateId,
+      launchCandidateId: launchCandidate.candidateId,
+      sourceAddress: DYNAMIC_CHILD,
+      deploymentBlockNumber: BLOCK_NUMBER.toString(),
+      deploymentBlockHash: BLOCK_HASH,
+      activationBlockNumber: ACTIVATION_BLOCK_NUMBER.toString(),
+      activationBlockHash: ACTIVATION_BLOCK_HASH,
+      activationBlockGlobalLogIndex: 4,
+      rawRuntimeCodeA: DYNAMIC_CHILD,
+      rawRuntimeCodeB: DYNAMIC_CHILD,
+      factoryConfigurationCommitment: DYNAMIC_CONFIGURATION,
+      providerCallCounts: [1, 1],
+    });
+    expect(first.getBytecode).toHaveBeenCalledTimes(1);
+    expect(second.getBytecode).toHaveBeenCalledTimes(1);
+    expect(first.getBytecode).toHaveBeenCalledWith({
+      address: DYNAMIC_CHILD,
+      blockHash: ACTIVATION_BLOCK_HASH,
+      requireCanonical: true,
+    });
+  });
+
+  it("rejects a launch whose reward configuration does not bind the staged parent", async () => {
+    const first = client([]);
+    const second = client([]);
+    const providers = [
+      provider("alchemy-mainnet", first),
+      provider("quicknode-mainnet", second),
+    ] as const;
+    const launchCandidate = dynamicLaunchCandidate({
+      rewardConfigurationHash: `0x${"b1".repeat(32)}`,
+    });
+    first.getBytecode = vi.fn(async () => DYNAMIC_CHILD);
+    second.getBytecode = vi.fn(async () => DYNAMIC_CHILD);
+
+    await expect(
+      verifyDynamicRuntimeAtActivationWithDualRpc({
+        parentCandidate: dynamicParentCandidate(),
+        launchCandidate,
+        sourceAddress: DYNAMIC_CHILD,
+        template: dynamicTemplate(),
+        activationEvidence: dynamicActivationEvidence(
+          providers,
+          launchCandidate,
+        ),
+        providers,
+        deadlineMs: 1_000,
+      }),
+    ).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+    });
+    expect(first.getBytecode).not.toHaveBeenCalled();
+    expect(second.getBytecode).not.toHaveBeenCalled();
   });
 
   it("rejects an extra manifest event omitted by Envio", async () => {

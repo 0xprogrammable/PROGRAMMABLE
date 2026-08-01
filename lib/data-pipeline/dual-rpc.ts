@@ -96,8 +96,18 @@ export type CandidateRpcClient = {
   }): Promise<CandidateRpcReceipt>;
   getBytecode(input: {
     address: HexAddress;
-    blockNumber: bigint;
-  }): Promise<Hex | undefined>;
+  } & (
+    | {
+        blockNumber: bigint;
+        blockHash?: never;
+        requireCanonical?: never;
+      }
+    | {
+        blockNumber?: never;
+        blockHash: HexBytes32;
+        requireCanonical: true;
+      }
+  )): Promise<Hex | undefined>;
   /**
    * Reads immutable launch-token display metadata at the launch block. The
    * projector accepts the values only when both independent providers return
@@ -179,6 +189,70 @@ export type DualRpcRewardSnapshot = Readonly<{
     providerSnapshotCommitments: readonly [HexBytes32, HexBytes32];
   }>[];
   executionTrace: DualRpcExecutionTrace;
+}>;
+
+export type DualRpcInitialRewardSeed = Readonly<{
+  parentCandidateId: string;
+  launchCandidateId: string;
+  vault: HexAddress;
+  poolId: HexBytes32;
+  deploymentBlockNumber: string;
+  deploymentBlockHash: HexBytes32;
+  activationBlockNumber: string;
+  activationBlockHash: HexBytes32;
+  activationBlockGlobalLogIndex: number;
+  coveredRewardCandidateIds: readonly string[];
+  factoryConfigurationHash: HexBytes32;
+  initialActiveConfigurationHash: HexBytes32;
+  allocations: readonly Readonly<{
+    allocationIndex: number;
+    beneficiary: HexAddress;
+    shareBps: string;
+  }>[];
+  /**
+   * Configuration-only provider evidence used to reconstruct epoch one. It is
+   * deliberately not a reward-state/conservation proof because it reads only
+   * the vault sentinel account. A launch block containing reward events must
+   * still pass the normal full-account reward fold and snapshot verifier.
+   */
+  endConfigurationSnapshot: DualRpcRewardSnapshot;
+}>;
+
+export type DualRpcDynamicRuntimeActivationObservation = Readonly<{
+  chainId: 1;
+  parentCandidateId: string;
+  launchCandidateId: string;
+  sourceAddress: HexAddress;
+  deploymentBlockNumber: string;
+  deploymentBlockHash: HexBytes32;
+  activationBlockNumber: string;
+  activationBlockHash: HexBytes32;
+  activationBlockGlobalLogIndex: number;
+  providerIdentities: readonly [string, string];
+  providerVendorGroups: readonly [string, string];
+  providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
+  providerOriginCommitments: readonly [HexBytes32, HexBytes32];
+  rawRuntimeCodeA: Hex;
+  rawRuntimeCodeB: Hex;
+  runtimeCodeHashA: HexBytes32;
+  runtimeCodeHashB: HexBytes32;
+  normalizedRuntimeCodeHashA: HexBytes32;
+  normalizedRuntimeCodeHashB: HexBytes32;
+  runtimeByteLengthA: string;
+  runtimeByteLengthB: string;
+  immutableReferences: readonly ImmutableReference[];
+  immutableReferencesCommitment: HexBytes32;
+  immutableValues: readonly Hex[];
+  immutableValuesCommitment: HexBytes32;
+  reconstructedRuntimeCode: Hex;
+  reconstructedRuntimeCodeHash: HexBytes32;
+  factoryConfigurationCommitment: HexBytes32;
+  template: ProjectorDynamicSourceTemplate;
+  startedAtMs: number;
+  completedAtMs: number;
+  elapsedMs: number;
+  hardDeadlineMs: number;
+  providerCallCounts: readonly [1, 1];
 }>;
 
 export type DualRpcTokenMetadata = Readonly<{
@@ -1804,6 +1878,439 @@ export async function readDualRpcRewardSnapshot(input: Readonly<{
   }
 }
 
+function classicActiveConfigurationHash(input: {
+  vault: HexAddress;
+  factoryConfigurationHash: HexBytes32;
+  configurationEpoch: string;
+  beneficiaries: readonly HexAddress[];
+  sharesBps: readonly string[];
+}): HexBytes32 {
+  return keccak256(
+    encodeAbiParameters(
+      [
+        { type: "uint256" },
+        { type: "address" },
+        { type: "bytes32" },
+        { type: "uint64" },
+        { type: "address[]" },
+        { type: "uint16[]" },
+      ],
+      [
+        1n,
+        input.vault,
+        input.factoryConfigurationHash,
+        BigInt(input.configurationEpoch),
+        [...input.beneficiaries],
+        input.sharesBps.map(Number),
+      ],
+    ),
+  );
+}
+
+/**
+ * Reads a launch-bound Classic reward vault at the exact launch block from two
+ * independent providers and reconstructs its activation state. Only vault
+ * events strictly after the launch log may be reversed. A CTO allocation
+ * replacement in that block is deliberately unsupported and fails closed.
+ */
+export async function readDualRpcInitialRewardSeed(input: Readonly<{
+  parentCandidate: EnvioCandidate;
+  launchCandidate: EnvioCandidate;
+  sameBlockVaultEvents: readonly EnvioCandidate[];
+  candidateEvidence: DualRpcCandidateBatchEvidence;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  rpcPolicy?: RpcExecutionPolicyInput;
+}>): Promise<DualRpcInitialRewardSeed> {
+  assertProductionDualRpcProviders(input.providers);
+  const parent = input.parentCandidate;
+  const launch = input.launchCandidate;
+  const vault = rpcAddress(parent.decodedPayload.vault, "reward-seed-vault");
+  const poolId = rpcBytes32(parent.decodedPayload.poolId, "reward-seed-pool");
+  const feeHook = rpcAddress(
+    parent.decodedPayload.feeHook,
+    "reward-seed-fee-hook",
+  );
+  const factoryConfigurationHash = rpcBytes32(
+    parent.decodedPayload.configurationHash,
+    "reward-seed-configuration",
+  );
+  const deploymentBlockHash = rpcBytes32(
+    parent.blockHash,
+    "reward-seed-block",
+  );
+  let deploymentBlockNumber: string;
+  try {
+    deploymentBlockNumber = parseNonnegativeIntegerText(parent.blockNumber);
+  } catch {
+    throw invalidInput("rpc", "reward-seed-block");
+  }
+  const activationBlockHash = rpcBytes32(
+    launch.blockHash,
+    "reward-seed-activation-block",
+  );
+  let activationBlockNumber: string;
+  try {
+    activationBlockNumber = parseNonnegativeIntegerText(launch.blockNumber);
+  } catch {
+    throw invalidInput("rpc", "reward-seed-activation-block");
+  }
+  const launchVault = rpcAddress(
+    launch.decodedPayload.rewardVault,
+    "reward-seed-launch-vault",
+  );
+  const launchPoolId = rpcBytes32(
+    launch.decodedPayload.poolId,
+    "reward-seed-launch-pool",
+  );
+  const launchFeeHook = rpcAddress(
+    launch.decodedPayload.feeHook,
+    "reward-seed-launch-hook",
+  );
+  const launchConfigurationHash = rpcBytes32(
+    launch.decodedPayload.rewardConfigurationHash,
+    "reward-seed-launch-configuration",
+  );
+  const providerIdentities = input.providers.map(({ identity }) =>
+    providerIdentity(identity)
+  ) as [string, string];
+  const providerVendorGroups = input.providers.map(({ vendorGroup }) =>
+    providerIdentity(vendorGroup)
+  ) as [string, string];
+  const providerEndpointCommitments = input.providers.map(
+    ({ endpointCommitment }) =>
+      rpcBytes32(endpointCommitment, "reward-seed-provider-endpoint"),
+  ) as [HexBytes32, HexBytes32];
+  const providerOriginCommitments = input.providers.map(
+    ({ endpointOriginCommitment }) =>
+      rpcBytes32(endpointOriginCommitment, "reward-seed-provider-origin"),
+  ) as [HexBytes32, HexBytes32];
+  const exactTuple = (
+    actual: readonly string[],
+    expected: readonly string[],
+  ) =>
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index]);
+  if (
+    parent.chainId !== 1 ||
+    parent.contractName !== "ClassicV3RewardVaultFactory" ||
+    parent.eventName !== "ClassicRewardVaultDeployed" ||
+    launch.chainId !== 1 ||
+    launch.contractName !== "ClassicV3Launcher" ||
+    launch.eventName !== "MemeTokenLaunchedV2" ||
+    BigInt(activationBlockNumber) < BigInt(deploymentBlockNumber) ||
+    launchVault !== vault ||
+    launchPoolId !== poolId ||
+    launchFeeHook !== feeHook ||
+    launchConfigurationHash !== factoryConfigurationHash ||
+    input.providers[0].identity === input.providers[1].identity ||
+    input.providers[0].vendorGroup === input.providers[1].vendorGroup ||
+    providerEndpointCommitments[0] === providerEndpointCommitments[1] ||
+    providerOriginCommitments[0] === providerOriginCommitments[1] ||
+    input.providers[0].client === input.providers[1].client ||
+    input.providers.some(
+      ({ client }) => typeof client.readRewardSnapshot !== "function",
+    ) ||
+    !exactTuple(
+      input.candidateEvidence.providerIdentities,
+      providerIdentities,
+    ) ||
+    !exactTuple(
+      input.candidateEvidence.providerVendorGroups,
+      providerVendorGroups,
+    ) ||
+    !exactTuple(
+      input.candidateEvidence.providerEndpointCommitments,
+      providerEndpointCommitments,
+    ) ||
+    !exactTuple(
+      input.candidateEvidence.providerOriginCommitments,
+      providerOriginCommitments,
+    ) ||
+    input.candidateEvidence.candidates.some(
+      (candidate) =>
+        !exactTuple(candidate.providerIdentities, providerIdentities) ||
+        !exactTuple(candidate.providerVendorGroups, providerVendorGroups) ||
+        !exactTuple(
+          candidate.providerEndpointCommitments,
+          providerEndpointCommitments,
+        ) ||
+        !exactTuple(
+          candidate.providerOriginCommitments,
+          providerOriginCommitments,
+        ),
+    )
+  ) {
+    throw invalidInput("rpc", "reward-seed-parent");
+  }
+  const orderedEvents = [...input.sameBlockVaultEvents].sort(
+    (left, right) => left.blockGlobalLogIndex - right.blockGlobalLogIndex,
+  );
+  const evidencedLaunch = input.candidateEvidence.candidates.filter(
+    ({ candidateId }) => candidateId === launch.candidateId,
+  );
+  const evidencedVaultEvents = input.candidateEvidence.candidates
+    .filter(
+      (event) =>
+        event.sourceAddress === vault &&
+        event.contractName === "ClassicV3RewardVault" &&
+        event.candidateBlockNumber === activationBlockNumber &&
+        event.candidateBlockHash === activationBlockHash,
+    );
+  const coveredRewardCandidateIds = orderedEvents.map(
+    ({ candidateId }) => candidateId,
+  );
+  if (
+    evidencedLaunch.length !== 1 ||
+    evidencedLaunch[0]!.candidateBlockNumber !== activationBlockNumber ||
+    evidencedLaunch[0]!.candidateBlockHash !== activationBlockHash ||
+    evidencedLaunch[0]!.sourceAddress !== launch.sourceAddress ||
+    evidencedLaunch[0]!.eventName !== launch.eventName ||
+    evidencedLaunch[0]!.contractName !== launch.contractName ||
+    evidencedVaultEvents.length !== orderedEvents.length ||
+    evidencedVaultEvents.some(
+      ({ candidateId }, index) =>
+        candidateId !== orderedEvents[index]!.candidateId,
+    ) ||
+    new Set(coveredRewardCandidateIds).size !== coveredRewardCandidateIds.length ||
+    orderedEvents.some(
+      (event, index) =>
+        event.chainId !== 1 ||
+        event.blockNumber !== activationBlockNumber ||
+        event.blockHash !== activationBlockHash ||
+        event.sourceAddress !== vault ||
+        event.contractName !== "ClassicV3RewardVault" ||
+        event.blockGlobalLogIndex <= launch.blockGlobalLogIndex ||
+        (index > 0 &&
+          event.blockGlobalLogIndex <=
+            orderedEvents[index - 1]!.blockGlobalLogIndex) ||
+        ![
+          "CreatorFeesCheckpointed",
+          "BeneficiaryFeesClaimed",
+          "PayoutWalletChanged",
+          "CtoRewardConfigurationActivated",
+        ].includes(event.eventName),
+    ) ||
+    orderedEvents.some((event) => {
+      if (event.eventName === "BeneficiaryFeesClaimed") return false;
+      try {
+        return rpcBytes32(
+          event.decodedPayload.poolId,
+          "reward-seed-event-pool",
+        ) !== poolId;
+      } catch {
+        return true;
+      }
+    }) ||
+    orderedEvents.some(
+      ({ eventName }) => eventName === "CtoRewardConfigurationActivated",
+    )
+  ) {
+    throw validationError("rpc", "reward-seed-same-block-events");
+  }
+  const policy = rpcExecutionPolicy({
+    ...input.rpcPolicy,
+    maxAttempts: 1,
+  });
+  const maximumCallCount = expectedRewardRpcCallCount("classic-v3", 5, 1);
+  if (maximumCallCount > policy.maxCallsPerProvider) {
+    throw invalidInput("rpc", "provider-call-budget");
+  }
+  const request = Object.freeze({
+    model: "classic-v3" as const,
+    vault,
+    blockNumber: BigInt(activationBlockNumber),
+    blockHash: activationBlockHash,
+    balanceAccounts: Object.freeze([vault]),
+  });
+  const startedAtMs = Date.now();
+  try {
+    const callStartedAtMs = Date.now();
+    const [leftRaw, rightRaw] = await Promise.all([
+      retryRpc(
+        () => input.providers[0].client.readRewardSnapshot!(request),
+        policy,
+      ),
+      retryRpc(
+        () => input.providers[1].client.readRewardSnapshot!(request),
+        policy,
+      ),
+    ]);
+    const completedAtMs = Date.now();
+    const canonicalRequest = Object.freeze({
+      model: "classic-v3" as const,
+      vault,
+      blockNumber: activationBlockNumber,
+      blockHash: activationBlockHash,
+      balanceAccounts: Object.freeze([vault]),
+    });
+    const left = canonicalRewardSnapshot(leftRaw, canonicalRequest);
+    const right = canonicalRewardSnapshot(rightRaw, canonicalRequest);
+    if (
+      JSON.stringify(left) !== JSON.stringify(right) ||
+      left.poolId !== poolId ||
+      left.configurationEpoch === null ||
+      left.rpcCallCount > policy.maxCallsPerProvider
+    ) {
+      throw validationError("rpc", "reward-seed-provider-agreement");
+    }
+    const snapshotCommitment = keccak256(toBytes(JSON.stringify(left)));
+    const providerCallCounts = [left.rpcCallCount, right.rpcCallCount] as const;
+    const traceCalls = input.providers.map((provider) =>
+      Object.freeze({
+        providerIdentity: provider.identity,
+        providerVendorGroup: provider.vendorGroup,
+        providerEndpointCommitment: provider.endpointCommitment,
+        providerOriginCommitment: provider.endpointOriginCommitment,
+        operation: "readRewardSnapshot" as const,
+        attempt: 1,
+        startedOffsetMs: Math.max(0, callStartedAtMs - startedAtMs),
+        durationMs: Math.max(0, completedAtMs - callStartedAtMs),
+        outcome: "success" as const,
+      }),
+    );
+    const endConfigurationSnapshot: DualRpcRewardSnapshot = Object.freeze({
+      ...left,
+      rpcCallCount: left.rpcCallCount + right.rpcCallCount,
+      verificationAccounts: Object.freeze([vault]),
+      providerIdentities,
+      providerVendorGroups,
+      providerEndpointCommitments,
+      providerOriginCommitments,
+      providerCallCounts,
+      providerSnapshotCommitments: [
+        snapshotCommitment,
+        snapshotCommitment,
+      ] as const,
+      chunks: Object.freeze([
+        Object.freeze({
+          chunkIndex: 0,
+          verificationAccounts: Object.freeze([vault]),
+          providerCallCounts,
+          providerSnapshotCommitments: [
+            snapshotCommitment,
+            snapshotCommitment,
+          ] as const,
+        }),
+      ]),
+      executionTrace: Object.freeze({
+        startedAtMs,
+        completedAtMs,
+        candidateBatchSize: 0,
+        hardDeadlineMs: policy.hardDeadlineMs,
+        maxCallsPerProvider: policy.maxCallsPerProvider,
+        elapsedMs: Math.max(0, completedAtMs - startedAtMs),
+        providerCallCounts,
+        calls: Object.freeze(traceCalls),
+      }),
+    });
+    let epoch = BigInt(left.configurationEpoch);
+    const beneficiaries = left.allocations.map(({ beneficiary }) => beneficiary);
+    const sharesBps = left.allocations.map(({ shareBps }) => shareBps);
+    if (
+      classicActiveConfigurationHash({
+        vault,
+        factoryConfigurationHash,
+        configurationEpoch: epoch.toString(),
+        beneficiaries,
+        sharesBps,
+      }) !== left.configurationHash
+    ) {
+      throw validationError("rpc", "reward-seed-active-configuration");
+    }
+    for (const event of [...orderedEvents].reverse()) {
+      if (event.eventName !== "PayoutWalletChanged") continue;
+      const values = event.decodedPayload;
+      let allocationIndex: number;
+      let eventEpoch: bigint;
+      try {
+        allocationIndex = Number(parseUint256Text(values.allocationIndex));
+        eventEpoch = BigInt(parseNonnegativeIntegerText(values.configurationEpoch));
+      } catch {
+        throw validationError("rpc", "reward-seed-payout-event");
+      }
+      const previous = rpcAddress(
+        values.previousPayoutWallet,
+        "reward-seed-previous-payout",
+      );
+      const next = rpcAddress(
+        values.newPayoutWallet,
+        "reward-seed-next-payout",
+      );
+      const share = parseNonnegativeIntegerText(values.shareBps);
+      const eventHash = rpcBytes32(
+        values.activeConfigurationHash,
+        "reward-seed-event-configuration",
+      );
+      if (
+        !Number.isSafeInteger(allocationIndex) ||
+        allocationIndex < 0 ||
+        allocationIndex >= beneficiaries.length ||
+        eventEpoch !== epoch ||
+        eventHash !== classicActiveConfigurationHash({
+          vault,
+          factoryConfigurationHash,
+          configurationEpoch: epoch.toString(),
+          beneficiaries,
+          sharesBps,
+        }) ||
+        beneficiaries[allocationIndex] !== next ||
+        sharesBps[allocationIndex] !== share ||
+        epoch <= 1n
+      ) {
+        throw validationError("rpc", "reward-seed-payout-reversal");
+      }
+      beneficiaries[allocationIndex] = previous;
+      epoch -= 1n;
+    }
+    if (
+      epoch !== 1n ||
+      new Set(beneficiaries).size !== beneficiaries.length ||
+      sharesBps.reduce((sum, share) => sum + BigInt(share), 0n) !== 10_000n
+    ) {
+      throw validationError("rpc", "reward-seed-initial-state");
+    }
+    const initialActiveConfigurationHash = classicActiveConfigurationHash({
+      vault,
+      factoryConfigurationHash,
+      configurationEpoch: "1",
+      beneficiaries,
+      sharesBps,
+    });
+    return Object.freeze({
+      parentCandidateId: parent.candidateId,
+      launchCandidateId: launch.candidateId,
+      vault,
+      poolId,
+      deploymentBlockNumber,
+      deploymentBlockHash,
+      activationBlockNumber,
+      activationBlockHash,
+      activationBlockGlobalLogIndex: launch.blockGlobalLogIndex,
+      coveredRewardCandidateIds: Object.freeze(coveredRewardCandidateIds),
+      factoryConfigurationHash,
+      initialActiveConfigurationHash,
+      allocations: Object.freeze(
+        beneficiaries.map((beneficiary, allocationIndex) =>
+          Object.freeze({
+            allocationIndex,
+            beneficiary,
+            shareBps: sharesBps[allocationIndex]!,
+          }),
+        ),
+      ),
+      endConfigurationSnapshot,
+    });
+  } catch (error) {
+    if (error instanceof DataPipelineError) throw error;
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "dependency_unavailable",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
+}
+
 export async function verifyEnvioCandidateBatchWithDualRpc(input: {
   candidates: readonly EnvioCandidate[];
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
@@ -3118,6 +3625,309 @@ export async function verifyDynamicRuntimeAtBlockWithDualRpc(input: {
       sourceAddress,
       deploymentBlockNumber,
       deploymentBlockHash,
+      providerIdentities: Object.freeze(providerIdentities) as readonly [
+        string,
+        string,
+      ],
+      providerVendorGroups: Object.freeze(providerVendorGroups) as readonly [
+        string,
+        string,
+      ],
+      providerEndpointCommitments: Object.freeze(
+        providerEndpointCommitments,
+      ) as readonly [HexBytes32, HexBytes32],
+      providerOriginCommitments: Object.freeze(
+        providerOriginCommitments,
+      ) as readonly [HexBytes32, HexBytes32],
+      rawRuntimeCodeA: code[0]!.canonical,
+      rawRuntimeCodeB: code[1]!.canonical,
+      runtimeCodeHashA: runtimeEvidence.exactRuntimeCodeHash,
+      runtimeCodeHashB: runtimeEvidence.exactRuntimeCodeHash,
+      normalizedRuntimeCodeHashA:
+        runtimeEvidence.normalizedRuntimeCodeHash,
+      normalizedRuntimeCodeHashB:
+        runtimeEvidence.normalizedRuntimeCodeHash,
+      runtimeByteLengthA: String(code[0]!.byteLength),
+      runtimeByteLengthB: String(code[1]!.byteLength),
+      immutableReferences: template.immutableReferences,
+      immutableReferencesCommitment:
+        runtimeEvidence.immutableReferencesCommitment,
+      immutableValues: immutableEvidence.immutableValues,
+      immutableValuesCommitment:
+        immutableEvidence.immutableValuesCommitment,
+      reconstructedRuntimeCode:
+        immutableEvidence.reconstructedRuntimeCode,
+      reconstructedRuntimeCodeHash:
+        immutableEvidence.reconstructedRuntimeCodeHash,
+      factoryConfigurationCommitment:
+        immutableEvidence.factoryConfigurationCommitment,
+      template,
+      startedAtMs,
+      completedAtMs,
+      elapsedMs: completedAtMs - startedAtMs,
+      hardDeadlineMs: policy.hardDeadlineMs,
+      providerCallCounts: Object.freeze([1, 1]) as readonly [1, 1],
+    });
+  } catch (error) {
+    if (error instanceof DataPipelineError) throw error;
+    throw dataPipelineError({
+      dependency: "rpc",
+      code: "dependency_unavailable",
+      retryable: true,
+      countsTowardCircuit: true,
+    });
+  }
+}
+
+/**
+ * Re-verifies a previously staged Classic reward vault at the exact canonical
+ * launch block. The launch is the activation boundary: the factory event may
+ * be in an earlier block, but the runtime and immutable binding must still be
+ * present and identical when the launcher first exposes the vault publicly.
+ */
+export async function verifyDynamicRuntimeAtActivationWithDualRpc(input: {
+  parentCandidate: EnvioCandidate;
+  launchCandidate: EnvioCandidate;
+  sourceAddress: HexAddress;
+  template: ProjectorDynamicSourceTemplate;
+  activationEvidence: DualRpcCandidateBatchEvidence;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  deadlineMs?: number;
+}): Promise<DualRpcDynamicRuntimeActivationObservation> {
+  assertProductionDualRpcProviders(input.providers);
+  const template = canonicalDynamicSourceTemplate(input.template);
+  const parent = input.parentCandidate;
+  const launch = input.launchCandidate;
+  const sourceAddress = rpcAddress(
+    input.sourceAddress,
+    "dynamic-activation-source",
+  );
+  let deploymentBlockNumber: string;
+  let activationBlockNumber: string;
+  let deploymentBlockHash: HexBytes32;
+  let activationBlockHash: HexBytes32;
+  try {
+    deploymentBlockNumber = parseNonnegativeIntegerText(parent.blockNumber);
+    activationBlockNumber = parseNonnegativeIntegerText(launch.blockNumber);
+    deploymentBlockHash = canonicalBytes32(parent.blockHash);
+    activationBlockHash = canonicalBytes32(launch.blockHash);
+  } catch {
+    throw invalidInput("rpc", "dynamic-activation-block");
+  }
+  const parentVault = rpcAddress(
+    parent.decodedPayload.vault,
+    "dynamic-activation-parent-vault",
+  );
+  const launchVault = rpcAddress(
+    launch.decodedPayload.rewardVault,
+    "dynamic-activation-launch-vault",
+  );
+  const parentPoolId = rpcBytes32(
+    parent.decodedPayload.poolId,
+    "dynamic-activation-parent-pool",
+  );
+  const launchPoolId = rpcBytes32(
+    launch.decodedPayload.poolId,
+    "dynamic-activation-launch-pool",
+  );
+  const parentFeeHook = rpcAddress(
+    parent.decodedPayload.feeHook,
+    "dynamic-activation-parent-hook",
+  );
+  const launchFeeHook = rpcAddress(
+    launch.decodedPayload.feeHook,
+    "dynamic-activation-launch-hook",
+  );
+  const parentConfigurationHash = rpcBytes32(
+    parent.decodedPayload.configurationHash,
+    "dynamic-activation-parent-configuration",
+  );
+  const launchConfigurationHash = rpcBytes32(
+    launch.decodedPayload.rewardConfigurationHash,
+    "dynamic-activation-launch-configuration",
+  );
+  const launchEvidence = input.activationEvidence.candidates.filter(
+    ({ candidateId }) => candidateId === launch.candidateId,
+  );
+  const launcher = RELEASE_BINDING.sources.find(
+    (source) => source.contractName === "ClassicV3Launcher",
+  );
+  const launchCandidateMatch = CANDIDATE_ID_PATTERN.exec(launch.candidateId);
+  if (
+    parent.chainId !== RELEASE_BINDING.chainId ||
+    launch.chainId !== RELEASE_BINDING.chainId ||
+    parent.contractName !== template.parentFactoryContractName ||
+    parent.eventName !== template.factoryEventName ||
+    parent.sourceAddress !== template.parentFactoryAddress ||
+    launch.contractName !== "ClassicV3Launcher" ||
+    launch.eventName !== "MemeTokenLaunchedV2" ||
+    !launcher ||
+    launch.sourceAddress !== launcher.address ||
+    parentVault !== sourceAddress ||
+    launchVault !== sourceAddress ||
+    parentPoolId !== launchPoolId ||
+    parentFeeHook !== launchFeeHook ||
+    parentConfigurationHash !== launchConfigurationHash ||
+    BigInt(activationBlockNumber) < BigInt(deploymentBlockNumber) ||
+    !launchCandidateMatch ||
+    BigInt(launchCandidateMatch[3]!) !==
+      BigInt(launch.blockGlobalLogIndex) ||
+    launchEvidence.length !== 1 ||
+    launchEvidence[0]!.candidateBlockNumber !== activationBlockNumber ||
+    launchEvidence[0]!.candidateBlockHash !== activationBlockHash ||
+    launchEvidence[0]!.sourceAddress !== launch.sourceAddress ||
+    launchEvidence[0]!.contractName !== launch.contractName ||
+    launchEvidence[0]!.eventName !== launch.eventName ||
+    launchEvidence[0]!.transactionHash !== launch.transactionHash ||
+    launchEvidence[0]!.transactionIndex !== launch.transactionIndex ||
+    BigInt(input.activationEvidence.safeBlockNumber) <
+      BigInt(activationBlockNumber)
+  ) {
+    throw validationError("rpc", "dynamic-activation-binding");
+  }
+
+  const providerIdentities = input.providers.map(({ identity }) =>
+    providerIdentity(identity),
+  ) as [string, string];
+  const providerVendorGroups = input.providers.map(({ vendorGroup }) =>
+    providerIdentity(vendorGroup),
+  ) as [string, string];
+  const providerEndpointCommitments = input.providers.map(
+    ({ endpointCommitment }) =>
+      rpcBytes32(endpointCommitment, "provider-endpoint-commitment"),
+  ) as [HexBytes32, HexBytes32];
+  const providerOriginCommitments = input.providers.map(
+    ({ endpointOriginCommitment }) =>
+      rpcBytes32(endpointOriginCommitment, "provider-origin-commitment"),
+  ) as [HexBytes32, HexBytes32];
+  const exactTuple = (
+    actual: readonly string[],
+    expected: readonly string[],
+  ) =>
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index]);
+  if (
+    !exactTuple(
+      input.activationEvidence.providerIdentities,
+      providerIdentities,
+    ) ||
+    !exactTuple(
+      input.activationEvidence.providerVendorGroups,
+      providerVendorGroups,
+    ) ||
+    !exactTuple(
+      input.activationEvidence.providerEndpointCommitments,
+      providerEndpointCommitments,
+    ) ||
+    !exactTuple(
+      input.activationEvidence.providerOriginCommitments,
+      providerOriginCommitments,
+    ) ||
+    input.activationEvidence.candidates.some(
+      (candidate) =>
+        !exactTuple(candidate.providerIdentities, providerIdentities) ||
+        !exactTuple(candidate.providerVendorGroups, providerVendorGroups) ||
+        !exactTuple(
+          candidate.providerEndpointCommitments,
+          providerEndpointCommitments,
+        ) ||
+        !exactTuple(
+          candidate.providerOriginCommitments,
+          providerOriginCommitments,
+        ),
+    )
+  ) {
+    throw validationError("rpc", "dynamic-activation-provider-binding");
+  }
+
+  const policy = rpcExecutionPolicy({
+    maxConcurrency: 2,
+    maxAttempts: 1,
+    baseBackoffMs: 0,
+    hardDeadlineMs: input.deadlineMs,
+    maxCallsPerProvider: 1,
+  });
+  const startedAtMs = Date.now();
+  try {
+    const rawCodes = await Promise.all(
+      input.providers.map(({ client }) =>
+        withinRpcDeadline(
+          () =>
+            client.getBytecode({
+              address: sourceAddress,
+              blockHash: activationBlockHash,
+              requireCanonical: true,
+            }),
+          policy,
+        ),
+      ),
+    );
+    const code = rawCodes.map((value) => {
+      if (value === undefined) {
+        throw validationError("rpc", "dynamic-activation-code");
+      }
+      const canonical = rpcData(value, "dynamic-activation-code");
+      const byteLength = (canonical.length - 2) / 2;
+      if (
+        canonical === "0x" ||
+        !Number.isSafeInteger(byteLength) ||
+        byteLength < 1 ||
+        byteLength > 24_576
+      ) {
+        throw validationError("rpc", "dynamic-activation-code");
+      }
+      return Object.freeze({ canonical, byteLength });
+    });
+    if (
+      code[0]!.canonical !== code[1]!.canonical ||
+      code[0]!.byteLength !== code[1]!.byteLength
+    ) {
+      throw validationError("rpc", "dynamic-activation-code-agreement");
+    }
+    if (
+      code[0]!.byteLength !== Number(template.expectedRuntimeByteLength)
+    ) {
+      throw validationError("rpc", "dynamic-activation-template-length");
+    }
+    const runtimeEvidence = runtimeBytecodeEvidence({
+      runtimeBytecode: code[0]!.canonical,
+      expectedByteLength: code[0]!.byteLength,
+      immutableReferences: template.immutableReferences,
+    });
+    if (
+      runtimeEvidence.normalizedRuntimeCodeHash !==
+        template.expectedNormalizedRuntimeCodeHash ||
+      runtimeEvidence.immutableReferencesCommitment !==
+        template.expectedImmutableReferencesCommitment ||
+      (template.expectedExactRuntimeCodeHash !== null &&
+        runtimeEvidence.exactRuntimeCodeHash !==
+          template.expectedExactRuntimeCodeHash)
+    ) {
+      throw validationError("rpc", "dynamic-activation-template-mismatch");
+    }
+    const immutableEvidence = dynamicImmutableEvidence({
+      template,
+      parentCandidate: parent,
+      sourceAddress,
+      runtimeBytecode: code[0]!.canonical,
+    });
+    if (
+      immutableEvidence.factoryConfigurationCommitment !==
+      parentConfigurationHash
+    ) {
+      throw validationError("rpc", "dynamic-activation-configuration");
+    }
+    const completedAtMs = Date.now();
+    return Object.freeze({
+      chainId: 1 as const,
+      parentCandidateId: parent.candidateId,
+      launchCandidateId: launch.candidateId,
+      sourceAddress,
+      deploymentBlockNumber,
+      deploymentBlockHash,
+      activationBlockNumber,
+      activationBlockHash,
+      activationBlockGlobalLogIndex: launch.blockGlobalLogIndex,
       providerIdentities: Object.freeze(providerIdentities) as readonly [
         string,
         string,

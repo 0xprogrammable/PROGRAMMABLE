@@ -204,8 +204,17 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         })),
       };
     },
-    getBytecode: ({ address, blockNumber }) =>
-      client.getBytecode({ address, blockNumber }),
+    getBytecode: (request) =>
+      "blockHash" in request && request.blockHash !== undefined
+        ? client.getBytecode({
+            address: request.address,
+            blockHash: request.blockHash,
+            requireCanonical: true,
+          })
+        : client.getBytecode({
+            address: request.address,
+            blockNumber: request.blockNumber,
+          }),
     async readErc20Metadata({ address, blockNumber }) {
       const [name, symbol] = await Promise.all([
         client.readContract({
