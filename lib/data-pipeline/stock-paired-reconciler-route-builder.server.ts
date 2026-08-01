@@ -40,6 +40,10 @@ import { stateViewReadAbi, uerc20ReadAbi } from "../onchain/abis";
 import type { CanonicalJsonValue } from "./canonical-fingerprint";
 import { canonicalBytes32, type HexBytes32 } from "./codecs";
 import { dataPipelineError, invalidInput, validationError } from "./errors";
+import {
+  assembleReconcilerCorpusPages,
+  createReconcilerCorpusManifest,
+} from "./reconciler-corpus-partitions";
 import type {
   ExactBlockRpcClient,
   ExactBlockRpcLog,
@@ -58,7 +62,6 @@ import {
 } from "./stock-paired-reconciler-contribution";
 
 export const STOCK_PAIRED_RECONCILER_LOG_BLOCK_RANGE = 10_000n;
-export const MAXIMUM_STOCK_PAIRED_RECONCILER_LAUNCHES = 256;
 export const STOCK_PAIRED_RECONCILER_ROUTE_KEYS = Object.freeze([
   "explore-list",
   "explore-token",
@@ -631,10 +634,7 @@ function launchRecords(
 ): readonly StockLaunch[] {
   const launched = logs.filter(({ eventName }) =>
     eventName === "StockPairedTokenLaunched");
-  if (
-    launched.length < 1 ||
-    launched.length > MAXIMUM_STOCK_PAIRED_RECONCILER_LAUNCHES
-  ) {
+  if (launched.length < 1) {
     fail("stock-reconciler-launch-cardinality");
   }
   const tokens = new Set<string>();
@@ -1192,6 +1192,17 @@ async function buildContribution(
       }),
     ]);
   const launches = launchRecords(launcherLogs, release);
+  const corpusManifest = createReconcilerCorpusManifest({
+    contract: input.contract,
+    identities: launches.map((launch) => Object.freeze({
+      tokenAddress: lowerAddress(launch.token),
+      poolId: launch.poolId,
+      launchTransactionHash: launch.transactionHash,
+      launchBlockNumber: launch.blockNumber.toString(),
+      launchTransactionIndex: launch.transactionIndex,
+      launchLogIndex: launch.blockGlobalLogIndex,
+    })),
+  });
   const launchCompanions = companions({
     launches,
     launcherLogs,
@@ -1200,130 +1211,160 @@ async function buildContribution(
     factoryLogs,
     release,
   });
-  const transactionBindings = launches.map((launch) => Object.freeze({
-    transactionHash: launch.transactionHash,
-    expectedBlockNumber: launch.blockNumber,
-    expectedBlockHash: launch.blockHash,
-    expectedTo: release.addresses.ethLaunchCoordinator,
-  }));
-  const receiptBindings = launches.map((launch) => Object.freeze({
-    transactionHash: launch.transactionHash,
-    expectedBlockNumber: launch.blockNumber,
-    expectedBlockHash: launch.blockHash,
-  }));
-  const [transactions, receipts, poolSwapLogs] = await Promise.all([
-    input.rpc.getTransactions({
-      transactions: transactionBindings,
-      signal: input.signal,
-    }),
-    input.rpc.getTransactionReceipts({
-      receipts: receiptBindings,
-      signal: input.signal,
-    }),
-    readPoolSwapLogs({
-      rpc: input.rpc,
-      poolManager: release.officialDependencies.poolManager.address,
-      poolIds: launches.map(({ poolId }) => poolId),
-      fromBlock,
-      toBlock: input.blockNumber,
-      signal: input.signal,
-    }),
-  ]);
-  const launchInputs = validatedLaunchInputs({
-    launches,
-    companions: launchCompanions,
-    transactions,
-    receipts,
-    release,
-  });
-
-  for (const quoteAsset of new Set(launches.map(({ quoteAsset }) => quoteAsset))) {
-    const codeHash = await input.rpc.getCodeHash({
-      address: quoteAsset,
+  const launchInputs = new Map<string, LaunchInput>();
+  const values: unknown[] = [];
+  const poolSwapLogs: DecodedLog[] = [];
+  const timestamps = new Map<string, bigint>();
+  const verifiedQuoteAssets = new Set<string>();
+  const completedCorpusPages: Array<(typeof corpusManifest.pages)[number]> = [];
+  for (const page of corpusManifest.pages) {
+    const pageRpc = input.rpc.createPartitionClient(page);
+    await pageRpc.assertCheckpoint({
+      blockNumber: input.blockNumber,
       blockHash: input.blockHash,
       signal: input.signal,
     });
-    if (!sameHex(codeHash, release.issuerRuntime.tokenRuntimeCodeHash)) {
-      fail("stock-reconciler-quote-runtime");
-    }
-  }
-
-  const calls = launches.flatMap((launch) => {
-    const launchInput = launchInputs.get(lowerAddress(launch.token));
-    if (!launchInput) fail("stock-reconciler-launch-input-missing");
-    return [
-      callSpec(launch.token, uerc20ReadAbi, "name"),
-      callSpec(launch.token, uerc20ReadAbi, "symbol"),
-      callSpec(launch.token, uerc20ReadAbi, "decimals"),
-      callSpec(launch.token, uerc20ReadAbi, "totalSupply"),
-      callSpec(launch.token, uerc20ReadAbi, "creator"),
-      callSpec(launch.token, uerc20ReadAbi, "metadata"),
-      callSpec(release.officialDependencies.stateView.address,
-        stateViewReadAbi, "getSlot0", [launch.poolId]),
-      callSpec(release.officialDependencies.stateView.address,
-        stateViewReadAbi, "getLiquidity", [launch.poolId]),
-      callSpec(release.addresses.feeHook, stockPairedHookAbi,
-        "feeDisclosure", [launch.poolId]),
-      callSpec(release.addresses.feeHook, stockPairedHookAbi,
-        "poolFeeConfig", [launch.poolId]),
-      callSpec(release.addresses.ethLaunchCoordinator,
-        stockPairedEthLaunchCoordinatorAbi, "predictTokenAddress", [
-          launchInput.name,
-          launchInput.symbol,
-          launchInput.creator,
-          launchInput.creatorSalt,
-        ]),
-      callSpec(release.addresses.launcher, launcherStateAbi,
-        "launchHashOf", [launch.token]),
-      callSpec(release.addresses.launcher, launcherStateAbi,
-        "rewardVaultOf", [launch.token]),
-      callSpec(release.addresses.launcher, launcherStateAbi,
-        "quoteAssetOf", [launch.token]),
-      callSpec(release.addresses.feeSplitVaultFactory,
-        rewardVaultFactoryStateAbi, "isFactoryVault", [launch.rewardVault]),
-      callSpec(release.addresses.feeSplitVaultFactory,
-        rewardVaultFactoryStateAbi, "configurationHashOf", [launch.rewardVault]),
-      callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "feeHook"),
-      callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "poolId"),
-      callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "quoteAsset"),
-      callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "configurationHash"),
-      callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "beneficiaryCount"),
-      callSpec(launch.rewardVault, stockFeeSplitVaultAbi,
-        "totalCreatorFeesReceived"),
-      callSpec(launch.rewardVault, stockFeeSplitVaultAbi,
-        "totalCreatorFeesClaimed"),
-      callSpec(release.addresses.quoteRegistry, stockQuoteRegistryAbi,
-        "isSupported", [launch.quoteAsset]),
-      callSpec(release.addresses.quoteRegistry, stockQuoteRegistryAbi,
-        "assertAssetReady", [launch.quoteAsset]),
-      callSpec(release.addresses.positionForwarderFactory,
-        positionForwarderFactoryStateAbi, "isFactoryForwarder", [
-          launch.positionRecipient,
-        ]),
-      callSpec(release.addresses.positionForwarderFactory,
-        positionForwarderFactoryStateAbi, "configurationHashOf", [
-          launch.positionRecipient,
-        ]),
-    ];
-  });
-  const values = await readCalls(
-    input.rpc,
-    calls,
-    input.blockHash,
-    input.signal,
-  );
-
-  const timestamps = new Map<string, bigint>();
-  for (const launch of launches) {
-    const key = launch.blockNumber.toString();
-    if (!timestamps.has(key)) {
-      timestamps.set(key, await input.rpc.getBlockTimestamp({
-        blockNumber: launch.blockNumber,
-        expectedHash: launch.blockHash,
+    const pageLaunches = launches.slice(page.startIndex, page.endIndexExclusive);
+    const [transactions, receipts, pagePoolSwapLogs] = await Promise.all([
+      pageRpc.getTransactions({
+        transactions: pageLaunches.map((launch) => Object.freeze({
+          transactionHash: launch.transactionHash,
+          expectedBlockNumber: launch.blockNumber,
+          expectedBlockHash: launch.blockHash,
+          expectedTo: release.addresses.ethLaunchCoordinator,
+        })),
         signal: input.signal,
-      }));
+      }),
+      pageRpc.getTransactionReceipts({
+        receipts: pageLaunches.map((launch) => Object.freeze({
+          transactionHash: launch.transactionHash,
+          expectedBlockNumber: launch.blockNumber,
+          expectedBlockHash: launch.blockHash,
+        })),
+        signal: input.signal,
+      }),
+      readPoolSwapLogs({
+        rpc: pageRpc,
+        poolManager: release.officialDependencies.poolManager.address,
+        poolIds: pageLaunches.map(({ poolId }) => poolId),
+        fromBlock,
+        toBlock: input.blockNumber,
+        signal: input.signal,
+      }),
+    ]);
+    poolSwapLogs.push(...pagePoolSwapLogs);
+    const pageInputs = validatedLaunchInputs({
+      launches: pageLaunches,
+      companions: launchCompanions,
+      transactions,
+      receipts,
+      release,
+    });
+    for (const [key, launchInput] of pageInputs) {
+      if (launchInputs.has(key)) fail("stock-reconciler-launch-input-duplicate");
+      launchInputs.set(key, launchInput);
     }
+    for (const quoteAsset of new Set(pageLaunches.map(({ quoteAsset }) => quoteAsset))) {
+      const key = lowerAddress(quoteAsset);
+      if (verifiedQuoteAssets.has(key)) continue;
+      const codeHash = await pageRpc.getCodeHash({
+        address: quoteAsset,
+        blockHash: input.blockHash,
+        signal: input.signal,
+      });
+      if (!sameHex(codeHash, release.issuerRuntime.tokenRuntimeCodeHash)) {
+        fail("stock-reconciler-quote-runtime");
+      }
+      verifiedQuoteAssets.add(key);
+    }
+    values.push(...await readCalls(
+      pageRpc,
+      pageLaunches.flatMap((launch) => {
+        const launchInput = pageInputs.get(lowerAddress(launch.token));
+        if (!launchInput) fail("stock-reconciler-launch-input-missing");
+        return [
+          callSpec(launch.token, uerc20ReadAbi, "name"),
+          callSpec(launch.token, uerc20ReadAbi, "symbol"),
+          callSpec(launch.token, uerc20ReadAbi, "decimals"),
+          callSpec(launch.token, uerc20ReadAbi, "totalSupply"),
+          callSpec(launch.token, uerc20ReadAbi, "creator"),
+          callSpec(launch.token, uerc20ReadAbi, "metadata"),
+          callSpec(release.officialDependencies.stateView.address,
+            stateViewReadAbi, "getSlot0", [launch.poolId]),
+          callSpec(release.officialDependencies.stateView.address,
+            stateViewReadAbi, "getLiquidity", [launch.poolId]),
+          callSpec(release.addresses.feeHook, stockPairedHookAbi,
+            "feeDisclosure", [launch.poolId]),
+          callSpec(release.addresses.feeHook, stockPairedHookAbi,
+            "poolFeeConfig", [launch.poolId]),
+          callSpec(release.addresses.ethLaunchCoordinator,
+            stockPairedEthLaunchCoordinatorAbi, "predictTokenAddress", [
+              launchInput.name,
+              launchInput.symbol,
+              launchInput.creator,
+              launchInput.creatorSalt,
+            ]),
+          callSpec(release.addresses.launcher, launcherStateAbi,
+            "launchHashOf", [launch.token]),
+          callSpec(release.addresses.launcher, launcherStateAbi,
+            "rewardVaultOf", [launch.token]),
+          callSpec(release.addresses.launcher, launcherStateAbi,
+            "quoteAssetOf", [launch.token]),
+          callSpec(release.addresses.feeSplitVaultFactory,
+            rewardVaultFactoryStateAbi, "isFactoryVault", [launch.rewardVault]),
+          callSpec(release.addresses.feeSplitVaultFactory,
+            rewardVaultFactoryStateAbi, "configurationHashOf", [launch.rewardVault]),
+          callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "feeHook"),
+          callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "poolId"),
+          callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "quoteAsset"),
+          callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "configurationHash"),
+          callSpec(launch.rewardVault, stockFeeSplitVaultAbi, "beneficiaryCount"),
+          callSpec(launch.rewardVault, stockFeeSplitVaultAbi,
+            "totalCreatorFeesReceived"),
+          callSpec(launch.rewardVault, stockFeeSplitVaultAbi,
+            "totalCreatorFeesClaimed"),
+          callSpec(release.addresses.quoteRegistry, stockQuoteRegistryAbi,
+            "isSupported", [launch.quoteAsset]),
+          callSpec(release.addresses.quoteRegistry, stockQuoteRegistryAbi,
+            "assertAssetReady", [launch.quoteAsset]),
+          callSpec(release.addresses.positionForwarderFactory,
+            positionForwarderFactoryStateAbi, "isFactoryForwarder", [
+              launch.positionRecipient,
+            ]),
+          callSpec(release.addresses.positionForwarderFactory,
+            positionForwarderFactoryStateAbi, "configurationHashOf", [
+              launch.positionRecipient,
+            ]),
+        ];
+      }),
+      input.blockHash,
+      input.signal,
+    ));
+    for (const launch of pageLaunches) {
+      const key = launch.blockNumber.toString();
+      if (!timestamps.has(key)) {
+        timestamps.set(key, await pageRpc.getBlockTimestamp({
+          blockNumber: launch.blockNumber,
+          expectedHash: launch.blockHash,
+          signal: input.signal,
+        }));
+      }
+    }
+    await pageRpc.assertCheckpoint({
+      blockNumber: input.blockNumber,
+      blockHash: input.blockHash,
+      signal: input.signal,
+    });
+    completedCorpusPages.push(page);
   }
+  assembleReconcilerCorpusPages(corpusManifest, completedCorpusPages);
+  poolSwapLogs.sort((left, right) =>
+    left.log.blockNumber === right.log.blockNumber
+      ? left.log.transactionIndex === right.log.transactionIndex
+        ? left.log.logIndex - right.log.logIndex
+        : left.log.transactionIndex - right.log.transactionIndex
+      : left.log.blockNumber < right.log.blockNumber ? -1 : 1
+  );
 
   const tokens: Json[] = [];
   const charts: Json[] = [];

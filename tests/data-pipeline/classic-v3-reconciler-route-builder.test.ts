@@ -21,7 +21,6 @@ import {
   assertClassicV3ReconcilerLaunchCount,
   classicV3ReconcilerBlockRanges,
   CLASSIC_V3_RECONCILER_LOG_BLOCK_RANGE,
-  MAXIMUM_CLASSIC_V3_RECONCILER_LAUNCHES,
 } from "../../lib/data-pipeline/classic-v3-reconciler-route-builder.server";
 import {
   CLASSIC_V3_RECONCILER_ROUTE_CONTRACT,
@@ -101,6 +100,9 @@ const swapEvent = parseAbiItem(
 const checkpointEvent = parseAbiItem(
   "event CreatorFeesCheckpointed(bytes32 indexed poolId,uint64 indexed configurationEpoch,uint256 amount,uint256 totalCreatorFeesReceived)",
 );
+const beneficiaryClaimEvent = parseAbiItem(
+  "event BeneficiaryFeesClaimed(address indexed beneficiary,uint256 amount,uint256 beneficiaryTotalClaimed,uint256 vaultTotalReceived)",
+);
 const payoutChangedEvent = parseAbiItem(
   "event PayoutWalletChanged(bytes32 indexed poolId,uint256 indexed allocationIndex,address indexed previousPayoutWallet,address newPayoutWallet,uint16 shareBps,uint64 configurationEpoch,bytes32 activeConfigurationHash,uint256 effectiveTotalCreatorFeesReceived)",
 );
@@ -128,7 +130,8 @@ type Mutation =
   | "duplicate-fee"
   | "reordered-fees"
   | "payout-history"
-  | "cto-history";
+  | "cto-history"
+  | "fully-claimed-history";
 
 function eventLog(input: {
   event: AbiEvent;
@@ -178,12 +181,15 @@ function fixture(mutation: Mutation = "none") {
   const launchBlock = startBlock + 1n;
   const swapBlock = startBlock + 2n;
   const checkpointBlock = startBlock + 5n;
-  const currentBeneficiary = mutation === "payout-history"
+  const currentBeneficiary = mutation === "payout-history" ||
+      mutation === "fully-claimed-history"
     ? REPLACEMENT
     : mutation === "cto-history"
       ? CTO_BENEFICIARY
       : BENEFICIARY;
-  const configurationEpoch = mutation === "payout-history" || mutation === "cto-history"
+  const configurationEpoch = mutation === "payout-history" ||
+      mutation === "cto-history" ||
+      mutation === "fully-claimed-history"
     ? 2n
     : 1n;
   const initialActiveConfigurationHash = keccak256(encodeAbiParameters(
@@ -238,6 +244,21 @@ function fixture(mutation: Mutation = "none") {
     blockHash: LAUNCH_BLOCK_HASH,
     transactionHash: LAUNCH_TRANSACTION,
     transactionIndex: 2,
+    logIndex: 1,
+  });
+  const beneficiaryClaimLog = eventLog({
+    event: beneficiaryClaimEvent,
+    args: {
+      beneficiary: BENEFICIARY,
+      amount: 90n,
+      beneficiaryTotalClaimed: 90n,
+      vaultTotalReceived: 90n,
+    },
+    address: VAULT,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: HISTORY_TRANSACTION,
+    transactionIndex: 4,
     logIndex: 1,
   });
   const disclosureLog = eventLog({
@@ -486,7 +507,7 @@ function fixture(mutation: Mutation = "none") {
     blockHash: SWAP_BLOCK_HASH,
     transactionHash: HISTORY_TRANSACTION,
     transactionIndex: 4,
-    logIndex: 1,
+    logIndex: mutation === "fully-claimed-history" ? 2 : 1,
   });
   const ctoActivatedLog = eventLog({
     event: ctoActivatedEvent,
@@ -643,7 +664,11 @@ function fixture(mutation: Mutation = "none") {
           ),
           encodedResult(classicRewardVaultAbi, "beneficiaryCount", 1n),
           encodedResult(classicRewardVaultAbi, "totalCreatorFeesReceived", 90n),
-          encodedResult(classicRewardVaultAbi, "totalCreatorFeesClaimed", 0n),
+          encodedResult(
+            classicRewardVaultAbi,
+            "totalCreatorFeesClaimed",
+            mutation === "fully-claimed-history" ? 90n : 0n,
+          ),
         ]);
       }
       if (callBatch === 2) {
@@ -658,12 +683,22 @@ function fixture(mutation: Mutation = "none") {
         ]);
       }
       expect(callBatch).toBe(3);
-      const hasHistory = mutation === "payout-history" || mutation === "cto-history";
+      const hasHistory = mutation === "payout-history" ||
+        mutation === "cto-history" ||
+        mutation === "fully-claimed-history";
       expect(calls).toHaveLength(hasHistory ? 4 : 2);
       if (hasHistory) {
         return Object.freeze([
-          encodedResult(classicRewardVaultAbi, "claimable", 90n),
-          encodedResult(classicRewardVaultAbi, "claimedBy", 0n),
+          encodedResult(
+            classicRewardVaultAbi,
+            "claimable",
+            mutation === "fully-claimed-history" ? 0n : 90n,
+          ),
+          encodedResult(
+            classicRewardVaultAbi,
+            "claimedBy",
+            mutation === "fully-claimed-history" ? 90n : 0n,
+          ),
           encodedResult(classicRewardVaultAbi, "claimable", 0n),
           encodedResult(classicRewardVaultAbi, "claimedBy", 0n),
         ]);
@@ -705,6 +740,13 @@ function fixture(mutation: Mutation = "none") {
         if (mutation === "payout-history") {
           return Object.freeze([checkpointLog, payoutChangedLog]);
         }
+        if (mutation === "fully-claimed-history") {
+          return Object.freeze([
+            checkpointLog,
+            beneficiaryClaimLog,
+            payoutChangedLog,
+          ]);
+        }
         if (mutation === "cto-history") {
           return Object.freeze([checkpointLog, ctoActivatedLog]);
         }
@@ -740,7 +782,10 @@ function fixture(mutation: Mutation = "none") {
     routeKeys: RECONCILER_ROUTE_KEYS,
     routeContract: {},
     projectionContract: {},
-    currentEntities: [],
+    currentEntities: [{
+      entityKind: "launch",
+      entityKey: TOKEN.toLowerCase(),
+    }],
   });
   return { rpc, contract, checkpointBlock };
 }
@@ -837,6 +882,49 @@ describe("Classic V3 exact route builder", () => {
     },
   );
 
+  it("keeps a fully claimed historical-only wallet in the entitlement corpus", async () => {
+    const { rpc, contract, checkpointBlock } = fixture(
+      "fully-claimed-history",
+    );
+    const routes = await buildClassicV3ExactBlockRoutes({
+      rpc,
+      contract,
+      blockNumber: checkpointBlock,
+      blockHash: CHECKPOINT_HASH,
+      signal: new AbortController().signal,
+    });
+    const profile = routes.find(({ routeKey }) =>
+      routeKey === "classic-v3-profile"
+    )!.dto as {
+      rewards: Array<{
+        totalCreatorFeesClaimedWei: string;
+        entitlements: Array<Record<string, unknown>>;
+        events: Array<Record<string, unknown>>;
+      }>;
+    };
+
+    expect(profile.rewards[0]).toMatchObject({
+      totalCreatorFeesClaimedWei: "90",
+      entitlements: [
+        {
+          account: BENEFICIARY.toLowerCase(),
+          claimableWei: "0",
+          claimedWei: "90",
+        },
+        {
+          account: REPLACEMENT.toLowerCase(),
+          claimableWei: "0",
+          claimedWei: "0",
+        },
+      ],
+    });
+    expect(profile.rewards[0]!.events.map(({ kind }) => kind)).toEqual([
+      "checkpoint",
+      "claim",
+      "payout-change",
+    ]);
+  });
+
   it.each([
     ["runtime hash", "runtime"],
     ["launch calldata", "calldata"],
@@ -871,12 +959,10 @@ describe("Classic V3 exact route builder", () => {
     ]);
   });
 
-  it("covers the current 186-launch corpus without silent truncation", () => {
-    expect(MAXIMUM_CLASSIC_V3_RECONCILER_LAUNCHES).toBeGreaterThanOrEqual(186);
-    expect(MAXIMUM_CLASSIC_V3_RECONCILER_LAUNCHES).toBe(256);
-    expect(MAXIMUM_CLASSIC_V3_RECONCILER_LAUNCHES * 41).toBeLessThan(16_384);
-    expect([128, 129, 186, 256].map(assertClassicV3ReconcilerLaunchCount))
-      .toEqual([128, 129, 186, 256]);
-    expect(() => assertClassicV3ReconcilerLaunchCount(257)).toThrow();
+  it("covers the current inventory and growth beyond 256 launches", () => {
+    expect([128, 129, 186, 256, 257, 10_000].map(
+      assertClassicV3ReconcilerLaunchCount,
+    )).toEqual([128, 129, 186, 256, 257, 10_000]);
+    expect(() => assertClassicV3ReconcilerLaunchCount(0)).toThrow();
   });
 });

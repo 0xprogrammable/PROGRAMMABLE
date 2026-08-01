@@ -38,7 +38,9 @@ import {
 import { canonicalBytes32, type HexBytes32 } from "./codecs";
 import {
   assembleReconcilerCorpusPages,
+  assembleReconcilerEntitlementPages,
   createReconcilerCorpusManifest,
+  createReconcilerEntitlementManifest,
 } from "./reconciler-corpus-partitions";
 import { dataPipelineError, invalidInput, validationError } from "./errors";
 import type {
@@ -1443,8 +1445,12 @@ async function buildContribution(input: {
   signal: AbortSignal;
 }): Promise<ReconcilerRouteContribution> {
   const release = resolvedRelease(input.contract);
-  if (input.blockNumber < release.startBlock) {
-    fail("classic-v3-checkpoint-before-release");
+  if (
+    input.blockNumber < release.startBlock ||
+    input.blockNumber.toString() !== input.contract.checkpointBlockNumber ||
+    !sameHex(input.blockHash, input.contract.checkpointBlockHash)
+  ) {
+    fail("classic-v3-checkpoint-binding");
   }
   await assertRuntime(input.rpc, release, input.blockHash, input.signal);
 
@@ -1475,6 +1481,17 @@ async function buildContribution(input: {
     }),
   ]);
   const launches = launchRecords(launcherLogs, release);
+  const corpusManifest = createReconcilerCorpusManifest({
+    contract: input.contract,
+    identities: launches.map((launch) => Object.freeze({
+      tokenAddress: lowerAddress(launch.token),
+      poolId: launch.poolId,
+      launchTransactionHash: launch.transactionHash,
+      launchBlockNumber: launch.blockNumber.toString(),
+      launchTransactionIndex: launch.transactionIndex,
+      launchLogIndex: launch.blockGlobalLogIndex,
+    })),
+  });
   const companions = validatedCompanions({
     launches,
     launcherLogs,
@@ -1482,164 +1499,251 @@ async function buildContribution(input: {
     factoryLogs,
     release,
   });
-  const transactionBindings = launches.map((launch) => Object.freeze({
-    transactionHash: launch.transactionHash,
-    expectedBlockNumber: launch.blockNumber,
-    expectedBlockHash: launch.blockHash,
-    expectedTo: release.launcher,
-  }));
-  const receiptBindings = launches.map((launch) => Object.freeze({
-    transactionHash: launch.transactionHash,
-    expectedBlockNumber: launch.blockNumber,
-    expectedBlockHash: launch.blockHash,
-  }));
-  const [transactions, receipts] = await Promise.all([
-    input.rpc.getTransactions({
-      transactions: transactionBindings,
-      signal: input.signal,
-    }),
-    input.rpc.getTransactionReceipts({
-      receipts: receiptBindings,
-      signal: input.signal,
-    }),
-  ]);
-  const launchTransactions = validatedLaunchTransactions({
-    launches,
-    transactions,
-    receipts,
-    companions,
-    release,
-  });
-  const vaults = launches.map(({ rewardVault }) => rewardVault);
-  const [vaultLogs, poolSwapLogs] = await Promise.all([
-    readAddressBatches({
-      rpc: input.rpc,
-      addresses: vaults,
-      events: VAULT_EVENTS,
-      fromBlock: release.startBlock,
-      toBlock: input.blockNumber,
-      signal: input.signal,
-    }),
-    readPoolSwapBatches({
-      rpc: input.rpc,
-      poolManager: release.poolManager,
-      poolIds: launches.map(({ poolId }) => poolId),
-      fromBlock: release.startBlock,
-      toBlock: input.blockNumber,
-      signal: input.signal,
-    }),
-  ]);
-  const vaultLogsByAddress = groupLogsByAddress(vaultLogs);
-
-  const initialSpecs = launches.flatMap((launch) => [
-    callSpec(launch.token, uerc20ReadAbi, "name"),
-    callSpec(launch.token, uerc20ReadAbi, "symbol"),
-    callSpec(launch.token, uerc20ReadAbi, "decimals"),
-    callSpec(launch.token, uerc20ReadAbi, "totalSupply"),
-    callSpec(launch.token, uerc20ReadAbi, "creator"),
-    callSpec(launch.token, uerc20ReadAbi, "metadata"),
-    callSpec(release.stateView, stateViewReadAbi, "getSlot0", [launch.poolId]),
-    callSpec(release.stateView, stateViewReadAbi, "getLiquidity", [launch.poolId]),
-    callSpec(release.hook, classicV3HookAbi, "feeDisclosure", [launch.poolId]),
-    callSpec(release.hook, classicV3HookAbi, "poolFeeConfig", [launch.poolId]),
-    callSpec(release.launcher, classicV3LaunchAbi, "predictRewardVault", [
-      launch.token,
-      launch.deployer,
-      launchTransactions.get(lowerAddress(launch.token))?.rewardBeneficiaries ?? [],
-      launchTransactions.get(lowerAddress(launch.token))?.rewardSharesBps ?? [],
-    ]),
-    callSpec(release.rewardVaultFactory, reconcilerRewardVaultFactoryAbi, "isFactoryVault", [launch.rewardVault]),
-    callSpec(release.rewardVaultFactory, reconcilerRewardVaultFactoryAbi, "configurationHashOf", [launch.rewardVault]),
-    callSpec(launch.rewardVault, classicRewardVaultAbi, "feeHook"),
-    callSpec(launch.rewardVault, classicRewardVaultAbi, "poolId"),
-    callSpec(launch.rewardVault, classicRewardVaultAbi, "configurationHash"),
-    callSpec(launch.rewardVault, classicRewardVaultAbi, "activeConfigurationHash"),
-    callSpec(launch.rewardVault, classicRewardVaultAbi, "configurationEpoch"),
-    callSpec(launch.rewardVault, classicRewardVaultAbi, "beneficiaryCount"),
-    callSpec(launch.rewardVault, classicRewardVaultAbi, "totalCreatorFeesReceived"),
-    callSpec(launch.rewardVault, classicRewardVaultAbi, "totalCreatorFeesClaimed"),
-  ]);
-  const initialValues = await readCalls(
-    input.rpc,
-    initialSpecs,
-    input.blockHash,
-    input.signal,
-  );
-
-  const beneficiarySpecs: CallSpec[] = [];
+  const vaultLogs: DecodedLog[] = [];
+  const poolSwapLogs: DecodedLog[] = [];
+  const launchTransactions = new Map<string, LaunchTransactionEvidence>();
+  const initialValues: unknown[] = [];
   const beneficiaryCounts: number[] = [];
-  for (let index = 0; index < launches.length; index += 1) {
-    const count = safeInteger(
-      initialValues[index * CALLS_PER_LAUNCH + 18],
-      1,
-      5,
-      "classic-v3-beneficiary-count",
-    );
-    beneficiaryCounts.push(count);
-    const vault = launches[index]!.rewardVault;
-    for (let allocationIndex = 0; allocationIndex < count; allocationIndex += 1) {
-      beneficiarySpecs.push(
-        callSpec(vault, classicRewardVaultAbi, "beneficiaryAt", [BigInt(allocationIndex)]),
-        callSpec(vault, classicRewardVaultAbi, "shareBpsAt", [BigInt(allocationIndex)]),
-      );
-    }
-  }
-  const beneficiaryBaseValues = await readCalls(
-    input.rpc,
-    beneficiarySpecs,
-    input.blockHash,
-    input.signal,
-  );
+  const beneficiaryBaseValues: unknown[] = [];
   const activeBeneficiaries: Address[][] = [];
-  let beneficiaryCursor = 0;
-  for (const count of beneficiaryCounts) {
-    const values: Address[] = [];
-    for (let index = 0; index < count; index += 1) {
-      values.push(exactAddress(
-        beneficiaryBaseValues[beneficiaryCursor],
-        "classic-v3-beneficiary",
-      ));
-      beneficiaryCursor += 2;
-    }
-    activeBeneficiaries.push(values);
-  }
-  const entitlementAccountsByLaunch = launches.map((launch, launchIndex) => {
-    const transaction = launchTransactions.get(lowerAddress(launch.token));
-    if (!transaction) fail("classic-v3-entitlement-launch-transaction");
-    const logs = vaultLogsByAddress.get(lowerAddress(launch.rewardVault)) ?? [];
-    // Validate the complete history before using it as an entitlement source.
-    vaultEventInputs(logs, launch.poolId);
-    return entitlementAccounts({
-      initialBeneficiaries: transaction.rewardBeneficiaries,
-      currentBeneficiaries: activeBeneficiaries[launchIndex]!,
-      logs,
-      poolId: launch.poolId,
-    });
-  });
-  const balanceSpecs = launches.flatMap((launch, launchIndex) =>
-    entitlementAccountsByLaunch[launchIndex]!.flatMap((beneficiary) => [
-      callSpec(launch.rewardVault, classicRewardVaultAbi, "claimable", [beneficiary]),
-      callSpec(launch.rewardVault, classicRewardVaultAbi, "claimedBy", [beneficiary]),
-    ])
-  );
-  const balanceValues = await readCalls(
-    input.rpc,
-    balanceSpecs,
-    input.blockHash,
-    input.signal,
-  );
-
+  const entitlementAccountsByLaunch: Address[][] = [];
+  const balanceValues: unknown[] = [];
   const timestamps = new Map<string, bigint>();
-  for (const launch of launches) {
-    const key = launch.blockNumber.toString();
-    if (!timestamps.has(key)) {
-      timestamps.set(key, await input.rpc.getBlockTimestamp({
-        blockNumber: launch.blockNumber,
-        expectedHash: launch.blockHash,
+  const completedCorpusPages: Array<(typeof corpusManifest.pages)[number]> = [];
+  for (const page of corpusManifest.pages) {
+    const pageRpc = input.rpc.createPartitionClient(page);
+    await pageRpc.assertCheckpoint({
+      blockNumber: input.blockNumber,
+      blockHash: input.blockHash,
+      signal: input.signal,
+    });
+    const pageLaunches = launches.slice(page.startIndex, page.endIndexExclusive);
+    const [transactions, receipts, pageVaultLogs, pagePoolSwapLogs] =
+      await Promise.all([
+      pageRpc.getTransactions({
+        transactions: pageLaunches.map((launch) => Object.freeze({
+          transactionHash: launch.transactionHash,
+          expectedBlockNumber: launch.blockNumber,
+          expectedBlockHash: launch.blockHash,
+          expectedTo: release.launcher,
+        })),
         signal: input.signal,
-      }));
+      }),
+      pageRpc.getTransactionReceipts({
+        receipts: pageLaunches.map((launch) => Object.freeze({
+          transactionHash: launch.transactionHash,
+          expectedBlockNumber: launch.blockNumber,
+          expectedBlockHash: launch.blockHash,
+        })),
+        signal: input.signal,
+      }),
+      readAddressBatches({
+        rpc: pageRpc,
+        addresses: pageLaunches.map(({ rewardVault }) => rewardVault),
+        events: VAULT_EVENTS,
+        fromBlock: release.startBlock,
+        toBlock: input.blockNumber,
+        signal: input.signal,
+      }),
+      readPoolSwapBatches({
+        rpc: pageRpc,
+        poolManager: release.poolManager,
+        poolIds: pageLaunches.map(({ poolId }) => poolId),
+        fromBlock: release.startBlock,
+        toBlock: input.blockNumber,
+        signal: input.signal,
+      }),
+    ]);
+    vaultLogs.push(...pageVaultLogs);
+    poolSwapLogs.push(...pagePoolSwapLogs);
+    const pageVaultLogsByAddress = groupLogsByAddress(pageVaultLogs);
+    const pageTransactions = validatedLaunchTransactions({
+      launches: pageLaunches,
+      transactions,
+      receipts,
+      companions,
+      release,
+    });
+    for (const [key, transaction] of pageTransactions) {
+      if (launchTransactions.has(key)) fail("classic-v3-launch-transaction-duplicate");
+      launchTransactions.set(key, transaction);
     }
+    const pageInitialValues = await readCalls(
+      pageRpc,
+      pageLaunches.flatMap((launch) => {
+        const transaction = pageTransactions.get(lowerAddress(launch.token));
+        if (!transaction) fail("classic-v3-launch-transaction-missing");
+        return [
+          callSpec(launch.token, uerc20ReadAbi, "name"),
+          callSpec(launch.token, uerc20ReadAbi, "symbol"),
+          callSpec(launch.token, uerc20ReadAbi, "decimals"),
+          callSpec(launch.token, uerc20ReadAbi, "totalSupply"),
+          callSpec(launch.token, uerc20ReadAbi, "creator"),
+          callSpec(launch.token, uerc20ReadAbi, "metadata"),
+          callSpec(release.stateView, stateViewReadAbi, "getSlot0", [launch.poolId]),
+          callSpec(release.stateView, stateViewReadAbi, "getLiquidity", [launch.poolId]),
+          callSpec(release.hook, classicV3HookAbi, "feeDisclosure", [launch.poolId]),
+          callSpec(release.hook, classicV3HookAbi, "poolFeeConfig", [launch.poolId]),
+          callSpec(release.launcher, classicV3LaunchAbi, "predictRewardVault", [
+            launch.token,
+            launch.deployer,
+            transaction.rewardBeneficiaries,
+            transaction.rewardSharesBps,
+          ]),
+          callSpec(release.rewardVaultFactory, reconcilerRewardVaultFactoryAbi, "isFactoryVault", [launch.rewardVault]),
+          callSpec(release.rewardVaultFactory, reconcilerRewardVaultFactoryAbi, "configurationHashOf", [launch.rewardVault]),
+          callSpec(launch.rewardVault, classicRewardVaultAbi, "feeHook"),
+          callSpec(launch.rewardVault, classicRewardVaultAbi, "poolId"),
+          callSpec(launch.rewardVault, classicRewardVaultAbi, "configurationHash"),
+          callSpec(launch.rewardVault, classicRewardVaultAbi, "activeConfigurationHash"),
+          callSpec(launch.rewardVault, classicRewardVaultAbi, "configurationEpoch"),
+          callSpec(launch.rewardVault, classicRewardVaultAbi, "beneficiaryCount"),
+          callSpec(launch.rewardVault, classicRewardVaultAbi, "totalCreatorFeesReceived"),
+          callSpec(launch.rewardVault, classicRewardVaultAbi, "totalCreatorFeesClaimed"),
+        ];
+      }),
+      input.blockHash,
+      input.signal,
+    );
+    initialValues.push(...pageInitialValues);
+    const pageCounts: number[] = [];
+    const beneficiarySpecs: CallSpec[] = [];
+    for (let index = 0; index < pageLaunches.length; index += 1) {
+      const count = safeInteger(
+        pageInitialValues[index * CALLS_PER_LAUNCH + 18],
+        1,
+        5,
+        "classic-v3-beneficiary-count",
+      );
+      pageCounts.push(count);
+      beneficiaryCounts.push(count);
+      for (let allocationIndex = 0; allocationIndex < count; allocationIndex += 1) {
+        beneficiarySpecs.push(
+          callSpec(pageLaunches[index]!.rewardVault, classicRewardVaultAbi, "beneficiaryAt", [BigInt(allocationIndex)]),
+          callSpec(pageLaunches[index]!.rewardVault, classicRewardVaultAbi, "shareBpsAt", [BigInt(allocationIndex)]),
+        );
+      }
+    }
+    const pageBeneficiaryValues = await readCalls(
+      pageRpc,
+      beneficiarySpecs,
+      input.blockHash,
+      input.signal,
+    );
+    beneficiaryBaseValues.push(...pageBeneficiaryValues);
+    let pageBeneficiaryCursor = 0;
+    const pageActiveBeneficiaries: Address[][] = [];
+    for (const count of pageCounts) {
+      const values: Address[] = [];
+      for (let index = 0; index < count; index += 1) {
+        values.push(exactAddress(
+          pageBeneficiaryValues[pageBeneficiaryCursor],
+          "classic-v3-beneficiary",
+        ));
+        pageBeneficiaryCursor += 2;
+      }
+      pageActiveBeneficiaries.push(values);
+      activeBeneficiaries.push(values);
+    }
+    const pageEntitlements = pageLaunches.map((launch, launchIndex) => {
+      const transaction = pageTransactions.get(lowerAddress(launch.token));
+      if (!transaction) fail("classic-v3-entitlement-launch-transaction");
+      const logs = pageVaultLogsByAddress.get(
+        lowerAddress(launch.rewardVault),
+      ) ?? [];
+      vaultEventInputs(logs, launch.poolId);
+      return entitlementAccounts({
+        initialBeneficiaries: transaction.rewardBeneficiaries,
+        currentBeneficiaries: pageActiveBeneficiaries[launchIndex]!,
+        logs,
+        poolId: launch.poolId,
+      });
+    });
+    entitlementAccountsByLaunch.push(...pageEntitlements.map((values) => [...values]));
+    const entitlementManifest = createReconcilerEntitlementManifest({
+      contract: input.contract,
+      parentPage: page,
+      identities: pageLaunches.flatMap((launch, launchIndex) =>
+        pageEntitlements[launchIndex]!.map((account) => Object.freeze({
+          tokenAddress: lowerAddress(launch.token),
+          vaultAddress: lowerAddress(launch.rewardVault),
+          account: lowerAddress(account),
+        }))
+      ),
+    });
+    const completedEntitlementPages: Array<
+      (typeof entitlementManifest.pages)[number]
+    > = [];
+    for (const entitlementPage of entitlementManifest.pages) {
+      const entitlementRpc = pageRpc.createPartitionClient(entitlementPage);
+      await entitlementRpc.assertCheckpoint({
+        blockNumber: input.blockNumber,
+        blockHash: input.blockHash,
+        signal: input.signal,
+      });
+      balanceValues.push(...await readCalls(
+        entitlementRpc,
+        entitlementPage.identities.flatMap((identity) => [
+          callSpec(
+            getAddress(identity.vaultAddress),
+            classicRewardVaultAbi,
+            "claimable",
+            [getAddress(identity.account)],
+          ),
+          callSpec(
+            getAddress(identity.vaultAddress),
+            classicRewardVaultAbi,
+            "claimedBy",
+            [getAddress(identity.account)],
+          ),
+        ]),
+        input.blockHash,
+        input.signal,
+      ));
+      await entitlementRpc.assertCheckpoint({
+        blockNumber: input.blockNumber,
+        blockHash: input.blockHash,
+        signal: input.signal,
+      });
+      completedEntitlementPages.push(entitlementPage);
+    }
+    assembleReconcilerEntitlementPages(
+      entitlementManifest,
+      completedEntitlementPages,
+    );
+    for (const launch of pageLaunches) {
+      const key = launch.blockNumber.toString();
+      if (!timestamps.has(key)) {
+        timestamps.set(key, await pageRpc.getBlockTimestamp({
+          blockNumber: launch.blockNumber,
+          expectedHash: launch.blockHash,
+          signal: input.signal,
+        }));
+      }
+    }
+    await pageRpc.assertCheckpoint({
+      blockNumber: input.blockNumber,
+      blockHash: input.blockHash,
+      signal: input.signal,
+    });
+    completedCorpusPages.push(page);
   }
+  assembleReconcilerCorpusPages(corpusManifest, completedCorpusPages);
+  vaultLogs.sort((left, right) =>
+    left.log.blockNumber === right.log.blockNumber
+      ? left.log.transactionIndex === right.log.transactionIndex
+        ? left.log.logIndex - right.log.logIndex
+        : left.log.transactionIndex - right.log.transactionIndex
+      : left.log.blockNumber < right.log.blockNumber ? -1 : 1
+  );
+  poolSwapLogs.sort((left, right) =>
+    left.log.blockNumber === right.log.blockNumber
+      ? left.log.transactionIndex === right.log.transactionIndex
+        ? left.log.logIndex - right.log.logIndex
+        : left.log.transactionIndex - right.log.transactionIndex
+      : left.log.blockNumber < right.log.blockNumber ? -1 : 1
+  );
+  const vaultLogsByAddress = groupLogsByAddress(vaultLogs);
 
   const tokens: Json[] = [];
   const charts: Json[] = [];

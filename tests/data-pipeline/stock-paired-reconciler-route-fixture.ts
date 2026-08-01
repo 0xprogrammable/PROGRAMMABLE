@@ -692,7 +692,10 @@ export function stockPairedReconcilerRouteFixture(
     routeKeys: STOCK_PAIRED_RECONCILER_ROUTE_KEYS,
     routeContract: { exact: true },
     projectionContract: { exact: true },
-    currentEntities: [],
+    currentEntities: [{
+      entityKind: "launch",
+      entityKey: TOKEN.toLowerCase(),
+    }],
   });
 
   return Object.freeze({

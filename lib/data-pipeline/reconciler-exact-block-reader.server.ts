@@ -19,6 +19,10 @@ import {
   validationError,
 } from "./errors";
 import {
+  RECONCILER_CORPUS_MAXIMUM_TOTAL_COUNT,
+  RECONCILER_CORPUS_PARTITION_SIZE,
+} from "./reconciler-corpus-partitions";
+import {
   canonicalProjectorRpcEndpoint,
   projectorRpcDeploymentCommitment,
 } from "./projector-provider-commitments";
@@ -139,6 +143,17 @@ export type ExactBlockRpcCall = Readonly<{
   data: Hex;
 }>;
 
+export type ExactBlockRpcPartitionBinding = Readonly<{
+  manifestCommitment: HexBytes32;
+  pageCommitment: HexBytes32;
+  pageIndex: number;
+  pageCount: number;
+  pageSize: number;
+  totalCount: number;
+  startIndex: number;
+  endIndexExclusive: number;
+}>;
+
 function safeQuantityNumber(value: unknown, operation: string): number {
   const parsed = parseQuantity(value, operation);
   if (parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -185,6 +200,14 @@ export type ExactBlockRpcClient = Readonly<{
   requestCount(): number;
   /** Individual JSON-RPC operations reserved by this client. */
   logicalRequestCount(): number;
+  /**
+   * Creates one independently bounded client for the next manifest-bound
+   * corpus page. The parent aggregates its counters and rejects reuse or
+   * out-of-order page issuance.
+   */
+  createPartitionClient(
+    binding: ExactBlockRpcPartitionBinding,
+  ): ExactBlockRpcClient;
   assertCheckpoint(input: {
     blockNumber: bigint;
     blockHash: HexBytes32;
@@ -370,6 +393,8 @@ export function createExactBlockRpcClient(input: {
   maximumLogicalRequests?: number;
   maximumBatchSize?: number;
   timeoutMs?: number;
+  /** @internal Root, corpus page, then one bounded nested-work page. */
+  partitionDepth?: number;
 }): ExactBlockRpcClient {
   const fetchImplementation = input.fetch ?? fetch;
   const maximumRequests = input.maximumRequests ?? DEFAULT_REQUEST_BUDGET;
@@ -377,6 +402,7 @@ export function createExactBlockRpcClient(input: {
     DEFAULT_LOGICAL_REQUEST_BUDGET;
   const maximumBatchSize = input.maximumBatchSize ?? DEFAULT_BATCH_SIZE;
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const partitionDepth = input.partitionDepth ?? 0;
   if (
     !Number.isSafeInteger(maximumRequests) ||
     maximumRequests < 1 ||
@@ -389,13 +415,24 @@ export function createExactBlockRpcClient(input: {
     maximumBatchSize > MAXIMUM_BATCH_SIZE ||
     !Number.isSafeInteger(timeoutMs) ||
     timeoutMs < 100 ||
-    timeoutMs > 30_000
+    timeoutMs > 30_000 ||
+    !Number.isSafeInteger(partitionDepth) ||
+    partitionDepth < 0 ||
+    partitionDepth > 2
   ) {
     throw invalidInput("config", "reconciler-rpc-budget");
   }
   let nextId = 1;
   let requests = 0;
   let logicalRequests = 0;
+  const partitionClients: ExactBlockRpcClient[] = [];
+  const issuedPartitions = new Set<string>();
+  let partitionManifestCommitment: HexBytes32 | null = null;
+  let partitionPageCount: number | null = null;
+  let partitionPageSize: number | null = null;
+  let partitionTotalCount: number | null = null;
+  let partitionNextStartIndex = 0;
+  let partitionSequenceClosed = false;
 
   const assertNotAborted = (signal: AbortSignal) => {
     if (signal.aborted) {
@@ -781,8 +818,83 @@ export function createExactBlockRpcClient(input: {
     endpointOriginCommitment: canonicalBytes32(
       input.endpointOriginCommitment,
     ),
-    requestCount: () => requests,
-    logicalRequestCount: () => logicalRequests,
+    requestCount: () => requests + partitionClients.reduce(
+      (total, client) => total + client.requestCount(),
+      0,
+    ),
+    logicalRequestCount: () => logicalRequests + partitionClients.reduce(
+      (total, client) => total + client.logicalRequestCount(),
+      0,
+    ),
+    createPartitionClient(binding) {
+      if (partitionDepth >= 2) {
+        throw invalidInput("rpc", "reconciler-rpc-nested-partition");
+      }
+      const manifestCommitment = canonicalBytes32(binding.manifestCommitment);
+      const pageCommitment = canonicalBytes32(binding.pageCommitment);
+      if (
+        !Number.isSafeInteger(binding.pageIndex) ||
+        !Number.isSafeInteger(binding.pageCount) ||
+        !Number.isSafeInteger(binding.pageSize) ||
+        !Number.isSafeInteger(binding.totalCount) ||
+        !Number.isSafeInteger(binding.startIndex) ||
+        !Number.isSafeInteger(binding.endIndexExclusive) ||
+        binding.pageCount < 1 ||
+        binding.pageSize < 1 ||
+        binding.pageSize > RECONCILER_CORPUS_PARTITION_SIZE ||
+        binding.totalCount < 1 ||
+        binding.totalCount > RECONCILER_CORPUS_MAXIMUM_TOTAL_COUNT ||
+        binding.pageCount !== Math.ceil(binding.totalCount / binding.pageSize) ||
+        binding.pageIndex !== partitionClients.length ||
+        binding.pageIndex >= binding.pageCount ||
+        binding.startIndex !== binding.pageIndex * binding.pageSize ||
+        binding.endIndexExclusive !== Math.min(
+          binding.startIndex + binding.pageSize,
+          binding.totalCount,
+        ) ||
+        partitionSequenceClosed
+      ) {
+        throw invalidInput("rpc", "reconciler-rpc-partition-binding");
+      }
+      if (partitionManifestCommitment === null) {
+        if (binding.pageIndex !== 0 || binding.startIndex !== 0) {
+          throw invalidInput("rpc", "reconciler-rpc-partition-sequence");
+        }
+        partitionManifestCommitment = manifestCommitment;
+        partitionPageCount = binding.pageCount;
+        partitionPageSize = binding.pageSize;
+        partitionTotalCount = binding.totalCount;
+      } else if (
+        manifestCommitment !== partitionManifestCommitment ||
+        binding.pageCount !== partitionPageCount ||
+        binding.pageSize !== partitionPageSize ||
+        binding.totalCount !== partitionTotalCount ||
+        binding.startIndex !== partitionNextStartIndex
+      ) {
+        throw invalidInput("rpc", "reconciler-rpc-partition-sequence");
+      }
+      const identity = `${manifestCommitment}:${pageCommitment}:${binding.pageIndex}`;
+      if (issuedPartitions.has(identity) || issuedPartitions.has(pageCommitment)) {
+        throw invalidInput("rpc", "reconciler-rpc-partition-reuse");
+      }
+      issuedPartitions.add(identity);
+      issuedPartitions.add(pageCommitment);
+      const client = createExactBlockRpcClient({
+        endpoint: input.endpoint,
+        endpointCommitment: input.endpointCommitment,
+        endpointOriginCommitment: input.endpointOriginCommitment,
+        fetch: fetchImplementation,
+        maximumRequests,
+        maximumLogicalRequests,
+        maximumBatchSize,
+        timeoutMs,
+        partitionDepth: partitionDepth + 1,
+      });
+      partitionClients.push(client);
+      partitionNextStartIndex = binding.endIndexExclusive;
+      partitionSequenceClosed = binding.pageIndex + 1 === binding.pageCount;
+      return client;
+    },
     async assertCheckpoint({ blockNumber, blockHash, signal }) {
       const block = await readBlock(blockNumber, signal);
       if (block.hash !== canonicalBytes32(blockHash)) {

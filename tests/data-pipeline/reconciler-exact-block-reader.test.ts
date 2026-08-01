@@ -226,6 +226,154 @@ describe("exact-block reconciler RPC", () => {
     expect(rpc.logicalRequestCount()).toBe(3);
   });
 
+  it("issues independently bounded corpus clients in exact page order and aggregates usage", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return rpcResponse(Number(body.id), "0x");
+    });
+    const rpc = createExactBlockRpcClient({
+      endpoint: ALCHEMY,
+      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpointOriginCommitment: rpcProviderCommitment(
+        "origin",
+        new URL(ALCHEMY).origin,
+      ),
+      maximumLogicalRequests: 1,
+      fetch: fetchMock as typeof fetch,
+    });
+    const manifestCommitment = `0x${"51".repeat(32)}` as const;
+    const first = rpc.createPartitionClient({
+      manifestCommitment,
+      pageCommitment: `0x${"52".repeat(32)}`,
+      pageIndex: 0,
+      pageCount: 2,
+      pageSize: 128,
+      totalCount: 256,
+      startIndex: 0,
+      endIndexExclusive: 128,
+    });
+    await first.call({
+      to: ADDRESS,
+      data: totalSupplyCall,
+      blockHash: BLOCK_HASH,
+      signal: new AbortController().signal,
+    });
+    const nested = first.createPartitionClient({
+      manifestCommitment,
+      pageCommitment: `0x${"55".repeat(32)}`,
+      pageIndex: 0,
+      pageCount: 1,
+      pageSize: 1,
+      totalCount: 1,
+      startIndex: 0,
+      endIndexExclusive: 1,
+    });
+    expect(() => nested.createPartitionClient({
+      manifestCommitment,
+      pageCommitment: `0x${"5a".repeat(32)}`,
+      pageIndex: 0,
+      pageCount: 1,
+      pageSize: 1,
+      totalCount: 1,
+      startIndex: 0,
+      endIndexExclusive: 1,
+    })).toThrow();
+    expect(() => rpc.createPartitionClient({
+      manifestCommitment: `0x${"56".repeat(32)}`,
+      pageCommitment: `0x${"57".repeat(32)}`,
+      pageIndex: 1,
+      pageCount: 2,
+      pageSize: 128,
+      totalCount: 256,
+      startIndex: 128,
+      endIndexExclusive: 256,
+    })).toThrow();
+    expect(() => rpc.createPartitionClient({
+      manifestCommitment,
+      pageCommitment: `0x${"58".repeat(32)}`,
+      pageIndex: 1,
+      pageCount: 3,
+      pageSize: 128,
+      totalCount: 256,
+      startIndex: 128,
+      endIndexExclusive: 256,
+    })).toThrow();
+    expect(() => rpc.createPartitionClient({
+      manifestCommitment,
+      pageCommitment: `0x${"59".repeat(32)}`,
+      pageIndex: 1,
+      pageCount: 2,
+      pageSize: 128,
+      totalCount: 256,
+      startIndex: 129,
+      endIndexExclusive: 256,
+    })).toThrow();
+    const second = rpc.createPartitionClient({
+      manifestCommitment,
+      pageCommitment: `0x${"53".repeat(32)}`,
+      pageIndex: 1,
+      pageCount: 2,
+      pageSize: 128,
+      totalCount: 256,
+      startIndex: 128,
+      endIndexExclusive: 256,
+    });
+    await second.call({
+      to: ADDRESS,
+      data: totalSupplyCall,
+      blockHash: BLOCK_HASH,
+      signal: new AbortController().signal,
+    });
+
+    expect(rpc.requestCount()).toBe(2);
+    expect(rpc.logicalRequestCount()).toBe(2);
+    expect(() => rpc.createPartitionClient({
+      manifestCommitment,
+      pageCommitment: `0x${"54".repeat(32)}`,
+      pageIndex: 1,
+      pageCount: 2,
+      pageSize: 128,
+      totalCount: 256,
+      startIndex: 128,
+      endIndexExclusive: 256,
+    })).toThrow();
+  });
+
+  it("rejects a partition sequence that does not start at page zero and index zero", () => {
+    const fetchMock = vi.fn();
+    const rpc = createExactBlockRpcClient({
+      endpoint: ALCHEMY,
+      endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+      endpointOriginCommitment: rpcProviderCommitment(
+        "origin",
+        new URL(ALCHEMY).origin,
+      ),
+      fetch: fetchMock as typeof fetch,
+    });
+    const manifestCommitment = `0x${"61".repeat(32)}` as const;
+    expect(() => rpc.createPartitionClient({
+      manifestCommitment,
+      pageCommitment: `0x${"62".repeat(32)}`,
+      pageIndex: 1,
+      pageCount: 2,
+      pageSize: 128,
+      totalCount: 256,
+      startIndex: 128,
+      endIndexExclusive: 256,
+    })).toThrow();
+    expect(() => rpc.createPartitionClient({
+      manifestCommitment,
+      pageCommitment: `0x${"63".repeat(32)}`,
+      pageIndex: 0,
+      pageCount: 2,
+      pageSize: 128,
+      totalCount: 256,
+      startIndex: 1,
+      endIndexExclusive: 128,
+    })).toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       label: "missing IDs",

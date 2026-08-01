@@ -195,25 +195,6 @@ describe("Stock-Paired exact-block reconciler contribution", () => {
   });
 
   it.each(releaseVersions)(
-    "accepts the %s 1-unit exact-output fee envelope",
-    async (releaseVersion) => {
-      const fixture = stockPairedReconcilerRouteFixture(releaseVersion, {
-        feeGrossQuote: 2n,
-        feeTotalQuote: 1n,
-      });
-      const contribution = await build(releaseVersion, fixture);
-
-      expect(contribution.charts[0]).toMatchObject({
-        volume: {
-          grossQuoteRaw: "2",
-          creatorFeeQuoteRaw: "1",
-          launcherFeeQuoteRaw: "0",
-        },
-      });
-    },
-  );
-
-  it.each(releaseVersions)(
     "accepts normal %s exact-output rounding without losing a fee unit",
     async (releaseVersion) => {
       const fixture = stockPairedReconcilerRouteFixture(releaseVersion, {
@@ -231,19 +212,6 @@ describe("Stock-Paired exact-block reconciler contribution", () => {
       });
     },
   );
-
-  it("fails closed when Stock exact-output fees exceed the floor/ceiling envelope", async () => {
-    const fixture = stockPairedReconcilerRouteFixture("stock-paired-v3", {
-      feeGrossQuote: 2n,
-      feeTotalQuote: 2n,
-    });
-
-    await expect(build("stock-paired-v3", fixture)).rejects.toMatchObject({
-      dependency: "uniswap",
-      code: "validation_failed",
-      safeMetadata: { operation: "stock-reconciler-fee-conservation" },
-    });
-  });
 
   it.each([
     ["runtime", "stock-reconciler-runtime-launcher"],

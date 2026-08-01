@@ -51,7 +51,9 @@ const LAUNCH_BLOCK_HASH = `0x${"aa".repeat(32)}` as const;
 const SWAP_TRANSACTION = `0x${"bb".repeat(32)}` as const;
 const TINY_SWAP_TRANSACTION = `0x${"bc".repeat(32)}` as const;
 const SECOND_SWAP_TRANSACTION = `0x${"bd".repeat(32)}` as const;
+const CLAIM_TRANSACTION = `0x${"be".repeat(32)}` as const;
 const SWAP_BLOCK_HASH = `0x${"cc".repeat(32)}` as const;
+const CLAIM_BLOCK_HASH = `0x${"cd".repeat(32)}` as const;
 const CHECKPOINT_HASH = `0x${"dd".repeat(32)}` as const;
 const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n;
 const TOKEN_LIQUIDITY = TOTAL_SUPPLY - 1n;
@@ -92,6 +94,9 @@ const disclosureEvent = parseAbiItem(
 const feeAccruedEvent = parseAbiItem(
   "event NativeSwapFeesAccrued(bytes32 indexed poolId,address indexed swapSender,uint256 grossNativeAmount,uint256 creatorFee,uint256 launcherFee)",
 );
+const creatorFeesClaimedEvent = parseAbiItem(
+  "event CreatorFeesClaimed(bytes32 indexed poolId,address indexed creator,address indexed recipient,address caller,uint256 amount)",
+);
 const swapEvent = parseAbiItem(
   "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
 );
@@ -109,7 +114,12 @@ type Mutation =
   | "missing-fee"
   | "extra-fee"
   | "duplicate-fee"
-  | "reordered-fees";
+  | "reordered-fees"
+  | "claimed-fees"
+  | "claimed-fees-third-party"
+  | "claim-accounting"
+  | "claim-provenance"
+  | "unauthorized-redirect";
 
 function eventLog(input: {
   event: AbiEvent;
@@ -360,6 +370,27 @@ function fixture(mutation: Mutation = "none") {
     transactionIndex: 3,
     logIndex: 2,
   });
+  const creatorClaimLog = eventLog({
+    event: creatorFeesClaimedEvent,
+    args: {
+      poolId: POOL_ID,
+      creator: mutation === "claim-provenance" ? SWAP_SENDER : CREATOR,
+      recipient: mutation === "unauthorized-redirect"
+        ? POSITION_RECIPIENT
+        : CREATOR,
+      caller: mutation === "claimed-fees-third-party" ||
+          mutation === "unauthorized-redirect"
+        ? SWAP_SENDER
+        : CREATOR,
+      amount: mutation === "claim-accounting" ? 4_999n : 5_000n,
+    },
+    address: hook,
+    blockNumber: swapBlock + 1n,
+    blockHash: CLAIM_BLOCK_HASH,
+    transactionHash: CLAIM_TRANSACTION,
+    transactionIndex: 1,
+    logIndex: 0,
+  });
 
   const launchParameters = {
     name: mutation === "calldata" ? "Wrong" : "Fixture Token",
@@ -480,7 +511,13 @@ function fixture(mutation: Mutation = "none") {
           launcher,
           100,
           true,
-          9_000n,
+          mutation === "claimed-fees" ||
+              mutation === "claimed-fees-third-party" ||
+              mutation === "claim-accounting" ||
+              mutation === "claim-provenance" ||
+              mutation === "unauthorized-redirect"
+            ? 4_000n
+            : 9_000n,
         ]),
         encodedResult(launcherAbi, "launchHashOf", LAUNCH_HASH),
         encodedResult(launcherAbi, "predictTokenAddress", [
@@ -526,6 +563,15 @@ function fixture(mutation: Mutation = "none") {
           logs.push(secondFeeLog);
         }
         if (mutation === "duplicate-fee") logs.push(duplicateFeeLog);
+        if (
+          mutation === "claimed-fees" ||
+          mutation === "claimed-fees-third-party" ||
+          mutation === "claim-accounting" ||
+          mutation === "claim-provenance" ||
+          mutation === "unauthorized-redirect"
+        ) {
+          logs.push(creatorClaimLog);
+        }
         return Object.freeze(logs);
       }
       expect(values).toContain(poolManager.toLowerCase());
@@ -629,6 +675,34 @@ describe("Classic V2 exact-block contribution builder", () => {
     });
   });
 
+  it("reconciles claimed creator fees with the remaining exact-block balance", async () => {
+    const { rpc, contract, checkpointBlock } = fixture("claimed-fees");
+    const contribution = await buildClassicV2ExactBlockContribution({
+      rpc,
+      contract,
+      blockNumber: checkpointBlock,
+      blockHash: CHECKPOINT_HASH,
+      signal: new AbortController().signal,
+    });
+
+    expect(contribution.charts[0]).toMatchObject({
+      volume: { creatorFeeQuoteRaw: "9000" },
+    });
+  });
+
+  it("accepts a third-party trigger when the immutable creator receives the claim", async () => {
+    const { rpc, contract, checkpointBlock } = fixture(
+      "claimed-fees-third-party",
+    );
+    await expect(buildClassicV2ExactBlockContribution({
+      rpc,
+      contract,
+      blockNumber: checkpointBlock,
+      blockHash: CHECKPOINT_HASH,
+      signal: new AbortController().signal,
+    })).resolves.toBeDefined();
+  });
+
   it.each([
     ["runtime hash", "runtime"],
     ["launch calldata", "calldata"],
@@ -641,6 +715,9 @@ describe("Classic V2 exact-block contribution builder", () => {
     ["extra fee event", "extra-fee"],
     ["duplicate fee event", "duplicate-fee"],
     ["reordered fee events", "reordered-fees"],
+    ["creator claim accounting", "claim-accounting"],
+    ["creator claim provenance", "claim-provenance"],
+    ["unauthorized creator claim redirect", "unauthorized-redirect"],
   ] as const)("fails closed on a bad %s", async (_label, mutation) => {
     const { rpc, contract, checkpointBlock } = fixture(mutation);
     await expect(buildClassicV2ExactBlockContribution({

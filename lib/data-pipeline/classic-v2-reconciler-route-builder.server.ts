@@ -40,6 +40,7 @@ import type {
   ReconcilerRouteKey,
 } from "./reconciler-preparity";
 import {
+  creatorFeesClaimedEvent,
   creatorFeeHookReadAbi,
   stateViewReadAbi,
   uerc20ReadAbi,
@@ -116,6 +117,7 @@ const HOOK_EVENTS = Object.freeze([
   registeredEvent,
   disclosureEvent,
   feeAccruedEvent,
+  creatorFeesClaimedEvent,
 ]);
 
 type Json = CanonicalJsonValue;
@@ -1160,6 +1162,43 @@ function feeTotals(
   });
 }
 
+function creatorClaimTotal(
+  hookLogs: readonly DecodedLog[],
+  poolId: HexBytes32,
+  creator: Address,
+): bigint {
+  let total = 0n;
+  for (const event of hookLogs) {
+    if (event.eventName !== "CreatorFeesClaimed") continue;
+    if (!sameHex(
+      exactBytes32(event.args.poolId, "classic-v2-claim-pool"),
+      poolId,
+    )) {
+      continue;
+    }
+    const amount = nonnegative(event.args.amount, "classic-v2-claim-amount");
+    const recipient = exactAddress(
+      event.args.recipient,
+      "classic-v2-claim-recipient",
+    );
+    const caller = exactAddress(event.args.caller, "classic-v2-claim-caller");
+    if (
+      amount === 0n ||
+      !sameHex(
+        exactAddress(event.args.creator, "classic-v2-claim-creator"),
+        creator,
+      ) ||
+      sameHex(recipient, ZERO_ADDRESS) ||
+      sameHex(caller, ZERO_ADDRESS) ||
+      (!sameHex(recipient, creator) && !sameHex(caller, creator))
+    ) {
+      fail("classic-v2-claim-provenance");
+    }
+    total += amount;
+  }
+  return total;
+}
+
 function isoTimestamp(timestamp: bigint): string {
   if (timestamp < 0n || timestamp > 8_640_000_000_000n) {
     fail("classic-v2-block-timestamp");
@@ -1274,24 +1313,17 @@ export async function buildClassicV2ExactBlockContribution(input: {
       launchLogIndex: launch.blockGlobalLogIndex,
     })),
   });
-  assembleReconcilerCorpusPages(corpusManifest, corpusManifest.pages);
   const companions = validatedCompanions({
     launches,
     launcherLogs,
     hookLogs,
     release,
   });
-  const poolSwapLogsPromise = readPoolSwapBatches({
-    rpc: input.rpc,
-    poolManager: release.poolManager,
-    poolIds: launches.map(({ poolId }) => poolId),
-    fromBlock: release.startBlock,
-    toBlock: input.blockNumber,
-    signal: input.signal,
-  });
   const launchTransactions = new Map<string, LaunchTransactionEvidence>();
   const stateValues: unknown[] = [];
+  const poolSwapLogs: DecodedLog[] = [];
   const timestamps = new Map<string, bigint>();
+  const completedCorpusPages: Array<(typeof corpusManifest.pages)[number]> = [];
   for (const page of corpusManifest.pages) {
     const pageRpc = input.rpc.createPartitionClient(page);
     await pageRpc.assertCheckpoint({
@@ -1300,7 +1332,7 @@ export async function buildClassicV2ExactBlockContribution(input: {
       signal: input.signal,
     });
     const pageLaunches = launches.slice(page.startIndex, page.endIndexExclusive);
-    const [transactions, receipts] = await Promise.all([
+    const [transactions, receipts, pagePoolSwapLogs] = await Promise.all([
       pageRpc.getTransactions({
         transactions: pageLaunches.map((launch) => Object.freeze({
           transactionHash: launch.transactionHash,
@@ -1318,7 +1350,16 @@ export async function buildClassicV2ExactBlockContribution(input: {
         })),
         signal: input.signal,
       }),
+      readPoolSwapBatches({
+        rpc: pageRpc,
+        poolManager: release.poolManager,
+        poolIds: pageLaunches.map(({ poolId }) => poolId),
+        fromBlock: release.startBlock,
+        toBlock: input.blockNumber,
+        signal: input.signal,
+      }),
     ]);
+    poolSwapLogs.push(...pagePoolSwapLogs);
     const pageTransactions = validatedLaunchTransactions({
       launches: pageLaunches,
       transactions,
@@ -1379,8 +1420,16 @@ export async function buildClassicV2ExactBlockContribution(input: {
       blockHash: input.blockHash,
       signal: input.signal,
     });
+    completedCorpusPages.push(page);
   }
-  const poolSwapLogs = await poolSwapLogsPromise;
+  assembleReconcilerCorpusPages(corpusManifest, completedCorpusPages);
+  poolSwapLogs.sort((left, right) =>
+    left.log.blockNumber === right.log.blockNumber
+      ? left.log.transactionIndex === right.log.transactionIndex
+        ? left.log.logIndex - right.log.logIndex
+        : left.log.transactionIndex - right.log.transactionIndex
+      : left.log.blockNumber < right.log.blockNumber ? -1 : 1
+  );
 
   const tokens: Json[] = [];
   const charts: Json[] = [];
@@ -1572,7 +1621,10 @@ export async function buildClassicV2ExactBlockContribution(input: {
       fail("classic-v2-current-state-mismatch");
     }
     exactBytes32(predictedToken[1], "classic-v2-effective-graffiti");
-    nonnegative(pendingCreatorFeesValue, "classic-v2-pending-creator-fees");
+    const pendingCreatorFees = nonnegative(
+      pendingCreatorFeesValue,
+      "classic-v2-pending-creator-fees",
+    );
 
     const liquidityArgs = companion.liquidity.args;
     const liquiditySupply = nonnegative(
@@ -1631,6 +1683,14 @@ export async function buildClassicV2ExactBlockContribution(input: {
       launch.poolId,
       launch.totalSwapFeeBps,
     );
+    const claimedCreatorFees = creatorClaimTotal(
+      hookLogs,
+      launch.poolId,
+      launch.creator,
+    );
+    if (totals.creator !== pendingCreatorFees + claimedCreatorFees) {
+      fail("classic-v2-creator-fee-accounting");
+    }
     const lastSwap = totals.lastSwap;
     const timestamp = timestamps.get(launch.blockNumber.toString());
     if (timestamp === undefined) fail("classic-v2-launch-timestamp-missing");

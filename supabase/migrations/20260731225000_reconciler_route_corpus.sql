@@ -640,7 +640,6 @@ begin
   if launch_count = 0
      or launch_count <> projected_launch_count
      or launch_count > p_maximum_entity_count
-     or launch_count > 256
   then
     raise exception using
       errcode = '54000',

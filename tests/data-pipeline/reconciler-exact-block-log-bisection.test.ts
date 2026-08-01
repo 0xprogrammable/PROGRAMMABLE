@@ -214,4 +214,30 @@ describe("exact-block eth_getLogs range bisection", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("returns every log from a busy 10,000-block range without truncation", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as RpcRequest;
+      const [fromBlock, toBlock] = range(request);
+      if (toBlock - fromBlock + 1n > 100n) {
+        return rpcRangeError(request.id);
+      }
+      const logs = Array.from(
+        { length: Number(toBlock - fromBlock + 1n) },
+        (_, offset) => rawLog(fromBlock + BigInt(offset)),
+      );
+      return rpcResult(request.id, logs);
+    });
+    const rpc = client(fetchMock as typeof fetch);
+
+    const logs = await getLogs(rpc, 1n, 10_000n);
+    expect(logs).toHaveLength(10_000);
+    expect(logs[0]?.blockNumber).toBe(1n);
+    expect(logs.at(-1)?.blockNumber).toBe(10_000n);
+    expect(new Set(logs.map((log) => log.transactionHash))).toHaveLength(
+      10_000,
+    );
+    expect(rpc.requestCount()).toBe(255);
+    expect(rpc.logicalRequestCount()).toBe(255);
+  });
 });

@@ -1,12 +1,22 @@
 begin;
 
-select plan(24);
+select plan(25);
 
 select ok(
   to_regprocedure(
     'programmable_private.assemble_reconciler_routes_v1(jsonb,jsonb,jsonb,jsonb,jsonb)'
   ) is not null,
   'the pure applicable-route assembler exists'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.get_reconciler_route_corpus_v1(bigint,text,text,text,uuid,bigint,uuid,numeric,bytea,integer)'::regprocedure
+    ),
+    'launch_count > 256'
+  ) = 0,
+  'the indexed corpus has no legacy 256-launch ceiling'
 );
 
 select ok(
