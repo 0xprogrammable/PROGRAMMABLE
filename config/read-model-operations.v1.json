@@ -21,12 +21,18 @@
       "activationEnvironment": "PROGRAMMABLE_PROJECTOR_ACTIVE",
       "route": {
         "path": "app/api/ops/projector/route.ts",
-        "sha256": "bea509d5f2a7f2a35c2a49dacc4001074307b4b917d3ac4cb8647310cbd28417"
+        "sha256": "c2dadbbab4dce88fea349c98adf50eb3566bbd9957529b3bfc3fad594a704b92"
       },
       "runtime": {
         "path": "lib/data-pipeline/projector-runtime-config.server.ts",
-        "sha256": "d9d34f8faee5926ec35bf7bc7433aad451741195948026fa17072ce34ca96e02"
+        "sha256": "3c511b193721ffaceabc1e547335eda76c8e12324e29f27af0f86a14513d1372"
       },
+      "dependencies": [
+        {
+          "path": "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
+          "sha256": "890ce8c7bea47e399b42c9c0228eef64bb139a1382e26fc68f3264ed6e3d8527"
+        }
+      ],
       "migrations": [
         {
           "path": "supabase/migrations/20260731203900_projector_runtime_singleton_lease.sql",
@@ -35,6 +41,22 @@
         {
           "path": "supabase/migrations/20260731224000_projector_provider_evidence_binding.sql",
           "sha256": "0404f7c610a34af23fe536f021927efec4e0aede235068b70be04331c58f03af"
+        },
+        {
+          "path": "supabase/migrations/20260801090000_bootstrap_dynamic_evidence_and_launch_requirements.sql",
+          "sha256": "d4883ef60590c54c2a1bc9cd4834958fb22004a49e4e98dc9fd9a08311c7fbed"
+        },
+        {
+          "path": "supabase/migrations/20260801091000_candidate_projector_unpromoted_gate.sql",
+          "sha256": "cd8b5a4aa4801ca773cb84047edbf05349288cada47d671bd47e7d997902c91f"
+        },
+        {
+          "path": "supabase/migrations/20260801092000_verify_candidate_database_promoted.sql",
+          "sha256": "ed5f54a374ad8178393e88a3948281ad9acba10aebbbd5209ea6793691b8c677"
+        },
+        {
+          "path": "supabase/migrations/20260801093000_bind_candidate_promotion_to_product.sql",
+          "sha256": "c6a032ef371b2211004c8d72c0a8c4eec4ba630776210aed48d2d054e642dbbe"
         }
       ]
     },

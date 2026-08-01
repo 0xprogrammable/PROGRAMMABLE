@@ -26,12 +26,18 @@ const APPROVED_OPERATIONS = Object.freeze({
       activationEnvironment: "PROGRAMMABLE_PROJECTOR_ACTIVE",
       route: Object.freeze({
         path: "app/api/ops/projector/route.ts",
-        sha256: "bea509d5f2a7f2a35c2a49dacc4001074307b4b917d3ac4cb8647310cbd28417",
+        sha256: "c2dadbbab4dce88fea349c98adf50eb3566bbd9957529b3bfc3fad594a704b92",
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "d9d34f8faee5926ec35bf7bc7433aad451741195948026fa17072ce34ca96e02",
+        sha256: "3c511b193721ffaceabc1e547335eda76c8e12324e29f27af0f86a14513d1372",
       }),
+      dependencies: Object.freeze([
+        Object.freeze({
+          path: "lib/data-pipeline/candidate-projector-runtime-binding.server.ts",
+          sha256: "890ce8c7bea47e399b42c9c0228eef64bb139a1382e26fc68f3264ed6e3d8527",
+        }),
+      ]),
       migrations: Object.freeze([
         Object.freeze({
           path: "supabase/migrations/20260731203900_projector_runtime_singleton_lease.sql",
@@ -40,6 +46,22 @@ const APPROVED_OPERATIONS = Object.freeze({
         Object.freeze({
           path: "supabase/migrations/20260731224000_projector_provider_evidence_binding.sql",
           sha256: "0404f7c610a34af23fe536f021927efec4e0aede235068b70be04331c58f03af",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260801090000_bootstrap_dynamic_evidence_and_launch_requirements.sql",
+          sha256: "d4883ef60590c54c2a1bc9cd4834958fb22004a49e4e98dc9fd9a08311c7fbed",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260801091000_candidate_projector_unpromoted_gate.sql",
+          sha256: "cd8b5a4aa4801ca773cb84047edbf05349288cada47d671bd47e7d997902c91f",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260801092000_verify_candidate_database_promoted.sql",
+          sha256: "ed5f54a374ad8178393e88a3948281ad9acba10aebbbd5209ea6793691b8c677",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260801093000_bind_candidate_promotion_to_product.sql",
+          sha256: "c6a032ef371b2211004c8d72c0a8c4eec4ba630776210aed48d2d054e642dbbe",
         }),
       ]),
     }),
@@ -187,6 +209,41 @@ function migrationContract(id, source) {
       /force row level security/iu.test(source)
     );
   }
+  if (id === "candidate-control-bootstrap") {
+    return (
+      source.includes("candidate_database_control") &&
+      source.includes("initialize_candidate_database") &&
+      source.includes("attest_candidate_database_promotion") &&
+      source.includes("enforce_candidate_database_promotion") &&
+      /force row level security/iu.test(source)
+    );
+  }
+  if (id === "candidate-unpromoted-gate") {
+    return (
+      source.includes("verify_candidate_database_unpromoted_v1") &&
+      source.includes("envio:production-7f24e63") &&
+      source.includes("programmable_private.assert_caller('programmable_projector')") &&
+      /grant execute[\s\S]*to programmable_projector/iu.test(source)
+    );
+  }
+  if (id === "candidate-promoted-gate") {
+    return (
+      source.includes("verify_candidate_database_promoted_v1") &&
+      source.includes("envio:production-7f24e63") &&
+      source.includes("programmable_private.assert_caller('programmable_projector')") &&
+      /grant execute[\s\S]*to programmable_projector/iu.test(source)
+    );
+  }
+  if (id === "candidate-product-binding") {
+    return (
+      source.includes("candidate_database_control_product_binding") &&
+      source.includes("product_commit") &&
+      source.includes("staged_deployment_id") &&
+      source.includes("verify_candidate_database_promoted_v2") &&
+      source.includes("candidate product-bound promotion CAS lost") &&
+      /validate constraint candidate_database_control_product_binding/iu.test(source)
+    );
+  }
   if (id === "market-projector") {
     return (
       source.includes("market_projector_cursor_history") &&
@@ -289,7 +346,14 @@ export function evaluateReadModelOperationsSourceContracts(
     check(
       `ops-${approvedWorker.id}-source-digests`,
       sourceBindingMatches(source, worker?.route, expectedSha256Overrides) &&
-        sourceBindingMatches(source, worker?.runtime, expectedSha256Overrides) &&
+      sourceBindingMatches(source, worker?.runtime, expectedSha256Overrides) &&
+        (approvedWorker.dependencies ?? []).every((binding, index) =>
+          sourceBindingMatches(
+            source,
+            worker?.dependencies?.[index],
+            expectedSha256Overrides,
+          ),
+        ) &&
         approvedWorker.migrations.every((binding, index) =>
           sourceBindingMatches(
             source,
@@ -340,7 +404,11 @@ export function evaluateReadModelOperationsSourceContracts(
   const marketWorker = workers.find(({ id }) => id === "market-projector");
   check(
     "ops-source-projector-migrations",
-    sourceWorker?.migrations?.length === 2 &&
+    sourceWorker?.dependencies?.length === 1 &&
+      source(sourceWorker.dependencies[0]?.path)?.includes(
+        "verify_candidate_database_promoted_v2",
+      ) &&
+      sourceWorker?.migrations?.length === 6 &&
       migrationContract(
         "source-projector-lease",
         source(sourceWorker.migrations[0]?.path),
@@ -348,8 +416,24 @@ export function evaluateReadModelOperationsSourceContracts(
       migrationContract(
         "source-projector-provider-evidence",
         source(sourceWorker.migrations[1]?.path),
+      ) &&
+      migrationContract(
+        "candidate-control-bootstrap",
+        source(sourceWorker.migrations[2]?.path),
+      ) &&
+      migrationContract(
+        "candidate-unpromoted-gate",
+        source(sourceWorker.migrations[3]?.path),
+      ) &&
+      migrationContract(
+        "candidate-promoted-gate",
+        source(sourceWorker.migrations[4]?.path),
+      ) &&
+      migrationContract(
+        "candidate-product-binding",
+        source(sourceWorker.migrations[5]?.path),
       ),
-    "the source worker is bound to singleton and provider-evidence migrations",
+    "the source worker is byte-bound to its runtime selector, database fence and provider evidence",
   );
   check(
     "ops-market-projector-migration",
