@@ -519,6 +519,18 @@ revoke all on function programmable_private.stage_launch_occurrence_role(
 ) from public;
 revoke all on function programmable_private.enforce_candidate_database_promotion()
   from public, anon, authenticated, service_role;
+
+-- The promotion operator is deliberately narrower than every runtime role:
+-- schema lookup plus one function, with no direct relation or sequence access.
+revoke all on schema programmable_private from programmable_operator;
+revoke all on all tables in schema programmable_private
+  from programmable_operator;
+revoke all on all sequences in schema programmable_private
+  from programmable_operator;
+revoke all on all functions in schema programmable_private
+  from programmable_operator;
+grant usage on schema programmable_private to programmable_operator;
+
 grant execute on function programmable_private.stage_launch_occurrence_role(
   uuid, text, uuid, timestamptz
 ) to programmable_projector;
