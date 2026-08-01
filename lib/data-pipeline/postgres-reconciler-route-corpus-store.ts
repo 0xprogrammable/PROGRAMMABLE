@@ -1,7 +1,7 @@
 import "server-only";
 
 import { hexToBytes, parseNonnegativeIntegerText } from "./codecs";
-import { assertClassicV3ReconcilerRouteSet } from "./classic-v3-reconciler-route-contract";
+import { assertReconcilerRouteSetForKeys } from "./classic-v3-reconciler-route-contract";
 import { validationError } from "./errors";
 import type { PostgresExecutor } from "./postgres";
 import { createReconcilerDatabaseGateway } from "./postgres-reconciler";
@@ -86,7 +86,7 @@ export function createPostgresReconcilerRouteCorpusStore(input: {
             maximumEntityCount,
           ],
         );
-        if (signal.aborted || rows.length !== RECONCILER_ROUTE_KEYS.length) {
+        if (signal.aborted || rows.length !== contract.routeKeys.length) {
           throw validationError("postgres", "reconciler-corpus-cardinality");
         }
         const parsed = rows.map((row) => Object.freeze({
@@ -96,12 +96,14 @@ export function createPostgresReconcilerRouteCorpusStore(input: {
         }));
         if (
           parsed.some(
-            (row, index) => row.routeKey !== RECONCILER_ROUTE_KEYS[index],
+            (row, index) => row.routeKey !== contract.routeKeys[index],
           )
         ) {
           throw validationError("postgres", "reconciler-corpus-order");
         }
-        return Object.freeze(assertClassicV3ReconcilerRouteSet(parsed));
+        return Object.freeze(
+          assertReconcilerRouteSetForKeys(parsed, contract.routeKeys),
+        );
       });
     },
   });

@@ -7,8 +7,10 @@ import type {
   PostgresParameter,
   PostgresTransaction,
 } from "../../lib/data-pipeline/postgres";
+import { assembleReconcilerRoutesFromContributions } from "../../lib/data-pipeline/classic-v3-reconciler-route-contract";
 import { createPostgresReconcilerRouteCorpusStore } from "../../lib/data-pipeline/postgres-reconciler-route-corpus-store";
 import {
+  CLASSIC_V2_RECONCILER_ROUTE_KEYS,
   RECONCILER_ROUTE_KEYS,
   type ReconcilerPreParityContract,
 } from "../../lib/data-pipeline/reconciler-preparity";
@@ -102,6 +104,41 @@ describe("reconciler route corpus Postgres store", () => {
     expect(executor.applicationQueries[0]!.text).not.toMatch(
       /public_(?:explore|creator|classic|launch)|route_snapshot_readiness/iu,
     );
+  });
+
+  it("accepts the exact four-route Classic V2 corpus", async () => {
+    const fixture = classicV3ReconcilerRouteFixture();
+    const token = structuredClone(
+      (fixture[0]!.dto as { tokens: Array<Record<string, unknown>> }).tokens[0]!,
+    );
+    const chart = structuredClone(
+      (fixture[2]!.dto as { charts: Array<Record<string, unknown>> }).charts[0]!,
+    );
+    token.releaseVersion = "classic-v2";
+    token.rewardVaultAddress = null;
+    chart.releaseVersion = "classic-v2";
+    const routes = assembleReconcilerRoutesFromContributions([{
+      tokens: [token] as never,
+      charts: [chart] as never,
+    }]);
+    const v2Contract: ReconcilerPreParityContract = {
+      ...contract,
+      releaseId: "classic-v2",
+      routeKeys: CLASSIC_V2_RECONCILER_ROUTE_KEYS,
+      routeContract: { routes: [...CLASSIC_V2_RECONCILER_ROUTE_KEYS] },
+    };
+    const executor = new CorpusExecutor(routes.map((route) => ({
+      route_key: route.routeKey,
+      compared_count: String(route.comparedCount),
+      dto: route.dto,
+    })));
+    const store = createPostgresReconcilerRouteCorpusStore({ executor });
+
+    await expect(store.readExactIndexedRouteCorpus({
+      contract: v2Contract,
+      maximumEntityCount: 10_000,
+      signal: new AbortController().signal,
+    })).resolves.toEqual(routes);
   });
 
   it("rejects missing, reordered and empty route rows", async () => {

@@ -34,6 +34,44 @@ export const RECONCILER_ROUTE_KEYS = Object.freeze([
 
 export type ReconcilerRouteKey = (typeof RECONCILER_ROUTE_KEYS)[number];
 
+export const CLASSIC_V2_RECONCILER_ROUTE_KEYS = Object.freeze([
+  "explore-list",
+  "explore-token",
+  "explore-chart",
+  "creator-profile",
+] as const satisfies readonly ReconcilerRouteKey[]);
+
+export const CLASSIC_V3_RECONCILER_ROUTE_KEYS = RECONCILER_ROUTE_KEYS;
+
+export const STOCK_PAIRED_RECONCILER_ROUTE_KEYS = Object.freeze([
+  "explore-list",
+  "explore-token",
+  "explore-chart",
+  "creator-profile",
+  "launch-lookup",
+] as const satisfies readonly ReconcilerRouteKey[]);
+
+export function reconcilerRouteKeysForScope(
+  releaseId: string,
+  modelId: string,
+): readonly ReconcilerRouteKey[] {
+  if (releaseId === "classic-v2" && modelId === "classic") {
+    return CLASSIC_V2_RECONCILER_ROUTE_KEYS;
+  }
+  if (releaseId === "classic-v3" && modelId === "classic") {
+    return CLASSIC_V3_RECONCILER_ROUTE_KEYS;
+  }
+  if (
+    modelId === "stock-paired" &&
+    (releaseId === "stock-paired-v1" ||
+      releaseId === "stock-paired-v2" ||
+      releaseId === "stock-paired-v3")
+  ) {
+    return STOCK_PAIRED_RECONCILER_ROUTE_KEYS;
+  }
+  throw invalidInput("config", "reconciler-release-model");
+}
+
 export type ReconcilerCheckpointRequest = Readonly<{
   chainId: "1";
   releaseId: string;
@@ -128,7 +166,7 @@ export type ReconcilerCommitResult = Readonly<{
   checkpointId: string;
   checkpointBlockNumber: string;
   checkpointBlockHash: HexBytes32;
-  routeCount: 6;
+  routeCount: number;
   mismatchCount: number;
   status: "succeeded" | "failed";
 }>;
@@ -254,10 +292,13 @@ export function canonicalReconcilerCheckpointRequest(
   ) {
     throw invalidInput("config", "maximum-entity-count");
   }
+  const releaseId = canonicalIdentifier(input.releaseId, "release-id");
+  const modelId = canonicalIdentifier(input.modelId, "model-id");
+  reconcilerRouteKeysForScope(releaseId, modelId);
   return Object.freeze({
     chainId: "1",
-    releaseId: canonicalIdentifier(input.releaseId, "release-id"),
-    modelId: canonicalIdentifier(input.modelId, "model-id"),
+    releaseId,
+    modelId,
     sourceGroup: canonicalIdentifier(input.sourceGroup, "source-group"),
     epochId: canonicalUuid(input.epochId, "epoch-id"),
     pointerGeneration: canonicalPositiveIntegerText(
@@ -359,15 +400,20 @@ function canonicalJsonDocument(
   return { value: canonical, encoded, bytes };
 }
 
-function routeKeys(value: unknown): readonly ReconcilerRouteKey[] {
+function routeKeys(
+  value: unknown,
+  releaseId: string,
+  modelId: string,
+): readonly ReconcilerRouteKey[] {
+  const expected = reconcilerRouteKeysForScope(releaseId, modelId);
   if (
     !Array.isArray(value) ||
-    value.length !== RECONCILER_ROUTE_KEYS.length ||
-    value.some((routeKey, index) => routeKey !== RECONCILER_ROUTE_KEYS[index])
+    value.length !== expected.length ||
+    value.some((routeKey, index) => routeKey !== expected[index])
   ) {
     throw validationError("postgres", "reconciler-route-contract");
   }
-  return RECONCILER_ROUTE_KEYS;
+  return expected;
 }
 
 export function canonicalReconcilerPreParityContract(
@@ -398,10 +444,12 @@ export function canonicalReconcilerPreParityContract(
     "reconciler-current-entities",
     2 * 1024 * 1024,
   ).value;
+  const releaseId = canonicalIdentifier(input.releaseId, "release-id");
+  const modelId = canonicalIdentifier(input.modelId, "model-id");
   return Object.freeze({
     chainId: "1",
-    releaseId: canonicalIdentifier(input.releaseId, "release-id"),
-    modelId: canonicalIdentifier(input.modelId, "model-id"),
+    releaseId,
+    modelId,
     sourceGroup: canonicalIdentifier(input.sourceGroup, "source-group"),
     projectorVersion: canonicalIdentifier(
       input.projectorVersion,
@@ -425,7 +473,7 @@ export function canonicalReconcilerPreParityContract(
       input.checkpointBlockNumber,
     ),
     checkpointBlockHash: canonicalBytes32(input.checkpointBlockHash),
-    routeKeys: routeKeys(input.routeKeys),
+    routeKeys: routeKeys(input.routeKeys, releaseId, modelId),
     routeContract,
     projectionContract,
     currentEntities,
@@ -557,10 +605,11 @@ function commitment(domain: string, value: CanonicalJsonValue): HexBytes32 {
 
 function canonicalRouteSet(input: {
   value: unknown;
+  routeKeys: readonly ReconcilerRouteKey[];
   dependency: DataPipelineDependency;
   operation: string;
 }): readonly CanonicalRouteDto[] {
-  if (!Array.isArray(input.value) || input.value.length !== 6) {
+  if (!Array.isArray(input.value) || input.value.length !== input.routeKeys.length) {
     throw validationError(input.dependency, input.operation);
   }
   const byKey = new Map<ReconcilerRouteKey, CanonicalRouteDto>();
@@ -572,7 +621,7 @@ function canonicalRouteSet(input: {
     const item = raw as Record<string, unknown>;
     if (
       typeof item.routeKey !== "string" ||
-      !RECONCILER_ROUTE_KEYS.includes(item.routeKey as ReconcilerRouteKey) ||
+      !input.routeKeys.includes(item.routeKey as ReconcilerRouteKey) ||
       typeof item.comparedCount !== "number" ||
       !Number.isSafeInteger(item.comparedCount) ||
       item.comparedCount < 1 ||
@@ -616,7 +665,7 @@ function canonicalRouteSet(input: {
       hash,
     });
   }
-  return RECONCILER_ROUTE_KEYS.map((key) => {
+  return input.routeKeys.map((key) => {
     const route = byKey.get(key);
     if (!route) throw validationError(input.dependency, input.operation);
     return route;
@@ -653,6 +702,7 @@ function monotonicTimestamps(now: () => Date) {
 
 function uniqueUuids(
   uuidFactory: () => string,
+  routeCount: number,
 ): {
   runId: string;
   reconciliationId: string;
@@ -660,7 +710,8 @@ function uniqueUuids(
   parityBindingIds: readonly string[];
   outcomeId: string;
 } {
-  const values = Array.from({ length: 15 }, () =>
+  const valueCount = 3 + routeCount * 2;
+  const values = Array.from({ length: valueCount }, () =>
     canonicalUuid(uuidFactory(), "reconciler-generated-id"),
   );
   if (new Set(values).size !== values.length) {
@@ -669,9 +720,9 @@ function uniqueUuids(
   return {
     runId: values[0]!,
     reconciliationId: values[1]!,
-    parityRecordIds: values.slice(2, 8),
-    parityBindingIds: values.slice(8, 14),
-    outcomeId: values[14]!,
+    parityRecordIds: values.slice(2, 2 + routeCount),
+    parityBindingIds: values.slice(2 + routeCount, 2 + routeCount * 2),
+    outcomeId: values[valueCount - 1]!,
   };
 }
 
@@ -837,21 +888,24 @@ export async function runReconcilerPreParityCycle(input: {
 
     const firstLive = canonicalRouteSet({
       value: firstLiveRaw,
+      routeKeys: contract.routeKeys,
       dependency: "rpc",
       operation: "reconciler-live-route-a",
     });
     const secondLive = canonicalRouteSet({
       value: secondLiveRaw,
+      routeKeys: contract.routeKeys,
       dependency: "rpc",
       operation: "reconciler-live-route-b",
     });
     const indexed = canonicalRouteSet({
       value: indexedRaw,
+      routeKeys: contract.routeKeys,
       dependency: "postgres",
       operation: "reconciler-indexed-route",
     });
 
-    for (let index = 0; index < RECONCILER_ROUTE_KEYS.length; index += 1) {
+    for (let index = 0; index < contract.routeKeys.length; index += 1) {
       if (
         firstLive[index]!.hash !== secondLive[index]!.hash ||
         firstLive[index]!.comparedCount !== secondLive[index]!.comparedCount ||
@@ -861,7 +915,7 @@ export async function runReconcilerPreParityCycle(input: {
       }
     }
 
-    const routeEvidenceCommitments = RECONCILER_ROUTE_KEYS.map(
+    const routeEvidenceCommitments = contract.routeKeys.map(
       (routeKey, index) =>
         commitment("route-evidence", {
           routeKey,
@@ -875,7 +929,7 @@ export async function runReconcilerPreParityCycle(input: {
           providers: providers.map((provider) => liveSource(provider)),
         }),
     );
-    const parityBindingCommitments = RECONCILER_ROUTE_KEYS.map(
+    const parityBindingCommitments = contract.routeKeys.map(
       (routeKey, index) =>
         commitment("parity-binding", {
           routeKey,
@@ -907,13 +961,13 @@ export async function runReconcilerPreParityCycle(input: {
         routeEvidenceCommitments,
       },
     );
-    const mismatchRoutes = RECONCILER_ROUTE_KEYS.filter(
+    const mismatchRoutes = contract.routeKeys.filter(
       (_, index) => firstLive[index]!.hash !== indexed[index]!.hash,
     );
     const resultCommitment = commitment("result", {
       requestCommitment,
       reconciliationEvidenceCommitment,
-      routeKeys: [...RECONCILER_ROUTE_KEYS],
+      routeKeys: [...contract.routeKeys],
       legacyDtoHashes: firstLive.map((route) => route.hash),
       indexedDtoHashes: indexed.map((route) => route.hash),
       routeEvidenceCommitments,
@@ -923,14 +977,17 @@ export async function runReconcilerPreParityCycle(input: {
     });
     const comparedAt = timestamps.comparedAt();
     const finishedAt = timestamps.finishedAt(comparedAt);
-    const ids = uniqueUuids(input.uuidFactory ?? randomUUID);
+    const ids = uniqueUuids(
+      input.uuidFactory ?? randomUUID,
+      contract.routeKeys.length,
+    );
 
     deadline.assertCommitWindow();
     const result = await input.store.commitResult({
       ...ids,
       contract,
       workerVersion,
-      routeKeys: RECONCILER_ROUTE_KEYS,
+      routeKeys: contract.routeKeys,
       legacyDtoHashes: firstLive.map((route) => route.hash),
       indexedDtoHashes: indexed.map((route) => route.hash),
       routeEvidenceCommitments,
@@ -950,7 +1007,7 @@ export async function runReconcilerPreParityCycle(input: {
       result.checkpointId !== contract.checkpointId ||
       result.checkpointBlockNumber !== contract.checkpointBlockNumber ||
       result.checkpointBlockHash !== contract.checkpointBlockHash ||
-      result.routeCount !== 6 ||
+      result.routeCount !== contract.routeKeys.length ||
       result.mismatchCount !== mismatchRoutes.length ||
       result.status !== (mismatchRoutes.length === 0 ? "succeeded" : "failed")
     ) {

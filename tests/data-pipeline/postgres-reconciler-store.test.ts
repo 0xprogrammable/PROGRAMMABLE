@@ -9,9 +9,12 @@ import type {
 } from "../../lib/data-pipeline/postgres";
 import { createPostgresReconcilerPreParityStore } from "../../lib/data-pipeline/postgres-reconciler-store";
 import {
+  CLASSIC_V2_RECONCILER_ROUTE_KEYS,
   RECONCILER_ROUTE_KEYS,
   type ReconcilerCheckpointRequest,
   type ReconcilerCommitInput,
+  type ReconcilerPreParityContract,
+  type ReconcilerRouteKey,
 } from "../../lib/data-pipeline/reconciler-preparity";
 
 const HASH = `0x${"11".repeat(32)}` as const;
@@ -37,6 +40,12 @@ class ScriptedExecutor implements PostgresExecutor {
     values: readonly PostgresParameter[];
   }[] = [];
   readonly close = vi.fn(async () => undefined);
+
+  constructor(
+    private readonly scopeRequest: ReconcilerCheckpointRequest = request,
+    private readonly scopeRouteKeys: readonly ReconcilerRouteKey[] =
+      RECONCILER_ROUTE_KEYS,
+  ) {}
 
   async transaction<T>(
     work: (transaction: PostgresTransaction) => Promise<T>,
@@ -65,19 +74,19 @@ class ScriptedExecutor implements PostgresExecutor {
           return [
             {
               chain_id: "1",
-              release_id: request.releaseId,
-              model_id: request.modelId,
-              source_group: request.sourceGroup,
+              release_id: this.scopeRequest.releaseId,
+              model_id: this.scopeRequest.modelId,
+              source_group: this.scopeRequest.sourceGroup,
               projector_version: "projector-v1",
-              epoch_id: request.epochId,
-              pointer_generation: request.pointerGeneration,
-              checkpoint_id: request.checkpointId,
+              epoch_id: this.scopeRequest.epochId,
+              pointer_generation: this.scopeRequest.pointerGeneration,
+              checkpoint_id: this.scopeRequest.checkpointId,
               checkpoint_generation: "11",
               reorg_generation: "0",
-              checkpoint_block_number: request.checkpointBlockNumber,
+              checkpoint_block_number: this.scopeRequest.checkpointBlockNumber,
               checkpoint_block_hash: HASH,
-              route_keys: [...RECONCILER_ROUTE_KEYS],
-              route_contract: { routes: [...RECONCILER_ROUTE_KEYS] },
+              route_keys: [...this.scopeRouteKeys],
+              route_contract: { routes: [...this.scopeRouteKeys] },
               projection_contract: { resultCommitment: HASH },
               current_entities: [],
             },
@@ -92,7 +101,7 @@ class ScriptedExecutor implements PostgresExecutor {
                 checkpointId: values[11],
                 checkpointBlockNumber: values[12],
                 checkpointBlockHash: HASH,
-                routeCount: 6,
+                routeCount: this.scopeRouteKeys.length,
                 mismatchCount: 0,
                 status: "succeeded",
               },
@@ -109,6 +118,34 @@ function uuid(index: number) {
   return `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 }
 
+function validCommit(
+  contract: ReconcilerPreParityContract,
+  routeKeys: readonly ReconcilerRouteKey[],
+): ReconcilerCommitInput {
+  return {
+    runId: uuid(1),
+    reconciliationId: uuid(2),
+    parityRecordIds: routeKeys.map((_, index) => uuid(index + 3)),
+    parityBindingIds: routeKeys.map((_, index) =>
+      uuid(index + 3 + routeKeys.length)
+    ),
+    outcomeId: uuid(3 + routeKeys.length * 2),
+    contract,
+    workerVersion: "reconciler-preparity-v1",
+    routeKeys,
+    legacyDtoHashes: routeKeys.map(() => HASH),
+    indexedDtoHashes: routeKeys.map(() => HASH),
+    routeEvidenceCommitments: routeKeys.map(() => HASH),
+    parityBindingCommitments: routeKeys.map(() => HASH),
+    requestCommitment: HASH,
+    reconciliationEvidenceCommitment: HASH,
+    resultCommitment: HASH,
+    startedAt: "2026-08-01T00:00:00.000Z",
+    comparedAt: "2026-08-01T00:00:01.000Z",
+    finishedAt: "2026-08-01T00:00:02.000Z",
+  };
+}
+
 describe("reconciler Postgres store", () => {
   it("uses only the narrow read function and one atomic commit function", async () => {
     const executor = new ScriptedExecutor();
@@ -122,26 +159,7 @@ describe("reconciler Postgres store", () => {
       routeKeys: RECONCILER_ROUTE_KEYS,
     });
 
-    const commit: ReconcilerCommitInput = {
-      runId: uuid(1),
-      reconciliationId: uuid(2),
-      parityRecordIds: RECONCILER_ROUTE_KEYS.map((_, index) => uuid(index + 3)),
-      parityBindingIds: RECONCILER_ROUTE_KEYS.map((_, index) => uuid(index + 9)),
-      outcomeId: uuid(15),
-      contract,
-      workerVersion: "reconciler-preparity-v1",
-      routeKeys: RECONCILER_ROUTE_KEYS,
-      legacyDtoHashes: RECONCILER_ROUTE_KEYS.map(() => HASH),
-      indexedDtoHashes: RECONCILER_ROUTE_KEYS.map(() => HASH),
-      routeEvidenceCommitments: RECONCILER_ROUTE_KEYS.map(() => HASH),
-      parityBindingCommitments: RECONCILER_ROUTE_KEYS.map(() => HASH),
-      requestCommitment: HASH,
-      reconciliationEvidenceCommitment: HASH,
-      resultCommitment: HASH,
-      startedAt: "2026-08-01T00:00:00.000Z",
-      comparedAt: "2026-08-01T00:00:01.000Z",
-      finishedAt: "2026-08-01T00:00:02.000Z",
-    };
+    const commit = validCommit(contract, RECONCILER_ROUTE_KEYS);
 
     await expect(store.commitResult(commit)).resolves.toMatchObject({
       status: "succeeded",
@@ -157,5 +175,27 @@ describe("reconciler Postgres store", () => {
     );
     expect(executor.applicationQueries.map(({ text }) => text).join("\n"))
       .not.toMatch(/\b(?:insert|update|delete)\b/iu);
+  });
+
+  it("preserves the exact four-route Classic V2 commit cardinality", async () => {
+    const v2Request: ReconcilerCheckpointRequest = {
+      ...request,
+      releaseId: "classic-v2",
+    };
+    const executor = new ScriptedExecutor(
+      v2Request,
+      CLASSIC_V2_RECONCILER_ROUTE_KEYS,
+    );
+    const store = createPostgresReconcilerPreParityStore({ executor });
+    const contract = await store.readExactContract(v2Request);
+
+    await expect(store.commitResult(validCommit(
+      contract,
+      CLASSIC_V2_RECONCILER_ROUTE_KEYS,
+    ))).resolves.toMatchObject({
+      status: "succeeded",
+      routeCount: 4,
+      mismatchCount: 0,
+    });
   });
 });

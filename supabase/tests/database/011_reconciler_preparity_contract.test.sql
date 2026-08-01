@@ -245,9 +245,9 @@ select ok(
     pg_catalog.pg_get_functiondef(
       'programmable_private.commit_reconciler_preparity_result_v1(uuid,uuid,uuid[],uuid[],uuid,bigint,text,text,text,uuid,bigint,uuid,numeric,bytea,text,text[],bytea[],bytea[],bytea[],bytea[],bytea,bytea,bytea,timestamp with time zone,timestamp with time zone,timestamp with time zone)'::regprocedure
     ),
-    'for route_index in 1..6'
+    'for route_index in 1..expected_route_count'
   ) > 0,
-  'route coverage and order are closed over exactly six routes'
+  'route coverage and order are closed over the exact release route matrix'
 );
 
 select ok(

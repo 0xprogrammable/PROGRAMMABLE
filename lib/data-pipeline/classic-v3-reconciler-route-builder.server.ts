@@ -32,8 +32,8 @@ import {
 } from "../classic-v3-release";
 import { stateViewReadAbi, uerc20ReadAbi } from "../onchain/abis";
 import {
-  assembleClassicV3ReconcilerRoutes,
-  assertClassicV3ReconcilerRouteSet,
+  assembleReconcilerRoutesFromContributions,
+  type ReconcilerRouteContribution,
 } from "./classic-v3-reconciler-route-contract";
 import { canonicalBytes32, type HexBytes32 } from "./codecs";
 import { dataPipelineError, invalidInput, validationError } from "./errors";
@@ -47,7 +47,6 @@ import type {
 import {
   RECONCILER_ROUTE_KEYS,
   type ReconcilerPreParityContract,
-  type ReconcilerRouteDto,
 } from "./reconciler-preparity";
 
 const ZERO_ADDRESS = `0x${"00".repeat(20)}` as Address;
@@ -325,6 +324,17 @@ export function classicV3ReconcilerBlockRanges(
     }));
   }
   return Object.freeze(ranges);
+}
+
+export function assertClassicV3ReconcilerLaunchCount(count: number): number {
+  if (
+    !Number.isSafeInteger(count) ||
+    count < 1 ||
+    count > MAXIMUM_CLASSIC_V3_RECONCILER_LAUNCHES
+  ) {
+    fail("classic-v3-launch-cardinality");
+  }
+  return count;
 }
 
 function callSpec(
@@ -734,12 +744,7 @@ function launchRecords(
   release: Release,
 ): readonly LaunchRecord[] {
   const launched = logs.filter((value) => value.eventName === "MemeTokenLaunchedV2");
-  if (
-    launched.length < 1 ||
-    launched.length > MAXIMUM_CLASSIC_V3_RECONCILER_LAUNCHES
-  ) {
-    fail("classic-v3-launch-cardinality");
-  }
+  assertClassicV3ReconcilerLaunchCount(launched.length);
   const tokens = new Set<string>();
   const pools = new Set<string>();
   const output = launched.map(({ args, log }) => {
@@ -1276,13 +1281,13 @@ function isoTimestamp(timestamp: bigint) {
   return new Date(Number(timestamp) * 1_000).toISOString();
 }
 
-async function buildRoutes(input: {
+async function buildContribution(input: {
   rpc: ExactBlockRpcClient;
   contract: ReconcilerPreParityContract;
   blockNumber: bigint;
   blockHash: HexBytes32;
   signal: AbortSignal;
-}): Promise<readonly ReconcilerRouteDto[]> {
+}): Promise<ReconcilerRouteContribution> {
   const release = resolvedRelease(input.contract);
   if (input.blockNumber < release.startBlock) {
     fail("classic-v3-checkpoint-before-release");
@@ -1472,7 +1477,6 @@ async function buildRoutes(input: {
   const tokens: Json[] = [];
   const charts: Json[] = [];
   const rewards: Json[] = [];
-  const lookups: Json[] = [];
   let beneficiaryValueCursor = 0;
   let balanceValueCursor = 0;
   for (let index = 0; index < launches.length; index += 1) {
@@ -1490,7 +1494,7 @@ async function buildRoutes(input: {
     const recordedCreator = exactAddress(initialValues[offset + 4], "classic-v3-token-creator");
     const metadata = tuple(initialValues[offset + 5], 4, "classic-v3-token-metadata");
     const slot0 = tuple(initialValues[offset + 6], 4, "classic-v3-slot0");
-    const activeLiquidity = nonnegative(initialValues[offset + 7], "classic-v3-active-liquidity");
+    nonnegative(initialValues[offset + 7], "classic-v3-active-liquidity");
     const disclosure = tuple(initialValues[offset + 8], 8, "classic-v3-fee-disclosure");
     const poolConfig = tuple(initialValues[offset + 9], 6, "classic-v3-pool-config");
     const predictedRewardVault = exactAddress(initialValues[offset + 10], "classic-v3-predicted-vault");
@@ -1516,9 +1520,9 @@ async function buildRoutes(input: {
       fail("classic-v3-current-provenance");
     }
     const [sqrtPriceValue, tickValue, protocolFeeValue, lpFeeValue] = slot0;
-    const sqrtPriceX96 = nonnegative(sqrtPriceValue, "classic-v3-current-price");
-    const currentTick = safeInteger(tickValue, -887_272, 887_272, "classic-v3-current-tick");
-    const protocolFeePips = safeInteger(protocolFeeValue, 0, 1_000_000, "classic-v3-protocol-fee");
+    nonnegative(sqrtPriceValue, "classic-v3-current-price");
+    safeInteger(tickValue, -887_272, 887_272, "classic-v3-current-tick");
+    safeInteger(protocolFeeValue, 0, 1_000_000, "classic-v3-protocol-fee");
     const currentLpFeePips = safeInteger(lpFeeValue, 0, 1_000_000, "classic-v3-current-lp-fee");
     const [
       buySwapFee,
@@ -1722,6 +1726,8 @@ async function buildRoutes(input: {
       launch.poolId,
     );
     const tokenJson: Json = {
+      releaseVersion: "classic-v3",
+      modelId: "classic",
       tokenAddress: lowerAddress(launch.token),
       creatorAddress: lowerAddress(launch.deployer),
       launchTransactionHash: launch.transactionHash,
@@ -1739,6 +1745,7 @@ async function buildRoutes(input: {
       symbol,
       decimals,
       totalSupplyRaw: totalSupply.toString(),
+      quoteAssetAddress: lowerAddress(ZERO_ADDRESS),
       fees: {
         buySwapFeeBps,
         sellSwapFeeBps,
@@ -1763,8 +1770,11 @@ async function buildRoutes(input: {
     const lastSwap = chart.last;
     if (!lastSwap) fail("classic-v3-latest-swap-missing");
     charts.push({
+      releaseVersion: "classic-v3",
+      modelId: "classic",
       tokenAddress: lowerAddress(launch.token),
       poolId: launch.poolId,
+      quoteAssetAddress: lowerAddress(ZERO_ADDRESS),
       state: {
         blockNumber: lastSwap.log.blockNumber.toString(),
         blockHash: lastSwap.log.blockHash,
@@ -1788,12 +1798,15 @@ async function buildRoutes(input: {
         lpFeePips,
       },
       volume: {
-        grossNativeWei: feeTotals.gross.toString(),
-        creatorFeeWei: feeTotals.creator.toString(),
-        launcherFeeWei: feeTotals.launcher.toString(),
+        quoteAssetAddress: lowerAddress(ZERO_ADDRESS),
+        grossQuoteRaw: feeTotals.gross.toString(),
+        creatorFeeQuoteRaw: feeTotals.creator.toString(),
+        launcherFeeQuoteRaw: feeTotals.launcher.toString(),
       },
     });
     rewards.push({
+      releaseVersion: "classic-v3",
+      modelId: "classic",
       vaultAddress: lowerAddress(launch.rewardVault),
       poolId: launch.poolId,
       tokenAddress: lowerAddress(launch.token),
@@ -1805,56 +1818,13 @@ async function buildRoutes(input: {
       launcherFeeBps,
       allocations,
     });
-    lookups.push({
-      account: lowerAddress(launch.deployer),
-      launchTransactionHash: launch.transactionHash,
-      tokenAddress: lowerAddress(launch.token),
-    });
   }
 
-  const creatorMap = new Map<string, Json[]>();
-  tokens.forEach((token, index) => {
-    const account = lowerAddress(launches[index]!.deployer);
-    const values = creatorMap.get(account) ?? [];
-    values.push(token);
-    creatorMap.set(account, values);
+  return Object.freeze({
+    tokens: Object.freeze(tokens),
+    charts: Object.freeze(charts),
+    rewards: Object.freeze(rewards),
   });
-  const profiles = [...creatorMap.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([account, creatorTokens]) => ({
-      account,
-      tokens: creatorTokens.map((token) => {
-        const row = token as {
-          tokenAddress: string;
-          launchTransactionHash: string;
-        };
-        return {
-          tokenAddress: row.tokenAddress,
-          launchTransactionHash: row.launchTransactionHash,
-        };
-      }),
-    }));
-  rewards.sort((left, right) => {
-    const leftVault = (left as { vaultAddress: string }).vaultAddress;
-    const rightVault = (right as { vaultAddress: string }).vaultAddress;
-    return leftVault.localeCompare(rightVault);
-  });
-  lookups.sort((left, right) => {
-    const a = left as { account: string; launchTransactionHash: string };
-    const b = right as { account: string; launchTransactionHash: string };
-    return a.account.localeCompare(b.account) ||
-      a.launchTransactionHash.localeCompare(b.launchTransactionHash);
-  });
-
-  return assertClassicV3ReconcilerRouteSet(
-    assembleClassicV3ReconcilerRoutes({
-      tokens,
-      charts,
-      profiles,
-      rewards,
-      launches: lookups,
-    }),
-  );
 }
 
 /**
@@ -1862,5 +1832,9 @@ async function buildRoutes(input: {
  * Other releases deliberately remain unconfigured until their exact DTO
  * corpus and lifecycle evidence are complete.
  */
+export const buildClassicV3ExactBlockContribution = buildContribution;
+
 export const buildClassicV3ExactBlockRoutes: ExactBlockRouteBuilder =
-  async (input) => buildRoutes(input);
+  async (input) => assembleReconcilerRoutesFromContributions([
+    await buildContribution(input),
+  ]);

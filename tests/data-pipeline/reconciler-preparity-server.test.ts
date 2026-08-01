@@ -30,21 +30,62 @@ describe("configured reconciler bootstrap", () => {
     });
   });
 
-  it("keeps every unsupported release fail closed without a live builder", async () => {
+  it("wires the reviewed Classic V2 historical reader before database configuration", async () => {
     await expect(
       runConfiguredReconcilerPreParity({
         request: {
           ...request,
-          releaseId: "stock-paired-v3",
+          releaseId: "classic-v2",
+        },
+        env: {},
+      }),
+    ).rejects.toMatchObject({
+      dependency: "config",
+      code: "invalid_input",
+      retryable: false,
+      safeMetadata: { operation: "reconciler-database-url" },
+    });
+  });
+
+  it.each([
+    "stock-paired-v1",
+    "stock-paired-v2",
+    "stock-paired-v3",
+  ])("wires the reviewed %s historical reader before database configuration", async (
+    releaseId,
+  ) => {
+    await expect(
+      runConfiguredReconcilerPreParity({
+        request: {
+          ...request,
+          releaseId,
           modelId: "stock-paired",
         },
         env: {},
       }),
     ).rejects.toMatchObject({
-      dependency: "uniswap",
-      code: "dependency_unavailable",
+      dependency: "config",
+      code: "invalid_input",
       retryable: false,
-      safeMetadata: { operation: "reconciler-route-reader-unconfigured" },
+      safeMetadata: { operation: "reconciler-database-url" },
+    });
+  });
+
+  it("keeps unsupported releases fail closed", async () => {
+    await expect(
+      runConfiguredReconcilerPreParity({
+        request: {
+          ...request,
+          releaseId: "deep-v3",
+          modelId: "deep",
+        },
+        env: {},
+      }),
+    ).rejects.toMatchObject({
+      dependency: "config",
+      code: "invalid_input",
+      retryable: false,
+      safeMetadata: { operation: "reconciler-release-model" },
     });
   });
 });

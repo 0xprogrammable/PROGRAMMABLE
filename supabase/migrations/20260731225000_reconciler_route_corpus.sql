@@ -1,14 +1,14 @@
 -- Bounded, exact-checkpoint route corpus for independent pre-parity reads.
 --
 -- This function deliberately reads projection state before route parity exists.
--- It exposes only fields which can be reconstructed from the Classic V3
--- contracts and their canonical logs at the supplied checkpoint.  Public
+-- It exposes only fields which can be reconstructed from the supported
+-- release contracts and their canonical logs at the supplied checkpoint. Public
 -- route views are not used because they are themselves parity-gated.
 
 reset role;
 set role programmable_migrator;
 
-create function programmable_private.assemble_classic_v3_reconciler_routes_v1(
+create function programmable_private.assemble_reconciler_routes_v1(
   p_tokens jsonb,
   p_charts jsonb,
   p_profiles jsonb,
@@ -26,9 +26,14 @@ security invoker
 set search_path = ''
 as $function$
 declare
-  route_contract_version constant text := 'classic-v3-route-corpus-v1';
+  route_contract_version constant text := 'programmable-route-corpus-v1';
   launch_count bigint;
   profile_token_count bigint;
+  reward_count bigint;
+  lookup_count bigint;
+  release_id text;
+  model_id text;
+  expected_route_keys text[];
 begin
   if p_tokens is null
      or pg_catalog.jsonb_typeof(p_tokens) <> 'array'
@@ -43,10 +48,35 @@ begin
   then
     raise exception using
       errcode = '22023',
-      message = 'invalid Classic V3 reconciler route parts';
+      message = 'invalid reconciler route parts';
   end if;
 
   launch_count := pg_catalog.jsonb_array_length(p_tokens);
+  reward_count := pg_catalog.jsonb_array_length(p_rewards);
+  lookup_count := pg_catalog.jsonb_array_length(p_launches);
+  if launch_count > 0 then
+    release_id := p_tokens -> 0 ->> 'releaseVersion';
+    model_id := p_tokens -> 0 ->> 'modelId';
+  end if;
+  expected_route_keys := case
+    when release_id = 'classic-v2' and model_id = 'classic' then
+      array[
+        'explore-list', 'explore-token', 'explore-chart', 'creator-profile'
+      ]::text[]
+    when release_id = 'classic-v3' and model_id = 'classic' then
+      array[
+        'explore-list', 'explore-token', 'explore-chart', 'creator-profile',
+        'classic-v3-profile', 'launch-lookup'
+      ]::text[]
+    when release_id in (
+      'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+    ) and model_id = 'stock-paired' then
+      array[
+        'explore-list', 'explore-token', 'explore-chart', 'creator-profile',
+        'launch-lookup'
+      ]::text[]
+    else null
+  end;
   select coalesce(pg_catalog.sum(pg_catalog.jsonb_array_length(profile -> 'tokens')), 0)
   into profile_token_count
   from pg_catalog.jsonb_array_elements(p_profiles) as profile
@@ -54,56 +84,63 @@ begin
 
   if launch_count < 1
      or launch_count <> pg_catalog.jsonb_array_length(p_charts)
-     or launch_count <> pg_catalog.jsonb_array_length(p_rewards)
-     or launch_count <> pg_catalog.jsonb_array_length(p_launches)
      or launch_count <> profile_token_count
+     or expected_route_keys is null
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(p_tokens) as token
+       where token ->> 'releaseVersion' is distinct from release_id
+          or token ->> 'modelId' is distinct from model_id
+     )
+     or (release_id = 'classic-v3' and reward_count <> launch_count)
+     or (release_id <> 'classic-v3' and reward_count <> 0)
+     or (release_id = 'classic-v2' and lookup_count <> 0)
+     or (release_id <> 'classic-v2' and lookup_count <> launch_count)
   then
     raise exception using
       errcode = '22023',
-      message = 'Classic V3 reconciler route cardinality mismatch';
+      message = 'reconciler route cardinality mismatch';
   end if;
 
   return query
-  select route.route_key, launch_count, route.dto
+  select route.route_key, route.compared_count, route.dto
   from (values
-    ('explore-list'::text, pg_catalog.jsonb_build_object(
+    ('explore-list'::text, launch_count, pg_catalog.jsonb_build_object(
       'contractVersion', route_contract_version, 'tokens', p_tokens
     )),
-    ('explore-token'::text, pg_catalog.jsonb_build_object(
+    ('explore-token'::text, launch_count, pg_catalog.jsonb_build_object(
       'contractVersion', route_contract_version, 'tokens', p_tokens
     )),
-    ('explore-chart'::text, pg_catalog.jsonb_build_object(
+    ('explore-chart'::text, launch_count, pg_catalog.jsonb_build_object(
       'contractVersion', route_contract_version, 'charts', p_charts
     )),
-    ('creator-profile'::text, pg_catalog.jsonb_build_object(
+    ('creator-profile'::text, launch_count, pg_catalog.jsonb_build_object(
       'contractVersion', route_contract_version, 'profiles', p_profiles
     )),
-    ('classic-v3-profile'::text, pg_catalog.jsonb_build_object(
+    ('classic-v3-profile'::text, reward_count, pg_catalog.jsonb_build_object(
       'contractVersion', route_contract_version, 'rewards', p_rewards
     )),
-    ('launch-lookup'::text, pg_catalog.jsonb_build_object(
+    ('launch-lookup'::text, lookup_count, pg_catalog.jsonb_build_object(
       'contractVersion', route_contract_version, 'launches', p_launches
     ))
-  ) as route(route_key, dto)
-  order by pg_catalog.array_position(array[
-    'explore-list', 'explore-token', 'explore-chart',
-    'creator-profile', 'classic-v3-profile', 'launch-lookup'
-  ]::text[], route.route_key);
+  ) as route(route_key, compared_count, dto)
+  where route.route_key = any(expected_route_keys)
+  order by pg_catalog.array_position(expected_route_keys, route.route_key);
 end
 $function$;
 
-comment on function programmable_private.assemble_classic_v3_reconciler_routes_v1(
+comment on function programmable_private.assemble_reconciler_routes_v1(
   jsonb, jsonb, jsonb, jsonb, jsonb
 ) is
-  'Assembles the immutable six-route Classic V3 corpus contract from validated canonical route parts.';
+  'Assembles the immutable applicable-route corpus contract from validated canonical release parts.';
 
-revoke all on function programmable_private.assemble_classic_v3_reconciler_routes_v1(
+revoke all on function programmable_private.assemble_reconciler_routes_v1(
   jsonb, jsonb, jsonb, jsonb, jsonb
 ) from public, anon, authenticated, service_role, programmable_projector,
   programmable_api_reader, programmable_profile_binder,
   programmable_profile_recovery, programmable_profile_writer,
   programmable_maintenance;
-grant execute on function programmable_private.assemble_classic_v3_reconciler_routes_v1(
+grant execute on function programmable_private.assemble_reconciler_routes_v1(
   jsonb, jsonb, jsonb, jsonb, jsonb
 ) to programmable_reconciler;
 
@@ -132,6 +169,7 @@ as $function$
 declare
   contract_row record;
   launch_count bigint;
+  projected_launch_count bigint;
   vault_count bigint;
   launch_rows jsonb;
   chart_rows jsonb;
@@ -141,7 +179,13 @@ declare
 begin
   perform programmable_private.assert_caller('programmable_reconciler');
 
-  if p_release_id <> 'classic-v3' or p_model_id <> 'classic' then
+  if not (
+    p_release_id = 'classic-v2' and p_model_id = 'classic'
+    or p_release_id = 'classic-v3' and p_model_id = 'classic'
+    or p_release_id in (
+      'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+    ) and p_model_id = 'stock-paired'
+  ) then
     raise exception using
       errcode = '0A000',
       message = 'reconciler route corpus release is not supported';
@@ -160,6 +204,10 @@ begin
   with launches as materialized (
     select
       launch.*,
+      coalesce(
+        launch.quote_asset,
+        pg_catalog.decode(pg_catalog.repeat('00', 20), 'hex')
+      ) as normalized_quote_asset,
       source_occurrence.block_number as launch_source_block_number,
       source_occurrence.block_global_log_index::bigint
         as launch_source_block_global_log_index,
@@ -234,6 +282,8 @@ begin
     select
       launch.*,
       pg_catalog.jsonb_build_object(
+        'releaseVersion', launch.release_id,
+        'modelId', launch.model_id,
         'tokenAddress', '0x' || pg_catalog.encode(launch.token, 'hex'),
         'creatorAddress', '0x' || pg_catalog.encode(launch.creator, 'hex'),
         'launchTransactionHash', '0x' || pg_catalog.encode(
@@ -259,6 +309,9 @@ begin
         'symbol', launch.token_symbol,
         'decimals', 18,
         'totalSupplyRaw', launch.total_supply::text,
+        'quoteAssetAddress', '0x' || pg_catalog.encode(
+          launch.normalized_quote_asset, 'hex'
+        ),
         'fees', pg_catalog.jsonb_build_object(
           'buySwapFeeBps', launch.buy_swap_fee_bps,
           'sellSwapFeeBps', launch.sell_swap_fee_bps,
@@ -277,8 +330,13 @@ begin
         )
       ) as token_json,
       pg_catalog.jsonb_build_object(
+        'releaseVersion', launch.release_id,
+        'modelId', launch.model_id,
         'tokenAddress', '0x' || pg_catalog.encode(launch.token, 'hex'),
         'poolId', '0x' || pg_catalog.encode(launch.pool_id, 'hex'),
+        'quoteAssetAddress', '0x' || pg_catalog.encode(
+          launch.normalized_quote_asset, 'hex'
+        ),
         'state', pg_catalog.jsonb_build_object(
           'blockNumber', launch.market_block_number::text,
           'blockHash', '0x' || pg_catalog.encode(
@@ -295,9 +353,12 @@ begin
           'lpFeePips', launch.lp_fee_pips
         ),
         'volume', pg_catalog.jsonb_build_object(
-          'grossNativeWei', coalesce(launch.gross_total, 0)::text,
-          'creatorFeeWei', coalesce(launch.creator_fee_total, 0)::text,
-          'launcherFeeWei', coalesce(launch.launcher_fee_total, 0)::text
+          'quoteAssetAddress', '0x' || pg_catalog.encode(
+            launch.normalized_quote_asset, 'hex'
+          ),
+          'grossQuoteRaw', launch.gross_total::text,
+          'creatorFeeQuoteRaw', launch.creator_fee_total::text,
+          'launcherFeeQuoteRaw', launch.launcher_fee_total::text
         )
       ) as chart_json
     from launches as launch
@@ -313,7 +374,18 @@ begin
   into launch_count, launch_rows, chart_rows
   from ordered_tokens;
 
+  select pg_catalog.count(*) into projected_launch_count
+  from programmable_private.launch_by_token_v2 as launch
+  where launch.chain_id = p_chain_id
+    and launch.release_id = p_release_id
+    and launch.model_id = p_model_id
+    and launch.source_group = p_source_group
+    and launch.epoch_id = p_epoch_id
+    and launch.pointer_generation = p_pointer_generation
+    and launch.promoted_block_number <= p_checkpoint_block_number::bigint;
+
   if launch_count = 0
+     or launch_count <> projected_launch_count
      or launch_count > p_maximum_entity_count
      or launch_count > 256
   then
@@ -327,6 +399,8 @@ begin
       launch.creator,
       pg_catalog.jsonb_agg(
         pg_catalog.jsonb_build_object(
+          'releaseVersion', launch.release_id,
+          'modelId', launch.model_id,
           'tokenAddress', '0x' || pg_catalog.encode(launch.token, 'hex'),
           'launchTransactionHash', '0x' || pg_catalog.encode(
             launch.launch_transaction_hash, 'hex'
@@ -423,6 +497,7 @@ begin
       on fee.pool_projection_id = pool.pool_projection_id
      and fee.projection_run_id = pool.projection_run_id
     where vault.chain_id = p_chain_id
+      and p_release_id = 'classic-v3'
       and vault.release_id = p_release_id
       and vault.model_id = p_model_id
       and vault.epoch_id = p_epoch_id
@@ -436,6 +511,8 @@ begin
   select
     pg_catalog.count(*),
     coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'releaseVersion', 'classic-v3',
+      'modelId', 'classic',
       'vaultAddress', '0x' || pg_catalog.encode(vault, 'hex'),
       'poolId', '0x' || pg_catalog.encode(pool_id, 'hex'),
       'tokenAddress', '0x' || pg_catalog.encode(token, 'hex'),
@@ -452,7 +529,9 @@ begin
   into vault_count, reward_rows
   from ordered_vaults;
 
-  if vault_count <> launch_count or exists (
+  if (p_release_id = 'classic-v3' and vault_count <> launch_count)
+    or (p_release_id <> 'classic-v3' and vault_count <> 0)
+    or exists (
     select 1 from pg_catalog.jsonb_array_elements(reward_rows) as reward
     where pg_catalog.jsonb_array_length(reward -> 'allocations') = 0
   ) then
@@ -463,6 +542,8 @@ begin
 
   select coalesce(pg_catalog.jsonb_agg(
     pg_catalog.jsonb_build_object(
+      'releaseVersion', launch.release_id,
+      'modelId', launch.model_id,
       'account', '0x' || pg_catalog.encode(launch.creator, 'hex'),
       'launchTransactionHash', '0x' || pg_catalog.encode(
         launch.launch_transaction_hash, 'hex'
@@ -473,6 +554,7 @@ begin
   into lookup_rows
   from programmable_private.launch_by_token_v2 as launch
   where launch.chain_id = p_chain_id
+    and p_release_id <> 'classic-v2'
     and launch.release_id = p_release_id
     and launch.model_id = p_model_id
     and launch.source_group = p_source_group
@@ -482,7 +564,7 @@ begin
 
   return query
   select route.route_key, route.compared_count, route.dto
-  from programmable_private.assemble_classic_v3_reconciler_routes_v1(
+  from programmable_private.assemble_reconciler_routes_v1(
     launch_rows, chart_rows, creator_rows, reward_rows, lookup_rows
   ) as route;
 end
@@ -491,7 +573,7 @@ $function$;
 comment on function programmable_private.get_reconciler_route_corpus_v1(
   bigint, text, text, text, uuid, bigint, uuid, numeric, bytea, integer
 ) is
-  'Returns a bounded deterministic six-route Classic V3 corpus for one exact current checkpoint without reading public or parity-gated route views.';
+  'Returns the bounded deterministic applicable-route corpus for one supported release at one exact current checkpoint without reading public or parity-gated route views.';
 
 revoke all on function programmable_private.get_reconciler_route_corpus_v1(
   bigint, text, text, text, uuid, bigint, uuid, numeric, bytea, integer

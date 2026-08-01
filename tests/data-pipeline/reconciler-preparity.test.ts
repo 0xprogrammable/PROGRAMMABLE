@@ -4,7 +4,10 @@ vi.mock("server-only", () => ({}));
 
 import type { CandidateRpcProvider } from "../../lib/data-pipeline/dual-rpc";
 import {
+  CLASSIC_V2_RECONCILER_ROUTE_KEYS,
   RECONCILER_ROUTE_KEYS,
+  STOCK_PAIRED_RECONCILER_ROUTE_KEYS,
+  reconcilerRouteKeysForScope,
   runReconcilerPreParityCycle,
   type ReconcilerCheckpointRequest,
   type ReconcilerCommitInput,
@@ -53,8 +56,11 @@ const contract: ReconcilerPreParityContract = Object.freeze({
   currentEntities: [{ entityKind: "token", entityKey: "0x01" }],
 });
 
-function routeDtos(suffix = "same"): ReconcilerRouteDto[] {
-  return RECONCILER_ROUTE_KEYS.map((routeKey, index) => ({
+function routeDtos(
+  suffix = "same",
+  routeKeys = RECONCILER_ROUTE_KEYS as readonly typeof RECONCILER_ROUTE_KEYS[number][],
+): ReconcilerRouteDto[] {
+  return routeKeys.map((routeKey, index) => ({
     routeKey,
     comparedCount: index + 1,
     dto: {
@@ -99,6 +105,7 @@ function runtime(overrides: {
   secondLive?: ReconcilerRouteDto[];
   indexed?: ReconcilerRouteDto[];
   contract?: ReconcilerPreParityContract;
+  request?: ReconcilerCheckpointRequest;
   reader?: ReconcilerRouteDtoReader;
   providers?: readonly CandidateRpcProvider[];
 } = {}) {
@@ -137,7 +144,7 @@ function runtime(overrides: {
       checkpointId: input.contract.checkpointId,
       checkpointBlockNumber: input.contract.checkpointBlockNumber,
       checkpointBlockHash: input.contract.checkpointBlockHash,
-      routeCount: 6 as const,
+      routeCount: input.routeKeys.length,
       mismatchCount,
       status: mismatchCount === 0 ? ("succeeded" as const) : ("failed" as const),
     };
@@ -161,7 +168,7 @@ function runtime(overrides: {
     readExactContract,
     commitResult,
     input: {
-      request,
+      request: overrides.request ?? request,
       store,
       providers: overrides.providers ?? [first.value, second.value],
       routeDtoReader: reader,
@@ -173,6 +180,54 @@ function runtime(overrides: {
 }
 
 describe("exact-checkpoint reconciler", () => {
+  it("uses the exact applicable-route matrix for every supported release", () => {
+    expect(reconcilerRouteKeysForScope("classic-v2", "classic")).toEqual(
+      CLASSIC_V2_RECONCILER_ROUTE_KEYS,
+    );
+    expect(reconcilerRouteKeysForScope("classic-v3", "classic")).toEqual(
+      RECONCILER_ROUTE_KEYS,
+    );
+    for (const releaseId of [
+      "stock-paired-v1",
+      "stock-paired-v2",
+      "stock-paired-v3",
+    ]) {
+      expect(reconcilerRouteKeysForScope(releaseId, "stock-paired")).toEqual(
+        STOCK_PAIRED_RECONCILER_ROUTE_KEYS,
+      );
+    }
+    expect(() => reconcilerRouteKeysForScope("classic-v2", "stock-paired"))
+      .toThrow();
+  });
+
+  it("commits only four records for a Classic V2 checkpoint", async () => {
+    const classicV2Request = {
+      ...request,
+      releaseId: "classic-v2",
+    };
+    const classicV2Contract = {
+      ...contract,
+      releaseId: "classic-v2",
+      routeKeys: CLASSIC_V2_RECONCILER_ROUTE_KEYS,
+      routeContract: { routes: [...CLASSIC_V2_RECONCILER_ROUTE_KEYS] },
+    };
+    const routes = routeDtos("same", CLASSIC_V2_RECONCILER_ROUTE_KEYS);
+    const fixture = runtime({
+      request: classicV2Request,
+      contract: classicV2Contract,
+      firstLive: routes,
+      secondLive: routes,
+      indexed: routes,
+    });
+
+    await expect(runReconcilerPreParityCycle(fixture.input)).resolves
+      .toMatchObject({ status: "succeeded", routeCount: 4 });
+    const commit = fixture.commitResult.mock.calls[0]![0];
+    expect(commit.routeKeys).toEqual(CLASSIC_V2_RECONCILER_ROUTE_KEYS);
+    expect(commit.parityRecordIds).toHaveLength(4);
+    expect(commit.parityBindingIds).toHaveLength(4);
+  });
+
   it("reads both independent providers at the same explicit checkpoint and atomically commits six routes", async () => {
     const fixture = runtime();
 

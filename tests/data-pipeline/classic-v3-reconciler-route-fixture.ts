@@ -15,6 +15,8 @@ export const ROUTE_FIXTURE_POOL = `0x${"88".repeat(32)}`;
 export const ROUTE_FIXTURE_LAUNCH_HASH = `0x${"99".repeat(32)}`;
 
 const token: CanonicalJsonValue = {
+  releaseVersion: "classic-v3",
+  modelId: "classic",
   tokenAddress: ROUTE_FIXTURE_ADDRESS,
   creatorAddress: ROUTE_FIXTURE_CREATOR,
   launchTransactionHash: ROUTE_FIXTURE_TRANSACTION,
@@ -32,6 +34,7 @@ const token: CanonicalJsonValue = {
   symbol: "FIX",
   decimals: 18,
   totalSupplyRaw: "1000000000000000000000000000",
+  quoteAssetAddress: `0x${"00".repeat(20)}`,
   fees: {
     buySwapFeeBps: 100,
     sellSwapFeeBps: 100,
@@ -51,8 +54,11 @@ const token: CanonicalJsonValue = {
 };
 
 const chart: CanonicalJsonValue = {
+  releaseVersion: "classic-v3",
+  modelId: "classic",
   tokenAddress: ROUTE_FIXTURE_ADDRESS,
   poolId: ROUTE_FIXTURE_POOL,
+  quoteAssetAddress: `0x${"00".repeat(20)}`,
   state: {
     blockNumber: "25700001",
     blockHash: ROUTE_FIXTURE_BLOCK_HASH,
@@ -65,13 +71,16 @@ const chart: CanonicalJsonValue = {
     lpFeePips: 0,
   },
   volume: {
-    grossNativeWei: "1000000000000000000",
-    creatorFeeWei: "9000000000000000",
-    launcherFeeWei: "1000000000000000",
+    quoteAssetAddress: `0x${"00".repeat(20)}`,
+    grossQuoteRaw: "1000000000000000000",
+    creatorFeeQuoteRaw: "9000000000000000",
+    launcherFeeQuoteRaw: "1000000000000000",
   },
 };
 
 const reward: CanonicalJsonValue = {
+  releaseVersion: "classic-v3",
+  modelId: "classic",
   vaultAddress: ROUTE_FIXTURE_VAULT,
   poolId: ROUTE_FIXTURE_POOL,
   tokenAddress: ROUTE_FIXTURE_ADDRESS,
@@ -97,12 +106,16 @@ export const CLASSIC_V3_RECONCILER_ROUTE_FIXTURE_PARTS:
     profiles: Object.freeze([{
       account: ROUTE_FIXTURE_CREATOR,
       tokens: [{
+        releaseVersion: "classic-v3",
+        modelId: "classic",
         tokenAddress: ROUTE_FIXTURE_ADDRESS,
         launchTransactionHash: ROUTE_FIXTURE_TRANSACTION,
       }],
     }]),
     rewards: Object.freeze([reward]),
     launches: Object.freeze([{
+      releaseVersion: "classic-v3",
+      modelId: "classic",
       account: ROUTE_FIXTURE_CREATOR,
       launchTransactionHash: ROUTE_FIXTURE_TRANSACTION,
       tokenAddress: ROUTE_FIXTURE_ADDRESS,

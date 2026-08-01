@@ -1,9 +1,9 @@
 -- Exact-checkpoint bootstrap contract for the server-only reconciler.
 --
 -- The reconciler intentionally receives no general table privileges.  One
--- narrow reader exposes only the exact current checkpoint, its six route
--- bindings, the immutable projection fold manifest and the current entity
--- identities needed to prepare an independent comparison.  One writer
+-- narrow reader exposes only the exact current checkpoint, its applicable
+-- route bindings, the immutable projection fold manifest and the current
+-- entity identities needed to prepare an independent comparison. One writer
 -- appends the reconciliation, all route parity rows, exact checkpoint
 -- bindings and the terminal outcome in a single transaction.
 
@@ -46,14 +46,7 @@ security definer
 set search_path = ''
 as $function$
 declare
-  expected_route_keys constant text[] := array[
-    'explore-list',
-    'explore-token',
-    'explore-chart',
-    'creator-profile',
-    'classic-v3-profile',
-    'launch-lookup'
-  ]::text[];
+  expected_route_keys text[];
   checkpoint programmable_private.projector_checkpoints%rowtype;
   manifest programmable_private.projection_fold_manifests%rowtype;
   resolved_route_keys text[];
@@ -86,6 +79,31 @@ begin
     raise exception using
       errcode = '22023',
       message = 'invalid reconciler pre-parity checkpoint request';
+  end if;
+
+  expected_route_keys := case
+    when p_release_id = 'classic-v2' and p_model_id = 'classic' then
+      array[
+        'explore-list', 'explore-token', 'explore-chart', 'creator-profile'
+      ]::text[]
+    when p_release_id = 'classic-v3' and p_model_id = 'classic' then
+      array[
+        'explore-list', 'explore-token', 'explore-chart', 'creator-profile',
+        'classic-v3-profile', 'launch-lookup'
+      ]::text[]
+    when p_release_id in (
+      'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+    ) and p_model_id = 'stock-paired' then
+      array[
+        'explore-list', 'explore-token', 'explore-chart', 'creator-profile',
+        'launch-lookup'
+      ]::text[]
+    else null
+  end;
+  if expected_route_keys is null then
+    raise exception using
+      errcode = '0A000',
+      message = 'reconciler release and model are not supported';
   end if;
 
   select checkpoint_row.* into checkpoint
@@ -291,14 +309,8 @@ security definer
 set search_path = ''
 as $function$
 declare
-  expected_route_keys constant text[] := array[
-    'explore-list',
-    'explore-token',
-    'explore-chart',
-    'creator-profile',
-    'classic-v3-profile',
-    'launch-lookup'
-  ]::text[];
+  expected_route_keys text[];
+  expected_route_count integer;
   route_index integer;
   mismatch_count bigint := 0;
   mismatch_commitments bytea[] := array[]::bytea[];
@@ -306,6 +318,26 @@ declare
   locked_route_count bigint;
 begin
   perform programmable_private.assert_caller('programmable_reconciler');
+  expected_route_keys := case
+    when p_release_id = 'classic-v2' and p_model_id = 'classic' then
+      array[
+        'explore-list', 'explore-token', 'explore-chart', 'creator-profile'
+      ]::text[]
+    when p_release_id = 'classic-v3' and p_model_id = 'classic' then
+      array[
+        'explore-list', 'explore-token', 'explore-chart', 'creator-profile',
+        'classic-v3-profile', 'launch-lookup'
+      ]::text[]
+    when p_release_id in (
+      'stock-paired-v1', 'stock-paired-v2', 'stock-paired-v3'
+    ) and p_model_id = 'stock-paired' then
+      array[
+        'explore-list', 'explore-token', 'explore-chart', 'creator-profile',
+        'launch-lookup'
+      ]::text[]
+    else null
+  end;
+  expected_route_count := pg_catalog.cardinality(expected_route_keys);
   if p_run_id is null
      or p_reconciliation_id is null
      or p_outcome_id is null
@@ -340,15 +372,20 @@ begin
      or p_finished_at is null
      or p_started_at > p_compared_at
      or p_compared_at > p_finished_at
+     or expected_route_keys is null
      or p_route_keys is distinct from expected_route_keys
-     or pg_catalog.cardinality(p_parity_record_ids) is distinct from 6
-     or pg_catalog.cardinality(p_parity_binding_ids) is distinct from 6
-     or pg_catalog.cardinality(p_legacy_dto_hashes) is distinct from 6
-     or pg_catalog.cardinality(p_indexed_dto_hashes) is distinct from 6
+     or pg_catalog.cardinality(p_parity_record_ids)
+       is distinct from expected_route_count
+     or pg_catalog.cardinality(p_parity_binding_ids)
+       is distinct from expected_route_count
+     or pg_catalog.cardinality(p_legacy_dto_hashes)
+       is distinct from expected_route_count
+     or pg_catalog.cardinality(p_indexed_dto_hashes)
+       is distinct from expected_route_count
      or pg_catalog.cardinality(p_route_evidence_commitments)
-       is distinct from 6
+       is distinct from expected_route_count
      or pg_catalog.cardinality(p_parity_binding_commitments)
-       is distinct from 6
+       is distinct from expected_route_count
      or exists (
        select 1
        from pg_catalog.unnest(
@@ -363,7 +400,7 @@ begin
          array[p_run_id, p_reconciliation_id, p_outcome_id]
            || p_parity_record_ids || p_parity_binding_ids
        ) as supplied_id(value)
-     ) <> 15
+     ) <> (3 + expected_route_count * 2)
      or exists (
        select 1
        from pg_catalog.unnest(
@@ -437,13 +474,13 @@ begin
     and route.checkpoint_id = p_checkpoint_id
     and route.status = 'eligible'
     and route.route_mode = 'indexed';
-  if locked_route_count <> 6 then
+  if locked_route_count <> expected_route_count then
     raise exception using
       errcode = '40001',
       message = 'reconciler route coverage changed before commit';
   end if;
 
-  for route_index in 1..6 loop
+  for route_index in 1..expected_route_count loop
     if p_legacy_dto_hashes[route_index]
        <> p_indexed_dto_hashes[route_index]
     then
@@ -479,7 +516,7 @@ begin
     case when mismatch_count = 0 then 'info' else 'warning' end,
     p_checkpoint_block_number,
     p_checkpoint_block_number,
-    6,
+    expected_route_count,
     mismatch_count,
     p_reconciliation_evidence_commitment,
     mismatch_commitments,
@@ -487,7 +524,7 @@ begin
     p_compared_at
   );
 
-  for route_index in 1..6 loop
+  for route_index in 1..expected_route_count loop
     perform programmable_private.append_parity_record(
       p_parity_record_ids[route_index],
       p_reconciliation_id,
@@ -522,7 +559,7 @@ begin
     'checkpointBlockHash', '0x' || pg_catalog.encode(
       p_checkpoint_block_hash, 'hex'
     ),
-    'routeCount', 6,
+    'routeCount', expected_route_count,
     'mismatchCount', mismatch_count,
     'status', terminal_status
   );

@@ -1,6 +1,8 @@
 import "server-only";
 
+import { buildClassicV2ExactBlockContribution } from "./classic-v2-reconciler-route-builder.server";
 import { dataPipelineError, invalidInput } from "./errors";
+import { assembleReconcilerRoutesFromContributions } from "./classic-v3-reconciler-route-contract";
 import { buildClassicV3ExactBlockRoutes } from "./classic-v3-reconciler-route-builder.server";
 import { createPostgresExecutor } from "./postgres";
 import { createPostgresReconcilerPreParityStore } from "./postgres-reconciler-store";
@@ -17,6 +19,12 @@ import {
   type ReconcilerRouteDtoReader,
 } from "./reconciler-preparity";
 import { createProductionDualRpcProviders } from "./rpc-providers.server";
+import {
+  buildStockPairedV1ExactBlockContribution,
+  buildStockPairedV2ExactBlockContribution,
+  buildStockPairedV3ExactBlockContribution,
+  type StockPairedExactBlockContributionBuilder,
+} from "./stock-paired-reconciler-route-builder.server";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -47,10 +55,54 @@ function requiredEnvironmentValue(
   return value;
 }
 
+function stockPairedExactBlockRoutes(
+  builder: StockPairedExactBlockContributionBuilder,
+): ExactBlockRouteBuilder {
+  return async (input) =>
+    assembleReconcilerRoutesFromContributions([await builder(input)]);
+}
+
+const buildStockPairedV1ExactBlockRoutes = stockPairedExactBlockRoutes(
+  buildStockPairedV1ExactBlockContribution,
+);
+const buildStockPairedV2ExactBlockRoutes = stockPairedExactBlockRoutes(
+  buildStockPairedV2ExactBlockContribution,
+);
+const buildStockPairedV3ExactBlockRoutes = stockPairedExactBlockRoutes(
+  buildStockPairedV3ExactBlockContribution,
+);
+const buildClassicV2ExactBlockRoutes: ExactBlockRouteBuilder = async (input) =>
+  assembleReconcilerRoutesFromContributions([
+    await buildClassicV2ExactBlockContribution(input),
+  ]);
+
+function configuredExactBlockRouteBuilder(
+  releaseId: string,
+  modelId: string,
+): ExactBlockRouteBuilder | undefined {
+  if (modelId === "classic" && releaseId === "classic-v2") {
+    return buildClassicV2ExactBlockRoutes;
+  }
+  if (modelId === "classic" && releaseId === "classic-v3") {
+    return buildClassicV3ExactBlockRoutes;
+  }
+  if (modelId !== "stock-paired") return undefined;
+  if (releaseId === "stock-paired-v1") {
+    return buildStockPairedV1ExactBlockRoutes;
+  }
+  if (releaseId === "stock-paired-v2") {
+    return buildStockPairedV2ExactBlockRoutes;
+  }
+  if (releaseId === "stock-paired-v3") {
+    return buildStockPairedV3ExactBlockRoutes;
+  }
+  return undefined;
+}
+
 /**
  * Runs one exact-checkpoint cycle. Production callers must supply the reviewed
- * six-route live/indexed DTO implementation; there is deliberately no legacy
- * or indexed-view fallback.
+ * applicable-route live/indexed DTO implementation; there is deliberately no
+ * legacy or indexed-view fallback.
  */
 export async function runConfiguredReconcilerPreParity(input: {
   request: ReconcilerCheckpointRequest;
@@ -60,11 +112,8 @@ export async function runConfiguredReconcilerPreParity(input: {
 }): Promise<ReconcilerCommitResult> {
   const request = canonicalReconcilerCheckpointRequest(input.request);
   const env = input.env ?? process.env;
-  const exactBlockRouteBuilder = input.exactBlockRouteBuilder ?? (
-    request.releaseId === "classic-v3" && request.modelId === "classic"
-      ? buildClassicV3ExactBlockRoutes
-      : undefined
-  );
+  const exactBlockRouteBuilder = input.exactBlockRouteBuilder ??
+    configuredExactBlockRouteBuilder(request.releaseId, request.modelId);
   if (!input.routeDtoReader && !exactBlockRouteBuilder) {
     configuredRouteReader(undefined);
   }

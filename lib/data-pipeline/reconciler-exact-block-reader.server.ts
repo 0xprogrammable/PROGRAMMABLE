@@ -1042,10 +1042,21 @@ export function createExactBlockReconcilerRouteDtoReader(input: {
         blockHash,
         signal,
       });
+      const byKey = new Map(routes.map((route) => [route.routeKey, route]));
+      if (byKey.size !== routes.length) {
+        throw validationError("rpc", "reconciler-live-route-duplicate");
+      }
+      const selected = contract.routeKeys.map((routeKey) => {
+        const route = byKey.get(routeKey);
+        if (!route) {
+          throw validationError("rpc", "reconciler-live-route-missing");
+        }
+        return route;
+      });
       // A canonicality change while logs or EIP-1898 calls were in flight must
       // invalidate the whole source read, not merely the affected entity.
       await rpc.assertCheckpoint({ blockNumber, blockHash, signal });
-      return routes;
+      return Object.freeze(selected);
     },
     readIndexedRoutes({ contract, signal }) {
       return input.indexedStore.readExactIndexedRouteCorpus({

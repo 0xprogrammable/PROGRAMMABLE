@@ -70,7 +70,10 @@ function stringArray(value: unknown, operation: string): readonly string[] {
   return value;
 }
 
-function commitResult(value: unknown): ReconcilerCommitResult {
+function commitResult(
+  value: unknown,
+  expectedRouteCount: number,
+): ReconcilerCommitResult {
   const parsed = json(value, "reconciler-commit-result");
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw validationError("postgres", "reconciler-commit-result");
@@ -81,9 +84,9 @@ function commitResult(value: unknown): ReconcilerCommitResult {
     integerText(input.mismatchCount, "mismatch-count"),
   );
   if (
-    routeCount !== 6 ||
+    routeCount !== expectedRouteCount ||
     mismatchCount < 0 ||
-    mismatchCount > 6 ||
+    mismatchCount > expectedRouteCount ||
     (input.status !== "succeeded" && input.status !== "failed")
   ) {
     throw validationError("postgres", "reconciler-commit-result");
@@ -100,7 +103,7 @@ function commitResult(value: unknown): ReconcilerCommitResult {
       input.checkpointBlockHash,
       "checkpoint-block-hash",
     ),
-    routeCount: 6,
+    routeCount,
     mismatchCount,
     status: input.status,
   });
@@ -236,7 +239,7 @@ export function createPostgresReconcilerPreParityStore(input: {
         if (rows.length !== 1) {
           throw validationError("postgres", "reconciler-commit-cardinality");
         }
-        return commitResult(rows[0]!.result);
+        return commitResult(rows[0]!.result, result.routeKeys.length);
       });
     },
   });

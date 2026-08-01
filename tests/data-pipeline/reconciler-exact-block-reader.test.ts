@@ -9,6 +9,7 @@ import {
 } from "../../lib/data-pipeline/reconciler-exact-block-reader.server";
 import { projectorRpcDeploymentCommitment } from "../../lib/data-pipeline/projector-provider-commitments";
 import {
+  CLASSIC_V2_RECONCILER_ROUTE_KEYS,
   RECONCILER_ROUTE_KEYS,
   type ReconcilerPreParityContract,
   type ReconcilerRouteDto,
@@ -350,6 +351,49 @@ describe("exact-block reconciler RPC", () => {
       "eth_getBlockByNumber",
       "eth_getBlockByNumber",
     ]);
+  });
+
+  it("selects only the routes applicable to the requested release", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { id: number };
+      return rpcResponse(body.id, block());
+    });
+    const reader = createExactBlockReconcilerRouteDtoReader({
+      env: {
+        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY,
+        PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL: QUICKNODE,
+      },
+      indexedStore: {
+        readExactIndexedRouteCorpus: vi.fn(async () => routes("indexed")),
+      },
+      buildLiveRoutes: vi.fn(async () => routes("live")),
+      fetch: fetchMock as typeof fetch,
+    });
+    const classicV2Contract: ReconcilerPreParityContract = {
+      ...contract,
+      releaseId: "classic-v2",
+      routeKeys: CLASSIC_V2_RECONCILER_ROUTE_KEYS,
+    };
+
+    const result = await reader.readLiveRoutes({
+      source: {
+        identity: "alchemy-mainnet-test",
+        vendorGroup: "alchemy",
+        endpointCommitment: projectorRpcDeploymentCommitment(ALCHEMY),
+        endpointOriginCommitment: rpcProviderCommitment(
+          "origin",
+          new URL(ALCHEMY).origin,
+        ),
+      },
+      contract: classicV2Contract,
+      blockNumber: BLOCK_NUMBER,
+      blockHash: BLOCK_HASH,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.map(({ routeKey }) => routeKey)).toEqual(
+      CLASSIC_V2_RECONCILER_ROUTE_KEYS,
+    );
   });
 
   it("fails closed if the checkpoint changes after the route read", async () => {
