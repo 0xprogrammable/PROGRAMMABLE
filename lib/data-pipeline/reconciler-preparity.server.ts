@@ -1,8 +1,14 @@
 import "server-only";
 
 import { dataPipelineError, invalidInput } from "./errors";
+import { buildClassicV3ExactBlockRoutes } from "./classic-v3-reconciler-route-builder.server";
 import { createPostgresExecutor } from "./postgres";
 import { createPostgresReconcilerPreParityStore } from "./postgres-reconciler-store";
+import { createPostgresReconcilerRouteCorpusStore } from "./postgres-reconciler-route-corpus-store";
+import {
+  createExactBlockReconcilerRouteDtoReader,
+  type ExactBlockRouteBuilder,
+} from "./reconciler-exact-block-reader.server";
 import {
   canonicalReconcilerCheckpointRequest,
   runReconcilerPreParityCycle,
@@ -49,11 +55,19 @@ function requiredEnvironmentValue(
 export async function runConfiguredReconcilerPreParity(input: {
   request: ReconcilerCheckpointRequest;
   routeDtoReader?: ReconcilerRouteDtoReader;
+  exactBlockRouteBuilder?: ExactBlockRouteBuilder;
   env?: Environment;
 }): Promise<ReconcilerCommitResult> {
   const request = canonicalReconcilerCheckpointRequest(input.request);
-  const routeDtoReader = configuredRouteReader(input.routeDtoReader);
   const env = input.env ?? process.env;
+  const exactBlockRouteBuilder = input.exactBlockRouteBuilder ?? (
+    request.releaseId === "classic-v3" && request.modelId === "classic"
+      ? buildClassicV3ExactBlockRoutes
+      : undefined
+  );
+  if (!input.routeDtoReader && !exactBlockRouteBuilder) {
+    configuredRouteReader(undefined);
+  }
   const executor = createPostgresExecutor({
     connectionString: requiredEnvironmentValue(
       env.PROGRAMMABLE_RECONCILER_DATABASE_URL,
@@ -68,6 +82,12 @@ export async function runConfiguredReconcilerPreParity(input: {
     idleTimeoutMs: 5_000,
   });
   try {
+    const routeDtoReader = input.routeDtoReader ??
+      createExactBlockReconcilerRouteDtoReader({
+        env,
+        indexedStore: createPostgresReconcilerRouteCorpusStore({ executor }),
+        buildLiveRoutes: exactBlockRouteBuilder!,
+      });
     return await runReconcilerPreParityCycle({
       request,
       store: createPostgresReconcilerPreParityStore({ executor }),

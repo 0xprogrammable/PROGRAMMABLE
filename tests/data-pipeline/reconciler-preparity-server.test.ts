@@ -19,9 +19,27 @@ const request: ReconcilerCheckpointRequest = {
 };
 
 describe("configured reconciler bootstrap", () => {
-  it("refuses to manufacture parity when the reviewed exact-route reader is not wired", async () => {
+  it("wires the reviewed Classic V3 exact-block builder before database configuration", async () => {
     await expect(
       runConfiguredReconcilerPreParity({ request, env: {} }),
+    ).rejects.toMatchObject({
+      dependency: "config",
+      code: "invalid_input",
+      retryable: false,
+      safeMetadata: { operation: "reconciler-database-url" },
+    });
+  });
+
+  it("keeps every unsupported release fail closed without a live builder", async () => {
+    await expect(
+      runConfiguredReconcilerPreParity({
+        request: {
+          ...request,
+          releaseId: "stock-paired-v3",
+          modelId: "stock-paired",
+        },
+        env: {},
+      }),
     ).rejects.toMatchObject({
       dependency: "uniswap",
       code: "dependency_unavailable",

@@ -23,7 +23,7 @@ const RPC_METHOD_CONTRACT_V1 = Object.freeze({
     Object.freeze(["eth_blockNumber"]),
     Object.freeze(["eth_getBlockByNumber", "number,transactions=false"]),
     Object.freeze(["eth_getTransactionReceipt", "transaction-hash"]),
-    Object.freeze(["eth_getCode", "address,block-number"]),
+    Object.freeze(["eth_getCode", "address,eip-1898-canonical-block-hash"]),
     Object.freeze(["eth_call", "erc20-name-or-symbol,exact-block-number"]),
     Object.freeze([
       "eth_call",

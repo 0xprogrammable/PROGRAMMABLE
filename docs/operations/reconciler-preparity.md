@@ -32,14 +32,22 @@ The runtime then:
 An indexed mismatch is stored as a failed reconciliation. It never becomes
 current route parity.
 
-## Production wiring still required
+## Activation boundary
 
 `POST /api/ops/reconcile-preparity` is protected by `CRON_SECRET`, accepts only
 an explicit checkpoint request and returns `Cache-Control: no-store`.
 
-The endpoint currently returns `503` until a reviewed exact-block route DTO
-reader is supplied to `runConfiguredReconcilerPreParity`. The reader must build
-the following route DTOs without depending on current parity:
+The server now provides the narrow indexed-corpus store and the strict RPC
+transport used by an exact-block route reader. The transport binds each source
+to its reviewed endpoint commitment, uses EIP-1898 `blockHash` plus
+`requireCanonical` for `eth_call`, bounds physical requests and log results,
+and verifies the checkpoint before and after each complete source read.
+
+Classic V3 now has a release-specific live builder. It verifies the pinned
+release runtimes, reconstructs launch provenance from canonical logs, binds
+each launch to its successful transaction and receipt, reads contract state
+with EIP-1898 at the agreed block hash and materializes these six corpora
+without depending on current parity:
 
 - `explore-list`
 - `explore-token`
@@ -48,12 +56,14 @@ the following route DTOs without depending on current parity:
 - `classic-v3-profile`
 - `launch-lookup`
 
-Do not replace the missing reader with public read views, latest-block calls or
-event-corpus hashes. Those substitutions would compare the index with itself or
-record parity for a different chain state.
+The builder is intentionally allowlisted to `classic-v3` / `classic`. Every
+other release remains unavailable until it has its own reviewed DTO family.
+Do not replace a missing builder with public read views, latest-block calls,
+event-corpus hashes or a projection identity comparison. Those substitutions
+would compare the index with itself or record parity for a different chain
+state.
 
-Only after the reader has its own exact-checkpoint tests and the production
-reconciler credentials are provisioned should the endpoint be added to
-`vercel.json`. The scheduler must first obtain the complete checkpoint identity
-from the projector handoff; it must not infer a checkpoint from a latest-block
-RPC response.
+This route is not scheduled. Activation still requires a successful Classic V3
+indexed-corpus fixture, a provider-backed live dry run, production reconciler
+credentials and the complete checkpoint identity from the projector handoff.
+The scheduler must never infer a checkpoint from a latest-block RPC response.

@@ -93,6 +93,14 @@ export type ReconcilerRouteDtoReader = Readonly<{
   }): Promise<readonly ReconcilerRouteDto[]>;
 }>;
 
+export type ReconcilerIndexedRouteStore = Readonly<{
+  readExactIndexedRouteCorpus(input: {
+    contract: ReconcilerPreParityContract;
+    maximumEntityCount: number;
+    signal: AbortSignal;
+  }): Promise<readonly ReconcilerRouteDto[]>;
+}>;
+
 export type ReconcilerCommitInput = Readonly<{
   runId: string;
   reconciliationId: string;
