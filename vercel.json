@@ -4,6 +4,14 @@
     {
       "path": "/api/ops/index-v2",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/ops/projector",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/ops/market-projector",
+      "schedule": "* * * * *"
     }
   ]
 }

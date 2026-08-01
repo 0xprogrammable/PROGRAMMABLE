@@ -93,6 +93,9 @@ jobs:
       - name: Audit production dependencies
         run: npm run audit:prod
 
+      - name: Verify operations source contract
+        run: npm run perf:read-model:ops-gate
+
       - name: Verify interface
         run: npm run verify
 

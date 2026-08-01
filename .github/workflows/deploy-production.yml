@@ -15,13 +15,91 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy programmable.family
+  release-gate:
+    name: Verify exact production commit
     if: >-
       github.repository == '0xprogrammable/programmable' &&
       github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
+    outputs:
+      verified_sha: ${{ steps.exact-head.outputs.sha }}
+
+    steps:
+      - name: Check out exact production commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Set up Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1
+        with:
+          version: v1.7.1
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          pipx install slither-analyzer==0.11.5
+
+      - name: Pin pnpm
+        run: |
+          npm install --global pnpm@10.32.0
+          test "$(pnpm --version)" = "10.32.0"
+
+      - name: Verify indexer
+        run: |
+          pnpm --dir indexer install --frozen-lockfile
+          pnpm --dir indexer audit --prod --audit-level high
+          pnpm --dir indexer codegen
+          pnpm --dir indexer typecheck
+          pnpm --dir indexer test
+
+      - name: Audit production dependencies
+        run: npm run audit:prod
+
+      - name: Verify operations source contract
+        run: npm run perf:read-model:ops-gate
+
+      - name: Verify interface and release gates
+        run: npm run verify
+
+      - name: Verify fresh database migrations
+        run: npm run db:test:pglite
+
+      - name: Verify contracts
+        run: |
+          npm run contracts:verify:ci
+          npm run contracts:official-deployments
+          npm run contracts:slither
+
+      - name: Bind verified evidence to exact commit
+        id: exact-head
+        run: |
+          verified_sha="$(git rev-parse HEAD)"
+          test "$verified_sha" = "$GITHUB_SHA"
+          echo "sha=$verified_sha" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy programmable.family
+    needs: release-gate
+    if: >-
+      github.repository == '0xprogrammable/programmable' &&
+      github.ref == 'refs/heads/production' &&
+      needs.release-gate.outputs.verified_sha == github.sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment:
       name: production
       url: ${{ steps.deploy.outputs.url }}
@@ -32,6 +110,9 @@ jobs:
     steps:
       - name: Check out production
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.release-gate.outputs.verified_sha }}
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -49,6 +130,16 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Capture current production rollback target
+        id: production-before
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: >-
+          npm run perf:read-model:production-binding --
+          --target-url "https://programmable.family"
+          --reject-git-head "$GITHUB_SHA"
+          --github-output "$GITHUB_OUTPUT"
 
       - name: Resolve read-model release policy
         id: read-model-policy
@@ -144,16 +235,53 @@ jobs:
         run: npm run perf:read-model:gate
 
       - name: Promote verified staged deployment
+        id: promote
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
-        run: vercel promote "$DEPLOYMENT_URL" --yes --token="$VERCEL_TOKEN"
+          DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+        run: vercel promote "$DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
 
-      - name: Verify production domain
+      - name: Verify promoted production routes
+        env:
+          EVIDENCE_REQUIRED: ${{ steps.read-model-policy.outputs.evidence_required }}
+          EVIDENCE_PATH: ${{ steps.read-model-capture.outputs.evidence_path }}
+          DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          curl --fail --silent --show-error \
-            --retry 12 --retry-all-errors --retry-delay 5 \
-            --max-time 30 "https://programmable.family/" > /dev/null
+          if [ "$EVIDENCE_REQUIRED" = "true" ]; then
+            npm run perf:read-model:post-promotion -- \
+              --target-url "https://programmable.family" \
+              --deployment-id "$DEPLOYMENT_ID" \
+              --git-head "$GITHUB_SHA" \
+              --evidence "$EVIDENCE_PATH"
+          else
+            npm run perf:read-model:post-promotion -- \
+              --target-url "https://programmable.family" \
+              --deployment-id "$DEPLOYMENT_ID" \
+              --git-head "$GITHUB_SHA"
+          fi
+
+      - name: Roll back a failed promotion
+        if: failure() && steps.promote.outcome == 'success'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ROLLBACK_DEPLOYMENT_URL: ${{ steps.production-before.outputs.deployment_url }}
+        run: >-
+          vercel rollback "$ROLLBACK_DEPLOYMENT_URL"
+          --yes --timeout 60s --token="$VERCEL_TOKEN"
+
+      - name: Verify rollback binding
+        if: failure() && steps.promote.outcome == 'success'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ROLLBACK_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
+          ROLLBACK_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
+        run: >-
+          npm run perf:read-model:production-binding --
+          --target-url "https://programmable.family"
+          --expected-deployment-id "$ROLLBACK_DEPLOYMENT_ID"
+          --expected-git-head "$ROLLBACK_GIT_HEAD"
+          --github-output "$RUNNER_TEMP/verified-rollback-binding"
 
       - name: Record deployment
         env:

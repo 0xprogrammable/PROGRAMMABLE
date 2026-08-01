@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "legacyIndexer": {
+    "path": "/api/ops/index-v2",
+    "schedule": "*/5 * * * *",
+    "retainedUntil": "indexed-read-cutover",
+    "route": "app/api/ops/index-v2/route.ts",
+    "sha256": "5f1bca899c729689827bbcf1edeea2ec101f0770f0326bc60af529ba8a6cadaa"
+  },
+  "workers": [
+    {
+      "id": "source-projector",
+      "path": "/api/ops/projector",
+      "schedule": "* * * * *",
+      "activationEnvironment": "PROGRAMMABLE_PROJECTOR_ACTIVE",
+      "route": {
+        "path": "app/api/ops/projector/route.ts",
+        "sha256": "2d76bc9d6b4cf4168a80b87a374b0e54edb8a6b8fdf6f67dcf74ab18f5d92376"
+      },
+      "runtime": {
+        "path": "lib/data-pipeline/projector-runtime-config.server.ts",
+        "sha256": "a8fd4a36af8cde2c24698ff39810b55a757510fb68a66395d322b894534df2d5"
+      },
+      "migrations": [
+        {
+          "path": "supabase/migrations/20260731203900_projector_runtime_singleton_lease.sql",
+          "sha256": "4849bb4a7e8683ce88acbe74e43d38f00c758388509b9ab8ac9fda426a5ebc09"
+        },
+        {
+          "path": "supabase/migrations/20260731224000_projector_provider_evidence_binding.sql",
+          "sha256": "11e86d218c67a59ed6dd049491c42de1e3527a245cf50a33346013b017d8f875"
+        }
+      ]
+    },
+    {
+      "id": "market-projector",
+      "path": "/api/ops/market-projector",
+      "schedule": "* * * * *",
+      "activationEnvironment": "PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE",
+      "route": {
+        "path": "app/api/ops/market-projector/route.ts",
+        "sha256": "73bf9299095cfdf75d5452513ee818e161297a83c6355760ab2f79a22a13edbd"
+      },
+      "runtime": {
+        "path": "lib/data-pipeline/market-projector-runtime.server.ts",
+        "sha256": "4c60715c48f6aa857403d826a8130e3b63338dff62f7569b6c15b5635e2dd375"
+      },
+      "migrations": [
+        {
+          "path": "supabase/migrations/20260731223000_market_projector_contract.sql",
+          "sha256": "ea73f4112a53b25e72aa697d3fc0679bf9c6e7f93a496edd167803d6a7f81a24"
+        }
+      ]
+    }
+  ],
+  "unscheduled": [
+    {
+      "id": "reconciler-preparity",
+      "path": "/api/ops/reconcile-preparity",
+      "reason": "full-release-route-matrix-not-yet-proven"
+    }
+  ],
+  "postPromotion": {
+    "publicRoutes": [
+      "/",
+      "/api/ops/health",
+      "/api/explore?limit=6&page=1&sort=market-cap",
+      "/api/indexers/v1/token-list"
+    ],
+    "evidenceRequiredForIndexedRoutes": true
+  }
+}
