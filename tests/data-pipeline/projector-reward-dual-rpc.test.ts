@@ -41,6 +41,7 @@ const poolId = bytes32("3");
 const configurationHash = bytes32("4");
 const blockHash = bytes32("9");
 const rewardVaultFactory = address("f");
+const rewardVaultCtoAuthority = address("d");
 const launchToken = address("a");
 const launchDeployer = address("b");
 const rewardVaultSalt = keccak256(
@@ -273,9 +274,10 @@ function provider(
         blockNumber: request.blockNumber.toString(),
         blockHash: request.blockHash,
         configurationHash: factoryConfigurationHash,
+        ctoAuthority: rewardVaultCtoAuthority,
         initCodeHash: rewardVaultInitCodeHash,
         predictedVault: vault,
-        rpcCallCount: 3,
+        rpcCallCount: 4,
         ...factoryOverrides,
       }),
       getBytecode: async () => vault,
@@ -864,7 +866,30 @@ describe("dual-RPC exact-block reward snapshots", () => {
       ],
       providerPredictedVaults: [vault, vault],
       locallyPredictedVault: vault,
-      factoryProviderCallCounts: [3, 3],
+      ctoAuthority: rewardVaultCtoAuthority,
+      constructorArgumentsCommitment: keccak256(
+        encodeAbiParameters(
+          [
+            { type: "address" },
+            { type: "bytes32" },
+            { type: "address" },
+            { type: "address[]" },
+            { type: "uint16[]" },
+          ],
+          [
+            address("e"),
+            poolId,
+            rewardVaultCtoAuthority,
+            [alice, bob],
+            [4000, 6000],
+          ],
+        ),
+      ),
+      providerCtoAuthorities: [
+        rewardVaultCtoAuthority,
+        rewardVaultCtoAuthority,
+      ],
+      factoryProviderCallCounts: [4, 4],
       initialActiveConfigurationHash: initialActiveHash,
       allocations: [
         { allocationIndex: 0, beneficiary: alice, shareBps: "4000" },
@@ -907,6 +932,36 @@ describe("dual-RPC exact-block reward snapshots", () => {
       ),
       template: dynamicTemplate(parent.sourceAddress),
       providers: disagreeingProviders,
+      rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 32 },
+    })).rejects.toMatchObject({
+      dependency: "rpc",
+      code: "validation_failed",
+    });
+
+    const authorityDisagreement = [
+      provider("alchemy-seed", "alchemy", left, factoryConfigurationHash),
+      provider(
+        "quicknode-seed",
+        "quicknode",
+        right,
+        factoryConfigurationHash,
+        { ctoAuthority: address("c") },
+      ),
+    ] as const;
+    await expect(readDualRpcInitialRewardConfiguration({
+      parentCandidate: parent,
+      launchCandidate: launch,
+      sameBlockVaultEvents: [payout],
+      candidateEvidence: candidateBatchEvidence(
+        [launch, payout],
+        authorityDisagreement,
+      ),
+      canonicalDeployment: canonicalDeploymentEvidence(
+        parent,
+        authorityDisagreement,
+      ),
+      template: dynamicTemplate(parent.sourceAddress),
+      providers: authorityDisagreement,
       rpcPolicy: { maxAttempts: 1, maxCallsPerProvider: 32 },
     })).rejects.toMatchObject({
       dependency: "rpc",

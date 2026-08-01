@@ -158,6 +158,13 @@ const CLASSIC_REWARD_VAULT_FACTORY_ABI = [
   },
   {
     type: "function",
+    name: "ctoAuthority",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
     name: "initCodeHash",
     stateMutability: "view",
     inputs: [
@@ -563,13 +570,19 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
       sharesBps,
     }): Promise<CandidateRpcClassicRewardFactorySnapshot> {
       const exactBlock = { blockHash, requireCanonical: true } as const;
-      const [configurationHash, initCodeHash, predictedVault] =
+      const [configurationHash, ctoAuthority, initCodeHash, predictedVault] =
         await Promise.all([
           rpc(() => client.readContract({
             address: factory,
             abi: CLASSIC_REWARD_VAULT_FACTORY_ABI,
             functionName: "configurationHashOf",
             args: [vault],
+            ...exactBlock,
+          })),
+          rpc(() => client.readContract({
+            address: factory,
+            abi: CLASSIC_REWARD_VAULT_FACTORY_ABI,
+            functionName: "ctoAuthority",
             ...exactBlock,
           })),
           rpc(() => client.readContract({
@@ -599,9 +612,10 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         blockNumber: blockNumber.toString(),
         blockHash,
         configurationHash,
+        ctoAuthority,
         initCodeHash,
         predictedVault,
-        rpcCallCount: 3,
+        rpcCallCount: 4,
       });
     },
     getLogs(filter) {

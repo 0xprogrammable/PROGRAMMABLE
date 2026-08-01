@@ -167,8 +167,10 @@ describe("production reward-vault RPC reader", () => {
     const poolId = bytes32("3");
     const configurationHash = bytes32("4");
     const initCodeHash = bytes32("5");
+    const ctoAuthority = address("a");
     mocks.readContract.mockImplementation(async ({ functionName }) => {
       if (functionName === "configurationHashOf") return configurationHash;
+      if (functionName === "ctoAuthority") return ctoAuthority;
       if (functionName === "initCodeHash") return initCodeHash;
       if (functionName === "predict") return vault;
       throw new Error("unexpected function");
@@ -196,11 +198,12 @@ describe("production reward-vault RPC reader", () => {
       blockNumber: "100",
       blockHash,
       configurationHash,
+      ctoAuthority,
       initCodeHash,
       predictedVault: vault,
-      rpcCallCount: 3,
+      rpcCallCount: 4,
     });
-    expect(mocks.readContract).toHaveBeenCalledTimes(3);
+    expect(mocks.readContract).toHaveBeenCalledTimes(4);
     for (const [request] of mocks.readContract.mock.calls) {
       expect(request).toMatchObject({
         address: factory,

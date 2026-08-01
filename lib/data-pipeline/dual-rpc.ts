@@ -160,9 +160,10 @@ export type CandidateRpcClient = {
     balanceAccounts: readonly HexAddress[];
   }): Promise<CandidateRpcRewardSnapshot>;
   /**
-   * Reads the authenticated Classic vault-factory mapping and both CREATE2
-   * helpers at one exact canonical block. These are separate physical calls;
-   * their count is part of the activation evidence budget.
+   * Reads the authenticated Classic vault-factory mapping, immutable CTO
+   * authority and both CREATE2 helpers at one exact canonical block. These are
+   * separate physical calls; their count is part of the activation evidence
+   * budget.
    */
   readClassicRewardFactorySnapshot?(input: {
     factory: HexAddress;
@@ -204,6 +205,7 @@ export type CandidateRpcClassicRewardFactorySnapshot = Readonly<{
   blockNumber: unknown;
   blockHash: unknown;
   configurationHash: unknown;
+  ctoAuthority: unknown;
   initCodeHash: unknown;
   predictedVault: unknown;
   rpcCallCount: unknown;
@@ -262,13 +264,16 @@ export type DualRpcInitialRewardConfigurationEvidence = Readonly<{
   factory: HexAddress;
   salt: HexBytes32;
   factoryInputCommitment: HexBytes32;
+  ctoAuthority: HexAddress;
+  constructorArgumentsCommitment: HexBytes32;
   deployedArtifactCreationCodeCommitment: HexBytes32;
   factoryConfigurationHash: HexBytes32;
   providerFactoryConfigurationHashes: readonly [HexBytes32, HexBytes32];
+  providerCtoAuthorities: readonly [HexAddress, HexAddress];
   providerInitCodeHashes: readonly [HexBytes32, HexBytes32];
   providerPredictedVaults: readonly [HexAddress, HexAddress];
   locallyPredictedVault: HexAddress;
-  factoryProviderCallCounts: readonly [3, 3];
+  factoryProviderCallCounts: readonly [4, 4];
   factoryProviderSnapshotCommitments: readonly [HexBytes32, HexBytes32];
   initialActiveConfigurationHash: HexBytes32;
   allocations: readonly Readonly<{
@@ -1696,6 +1701,10 @@ function canonicalClassicRewardFactorySnapshot(
     raw.configurationHash,
     "reward-factory-configuration-hash",
   );
+  const ctoAuthority = rpcAddress(
+    raw.ctoAuthority,
+    "reward-factory-cto-authority",
+  );
   const initCodeHash = rpcBytes32(
     raw.initCodeHash,
     "reward-factory-init-code-hash",
@@ -1710,7 +1719,7 @@ function canonicalClassicRewardFactorySnapshot(
     blockNumber !== expected.blockNumber ||
     blockHash !== expected.blockHash ||
     typeof raw.rpcCallCount !== "number" ||
-    raw.rpcCallCount !== 3
+    raw.rpcCallCount !== 4
   ) {
     throw validationError("rpc", "reward-factory-snapshot");
   }
@@ -1720,9 +1729,10 @@ function canonicalClassicRewardFactorySnapshot(
     blockNumber,
     blockHash,
     configurationHash,
+    ctoAuthority,
     initCodeHash,
     predictedVault,
-    rpcCallCount: 3 as const,
+    rpcCallCount: 4 as const,
   });
 }
 
@@ -2686,7 +2696,7 @@ export async function readDualRpcInitialRewardConfiguration(input: Readonly<{
       ...input.rpcPolicy,
       maxAttempts: 1,
       hardDeadlineMs: remainingDeadlineMs,
-      maxCallsPerProvider: 3,
+      maxCallsPerProvider: 4,
     });
     const factoryProviderBudgets = input.providers.map(() => ({
       used: 0,
@@ -2700,7 +2710,7 @@ export async function readDualRpcInitialRewardConfiguration(input: Readonly<{
           ),
         factoryPolicy,
         factoryProviderBudgets[0],
-        3,
+        4,
       ),
       retryRpc(
         () =>
@@ -2709,12 +2719,12 @@ export async function readDualRpcInitialRewardConfiguration(input: Readonly<{
           ),
         factoryPolicy,
         factoryProviderBudgets[1],
-        3,
+        4,
       ),
     ]);
     if (
-      factoryProviderBudgets[0]!.used !== 3 ||
-      factoryProviderBudgets[1]!.used !== 3
+      factoryProviderBudgets[0]!.used !== 4 ||
+      factoryProviderBudgets[1]!.used !== 4
     ) {
       throw validationError("rpc", "reward-factory-call-budget");
     }
@@ -2741,6 +2751,24 @@ export async function readDualRpcInitialRewardConfiguration(input: Readonly<{
       }),
       "reward-seed-local-prediction",
     );
+    const constructorArgumentsCommitment = keccak256(
+      encodeAbiParameters(
+        [
+          { type: "address" },
+          { type: "bytes32" },
+          { type: "address" },
+          { type: "address[]" },
+          { type: "uint16[]" },
+        ],
+        [
+          feeHook,
+          poolId,
+          leftFactory.ctoAuthority,
+          beneficiaries,
+          sharesBps.map(Number),
+        ],
+      ),
+    );
     if (
       JSON.stringify(leftFactory) !== JSON.stringify(rightFactory) ||
       leftFactory.configurationHash !== factoryConfigurationHash ||
@@ -2766,6 +2794,8 @@ export async function readDualRpcInitialRewardConfiguration(input: Readonly<{
       factory,
       salt,
       factoryInputCommitment,
+      ctoAuthority: leftFactory.ctoAuthority,
+      constructorArgumentsCommitment,
       deployedArtifactCreationCodeCommitment:
         template.deployedArtifactCreationCodeCommitment,
       factoryConfigurationHash,
@@ -2773,6 +2803,10 @@ export async function readDualRpcInitialRewardConfiguration(input: Readonly<{
         leftFactory.configurationHash,
         rightFactory.configurationHash,
       ]) as readonly [HexBytes32, HexBytes32],
+      providerCtoAuthorities: Object.freeze([
+        leftFactory.ctoAuthority,
+        rightFactory.ctoAuthority,
+      ]) as readonly [HexAddress, HexAddress],
       providerInitCodeHashes: Object.freeze([
         leftFactory.initCodeHash,
         rightFactory.initCodeHash,
@@ -2782,7 +2816,7 @@ export async function readDualRpcInitialRewardConfiguration(input: Readonly<{
         rightFactory.predictedVault,
       ]) as readonly [HexAddress, HexAddress],
       locallyPredictedVault,
-      factoryProviderCallCounts: Object.freeze([3, 3]) as readonly [3, 3],
+      factoryProviderCallCounts: Object.freeze([4, 4]) as readonly [4, 4],
       factoryProviderSnapshotCommitments: Object.freeze([
         factorySnapshotCommitment,
         factorySnapshotCommitment,
