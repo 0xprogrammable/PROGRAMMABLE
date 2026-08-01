@@ -249,6 +249,63 @@ type JsonRpcRequest = Readonly<{
   params: readonly unknown[];
 }>;
 
+class ProviderLogLimitError extends Error {
+  constructor() {
+    super("Provider rejected the eth_getLogs range");
+    this.name = "ProviderLogLimitError";
+  }
+}
+
+const EXPLICIT_LOG_LIMIT_PATTERNS = Object.freeze([
+  /\beth_getlogs\b.{0,120}\b(?:block range|range|response size|result size|limit(?:ed)?|too (?:large|wide|many)|exceed(?:ed|s)?)\b/iu,
+  /\b(?:block range|response size|result size|query size)\b.{0,120}\b(?:limit(?:ed)?|too (?:large|wide)|exceed(?:ed|s)?|maximum|max)\b/iu,
+  /\b(?:too many|more than|maximum|max)\b.{0,120}\b(?:logs?|results?|blocks?)\b/iu,
+  /\bquery returned more than\b/iu,
+]);
+
+function isExplicitProviderLogLimit(value: unknown): boolean {
+  let text: string;
+  if (typeof value === "string") {
+    text = value;
+  } else {
+    try {
+      text = JSON.stringify(value);
+    } catch {
+      return false;
+    }
+  }
+  return EXPLICIT_LOG_LIMIT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function isSplittableLogFailure(error: unknown): boolean {
+  if (error instanceof ProviderLogLimitError) return true;
+  if (!(error instanceof DataPipelineError) || error.code !== "response_oversize") {
+    return false;
+  }
+  const operation = error.safeMetadata?.operation;
+  return operation === "reconciler-rpc-response" ||
+    operation === "reconciler-rpc-log-count";
+}
+
+function assertCanonicalLogOrder(
+  logs: readonly ExactBlockRpcLog[],
+  operation: string,
+): void {
+  for (let index = 1; index < logs.length; index += 1) {
+    const previous = logs[index - 1]!;
+    const current = logs[index]!;
+    if (
+      current.blockNumber < previous.blockNumber ||
+      (current.blockNumber === previous.blockNumber &&
+        (current.transactionIndex < previous.transactionIndex ||
+          (current.transactionIndex === previous.transactionIndex &&
+            current.logIndex <= previous.logIndex)))
+    ) {
+      throw validationError("rpc", operation);
+    }
+  }
+}
+
 function hasOwn(value: object, property: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(value, property);
 }
@@ -431,6 +488,17 @@ export function createExactBlockRpcClient(input: {
         signal: controller.signal,
       });
       if (!response.ok) {
+        const isLogRequest = !Array.isArray(body) &&
+          (body as JsonRpcRequest).method === "eth_getLogs";
+        if (isLogRequest && response.status !== 408 && response.status !== 429) {
+          if (response.status === 413) {
+            throw new ProviderLogLimitError();
+          }
+          const failureBody = await responseText(response);
+          if (isExplicitProviderLogLimit(failureBody)) {
+            throw new ProviderLogLimitError();
+          }
+        }
         throw dataPipelineError({
           dependency: "rpc",
           code: "dependency_unavailable",
@@ -458,7 +526,10 @@ export function createExactBlockRpcClient(input: {
         });
       }
     } catch (error) {
-      if (error instanceof DataPipelineError) {
+      if (
+        error instanceof DataPipelineError ||
+        error instanceof ProviderLogLimitError
+      ) {
         throw error;
       }
       throw dataPipelineError({
@@ -477,6 +548,7 @@ export function createExactBlockRpcClient(input: {
   const decodeSingleResponse = (
     decoded: unknown,
     expectedId: number,
+    method: string,
   ): unknown => {
     const envelope = object(decoded, "reconciler-rpc-envelope");
     const hasResult = hasOwn(envelope, "result");
@@ -489,6 +561,12 @@ export function createExactBlockRpcClient(input: {
       throw validationError("rpc", "reconciler-rpc-envelope");
     }
     if (hasError) {
+      if (
+        method === "eth_getLogs" &&
+        isExplicitProviderLogLimit(envelope.error)
+      ) {
+        throw new ProviderLogLimitError();
+      }
       throw validationError("rpc", "reconciler-rpc-item-error");
     }
     return envelope.result;
@@ -502,7 +580,11 @@ export function createExactBlockRpcClient(input: {
     assertNotAborted(signal);
     reserve(1, 1);
     const request = allocateRequest(method, params);
-    return decodeSingleResponse(await post(request, signal), request.id);
+    return decodeSingleResponse(
+      await post(request, signal),
+      request.id,
+      method,
+    );
   };
 
   const rpcBatch = async (
@@ -799,49 +881,70 @@ export function createExactBlockRpcClient(input: {
       ) {
         throw invalidInput("rpc", "reconciler-log-request");
       }
-      const result = await rpc(
-        "eth_getLogs",
-        [{
-          address: Array.isArray(addresses)
-            ? addresses.map((item) => getAddress(item))
-            : getAddress(addresses as Address),
-          fromBlock: quantity(fromBlock),
-          toBlock: quantity(toBlock),
-          ...(topics ? { topics } : {}),
-        }],
-        signal,
-      );
-      if (!Array.isArray(result) || result.length > maximumLogs) {
-        throw dataPipelineError({
-          dependency: "rpc",
-          code: "response_oversize",
-          retryable: false,
-          countsTowardCircuit: true,
-          metadata: { operation: "reconciler-rpc-log-count" },
-        });
-      }
-      const logs = result.map((raw) =>
-        decodeRpcLog(raw, "reconciler-rpc-log")
-      );
-      if (logs.some((log) =>
-        log.blockNumber < fromBlock || log.blockNumber > toBlock
-      )) {
-        throw validationError("rpc", "reconciler-rpc-log-block-range");
-      }
-      for (let index = 1; index < logs.length; index += 1) {
-        const previous = logs[index - 1]!;
-        const current = logs[index]!;
-        if (
-          current.blockNumber < previous.blockNumber ||
-          (current.blockNumber === previous.blockNumber &&
-            (current.transactionIndex < previous.transactionIndex ||
-              (current.transactionIndex === previous.transactionIndex &&
-                current.logIndex <= previous.logIndex)))
-        ) {
-          throw validationError("rpc", "reconciler-rpc-log-order");
+      const exactAddresses = Array.isArray(addresses)
+        ? addresses.map((item) => getAddress(item))
+        : getAddress(addresses as Address);
+      const readRange = async (
+        rangeFromBlock: bigint,
+        rangeToBlock: bigint,
+      ): Promise<readonly ExactBlockRpcLog[]> => {
+        try {
+          const result = await rpc(
+            "eth_getLogs",
+            [{
+              address: exactAddresses,
+              fromBlock: quantity(rangeFromBlock),
+              toBlock: quantity(rangeToBlock),
+              ...(topics ? { topics } : {}),
+            }],
+            signal,
+          );
+          if (!Array.isArray(result) || result.length > maximumLogs) {
+            throw dataPipelineError({
+              dependency: "rpc",
+              code: "response_oversize",
+              retryable: false,
+              countsTowardCircuit: true,
+              metadata: { operation: "reconciler-rpc-log-count" },
+            });
+          }
+          const logs = result.map((raw) =>
+            decodeRpcLog(raw, "reconciler-rpc-log")
+          );
+          if (logs.some((log) =>
+            log.blockNumber < rangeFromBlock ||
+            log.blockNumber > rangeToBlock
+          )) {
+            throw validationError("rpc", "reconciler-rpc-log-block-range");
+          }
+          assertCanonicalLogOrder(logs, "reconciler-rpc-log-order");
+          return Object.freeze(logs);
+        } catch (error) {
+          if (!isSplittableLogFailure(error)) throw error;
+          if (rangeFromBlock === rangeToBlock) {
+            throw dataPipelineError({
+              dependency: "rpc",
+              code: "response_oversize",
+              retryable: false,
+              countsTowardCircuit: true,
+              metadata: {
+                operation: "reconciler-rpc-log-single-block-oversize",
+              },
+            });
+          }
+          const midpoint = rangeFromBlock +
+            (rangeToBlock - rangeFromBlock) / 2n;
+          const left = await readRange(rangeFromBlock, midpoint);
+          const right = await readRange(midpoint + 1n, rangeToBlock);
+          const merged = Object.freeze([...left, ...right]);
+          assertCanonicalLogOrder(
+            merged,
+            "reconciler-rpc-log-split-order",
+          );
+          return merged;
         }
-      }
-      return Object.freeze(logs);
+      };
+      return readRange(fromBlock, toBlock);
     },
     async getBlockTimestamp({ blockNumber, expectedHash, signal }) {
       const block = await readBlock(blockNumber, signal);
