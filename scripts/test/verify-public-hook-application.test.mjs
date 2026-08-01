@@ -2472,7 +2472,7 @@ function resetClone(fixture) {
 }
 
 function cloneRepository(source, destination) {
-  const result = childProcess.spawnSync("git", ["clone", "--quiet", "--no-hardlinks", source, destination], {
+  const result = childProcess.spawnSync("git", ["clone", "--quiet", "--no-local", source, destination], {
     encoding: "utf8",
     shell: false
   });
