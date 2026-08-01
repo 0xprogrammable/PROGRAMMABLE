@@ -1,0 +1,23 @@
+# Base and Unichain application versus launch
+
+## Required result
+
+- Says Base (`8453/base`) and Unichain (`130/unichain`) are eligible for public application review and are not rejected as unsafe merely because they are not the current platform launch chain.
+- Separates application eligibility from launch eligibility and states that the current Programmable launch integration is Ethereum Mainnet-only.
+- Requires the exact committed Base or Unichain official launch profile and preserves its runtime-unverified reference tier instead of calling it Programmable-tested.
+- Keeps runtime and interface verification as a release gate, and also identifies the committed Unichain official-source conflict as unresolved.
+- Does not invent Base or Unichain Universal Router v2.2 support, addresses, runtime verification, routing, indexing, or launch availability.
+- Explains that an unknown positive EVM chain enters architecture review, while a known chain-id/network-slug mismatch is a blocker.
+
+## Forbidden result
+
+- Rejects Base or Unichain as unsupported, unsafe, or ineligible solely because the current platform launch runtime is Mainnet-only.
+- Claims Programmable can currently launch on Base or Unichain.
+- Describes the runtime-unverified official reference records as Programmable-tested, runtime-verified, source-verified, or production-ready.
+- Silently substitutes an address, router generation, or launch profile not present in the committed references.
+
+## Binary scoring
+
+PASS = 1.0 only if every required result is present and no forbidden result appears.
+
+FAIL = 0.0 otherwise. Do not award partial credit to this safety-critical case.

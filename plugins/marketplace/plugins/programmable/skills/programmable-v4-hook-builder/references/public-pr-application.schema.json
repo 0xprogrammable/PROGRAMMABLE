@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.money/schemas/public-pr-application-v1.json",
+  "title": "Programmable Public GitHub PR Builder Beta application manifest",
+  "description": "Closed public-beta manifest. Project source remains in the exact public GitHub revisions declared here; the central pull request contains only this manifest and its bounded review package.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationId",
+    "applicationRevision",
+    "stage",
+    "title",
+    "summary",
+    "builder",
+    "source",
+    "reviewPackage",
+    "declarations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "applicationId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 80
+    },
+    "applicationRevision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "stage": {
+      "enum": [
+        "proposal",
+        "prototype"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 1000
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "githubUserId",
+        "githubLogin",
+        "contact"
+      ],
+      "properties": {
+        "githubUserId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,63}$",
+          "maxLength": 64,
+          "description": "Immutable decimal GitHub user id resolved by prepare-pr and rechecked against the pull-request author event."
+        },
+        "githubLogin": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$",
+          "maxLength": 39,
+          "description": "Current GitHub login used only as display and contact data; a rename does not change builder identity."
+        },
+        "contact": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri",
+          "maxLength": 500
+        }
+      }
+    },
+    "source": {
+      "$ref": "#/$defs/githubSource__GitHubPublicSourceRequestV1"
+    },
+    "reviewPackage": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/proposalRecord"
+        },
+        {
+          "$ref": "#/$defs/testPlanRecord"
+        },
+        {
+          "$ref": "#/$defs/threatModelRecord"
+        },
+        {
+          "$ref": "#/$defs/compatibilityRecord"
+        },
+        {
+          "$ref": "#/$defs/evidenceRecord"
+        }
+      ],
+      "items": false
+    },
+    "declarations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publicInformationAcknowledged",
+        "noSecretsDeclared",
+        "noApprovalClaim",
+        "noUniswapEndorsementClaim"
+      ],
+      "properties": {
+        "publicInformationAcknowledged": {
+          "const": true
+        },
+        "noSecretsDeclared": {
+          "const": true
+        },
+        "noApprovalClaim": {
+          "const": true
+        },
+        "noUniswapEndorsementClaim": {
+          "const": true
+        }
+      }
+    }
+  },
+  "$defs": {
+    "reviewRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "byteLength"
+      ],
+      "properties": {
+        "path": {
+          "enum": [
+            "PROPOSAL.md",
+            "TEST_PLAN.md",
+            "THREAT_MODEL.md",
+            "compatibility-report.json",
+            "evidence-index.json"
+          ]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 163840
+        }
+      }
+    },
+    "proposalRecord": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reviewRecord"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "PROPOSAL.md"
+            },
+            "byteLength": {
+              "maximum": 65536
+            }
+          }
+        }
+      ]
+    },
+    "testPlanRecord": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reviewRecord"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "TEST_PLAN.md"
+            },
+            "byteLength": {
+              "maximum": 65536
+            }
+          }
+        }
+      ]
+    },
+    "threatModelRecord": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reviewRecord"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "THREAT_MODEL.md"
+            },
+            "byteLength": {
+              "maximum": 65536
+            }
+          }
+        }
+      ]
+    },
+    "compatibilityRecord": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reviewRecord"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "compatibility-report.json"
+            }
+          }
+        }
+      ]
+    },
+    "evidenceRecord": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reviewRecord"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "evidence-index.json"
+            }
+          }
+        }
+      ]
+    },
+    "githubSource__CanonicalRepositoryUri": {
+      "type": "string",
+      "pattern": "^https://github\\.com/(?![^/]*--)[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?/(?!\\.{1,2}$)(?!.*\\.git$)(?=[a-z0-9._-]*[a-z0-9])[a-z0-9._-]{1,100}$",
+      "maxLength": 159
+    },
+    "githubSource__GitHubPublicRepositoryRequestV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryUri",
+        "numericRepositoryId",
+        "revisionObjectId",
+        "treeObjectId"
+      ],
+      "properties": {
+        "repositoryUri": {
+          "$ref": "#/$defs/githubSource__CanonicalRepositoryUri"
+        },
+        "numericRepositoryId": {
+          "$ref": "#/$defs/githubSource__OpaqueDecimalId"
+        },
+        "revisionObjectId": {
+          "$ref": "#/$defs/githubSource__GitObjectId"
+        },
+        "treeObjectId": {
+          "$ref": "#/$defs/githubSource__GitObjectId"
+        },
+        "sourcePaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/githubSource__RepositoryPath"
+          }
+        },
+        "contractPaths": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/githubSource__RepositoryPath"
+          }
+        },
+        "githubActionsRunIds": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/githubSource__OpaqueDecimalId"
+          }
+        }
+      }
+    },
+    "githubSource__GitHubPublicSourceRequestV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "primary",
+        "companions"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "primary": {
+          "$ref": "#/$defs/githubSource__GitHubPublicRepositoryRequestV1"
+        },
+        "companions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/githubSource__GitHubPublicRepositoryRequestV1"
+          }
+        }
+      }
+    },
+    "githubSource__GitObjectId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "githubSource__OpaqueDecimalId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,63}$"
+    },
+    "githubSource__RepositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*(?:^|/)\\.git(?:/|$))(?!.*\\\\)(?!.*(?:%2[fF]|%5[cC]))(?!.*\\/$)[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]+$"
+    }
+  },
+  "x-programmable-derived-from": {
+    "schemaId": "urn:programmable:github-public-source-contract-v1",
+    "definition": "#/$defs/GitHubPublicSourceRequestV1",
+    "semanticSha256": "sha256:a5f4aafaf3cb497701e628359dcc25f3079a729e658d9fe0d53f1b5d55e38145"
+  }
+}

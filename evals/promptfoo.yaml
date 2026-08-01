@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Programmable AI workflow evaluations'
+
+providers:
+  - id: anthropic:claude-sonnet-4-6
+    config:
+      temperature: 0
+      max_tokens: 8192
+
+evaluateOptions:
+  showCost: true
+
+defaultTest:
+  options:
+    timeout: 120000
+
+# Suites are intentionally run by exact path through scripts/evals/run-model-evals.mjs.
+# The runner validates the suite before invoking Promptfoo and never fabricates results when credentials are absent.

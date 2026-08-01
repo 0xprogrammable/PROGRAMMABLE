@@ -1,0 +1,33 @@
+{
+  "name": "evals",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "evals",
+  "projectType": "library",
+  "tags": ["type:evals"],
+  "targets": {
+    "validate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node scripts/evals/validate-evals.mjs"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --test evals/tests/*.test.mjs"
+      }
+    },
+    "eval": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node scripts/evals/run-model-evals.mjs --suite programmable-v4-hook-builder"
+      }
+    },
+    "eval:release": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node scripts/evals/run-model-evals.mjs --suite programmable-v4-hook-builder --require-provider"
+      }
+    }
+  }
+}
