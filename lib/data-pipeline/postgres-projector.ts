@@ -5,9 +5,11 @@ import { randomUUID } from "node:crypto";
 import { concat, encodeAbiParameters, keccak256, toBytes } from "viem";
 
 import {
+  canonicalizeFingerprintJson,
   canonicalFingerprintPreimageV1,
   canonicalFingerprintV1,
   type CanonicalJsonValue,
+  type OccurrenceFingerprintReference,
 } from "./canonical-fingerprint";
 import {
   addressFromBytea,
@@ -21,6 +23,7 @@ import {
   type HexAddress,
   type HexBytes32,
 } from "./codecs";
+import { classicV3InitialRewardCommitments } from "./classic-v3-reward-commitments";
 import type {
   CandidateRpcProvider,
   DualRpcCandidateWindowEvidence,
@@ -35,6 +38,10 @@ import type {
   PostgresTransaction,
 } from "./postgres";
 import type { ProjectorPlan, ProjectorStore } from "./projector";
+import type {
+  CanonicalDynamicSourceDeploymentEvidence,
+  PendingDynamicSourceActivation,
+} from "./projector-dynamic-activation";
 import type {
   ReorgGenesisAnchor,
   ReorgHistoryAncestor,
@@ -55,7 +62,10 @@ import {
   canonicalDynamicSourceLineage,
   type VerifiedDynamicSourceLineage,
 } from "./projector-identities";
-import { deterministicProjectorUuid as deterministicUuid } from "./projector-ids";
+import {
+  deterministicProjectorUuid as deterministicUuid,
+  projectorOccurrenceUuid,
+} from "./projector-ids";
 import {
   foldProjectorRewardState,
   type ProjectorRewardBaseline,
@@ -93,6 +103,10 @@ const RELEASE_PROJECTOR_VERSION = "projector-v1";
 const IMMUTABLE_VALUES_DOMAIN = toBytes(
   "programmable:data-pipeline:immutable-values:v1\0",
 );
+const ACTIVATION_MODEL_EVIDENCE_DOMAIN =
+  "programmable:classic-v3-activation-model-evidence:v1\0";
+const ACTIVATION_PAYLOAD_DOMAIN =
+  "programmable:classic-v3-dynamic-activation:v1\0";
 
 export type ProjectorProviderDatabaseBinding = Readonly<{
   type: "rpc_provider" | "envio_deployment" | "uniswap_subgraph";
@@ -1567,6 +1581,15 @@ export function createPostgresProjectorStore(input: {
   const runtimeFence = canonicalRuntimeFence(input.runtimeFence);
   const uuid = input.uuid ?? randomUUID;
   const now = input.now ?? (() => new Date());
+  let latestPlan: ProjectorPlan | null = null;
+  const activationContexts = new Map<
+    string,
+    Readonly<{
+      manifestArtifactCreationCodeCommitment: HexBytes32;
+      deployedArtifactCreationCodeCommitment: HexBytes32;
+      parentReceiptLogOrdinal: number;
+    }>
+  >();
 
   return Object.freeze({
     async readPlan(): Promise<ProjectorPlan> {
@@ -1668,7 +1691,7 @@ export function createPostgresProjectorStore(input: {
         ) {
           return projectorValidationFailure();
         }
-        return Object.freeze({
+        const plan = Object.freeze({
           cursor,
           dynamicSources: Object.freeze(dynamicSources),
           provisionalSourceAddresses: Object.freeze(
@@ -1685,6 +1708,807 @@ export function createPostgresProjectorStore(input: {
             ) as readonly [string, string],
           }),
         });
+        latestPlan = plan;
+        return plan;
+      });
+    },
+
+    async resolvePendingDynamicSourceActivations(
+      resolveInput,
+    ): Promise<readonly PendingDynamicSourceActivation[]> {
+      const plan = latestPlan;
+      if (
+        plan === null ||
+        resolveInput.expectedCursorGeneration !== plan.cursor.generation ||
+        resolveInput.expectedCursorBlockHash !== plan.cursor.blockHash ||
+        resolveInput.expectedReorgGeneration !==
+          plan.database.reorgGeneration ||
+        resolveInput.candidates.length >
+          PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+      ) {
+        return projectorValidationFailure();
+      }
+      const rows = await gateway.transaction(async (transaction) => {
+        await assertRuntimeFence(transaction, runtimeFence);
+        return transaction.query(
+          "select * from programmable_private.resolve_pending_dynamic_source_activations_v1($1, $2::bigint, $3::bytea, $4::bigint)",
+          [
+            RELEASE_PROJECTOR_VERSION,
+            plan.cursor.generation,
+            hexToBytes(plan.cursor.blockHash),
+            plan.database.reorgGeneration,
+          ],
+        );
+      });
+      const pending: PendingDynamicSourceActivation[] = [];
+      const seenSources = new Set<string>();
+      for (const row of rows) {
+        const parentCandidateId = exactText(
+          row.parent_candidate_id,
+          /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9]\d*)$/u,
+          192,
+        );
+        const parentMatches = resolveInput.candidates.filter(
+          ({ candidateId }) => candidateId === parentCandidateId,
+        );
+        const sourceAddress = databaseAddress(row.source_address);
+        const templateId = exactUuid(row.dynamic_source_template_id);
+        const templates = plan.dynamicSourceTemplates.filter(
+          (template) =>
+            template.templateId === templateId &&
+            template.contractName === "ClassicV3RewardVault" &&
+            template.database.epochId === exactUuid(row.release_epoch_id) &&
+            template.database.pointerGeneration ===
+              integerText(row.release_pointer_generation) &&
+            template.database.reorgGeneration ===
+              integerText(row.reorg_generation),
+        );
+        const parentReceiptLogOrdinal = Number(
+          integerText(row.parent_receipt_log_ordinal),
+        );
+        if (
+          parentMatches.length !== 1 ||
+          templates.length !== 1 ||
+          !Number.isSafeInteger(parentReceiptLogOrdinal) ||
+          parentReceiptLogOrdinal < 0 ||
+          parentReceiptLogOrdinal > 0xffff_ffff ||
+          seenSources.has(sourceAddress)
+        ) {
+          return projectorValidationFailure();
+        }
+        const parent = parentMatches[0]!;
+        const template = templates[0]!;
+        const launchMatches = resolveInput.candidates.filter((candidate) => {
+          let rewardVault: HexAddress;
+          try {
+            rewardVault = canonicalAddress(candidate.decodedPayload.rewardVault);
+          } catch {
+            return false;
+          }
+          return (
+            candidate.contractName === "ClassicV3Launcher" &&
+            candidate.eventName === "MemeTokenLaunchedV2" &&
+            rewardVault === sourceAddress &&
+            candidate.blockNumber === parent.blockNumber &&
+            candidate.blockHash === parent.blockHash &&
+            candidate.transactionHash === parent.transactionHash &&
+            candidate.blockGlobalLogIndex > parent.blockGlobalLogIndex
+          );
+        });
+        if (launchMatches.length !== 1) return projectorValidationFailure();
+        const launch = launchMatches[0]!;
+        const parentOccurrenceId = projectorOccurrenceUuid({
+          transactionHash: parent.transactionHash,
+          receiptLogOrdinal: String(parentReceiptLogOrdinal),
+          blockHash: parent.blockHash,
+        });
+        const activationId = deterministicUuid(
+          "dynamic-source-activation",
+          exactUuid(row.release_epoch_id),
+          integerText(row.release_pointer_generation),
+          integerText(row.reorg_generation),
+          plan.cursor.generation,
+          parent.candidateId,
+          launch.candidateId,
+          sourceAddress,
+        );
+        const canonicalDeployment: CanonicalDynamicSourceDeploymentEvidence =
+          Object.freeze({
+            provisionalPageId: exactUuid(row.provisional_page_id),
+            provisionalLineageId: exactUuid(row.provisional_lineage_id),
+            dynamicSourceAttestationId: exactUuid(
+              row.dynamic_source_attestation_id,
+            ),
+            runtimeCodeEvidenceId: exactUuid(row.runtime_code_evidence_id),
+            dynamicSourceTemplateId: templateId,
+            parentOccurrenceId,
+            parentCandidateId: parent.candidateId,
+            parentBlockNumber: parent.blockNumber,
+            parentBlockHash: parent.blockHash,
+            parentBlockGlobalLogIndex: parent.blockGlobalLogIndex,
+            parentTransactionHash: parent.transactionHash,
+            parentTransactionIndex: parent.transactionIndex,
+            parentSourceAddress: parent.sourceAddress,
+            parentContractName: parent.contractName,
+            parentEventName: parent.eventName,
+            parentPayloadHash: parent.payloadHash,
+            parentRawLogCommitment: databaseBytes32(
+              row.parent_candidate_commitment,
+            ),
+            canonicalStatusHistoryId: deterministicUuid(
+              "provisional-parent-status",
+              exactUuid(row.provisional_page_id),
+              parent.candidateId,
+              integerText(row.reorg_generation),
+            ),
+            safeHeadObservationId: exactUuid(row.safe_head_observation_id),
+            blockEvidenceId: exactUuid(row.target_block_evidence_id),
+            reorgGeneration: integerText(row.reorg_generation),
+            envioProviderDeploymentId: exactUuid(
+              row.envio_provider_deployment_id,
+            ),
+            rpcProviderDeploymentIds: Object.freeze([
+              exactUuid(row.provider_a_id),
+              exactUuid(row.provider_b_id),
+            ]) as readonly [string, string],
+            providerIdentities: Object.freeze([
+              exactText(row.provider_a_identity, /^[a-z0-9][a-z0-9._:/-]{0,95}$/u),
+              exactText(row.provider_b_identity, /^[a-z0-9][a-z0-9._:/-]{0,95}$/u),
+            ]) as readonly [string, string],
+            providerVendorGroups: Object.freeze([
+              exactText(row.provider_a_vendor, /^[a-z][a-z0-9_-]{0,31}$/u),
+              exactText(row.provider_b_vendor, /^[a-z][a-z0-9_-]{0,31}$/u),
+            ]) as readonly [string, string],
+            providerEndpointCommitments: Object.freeze([
+              databaseBytes32(row.provider_a_endpoint_url_commitment),
+              databaseBytes32(row.provider_b_endpoint_url_commitment),
+            ]) as readonly [HexBytes32, HexBytes32],
+            providerOriginCommitments: Object.freeze([
+              databaseBytes32(row.provider_a_endpoint_origin_commitment),
+              databaseBytes32(row.provider_b_endpoint_origin_commitment),
+            ]) as readonly [HexBytes32, HexBytes32],
+          });
+        const ephemeralLineage = canonicalDynamicSourceLineage({
+          attestationId: canonicalDeployment.dynamicSourceAttestationId,
+          sourceAddress,
+          contractName: template.contractName,
+          model: template.model,
+          releaseVersion: template.releaseVersion,
+          factoryAddress: template.parentFactoryAddress,
+          factoryContractName: template.parentFactoryContractName,
+          factoryCandidateId: parent.candidateId,
+          factoryBlockNumber: parent.blockNumber,
+          factoryBlockGlobalLogIndex: String(parent.blockGlobalLogIndex),
+          activationCandidateId: launch.candidateId,
+          activationBlockNumber: launch.blockNumber,
+          activationBlockHash: launch.blockHash,
+          activationBlockGlobalLogIndex: String(
+            launch.blockGlobalLogIndex,
+          ),
+          expectedExactRuntimeCodeHash:
+            template.expectedExactRuntimeCodeHash ??
+            template.expectedNormalizedRuntimeCodeHash,
+          expectedNormalizedRuntimeCodeHash:
+            template.expectedNormalizedRuntimeCodeHash,
+          expectedImmutableReferencesCommitment:
+            template.expectedImmutableReferencesCommitment,
+          expectedRuntimeByteLength: template.expectedRuntimeByteLength,
+          immutableReferences: template.immutableReferences,
+        });
+        activationContexts.set(
+          activationId,
+          Object.freeze({
+            manifestArtifactCreationCodeCommitment: databaseBytes32(
+              row.manifest_artifact_creation_code_commitment,
+            ),
+            deployedArtifactCreationCodeCommitment: databaseBytes32(
+              row.deployed_artifact_creation_code_commitment,
+            ),
+            parentReceiptLogOrdinal,
+          }),
+        );
+        seenSources.add(sourceAddress);
+        pending.push(
+          Object.freeze({
+            activationId,
+            historicalParentCandidate: parent,
+            launchCandidate: launch,
+            sourceAddress,
+            template,
+            canonicalDeployment,
+            ephemeralLineage,
+          }),
+        );
+      }
+      return Object.freeze(pending);
+    },
+
+    async stageVerifiedDynamicSourceActivations(stageInput): Promise<void> {
+      const plan = latestPlan;
+      if (
+        plan === null ||
+        stageInput.blockComplete !== false ||
+        stageInput.activations.length < 1 ||
+        stageInput.activations.length >
+          PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE ||
+        stageInput.evidence.coveredCandidateCount !==
+          stageInput.evidence.candidates.length
+      ) {
+        return projectorValidationFailure();
+      }
+      const timestamp = now().toISOString();
+      const evidenceByCandidate = new Map(
+        stageInput.evidence.candidates.map((candidate) => [
+          candidate.candidateId,
+          candidate,
+        ]),
+      );
+      if (evidenceByCandidate.size !== stageInput.evidence.candidates.length) {
+        return projectorValidationFailure();
+      }
+      const expectedKinds = Object.freeze([
+        "classic-v3-initial-reward-configuration-v1",
+        "classic-v3-launch-reward-conservation-v1",
+        "classic-v3-runtime-activation-v1",
+      ]);
+      const activationPayloads: Record<string, unknown>[] = [];
+      const modelEvidencePayloads: Record<string, unknown>[] = [];
+      let activationBlockNumber: string | null = null;
+      let activationBlockHash: HexBytes32 | null = null;
+      let releaseEpochId: string | null = null;
+      let releasePointerGeneration: string | null = null;
+      let releaseReorgGeneration: string | null = null;
+
+      for (const verifiedActivation of stageInput.activations) {
+        const pending = verifiedActivation.pending;
+        const context = activationContexts.get(pending.activationId);
+        const parentEvidence = evidenceByCandidate.get(
+          pending.historicalParentCandidate.candidateId,
+        );
+        const launchEvidence = evidenceByCandidate.get(
+          pending.launchCandidate.candidateId,
+        );
+        if (!context || !parentEvidence || !launchEvidence) {
+          return projectorValidationFailure();
+        }
+        if (releaseEpochId === null) {
+          releaseEpochId = pending.template.database.epochId;
+          releasePointerGeneration =
+            pending.template.database.pointerGeneration;
+          releaseReorgGeneration = pending.template.database.reorgGeneration;
+        } else if (
+          releaseEpochId !== pending.template.database.epochId ||
+          releasePointerGeneration !==
+            pending.template.database.pointerGeneration ||
+          releaseReorgGeneration !==
+            pending.template.database.reorgGeneration
+        ) {
+          return projectorValidationFailure();
+        }
+        const evidenceKinds = verifiedActivation.modelVerificationEvidence
+          .map(({ evidenceKind }) => evidenceKind)
+          .sort();
+        if (
+          evidenceKinds.length !== 3 ||
+          evidenceKinds.some((kind, index) => kind !== expectedKinds[index])
+        ) {
+          return projectorValidationFailure();
+        }
+        const evidenceByKind = new Map(
+          verifiedActivation.modelVerificationEvidence.map((entry) => [
+            entry.evidenceKind,
+            entry,
+          ]),
+        );
+        if (evidenceByKind.size !== 3) return projectorValidationFailure();
+        for (const evidence of verifiedActivation.modelVerificationEvidence) {
+          const commitment = keccak256(
+            toBytes(
+              `${ACTIVATION_MODEL_EVIDENCE_DOMAIN}${canonicalizeFingerprintJson({
+                activationId: pending.activationId,
+                evidenceKind: evidence.evidenceKind,
+                payload: evidence.payload,
+              })}`,
+            ),
+          );
+          if (
+            evidence.activationId !== pending.activationId ||
+            canonicalBytes32(evidence.evidenceCommitment) !== commitment
+          ) {
+            return projectorValidationFailure();
+          }
+        }
+        const initialEvidence = evidenceByKind.get(
+          "classic-v3-initial-reward-configuration-v1",
+        );
+        const runtimeEvidence = evidenceByKind.get(
+          "classic-v3-runtime-activation-v1",
+        );
+        if (!initialEvidence || !runtimeEvidence) {
+          return projectorValidationFailure();
+        }
+        const initial = exactRecord(initialEvidence.payload);
+        const runtimePayload = exactRecord(runtimeEvidence.payload);
+        const runtimeObservation = exactRecord(
+          runtimePayload.runtimeObservation,
+        );
+        const providerInitCodeHashes = exactArray(
+          initial.providerInitCodeHashes,
+          2,
+        ).map(canonicalBytes32);
+        const providerConfigurationHashes = exactArray(
+          initial.providerFactoryConfigurationHashes,
+          2,
+        ).map(canonicalBytes32);
+        const providerPredictedVaults = exactArray(
+          initial.providerPredictedVaults,
+          2,
+        ).map(canonicalAddress);
+        const providerCtoAuthorities = exactArray(
+          initial.providerCtoAuthorities,
+          2,
+        ).map(canonicalAddress);
+        const ctoAuthority = canonicalAddress(initial.ctoAuthority);
+        const sourceAddress = canonicalAddress(initial.vault);
+        const poolId = canonicalBytes32(initial.poolId);
+        const configurationHash = canonicalBytes32(
+          initial.factoryConfigurationHash,
+        );
+        const activeConfigurationHash = canonicalBytes32(
+          initial.initialActiveConfigurationHash,
+        );
+        const constructorArgumentsCommitment = canonicalBytes32(
+          initial.constructorArgumentsCommitment,
+        );
+        const factoryInputCommitment = canonicalBytes32(
+          initial.factoryInputCommitment,
+        );
+        const create2Salt = canonicalBytes32(initial.salt);
+        const locallyPredictedVault = canonicalAddress(
+          initial.locallyPredictedVault,
+        );
+        const deployedArtifactCreationCodeCommitment = canonicalBytes32(
+          initial.deployedArtifactCreationCodeCommitment,
+        );
+        const allocations = exactArray(initial.allocations, 5).map(
+          (value, index) => {
+            const allocation = exactRecord(value);
+            const allocationIndex = Number(
+              integerText(allocation.allocationIndex),
+            );
+            const shareBps = integerText(allocation.shareBps);
+            if (allocationIndex !== index) return projectorValidationFailure();
+            return Object.freeze({
+              allocationIndex,
+              beneficiary: canonicalAddress(allocation.beneficiary),
+              shareBps,
+            });
+          },
+        );
+        const allocationShares = allocations.map(({ shareBps }) => {
+          const share = BigInt(shareBps);
+          if (share < 1n || share > 10_000n) {
+            return projectorValidationFailure();
+          }
+          return Number(share);
+        });
+        const allocationBeneficiaries = allocations.map(
+          ({ beneficiary }) => beneficiary,
+        );
+        if (
+          allocations.length < 1 ||
+          new Set(allocationBeneficiaries).size !== allocations.length ||
+          allocationShares.reduce((sum, share) => sum + share, 0) !== 10_000
+        ) {
+          return projectorValidationFailure();
+        }
+        const parentFactory = canonicalAddress(initial.factory);
+        const parentEventVault = canonicalAddress(
+          pending.historicalParentCandidate.decodedPayload.vault,
+        );
+        const parentEventPoolId = canonicalBytes32(
+          pending.historicalParentCandidate.decodedPayload.poolId,
+        );
+        const parentEventFeeHook = canonicalAddress(
+          pending.historicalParentCandidate.decodedPayload.feeHook,
+        );
+        const parentEventSalt = canonicalBytes32(
+          pending.historicalParentCandidate.decodedPayload.salt,
+        );
+        const parentEventConfigurationHash = canonicalBytes32(
+          pending.historicalParentCandidate.decodedPayload.configurationHash,
+        );
+        const launchEventVault = canonicalAddress(
+          pending.launchCandidate.decodedPayload.rewardVault,
+        );
+        const launchEventPoolId = canonicalBytes32(
+          pending.launchCandidate.decodedPayload.poolId,
+        );
+        const launchEventFeeHook = canonicalAddress(
+          pending.launchCandidate.decodedPayload.feeHook,
+        );
+        const launchEventConfigurationHash = canonicalBytes32(
+          pending.launchCandidate.decodedPayload.rewardConfigurationHash,
+        );
+        const localCommitments = classicV3InitialRewardCommitments({
+          vault: sourceAddress,
+          feeHook: parentEventFeeHook,
+          poolId: parentEventPoolId,
+          ctoAuthority,
+          salt: parentEventSalt,
+          factoryConfigurationHash: configurationHash,
+          beneficiaries: allocationBeneficiaries,
+          sharesBps: allocationShares,
+        });
+        if (
+          parentFactory !== pending.historicalParentCandidate.sourceAddress ||
+          parentEventVault !== sourceAddress ||
+          parentEventPoolId !== poolId ||
+          parentEventFeeHook !== launchEventFeeHook ||
+          parentEventSalt !== create2Salt ||
+          parentEventConfigurationHash !== configurationHash ||
+          launchEventVault !== sourceAddress ||
+          launchEventPoolId !== poolId ||
+          launchEventConfigurationHash !== configurationHash ||
+          localCommitments.factoryInputCommitment !== factoryInputCommitment ||
+          localCommitments.constructorArgumentsCommitment !==
+            constructorArgumentsCommitment ||
+          localCommitments.initialActiveConfigurationHash !==
+            activeConfigurationHash ||
+          pending.sourceAddress !== sourceAddress ||
+          locallyPredictedVault !== sourceAddress ||
+          deployedArtifactCreationCodeCommitment !==
+            context.deployedArtifactCreationCodeCommitment ||
+          providerInitCodeHashes[0] !== providerInitCodeHashes[1] ||
+          providerConfigurationHashes[0] !== configurationHash ||
+          providerConfigurationHashes[1] !== configurationHash ||
+          providerPredictedVaults[0] !== sourceAddress ||
+          providerPredictedVaults[1] !== sourceAddress ||
+          providerCtoAuthorities[0] !== ctoAuthority ||
+          providerCtoAuthorities[1] !== ctoAuthority ||
+          JSON.stringify(initial.factoryProviderCallCounts) !== "[4,4]" ||
+          runtimeObservation.sourceAddress !== sourceAddress ||
+          runtimeObservation.activationBlockNumber !==
+            pending.launchCandidate.blockNumber ||
+          runtimeObservation.activationBlockHash !==
+            pending.launchCandidate.blockHash ||
+          runtimeObservation.activationBlockGlobalLogIndex !==
+            pending.launchCandidate.blockGlobalLogIndex ||
+          !sameStringPair(
+            verifiedActivation.runtimeObservation.providerIdentities,
+            stageInput.evidence.providerIdentities,
+          ) ||
+          !sameStringPair(
+            verifiedActivation.runtimeObservation.providerVendorGroups,
+            stageInput.evidence.providerVendorGroups,
+          ) ||
+          !sameStringPair(
+            verifiedActivation.runtimeObservation.providerEndpointCommitments,
+            stageInput.evidence.providerEndpointCommitments,
+          ) ||
+          !sameStringPair(
+            verifiedActivation.runtimeObservation.providerOriginCommitments,
+            stageInput.evidence.providerOriginCommitments,
+          )
+        ) {
+          return projectorValidationFailure();
+        }
+        const hookMatches = stageInput.candidates.filter((candidate) => {
+          try {
+            return (
+              candidate.contractName === "ClassicV3Hook" &&
+              candidate.eventName === "PoolRegistered" &&
+              candidate.blockNumber === pending.launchCandidate.blockNumber &&
+              candidate.blockHash === pending.launchCandidate.blockHash &&
+              candidate.transactionHash ===
+                pending.launchCandidate.transactionHash &&
+              canonicalBytes32(candidate.decodedPayload.poolId) === poolId &&
+              canonicalAddress(candidate.decodedPayload.rewardVault) ===
+                sourceAddress
+            );
+          } catch {
+            return false;
+          }
+        });
+        if (hookMatches.length !== 1) return projectorValidationFailure();
+        const hook = hookMatches[0]!;
+        const hookEvidence = evidenceByCandidate.get(hook.candidateId);
+        if (!hookEvidence) return projectorValidationFailure();
+        const launchOccurrenceId = projectorOccurrenceUuid({
+          transactionHash: pending.launchCandidate.transactionHash,
+          receiptLogOrdinal: String(launchEvidence.receiptLogOrdinal),
+          blockHash: pending.launchCandidate.blockHash,
+        });
+        const hookOccurrenceId = projectorOccurrenceUuid({
+          transactionHash: hook.transactionHash,
+          receiptLogOrdinal: String(hookEvidence.receiptLogOrdinal),
+          blockHash: hook.blockHash,
+        });
+        const allocationHash = keccak256(
+          encodeAbiParameters(
+            [{ type: "address[]" }, { type: "uint16[]" }],
+            [
+              allocations.map(({ beneficiary }) => beneficiary),
+              allocations.map(({ shareBps }) => Number(shareBps)),
+            ],
+          ),
+        );
+        const predictResultHash = keccak256(
+          encodeAbiParameters([{ type: "address" }], [sourceAddress]),
+        );
+        const payloadWithoutCommitment = Object.freeze({
+          activationId: pending.activationId,
+          provisionalPageId:
+            pending.canonicalDeployment.provisionalPageId,
+          provisionalLineageId:
+            pending.canonicalDeployment.provisionalLineageId,
+          dynamicSourceAttestationId:
+            pending.canonicalDeployment.dynamicSourceAttestationId,
+          runtimeCodeEvidenceId:
+            pending.canonicalDeployment.runtimeCodeEvidenceId,
+          dynamicSourceTemplateId:
+            pending.canonicalDeployment.dynamicSourceTemplateId,
+          parentCandidateId: pending.historicalParentCandidate.candidateId,
+          parentOccurrenceId:
+            pending.canonicalDeployment.parentOccurrenceId,
+          parentBlockNumber: pending.historicalParentCandidate.blockNumber,
+          parentBlockHash: pending.historicalParentCandidate.blockHash,
+          parentBlockGlobalLogIndex:
+            pending.historicalParentCandidate.blockGlobalLogIndex,
+          parentReceiptLogOrdinal: context.parentReceiptLogOrdinal,
+          parentTransactionHash:
+            pending.historicalParentCandidate.transactionHash,
+          parentTransactionIndex:
+            pending.historicalParentCandidate.transactionIndex,
+          parentSourceAddress:
+            pending.historicalParentCandidate.sourceAddress,
+          parentPayloadHash: pending.historicalParentCandidate.payloadHash,
+          parentRawLogCommitment:
+            pending.canonicalDeployment.parentRawLogCommitment,
+          launchCandidateId: pending.launchCandidate.candidateId,
+          launchOccurrenceId,
+          launchBlockNumber: pending.launchCandidate.blockNumber,
+          launchBlockHash: pending.launchCandidate.blockHash,
+          launchBlockGlobalLogIndex:
+            pending.launchCandidate.blockGlobalLogIndex,
+          launchReceiptLogOrdinal: launchEvidence.receiptLogOrdinal,
+          launchTransactionHash: pending.launchCandidate.transactionHash,
+          hookCandidateId: hook.candidateId,
+          hookOccurrenceId,
+          hookReceiptLogOrdinal: hookEvidence.receiptLogOrdinal,
+          sourceAddress,
+          poolId,
+          ctoAuthority,
+          allocations,
+          allocationHash,
+          configurationHash,
+          activeConfigurationHash,
+          artifactCreationCodeCommitment:
+            context.manifestArtifactCreationCodeCommitment,
+          deployedArtifactCreationCodeCommitment,
+          factoryInputCommitment,
+          constructorArgumentsCommitment,
+          localInitCodeHash: providerInitCodeHashes[0]!,
+          create2Salt,
+          predictResultHash,
+        });
+        const activationCommitment = keccak256(
+          toBytes(
+            `${ACTIVATION_PAYLOAD_DOMAIN}${canonicalizeFingerprintJson(
+              payloadWithoutCommitment as CanonicalJsonValue,
+            )}`,
+          ),
+        );
+        activationPayloads.push({
+          ...payloadWithoutCommitment,
+          activationCommitment,
+        });
+        modelEvidencePayloads.push(
+          ...verifiedActivation.modelVerificationEvidence.map((evidence) => ({
+            activationId: evidence.activationId,
+            evidenceKind: evidence.evidenceKind,
+            payload: evidence.payload,
+            evidenceCommitment: evidence.evidenceCommitment,
+          })),
+        );
+        if (activationBlockNumber === null) {
+          activationBlockNumber = pending.launchCandidate.blockNumber;
+          activationBlockHash = pending.launchCandidate.blockHash;
+        } else if (
+          activationBlockNumber !== pending.launchCandidate.blockNumber ||
+          activationBlockHash !== pending.launchCandidate.blockHash
+        ) {
+          return projectorValidationFailure();
+        }
+      }
+      if (
+        activationBlockNumber === null ||
+        activationBlockHash === null ||
+        releaseEpochId === null ||
+        releasePointerGeneration === null ||
+        releaseReorgGeneration === null ||
+        stageInput.evidence.coverage.throughBlockNumber !==
+          activationBlockNumber ||
+        stageInput.evidence.coverage.throughBlockHash !==
+          activationBlockHash ||
+        stageInput.evidence.coverage.throughBlockGlobalLogIndex !==
+          "4294967295"
+      ) {
+        return projectorValidationFailure();
+      }
+      activationPayloads.sort((left, right) =>
+        String(left.activationId).localeCompare(String(right.activationId)),
+      );
+      modelEvidencePayloads.sort((left, right) => {
+        const activationOrder = String(left.activationId).localeCompare(
+          String(right.activationId),
+        );
+        return activationOrder !== 0
+          ? activationOrder
+          : String(left.evidenceKind).localeCompare(
+              String(right.evidenceKind),
+            );
+      });
+      const identity = [
+        releaseEpochId,
+        releasePointerGeneration,
+        releaseReorgGeneration,
+        plan.database.epochId,
+        plan.database.pointerGeneration,
+        plan.database.reorgGeneration,
+        plan.cursor.generation,
+        ...stageInput.activations
+          .map(({ pending }) => pending.activationId)
+          .sort(),
+      ];
+      const ids = Object.freeze({
+        run: deterministicUuid("dynamic-activation-run", ...identity),
+        observation: deterministicUuid(
+          "dynamic-activation-observation",
+          ...identity,
+        ),
+        block: deterministicUuid("dynamic-activation-block", ...identity),
+        outcome: deterministicUuid("dynamic-activation-outcome", ...identity),
+      });
+      const safeEvidence = providerEvidenceV2("safe_head", {
+        chain_id: "1",
+        epoch_id: plan.database.epochId,
+        pointer_generation: plan.database.pointerGeneration,
+        provider_a_id: plan.database.rpcProviderDeploymentIds[0],
+        provider_b_id: plan.database.rpcProviderDeploymentIds[1],
+        reported_chain_id_a: "1",
+        reported_chain_id_b: "1",
+        head_a: stageInput.evidence.providerHeads[0],
+        head_b: stageInput.evidence.providerHeads[1],
+        finality_depth: "12",
+        safe_block_number: stageInput.evidence.safeBlockNumber,
+        safe_block_hash_a: stageInput.evidence.safeBlockHash,
+        safe_block_hash_b: stageInput.evidence.safeBlockHash,
+      });
+      const blockEvidence = providerEvidenceV2("block", {
+        chain_id: "1",
+        epoch_id: plan.database.epochId,
+        pointer_generation: plan.database.pointerGeneration,
+        observation_id: ids.observation,
+        block_number: activationBlockNumber,
+        provider_a_block_hash: activationBlockHash,
+        provider_b_block_hash: activationBlockHash,
+      });
+      const requestCommitment = keccak256(
+        toBytes(
+          canonicalizeFingerprintJson({
+            kind: "dynamic-activation-stage-v1",
+            activations: activationPayloads,
+            modelEvidence: modelEvidencePayloads,
+          } as CanonicalJsonValue),
+        ),
+      );
+      const resultCommitment = keccak256(
+        toBytes(
+          canonicalizeFingerprintJson({
+            activationIds: stageInput.activations
+              .map(({ pending }) => pending.activationId)
+              .sort(),
+          }),
+        ),
+      );
+      await gateway.transaction(async (transaction) => {
+        await assertRuntimeFence(transaction, runtimeFence);
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.open_run($1::uuid, 'ingestion', '1', $2, $3, $4, $5::uuid, $6, $7, $8::bytea, $9::timestamptz) as id",
+            [
+              ids.run,
+              ENVIO_CONTROL_SCOPE.releaseId,
+              ENVIO_CONTROL_SCOPE.modelId,
+              ENVIO_CONTROL_SCOPE.sourceGroup,
+              plan.database.epochId,
+              plan.database.pointerGeneration,
+              ENVIO_CONTROL_SCOPE.projectorVersion,
+              hexToBytes(requestCommitment),
+              timestamp,
+            ],
+          ),
+          ids.run,
+        );
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, '1', '1', $5::numeric, $6::numeric, 12, $7::numeric, $8::bytea, $9::bytea, $10, $11::bytea, $12::bytea, $13::timestamptz) as id",
+            [
+              ids.observation,
+              ids.run,
+              plan.database.rpcProviderDeploymentIds[0],
+              plan.database.rpcProviderDeploymentIds[1],
+              stageInput.evidence.providerHeads[0],
+              stageInput.evidence.providerHeads[1],
+              stageInput.evidence.safeBlockNumber,
+              hexToBytes(stageInput.evidence.safeBlockHash),
+              hexToBytes(stageInput.evidence.safeBlockHash),
+              safeEvidence.encodingVersion,
+              safeEvidence.canonicalPreimage,
+              hexToBytes(safeEvidence.contentFingerprint),
+              timestamp,
+            ],
+          ),
+          ids.observation,
+        );
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
+            [
+              ids.block,
+              ids.observation,
+              ids.run,
+              activationBlockNumber,
+              hexToBytes(activationBlockHash),
+              hexToBytes(activationBlockHash),
+              blockEvidence.encodingVersion,
+              blockEvidence.canonicalPreimage,
+              hexToBytes(blockEvidence.contentFingerprint),
+              timestamp,
+            ],
+          ),
+          ids.block,
+        );
+        const stagedRows = await transaction.query<{ staged_count: unknown }>(
+          "select programmable_private.stage_verified_dynamic_source_activations_v1($1::uuid, $2, $3::uuid, $4::bigint, $5::bigint, $6::bigint, $7::bytea, $8::uuid, $9::uuid, $10::uuid, $11::uuid, $12::uuid, $13::jsonb, $14::jsonb, $15::timestamptz) as staged_count",
+          [
+            ids.run,
+            RELEASE_PROJECTOR_VERSION,
+            releaseEpochId,
+            releasePointerGeneration,
+            releaseReorgGeneration,
+            plan.cursor.generation,
+            hexToBytes(plan.cursor.blockHash),
+            plan.database.envioProviderDeploymentId,
+            plan.database.rpcProviderDeploymentIds[0],
+            plan.database.rpcProviderDeploymentIds[1],
+            ids.observation,
+            ids.block,
+            JSON.stringify(activationPayloads),
+            JSON.stringify(modelEvidencePayloads),
+            timestamp,
+          ],
+        );
+        if (
+          stagedRows.length !== 1 ||
+          BigInt(integerText(stagedRows[0]!.staged_count)) !==
+            BigInt(stageInput.activations.length)
+        ) {
+          return projectorValidationFailure();
+        }
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.append_run_outcome($1::uuid, $2::uuid, 'succeeded', $3::bytea, $4::timestamptz) as id",
+            [
+              ids.outcome,
+              ids.run,
+              hexToBytes(resultCommitment),
+              timestamp,
+            ],
+          ),
+          ids.outcome,
+        );
       });
     },
 
@@ -2273,6 +3097,21 @@ export function createPostgresProjectorStore(input: {
               ),
               JSON.stringify(
                 records.map(({ provisionalSource }) => provisionalSource),
+              ),
+              timestamp,
+            ],
+          ),
+          ids.page,
+        );
+        exactIdResult(
+          await transaction.query(
+            "select programmable_private.stage_provisional_parent_receipt_ordinals_v1($1::uuid, $2::uuid, $3::text[], $4::numeric[], $5::timestamptz) as id",
+            [
+              ids.page,
+              ids.run,
+              records.map(({ parsed }) => parsed.candidate.candidateId),
+              records.map(({ parsed }) =>
+                String(parsed.verified.receiptLogOrdinal)
               ),
               timestamp,
             ],
@@ -3453,6 +4292,209 @@ type ProjectorRewardState = Readonly<{
   initialAllocationEvidenceId: string;
   baseline: ProjectorRewardBaseline;
 }>;
+
+async function materializeDynamicActivationSeeds(input: {
+  transaction: PostgresTransaction;
+  runId: string;
+  scope: ProjectorReleaseDatabaseScope;
+  targetBlockNumber: string;
+  targetBlockHash: HexBytes32;
+  verifiedAt: string;
+}): Promise<readonly Readonly<{ factId: string; evidenceId: string }>[]> {
+  if (input.scope.releaseId !== "classic-v3") return Object.freeze([]);
+  const rows = await input.transaction.query(
+    "select * from programmable_private.get_dynamic_activation_seed_requests_v1($1::uuid, $2::numeric, $3::bytea)",
+    [
+      input.runId,
+      input.targetBlockNumber,
+      hexToBytes(input.targetBlockHash),
+    ],
+  );
+  const expectedPairs: Array<{ factId: string; evidenceId: string }> = [];
+  for (const row of rows) {
+    const activationId = exactUuid(row.activation_id);
+    const vault = databaseAddress(row.vault);
+    const beneficiaries = exactArray(row.ordered_beneficiaries, 5).map(
+      databaseAddress,
+    );
+    const sharesBps = exactArray(row.ordered_shares_bps, 5).map(integerText);
+    const allocationHash = databaseBytes32(row.allocation_hash);
+    const configurationHash = databaseBytes32(row.configuration_hash);
+    const activeConfigurationHash = databaseBytes32(
+      row.active_configuration_hash,
+    );
+    const artifactCreationCodeCommitment = databaseBytes32(
+      row.artifact_creation_code_commitment,
+    );
+    const constructorArgumentsCommitment = databaseBytes32(
+      row.constructor_arguments_commitment,
+    );
+    const localInitCodeHash = databaseBytes32(row.local_init_code_hash);
+    const create2Salt = databaseBytes32(row.create2_salt);
+    const predictResultHash = databaseBytes32(row.predict_result_hash);
+    const factoryTransactionHash = databaseBytes32(
+      row.factory_transaction_hash,
+    );
+    const factoryReceiptLogOrdinal = integerText(
+      row.factory_receipt_log_ordinal,
+    );
+    const factoryBlockHash = databaseBytes32(row.factory_block_hash);
+    const creationBlockNumber = integerText(row.creation_block_number);
+    const creationTransactionIndex = integerText(
+      row.creation_transaction_index,
+    );
+    const required = exactArray(row.required_occurrences, 8).map((entry) => {
+      const occurrence = exactRecord(entry);
+      return Object.freeze({
+        role: exactText(
+          occurrence.role,
+          /^(launcher|vault_factory|hook)$/u,
+        ),
+        occurrenceId: exactUuid(occurrence.occurrenceId),
+        transactionHash: canonicalBytes32(occurrence.transactionHash),
+        receiptLogOrdinal: integerText(occurrence.receiptLogOrdinal),
+        blockHash: canonicalBytes32(occurrence.blockHash),
+        contentFingerprint: canonicalBytes32(
+          occurrence.contentFingerprint,
+        ),
+        releaseBindingId: exactUuid(occurrence.releaseBindingId),
+        releaseBindingCommitment: canonicalBytes32(
+          occurrence.releaseBindingCommitment,
+        ),
+      });
+    });
+    if (
+      beneficiaries.length < 1 ||
+      beneficiaries.length !== sharesBps.length ||
+      new Set(beneficiaries).size !== beneficiaries.length ||
+      sharesBps.reduce((sum, share) => sum + BigInt(share), 0n) !==
+        10_000n ||
+      required.length !== 3 ||
+      required.map(({ role }) => role).join(",") !==
+        "launcher,vault_factory,hook"
+    ) {
+      return projectorValidationFailure();
+    }
+    const requiredReferences: OccurrenceFingerprintReference[] = required.map(
+      (occurrence) => ({
+        transaction_hash: occurrence.transactionHash,
+        receipt_log_ordinal: occurrence.receiptLogOrdinal,
+        block_hash: occurrence.blockHash,
+        role: occurrence.role,
+      }),
+    );
+    const allocationInput = {
+      chain_id: "1",
+      release_id: input.scope.releaseId,
+      model_id: input.scope.modelId,
+      vault,
+      factory_transaction_hash: factoryTransactionHash,
+      factory_receipt_log_ordinal: factoryReceiptLogOrdinal,
+      factory_block_hash: factoryBlockHash,
+      creation_block_number: creationBlockNumber,
+      creation_transaction_index: creationTransactionIndex,
+      ordered_beneficiaries: beneficiaries,
+      ordered_shares_bps: sharesBps,
+      allocation_hash: allocationHash,
+      configuration_hash: configurationHash,
+      active_configuration_hash: activeConfigurationHash,
+      artifact_creation_code_commitment:
+        artifactCreationCodeCommitment,
+      required_occurrences: requiredReferences,
+    };
+    const allocationPreimage = canonicalFingerprintPreimageV1(
+      "allocation",
+      allocationInput,
+    );
+    const allocationFingerprint = canonicalFingerprintV1(
+      "allocation",
+      allocationInput,
+    );
+    const evidenceInput = {
+      allocation_fingerprint: allocationFingerprint,
+      recovery_method: "historical_getters",
+      evidence_version: "classic-v3-activation-v1",
+      top_level_destination: null,
+      method_selector: null,
+      transaction_input_hash: null,
+      constructor_arguments_commitment: constructorArgumentsCommitment,
+      local_init_code_hash: localInitCodeHash,
+      create2_salt: create2Salt,
+      local_create2_address: vault,
+      historical_enrichment_status: "matched",
+      getter_block_hash: factoryBlockHash,
+      getter_result_hash_a: activeConfigurationHash,
+      getter_result_hash_b: activeConfigurationHash,
+      predict_result_hash_a: predictResultHash,
+      predict_result_hash_b: predictResultHash,
+      predicted_vault_a: vault,
+      predicted_vault_b: vault,
+      selected_rpc_result_hash_a: configurationHash,
+      selected_rpc_result_hash_b: configurationHash,
+      selected_rpc_transaction_receipt_hash_a: null,
+      selected_rpc_transaction_receipt_hash_b: null,
+      extra_note: null,
+      required_occurrence_fingerprints: required.map(
+        ({ contentFingerprint }) => contentFingerprint,
+      ),
+    };
+    const evidencePreimage = canonicalFingerprintPreimageV1(
+      "evidence",
+      evidenceInput,
+    );
+    const evidenceFingerprint = canonicalFingerprintV1(
+      "evidence",
+      evidenceInput,
+    );
+    const allocationFactId = deterministicUuid(
+      "dynamic-activation-allocation-fact",
+      activationId,
+    );
+    const allocationEvidenceId = deterministicUuid(
+      "dynamic-activation-allocation-evidence",
+      activationId,
+    );
+    const materialized = await input.transaction.query<{
+      allocation_fact_id: unknown;
+      allocation_evidence_id: unknown;
+    }>(
+      "select * from programmable_private.materialize_dynamic_activation_seed_v1($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid[], $6::text[], $7::bytea, $8::bytea, $9::bytea, $10::bytea, $11::timestamptz)",
+      [
+        input.runId,
+        activationId,
+        allocationFactId,
+        allocationEvidenceId,
+        required.map(({ occurrenceId }) => occurrenceId),
+        required.map(({ role }) => role),
+        allocationPreimage,
+        hexToBytes(allocationFingerprint),
+        evidencePreimage,
+        hexToBytes(evidenceFingerprint),
+        input.verifiedAt,
+      ],
+    );
+    if (
+      materialized.length !== 1 ||
+      exactUuid(materialized[0]!.allocation_fact_id) !== allocationFactId ||
+      exactUuid(materialized[0]!.allocation_evidence_id) !==
+        allocationEvidenceId
+    ) {
+      return projectorValidationFailure();
+    }
+    expectedPairs.push({
+      factId: allocationFactId,
+      evidenceId: allocationEvidenceId,
+    });
+  }
+  expectedPairs.sort((left, right) => left.factId.localeCompare(right.factId));
+  const pairKeys = expectedPairs.map(
+    ({ factId, evidenceId }) => `${factId}:${evidenceId}`,
+  );
+  if (new Set(pairKeys).size !== pairKeys.length) {
+    return projectorValidationFailure();
+  }
+  return Object.freeze(expectedPairs.map((pair) => Object.freeze(pair)));
+}
 
 function unixSecondsTimestamp(value: string): string {
   const seconds = BigInt(integerText(value));
@@ -4777,10 +5819,18 @@ async function stageIncrementalFacts(input: {
     );
     if (snapshotRows.length !== 1) return projectorValidationFailure();
     exactUuid(snapshotRows[0]!.id);
-    input.allocationPairs.push({
-      factId: state.initialAllocationFactId,
-      evidenceId: state.initialAllocationEvidenceId,
-    });
+    if (
+      !input.allocationPairs.some(
+        ({ factId, evidenceId }) =>
+          factId === state.initialAllocationFactId &&
+          evidenceId === state.initialAllocationEvidenceId,
+      )
+    ) {
+      input.allocationPairs.push({
+        factId: state.initialAllocationFactId,
+        evidenceId: state.initialAllocationEvidenceId,
+      });
+    }
     rewardDeltas.push(Object.freeze({
       vault,
       allocationFactId: state.initialAllocationFactId,
@@ -5593,6 +6643,14 @@ async function commitPostgresVerifiedProjection(input: {
       factId: string;
       evidenceId: string;
     }> = [];
+    const expectedActivationPairs = await materializeDynamicActivationSeeds({
+      transaction,
+      runId: privatePlan.runId,
+      scope: input.scope,
+      targetBlockNumber,
+      targetBlockHash,
+      verifiedAt,
+    });
     const stagedRewardStates = new Map<HexAddress, ProjectorRewardState>();
     for (const launch of projection.fold.launches) {
       await stageCompletedLaunch({
@@ -5608,6 +6666,28 @@ async function commitPostgresVerifiedProjection(input: {
         allocationPairs,
         stagedRewardStates,
       });
+    }
+    const launchPairKeys = allocationPairs.map(
+      ({ factId, evidenceId }) => `${factId}:${evidenceId}`,
+    );
+    const expectedActivationPairKeys = expectedActivationPairs.map(
+      ({ factId, evidenceId }) => `${factId}:${evidenceId}`,
+    );
+    const sortedLaunchPairKeys = [...launchPairKeys].sort();
+    const sortedExpectedActivationPairKeys = [
+      ...expectedActivationPairKeys,
+    ].sort();
+    if (
+      new Set(launchPairKeys).size !== launchPairKeys.length ||
+      (input.scope.releaseId === "classic-v3" &&
+        (launchPairKeys.length !== expectedActivationPairKeys.length ||
+          sortedLaunchPairKeys.some(
+            (key, index) => key !== sortedExpectedActivationPairKeys[index],
+          ))) ||
+      (input.scope.releaseId !== "classic-v3" &&
+        expectedActivationPairKeys.length !== 0)
+    ) {
+      return projectorValidationFailure();
     }
 
     const chainOrderedOccurrenceIds = [...occurrenceWrites.values()]
@@ -5865,6 +6945,9 @@ async function commitPostgresVerifiedProjection(input: {
 
     const rewardDeltas = incrementalStage.rewardDeltas;
     const promotionMode = "exact_incremental" as const;
+    const finalAllocationPairKeys = allocationPairs.map(
+      ({ factId, evidenceId }) => `${factId}:${evidenceId}`,
+    );
     if (rewardDeltas.length > 0) {
       if (
         (projection.rewardSnapshots ?? []).length !== rewardDeltas.length ||
@@ -5878,6 +6961,11 @@ async function commitPostgresVerifiedProjection(input: {
       ) {
         return projectorValidationFailure();
       }
+    }
+    if (
+      new Set(finalAllocationPairKeys).size !== finalAllocationPairKeys.length
+    ) {
+      return projectorValidationFailure();
     }
     const occurrenceIds = chainOrderedOccurrenceIds;
     allocationPairs.sort((left, right) =>

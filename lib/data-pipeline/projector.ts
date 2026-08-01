@@ -12,12 +12,18 @@ import {
   verifyDynamicRuntimesAtBlockWithDualRpc,
   verifyEnvioCandidateWindowWithDualRpc,
 } from "./dual-rpc";
+import { verifyClassicV3ActivationModel } from "./classic-v3-activation-model";
 import type {
   EnvioCandidate,
   EnvioCandidateCursor,
 } from "./envio";
 import { DataPipelineError, dataPipelineError, invalidInput } from "./errors";
 import type { VerifiedDynamicSourceLineage } from "./projector-identities";
+import type {
+  PendingDynamicSourceActivation,
+  ResolvePendingDynamicSourceActivationsInput,
+  StageVerifiedDynamicSourceActivationsInput,
+} from "./projector-dynamic-activation";
 import {
   buildEnvioCursorRecoveryPlan,
   findCanonicalAncestorWithDualRpc,
@@ -89,6 +95,12 @@ export type ProjectorStore = Readonly<{
     reorgGeneration: string;
     releaseCheckpointCount: number;
   }>>;
+  resolvePendingDynamicSourceActivations(
+    input: ResolvePendingDynamicSourceActivationsInput,
+  ): Promise<readonly PendingDynamicSourceActivation[]>;
+  stageVerifiedDynamicSourceActivations(
+    input: StageVerifiedDynamicSourceActivationsInput,
+  ): Promise<void>;
   stageVerifiedDynamicParents(input: {
     plan: ProjectorPlan;
     snapshotBlock: string;
@@ -122,6 +134,7 @@ type VerifyWindow = typeof verifyEnvioCandidateWindowWithDualRpc;
 type VerifyDynamicRuntime = typeof verifyDynamicRuntimeAtBlockWithDualRpc;
 type VerifyDynamicRuntimes = typeof verifyDynamicRuntimesAtBlockWithDualRpc;
 type FindCanonicalAncestor = typeof findCanonicalAncestorWithDualRpc;
+type VerifyClassicV3Activation = typeof verifyClassicV3ActivationModel;
 
 type DynamicParentForReplay = Readonly<{
   parent: EnvioCandidate;
@@ -379,6 +392,7 @@ export async function runProjectorCycle(input: {
   verifyDynamicRuntimes?: VerifyDynamicRuntimes;
   verifyDynamicRuntime?: VerifyDynamicRuntime;
   findCanonicalAncestor?: FindCanonicalAncestor;
+  verifyClassicV3Activation?: VerifyClassicV3Activation;
 }) {
   const deadlineMs = input.deadlineMs ?? MAXIMUM_DEADLINE_MS;
   if (
@@ -406,6 +420,8 @@ export async function runProjectorCycle(input: {
       : null);
   const findCanonicalAncestor =
     input.findCanonicalAncestor ?? findCanonicalAncestorWithDualRpc;
+  const verifyClassicV3Activation =
+    input.verifyClassicV3Activation ?? verifyClassicV3ActivationModel;
 
   return withOverallDeadline(deadlineMs, async () => {
     // Each store method owns and closes its database transaction. All Envio
@@ -680,6 +696,98 @@ export async function runProjectorCycle(input: {
         maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
       },
     });
+    const pendingActivations =
+      await input.store.resolvePendingDynamicSourceActivations({
+        candidates,
+        expectedCursorGeneration: plan.cursor.generation,
+        expectedCursorBlockHash: plan.cursor.blockHash,
+        expectedReorgGeneration: plan.database.reorgGeneration,
+      });
+    const activationsByBlock = new Map<
+      string,
+      PendingDynamicSourceActivation[]
+    >();
+    for (const pending of pendingActivations) {
+      const blockKey = `${pending.launchCandidate.blockNumber}:${pending.launchCandidate.blockHash}`;
+      const group = activationsByBlock.get(blockKey) ?? [];
+      group.push(pending);
+      activationsByBlock.set(blockKey, group);
+    }
+    const orderedActivationGroups = [...activationsByBlock.values()].sort(
+      (left, right) => {
+        const leftBlock = BigInt(left[0]!.launchCandidate.blockNumber);
+        const rightBlock = BigInt(right[0]!.launchCandidate.blockNumber);
+        return leftBlock < rightBlock ? -1 : leftBlock > rightBlock ? 1 : 0;
+      },
+    );
+    for (const group of orderedActivationGroups) {
+      const activationBlock = group[0]!.launchCandidate.blockNumber;
+      const activationCandidates = candidates.filter(
+        (candidate) => BigInt(candidate.blockNumber) <= BigInt(activationBlock),
+      );
+      const dynamicSources = [
+        ...plan.dynamicSources,
+        ...pendingActivations
+          .filter(
+            (pending) =>
+              BigInt(pending.launchCandidate.blockNumber) <=
+              BigInt(activationBlock),
+          )
+          .map(({ ephemeralLineage }) => ephemeralLineage),
+      ];
+      const activationEvidence = await verifyWindow({
+        candidates: activationCandidates,
+        cursor,
+        through: {
+          blockNumber: activationBlock,
+          blockGlobalLogIndex: 0xffff_ffff,
+          candidateId: "empty-page",
+        },
+        providers: input.providers,
+        dynamicSources,
+        coveragePolicy: {
+          maximumBlockSpan: COVERAGE_BLOCK_SPAN,
+          maximumRequests: MAXIMUM_COVERAGE_REQUESTS,
+        },
+        rpcPolicy: {
+          hardDeadlineMs: remaining(),
+          maxCallsPerProvider: MAXIMUM_PROVIDER_CALLS,
+        },
+      });
+      const verifiedActivations = await Promise.all(
+        group.map(async (pending) => {
+          const verification = await verifyClassicV3Activation({
+            activationId: pending.activationId,
+            parentCandidate: pending.historicalParentCandidate,
+            launchCandidate: pending.launchCandidate,
+            sameBlockVaultEvents: activationCandidates.filter(
+              (candidate) =>
+                candidate.blockNumber === activationBlock &&
+                candidate.sourceAddress === pending.sourceAddress &&
+                candidate.contractName === "ClassicV3RewardVault",
+            ),
+            candidateEvidence: activationEvidence,
+            sourceAddress: pending.sourceAddress,
+            template: pending.template,
+            canonicalDeployment: pending.canonicalDeployment,
+            providers: input.providers,
+            deadlineMs: remaining(),
+          });
+          return Object.freeze({
+            pending,
+            runtimeObservation: verification.runtimeObservation,
+            modelVerificationEvidence:
+              verification.modelVerificationEvidence,
+          });
+        }),
+      );
+      await input.store.stageVerifiedDynamicSourceActivations({
+        candidates: activationCandidates,
+        evidence: activationEvidence,
+        activations: verifiedActivations,
+        blockComplete: false,
+      });
+    }
     const committed = await input.store.commitVerifiedPage({
       plan,
       snapshotBlock: completeBlock,

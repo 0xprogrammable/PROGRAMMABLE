@@ -6,6 +6,7 @@ import { runProjectorCycle } from "../../lib/data-pipeline/projector";
 import { validationError } from "../../lib/data-pipeline/errors";
 import type { EnvioCandidate } from "../../lib/data-pipeline/envio";
 import type { ProjectorDynamicSourceTemplate } from "../../lib/data-pipeline/dual-rpc";
+import type { PendingDynamicSourceActivation } from "../../lib/data-pipeline/projector-dynamic-activation";
 
 const CURSOR_HASH = `0x${"11".repeat(32)}` as const;
 const SAFE_HASH = `0x${"22".repeat(32)}` as const;
@@ -121,6 +122,24 @@ function candidate(
   };
 }
 
+function pendingActivation(input: {
+  parent: EnvioCandidate;
+  launch: EnvioCandidate;
+  sourceAddress: `0x${string}`;
+}): PendingDynamicSourceActivation {
+  return {
+    activationId: "10000000-0000-4000-8000-000000000099",
+    historicalParentCandidate: input.parent,
+    launchCandidate: input.launch,
+    sourceAddress: input.sourceAddress,
+    template: dynamicTemplate(),
+    canonicalDeployment: {} as never,
+    ephemeralLineage: {
+      sourceAddress: input.sourceAddress,
+    } as never,
+  };
+}
+
 function fixtures() {
   let databaseTransactionOpen = false;
   const store = {
@@ -170,6 +189,12 @@ function fixtures() {
       reorgGeneration: "1",
       releaseCheckpointCount: 5,
     })),
+    resolvePendingDynamicSourceActivations: vi.fn(
+      async (): Promise<readonly PendingDynamicSourceActivation[]> => [],
+    ),
+    stageVerifiedDynamicSourceActivations: vi.fn(async () => {
+      expect(databaseTransactionOpen).toBe(false);
+    }),
     stageVerifiedDynamicParents: vi.fn(async () => {
       expect(databaseTransactionOpen).toBe(false);
     }),
@@ -298,6 +323,12 @@ describe("projector runtime boundary", () => {
       snapshotBlock: "101",
     });
     expect(input.store.commitVerifiedPage).toHaveBeenCalledTimes(1);
+    expect(
+      input.store.resolvePendingDynamicSourceActivations,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      input.store.stageVerifiedDynamicSourceActivations,
+    ).not.toHaveBeenCalled();
     expect(input.verifyWindow).toHaveBeenCalledWith(
       expect.objectContaining({
         candidates: [expect.objectContaining({ candidateId: candidate().candidateId })],
@@ -545,6 +576,171 @@ describe("projector runtime boundary", () => {
     });
     expect(findCanonicalAncestor).not.toHaveBeenCalled();
     expect(input.store.recoverCanonicalReorg).not.toHaveBeenCalled();
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
+
+  it("resolves, verifies and stages an activation before committing", async () => {
+    const input = fixtures();
+    const vault = "0x4cfe000000000000000000000000000000000001" as const;
+    const parent = candidate({
+      blockNumber: 101,
+      logIndex: 7,
+      sourceAddress: CLASSIC_V3_FACTORY,
+      contractName: "ClassicV3RewardVaultFactory",
+      eventName: "ClassicRewardVaultDeployed",
+      decodedPayload: { vault },
+    });
+    const launch = candidate({
+      blockNumber: 101,
+      logIndex: 9,
+      contractName: "ClassicV3Launcher",
+      eventName: "MemeTokenLaunchedV2",
+      decodedPayload: { rewardVault: vault },
+    });
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce([parent, launch])
+      .mockResolvedValueOnce([]);
+    const pending = pendingActivation({ parent, launch, sourceAddress: vault });
+    const baseReadPlan = input.store.readPlan.getMockImplementation()!;
+    input.store.readPlan.mockImplementation((async () => ({
+      ...(await baseReadPlan()),
+      provisionalSourceAddresses: [vault],
+    })) as never);
+    const order: string[] = [];
+    let verifyWindowCalls = 0;
+    const baseVerifyWindow = input.verifyWindow.getMockImplementation()!;
+    input.verifyWindow.mockImplementation(async (request) => {
+      order.push(
+        verifyWindowCalls++ === 0 ? "full-evidence" : "activation-evidence",
+      );
+      return baseVerifyWindow(request);
+    });
+    input.store.resolvePendingDynamicSourceActivations.mockImplementation(
+      async () => {
+        order.push("resolve");
+        return [pending];
+      },
+    );
+    const verifyClassicV3Activation = vi.fn(async () => {
+      order.push("verify-model");
+      return {
+        runtimeObservation: {},
+        modelVerificationEvidence: [],
+      } as never;
+    });
+    input.store.stageVerifiedDynamicSourceActivations.mockImplementation(
+      async () => {
+        order.push("stage");
+      },
+    );
+    input.store.commitVerifiedPage.mockImplementation(async () => {
+      order.push("commit");
+      return { generation: "6" };
+    });
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+        verifyClassicV3Activation,
+      }),
+    ).resolves.toMatchObject({ status: "committed" });
+
+    expect(order).toEqual([
+      "full-evidence",
+      "resolve",
+      "activation-evidence",
+      "verify-model",
+      "stage",
+      "commit",
+    ]);
+    expect(verifyClassicV3Activation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activationId: pending.activationId,
+        parentCandidate: parent,
+        launchCandidate: launch,
+        candidateEvidence: expect.objectContaining({
+          coverage: expect.objectContaining({
+            throughBlockNumber: "101",
+            throughBlockGlobalLogIndex: "4294967295",
+          }),
+        }),
+      }),
+    );
+    expect(
+      input.store.stageVerifiedDynamicSourceActivations,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: [parent, launch],
+        blockComplete: false,
+        activations: [expect.objectContaining({ pending })],
+      }),
+    );
+  });
+
+  it("does not stage or commit when activation evidence RPC verification fails", async () => {
+    const input = fixtures();
+    const vault = "0x4cfe000000000000000000000000000000000001" as const;
+    const parent = candidate({ blockNumber: 101, logIndex: 7 });
+    const launch = candidate({ blockNumber: 101, logIndex: 9 });
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce([parent, launch])
+      .mockResolvedValueOnce([]);
+    input.store.resolvePendingDynamicSourceActivations.mockResolvedValue([
+      pendingActivation({ parent, launch, sourceAddress: vault }),
+    ]);
+    const fullEvidence = input.verifyWindow.getMockImplementation()!;
+    input.verifyWindow
+      .mockImplementationOnce(fullEvidence)
+      .mockRejectedValueOnce(validationError("rpc", "coverage-omission"));
+    const verifyClassicV3Activation = vi.fn();
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+        verifyClassicV3Activation: verifyClassicV3Activation as never,
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    expect(verifyClassicV3Activation).not.toHaveBeenCalled();
+    expect(
+      input.store.stageVerifiedDynamicSourceActivations,
+    ).not.toHaveBeenCalled();
+    expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
+  });
+
+  it("does not stage or commit when activation model verification fails", async () => {
+    const input = fixtures();
+    const vault = "0x4cfe000000000000000000000000000000000001" as const;
+    const parent = candidate({ blockNumber: 101, logIndex: 7 });
+    const launch = candidate({ blockNumber: 101, logIndex: 9 });
+    input.envio.readCandidatesWindow
+      .mockReset()
+      .mockResolvedValueOnce([parent, launch])
+      .mockResolvedValueOnce([]);
+    input.store.resolvePendingDynamicSourceActivations.mockResolvedValue([
+      pendingActivation({ parent, launch, sourceAddress: vault }),
+    ]);
+    const verifyClassicV3Activation = vi.fn().mockRejectedValue(
+      validationError("rpc", "activation-model-runtime"),
+    );
+
+    await expect(
+      runProjectorCycle({
+        ...input,
+        providers: [] as never,
+        deadlineMs: 1_000,
+        verifyClassicV3Activation: verifyClassicV3Activation as never,
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    expect(verifyClassicV3Activation).toHaveBeenCalledTimes(1);
+    expect(
+      input.store.stageVerifiedDynamicSourceActivations,
+    ).not.toHaveBeenCalled();
     expect(input.store.commitVerifiedPage).not.toHaveBeenCalled();
   });
 

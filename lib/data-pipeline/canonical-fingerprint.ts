@@ -57,7 +57,7 @@ export type AllocationFingerprintInput = {
   allocation_hash: string;
   configuration_hash: string;
   active_configuration_hash: string | null;
-  artifact_init_code_commitment: string;
+  artifact_creation_code_commitment: string;
   required_occurrences: OccurrenceFingerprintReference[];
 };
 
@@ -68,7 +68,9 @@ export type EvidenceFingerprintInput = {
   top_level_destination: string | null;
   method_selector: string | null;
   transaction_input_hash: string | null;
+  constructor_arguments_commitment: string;
   local_init_code_hash: string;
+  create2_salt: string;
   local_create2_address: string;
   historical_enrichment_status: string;
   getter_block_hash: string | null;
@@ -307,7 +309,10 @@ function allocationPreimage(input: AllocationFingerprintInput): Uint8Array {
     frameNullable(input.active_configuration_hash, (hash) =>
       decodeCanonicalFingerprintHex(hash, 32),
     ),
-    decodeCanonicalFingerprintHex(input.artifact_init_code_commitment, 32),
+    decodeCanonicalFingerprintHex(
+      input.artifact_creation_code_commitment,
+      32,
+    ),
     frameArray(input.required_occurrences, occurrenceReferencePreimage),
   );
 }
@@ -329,7 +334,9 @@ function evidencePreimage(input: EvidenceFingerprintInput): Uint8Array {
       decodeCanonicalFingerprintHex(selector, 4),
     ),
     nullableHash(input.transaction_input_hash),
+    decodeCanonicalFingerprintHex(input.constructor_arguments_commitment, 32),
     decodeCanonicalFingerprintHex(input.local_init_code_hash, 32),
+    decodeCanonicalFingerprintHex(input.create2_salt, 32),
     decodeCanonicalFingerprintHex(input.local_create2_address, 20),
     frameString(input.historical_enrichment_status),
     nullableHash(input.getter_block_hash),

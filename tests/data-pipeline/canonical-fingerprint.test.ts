@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import { keccak256, type Hex } from "viem";
 
 import fixtureJson from "../../config/data-pipeline-canonical-fingerprint.v1.json";
+import databaseFixtureJson from "../../supabase/tests/codec/canonical-fingerprint-v1.json";
 import {
   canonicalFingerprintBytesToHex,
   canonicalFingerprintPreimageV1,
@@ -56,6 +57,10 @@ function encodeVector(vector: FixtureVector) {
 }
 
 describe("production canonical fingerprint v1", () => {
+  it("keeps the application and database codec fixtures identical", () => {
+    expect(fixtureJson).toEqual(databaseFixtureJson);
+  });
+
   it("matches every independent canonical fixture preimage and digest", () => {
     expect(fixture.vectors).toHaveLength(7);
 

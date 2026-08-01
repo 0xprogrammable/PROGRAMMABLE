@@ -430,6 +430,7 @@ class StoreExecutor implements PostgresExecutor {
           text.includes("open_run") ||
           text.includes("append_dual_rpc_runtime_code_evidence") ||
           text.includes("stage_verified_dynamic_parents_v2") ||
+          text.includes("stage_provisional_parent_receipt_ordinals_v1") ||
           text.includes("append_run_outcome")
         ) {
           return [{ id: values[0] }] as unknown as Row[];
