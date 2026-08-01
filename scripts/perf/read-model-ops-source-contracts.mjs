@@ -54,7 +54,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/market-projector-runtime.server.ts",
-        sha256: "4c60715c48f6aa857403d826a8130e3b63338dff62f7569b6c15b5635e2dd375",
+        sha256: "ed1c55148d05a47d747616a4bc8250996780be65d053b989d51db21b4519109b",
       }),
       migrations: Object.freeze([
         Object.freeze({
