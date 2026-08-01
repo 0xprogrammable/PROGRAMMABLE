@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:programmable:v4-hook-submission:1.1.0",
+  "$id": "urn:programmable:v4-hook-submission:1.2.0",
   "title": "Programmable v4 model submission preflight",
   "type": "object",
   "additionalProperties": false,
@@ -21,7 +21,10 @@
     "dependencies",
     "operations",
     "integration",
+    "projectSurfaces",
+    "projectCapabilities",
     "capabilities",
+    "capabilityExtensions",
     "security",
     "implementation",
     "risk",
@@ -29,9 +32,9 @@
     "unresolved"
   ],
   "properties": {
-    "$schema": { "const": "urn:programmable:v4-hook-submission:1.1.0" },
+    "$schema": { "const": "urn:programmable:v4-hook-submission:1.2.0" },
     "schemaVersion": { "const": 1 },
-    "standardVersion": { "const": "1.1.0" },
+    "standardVersion": { "const": "1.2.0" },
     "stage": { "enum": ["proposal", "prototype"] },
     "model": {
       "type": "object",
@@ -590,6 +593,20 @@
         "platformHandoff": { "$ref": "#/$defs/platformHandoff" }
       }
     },
+    "projectSurfaces": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/projectSurface" },
+      "description": "Open inventory of every onchain and offchain project boundary. Surface kinds are slugs rather than a closed enum; unfamiliar kinds enter architecture review."
+    },
+    "projectCapabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/projectCapability" },
+      "description": "Open capability inventory. Each capability declares its affected surfaces, security triggers and the profiles that those triggers require."
+    },
     "capabilities": {
       "type": "object",
       "additionalProperties": false,
@@ -723,6 +740,239 @@
     "unresolved": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500 } }
   },
   "$defs": {
+    "projectSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "summary",
+        "executionBoundary",
+        "capabilityIds",
+        "authorityRefs",
+        "valueFlowRefs",
+        "assetRefs",
+        "sourcePaths",
+        "testPaths",
+        "schemaPaths",
+        "evidencePaths",
+        "exposure",
+        "profiles",
+        "signedDataSource",
+        "onchainOracleVerifier"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120,
+          "description": "Open surface kind. Known values accelerate review; an unfamiliar slug enters architecture review instead of failing schema validation."
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "summary": { "type": "string", "minLength": 20, "maxLength": 1200 },
+        "executionBoundary": {
+          "enum": ["onchain", "browser", "mobile-client", "server", "worker", "database", "external-provider", "hybrid", "other-reviewed", null]
+        },
+        "capabilityIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 }
+        },
+        "authorityRefs": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 120 }
+        },
+        "valueFlowRefs": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 }
+        },
+        "assetRefs": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+        },
+        "sourcePaths": { "$ref": "#/$defs/repositoryPathList" },
+        "testPaths": { "$ref": "#/$defs/repositoryPathList" },
+        "schemaPaths": { "$ref": "#/$defs/repositoryPathList" },
+        "evidencePaths": { "$ref": "#/$defs/repositoryPathList" },
+        "exposure": { "$ref": "#/$defs/projectSurfaceExposure" },
+        "profiles": { "$ref": "#/$defs/projectSurfaceProfiles" },
+        "signedDataSource": { "$ref": "#/$defs/signedDataSource" },
+        "onchainOracleVerifier": { "$ref": "#/$defs/onchainOracleVerifier" }
+      }
+    },
+    "projectCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "summary", "surfaceIds", "securityTriggers", "requiredProfiles"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 120,
+          "description": "Open capability kind. Unknown kinds remain valid but require architecture review."
+        },
+        "summary": { "type": "string", "minLength": 20, "maxLength": 1200 },
+        "surfaceIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 }
+        },
+        "securityTriggers": { "$ref": "#/$defs/projectSecurityTriggers" },
+        "requiredProfiles": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/projectProfileId" },
+          "description": "Must equal the profiles derived from securityTriggers. Authority, source-of-truth, source-test-schema and failure-recovery are mandatory for every capability."
+        }
+      }
+    },
+    "projectSecurityTriggers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "valueFlow",
+        "sourceOfTruth",
+        "signaturesReplay",
+        "externalCalls",
+        "custody",
+        "piiGeolocation",
+        "secretBoundary",
+        "sourceTestSchema",
+        "failureRecovery"
+      ],
+      "properties": {
+        "authority": { "type": "boolean" },
+        "valueFlow": { "type": "boolean" },
+        "sourceOfTruth": { "type": "boolean" },
+        "signaturesReplay": { "type": "boolean" },
+        "externalCalls": { "type": "boolean" },
+        "custody": { "type": "boolean" },
+        "piiGeolocation": { "type": "boolean" },
+        "secretBoundary": { "type": "boolean" },
+        "sourceTestSchema": { "type": "boolean" },
+        "failureRecovery": { "type": "boolean" }
+      }
+    },
+    "projectProfileId": {
+      "enum": [
+        "authority",
+        "value-flow",
+        "source-of-truth",
+        "signatures-replay",
+        "external-calls",
+        "custody",
+        "pii-geolocation",
+        "secret-boundary",
+        "source-test-schema",
+        "failure-recovery"
+      ]
+    },
+    "projectSurfaceExposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["movesValue", "usesSignatures", "makesExternalCalls", "holdsCustody", "handlesPii", "usesGeolocation", "usesSecrets"],
+      "properties": {
+        "movesValue": { "type": ["boolean", "null"] },
+        "usesSignatures": { "type": ["boolean", "null"] },
+        "makesExternalCalls": { "type": ["boolean", "null"] },
+        "holdsCustody": { "type": ["boolean", "null"] },
+        "handlesPii": { "type": ["boolean", "null"] },
+        "usesGeolocation": { "type": ["boolean", "null"] },
+        "usesSecrets": { "type": ["boolean", "null"] }
+      }
+    },
+    "projectSurfaceProfiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "valueFlow", "sourceOfTruth", "signaturesReplay", "externalCalls", "custody", "piiGeolocation", "secretBoundary", "sourceTestSchema", "failureRecovery"],
+      "properties": {
+        "authority": { "$ref": "#/$defs/projectSurfaceProfile" },
+        "valueFlow": { "$ref": "#/$defs/projectSurfaceProfile" },
+        "sourceOfTruth": { "$ref": "#/$defs/projectSurfaceProfile" },
+        "signaturesReplay": { "$ref": "#/$defs/projectSurfaceProfile" },
+        "externalCalls": { "$ref": "#/$defs/projectSurfaceProfile" },
+        "custody": { "$ref": "#/$defs/projectSurfaceProfile" },
+        "piiGeolocation": { "$ref": "#/$defs/projectSurfaceProfile" },
+        "secretBoundary": { "$ref": "#/$defs/projectSurfaceProfile" },
+        "sourceTestSchema": { "$ref": "#/$defs/projectSurfaceProfile" },
+        "failureRecovery": { "$ref": "#/$defs/projectSurfaceProfile" }
+      }
+    },
+    "projectSurfaceProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "summary", "controls", "evidenceRefs"],
+      "properties": {
+        "status": { "enum": ["applicable", "not-applicable", null] },
+        "summary": { "type": ["string", "null"], "minLength": 20, "maxLength": 1200 },
+        "controls": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 12, "maxLength": 800 }
+        },
+        "evidenceRefs": { "$ref": "#/$defs/repositoryPathList" }
+      }
+    },
+    "signedDataSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "signerAuthorityRefs", "signatureScheme", "payloadSchemaPath", "freshnessRule", "replayProtection", "onchainVerifierSurfaceId"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "signerAuthorityRefs": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 120 }
+        },
+        "signatureScheme": { "type": ["string", "null"], "maxLength": 500 },
+        "payloadSchemaPath": { "type": ["string", "null"], "maxLength": 1024 },
+        "freshnessRule": { "type": ["string", "null"], "maxLength": 800 },
+        "replayProtection": { "type": ["string", "null"], "maxLength": 800 },
+        "onchainVerifierSurfaceId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 }
+      }
+    },
+    "onchainOracleVerifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "verifiedSourceSurfaceIds", "verificationRule", "freshnessRule", "replayProtection", "failureRule"],
+      "properties": {
+        "used": { "type": ["boolean", "null"] },
+        "verifiedSourceSurfaceIds": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 }
+        },
+        "verificationRule": { "type": ["string", "null"], "maxLength": 1000 },
+        "freshnessRule": { "type": ["string", "null"], "maxLength": 800 },
+        "replayProtection": { "type": ["string", "null"], "maxLength": 800 },
+        "failureRule": { "type": ["string", "null"], "maxLength": 800 }
+      }
+    },
+    "repositoryPathList": {
+      "type": "array",
+      "maxItems": 512,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
     "capabilityExtension": {
       "type": "object",
       "additionalProperties": false,

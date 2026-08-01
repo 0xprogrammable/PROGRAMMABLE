@@ -21,7 +21,9 @@ test("review target binds arbitrary project bytes without requiring Foundry", ()
       "submissions/fixture/game/reward.glsl",
       "submissions/fixture/service/main.py",
       "submissions/fixture/engine/src/lib.rs",
-      "submissions/fixture/assets/sprite.bin"
+      "submissions/fixture/assets/sprite.bin",
+      "submissions/fixture/project-surface.schema.json",
+      "submissions/fixture/project-surface-evidence.md"
     ]) assert.ok(paths.has(expectedPath), `${expectedPath} must be byte-bound`);
     assert.equal(paths.has("foundry.toml"), false);
     assert.equal(paths.has("remappings.txt"), false);
@@ -241,7 +243,7 @@ test("review target hashes transitive local TypeScript imports and changes when 
   }
 });
 
-test("review target v9 excludes its authority records while retaining gate evidence bytes", () => {
+test("review target v10 excludes its authority records while retaining gate and surface evidence bytes", () => {
   const evidencePath = "submissions/fixture/evidence/test-result.json";
   const gateStatusPath = "submissions/fixture/evidence/gate-status.json";
   const reviewTargetPath = "submissions/fixture/evidence/review-target.json";
@@ -272,7 +274,7 @@ test("review target v9 excludes its authority records while retaining gate evide
       `${JSON.stringify(gateStatus(`sha256:${"0".repeat(64)}`), null, 2)}\n`
     );
     const first = buildReviewTarget(fixture);
-    assert.equal(first.closureMethod.endsWith("-v9"), true);
+    assert.equal(first.closureMethod.endsWith("-v10"), true);
     assert.equal(first.files.some(({ path: filePath }) => filePath === gateStatusPath), false);
     assert.equal(first.files.some(({ path: filePath }) => filePath === reviewTargetPath), false);
     assert.equal(first.files.some(({ path: filePath }) => filePath === evidencePath), true);
@@ -1499,6 +1501,8 @@ function createArbitraryProjectFixture() {
   fs.writeFileSync(path.join(packageRoot, "service", "test_reward.py"), "def test_reward():\n    assert True\n");
   fs.writeFileSync(path.join(packageRoot, "engine", "src", "lib.rs"), "pub fn settle() -> bool { true }\n");
   fs.writeFileSync(path.join(packageRoot, "assets", "sprite.bin"), Buffer.from([0, 255, 1, 2, 3, 4]));
+  fs.writeFileSync(path.join(packageRoot, "project-surface.schema.json"), "{\"type\":\"object\"}\n");
+  fs.writeFileSync(path.join(packageRoot, "project-surface-evidence.md"), "# Bound project surface evidence\n");
 
   const prefix = "submissions/fixture";
   const submission = {
@@ -1518,6 +1522,20 @@ function createArbitraryProjectFixture() {
       integrationTestPaths: [`${prefix}/service/test_reward.py`],
       sdkDependencies: []
     },
+    projectSurfaces: [{
+      id: "arbitrary-project",
+      sourcePaths: [
+        `${prefix}/game/scene.ts`,
+        `${prefix}/game/style.css`,
+        `${prefix}/game/reward.glsl`,
+        `${prefix}/service/main.py`,
+        `${prefix}/engine/src/lib.rs`,
+        `${prefix}/assets/sprite.bin`
+      ],
+      testPaths: [`${prefix}/service/test_reward.py`],
+      schemaPaths: [`${prefix}/project-surface.schema.json`],
+      evidencePaths: [`${prefix}/project-surface-evidence.md`]
+    }],
     capabilityExtensions: []
   };
 

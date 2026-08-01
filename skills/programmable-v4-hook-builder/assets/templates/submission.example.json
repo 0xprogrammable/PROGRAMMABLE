@@ -1,7 +1,7 @@
 {
-  "$schema": "urn:programmable:v4-hook-submission:1.1.0",
+  "$schema": "urn:programmable:v4-hook-submission:1.2.0",
   "schemaVersion": 1,
-  "standardVersion": "1.1.0",
+  "standardVersion": "1.2.0",
   "stage": "proposal",
   "model": {
     "id": "example-model",
@@ -329,6 +329,132 @@
       "handoffNotes": null
     }
   },
+  "projectSurfaces": [
+    {
+      "id": "canonical-pool-model",
+      "kind": "onchain-contract",
+      "name": "Canonical pool model",
+      "summary": "The canonical launch token, PoolKey and optional hook behavior reviewed as one onchain project boundary.",
+      "executionBoundary": "onchain",
+      "capabilityIds": ["canonical-pool-state"],
+      "authorityRefs": [],
+      "valueFlowRefs": [],
+      "assetRefs": [],
+      "sourcePaths": [],
+      "testPaths": [],
+      "schemaPaths": [],
+      "evidencePaths": [],
+      "exposure": {
+        "movesValue": false,
+        "usesSignatures": false,
+        "makesExternalCalls": false,
+        "holdsCustody": false,
+        "handlesPii": false,
+        "usesGeolocation": false,
+        "usesSecrets": false
+      },
+      "profiles": {
+        "authority": {
+          "status": "applicable",
+          "summary": "PoolManager callback authentication and the declared launch authorities bound in this submission govern the exact onchain boundary.",
+          "controls": ["Authenticate every hook callback through the exact PoolManager and declared pool-admission rule."],
+          "evidenceRefs": []
+        },
+        "valueFlow": {
+          "status": "not-applicable",
+          "summary": "This starter surface declares no additional value movement beyond standard PoolManager settlement until a capability changes that boundary.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "sourceOfTruth": {
+          "status": "applicable",
+          "summary": "Confirmed PoolManager and contract state for the exact chain and PoolId is the authoritative source of truth.",
+          "controls": ["Key every state read and emitted event by the exact chain, model revision and PoolId."],
+          "evidenceRefs": []
+        },
+        "signaturesReplay": {
+          "status": "not-applicable",
+          "summary": "The starter surface consumes no model-specific signed message or signed offchain payload.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "externalCalls": {
+          "status": "not-applicable",
+          "summary": "The starter surface makes no model-specific external call beyond authenticated protocol execution.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "custody": {
+          "status": "not-applicable",
+          "summary": "The starter surface retains no token, liquidity position, PoolManager claim or beneficiary balance.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "piiGeolocation": {
+          "status": "not-applicable",
+          "summary": "The onchain starter surface collects no private identity data or precise user geolocation.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "secretBoundary": {
+          "status": "not-applicable",
+          "summary": "The onchain starter surface assumes no secret can remain confidential in contract state or calldata.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "sourceTestSchema": {
+          "status": "applicable",
+          "summary": "The implementation manifest binds the exact source, tests, compiler input and specification reviewed for this boundary.",
+          "controls": ["Bind prototype source and tests to implementation paths and include every imported executable byte in the review target."],
+          "evidenceRefs": []
+        },
+        "failureRecovery": {
+          "status": "applicable",
+          "summary": "An invalid callback or state transition reverts atomically and does not block the separately declared user exit path.",
+          "controls": ["Test dependency failure, callback revert and recovery without partial settlement or trapped user funds."],
+          "evidenceRefs": []
+        }
+      },
+      "signedDataSource": {
+        "used": false,
+        "signerAuthorityRefs": [],
+        "signatureScheme": null,
+        "payloadSchemaPath": null,
+        "freshnessRule": null,
+        "replayProtection": null,
+        "onchainVerifierSurfaceId": null
+      },
+      "onchainOracleVerifier": {
+        "used": false,
+        "verifiedSourceSurfaceIds": [],
+        "verificationRule": null,
+        "freshnessRule": null,
+        "replayProtection": null,
+        "failureRule": null
+      }
+    }
+  ],
+  "projectCapabilities": [
+    {
+      "id": "canonical-pool-state",
+      "kind": "state-observation",
+      "summary": "Read and update only the declared canonical PoolId state without adding value custody or an offchain trust dependency.",
+      "surfaceIds": ["canonical-pool-model"],
+      "securityTriggers": {
+        "authority": true,
+        "valueFlow": false,
+        "sourceOfTruth": true,
+        "signaturesReplay": false,
+        "externalCalls": false,
+        "custody": false,
+        "piiGeolocation": false,
+        "secretBoundary": false,
+        "sourceTestSchema": true,
+        "failureRecovery": true
+      },
+      "requiredProfiles": ["authority", "failure-recovery", "source-of-truth", "source-test-schema"]
+    }
+  ],
   "capabilities": {
     "externalCalls": { "used": null, "targets": [], "callSites": [], "reentrancyPolicy": null, "stateDriftPolicy": null, "returnValuePolicy": null, "failureAtomicity": null },
     "permissionedAsset": { "used": null, "officialUniswapPermissionedPool": null, "issuer": null, "jurisdiction": null, "legalDocuments": [], "underlyingClaim": null, "custodian": null, "adapter": null, "hooks": null, "positionManager": null, "swapEligibility": null, "liquidityEligibility": null, "positionTransferability": null, "pauseFreezeUnwind": null, "redemption": null, "routingLimitations": null },

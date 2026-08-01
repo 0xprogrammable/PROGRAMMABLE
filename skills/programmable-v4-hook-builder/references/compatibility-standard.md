@@ -1,6 +1,6 @@
 # Programmable compatibility standard
 
-Version: `1.1.0`
+Version: `1.2.0`
 
 This standard defines the information and structural checks required before a Programmable prototype begins. It does
 not approve a model, certify security or predict support from Uniswap routing or third-party indexers.
@@ -333,6 +333,23 @@ Review public UI and application strings as well as documents. Ignore comments a
 unsupported approval, audit, safety, deployment and availability claims that would actually be shown to users.
 
 ## Platform profiles
+
+### Open project-surface profile
+
+Inventory every contract, app, game, map, service, database, indexer, signed data source, optional onchain verifier,
+keeper, claim and monitoring boundary through `projectSurfaces` and `projectCapabilities`. Surface and capability kinds
+are open slugs: unfamiliar kinds enter architecture review instead of being rejected by a closed launch-type enum.
+
+Open kinds do not weaken security. Every capability explicitly triggers and derives the applicable authority,
+value-flow, source-of-truth, signatures/replay, external-call, custody, PII/geolocation, secret-boundary,
+source/test/schema and failure/recovery profiles. Authority, source of truth, source/test/schema and failure/recovery
+remain mandatory even for permissionless or value-free components. Exposure booleans, capability triggers, profile
+status, declared references and prototype closure must agree.
+
+Keep a signed offchain data source separate from an optional onchain oracle verifier. The source binds signer authority,
+canonical payload schema, freshness and replay. A verifier binds one or more distinct signed-source surfaces and its
+verification, freshness, replay and failure rules. The verifier is optional unless the actual architecture uses one.
+See [project-surfaces-and-capabilities.md](project-surfaces-and-capabilities.md).
 
 ### Permissionless token profile
 

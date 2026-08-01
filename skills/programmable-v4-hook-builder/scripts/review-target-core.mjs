@@ -142,6 +142,13 @@ export function buildReviewTarget({
   for (const sourcePath of platformHandoff.apiSourcePaths ?? []) addRepositoryPath(sourcePath, "platform-handoff-api-source");
   for (const sourcePath of platformHandoff.indexerSourcePaths ?? []) addRepositoryPath(sourcePath, "platform-handoff-indexer-source");
   for (const testPath of platformHandoff.testPaths ?? []) addRepositoryPath(testPath, "platform-handoff-test");
+  for (const surface of submission.projectSurfaces ?? []) {
+    const surfaceId = surface?.id ?? "unidentified";
+    for (const sourcePath of surface?.sourcePaths ?? []) addRepositoryPath(sourcePath, `project-surface-source:${surfaceId}`);
+    for (const testPath of surface?.testPaths ?? []) addRepositoryPath(testPath, `project-surface-test:${surfaceId}`);
+    for (const schemaPath of surface?.schemaPaths ?? []) addRepositoryPath(schemaPath, `project-surface-schema:${surfaceId}`);
+    for (const evidencePath of surface?.evidencePaths ?? []) addRepositoryPath(evidencePath, `project-surface-evidence:${surfaceId}`);
+  }
   for (const extension of submission.capabilityExtensions ?? []) {
     if (extension?.schemaPath) addRepositoryPath(extension.schemaPath, `capability-schema:${extension.capabilityId ?? "unidentified"}`);
     for (const sourcePath of extension?.sourcePaths ?? []) addRepositoryPath(sourcePath, `capability-source:${extension.capabilityId ?? "unidentified"}`);

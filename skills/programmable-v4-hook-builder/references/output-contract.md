@@ -71,6 +71,9 @@ Before a human handoff says `PROTOTYPE_READY`, the proposal also contains:
   that the ordinary pool path introduces no custom swap callback behavior
 - A planned boundary for every intended UI, game, service, API, indexer, quote, trade, claim, keeper, oracle, and
   monitoring surface, with unused surfaces marked not applicable with a reason
+- A machine-readable `projectSurfaces` and `projectCapabilities` graph. New surface or capability kinds remain open for
+  architecture review, while every capability still derives authority, value-flow, source-of-truth, signature/replay,
+  external-call, custody, PII/geolocation, secret, source/test/schema and failure/recovery profiles.
 - No contradiction among the design card, structured submission, proposal, threat model, and test plan
 
 ## Prototype output
@@ -98,7 +101,8 @@ fields apply. Mark a capability-specific field or gate not applicable with a rea
 unexecuted command.
 
 `review-target.json` binds the package, declared source and test files, the supported closure for each declared language,
-the dependency lock, and every gate-evidence artifact by content hash. Closure method v9 deliberately excludes both
+the dependency lock, and every gate-evidence artifact by content hash. Closure method v10 additionally binds every
+declared project-surface source, test, schema and evidence path, and deliberately excludes both
 `gate-status.json` and `review-target.json` from its own file subject, preventing either authority record from hashing
 itself. `prepare-pr` binds those two records separately as exact primary HEAD/GitHub source blobs. Solidity uses compiler and import closure;
 JavaScript and TypeScript use static or literal local module closure. Another language uses its declared supported
@@ -130,6 +134,8 @@ Capability-triggered evidence is additive:
   and failure tests for its declared behavior; unused categories are not fabricated.
 - A service, keeper, oracle, or indexer requires the relevant API/schema, authentication, authorization, retry,
   freshness, reorg, idempotency, failure, operating, and monitoring evidence for its declared responsibilities.
+- A signed offchain data producer and an optional onchain oracle verifier remain separate surfaces with reciprocal
+  references. A signed source without an onchain verifier is valid when the declared consumer boundary does not use one.
 
 The prototype also records the product-facing specification. For each intended surface, name the source of truth, input,
 output, error behavior, unsupported state, dependency ids, source paths, executable tests, and operating owner. These

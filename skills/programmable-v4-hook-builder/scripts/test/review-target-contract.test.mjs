@@ -8,10 +8,10 @@ import {
   REVIEW_TARGET_CONTRACT_V1
 } from "../review-target-contract.mjs";
 
-test("review-target authority separation is visibly versioned as closure method v9", () => {
+test("project-surface closure is visibly versioned as closure method v10", () => {
   assert.equal(
     REVIEW_TARGET_CLOSURE_METHOD_V1,
-    "declared-bytes-and-resolved-solidity-and-javascript-imports-v9"
+    "declared-bytes-and-resolved-solidity-and-javascript-imports-v10"
   );
   assert.notEqual(
     REVIEW_TARGET_CLOSURE_METHOD_V1,

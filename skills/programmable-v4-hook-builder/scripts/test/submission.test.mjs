@@ -196,6 +196,12 @@ test("ordinary no-hook prototype needs no Solidity, Foundry build-info or callba
       compilerBuildInfoPaths: [],
       dependencyLockPath: null
     };
+    bindSingleProjectSurface(submission, {
+      sourcePaths: submission.implementation.sourcePaths,
+      testPaths: submission.implementation.testPaths,
+      schemaPaths: [submission.implementation.specificationPath],
+      evidencePaths: [submission.implementation.testEvidencePath]
+    });
 
     const report = analyzeSubmission(submission, { schema });
 
@@ -301,6 +307,12 @@ test("ordinary no-hook prototype package verifies without an included client or 
       compilerBuildInfoPaths: [],
       dependencyLockPath: null
     };
+    bindSingleProjectSurface(submission, {
+      sourcePaths: submission.implementation.sourcePaths,
+      testPaths: submission.implementation.testPaths,
+      schemaPaths: [submission.implementation.specificationPath],
+      evidencePaths: [submission.implementation.testEvidencePath]
+    });
     rewritePrototypePackageArtifacts(complete.modelRoot, submission);
 
     const result = childProcess.spawnSync(
@@ -930,16 +942,16 @@ test("schema rejects unknown fields and out-of-range risk dimensions", () => {
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_MAXIMUM" && path.endsWith("externalDependencies")));
 });
 
-test("chain-scope semantics are a versioned 1.1.0 standard rather than a silent 1.0.0 mutation", () => {
-  assert.equal(schema.$id, "urn:programmable:v4-hook-submission:1.1.0");
-  assert.equal(schema.properties.standardVersion.const, "1.1.0");
+test("project-surface semantics are a versioned 1.2.0 standard rather than a silent 1.1.0 mutation", () => {
+  assert.equal(schema.$id, "urn:programmable:v4-hook-submission:1.2.0");
+  assert.equal(schema.properties.standardVersion.const, "1.2.0");
   const report = analyzeSubmission(readySubmission(), { schema });
   assert.equal(report.reportVersion, 2);
-  assert.equal(report.standardVersion, "1.1.0");
+  assert.equal(report.standardVersion, "1.2.0");
 
   const stale = readySubmission();
-  stale.$schema = "urn:programmable:v4-hook-submission:1.0.0";
-  stale.standardVersion = "1.0.0";
+  stale.$schema = "urn:programmable:v4-hook-submission:1.1.0";
+  stale.standardVersion = "1.1.0";
   const findings = validateAgainstSchema(stale, schema);
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_CONST" && path === "$.$schema"));
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_CONST" && path === "$.standardVersion"));
@@ -1890,6 +1902,26 @@ test("novel project categories and capability extensions enter architecture revi
     testPaths: ["service/tests/test_rewards.py"],
     evidencePaths: ["evidence/game-boundary.md"]
   }];
+  submission.projectCapabilities.push({
+    id: "player-elimination-reward",
+    kind: "server-authoritative-elimination-reward",
+    summary: "Represent the novel player elimination reward as an open capability with explicit project security triggers.",
+    surfaceIds: ["canonical-pool-model"],
+    securityTriggers: {
+      authority: true,
+      valueFlow: false,
+      sourceOfTruth: true,
+      signaturesReplay: false,
+      externalCalls: false,
+      custody: false,
+      piiGeolocation: false,
+      secretBoundary: false,
+      sourceTestSchema: true,
+      failureRecovery: true
+    },
+    requiredProfiles: ["authority", "failure-recovery", "source-of-truth", "source-test-schema"]
+  });
+  submission.projectSurfaces[0].capabilityIds.push("player-elimination-reward");
 
   const report = analyzeSubmission(submission, { schema });
 
@@ -3523,6 +3555,12 @@ function createPrototypePackage(destinationRoot, {
     gateStatusPath: `${repositoryPackagePath}/evidence/gate-status.json`,
     reviewTargetPath: `${repositoryPackagePath}/evidence/review-target.json`
   };
+  bindSingleProjectSurface(submission, {
+    sourcePaths: [`${repositoryPackagePath}/src/Observer.sol`],
+    testPaths: [`${repositoryPackagePath}/test/Observer.t.sol`],
+    schemaPaths: [submission.implementation.specificationPath],
+    evidencePaths: [submission.implementation.testEvidencePath]
+  });
   writeJson(path.join(modelRoot, "submission.json"), submission);
 
   const preflight = analyzeRepositorySubmission(submission, modelRoot, targetRepositoryRoot);
@@ -3542,6 +3580,16 @@ function createPrototypePackage(destinationRoot, {
     ).stdout.trim()
   });
   return { modelRoot, submission, preflight };
+}
+
+function bindSingleProjectSurface(submission, { sourcePaths, testPaths, schemaPaths, evidencePaths }) {
+  assert.equal(submission.projectSurfaces.length, 1);
+  Object.assign(submission.projectSurfaces[0], {
+    sourcePaths: [...sourcePaths],
+    testPaths: [...testPaths],
+    schemaPaths: [...schemaPaths],
+    evidencePaths: [...evidencePaths]
+  });
 }
 
 function rewritePrototypePackageArtifacts(modelRoot, submission) {

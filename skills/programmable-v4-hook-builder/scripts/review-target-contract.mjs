@@ -15,7 +15,7 @@ export const REVIEW_TARGET_CONTRACT_V1 = Object.freeze({
 });
 
 export const REVIEW_TARGET_CLOSURE_METHOD_V1 =
-  "declared-bytes-and-resolved-solidity-and-javascript-imports-v9";
+  "declared-bytes-and-resolved-solidity-and-javascript-imports-v10";
 
 export const REVIEW_TARGET_CLOSURE_DIAGNOSTIC_CODES = Object.freeze([
   "COMPANION_CLOSURE_REVIEW_REQUIRED",
@@ -107,6 +107,12 @@ export function declaredSourceAndTestPaths(submission) {
     ...arrayValues(handoff.apiSourcePaths),
     ...arrayValues(handoff.indexerSourcePaths),
     ...arrayValues(handoff.testPaths),
+    ...arrayValues(submission?.projectSurfaces).flatMap((surface) => [
+      ...arrayValues(surface?.sourcePaths),
+      ...arrayValues(surface?.testPaths),
+      ...arrayValues(surface?.schemaPaths),
+      ...arrayValues(surface?.evidencePaths)
+    ]),
     ...arrayValues(submission?.capabilityExtensions).flatMap((extension) => [
       ...arrayValues(extension?.sourcePaths),
       ...arrayValues(extension?.testPaths)
@@ -133,6 +139,8 @@ export function isSourceOrTestReviewKind(kind) {
     || kind === "platform-handoff-api-source"
     || kind === "platform-handoff-indexer-source"
     || kind === "platform-handoff-test"
+    || kind?.startsWith("project-surface-source:")
+    || kind?.startsWith("project-surface-test:")
     || kind?.startsWith("capability-source:")
     || kind?.startsWith("capability-test:")
     || kind?.startsWith("solidity-")

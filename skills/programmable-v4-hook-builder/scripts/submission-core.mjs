@@ -21,9 +21,10 @@ import {
   isCanonicalReviewTargetPath
 } from "./review-target-contract.mjs";
 import { findUnsupportedPublicClaims } from "./public-claims-core.mjs";
+import { analyzeProjectSurfaces } from "./project-surfaces-core.mjs";
 
 export const REPORT_VERSION = 2;
-export const STANDARD_VERSION = "1.1.0";
+export const STANDARD_VERSION = "1.2.0";
 export const PROGRAMMABLE_LAUNCH_CHAIN_ID = 1;
 export const KNOWN_EVM_NETWORKS = Object.freeze({
   1: "ethereum",
@@ -123,6 +124,7 @@ const policyBundlePaths = [
   "references/official-launchpad-deployments.json",
   "references/official-model-patterns.md",
   "references/output-contract.md",
+  "references/project-surfaces-and-capabilities.md",
   "references/routing-and-discovery.md",
   "references/scenario-matrix.md",
   "references/security-and-evidence.md",
@@ -133,7 +135,8 @@ const policyBundlePaths = [
   "scripts/official-launchpad-core.mjs",
   "scripts/package-dependency-contract.mjs",
   "scripts/metadata-core.mjs",
-  "scripts/public-claims-core.mjs"
+  "scripts/public-claims-core.mjs",
+  "scripts/project-surfaces-core.mjs"
 ].map((relativePath) => path.resolve(skillRoot, relativePath));
 
 export function canonicalJson(value) {
@@ -1409,6 +1412,13 @@ export function analyzeSubmission(submission, { schema } = {}) {
     ) gate("programmable-integration-test-review", "candidate", "Programmable maintainers must review the bound cross-surface tests before integration.");
   }
 
+  analyzeProjectSurfaces(submission, {
+    stage,
+    add,
+    gate,
+    validateDeclaredPath
+  });
+
   const capabilityProfiles = objectAt(submission, "capabilities");
   for (const name of ["externalCalls", "permissionedAsset", "oracle", "keeper", "proof", "crossChain", "externalLiquidity", "asyncSwap", "customCurve"]) {
     const profile = objectAt(capabilityProfiles, name);
@@ -1418,6 +1428,7 @@ export function analyzeSubmission(submission, { schema } = {}) {
   }
 
   const capabilityExtensions = Array.isArray(submission.capabilityExtensions) ? submission.capabilityExtensions : [];
+  const projectCapabilityIds = new Set((submission.projectCapabilities ?? []).map((capability) => capability?.id));
   const capabilityExtensionIds = new Set();
   for (const [index, extension] of capabilityExtensions.entries()) {
     const extensionPath = `$.capabilityExtensions[${index}]`;
@@ -1425,6 +1436,15 @@ export function analyzeSubmission(submission, { schema } = {}) {
       add("blocker", "CAPABILITY_EXTENSION_DUPLICATE", `${extensionPath}.capabilityId`, "Capability extension identifiers must be unique.", "Merge duplicate declarations under one stable capabilityId.");
     }
     capabilityExtensionIds.add(extension?.capabilityId);
+    if (!projectCapabilityIds.has(extension?.capabilityId)) {
+      add(
+        "blocker",
+        "CAPABILITY_EXTENSION_PROJECT_PROFILE_MISSING",
+        `${extensionPath}.capabilityId`,
+        "A capability extension is outside the project capability graph and therefore has no derived security profiles.",
+        "Declare the same stable id in projectCapabilities, bind its surfaces, set every security trigger and use the exact derived requiredProfiles list."
+      );
+    }
     for (const [field, role] of [
       ["sourcePaths", "capability extension source"],
       ["testPaths", "capability extension test"],

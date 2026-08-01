@@ -14,10 +14,11 @@ current Programmable launch integration remains Ethereum Mainnet-only, so every 
 separate release gate and cannot claim current platform launchability. Exact Base or Unichain official deployment
 records remain a runtime-unverified reference tier, not Programmable-tested deployment evidence.
 
-Submission standard `1.1.0` introduces this chain/application split and the separate deployment-reference digest. A
-`1.0.0` submission is not silently reinterpreted. Regenerate it from the current template, review the target chain,
-network slug, deployment trust tier and new release gates, then commit the fresh report and gate-status authority
-digests.
+Submission standard `1.2.0` adds the open project-surface and capability graph. It preserves unfamiliar games, maps,
+services, databases, data sources, keepers, claims and later kinds for architecture review while deriving non-bypassable
+security profiles from explicit triggers. It also separates a signed offchain data source from an optional onchain
+oracle verifier. A `1.1.0` submission is not silently reinterpreted. Regenerate it from the current template, review
+every surface, capability, exposure, path and profile, then commit the fresh report and gate-status authority digests.
 
 ## Stages
 
@@ -193,7 +194,8 @@ proposal-eligible with an explicit incomplete-closure diagnostic, but it cannot 
 
 For a prototype, create source, tests, and final evidence artifacts first. Create `gate-status.json` with those evidence
 paths, build `review-target.json`, copy its exact hash into the gate status and every completed gate-evidence metadata
-record, then rebuild the target. The two targets must be identical. Closure method v9 hashes the evidence artifacts but
+record, then rebuild the target. The two targets must be identical. Closure method v10 also binds project-surface
+source, test, schema and evidence files. It hashes the evidence artifacts but
 not `gate-status.json` or `review-target.json` themselves; `prepare-pr` binds both authority records separately to exact
 HEAD and the primary GitHub source request. A gate evidence `commit` is an exact 40-character provenance value and need
 not equal the later packaging HEAD.
