@@ -11,7 +11,7 @@ Programmable is an interface for launching tokens whose market behavior is defin
 | Model | Status | Purpose |
 | --- | --- | --- |
 | Classic | Live on Ethereum Mainnet | Fixed supply, permanently locked one-sided liquidity and creator rewards in ETH |
-| Stock-Paired | Coming soon | Fixed supply traded against an allowlisted Ondo tokenized stock or ETF quote asset |
+| Stock-Paired | Historical, new launches closed | Fixed supply traded against an allowlisted Ondo tokenized stock or ETF quote asset |
 | Deep | Design only, unavailable | A proposed growth-fee model for adding both assets to the original permanently locked pool |
 
 Only models with a completed deployment manifest, matching runtime code and verified lifecycle are exposed for production launches.
@@ -42,9 +42,10 @@ Optional X and Telegram links are encoded as versioned UTF-8 JSON in `extraData`
 
 ## Stock-Paired
 
-Stock-Paired launches use an allowlisted Ondo tokenized stock or ETF as the
-canonical v4 pool's quote asset. An initial ETH buy is routed through USDC and
-the selected quote asset before purchasing the launched token.
+Historical Stock-Paired launches use an allowlisted Ondo tokenized stock or ETF
+as the canonical v4 pool's quote asset. An initial ETH buy was routed through
+USDC and the selected quote asset before purchasing the launched token. New
+Stock-Paired launches are closed.
 
 - The launched token remains a separate fixed-supply ERC-20
 - The pool charges a fixed 1.00% hook fee
@@ -70,10 +71,10 @@ The public read model pairs canonical launch events, ignores unrecognized shared
 
 The active Classic deployment is recorded in [`contracts/deployments/mainnet-classic-v3.json`](./contracts/deployments/mainnet-classic-v3.json). Its deployment receipts, constructor configuration, runtime code hashes and signed launch, buy, sell and claim lifecycle have been reconciled through two RPC providers. The deployed contracts have exact source matches on Etherscan and Sourcify.
 
-The V1 and V2 Stock-Paired deployments remain immutable historical releases.
-Their public indexer records preserve the quote asset, v4 pool ordering, hook,
-fees and exact release. New launches stay closed while the V3 starting-price
-release is prepared and verified.
+The V1, V2 and V3 Stock-Paired deployments remain immutable historical
+releases. Their public indexer records preserve the quote asset, v4 pool
+ordering, hook, fees and exact release. Existing token pages, trading, profile
+history and reward claims remain supported while new launches stay closed.
 
 Deep V3 is not deployed. Its automated keeper has been removed, and the model remains unavailable while its execution design is reconsidered. A passing local test suite is not a production release.
 

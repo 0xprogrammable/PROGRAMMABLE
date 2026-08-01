@@ -58,19 +58,15 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
   );
 }
 
-export function LaunchExperience({
-  stockPairedPublicLaunchEnabled,
-}: {
-  stockPairedPublicLaunchEnabled: boolean;
-}) {
+export function LaunchExperience() {
   const [selectedModel, setSelectedModel] = useState<LaunchModel | null>(null);
 
   function chooseModel(candidate: LaunchModel) {
     const model = resolveImplementedLaunchModel(candidate);
     if (
       !model ||
-      (model === "classic-v3" && !classicV3LaunchAvailable) ||
-      (model === "stock-paired" && !stockPairedPublicLaunchEnabled)
+      model === "stock-paired" ||
+      (model === "classic-v3" && !classicV3LaunchAvailable)
     ) {
       return;
     }
@@ -85,12 +81,7 @@ export function LaunchExperience({
   }
 
   if (!selectedModel) {
-    return (
-      <LaunchModelPicker
-        onChoose={chooseModel}
-        stockPairedPublicLaunchEnabled={stockPairedPublicLaunchEnabled}
-      />
-    );
+    return <LaunchModelPicker onChoose={chooseModel} />;
   }
 
   return (
@@ -98,7 +89,7 @@ export function LaunchExperience({
       <LazyLaunchBuilderForm
         model={selectedModel}
         onBackToModels={returnToModels}
-        stockPairedPublicLaunchEnabled={stockPairedPublicLaunchEnabled}
+        stockPairedPublicLaunchEnabled={false}
       />
     </Suspense>
   );
@@ -106,10 +97,8 @@ export function LaunchExperience({
 
 export function LaunchModelPicker({
   onChoose,
-  stockPairedPublicLaunchEnabled = false,
 }: {
   onChoose: (model: LaunchModel) => void;
-  stockPairedPublicLaunchEnabled?: boolean;
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
@@ -171,64 +160,6 @@ export function LaunchModelPicker({
               token launch on Uniswap v4.
             </span>
             {classicV3LaunchAvailable ? (
-              <span
-                className={`launch-model-action ${launchExperience.modelAction}`}
-              >
-                Launch
-                <ArrowRight aria-hidden="true" size={16} />
-              </span>
-            ) : null}
-          </span>
-        </button>
-
-        <button
-          className={`launch-model-card launch-model-card-stock ${launchExperience.modelCard}`}
-          data-launch-model-option="stock-paired"
-          data-launch-model-available={stockPairedPublicLaunchEnabled}
-          type="button"
-          disabled={!stockPairedPublicLaunchEnabled}
-          aria-describedby="launch-model-stock-description"
-          onPointerEnter={
-            stockPairedPublicLaunchEnabled
-              ? preloadAvailableForm
-              : undefined
-          }
-          onFocus={
-            stockPairedPublicLaunchEnabled ? preloadAvailableForm : undefined
-          }
-          onClick={() => onChoose("stock-paired")}
-        >
-          <span
-            className={`launch-model-art launch-model-art-stock ${launchExperience.modelArt}`}
-            aria-hidden="true"
-          >
-            <Image
-              src="/brand/programmable-stock-paired-launch-art-v1.webp"
-              alt=""
-              fill
-              sizes="(max-width: 520px) calc(100vw - 28px), (max-width: 800px) calc(100vw - 48px), 500px"
-            />
-          </span>
-
-          <span
-            className={`launch-model-card-body ${launchExperience.modelBody}`}
-          >
-            <span
-              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-            >
-              <strong>Stock-Paired</strong>
-              {!stockPairedPublicLaunchEnabled ? (
-                <small data-status="pending">Coming soon</small>
-              ) : null}
-            </span>
-            <span
-              className={`launch-model-description ${launchExperience.modelDescription}`}
-              id="launch-model-stock-description"
-            >
-              Launch a token on Ethereum with a tokenized stock, ETF, or
-              commodity as its quote asset on Uniswap v4.
-            </span>
-            {stockPairedPublicLaunchEnabled ? (
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >

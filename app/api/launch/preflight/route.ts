@@ -114,7 +114,6 @@ import {
   getConfiguredStockPairedLaunchRelease,
   type VerifiedStockPairedRelease,
 } from "@/lib/stock-paired-release";
-import { isStockPairedPublicLaunchEnabled } from "@/lib/stock-paired-access";
 import {
   assessStockPairedRuntimeFdv,
   STOCK_PAIRED_RUNTIME_FDV_PROBE_WEI,
@@ -150,11 +149,6 @@ const selectedStockPairedRelease =
   launchEnvironment === "production"
     ? getConfiguredStockPairedLaunchRelease()
     : null;
-const stockPairedPublicLaunchEnabled =
-  isStockPairedPublicLaunchEnabled(
-    launchEnvironment,
-    selectedStockPairedRelease,
-  );
 
 const client = createPublicClient({
   chain: launchChain,
@@ -2462,6 +2456,9 @@ async function findStockPairedCurrency0Salt({
   );
 }
 
+// Retained as release evidence for historical Stock-Paired deployments. No
+// public route calls this transaction builder after new launches were closed.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function prepareStockPairedLaunch(
   account: Address,
   draft: LaunchDraft,
@@ -2736,13 +2733,15 @@ export async function POST(request: NextRequest) {
       return await prepareDeepLaunch(account, draft, connectedWalletCheck);
     }
     if (draft.launchModel === "stock-paired") {
-      if (!stockPairedPublicLaunchEnabled) {
-        return errorResponse("Stock-Paired is coming soon", 403);
-      }
-      return await prepareStockPairedLaunch(
-        account,
-        draft,
-        connectedWalletCheck,
+      return NextResponse.json(
+        {
+          code: "stock_paired_launches_closed",
+          error: "New Stock-Paired launches are no longer available",
+        },
+        {
+          status: 410,
+          headers: { "Cache-Control": "no-store" },
+        },
       );
     }
     return await prepareMemeLaunch(
