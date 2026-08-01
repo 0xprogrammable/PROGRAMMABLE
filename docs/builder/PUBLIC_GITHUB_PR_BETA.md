@@ -60,6 +60,12 @@ The project can be a focused hook repository or a larger application that includ
 games, indexers or external dependencies. An unfamiliar mechanic is not rejected merely because it lacks a catalog
 name. Reviewers open an architecture discussion to understand its value flow, authority, trust and failure behavior.
 
+The no-hook path is also open. The official Launchpad profile is the safer default, while a separately pinned
+model-specific token or launcher may apply without inventing a hook. Transparent transfer taxes and automatic liquidity
+must disclose exact bounds, recipients, mutability and authority, value flows, PoolManager received-amount behavior, LP
+custody and exit, provider limitations, and tests. Hidden fees, sell blocks, address lists, wallet or transaction caps,
+cooldowns, and a tax bound that can consume the complete transfer are not eligible for the permissionless path.
+
 The target may be any positive JavaScript-safe EVM chain. Known chain ids must use their canonical network slug; an
 unknown chain opens an architecture review instead of an automatic safety rejection. This makes the project eligible to
 apply, not eligible to launch. The current Programmable launch integration is Ethereum Mainnet-only. Base, Unichain,

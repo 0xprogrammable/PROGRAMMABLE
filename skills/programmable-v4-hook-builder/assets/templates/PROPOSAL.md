@@ -26,7 +26,9 @@
 
 Explain why the project uses Uniswap v4. State `hook.used` explicitly.
 
-- If false, identify the ordinary no-hook launch profile and explain why no custom pool callback is needed.
+- If false, select `official-launchpad` or `model-specific-no-hook` and explain why no custom pool callback is needed.
+  Keep the official Launchpad as the safer default. For a model-specific token or launcher, state that it does not inherit
+  an official profile identity and bind its own exact dependencies and review gates.
 - If true, explain which atomic pool-side behavior requires a custom hook and why an ordinary token, router, app, or
   offchain service is insufficient.
 
@@ -83,6 +85,16 @@ resistance, and failure rule. For hook-owned value, state charged currency by su
 value-flow id, liability keys, event, recipient shares and address bindings, rounding, claims, payout changes, historic
 entitlements, and failed-recipient behavior. List custom-accounting settlement actions in order and state the conservation
 equation. For app, game, or service value, state custody, authorization, replay protection, failure, refund, and exit.
+
+For a model-specific no-hook transfer tax, state buy, sell and peer-transfer rates in hundredths of a basis point, the
+immutable maximum, exemptions, PoolManager transfer scope, recipient destinations and shares, value-flow ids, mutability,
+authority, delay, shared-PoolManager classification, liquidity-operation and alternative-pool treatment, event, and failure rule. State explicitly that ordinary peer transfers, pool buys, and pool sells stay
+permitted and that no transaction cap, wallet cap, cooldown, allowlist, or denylist exists. For automatic liquidity,
+state the funding recipient id, safe trigger mode, pool-transfer suppression, threshold, maximum swap, slippage, deadline, execution and reentrancy rule, actual-received
+accounting, LP position custodian and transferability, exit, emergency recovery, events, and atomic failure behavior.
+
+List routing, quote, indexer, scanner, aggregator, and listing limitations separately. Local compatibility is not provider
+approval; name the tested fallback when an external provider does not support the exact token runtime.
 
 ## Semantic examples
 

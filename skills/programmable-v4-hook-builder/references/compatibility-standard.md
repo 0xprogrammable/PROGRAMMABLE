@@ -146,7 +146,10 @@ Permission bits, from highest to lowest:
 | `0x0001` | `afterRemoveLiquidityReturnDelta` |
 
 When `hook.used` is false, all 14 bits are false, hook-only configuration is neutral, and no hook address is mined. A
-static ordinary v4 pool is valid on that route. When `hook.used` is true, every return-delta bit requires its parent
+static ordinary v4 pool is valid on that route. `noHookArchitecture.route` must then select either the safer
+`official-launchpad` default or a `model-specific-no-hook` design. The model-specific route cannot borrow an official
+profile identity. It binds its own dependencies and enters architecture review. When `hook.used` is true,
+`noHookArchitecture` is null, every return-delta bit requires its parent
 callback and the deployed address must match the final permission mask. Any
 compiler, metadata, import, optimizer, constructor, deployer, or creation-code change invalidates a previously mined
 CREATE2 salt.
@@ -167,6 +170,21 @@ For a dynamic LP fee, additionally lock:
 - manipulation resistance, stale-data behavior, and failure rule
 
 A dynamic LP fee belongs to liquidity providers and is not creator revenue.
+
+For a model-specific no-hook transfer tax, lock the buy, sell, and peer-transfer rates; immutable maximum; exemption
+set; recipient destinations and shares; value-flow ids; mutability, authority, and delay; PoolManager transfer scope
+and classification; liquidity-add/remove and alternative-pool treatment; event; and failure behavior. A token sees the
+shared PoolManager, not a trustworthy PoolId or swap-versus-liquidity action label, so any ingress/egress classification
+or exact counterparty classifier must be explicit and adversarially tested. Ordinary peer transfers, pool buys, and pool sells remain permitted. Transaction caps,
+wallet caps, cooldowns, denylists, allowlists, or a tax bound that can consume the complete amount are hard conflicts for
+this permissionless path.
+
+For automatic liquidity, additionally lock the funding recipient bucket, safe trigger mode, pool-transfer suppression,
+trigger threshold, maximum swap amount, slippage, deadline, execution actor, reentrancy guard, actual-received accounting, LP position custodian,
+transferability, exit, emergency recovery, events, and failure atomicity. Trace collection, conversion, liquidity add,
+and position custody through stable value-flow ids. A failed automatic action remains retryable and cannot block the
+underlying permitted transfer. Provider routing, quoting, indexing, scanner, and listing support
+remain external states even after local tests pass.
 
 For a hook-owned fee or reward split, lock the charged currency in each supported swap quadrant, aggregate bound,
 collection path, matching value-flow id, liability-key dimensions, collection event, and rounding. Each recipient records
@@ -313,8 +331,9 @@ Record the underlying answers, not only a total. Use the framework's published b
 - `7–17`: medium
 - `18–33`: high
 
-Feature triggers override a low aggregate score. Return deltas, custom math, hook-held liquidity, external pricing data,
-autonomous changes, upgradeability, meaningful custody, and high expected value require their capability-specific gates.
+Feature triggers override a low aggregate score. Return deltas, custom math, hook-held liquidity, transfer taxes,
+automatic liquidity, external pricing data, autonomous changes, upgradeability, meaningful custody, and high expected
+value require their capability-specific gates.
 
 The agent derives a conservative provisional score from the declared design and evidence. The builder supplies factual
 inputs such as expected value at risk and operating maturity but may not lower the score by assertion. The score is a
@@ -354,8 +373,10 @@ See [project-surfaces-and-capabilities.md](project-surfaces-and-capabilities.md)
 ### Permissionless token profile
 
 A permissionless launch model may not hide or retain arbitrary minting, transfer freezing, confiscation, blacklisting,
-undisclosed transfer tax, arbitrary execution, or silent fee and payout changes. Any disclosed administration changes the
-trust profile and may make the design unsuitable for this category.
+undisclosed transfer tax, arbitrary execution, or silent fee and payout changes. A disclosed, bounded transfer tax can
+continue only through the model-specific no-hook profile with unrestricted transfer and sell liveness, exact recipients,
+authority, custody, provider limitations, and tests. Any administration changes the trust profile and may make the
+design unsuitable for this category.
 
 ### Permissioned or regulated asset profile
 

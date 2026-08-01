@@ -130,6 +130,9 @@ Capability-triggered evidence is additive:
   and lifecycle evidence for the callbacks it actually enables.
 - An ordinary no-hook project requires no custom Solidity, callback, permission-mask, or CREATE2 artifact unless another
   declared contract surface independently needs it.
+- A model-specific no-hook token requires its own exact source and dependency closure plus the declared transfer-tax,
+  actual-received, authority, automatic-liquidity, custody, exit and provider-limit scenarios. It cannot reuse official
+  Launchpad evidence or turn local provider canaries into routing, indexing, scanner or listing approval.
 - An app or game requires the relevant build, interaction, state, wallet/signing, accessibility, responsive, browser,
   and failure tests for its declared behavior; unused categories are not fabricated.
 - A service, keeper, oracle, or indexer requires the relevant API/schema, authentication, authorization, retry,

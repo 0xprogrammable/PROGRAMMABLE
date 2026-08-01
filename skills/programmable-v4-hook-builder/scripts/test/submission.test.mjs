@@ -50,6 +50,7 @@ const fixtureCommit = childProcess.spawnSync("git", ["-C", repositoryRoot, "comm
 assert.equal(fixtureCommit.status, 0, fixtureCommit.stderr);
 test.after(() => fs.rmSync(repositoryRoot, { recursive: true, force: true }));
 const template = JSON.parse(fs.readFileSync(path.join(skillRoot, "assets", "templates", "submission.example.json"), "utf8"));
+const noHookArchitectureTemplate = JSON.parse(fs.readFileSync(path.join(skillRoot, "assets", "templates", "no-hook-architecture.example.json"), "utf8"));
 const schema = JSON.parse(fs.readFileSync(path.join(skillRoot, "references", "submission.schema.json"), "utf8"));
 
 test("complete standard proposal is prototype ready", () => {
@@ -92,6 +93,78 @@ test("ordinary fixed-supply launch is ready without a custom hook", () => {
   assert.equal(report.requiredGates.some(({ id }) => id.startsWith("callback-")), false);
 });
 
+test("transparent transfer-tax and auto-liquidity token enters model-specific no-hook review", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.hookPermissionMask, null);
+  assert.deepEqual(report.risk.featureTriggers, [
+    "auto-liquidity",
+    "autonomous",
+    "external-calls",
+    "non-standard-token",
+    "price-impact",
+    "transfer-tax"
+  ]);
+  for (const gateId of [
+    "model-specific-no-hook-architecture-review",
+    "transfer-tax-accounting-and-liveness-tests",
+    "auto-liquidity-lifecycle-and-reentrancy-tests",
+    "auto-liquidity-custody-and-exit-review",
+    "independent-no-hook-provider-approval"
+  ]) assert.ok(report.requiredGates.some(({ id }) => id === gateId), gateId);
+});
+
+test("model-specific no-hook path rejects concealed sell restrictions", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  submission.noHookArchitecture.transferPolicy.poolSellsAllowed = false;
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "UNSUPPORTED");
+  assert.ok(report.findings.some(({ code, severity }) => code === "HIDDEN_TRANSFER_OR_SELL_RESTRICTION" && severity === "hard"));
+});
+
+test("model-specific no-hook tax requires exact bounds, value flows, provider limits and tests", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  submission.noHookArchitecture.transferTax.maximumHundredthsOfBip = 20000;
+  submission.noHookArchitecture.transferTax.recipientValueFlowIds = ["missing-flow"];
+  submission.noHookArchitecture.providerCompatibility.limitations = [];
+  submission.noHookArchitecture.testScenarios = [];
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "REDESIGN_REQUIRED");
+  for (const code of [
+    "TRANSFER_TAX_RATE_ABOVE_MAXIMUM",
+    "TRANSFER_TAX_VALUE_FLOW_UNKNOWN",
+    "NO_HOOK_PROVIDER_LIMITS_MISSING",
+    "NO_HOOK_TEST_SCENARIO_MISSING"
+  ]) assert.ok(report.findings.some((finding) => finding.code === code), code);
+});
+
+test("mutable transfer tax binds one explicit bounded authority and delay", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  submission.noHookArchitecture.transferTax.mutable = true;
+  submission.noHookArchitecture.transferTax.authorityRole = "fee-policy-admin";
+  submission.noHookArchitecture.transferTax.changeDelay = "Every change executes only after the immutable seven-day timelock and cannot exceed the fixed maximum.";
+  submission.noHookArchitecture.testScenarios.push("authority-and-delay");
+  submission.authorities = [{
+    role: "fee-policy-admin",
+    controller: "The exact immutable timelock contract named by chain address in the dependency records.",
+    capabilities: ["Change buy, sell and peer tax rates or recipient shares only inside the immutable maximum and conservation rules."],
+    mutable: true,
+    delay: "Seven days from an onchain scheduled change event to permissionless execution.",
+    userExitImpact: "Users retain unrestricted transfers and sells during the delay and after every bounded fee update."
+  }];
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.requiredGates.some(({ id }) => id === "transfer-tax-authority-and-timelock-review"));
+});
+
 test("mutable public token metadata requires a disclosed owner", () => {
   const submission = readySubmission();
   submission.publicMetadata.token.metadataMutable = true;
@@ -105,7 +178,6 @@ test("mutable public token metadata requires a disclosed owner", () => {
 test("Unicode confusables enter identity review instead of automatic rejection", () => {
   const submission = readySubmission();
   submission.publicMetadata.project.name = "Un\u0456swap Garden";
-
   const report = analyzeSubmission(submission, { schema });
 
   assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
@@ -389,7 +461,7 @@ test("no-custom-hook route rejects dynamic LP fees", () => {
   assert.ok(report.findings.some(({ code }) => code === "NO_CUSTOM_HOOK_DYNAMIC_FEE_CONFLICT"));
 });
 
-test("no-custom-hook route requires an exact committed official launch profile id", () => {
+test("official-launchpad no-hook route requires an exact committed profile id", () => {
   const submission = noCustomHookSubmission();
   submission.target.officialLaunchProfileId = null;
 
@@ -942,7 +1014,7 @@ test("schema rejects unknown fields and out-of-range risk dimensions", () => {
   assert.ok(findings.some(({ code, path }) => code === "SCHEMA_MAXIMUM" && path.endsWith("externalDependencies")));
 });
 
-test("project-surface semantics are a versioned 1.2.0 standard rather than a silent 1.1.0 mutation", () => {
+test("project-surface and no-hook semantics are a versioned 1.2.0 standard rather than a silent 1.1.0 mutation", () => {
   assert.equal(schema.$id, "urn:programmable:v4-hook-submission:1.2.0");
   assert.equal(schema.properties.standardVersion.const, "1.2.0");
   const report = analyzeSubmission(readySubmission(), { schema });
@@ -3156,6 +3228,7 @@ function readySubmission() {
 function noCustomHookSubmission() {
   const submission = readySubmission();
   submission.target.officialLaunchProfileId = "official-cca-lbp-new-token-ethereum";
+  submission.noHookArchitecture = officialNoHookArchitecture();
   const hook = structuredClone(template.hook);
   hook.used = false;
   for (const permission of Object.keys(hook.permissions)) hook.permissions[permission] = false;
@@ -3229,6 +3302,197 @@ function noCustomHookSubmission() {
   };
   submission.disclosures = [
     "This project uses the ordinary no-custom-hook launch route; review readiness is not deployment, routing or listing approval."
+  ];
+  return submission;
+}
+
+function officialNoHookArchitecture() {
+  return {
+    route: "official-launchpad",
+    rationale: "Use the committed official launchpad profile as the safer ordinary-token default without custom token transfer mechanics.",
+    transferPolicy: {
+      peerTransfersAllowed: true,
+      poolBuysAllowed: true,
+      poolSellsAllowed: true,
+      maxTransactionAmount: null,
+      maxWalletAmount: null,
+      cooldownSeconds: null,
+      allowlist: false,
+      denylist: false
+    },
+    transferTax: {
+      used: false,
+      buyHundredthsOfBip: null,
+      sellHundredthsOfBip: null,
+      peerTransferHundredthsOfBip: null,
+      maximumHundredthsOfBip: null,
+      mutable: null,
+      authorityRole: null,
+      changeDelay: null,
+      recipients: [],
+      recipientValueFlowIds: [],
+      exemptions: [],
+      appliesToPoolManagerTransfers: null,
+      poolManagerTransferPolicy: null,
+      liquidityOperationTreatment: null,
+      alternativePoolTreatment: null,
+      event: null,
+      failureRule: null
+    },
+    autoLiquidity: {
+      used: false,
+      fundingRecipientId: null,
+      triggerMode: null,
+      triggerThreshold: null,
+      maximumSwapAmount: null,
+      slippageHundredthsOfBip: null,
+      deadlineSeconds: null,
+      executionActor: null,
+      poolTransferSuppression: null,
+      reentrancyGuard: null,
+      underlyingTransferFailurePolicy: null,
+      mutable: null,
+      authorityRole: null,
+      valueFlowIds: [],
+      custody: null,
+      lpPositionCustodian: null,
+      lpPositionTransferable: null,
+      exitPolicy: null,
+      emergencyRecovery: null,
+      event: null,
+      failureRule: null
+    },
+    providerCompatibility: {
+      routing: "The selected external routing provider must evaluate the exact token and canonical PoolKey independently.",
+      quoting: "Quotes use ordinary token amounts and remain subject to exact runtime and chain verification.",
+      indexing: "Indexers must bind the exact official launcher, token and canonical pool events for this release.",
+      status: "requires-provider-review",
+      evidence: [],
+      limitations: ["An official launch profile is not proof of routing, quoting, indexing or listing availability."],
+      fallback: "Keep the project reviewable without an availability claim until every selected provider confirms support."
+    },
+    testScenarios: []
+  };
+}
+
+function modelSpecificTaxTokenSubmission() {
+  const submission = noCustomHookSubmission();
+  submission.target.officialLaunchProfileId = null;
+  submission.target.dependencyBaseline = "model-specific-pinned";
+  submission.noHookArchitecture = structuredClone(noHookArchitectureTemplate);
+  submission.model = {
+    id: "transparent-tax-auto-liquidity-token",
+    name: "Transparent Tax Auto-Liquidity Token",
+    summary: "Create one fixed-supply token with bounded visible transfer taxes and an immutable automatic liquidity lifecycle outside custom PoolManager callbacks.",
+    userOutcome: "A creator can launch a taxed token whose rates, recipients, liquidity custody, execution bounds and provider limitations are explicit before trading.",
+    category: "permissionless-token",
+    whyV4: "The token forms one canonical Uniswap v4 pool while tax collection and automatic liquidity remain ordinary token and router actions rather than custom hook callbacks."
+  };
+  const launchedAsset = submission.assets.find(({ role }) => role === "launched");
+  launchedAsset.behaviors = ["fee-on-transfer"];
+  submission.launchLifecycle = completeNoCustomHookLaunchLifecycle();
+  submission.launchLifecycle.tokenCreation.actor = "The model-specific factory deploys one immutable fixed-supply transfer-tax token from the reviewed source and constructor configuration.";
+  submission.launchLifecycle.feesAndClaims = lifecyclePhase(
+    "The immutable token allocates each visible transfer tax to the declared recipient buckets.",
+    "A bounded portion funds automatic liquidity while the remaining portion reaches the exact beneficiary value flow."
+  );
+  submission.launchLifecycle.liquidityFormation = lifecyclePhase(
+    "The model-specific launcher creates the initial position and the token may later add bounded automatic liquidity.",
+    "Initial assets and later collected liquidity tax enter only the canonical PoolKey under the disclosed custody and exit policy."
+  );
+  submission.valueFlows = [
+    {
+      id: "transfer-tax-collection",
+      action: "collect visible transfer tax",
+      asset: "launched-token",
+      from: "each taxed sender gross transfer amount",
+      to: "the two immutable recipient buckets declared by id",
+      amountRule: "Apply the exact direction rate and allocate the resulting tax by the declared 6000 and 4000 basis-point shares.",
+      settlement: "Update the net recipient amount and both tax buckets in the same token transfer before emitting the complete event.",
+      failure: "Revert the complete transfer if any amount, bound or recipient allocation cannot be preserved."
+    },
+    {
+      id: "transfer-tax-treasury",
+      action: "deliver treasury share",
+      asset: "launched-token",
+      from: "treasury-beneficiary tax bucket",
+      to: "the immutable builder beneficiary address",
+      amountRule: "Deliver exactly 4000 basis points of every collected tax with no redirect or administrator override.",
+      settlement: "Credit the beneficiary during the originating transfer and record gross tax, share and destination.",
+      failure: "Revert the complete transfer instead of retaining an unaccounted treasury balance."
+    },
+    {
+      id: "auto-liquidity-swap",
+      action: "swap bounded liquidity-tax inventory",
+      asset: "launched-token",
+      from: "liquidity-bucket token contract balance",
+      to: "the exact reviewed router and canonical PoolKey",
+      amountRule: "Swap no more than the immutable maximum after the threshold, enforcing the declared final-received slippage and deadline bounds.",
+      settlement: "Complete the reviewed router call under a non-reentrant execution lock and measure actual quote received.",
+      failure: "Leave the bucket retryable and continue the underlying user transfer without a partial router or liquidity state."
+    },
+    {
+      id: "auto-liquidity-add",
+      action: "add bounded canonical liquidity",
+      asset: "launched-token and native ETH quote proceeds",
+      from: "the remaining token half and actual quote received by the automatic swap",
+      to: "the exact canonical Uniswap v4 PoolKey",
+      amountRule: "Add only the actual balances produced by the bounded lifecycle and enforce nonzero minimum amounts.",
+      settlement: "Mint or increase the exact position owned by the immutable liquidity custody contract.",
+      failure: "Revert the automatic liquidity action and retain retryable bucket accounting without blocking the user transfer."
+    },
+    {
+      id: "auto-liquidity-position",
+      action: "custody automatic liquidity position",
+      asset: "the exact canonical v4 position",
+      from: "the automatic liquidity add action",
+      to: "the immutable liquidity custody contract",
+      amountRule: "Bind every added amount and position identifier to the canonical PoolId and the no-transfer exit policy.",
+      settlement: "Record the position id, custody destination and actual token amounts in the execution event.",
+      failure: "Do not mint the position to an administrator, creator wallet or undeclared destination."
+    }
+  ];
+  submission.capabilities.externalCalls = {
+    used: true,
+    targets: ["The exact reviewed Universal Router and v4 position-management contracts pinned in the dependency lock."],
+    callSites: ["The bounded automatic liquidity lifecycle may swap and add canonical liquidity after the immutable threshold."],
+    reentrancyPolicy: "A dedicated execution lock prevents token transfers and router callbacks from entering the automatic liquidity lifecycle recursively.",
+    stateDriftPolicy: "The action binds one canonical PoolKey, current bucket balance, minimum received amounts and finite deadline before external execution.",
+    returnValuePolicy: "The contract measures actual token and quote balances and validates the exact position identifier rather than trusting nominal router return values.",
+    failureAtomicity: "Any router or position failure reverts only the automatic liquidity sub-action and leaves its disclosed bucket retryable without blocking the user transfer."
+  };
+  configureNoIncludedSwapClient(submission, "not-planned");
+  submission.integration.routingAndDiscoverability.standardRouterCompatible = false;
+  submission.risk = {
+    dimensions: {
+      complexity: 2,
+      customMath: 0,
+      externalDependencies: 1,
+      externalLiquidity: 0,
+      valueAtRisk: 1,
+      teamMaturity: 1,
+      upgradeability: 0,
+      autonomy: 1,
+      priceImpact: 1
+    },
+    rationales: {
+      complexity: "Transfer direction classification, recipient conservation and bounded automatic liquidity create multiple interacting but explicit states.",
+      customMath: "All rates use bounded basis arithmetic without a custom price curve, oracle formula or PoolManager return delta.",
+      externalDependencies: "Automatic liquidity calls the exact reviewed router and position manager under pinned runtime and failure assumptions.",
+      externalLiquidity: "The model owns only its disclosed canonical v4 position and no vault, wrapper, collateral or off-pool liquidity inventory.",
+      valueAtRisk: "Collected tax balances and the resulting canonical liquidity position remain exposed to token, router and custody defects.",
+      teamMaturity: "A conservative nonzero process score remains until independent contract, economic and integration reviews are complete.",
+      upgradeability: "Token rates, bounds, recipients, router bindings and liquidity custody are immutable and use no proxy or rescue authority.",
+      autonomy: "An ordinary transfer may trigger one bounded automatic liquidity action without a keeper or administrator decision.",
+      priceImpact: "Transfer taxes and the bounded automatic swap affect actual received amounts and execution price despite standard pool math."
+    },
+    declaredTotal: 7,
+    declaredTier: "high",
+    featureTriggers: ["auto-liquidity", "autonomous", "external-calls", "non-standard-token", "price-impact", "transfer-tax"]
+  };
+  submission.disclosures = [
+    "Every buy, sell and transfer stays permitted, but the exact visible rate may reduce the recipient amount.",
+    "Passing Programmable checks does not prove routing, quoting, indexer, scanner or listing support for this token."
   ];
   return submission;
 }

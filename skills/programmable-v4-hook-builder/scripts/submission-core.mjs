@@ -209,6 +209,19 @@ export function validateAgainstSchema(value, schema) {
       addStructural("SCHEMA_KEYWORD_INVALID", path, "Schema structure keywords must use the supported JSON shapes.");
       return;
     }
+    if (rule.oneOf) {
+      const matchingBranches = rule.oneOf.filter((branch) => {
+        const target = branch.$ref ? resolveLocalReference(schema, branch.$ref) : branch;
+        const types = Array.isArray(target?.type) ? target.type : target?.type ? [target.type] : [];
+        return types.some((type) => matchesType(node, type));
+      });
+      if (matchingBranches.length !== 1) {
+        add("SCHEMA_ONE_OF", path, "Value must match exactly one type-disjoint schema option.");
+        return;
+      }
+      check(node, matchingBranches[0], path);
+      return;
+    }
     if (rule.$ref) {
       const target = resolveLocalReference(schema, rule.$ref);
       if (!target) {
@@ -664,7 +677,14 @@ export function analyzeSubmission(submission, { schema } = {}) {
       gate("adversarial-token-tests", "prototype", "Non-standard token behavior is declared.");
     }
     const settlementSensitive = (asset.behaviors ?? []).filter((behavior) => ["fee-on-transfer", "rebasing", "callback-on-transfer"].includes(behavior));
-    if (settlementSensitive.length > 0 && (!["permissioned-adapter", "external-wrapper"].includes(asset.origin) || submission.hook?.customAccounting?.used !== true || submission.capabilities?.externalCalls?.used !== true)) add("blocker", "NON_STANDARD_TOKEN_ADAPTER_MISSING", `$.assets[${index}]`, "A settlement-sensitive token behavior is declared without an explicit reviewed adapter and accounting path.", "Use a reviewed adapter or wrapper, enable custom accounting and external-call policies, and add requested-versus-received, reentrancy and solvency tests.");
+    const reviewableNoHookTransferTax =
+      asset.role === "launched" &&
+      settlementSensitive.length === 1 &&
+      settlementSensitive[0] === "fee-on-transfer" &&
+      submission.hook?.used === false &&
+      submission.noHookArchitecture?.route === "model-specific-no-hook" &&
+      submission.noHookArchitecture?.transferTax?.used === true;
+    if (settlementSensitive.length > 0 && !reviewableNoHookTransferTax && (!["permissioned-adapter", "external-wrapper"].includes(asset.origin) || submission.hook?.customAccounting?.used !== true || submission.capabilities?.externalCalls?.used !== true)) add("blocker", "NON_STANDARD_TOKEN_ADAPTER_MISSING", `$.assets[${index}]`, "A settlement-sensitive token behavior is declared without an explicit reviewed adapter or transparent model-specific no-hook accounting path.", "Use a reviewed adapter or wrapper, or declare the launched token's bounded transfer tax in noHookArchitecture with requested-versus-received, quote parity, liveness and provider-limit tests.");
   }
 
   if (assets.filter((asset) => asset?.role === "launched").length !== 1) add("blocker", "LAUNCHED_ASSET_COUNT_INVALID", "$.assets", "A launch model needs exactly one launched asset.", "Identify one launched asset and classify the other PoolKey currency as quote.");
@@ -772,7 +792,16 @@ export function analyzeSubmission(submission, { schema } = {}) {
     }
   }
   if (hookUsed === true && mask === "0x0000" && lpFee.mode !== "dynamic") add("blocker", "ZERO_PERMISSION_STATIC_HOOK_INVALID", "$.hook.permissions", "A nonzero static-fee hook address with no permission bits fails Uniswap v4 hook-address validation.", "Enable only the callbacks the model actually needs, use a dynamic-fee hook, or remove the hook and use an ordinary pool.");
-  if (hookUsed === false) validateNoCustomHookRoute({ hook, poolAdmission, permissions, computedMask, lpFee, target, add });
+  if (hookUsed === false) validateNoCustomHookRoute({ submission, hook, poolAdmission, permissions, computedMask, lpFee, target, assets, add, gate });
+  if (hookUsed === true && submission.noHookArchitecture !== null) {
+    add(
+      "blocker",
+      "CUSTOM_HOOK_NO_HOOK_PROFILE_CONFLICT",
+      "$.noHookArchitecture",
+      "A custom-hook launch also declares an ordinary-token no-hook architecture.",
+      "Set noHookArchitecture to null when hook.used is true."
+    );
+  }
 
   const callbackPolicies = Array.isArray(hook.callbackPolicies) ? hook.callbackPolicies : [];
   const callbackPolicyNames = new Set();
@@ -1983,7 +2012,7 @@ export function analyzeSubmission(submission, { schema } = {}) {
     if (!Array.isArray(implementation.sourcePaths) || implementation.sourcePaths.length === 0) add("blocker", "SOURCE_PATHS_MISSING", "$.implementation.sourcePaths", "A prototype must identify its source files.", "List repository-relative contract and integration source paths.");
     if (!Array.isArray(implementation.testPaths) || implementation.testPaths.length === 0) add("blocker", "TEST_PATHS_MISSING", "$.implementation.testPaths", "A prototype must identify its tests.", "List repository-relative unit, fuzz, invariant and integration tests.");
     if (solidityBuildRequired && (!Array.isArray(implementation.compilerBuildInfoPaths) || implementation.compilerBuildInfoPaths.length !== 1)) add("blocker", "COMPILER_BUILD_INFO_PATHS_MISSING", "$.implementation.compilerBuildInfoPaths", "A prototype with declared Solidity source must bind exactly one compiler build-info artifact.", "List the one repository-relative Foundry build-info JSON file whose compiler input and settings produced the reviewed bytecode.");
-    if (!solidityBuildRequired && (implementation.compilerBuildInfoPaths?.length ?? 0) !== 0) add("blocker", "COMPILER_BUILD_INFO_WITHOUT_SOLIDITY", "$.implementation.compilerBuildInfoPaths", "Compiler build-info is declared even though the project declares no Solidity source.", "Use an empty compilerBuildInfoPaths array for the official no-custom-hook route, or declare and bind the actual Solidity source.");
+    if (!solidityBuildRequired && (implementation.compilerBuildInfoPaths?.length ?? 0) !== 0) add("blocker", "COMPILER_BUILD_INFO_WITHOUT_SOLIDITY", "$.implementation.compilerBuildInfoPaths", "Compiler build-info is declared even though the project declares no Solidity source.", "Use an empty compilerBuildInfoPaths array for a no-Solidity project, or declare and bind the actual Solidity source.");
     if (customHookDeclared && declaredImplementationSoliditySourcePaths.length === 0) add("blocker", "SOLIDITY_SOURCE_MISSING", "$.implementation.sourcePaths", "A custom-hook prototype has no declared Solidity implementation source.", "List every .sol hook implementation file so the package verifier can bind and scan the complete import closure.");
     for (const [index, entry] of (implementation.sourcePaths ?? []).entries()) validateDeclaredPath(entry, `$.implementation.sourcePaths[${index}]`, "implementation source");
     for (const [index, entry] of (implementation.testPaths ?? []).entries()) validateDeclaredPath(entry, `$.implementation.testPaths[${index}]`, "implementation test");
@@ -2064,7 +2093,7 @@ export function analyzeSubmission(submission, { schema } = {}) {
     if (trigger === "permissioned-asset") {
       gate("permissioned-asset-trust-and-legal-profile", "candidate", "The model uses permissioned assets or issuer controls.");
     }
-    if (["custom-math", "custom-accounting", "return-delta", "hook-held-liquidity", "price-impact"].includes(trigger)) {
+    if (["custom-math", "custom-accounting", "return-delta", "hook-held-liquidity", "price-impact", "transfer-tax", "auto-liquidity"].includes(trigger)) {
       gate("independent-specialist-review", "candidate", `Feature trigger: ${trigger}.`);
     }
     if (trigger === "upgradeable") gate("upgrade-storage-and-authority-review", "candidate", "The model is upgradeable.");
@@ -2089,16 +2118,8 @@ export function analyzeSubmission(submission, { schema } = {}) {
   return buildReport(submission, findings, gates, mask, derivedTriggers, risk.score, risk, schema);
 }
 
-function validateNoCustomHookRoute({ hook, poolAdmission, permissions, computedMask, lpFee, target, add }) {
-  if (!resolvedText(target.officialLaunchProfileId)) {
-    add(
-      "blocker",
-      "NO_CUSTOM_HOOK_OFFICIAL_LAUNCH_PROFILE_MISSING",
-      "$.target.officialLaunchProfileId",
-      "The ordinary no-custom-hook route is not bound to an exact committed official launch profile.",
-      "Set officialLaunchProfileId to the current committed profile for target.chainId; never supply deployment addresses in the submission."
-    );
-  }
+function validateNoCustomHookRoute({ submission, hook, poolAdmission, permissions, computedMask, lpFee, target, assets, add, gate }) {
+  validateNoHookArchitecture({ submission, target, assets, add, gate });
   if (lpFee.mode === "dynamic") {
     add(
       "blocker",
@@ -2229,6 +2250,244 @@ function validateNoCustomHookRoute({ hook, poolAdmission, permissions, computedM
   }
 }
 
+function validateNoHookArchitecture({ submission, target, assets, add, gate }) {
+  const profile = submission.noHookArchitecture;
+  if (!isObject(profile)) {
+    add(
+      "blocker",
+      "NO_HOOK_ARCHITECTURE_MISSING",
+      "$.noHookArchitecture",
+      "The no-custom-hook route does not identify the safer official launchpad or a model-specific ordinary-token architecture.",
+      "Use route official-launchpad by default, or model-specific-no-hook with complete token mechanics, custody, provider and test declarations."
+    );
+    return;
+  }
+  if (submission.model?.category !== "permissioned-asset") {
+    validatePermissionlessTransferPolicy(profile.transferPolicy, add);
+  } else {
+    gate("permissioned-no-hook-transfer-policy-review", "candidate", "A permissioned no-hook asset declares transfer eligibility or exit restrictions through its separate issuer and legal trust model.");
+  }
+
+  if (profile.route === "official-launchpad") {
+    if (!resolvedText(target.officialLaunchProfileId)) {
+      add(
+        "blocker",
+        "NO_CUSTOM_HOOK_OFFICIAL_LAUNCH_PROFILE_MISSING",
+        "$.target.officialLaunchProfileId",
+        "The safer official-launchpad no-hook route is not bound to an exact committed official launch profile.",
+        "Set officialLaunchProfileId to the current committed profile for target.chainId; never supply deployment addresses in the submission."
+      );
+    }
+    if (profile.transferTax?.used === true || profile.autoLiquidity?.used === true) {
+      add(
+        "blocker",
+        "OFFICIAL_LAUNCHPAD_MODEL_SPECIFIC_MECHANIC",
+        "$.noHookArchitecture",
+        "The official launchpad route cannot self-attach transfer-tax or auto-liquidity token mechanics.",
+        "Use model-specific-no-hook and keep the official launch profile id null, or remove the model-specific mechanics."
+      );
+    }
+    return;
+  }
+
+  if (profile.route !== "model-specific-no-hook") {
+    add(
+      "blocker",
+      "NO_HOOK_ROUTE_UNRESOLVED",
+      "$.noHookArchitecture.route",
+      "The ordinary-token route is unresolved.",
+      "Choose official-launchpad or model-specific-no-hook."
+    );
+    return;
+  }
+
+  gate("model-specific-no-hook-architecture-review", "candidate", "The no-hook token, launcher or liquidity path is model-specific and outside the safer official launchpad profile.");
+  if (target.officialLaunchProfileId !== null) {
+    add(
+      "blocker",
+      "MODEL_SPECIFIC_NO_HOOK_OFFICIAL_PROFILE_CONFLICT",
+      "$.target.officialLaunchProfileId",
+      "A model-specific no-hook architecture cannot borrow the identity or deployment claims of an official launch profile.",
+      "Set officialLaunchProfileId to null and bind every model-specific dependency through the normal dependency and evidence records."
+    );
+  }
+  if (target.dependencyBaseline !== "model-specific-pinned") {
+    add(
+      "blocker",
+      "MODEL_SPECIFIC_NO_HOOK_BASELINE_REQUIRED",
+      "$.target.dependencyBaseline",
+      "A model-specific no-hook contract needs its own builder-pinned dependency baseline.",
+      "Use model-specific-pinned with the exact compiler and dependency lock; maintainer review remains a separate gate."
+    );
+  }
+  requireDetailedText(profile.rationale, "$.noHookArchitecture.rationale", "MODEL_SPECIFIC_NO_HOOK_RATIONALE_MISSING", add);
+
+  const launchedAsset = assets.find((asset) => asset?.role === "launched");
+  const transferTax = objectAt(profile, "transferTax");
+  const autoLiquidity = objectAt(profile, "autoLiquidity");
+  const taxDeclaredOnAsset = launchedAsset?.behaviors?.includes("fee-on-transfer") === true;
+  if (transferTax.used !== taxDeclaredOnAsset) {
+    add(
+      "blocker",
+      "TRANSFER_TAX_ASSET_PROFILE_MISMATCH",
+      "$.noHookArchitecture.transferTax.used",
+      "The structured transfer-tax declaration does not match the launched asset behavior profile.",
+      "Set both transferTax.used and the launched asset fee-on-transfer behavior to the same actual token behavior."
+    );
+  }
+
+  if (transferTax.used === true) {
+    validateTransferTaxProfile({ submission, transferTax, autoLiquidity, add, gate });
+  } else if (hasConfiguredValue(transferTax, new Set(["used"]))) {
+    add("blocker", "TRANSFER_TAX_DISABLED_CONFLICT", "$.noHookArchitecture.transferTax", "Transfer tax is disabled but rate, recipient, authority or execution fields remain configured.", "Clear every transfer-tax field except used, and use empty recipient, value-flow and exemption arrays.");
+  }
+
+  if (autoLiquidity.used === true) {
+    validateAutoLiquidityProfile({ submission, transferTax, autoLiquidity, add, gate });
+  } else if (hasConfiguredValue(autoLiquidity, new Set(["used"]))) {
+    add("blocker", "AUTO_LIQUIDITY_DISABLED_CONFLICT", "$.noHookArchitecture.autoLiquidity", "Auto-liquidity is disabled but trigger, custody, authority or execution fields remain configured.", "Clear every auto-liquidity field except used, and use an empty valueFlowIds array.");
+  }
+
+  validateNoHookProviderProfile({ submission, profile, transferTax, autoLiquidity, add, gate });
+}
+
+function validatePermissionlessTransferPolicy(policyInput, add) {
+  const transferPolicy = isObject(policyInput) ? policyInput : {};
+  for (const field of ["peerTransfersAllowed", "poolBuysAllowed", "poolSellsAllowed"]) {
+    if (transferPolicy[field] !== true) add("hard", "HIDDEN_TRANSFER_OR_SELL_RESTRICTION", `$.noHookArchitecture.transferPolicy.${field}`, "The model can deny an ordinary transfer, pool buy or pool sell.", "Keep peer transfers, pool buys and pool sells permissionless; encode economic fees separately and transparently.");
+  }
+  for (const field of ["maxTransactionAmount", "maxWalletAmount", "cooldownSeconds"]) {
+    if (transferPolicy[field] !== null) add("hard", "HIDDEN_TRANSFER_OR_SELL_RESTRICTION", `$.noHookArchitecture.transferPolicy.${field}`, "The model introduces an amount or time restriction that can prevent an otherwise valid transfer or sale.", "Set transaction, wallet and cooldown restrictions to null; use visible pricing, slippage and fee bounds instead.");
+  }
+  for (const field of ["allowlist", "denylist"]) {
+    if (transferPolicy[field] !== false) add("hard", "HIDDEN_TRANSFER_OR_SELL_RESTRICTION", `$.noHookArchitecture.transferPolicy.${field}`, "The model introduces an address list that can prevent an ordinary transfer or sale.", "Disable token-level allowlists and denylists for this permissionless no-hook path.");
+  }
+}
+
+function validateTransferTaxProfile({ submission, transferTax, autoLiquidity, add, gate }) {
+  gate("transfer-tax-accounting-and-liveness-tests", "prototype", "The launched token charges an explicit transfer tax.");
+  gate("transfer-tax-economic-review", "candidate", "A transfer tax changes the amount users and PoolManager counterparties receive.");
+  gate("transfer-tax-provider-compatibility", "external", "Routing, quoting, indexing and listing support remain provider decisions for the exact token runtime.");
+
+  const rates = ["buyHundredthsOfBip", "sellHundredthsOfBip", "peerTransferHundredthsOfBip"];
+  if (!Number.isInteger(transferTax.maximumHundredthsOfBip)) add("blocker", "TRANSFER_TAX_MAXIMUM_MISSING", "$.noHookArchitecture.transferTax.maximumHundredthsOfBip", "The immutable maximum transfer-tax bound is unresolved.", "Set the exact maximum in hundredths of a basis point and test the endpoint.");
+  for (const field of rates) {
+    const rate = transferTax[field];
+    if (!Number.isInteger(rate)) add("blocker", "TRANSFER_TAX_RATE_MISSING", `$.noHookArchitecture.transferTax.${field}`, "A buy, sell or peer-transfer tax rate is unresolved.", "Set every current rate explicitly, including zero.");
+    if (Number.isInteger(rate) && Number.isInteger(transferTax.maximumHundredthsOfBip) && rate > transferTax.maximumHundredthsOfBip) add("blocker", "TRANSFER_TAX_RATE_ABOVE_MAXIMUM", `$.noHookArchitecture.transferTax.${field}`, "A current transfer-tax rate exceeds its declared immutable maximum.", "Lower the rate or raise and disclose the immutable maximum before review.");
+  }
+  if (Number.isInteger(transferTax.maximumHundredthsOfBip) && transferTax.maximumHundredthsOfBip >= 1000000) add("hard", "CONFISCATORY_TRANSFER_TAX_BOUND", "$.noHookArchitecture.transferTax.maximumHundredthsOfBip", "The transfer-tax bound can consume the complete transferred amount.", "Set an immutable maximum below 100 percent so every permitted transfer delivers a nonzero amount.");
+  if (Number.isInteger(transferTax.maximumHundredthsOfBip) && transferTax.maximumHundredthsOfBip > 100000) add("warning", "HIGH_TRANSFER_TAX_BOUND", "$.noHookArchitecture.transferTax.maximumHundredthsOfBip", "The declared maximum transfer tax exceeds 10 percent.", "Keep the exact bound prominent in every quote and launch disclosure and obtain focused economic review.");
+
+  if (typeof transferTax.mutable !== "boolean") add("blocker", "TRANSFER_TAX_MUTABILITY_UNRESOLVED", "$.noHookArchitecture.transferTax.mutable", "Transfer-tax mutability is unresolved.", "State whether current rates or recipients can change.");
+  const authorities = submission.authorities ?? [];
+  const authorityRoles = new Set(authorities.map((authority) => authority?.role));
+  if (transferTax.mutable === true) {
+    if (!resolvedText(transferTax.authorityRole) || !authorityRoles.has(transferTax.authorityRole)) add("blocker", "TRANSFER_TAX_AUTHORITY_MISSING", "$.noHookArchitecture.transferTax.authorityRole", "Mutable transfer-tax fields are not bound to one declared authority role.", "Name an exact role from authorities and describe its bounded capabilities and user-exit impact.");
+    const authority = authorities.find((candidate) => candidate?.role === transferTax.authorityRole);
+    if (authority && (authority.mutable !== true || !/(?:tax|fee|recipient)/i.test((authority.capabilities ?? []).join(" ")))) add("blocker", "TRANSFER_TAX_AUTHORITY_SCOPE_MISMATCH", "$.noHookArchitecture.transferTax.authorityRole", "The referenced authority does not explicitly expose the bounded mutable tax or recipient capability.", "Set the authority record mutable and name the exact fee, maximum and recipient capabilities it may change.");
+    requireDetailedText(transferTax.changeDelay, "$.noHookArchitecture.transferTax.changeDelay", "TRANSFER_TAX_DELAY_MISSING", add);
+    gate("transfer-tax-authority-and-timelock-review", "candidate", "Transfer-tax configuration remains mutable within the declared maximum.");
+  } else if (transferTax.authorityRole !== null || transferTax.changeDelay !== null) {
+    add("blocker", "IMMUTABLE_TRANSFER_TAX_AUTHORITY_CONFLICT", "$.noHookArchitecture.transferTax", "An immutable transfer tax still declares a configuration authority or delay.", "Set authorityRole and changeDelay to null or mark the actual bounded configuration mutable.");
+  }
+
+  const recipients = Array.isArray(transferTax.recipients) ? transferTax.recipients : [];
+  if (recipients.length === 0) add("blocker", "TRANSFER_TAX_RECIPIENTS_MISSING", "$.noHookArchitecture.transferTax.recipients", "Transfer-tax proceeds have no explicit recipients.", "List every destination and make recipient shares sum to 10000 basis points.");
+  const recipientIds = new Set();
+  let recipientShare = 0;
+  for (const [index, recipient] of recipients.entries()) {
+    if (recipientIds.has(recipient?.id)) add("blocker", "TRANSFER_TAX_RECIPIENT_DUPLICATE", `$.noHookArchitecture.transferTax.recipients[${index}].id`, "Transfer-tax recipient ids must be unique.", "Give every destination one stable recipient id.");
+    recipientIds.add(recipient?.id);
+    recipientShare += Number.isInteger(recipient?.shareBps) ? recipient.shareBps : 0;
+    requireResolvedText(recipient?.destination, `$.noHookArchitecture.transferTax.recipients[${index}].destination`, "TRANSFER_TAX_RECIPIENT_UNRESOLVED", add);
+  }
+  if (recipients.length > 0 && recipientShare !== 10000) add("blocker", "TRANSFER_TAX_RECIPIENT_SHARE_MISMATCH", "$.noHookArchitecture.transferTax.recipients", `Transfer-tax recipient shares sum to ${recipientShare}, not 10000 basis points.`, "Make the exact recipient allocation conserve 100 percent of collected tax.");
+  validateValueFlowReferences(transferTax.recipientValueFlowIds, submission.valueFlows, "$.noHookArchitecture.transferTax.recipientValueFlowIds", "TRANSFER_TAX_VALUE_FLOW", add);
+  requireDetailedText(transferTax.event, "$.noHookArchitecture.transferTax.event", "TRANSFER_TAX_EVENT_MISSING", add);
+  requireDetailedText(transferTax.failureRule, "$.noHookArchitecture.transferTax.failureRule", "TRANSFER_TAX_FAILURE_RULE_MISSING", add);
+  if (typeof transferTax.appliesToPoolManagerTransfers !== "boolean") add("blocker", "TRANSFER_TAX_POOLMANAGER_SCOPE_UNRESOLVED", "$.noHookArchitecture.transferTax.appliesToPoolManagerTransfers", "The tax scope for PoolManager settlement transfers is unresolved.", "State whether transfers to or from PoolManager are taxed and test requested-versus-received amounts in both directions.");
+  if (!transferTax.poolManagerTransferPolicy) add("blocker", "TRANSFER_TAX_POOLMANAGER_CLASSIFICATION_UNRESOLVED", "$.noHookArchitecture.transferTax.poolManagerTransferPolicy", "The token does not say how shared PoolManager ingress and egress are classified.", "Choose the honest all-ingress/egress policy, a complete exemption, or an exact separately reviewed counterparty classifier.");
+  if (transferTax.poolManagerTransferPolicy === "tax-all-ingress-egress" && transferTax.appliesToPoolManagerTransfers !== true) add("blocker", "TRANSFER_TAX_POOLMANAGER_POLICY_MISMATCH", "$.noHookArchitecture.transferTax.poolManagerTransferPolicy", "The declared all-ingress/egress tax policy contradicts the PoolManager transfer scope.", "Set appliesToPoolManagerTransfers true or choose the actual policy.");
+  if (transferTax.poolManagerTransferPolicy === "exempt-all-poolmanager-transfers" && transferTax.appliesToPoolManagerTransfers !== false) add("blocker", "TRANSFER_TAX_POOLMANAGER_POLICY_MISMATCH", "$.noHookArchitecture.transferTax.poolManagerTransferPolicy", "The declared PoolManager exemption contradicts the PoolManager transfer scope.", "Set appliesToPoolManagerTransfers false or choose the actual policy.");
+  for (const field of ["liquidityOperationTreatment", "alternativePoolTreatment"]) requireDetailedText(transferTax[field], `$.noHookArchitecture.transferTax.${field}`, "TRANSFER_TAX_POOLMANAGER_CLASSIFICATION_INCOMPLETE", add);
+  if (transferTax.poolManagerTransferPolicy === "exact-reviewed-counterparty-classifier") gate("transfer-tax-counterparty-classifier-review", "candidate", "The token attempts to distinguish PoolManager actions through an exact router, Permit2 or counterparty classifier that needs independent spoofing and upgrade review.");
+
+  const requiredTests = [
+    "buy-sell-peer-tax-rates",
+    "zero-tax-path",
+    "immutable-maximum-tax-bound",
+    "recipient-split-conservation",
+    "exemption-boundaries",
+    "poolmanager-requested-versus-received",
+    "poolmanager-liquidity-and-alternative-pool-classification",
+    "quote-execution-received-amount",
+    "unrestricted-buy-sell-transfer-liveness"
+  ];
+  if (transferTax.mutable === true) requiredTests.push("authority-and-delay");
+  requireTestScenarios(submission.noHookArchitecture?.testScenarios, requiredTests, add);
+  if (autoLiquidity.used === true && !recipientIds.has(autoLiquidity.fundingRecipientId)) add("blocker", "AUTO_LIQUIDITY_FUNDING_RECIPIENT_MISSING", "$.noHookArchitecture.autoLiquidity.fundingRecipientId", "Auto-liquidity funding does not reference one declared transfer-tax recipient bucket.", "Use a recipient id from transferTax.recipients and trace it through the liquidity value flows.");
+}
+
+function validateAutoLiquidityProfile({ submission, transferTax, autoLiquidity, add, gate }) {
+  gate("auto-liquidity-lifecycle-and-reentrancy-tests", "prototype", "The token automatically swaps or adds liquidity from collected tax balances.");
+  gate("auto-liquidity-custody-and-exit-review", "candidate", "The model creates and custodies liquidity through token-controlled execution.");
+  if (transferTax.used !== true) add("blocker", "AUTO_LIQUIDITY_WITHOUT_FUNDING_TAX", "$.noHookArchitecture.autoLiquidity", "Auto-liquidity is enabled without one explicit transfer-tax funding path.", "Enable and complete transferTax or remove auto-liquidity.");
+  if (!["permissionless-explicit-call", "eligible-non-pool-transfer"].includes(autoLiquidity.triggerMode)) add("blocker", "AUTO_LIQUIDITY_TRIGGER_MODE_UNRESOLVED", "$.noHookArchitecture.autoLiquidity.triggerMode", "The automatic liquidity trigger path is unresolved.", "Use a permissionless explicit call or an eligible non-pool transfer and test its exact threshold boundaries.");
+  if (autoLiquidity.poolTransferSuppression !== true) add("hard", "AUTO_LIQUIDITY_POOL_TRANSFER_REENTRANCY", "$.noHookArchitecture.autoLiquidity.poolTransferSuppression", "Automatic liquidity may execute while PoolManager or a router is settling the transfer that triggered it.", "Suppress automatic execution during pool and router transfers; settle the user action first and use the declared safe trigger path.");
+  if (autoLiquidity.reentrancyGuard !== true) add("hard", "AUTO_LIQUIDITY_REENTRANCY_GUARD_MISSING", "$.noHookArchitecture.autoLiquidity.reentrancyGuard", "The router and position lifecycle can reenter token transfer logic without an explicit guard.", "Use one bounded execution lock and test callback, token and cross-function reentrancy.");
+  if (autoLiquidity.underlyingTransferFailurePolicy !== "continue-transfer") add("hard", "AUTO_LIQUIDITY_CAN_BLOCK_TRANSFER", "$.noHookArchitecture.autoLiquidity.underlyingTransferFailurePolicy", "An automatic liquidity failure can block an otherwise valid peer transfer, buy or sell.", "Keep the failed automatic action retryable while the underlying permitted transfer continues under its disclosed tax.");
+  for (const field of ["triggerThreshold", "maximumSwapAmount"]) {
+    if (!/^[0-9]+$/.test(autoLiquidity[field] ?? "") || autoLiquidity[field] === "0") add("blocker", "AUTO_LIQUIDITY_BOUND_MISSING", `$.noHookArchitecture.autoLiquidity.${field}`, "An auto-liquidity base-unit bound is unresolved or zero.", "Set one exact positive integer bound in launched-token base units.");
+    if (/^[0-9]+$/.test(autoLiquidity[field] ?? "") && BigInt(autoLiquidity[field]) > (2n ** 256n - 1n)) add("blocker", "AUTO_LIQUIDITY_BOUND_UINT256_OVERFLOW", `$.noHookArchitecture.autoLiquidity.${field}`, "An auto-liquidity base-unit bound does not fit uint256.", "Choose a positive integer no greater than 2^256 minus 1.");
+  }
+  if (/^[0-9]+$/.test(autoLiquidity.triggerThreshold ?? "") && /^[0-9]+$/.test(autoLiquidity.maximumSwapAmount ?? "") && BigInt(autoLiquidity.maximumSwapAmount) > BigInt(autoLiquidity.triggerThreshold)) add("blocker", "AUTO_LIQUIDITY_SWAP_ABOVE_THRESHOLD", "$.noHookArchitecture.autoLiquidity.maximumSwapAmount", "One automatic swap can exceed the balance threshold that triggered it.", "Cap each swap at or below the trigger threshold and test surplus balances separately.");
+  if (!Number.isInteger(autoLiquidity.slippageHundredthsOfBip) || autoLiquidity.slippageHundredthsOfBip >= 1000000) add("blocker", "AUTO_LIQUIDITY_SLIPPAGE_BOUND_INVALID", "$.noHookArchitecture.autoLiquidity.slippageHundredthsOfBip", "Auto-liquidity slippage is unresolved or permits total loss of the quoted leg.", "Set an explicit slippage bound below 100 percent and enforce it against final received amounts.");
+  if (!Number.isInteger(autoLiquidity.deadlineSeconds)) add("blocker", "AUTO_LIQUIDITY_DEADLINE_MISSING", "$.noHookArchitecture.autoLiquidity.deadlineSeconds", "Auto-liquidity has no finite execution deadline.", "Set and test one finite deadline in seconds.");
+  for (const field of ["executionActor", "custody", "lpPositionCustodian", "exitPolicy", "emergencyRecovery", "event", "failureRule"]) requireDetailedText(autoLiquidity[field], `$.noHookArchitecture.autoLiquidity.${field}`, "AUTO_LIQUIDITY_PROFILE_INCOMPLETE", add);
+  if (typeof autoLiquidity.lpPositionTransferable !== "boolean") add("blocker", "AUTO_LIQUIDITY_LP_TRANSFERABILITY_UNRESOLVED", "$.noHookArchitecture.autoLiquidity.lpPositionTransferable", "LP position transferability is unresolved.", "State who may transfer the position and how that affects creator and holder exit claims.");
+  if (typeof autoLiquidity.mutable !== "boolean") add("blocker", "AUTO_LIQUIDITY_MUTABILITY_UNRESOLVED", "$.noHookArchitecture.autoLiquidity.mutable", "Auto-liquidity configuration mutability is unresolved.", "State whether thresholds, swap bounds, custody or execution actors can change.");
+  const authorities = submission.authorities ?? [];
+  const authorityRoles = new Set(authorities.map((authority) => authority?.role));
+  if (autoLiquidity.mutable === true && (!resolvedText(autoLiquidity.authorityRole) || !authorityRoles.has(autoLiquidity.authorityRole))) add("blocker", "AUTO_LIQUIDITY_AUTHORITY_MISSING", "$.noHookArchitecture.autoLiquidity.authorityRole", "Mutable auto-liquidity configuration is not bound to one declared authority role.", "Reference an exact role from authorities and disclose its custody and user-exit impact.");
+  const authority = authorities.find((candidate) => candidate?.role === autoLiquidity.authorityRole);
+  if (autoLiquidity.mutable === true && authority && (authority.mutable !== true || !/(?:liquidity|threshold|slippage|router|custod)/i.test((authority.capabilities ?? []).join(" ")))) add("blocker", "AUTO_LIQUIDITY_AUTHORITY_SCOPE_MISMATCH", "$.noHookArchitecture.autoLiquidity.authorityRole", "The referenced authority does not explicitly expose the bounded mutable liquidity capability.", "Set the authority record mutable and name the exact threshold, swap, router, custody or exit capability it may change.");
+  if (autoLiquidity.mutable === true && authority) requireDetailedText(authority.delay, `$.authorities[${authorities.indexOf(authority)}].delay`, "AUTO_LIQUIDITY_AUTHORITY_DELAY_MISSING", add);
+  if (autoLiquidity.mutable !== true && autoLiquidity.authorityRole !== null) add("blocker", "IMMUTABLE_AUTO_LIQUIDITY_AUTHORITY_CONFLICT", "$.noHookArchitecture.autoLiquidity.authorityRole", "Immutable auto-liquidity still declares a configuration authority.", "Set authorityRole to null or declare the actual bounded configuration mutable.");
+  validateValueFlowReferences(autoLiquidity.valueFlowIds, submission.valueFlows, "$.noHookArchitecture.autoLiquidity.valueFlowIds", "AUTO_LIQUIDITY_VALUE_FLOW", add);
+  requireTestScenarios(submission.noHookArchitecture?.testScenarios, [
+    "auto-liquidity-threshold-boundaries",
+    "auto-liquidity-maximum-swap-bound",
+    "auto-liquidity-slippage-and-deadline",
+    "auto-liquidity-reentrancy",
+    "auto-liquidity-failure-atomicity",
+    "lp-custody-and-exit"
+  ], add);
+  if (submission.capabilities?.externalCalls?.used !== true) add("blocker", "AUTO_LIQUIDITY_EXTERNAL_CALL_PROFILE_MISSING", "$.capabilities.externalCalls.used", "Auto-liquidity executes router or position-manager calls without the structured external-call policy.", "Enable externalCalls and document exact targets, call sites, return checks, reentrancy, state drift and failure atomicity.");
+}
+
+function validateNoHookProviderProfile({ submission, profile, transferTax, autoLiquidity, add, gate }) {
+  const provider = objectAt(profile, "providerCompatibility");
+  for (const field of ["routing", "quoting", "indexing", "fallback"]) requireDetailedText(provider[field], `$.noHookArchitecture.providerCompatibility.${field}`, "NO_HOOK_PROVIDER_PROFILE_INCOMPLETE", add);
+  requireNonEmptyArray(provider.limitations, "$.noHookArchitecture.providerCompatibility.limitations", "NO_HOOK_PROVIDER_LIMITS_MISSING", "List every known routing, quote, received-amount, indexing and listing limitation.", add);
+  if (!provider.status) add("blocker", "NO_HOOK_PROVIDER_STATUS_UNRESOLVED", "$.noHookArchitecture.providerCompatibility.status", "External provider support is unresolved.", "Use unknown, unsupported, requires-provider-review or confirmed-external without claiming Programmable controls the provider.");
+  if (provider.status === "confirmed-external" && (provider.evidence?.length ?? 0) === 0) add("blocker", "NO_HOOK_PROVIDER_EVIDENCE_MISSING", "$.noHookArchitecture.providerCompatibility.evidence", "Confirmed external support has no exact evidence reference.", "Add provider-owned documentation or an attributable approval record for the exact token runtime and chain.");
+  if (provider.status !== "confirmed-external" && (provider.evidence?.length ?? 0) > 0) add("warning", "NO_HOOK_PROVIDER_EVIDENCE_UNCONFIRMED", "$.noHookArchitecture.providerCompatibility.evidence", "Provider evidence is attached while support remains unconfirmed.", "Keep the limitation visible and do not present documentation or a canary as approval.");
+  if (transferTax.used === true && transferTax.appliesToPoolManagerTransfers === true && submission.integration?.routingAndDiscoverability?.standardRouterCompatible === true) add("blocker", "TRANSFER_TAX_STANDARD_ROUTER_CLAIM_UNPROVEN", "$.integration.routingAndDiscoverability.standardRouterCompatible", "A PoolManager transfer tax cannot self-attest generic standard-router quote and received-amount compatibility.", "Set standardRouterCompatible to false, bind the exact tested client path, and keep each external provider behind its own review gate.");
+  if (transferTax.used === true || autoLiquidity.used === true) gate("independent-no-hook-provider-approval", "external", "Programmable checks cannot guarantee aggregator, interface, indexer or listing support for model-specific token mechanics.");
+}
+
+function validateValueFlowReferences(references, valueFlows, path, codePrefix, add) {
+  const declared = new Set((valueFlows ?? []).map((flow) => flow?.id));
+  if (!Array.isArray(references) || references.length === 0) add("blocker", `${codePrefix}_MISSING`, path, "The mechanic has no referenced value-flow records.", "Reference every collection, conversion, liquidity, recipient, custody and failure flow by stable id.");
+  for (const [index, reference] of (references ?? []).entries()) if (!declared.has(reference)) add("blocker", `${codePrefix}_UNKNOWN`, `${path}[${index}]`, `Value-flow id ${reference} is not declared.`, "Add the exact flow or fix the reference.");
+}
+
+function requireTestScenarios(actual, required, add) {
+  const declared = new Set(actual ?? []);
+  for (const scenario of required) if (!declared.has(scenario)) add("blocker", "NO_HOOK_TEST_SCENARIO_MISSING", "$.noHookArchitecture.testScenarios", `Required no-hook test scenario ${scenario} is missing.`, "Add the scenario and bind executable evidence before prototype readiness.");
+}
+
 function hasConfiguredValue(value, ignoredKeys = new Set()) {
   if (value === null || value === false || value === undefined) return false;
   if (Array.isArray(value)) return value.length > 0;
@@ -2254,7 +2513,7 @@ function analyzeRisk(riskInput, derivedTriggers, add) {
   }
   const triggerSet = new Set(derivedTriggers);
   const floors = {
-    complexity: derivedTriggers.some((trigger) => ["custom-math", "custom-accounting", "return-delta", "oracle", "autonomous", "proof", "cross-chain", "external-liquidity", "async-swap", "custom-curve"].includes(trigger)) ? 2 : 1,
+    complexity: derivedTriggers.some((trigger) => ["custom-math", "custom-accounting", "return-delta", "oracle", "autonomous", "proof", "cross-chain", "external-liquidity", "async-swap", "custom-curve", "transfer-tax", "auto-liquidity"].includes(trigger)) ? 2 : 1,
     customMath: triggerSet.has("custom-math") || triggerSet.has("custom-curve") ? 1 : 0,
     externalDependencies: derivedTriggers.some((trigger) => ["external-calls", "oracle", "proof", "cross-chain"].includes(trigger)) ? 1 : 0,
     externalLiquidity: triggerSet.has("external-liquidity") || triggerSet.has("hook-held-liquidity") ? 1 : 0,
@@ -2264,7 +2523,7 @@ function analyzeRisk(riskInput, derivedTriggers, add) {
   };
   for (const [name, floor] of Object.entries(floors)) if (Number.isInteger(dimensions[name]) && dimensions[name] < floor) add("blocker", "RISK_DIMENSION_BELOW_FEATURE_FLOOR", `$.risk.dimensions.${name}`, `Risk dimension ${name} is below the minimum implied by the declared capabilities.`, `Use at least ${floor} and explain the specific exposure in risk.rationales.${name}.`);
   const baseTier = complete ? tierForScore(score) : null;
-  const critical = new Set(["custom-math", "custom-accounting", "return-delta", "hook-held-liquidity", "oracle", "autonomous", "price-impact", "upgradeable", "permissioned-asset", "proof", "cross-chain", "external-liquidity", "async-swap", "custom-curve"]);
+  const critical = new Set(["custom-math", "custom-accounting", "return-delta", "hook-held-liquidity", "oracle", "autonomous", "price-impact", "upgradeable", "permissioned-asset", "proof", "cross-chain", "external-liquidity", "async-swap", "custom-curve", "transfer-tax", "auto-liquidity"]);
   const effectiveTier = complete && derivedTriggers.some((trigger) => critical.has(trigger)) ? "high" : baseTier;
   if (complete && risk.declaredTotal !== score) add("blocker", "RISK_TOTAL_MISMATCH", "$.risk.declaredTotal", `Declared total ${risk.declaredTotal} does not match derived total ${score}.`, "Update the total from the nine dimension values.");
   if (complete && risk.declaredTier !== effectiveTier) add("blocker", "RISK_TIER_MISMATCH", "$.risk.declaredTier", `Declared tier ${risk.declaredTier} does not match effective tier ${effectiveTier}.`, "Use the numeric tier and raise it when a critical feature trigger applies.");
@@ -2300,6 +2559,14 @@ function deriveFeatureTriggers(submission) {
   if (capabilityProfiles.asyncSwap?.used === true) triggers.add("async-swap");
   if (capabilityProfiles.customCurve?.used === true) triggers.add("custom-curve");
   if (behaviors.some((behavior) => ["fee-on-transfer", "rebasing", "callback-on-transfer"].includes(behavior))) triggers.add("non-standard-token");
+  if (submission.noHookArchitecture?.transferTax?.used === true) {
+    triggers.add("transfer-tax");
+    triggers.add("price-impact");
+  }
+  if (submission.noHookArchitecture?.autoLiquidity?.used === true) {
+    triggers.add("auto-liquidity");
+    triggers.add("autonomous");
+  }
   return [...triggers].sort();
 }
 
@@ -2653,6 +2920,7 @@ function schemaRuleShapeIsValid(rule) {
   if (Object.hasOwn(rule, "required") && (!Array.isArray(rule.required) || rule.required.some((entry) => typeof entry !== "string"))) return false;
   if (Object.hasOwn(rule, "properties") && !isObject(rule.properties)) return false;
   if (Object.hasOwn(rule, "items") && !isObject(rule.items)) return false;
+  if (Object.hasOwn(rule, "oneOf") && (!Array.isArray(rule.oneOf) || rule.oneOf.length < 2 || rule.oneOf.some((entry) => !isObject(entry)))) return false;
   if (Object.hasOwn(rule, "$ref") && typeof rule.$ref !== "string") return false;
   if (Object.hasOwn(rule, "pattern") && typeof rule.pattern !== "string") return false;
   return true;

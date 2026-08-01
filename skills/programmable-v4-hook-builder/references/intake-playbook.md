@@ -81,6 +81,14 @@ Propose these defaults together unless the idea requires something else:
 The builder may confirm these defaults as a group. Any departure that changes economics, custody, authority,
 dependencies or exits requires separate confirmation.
 
+If the builder requests a token transfer tax or automatic liquidity, keep the official route as the comparison but do
+not force the idea into a hook or reject it for leaving the default. Select `model-specific-no-hook` and confirm, in this
+order: all buy/sell/peer rates and the immutable maximum; whether any ordinary transfer or sale can be blocked; every
+recipient and value flow; mutability, authority and delay; tax exemptions and PoolManager transfer scope; automatic
+swap threshold, maximum, slippage, deadline and reentrancy; LP custody and exit; then routing, quote, indexer, scanner,
+and listing limitations. Hidden sell blocks, address lists, transaction/wallet caps, cooldowns, and a 100 percent bound
+do not continue on the permissionless path.
+
 ## Fact ownership
 
 The agent derives without asking:
@@ -150,8 +158,9 @@ unsafe or rejected.
 
 Record `hook.used` explicitly. When it is false, keep the hook address/base, admission rules, callback policies,
 hookData, custom accounting, hook-owned fees, return deltas, claims, and nested actions disabled; all permission bits are
-false and there is no hook-address mask to mine. Select and bind the official launch profile separately. When it is true,
-apply every callback rule below.
+false and there is no hook-address mask to mine. Select `official-launchpad` and bind its committed profile by default,
+or select `model-specific-no-hook`, keep the official profile null, and complete its separate token mechanics,
+dependencies and gates. When `hook.used` is true, apply every callback rule below.
 
 Set all 14 permission fields to explicit booleans. Enable only callbacks required by confirmed behavior. Record:
 
@@ -249,7 +258,9 @@ surface changes who can act, which trades work, where value appears, what can fa
 
 - **LP fee:** paid to liquidity providers in that pool. It is not creator revenue.
 - **Hook-owned charge:** accounted by hook logic and owed to explicit recipients. Its currency can change by direction and exactness.
-- **Token transfer tax:** runs on ERC-20 transfers outside the pool too and is not part of the conservative default.
+- **Token transfer tax:** runs on ERC-20 transfers outside the pool too. It is not part of the conservative default, but
+  a transparent bounded version may enter model-specific no-hook review with exact recipients, authority, custody,
+  provider limitations, received-amount semantics, and liveness tests.
 
 Units in the schema are hundredths of a basis point:
 

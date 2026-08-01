@@ -89,6 +89,7 @@ const required = [
   "assets/examples/transparent-pool-scoped-fee.json",
   "assets/examples/unsafe-hidden-curve.json",
   "assets/templates/submission.example.json",
+  "assets/templates/no-hook-architecture.example.json",
   "assets/templates/deployment-evidence.example.json",
   "assets/templates/dependency-lock.example.json",
   "assets/templates/gate-status.example.json",

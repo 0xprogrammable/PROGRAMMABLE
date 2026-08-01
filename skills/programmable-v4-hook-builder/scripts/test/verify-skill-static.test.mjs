@@ -71,6 +71,7 @@ for (const requiredPath of [
   "references/routing-and-discovery.md",
   "references/workflow.md",
   "assets/examples/transparent-pool-scoped-fee.json",
+  "assets/templates/no-hook-architecture.example.json",
   "scripts/build-info-core.mjs",
   "scripts/check-upstream-drift.mjs",
   "scripts/example-materializer-core.mjs",

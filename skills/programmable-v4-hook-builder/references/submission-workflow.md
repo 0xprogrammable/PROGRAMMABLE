@@ -17,8 +17,11 @@ records remain a runtime-unverified reference tier, not Programmable-tested depl
 Submission standard `1.2.0` adds the open project-surface and capability graph. It preserves unfamiliar games, maps,
 services, databases, data sources, keepers, claims and later kinds for architecture review while deriving non-bypassable
 security profiles from explicit triggers. It also separates a signed offchain data source from an optional onchain
-oracle verifier. A `1.1.0` submission is not silently reinterpreted. Regenerate it from the current template, review
-every surface, capability, exposure, path and profile, then commit the fresh report and gate-status authority digests.
+oracle verifier. The same version adds explicit `official-launchpad` and `model-specific-no-hook` architecture paths
+plus structured transfer-tax, automatic-liquidity, provider-limit and test declarations. A `1.1.0` submission is not
+silently reinterpreted. Regenerate it from the current template; review every surface, capability, exposure, path,
+profile, no-hook route, target chain, network slug, dependency and deployment trust tier; then commit the fresh report
+and gate-status authority digests.
 
 ## Stages
 
@@ -36,7 +39,9 @@ The builder repository contains:
 
 No implementation language is required at proposal stage. The proposal must still resolve the user outcome, project
 surfaces, value flow, canonical PoolKey, whether a custom hook is used, authorities, dependencies, hard failure behavior,
-and expected evidence. Hook callbacks, a permission mask, and CREATE2 planning apply only when `hook.used` is true.
+and expected evidence. Hook callbacks, a permission mask, and CREATE2 planning apply only when `hook.used` is true. A
+no-hook proposal selects the safer official Launchpad default or the model-specific route; the latter completes its own
+token mechanics, fee bounds, recipients, authority, liquidity custody and exit, provider limits, and test scenarios.
 
 ### Prototype
 

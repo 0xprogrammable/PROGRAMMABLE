@@ -200,6 +200,7 @@
     "erc6909Claims": { "used": null, "currencyIdDerivation": null, "claimBalanceScope": null, "poolIdIncludedInClaimId": null, "owner": null, "operatorPolicy": null, "mintFlow": null, "burnFlow": null, "takeSettleFlow": null, "liabilityKeys": null, "liabilityKeyDimensions": [], "crossPoolNetting": null, "transferPolicy": null, "redemption": null, "roundingDust": null, "aggregateSolvencyEquation": null },
     "nestedActions": { "used": null, "directPoolManagerCalls": null, "routerCalls": null, "allowedActions": [], "samePoolPolicy": null, "crossPoolPolicy": null, "callbackSuppression": null, "directCallbackBehavior": null, "routerCallbackBehavior": null, "maximumDepth": null, "stateCommitOrder": null, "transientDeltaOwner": null, "syncInterleaving": null, "slippageAggregation": null, "failureAtomicity": null }
   },
+  "noHookArchitecture": null,
   "valueFlows": [
     {
       "id": "swap",

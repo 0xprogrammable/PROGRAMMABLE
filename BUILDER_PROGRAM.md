@@ -115,6 +115,11 @@ Reviewers evaluate the exact revision, not the idea's popularity and not the cur
 An unfamiliar mechanic enters **architecture discussion**. Reviewers ask what it does, where value moves, who controls
 it, what it trusts and how it fails. Lack of a catalog label is not a rejection.
 
+The safer no-hook default uses the pinned official Launchpad profile, but it is not a launch-type allowlist. A
+model-specific ordinary token or launcher, including transparent bounded transfer tax and automatic liquidity, may
+enter review with its own exact source and dependencies. It must preserve transfer and sell liveness and disclose fee
+bounds, recipients, authority, value flows, liquidity custody and exit, provider limits, and test evidence.
+
 An objective finding includes:
 
 - the exact affected revision and location;

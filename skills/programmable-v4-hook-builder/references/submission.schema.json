@@ -16,6 +16,7 @@
     "launchLifecycle",
     "pool",
     "hook",
+    "noHookArchitecture",
     "valueFlows",
     "authorities",
     "dependencies",
@@ -161,7 +162,7 @@
         "solidityVersion": { "type": ["string", "null"], "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
         "evmVersion": { "type": ["string", "null"], "enum": ["cancun", null] },
         "dependencyBaseline": { "enum": ["programmable-tested", "model-specific-pinned", "model-specific-reviewed", null] },
-        "officialLaunchProfileId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "description": "Exact profile id from the committed official launchpad deployment reference; required by policy for the ordinary no-custom-hook route." }
+        "officialLaunchProfileId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "description": "Exact profile id from the committed official launchpad deployment reference. Required for the safer official-launchpad no-hook route and null for a model-specific no-hook architecture." }
       }
     },
     "assets": {
@@ -494,6 +495,13 @@
           }
         }
       }
+    },
+    "noHookArchitecture": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/noHookArchitecture" }
+      ],
+      "description": "Structured ordinary-token architecture used only when hook.used is false. The official launchpad remains the safer default; model-specific no-hook designs enter architecture review."
     },
     "valueFlows": {
       "type": "array",
@@ -972,6 +980,133 @@
       "maxItems": 512,
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
+    "noHookArchitecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["route", "rationale", "transferPolicy", "transferTax", "autoLiquidity", "providerCompatibility", "testScenarios"],
+      "properties": {
+        "route": { "enum": ["official-launchpad", "model-specific-no-hook"] },
+        "rationale": { "type": "string", "minLength": 20, "maxLength": 1200 },
+        "transferPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["peerTransfersAllowed", "poolBuysAllowed", "poolSellsAllowed", "maxTransactionAmount", "maxWalletAmount", "cooldownSeconds", "allowlist", "denylist"],
+          "properties": {
+            "peerTransfersAllowed": { "type": "boolean" },
+            "poolBuysAllowed": { "type": "boolean" },
+            "poolSellsAllowed": { "type": "boolean" },
+            "maxTransactionAmount": { "type": ["string", "null"], "pattern": "^[0-9]+$", "maxLength": 78 },
+            "maxWalletAmount": { "type": ["string", "null"], "pattern": "^[0-9]+$", "maxLength": 78 },
+            "cooldownSeconds": { "type": ["integer", "null"], "minimum": 0, "maximum": 31536000 },
+            "allowlist": { "type": "boolean" },
+            "denylist": { "type": "boolean" }
+          }
+        },
+        "transferTax": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["used", "buyHundredthsOfBip", "sellHundredthsOfBip", "peerTransferHundredthsOfBip", "maximumHundredthsOfBip", "mutable", "authorityRole", "changeDelay", "recipients", "recipientValueFlowIds", "exemptions", "appliesToPoolManagerTransfers", "poolManagerTransferPolicy", "liquidityOperationTreatment", "alternativePoolTreatment", "event", "failureRule"],
+          "properties": {
+            "used": { "type": "boolean" },
+            "buyHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "sellHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "peerTransferHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "maximumHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "mutable": { "type": ["boolean", "null"] },
+            "authorityRole": { "type": ["string", "null"], "maxLength": 120 },
+            "changeDelay": { "type": ["string", "null"], "maxLength": 500 },
+            "recipients": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "destination", "shareBps"],
+                "properties": {
+                  "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+                  "destination": { "type": "string", "minLength": 1, "maxLength": 200 },
+                  "shareBps": { "type": "integer", "minimum": 1, "maximum": 10000 }
+                }
+              }
+            },
+            "recipientValueFlowIds": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" } },
+            "exemptions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 200 } },
+            "appliesToPoolManagerTransfers": { "type": ["boolean", "null"] },
+            "poolManagerTransferPolicy": { "enum": ["tax-all-ingress-egress", "exempt-all-poolmanager-transfers", "exact-reviewed-counterparty-classifier", null] },
+            "liquidityOperationTreatment": { "type": ["string", "null"], "maxLength": 800 },
+            "alternativePoolTreatment": { "type": ["string", "null"], "maxLength": 800 },
+            "event": { "type": ["string", "null"], "maxLength": 500 },
+            "failureRule": { "type": ["string", "null"], "maxLength": 800 }
+          }
+        },
+        "autoLiquidity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["used", "fundingRecipientId", "triggerMode", "triggerThreshold", "maximumSwapAmount", "slippageHundredthsOfBip", "deadlineSeconds", "executionActor", "poolTransferSuppression", "reentrancyGuard", "underlyingTransferFailurePolicy", "mutable", "authorityRole", "valueFlowIds", "custody", "lpPositionCustodian", "lpPositionTransferable", "exitPolicy", "emergencyRecovery", "event", "failureRule"],
+          "properties": {
+            "used": { "type": "boolean" },
+            "fundingRecipientId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+            "triggerMode": { "enum": ["permissionless-explicit-call", "eligible-non-pool-transfer", null] },
+            "triggerThreshold": { "type": ["string", "null"], "pattern": "^[0-9]+$", "maxLength": 78 },
+            "maximumSwapAmount": { "type": ["string", "null"], "pattern": "^[0-9]+$", "maxLength": 78 },
+            "slippageHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
+            "deadlineSeconds": { "type": ["integer", "null"], "minimum": 1, "maximum": 86400 },
+            "executionActor": { "type": ["string", "null"], "maxLength": 300 },
+            "poolTransferSuppression": { "type": ["boolean", "null"] },
+            "reentrancyGuard": { "type": ["boolean", "null"] },
+            "underlyingTransferFailurePolicy": { "enum": ["continue-transfer", null] },
+            "mutable": { "type": ["boolean", "null"] },
+            "authorityRole": { "type": ["string", "null"], "maxLength": 120 },
+            "valueFlowIds": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" } },
+            "custody": { "type": ["string", "null"], "maxLength": 800 },
+            "lpPositionCustodian": { "type": ["string", "null"], "maxLength": 300 },
+            "lpPositionTransferable": { "type": ["boolean", "null"] },
+            "exitPolicy": { "type": ["string", "null"], "maxLength": 800 },
+            "emergencyRecovery": { "type": ["string", "null"], "maxLength": 800 },
+            "event": { "type": ["string", "null"], "maxLength": 500 },
+            "failureRule": { "type": ["string", "null"], "maxLength": 800 }
+          }
+        },
+        "providerCompatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["routing", "quoting", "indexing", "status", "evidence", "limitations", "fallback"],
+          "properties": {
+            "routing": { "type": "string", "minLength": 20, "maxLength": 800 },
+            "quoting": { "type": "string", "minLength": 20, "maxLength": 800 },
+            "indexing": { "type": "string", "minLength": 20, "maxLength": 800 },
+            "status": { "enum": ["unknown", "unsupported", "requires-provider-review", "confirmed-external"] },
+            "evidence": { "type": "array", "uniqueItems": true, "items": { "type": "string", "format": "uri", "minLength": 1, "maxLength": 1000 } },
+            "limitations": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 20, "maxLength": 800 } },
+            "fallback": { "type": "string", "minLength": 20, "maxLength": 800 }
+          }
+        },
+        "testScenarios": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "buy-sell-peer-tax-rates",
+              "zero-tax-path",
+              "immutable-maximum-tax-bound",
+              "recipient-split-conservation",
+              "exemption-boundaries",
+              "authority-and-delay",
+              "poolmanager-requested-versus-received",
+              "poolmanager-liquidity-and-alternative-pool-classification",
+              "quote-execution-received-amount",
+              "unrestricted-buy-sell-transfer-liveness",
+              "auto-liquidity-threshold-boundaries",
+              "auto-liquidity-maximum-swap-bound",
+              "auto-liquidity-slippage-and-deadline",
+              "auto-liquidity-reentrancy",
+              "auto-liquidity-failure-atomicity",
+              "lp-custody-and-exit"
+            ]
+          }
+        }
+      }
     },
     "capabilityExtension": {
       "type": "object",
