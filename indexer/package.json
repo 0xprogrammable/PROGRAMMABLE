@@ -13,7 +13,9 @@
     "start": "envio start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "release:identity": "node scripts/release-candidate.mjs identity",
+    "release:audit": "node scripts/release-candidate.mjs audit"
   },
   "dependencies": {
     "envio": "3.2.1",
