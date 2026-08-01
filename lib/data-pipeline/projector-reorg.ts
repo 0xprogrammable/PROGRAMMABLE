@@ -24,7 +24,7 @@ const CANDIDATE_ID_PATTERN =
   /^1:(0x[0-9a-f]{64}):(0x[0-9a-f]{64}):(0|[1-9]\d*)$/u;
 const UINT32_MAXIMUM = 4_294_967_295;
 const POSTGRES_BIGINT_MAXIMUM = 9_223_372_036_854_775_807n;
-// This is not a caller preference. append_safe_head_observation enforces the
+// This is not a caller preference. Safe-head persistence enforces the
 // same Ethereum mainnet finality depth in migrations 002/007/008.
 const FINALITY_DEPTH = 12n;
 const DEFAULT_MAXIMUM_DEPTH = 64;

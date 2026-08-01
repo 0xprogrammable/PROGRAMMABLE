@@ -628,6 +628,44 @@ describe("dual-RPC Envio candidate verification", () => {
     expect(JSON.stringify(result)).not.toContain(".example");
   });
 
+  it("accepts an unrelated anonymous LOG0 in the same transaction receipt", async () => {
+    const receiptWithAnonymousLog = (): CandidateRpcReceipt => {
+      const value = receipt();
+      return {
+        ...value,
+        logs: [
+          {
+            address: "0x0000000000000000000000000000000000000001",
+            blockNumber: CANDIDATE_BLOCK,
+            blockHash: BLOCK_HASH,
+            transactionHash: TRANSACTION_HASH,
+            transactionIndex: 2,
+            logIndex: 5,
+            removed: false,
+            topics: [],
+            data: "0x1234",
+          },
+          ...value.logs,
+        ],
+      };
+    };
+
+    const result = await verifyEnvioCandidateWithDualRpc({
+      candidate: candidate(),
+      providers: [
+        provider("alchemy-mainnet", client({
+          getTransactionReceipt: async () => receiptWithAnonymousLog(),
+        })),
+        provider("quicknode-mainnet", client({
+          getTransactionReceipt: async () => receiptWithAnonymousLog(),
+        })),
+      ],
+    });
+
+    expect(result.receiptLogOrdinal).toBe(2);
+    expect(result.receiptCommitment).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
   it("keeps a known dynamic vault release-neutral until factory proof", async () => {
     const result = await verifyEnvioCandidateWithDualRpc({
       candidate: dynamicCandidate(),

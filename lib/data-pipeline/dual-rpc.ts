@@ -685,7 +685,6 @@ function canonicalReceipt(input: {
       log.logIndex === null ||
       log.removed !== false ||
       !Array.isArray(log.topics) ||
-      log.topics.length < 1 ||
       log.topics.length > 4
     ) {
       throw validationError("rpc", "receipt-log");

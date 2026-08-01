@@ -63,6 +63,10 @@ const APPROVED_OPERATIONS = Object.freeze({
           path: "supabase/migrations/20260801093000_bind_candidate_promotion_to_product.sql",
           sha256: "c6a032ef371b2211004c8d72c0a8c4eec4ba630776210aed48d2d054e642dbbe",
         }),
+        Object.freeze({
+          path: "supabase/migrations/20260801125441_reuse_safe_head_observations.sql",
+          sha256: "afbeea7bcf60e492e51bfd0c56517613f32a6f87a0182af00c48bdaef6569e74",
+        }),
       ]),
     }),
     Object.freeze({
@@ -207,6 +211,17 @@ function migrationContract(id, source) {
       source.includes("reward_snapshot_provider_evidence") &&
       source.includes("projection_publication_provider_bindings") &&
       /force row level security/iu.test(source)
+    );
+  }
+  if (id === "source-projector-safe-head-reuse") {
+    return (
+      source.includes("append_or_reuse_safe_head_observation_v1") &&
+      source.includes(
+        "safe_head_observations_epoch_id_content_fingerprint_key",
+      ) &&
+      source.includes("for key share") &&
+      source.includes("safe-head fingerprint replay conflicts with stored evidence") &&
+      /security definer/iu.test(source)
     );
   }
   if (id === "candidate-control-bootstrap") {
@@ -408,7 +423,7 @@ export function evaluateReadModelOperationsSourceContracts(
       source(sourceWorker.dependencies[0]?.path)?.includes(
         "verify_candidate_database_promoted_v2",
       ) &&
-      sourceWorker?.migrations?.length === 6 &&
+      sourceWorker?.migrations?.length === 7 &&
       migrationContract(
         "source-projector-lease",
         source(sourceWorker.migrations[0]?.path),
@@ -432,6 +447,10 @@ export function evaluateReadModelOperationsSourceContracts(
       migrationContract(
         "candidate-product-binding",
         source(sourceWorker.migrations[5]?.path),
+      ) &&
+      migrationContract(
+        "source-projector-safe-head-reuse",
+        source(sourceWorker.migrations[6]?.path),
       ),
     "the source worker is byte-bound to its runtime selector, database fence and provider evidence",
   );

@@ -128,6 +128,7 @@ class StoreExecutor implements PostgresExecutor {
   omitReorgGeneration = false;
   classicNormalizedRuntimeCodeHash = bytes32("e");
   classicImmutableReferencesCommitment = bytes32("f");
+  reusedSafeHeadObservationId: string | null = null;
 
   async transaction<T>(
     work: (transaction: PostgresTransaction) => Promise<T>,
@@ -435,8 +436,10 @@ class StoreExecutor implements PostgresExecutor {
         ) {
           return [{ id: values[0] }] as unknown as Row[];
         }
-        if (text.includes("append_safe_head_observation")) {
-          return [{ id: values[0] }] as unknown as Row[];
+        if (text.includes("append_or_reuse_safe_head_observation_v1")) {
+          return [{
+            id: this.reusedSafeHeadObservationId ?? values[0],
+          }] as unknown as Row[];
         }
         if (text.includes("append_dual_rpc_block_evidence")) {
           return [{ id: values[0] }] as unknown as Row[];
@@ -698,7 +701,7 @@ describe("concrete projector Postgres store", () => {
     expect(statements).toEqual(expect.arrayContaining([
       expect.stringContaining("assert_projector_runtime_lease_v1"),
       expect.stringContaining("open_run"),
-      expect.stringContaining("append_safe_head_observation"),
+      expect.stringContaining("append_or_reuse_safe_head_observation_v1"),
       expect.stringContaining("append_dual_rpc_block_evidence"),
       expect.stringContaining("append_run_outcome"),
       expect.stringContaining("recover_projector_reorg_v1"),
@@ -1136,6 +1139,8 @@ describe("concrete projector Postgres store", () => {
 
   it("opens evidence and commits one verified page in a single final transaction", async () => {
     const executor = new StoreExecutor();
+    executor.reusedSafeHeadObservationId =
+      "49000000-0000-4000-8000-000000000001";
     const store = createPostgresProjectorStore({
       executor,
       providers: PROVIDERS,
@@ -1271,7 +1276,11 @@ describe("concrete projector Postgres store", () => {
 
     const statements = executor.queries.map(({ text }) => text);
     expect(statements.some((text) => text.includes("open_run"))).toBe(true);
-    expect(statements.some((text) => text.includes("append_safe_head_observation"))).toBe(true);
+    expect(
+      statements.some((text) =>
+        text.includes("append_or_reuse_safe_head_observation_v1")
+      ),
+    ).toBe(true);
     expect(statements.some((text) => text.includes("append_dual_rpc_block_evidence"))).toBe(true);
     const blockWrites = executor.queries.filter(({ text }) =>
       text.includes("append_dual_rpc_block_evidence"),
@@ -1280,8 +1289,12 @@ describe("concrete projector Postgres store", () => {
       first.blockNumber,
       second.blockNumber,
     ]);
+    expect(blockWrites.every(({ values }) =>
+      values[1] === executor.reusedSafeHeadObservationId
+    )).toBe(true);
     expect(statements.at(-1)).toContain("commit_envio_ingestion_page_v1");
     const commit = executor.queries.at(-1)!;
+    expect(commit.values[9]).toBe(executor.reusedSafeHeadObservationId);
     expect(
       commit.values.some(
         (value) =>
@@ -1512,7 +1525,7 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
         if (text.includes("open_run")) {
           return [{ id: values[0] }] as unknown as Row[];
         }
-        if (text.includes("append_safe_head_observation")) {
+        if (text.includes("append_or_reuse_safe_head_observation_v1")) {
           return [{ id: values[0] }] as unknown as Row[];
         }
         if (text.includes("append_dual_rpc_block_evidence")) {

@@ -118,6 +118,26 @@ export function candidateGenesisAnchorBlock(bootstrap) {
   return (first - 1n).toString();
 }
 
+export async function withCandidateRuntimeLease(input) {
+  const acquired = await input.lease.tryAcquire();
+  if (acquired.status !== "acquired" || !acquired.fence) {
+    throw new Error("candidate raw backfill lease is busy");
+  }
+  let operationFailed = true;
+  try {
+    const result = await input.operation(acquired.fence);
+    operationFailed = false;
+    return result;
+  } finally {
+    const released = await input.lease
+      .release(acquired.fence)
+      .catch(() => false);
+    if (!released && !operationFailed) {
+      throw new Error("candidate raw backfill lease release failed");
+    }
+  }
+}
+
 export async function runConfiguredCandidateRawBackfill(input) {
   const environment = input.environment ?? process.env;
   const identity = await loadCandidateRuntimeIdentity();
@@ -193,35 +213,28 @@ export async function runConfiguredCandidateRawBackfill(input) {
     const lease = modules.leaseModule.createProjectorRuntimeLeaseController({
       executor: runtimeExecutor,
     });
-    let fence;
     try {
-      const acquired = await lease.tryAcquire();
-      if (acquired.status !== "acquired" || !acquired.fence) {
-        throw new Error("candidate raw backfill lease is busy");
-      }
-      fence = acquired.fence;
-      const anchorBlock = await providers[0].client.getBlock({
-        blockNumber: BigInt(anchorBlockNumber),
-      });
-      const anchorBlockHash = modules.codecsModule.canonicalBytes32(
-        anchorBlock?.hash,
-      );
-      const safeHead = await modules.dualRpcModule.readDualRpcSafeHead({
-        providers,
-        cursor: { blockNumber: anchorBlockNumber, blockHash: anchorBlockHash },
-      });
-      await modules.projectorStoreModule.initializePostgresProjectorGenesis({
-        executor: writerExecutor,
-        providers: providerBindings,
-        releaseScopes,
-        runtimeFence: fence,
-        evidence: { anchorBlockNumber, anchorBlockHash, safeHead },
-      });
-      const store = modules.projectorStoreModule.createPostgresProjectorStore({
-        executor: writerExecutor,
-        providers: providerBindings,
-        releaseScopes,
-        runtimeFence: fence,
+      await withCandidateRuntimeLease({
+        lease,
+        operation: async (runtimeFence) => {
+          const anchorBlock = await providers[0].client.getBlock({
+            blockNumber: BigInt(anchorBlockNumber),
+          });
+          const anchorBlockHash = modules.codecsModule.canonicalBytes32(
+            anchorBlock?.hash,
+          );
+          const safeHead = await modules.dualRpcModule.readDualRpcSafeHead({
+            providers,
+            cursor: { blockNumber: anchorBlockNumber, blockHash: anchorBlockHash },
+          });
+          await modules.projectorStoreModule.initializePostgresProjectorGenesis({
+            executor: writerExecutor,
+            providers: providerBindings,
+            releaseScopes,
+            runtimeFence,
+            evidence: { anchorBlockNumber, anchorBlockHash, safeHead },
+          });
+        },
       });
       const envio = modules.envioModule.createEnvioClient({
         endpoint: identity.endpoint,
@@ -230,18 +243,28 @@ export async function runConfiguredCandidateRawBackfill(input) {
       return await runFencedRawBackfill({
         candidateEndpointIdentity: "envio:d7a39a2",
         inspectFence: input.inspectFence,
-        runRawCycle: () => modules.projectorModule.runProjectorCycle({
-          store,
-          envio,
-          providers,
-          deadlineMs: 60_000,
+        runRawCycle: () => withCandidateRuntimeLease({
+          lease,
+          operation: (runtimeFence) => {
+            const store = modules.projectorStoreModule.createPostgresProjectorStore({
+              executor: writerExecutor,
+              providers: providerBindings,
+              releaseScopes,
+              runtimeFence,
+            });
+            return modules.projectorModule.runProjectorCycle({
+              store,
+              envio,
+              providers,
+              deadlineMs: 60_000,
+            });
+          },
         }),
         maximumCycles: input.maximumCycles,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
       });
     } finally {
-      if (fence) await lease.release(fence).catch(() => false);
       await Promise.allSettled([writerExecutor.close(), runtimeExecutor.close()]);
     }
   });

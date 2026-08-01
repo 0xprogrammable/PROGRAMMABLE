@@ -37,6 +37,7 @@ import { DataPipelineError } from "./errors";
 import {
   postgresJson,
   type PostgresExecutor,
+  type PostgresParameter,
   type PostgresTransaction,
 } from "./postgres";
 import type { ProjectorPlan, ProjectorStore } from "./projector";
@@ -1283,15 +1284,6 @@ export async function initializePostgresProjectorGenesis(input: {
       safe_block_hash_a: safeBlockHash,
       safe_block_hash_b: safeBlockHash,
     });
-    const blockEvidence = providerEvidenceV2("block", {
-      chain_id: "1",
-      epoch_id: neutral.epochId,
-      pointer_generation: neutral.pointerGeneration,
-      observation_id: ids.observation,
-      block_number: anchorBlockNumber,
-      provider_a_block_hash: anchorBlockHash,
-      provider_b_block_hash: anchorBlockHash,
-    });
     const requestCommitment = keccak256(toBytes(JSON.stringify([
       "projector-genesis-initialization-v1",
       neutral.epochId,
@@ -1333,29 +1325,38 @@ export async function initializePostgresProjectorGenesis(input: {
         timestamp,
       ],
     ), ids.run);
-    exactIdResult(await transaction.query(
-      "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, '1', '1', $5::numeric, $6::numeric, 12, $7::numeric, $8::bytea, $9::bytea, $10, $11::bytea, $12::bytea, $13::timestamptz) as id",
-      [
-        ids.observation,
-        ids.run,
-        rpcProviderDeploymentIds[0],
-        rpcProviderDeploymentIds[1],
-        providerHeads[0]!,
-        providerHeads[1]!,
-        safeBlockNumber,
-        hexToBytes(safeBlockHash),
-        hexToBytes(safeBlockHash),
-        safeEvidence.encodingVersion,
-        safeEvidence.canonicalPreimage,
-        hexToBytes(safeEvidence.contentFingerprint),
-        timestamp,
-      ],
-    ), ids.observation);
+    const observationId = await appendOrReuseSafeHeadObservation(transaction, [
+      ids.observation,
+      ids.run,
+      rpcProviderDeploymentIds[0],
+      rpcProviderDeploymentIds[1],
+      "1",
+      "1",
+      providerHeads[0]!,
+      providerHeads[1]!,
+      12,
+      safeBlockNumber,
+      hexToBytes(safeBlockHash),
+      hexToBytes(safeBlockHash),
+      safeEvidence.encodingVersion,
+      safeEvidence.canonicalPreimage,
+      hexToBytes(safeEvidence.contentFingerprint),
+      timestamp,
+    ]);
+    const blockEvidence = providerEvidenceV2("block", {
+      chain_id: "1",
+      epoch_id: neutral.epochId,
+      pointer_generation: neutral.pointerGeneration,
+      observation_id: observationId,
+      block_number: anchorBlockNumber,
+      provider_a_block_hash: anchorBlockHash,
+      provider_b_block_hash: anchorBlockHash,
+    });
     exactIdResult(await transaction.query(
       "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
       [
         ids.block,
-        ids.observation,
+        observationId,
         ids.run,
         anchorBlockNumber,
         hexToBytes(anchorBlockHash),
@@ -1490,6 +1491,18 @@ function exactIdResult(
   if (rows.length !== 1 || exactUuid(rows[0]?.id) !== expected) {
     return projectorValidationFailure();
   }
+}
+
+async function appendOrReuseSafeHeadObservation(
+  transaction: PostgresTransaction,
+  values: readonly PostgresParameter[],
+): Promise<string> {
+  const rows = await transaction.query(
+    "select programmable_private.append_or_reuse_safe_head_observation_v1($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7::numeric, $8::numeric, $9, $10::numeric, $11::bytea, $12::bytea, $13, $14::bytea, $15::bytea, $16::timestamptz) as id",
+    values,
+  );
+  if (rows.length !== 1) return projectorValidationFailure();
+  return exactUuid(rows[0]?.id);
 }
 
 function candidatePageJson(input: {
@@ -2666,15 +2679,6 @@ export function createPostgresProjectorStore(input: {
         safe_block_hash_a: stageInput.evidence.safeBlockHash,
         safe_block_hash_b: stageInput.evidence.safeBlockHash,
       });
-      const blockEvidence = providerEvidenceV2("block", {
-        chain_id: "1",
-        epoch_id: plan.database.epochId,
-        pointer_generation: plan.database.pointerGeneration,
-        observation_id: ids.observation,
-        block_number: activationBlockNumber,
-        provider_a_block_hash: activationBlockHash,
-        provider_b_block_hash: activationBlockHash,
-      });
       const requestCommitment = keccak256(
         toBytes(
           canonicalizeFingerprintJson({
@@ -2712,33 +2716,42 @@ export function createPostgresProjectorStore(input: {
           ),
           ids.run,
         );
-        exactIdResult(
-          await transaction.query(
-            "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, '1', '1', $5::numeric, $6::numeric, 12, $7::numeric, $8::bytea, $9::bytea, $10, $11::bytea, $12::bytea, $13::timestamptz) as id",
-            [
-              ids.observation,
-              ids.run,
-              plan.database.rpcProviderDeploymentIds[0],
-              plan.database.rpcProviderDeploymentIds[1],
-              stageInput.evidence.providerHeads[0],
-              stageInput.evidence.providerHeads[1],
-              stageInput.evidence.safeBlockNumber,
-              hexToBytes(stageInput.evidence.safeBlockHash),
-              hexToBytes(stageInput.evidence.safeBlockHash),
-              safeEvidence.encodingVersion,
-              safeEvidence.canonicalPreimage,
-              hexToBytes(safeEvidence.contentFingerprint),
-              timestamp,
-            ],
-          ),
-          ids.observation,
+        const observationId = await appendOrReuseSafeHeadObservation(
+          transaction,
+          [
+            ids.observation,
+            ids.run,
+            plan.database.rpcProviderDeploymentIds[0],
+            plan.database.rpcProviderDeploymentIds[1],
+            "1",
+            "1",
+            stageInput.evidence.providerHeads[0],
+            stageInput.evidence.providerHeads[1],
+            12,
+            stageInput.evidence.safeBlockNumber,
+            hexToBytes(stageInput.evidence.safeBlockHash),
+            hexToBytes(stageInput.evidence.safeBlockHash),
+            safeEvidence.encodingVersion,
+            safeEvidence.canonicalPreimage,
+            hexToBytes(safeEvidence.contentFingerprint),
+            timestamp,
+          ],
         );
+        const blockEvidence = providerEvidenceV2("block", {
+          chain_id: "1",
+          epoch_id: plan.database.epochId,
+          pointer_generation: plan.database.pointerGeneration,
+          observation_id: observationId,
+          block_number: activationBlockNumber,
+          provider_a_block_hash: activationBlockHash,
+          provider_b_block_hash: activationBlockHash,
+        });
         exactIdResult(
           await transaction.query(
             "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
             [
               ids.block,
-              ids.observation,
+              observationId,
               ids.run,
               activationBlockNumber,
               hexToBytes(activationBlockHash),
@@ -2764,7 +2777,7 @@ export function createPostgresProjectorStore(input: {
             plan.database.envioProviderDeploymentId,
             plan.database.rpcProviderDeploymentIds[0],
             plan.database.rpcProviderDeploymentIds[1],
-            ids.observation,
+            observationId,
             ids.block,
             JSON.stringify(activationPayloads),
             JSON.stringify(modelEvidencePayloads),
@@ -2915,15 +2928,6 @@ export function createPostgresProjectorStore(input: {
         safe_block_hash_a: providerSafeBlockHashes[0],
         safe_block_hash_b: providerSafeBlockHashes[1],
       });
-      const blockEvidence = providerEvidenceV2("block", {
-        chain_id: "1",
-        epoch_id: plan.database.epochId,
-        pointer_generation: plan.database.pointerGeneration,
-        observation_id: ids.observation,
-        block_number: targetBlockNumber,
-        provider_a_block_hash: providerBlockHashes[0],
-        provider_b_block_hash: providerBlockHashes[1],
-      });
       const reasonCommitment = keccak256(toBytes(JSON.stringify([
         "projector-reorg-recovery-v1",
         plan.cursor.generation,
@@ -2955,29 +2959,38 @@ export function createPostgresProjectorStore(input: {
             timestamp,
           ],
         ), ids.run);
-        exactIdResult(await transaction.query(
-          "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, '1', '1', $5::numeric, $6::numeric, 12, $7::numeric, $8::bytea, $9::bytea, $10, $11::bytea, $12::bytea, $13::timestamptz) as id",
-          [
-            ids.observation,
-            ids.run,
-            plan.database.rpcProviderDeploymentIds[0],
-            plan.database.rpcProviderDeploymentIds[1],
-            recovery.providerHeads[0],
-            recovery.providerHeads[1],
-            safeBlockNumber,
-            hexToBytes(providerSafeBlockHashes[0]),
-            hexToBytes(providerSafeBlockHashes[1]),
-            safeEvidence.encodingVersion,
-            safeEvidence.canonicalPreimage,
-            hexToBytes(safeEvidence.contentFingerprint),
-            timestamp,
-          ],
-        ), ids.observation);
+        const observationId = await appendOrReuseSafeHeadObservation(transaction, [
+          ids.observation,
+          ids.run,
+          plan.database.rpcProviderDeploymentIds[0],
+          plan.database.rpcProviderDeploymentIds[1],
+          "1",
+          "1",
+          recovery.providerHeads[0],
+          recovery.providerHeads[1],
+          12,
+          safeBlockNumber,
+          hexToBytes(providerSafeBlockHashes[0]),
+          hexToBytes(providerSafeBlockHashes[1]),
+          safeEvidence.encodingVersion,
+          safeEvidence.canonicalPreimage,
+          hexToBytes(safeEvidence.contentFingerprint),
+          timestamp,
+        ]);
+        const blockEvidence = providerEvidenceV2("block", {
+          chain_id: "1",
+          epoch_id: plan.database.epochId,
+          pointer_generation: plan.database.pointerGeneration,
+          observation_id: observationId,
+          block_number: targetBlockNumber,
+          provider_a_block_hash: providerBlockHashes[0],
+          provider_b_block_hash: providerBlockHashes[1],
+        });
         exactIdResult(await transaction.query(
           "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
           [
             ids.block,
-            ids.observation,
+            observationId,
             ids.run,
             targetBlockNumber,
             hexToBytes(providerBlockHashes[0]),
@@ -3002,7 +3015,7 @@ export function createPostgresProjectorStore(input: {
             ids.recovery,
             ids.run,
             ids.outcome,
-            ids.observation,
+            observationId,
             ids.block,
             plan.database.envioProviderDeploymentId,
             streamId,
@@ -3122,15 +3135,6 @@ export function createPostgresProjectorStore(input: {
         safe_block_number: stageInput.evidence.safeBlockNumber,
         safe_block_hash_a: stageInput.evidence.safeBlockHash,
         safe_block_hash_b: stageInput.evidence.safeBlockHash,
-      });
-      const blockEvidence = providerEvidenceV2("block", {
-        chain_id: "1",
-        epoch_id: stageInput.plan.database.epochId,
-        pointer_generation: stageInput.plan.database.pointerGeneration,
-        observation_id: ids.observation,
-        block_number: firstCandidate.blockNumber,
-        provider_a_block_hash: firstCandidate.blockHash,
-        provider_b_block_hash: firstCandidate.blockHash,
       });
       const records = parsedItems.map((parsed) => {
         const itemIdentity = [
@@ -3264,36 +3268,42 @@ export function createPostgresProjectorStore(input: {
           ),
           ids.run,
         );
-        exactIdResult(
-          await transaction.query(
-            "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7::numeric, $8::numeric, $9, $10::numeric, $11::bytea, $12::bytea, $13, $14::bytea, $15::bytea, $16::timestamptz) as id",
-            [
-              ids.observation,
-              ids.run,
-              stageInput.plan.database.rpcProviderDeploymentIds[0],
-              stageInput.plan.database.rpcProviderDeploymentIds[1],
-              "1",
-              "1",
-              stageInput.evidence.providerHeads[0],
-              stageInput.evidence.providerHeads[1],
-              12,
-              stageInput.evidence.safeBlockNumber,
-              hexToBytes(stageInput.evidence.safeBlockHash),
-              hexToBytes(stageInput.evidence.safeBlockHash),
-              safeEvidence.encodingVersion,
-              safeEvidence.canonicalPreimage,
-              hexToBytes(safeEvidence.contentFingerprint),
-              timestamp,
-            ],
-          ),
-          ids.observation,
+        const observationId = await appendOrReuseSafeHeadObservation(
+          transaction,
+          [
+            ids.observation,
+            ids.run,
+            stageInput.plan.database.rpcProviderDeploymentIds[0],
+            stageInput.plan.database.rpcProviderDeploymentIds[1],
+            "1",
+            "1",
+            stageInput.evidence.providerHeads[0],
+            stageInput.evidence.providerHeads[1],
+            12,
+            stageInput.evidence.safeBlockNumber,
+            hexToBytes(stageInput.evidence.safeBlockHash),
+            hexToBytes(stageInput.evidence.safeBlockHash),
+            safeEvidence.encodingVersion,
+            safeEvidence.canonicalPreimage,
+            hexToBytes(safeEvidence.contentFingerprint),
+            timestamp,
+          ],
         );
+        const blockEvidence = providerEvidenceV2("block", {
+          chain_id: "1",
+          epoch_id: stageInput.plan.database.epochId,
+          pointer_generation: stageInput.plan.database.pointerGeneration,
+          observation_id: observationId,
+          block_number: firstCandidate.blockNumber,
+          provider_a_block_hash: firstCandidate.blockHash,
+          provider_b_block_hash: firstCandidate.blockHash,
+        });
         exactIdResult(
           await transaction.query(
             "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
             [
               ids.block,
-              ids.observation,
+              observationId,
               ids.run,
               firstCandidate.blockNumber,
               hexToBytes(firstCandidate.blockHash),
@@ -3360,7 +3370,7 @@ export function createPostgresProjectorStore(input: {
               streamId,
               stageInput.plan.database.rpcProviderDeploymentIds[0],
               stageInput.plan.database.rpcProviderDeploymentIds[1],
-              ids.observation,
+              observationId,
               ids.block,
               firstCandidate.blockNumber,
               hexToBytes(firstCandidate.blockHash),
@@ -3471,15 +3481,6 @@ export function createPostgresProjectorStore(input: {
         safe_block_hash_a: evidence.safeBlockHash,
         safe_block_hash_b: evidence.safeBlockHash,
       });
-      const blockEvidence = providerEvidenceV2("block", {
-        chain_id: "1",
-        epoch_id: plan.database.epochId,
-        pointer_generation: plan.database.pointerGeneration,
-        observation_id: ids.observation,
-        block_number: finalBlockNumber,
-        provider_a_block_hash: finalBlockHash,
-        provider_b_block_hash: finalBlockHash,
-      });
       const candidateBlocks = new Map<string, HexBytes32>();
       for (const candidate of commitInput.candidates) {
         const blockHash = canonicalBytes32(candidate.blockHash);
@@ -3495,57 +3496,6 @@ export function createPostgresProjectorStore(input: {
       if (candidateBlocks.get(finalBlockNumber) !== finalBlockHash) {
         return projectorValidationFailure();
       }
-      const blockEvidenceRecords = Object.freeze(
-        [...candidateBlocks].map(([blockNumber, blockHash]) => {
-          const evidenceId = blockNumber === finalBlockNumber
-            ? ids.block
-            : exactUuid(uuid());
-          return Object.freeze({
-            evidenceId,
-            blockNumber,
-            blockHash,
-            evidence: blockNumber === finalBlockNumber
-              ? blockEvidence
-              : providerEvidenceV2("block", {
-                  chain_id: "1",
-                  epoch_id: plan.database.epochId,
-                  pointer_generation: plan.database.pointerGeneration,
-                  observation_id: ids.observation,
-                  block_number: blockNumber,
-                  provider_a_block_hash: blockHash,
-                  provider_b_block_hash: blockHash,
-                }),
-          });
-        }),
-      );
-      const coverageEvidence = providerEvidenceV2("log_coverage", {
-        chain_id: "1",
-        epoch_id: plan.database.epochId,
-        pointer_generation: plan.database.pointerGeneration,
-        provider_deployment_id: plan.database.envioProviderDeploymentId,
-        stream_id: streamId,
-        expected_cursor_generation: plan.cursor.generation,
-        next_cursor_generation: (BigInt(plan.cursor.generation) + 1n).toString(),
-        previous_block_number: plan.cursor.blockNumber,
-        previous_block_global_log_index: plan.cursor.isBlockBoundary
-          ? null
-          : String(plan.cursor.blockGlobalLogIndex),
-        previous_candidate_id: plan.cursor.isBlockBoundary
-          ? null
-          : plan.cursor.candidateId,
-        from_block_number: evidence.coverage.fromBlockNumber,
-        to_block_number: finalBlockNumber,
-        final_block_hash: finalBlockHash,
-        final_block_global_log_index: String(finalBlockGlobalLogIndex),
-        final_candidate_id: finalCandidateId,
-        safe_head_observation_id: ids.observation,
-        final_block_evidence_id: ids.block,
-        provider_a_id: plan.database.rpcProviderDeploymentIds[0],
-        provider_b_id: plan.database.rpcProviderDeploymentIds[1],
-        filter_commitment: evidence.coverage.filterCommitment,
-        ordered_log_commitments: orderedLogCommitments,
-        page_commitment: pageCommitment,
-      });
       const requestCommitment = keccak256(
         toBytes(
           JSON.stringify([
@@ -3554,12 +3504,6 @@ export function createPostgresProjectorStore(input: {
             commitInput.snapshotBlock,
             pageCommitment,
           ]),
-        ),
-      );
-      const resultCommitment = keccak256(
-        encodeAbiParameters(
-          [{ type: "bytes32" }, { type: "bytes32" }],
-          [pageCommitment, coverageEvidence.contentFingerprint],
         ),
       );
       const candidateJson = candidatePageJson({
@@ -3586,8 +3530,8 @@ export function createPostgresProjectorStore(input: {
             timestamp,
           ],
         );
-        const observationRows = await transaction.query(
-          "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7::numeric, $8::numeric, $9, $10::numeric, $11::bytea, $12::bytea, $13, $14::bytea, $15::bytea, $16::timestamptz) as id",
+        const observationId = await appendOrReuseSafeHeadObservation(
+          transaction,
           [
             ids.observation,
             ids.run,
@@ -3607,13 +3551,67 @@ export function createPostgresProjectorStore(input: {
             timestamp,
           ],
         );
-        exactIdResult(observationRows, ids.observation);
+        const blockEvidenceRecords = Object.freeze(
+          [...candidateBlocks].map(([blockNumber, blockHash]) => {
+            const evidenceId = blockNumber === finalBlockNumber
+              ? ids.block
+              : exactUuid(uuid());
+            return Object.freeze({
+              evidenceId,
+              blockNumber,
+              blockHash,
+              evidence: providerEvidenceV2("block", {
+                chain_id: "1",
+                epoch_id: plan.database.epochId,
+                pointer_generation: plan.database.pointerGeneration,
+                observation_id: observationId,
+                block_number: blockNumber,
+                provider_a_block_hash: blockHash,
+                provider_b_block_hash: blockHash,
+              }),
+            });
+          }),
+        );
+        const coverageEvidence = providerEvidenceV2("log_coverage", {
+          chain_id: "1",
+          epoch_id: plan.database.epochId,
+          pointer_generation: plan.database.pointerGeneration,
+          provider_deployment_id: plan.database.envioProviderDeploymentId,
+          stream_id: streamId,
+          expected_cursor_generation: plan.cursor.generation,
+          next_cursor_generation: (BigInt(plan.cursor.generation) + 1n).toString(),
+          previous_block_number: plan.cursor.blockNumber,
+          previous_block_global_log_index: plan.cursor.isBlockBoundary
+            ? null
+            : String(plan.cursor.blockGlobalLogIndex),
+          previous_candidate_id: plan.cursor.isBlockBoundary
+            ? null
+            : plan.cursor.candidateId,
+          from_block_number: evidence.coverage.fromBlockNumber,
+          to_block_number: finalBlockNumber,
+          final_block_hash: finalBlockHash,
+          final_block_global_log_index: String(finalBlockGlobalLogIndex),
+          final_candidate_id: finalCandidateId,
+          safe_head_observation_id: observationId,
+          final_block_evidence_id: ids.block,
+          provider_a_id: plan.database.rpcProviderDeploymentIds[0],
+          provider_b_id: plan.database.rpcProviderDeploymentIds[1],
+          filter_commitment: evidence.coverage.filterCommitment,
+          ordered_log_commitments: orderedLogCommitments,
+          page_commitment: pageCommitment,
+        });
+        const resultCommitment = keccak256(
+          encodeAbiParameters(
+            [{ type: "bytes32" }, { type: "bytes32" }],
+            [pageCommitment, coverageEvidence.contentFingerprint],
+          ),
+        );
         for (const blockRecord of blockEvidenceRecords) {
           const blockRows = await transaction.query(
             "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
             [
               blockRecord.evidenceId,
-              ids.observation,
+              observationId,
               ids.run,
               blockRecord.blockNumber,
               hexToBytes(blockRecord.blockHash),
@@ -3638,7 +3636,7 @@ export function createPostgresProjectorStore(input: {
             (BigInt(plan.cursor.generation) + 1n).toString(),
             evidence.coverage.fromBlockNumber,
             postgresJson(candidateJson),
-            ids.observation,
+            observationId,
             ids.block,
             plan.database.rpcProviderDeploymentIds[0],
             plan.database.rpcProviderDeploymentIds[1],
@@ -6644,7 +6642,7 @@ async function commitPostgresVerifiedProjection(input: {
       });
     }
 
-    const safeObservationId = deterministicUuid(
+    const proposedSafeObservationId = deterministicUuid(
       "safe-head-observation",
       privatePlan.runId,
       projection.evidence.safeBlockNumber,
@@ -6665,29 +6663,26 @@ async function commitPostgresVerifiedProjection(input: {
       safe_block_hash_a: projection.evidence.safeBlockHash,
       safe_block_hash_b: projection.evidence.safeBlockHash,
     });
-    exactIdResult(
-      await transaction.query(
-        "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7::numeric, $8::numeric, $9, $10::numeric, $11::bytea, $12::bytea, $13, $14::bytea, $15::bytea, $16::timestamptz) as id",
-        [
-          safeObservationId,
-          privatePlan.runId,
-          rpcProviderIds[0]!,
-          rpcProviderIds[1]!,
-          "1",
-          "1",
-          projection.evidence.providerHeads[0],
-          projection.evidence.providerHeads[1],
-          12,
-          projection.evidence.safeBlockNumber,
-          hexToBytes(projection.evidence.safeBlockHash),
-          hexToBytes(projection.evidence.safeBlockHash),
-          safeEvidence.encodingVersion,
-          safeEvidence.canonicalPreimage,
-          hexToBytes(safeEvidence.contentFingerprint),
-          verifiedAt,
-        ],
-      ),
-      safeObservationId,
+    const safeObservationId = await appendOrReuseSafeHeadObservation(
+      transaction,
+      [
+        proposedSafeObservationId,
+        privatePlan.runId,
+        rpcProviderIds[0]!,
+        rpcProviderIds[1]!,
+        "1",
+        "1",
+        projection.evidence.providerHeads[0],
+        projection.evidence.providerHeads[1],
+        12,
+        projection.evidence.safeBlockNumber,
+        hexToBytes(projection.evidence.safeBlockHash),
+        hexToBytes(projection.evidence.safeBlockHash),
+        safeEvidence.encodingVersion,
+        safeEvidence.canonicalPreimage,
+        hexToBytes(safeEvidence.contentFingerprint),
+        verifiedAt,
+      ],
     );
 
     const blockEvidenceIds = new Map<string, string>();

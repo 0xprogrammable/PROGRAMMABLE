@@ -5,6 +5,7 @@ import {
   CANDIDATE_RUNTIME_ENDPOINT,
   candidateGenesisAnchorBlock,
   loadCandidateRuntimeIdentity,
+  withCandidateRuntimeLease,
 } from "./cutover-runtime.mjs";
 
 test("raw runtime is pinned to the reviewed candidate evidence", async () => {
@@ -35,4 +36,70 @@ test("candidate genesis is the predecessor of the earliest reviewed source", () 
     () => candidateGenesisAnchorBlock({ releases: [] }),
     /start blocks are unavailable/u,
   );
+});
+
+test("raw backfill leases one bounded projector cycle at a time", async () => {
+  let generation = 0;
+  const operations = [];
+  const releases = [];
+  const lease = {
+    async tryAcquire() {
+      generation += 1;
+      return {
+        status: "acquired",
+        fence: {
+          holderId: `projector-runtime-00000000-0000-4000-8000-${String(generation).padStart(12, "0")}`,
+          generation: String(generation),
+          tokenHash: `0x${String(generation).padStart(64, "0")}`,
+        },
+      };
+    },
+    async release(fence) {
+      releases.push(fence.generation);
+      return true;
+    },
+  };
+
+  for (let index = 0; index < 3; index += 1) {
+    await withCandidateRuntimeLease({
+      lease,
+      operation: async (fence) => {
+        operations.push(fence.generation);
+      },
+    });
+  }
+
+  assert.deepEqual(operations, ["1", "2", "3"]);
+  assert.deepEqual(releases, ["1", "2", "3"]);
+});
+
+test("raw backfill releases a lease when a cycle fails", async () => {
+  let released = false;
+  const lease = {
+    async tryAcquire() {
+      return {
+        status: "acquired",
+        fence: {
+          holderId: "projector-runtime-00000000-0000-4000-8000-000000000001",
+          generation: "1",
+          tokenHash: `0x${"11".repeat(32)}`,
+        },
+      };
+    },
+    async release() {
+      released = true;
+      return true;
+    },
+  };
+
+  await assert.rejects(
+    withCandidateRuntimeLease({
+      lease,
+      operation: async () => {
+        throw new Error("cycle failed");
+      },
+    }),
+    /cycle failed/u,
+  );
+  assert.equal(released, true);
 });

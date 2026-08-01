@@ -57,6 +57,10 @@
         {
           "path": "supabase/migrations/20260801093000_bind_candidate_promotion_to_product.sql",
           "sha256": "c6a032ef371b2211004c8d72c0a8c4eec4ba630776210aed48d2d054e642dbbe"
+        },
+        {
+          "path": "supabase/migrations/20260801125441_reuse_safe_head_observations.sql",
+          "sha256": "afbeea7bcf60e492e51bfd0c56517613f32a6f87a0182af00c48bdaef6569e74"
         }
       ]
     },
