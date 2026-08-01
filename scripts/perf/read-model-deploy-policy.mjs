@@ -296,7 +296,7 @@ function exactHttpsOrigin(value, subject) {
   return target;
 }
 
-function canonicalJson(value) {
+export function canonicalJson(value) {
   if (
     value === null ||
     typeof value === "boolean" ||
@@ -317,6 +317,129 @@ function canonicalJson(value) {
       .join(",")}}`;
   }
   throw new Error("release attestation contains a non-canonical value");
+}
+
+function exactObjectKeys(value, keys, label) {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype ||
+    Object.keys(value).sort().join("\0") !== [...keys].sort().join("\0")
+  ) {
+    throw new Error(`${label} shape is invalid`);
+  }
+  return value;
+}
+
+function exactBooleanRecord(value, keys, label) {
+  const record = exactObjectKeys(value, keys, label);
+  if (keys.some((key) => typeof record[key] !== "boolean")) {
+    throw new Error(`${label} values are invalid`);
+  }
+  return Object.freeze(Object.fromEntries(keys.map((key) => [key, record[key]])));
+}
+
+export function validateStagedReleaseAttestation(value, expectations = {}) {
+  const attestation = exactObjectKeys(
+    value,
+    [
+      "schemaVersion",
+      "verifiedSha",
+      "vercelProjectId",
+      "stagedDeploymentId",
+      "stagedDeploymentUrl",
+      "productionOrigin",
+      "policyMode",
+      "indexedFlags",
+      "workerActivationFlags",
+      "timestamp",
+    ],
+    "staged release attestation",
+  );
+  if (
+    attestation.schemaVersion !== 1 ||
+    !/^[0-9a-f]{40}$/u.test(attestation.verifiedSha ?? "") ||
+    !/^prj_[A-Za-z0-9]{8,80}$/u.test(attestation.vercelProjectId ?? "") ||
+    !/^dpl_[A-Za-z0-9]{20,80}$/u.test(attestation.stagedDeploymentId ?? "")
+  ) {
+    throw new Error("staged release attestation identity is invalid");
+  }
+  const stagedTarget = exactHttpsOrigin(
+    attestation.stagedDeploymentUrl,
+    "staged release attestation URL",
+  );
+  if (!stagedTarget.hostname.endsWith(".vercel.app")) {
+    throw new Error("staged release attestation URL is not deployment-specific");
+  }
+  if (
+    attestation.productionOrigin !== CANONICAL_PRODUCTION_ORIGIN ||
+    exactHttpsOrigin(attestation.productionOrigin, "production origin").origin !==
+      CANONICAL_PRODUCTION_ORIGIN
+  ) {
+    throw new Error("staged release attestation production origin is invalid");
+  }
+  const indexedFlags = exactBooleanRecord(
+    attestation.indexedFlags,
+    RELEASE_GATED_FLAG_NAMES,
+    "staged release indexed flags",
+  );
+  const workerActivationFlags = exactBooleanRecord(
+    attestation.workerActivationFlags,
+    WORKER_ACTIVATION_FLAG_NAMES,
+    "staged release worker flags",
+  );
+  const nonLegacy =
+    Object.values(indexedFlags).some(Boolean) ||
+    Object.values(workerActivationFlags).some(Boolean);
+  const expectedMode = nonLegacy ? "indexed-or-shadow" : "legacy-only";
+  if (attestation.policyMode !== expectedMode) {
+    throw new Error("staged release attestation mode is invalid");
+  }
+  const timestampMs = Date.parse(attestation.timestamp ?? "");
+  const nowMs = expectations.nowMs ?? Date.now();
+  const maximumAgeMs = expectations.maximumAgeMs ?? 2 * 60 * 60 * 1_000;
+  if (
+    !Number.isFinite(timestampMs) ||
+    !Number.isSafeInteger(nowMs) ||
+    !Number.isSafeInteger(maximumAgeMs) ||
+    maximumAgeMs < 1_000 ||
+    maximumAgeMs > 24 * 60 * 60 * 1_000 ||
+    timestampMs > nowMs + 60_000 ||
+    nowMs - timestampMs > maximumAgeMs
+  ) {
+    throw new Error("staged release attestation timestamp is invalid");
+  }
+  const exactExpectations = [
+    ["verifiedSha", attestation.verifiedSha],
+    ["vercelProjectId", attestation.vercelProjectId],
+    ["stagedDeploymentId", attestation.stagedDeploymentId],
+    ["stagedDeploymentUrl", stagedTarget.origin],
+    ["productionOrigin", attestation.productionOrigin],
+  ];
+  for (const [key, observed] of exactExpectations) {
+    if (expectations[key] !== undefined && expectations[key] !== observed) {
+      throw new Error(`staged release attestation ${key} does not match`);
+    }
+  }
+  if (
+    expectations.requireWorkersActive === true &&
+    Object.values(workerActivationFlags).some((active) => active !== true)
+  ) {
+    throw new Error("staged release attestation workers are not active");
+  }
+  if (
+    expectations.requireIndexedFlagsFalse === true &&
+    Object.values(indexedFlags).some(Boolean)
+  ) {
+    throw new Error("staged release attestation exposes indexed reads");
+  }
+  return Object.freeze({
+    ...attestation,
+    stagedDeploymentUrl: stagedTarget.origin,
+    indexedFlags,
+    workerActivationFlags,
+  });
 }
 
 export function createStagedReleaseAttestation(input) {

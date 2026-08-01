@@ -118,7 +118,11 @@ test("projector drain evidence binds stopped schedulers, drained leases and stag
       schedulerExposure: false,
       assignedAliases: [],
     },
-    leaseDrain: { drained: true },
+    leaseDrain: {
+      drained: true,
+      stabilityWindowMs: 65_000,
+      stableForMs: 65_000,
+    },
     releaseGateEvidenceSha256: `0x${"b".repeat(64)}`,
   };
   const evidence = {

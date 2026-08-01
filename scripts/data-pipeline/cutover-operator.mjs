@@ -50,6 +50,7 @@ import {
   safeFailure,
   sha256,
 } from "./hosted-db-operator-core.mjs";
+import { validateStagedReleaseAttestation } from "../perf/read-model-deploy-policy.mjs";
 
 const execute = promisify(execFile);
 const workspace = fileURLToPath(new URL("../../", import.meta.url));
@@ -277,6 +278,10 @@ export function assertProjectorDrainEvidence(value, commit, stagedDeploymentId) 
     !Array.isArray(evidence.stageExposure?.assignedAliases) ||
     evidence.stageExposure.assignedAliases.length !== 0 ||
     evidence.leaseDrain?.drained !== true ||
+    !Number.isSafeInteger(evidence.leaseDrain?.stabilityWindowMs) ||
+    evidence.leaseDrain.stabilityWindowMs < 65_000 ||
+    !Number.isSafeInteger(evidence.leaseDrain?.stableForMs) ||
+    evidence.leaseDrain.stableForMs < evidence.leaseDrain.stabilityWindowMs ||
     !SHA256.test(evidence.releaseGateEvidenceSha256 ?? "") ||
     !SHA256.test(evidence.evidenceSha256 ?? "")
   ) {
@@ -436,7 +441,18 @@ async function runCommand(command, flags, environment) {
     ]);
     const commit = await assertCleanCheckout();
     const target = exactStagedTarget(flags.get("--target-url"), flags.get("--deployment-id"));
-    const gate = await readArtifact(flags.get("--release-gate"));
+    const gate = validateStagedReleaseAttestation(
+      await readArtifact(flags.get("--release-gate"), { privateFile: true }),
+      {
+        verifiedSha: commit,
+        vercelProjectId: environment.VERCEL_PROJECT_ID,
+        stagedDeploymentId: flags.get("--deployment-id"),
+        stagedDeploymentUrl: target.origin,
+        productionOrigin: "https://programmable.family",
+        requireWorkersActive: true,
+        requireIndexedFlagsFalse: true,
+      },
+    );
     const stageExposure = await inspectUnexposedStagedDeployment({
       targetUrl: target.toString(),
       deploymentId: flags.get("--deployment-id"),
@@ -451,6 +467,7 @@ async function runCommand(command, flags, environment) {
         const fence = assertCandidateFence(await inspectCandidateDatabase(sql), "fenced");
         const leaseDrain = await waitForProjectorLeaseDrain({
           inspect: () => inspectProjectorLeaseDrain(sql),
+          stabilityWindowMs: 65_000,
         });
         const payload = {
           kind: "programmable-projector-drain-evidence",

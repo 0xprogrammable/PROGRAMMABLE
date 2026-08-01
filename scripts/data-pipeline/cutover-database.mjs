@@ -280,13 +280,17 @@ export async function inspectProjectorLeaseDrain(sql) {
 export async function waitForProjectorLeaseDrain(input) {
   const maximumWaitMs = input.maximumWaitMs ?? 120_000;
   const intervalMs = input.intervalMs ?? 1_000;
+  const stabilityWindowMs = input.stabilityWindowMs ?? 0;
   if (
     !Number.isSafeInteger(maximumWaitMs) ||
     maximumWaitMs < 1_000 ||
     maximumWaitMs > 180_000 ||
     !Number.isSafeInteger(intervalMs) ||
     intervalMs < 100 ||
-    intervalMs > 5_000
+    intervalMs > 5_000 ||
+    !Number.isSafeInteger(stabilityWindowMs) ||
+    stabilityWindowMs < 0 ||
+    stabilityWindowMs > maximumWaitMs - intervalMs
   ) {
     throw new Error("projector lease drain bound is invalid");
   }
@@ -295,11 +299,39 @@ export async function waitForProjectorLeaseDrain(input) {
     new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const startedAt = now();
   let attempts = 0;
+  let stableSince = null;
+  let stableFingerprint = null;
   while (now() - startedAt <= maximumWaitMs) {
     attempts += 1;
     const state = await input.inspect();
     if (state?.drained === true) {
-      return Object.freeze({ ...state, attempts, waitedMs: now() - startedAt });
+      const fingerprint = JSON.stringify(
+        Array.isArray(state.leases)
+          ? state.leases.map((lease) => ({
+              projector: lease.projector,
+              leaseGeneration: lease.leaseGeneration,
+              expiresAt: lease.expiresAt,
+              releasedAt: lease.releasedAt,
+            }))
+          : [],
+      );
+      if (stableFingerprint !== fingerprint) {
+        stableFingerprint = fingerprint;
+        stableSince = now();
+      }
+      const stableForMs = now() - stableSince;
+      if (stableForMs >= stabilityWindowMs) {
+        return Object.freeze({
+          ...state,
+          attempts,
+          waitedMs: now() - startedAt,
+          stabilityWindowMs,
+          stableForMs,
+        });
+      }
+    } else {
+      stableSince = null;
+      stableFingerprint = null;
     }
     await sleep(intervalMs);
   }

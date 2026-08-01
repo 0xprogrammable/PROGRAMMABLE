@@ -13,6 +13,7 @@ const {
   createStagedReleaseAttestation,
   evaluateReadModelDeployPolicy,
   readReleasePolicyExpectations,
+  validateStagedReleaseAttestation,
   RELEASE_GATED_FLAG_NAMES,
   REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES,
   WORKER_ACTIVATION_FLAG_NAMES,
@@ -194,6 +195,75 @@ describe("read-model production deploy policy", () => {
       createHash("sha256").update(result.json, "utf8").digest("hex"),
     );
     expect(result.json).not.toMatch(/(?:password|postgresql:\/\/)/iu);
+    expect(
+      validateStagedReleaseAttestation(JSON.parse(result.json), {
+        verifiedSha: "a".repeat(40),
+        vercelProjectId: "prj_1234567890abcdef",
+        stagedDeploymentId: `dpl_${"b".repeat(24)}`,
+        stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
+        productionOrigin: "https://programmable.family",
+        nowMs: Date.parse("2026-08-01T12:35:00.000Z"),
+      }),
+    ).toEqual(JSON.parse(result.json));
+  });
+
+  it("rejects stale, mutated or publicly exposed cutover attestations", () => {
+    const policy = evaluateReadModelDeployPolicy(
+      environmentFile({
+        workers: Object.fromEntries(
+          WORKER_ACTIVATION_FLAG_NAMES.map((name: string) => [name, "true"]),
+        ),
+        includeRuntimeProviders: true,
+      }),
+      COMMITMENTS,
+      EXPECTATIONS,
+    );
+    const value = JSON.parse(
+      createStagedReleaseAttestation({
+        policy,
+        verifiedSha: "a".repeat(40),
+        vercelProjectId: "prj_1234567890abcdef",
+        stagedDeploymentId: `dpl_${"b".repeat(24)}`,
+        stagedDeploymentUrl: "https://programmable-stage-abc.vercel.app",
+        productionOrigin: "https://programmable.family",
+        expectedMode: "indexed-or-shadow",
+        timestamp: "2026-08-01T12:34:56.000Z",
+      }).json,
+    );
+    const expected = {
+      verifiedSha: value.verifiedSha,
+      vercelProjectId: value.vercelProjectId,
+      stagedDeploymentId: value.stagedDeploymentId,
+      stagedDeploymentUrl: value.stagedDeploymentUrl,
+      productionOrigin: value.productionOrigin,
+      requireWorkersActive: true,
+      requireIndexedFlagsFalse: true,
+      nowMs: Date.parse("2026-08-01T12:35:00.000Z"),
+    };
+    expect(() =>
+      validateStagedReleaseAttestation(
+        { ...value, verifiedSha: "c".repeat(40) },
+        expected,
+      ),
+    ).toThrow("verifiedSha does not match");
+    expect(() =>
+      validateStagedReleaseAttestation(
+        {
+          ...value,
+          indexedFlags: {
+            ...value.indexedFlags,
+            INDEXED_EXPLORE_LIST_READS_ENABLED: true,
+          },
+        },
+        expected,
+      ),
+    ).toThrow("exposes indexed reads");
+    expect(() =>
+      validateStagedReleaseAttestation(value, {
+        ...expected,
+        nowMs: Date.parse("2026-08-02T12:35:00.000Z"),
+      }),
+    ).toThrow("timestamp is invalid");
   });
 
   it("rejects an attestation for a different mode, target or project", () => {

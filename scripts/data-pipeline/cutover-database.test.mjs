@@ -85,6 +85,36 @@ test("lease drain fails closed when an active lease survives the deadline", asyn
   );
 });
 
+test("lease drain proves scheduler isolation across a full stability window", async () => {
+  let clock = 0;
+  let generation = "0";
+  const result = await waitForProjectorLeaseDrain({
+    maximumWaitMs: 2_000,
+    intervalMs: 100,
+    stabilityWindowMs: 500,
+    now: () => clock,
+    sleep: async (milliseconds) => {
+      clock += milliseconds;
+      if (clock === 300) generation = "1";
+    },
+    inspect: async () => ({
+      observedAt: "2026-08-01T08:00:00.000Z",
+      drained: true,
+      leases: [
+        {
+          projector: "source",
+          leaseGeneration: generation,
+          expiresAt: null,
+          releasedAt: generation === "0" ? null : "2026-08-01T08:00:00.000Z",
+        },
+      ],
+    }),
+  });
+  assert.equal(result.stabilityWindowMs, 500);
+  assert.equal(result.stableForMs, 500);
+  assert.equal(result.waitedMs, 800);
+});
+
 test("database promotion rechecks current leases under its transaction before mutation", async () => {
   const observedAt = "2026-08-01T08:00:00.000Z";
   assert.throws(
