@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow,noarchive" />
+    <title>Programmable fee claim</title>
+    <link rel="icon" href="/public/brand/loop/programmable-loop-mark-64.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <div class="brand">
+          <img
+            src="/public/brand/loop/programmable-loop-mark-512.png"
+            alt=""
+            width="34"
+            height="34"
+          />
+          <strong>Programmable</strong>
+        </div>
+        <div class="network" data-network>Ethereum</div>
+      </header>
+
+      <section class="content" aria-labelledby="claim-title">
+        <p class="eyebrow">Protocol revenue</p>
+        <h1 id="claim-title">Claim fees</h1>
+        <p class="intro">
+          Collect ETH and stock-asset balances from every verified Programmable fee hook. Each transaction pays the immutable treasury directly.
+        </p>
+
+        <div class="total-line">
+          <span data-claim-count>0 claims</span>
+          <strong data-total>0 ETH</strong>
+        </div>
+
+        <ul class="claim-list" data-claim-rows aria-label="Protocol fee hooks"></ul>
+
+        <div class="wallet-line">
+          <span>Wallet <strong data-account>Not connected</strong></span>
+          <button class="refresh" type="button" data-refresh disabled>Refresh balances</button>
+        </div>
+
+        <button class="primary" type="button" data-action>
+          <strong>Connect wallet</strong>
+          <span data-action-detail>Connect the Programmable treasury</span>
+        </button>
+
+        <p class="status" role="status" aria-live="polite" data-status>
+          Connect MetaMask to read claimable fees
+        </p>
+        <p class="error" role="alert" data-error hidden></p>
+        <p class="trust">
+          This local page can only call the published launcher-fee claim functions. It never requests a private key and cannot redirect the payout.
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
