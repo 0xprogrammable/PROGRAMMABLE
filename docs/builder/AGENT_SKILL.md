@@ -63,7 +63,7 @@ First preview the protected Builder release tag:
 
 ```bash
 gh skill preview 0xprogrammable/programmable \
-  programmable-v4-hook-builder@programmable-v4-builder-v0.1.0
+  programmable-v4-hook-builder@programmable-v4-builder-v0.1.1
 ```
 
 Then install that same release for your agent. User scope is the beginner default because it keeps the project
@@ -74,7 +74,7 @@ gh skill install 0xprogrammable/programmable \
   skills/programmable-v4-hook-builder \
   --agent codex \
   --scope user \
-  --pin programmable-v4-builder-v0.1.0
+  --pin programmable-v4-builder-v0.1.1
 ```
 
 Replace `codex` with `claude-code` or `github-copilot` when appropriate. Use `--scope project` only when the project
