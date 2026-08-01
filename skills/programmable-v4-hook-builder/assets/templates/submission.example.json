@@ -562,6 +562,7 @@
     "customCurve": { "used": null, "invariant": null, "domain": null, "rounding": null, "monotonicity": null, "discontinuities": null, "inverse": null, "differentialReference": null, "failureRule": null }
   },
   "capabilityExtensions": [],
+  "tokenBehaviorExtensions": [],
   "security": {
     "usesTxOrigin": false,
     "userControlledDelegatecall": false,

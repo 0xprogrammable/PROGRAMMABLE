@@ -116,6 +116,131 @@ test("transparent transfer-tax and auto-liquidity token enters model-specific no
   ]) assert.ok(report.requiredGates.some(({ id }) => id === gateId), gateId);
 });
 
+test("auto-liquidity accepts a bounded launch allocation without requiring transfer tax", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  submission.noHookArchitecture.transferTax = officialNoHookArchitecture().transferTax;
+  submission.assets.find(({ role }) => role === "launched").behaviors = ["standard"];
+  submission.valueFlows.push({
+    id: "auto-liquidity-launch-allocation",
+    action: "reserve an immutable launch allocation for later canonical liquidity",
+    asset: "launched-token",
+    from: "the fixed token supply allocation committed at creation",
+    to: "the separately accounted automatic-liquidity bucket",
+    amountRule: "Credit no more than the immutable constructor allocation and never debit a holder, recipient or unrelated treasury balance.",
+    settlement: "Record the allocation before trading and debit only actual amounts used by the bounded swap and liquidity-add lifecycle.",
+    failure: "A failed allocation or later liquidity action cannot mint, confiscate, borrow or redirect any user balance."
+  });
+  submission.noHookArchitecture.autoLiquidity.fundingSources = [{
+    id: "immutable-launch-allocation",
+    kind: "launcher-allocation",
+    assetId: "launched-token",
+    source: "An immutable fixed-supply allocation reserved by the reviewed token constructor before trading begins.",
+    transferTaxRecipientId: null,
+    authorityRole: null,
+    valueFlowIds: ["auto-liquidity-launch-allocation", "auto-liquidity-swap", "auto-liquidity-add"],
+    custody: "The token contract keeps the allocation in a separately accounted balance used only by the bounded liquidity lifecycle.",
+    accountingRule: "Track initial credit, each actual router debit, each added amount and every retryable remainder without mixing beneficiary or user balances.",
+    fundingLimit: "The source can never exceed the immutable constructor allocation and exposes no mint, pull, tax or confiscation path.",
+    withdrawalRule: "No creator or administrator can withdraw or redirect this allocation outside the declared canonical-liquidity lifecycle.",
+    failureRule: "Failure leaves the exact unspent allocation retryable and cannot block transfers or debit another account."
+  }];
+  submission.noHookArchitecture.autoLiquidity.valueFlowIds.push("auto-liquidity-launch-allocation");
+  submission.risk.featureTriggers = submission.risk.featureTriggers.filter((trigger) => !["non-standard-token", "transfer-tax"].includes(trigger));
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.equal(report.findings.some(({ code }) => code === "AUTO_LIQUIDITY_WITHOUT_FUNDING_TAX"), false);
+  assert.equal(report.risk.featureTriggers.includes("transfer-tax"), false);
+});
+
+test("unknown token behavior remains reviewable through the open structured extension", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  const launchedAsset = submission.assets.find(({ role }) => role === "launched");
+  const capability = submission.projectCapabilities.find(({ id }) => id === "canonical-pool-state");
+  launchedAsset.behaviors.push("time-weighted-vote-checkpoint");
+  submission.tokenBehaviorExtensions = [{
+    id: "time-weighted-vote-checkpoint",
+    assetId: launchedAsset.id,
+    behavior: "time-weighted-vote-checkpoint",
+    summary: "Record a non-transferable time-weighted governance checkpoint without changing balances, supply, transfer liveness or pool settlement.",
+    projectCapabilityId: capability.id,
+    authorityRefs: [],
+    valueFlowIds: [],
+    mutable: false,
+    visibility: "fully-disclosed",
+    supplyImpact: "none",
+    transferImpact: "none",
+    failureRule: "A checkpoint write failure reverts only the governance checkpoint action and cannot alter or block an ordinary transfer, buy or sell.",
+    providerImpact: {
+      routing: "Routers may ignore the checkpoint because it does not change transferred amounts, token approvals or pool settlement.",
+      quoting: "Quotes remain based on the exact ordinary transfer and pool amounts, with the existing visible tax handled separately.",
+      indexing: "Indexers may consume the new checkpoint event only when they opt into the exact published schema and source revision.",
+      status: "requires-provider-review",
+      evidence: [],
+      limitations: ["Passing this check does not make an external router, indexer, scanner or listing understand the new checkpoint event."],
+      fallback: "Keep routing independent from the checkpoint and expose the feature only through a client that verifies the exact event schema."
+    },
+    securityTriggers: structuredClone(capability.securityTriggers),
+    requiredProfiles: [...capability.requiredProfiles],
+    sourcePaths: [],
+    testPaths: [],
+    evidencePaths: [],
+    testScenarios: ["Checkpoint creation and failure cannot change balances, supply, transfer liveness or canonical pool settlement."]
+  }];
+  submission.risk.featureTriggers.push("novel-token-behavior");
+  submission.risk.featureTriggers.sort();
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assert.ok(report.findings.some(({ code, severity }) => code === "TOKEN_BEHAVIOR_REQUIRES_ARCHITECTURE_REVIEW" && severity === "warning"));
+  assert.ok(report.requiredGates.some(({ id }) => id === "novel-token-behavior-architecture-review"));
+  assert.ok(report.requiredGates.some(({ id }) => id === "novel-token-behavior-provider-review"));
+});
+
+test("open token behavior path still rejects hidden controls", () => {
+  const submission = modelSpecificTaxTokenSubmission();
+  const launchedAsset = submission.assets.find(({ role }) => role === "launched");
+  const capability = submission.projectCapabilities.find(({ id }) => id === "canonical-pool-state");
+  launchedAsset.behaviors.push("concealed-balance-rule");
+  submission.tokenBehaviorExtensions = [{
+    id: "concealed-balance-rule",
+    assetId: launchedAsset.id,
+    behavior: "concealed-balance-rule",
+    summary: "This negative fixture declares an intentionally concealed balance rule so the hard policy boundary is exercised.",
+    projectCapabilityId: capability.id,
+    authorityRefs: [],
+    valueFlowIds: [],
+    mutable: false,
+    visibility: "undisclosed-or-obfuscated",
+    supplyImpact: "none",
+    transferImpact: "none",
+    failureRule: "The negative fixture does not define a safe public failure rule because its behavior is intentionally concealed from users.",
+    providerImpact: {
+      routing: "No router can safely evaluate an intentionally concealed balance rule without exact public behavior and source.",
+      quoting: "No quoter can safely predict final received amounts while a balance rule remains intentionally concealed.",
+      indexing: "No indexer can reconstruct balances while the behavior and controlling state remain intentionally concealed.",
+      status: "unsupported",
+      evidence: [],
+      limitations: ["The hidden rule prevents truthful transfer, quote, routing and balance reconstruction claims."],
+      fallback: "Remove the hidden behavior and publish the exact authority, state, value and failure rules before review."
+    },
+    securityTriggers: structuredClone(capability.securityTriggers),
+    requiredProfiles: [...capability.requiredProfiles],
+    sourcePaths: [],
+    testPaths: [],
+    evidencePaths: [],
+    testScenarios: ["The negative fixture proves intentionally hidden behavior cannot enter architecture review as a safe extension."]
+  }];
+  submission.risk.featureTriggers.push("novel-token-behavior");
+
+  const report = analyzeSubmission(submission, { schema });
+
+  assert.equal(report.decision, "UNSUPPORTED");
+  assert.ok(report.findings.some(({ code, severity }) => code === "HIDDEN_TOKEN_BEHAVIOR" && severity === "hard"));
+});
+
 test("model-specific no-hook path rejects concealed sell restrictions", () => {
   const submission = modelSpecificTaxTokenSubmission();
   submission.noHookArchitecture.transferPolicy.poolSellsAllowed = false;
@@ -3487,7 +3612,7 @@ function officialNoHookArchitecture() {
     },
     autoLiquidity: {
       used: false,
-      fundingRecipientId: null,
+      fundingSources: [],
       triggerMode: null,
       triggerThreshold: null,
       maximumSwapAmount: null,

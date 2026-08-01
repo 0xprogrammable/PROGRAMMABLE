@@ -116,6 +116,10 @@ export function declaredSourceAndTestPaths(submission) {
     ...arrayValues(submission?.capabilityExtensions).flatMap((extension) => [
       ...arrayValues(extension?.sourcePaths),
       ...arrayValues(extension?.testPaths)
+    ]),
+    ...arrayValues(submission?.tokenBehaviorExtensions).flatMap((extension) => [
+      ...arrayValues(extension?.sourcePaths),
+      ...arrayValues(extension?.testPaths)
     ])
   ].filter((entry) => typeof entry === "string" && entry.length > 0);
   return [...new Set(paths)].sort(compareUtf8);

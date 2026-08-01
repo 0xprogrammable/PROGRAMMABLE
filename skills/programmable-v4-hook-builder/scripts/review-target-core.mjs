@@ -182,6 +182,12 @@ export function buildReviewTarget({
     for (const testPath of extension?.testPaths ?? []) addRepositoryPath(testPath, `capability-test:${extension.capabilityId ?? "unidentified"}`);
     for (const evidencePath of extension?.evidencePaths ?? []) addRepositoryPath(evidencePath, `capability-evidence:${extension.capabilityId ?? "unidentified"}`);
   }
+  for (const extension of submission.tokenBehaviorExtensions ?? []) {
+    const extensionId = extension?.id ?? "unidentified";
+    for (const sourcePath of extension?.sourcePaths ?? []) addRepositoryPath(sourcePath, `token-behavior-source:${extensionId}`);
+    for (const testPath of extension?.testPaths ?? []) addRepositoryPath(testPath, `token-behavior-test:${extensionId}`);
+    for (const evidencePath of extension?.evidencePaths ?? []) addRepositoryPath(evidencePath, `token-behavior-evidence:${extensionId}`);
+  }
   if (includePackageArtifacts) for (const dependency of submission.dependencies?.onchain ?? []) {
     if (dependency?.deploymentEvidencePath) addRepositoryPath(dependency.deploymentEvidencePath, `deployment-evidence:${dependency.name ?? "unidentified"}`);
   }

@@ -84,8 +84,9 @@ dependencies or exits requires separate confirmation.
 If the builder requests a token transfer tax or automatic liquidity, keep the official route as the comparison but do
 not force the idea into a hook or reject it for leaving the default. Select `model-specific-no-hook` and confirm, in this
 order: all buy/sell/peer rates and the immutable maximum; whether any ordinary transfer or sale can be blocked; every
-recipient and value flow; mutability, authority and delay; tax exemptions and PoolManager transfer scope; automatic
-swap threshold, maximum, slippage, deadline and reentrancy; LP custody and exit; then routing, quote, indexer, scanner,
+recipient and value flow; mutability, authority and delay; tax exemptions and PoolManager transfer scope; every
+automatic-liquidity funding source with custody, accounting, limit, withdrawal and failure rules; automatic swap
+threshold, maximum, slippage, deadline and reentrancy; LP custody and exit; then routing, quote, indexer, scanner,
 and listing limitations. Hidden sell blocks, address lists, transaction/wallet caps, cooldowns, and a 100 percent bound
 do not continue on the permissionless path.
 

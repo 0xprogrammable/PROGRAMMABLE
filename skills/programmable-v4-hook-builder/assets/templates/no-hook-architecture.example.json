@@ -48,7 +48,22 @@
   },
   "autoLiquidity": {
     "used": true,
-    "fundingRecipientId": "liquidity-bucket",
+    "fundingSources": [
+      {
+        "id": "liquidity-tax-bucket",
+        "kind": "transfer-tax-recipient",
+        "assetId": "launched-token",
+        "source": "The immutable liquidity-bucket share of each explicitly declared transfer-tax collection.",
+        "transferTaxRecipientId": "liquidity-bucket",
+        "authorityRole": null,
+        "valueFlowIds": ["transfer-tax-collection", "auto-liquidity-swap", "auto-liquidity-add"],
+        "custody": "The token contract holds only this separately accounted bucket until the bounded liquidity action executes.",
+        "accountingRule": "Credit the exact recipient share on collection, debit only actual swap and add inputs, and retain any unused remainder in the same bucket.",
+        "fundingLimit": "Funding cannot exceed the immutable recipient share of taxes actually collected and cannot borrow from user balances or other recipient buckets.",
+        "withdrawalRule": "No creator or administrator can withdraw or redirect the bucket outside the declared automatic-liquidity lifecycle.",
+        "failureRule": "A failed execution leaves the exact bucket balance retryable and cannot debit another recipient or block the underlying permitted transfer."
+      }
+    ],
     "triggerMode": "eligible-non-pool-transfer",
     "triggerThreshold": "10000000000000000000000",
     "maximumSwapAmount": "1000000000000000000000",

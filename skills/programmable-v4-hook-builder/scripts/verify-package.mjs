@@ -182,6 +182,9 @@ if (submission) {
     ...(submission.capabilityExtensions ?? []).flatMap((extension) => [
       extension?.schemaPath,
       ...(extension?.evidencePaths ?? [])
+    ]),
+    ...(submission.tokenBehaviorExtensions ?? []).flatMap((extension) => [
+      ...(extension?.evidencePaths ?? [])
     ])
   ].filter(Boolean);
   for (const listedPath of [...new Set(listedPaths)]) {
@@ -905,7 +908,8 @@ function declaredPublicClaimPaths(value) {
     ...(reconstruction.testPaths ?? []),
     ...(handoff.testPaths ?? []),
     ...(value?.projectSurfaces ?? []).flatMap((surface) => surface?.testPaths ?? []),
-    ...(value?.capabilityExtensions ?? []).flatMap((extension) => extension?.testPaths ?? [])
+    ...(value?.capabilityExtensions ?? []).flatMap((extension) => extension?.testPaths ?? []),
+    ...(value?.tokenBehaviorExtensions ?? []).flatMap((extension) => extension?.testPaths ?? [])
   ]);
   const declared = [
     ...(integration.appSourcePaths ?? []),
