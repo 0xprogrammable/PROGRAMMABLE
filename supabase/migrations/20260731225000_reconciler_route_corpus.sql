@@ -203,9 +203,61 @@ begin
 
   with launches as materialized (
     select
-      launch.*,
+      launch.chain_id,
+      launch.release_id,
+      launch.model_id,
+      launch.token,
+      launch.creator,
+      launch.launch_transaction_hash,
+      launch.pool_id,
+      launch.reward_vault,
+      launch.launch_hash,
+      launch.token_name,
+      launch.token_symbol,
+      launch.total_supply,
+      run.source_group,
+      launch.epoch_id,
+      launch.pointer_generation,
+      launch.projection_run_id,
+      source_occurrence.block_timestamp as launch_block_timestamp,
+      source_occurrence.transaction_index::bigint
+        as launch_transaction_index,
+      source_occurrence.receipt_log_ordinal::bigint
+        as launch_receipt_log_ordinal,
+      pool.currency0,
+      pool.currency1,
+      pool.hook,
+      pool.pool_key_fee,
+      pool.tick_spacing,
+      case
+        when pool.currency0 = launch.token then pool.currency1
+        when pool.currency1 = launch.token then pool.currency0
+        else null
+      end as quote_asset,
+      fee.buy_swap_fee_bps,
+      fee.sell_swap_fee_bps,
+      fee.buy_creator_fee_bps,
+      fee.sell_creator_fee_bps,
+      fee.creator_fee_bps,
+      fee.launcher_fee_bps,
+      fee.transfer_tax_bps,
+      fee.lp_fee_pips,
+      launch.promoted_block_number,
+      launch.promoted_block_hash,
+      liquidity.position_recipient,
+      liquidity.position_token_id,
+      liquidity.token_liquidity_amount,
+      liquidity.locked_token_dust,
+      liquidity.initial_sqrt_price_x96,
+      liquidity.initial_tick,
+      liquidity.tick_lower,
+      liquidity.tick_upper,
       coalesce(
-        launch.quote_asset,
+        case
+          when pool.currency0 = launch.token then pool.currency1
+          when pool.currency1 = launch.token then pool.currency0
+          else null
+        end,
         pg_catalog.decode(pg_catalog.repeat('00', 20), 'hex')
       ) as normalized_quote_asset,
       source_occurrence.block_number as launch_source_block_number,
@@ -222,19 +274,154 @@ begin
       fee_total.gross_total as gross_total,
       fee_total.creator_fee_total as creator_fee_total,
       fee_total.launcher_fee_total as launcher_fee_total
-    from programmable_private.launch_by_token_v2 as launch
-    join programmable_private.current_launch_projections_v1
-      as launch_projection
-      on launch_projection.projection_run_id = launch.projection_run_id
-     and launch_projection.token = launch.token
+    from programmable_private.projection_entity_current as current_launch
+    join programmable_private.launch_projections as launch
+      on launch.launch_projection_id = current_launch.projection_row_id
+     and launch.projection_run_id = current_launch.projection_run_id
+     and launch.chain_id = current_launch.chain_id
+     and launch.release_id = current_launch.release_id
+     and launch.model_id = current_launch.model_id
+     and launch.promoted_block_number = current_launch.promoted_block_number
+     and launch.promoted_block_hash = current_launch.promoted_block_hash
+    join programmable_private.run_headers as run
+      on run.run_id = launch.projection_run_id
+     and run.run_kind = 'projection'
+     and run.chain_id = launch.chain_id
+     and run.release_id = launch.release_id
+     and run.model_id = launch.model_id
+     and run.source_group = current_launch.source_group
+     and run.epoch_id = launch.epoch_id
+     and run.captured_pointer_generation = launch.pointer_generation
+    join programmable_private.projection_publications as publication
+      on publication.publication_id = current_launch.publication_id
+     and publication.run_id = launch.projection_run_id
+     and publication.epoch_id = launch.epoch_id
+     and publication.pointer_generation = launch.pointer_generation
+     and publication.checkpoint_id = current_launch.checkpoint_id
+     and publication.target_block_number = launch.promoted_block_number
+     and publication.target_block_hash = launch.promoted_block_hash
+    join programmable_private.release_epoch_current as current_epoch
+      on current_epoch.chain_id = launch.chain_id
+     and current_epoch.release_id = launch.release_id
+     and current_epoch.model_id = launch.model_id
+     and current_epoch.source_group = run.source_group
+     and current_epoch.epoch_id = launch.epoch_id
+     and current_epoch.generation = launch.pointer_generation
+    join programmable_private.chain_event_current_canonical
+      as launch_canonical
+      on launch_canonical.logical_event_id =
+        launch.last_source_logical_event_id
+     and launch_canonical.occurrence_id = launch.last_source_occurrence_id
+     and launch_canonical.block_hash =
+        launch.last_source_occurrence_block_hash
     join programmable_private.chain_event_materialized_occurrences_v1
       as source_occurrence
       on source_occurrence.occurrence_id =
-        launch_projection.last_source_occurrence_id
+        launch.last_source_occurrence_id
      and source_occurrence.logical_event_id =
-        launch_projection.last_source_logical_event_id
+        launch.last_source_logical_event_id
      and source_occurrence.block_hash =
-        launch_projection.last_source_occurrence_block_hash
+        launch.last_source_occurrence_block_hash
+     and source_occurrence.chain_id = launch.chain_id
+     and source_occurrence.release_id = launch.release_id
+     and source_occurrence.model_id = launch.model_id
+     and source_occurrence.source_group = run.source_group
+     and source_occurrence.epoch_id = launch.epoch_id
+     and source_occurrence.pointer_generation = launch.pointer_generation
+    join programmable_private.pool_projections as pool
+      on pool.launch_projection_id = launch.launch_projection_id
+     and pool.projection_run_id = launch.projection_run_id
+     and pool.chain_id = launch.chain_id
+     and pool.release_id = launch.release_id
+     and pool.model_id = launch.model_id
+     and pool.epoch_id = launch.epoch_id
+     and pool.pointer_generation = launch.pointer_generation
+     and pool.pool_id = launch.pool_id
+     and pool.promoted_block_number = launch.promoted_block_number
+     and pool.promoted_block_hash = launch.promoted_block_hash
+     and (pool.currency0 = launch.token or pool.currency1 = launch.token)
+    join programmable_private.chain_event_current_canonical
+      as pool_canonical
+      on pool_canonical.logical_event_id = pool.last_source_logical_event_id
+     and pool_canonical.occurrence_id = pool.last_source_occurrence_id
+     and pool_canonical.block_hash = pool.last_source_occurrence_block_hash
+    join programmable_private.chain_event_materialized_occurrences_v1
+      as pool_source_occurrence
+      on pool_source_occurrence.occurrence_id = pool.last_source_occurrence_id
+     and pool_source_occurrence.logical_event_id =
+        pool.last_source_logical_event_id
+     and pool_source_occurrence.block_hash =
+        pool.last_source_occurrence_block_hash
+     and pool_source_occurrence.chain_id = launch.chain_id
+     and pool_source_occurrence.release_id = launch.release_id
+     and pool_source_occurrence.model_id = launch.model_id
+     and pool_source_occurrence.source_group = run.source_group
+     and pool_source_occurrence.epoch_id = launch.epoch_id
+     and pool_source_occurrence.pointer_generation =
+        launch.pointer_generation
+    join programmable_private.pool_fee_configurations as fee
+      on fee.pool_projection_id = pool.pool_projection_id
+     and fee.projection_run_id = pool.projection_run_id
+     and fee.chain_id = pool.chain_id
+     and fee.release_id = pool.release_id
+     and fee.model_id = pool.model_id
+     and fee.epoch_id = pool.epoch_id
+     and fee.pointer_generation = pool.pointer_generation
+     and fee.promoted_block_number = pool.promoted_block_number
+     and fee.promoted_block_hash = pool.promoted_block_hash
+    join programmable_private.chain_event_current_canonical as fee_canonical
+      on fee_canonical.logical_event_id =
+        fee.disclosure_source_logical_event_id
+     and fee_canonical.occurrence_id = fee.disclosure_source_occurrence_id
+     and fee_canonical.block_hash =
+        fee.disclosure_source_occurrence_block_hash
+    join programmable_private.chain_event_materialized_occurrences_v1
+      as fee_source_occurrence
+      on fee_source_occurrence.occurrence_id =
+        fee.disclosure_source_occurrence_id
+     and fee_source_occurrence.logical_event_id =
+        fee.disclosure_source_logical_event_id
+     and fee_source_occurrence.block_hash =
+        fee.disclosure_source_occurrence_block_hash
+     and fee_source_occurrence.chain_id = launch.chain_id
+     and fee_source_occurrence.release_id = launch.release_id
+     and fee_source_occurrence.model_id = launch.model_id
+     and fee_source_occurrence.source_group = run.source_group
+     and fee_source_occurrence.epoch_id = launch.epoch_id
+     and fee_source_occurrence.pointer_generation = launch.pointer_generation
+    join programmable_private.launch_position_liquidity_facts as liquidity
+      on liquidity.launch_projection_id = launch.launch_projection_id
+     and liquidity.projection_run_id = launch.projection_run_id
+     and liquidity.chain_id = launch.chain_id
+     and liquidity.release_id = launch.release_id
+     and liquidity.model_id = launch.model_id
+     and liquidity.source_group = run.source_group
+     and liquidity.epoch_id = launch.epoch_id
+     and liquidity.pointer_generation = launch.pointer_generation
+     and liquidity.token = launch.token
+     and liquidity.pool_id = launch.pool_id
+    join programmable_private.chain_event_current_canonical
+      as liquidity_canonical
+      on liquidity_canonical.logical_event_id =
+        liquidity.source_logical_event_id
+     and liquidity_canonical.occurrence_id = liquidity.source_occurrence_id
+     and liquidity_canonical.block_hash =
+        liquidity.source_occurrence_block_hash
+    join programmable_private.chain_event_materialized_occurrences_v1
+      as liquidity_source_occurrence
+      on liquidity_source_occurrence.occurrence_id =
+        liquidity.source_occurrence_id
+     and liquidity_source_occurrence.logical_event_id =
+        liquidity.source_logical_event_id
+     and liquidity_source_occurrence.block_hash =
+        liquidity.source_occurrence_block_hash
+     and liquidity_source_occurrence.chain_id = launch.chain_id
+     and liquidity_source_occurrence.release_id = launch.release_id
+     and liquidity_source_occurrence.model_id = launch.model_id
+     and liquidity_source_occurrence.source_group = run.source_group
+     and liquidity_source_occurrence.epoch_id = launch.epoch_id
+     and liquidity_source_occurrence.pointer_generation =
+        launch.pointer_generation
     -- Market closes are prior independently reconciled evidence.  Read the
     -- private base fact rather than the parity-gated public view, but bind the
     -- complete release/epoch/pointer scope so another release sharing a pool
@@ -242,10 +429,57 @@ begin
     join lateral (
       select close_fact.*
       from programmable_private.market_block_closes as close_fact
+      join programmable_private.reconciliation_records as reconciliation
+        on reconciliation.reconciliation_id = close_fact.reconciliation_id
+       and reconciliation.mismatch_count = 0
+      join programmable_private.run_headers as reconciliation_run
+        on reconciliation_run.run_id = reconciliation.run_id
+       and reconciliation_run.run_kind = 'reconciliation'
+       and reconciliation_run.chain_id = close_fact.chain_id
+       and reconciliation_run.release_id = close_fact.release_id
+       and reconciliation_run.model_id = close_fact.model_id
+       and reconciliation_run.source_group = close_fact.source_group
+       and reconciliation_run.epoch_id = close_fact.epoch_id
+       and reconciliation_run.captured_pointer_generation =
+          close_fact.pointer_generation
+      join programmable_private.run_lifecycle_outcomes
+        as reconciliation_outcome
+        on reconciliation_outcome.run_id = reconciliation_run.run_id
+       and reconciliation_outcome.status = 'succeeded'
+      join programmable_private.release_epoch_current as market_epoch
+        on market_epoch.chain_id = close_fact.chain_id
+       and market_epoch.release_id = close_fact.release_id
+       and market_epoch.model_id = close_fact.model_id
+       and market_epoch.source_group = close_fact.source_group
+       and market_epoch.epoch_id = close_fact.epoch_id
+       and market_epoch.generation = close_fact.pointer_generation
+      join programmable_private.chain_event_current_canonical
+        as market_canonical
+        on market_canonical.occurrence_id =
+          close_fact.last_source_occurrence_id
+       and market_canonical.logical_event_id =
+          close_fact.last_source_logical_event_id
+       and market_canonical.block_hash =
+          close_fact.last_source_occurrence_block_hash
+      join programmable_private.chain_event_materialized_occurrences_v1
+        as market_source_occurrence
+        on market_source_occurrence.occurrence_id =
+          close_fact.last_source_occurrence_id
+       and market_source_occurrence.logical_event_id =
+          close_fact.last_source_logical_event_id
+       and market_source_occurrence.block_hash =
+          close_fact.last_source_occurrence_block_hash
+       and market_source_occurrence.chain_id = close_fact.chain_id
+       and market_source_occurrence.release_id = close_fact.release_id
+       and market_source_occurrence.model_id = close_fact.model_id
+       and market_source_occurrence.source_group = close_fact.source_group
+       and market_source_occurrence.epoch_id = close_fact.epoch_id
+       and market_source_occurrence.pointer_generation =
+          close_fact.pointer_generation
       where close_fact.chain_id = launch.chain_id
         and close_fact.release_id = launch.release_id
         and close_fact.model_id = launch.model_id
-        and close_fact.source_group = launch.source_group
+        and close_fact.source_group = run.source_group
         and close_fact.epoch_id = launch.epoch_id
         and close_fact.pointer_generation = launch.pointer_generation
         and close_fact.pool_id = launch.pool_id
@@ -263,21 +497,40 @@ begin
      and fee_total.pointer_generation = launch.pointer_generation
      and fee_total.pool_id = launch.pool_id
      and (
-       fee_total.quote_asset is not distinct from launch.quote_asset
+       fee_total.quote_asset is not distinct from case
+         when pool.currency0 = launch.token then pool.currency1
+         when pool.currency1 = launch.token then pool.currency0
+         else null
+       end
        or (
          fee_total.quote_asset is null
-         and launch.quote_asset = pg_catalog.decode(
-           pg_catalog.repeat('00', 20), 'hex'
-         )
+         and case
+           when pool.currency0 = launch.token then pool.currency1
+           when pool.currency1 = launch.token then pool.currency0
+           else null
+         end = pg_catalog.decode(pg_catalog.repeat('00', 20), 'hex')
        )
      )
-    where launch.chain_id = p_chain_id
+    where current_launch.entity_kind = 'launch'
+      and current_launch.chain_id = p_chain_id
+      and current_launch.release_id = p_release_id
+      and current_launch.model_id = p_model_id
+      and current_launch.source_group = p_source_group
+      and launch.chain_id = p_chain_id
       and launch.release_id = p_release_id
       and launch.model_id = p_model_id
-      and launch.source_group = p_source_group
+      and run.source_group = p_source_group
       and launch.epoch_id = p_epoch_id
       and launch.pointer_generation = p_pointer_generation
       and launch.promoted_block_number <= p_checkpoint_block_number::bigint
+      and launch.is_complete
+      and (
+        launch.reward_vault is null
+        or programmable_private.has_current_verified_reward_seed(
+          run.run_id,
+          launch.reward_vault
+        )
+      )
   ), normalized as materialized (
     select
       launch.*,
@@ -374,15 +627,15 @@ begin
   into launch_count, launch_rows, chart_rows
   from ordered_tokens;
 
+  -- The pre-parity contract already captured the immutable current-entity
+  -- manifest for this exact checkpoint.  Count launch pointers from that
+  -- contract so any missing canonical/publication/base-fact join fails closed
+  -- instead of silently shrinking every DTO route together.
   select pg_catalog.count(*) into projected_launch_count
-  from programmable_private.launch_by_token_v2 as launch
-  where launch.chain_id = p_chain_id
-    and launch.release_id = p_release_id
-    and launch.model_id = p_model_id
-    and launch.source_group = p_source_group
-    and launch.epoch_id = p_epoch_id
-    and launch.pointer_generation = p_pointer_generation
-    and launch.promoted_block_number <= p_checkpoint_block_number::bigint;
+  from pg_catalog.jsonb_array_elements(
+    contract_row.current_entities
+  ) as entity
+  where entity ->> 'entityKind' = 'launch';
 
   if launch_count = 0
      or launch_count <> projected_launch_count
@@ -394,49 +647,29 @@ begin
       message = 'reconciler route corpus launch cardinality is invalid';
   end if;
 
-  with creators as (
+  with token_rows as (
+    select token, ordinal
+    from pg_catalog.jsonb_array_elements(launch_rows) with ordinality
+      as launch_token(token, ordinal)
+  ), creators as (
     select
-      launch.creator,
+      token ->> 'creatorAddress' as account,
       pg_catalog.jsonb_agg(
         pg_catalog.jsonb_build_object(
-          'releaseVersion', launch.release_id,
-          'modelId', launch.model_id,
-          'tokenAddress', '0x' || pg_catalog.encode(launch.token, 'hex'),
-          'launchTransactionHash', '0x' || pg_catalog.encode(
-            launch.launch_transaction_hash, 'hex'
-          )
-        ) order by source_occurrence.block_number,
-          launch.launch_transaction_index,
-          launch.launch_receipt_log_ordinal,
-          launch.launch_transaction_hash, launch.token
+          'releaseVersion', token ->> 'releaseVersion',
+          'modelId', token ->> 'modelId',
+          'tokenAddress', token ->> 'tokenAddress',
+          'launchTransactionHash', token ->> 'launchTransactionHash'
+        ) order by ordinal
       ) as tokens
-    from programmable_private.launch_by_token_v2 as launch
-    join programmable_private.current_launch_projections_v1
-      as launch_projection
-      on launch_projection.projection_run_id = launch.projection_run_id
-     and launch_projection.token = launch.token
-    join programmable_private.chain_event_materialized_occurrences_v1
-      as source_occurrence
-      on source_occurrence.occurrence_id =
-        launch_projection.last_source_occurrence_id
-     and source_occurrence.logical_event_id =
-        launch_projection.last_source_logical_event_id
-     and source_occurrence.block_hash =
-        launch_projection.last_source_occurrence_block_hash
-    where launch.chain_id = p_chain_id
-      and launch.release_id = p_release_id
-      and launch.model_id = p_model_id
-      and launch.source_group = p_source_group
-      and launch.epoch_id = p_epoch_id
-      and launch.pointer_generation = p_pointer_generation
-      and launch.promoted_block_number <= p_checkpoint_block_number::bigint
-    group by launch.creator
+    from token_rows
+    group by token ->> 'creatorAddress'
   )
   select coalesce(pg_catalog.jsonb_agg(
     pg_catalog.jsonb_build_object(
-      'account', '0x' || pg_catalog.encode(creator, 'hex'),
+      'account', account,
       'tokens', tokens
-    ) order by creator
+    ) order by account
   ), '[]'::jsonb)
   into creator_rows
   from creators;
@@ -542,25 +775,18 @@ begin
 
   select coalesce(pg_catalog.jsonb_agg(
     pg_catalog.jsonb_build_object(
-      'releaseVersion', launch.release_id,
-      'modelId', launch.model_id,
-      'account', '0x' || pg_catalog.encode(launch.creator, 'hex'),
-      'launchTransactionHash', '0x' || pg_catalog.encode(
-        launch.launch_transaction_hash, 'hex'
-      ),
-      'tokenAddress', '0x' || pg_catalog.encode(launch.token, 'hex')
-    ) order by launch.creator, launch.launch_transaction_hash, launch.token
+      'releaseVersion', launch.token ->> 'releaseVersion',
+      'modelId', launch.token ->> 'modelId',
+      'account', launch.token ->> 'creatorAddress',
+      'launchTransactionHash', launch.token ->> 'launchTransactionHash',
+      'tokenAddress', launch.token ->> 'tokenAddress'
+    ) order by launch.token ->> 'creatorAddress',
+      launch.token ->> 'launchTransactionHash',
+      launch.token ->> 'tokenAddress'
   ), '[]'::jsonb)
   into lookup_rows
-  from programmable_private.launch_by_token_v2 as launch
-  where launch.chain_id = p_chain_id
-    and p_release_id <> 'classic-v2'
-    and launch.release_id = p_release_id
-    and launch.model_id = p_model_id
-    and launch.source_group = p_source_group
-    and launch.epoch_id = p_epoch_id
-    and launch.pointer_generation = p_pointer_generation
-    and launch.promoted_block_number <= p_checkpoint_block_number::bigint;
+  from pg_catalog.jsonb_array_elements(launch_rows) as launch(token)
+  where p_release_id <> 'classic-v2';
 
   return query
   select route.route_key, route.compared_count, route.dto

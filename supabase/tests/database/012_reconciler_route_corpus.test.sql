@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(22);
 
 select ok(
   to_regprocedure(
@@ -234,8 +234,66 @@ select ok(
       'programmable_private.get_reconciler_route_corpus_v1(bigint,text,text,text,uuid,bigint,uuid,numeric,bytea,integer)'::regprocedure
     )),
     'parity_records'
+  ) = 0
+  and pg_catalog.strpos(
+    pg_catalog.lower(pg_catalog.pg_get_functiondef(
+      'programmable_private.get_reconciler_route_corpus_v1(bigint,text,text,text,uuid,bigint,uuid,numeric,bytea,integer)'::regprocedure
+    )),
+    'route_checkpoint_parity_bindings'
+  ) = 0
+  and pg_catalog.strpos(
+    pg_catalog.lower(pg_catalog.pg_get_functiondef(
+      'programmable_private.get_reconciler_route_corpus_v1(bigint,text,text,text,uuid,bigint,uuid,numeric,bytea,integer)'::regprocedure
+    )),
+    'launch_by_token_v1'
+  ) = 0
+  and pg_catalog.strpos(
+    pg_catalog.lower(pg_catalog.pg_get_functiondef(
+      'programmable_private.get_reconciler_route_corpus_v1(bigint,text,text,text,uuid,bigint,uuid,numeric,bytea,integer)'::regprocedure
+    )),
+    'launch_by_token_v2'
   ) = 0,
-  'the corpus never self-compares through public or parity-gated views'
+  'the corpus never self-compares through public, parity or route-gated launch views'
+);
+
+select ok(
+  (
+    select
+      pg_catalog.strpos(definition, 'projection_entity_current as current_launch') > 0
+      and pg_catalog.strpos(definition, 'launch_projections as launch') > 0
+      and pg_catalog.strpos(definition, 'run_headers as run') > 0
+      and pg_catalog.strpos(definition, 'projection_publications as publication') > 0
+      and pg_catalog.strpos(definition, 'release_epoch_current as current_epoch') > 0
+      and pg_catalog.strpos(definition, 'as launch_canonical') > 0
+      and pg_catalog.strpos(definition, 'as pool_canonical') > 0
+      and pg_catalog.strpos(definition, 'as fee_canonical') > 0
+      and pg_catalog.strpos(definition, 'as liquidity_canonical') > 0
+      and pg_catalog.strpos(definition, 'as market_canonical') > 0
+    from (
+      select pg_catalog.lower(pg_catalog.pg_get_functiondef(
+        'programmable_private.get_reconciler_route_corpus_v1(bigint,text,text,text,uuid,bigint,uuid,numeric,bytea,integer)'::regprocedure
+      )) as definition
+    ) as corpus
+  ),
+  'launch DTOs bind direct current projections to run, publication, epoch and canonical source provenance'
+);
+
+select ok(
+  (
+    select
+      pg_catalog.strpos(definition, 'contract_row.current_entities') > 0
+      and pg_catalog.strpos(definition, 'entity ->> ''entityKind'' = ''launch''') > 0
+      and pg_catalog.strpos(
+        definition,
+        'launch_count <> projected_launch_count'
+      ) > 0
+    from (
+      select pg_catalog.pg_get_functiondef(
+        'programmable_private.get_reconciler_route_corpus_v1(bigint,text,text,text,uuid,bigint,uuid,numeric,bytea,integer)'::regprocedure
+      ) as definition
+    ) as corpus
+  ),
+  'the exact pre-parity entity manifest closes launch coverage without a parity binding'
 );
 
 select ok(
