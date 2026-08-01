@@ -139,6 +139,41 @@ describe("Stock-Paired exact-block reconciler contribution", () => {
     },
   );
 
+  it.each(releaseVersions)(
+    "accepts the exact-output ceiling fee envelope for a tiny %s quote swap",
+    async (releaseVersion) => {
+      const fixture = stockPairedReconcilerRouteFixture(releaseVersion, {
+        feeGrossQuote: 2n,
+        feeTotalQuote: 1n,
+      });
+      const contribution = await build(releaseVersion, fixture);
+
+      expect(contribution.charts[0]).toMatchObject({
+        volume: {
+          grossQuoteRaw: "2",
+          creatorFeeQuoteRaw: "1",
+          launcherFeeQuoteRaw: "0",
+        },
+      });
+    },
+  );
+
+  it.each(releaseVersions)(
+    "rejects a %s quote fee outside the exact-input floor/exact-output ceiling envelope",
+    async (releaseVersion) => {
+      const fixture = stockPairedReconcilerRouteFixture(releaseVersion, {
+        feeGrossQuote: 2n,
+        feeTotalQuote: 2n,
+      });
+
+      await expect(build(releaseVersion, fixture)).rejects.toMatchObject({
+        dependency: "uniswap",
+        code: "validation_failed",
+        safeMetadata: { operation: "stock-reconciler-fee-conservation" },
+      });
+    },
+  );
+
   it("exposes provider disagreement instead of normalizing quote volume", async () => {
     const first = stockPairedReconcilerRouteFixture("stock-paired-v3");
     const second = stockPairedReconcilerRouteFixture("stock-paired-v3", {
@@ -156,6 +191,57 @@ describe("Stock-Paired exact-block reconciler contribution", () => {
         creatorFeeQuoteRaw: "18000",
         launcherFeeQuoteRaw: "2000",
       },
+    });
+  });
+
+  it.each(releaseVersions)(
+    "accepts the %s 1-unit exact-output fee envelope",
+    async (releaseVersion) => {
+      const fixture = stockPairedReconcilerRouteFixture(releaseVersion, {
+        feeGrossQuote: 2n,
+        feeTotalQuote: 1n,
+      });
+      const contribution = await build(releaseVersion, fixture);
+
+      expect(contribution.charts[0]).toMatchObject({
+        volume: {
+          grossQuoteRaw: "2",
+          creatorFeeQuoteRaw: "1",
+          launcherFeeQuoteRaw: "0",
+        },
+      });
+    },
+  );
+
+  it.each(releaseVersions)(
+    "accepts normal %s exact-output rounding without losing a fee unit",
+    async (releaseVersion) => {
+      const fixture = stockPairedReconcilerRouteFixture(releaseVersion, {
+        feeGrossQuote: 10_102n,
+        feeTotalQuote: 102n,
+      });
+      const contribution = await build(releaseVersion, fixture);
+
+      expect(contribution.charts[0]).toMatchObject({
+        volume: {
+          grossQuoteRaw: "10102",
+          creatorFeeQuoteRaw: "92",
+          launcherFeeQuoteRaw: "10",
+        },
+      });
+    },
+  );
+
+  it("fails closed when Stock exact-output fees exceed the floor/ceiling envelope", async () => {
+    const fixture = stockPairedReconcilerRouteFixture("stock-paired-v3", {
+      feeGrossQuote: 2n,
+      feeTotalQuote: 2n,
+    });
+
+    await expect(build("stock-paired-v3", fixture)).rejects.toMatchObject({
+      dependency: "uniswap",
+      code: "validation_failed",
+      safeMetadata: { operation: "stock-reconciler-fee-conservation" },
     });
   });
 

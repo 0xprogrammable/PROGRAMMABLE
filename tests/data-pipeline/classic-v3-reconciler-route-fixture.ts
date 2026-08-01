@@ -90,13 +90,23 @@ const reward: CanonicalJsonValue = {
   buySwapFeeBps: 100,
   sellSwapFeeBps: 100,
   launcherFeeBps: 10,
+  configurationHash: ROUTE_FIXTURE_LAUNCH_HASH,
+  activeConfigurationHash: ROUTE_FIXTURE_BLOCK_HASH,
+  configurationEpoch: "1",
+  totalCreatorFeesReceivedWei: "9000000000000000",
+  totalCreatorFeesClaimedWei: "0",
+  pendingCreatorFeesWei: "0",
   allocations: [{
     allocationIndex: 0,
     payoutAddress: ROUTE_FIXTURE_RECIPIENT,
     shareBps: 10000,
+  }],
+  entitlements: [{
+    account: ROUTE_FIXTURE_RECIPIENT,
     claimableWei: "9000000000000000",
     claimedWei: "0",
   }],
+  events: [],
 };
 
 export const CLASSIC_V3_RECONCILER_ROUTE_FIXTURE_PARTS:

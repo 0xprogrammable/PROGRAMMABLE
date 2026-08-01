@@ -21,6 +21,10 @@ import dependencies from "../../contracts/dependencies/ethereum-mainnet.json";
 import type { CanonicalJsonValue } from "./canonical-fingerprint";
 import { canonicalBytes32, type HexBytes32 } from "./codecs";
 import {
+  assembleReconcilerCorpusPages,
+  createReconcilerCorpusManifest,
+} from "./reconciler-corpus-partitions";
+import {
   dataPipelineError,
   invalidInput,
   validationError,
@@ -58,11 +62,6 @@ export const CLASSIC_V2_RECONCILER_ROUTE_KEYS = Object.freeze([
 // QuickNode and the portable fallback both support this exact range. Keeping
 // every request at the common boundary avoids provider-dependent corpora.
 export const CLASSIC_V2_RECONCILER_LOG_BLOCK_RANGE = 10_000n;
-
-// The live reader performs 14 exact-state calls per launch. The bound keeps a
-// complete run comfortably inside the reconciler's 16,384 logical RPC budget;
-// crossing it must fail closed until partitioning exists.
-export const MAXIMUM_CLASSIC_V2_RECONCILER_LAUNCHES = 256;
 
 export type ClassicV2ReconcilerRouteContribution = Readonly<{
   tokens: readonly CanonicalJsonValue[];
@@ -236,6 +235,11 @@ function nonnegative(value: unknown, operation: string): bigint {
   return parsed;
 }
 
+function absolute(value: unknown, operation: string): bigint {
+  const parsed = integer(value, operation);
+  return parsed < 0n ? -parsed : parsed;
+}
+
 function safeInteger(
   value: unknown,
   minimum: number,
@@ -302,8 +306,7 @@ export function classicV2ReconcilerBlockRanges(
 export function assertClassicV2ReconcilerLaunchCount(count: number): number {
   if (
     !Number.isSafeInteger(count) ||
-    count < 1 ||
-    count > MAXIMUM_CLASSIC_V2_RECONCILER_LAUNCHES
+    count < 1
   ) {
     fail("classic-v2-launch-cardinality");
   }
@@ -1026,22 +1029,13 @@ function feeTotals(
     event.eventName === "Swap" &&
     sameHex(exactBytes32(event.args.id, "classic-v2-swap-pool"), poolId)
   );
-  if (fees.length < 1 || fees.length !== swaps.length) {
+  if (swaps.length < 1 || fees.length > swaps.length) {
     fail("classic-v2-swap-fee-event-coverage");
   }
   let gross = 0n;
   let creator = 0n;
   let launcher = 0n;
-  for (let index = 0; index < fees.length; index += 1) {
-    const fee = fees[index]!;
-    const swap = swaps[index]!;
-    if (
-      fee.log.blockNumber !== swap.log.blockNumber ||
-      !sameHex(fee.log.blockHash, swap.log.blockHash) ||
-      !sameHex(fee.log.transactionHash, swap.log.transactionHash)
-    ) {
-      fail("classic-v2-swap-fee-provenance");
-    }
+  const feeAmounts = fees.map((fee) => {
     const grossAmount = nonnegative(
       fee.args.grossNativeAmount,
       "classic-v2-gross-fee",
@@ -1060,6 +1054,7 @@ function feeTotals(
       (grossAmount * BigInt(totalSwapFeeBps) + 9_999n) / 10_000n;
     const expectedLauncherFee = grossAmount * 10n / 10_000n;
     if (
+      actualTotalFee === 0n ||
       (actualTotalFee !== floorTotalFee &&
         actualTotalFee !== ceilingTotalFee) ||
       launcherAmount !== (
@@ -1067,14 +1062,95 @@ function feeTotals(
           ? actualTotalFee
           : expectedLauncherFee
       ) ||
-      creatorAmount !== actualTotalFee - launcherAmount ||
-      safeInteger(swap.args.fee, 0, 1_000_000, "classic-v2-swap-lp-fee") !== 0
+      creatorAmount !== actualTotalFee - launcherAmount
     ) {
       fail("classic-v2-fee-conservation");
     }
     gross += grossAmount;
     creator += creatorAmount;
     launcher += launcherAmount;
+    return Object.freeze({
+      grossAmount,
+      actualTotalFee,
+      sender: exactAddress(fee.args.swapSender, "classic-v2-fee-sender"),
+    });
+  });
+
+  const swapNativeAmounts = swaps.map((swap) => {
+    if (
+      safeInteger(swap.args.fee, 0, 1_000_000, "classic-v2-swap-lp-fee") !== 0
+    ) {
+      fail("classic-v2-fee-conservation");
+    }
+    const amount = absolute(swap.args.amount0, "classic-v2-swap-native");
+    if (amount === 0n) fail("classic-v2-swap-native");
+    return Object.freeze({
+      amount,
+      sender: exactAddress(swap.args.sender, "classic-v2-swap-sender"),
+    });
+  });
+
+  const candidates = fees.map((fee, feeIndex) => {
+    const related = swaps.flatMap((swap, swapIndex) => {
+      if (
+        fee.log.blockNumber !== swap.log.blockNumber ||
+        fee.log.transactionIndex !== swap.log.transactionIndex ||
+        !sameHex(fee.log.blockHash, swap.log.blockHash) ||
+        !sameHex(fee.log.transactionHash, swap.log.transactionHash) ||
+        !sameHex(feeAmounts[feeIndex]!.sender, swapNativeAmounts[swapIndex]!.sender)
+      ) {
+        return [];
+      }
+      return [swapIndex];
+    });
+    const previous = related.filter((swapIndex) =>
+      swaps[swapIndex]!.log.logIndex < fee.log.logIndex
+    ).at(-1);
+    const next = related.find((swapIndex) =>
+      swaps[swapIndex]!.log.logIndex > fee.log.logIndex
+    );
+    return Object.freeze([previous, next]
+      .filter((swapIndex): swapIndex is number => swapIndex !== undefined)
+      .filter((swapIndex, index, values) =>
+        values.indexOf(swapIndex) === index &&
+        (
+          feeAmounts[feeIndex]!.grossAmount ===
+            swapNativeAmounts[swapIndex]!.amount ||
+          feeAmounts[feeIndex]!.grossAmount ===
+            swapNativeAmounts[swapIndex]!.amount +
+              feeAmounts[feeIndex]!.actualTotalFee
+        )
+      ));
+  });
+
+  let assignmentCount = 0;
+  let matchedSwapIndexes: readonly number[] = Object.freeze([]);
+  function assign(feeIndex: number, previousSwapIndex: number, path: number[]) {
+    if (assignmentCount > 1) return;
+    if (feeIndex === candidates.length) {
+      assignmentCount += 1;
+      matchedSwapIndexes = Object.freeze([...path]);
+      return;
+    }
+    for (const swapIndex of candidates[feeIndex]!) {
+      if (swapIndex <= previousSwapIndex) continue;
+      path.push(swapIndex);
+      assign(feeIndex + 1, swapIndex, path);
+      path.pop();
+    }
+  }
+  assign(0, -1, []);
+  if (assignmentCount !== 1) {
+    fail("classic-v2-swap-fee-provenance");
+  }
+  const matched = new Set(matchedSwapIndexes);
+  for (let index = 0; index < swaps.length; index += 1) {
+    if (
+      !matched.has(index) &&
+      swapNativeAmounts[index]!.amount * BigInt(totalSwapFeeBps) / 10_000n !== 0n
+    ) {
+      fail("classic-v2-swap-fee-event-coverage");
+    }
   }
   return Object.freeze({
     gross,
@@ -1187,95 +1263,124 @@ export async function buildClassicV2ExactBlockContribution(input: {
   }
 
   const launches = launchRecords(launcherLogs, release);
+  const corpusManifest = createReconcilerCorpusManifest({
+    contract: input.contract,
+    identities: launches.map((launch) => Object.freeze({
+      tokenAddress: lowerAddress(launch.token),
+      poolId: launch.poolId,
+      launchTransactionHash: launch.transactionHash,
+      launchBlockNumber: launch.blockNumber.toString(),
+      launchTransactionIndex: launch.transactionIndex,
+      launchLogIndex: launch.blockGlobalLogIndex,
+    })),
+  });
+  assembleReconcilerCorpusPages(corpusManifest, corpusManifest.pages);
   const companions = validatedCompanions({
     launches,
     launcherLogs,
     hookLogs,
     release,
   });
-  const transactionBindings = launches.map((launch) => Object.freeze({
-    transactionHash: launch.transactionHash,
-    expectedBlockNumber: launch.blockNumber,
-    expectedBlockHash: launch.blockHash,
-    expectedTo: release.launcher,
-  }));
-  const receiptBindings = launches.map((launch) => Object.freeze({
-    transactionHash: launch.transactionHash,
-    expectedBlockNumber: launch.blockNumber,
-    expectedBlockHash: launch.blockHash,
-  }));
-  const [transactions, receipts, poolSwapLogs] = await Promise.all([
-    input.rpc.getTransactions({
-      transactions: transactionBindings,
-      signal: input.signal,
-    }),
-    input.rpc.getTransactionReceipts({
-      receipts: receiptBindings,
-      signal: input.signal,
-    }),
-    readPoolSwapBatches({
-      rpc: input.rpc,
-      poolManager: release.poolManager,
-      poolIds: launches.map(({ poolId }) => poolId),
-      fromBlock: release.startBlock,
-      toBlock: input.blockNumber,
-      signal: input.signal,
-    }),
-  ]);
-  const launchTransactions = validatedLaunchTransactions({
-    launches,
-    transactions,
-    receipts,
-    companions,
-    release,
+  const poolSwapLogsPromise = readPoolSwapBatches({
+    rpc: input.rpc,
+    poolManager: release.poolManager,
+    poolIds: launches.map(({ poolId }) => poolId),
+    fromBlock: release.startBlock,
+    toBlock: input.blockNumber,
+    signal: input.signal,
   });
-
-  const stateSpecs = launches.flatMap((launch) => {
-    const transaction = launchTransactions.get(lowerAddress(launch.token));
-    if (!transaction) fail("classic-v2-launch-transaction-missing");
-    return [
-      callSpec(launch.token, uerc20ReadAbi, "name"),
-      callSpec(launch.token, uerc20ReadAbi, "symbol"),
-      callSpec(launch.token, uerc20ReadAbi, "decimals"),
-      callSpec(launch.token, uerc20ReadAbi, "totalSupply"),
-      callSpec(launch.token, uerc20ReadAbi, "creator"),
-      callSpec(launch.token, uerc20ReadAbi, "metadata"),
-      callSpec(release.stateView, stateViewReadAbi, "getSlot0", [launch.poolId]),
-      callSpec(release.stateView, stateViewReadAbi, "getLiquidity", [launch.poolId]),
-      callSpec(release.hook, creatorFeeHookReadAbi, "feeDisclosure", [launch.poolId]),
-      callSpec(release.hook, creatorFeeHookReadAbi, "poolFeeConfig", [launch.poolId]),
-      callSpec(release.launcher, launcherAbi, "launchHashOf", [launch.token]),
-      callSpec(release.launcher, launcherAbi, "predictTokenAddress", [
-        transaction.name,
-        transaction.symbol,
-        launch.creator,
-        transaction.creatorSalt,
-      ]),
-      callSpec(release.launcher, launcherAbi, "predictPositionRecipient", [
-        launch.token,
-        launch.creator,
-      ]),
-      callSpec(release.launcher, launcherAbi, "poolKey", [launch.token]),
-    ];
-  });
-  const stateValues = await readCalls(
-    input.rpc,
-    stateSpecs,
-    input.blockHash,
-    input.signal,
-  );
-
+  const launchTransactions = new Map<string, LaunchTransactionEvidence>();
+  const stateValues: unknown[] = [];
   const timestamps = new Map<string, bigint>();
-  for (const launch of launches) {
-    const key = launch.blockNumber.toString();
-    if (!timestamps.has(key)) {
-      timestamps.set(key, await input.rpc.getBlockTimestamp({
-        blockNumber: launch.blockNumber,
-        expectedHash: launch.blockHash,
+  for (const page of corpusManifest.pages) {
+    const pageRpc = input.rpc.createPartitionClient(page);
+    await pageRpc.assertCheckpoint({
+      blockNumber: input.blockNumber,
+      blockHash: input.blockHash,
+      signal: input.signal,
+    });
+    const pageLaunches = launches.slice(page.startIndex, page.endIndexExclusive);
+    const [transactions, receipts] = await Promise.all([
+      pageRpc.getTransactions({
+        transactions: pageLaunches.map((launch) => Object.freeze({
+          transactionHash: launch.transactionHash,
+          expectedBlockNumber: launch.blockNumber,
+          expectedBlockHash: launch.blockHash,
+          expectedTo: release.launcher,
+        })),
         signal: input.signal,
-      }));
+      }),
+      pageRpc.getTransactionReceipts({
+        receipts: pageLaunches.map((launch) => Object.freeze({
+          transactionHash: launch.transactionHash,
+          expectedBlockNumber: launch.blockNumber,
+          expectedBlockHash: launch.blockHash,
+        })),
+        signal: input.signal,
+      }),
+    ]);
+    const pageTransactions = validatedLaunchTransactions({
+      launches: pageLaunches,
+      transactions,
+      receipts,
+      companions,
+      release,
+    });
+    for (const [key, transaction] of pageTransactions) {
+      if (launchTransactions.has(key)) fail("classic-v2-launch-transaction-duplicate");
+      launchTransactions.set(key, transaction);
     }
+    const stateSpecs = pageLaunches.flatMap((launch) => {
+      const transaction = pageTransactions.get(lowerAddress(launch.token));
+      if (!transaction) fail("classic-v2-launch-transaction-missing");
+      return [
+        callSpec(launch.token, uerc20ReadAbi, "name"),
+        callSpec(launch.token, uerc20ReadAbi, "symbol"),
+        callSpec(launch.token, uerc20ReadAbi, "decimals"),
+        callSpec(launch.token, uerc20ReadAbi, "totalSupply"),
+        callSpec(launch.token, uerc20ReadAbi, "creator"),
+        callSpec(launch.token, uerc20ReadAbi, "metadata"),
+        callSpec(release.stateView, stateViewReadAbi, "getSlot0", [launch.poolId]),
+        callSpec(release.stateView, stateViewReadAbi, "getLiquidity", [launch.poolId]),
+        callSpec(release.hook, creatorFeeHookReadAbi, "feeDisclosure", [launch.poolId]),
+        callSpec(release.hook, creatorFeeHookReadAbi, "poolFeeConfig", [launch.poolId]),
+        callSpec(release.launcher, launcherAbi, "launchHashOf", [launch.token]),
+        callSpec(release.launcher, launcherAbi, "predictTokenAddress", [
+          transaction.name,
+          transaction.symbol,
+          launch.creator,
+          transaction.creatorSalt,
+        ]),
+        callSpec(release.launcher, launcherAbi, "predictPositionRecipient", [
+          launch.token,
+          launch.creator,
+        ]),
+        callSpec(release.launcher, launcherAbi, "poolKey", [launch.token]),
+      ];
+    });
+    stateValues.push(...await readCalls(
+      pageRpc,
+      stateSpecs,
+      input.blockHash,
+      input.signal,
+    ));
+    for (const launch of pageLaunches) {
+      const key = launch.blockNumber.toString();
+      if (!timestamps.has(key)) {
+        timestamps.set(key, await pageRpc.getBlockTimestamp({
+          blockNumber: launch.blockNumber,
+          expectedHash: launch.blockHash,
+          signal: input.signal,
+        }));
+      }
+    }
+    await pageRpc.assertCheckpoint({
+      blockNumber: input.blockNumber,
+      blockHash: input.blockHash,
+      signal: input.signal,
+    });
   }
+  const poolSwapLogs = await poolSwapLogsPromise;
 
   const tokens: Json[] = [];
   const charts: Json[] = [];

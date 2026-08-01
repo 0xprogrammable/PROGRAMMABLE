@@ -36,6 +36,10 @@ import {
   type ReconcilerRouteContribution,
 } from "./classic-v3-reconciler-route-contract";
 import { canonicalBytes32, type HexBytes32 } from "./codecs";
+import {
+  assembleReconcilerCorpusPages,
+  createReconcilerCorpusManifest,
+} from "./reconciler-corpus-partitions";
 import { dataPipelineError, invalidInput, validationError } from "./errors";
 import type {
   ExactBlockRouteBuilder,
@@ -55,13 +59,6 @@ const ZERO_ADDRESS = `0x${"00".repeat(20)}` as Address;
 // success on one side of the dual-provider comparison.
 export const CLASSIC_V3_RECONCILER_LOG_BLOCK_RANGE = 10_000n;
 const MAXIMUM_LOGS_PER_REQUEST = 20_000;
-// The complete route corpus needs 41 exact-block calls per launch before log
-// reads. Keep the live release inside both the RPC client's logical budget and
-// the 75-second reconciliation deadline; partitioning is required before this
-// release grows beyond the bound.
-// 256 remains within the 16,384 logical-RPC budget at the current worst-case
-// 41 calls per launch, while covering the present 186-launch production set.
-export const MAXIMUM_CLASSIC_V3_RECONCILER_LAUNCHES = 256;
 const MAXIMUM_VAULTS_PER_LOG_REQUEST = 64;
 const MAXIMUM_POOLS_PER_LOG_REQUEST = 64;
 const CALLS_PER_LAUNCH = 21;
@@ -265,6 +262,11 @@ function nonnegative(value: unknown, operation: string): bigint {
   return parsed;
 }
 
+function absolute(value: unknown, operation: string): bigint {
+  const parsed = integer(value, operation);
+  return parsed < 0n ? -parsed : parsed;
+}
+
 function safeInteger(
   value: unknown,
   minimum: number,
@@ -329,8 +331,7 @@ export function classicV3ReconcilerBlockRanges(
 export function assertClassicV3ReconcilerLaunchCount(count: number): number {
   if (
     !Number.isSafeInteger(count) ||
-    count < 1 ||
-    count > MAXIMUM_CLASSIC_V3_RECONCILER_LAUNCHES
+    count < 1
   ) {
     fail("classic-v3-launch-cardinality");
   }
@@ -1119,22 +1120,27 @@ function groupLogsByAddress(logs: readonly DecodedLog[]) {
 }
 
 function grossFeeTotals(
-  logs: readonly DecodedLog[],
+  hookLogs: readonly DecodedLog[],
+  swapLogs: readonly DecodedLog[],
   poolId: HexBytes32,
   buySwapFeeBps: number,
   sellSwapFeeBps: number,
 ) {
+  const fees = hookLogs.filter((event) =>
+    event.eventName === "NativeSwapFeesAccrued" &&
+    sameHex(exactBytes32(event.args.poolId, "classic-v3-accrual-pool"), poolId)
+  );
+  const swaps = swapLogs.filter((event) =>
+    event.eventName === "Swap" &&
+    sameHex(exactBytes32(event.args.id, "classic-v3-swap-pool"), poolId)
+  );
+  if (swaps.length < 1 || fees.length > swaps.length) {
+    fail("classic-v3-swap-fee-event-coverage");
+  }
   let gross = 0n;
   let creator = 0n;
   let launcher = 0n;
-  let count = 0;
-  for (const event of logs) {
-    if (
-      event.eventName !== "NativeSwapFeesAccrued" ||
-      !sameHex(exactBytes32(event.args.poolId, "classic-v3-accrual-pool"), poolId)
-    ) {
-      continue;
-    }
+  const feeAmounts = fees.map((event) => {
     const grossAmount = nonnegative(event.args.grossNativeAmount, "classic-v3-gross-fee");
     const creatorAmount = nonnegative(event.args.creatorFee, "classic-v3-creator-fee");
     const launcherAmount = nonnegative(event.args.launcherFee, "classic-v3-launcher-fee");
@@ -1158,6 +1164,7 @@ function grossFeeTotals(
     const expectedLauncherFee = grossAmount * 10n / 10_000n;
     if (
       appliedFeeBps !== configuredFeeBps ||
+      actualTotalFee === 0n ||
       (
         actualTotalFee !== expectedFloorTotalFee &&
         actualTotalFee !== expectedCeilingTotalFee
@@ -1174,9 +1181,90 @@ function grossFeeTotals(
     gross += grossAmount;
     creator += creatorAmount;
     launcher += launcherAmount;
-    count += 1;
+    return Object.freeze({
+      grossAmount,
+      actualTotalFee,
+      isBuy: event.args.isBuy,
+      sender: exactAddress(event.args.swapSender, "classic-v3-fee-sender"),
+    });
+  });
+
+  const swapNativeAmounts = swaps.map((event) => {
+    if (safeInteger(event.args.fee, 0, 1_000_000, "classic-v3-swap-lp-fee") !== 0) {
+      fail("classic-v3-fee-conservation");
+    }
+    const amount = absolute(event.args.amount0, "classic-v3-swap-native");
+    if (amount === 0n) fail("classic-v3-swap-native");
+    return Object.freeze({
+      amount,
+      isBuy: integer(event.args.amount0, "classic-v3-swap-direction") > 0n,
+      sender: exactAddress(event.args.sender, "classic-v3-swap-sender"),
+    });
+  });
+
+  const candidates = fees.map((fee, feeIndex) => {
+    const related = swaps.flatMap((swap, swapIndex) => {
+      if (
+        fee.log.blockNumber !== swap.log.blockNumber ||
+        fee.log.transactionIndex !== swap.log.transactionIndex ||
+        !sameHex(fee.log.blockHash, swap.log.blockHash) ||
+        !sameHex(fee.log.transactionHash, swap.log.transactionHash) ||
+        feeAmounts[feeIndex]!.isBuy !== swapNativeAmounts[swapIndex]!.isBuy ||
+        !sameHex(feeAmounts[feeIndex]!.sender, swapNativeAmounts[swapIndex]!.sender)
+      ) {
+        return [];
+      }
+      return [swapIndex];
+    });
+    const previous = related.filter((swapIndex) =>
+      swaps[swapIndex]!.log.logIndex < fee.log.logIndex
+    ).at(-1);
+    const next = related.find((swapIndex) =>
+      swaps[swapIndex]!.log.logIndex > fee.log.logIndex
+    );
+    return Object.freeze([previous, next]
+      .filter((swapIndex): swapIndex is number => swapIndex !== undefined)
+      .filter((swapIndex, index, values) =>
+        values.indexOf(swapIndex) === index &&
+        (
+          feeAmounts[feeIndex]!.grossAmount === swapNativeAmounts[swapIndex]!.amount ||
+          feeAmounts[feeIndex]!.grossAmount ===
+            swapNativeAmounts[swapIndex]!.amount + feeAmounts[feeIndex]!.actualTotalFee
+        )
+      ));
+  });
+
+  let assignmentCount = 0;
+  let matchedSwapIndexes: readonly number[] = Object.freeze([]);
+  function assign(feeIndex: number, previousSwapIndex: number, path: number[]) {
+    if (assignmentCount > 1) return;
+    if (feeIndex === candidates.length) {
+      assignmentCount += 1;
+      matchedSwapIndexes = Object.freeze([...path]);
+      return;
+    }
+    for (const swapIndex of candidates[feeIndex]!) {
+      if (swapIndex <= previousSwapIndex) continue;
+      path.push(swapIndex);
+      assign(feeIndex + 1, swapIndex, path);
+      path.pop();
+    }
   }
-  return Object.freeze({ gross, creator, launcher, count });
+  assign(0, -1, []);
+  if (assignmentCount !== 1) {
+    fail("classic-v3-swap-fee-provenance");
+  }
+  const matched = new Set(matchedSwapIndexes);
+  for (let index = 0; index < swaps.length; index += 1) {
+    if (matched.has(index)) continue;
+    const configuredFeeBps = integer(swaps[index]!.args.amount0, "classic-v3-swap-direction") > 0n
+      ? buySwapFeeBps
+      : sellSwapFeeBps;
+    if (swapNativeAmounts[index]!.amount * BigInt(configuredFeeBps) / 10_000n !== 0n) {
+      fail("classic-v3-swap-fee-event-coverage");
+    }
+  }
+  return Object.freeze({ gross, creator, launcher, count: fees.length });
 }
 
 function vaultEventInputs(logs: readonly DecodedLog[], poolId: HexBytes32) {
@@ -1248,6 +1336,72 @@ function vaultEventInputs(logs: readonly DecodedLog[], poolId: HexBytes32) {
       effectiveTotalCreatorFeesReceivedWei: nonnegative(event.args.effectiveTotalCreatorFeesReceived, "classic-v3-cto-total").toString(),
     } satisfies Json;
   }));
+}
+
+function entitlementAccounts(input: Readonly<{
+  initialBeneficiaries: readonly Address[];
+  currentBeneficiaries: readonly Address[];
+  logs: readonly DecodedLog[];
+  poolId: HexBytes32;
+}>): readonly Address[] {
+  const accounts = new Map<string, Address>();
+  const add = (value: unknown, operation: string) => {
+    const account = exactAddress(value, operation);
+    accounts.set(lowerAddress(account), account);
+  };
+  input.initialBeneficiaries.forEach((account) =>
+    add(account, "classic-v3-initial-entitlement-account")
+  );
+  input.currentBeneficiaries.forEach((account) =>
+    add(account, "classic-v3-current-entitlement-account")
+  );
+  for (const event of input.logs) {
+    if (event.eventName === "BeneficiaryFeesClaimed") {
+      add(event.args.beneficiary, "classic-v3-claimed-entitlement-account");
+      continue;
+    }
+    if (event.eventName === "CreatorFeesCheckpointed") {
+      if (!sameHex(
+        exactBytes32(event.args.poolId, "classic-v3-entitlement-checkpoint-pool"),
+        input.poolId,
+      )) {
+        fail("classic-v3-entitlement-checkpoint-pool");
+      }
+      continue;
+    }
+    if (event.eventName === "PayoutWalletChanged") {
+      if (!sameHex(
+        exactBytes32(event.args.poolId, "classic-v3-entitlement-payout-pool"),
+        input.poolId,
+      )) {
+        fail("classic-v3-entitlement-payout-pool");
+      }
+      add(
+        event.args.previousPayoutWallet,
+        "classic-v3-previous-entitlement-account",
+      );
+      add(event.args.newPayoutWallet, "classic-v3-new-entitlement-account");
+      continue;
+    }
+    if (event.eventName !== "CtoRewardConfigurationActivated" || !sameHex(
+      exactBytes32(event.args.poolId, "classic-v3-entitlement-cto-pool"),
+      input.poolId,
+    )) {
+      fail("classic-v3-entitlement-event");
+    }
+    if (!Array.isArray(event.args.beneficiaries)) {
+      fail("classic-v3-entitlement-cto-beneficiaries");
+    }
+    event.args.beneficiaries.forEach((account) =>
+      add(account, "classic-v3-cto-entitlement-account")
+    );
+  }
+  if (accounts.size < 1) fail("classic-v3-entitlement-account-count");
+  return Object.freeze(
+    [...accounts.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([, account]) => account),
+  );
 }
 
 function swapPoints(logs: readonly DecodedLog[], poolId: HexBytes32) {
@@ -1449,8 +1603,21 @@ async function buildContribution(input: {
     }
     activeBeneficiaries.push(values);
   }
+  const entitlementAccountsByLaunch = launches.map((launch, launchIndex) => {
+    const transaction = launchTransactions.get(lowerAddress(launch.token));
+    if (!transaction) fail("classic-v3-entitlement-launch-transaction");
+    const logs = vaultLogsByAddress.get(lowerAddress(launch.rewardVault)) ?? [];
+    // Validate the complete history before using it as an entitlement source.
+    vaultEventInputs(logs, launch.poolId);
+    return entitlementAccounts({
+      initialBeneficiaries: transaction.rewardBeneficiaries,
+      currentBeneficiaries: activeBeneficiaries[launchIndex]!,
+      logs,
+      poolId: launch.poolId,
+    });
+  });
   const balanceSpecs = launches.flatMap((launch, launchIndex) =>
-    activeBeneficiaries[launchIndex]!.flatMap((beneficiary) => [
+    entitlementAccountsByLaunch[launchIndex]!.flatMap((beneficiary) => [
       callSpec(launch.rewardVault, classicRewardVaultAbi, "claimable", [beneficiary]),
       callSpec(launch.rewardVault, classicRewardVaultAbi, "claimedBy", [beneficiary]),
     ])
@@ -1582,12 +1749,13 @@ async function buildContribution(input: {
     const extraData = exactData(extraDataValue, "classic-v3-extra-data");
     const feeTotals = grossFeeTotals(
       hookLogs,
+      poolSwapLogs,
       launch.poolId,
       buySwapFeeBps,
       sellSwapFeeBps,
     );
     const chart = swapPoints(poolSwapLogs, launch.poolId);
-    if (chart.swapCount < 1 || chart.swapCount !== feeTotals.count) {
+    if (chart.swapCount < 1 || chart.swapCount < feeTotals.count) {
       fail("classic-v3-swap-fee-event-coverage");
     }
     const liquidityArgs = companion.liquidity.args;
@@ -1656,8 +1824,6 @@ async function buildContribution(input: {
     const currentBeneficiaries: Address[] = [];
     const currentShares: number[] = [];
     let shareTotal = 0;
-    let claimableTotal = 0n;
-    let claimedCurrentTotal = 0n;
     for (let allocationIndex = 0; allocationIndex < count; allocationIndex += 1) {
       const beneficiary = exactAddress(
         beneficiaryBaseValues[beneficiaryValueCursor],
@@ -1670,26 +1836,45 @@ async function buildContribution(input: {
         "classic-v3-beneficiary-share",
       );
       beneficiaryValueCursor += 2;
-      const claimable = nonnegative(balanceValues[balanceValueCursor], "classic-v3-claimable");
-      const claimed = nonnegative(balanceValues[balanceValueCursor + 1], "classic-v3-claimed");
-      balanceValueCursor += 2;
       shareTotal += shareBps;
       currentBeneficiaries.push(beneficiary);
       currentShares.push(shareBps);
-      claimableTotal += claimable;
-      claimedCurrentTotal += claimed;
       allocations.push({
         allocationIndex,
         payoutAddress: lowerAddress(beneficiary),
         shareBps,
+      });
+    }
+    const entitlements: Json[] = [];
+    let claimableTotal = 0n;
+    let claimedEntitlementTotal = 0n;
+    for (const account of entitlementAccountsByLaunch[index]!) {
+      const claimable = nonnegative(
+        balanceValues[balanceValueCursor],
+        "classic-v3-claimable",
+      );
+      const claimed = nonnegative(
+        balanceValues[balanceValueCursor + 1],
+        "classic-v3-claimed",
+      );
+      balanceValueCursor += 2;
+      claimableTotal += claimable;
+      claimedEntitlementTotal += claimed;
+      entitlements.push({
+        account: lowerAddress(account),
         claimableWei: claimable.toString(),
         claimedWei: claimed.toString(),
       });
     }
+    const pendingCreatorFeeTotal = nonnegative(
+      pendingCreatorFees,
+      "classic-v3-pending-creator-fees",
+    );
     if (
       shareTotal !== 10_000 ||
-      totalClaimed < claimedCurrentTotal ||
-      totalReceived < totalClaimed + claimableTotal
+      totalClaimed !== claimedEntitlementTotal ||
+      totalReceived !== totalClaimed + claimableTotal ||
+      feeTotals.creator !== totalReceived + pendingCreatorFeeTotal
     ) {
       fail("classic-v3-reward-conservation");
     }
@@ -1721,7 +1906,7 @@ async function buildContribution(input: {
     ) {
       fail("classic-v3-initial-reward-state-mismatch");
     }
-    vaultEventInputs(
+    const rewardEvents = vaultEventInputs(
       vaultLogsByAddress.get(lowerAddress(launch.rewardVault)) ?? [],
       launch.poolId,
     );
@@ -1763,7 +1948,6 @@ async function buildContribution(input: {
         tickUpper,
       },
     };
-    nonnegative(pendingCreatorFees, "classic-v3-pending-creator-fees");
     nonnegative(initialBuyArgs.tokenAmount, "classic-v3-initial-buy-token");
     exactBytes32(custodyArgs.configurationHash, "classic-v3-custody-hash");
     tokens.push(tokenJson);
@@ -1816,7 +2000,15 @@ async function buildContribution(input: {
       buySwapFeeBps,
       sellSwapFeeBps,
       launcherFeeBps,
+      configurationHash,
+      activeConfigurationHash,
+      configurationEpoch: configurationEpoch.toString(),
+      totalCreatorFeesReceivedWei: totalReceived.toString(),
+      totalCreatorFeesClaimedWei: totalClaimed.toString(),
+      pendingCreatorFeesWei: pendingCreatorFeeTotal.toString(),
       allocations,
+      entitlements,
+      events: [...rewardEvents],
     });
   }
 

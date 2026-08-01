@@ -50,6 +50,8 @@ const TOKEN = getAddress(`0x${"11".repeat(20)}`);
 const DEPLOYER = getAddress(`0x${"22".repeat(20)}`);
 const VAULT = getAddress(`0x${"33".repeat(20)}`);
 const BENEFICIARY = getAddress(`0x${"44".repeat(20)}`);
+const REPLACEMENT = getAddress(`0x${"45".repeat(20)}`);
+const CTO_BENEFICIARY = getAddress(`0x${"46".repeat(20)}`);
 const POSITION_RECIPIENT = getAddress(`0x${"55".repeat(20)}`);
 const SWAP_SENDER = getAddress(`0x${"66".repeat(20)}`);
 const POOL_ID = `0x${"77".repeat(32)}` as const;
@@ -59,8 +61,12 @@ const CREATOR_SALT = `0x${"aa".repeat(32)}` as const;
 const LAUNCH_TRANSACTION = `0x${"bb".repeat(32)}` as const;
 const LAUNCH_BLOCK_HASH = `0x${"cc".repeat(32)}` as const;
 const SWAP_TRANSACTION = `0x${"dd".repeat(32)}` as const;
+const TINY_SWAP_TRANSACTION = `0x${"de".repeat(32)}` as const;
+const SECOND_SWAP_TRANSACTION = `0x${"df".repeat(32)}` as const;
+const HISTORY_TRANSACTION = `0x${"e0".repeat(32)}` as const;
 const SWAP_BLOCK_HASH = `0x${"ee".repeat(32)}` as const;
 const CHECKPOINT_HASH = `0x${"ff".repeat(32)}` as const;
+const APPROVAL_REFERENCE = `0x${"ab".repeat(32)}` as const;
 const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n;
 const TOKEN_LIQUIDITY = TOTAL_SUPPLY - 1n;
 const SQRT_PRICE_X96 = 79_228_162_514_264_337_593_543_950_336n;
@@ -92,6 +98,15 @@ const vaultDeployedEvent = parseAbiItem(
 const swapEvent = parseAbiItem(
   "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
 );
+const checkpointEvent = parseAbiItem(
+  "event CreatorFeesCheckpointed(bytes32 indexed poolId,uint64 indexed configurationEpoch,uint256 amount,uint256 totalCreatorFeesReceived)",
+);
+const payoutChangedEvent = parseAbiItem(
+  "event PayoutWalletChanged(bytes32 indexed poolId,uint256 indexed allocationIndex,address indexed previousPayoutWallet,address newPayoutWallet,uint16 shareBps,uint64 configurationEpoch,bytes32 activeConfigurationHash,uint256 effectiveTotalCreatorFeesReceived)",
+);
+const ctoActivatedEvent = parseAbiItem(
+  "event CtoRewardConfigurationActivated(bytes32 indexed poolId,bytes32 indexed approvalReference,uint64 indexed configurationEpoch,bytes32 previousConfigurationHash,bytes32 newConfigurationHash,address[] beneficiaries,uint16[] sharesBps,uint256 effectiveTotalCreatorFeesReceived)",
+);
 
 const vaultFactoryAbi = parseAbi([
   "function isFactoryVault(address vault) view returns (bool)",
@@ -104,8 +119,16 @@ type Mutation =
   | "calldata"
   | "receipt"
   | "fee"
+  | "direction"
   | "reward"
-  | "log-order";
+  | "log-order"
+  | "tiny-swap"
+  | "missing-fee"
+  | "extra-fee"
+  | "duplicate-fee"
+  | "reordered-fees"
+  | "payout-history"
+  | "cto-history";
 
 function eventLog(input: {
   event: AbiEvent;
@@ -155,11 +178,32 @@ function fixture(mutation: Mutation = "none") {
   const launchBlock = startBlock + 1n;
   const swapBlock = startBlock + 2n;
   const checkpointBlock = startBlock + 5n;
-  const activeConfigurationHash = keccak256(encodeAbiParameters(
+  const currentBeneficiary = mutation === "payout-history"
+    ? REPLACEMENT
+    : mutation === "cto-history"
+      ? CTO_BENEFICIARY
+      : BENEFICIARY;
+  const configurationEpoch = mutation === "payout-history" || mutation === "cto-history"
+    ? 2n
+    : 1n;
+  const initialActiveConfigurationHash = keccak256(encodeAbiParameters(
     parseAbi([
       "function f(uint256 chainId,address vault,bytes32 configurationHash,uint64 epoch,address[] beneficiaries,uint16[] sharesBps)",
     ])[0]!.inputs,
     [1n, VAULT, CONFIGURATION_HASH, 1n, [BENEFICIARY], [10_000]],
+  ));
+  const activeConfigurationHash = keccak256(encodeAbiParameters(
+    parseAbi([
+      "function f(uint256 chainId,address vault,bytes32 configurationHash,uint64 epoch,address[] beneficiaries,uint16[] sharesBps)",
+    ])[0]!.inputs,
+    [
+      1n,
+      VAULT,
+      CONFIGURATION_HASH,
+      configurationEpoch,
+      [currentBeneficiary],
+      [10_000],
+    ],
   ));
 
   const factoryLog = eventLog({
@@ -300,7 +344,7 @@ function fixture(mutation: Mutation = "none") {
     args: {
       poolId: POOL_ID,
       swapSender: SWAP_SENDER,
-      isBuy: true,
+      isBuy: mutation !== "direction",
       appliedTotalSwapFeeBps: 100,
       grossNativeAmount: 10_000n,
       creatorFee: mutation === "fee" ? 89n : 90n,
@@ -318,7 +362,7 @@ function fixture(mutation: Mutation = "none") {
     args: {
       id: POOL_ID,
       sender: SWAP_SENDER,
-      amount0: 1n,
+      amount0: 10_000n,
       amount1: -1n,
       sqrtPriceX96: SQRT_PRICE_X96,
       liquidity: 1_000_000n,
@@ -330,6 +374,137 @@ function fixture(mutation: Mutation = "none") {
     blockHash: SWAP_BLOCK_HASH,
     transactionHash: SWAP_TRANSACTION,
     transactionIndex: 3,
+    logIndex: mutation === "reordered-fees" ? 3 : 1,
+  });
+  const tinySwapLog = eventLog({
+    event: swapEvent,
+    args: {
+      id: POOL_ID,
+      sender: SWAP_SENDER,
+      amount0: 1n,
+      amount1: -1n,
+      sqrtPriceX96: SQRT_PRICE_X96,
+      liquidity: 1_000_000n,
+      tick: 0,
+      fee: 0,
+    },
+    address: getAddress(dependencies.contracts.poolManager.address),
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: TINY_SWAP_TRANSACTION,
+    transactionIndex: 2,
+    logIndex: 0,
+  });
+  const secondFeeLog = eventLog({
+    event: feeAccruedEvent,
+    args: {
+      poolId: POOL_ID,
+      swapSender: SWAP_SENDER,
+      isBuy: true,
+      appliedTotalSwapFeeBps: 100,
+      grossNativeAmount: 20_000n,
+      creatorFee: 180n,
+      launcherFee: 20n,
+    },
+    address: hook,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: mutation === "reordered-fees"
+      ? SWAP_TRANSACTION
+      : SECOND_SWAP_TRANSACTION,
+    transactionIndex: mutation === "reordered-fees" ? 3 : 4,
+    logIndex: mutation === "reordered-fees" ? 2 : 0,
+  });
+  const secondSwapLog = eventLog({
+    event: swapEvent,
+    args: {
+      id: POOL_ID,
+      sender: SWAP_SENDER,
+      amount0: 20_000n,
+      amount1: -2n,
+      sqrtPriceX96: SQRT_PRICE_X96,
+      liquidity: 1_000_000n,
+      tick: 0,
+      fee: 0,
+    },
+    address: getAddress(dependencies.contracts.poolManager.address),
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: mutation === "reordered-fees"
+      ? SWAP_TRANSACTION
+      : SECOND_SWAP_TRANSACTION,
+    transactionIndex: mutation === "reordered-fees" ? 3 : 4,
+    logIndex: 1,
+  });
+  const duplicateFeeLog = eventLog({
+    event: feeAccruedEvent,
+    args: {
+      poolId: POOL_ID,
+      swapSender: SWAP_SENDER,
+      isBuy: true,
+      appliedTotalSwapFeeBps: 100,
+      grossNativeAmount: 10_000n,
+      creatorFee: 90n,
+      launcherFee: 10n,
+    },
+    address: hook,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: SWAP_TRANSACTION,
+    transactionIndex: 3,
+    logIndex: 2,
+  });
+  const checkpointLog = eventLog({
+    event: checkpointEvent,
+    args: {
+      poolId: POOL_ID,
+      configurationEpoch: 1n,
+      amount: 90n,
+      totalCreatorFeesReceived: 90n,
+    },
+    address: VAULT,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: HISTORY_TRANSACTION,
+    transactionIndex: 4,
+    logIndex: 0,
+  });
+  const payoutChangedLog = eventLog({
+    event: payoutChangedEvent,
+    args: {
+      poolId: POOL_ID,
+      allocationIndex: 0n,
+      previousPayoutWallet: BENEFICIARY,
+      newPayoutWallet: REPLACEMENT,
+      shareBps: 10_000,
+      configurationEpoch: 2n,
+      activeConfigurationHash,
+      effectiveTotalCreatorFeesReceived: 90n,
+    },
+    address: VAULT,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: HISTORY_TRANSACTION,
+    transactionIndex: 4,
+    logIndex: 1,
+  });
+  const ctoActivatedLog = eventLog({
+    event: ctoActivatedEvent,
+    args: {
+      poolId: POOL_ID,
+      approvalReference: APPROVAL_REFERENCE,
+      configurationEpoch: 2n,
+      previousConfigurationHash: initialActiveConfigurationHash,
+      newConfigurationHash: activeConfigurationHash,
+      beneficiaries: [CTO_BENEFICIARY],
+      sharesBps: [10_000],
+      effectiveTotalCreatorFeesReceived: 90n,
+    },
+    address: VAULT,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: HISTORY_TRANSACTION,
+    transactionIndex: 4,
     logIndex: 1,
   });
 
@@ -403,6 +578,7 @@ function fixture(mutation: Mutation = "none") {
     endpointOriginCommitment: `0x${"02".repeat(32)}`,
     requestCount: () => 0,
     logicalRequestCount: () => 0,
+    createPartitionClient: () => rpc,
     assertCheckpoint: async () => 1_700_000_000n,
     call: async () => {
       throw new Error("unexpected single call");
@@ -447,7 +623,7 @@ function fixture(mutation: Mutation = "none") {
             100,
             100,
             true,
-            90n,
+            0n,
           ]),
           encodedResult(classicV3LaunchAbi, "predictRewardVault", VAULT),
           encodedResult(vaultFactoryAbi, "isFactoryVault", true),
@@ -460,7 +636,11 @@ function fixture(mutation: Mutation = "none") {
             "activeConfigurationHash",
             mutation === "reward" ? LAUNCH_HASH : activeConfigurationHash,
           ),
-          encodedResult(classicRewardVaultAbi, "configurationEpoch", 1n),
+          encodedResult(
+            classicRewardVaultAbi,
+            "configurationEpoch",
+            configurationEpoch,
+          ),
           encodedResult(classicRewardVaultAbi, "beneficiaryCount", 1n),
           encodedResult(classicRewardVaultAbi, "totalCreatorFeesReceived", 90n),
           encodedResult(classicRewardVaultAbi, "totalCreatorFeesClaimed", 0n),
@@ -469,12 +649,25 @@ function fixture(mutation: Mutation = "none") {
       if (callBatch === 2) {
         expect(calls).toHaveLength(2);
         return Object.freeze([
-          encodedResult(classicRewardVaultAbi, "beneficiaryAt", BENEFICIARY),
+          encodedResult(
+            classicRewardVaultAbi,
+            "beneficiaryAt",
+            currentBeneficiary,
+          ),
           encodedResult(classicRewardVaultAbi, "shareBpsAt", 10_000),
         ]);
       }
       expect(callBatch).toBe(3);
-      expect(calls).toHaveLength(2);
+      const hasHistory = mutation === "payout-history" || mutation === "cto-history";
+      expect(calls).toHaveLength(hasHistory ? 4 : 2);
+      if (hasHistory) {
+        return Object.freeze([
+          encodedResult(classicRewardVaultAbi, "claimable", 90n),
+          encodedResult(classicRewardVaultAbi, "claimedBy", 0n),
+          encodedResult(classicRewardVaultAbi, "claimable", 0n),
+          encodedResult(classicRewardVaultAbi, "claimedBy", 0n),
+        ]);
+      }
       return Object.freeze([
         encodedResult(classicRewardVaultAbi, "claimable", 90n),
         encodedResult(classicRewardVaultAbi, "claimedBy", 0n),
@@ -497,12 +690,32 @@ function fixture(mutation: Mutation = "none") {
           : logs);
       }
       if (values.includes(hook.toLowerCase())) {
-        return Object.freeze([registrationLog, disclosureLog, feeLog]);
+        const logs = [registrationLog, disclosureLog];
+        if (mutation !== "missing-fee") logs.push(feeLog);
+        if (mutation === "extra-fee" || mutation === "reordered-fees") {
+          logs.push(secondFeeLog);
+        }
+        if (mutation === "duplicate-fee") logs.push(duplicateFeeLog);
+        return Object.freeze(logs);
       }
       if (values.includes(vaultFactory.toLowerCase())) {
         return Object.freeze([factoryLog]);
       }
-      if (values.includes(VAULT.toLowerCase())) return Object.freeze([]);
+      if (values.includes(VAULT.toLowerCase())) {
+        if (mutation === "payout-history") {
+          return Object.freeze([checkpointLog, payoutChangedLog]);
+        }
+        if (mutation === "cto-history") {
+          return Object.freeze([checkpointLog, ctoActivatedLog]);
+        }
+        return Object.freeze([]);
+      }
+      if (mutation === "tiny-swap") {
+        return Object.freeze([tinySwapLog, swapLog]);
+      }
+      if (mutation === "reordered-fees") {
+        return Object.freeze([secondSwapLog, swapLog]);
+      }
       return Object.freeze([swapLog]);
     },
     getBlockTimestamp: async () => 1_700_000_000n,
@@ -562,13 +775,80 @@ describe("Classic V3 exact route builder", () => {
     });
   });
 
+  it("accepts a 1-wei swap whose rounded fee is zero and emits no fee event", async () => {
+    const { rpc, contract, checkpointBlock } = fixture("tiny-swap");
+    const routes = await buildClassicV3ExactBlockRoutes({
+      rpc,
+      contract,
+      blockNumber: checkpointBlock,
+      blockHash: CHECKPOINT_HASH,
+      signal: new AbortController().signal,
+    });
+
+    expect(routes.map((route) => route.routeKey)).toEqual(RECONCILER_ROUTE_KEYS);
+    expect(routes.every((route) => route.comparedCount === 1)).toBe(true);
+  });
+
+  it.each([
+    ["payout-history", REPLACEMENT, "payout-change"],
+    ["cto-history", CTO_BENEFICIARY, "cto-activation"],
+  ] as const)(
+    "preserves old-wallet entitlements after %s",
+    async (mutation, currentBeneficiary, historyKind) => {
+      const { rpc, contract, checkpointBlock } = fixture(mutation);
+      const routes = await buildClassicV3ExactBlockRoutes({
+        rpc,
+        contract,
+        blockNumber: checkpointBlock,
+        blockHash: CHECKPOINT_HASH,
+        signal: new AbortController().signal,
+      });
+      const profile = routes.find(({ routeKey }) =>
+        routeKey === "classic-v3-profile"
+      )!.dto as {
+        rewards: Array<{
+          allocations: Array<Record<string, unknown>>;
+          entitlements: Array<Record<string, unknown>>;
+          events: Array<Record<string, unknown>>;
+        }>;
+      };
+
+      expect(profile.rewards[0]!.allocations).toEqual([{
+        allocationIndex: 0,
+        payoutAddress: currentBeneficiary.toLowerCase(),
+        shareBps: 10_000,
+      }]);
+      expect(profile.rewards[0]!.entitlements).toEqual([
+        {
+          account: BENEFICIARY.toLowerCase(),
+          claimableWei: "90",
+          claimedWei: "0",
+        },
+        {
+          account: currentBeneficiary.toLowerCase(),
+          claimableWei: "0",
+          claimedWei: "0",
+        },
+      ]);
+      expect(profile.rewards[0]!.events.map(({ kind }) => kind)).toEqual([
+        "checkpoint",
+        historyKind,
+      ]);
+    },
+  );
+
   it.each([
     ["runtime hash", "runtime"],
     ["launch calldata", "calldata"],
     ["receipt companion", "receipt"],
     ["fee conservation", "fee"],
+    ["fee direction", "direction"],
     ["reward configuration", "reward"],
     ["log ordering", "log-order"],
+    ["missing nonzero rounded fee event", "missing-fee"],
+    ["extra fee event", "extra-fee"],
+    ["duplicate fee event", "duplicate-fee"],
+    ["reordered fee events", "reordered-fees"],
   ] as const)("fails closed on a bad %s", async (_label, mutation) => {
     const { rpc, contract, checkpointBlock } = fixture(mutation);
     await expect(buildClassicV3ExactBlockRoutes({

@@ -1070,16 +1070,28 @@ function feeTotals(
       event.args.launcherFee,
       "stock-reconciler-launcher-fee",
     );
+    const actualTotalFee = creatorAmount + launcherAmount;
+    const floorTotalFee =
+      grossAmount * BigInt(STOCK_PAIRED_TOTAL_SWAP_FEE_BPS) / 10_000n;
+    const ceilingTotalFee =
+      (grossAmount * BigInt(STOCK_PAIRED_TOTAL_SWAP_FEE_BPS) + 9_999n) /
+        10_000n;
+    const expectedLauncherFee =
+      grossAmount * BigInt(STOCK_PAIRED_PROGRAMMABLE_FEE_BPS) / 10_000n;
     if (
       typeof event.args.isBuy !== "boolean" ||
       !sameHex(exactAddress(
         event.args.quoteAsset,
         "stock-reconciler-fee-quote",
       ), launch.quoteAsset) ||
-      creatorAmount + launcherAmount !==
-        grossAmount * BigInt(STOCK_PAIRED_TOTAL_SWAP_FEE_BPS) / 10_000n ||
-      launcherAmount !==
-        grossAmount * BigInt(STOCK_PAIRED_PROGRAMMABLE_FEE_BPS) / 10_000n
+      actualTotalFee === 0n ||
+      (actualTotalFee !== floorTotalFee && actualTotalFee !== ceilingTotalFee) ||
+      launcherAmount !== (
+        expectedLauncherFee > actualTotalFee
+          ? actualTotalFee
+          : expectedLauncherFee
+      ) ||
+      creatorAmount !== actualTotalFee - launcherAmount
     ) {
       fail("stock-reconciler-fee-conservation");
     }

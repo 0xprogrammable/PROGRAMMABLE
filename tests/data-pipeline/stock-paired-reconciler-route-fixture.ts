@@ -256,6 +256,7 @@ export function stockPairedReconcilerRouteFixture(
   options: Readonly<{
     mutation?: StockPairedReconcilerFixtureMutation;
     feeGrossQuote?: bigint;
+    feeTotalQuote?: bigint;
   }> = {},
 ): StockPairedReconcilerFixture {
   const release = configuredRelease(releaseVersion);
@@ -284,10 +285,14 @@ export function stockPairedReconcilerRouteFixture(
     ],
   )) as HexBytes32;
   const grossQuote = options.feeGrossQuote ?? FEE_GROSS_QUOTE;
-  const totalFee = grossQuote * BigInt(STOCK_PAIRED_TOTAL_SWAP_FEE_BPS) /
-    10_000n;
-  const launcherFee = grossQuote *
+  const totalFee = options.feeTotalQuote ?? (
+    grossQuote * BigInt(STOCK_PAIRED_TOTAL_SWAP_FEE_BPS) / 10_000n
+  );
+  const expectedLauncherFee = grossQuote *
     BigInt(STOCK_PAIRED_PROGRAMMABLE_FEE_BPS) / 10_000n;
+  const launcherFee = expectedLauncherFee > totalFee
+    ? totalFee
+    : expectedLauncherFee;
   const creatorFee = totalFee - launcherFee;
   const companionLaunchHash = options.mutation === "companion-launch-hash"
     ? ZERO_BYTES32
@@ -619,6 +624,7 @@ export function stockPairedReconcilerRouteFixture(
     endpointOriginCommitment: ENDPOINT_ORIGIN_COMMITMENT,
     requestCount: () => 0,
     logicalRequestCount: () => 0,
+    createPartitionClient: () => rpc,
     assertCheckpoint: async ({ blockHash }) => {
       if (blockHash !== BLOCK_HASH) throw new Error("checkpoint hash mismatch");
       return 1_700_000_000n;

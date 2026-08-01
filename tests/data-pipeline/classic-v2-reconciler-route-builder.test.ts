@@ -23,7 +23,6 @@ import {
   CLASSIC_V2_RECONCILER_LOG_BLOCK_RANGE,
   CLASSIC_V2_RECONCILER_ROUTE_KEYS,
   classicV2ReconcilerBlockRanges,
-  MAXIMUM_CLASSIC_V2_RECONCILER_LAUNCHES,
 } from "../../lib/data-pipeline/classic-v2-reconciler-route-builder.server";
 import type {
   ExactBlockRpcClient,
@@ -50,6 +49,8 @@ const EFFECTIVE_GRAFFITI = `0x${"88".repeat(32)}` as const;
 const LAUNCH_TRANSACTION = `0x${"99".repeat(32)}` as const;
 const LAUNCH_BLOCK_HASH = `0x${"aa".repeat(32)}` as const;
 const SWAP_TRANSACTION = `0x${"bb".repeat(32)}` as const;
+const TINY_SWAP_TRANSACTION = `0x${"bc".repeat(32)}` as const;
+const SECOND_SWAP_TRANSACTION = `0x${"bd".repeat(32)}` as const;
 const SWAP_BLOCK_HASH = `0x${"cc".repeat(32)}` as const;
 const CHECKPOINT_HASH = `0x${"dd".repeat(32)}` as const;
 const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n;
@@ -103,7 +104,12 @@ type Mutation =
   | "fee"
   | "state"
   | "provenance"
-  | "log-order";
+  | "log-order"
+  | "tiny-swap"
+  | "missing-fee"
+  | "extra-fee"
+  | "duplicate-fee"
+  | "reordered-fees";
 
 function eventLog(input: {
   event: AbiEvent;
@@ -264,7 +270,7 @@ function fixture(mutation: Mutation = "none") {
     args: {
       id: POOL_ID,
       sender: SWAP_SENDER,
-      amount0: 1n,
+      amount0: -1_000_000n,
       amount1: -1n,
       sqrtPriceX96: SQRT_PRICE_X96,
       liquidity: 1_000_000n,
@@ -278,7 +284,81 @@ function fixture(mutation: Mutation = "none") {
       ? (`0x${"ee".repeat(32)}` as const)
       : SWAP_TRANSACTION,
     transactionIndex: 3,
+    logIndex: mutation === "reordered-fees" ? 3 : 1,
+  });
+  const tinySwapLog = eventLog({
+    event: swapEvent,
+    args: {
+      id: POOL_ID,
+      sender: SWAP_SENDER,
+      amount0: -1n,
+      amount1: 1n,
+      sqrtPriceX96: SQRT_PRICE_X96,
+      liquidity: 1_000_000n,
+      tick: 0,
+      fee: 0,
+    },
+    address: poolManager,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: TINY_SWAP_TRANSACTION,
+    transactionIndex: 2,
+    logIndex: 0,
+  });
+  const secondFeeLog = eventLog({
+    event: feeAccruedEvent,
+    args: {
+      poolId: POOL_ID,
+      swapSender: SWAP_SENDER,
+      grossNativeAmount: 2_000_000n,
+      creatorFee: 18_000n,
+      launcherFee: 2_000n,
+    },
+    address: hook,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: mutation === "reordered-fees"
+      ? SWAP_TRANSACTION
+      : SECOND_SWAP_TRANSACTION,
+    transactionIndex: mutation === "reordered-fees" ? 3 : 4,
+    logIndex: mutation === "reordered-fees" ? 2 : 0,
+  });
+  const secondSwapLog = eventLog({
+    event: swapEvent,
+    args: {
+      id: POOL_ID,
+      sender: SWAP_SENDER,
+      amount0: -2_000_000n,
+      amount1: 2n,
+      sqrtPriceX96: SQRT_PRICE_X96,
+      liquidity: 1_000_000n,
+      tick: 0,
+      fee: 0,
+    },
+    address: poolManager,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: mutation === "reordered-fees"
+      ? SWAP_TRANSACTION
+      : SECOND_SWAP_TRANSACTION,
+    transactionIndex: mutation === "reordered-fees" ? 3 : 4,
     logIndex: 1,
+  });
+  const duplicateFeeLog = eventLog({
+    event: feeAccruedEvent,
+    args: {
+      poolId: POOL_ID,
+      swapSender: SWAP_SENDER,
+      grossNativeAmount: 1_000_000n,
+      creatorFee: 9_000n,
+      launcherFee: 1_000n,
+    },
+    address: hook,
+    blockNumber: swapBlock,
+    blockHash: SWAP_BLOCK_HASH,
+    transactionHash: SWAP_TRANSACTION,
+    transactionIndex: 3,
+    logIndex: 2,
   });
 
   const launchParameters = {
@@ -341,6 +421,7 @@ function fixture(mutation: Mutation = "none") {
     endpointOriginCommitment: `0x${"02".repeat(32)}`,
     requestCount: () => 0,
     logicalRequestCount: () => 0,
+    createPartitionClient: () => rpc,
     assertCheckpoint: async () => 1_700_000_000n,
     call: async () => {
       throw new Error("unexpected single call");
@@ -439,9 +520,21 @@ function fixture(mutation: Mutation = "none") {
           : logs);
       }
       if (values.includes(hook.toLowerCase())) {
-        return Object.freeze([registrationLog, disclosureLog, feeLog]);
+        const logs = [registrationLog, disclosureLog];
+        if (mutation !== "missing-fee") logs.push(feeLog);
+        if (mutation === "extra-fee" || mutation === "reordered-fees") {
+          logs.push(secondFeeLog);
+        }
+        if (mutation === "duplicate-fee") logs.push(duplicateFeeLog);
+        return Object.freeze(logs);
       }
       expect(values).toContain(poolManager.toLowerCase());
+      if (mutation === "tiny-swap") {
+        return Object.freeze([tinySwapLog, swapLog]);
+      }
+      if (mutation === "reordered-fees") {
+        return Object.freeze([secondSwapLog, swapLog]);
+      }
       return Object.freeze([swapLog]);
     },
     getBlockTimestamp: async () => 1_700_000_000n,
@@ -466,7 +559,10 @@ function fixture(mutation: Mutation = "none") {
     routeKeys: CLASSIC_V2_RECONCILER_ROUTE_KEYS,
     routeContract: {},
     projectionContract: {},
-    currentEntities: [],
+    currentEntities: [{
+      entityKind: "launch",
+      entityKey: TOKEN.toLowerCase(),
+    }],
   });
   return { rpc, contract, checkpointBlock };
 }
@@ -513,6 +609,26 @@ describe("Classic V2 exact-block contribution builder", () => {
     });
   });
 
+  it("accepts a 1-wei swap whose rounded fee is zero and emits no fee event", async () => {
+    const { rpc, contract, checkpointBlock } = fixture("tiny-swap");
+    const contribution = await buildClassicV2ExactBlockContribution({
+      rpc,
+      contract,
+      blockNumber: checkpointBlock,
+      blockHash: CHECKPOINT_HASH,
+      signal: new AbortController().signal,
+    });
+
+    expect(contribution.charts[0]).toMatchObject({
+      state: { transactionHash: SWAP_TRANSACTION },
+      volume: {
+        grossQuoteRaw: "1000000",
+        creatorFeeQuoteRaw: "9000",
+        launcherFeeQuoteRaw: "1000",
+      },
+    });
+  });
+
   it.each([
     ["runtime hash", "runtime"],
     ["launch calldata", "calldata"],
@@ -521,6 +637,10 @@ describe("Classic V2 exact-block contribution builder", () => {
     ["current state", "state"],
     ["swap provenance", "provenance"],
     ["log ordering", "log-order"],
+    ["missing nonzero rounded fee event", "missing-fee"],
+    ["extra fee event", "extra-fee"],
+    ["duplicate fee event", "duplicate-fee"],
+    ["reordered fee events", "reordered-fees"],
   ] as const)("fails closed on a bad %s", async (_label, mutation) => {
     const { rpc, contract, checkpointBlock } = fixture(mutation);
     await expect(buildClassicV2ExactBlockContribution({
@@ -543,15 +663,10 @@ describe("Classic V2 exact-block contribution builder", () => {
     ]);
   });
 
-  it("enforces the explicit complete-corpus launch cap", () => {
-    expect(MAXIMUM_CLASSIC_V2_RECONCILER_LAUNCHES).toBe(256);
-    expect(MAXIMUM_CLASSIC_V2_RECONCILER_LAUNCHES * 14).toBeLessThan(16_384);
-    expect([1, 128, 256].map(assertClassicV2ReconcilerLaunchCount)).toEqual([
-      1,
-      128,
-      256,
-    ]);
+  it("accepts growth beyond the former 256-launch boundary", () => {
+    expect([1, 128, 256, 257, 10_000].map(
+      assertClassicV2ReconcilerLaunchCount,
+    )).toEqual([1, 128, 256, 257, 10_000]);
     expect(() => assertClassicV2ReconcilerLaunchCount(0)).toThrow();
-    expect(() => assertClassicV2ReconcilerLaunchCount(257)).toThrow();
   });
 });

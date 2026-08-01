@@ -339,7 +339,15 @@ function reward(value: CanonicalJsonValue): JsonRecord {
     "buySwapFeeBps",
     "sellSwapFeeBps",
     "launcherFeeBps",
+    "configurationHash",
+    "activeConfigurationHash",
+    "configurationEpoch",
+    "totalCreatorFeesReceivedWei",
+    "totalCreatorFeesClaimedWei",
+    "pendingCreatorFeesWei",
     "allocations",
+    "entitlements",
+    "events",
   ], "reconciler-route-reward-fields");
   releaseIdentity(row, "reconciler-route-reward-release");
   if (row.releaseVersion !== "classic-v3" || row.modelId !== "classic") {
@@ -358,6 +366,18 @@ function reward(value: CanonicalJsonValue): JsonRecord {
     "reconciler-route-reward-sell-fee");
   integer(row.launcherFeeBps, 0, 10_000,
     "reconciler-route-reward-launcher-fee");
+  hex(row.configurationHash, 32,
+    "reconciler-route-reward-configuration-hash");
+  hex(row.activeConfigurationHash, 32,
+    "reconciler-route-reward-active-configuration-hash");
+  integerText(row.configurationEpoch,
+    "reconciler-route-reward-configuration-epoch");
+  integerText(row.totalCreatorFeesReceivedWei,
+    "reconciler-route-reward-total-received");
+  integerText(row.totalCreatorFeesClaimedWei,
+    "reconciler-route-reward-total-claimed");
+  integerText(row.pendingCreatorFeesWei,
+    "reconciler-route-reward-pending");
   const allocations = array(row.allocations,
     "reconciler-route-reward-allocations");
   if (allocations.length < 1 || allocations.length > 5) {
@@ -370,8 +390,6 @@ function reward(value: CanonicalJsonValue): JsonRecord {
       "allocationIndex",
       "payoutAddress",
       "shareBps",
-      "claimableWei",
-      "claimedWei",
     ], "reconciler-route-reward-allocation-fields");
     if (integer(item.allocationIndex, 0, 4,
       "reconciler-route-reward-allocation-index") !== index) {
@@ -381,10 +399,55 @@ function reward(value: CanonicalJsonValue): JsonRecord {
       "reconciler-route-reward-payout-address");
     shareTotal += integer(item.shareBps, 1, 10_000,
       "reconciler-route-reward-share");
-    integerText(item.claimableWei, "reconciler-route-reward-claimable");
-    integerText(item.claimedWei, "reconciler-route-reward-claimed");
   });
   if (shareTotal !== 10_000) fail("reconciler-route-reward-share-total");
+  const entitlementAccounts = new Set<string>();
+  const entitlements = array(row.entitlements,
+    "reconciler-route-reward-entitlements");
+  if (entitlements.length < 1) {
+    fail("reconciler-route-reward-entitlement-count");
+  }
+  let previousAccount: string | undefined;
+  let claimableTotal = 0n;
+  let claimedTotal = 0n;
+  entitlements.forEach((entitlement) => {
+    const item = object(entitlement, "reconciler-route-reward-entitlement");
+    exactKeys(item, [
+      "account",
+      "claimableWei",
+      "claimedWei",
+    ], "reconciler-route-reward-entitlement-fields");
+    const account = hex(
+      item.account,
+      20,
+      "reconciler-route-reward-entitlement-account",
+    );
+    if (
+      entitlementAccounts.has(account) ||
+      (previousAccount !== undefined && account.localeCompare(previousAccount) <= 0)
+    ) {
+      fail("reconciler-route-reward-entitlement-order");
+    }
+    entitlementAccounts.add(account);
+    previousAccount = account;
+    claimableTotal += BigInt(integerText(
+      item.claimableWei,
+      "reconciler-route-reward-entitlement-claimable",
+    ));
+    claimedTotal += BigInt(integerText(
+      item.claimedWei,
+      "reconciler-route-reward-entitlement-claimed",
+    ));
+  });
+  const totalReceived = BigInt(row.totalCreatorFeesReceivedWei as string);
+  const totalClaimed = BigInt(row.totalCreatorFeesClaimedWei as string);
+  if (
+    totalClaimed !== claimedTotal ||
+    totalReceived !== totalClaimed + claimableTotal
+  ) {
+    fail("reconciler-route-reward-entitlement-conservation");
+  }
+  array(row.events, "reconciler-route-reward-events");
   return row;
 }
 
