@@ -89,7 +89,44 @@ describe("candidate projector runtime binding", () => {
     ).toThrow();
   });
 
-  it("rejects provider identity drift and a database without the exact bootstrap row", async () => {
+  it("accepts the exact unpromoted database verification result", async () => {
+    const binding = loadCandidateProjectorRuntimeBinding({
+      env: candidateEnvironment(),
+      activeProductionBinding: getDataPipelineReleaseBinding(),
+    });
+    const query = vi.fn(async (text: string) => {
+      if (text.includes("current_role::text")) {
+        return [{
+          session_user: "programmable_projector_login",
+          current_role: "programmable_projector",
+        }];
+      }
+      if (text === "select session_user::text as session_user") {
+        return [{ session_user: "programmable_projector_login" }];
+      }
+      if (text.includes("verify_candidate_database_unpromoted_v1")) {
+        return [{ verified: true }];
+      }
+      return [];
+    });
+    const executor = {
+      transaction: vi.fn(async (work) => work({ query })),
+      close: vi.fn(),
+    } as never;
+
+    await expect(
+      assertCandidateDatabaseBootstrapState({ executor, binding }),
+    ).resolves.toBeUndefined();
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("verify_candidate_database_unpromoted_v1"),
+      expect.arrayContaining([
+        "d08b62a6-74fb-5e0a-a698-dc6877150db4",
+        "2026-08-01T09:00:00.000Z",
+      ]),
+    );
+  });
+
+  it("rejects provider identity drift and a promoted or missing candidate database", async () => {
     expect(() =>
       loadCandidateProjectorRuntimeBinding({
         env: candidateEnvironment({
@@ -114,8 +151,10 @@ describe("candidate projector runtime binding", () => {
       if (text === "select session_user::text as session_user") {
         return [{ session_user: "programmable_projector_login" }];
       }
-      if (text.includes("initialize_candidate_database")) {
-        return [{ initialized: true }];
+      if (text.includes("verify_candidate_database_unpromoted_v1")) {
+        throw Object.assign(new Error("candidate database promoted"), {
+          code: "55000",
+        });
       }
       return [];
     });

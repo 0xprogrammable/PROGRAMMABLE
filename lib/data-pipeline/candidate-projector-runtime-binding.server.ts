@@ -221,8 +221,8 @@ export async function assertCandidateDatabaseBootstrapState(input: Readonly<{
     ) {
       return invalidCandidateBinding();
     }
-    const rows = await transaction.query<{ initialized: unknown }>(
-      "select programmable_private.initialize_candidate_database($1::uuid, $2::bytea, $3::bytea, $4::bytea, $5::timestamptz) as initialized",
+    const rows = await transaction.query<{ verified: unknown }>(
+      "select programmable_private.verify_candidate_database_unpromoted_v1($1::uuid, $2::bytea, $3::bytea, $4::bytea, $5::timestamptz) as verified",
       [
         input.binding.databaseBootstrap.providerDeploymentId,
         hexToBytes(input.binding.databaseBootstrap.deploymentCommitment),
@@ -231,10 +231,7 @@ export async function assertCandidateDatabaseBootstrapState(input: Readonly<{
         input.binding.databaseBootstrap.initializedAt,
       ],
     );
-    // `false` is the read-equivalent replay result: the exact reviewed row
-    // already exists. `true` means this runtime would have initialized an
-    // incomplete database, so throwing rolls the entire transaction back.
-    if (rows.length !== 1 || rows[0]?.initialized !== false) {
+    if (rows.length !== 1 || rows[0]?.verified !== true) {
       return invalidCandidateBinding();
     }
   });

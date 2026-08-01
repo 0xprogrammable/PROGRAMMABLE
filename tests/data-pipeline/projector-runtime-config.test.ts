@@ -196,6 +196,66 @@ describe("configured projector runtime", () => {
     });
   });
 
+  it("rejects a promoted candidate database before any external provider work", async () => {
+    const runtimeClose = vi.fn(async () => undefined);
+    const writerClose = vi.fn(async () => undefined);
+    const createProviders = vi.fn();
+    const createEnvio = vi.fn();
+    const createStore = vi.fn();
+    const createReleaseStore = vi.fn();
+    const runCycle = vi.fn();
+    const runReleaseCycle = vi.fn();
+    const release = vi.fn(async () => true);
+    const assertCandidateDatabase = vi.fn(async () => {
+      throw new Error("candidate database promoted");
+    });
+    const dependencies = {
+      createExecutor: vi
+        .fn()
+        .mockReturnValueOnce({ close: runtimeClose })
+        .mockReturnValueOnce({ close: writerClose }),
+      createLeaseController: vi.fn(() => ({
+        tryAcquire: vi.fn(async () => ({
+          status: "acquired",
+          fence: {
+            holderId: "projector-runtime-test",
+            generation: "1",
+            tokenHash: bytes32("a"),
+          },
+          acquiredAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2026-07-31T18:01:25.000Z",
+        })),
+        release,
+      })),
+      createProviders,
+      assertProviders: vi.fn(),
+      createEnvio,
+      createStore,
+      createReleaseStore,
+      runCycle,
+      runReleaseCycle,
+      assertCandidateDatabase,
+    } as never;
+
+    await expect(
+      runConfiguredProjectorCycle({
+        env: candidateEnvironment(),
+        dependencies,
+      }),
+    ).rejects.toThrow("candidate database promoted");
+
+    expect(assertCandidateDatabase).toHaveBeenCalledOnce();
+    expect(createProviders).not.toHaveBeenCalled();
+    expect(createEnvio).not.toHaveBeenCalled();
+    expect(createStore).not.toHaveBeenCalled();
+    expect(createReleaseStore).not.toHaveBeenCalled();
+    expect(runCycle).not.toHaveBeenCalled();
+    expect(runReleaseCycle).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+    expect(writerClose).toHaveBeenCalledOnce();
+    expect(runtimeClose).toHaveBeenCalledOnce();
+  });
+
   it.each([
     "PROGRAMMABLE_PROJECTOR_DATABASE_URL",
     "PROGRAMMABLE_PROJECTOR_RUNTIME_DATABASE_URL",
