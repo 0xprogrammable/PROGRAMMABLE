@@ -203,6 +203,42 @@ test("package delegates to the existing package verifier", () => {
   }
 });
 
+test("companion command validates v2 structure and atomically writes canonical JSON without network", () => {
+  const fixture = createRepository();
+  const manifestPath = path.join(fixture.repository, "companion.json");
+  try {
+    const example = JSON.parse(fs.readFileSync(
+      path.join(skillRoot, "assets", "templates", "companion-manifest-v2.example.json"),
+      "utf8"
+    ));
+    fs.writeFileSync(manifestPath, `${JSON.stringify(example, null, 2)}\n`);
+    let result = runCli([
+      "companion",
+      manifestPath,
+      "--write-canonical",
+      "--repository-root",
+      fixture.repository
+    ]);
+    assert.equal(result.status, 0, result.stdout || result.stderr);
+    let output = JSON.parse(result.stdout);
+    assert.equal(output.result.schemaVersion, "2.0.0");
+    assert.equal(output.result.closureStatus, "declared");
+    assert.equal(output.result.rewritten, true);
+    assert.equal(output.result.networkAccessed, false);
+    assert.equal(output.result.prototypeClosureVerified, false);
+    const canonical = fs.readFileSync(manifestPath, "utf8");
+    assert.equal(canonical.split("\n").length, 2);
+
+    result = runCli(["companion", manifestPath, "--repository-root", fixture.repository]);
+    assert.equal(result.status, 0, result.stdout || result.stderr);
+    output = JSON.parse(result.stdout);
+    assert.equal(output.result.canonical, true);
+    assert.equal(output.result.rewritten, false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("check writes unsupported proposal closure diagnostics and require-ready blocks the prototype", () => {
   const fixture = createReadyProposalRepository();
   try {

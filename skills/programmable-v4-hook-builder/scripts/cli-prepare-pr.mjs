@@ -13,6 +13,7 @@ import {
   deriveApplicationRevision,
   resolveCentralApplicationBase
 } from "./cli-central-base.mjs";
+import { normalizeCompanionManifest } from "./companion-manifest-contract.mjs";
 import { buildCentralApplicationPackage } from "./cli-central-package.mjs";
 import {
   normalizeCompanionDescriptors,
@@ -63,13 +64,6 @@ const SAFE_BRANCH_PATTERN = /^(?!\/)(?!.*(?:\.\.|\/\/|@\{|\\|[\u0000-\u0020\u007
 const REVIEW_DIGEST_PATTERN = /^[0-9a-f]{64}$/u;
 const MAX_COMPANION_MANIFESTS = 8;
 const MAX_COMPANION_MANIFEST_BYTES = 65_536;
-const COMPANION_MANIFEST_KEYS = Object.freeze([
-  "contractPaths",
-  "repositoryUri",
-  "revisionObjectId",
-  "schemaVersion",
-  "sourcePaths"
-]);
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 export function inspectLocalGitReadiness(repositoryRoot, gitImplementation = runGit) {
@@ -339,11 +333,13 @@ export async function preparePullRequest({
     gitImplementation,
     gitBinaryImplementation
   });
-  const companionClosureDiagnostics = companionManifestBindings.map((binding) => ({
-    code: "COMPANION_CLOSURE_REVIEW_REQUIRED",
-    detail: "The exact companion revision and declared files are bound, but the closed v1 companion manifest does not prove its semantic dependency and build closure.",
-    path: binding.path
-  }));
+  const companionClosureDiagnostics = companionManifestBindings
+    .filter((binding) => binding.closureStatus === "incomplete")
+    .map((binding) => ({
+      code: "COMPANION_CLOSURE_REVIEW_REQUIRED",
+      detail: "The exact companion revision and declared files are bound, but companion manifest v1 does not prove semantic dependency, test, and build closure.",
+      path: binding.path
+    }));
 
   const relativePackage = relativeRepositoryPath(repositoryRoot, packageRoot);
   const reviewTarget = buildReviewTargetDocument(
@@ -472,7 +468,10 @@ export async function preparePullRequest({
       declaredPaths,
       gitBinaryImplementation
     }),
-    companions: companionManifestBindings.map((binding) => binding.source),
+    companions: companionManifestBindings.map((binding) => ({
+      ...binding.source,
+      ...(binding.manifestV2 === null ? {} : { companionManifestV2: binding.manifestV2 })
+    })),
     exactObjectResolver,
     fetchImplementation,
     sleepImplementation,
@@ -480,6 +479,7 @@ export async function preparePullRequest({
     timeoutMs: publicTimeoutMs
   });
   const github = { ...configuredGithub, ...publicGithub };
+  assertCompanionClosureVerification(companionManifestBindings, github.companionClosure);
   const builderIdentity = await publicBuilderResolver({
     login: submission.builder.github,
     fetchImplementation,
@@ -570,6 +570,7 @@ export async function preparePullRequest({
     submission,
     builderIdentity,
     source: github.sourceRequest,
+    companionClosure: github.companionClosure,
     applicationRevision,
     packageResult,
     reviewTarget,
@@ -751,7 +752,8 @@ export function buildPullRequestDocument({
       publicCommitReachable: true,
       sourceRequest: github.sourceRequest,
       sourceResolutionHash: github.sourceResolutionHash,
-      sourceResolution: github.sourceResolution
+      sourceResolution: github.sourceResolution,
+      companionClosure: github.companionClosure ?? []
     },
     submission: {
       package: relativePackage,
@@ -952,18 +954,6 @@ function readCompanionManifestsFromHead({
         exitCode: 1
       });
     }
-    const keys = Object.keys(value).sort(compareUtf8);
-    if (
-      keys.length !== COMPANION_MANIFEST_KEYS.length
-      || keys.some((key, index) => key !== COMPANION_MANIFEST_KEYS[index])
-      || value.schemaVersion !== "1.0.0"
-    ) {
-      throw new CliFailure(
-        "COMPANION_MANIFEST_INVALID",
-        "companion manifest fields do not match the closed v1 contract",
-        { exitCode: 1 }
-      );
-    }
     const canonicalBytes = Buffer.from(`${canonicalJson(value)}\n`, "utf8");
     if (!bytes.equals(canonicalBytes)) {
       throw new CliFailure(
@@ -972,13 +962,67 @@ function readCompanionManifestsFromHead({
         { exitCode: 1 }
       );
     }
-    parsed.push({ path: manifestPath, source: value });
+    let normalized;
+    try {
+      normalized = normalizeCompanionManifest(value);
+    } catch (error) {
+      throw new CliFailure(
+        "COMPANION_MANIFEST_INVALID",
+        sanitizeMessage(error?.message ?? "companion manifest is invalid"),
+        { exitCode: 1 }
+      );
+    }
+    parsed.push({ path: manifestPath, ...normalized });
   }
-  const normalized = normalizeCompanionDescriptors(parsed.map((binding) => binding.source));
+  const normalized = normalizeCompanionDescriptors(parsed.map((binding) => ({
+    ...binding.source,
+    ...(binding.manifestV2 === null ? {} : { companionManifestV2: binding.manifestV2 })
+  })));
   return parsed.map((binding, index) => Object.freeze({
     path: binding.path,
-    source: normalized[index]
+    schemaVersion: binding.schemaVersion,
+    source: Object.freeze({
+      repositoryUri: normalized[index].repositoryUri,
+      revisionObjectId: normalized[index].revisionObjectId,
+      sourcePaths: normalized[index].sourcePaths,
+      contractPaths: normalized[index].contractPaths,
+      ...(normalized[index].numericRepositoryId === null ? {} : {
+        numericRepositoryId: normalized[index].numericRepositoryId,
+        treeObjectId: normalized[index].treeObjectId,
+        githubActionsRunIds: normalized[index].githubActionsRunIds
+      })
+    }),
+    manifestV2: binding.manifestV2,
+    closureStatus: binding.closureStatus
   }));
+}
+
+function assertCompanionClosureVerification(bindings, attestations) {
+  const required = bindings.filter(({ manifestV2 }) => manifestV2 !== null);
+  if (required.length === 0) return;
+  if (!Array.isArray(attestations)) {
+    throw new CliFailure(
+      "TOOLING_BLOCKED",
+      "companion manifest v2 requires exact remote closure verification",
+      { exitCode: 1 }
+    );
+  }
+  const verifiedByRepository = new Map(attestations.map((entry) => [entry?.repositoryUri, entry]));
+  for (const binding of required) {
+    const verified = verifiedByRepository.get(binding.manifestV2.repositoryUri);
+    if (
+      verified?.status !== "verified"
+      || verified.numericRepositoryId !== binding.manifestV2.numericRepositoryId
+      || verified.revisionObjectId !== binding.manifestV2.revisionObjectId
+      || verified.treeObjectId !== binding.manifestV2.treeObjectId
+    ) {
+      throw new CliFailure(
+        "PACKAGE_INVALID",
+        "companion manifest v2 did not verify the exact repository, commit, tree, source, test, build, and dependency closure",
+        { exitCode: 1, details: { path: binding.path } }
+      );
+    }
+  }
 }
 
 function buildReviewTargetDocument(repositoryRoot, packageRoot, additionalClosureDiagnostics = []) {

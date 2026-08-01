@@ -4,6 +4,7 @@ import path from "node:path";
 import { TextDecoder } from "node:util";
 import { deriveApplicationRevision } from "./cli-central-base.mjs";
 import { CENTRAL_APPLICATION_FILES } from "./cli-central-package.mjs";
+import { validateCompanionClosureReceipts } from "./companion-manifest-contract.mjs";
 import { validateGitHubPublicSourceRequestV1 } from "./github-public-source-core.mjs";
 import { CliFailure, sanitizeMessage } from "./cli-runtime.mjs";
 import { canonicalJson } from "./submission-core.mjs";
@@ -285,6 +286,7 @@ function validateApplication(application, applicationId) {
       "applicationId",
       "applicationRevision",
       "builder",
+      "companionClosure",
       "declarations",
       "reviewPackage",
       "schemaVersion",
@@ -333,6 +335,16 @@ function validateApplication(application, applicationId) {
     invalidDraft("the local draft source does not use canonical defaults and ordering");
   }
   application.source = normalizedSource;
+  let normalizedCompanionClosure;
+  try {
+    normalizedCompanionClosure = validateCompanionClosureReceipts(application.companionClosure, normalizedSource);
+  } catch {
+    invalidDraft("the local draft companion closure receipts do not match the exact source authorities");
+  }
+  if (canonicalJson(normalizedCompanionClosure) !== canonicalJson(application.companionClosure)) {
+    invalidDraft("the local draft companion closure receipts are not canonical");
+  }
+  application.companionClosure = normalizedCompanionClosure;
   if (!Array.isArray(application.reviewPackage) || application.reviewPackage.length !== REVIEW_FILES.length) {
     invalidDraft("the local draft review index is incomplete");
   }

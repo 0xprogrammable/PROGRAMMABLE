@@ -407,8 +407,9 @@ GitHub Actions evidence. A branch, tag, repository slug, pull-request number, lo
 source authority.
 
 When one project spans repositories, accept up to eight canonical companion manifests committed in the primary HEAD.
-Resolve every companion's public numeric id, full commit, root tree, and declared paths independently. Do not collapse a
-game, app, service, indexer, or other repository into an unsupported category merely because it is not Solidity.
+Use v2 for a closed npm game/app/service path; keep v1 proposal-compatible for unsupported closure mechanics. Resolve
+every repository independently and follow `references/companion-manifests.md`. Do not reject a project category merely
+because it is not Solidity.
 
 Prepare the closed six-file application package defined by `references/public-pr-application.schema.json` and a
 copy-ready draft PR body. The complete project remains in the pinned external repository. The central package contains

@@ -10,6 +10,7 @@ import {
   isExactDeclaredPackageSpecifier,
   isExactPackageDependency,
   isExactPackageFilePath,
+  isCanonicalNpmPackageName,
   packageRootPath
 } from "./package-dependency-contract.mjs";
 import {
@@ -743,6 +744,18 @@ function extractJavaScriptDependencies(source, importer, declaredPackages) {
     }
     dependencies.push({ specifier, kind });
   }
+}
+
+export function analyzeJavaScriptModuleDependencies(source, importer, declaredPackages = []) {
+  if (typeof source !== "string" || !isCanonicalReviewTargetPath(importer)) {
+    throw new Error("JavaScript closure analysis input is invalid");
+  }
+  const packageNames = [...declaredPackages];
+  if (packageNames.some((entry) => !isCanonicalNpmPackageName(entry))) {
+    throw new Error("JavaScript closure analysis package input is invalid");
+  }
+  return extractJavaScriptDependencies(source, importer, packageNames)
+    .map((entry) => Object.freeze({ ...entry }));
 }
 
 function rejectUnsupportedRuntimeLoaders(tokens, importer) {

@@ -169,7 +169,11 @@ and separately asserted source match. Builder evidence remains untrusted until a
 - `centralPullRequestTarget`: fixed `0xprogrammable/programmable:main` identity, observed base commit and tree, central
   application path, prior revision, and next revision;
 - `github.sourceRequest`: the immutable primary authority and zero to eight sorted companion authorities;
-- `centralPackage`: exactly six canonical application files with byte lengths and SHA-256 digests;
+- `github.companionClosure`: one verified exact-closure receipt per v2 companion; v1 has no receipt and retains its
+  proposal closure diagnostic;
+- `centralPackage`: exactly six canonical application files with byte lengths and SHA-256 digests; its
+  `application.json.companionClosure` durably carries the same canonical v2 receipts and is checked against the exact
+  companion authorities and Actions run ids by downstream intake;
 - a copy-ready draft pull-request `title`, `body`, and confirmation `checklist`;
 - `localWritesPerformed`: empty unless an explicit output directory was requested;
 - `externalActionsPerformed`: always empty; and

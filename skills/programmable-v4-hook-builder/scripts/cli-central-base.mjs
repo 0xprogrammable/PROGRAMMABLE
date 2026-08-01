@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { TextDecoder } from "node:util";
 import { CENTRAL_APPLICATION_FILES } from "./cli-central-package.mjs";
+import { validateCompanionClosureReceipts } from "./companion-manifest-contract.mjs";
 import {
   createGitHubPublicFetchTransportV1,
   GITHUB_PUBLIC_SOURCE_CONTRACT_V1,
@@ -260,19 +261,21 @@ function parseCanonicalApplication(bytes, applicationId) {
 }
 
 function validatePriorApplicationManifest(application, applicationId) {
+  const applicationKeys = [
+    "applicationId",
+    "applicationRevision",
+    "builder",
+    ...(Object.hasOwn(application ?? {}, "companionClosure") ? ["companionClosure"] : []),
+    "declarations",
+    "reviewPackage",
+    "schemaVersion",
+    "source",
+    "stage",
+    "summary",
+    "title"
+  ];
   if (
-    !isExactObject(application, [
-      "applicationId",
-      "applicationRevision",
-      "builder",
-      "declarations",
-      "reviewPackage",
-      "schemaVersion",
-      "source",
-      "stage",
-      "summary",
-      "title"
-    ])
+    !isExactObject(application, applicationKeys)
     || application.schemaVersion !== 1
     || application.applicationId !== applicationId
     || !Number.isInteger(application.applicationRevision)
@@ -282,10 +285,23 @@ function validatePriorApplicationManifest(application, applicationId) {
   ) {
     throw new CliFailure("CENTRAL_BASE_INVALID", "the prior application manifest identity or revision is invalid", { exitCode: 1 });
   }
+  const normalizedSource = normalizeSource(application.source, "prior application source");
+  let companionClosure;
+  if (Object.hasOwn(application, "companionClosure")) {
+    try {
+      companionClosure = validateCompanionClosureReceipts(application.companionClosure, normalizedSource);
+    } catch {
+      throw new CliFailure("CENTRAL_BASE_INVALID", "prior application companion closure receipts are invalid", { exitCode: 1 });
+    }
+    if (canonicalJson(companionClosure) !== canonicalJson(application.companionClosure)) {
+      throw new CliFailure("CENTRAL_BASE_INVALID", "prior application companion closure receipts are not canonical", { exitCode: 1 });
+    }
+  }
   return {
     ...application,
     builder: normalizePriorBuilder(application.builder),
-    source: normalizeSource(application.source, "prior application source")
+    source: normalizedSource,
+    ...(companionClosure === undefined ? {} : { companionClosure })
   };
 }
 

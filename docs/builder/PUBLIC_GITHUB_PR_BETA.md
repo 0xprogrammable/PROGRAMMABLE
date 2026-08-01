@@ -185,6 +185,14 @@ output clearly separates the builder's `sourceHead` from the observed central `m
 revision 1. A merged revision n authorizes one pending n+1 update when primary or companion source authority differs
 from main; further commits in that same open pull request remain on the pending revision until merge.
 
+Companion manifest v2 removes the blanket incomplete-closure result for a supported npm game, app, or service only
+after `prepare-pr` verifies the declared numeric repository id, commit, root tree, source/test/runtime/build paths,
+static module graph, complete package-lock v3 dependency closure and a successful Actions run of the closed
+install/build/test workflow bound to that exact revision. Its receipt is preserved in central `application.json` for
+downstream authority checks. Manifest v1 remains proposal-compatible and enters architecture review. A v2 closure
+result is not an audit or approval; see the
+canonical `references/companion-manifests.md` contract in the installed skill.
+
 The source check supports broad repositories without spending one anonymous GitHub API call per declared file. It
 binds the public repository, commit and direct root-tree object first, then reads all declared Git objects in one
 bounded anonymous, no-checkout Git batch per repository. Evidence blobs are already declared primary-source paths, so

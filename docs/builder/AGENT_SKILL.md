@@ -206,8 +206,12 @@ copy-ready pull-request body and exactly six central files: `application.json`, 
 Programmable.
 
 For projects split across repositories, use committed companion manifests for up to eight additional public GitHub
-repositories. The result keeps the builder source head separate from the exact observed central target, derives the
-next application revision, and refuses inconsistent revision updates. Use `--replace-existing` once to replace the
+repositories. Manifest v2 can close a separate npm game/app/service path by binding its numeric repository id, commit,
+tree, source, tests, runtime files, build inputs, npm lock and successful exact-revision CI. Manifest v1 remains valid
+for proposals and architecture review but stays closure-incomplete. See
+`skills/programmable-v4-hook-builder/references/companion-manifests.md`. The result keeps the builder source head
+separate from the exact observed central target, derives the next application revision, and refuses inconsistent
+revision updates. Use `--replace-existing` once to replace the
 byte-exact merged-main package with the first pending update draft. Use `--replace-draft` for every later iteration of
 that same open pull request. A new application remains revision 1; an update remains main n+1 until merge. The explicit
 output directory must be outside the builder source repository. Its parent must already exist, must not be a

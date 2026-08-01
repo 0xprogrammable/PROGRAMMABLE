@@ -44,7 +44,7 @@ const EVIDENCE_BYTES = Buffer.from("exact builder-owned compatibility evidence f
 const EVIDENCE_SHA256 = `sha256:${crypto.createHash("sha256").update(EVIDENCE_BYTES).digest("hex")}`;
 
 test("the frozen six-file package and public schema identity are exported", () => {
-  assert.equal(VALIDATOR_VERSION, "1.6.1");
+  assert.equal(VALIDATOR_VERSION, "1.7.0");
   assert.deepEqual(PUBLIC_APPLICATION_FILES, [
     "application.json",
     "PROPOSAL.md",
@@ -147,6 +147,7 @@ test("the public application schema rejects adversarial source and package manif
   const validApplication = makeSchemaApplication();
   const cases = [
     ["stage is mandatory", (value) => { delete value.stage; }],
+    ["companion closure receipt index is mandatory", (value) => { delete value.companionClosure; }],
     ["stage cannot claim candidate readiness", (value) => { value.stage = "candidate"; }],
     ["numeric repository ids are opaque strings", (value) => { value.source.primary.numericRepositoryId = 9007199254740992; }],
     ["leading-zero repository ids are non-canonical", (value) => { value.source.primary.numericRepositoryId = "0123"; }],
@@ -2011,6 +2012,7 @@ function makePackage({
       contact: "https://github.com/alice"
     },
     source: makeSourceRequest(primary),
+    companionClosure: [],
     reviewPackage: reviewRecords(files),
     declarations: {
       publicInformationAcknowledged: true,

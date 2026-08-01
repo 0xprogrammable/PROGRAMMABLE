@@ -16,8 +16,9 @@ import {
   GITHUB_PUBLIC_GIT_OBJECT_RESOLVER_V1
 } from "../skills/programmable-v4-hook-builder/scripts/github-exact-object-resolver.mjs";
 import { findUnsupportedPublicClaims } from "../skills/programmable-v4-hook-builder/scripts/public-claims-core.mjs";
+import { validateCompanionClosureReceipts } from "../skills/programmable-v4-hook-builder/scripts/companion-manifest-contract.mjs";
 
-export const VALIDATOR_VERSION = "1.6.1";
+export const VALIDATOR_VERSION = "1.7.0";
 export const PUBLIC_APPLICATION_SCHEMA_ID = "https://programmable.money/schemas/public-pr-application-v1.json";
 export const PUBLIC_BETA_DISCLAIMER =
   "Builder-declared compatibility evidence; not an audit, approval, deployment, Uniswap endorsement, or launch.";
@@ -2248,6 +2249,7 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
     "applicationId",
     "applicationRevision",
     "builder",
+    "companionClosure",
     "declarations",
     "reviewPackage",
     "schemaVersion",
@@ -2284,6 +2286,15 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
   }
 
   validateApplicationSource(application.source);
+  let normalizedCompanionClosure;
+  try {
+    normalizedCompanionClosure = validateCompanionClosureReceipts(application.companionClosure, application.source);
+  } catch {
+    reject("COMPANION_CLOSURE_RECEIPT_INVALID", "Companion closure receipts must match every exact v2 source authority and Actions run.");
+  }
+  if (canonicalJson(normalizedCompanionClosure) !== canonicalJson(application.companionClosure)) {
+    reject("COMPANION_CLOSURE_RECEIPT_NONCANONICAL", "Companion closure receipts must use canonical ordering and fields.");
+  }
 
   if (!Array.isArray(application.reviewPackage) || application.reviewPackage.length !== REVIEW_FILES.length) {
     reject("REVIEW_PACKAGE_INDEX_INVALID", "The manifest must index every review file exactly once.");

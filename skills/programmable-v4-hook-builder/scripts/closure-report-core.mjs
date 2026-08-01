@@ -16,8 +16,8 @@ const CLOSURE_FINDING_CODES = new Set([
 
 const guidance = Object.freeze({
   COMPANION_CLOSURE_REVIEW_REQUIRED: {
-    message: "A companion repository is exactly revision-bound, but the current companion manifest does not prove its own semantic source and dependency closure.",
-    remediation: "Keep the exact companion binding and complete attributable companion build, dependency and semantic-closure review before prototype readiness."
+    message: "A companion repository is exactly revision-bound by manifest v1, but its semantic source, test, build and dependency closure is not proven.",
+    remediation: "Use companion manifest v2 for a supported closed npm project, or keep v1 and complete attributable architecture review before prototype readiness."
   },
   DECLARED_FILE_SEMANTIC_CLOSURE_UNAVAILABLE: {
     message: "Declared project files are byte-bound, but their language or asset graph has no deterministic semantic closure rule in this beta.",

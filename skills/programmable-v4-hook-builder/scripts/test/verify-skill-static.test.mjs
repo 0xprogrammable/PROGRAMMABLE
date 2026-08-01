@@ -67,6 +67,8 @@ test("non-canonical skill roots fail closed before candidate tests can execute",
 });
 
 for (const requiredPath of [
+  "references/companion-manifest-v2.schema.json",
+  "references/companion-manifests.md",
   "references/official-model-patterns.md",
   "references/routing-and-discovery.md",
   "references/runtime-assets-v1.schema.json",
@@ -74,8 +76,12 @@ for (const requiredPath of [
   "references/workflow.md",
   "assets/examples/transparent-pool-scoped-fee.json",
   "assets/templates/no-hook-architecture.example.json",
+  "assets/templates/runtime-assets.example.json",
+  "assets/templates/companion-closure-workflow.yml",
+  "assets/templates/companion-manifest-v2.example.json",
   "scripts/build-info-core.mjs",
   "scripts/check-upstream-drift.mjs",
+  "scripts/companion-manifest-contract.mjs",
   "scripts/example-materializer-core.mjs",
   "scripts/github-exact-object-resolver.mjs",
   "scripts/github-public-source-core.mjs",
@@ -84,6 +90,7 @@ for (const requiredPath of [
   "scripts/runtime-assets-core.mjs",
   "scripts/verify-skill.mjs",
   "scripts/test/cross-chain-policy.test.mjs",
+  "scripts/test/companion-manifest-v2.test.mjs",
   "scripts/test/schema-security.test.mjs",
   "scripts/test/verify-package-build-info.test.mjs"
 ]) {
