@@ -122,7 +122,12 @@ export function LaunchModelPicker({
       <header
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
-        <h1>Choose a launch model</h1>
+        <span className="eyebrow">Launch infrastructure</span>
+        <h1>Define how your token works.</h1>
+        <p>
+          Choose the onchain model first. Each option fixes a different fee,
+          reward, and quote-asset configuration on Uniswap v4.
+        </p>
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
@@ -167,8 +172,13 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-classic-description"
             >
-              Fixed swap fees with creator rewards paid in ETH. A familiar
-              token launch on Uniswap v4.
+              Directional swap fees with creator rewards paid in ETH. Configure
+              the launch wallet, reward destination, and initial buy custody.
+            </span>
+            <span className="launch-model-details" aria-hidden="true">
+              <span>1–10% buy and sell fees</span>
+              <span>ETH creator rewards</span>
+              <span>Fixed supply</span>
             </span>
             {classicV3LaunchAvailable ? (
               <span
@@ -225,8 +235,13 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-stock-description"
             >
-              Launch a token on Ethereum with a tokenized stock, ETF, or
-              commodity as its quote asset on Uniswap v4.
+              Pair a fixed-supply token with a reviewed tokenized stock, ETF, or
+              commodity quote asset on Uniswap v4.
+            </span>
+            <span className="launch-model-details" aria-hidden="true">
+              <span>1.00% fixed swap fee</span>
+              <span>Quote-asset rewards</span>
+              <span>Reviewed quote list</span>
             </span>
             {stockPairedPublicLaunchEnabled ? (
               <span

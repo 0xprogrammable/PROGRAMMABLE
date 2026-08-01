@@ -40,7 +40,11 @@ export function SiteFooter() {
     >
       <div className={styles.surface}>
         <section className={styles.brand}>
-          <Link href="/" aria-label="Programmable home">
+          <Link
+            className={styles.wordmark}
+            href="/"
+            aria-label="Programmable home"
+          >
             <Image
               className={styles.mark}
               src="/brand/loop/programmable-loop-mark-header.png"
@@ -48,10 +52,11 @@ export function SiteFooter() {
               width={146}
               height={192}
             />
+            <span>Programmable</span>
           </Link>
           <p>
-            Launch and explore fixed-supply tokens whose behavior is defined by
-            Uniswap v4 hooks. Your connected wallet submits every transaction.
+            Infrastructure for launching and inspecting fixed-supply tokens on
+            Uniswap v4. Your connected wallet submits every transaction.
           </p>
         </section>
 

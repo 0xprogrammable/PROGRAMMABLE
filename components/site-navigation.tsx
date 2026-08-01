@@ -100,6 +100,10 @@ export function SiteHeader() {
               height={192}
               priority
             />
+            <span className="wordmark-copy">
+              <strong>Programmable</strong>
+              <small>Ethereum · Uniswap v4</small>
+            </span>
           </Link>
           <a
             className="header-social-link"

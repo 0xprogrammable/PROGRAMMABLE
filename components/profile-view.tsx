@@ -1840,31 +1840,61 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   if (!account) {
     return (
       <div className={`${styles.page} page-width`}>
-        <section className={styles.connectCard}>
-          <Image
-            className={styles.connectMark}
-            src="/brand/loop/programmable-loop-mark-transparent-v1.png"
-            alt=""
-            width={96}
-            height={96}
-            sizes="82px"
-          />
-          <h1>Connect your wallet</h1>
-          <p>Your launches and creator rewards, in one place.</p>
-          <button
-            className={styles.connectButton}
-            type="button"
-            onClick={openWallet}
-          >
-            Connect wallet
-          </button>
-        </section>
+        <div className={styles.connectLayout}>
+          <header className={styles.profileIntroduction}>
+            <span className={styles.profileEyebrow}>Creator profile</span>
+            <h1>Your launches. One clear record.</h1>
+            <p>
+              Connect the wallet you launch with to manage your local profile,
+              inspect token activity, and claim available creator rewards.
+            </p>
+            <dl className={styles.profileCapabilities}>
+              <div>
+                <dt>Identity</dt>
+                <dd>Image and username</dd>
+              </div>
+              <div>
+                <dt>Portfolio</dt>
+                <dd>Launches and market data</dd>
+              </div>
+              <div>
+                <dt>Rewards</dt>
+                <dd>Claims and payout settings</dd>
+              </div>
+            </dl>
+          </header>
+
+          <section className={styles.connectCard}>
+            <Image
+              className={styles.connectMark}
+              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+              alt=""
+              width={96}
+              height={96}
+              sizes="82px"
+            />
+            <span className={styles.connectLabel}>Wallet workspace</span>
+            <h2>Open your profile</h2>
+            <p>Your wallet remains the account and transaction authority.</p>
+            <button
+              className={styles.connectButton}
+              type="button"
+              onClick={openWallet}
+            >
+              Connect wallet
+            </button>
+          </section>
+        </div>
       </div>
     );
   }
 
   return (
     <div className={`${styles.page} page-width`}>
+      <div className={styles.profileCover} aria-hidden="true">
+        <span>Creator workspace</span>
+        <small>Ethereum launches and rewards</small>
+      </div>
       <section
         className={`${styles.hero} ${
           editingProfile ? styles.heroEditing : ""

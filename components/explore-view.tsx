@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  ArrowRight,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -17,27 +18,19 @@ import {
   AnimatedMarketCap,
   type MarketCapMetric,
 } from "@/components/animated-market-cap";
-import { ScrambleText } from "@/components/scramble-text";
 import { SiteFooter } from "@/components/site-footer";
-import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
-import {
-  type LauncherToken,
-  type TokenLink,
-  type TokenLinkKind,
-} from "@/lib/tokens";
+import { type LauncherToken, type TokenLink } from "@/lib/tokens";
 
 type TokenCard = {
   id: string;
   name: string;
   symbol: string;
-  description?: string;
   imageUrl: string;
   usesFallbackImage: boolean;
-  links: TokenLink[];
   tokenAddress: `0x${string}`;
   marketCap?: MarketCapMetric;
 };
@@ -362,10 +355,6 @@ export function getMarketCap(
   return { kind: "eth", value };
 }
 
-function formatTokenAddress(address: `0x${string}`) {
-  return `${address.slice(0, 8)}…${address.slice(-6)}`;
-}
-
 function getPaginationItems(
   currentPage: number,
   pageCount: number,
@@ -405,75 +394,12 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     id: token.id,
     name: token.name,
     symbol: token.symbol,
-    description: token.description?.trim() || undefined,
     imageUrl:
       token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress),
     usesFallbackImage: !token.imageUrl?.trim(),
-    links: token.links ?? [],
     tokenAddress: token.tokenAddress,
     marketCap: getMarketCap(token),
   }));
-}
-
-function getLinkLabel(kind: TokenLinkKind) {
-  if (kind === "website") return "Website";
-  if (kind === "telegram") return "Telegram";
-  return "X";
-}
-
-function XBrandIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        fill="currentColor"
-        d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.451-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"
-      />
-    </svg>
-  );
-}
-
-function TelegramBrandIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        fill="currentColor"
-        d="M22.8 3.2 19.5 20.1c-.25 1.2-.91 1.5-1.85.94l-5.03-3.71-2.43 2.34c-.27.27-.5.5-1.02.5l.36-5.13 9.34-8.44c.41-.36-.09-.56-.63-.2L6.7 13.67l-4.98-1.56c-1.08-.34-1.1-1.08.23-1.6L21.36 3c.9-.33 1.69.2 1.44 1.2Z"
-      />
-    </svg>
-  );
-}
-
-function TokenLinkIcon({ kind }: { kind: TokenLinkKind }) {
-  if (kind === "website") {
-    return <WebsiteLinkIcon className="token-website-link-icon" />;
-  }
-  if (kind === "telegram") return <TelegramBrandIcon />;
-  return <XBrandIcon />;
-}
-
-function TokenSocialLink({
-  link,
-  tokenName,
-}: {
-  link: TokenLink;
-  tokenName: string;
-}) {
-  const label = getLinkLabel(link.kind);
-
-  return (
-    <a
-      className={`token-social-link${
-        link.kind === "website" ? " token-social-link-website" : ""
-      }`}
-      href={link.url}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={`${tokenName} on ${label}`}
-      title={label}
-    >
-      <TokenLinkIcon kind={link.kind} />
-    </a>
-  );
 }
 
 export function ExploreView() {
@@ -729,7 +655,6 @@ export function ExploreView() {
         key={`${activePage}:${sort}:${debouncedQuery}`}
       >
         {cards.map((token, index) => {
-          const copied = copiedAddress === token.tokenAddress;
           const href = `/token/${token.tokenAddress}`;
           const imageSource = getTokenCardImageSource(token.imageUrl);
 
@@ -749,7 +674,7 @@ export function ExploreView() {
                     token.usesFallbackImage ? "" : `${token.name} token image`
                   }
                   fill
-                  sizes="(max-width: 360px) 260px, (max-width: 800px) 46vw, 214px"
+                  sizes="(max-width: 800px) 46vw, 104px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                 />
               </span>
@@ -762,17 +687,6 @@ export function ExploreView() {
                   </span>
                 </header>
 
-                {token.description ? (
-                  <span className="token-card-description">
-                    {token.description}
-                  </span>
-                ) : (
-                  <span
-                    className="token-card-description token-card-description-empty"
-                    aria-hidden="true"
-                  />
-                )}
-
                 {token.marketCap ? (
                   <span className="token-card-market-cap">
                     <AnimatedMarketCap
@@ -780,54 +694,14 @@ export function ExploreView() {
                       metric={token.marketCap}
                       replayKey={`${activePage}:${sort}:${debouncedQuery}`}
                     />
-                    <span>MC</span>
+                    <span>Market cap</span>
                   </span>
                 ) : (
-                  <span
-                    className="token-card-market-cap token-card-market-cap-empty"
-                    aria-hidden="true"
-                  />
+                  <span className="token-card-market-cap token-card-market-cap-pending">
+                    <strong>—</strong>
+                    <span>Market cap</span>
+                  </span>
                 )}
-
-                <div className="token-card-footer">
-                  <button
-                    className="token-address"
-                    type="button"
-                    aria-label={
-                      copied
-                        ? `${token.name} contract address copied`
-                        : `Copy ${token.name} contract address`
-                    }
-                    title={
-                      copied
-                        ? "Copied"
-                        : `${token.tokenAddress} · Copy contract address`
-                    }
-                    onClick={() => copyAddress(token.tokenAddress)}
-                  >
-                    <code>{formatTokenAddress(token.tokenAddress)}</code>
-                    {copied ? (
-                      <Check aria-hidden="true" size={12} />
-                    ) : (
-                      <Copy aria-hidden="true" size={12} />
-                    )}
-                  </button>
-
-                  {token.links.length > 0 ? (
-                    <div
-                      className="token-social-links"
-                      aria-label={`${token.name} links`}
-                    >
-                      {token.links.map((link) => (
-                        <TokenSocialLink
-                          key={`${link.kind}:${link.url}`}
-                          link={link}
-                          tokenName={token.name}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
               </div>
             </article>
           );
@@ -840,51 +714,91 @@ export function ExploreView() {
     <>
       <div className="explore-page page-width">
         <section className="explore-intro">
-          <h1 className="explore-brand-heading">
-            <span className="sr-only">Programmable</span>
-            <Image
-              className="explore-brand-logo"
-              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
-              alt=""
-              width={1254}
-              height={1254}
-              priority
-            />
-          </h1>
-          <p>
-            <ScrambleText
-              text="Launch tokens that work the way you imagine"
-              duration={640}
-            />
-          </p>
-          <button
-            className="explore-token-address"
-            type="button"
-            aria-label={
-              copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                ? "Programmable contract address copied"
-                : "Copy Programmable contract address"
-            }
-            title={
-              copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                ? "Copied"
-                : "Copy contract address"
-            }
-            onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
-          >
-            <code>{PROGRAMMABLE_TOKEN_ADDRESS}</code>
-            {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
-              <Check aria-hidden="true" size={13} />
-            ) : (
-              <Copy aria-hidden="true" size={13} />
-            )}
-          </button>
+          <div className="explore-intro-copy">
+            <span className="explore-eyebrow">Programmable · Ethereum</span>
+            <h1>Uniswap v4 token infrastructure.</h1>
+            <p>
+              Explore indexed launches, inspect their onchain configuration,
+              and create tokens with defined rules.
+            </p>
+            <div className="explore-intro-actions">
+              <Link className="explore-primary-action" href="/launch">
+                Launch a token
+                <ArrowRight aria-hidden="true" size={16} />
+              </Link>
+              <a className="explore-secondary-action" href="#tokens">
+                View projects
+              </a>
+            </div>
+          </div>
+
+          <aside className="explore-protocol-card" aria-label="Protocol record">
+            <div className="explore-protocol-brand">
+              <Image
+                className="explore-brand-logo"
+                src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+                alt=""
+                width={1254}
+                height={1254}
+                priority
+              />
+              <div>
+                <strong>Programmable</strong>
+                <span>Token systems</span>
+              </div>
+            </div>
+            <dl className="explore-protocol-facts">
+              <div>
+                <dt>Network</dt>
+                <dd>Ethereum</dd>
+              </div>
+              <div>
+                <dt>Liquidity</dt>
+                <dd>Uniswap v4</dd>
+              </div>
+              <div>
+                <dt>Execution</dt>
+                <dd>Your wallet</dd>
+              </div>
+            </dl>
+            <button
+              className="explore-token-address"
+              type="button"
+              aria-label={
+                copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
+                  ? "Programmable token address copied"
+                  : "Copy Programmable token address"
+              }
+              title={
+                copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
+                  ? "Copied"
+                  : "Copy token address"
+              }
+              onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
+            >
+              <span>Programmable token</span>
+              <code>{PROGRAMMABLE_TOKEN_ADDRESS}</code>
+              {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
+                <Check aria-hidden="true" size={13} />
+              ) : (
+                <Copy aria-hidden="true" size={13} />
+              )}
+            </button>
+          </aside>
         </section>
 
         <section className="token-section" id="tokens" aria-busy={busy}>
-          {hasPublicTokens ? (
-            <div className="token-section-heading">
-              <h2 className="sr-only">Tokens</h2>
+          <div className="token-section-heading">
+            <div className="token-section-title">
+              <span>Project directory</span>
+              <h2>Explore launches</h2>
+              <p>
+                {state.phase === "ready" && state.payload.total > 0
+                  ? `${state.payload.total} indexed projects`
+                  : "Onchain launch records"}
+              </p>
+            </div>
+            {hasPublicTokens ? (
               <div className="token-toolbar">
                 <label className="token-search">
                   <Search aria-hidden="true" size={17} />
@@ -995,8 +909,8 @@ export function ExploreView() {
                   </nav>
                 ) : null}
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
 
           {state.phase === "ready" && state.refreshError ? (
             <div className="token-refresh-warning" role="status">

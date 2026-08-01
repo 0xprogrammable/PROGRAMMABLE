@@ -187,6 +187,89 @@
   padding: 0;
 }
 
+.protocolRecord {
+  background: color-mix(in srgb, var(--glass-82) 82%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 22px;
+  margin-top: 18px;
+  overflow: hidden;
+}
+
+.protocolRecordHeading {
+  align-items: end;
+  border-bottom: 1px solid var(--panel-border-soft);
+  display: flex;
+  gap: 22px;
+  justify-content: space-between;
+  padding: 19px 20px 17px;
+}
+
+.protocolRecordHeading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.protocolRecordHeading span {
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.protocolRecordHeading h2 {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.protocolRecordHeading p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.protocolFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.protocolFacts > div {
+  border-bottom: 1px solid var(--panel-border-soft);
+  border-right: 1px solid var(--panel-border-soft);
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 16px 20px;
+}
+
+.protocolFacts > div:nth-child(3n) {
+  border-right: 0;
+}
+
+.protocolFacts > div:nth-last-child(-n + 3) {
+  border-bottom: 0;
+}
+
+.protocolFacts dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.protocolFacts dd {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  min-width: 0;
+}
+
+.protocolFacts code {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .metric {
   border-right: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   min-width: 0;

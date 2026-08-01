@@ -29,6 +29,19 @@
   gap: 14px;
 }
 
+.wordmark {
+  align-items: center;
+  display: inline-flex;
+  gap: 9px;
+  width: fit-content;
+}
+
+.wordmark span {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
 .mark {
   height: 34px;
   object-fit: contain;

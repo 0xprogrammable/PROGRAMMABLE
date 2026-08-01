@@ -641,6 +641,87 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
   );
 }
 
+function formatTokenModel(token: LauncherToken) {
+  if (token.launchModelVersion === "classic-v3") return "Classic v3";
+  if (token.launchModelVersion?.startsWith("stock-paired-v")) {
+    return `Stock-paired v${token.launchModelVersion.slice(-1)}`;
+  }
+  if (token.deepReleaseVersion?.startsWith("deep-full-range-v")) {
+    return `Deep full-range v${token.deepReleaseVersion.slice(-1)}`;
+  }
+  if (token.launchModel === "stock-paired") return "Stock-paired";
+  if (token.launchModel === "adaptive") return "Adaptive";
+  if (token.launchModel === "deep") return "Deep";
+  return "Classic";
+}
+
+function formatLaunchDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Indexed";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+function shortenRecordValue(value: string) {
+  return `${value.slice(0, 10)}…${value.slice(-8)}`;
+}
+
+function ProtocolRecord({
+  token,
+  chainId,
+}: {
+  token: LauncherToken;
+  chainId: number;
+}) {
+  return (
+    <section className={styles.protocolRecord} aria-labelledby="protocol-record-title">
+      <header className={styles.protocolRecordHeading}>
+        <div>
+          <span>Indexed configuration</span>
+          <h2 id="protocol-record-title">Protocol record</h2>
+        </div>
+        <p>Onchain identifiers for this launch.</p>
+      </header>
+      <dl className={styles.protocolFacts}>
+        <div>
+          <dt>Network</dt>
+          <dd>{chainId === 1 ? "Ethereum" : chainId === 11_155_111 ? "Sepolia" : `Chain ${chainId}`}</dd>
+        </div>
+        <div>
+          <dt>Liquidity</dt>
+          <dd>Uniswap v4</dd>
+        </div>
+        <div>
+          <dt>Model</dt>
+          <dd>{formatTokenModel(token)}</dd>
+        </div>
+        <div>
+          <dt>Launched</dt>
+          <dd>{formatLaunchDate(token.launchedAt)}</dd>
+        </div>
+        <div>
+          <dt>Hook</dt>
+          <dd>
+            <code title={token.hookAddress}>
+              {shortenRecordValue(token.hookAddress)}
+            </code>
+          </dd>
+        </div>
+        <div>
+          <dt>Pool</dt>
+          <dd>
+            <code title={token.poolId}>{shortenRecordValue(token.poolId)}</code>
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 function DeepLiquiditySummary({ token }: { token: LauncherToken }) {
   const target = BigInt(token.growthTargetNativeWei ?? "0");
   const added = BigInt(token.totalNativeAddedToLiquidityWei ?? "0");
@@ -1019,6 +1100,8 @@ function TokenDetailContent({
           />
 
           <MetricGrid metrics={metrics} />
+
+          <ProtocolRecord token={token} chainId={chainId} />
 
           {token.launchModel === "deep" &&
           token.growthTargetNativeWei &&

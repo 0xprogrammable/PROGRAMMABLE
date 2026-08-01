@@ -5,6 +5,116 @@
   padding-top: 24px;
 }
 
+.connectLayout {
+  align-items: center;
+  display: grid;
+  gap: clamp(42px, 6vw, 86px);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 450px);
+  min-height: calc(100svh - var(--header-height) - 72px);
+  padding: 44px 34px 72px;
+}
+
+.profileIntroduction {
+  max-width: 650px;
+}
+
+.profileEyebrow,
+.connectLabel {
+  color: var(--accent-strong);
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.profileIntroduction h1 {
+  font-size: clamp(52px, 5.3vw, 76px);
+  font-weight: 700;
+  letter-spacing: -0.064em;
+  line-height: 0.94;
+  margin-top: 17px;
+  max-width: 640px;
+}
+
+.profileIntroduction > p {
+  color: var(--text-soft);
+  font-size: 17px;
+  line-height: 1.58;
+  margin-top: 24px;
+  max-width: 610px;
+}
+
+.profileCapabilities {
+  backdrop-filter: blur(24px) saturate(1.12);
+  background: color-mix(in srgb, var(--glass-82) 84%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 22px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 32px 0 0;
+  overflow: hidden;
+}
+
+.profileCapabilities > div {
+  border-right: 1px solid var(--panel-border-soft);
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.profileCapabilities > div:last-child {
+  border-right: 0;
+}
+
+.profileCapabilities dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.profileCapabilities dd {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.profileCover {
+  align-content: end;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.52)),
+    url("/brand/programmable-floral-headquarters-3000-v1.webp");
+  background-position: center 46%;
+  background-size: cover;
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 28px;
+  display: grid;
+  min-height: 224px;
+  padding: 24px 28px 70px;
+}
+
+.profileCover span,
+.profileCover small {
+  display: block;
+}
+
+.profileCover span {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.profileCover small {
+  color: var(--text-soft);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
 .hero,
 .portfolio,
 .connectCard,
@@ -19,16 +129,20 @@
 
 .hero {
   align-items: center;
-  backdrop-filter: none;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  backdrop-filter: blur(24px) saturate(1.12);
+  background: color-mix(in srgb, var(--glass-96) 86%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 24px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.72) inset,
+    0 20px 54px var(--card-shadow-soft);
   display: grid;
   gap: 18px;
   grid-template-columns: auto minmax(0, 1fr);
-  min-height: 104px;
-  padding: 12px 8px;
+  margin: -58px 24px 0;
+  min-height: 116px;
+  padding: 20px 24px;
+  position: relative;
 }
 
 .heroEditing {
@@ -40,25 +154,25 @@
   box-shadow:
     0 1px 0 var(--card-shadow),
     0 22px 64px var(--card-shadow-soft);
-  padding: 20px 24px;
+  padding: 22px 24px;
 }
 
 .avatar {
   align-items: center;
   background: var(--avatar-background);
   border: 1px solid color-mix(in srgb, var(--glass-94) 88%, var(--border));
-  border-radius: 20px;
+  border-radius: 24px;
   color: var(--accent-strong);
   display: flex;
   flex: none;
   font-family: var(--font-plex-mono), monospace;
   font-size: 20px;
   font-weight: 500;
-  height: 70px;
+  height: 82px;
   justify-content: center;
   overflow: hidden;
   position: relative;
-  width: 70px;
+  width: 82px;
 }
 
 .avatar img {
@@ -202,10 +316,10 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  margin: clamp(42px, 10svh, 92px) auto 0;
+  margin: 0;
   max-width: 580px;
-  min-height: 340px;
-  padding: 42px 32px;
+  min-height: 430px;
+  padding: 44px 38px;
   text-align: center;
 }
 
@@ -217,11 +331,12 @@
   width: 82px;
 }
 
-.connectCard h1 {
-  font-size: clamp(38px, 4vw, 48px);
-  font-weight: 580;
+.connectCard h2 {
+  font-size: clamp(35px, 3.5vw, 44px);
+  font-weight: 700;
   letter-spacing: -0.048em;
   line-height: 1;
+  margin-top: 15px;
 }
 
 .connectCard p {

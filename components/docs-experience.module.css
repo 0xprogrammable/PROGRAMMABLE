@@ -17,8 +17,8 @@
   grid-column: 2;
   margin: 0;
   max-width: var(--docs-content-width);
-  padding-top: 30px;
-  text-align: center;
+  padding: 44px 4px 0;
+  text-align: left;
 }
 
 .kicker {
@@ -30,10 +30,10 @@
 }
 
 .hero h1 {
-  font-size: clamp(43px, 5vw, 64px);
-  font-weight: 560;
-  letter-spacing: -0.052em;
-  line-height: 1;
+  font-size: clamp(46px, 4.8vw, 62px);
+  font-weight: 700;
+  letter-spacing: -0.062em;
+  line-height: 0.96;
   margin-top: 14px;
   text-wrap: balance;
 }
@@ -42,7 +42,7 @@
   color: var(--text-soft);
   font-size: clamp(17px, 1.7vw, 20px);
   line-height: 1.5;
-  margin: 22px auto 0;
+  margin: 22px 0 0;
   max-width: 690px;
   text-wrap: balance;
 }
@@ -59,7 +59,7 @@
   color: var(--muted);
   display: flex;
   gap: 10px;
-  margin: 30px auto 0;
+  margin: 28px 0 0;
   max-width: 560px;
   padding: 0 16px;
   position: relative;
@@ -158,8 +158,8 @@
 .desktopNav,
 .mobileNav {
   backdrop-filter: blur(20px);
-  background: var(--glass-90);
-  border: 1px solid var(--panel-border-soft);
+  background: color-mix(in srgb, var(--glass-82) 86%, transparent);
+  border: 1px solid color-mix(in srgb, white 78%, var(--panel-border-soft));
   border-radius: 20px;
   box-shadow:
     0 1px 0 var(--card-shadow),
@@ -225,10 +225,10 @@
   background:
     linear-gradient(
       145deg,
-      color-mix(in srgb, var(--glass-96) 98%, transparent),
-      color-mix(in srgb, var(--surface-tint) 94%, transparent)
+      color-mix(in srgb, var(--glass-94) 90%, transparent),
+      color-mix(in srgb, var(--surface-tint) 82%, transparent)
     );
-  border: 1px solid var(--panel-border-soft);
+  border: 1px solid color-mix(in srgb, white 78%, var(--panel-border-soft));
   border-radius: 28px;
   box-shadow:
     0 1px 0 var(--card-shadow),
