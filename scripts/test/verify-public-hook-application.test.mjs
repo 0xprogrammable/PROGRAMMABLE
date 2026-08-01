@@ -84,6 +84,12 @@ test("pure package validation accepts a canonical hash-bound review package", ()
   assert.equal(result.application.applicationRevision, 1);
   assert.equal(result.compatibility.result, "architecture-review-required");
   assert.equal(result.evidenceIndex.attestation, "builder-declared-untrusted");
+  assert.deepEqual(result.application.programmableFee.evidence.sourcePaths, ["src/ProgrammableFeeHook.sol"]);
+  assert.deepEqual(result.application.programmableFee.evidence.testPaths, ["test/ProgrammableFeeHook.t.sol"]);
+  assert.ok(result.application.source.primary.contractPaths.includes("src/ProgrammableFeeHook.sol"));
+  assert.ok(result.application.source.primary.contractPaths.includes("test/ProgrammableFeeHook.t.sol"));
+  assert.equal(result.application.source.primary.sourcePaths.includes("src/ProgrammableFeeHook.sol"), false);
+  assert.equal(result.application.source.primary.sourcePaths.includes("test/ProgrammableFeeHook.t.sol"), false);
 });
 
 test("trusted package validation rejects legacy and malformed mandatory fee projections", () => {
@@ -2235,9 +2241,12 @@ function makePackage({
     ...primary,
     sourcePaths: [...new Set([
       ...(primary.sourcePaths ?? []),
-      feeSourcePath,
-      feeTestPath,
       submissionPath
+    ])].sort(compareUtf8),
+    contractPaths: [...new Set([
+      ...(primary.contractPaths ?? []),
+      feeSourcePath,
+      feeTestPath
     ])].sort(compareUtf8)
   };
   const programmableFee = makeProgrammableFee({ feeSourcePath, feeTestPath });

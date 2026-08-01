@@ -737,8 +737,11 @@ function makePackage() {
     ...PRIMARY,
     sourcePaths: [...new Set([
       ...PRIMARY.sourcePaths,
+      submissionPath
+    ])].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))),
+    contractPaths: [...new Set([
+      ...PRIMARY.contractPaths,
       "src/ProgrammableFeeHook.sol",
-      submissionPath,
       "test/ProgrammableFeeHook.t.sol"
     ])].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
   };

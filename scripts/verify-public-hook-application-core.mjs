@@ -2565,6 +2565,7 @@ function validateProgrammableFeeProjection(fee, source) {
   const boundSourcePaths = new Set();
   for (const repository of [source.primary, ...source.companions]) {
     for (const entryPath of repository.sourcePaths ?? []) boundSourcePaths.add(entryPath);
+    for (const entryPath of repository.contractPaths ?? []) boundSourcePaths.add(entryPath);
   }
   for (const [paths, label] of [
     [fee.evidence.sourcePaths, "Fee source paths"],
