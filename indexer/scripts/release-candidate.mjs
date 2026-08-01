@@ -28,6 +28,11 @@ const MODELS = Object.freeze({
   "stock-paired-v2": "stock-paired",
   "stock-paired-v3": "stock-paired",
 });
+const STOCK_COORDINATOR_SOURCES = Object.freeze({
+  "stock-paired-v1": "0xfa5f17389ca28d071781d59750b32c842ab6a54b",
+  "stock-paired-v2": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+  "stock-paired-v3": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+});
 const EXPECTED_CONTRACTS = Object.freeze([
   "ClassicV2Hook",
   "ClassicV2Launcher",
@@ -886,17 +891,56 @@ function parseBaseline(value) {
   return { ...canonical, digest: expectedDigest };
 }
 
+function exactCoordinatorCreatorRepair(expected, actual, changedFields) {
+  const coordinatorSource = STOCK_COORDINATOR_SOURCES[expected.releaseVersion];
+  if (
+    coordinatorSource === undefined ||
+    changedFields.length !== 1 ||
+    changedFields[0] !== "creator" ||
+    expected.provenanceValid !== false ||
+    expected.isComplete !== false ||
+    expected.creator !== coordinatorSource ||
+    expected.hasLaunchEvent !== true ||
+    expected.hasCoordinatorEvent !== true ||
+    expected.launchOccurrenceId === null ||
+    expected.coordinatorOccurrenceId === null ||
+    actual.provenanceValid !== true ||
+    actual.isComplete !== true ||
+    actual.creator === null ||
+    actual.creator === coordinatorSource ||
+    actual.launchOccurrenceId !== expected.launchOccurrenceId ||
+    actual.coordinatorOccurrenceId !== expected.coordinatorOccurrenceId
+  ) {
+    return undefined;
+  }
+  return {
+    id: expected.id,
+    releaseVersion: expected.releaseVersion,
+    priorCoordinatorSource: coordinatorSource,
+    authenticatedCreator: actual.creator,
+    launchOccurrenceId: actual.launchOccurrenceId,
+    coordinatorOccurrenceId: actual.coordinatorOccurrenceId,
+  };
+}
+
 function assertFrozenBaseline(launches, baseline) {
   const current = new Map(launches.map((row) => [row.id, row]));
+  const repairs = [];
   for (const expected of baseline.entries) {
     const actual = current.get(expected.id);
     if (actual === undefined) throw new Error(`candidate omitted frozen launch ${expected.id}`);
-    for (const field of STABLE_LAUNCH_FIELDS) {
-      if (actual[field] !== expected[field]) {
-        throw new Error(`candidate changed frozen launch ${expected.id} at ${field}`);
-      }
+    const changedFields = STABLE_LAUNCH_FIELDS.filter(
+      (field) => actual[field] !== expected[field],
+    );
+    if (changedFields.length === 0) continue;
+    const repair = exactCoordinatorCreatorRepair(expected, actual, changedFields);
+    if (repair !== undefined) {
+      repairs.push(repair);
+      continue;
     }
+    throw new Error(`candidate changed frozen launch ${expected.id} at ${changedFields[0]}`);
   }
+  return repairs;
 }
 
 function candidateDeployment(values, endpoint, expectedIdentity) {
@@ -993,7 +1037,7 @@ async function auditCandidate({
       throw new Error(`candidate has no ${release} launches`);
     }
   }
-  assertFrozenBaseline(launches, baseline);
+  const authenticatedCoordinatorCreatorRepairs = assertFrozenBaseline(launches, baseline);
   return withDigest("envio-release-inventory", {
     schemaVersion: 2,
     kind: "envio-release-inventory",
@@ -1009,6 +1053,7 @@ async function auditCandidate({
     },
     anchor,
     inventory,
+    authenticatedCoordinatorCreatorRepairs,
   });
 }
 

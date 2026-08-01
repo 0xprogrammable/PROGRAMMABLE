@@ -243,7 +243,8 @@ describe("Envio release candidate identity", () => {
 
   it("rejects partial, extra and mistyped candidate identity JSON", () => {
     const identity = localIdentity(SOURCE_COMMIT) as JsonRecord;
-    const { eventCount: _eventCount, ...partial } = identity;
+    const partial = { ...identity };
+    delete partial.eventCount;
     expect(() => parseCandidateIdentity(partial)).toThrow(/exactly/u);
     expect(() => parseCandidateIdentity({ ...identity, arbitrary: true })).toThrow(/exactly/u);
     expect(() => parseCandidateIdentity({ ...identity, eventCount: "51" })).toThrow(/safe integer/u);
@@ -342,6 +343,58 @@ describe("Envio endpoint and frozen evidence", () => {
       ).toThrow();
     }
   });
+
+  it("records only the exact authenticated Stock coordinator creator repair", async () => {
+    const frozenRows = rows();
+    const stockIndex = frozenRows.findIndex(
+      (row) => row.releaseVersion === "stock-paired-v1",
+    );
+    const coordinatorSource = "0xfa5f17389ca28d071781d59750b32c842ab6a54b";
+    frozenRows[stockIndex] = {
+      ...frozenRows[stockIndex],
+      creator: coordinatorSource,
+      provenanceValid: false,
+      isComplete: false,
+    };
+    const candidateRows = frozenRows.map((row, index) =>
+      index === stockIndex
+        ? {
+            ...row,
+            creator: hex(20, 8_888),
+            provenanceValid: true,
+            isComplete: true,
+          }
+        : row,
+    );
+    const frozenBaseline = await baseline(frozenRows);
+
+    expect(assertFrozenBaseline(candidateRows, frozenBaseline)).toEqual([
+      {
+        id: frozenRows[stockIndex].id,
+        releaseVersion: "stock-paired-v1",
+        priorCoordinatorSource: coordinatorSource,
+        authenticatedCreator: hex(20, 8_888),
+        launchOccurrenceId: frozenRows[stockIndex].launchOccurrenceId,
+        coordinatorOccurrenceId: frozenRows[stockIndex].coordinatorOccurrenceId,
+      },
+    ]);
+
+    expect(() =>
+      assertFrozenBaseline(
+        candidateRows.map((row, index) =>
+          index === stockIndex ? { ...row, totalSupply: "999999999" } : row,
+        ),
+        frozenBaseline,
+      ),
+    ).toThrow(/changed frozen launch .* at creator/u);
+    expect(() =>
+      assertFrozenBaseline(candidateRows, {
+        entries: frozenRows.map((row, index) =>
+          index === stockIndex ? { ...row, provenanceValid: true } : row,
+        ),
+      }),
+    ).toThrow(/changed frozen launch .* at creator/u);
+  });
 });
 
 describe("Envio candidate audit", () => {
@@ -382,7 +435,53 @@ describe("Envio candidate audit", () => {
     expect(first.baseline.digest).toBe(frozenBaseline.digest);
     expect(first.anchor.progressBlock).toBe("1100");
     expect(first.inventory.sha256).toMatch(/^0x[0-9a-f]{64}$/u);
+    expect(first.authenticatedCoordinatorCreatorRepairs).toEqual([]);
     expect(first.digest).toMatch(/^0x[0-9a-f]{64}$/u);
+  });
+
+  it("includes an exact Stock coordinator creator repair in signed audit evidence", async () => {
+    const identity = localIdentity(SOURCE_COMMIT) as JsonRecord;
+    const frozenRows = rows();
+    const stockIndex = frozenRows.findIndex(
+      (row) => row.releaseVersion === "stock-paired-v1",
+    );
+    frozenRows[stockIndex] = {
+      ...frozenRows[stockIndex],
+      creator: "0xfa5f17389ca28d071781d59750b32c842ab6a54b",
+      provenanceValid: false,
+      isComplete: false,
+    };
+    const candidateRows = frozenRows.map((row, index) =>
+      index === stockIndex
+        ? {
+            ...row,
+            creator: hex(20, 8_888),
+            provenanceValid: true,
+            isComplete: true,
+          }
+        : row,
+    );
+    const result = await auditCandidate({
+      endpoint: CANDIDATE_ENDPOINT,
+      expectedIdentity: identity,
+      baseline: await baseline(frozenRows),
+      sourceCommit: SOURCE_COMMIT,
+      deployment: deployment(identity),
+      fetcher: fixtureFetcher({
+        identity,
+        rows: candidateRows,
+        progressBlock: 1_100,
+      }).fetcher,
+      now: () => new Date(CAPTURED_AT),
+    });
+
+    expect(result.authenticatedCoordinatorCreatorRepairs).toHaveLength(1);
+    expect(result.authenticatedCoordinatorCreatorRepairs[0]).toMatchObject({
+      id: frozenRows[stockIndex].id,
+      releaseVersion: "stock-paired-v1",
+      priorCoordinatorSource: "0xfa5f17389ca28d071781d59750b32c842ab6a54b",
+      authenticatedCreator: hex(20, 8_888),
+    });
   });
 
   it("rejects identity JSON that differs from the reviewed checkout", async () => {
