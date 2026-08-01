@@ -123,11 +123,7 @@ Resolve `SKILL_ROOT` to the directory that contains this loaded `SKILL.md`. It m
 repository. Resolve `REPOSITORY_ROOT` independently from the active Git worktree. Never infer the project root from the
 skill installation path.
 
-The deterministic scripts require Node.js 20 or newer. Exact remote-object resolution for declared public source and
-evidence paths additionally requires Git 2.49.0 or newer with a working `git backfill`; without it, report
-`TOOLING_BLOCKED`. Resolution is anonymous and no-checkout: never run candidate hooks, filters, submodules or code.
-The released resolver must keep Git and all helpers inside its documented process, CPU, memory, output, and temporary
-storage bounds; a resource failure is a tooling/source-resolution result, never a judgment that the project is unsafe.
+The deterministic scripts require Node.js 20 or newer. Exact remote-object resolution for declared public source and evidence paths additionally requires Git 2.49.0 or newer with a working `git backfill`; without it, report `TOOLING_BLOCKED`. Resolution is anonymous and no-checkout: never run candidate hooks, filters, submodules or code. The released resolver must keep Git and all helpers inside its documented process, CPU, memory, output, and temporary storage bounds; a resource failure is a tooling/source-resolution result, never a judgment that the project is unsafe.
 The stable public command surface is:
 
 ```bash
@@ -138,13 +134,9 @@ node "$SKILL_ROOT/scripts/cli.mjs" package path/to/submission-directory --reposi
 node "$SKILL_ROOT/scripts/cli.mjs" prepare-pr path/to/submission-directory --repository-root "$REPOSITORY_ROOT"
 ```
 
-Use each command's `--help` output for the released flags. All five commands emit canonical JSON. `prepare-pr` prepares
-data only; it performs no push, pull-request creation, signing, deployment, or other external write.
+Use each command's `--help` output for the released flags. All five commands emit canonical JSON. `prepare-pr` prepares data only; it performs no push, pull-request creation, signing, deployment, or other external write.
 
-A prototype that declares Solidity additionally requires the repository's pinned Foundry toolchain; Solidity static
-analysis uses Slither when the project reaches that phase. No-hook and non-Solidity work must use the pinned build,
-test and analysis tools appropriate to its declared languages. Explore remains usable when implementation tools are
-absent.
+A prototype that declares Solidity additionally requires the repository's pinned Foundry toolchain; Solidity static analysis uses Slither when the project reaches that phase. No-hook and non-Solidity work must use the pinned build, test and analysis tools appropriate to its declared languages. Explore remains usable when implementation tools are absent.
 
 ## Workflow
 
