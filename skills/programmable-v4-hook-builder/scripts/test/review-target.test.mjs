@@ -594,10 +594,11 @@ test("review target permits Node built-ins and exactly declared package roots an
     additionalFiles: {
       "submissions/fixture/app/entry.ts": [
         'import assert from "node:assert/strict";',
+        'import test from "node:test";',
         'import fs from "fs";',
         'import path from "path";',
         'import { Pool } from "@uniswap/v4-sdk/entities/pool";',
-        "export const visible = assert.ok && fs.readFile && path.resolve && Pool;"
+        "export const visible = assert.ok && test && fs.readFile && path.resolve && Pool;"
       ].join("\n")
     }
   });
