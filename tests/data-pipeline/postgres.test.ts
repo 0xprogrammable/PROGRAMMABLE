@@ -151,7 +151,7 @@ describe("private Postgres read-model adapter", () => {
       max: 3,
       connect_timeout: 1,
       idle_timeout: 5,
-      fetch_types: false,
+      fetch_types: true,
       connection: {
         application_name: "programmable-read-model",
       },

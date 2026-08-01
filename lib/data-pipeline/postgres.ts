@@ -87,7 +87,9 @@ export function postgresDriverOptions(
     max: settings.maxConnections,
     connect_timeout: Math.max(1, Math.ceil(settings.connectTimeoutMs / 1_000)),
     idle_timeout: Math.max(1, Math.ceil(settings.idleTimeoutMs / 1_000)),
-    fetch_types: false,
+    // postgres.js needs the server's element-to-array OID map to serialize
+    // typed parameters such as bytea[], uuid[] and numeric[] correctly.
+    fetch_types: true,
     max_lifetime: 300,
     onnotice: () => undefined,
     connection: {
@@ -156,9 +158,12 @@ export function createPostgresExecutor(input: {
             text: string,
             values: readonly PostgresParameter[] = [],
           ) {
+            const driverValues = values.map((value) =>
+              Array.isArray(value) ? sql.array([...value]) : value,
+            );
             const result = await transaction.unsafe<Row[]>(
               text,
-              [...values],
+              driverValues,
             );
             return [...result];
           },

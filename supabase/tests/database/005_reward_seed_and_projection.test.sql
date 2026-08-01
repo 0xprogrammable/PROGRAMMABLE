@@ -1,5 +1,5 @@
 begin;
-select plan(162);
+select plan(163);
 
 -- Preserve behavioral coverage for the retired v1/v2 promotion bodies while
 -- production keeps both capabilities revoked. pgTAP rolls these grants back.
@@ -4516,6 +4516,19 @@ select programmable_private.register_envio_ingestion_genesis_v1(
   '92000000-0000-0000-0000-000000000003', 'canonical-events',
   'a4100000-0000-0000-0000-000000000003',
   decode(repeat('64', 32), 'hex'), '2026-07-31T03:06:05.340Z'
+);
+select ok(
+  (
+    select generation = 0
+      and block_number = 25639600
+      and block_hash = decode(repeat('99', 32), 'hex')
+      and block_global_log_index is null
+      and candidate_id is null
+    from programmable_private.get_envio_ingestion_cursor_v1(
+      1, '92000000-0000-0000-0000-000000000003', 'canonical-events'
+    )
+  ),
+  'registered genesis is exposed as the generation-zero cursor'
 );
 
 select programmable_private.open_run(

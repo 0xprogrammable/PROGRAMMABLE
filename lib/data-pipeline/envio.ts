@@ -419,13 +419,20 @@ function canonicalCandidateCursor(
       : null;
   const isGenesisCursor =
     blockGlobalLogIndex === -1 && candidateId === "";
+  const isPredecessorBlockCursor =
+    blockGlobalLogIndex === UINT32_MAXIMUM && candidateId === "";
   const isTerminalBlockCursor =
     blockGlobalLogIndex === UINT32_MAXIMUM && candidateId === "empty-page";
   const isPlacedCursor =
     blockGlobalLogIndex >= 0 &&
     candidateMatch !== null &&
     BigInt(candidateMatch[3]) === BigInt(blockGlobalLogIndex);
-  if (!isGenesisCursor && !isTerminalBlockCursor && !isPlacedCursor) {
+  if (
+    !isGenesisCursor &&
+    !isPredecessorBlockCursor &&
+    !isTerminalBlockCursor &&
+    !isPlacedCursor
+  ) {
     throw invalidInput("envio", "candidate-cursor");
   }
   return {

@@ -67,16 +67,20 @@ async function withRuntimeModules(operation) {
       leaseModule,
       envioModule,
       projectorModule,
+      dualRpcModule,
       rpcModule,
       connectionModule,
+      codecsModule,
     ] = await Promise.all([
       vite.ssrLoadModule("/lib/data-pipeline/postgres.ts"),
       vite.ssrLoadModule("/lib/data-pipeline/postgres-projector.ts"),
       vite.ssrLoadModule("/lib/data-pipeline/projector-runtime-lease.server.ts"),
       vite.ssrLoadModule("/lib/data-pipeline/envio.ts"),
       vite.ssrLoadModule("/lib/data-pipeline/projector.ts"),
+      vite.ssrLoadModule("/lib/data-pipeline/dual-rpc.ts"),
       vite.ssrLoadModule("/lib/data-pipeline/rpc-providers.server.ts"),
       vite.ssrLoadModule("/lib/data-pipeline/postgres-connection.server.ts"),
+      vite.ssrLoadModule("/lib/data-pipeline/codecs.ts"),
     ]);
     return await operation({
       postgresModule,
@@ -84,12 +88,34 @@ async function withRuntimeModules(operation) {
       leaseModule,
       envioModule,
       projectorModule,
+      dualRpcModule,
       rpcModule,
       connectionModule,
+      codecsModule,
     });
   } finally {
     await vite.close();
   }
+}
+
+export function candidateGenesisAnchorBlock(bootstrap) {
+  const starts = bootstrap?.releases?.flatMap((release) =>
+    release?.sourceBindings?.map(({ inclusiveStartBlock }) => {
+      const value = String(inclusiveStartBlock ?? "");
+      if (!/^[1-9][0-9]*$/u.test(value)) {
+        throw new Error("candidate release start block is invalid");
+      }
+      return BigInt(value);
+    }) ?? []
+  );
+  if (!Array.isArray(starts) || starts.length < 1) {
+    throw new Error("candidate release start blocks are unavailable");
+  }
+  const first = starts.reduce(
+    (minimum, current) => current < minimum ? current : minimum,
+  );
+  if (first < 1n) throw new Error("candidate genesis anchor is invalid");
+  return (first - 1n).toString();
 }
 
 export async function runConfiguredCandidateRawBackfill(input) {
@@ -149,6 +175,7 @@ export async function runConfiguredCandidateRawBackfill(input) {
         sourceGroup: scope.sourceGroup,
       })),
     );
+    const anchorBlockNumber = candidateGenesisAnchorBlock(bootstrap);
     const runtimeExecutor = modules.postgresModule.createPostgresExecutor({
       connectionString: runtimeConnection,
       sslCaPem,
@@ -173,6 +200,23 @@ export async function runConfiguredCandidateRawBackfill(input) {
         throw new Error("candidate raw backfill lease is busy");
       }
       fence = acquired.fence;
+      const anchorBlock = await providers[0].client.getBlock({
+        blockNumber: BigInt(anchorBlockNumber),
+      });
+      const anchorBlockHash = modules.codecsModule.canonicalBytes32(
+        anchorBlock?.hash,
+      );
+      const safeHead = await modules.dualRpcModule.readDualRpcSafeHead({
+        providers,
+        cursor: { blockNumber: anchorBlockNumber, blockHash: anchorBlockHash },
+      });
+      await modules.projectorStoreModule.initializePostgresProjectorGenesis({
+        executor: writerExecutor,
+        providers: providerBindings,
+        releaseScopes,
+        runtimeFence: fence,
+        evidence: { anchorBlockNumber, anchorBlockHash, safeHead },
+      });
       const store = modules.projectorStoreModule.createPostgresProjectorStore({
         executor: writerExecutor,
         providers: providerBindings,

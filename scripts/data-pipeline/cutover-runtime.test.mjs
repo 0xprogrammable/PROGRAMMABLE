@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CANDIDATE_RUNTIME_ENDPOINT,
+  candidateGenesisAnchorBlock,
   loadCandidateRuntimeIdentity,
 } from "./cutover-runtime.mjs";
 
@@ -16,4 +17,22 @@ test("raw runtime is pinned to the reviewed candidate evidence", async () => {
   });
   assert.equal(CANDIDATE_RUNTIME_ENDPOINT, identity.endpoint);
   assert.equal(Object.isFrozen(identity), true);
+});
+
+test("candidate genesis is the predecessor of the earliest reviewed source", () => {
+  assert.equal(candidateGenesisAnchorBlock({
+    releases: [
+      { sourceBindings: [{ inclusiveStartBlock: "25639538" }] },
+      {
+        sourceBindings: [
+          { inclusiveStartBlock: "25624131" },
+          { inclusiveStartBlock: "25624130" },
+        ],
+      },
+    ],
+  }), "25624129");
+  assert.throws(
+    () => candidateGenesisAnchorBlock({ releases: [] }),
+    /start blocks are unavailable/u,
+  );
 });

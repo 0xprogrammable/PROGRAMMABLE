@@ -115,7 +115,7 @@ describe("Postgres connection boundary", () => {
     const options = factory.mock.calls[0]?.[1];
     expect(options).toMatchObject({
       ssl: { ca: TEST_CA, rejectUnauthorized: true },
-      fetch_types: false,
+      fetch_types: true,
       connection: {
         application_name: "programmable-read-model",
       },
@@ -125,6 +125,40 @@ describe("Postgres connection boundary", () => {
         statement_timeout: expect.anything(),
       },
     });
+    await executor.close();
+  });
+
+  it("binds SQL arrays through the postgres driver array encoder", async () => {
+    const encodedArray = Object.freeze({ kind: "driver-array" });
+    const array = vi.fn(() => encodedArray);
+    const unsafe = vi.fn(async () => []);
+    const begin = vi.fn(async (work: (transaction: unknown) => unknown) =>
+      work({ unsafe }),
+    );
+    const factory = vi.fn(() =>
+      ({
+        array,
+        begin,
+        end: vi.fn(async () => undefined),
+      }) as never,
+    );
+    const executor = createPostgresExecutor({
+      connectionString:
+        "postgresql://postgres:postgres@127.0.0.1:54322/postgres?sslmode=disable",
+      allowInsecureLoopback: true,
+      postgresFactory: factory,
+    });
+    const bytes = [new Uint8Array([1, 2]), new Uint8Array([3, 4])];
+
+    await executor.transaction((transaction) =>
+      transaction.query("select $1::bytea[], $2::text", [bytes, "value"]),
+    );
+
+    expect(array).toHaveBeenCalledWith(bytes);
+    expect(unsafe).toHaveBeenCalledWith(
+      "select $1::bytea[], $2::text",
+      [encodedArray, "value"],
+    );
     await executor.close();
   });
 

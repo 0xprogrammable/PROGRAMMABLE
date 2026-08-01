@@ -28,6 +28,7 @@ import type {
   CandidateRpcProvider,
   DualRpcCandidateWindowEvidence,
   DualRpcDynamicRuntimeObservation,
+  DualRpcSafeHeadEvidence,
   DualRpcRewardSnapshot,
   ProjectorDynamicSourceTemplate,
 } from "./dual-rpc";
@@ -130,6 +131,12 @@ export type ProjectorRuntimeFence = Readonly<{
   holderId: string;
   generation: string;
   tokenHash: HexBytes32;
+}>;
+
+export type ProjectorGenesisInitializationEvidence = Readonly<{
+  anchorBlockNumber: string;
+  anchorBlockHash: HexBytes32;
+  safeHead: DualRpcSafeHeadEvidence;
 }>;
 
 const PROJECTOR_RELEASE_SCOPES = Object.freeze([
@@ -1114,6 +1121,279 @@ function parseCursor(rows: readonly Record<string, unknown>[]) {
           192,
         ),
     isBlockBoundary,
+  });
+}
+
+function parseOptionalCursor(rows: readonly Record<string, unknown>[]) {
+  if (rows.length !== 1) return projectorValidationFailure();
+  const row = rows[0]!;
+  if (
+    row.block_number === null &&
+    row.block_hash === null &&
+    row.block_global_log_index === null &&
+    row.candidate_id === null
+  ) {
+    if (integerText(row.generation) !== "0") {
+      return projectorValidationFailure();
+    }
+    return null;
+  }
+  return parseCursor(rows);
+}
+
+/**
+ * Registers the immutable generation-zero predecessor used by the first raw
+ * backfill page. The database manifests independently determine the only
+ * acceptable anchor block; both production RPCs must already agree on that
+ * block and on a finalized safe head before this transaction can commit.
+ */
+export async function initializePostgresProjectorGenesis(input: {
+  executor: PostgresExecutor;
+  providers: readonly ProjectorProviderDatabaseBinding[];
+  releaseScopes: readonly ProjectorReleaseDatabaseScope[];
+  runtimeFence: ProjectorRuntimeFence;
+  evidence: ProjectorGenesisInitializationEvidence;
+  uuid?: () => string;
+  now?: () => Date;
+}): Promise<Readonly<{
+  status: "initialized" | "already-initialized";
+  cursor: ProjectorPlan["cursor"];
+}>> {
+  const gateway = createProjectorDatabaseGateway({ executor: input.executor });
+  const providers = canonicalProviderBindings(input.providers);
+  const releaseScopes = canonicalReleaseScopes(input.releaseScopes);
+  const runtimeFence = canonicalRuntimeFence(input.runtimeFence);
+  const envioIndexes = providers
+    .map((provider, index) => ({ provider, index }))
+    .filter(({ provider }) => provider.type === "envio_deployment");
+  const rpcIndexes = providers
+    .map((provider, index) => ({ provider, index }))
+    .filter(({ provider }) => provider.type === "rpc_provider");
+  if (envioIndexes.length !== 1 || rpcIndexes.length !== 2) {
+    return projectorValidationFailure();
+  }
+  const anchorBlockNumber = integerText(input.evidence?.anchorBlockNumber);
+  const anchorBlockHash = canonicalBytes32(input.evidence?.anchorBlockHash);
+  const safeBlockNumber = integerText(input.evidence?.safeHead?.safeBlockNumber);
+  const safeBlockHash = canonicalBytes32(input.evidence?.safeHead?.safeBlockHash);
+  const cursorBlockHash = canonicalBytes32(
+    input.evidence?.safeHead?.cursorBlockHash,
+  );
+  const providerHeads = input.evidence?.safeHead?.providerHeads?.map(integerText);
+  if (
+    providerHeads?.length !== 2 ||
+    anchorBlockHash !== cursorBlockHash ||
+    BigInt(anchorBlockNumber) > BigInt(safeBlockNumber) ||
+    providerHeads.some((head) => BigInt(head) < BigInt(safeBlockNumber) + 12n)
+  ) {
+    return projectorValidationFailure();
+  }
+  const uuid = input.uuid ?? randomUUID;
+  const now = input.now ?? (() => new Date());
+
+  return gateway.transaction(async (transaction) => {
+    await assertRuntimeFence(transaction, runtimeFence);
+    const neutral = await readRuntimeState({
+      transaction,
+      scope: ENVIO_CONTROL_SCOPE,
+      providers,
+    });
+    const envioProviderDeploymentId =
+      neutral.providerDeploymentIds[envioIndexes[0]!.index]!;
+    const rpcProviderDeploymentIds = rpcIndexes.map(
+      ({ index }) => neutral.providerDeploymentIds[index]!,
+    ) as [string, string];
+
+    const starts: bigint[] = [];
+    for (const scope of releaseScopes) {
+      const state = await readRuntimeState({
+        transaction,
+        scope: { ...scope, projectorVersion: RELEASE_PROJECTOR_VERSION },
+        providers,
+      });
+      const manifestRows = await transaction.query(
+        "select * from programmable_private.get_projector_release_manifest_v1($1, $2, $3, $4, $5::uuid, $6)",
+        [
+          "1",
+          scope.releaseId,
+          scope.modelId,
+          scope.sourceGroup,
+          state.epochId,
+          state.pointerGeneration,
+        ],
+      );
+      const manifest = parseManifest(manifestRows, state);
+      starts.push(...manifest.sources.map(({ inclusiveStartBlock }) =>
+        BigInt(inclusiveStartBlock)
+      ));
+    }
+    if (starts.length < 1) return projectorValidationFailure();
+    const firstStartBlock = starts.reduce(
+      (minimum, current) => current < minimum ? current : minimum,
+    );
+    if (
+      firstStartBlock < 1n ||
+      BigInt(anchorBlockNumber) !== firstStartBlock - 1n
+    ) {
+      return projectorValidationFailure();
+    }
+
+    const cursorQuery =
+      "select * from programmable_private.get_envio_ingestion_cursor_v1($1, $2::uuid, $3)";
+    const cursorValues = ["1", envioProviderDeploymentId, "canonical-events"];
+    const current = parseOptionalCursor(
+      await transaction.query(cursorQuery, cursorValues),
+    );
+    if (current !== null) {
+      if (
+        current.generation === "0" &&
+        (current.blockNumber !== anchorBlockNumber ||
+          current.blockHash !== anchorBlockHash ||
+          !current.isBlockBoundary)
+      ) {
+        return projectorValidationFailure();
+      }
+      return Object.freeze({
+        status: "already-initialized" as const,
+        cursor: current,
+      });
+    }
+
+    const timestamp = now().toISOString();
+    const ids = Object.freeze({
+      run: exactUuid(uuid()),
+      observation: exactUuid(uuid()),
+      block: exactUuid(uuid()),
+      outcome: exactUuid(uuid()),
+      genesis: exactUuid(uuid()),
+    });
+    const safeEvidence = providerEvidenceV2("safe_head", {
+      chain_id: "1",
+      epoch_id: neutral.epochId,
+      pointer_generation: neutral.pointerGeneration,
+      provider_a_id: rpcProviderDeploymentIds[0],
+      provider_b_id: rpcProviderDeploymentIds[1],
+      reported_chain_id_a: "1",
+      reported_chain_id_b: "1",
+      head_a: providerHeads[0]!,
+      head_b: providerHeads[1]!,
+      finality_depth: "12",
+      safe_block_number: safeBlockNumber,
+      safe_block_hash_a: safeBlockHash,
+      safe_block_hash_b: safeBlockHash,
+    });
+    const blockEvidence = providerEvidenceV2("block", {
+      chain_id: "1",
+      epoch_id: neutral.epochId,
+      pointer_generation: neutral.pointerGeneration,
+      observation_id: ids.observation,
+      block_number: anchorBlockNumber,
+      provider_a_block_hash: anchorBlockHash,
+      provider_b_block_hash: anchorBlockHash,
+    });
+    const requestCommitment = keccak256(toBytes(JSON.stringify([
+      "projector-genesis-initialization-v1",
+      neutral.epochId,
+      neutral.pointerGeneration,
+      envioProviderDeploymentId,
+      ...rpcProviderDeploymentIds,
+      anchorBlockNumber,
+      anchorBlockHash,
+      safeBlockNumber,
+      safeBlockHash,
+      ...providerHeads,
+    ])));
+    const resultCommitment = keccak256(toBytes(JSON.stringify([
+      "projector-genesis-initialized-v1",
+      envioProviderDeploymentId,
+      anchorBlockNumber,
+      anchorBlockHash,
+    ])));
+    const genesisCommitment = keccak256(toBytes(JSON.stringify([
+      "projector-genesis-anchor-v1",
+      envioProviderDeploymentId,
+      "canonical-events",
+      anchorBlockNumber,
+      anchorBlockHash,
+      ids.block,
+    ])));
+
+    exactIdResult(await transaction.query(
+      "select programmable_private.open_run($1::uuid, 'ingestion', '1', $2, $3, $4, $5::uuid, $6, $7, $8::bytea, $9::timestamptz) as id",
+      [
+        ids.run,
+        ENVIO_CONTROL_SCOPE.releaseId,
+        ENVIO_CONTROL_SCOPE.modelId,
+        ENVIO_CONTROL_SCOPE.sourceGroup,
+        neutral.epochId,
+        neutral.pointerGeneration,
+        ENVIO_CONTROL_SCOPE.projectorVersion,
+        hexToBytes(requestCommitment),
+        timestamp,
+      ],
+    ), ids.run);
+    exactIdResult(await transaction.query(
+      "select programmable_private.append_safe_head_observation($1::uuid, $2::uuid, $3::uuid, $4::uuid, '1', '1', $5::numeric, $6::numeric, 12, $7::numeric, $8::bytea, $9::bytea, $10, $11::bytea, $12::bytea, $13::timestamptz) as id",
+      [
+        ids.observation,
+        ids.run,
+        rpcProviderDeploymentIds[0],
+        rpcProviderDeploymentIds[1],
+        providerHeads[0]!,
+        providerHeads[1]!,
+        safeBlockNumber,
+        hexToBytes(safeBlockHash),
+        hexToBytes(safeBlockHash),
+        safeEvidence.encodingVersion,
+        safeEvidence.canonicalPreimage,
+        hexToBytes(safeEvidence.contentFingerprint),
+        timestamp,
+      ],
+    ), ids.observation);
+    exactIdResult(await transaction.query(
+      "select programmable_private.append_dual_rpc_block_evidence($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::bytea, $6::bytea, $7, $8::bytea, $9::bytea, $10::timestamptz) as id",
+      [
+        ids.block,
+        ids.observation,
+        ids.run,
+        anchorBlockNumber,
+        hexToBytes(anchorBlockHash),
+        hexToBytes(anchorBlockHash),
+        blockEvidence.encodingVersion,
+        blockEvidence.canonicalPreimage,
+        hexToBytes(blockEvidence.contentFingerprint),
+        timestamp,
+      ],
+    ), ids.block);
+    exactIdResult(await transaction.query(
+      "select programmable_private.append_run_outcome($1::uuid, $2::uuid, 'succeeded', $3::bytea, $4::timestamptz) as id",
+      [ids.outcome, ids.run, hexToBytes(resultCommitment), timestamp],
+    ), ids.outcome);
+    exactIdResult(await transaction.query(
+      "select programmable_private.register_envio_ingestion_genesis_v1($1::uuid, $2::uuid, $3::uuid, $4, $5::uuid, $6::bytea, $7::timestamptz) as id",
+      [
+        ids.genesis,
+        ids.run,
+        envioProviderDeploymentId,
+        "canonical-events",
+        ids.block,
+        hexToBytes(genesisCommitment),
+        timestamp,
+      ],
+    ), ids.genesis);
+
+    const cursor = parseCursor(
+      await transaction.query(cursorQuery, cursorValues),
+    );
+    if (
+      cursor.generation !== "0" ||
+      cursor.blockNumber !== anchorBlockNumber ||
+      cursor.blockHash !== anchorBlockHash ||
+      !cursor.isBlockBoundary
+    ) {
+      return projectorValidationFailure();
+    }
+    return Object.freeze({ status: "initialized" as const, cursor });
   });
 }
 

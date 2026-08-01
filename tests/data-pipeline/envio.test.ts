@@ -711,6 +711,33 @@ describe("Envio candidate cursor adapter", () => {
     ).rejects.toMatchObject({ code: "validation_failed" });
   });
 
+  it("accepts the registered predecessor-block cursor used for generation zero", async () => {
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        variables: Record<string, unknown>;
+      };
+      expect(body.variables.afterBlock).toBe("25624129");
+      expect(body.variables.afterLogIndex).toBe("4294967295");
+      expect(body.variables.afterCandidateId).toBe("");
+      return json({ data: { ChainEvent: [] } });
+    });
+    const client = createEnvioClient({
+      endpoint: "https://envio.example/graphql",
+      fetcher,
+    });
+
+    await expect(client.readCandidatesWindow({
+      cursor: {
+        blockNumber: "25624129",
+        blockGlobalLogIndex: 4_294_967_295,
+        candidateId: "",
+      },
+      throughBlock: "25624130",
+      limit: 1,
+    })).resolves.toEqual([]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("uses candidate identity as a stable-snapshot tie breaker", async () => {
     const forkReplacement = placedCandidate({
       blockNumber: "25624131",
