@@ -681,7 +681,7 @@ function backupRequestPayload({
     source,
     restore,
     schemas: BACKUP_SCHEMAS,
-    format: "pg-custom-v1",
+    format: "targeted-schema-backup-v2",
   };
 }
 
@@ -772,14 +772,19 @@ function validateStoredEvidence(value, request) {
     !isPlainRecord(value.backup) ||
     !SHA256.test(value.backup.sha256 ?? "") ||
     !SHA256.test(value.backup.archiveListSha256 ?? "") ||
+    !["pg-custom-v1", "empty-target-schemas-v1"].includes(
+      value.backup.format,
+    ) ||
     !Number.isSafeInteger(value.backup.bytes) ||
     value.backup.bytes <= 0 ||
     !SHA256.test(value.sourceManifestSha256 ?? "") ||
     value.restoredManifestSha256 !== value.sourceManifestSha256 ||
     !Number.isSafeInteger(value.tableCount) ||
-    value.tableCount < 1 ||
+    value.tableCount < 0 ||
     !Number.isSafeInteger(value.rowCount) ||
     value.rowCount < 0 ||
+    (value.tableCount === 0) !==
+      (value.backup.format === "empty-target-schemas-v1") ||
     !/^PostgreSQL 17\./u.test(value.postgresVersion ?? "") ||
     !Number.isFinite(Date.parse(value.createdAt ?? ""))
   ) {
@@ -1189,14 +1194,12 @@ export async function createBackupAndRestoreEvidence(input) {
     if (
       !SHA256.test(before?.manifestSha256 ?? "") ||
       !Number.isSafeInteger(before?.tableCount) ||
-      before.tableCount < 1 ||
+      before.tableCount < 0 ||
       !Number.isSafeInteger(before?.rowCount) ||
       before.rowCount < 0
     ) {
       throw new Error("source database manifest is invalid");
     }
-    await createPrivateFile(request.backupPath);
-    backupCreated = true;
     const secrets = [
       request.source.password,
       request.restore.password,
@@ -1224,26 +1227,46 @@ export async function createBackupAndRestoreEvidence(input) {
       secrets,
     });
     const postgresVersion = pgVersion(versionResult.stdout);
-    const dumpArguments = [
-      "--format=custom",
-      "--compress=6",
-      "--serializable-deferrable",
-      "--no-owner",
-      "--no-privileges",
-      ...BACKUP_SCHEMAS.flatMap((schema) => ["--schema", schema]),
-      ...commandTargetArguments(request.source.safeTarget, request.source.username),
-      "--file",
-      request.backupPath,
-    ];
-    await executeSafeCommand({
-      runner,
-      binary: input.pgDumpBinary ?? "pg_dump",
-      args: dumpArguments,
-      env: sourceEnvironment,
-      timeoutMs: 15 * 60_000,
-      secrets,
-    });
-    await chmod(request.backupPath, 0o600);
+    let backupFormat;
+    let listResult;
+    if (before.tableCount === 0 && before.rowCount === 0) {
+      backupFormat = "empty-target-schemas-v1";
+      const emptyArtifact = `${canonicalJson({
+        kind: backupFormat,
+        schemaVersion: 1,
+        sourceManifestSha256: before.manifestSha256,
+      })}\n`;
+      await createPrivateFile(request.backupPath, emptyArtifact);
+      backupCreated = true;
+      listResult = {
+        stdout: Buffer.from(emptyArtifact),
+        stderr: Buffer.alloc(0),
+      };
+    } else {
+      backupFormat = "pg-custom-v1";
+      await createPrivateFile(request.backupPath);
+      backupCreated = true;
+      const dumpArguments = [
+        "--format=custom",
+        "--compress=6",
+        "--serializable-deferrable",
+        "--no-owner",
+        "--no-privileges",
+        ...BACKUP_SCHEMAS.flatMap((schema) => ["--schema", schema]),
+        ...commandTargetArguments(request.source.safeTarget, request.source.username),
+        "--file",
+        request.backupPath,
+      ];
+      await executeSafeCommand({
+        runner,
+        binary: input.pgDumpBinary ?? "pg_dump",
+        args: dumpArguments,
+        env: sourceEnvironment,
+        timeoutMs: 15 * 60_000,
+        secrets,
+      });
+      await chmod(request.backupPath, 0o600);
+    }
     const after = await captureManifest(sourceConnection.sql);
     if (
       after?.manifestSha256 !== before.manifestSha256 ||
@@ -1252,48 +1275,52 @@ export async function createBackupAndRestoreEvidence(input) {
     ) {
       throw new Error("source database changed during the backup window");
     }
-    const listResult = await executeSafeCommand({
-      runner,
-      binary: input.pgRestoreBinary ?? "pg_restore",
-      args: ["--list", request.backupPath],
-      env: sourceEnvironment,
-      timeoutMs: 60_000,
-      secrets,
-    });
+    if (backupFormat === "pg-custom-v1") {
+      listResult = await executeSafeCommand({
+        runner,
+        binary: input.pgRestoreBinary ?? "pg_restore",
+        args: ["--list", request.backupPath],
+        env: sourceEnvironment,
+        timeoutMs: 60_000,
+        secrets,
+      });
+    }
     if (listResult.stdout.byteLength < 1) {
       throw new Error("Postgres backup archive listing is empty");
     }
-    await executeSafeCommand({
-      runner,
-      binary: input.psqlBinary ?? "psql",
-      args: [
-        "--no-psqlrc",
-        "--quiet",
-        "--set",
-        "ON_ERROR_STOP=1",
-        ...commandTargetArguments(request.restore.safeTarget, request.restore.username),
-        "--command",
-        roleBootstrapSql(),
-      ],
-      env: restoreEnvironment,
-      timeoutMs: 60_000,
-      secrets,
-    });
-    await executeSafeCommand({
-      runner,
-      binary: input.pgRestoreBinary ?? "pg_restore",
-      args: [
-        "--exit-on-error",
-        "--single-transaction",
-        "--no-owner",
-        "--no-privileges",
-        ...commandTargetArguments(request.restore.safeTarget, request.restore.username),
-        request.backupPath,
-      ],
-      env: restoreEnvironment,
-      timeoutMs: 15 * 60_000,
-      secrets,
-    });
+    if (backupFormat === "pg-custom-v1") {
+      await executeSafeCommand({
+        runner,
+        binary: input.psqlBinary ?? "psql",
+        args: [
+          "--no-psqlrc",
+          "--quiet",
+          "--set",
+          "ON_ERROR_STOP=1",
+          ...commandTargetArguments(request.restore.safeTarget, request.restore.username),
+          "--command",
+          roleBootstrapSql(),
+        ],
+        env: restoreEnvironment,
+        timeoutMs: 60_000,
+        secrets,
+      });
+      await executeSafeCommand({
+        runner,
+        binary: input.pgRestoreBinary ?? "pg_restore",
+        args: [
+          "--exit-on-error",
+          "--single-transaction",
+          "--no-owner",
+          "--no-privileges",
+          ...commandTargetArguments(request.restore.safeTarget, request.restore.username),
+          request.backupPath,
+        ],
+        env: restoreEnvironment,
+        timeoutMs: 15 * 60_000,
+        secrets,
+      });
+    }
     const restored = await captureManifest(restoreConnection.sql);
     if (
       restored?.manifestSha256 !== before.manifestSha256 ||
@@ -1317,6 +1344,7 @@ export async function createBackupAndRestoreEvidence(input) {
       source: request.source.safeTarget,
       restore: request.restore.safeTarget,
       backup: Object.freeze({
+        format: backupFormat,
         sha256: backup.sha256,
         bytes: backup.bytes,
         archiveListSha256: sha256(listResult.stdout),

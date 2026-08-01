@@ -533,6 +533,7 @@ test("createBackupAndRestoreEvidence keeps secrets in child env and proves an is
   assert.equal(result.evidence.restoredManifestSha256, manifest().manifestSha256);
   assert.equal(result.evidence.tableCount, 27);
   assert.equal(result.evidence.rowCount, 265);
+  assert.equal(result.evidence.backup.format, "pg-custom-v1");
   assert.equal(result.evidence.postgresVersion, "PostgreSQL 17.6");
   assert.equal(harness.closeCount, 2);
   const dump = harness.calls.find(
@@ -571,6 +572,38 @@ test("createBackupAndRestoreEvidence keeps secrets in child env and proves an is
   for (const caPath of harness.caPaths) {
     await assert.rejects(lstat(caPath), { code: "ENOENT" });
   }
+});
+
+test("createBackupAndRestoreEvidence records an exact empty target-schema baseline", async (t) => {
+  const fixture = await backupFixture();
+  t.after(() => rm(fixture.directory, { recursive: true, force: true }));
+  const emptyManifest = {
+    manifestSha256: `0x${"e".repeat(64)}`,
+    tableCount: 0,
+    rowCount: 0,
+  };
+  const harness = backupDependencies(fixture, {
+    captureDatabaseManifest: async () => emptyManifest,
+  });
+  const result = await createBackupAndRestoreEvidence({
+    ...fixture.input,
+    dependencies: harness.dependencies,
+  });
+
+  assert.equal(result.status, "created");
+  assert.equal(result.evidence.tableCount, 0);
+  assert.equal(result.evidence.rowCount, 0);
+  assert.equal(result.evidence.backup.format, "empty-target-schemas-v1");
+  assert.equal(
+    harness.calls.some(
+      ({ binary, args }) => binary === "pg_dump" && !args.includes("--version"),
+    ),
+    false,
+  );
+  assert.equal(
+    harness.calls.some(({ binary }) => binary === "pg_restore" || binary === "psql"),
+    false,
+  );
 });
 
 test("createBackupAndRestoreEvidence is idempotent only for matching private evidence", async (t) => {
