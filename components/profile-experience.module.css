@@ -320,7 +320,7 @@
 }
 
 .connectMark {
-  filter: drop-shadow(0 14px 30px rgba(142, 68, 109, 0.1));
+  filter: drop-shadow(0 14px 30px rgba(239, 130, 177, 0.11));
   height: 82px;
   margin-bottom: 24px;
   object-fit: contain;

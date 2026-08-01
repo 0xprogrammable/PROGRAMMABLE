@@ -408,7 +408,7 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .explore-brand-logo {
-  filter: drop-shadow(0 15px 34px rgba(142, 68, 109, 0.09));
+  filter: drop-shadow(0 15px 34px rgba(239, 130, 177, 0.1));
   height: clamp(144px, 11vw, 166px);
   width: clamp(144px, 11vw, 166px);
 }
