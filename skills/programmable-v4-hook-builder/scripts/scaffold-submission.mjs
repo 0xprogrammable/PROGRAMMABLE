@@ -104,7 +104,7 @@ function preloadPackage(id, name) {
   if (!submission || typeof submission !== "object" || Array.isArray(submission) || !submission.model || typeof submission.model !== "object") {
     throw new Error("submission.example.json is not a valid submission template");
   }
-  submission.$schema = "urn:programmable:v4-hook-submission:1.2.0";
+  submission.$schema = "urn:programmable:v4-hook-submission:1.3.0";
   submission.model.id = id;
   submission.model.name = name;
   rendered.set("submission.json", `${JSON.stringify(submission, null, 2)}\n`);

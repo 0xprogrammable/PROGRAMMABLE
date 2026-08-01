@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://programmable.money/schemas/public-pr-application-v1.json",
+  "$id": "https://programmable.money/schemas/public-pr-application-v2.json",
   "title": "Programmable Public GitHub PR Builder Beta application manifest",
   "description": "Closed public-beta manifest. Project source remains in the exact public GitHub revisions declared here; the central pull request contains only this manifest and its bounded review package.",
   "type": "object",
@@ -15,12 +15,13 @@
     "builder",
     "source",
     "companionClosure",
+    "programmableFee",
     "reviewPackage",
     "declarations"
   ],
   "properties": {
     "schemaVersion": {
-      "const": 1
+      "const": 2
     },
     "applicationId": {
       "type": "string",
@@ -89,6 +90,9 @@
         "$ref": "#/$defs/companionClosureReceipt"
       }
     },
+    "programmableFee": {
+      "$ref": "#/$defs/programmableFee"
+    },
     "reviewPackage": {
       "type": "array",
       "minItems": 5,
@@ -138,6 +142,355 @@
     }
   },
   "$defs": {
+    "programmableFee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policyId",
+        "policyVersion",
+        "poolScope",
+        "rates",
+        "basis",
+        "ownership",
+        "collection",
+        "accounting",
+        "evidence",
+        "submissionBinding"
+      ],
+      "properties": {
+        "policyId": {
+          "const": "programmable-volume-fee-v1"
+        },
+        "policyVersion": {
+          "const": "1.0.0"
+        },
+        "poolScope": {
+          "const": "canonical-launch-pool-key"
+        },
+        "rates": {
+          "$ref": "#/$defs/programmableFeeRates"
+        },
+        "basis": {
+          "$ref": "#/$defs/programmableFeeBasis"
+        },
+        "ownership": {
+          "$ref": "#/$defs/programmableFeeOwnership"
+        },
+        "collection": {
+          "$ref": "#/$defs/programmableFeeCollection"
+        },
+        "accounting": {
+          "$ref": "#/$defs/programmableFeeAccounting"
+        },
+        "evidence": {
+          "$ref": "#/$defs/programmableFeeEvidence"
+        },
+        "submissionBinding": {
+          "$ref": "#/$defs/programmableFeeSubmissionBinding"
+        }
+      }
+    },
+    "programmableFeeRates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "selectedHundredthsOfBip",
+        "minimumEffectiveHundredthsOfBip",
+        "effectiveHundredthsOfBip",
+        "platformHundredthsOfBip",
+        "projectHundredthsOfBip",
+        "formula",
+        "lpFeeExcluded"
+      ],
+      "properties": {
+        "unit": {
+          "const": "hundredths-of-bip"
+        },
+        "selectedHundredthsOfBip": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 999999
+        },
+        "minimumEffectiveHundredthsOfBip": {
+          "const": 1000
+        },
+        "effectiveHundredthsOfBip": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1000,
+          "maximum": 999999
+        },
+        "platformHundredthsOfBip": {
+          "const": 1000
+        },
+        "projectHundredthsOfBip": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 998999
+        },
+        "formula": {
+          "const": "effective=max(selected,1000);platform=1000;project=effective-1000"
+        },
+        "lpFeeExcluded": {
+          "const": true
+        }
+      }
+    },
+    "programmableFeeBasis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "volume",
+        "quoteAsset"
+      ],
+      "properties": {
+        "volume": {
+          "const": "gross-quote-side-swap-volume"
+        },
+        "quoteAsset": {
+          "const": "canonical-pool-quote-asset"
+        }
+      }
+    },
+    "programmableFeeOwnership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "immutable",
+        "claimAuthority",
+        "claimAvailability",
+        "claimDestinationPolicy",
+        "storedMutableRecipient",
+        "builderCanMutate",
+        "projectCanMutate",
+        "administratorCanMutate"
+      ],
+      "properties": {
+        "owner": {
+          "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+        },
+        "immutable": {
+          "const": true
+        },
+        "claimAuthority": {
+          "const": "owner-only"
+        },
+        "claimAvailability": {
+          "const": "anytime"
+        },
+        "claimDestinationPolicy": {
+          "const": "owner-or-owner-selected-per-claim"
+        },
+        "storedMutableRecipient": {
+          "const": false
+        },
+        "builderCanMutate": {
+          "const": false
+        },
+        "projectCanMutate": {
+          "const": false
+        },
+        "administratorCanMutate": {
+          "const": false
+        }
+      }
+    },
+    "programmableFeeCollection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "integration",
+        "enforcement",
+        "hookFeeMechanismBinding",
+        "supportedSwapModes",
+        "swapModePaths",
+        "selfCallPolicy"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending-hook-integration",
+            "implemented"
+          ]
+        },
+        "integration": {
+          "const": "canonical-pool-hook"
+        },
+        "enforcement": {
+          "const": "non-bypassable"
+        },
+        "hookFeeMechanismBinding": {
+          "const": "hook.feeMechanism"
+        },
+        "supportedSwapModes": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "zeroForOne-exactInput",
+              "zeroForOne-exactOutput",
+              "oneForZero-exactInput",
+              "oneForZero-exactOutput"
+            ]
+          }
+        },
+        "swapModePaths": {
+          "$ref": "#/$defs/programmableFeeSwapModePaths"
+        },
+        "selfCallPolicy": {
+          "enum": [
+            "same-pool-swap-forbidden",
+            "same-pool-swap-fee-enforced-internally"
+          ]
+        }
+      }
+    },
+    "programmableFeeSwapModePaths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zeroForOneExactInput",
+        "zeroForOneExactOutput",
+        "oneForZeroExactInput",
+        "oneForZeroExactOutput"
+      ],
+      "properties": {
+        "zeroForOneExactInput": {
+          "enum": [
+            "before-swap-return-delta",
+            "after-swap-return-delta",
+            null
+          ]
+        },
+        "zeroForOneExactOutput": {
+          "enum": [
+            "before-swap-return-delta",
+            "after-swap-return-delta",
+            null
+          ]
+        },
+        "oneForZeroExactInput": {
+          "enum": [
+            "before-swap-return-delta",
+            "after-swap-return-delta",
+            null
+          ]
+        },
+        "oneForZeroExactOutput": {
+          "enum": [
+            "before-swap-return-delta",
+            "after-swap-return-delta",
+            null
+          ]
+        }
+      }
+    },
+    "programmableFeeAccounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accrualMode",
+        "liabilityKeyDimensions",
+        "crossPoolNetting",
+        "valueFlowId",
+        "collectionEvent",
+        "claimEvent"
+      ],
+      "properties": {
+        "accrualMode": {
+          "const": "claimable-liability"
+        },
+        "liabilityKeyDimensions": {
+          "const": [
+            "poolId",
+            "currency",
+            "owner"
+          ]
+        },
+        "crossPoolNetting": {
+          "const": false
+        },
+        "valueFlowId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 80
+        },
+        "collectionEvent": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "claimEvent": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "programmableFeeEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourcePaths",
+        "testPaths"
+      ],
+      "properties": {
+        "sourcePaths": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/githubSource__RepositoryPath"
+          }
+        },
+        "testPaths": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/githubSource__RepositoryPath"
+          }
+        }
+      }
+    },
+    "programmableFeeSubmissionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/githubSource__RepositoryPath"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
     "companionClosureReceipt": {
       "type": "object",
       "additionalProperties": false,

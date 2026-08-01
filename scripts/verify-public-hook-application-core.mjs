@@ -23,8 +23,8 @@ import {
   verifyCompanionManifestV2Closure
 } from "../skills/programmable-v4-hook-builder/scripts/companion-manifest-contract.mjs";
 
-export const VALIDATOR_VERSION = "1.8.0";
-export const PUBLIC_APPLICATION_SCHEMA_ID = "https://programmable.money/schemas/public-pr-application-v1.json";
+export const VALIDATOR_VERSION = "2.0.0";
+export const PUBLIC_APPLICATION_SCHEMA_ID = "https://programmable.money/schemas/public-pr-application-v2.json";
 export const PUBLIC_BETA_DISCLAIMER =
   "Builder-declared compatibility evidence; not an audit, approval, deployment, Uniswap endorsement, or launch.";
 export const PUBLIC_INTAKE_STATES = Object.freeze(["prelaunch", "open", "paused-new", "paused-all"]);
@@ -139,6 +139,14 @@ const CANDIDATE_FETCH_FILE_SIZE_BYTES = 32 * 1024 * 1024;
 const CANDIDATE_FETCH_REPOSITORY_BYTES = 64 * 1024 * 1024;
 const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const PULL_REQUEST_NUMBER_PATTERN = /^[1-9][0-9]{0,19}$/u;
+const PROGRAMMABLE_FEE_OWNER = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
+const PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP = 1000;
+const PROGRAMMABLE_FEE_SWAP_MODES = Object.freeze([
+  "zeroForOne-exactInput",
+  "zeroForOne-exactOutput",
+  "oneForZero-exactInput",
+  "oneForZero-exactOutput"
+]);
 
 const DEFAULT_LIMITS = Object.freeze({
   maximumChangedFiles: 256,
@@ -1552,6 +1560,12 @@ export async function verifyPublicHookApplication({
     sourceObservation,
     blobObservations
   });
+  validateProgrammableFeeSubmissionObservation({
+    application,
+    evidenceIndex,
+    blobObservations,
+    limits
+  });
 
   return {
     schemaVersion: 1,
@@ -1817,7 +1831,9 @@ export function validatePublicApplicationPackageFiles({ applicationId, packageFi
   );
   const evidenceIndex = parseCanonicalJson(packageFiles.get("evidence-index.json"), "evidence-index.json", limits);
   const evidenceIds = validateEvidenceIndex(evidenceIndex, application, limits);
+  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application);
   validateCompatibilityReport(compatibility, application, evidenceIndex, evidenceIds, limits);
+  validateProgrammableFeeCompatibility(application, compatibility);
   validateReviewPackageHashes(application, packageFiles);
   const markdownSources = new Map([
     ["PROPOSAL.md", validateMarkdown(packageFiles.get("PROPOSAL.md"), "PROPOSAL.md", "# Proposal")],
@@ -2280,12 +2296,19 @@ function validateJsonTree(root, limits) {
 }
 
 function validateApplicationManifest(application, expectedApplicationId, limits) {
+  if (application?.schemaVersion !== 2) {
+    reject(
+      "PUBLIC_APPLICATION_CONTRACT_UNSUPPORTED",
+      "application.json must use the current public-pr-application-v2 contract with the mandatory Programmable fee projection."
+    );
+  }
   expectClosedObject(application, [
     "applicationId",
     "applicationRevision",
     "builder",
     "companionClosure",
     "declarations",
+    "programmableFee",
     "reviewPackage",
     "schemaVersion",
     "source",
@@ -2293,7 +2316,7 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
     "summary",
     "title"
   ], "application.json");
-  expectInteger(application.schemaVersion, 1, 1, "application.schemaVersion");
+  expectInteger(application.schemaVersion, 2, 2, "application.schemaVersion");
   expectPattern(application.applicationId, APPLICATION_ID_PATTERN, 80, "application.applicationId");
   if (application.applicationId !== expectedApplicationId) {
     reject("APPLICATION_ID_PATH_MISMATCH", "The manifest application id must equal its submissions directory.");
@@ -2321,6 +2344,13 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
   }
 
   validateApplicationSource(application.source);
+  validateProgrammableFeeProjection(application.programmableFee, application.source);
+  if (application.programmableFee.submissionBinding.path !== `submissions/${application.applicationId}/submission.json`) {
+    reject(
+      "PROGRAMMABLE_FEE_SOURCE_BINDING_INVALID",
+      "The fee projection must bind this application's canonical source submission.json path."
+    );
+  }
   let normalizedCompanionClosure;
   try {
     normalizedCompanionClosure = validateCompanionClosureReceipts(application.companionClosure, application.source);
@@ -2340,6 +2370,316 @@ function validateApplicationManifest(application, expectedApplicationId, limits)
     expectPattern(record.sha256, SHA256_PATTERN, 71, "reviewPackage.sha256");
     expectInteger(record.byteLength, 1, limits.maximumFileBytes[record.path], "reviewPackage.byteLength");
   });
+}
+
+function validateProgrammableFeeProjection(fee, source) {
+  const invalidFee = (message) => reject("PROGRAMMABLE_FEE_PROJECTION_INVALID", message);
+  const exact = (actual, expected, label) => {
+    if (canonicalJson(actual) !== canonicalJson(expected)) {
+      invalidFee(`${label} does not match the mandatory Programmable fee policy.`);
+    }
+  };
+
+  try {
+    expectClosedObject(fee, [
+      "accounting",
+      "basis",
+      "collection",
+      "evidence",
+      "ownership",
+      "policyId",
+      "policyVersion",
+      "poolScope",
+      "rates",
+      "submissionBinding"
+    ], "application.programmableFee");
+    expectClosedObject(fee.rates, [
+      "effectiveHundredthsOfBip",
+      "formula",
+      "lpFeeExcluded",
+      "minimumEffectiveHundredthsOfBip",
+      "platformHundredthsOfBip",
+      "projectHundredthsOfBip",
+      "selectedHundredthsOfBip",
+      "unit"
+    ], "application.programmableFee.rates");
+    expectClosedObject(fee.basis, ["quoteAsset", "volume"], "application.programmableFee.basis");
+    expectClosedObject(fee.ownership, [
+      "administratorCanMutate",
+      "builderCanMutate",
+      "claimAuthority",
+      "claimAvailability",
+      "claimDestinationPolicy",
+      "immutable",
+      "owner",
+      "projectCanMutate",
+      "storedMutableRecipient"
+    ], "application.programmableFee.ownership");
+    expectClosedObject(fee.collection, [
+      "enforcement",
+      "hookFeeMechanismBinding",
+      "integration",
+      "selfCallPolicy",
+      "status",
+      "supportedSwapModes",
+      "swapModePaths"
+    ], "application.programmableFee.collection");
+    expectClosedObject(fee.collection.swapModePaths, [
+      "oneForZeroExactInput",
+      "oneForZeroExactOutput",
+      "zeroForOneExactInput",
+      "zeroForOneExactOutput"
+    ], "application.programmableFee.collection.swapModePaths");
+    expectClosedObject(fee.accounting, [
+      "accrualMode",
+      "claimEvent",
+      "collectionEvent",
+      "crossPoolNetting",
+      "liabilityKeyDimensions",
+      "valueFlowId"
+    ], "application.programmableFee.accounting");
+    expectClosedObject(fee.evidence, ["sourcePaths", "testPaths"], "application.programmableFee.evidence");
+    expectClosedObject(fee.submissionBinding, ["path", "sha256"], "application.programmableFee.submissionBinding");
+  } catch (error) {
+    if (error instanceof PublicIntakeError) invalidFee(error.message);
+    throw error;
+  }
+
+  exact(fee.policyId, "programmable-volume-fee-v1", "Fee policy id");
+  exact(fee.policyVersion, "1.0.0", "Fee policy version");
+  exact(fee.poolScope, "canonical-launch-pool-key", "PoolKey scope");
+  exact(fee.rates.unit, "hundredths-of-bip", "Fee unit");
+  exact(
+    fee.rates.minimumEffectiveHundredthsOfBip,
+    PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP,
+    "Effective total fee floor"
+  );
+  exact(
+    fee.rates.platformHundredthsOfBip,
+    PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP,
+    "Programmable fee rate"
+  );
+  exact(
+    fee.rates.formula,
+    "effective=max(selected,1000);platform=1000;project=effective-1000",
+    "Fee allocation formula"
+  );
+  exact(fee.rates.lpFeeExcluded, true, "LP-fee exclusion");
+  exact(fee.basis.volume, "gross-quote-side-swap-volume", "Fee volume basis");
+  exact(fee.basis.quoteAsset, "canonical-pool-quote-asset", "Quote-asset basis");
+  exact(fee.ownership, {
+    owner: PROGRAMMABLE_FEE_OWNER,
+    immutable: true,
+    claimAuthority: "owner-only",
+    claimAvailability: "anytime",
+    claimDestinationPolicy: "owner-or-owner-selected-per-claim",
+    storedMutableRecipient: false,
+    builderCanMutate: false,
+    projectCanMutate: false,
+    administratorCanMutate: false
+  }, "Fee ownership and claim authority");
+  exact(fee.collection.integration, "canonical-pool-hook", "Collection integration");
+  exact(fee.collection.enforcement, "non-bypassable", "Collection enforcement");
+  exact(fee.collection.hookFeeMechanismBinding, "hook.feeMechanism", "Hook fee binding");
+  if (!new Set([
+    "same-pool-swap-forbidden",
+    "same-pool-swap-fee-enforced-internally"
+  ]).has(fee.collection.selfCallPolicy)) {
+    invalidFee("Same-pool self-swaps must be forbidden or fee-enforced internally.");
+  }
+  exact(fee.accounting.accrualMode, "claimable-liability", "Fee accrual mode");
+  exact(fee.accounting.liabilityKeyDimensions, ["poolId", "currency", "owner"], "Liability-key dimensions");
+  exact(fee.accounting.crossPoolNetting, false, "Cross-pool netting policy");
+  if (!isCanonicalGitHubRepositoryPathV1(fee.submissionBinding.path)) {
+    invalidFee("The exact submission binding path is not a canonical repository path.");
+  }
+  if (!SHA256_PATTERN.test(fee.submissionBinding.sha256 ?? "")) {
+    invalidFee("The exact submission binding must include a lowercase SHA-256 digest.");
+  }
+  if (!source.primary.sourcePaths?.includes(fee.submissionBinding.path)) {
+    invalidFee("The exact submission binding must be declared in primary.sourcePaths.");
+  }
+
+  const selected = fee.rates.selectedHundredthsOfBip;
+  const effective = fee.rates.effectiveHundredthsOfBip;
+  const project = fee.rates.projectHundredthsOfBip;
+  if (selected === null) {
+    if (effective !== null || project !== null) {
+      invalidFee("Unresolved selected fees must keep effective and project fee projections unresolved.");
+    }
+  } else {
+    if (!Number.isInteger(selected) || selected < 0 || selected > 999_999) {
+      invalidFee("The selected total fee must be an integer in hundredths of a basis point.");
+    }
+    const expectedEffective = Math.max(selected, PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP);
+    if (effective !== expectedEffective || project !== expectedEffective - PROGRAMMABLE_FEE_RATE_HUNDREDTHS_OF_BIP) {
+      invalidFee("Effective and project fees must be derived from max(selected, 1000) without adding the platform fee twice.");
+    }
+  }
+
+  if (!new Set(["pending-hook-integration", "implemented"]).has(fee.collection.status)) {
+    invalidFee("Collection status must identify a pending or implemented canonical PoolKey integration.");
+  }
+  const implemented = fee.collection.status === "implemented";
+  const expectedModes = implemented ? PROGRAMMABLE_FEE_SWAP_MODES : [];
+  exact(fee.collection.supportedSwapModes, expectedModes, "Covered swap modes");
+  const swapModePathValues = Object.values(fee.collection.swapModePaths);
+  if (implemented) {
+    if (swapModePathValues.some((value) => !new Set([
+      "before-swap-return-delta",
+      "after-swap-return-delta"
+    ]).has(value))) {
+      invalidFee("Every implemented swap mode must bind its exact PoolManager return-delta collection path.");
+    }
+  } else if (swapModePathValues.some((value) => value !== null)) {
+    invalidFee("Swap-mode collection paths must remain null while hook integration is pending.");
+  }
+
+  const nullableBindings = [
+    [fee.accounting.valueFlowId, "Value-flow binding"],
+    [fee.accounting.collectionEvent, "Collection-event binding"],
+    [fee.accounting.claimEvent, "Claim-event binding"]
+  ];
+  for (const [value, label] of nullableBindings) {
+    if (implemented) {
+      if (typeof value !== "string" || value.length < 1 || value.length > 500 || CONTROL_OR_BIDI_PATTERN.test(value)) {
+        invalidFee(`${label} is required for an implemented fee path.`);
+      }
+    } else if (value !== null) {
+      invalidFee(`${label} must remain null while hook integration is pending.`);
+    }
+  }
+
+  const boundSourcePaths = new Set();
+  for (const repository of [source.primary, ...source.companions]) {
+    for (const entryPath of repository.sourcePaths ?? []) boundSourcePaths.add(entryPath);
+  }
+  for (const [paths, label] of [
+    [fee.evidence.sourcePaths, "Fee source paths"],
+    [fee.evidence.testPaths, "Fee test paths"]
+  ]) {
+    if (!Array.isArray(paths) || paths.length > 64 || (implemented && paths.length === 0)) {
+      invalidFee(`${label} must be bounded and non-empty for an implemented fee path.`);
+    }
+    let previous = null;
+    for (const entryPath of paths) {
+      if (!isCanonicalGitHubRepositoryPathV1(entryPath) || !boundSourcePaths.has(entryPath)) {
+        invalidFee(`${label} must bind repository paths from an exact declared GitHub source revision.`);
+      }
+      if (previous !== null && compareUtf8(previous, entryPath) >= 0) {
+        invalidFee(`${label} must be unique and sorted canonically.`);
+      }
+      previous = entryPath;
+    }
+    if (!implemented && paths.length !== 0) {
+      invalidFee(`${label} must remain empty while hook integration is pending.`);
+    }
+  }
+}
+
+function validateProgrammableFeeCompatibility(application, compatibility) {
+  if (
+    application.programmableFee.collection.status !== "implemented"
+    && compatibility.result === "prototype-ready"
+  ) {
+    reject(
+      "PROGRAMMABLE_FEE_READINESS_INVALID",
+      "A pending Programmable fee integration cannot be projected as prototype-ready."
+    );
+  }
+}
+
+function validateProgrammableFeeSubmissionEvidence(evidenceIndex, application) {
+  const records = evidenceIndex.evidence.filter(({ id }) => id === "zz-programmable-fee-submission");
+  if (records.length !== 1) {
+    reject(
+      "PROGRAMMABLE_FEE_SOURCE_BINDING_MISSING",
+      "The evidence index must contain one exact submission.json binding for trusted fee-policy recomputation."
+    );
+  }
+  const [record] = records;
+  const expectedPath = application.programmableFee.submissionBinding.path;
+  const observedPath = validateGitHubEvidenceUrl(record.url, "programmable fee submission evidence", application.source.primary) === "blob"
+    ? evidenceBlobPath(record.url, application.source.primary)
+    : null;
+  if (
+    observedPath !== expectedPath
+    || record.sha256 !== application.programmableFee.submissionBinding.sha256
+    || record.kind !== "static-analysis"
+    || record.status !== "passed"
+  ) {
+    reject(
+      "PROGRAMMABLE_FEE_SOURCE_BINDING_INVALID",
+      "The mandatory fee projection must bind the exact primary-source submission.json bytes."
+    );
+  }
+}
+
+function validateProgrammableFeeSubmissionObservation({ application, evidenceIndex, blobObservations, limits }) {
+  validateProgrammableFeeSubmissionEvidence(evidenceIndex, application);
+  const observation = blobObservations.find(({ id }) => id === "zz-programmable-fee-submission");
+  if (!observation || !Buffer.isBuffer(observation.bytes)) {
+    systemBlocked(
+      "PROGRAMMABLE_FEE_SOURCE_OBSERVATION_MISSING",
+      "Trusted intake did not receive the exact submission.json bytes needed to recompute the fee projection."
+    );
+  }
+  let source;
+  let submission;
+  try {
+    source = UTF8_DECODER.decode(observation.bytes);
+    // The lossless parser rejects duplicate keys and oversized numeric tokens;
+    // the ordinary parse then exposes schema-bounded fee integers for arithmetic.
+    parseBoundedLosslessJson(source);
+    submission = JSON.parse(source);
+    validateJsonTree(submission, limits);
+  } catch {
+    reject(
+      "PROGRAMMABLE_FEE_SOURCE_SUBMISSION_INVALID",
+      "The exact source-bound submission.json is not bounded lossless JSON."
+    );
+  }
+  if (
+    !isPlainObject(submission)
+    || submission.standardVersion !== "1.3.0"
+    || submission.schemaVersion !== 1
+    || submission.model?.id !== application.applicationId
+    || !isPlainObject(submission.programmableFee)
+  ) {
+    reject(
+      "PROGRAMMABLE_FEE_SOURCE_SUBMISSION_UNSUPPORTED",
+      "The exact source submission must use the current 1.3.0 contract and match the application id."
+    );
+  }
+  const sourceFeeKeys = Object.keys(submission.programmableFee).sort(compareUtf8);
+  const expectedSourceFeeKeys = [
+    "accounting",
+    "basis",
+    "collection",
+    "evidence",
+    "ownership",
+    "policyId",
+    "policyVersion",
+    "poolScope",
+    "rates"
+  ].sort(compareUtf8);
+  if (!arraysEqual(sourceFeeKeys, expectedSourceFeeKeys)) {
+    reject(
+      "PROGRAMMABLE_FEE_SOURCE_SUBMISSION_UNSUPPORTED",
+      "The source programmableFee record is not closed under the current 1.3.0 contract."
+    );
+  }
+  const recomputed = {
+    ...submission.programmableFee,
+    submissionBinding: application.programmableFee.submissionBinding
+  };
+  validateProgrammableFeeProjection(recomputed, application.source);
+  if (canonicalJson(recomputed) !== canonicalJson(application.programmableFee)) {
+    reject(
+      "PROGRAMMABLE_FEE_SOURCE_PROJECTION_MISMATCH",
+      "application.programmableFee must equal the fee policy recomputed from the exact source-bound submission.json."
+    );
+  }
 }
 
 function validateEvidenceIndex(index, application, limits) {

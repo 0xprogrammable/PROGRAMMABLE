@@ -66,6 +66,27 @@ export function buildCentralApplicationPackage({
   }
 
   const primary = source?.primary;
+  const submissionRepositoryPath = `${packagePath}/submission.json`;
+  const committedSubmission = headFiles.get(submissionRepositoryPath);
+  if (!Buffer.isBuffer(committedSubmission)) {
+    invalid(`${submissionRepositoryPath} is not bound to HEAD`);
+  }
+  if (!primary?.sourcePaths?.includes(submissionRepositoryPath)) {
+    invalid("submission.json must be declared in primary.sourcePaths");
+  }
+  let committedSubmissionDocument;
+  try {
+    committedSubmissionDocument = JSON.parse(decoder.decode(committedSubmission));
+  } catch {
+    invalid("the exact committed submission.json cannot be projected");
+  }
+  if (
+    committedSubmissionDocument?.standardVersion !== "1.3.0"
+    || committedSubmissionDocument?.model?.id !== applicationId
+    || canonicalJson(committedSubmissionDocument?.programmableFee) !== canonicalJson(submission.programmableFee)
+  ) {
+    invalid("the exact committed submission.json does not match the current mandatory fee projection");
+  }
   let normalizedCompanionClosure;
   try {
     normalizedCompanionClosure = validateCompanionClosureReceipts(companionClosure, source);
@@ -131,6 +152,14 @@ export function buildCentralApplicationPackage({
         scope: `Deterministic builder compatibility preflight for the exact committed source revision; central result ${result}.`,
         url: `${primary.repositoryUri}/blob/${primary.revisionObjectId}/${encodeRepositoryPath(compatibilityRepositoryPath)}`,
         sha256: digest(committedCompatibility)
+      },
+      {
+        id: "zz-programmable-fee-submission",
+        kind: "static-analysis",
+        status: "passed",
+        scope: "Exact builder submission used by trusted intake to recompute the mandatory Programmable fee projection.",
+        url: `${primary.repositoryUri}/blob/${primary.revisionObjectId}/${encodeRepositoryPath(submissionRepositoryPath)}`,
+        sha256: digest(committedSubmission)
       }
     ]
   };
@@ -138,7 +167,7 @@ export function buildCentralApplicationPackage({
   files.set("evidence-index.json", jsonBytes(evidenceIndex));
 
   const application = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     applicationId,
     applicationRevision,
     stage: submission.stage,
@@ -151,6 +180,10 @@ export function buildCentralApplicationPackage({
     },
     source,
     companionClosure: normalizedCompanionClosure,
+    programmableFee: projectProgrammableFee(submission.programmableFee, {
+      path: submissionRepositoryPath,
+      sha256: digest(committedSubmission)
+    }),
     reviewPackage: REVIEW_FILES.map((name) => fileRecord(name, files.get(name))),
     declarations: {
       publicInformationAcknowledged: true,
@@ -178,9 +211,74 @@ export function buildCentralApplicationPackage({
     fileOrder: [...CENTRAL_APPLICATION_FILES],
     encoding: "utf8",
     generated: true,
-    validatorContract: "public-pr-application-v1",
+    validatorContract: "public-pr-application-v2",
     files: records
   };
+}
+
+function projectProgrammableFee(fee, submissionBinding) {
+  if (!isPlainObject(fee)) invalid("the mandatory Programmable fee policy cannot be projected");
+  const projected = {
+    policyId: fee.policyId,
+    policyVersion: fee.policyVersion,
+    poolScope: fee.poolScope,
+    rates: {
+      unit: fee.rates?.unit,
+      selectedHundredthsOfBip: fee.rates?.selectedHundredthsOfBip,
+      minimumEffectiveHundredthsOfBip: fee.rates?.minimumEffectiveHundredthsOfBip,
+      effectiveHundredthsOfBip: fee.rates?.effectiveHundredthsOfBip,
+      platformHundredthsOfBip: fee.rates?.platformHundredthsOfBip,
+      projectHundredthsOfBip: fee.rates?.projectHundredthsOfBip,
+      formula: fee.rates?.formula,
+      lpFeeExcluded: fee.rates?.lpFeeExcluded
+    },
+    basis: {
+      volume: fee.basis?.volume,
+      quoteAsset: fee.basis?.quoteAsset
+    },
+    ownership: {
+      owner: fee.ownership?.owner,
+      immutable: fee.ownership?.immutable,
+      claimAuthority: fee.ownership?.claimAuthority,
+      claimAvailability: fee.ownership?.claimAvailability,
+      claimDestinationPolicy: fee.ownership?.claimDestinationPolicy,
+      storedMutableRecipient: fee.ownership?.storedMutableRecipient,
+      builderCanMutate: fee.ownership?.builderCanMutate,
+      projectCanMutate: fee.ownership?.projectCanMutate,
+      administratorCanMutate: fee.ownership?.administratorCanMutate
+    },
+    collection: {
+      status: fee.collection?.status,
+      integration: fee.collection?.integration,
+      enforcement: fee.collection?.enforcement,
+      hookFeeMechanismBinding: fee.collection?.hookFeeMechanismBinding,
+      supportedSwapModes: [...(fee.collection?.supportedSwapModes ?? [])],
+      swapModePaths: {
+        zeroForOneExactInput: fee.collection?.swapModePaths?.zeroForOneExactInput,
+        zeroForOneExactOutput: fee.collection?.swapModePaths?.zeroForOneExactOutput,
+        oneForZeroExactInput: fee.collection?.swapModePaths?.oneForZeroExactInput,
+        oneForZeroExactOutput: fee.collection?.swapModePaths?.oneForZeroExactOutput
+      },
+      selfCallPolicy: fee.collection?.selfCallPolicy
+    },
+    accounting: {
+      accrualMode: fee.accounting?.accrualMode,
+      liabilityKeyDimensions: [...(fee.accounting?.liabilityKeyDimensions ?? [])],
+      crossPoolNetting: fee.accounting?.crossPoolNetting,
+      valueFlowId: fee.accounting?.valueFlowId,
+      collectionEvent: fee.accounting?.collectionEvent,
+      claimEvent: fee.accounting?.claimEvent
+    },
+    evidence: {
+      sourcePaths: [...(fee.evidence?.sourcePaths ?? [])],
+      testPaths: [...(fee.evidence?.testPaths ?? [])]
+    },
+    submissionBinding
+  };
+  if (projected.policyId !== "programmable-volume-fee-v1") {
+    invalid("the central application requires Programmable volume fee policy v1");
+  }
+  return projected;
 }
 
 function additionalReviewTargetClosureProjection({ localCompatibility, reviewTarget, stage }) {

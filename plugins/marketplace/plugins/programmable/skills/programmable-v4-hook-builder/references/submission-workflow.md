@@ -14,14 +14,19 @@ current Programmable launch integration remains Ethereum Mainnet-only, so every 
 separate release gate and cannot claim current platform launchability. Exact Base or Unichain official deployment
 records remain a runtime-unverified reference tier, not Programmable-tested deployment evidence.
 
-Submission standard `1.2.0` adds the open project-surface and capability graph. It preserves unfamiliar games, maps,
+Submission standard `1.3.0` adds the mandatory Programmable volume-fee record and retains the open project-surface and capability graph. It preserves unfamiliar games, maps,
 services, databases, data sources, keepers, claims and later kinds for architecture review while deriving non-bypassable
 security profiles from explicit triggers. It also separates a signed offchain data source from an optional onchain
-oracle verifier. The same version adds explicit `official-launchpad` and `model-specific-no-hook` architecture paths
-plus structured transfer-tax, automatic-liquidity, provider-limit and test declarations. A `1.1.0` submission is not
+oracle verifier. It retains explicit `official-launchpad` and `model-specific-no-hook` proposal paths plus structured
+transfer-tax, automatic-liquidity, provider-limit and test declarations. A `1.2.0` or older submission is not
 silently reinterpreted. Regenerate it from the current template; review every surface, capability, exposure, path,
 profile, no-hook route, target chain, network slug, dependency and deployment trust tier; then commit the fresh report
 and gate-status authority digests.
+
+Every new launch application declares the root `programmableFee` object from
+[programmable-fee-policy.md](programmable-fee-policy.md). Every idea remains submit-able, but no-hook, router-only,
+LP-fee-only, and transfer-tax-only enforcement stays architecture- or changes-required. A simple launch implements the
+standard Programmable fee-hook profile; a custom project integrates the policy into its single hook. Both require exact source, tests, and maintainer review.
 
 ## Stages
 
@@ -40,8 +45,8 @@ The builder repository contains:
 No implementation language is required at proposal stage. The proposal must still resolve the user outcome, project
 surfaces, value flow, canonical PoolKey, whether a custom hook is used, authorities, dependencies, hard failure behavior,
 and expected evidence. Hook callbacks, a permission mask, and CREATE2 planning apply only when `hook.used` is true. A
-no-hook proposal selects the safer official Launchpad default or the model-specific route; the latter completes its own
-token mechanics, fee bounds, recipients, authority, liquidity custody and exit, provider limits, and test scenarios.
+no-hook proposal may select its applicable route and keep `programmableFee.collection.status` at
+`pending-hook-integration`, but it cannot claim prototype or launch readiness.
 
 ### Prototype
 
@@ -54,10 +59,10 @@ Adds:
 - Pinned dependencies, languages, compilers, runtimes, and build configuration that the implementation actually uses
 - `TEST_PLAN.md` with actual results separated from planned checks
 
-Solidity and Foundry evidence is required only when Solidity is declared. Callback authentication, hook permission,
-PoolManager-delta, and CREATE2 evidence is required only when a custom hook is implemented. A no-hook ordinary launch
-does not need placeholder Solidity. Apps, games, and services instead provide the relevant source closure, build and
-test evidence, trust boundaries, failure behavior, and integration evidence for their declared surfaces.
+Solidity and Foundry evidence is required when Solidity is declared. A platform-launch-ready prototype additionally
+requires exact source and tests for either a project-specific standard-profile hook or its integrated custom hook, including
+callback authentication, permissions, fee accounting, owner-only claims, and CREATE2 evidence. Apps, games, and
+services also provide the relevant source closure, build and test evidence for their declared surfaces.
 
 A prototype provides implementation evidence for review. It is not accepted, audited, approved for deployment, or
 available by default.
@@ -69,6 +74,8 @@ candidate after confirming:
 
 - Complete declared source and supported dependency closure
 - All capability-triggered tests and security documents
+- Mandatory fee source and tests proving the floor, non-additive split, four swap modes, canonical-pool basis,
+  immutable owner-only claims, no mutable recipient, no cross-pool netting, and non-bypassability
 - Static-analysis dispositions
 - Gas and size evidence for deployed contracts
 - Pinned-chain lifecycle and current-head smoke evidence for surfaces that touch chain state

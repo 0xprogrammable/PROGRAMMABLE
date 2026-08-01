@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:programmable:v4-hook-submission:1.2.0",
+  "$id": "urn:programmable:v4-hook-submission:1.3.0",
   "title": "Programmable v4 model submission preflight",
   "type": "object",
   "additionalProperties": false,
@@ -15,6 +15,7 @@
     "assets",
     "launchLifecycle",
     "pool",
+    "programmableFee",
     "hook",
     "noHookArchitecture",
     "valueFlows",
@@ -33,9 +34,9 @@
     "unresolved"
   ],
   "properties": {
-    "$schema": { "const": "urn:programmable:v4-hook-submission:1.2.0" },
+    "$schema": { "const": "urn:programmable:v4-hook-submission:1.3.0" },
     "schemaVersion": { "const": 1 },
-    "standardVersion": { "const": "1.2.0" },
+    "standardVersion": { "const": "1.3.0" },
     "stage": { "enum": ["proposal", "prototype"] },
     "model": {
       "type": "object",
@@ -162,7 +163,7 @@
         "solidityVersion": { "type": ["string", "null"], "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
         "evmVersion": { "type": ["string", "null"], "enum": ["cancun", null] },
         "dependencyBaseline": { "enum": ["programmable-tested", "model-specific-pinned", "model-specific-reviewed", null] },
-        "officialLaunchProfileId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "description": "Exact profile id from the committed official launchpad deployment reference. Required for the safer official-launchpad no-hook route and null for a model-specific no-hook architecture." }
+        "officialLaunchProfileId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "description": "Exact profile id from the committed official launchpad deployment reference. A no-hook record is proposal-only under the mandatory Programmable fee policy and cannot become launch-ready until a non-bypassable fee hook is integrated." }
       }
     },
     "assets": {
@@ -293,6 +294,111 @@
         "alternativePools": { "type": ["string", "null"], "maxLength": 500 }
       }
     },
+    "programmableFee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyId", "policyVersion", "poolScope", "rates", "basis", "ownership", "collection", "accounting", "evidence"],
+      "properties": {
+        "policyId": { "const": "programmable-volume-fee-v1" },
+        "policyVersion": { "const": "1.0.0" },
+        "poolScope": { "const": "canonical-launch-pool-key" },
+        "rates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unit", "selectedHundredthsOfBip", "minimumEffectiveHundredthsOfBip", "effectiveHundredthsOfBip", "platformHundredthsOfBip", "projectHundredthsOfBip", "formula", "lpFeeExcluded"],
+          "properties": {
+            "unit": { "const": "hundredths-of-bip" },
+            "selectedHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 999999 },
+            "minimumEffectiveHundredthsOfBip": { "const": 1000 },
+            "effectiveHundredthsOfBip": { "type": ["integer", "null"], "minimum": 1000, "maximum": 999999 },
+            "platformHundredthsOfBip": { "const": 1000 },
+            "projectHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 998999 },
+            "formula": { "const": "effective=max(selected,1000);platform=1000;project=effective-1000" },
+            "lpFeeExcluded": { "const": true }
+          }
+        },
+        "basis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["volume", "quoteAsset"],
+          "properties": {
+            "volume": { "const": "gross-quote-side-swap-volume" },
+            "quoteAsset": { "const": "canonical-pool-quote-asset" }
+          }
+        },
+        "ownership": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["owner", "immutable", "claimAuthority", "claimAvailability", "claimDestinationPolicy", "storedMutableRecipient", "builderCanMutate", "projectCanMutate", "administratorCanMutate"],
+          "properties": {
+            "owner": { "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c" },
+            "immutable": { "const": true },
+            "claimAuthority": { "const": "owner-only" },
+            "claimAvailability": { "const": "anytime" },
+            "claimDestinationPolicy": { "const": "owner-or-owner-selected-per-claim" },
+            "storedMutableRecipient": { "const": false },
+            "builderCanMutate": { "const": false },
+            "projectCanMutate": { "const": false },
+            "administratorCanMutate": { "const": false }
+          }
+        },
+        "collection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "integration", "enforcement", "hookFeeMechanismBinding", "supportedSwapModes", "swapModePaths", "selfCallPolicy"],
+          "properties": {
+            "status": { "enum": ["pending-hook-integration", "implemented"] },
+            "integration": { "const": "canonical-pool-hook" },
+            "enforcement": { "const": "non-bypassable" },
+            "hookFeeMechanismBinding": { "const": "hook.feeMechanism" },
+            "supportedSwapModes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["zeroForOne-exactInput", "zeroForOne-exactOutput", "oneForZero-exactInput", "oneForZero-exactOutput"] }
+            },
+            "swapModePaths": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["zeroForOneExactInput", "zeroForOneExactOutput", "oneForZeroExactInput", "oneForZeroExactOutput"],
+              "properties": {
+                "zeroForOneExactInput": { "enum": ["before-swap-return-delta", "after-swap-return-delta", null] },
+                "zeroForOneExactOutput": { "enum": ["before-swap-return-delta", "after-swap-return-delta", null] },
+                "oneForZeroExactInput": { "enum": ["before-swap-return-delta", "after-swap-return-delta", null] },
+                "oneForZeroExactOutput": { "enum": ["before-swap-return-delta", "after-swap-return-delta", null] }
+              }
+            },
+            "selfCallPolicy": { "enum": ["same-pool-swap-forbidden", "same-pool-swap-fee-enforced-internally"] }
+          }
+        },
+        "accounting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["accrualMode", "liabilityKeyDimensions", "crossPoolNetting", "valueFlowId", "collectionEvent", "claimEvent"],
+          "properties": {
+            "accrualMode": { "const": "claimable-liability" },
+            "liabilityKeyDimensions": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": { "enum": ["poolId", "currency", "owner"] }
+            },
+            "crossPoolNetting": { "const": false },
+            "valueFlowId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+            "collectionEvent": { "type": ["string", "null"], "minLength": 10, "maxLength": 500 },
+            "claimEvent": { "type": ["string", "null"], "minLength": 10, "maxLength": 500 }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourcePaths", "testPaths"],
+          "properties": {
+            "sourcePaths": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+            "testPaths": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } }
+          }
+        }
+      }
+    },
     "hook": {
       "type": "object",
       "additionalProperties": false,
@@ -370,7 +476,7 @@
               }
             },
             "maximumHundredthsOfBip": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000000 },
-            "collectionPath": { "enum": ["before-swap-return-delta", "after-swap-return-delta", null] },
+            "collectionPath": { "enum": ["before-swap-return-delta", "after-swap-return-delta", "quadrant-dependent-swap-return-delta", null] },
             "collectionValueFlowId": { "type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
             "liabilityKeyDimensions": {
               "type": "array",
@@ -491,7 +597,7 @@
         { "type": "null" },
         { "$ref": "#/$defs/noHookArchitecture" }
       ],
-      "description": "Structured ordinary-token architecture used only when hook.used is false. The official launchpad remains the safer default; model-specific no-hook designs enter architecture review."
+      "description": "Structured proposal-only architecture used when hook.used is false. It may enter architecture review, but it is not prototype-ready or launch-ready under the mandatory Programmable fee policy until a non-bypassable canonical-pool fee hook is integrated."
     },
     "valueFlows": {
       "type": "array",

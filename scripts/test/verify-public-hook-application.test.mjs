@@ -49,7 +49,7 @@ const EVIDENCE_BYTES = Buffer.from("exact builder-owned compatibility evidence f
 const EVIDENCE_SHA256 = `sha256:${crypto.createHash("sha256").update(EVIDENCE_BYTES).digest("hex")}`;
 
 test("the frozen six-file package and public schema identity are exported", () => {
-  assert.equal(VALIDATOR_VERSION, "1.8.0");
+  assert.equal(VALIDATOR_VERSION, "2.0.0");
   assert.deepEqual(PUBLIC_APPLICATION_FILES, [
     "application.json",
     "PROPOSAL.md",
@@ -58,7 +58,7 @@ test("the frozen six-file package and public schema identity are exported", () =
     "compatibility-report.json",
     "evidence-index.json"
   ]);
-  assert.equal(PUBLIC_APPLICATION_SCHEMA_ID, "https://programmable.money/schemas/public-pr-application-v1.json");
+  assert.equal(PUBLIC_APPLICATION_SCHEMA_ID, "https://programmable.money/schemas/public-pr-application-v2.json");
   assert.deepEqual(PUBLIC_INTAKE_STATES, ["prelaunch", "open", "paused-new", "paused-all"]);
 });
 
@@ -84,6 +84,71 @@ test("pure package validation accepts a canonical hash-bound review package", ()
   assert.equal(result.application.applicationRevision, 1);
   assert.equal(result.compatibility.result, "architecture-review-required");
   assert.equal(result.evidenceIndex.attestation, "builder-declared-untrusted");
+});
+
+test("trusted package validation rejects legacy and malformed mandatory fee projections", () => {
+  const legacy = makePackage({ mutateApplication(application) {
+    application.schemaVersion = 1;
+    delete application.programmableFee;
+  } });
+  assert.throws(
+    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: legacy }),
+    hasCode("PUBLIC_APPLICATION_CONTRACT_UNSUPPORTED")
+  );
+
+  const cases = [
+    ["missing projection", (application) => { delete application.programmableFee; }, "OBJECT_NOT_CLOSED"],
+    ["wrong rate", (application) => { application.programmableFee.rates.platformHundredthsOfBip = 999; }],
+    ["wrong owner", (application) => { application.programmableFee.ownership.owner = "0x0000000000000000000000000000000000000001"; }],
+    ["mutable owner", (application) => { application.programmableFee.ownership.immutable = false; }],
+    ["delayed claim availability", (application) => { application.programmableFee.ownership.claimAvailability = "scheduled"; }],
+    ["builder mutation", (application) => { application.programmableFee.ownership.builderCanMutate = true; }],
+    ["bypassable collection", (application) => { application.programmableFee.collection.enforcement = "router-only"; }],
+    ["self-call bypass", (application) => { application.programmableFee.collection.selfCallPolicy = "callbacks-skipped"; }],
+    ["LP fee substitution", (application) => { application.programmableFee.rates.lpFeeExcluded = false; }],
+    ["automatic transfer instead of claimable accrual", (application) => { application.programmableFee.accounting.accrualMode = "automatic-transfer"; }]
+  ];
+  for (const [name, mutate, expectedCode = "PROGRAMMABLE_FEE_PROJECTION_INVALID"] of cases) {
+    const files = makePackage({ mutateApplication: mutate });
+    assert.throws(
+      () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: files }),
+      hasCode(expectedCode),
+      name
+    );
+  }
+
+  const unbound = makePackage({ mutateEvidence(index) {
+    index.evidence = index.evidence.filter(({ id }) => id !== "zz-programmable-fee-submission");
+  } });
+  assert.throws(
+    () => validatePublicApplicationPackageFiles({ applicationId: "example-hook", packageFiles: unbound }),
+    hasCode("PROGRAMMABLE_FEE_SOURCE_BINDING_MISSING")
+  );
+
+  const zeroSelected = makePackage({ mutateApplication(application) {
+    application.programmableFee.rates.selectedHundredthsOfBip = 0;
+    application.programmableFee.rates.effectiveHundredthsOfBip = 1000;
+    application.programmableFee.rates.projectHundredthsOfBip = 0;
+  } });
+  assert.doesNotThrow(() => validatePublicApplicationPackageFiles({
+    applicationId: "example-hook",
+    packageFiles: zeroSelected
+  }));
+});
+
+test("trusted intake recomputes the fee projection from exact source submission bytes", async (t) => {
+  const files = makePackage({ mutateApplication(application) {
+    application.programmableFee.rates.selectedHundredthsOfBip = 40000;
+    application.programmableFee.rates.effectiveHundredthsOfBip = 40000;
+    application.programmableFee.rates.projectHundredthsOfBip = 39000;
+  } });
+  const fixture = createRevisionPair(t);
+  writePackage(fixture.candidate, files);
+  const candidateCommit = commitAll(fixture.candidate, "forge fee projection");
+  await rejectsCode(
+    () => verifyPublicHookApplication(inputFor(fixture, candidateCommit)),
+    "PROGRAMMABLE_FEE_SOURCE_PROJECTION_MISMATCH"
+  );
 });
 
 test("a generated valid package matches the published application schema and review order contract", () => {
@@ -209,7 +274,7 @@ test("trusted intake independently recomputes an exact companion v2 receipt", as
   writePackage(fixture.candidate, makePackage({
     primary: closure.primary,
     mutateApplication(application) {
-      application.source = makeSourceRequest(closure.primary, [closure.companion]);
+      application.source = makeSourceRequest(closure.primary, [closure.companion], true);
       application.companionClosure = [closure.receipt];
     }
   }));
@@ -257,7 +322,7 @@ test("a handcrafted six-file PR cannot forge companion receipt facts", async (t)
       writePackage(fixture.candidate, makePackage({
         primary: closure.primary,
         mutateApplication(application) {
-          application.source = makeSourceRequest(closure.primary, [closure.companion]);
+          application.source = makeSourceRequest(closure.primary, [closure.companion], true);
           application.companionClosure = [receipt];
         }
       }));
@@ -1088,12 +1153,11 @@ test("trusted package paths accept NFC UTF-8 and spaces through 1024 bytes but r
   const exactBound = `z/${"x".repeat(1_022)}`;
   assert.equal(Buffer.byteLength(exactBound, "utf8"), 1_024);
   const accepted = makePackage({ mutateApplication: (application) => {
-    application.source.primary.sourcePaths = [
-      "compatibility-report.json",
+    application.source.primary.sourcePaths.push(
       "src/échange hook.sol",
-      "test/ExampleHook.t.sol",
       exactBound
-    ];
+    );
+    application.source.primary.sourcePaths.sort(compareUtf8);
   } });
   assert.doesNotThrow(() => validatePublicApplicationPackageFiles({
     applicationId: "example-hook",
@@ -1563,11 +1627,10 @@ test("rebinding the central package cannot make a false external blob digest pas
   const fixture = createRevisionPair(t);
   writePackage(fixture.candidate, files);
   const candidateCommit = commitAll(fixture.candidate, "false evidence digest");
-  const transport = makeEvidenceTransport();
   await rejectsCode(
     () => verifyPublicHookApplication({
       ...inputFor(fixture, candidateCommit),
-      resolveEvidence: (request) => resolvePublicApplicationEvidence(request, { transport })
+      resolveEvidence: exactEvidenceResolver
     }),
     "EVIDENCE_BLOB_DIGEST_MISMATCH"
   );
@@ -1830,13 +1893,13 @@ test("an existing application can update an exact companion authority without ch
     treeObjectId: "f".repeat(40)
   };
   writePackage(fixture.base, makePackage({ mutateApplication: (application) => {
-    application.source = makeSourceRequest(PRIMARY, [companionV1]);
+    application.source = makeSourceRequest(PRIMARY, [companionV1], true);
   } }));
   fixture.baseCommit = commitAll(fixture.base, "application revision one with companion");
   resetClone(fixture);
 
   const next = makePackage({ revision: 2, mutateApplication: (application) => {
-    application.source = makeSourceRequest(PRIMARY, [companionV2]);
+    application.source = makeSourceRequest(PRIMARY, [companionV2], true);
   } });
   const compatibility = JSON.parse(next.get("compatibility-report.json").toString("utf8"));
   compatibility.result = "changes-required";
@@ -2165,6 +2228,21 @@ function makePackage({
   mutateCompatibility = null,
   mutateEvidence = null
 } = {}) {
+  const submissionPath = `submissions/${applicationId}/submission.json`;
+  const feeSourcePath = "src/ProgrammableFeeHook.sol";
+  const feeTestPath = "test/ProgrammableFeeHook.t.sol";
+  primary = {
+    ...primary,
+    sourcePaths: [...new Set([
+      ...(primary.sourcePaths ?? []),
+      feeSourcePath,
+      feeTestPath,
+      submissionPath
+    ])].sort(compareUtf8)
+  };
+  const programmableFee = makeProgrammableFee({ feeSourcePath, feeTestPath });
+  const submissionBytes = sourceSubmissionBytes(applicationId, programmableFee);
+  const submissionSha256 = `sha256:${crypto.createHash("sha256").update(submissionBytes).digest("hex")}`;
   const files = new Map();
   const markdownDefaults = {
     "PROPOSAL.md": "# Proposal\nA bounded public application for an exact external GitHub source revision.\n",
@@ -2188,6 +2266,14 @@ function makePackage({
         scope: "Builder-owned unit checks for the exact declared source revision.",
         url: `${primary.repositoryUri}/blob/${primary.revisionObjectId}/compatibility-report.json`,
         sha256: EVIDENCE_SHA256
+      },
+      {
+        id: "zz-programmable-fee-submission",
+        kind: "static-analysis",
+        status: "passed",
+        scope: "Exact source submission used by trusted intake to recompute the mandatory Programmable fee projection.",
+        url: `${primary.repositoryUri}/blob/${primary.revisionObjectId}/${submissionPath}`,
+        sha256: submissionSha256
       }
     ]
   };
@@ -2204,7 +2290,7 @@ function makePackage({
   files.set("compatibility-report.json", jsonBytes(compatibility));
   files.set("evidence-index.json", jsonBytes(evidenceIndex));
   const application = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     applicationId,
     applicationRevision: revision,
     stage,
@@ -2217,6 +2303,13 @@ function makePackage({
     },
     source: makeSourceRequest(primary),
     companionClosure: [],
+    programmableFee: {
+      ...programmableFee,
+      submissionBinding: {
+        path: submissionPath,
+        sha256: submissionSha256
+      }
+    },
     reviewPackage: reviewRecords(files),
     declarations: {
       publicInformationAcknowledged: true,
@@ -2230,8 +2323,85 @@ function makePackage({
   return files;
 }
 
+function makeProgrammableFee({
+  feeSourcePath = "src/ProgrammableFeeHook.sol",
+  feeTestPath = "test/ProgrammableFeeHook.t.sol"
+} = {}) {
+  return {
+    policyId: "programmable-volume-fee-v1",
+    policyVersion: "1.0.0",
+    poolScope: "canonical-launch-pool-key",
+    rates: {
+      unit: "hundredths-of-bip",
+      selectedHundredthsOfBip: 30000,
+      minimumEffectiveHundredthsOfBip: 1000,
+      effectiveHundredthsOfBip: 30000,
+      platformHundredthsOfBip: 1000,
+      projectHundredthsOfBip: 29000,
+      formula: "effective=max(selected,1000);platform=1000;project=effective-1000",
+      lpFeeExcluded: true
+    },
+    basis: {
+      volume: "gross-quote-side-swap-volume",
+      quoteAsset: "canonical-pool-quote-asset"
+    },
+    ownership: {
+      owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      immutable: true,
+      claimAuthority: "owner-only",
+      claimAvailability: "anytime",
+      claimDestinationPolicy: "owner-or-owner-selected-per-claim",
+      storedMutableRecipient: false,
+      builderCanMutate: false,
+      projectCanMutate: false,
+      administratorCanMutate: false
+    },
+    collection: {
+      status: "implemented",
+      integration: "canonical-pool-hook",
+      enforcement: "non-bypassable",
+      hookFeeMechanismBinding: "hook.feeMechanism",
+      supportedSwapModes: [
+        "zeroForOne-exactInput",
+        "zeroForOne-exactOutput",
+        "oneForZero-exactInput",
+        "oneForZero-exactOutput"
+      ],
+      swapModePaths: {
+        zeroForOneExactInput: "after-swap-return-delta",
+        zeroForOneExactOutput: "after-swap-return-delta",
+        oneForZeroExactInput: "after-swap-return-delta",
+        oneForZeroExactOutput: "after-swap-return-delta"
+      },
+      selfCallPolicy: "same-pool-swap-forbidden"
+    },
+    accounting: {
+      accrualMode: "claimable-liability",
+      liabilityKeyDimensions: ["poolId", "currency", "owner"],
+      crossPoolNetting: false,
+      valueFlowId: "programmable-volume-fee",
+      collectionEvent: "ProgrammableFeeAccrued(bytes32,address,uint256)",
+      claimEvent: "ProgrammableFeeClaimed(address,address,uint256)"
+    },
+    evidence: {
+      sourcePaths: [feeSourcePath],
+      testPaths: [feeTestPath]
+    }
+  };
+}
+
+function sourceSubmissionBytes(applicationId, programmableFee) {
+  return Buffer.from(`${canonicalJson({
+    model: { id: applicationId },
+    programmableFee,
+    schemaVersion: 1,
+    standardVersion: "1.3.0"
+  })}\n`, "utf8");
+}
+
 function makePackageEvidence() {
-  return JSON.parse(makePackage().get("evidence-index.json").toString("utf8")).evidence;
+  return JSON.parse(makePackage().get("evidence-index.json").toString("utf8")).evidence
+    .filter(({ id }) => id === "unit-tests");
 }
 
 function makeActionPackage(declaredStatus) {
@@ -2390,7 +2560,7 @@ function sourceProjection(binding) {
   };
 }
 
-function makeSourceRequest(primary = PRIMARY, companions = []) {
+function makeSourceRequest(primary = PRIMARY, companions = [], bindProgrammableFee = false) {
   const cloneRepositoryRequest = (repository) => ({
     repositoryUri: repository.repositoryUri,
     numericRepositoryId: repository.numericRepositoryId,
@@ -2400,9 +2570,18 @@ function makeSourceRequest(primary = PRIMARY, companions = []) {
     contractPaths: [...(repository.contractPaths ?? [])],
     githubActionsRunIds: [...(repository.githubActionsRunIds ?? [])]
   });
+  const normalizedPrimary = bindProgrammableFee ? {
+    ...primary,
+    sourcePaths: [...new Set([
+      ...(primary.sourcePaths ?? []),
+      "src/ProgrammableFeeHook.sol",
+      "submissions/example-hook/submission.json",
+      "test/ProgrammableFeeHook.t.sol"
+    ])].sort(compareUtf8)
+  } : primary;
   return {
     schemaVersion: "1.0.0",
-    primary: cloneRepositoryRequest(primary),
+    primary: cloneRepositoryRequest(normalizedPrimary),
     companions: companions.map(cloneRepositoryRequest)
   };
 }
@@ -2602,11 +2781,18 @@ async function exactEvidenceResolver({ primary, evidence }) {
   return evidence.map((record) => {
     const prefix = `${primary.repositoryUri}/blob/${primary.revisionObjectId}/`;
     assert.ok(record.url.startsWith(prefix));
+    const evidencePath = decodeURIComponent(record.url.slice(prefix.length));
+    const bytes = record.id === "zz-programmable-fee-submission"
+      ? sourceSubmissionBytes(
+          /^submissions\/([^/]+)\/submission\.json$/u.exec(evidencePath)?.[1] ?? "",
+          makeProgrammableFee()
+        )
+      : EVIDENCE_BYTES;
     return {
       id: record.id,
-      path: decodeURIComponent(record.url.slice(prefix.length)),
-      blobObjectId: gitBlobObjectId(EVIDENCE_BYTES),
-      bytes: Buffer.from(EVIDENCE_BYTES)
+      path: evidencePath,
+      blobObjectId: gitBlobObjectId(bytes),
+      bytes: Buffer.from(bytes)
     };
   });
 }

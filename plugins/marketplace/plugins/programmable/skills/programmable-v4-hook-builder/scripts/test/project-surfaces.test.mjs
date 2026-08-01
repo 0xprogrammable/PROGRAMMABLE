@@ -42,7 +42,7 @@ test("unknown game capability remains reviewable while its security profiles sta
 
   const report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assertOnlyFeeBlocker(report);
   assert.ok(report.findings.some(({ code, severity }) => code === "PROJECT_CAPABILITY_KIND_REQUIRES_ARCHITECTURE_REVIEW" && severity === "warning"));
   assert.ok(report.requiredGates.some(({ id }) => id === "novel-project-capability-architecture-review"));
   assert.ok(report.requiredGates.some(({ id }) => id === "project-signature-domain-replay-and-expiry-tests"));
@@ -77,7 +77,7 @@ test("signed offchain source is complete without an onchain verifier", () => {
 
   const report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assertOnlyFeeBlocker(report);
   assert.equal(surface.signedDataSource.onchainVerifierSurfaceId, null);
   assert.equal(surface.onchainOracleVerifier.used, false);
 });
@@ -133,7 +133,7 @@ test("optional onchain verifier must be a separate reciprocal surface", () => {
   declareProjectRisk(submission, ["project-secret-boundary", "project-signatures"]);
 
   let report = analyzeSubmission(submission, { schema });
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assertOnlyFeeBlocker(report);
 
   source.signedDataSource.onchainVerifierSurfaceId = null;
   report = analyzeSubmission(submission, { schema });
@@ -162,7 +162,7 @@ test("novel map capability cannot hide PII or geolocation by changing its kind",
   declareProjectRisk(submission, ["project-pii-geolocation"]);
 
   let report = analyzeSubmission(submission, { schema });
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assertOnlyFeeBlocker(report);
   assert.ok(report.requiredGates.some(({ id }) => id === "project-pii-geolocation-privacy-review"));
 
   capability.securityTriggers.piiGeolocation = false;
@@ -240,13 +240,22 @@ test("dangerous novel capability cannot bypass risk tier or release gates", () =
   declareProjectRisk(submission, ["project-value-flow"]);
   report = analyzeSubmission(submission, { schema });
 
-  assert.equal(report.decision, "PROTOTYPE_READY", JSON.stringify(report.findings));
+  assertOnlyFeeBlocker(report);
   assert.equal(report.risk.effectiveTier, "high");
   assert.ok(report.requiredGates.some(({ id, stage }) => id === "independent-security-review-two" && stage === "release"));
 });
 
 function readyProposal() {
   return materializeExample({ skillRoot, exampleId: "dynamic-lp-fee", stepId: "fully-specified" });
+}
+
+function assertOnlyFeeBlocker(report) {
+  const blockers = report.findings.filter(({ severity }) => severity === "blocker");
+  assert.deepEqual(
+    blockers.map(({ code }) => code),
+    ["PROGRAMMABLE_FEE_INTEGRATION_PENDING"],
+    JSON.stringify(report.findings)
+  );
 }
 
 function declareProjectRisk(submission, triggers) {

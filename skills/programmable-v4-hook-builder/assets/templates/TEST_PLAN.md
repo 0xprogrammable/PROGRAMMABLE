@@ -41,15 +41,33 @@ tool result merely to fill a section.
 - For hook-owned charges, test the collection path, value-flow id, liability keys, event, recipient sums and bindings,
   duplicates, zero and failed recipients, claims, redirects, address mutation, and historic entitlements.
 
-## Ordinary no-hook path, when `hook.used` is false
+## Mandatory Programmable fee, for every launch-ready prototype
+
+- Prove `effective=max(selected,10 bps)`, with selected totals of zero, below the floor, at the floor, and above it.
+- Prove `3% selected = 0.1% Programmable + 2.9% project`, never an additive `3.1%`.
+- Test token-to-quote and quote-to-token, exact-input and exact-output, on the exact canonical PoolKey.
+- Prove the declared before-swap path when quote is specified and after-swap path when quote is unspecified. Test that
+  hook-initiated same-pool swaps revert or accrue the identical fee through a source-proven internal path.
+- Use actually executed gross quote-side volume after partial fills; test rounding, dust, reconciliation, and events.
+- Prove LP fees, token taxes, router paths, app payments, donations, and alternative pools neither satisfy nor bypass it.
+- Prove only immutable owner `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` can claim, anytime, to itself or an
+  owner-selected destination for that claim. Reject builder, project, administrator, recipient, arbitrary caller,
+  rescue, sweep, stored-recipient mutation, and owner mutation paths.
+- Prove the fee accrues as a claimable liability and is not merely auto-transferred; reconcile accrual, partial and full
+  claims, remaining availability, and backing.
+- Prove `(poolId,currency,owner)` liability solvency and isolation with no cross-pool netting.
+- Bind exact source and test paths to `programmableFee.collection.hookFeeMechanismBinding` and the fee value flow.
+
+## No-hook proposal path, when `hook.used` is false
 
 - Prove explicit selection of `official-launchpad` or `model-specific-no-hook` and the canonical pool lifecycle. For the
   official route, bind the current pinned profile. For the model-specific route, bind its own exact source, compiler,
   dependency closure and constructor configuration without borrowing the official profile identity.
 - Confirm that the declared project does not introduce custom callbacks, a hook permission mask, or a hook CREATE2
   address, and that its proposal, submission, threat model, and tests agree on that boundary.
-- Test any separately declared token, app, game, service, integration, or launch configuration on its own merits. No
-  custom Solidity or hook test is required merely because the project uses a Uniswap v4 pool.
+- Test any separately declared token, app, game, service, integration, or launch configuration on its own merits. Keep
+  fee collection pending and assert that the package does not claim prototype or launch readiness until the standard
+  fee hook or one integrated custom hook is added.
 
 When a model-specific no-hook transfer tax is used, test `buy-sell-peer-tax-rates`, `zero-tax-path`,
 `immutable-maximum-tax-bound`, `recipient-split-conservation`, `exemption-boundaries`,
@@ -96,15 +114,15 @@ after maintainers accept the model and assign product paths.
 - Monitoring detects contract, solvency, keeper, oracle, RPC, indexer, routing, and provider failures that apply; test
   alert ownership, fallback, escalation, and the incident runbook
 
-Tests may prove only the surface and revision they exercise. They do not prove deployment, source verification,
-provider approval, or production availability.
+Tests may prove only the surface and revision they exercise. They do not prove deployment, source verification, live
+fee collection, provider approval, or production availability.
 
 ## Semantic cases
 
 Record a worked numerical example for every fee or accounting rule the project introduces. Turn each example, its
 rounding boundary, its value-conservation equation, and one failure case into a test. For a project that changes or
-mediates swaps, cover all four quadrants or explicit rejection. An ordinary no-hook project states that it adds no
-custom swap accounting. A structurally valid submission with inconsistent examples is not prototype-ready.
+mediates swaps, cover all four quadrants or explicit rejection. The mandatory fee always covers all four modes for
+launch readiness. A structurally valid submission with inconsistent examples is not prototype-ready.
 
 ## Evidence status
 

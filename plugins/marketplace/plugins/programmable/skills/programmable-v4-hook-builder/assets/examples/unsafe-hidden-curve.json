@@ -107,6 +107,7 @@
         },
         "findingKeys": [
           "hard|HIDDEN_CONTROLS|$.security.hiddenControls",
+          "blocker|PROGRAMMABLE_FEE_INTEGRATION_PENDING|$.programmableFee.collection.status",
           "blocker|RETURN_DELTA_USAGE_MISMATCH|$.hook.returnDeltaAccounting.used",
           "blocker|RETURN_DELTA_WITHOUT_ACCOUNTING_MODEL|$.hook.customAccounting",
           "warning|BEFORE_SWAP_RETURN_DELTA_CRITICAL|$.hook.permissions.beforeSwapReturnDelta",
@@ -120,6 +121,7 @@
           "candidate|independent-security-review-one",
           "candidate|independent-specialist-review",
           "candidate|pinned-fork-and-current-head-smoke",
+          "candidate|programmable-fee-architecture-review",
           "candidate|programmable-indexer-integration-review",
           "candidate|programmable-integration-test-review",
           "candidate|programmable-registry-integration-review",

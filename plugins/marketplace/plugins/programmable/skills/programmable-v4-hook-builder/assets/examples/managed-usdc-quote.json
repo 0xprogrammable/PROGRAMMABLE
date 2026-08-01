@@ -2,7 +2,7 @@
   "fixtureVersion": 1,
   "id": "managed-usdc-quote",
   "name": "managed USDC quote asset fails closed, then reaches high-risk review",
-  "description": "A standard v4 pool using an issuer-controlled quote asset may advance structurally only after issuer, legal, adapter, router and unwind facts are explicit. It is not Uniswap's official permissioned-pool architecture and makes no issuer, routing or availability approval claim.",
+  "description": "A v4 pool using an issuer-controlled quote asset must resolve issuer, legal, router and unwind facts and integrate the mandatory Programmable volume fee. It is not Uniswap's official permissioned-pool architecture and makes no issuer, routing or availability approval claim.",
   "steps": [
     {
       "id": "missing-trust-facts",
@@ -177,6 +177,7 @@
           "blocker|PERMISSIONED_ASSET_PROFILE_INCOMPLETE|$.capabilities.permissionedAsset.issuer",
           "blocker|PERMISSIONED_ASSET_PROFILE_INCOMPLETE|$.capabilities.permissionedAsset.pauseFreezeUnwind",
           "blocker|PERMISSIONED_ASSET_PROFILE_INCOMPLETE|$.capabilities.permissionedAsset.routingLimitations",
+          "blocker|PROGRAMMABLE_FEE_INTEGRATION_PENDING|$.programmableFee.collection.status",
           "blocker|ROUTER_GENERATION_UNRESOLVED|$.integration.routerGeneration",
           "warning|ASSET_SPECIAL_BEHAVIOR|$.assets[0].behaviors",
           "warning|BUILDER_FIELD_PENDING|$.builder.contact",
@@ -190,6 +191,7 @@
           "candidate|permissioned-asset-trust-and-legal-profile",
           "candidate|pinned-fork-and-current-head-smoke",
           "candidate|privileged-authority-review",
+          "candidate|programmable-fee-architecture-review",
           "candidate|programmable-indexer-integration-review",
           "candidate|programmable-integration-test-review",
           "candidate|programmable-registry-integration-review",
@@ -271,7 +273,7 @@
         }
       },
       "expected": {
-        "decision": "PROTOTYPE_READY",
+        "decision": "REDESIGN_REQUIRED",
         "hookPermissionMask": "0x0040",
         "risk": {
           "score": 9,
@@ -283,6 +285,7 @@
           ]
         },
         "findingKeys": [
+          "blocker|PROGRAMMABLE_FEE_INTEGRATION_PENDING|$.programmableFee.collection.status",
           "warning|ASSET_SPECIAL_BEHAVIOR|$.assets[0].behaviors",
           "warning|BUILDER_FIELD_PENDING|$.builder.contact",
           "warning|BUILDER_FIELD_PENDING|$.builder.github",
@@ -295,6 +298,7 @@
           "candidate|permissioned-asset-trust-and-legal-profile",
           "candidate|pinned-fork-and-current-head-smoke",
           "candidate|privileged-authority-review",
+          "candidate|programmable-fee-architecture-review",
           "candidate|programmable-indexer-integration-review",
           "candidate|programmable-integration-test-review",
           "candidate|programmable-registry-integration-review",

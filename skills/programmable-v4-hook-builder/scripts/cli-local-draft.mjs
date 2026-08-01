@@ -205,7 +205,7 @@ function validateClosedCentralPackage(centralPackage, applicationId) {
     ])
     || centralPackage.generated !== true
     || centralPackage.encoding !== "utf8"
-    || centralPackage.validatorContract !== "public-pr-application-v1"
+    || centralPackage.validatorContract !== "public-pr-application-v2"
     || centralPackage.targetDirectory !== `submissions/${applicationId}`
     || centralPackage.fileCount !== CENTRAL_APPLICATION_FILES.length
     || !arraysEqual(centralPackage.fileOrder, CENTRAL_APPLICATION_FILES)
@@ -288,6 +288,7 @@ function validateApplication(application, applicationId) {
       "builder",
       "companionClosure",
       "declarations",
+      "programmableFee",
       "reviewPackage",
       "schemaVersion",
       "source",
@@ -295,7 +296,7 @@ function validateApplication(application, applicationId) {
       "summary",
       "title"
     ])
-    || application.schemaVersion !== 1
+    || application.schemaVersion !== 2
     || application.applicationId !== applicationId
     || !Number.isInteger(application.applicationRevision)
     || application.applicationRevision < 1
@@ -487,7 +488,7 @@ function centralPackageFromFiles({ applicationId, files, application }) {
     fileOrder: [...CENTRAL_APPLICATION_FILES],
     encoding: "utf8",
     generated: true,
-    validatorContract: "public-pr-application-v1",
+    validatorContract: "public-pr-application-v2",
     files: records
   };
 }

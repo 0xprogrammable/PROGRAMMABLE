@@ -24,7 +24,11 @@ import { findUnsupportedPublicClaims } from "./public-claims-core.mjs";
 import { analyzeProjectSurfaces, requiredProjectProfiles } from "./project-surfaces-core.mjs";
 
 export const REPORT_VERSION = 2;
-export const STANDARD_VERSION = "1.2.0";
+export const STANDARD_VERSION = "1.3.0";
+export const PROGRAMMABLE_FEE_POLICY_ID = "programmable-volume-fee-v1";
+export const PROGRAMMABLE_FEE_POLICY_VERSION = "1.0.0";
+export const PROGRAMMABLE_FEE_OWNER = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
+export const PROGRAMMABLE_FEE_HUNDREDTHS_OF_BIP = 1000;
 export const PROGRAMMABLE_LAUNCH_CHAIN_ID = 1;
 export const KNOWN_EVM_NETWORKS = Object.freeze({
   1: "ethereum",
@@ -899,6 +903,10 @@ export function analyzeSubmission(submission, { schema } = {}) {
     if (!fee.collectionPath) add("blocker", "HOOK_FEE_COLLECTION_PATH_MISSING", "$.hook.feeMechanism.collectionPath", "Hook-owned economics are declared without an executable PoolManager collection path.", "Choose a beforeSwap or afterSwap return-delta path and complete the corresponding accounting policy.");
     if (fee.collectionPath === "before-swap-return-delta" && (permissions.beforeSwap !== true || permissions.beforeSwapReturnDelta !== true || hook.returnDeltaAccounting?.used !== true)) add("blocker", "HOOK_FEE_COLLECTION_PATH_MISMATCH", "$.hook.feeMechanism.collectionPath", "The selected beforeSwap fee path is not enabled in permissions and return-delta accounting.", "Enable beforeSwap and beforeSwapReturnDelta and complete all supported component policies.");
     if (fee.collectionPath === "after-swap-return-delta" && (permissions.afterSwap !== true || permissions.afterSwapReturnDelta !== true || hook.postReturnDeltaAccounting?.afterSwap?.used !== true)) add("blocker", "HOOK_FEE_COLLECTION_PATH_MISMATCH", "$.hook.feeMechanism.collectionPath", "The selected afterSwap fee path is not enabled in permissions and post-return accounting.", "Enable afterSwap and afterSwapReturnDelta and complete the afterSwap component policy.");
+    if (fee.collectionPath === "quadrant-dependent-swap-return-delta" && (
+      permissions.beforeSwap !== true || permissions.beforeSwapReturnDelta !== true || hook.returnDeltaAccounting?.used !== true ||
+      permissions.afterSwap !== true || permissions.afterSwapReturnDelta !== true || hook.postReturnDeltaAccounting?.afterSwap?.used !== true
+    )) add("blocker", "HOOK_FEE_COLLECTION_PATH_MISMATCH", "$.hook.feeMechanism.collectionPath", "The quadrant-dependent quote-side fee path needs both beforeSwap and afterSwap return-delta accounting.", "Enable and fully specify beforeSwapReturnDelta for specified quote amounts and afterSwapReturnDelta for unspecified quote amounts.");
     if (hook.customAccounting?.used !== true) add("blocker", "HOOK_FEE_CUSTOM_ACCOUNTING_MISSING", "$.hook.customAccounting.used", "A hook-owned swap charge creates PoolManager deltas and liabilities but custom accounting is disabled.", "Define backing, conservation, settlement, liability keys and withdrawals for the fee path.");
     const feeFlow = (submission.valueFlows ?? []).find((flow) => flow?.id === fee.collectionValueFlowId);
     if (!feeFlow) add("blocker", "HOOK_FEE_VALUE_FLOW_MISSING", "$.hook.feeMechanism.collectionValueFlowId", "The hook fee does not reference one exact value-flow record.", "Add a fee collection value flow and reference its stable id.");
@@ -922,6 +930,132 @@ export function analyzeSubmission(submission, { schema } = {}) {
     }
     if (fee.maximumHundredthsOfBip === 1000000 && (submission.integration?.swapModes ?? []).some((mode) => mode.endsWith("exactOutput"))) add("blocker", "FULL_HOOK_FEE_EXACT_OUTPUT_UNSUPPORTED", "$.hook.feeMechanism.maximumHundredthsOfBip", "A 100% hook-owned charge has no finite gross-up for exact-output execution.", "Cap it below 100% or remove and reject exact-output modes.");
     gate("fee-four-quadrant-tests", "prototype", "The model charges or changes fees during swaps.");
+  }
+
+  const programmableFee = objectAt(submission, "programmableFee");
+  const programmableRates = objectAt(programmableFee, "rates");
+  const programmableBasis = objectAt(programmableFee, "basis");
+  const programmableOwnership = objectAt(programmableFee, "ownership");
+  const programmableCollection = objectAt(programmableFee, "collection");
+  const programmableAccounting = objectAt(programmableFee, "accounting");
+  const programmableEvidence = objectAt(programmableFee, "evidence");
+  const expectedProgrammableFormula = "effective=max(selected,1000);platform=1000;project=effective-1000";
+  const expectedLiabilityDimensions = ["poolId", "currency", "owner"];
+
+  for (const [actual, expected, path, code] of [
+    [programmableFee.policyId, PROGRAMMABLE_FEE_POLICY_ID, "$.programmableFee.policyId", "PROGRAMMABLE_FEE_POLICY_ID_INVALID"],
+    [programmableFee.policyVersion, PROGRAMMABLE_FEE_POLICY_VERSION, "$.programmableFee.policyVersion", "PROGRAMMABLE_FEE_POLICY_VERSION_INVALID"],
+    [programmableFee.poolScope, "canonical-launch-pool-key", "$.programmableFee.poolScope", "PROGRAMMABLE_FEE_POOL_SCOPE_INVALID"],
+    [programmableRates.unit, "hundredths-of-bip", "$.programmableFee.rates.unit", "PROGRAMMABLE_FEE_UNIT_INVALID"],
+    [programmableRates.minimumEffectiveHundredthsOfBip, PROGRAMMABLE_FEE_HUNDREDTHS_OF_BIP, "$.programmableFee.rates.minimumEffectiveHundredthsOfBip", "PROGRAMMABLE_FEE_MINIMUM_INVALID"],
+    [programmableRates.platformHundredthsOfBip, PROGRAMMABLE_FEE_HUNDREDTHS_OF_BIP, "$.programmableFee.rates.platformHundredthsOfBip", "PROGRAMMABLE_FEE_PLATFORM_RATE_INVALID"],
+    [programmableRates.formula, expectedProgrammableFormula, "$.programmableFee.rates.formula", "PROGRAMMABLE_FEE_FORMULA_DECLARATION_INVALID"],
+    [programmableRates.lpFeeExcluded, true, "$.programmableFee.rates.lpFeeExcluded", "PROGRAMMABLE_FEE_LP_FEE_EXCLUSION_INVALID"],
+    [programmableBasis.volume, "gross-quote-side-swap-volume", "$.programmableFee.basis.volume", "PROGRAMMABLE_FEE_VOLUME_BASIS_INVALID"],
+    [programmableBasis.quoteAsset, "canonical-pool-quote-asset", "$.programmableFee.basis.quoteAsset", "PROGRAMMABLE_FEE_QUOTE_ASSET_INVALID"],
+    [programmableOwnership.owner, PROGRAMMABLE_FEE_OWNER, "$.programmableFee.ownership.owner", "PROGRAMMABLE_FEE_OWNER_INVALID"],
+    [programmableOwnership.immutable, true, "$.programmableFee.ownership.immutable", "PROGRAMMABLE_FEE_OWNER_MUTABLE"],
+    [programmableOwnership.claimAuthority, "owner-only", "$.programmableFee.ownership.claimAuthority", "PROGRAMMABLE_FEE_CLAIM_AUTHORITY_INVALID"],
+    [programmableOwnership.claimAvailability, "anytime", "$.programmableFee.ownership.claimAvailability", "PROGRAMMABLE_FEE_CLAIM_AVAILABILITY_INVALID"],
+    [programmableOwnership.claimDestinationPolicy, "owner-or-owner-selected-per-claim", "$.programmableFee.ownership.claimDestinationPolicy", "PROGRAMMABLE_FEE_CLAIM_DESTINATION_INVALID"],
+    [programmableOwnership.storedMutableRecipient, false, "$.programmableFee.ownership.storedMutableRecipient", "PROGRAMMABLE_FEE_STORED_RECIPIENT_FORBIDDEN"],
+    [programmableOwnership.builderCanMutate, false, "$.programmableFee.ownership.builderCanMutate", "PROGRAMMABLE_FEE_BUILDER_MUTATION_FORBIDDEN"],
+    [programmableOwnership.projectCanMutate, false, "$.programmableFee.ownership.projectCanMutate", "PROGRAMMABLE_FEE_PROJECT_MUTATION_FORBIDDEN"],
+    [programmableOwnership.administratorCanMutate, false, "$.programmableFee.ownership.administratorCanMutate", "PROGRAMMABLE_FEE_ADMIN_MUTATION_FORBIDDEN"],
+    [programmableCollection.integration, "canonical-pool-hook", "$.programmableFee.collection.integration", "PROGRAMMABLE_FEE_INTEGRATION_INVALID"],
+    [programmableCollection.enforcement, "non-bypassable", "$.programmableFee.collection.enforcement", "PROGRAMMABLE_FEE_BYPASSABLE"],
+    [programmableCollection.hookFeeMechanismBinding, "hook.feeMechanism", "$.programmableFee.collection.hookFeeMechanismBinding", "PROGRAMMABLE_FEE_HOOK_BINDING_INVALID"],
+    [programmableAccounting.accrualMode, "claimable-liability", "$.programmableFee.accounting.accrualMode", "PROGRAMMABLE_FEE_ACCRUAL_MODE_INVALID"],
+    [programmableAccounting.crossPoolNetting, false, "$.programmableFee.accounting.crossPoolNetting", "PROGRAMMABLE_FEE_CROSS_POOL_NETTING_FORBIDDEN"]
+  ]) {
+    if (!sameValue(actual, expected)) add("blocker", code, path, `Expected the mandatory Programmable fee invariant ${JSON.stringify(expected)}.`, "Restore the exact v1 platform-fee policy value; builders and administrators cannot override it.");
+  }
+
+  if (!sameValue(programmableAccounting.liabilityKeyDimensions, expectedLiabilityDimensions)) {
+    add("blocker", "PROGRAMMABLE_FEE_ACCOUNTING_SCOPE_INVALID", "$.programmableFee.accounting.liabilityKeyDimensions", "The platform-fee liability must be keyed exactly by PoolId, quote currency and immutable owner.", "Use [poolId, currency, owner] in that order and keep cross-pool netting disabled.");
+  }
+
+  const selectedProgrammableRate = programmableRates.selectedHundredthsOfBip;
+  if (Number.isInteger(selectedProgrammableRate)) {
+    const expectedEffectiveRate = Math.max(selectedProgrammableRate, PROGRAMMABLE_FEE_HUNDREDTHS_OF_BIP);
+    const expectedProjectRate = expectedEffectiveRate - PROGRAMMABLE_FEE_HUNDREDTHS_OF_BIP;
+    if (programmableRates.effectiveHundredthsOfBip !== expectedEffectiveRate) add("blocker", "PROGRAMMABLE_FEE_EFFECTIVE_RATE_INVALID", "$.programmableFee.rates.effectiveHundredthsOfBip", `The effective hook charge must be ${expectedEffectiveRate} hundredths of a bip for the selected rate.`, "Use effective=max(selected,1000); never add 1000 on top of a selected fee already at or above the minimum.");
+    if (programmableRates.projectHundredthsOfBip !== expectedProjectRate) add("blocker", "PROGRAMMABLE_FEE_PROJECT_RATE_INVALID", "$.programmableFee.rates.projectHundredthsOfBip", `The project share must be ${expectedProjectRate} hundredths of a bip for the selected rate.`, "Use project=effective-1000 so Programmable receives exactly 0.1% of gross quote-side volume.");
+  } else if (programmableCollection.status === "implemented") {
+    add("blocker", "PROGRAMMABLE_FEE_SELECTED_RATE_UNRESOLVED", "$.programmableFee.rates.selectedHundredthsOfBip", "An implemented platform fee has no selected project swap-fee input.", "Set the project-selected hook fee in hundredths of a bip, including zero when no project fee is requested.");
+  }
+
+  if (programmableCollection.status !== "implemented") {
+    add("blocker", "PROGRAMMABLE_FEE_INTEGRATION_PENDING", "$.programmableFee.collection.status", "The mandatory platform fee is still a proposal architecture discussion and is not prototype-ready.", "Integrate the non-bypassable canonical-pool hook path, bind its evidence, and then set status to implemented.");
+    gate("programmable-fee-architecture-review", "candidate", "A proposal may discuss a pending hook integration, but it cannot become a Programmable prototype without the mandatory volume fee.");
+  }
+
+  if (hookUsed !== true) {
+    add("blocker", "PROGRAMMABLE_FEE_HOOK_REQUIRED", "$.hook.used", "A no-hook or router-only path cannot enforce the mandatory fee on every canonical-pool swap.", "Keep the idea as an architecture proposal or integrate a non-bypassable canonical-pool hook before requesting prototype readiness.");
+    gate("programmable-fee-no-hook-architecture-review", "candidate", "A no-hook project needs a reviewed architecture that preserves the mandatory canonical-pool fee before it can become a Programmable prototype.");
+  }
+
+  if (stage === "prototype") {
+    if (programmableCollection.status !== "implemented") add("blocker", "PROGRAMMABLE_FEE_PROTOTYPE_NOT_IMPLEMENTED", "$.programmableFee.collection.status", "A prototype cannot leave the mandatory platform fee pending.", "Complete the hook implementation and all exact bindings before declaring prototype stage.");
+    if (fee.used !== true || !["hook-owned-fee", "both"].includes(fee.classification)) add("blocker", "PROGRAMMABLE_FEE_HOOK_MECHANISM_MISSING", "$.hook.feeMechanism", "The prototype does not implement the mandatory fee through its declared hook fee mechanism.", "Enable a hook-owned fee path; LP fees and router-only charges are not substitutes.");
+    if (!Number.isInteger(fee.maximumHundredthsOfBip) || !Number.isInteger(programmableRates.effectiveHundredthsOfBip) || fee.maximumHundredthsOfBip < programmableRates.effectiveHundredthsOfBip) add("blocker", "PROGRAMMABLE_FEE_HOOK_CAP_TOO_LOW", "$.hook.feeMechanism.maximumHundredthsOfBip", "The hook fee cap cannot execute the declared effective platform-plus-project charge.", "Set the immutable hook cap at or above the exact effective rate.");
+    if (fee.collectionPath !== "quadrant-dependent-swap-return-delta") add("blocker", "PROGRAMMABLE_FEE_COLLECTION_PATH_INVALID", "$.hook.feeMechanism.collectionPath", "A single router-side, LP-fee, before-only or after-only path cannot collect gross quote-side volume in all four swap quadrants.", "Use the quadrant-dependent swap return-delta path: beforeSwap when quote is specified and afterSwap when quote is unspecified.");
+
+    const platformRecipient = (fee.recipients ?? []).find((recipient) => recipient?.role === "programmable-platform");
+    if (
+      !platformRecipient ||
+      platformRecipient.addressSource !== "fixed-address" ||
+      platformRecipient.address?.toLowerCase() !== PROGRAMMABLE_FEE_OWNER.toLowerCase() ||
+      platformRecipient.binding !== "exact-address" ||
+      platformRecipient.mutable !== false ||
+      platformRecipient.mutationController !== "none"
+    ) add("blocker", "PROGRAMMABLE_FEE_RECIPIENT_UNBOUND", "$.hook.feeMechanism.recipients", "The executable hook mechanism does not bind the Programmable liability to the exact immutable owner.", "Add one immutable programmable-platform fixed-address recipient for the mandated owner with no mutation controller.");
+
+    if (hook.customAccounting?.crossPoolNetting !== false || !["poolId", "currency", "beneficiary"].every((dimension) => hook.customAccounting?.liabilityKeyDimensions?.includes(dimension))) add("blocker", "PROGRAMMABLE_FEE_HOOK_ACCOUNTING_UNBOUND", "$.hook.customAccounting", "The executable hook accounting is not isolated by PoolId, quote currency and beneficiary.", "Disable cross-pool netting and include poolId, currency and beneficiary in the hook liability key.");
+
+    const declaredSwapModes = Array.isArray(submission.integration?.swapModes) ? [...submission.integration.swapModes].sort() : [];
+    const feeSwapModes = Array.isArray(programmableCollection.supportedSwapModes) ? [...programmableCollection.supportedSwapModes].sort() : [];
+    if (!sameStringList(feeSwapModes, declaredSwapModes) || declaredSwapModes.length === 0) add("blocker", "PROGRAMMABLE_FEE_SWAP_MODE_COVERAGE_INCOMPLETE", "$.programmableFee.collection.supportedSwapModes", "The mandatory fee does not cover exactly every swap mode exposed by the project.", "List every integration.swapModes entry and test the fee in each supported direction and exactness mode.");
+
+    const quoteAsset = assets.find((asset) => asset?.role === "quote");
+    const quoteCurrency = quoteAsset?.id === pool.currency0 ? "currency0" : quoteAsset?.id === pool.currency1 ? "currency1" : null;
+    if (!quoteCurrency) add("blocker", "PROGRAMMABLE_FEE_QUOTE_ASSET_UNBOUND", "$.programmableFee.basis.quoteAsset", "The declared quote-side fee basis does not resolve to one currency in the canonical PoolKey.", "Declare one quote asset and bind its id to pool.currency0 or pool.currency1.");
+    const feeQuadrantRules = {
+      "zeroForOne-exactInput": ["zeroForOneExactInput", "currency0", "currency1"],
+      "zeroForOne-exactOutput": ["zeroForOneExactOutput", "currency0", "currency1"],
+      "oneForZero-exactInput": ["oneForZeroExactInput", "currency1", "currency0"],
+      "oneForZero-exactOutput": ["oneForZeroExactOutput", "currency1", "currency0"]
+    };
+    for (const mode of declaredSwapModes) {
+      const [quadrantName, inputCurrency, outputCurrency] = feeQuadrantRules[mode] ?? [];
+      const quadrant = fee.swapQuadrants?.[quadrantName];
+      const expectedBasis = quoteCurrency === inputCurrency ? "gross-input" : quoteCurrency === outputCurrency ? "gross-output" : null;
+      if (!quadrant || quadrant.currency !== quoteCurrency || quadrant.basis !== expectedBasis) add("blocker", "PROGRAMMABLE_FEE_QUOTE_QUADRANT_INVALID", `$.hook.feeMechanism.swapQuadrants.${quadrantName ?? mode}`, `Swap mode ${mode} is not charged against its gross quote-side amount.`, `Use currency=${quoteCurrency} and basis=${expectedBasis} for ${mode}.`);
+      const specifiedCurrency = mode.endsWith("exactInput") ? inputCurrency : outputCurrency;
+      const expectedCollectionPath = quoteCurrency === specifiedCurrency ? "before-swap-return-delta" : "after-swap-return-delta";
+      if (programmableCollection.swapModePaths?.[quadrantName] !== expectedCollectionPath) add("blocker", "PROGRAMMABLE_FEE_SWAP_MODE_PATH_INVALID", `$.programmableFee.collection.swapModePaths.${quadrantName ?? mode}`, `Swap mode ${mode} uses the wrong return-delta phase for its quote currency.`, `Use ${expectedCollectionPath}: specified quote is collected beforeSwap and unspecified quote is collected afterSwap.`);
+    }
+
+    if (hook.nestedActions?.directPoolManagerCalls === true && programmableCollection.selfCallPolicy !== "same-pool-swap-fee-enforced-internally") add("blocker", "PROGRAMMABLE_FEE_SELF_CALL_BYPASS", "$.programmableFee.collection.selfCallPolicy", "Direct hook-to-PoolManager calls skip callbacks to the same hook and can bypass a callback-only same-pool fee.", "Either forbid same-pool nested swaps or enforce the exact fee inside the direct same-pool swap path and bind its source and tests.");
+
+    const feeFlow = (submission.valueFlows ?? []).find((flow) => flow?.id === programmableAccounting.valueFlowId);
+    if (!feeFlow || programmableAccounting.valueFlowId !== fee.collectionValueFlowId) add("blocker", "PROGRAMMABLE_FEE_VALUE_FLOW_UNBOUND", "$.programmableFee.accounting.valueFlowId", "The platform-fee accounting does not bind the exact executable hook collection value flow.", "Reference one declared value flow and use the same id in hook.feeMechanism.collectionValueFlowId.");
+    if (!resolvedText(programmableAccounting.collectionEvent) || programmableAccounting.collectionEvent !== fee.collectionEvent || !(submission.integration?.events ?? []).includes(programmableAccounting.collectionEvent)) add("blocker", "PROGRAMMABLE_FEE_COLLECTION_EVENT_UNBOUND", "$.programmableFee.accounting.collectionEvent", "The platform-fee accrual event is not exactly bound to the hook mechanism and integration event surface.", "Use the same exact collection event in programmableFee.accounting, hook.feeMechanism and integration.events.");
+    if (!resolvedText(programmableAccounting.claimEvent) || !(submission.integration?.events ?? []).includes(programmableAccounting.claimEvent)) add("blocker", "PROGRAMMABLE_FEE_CLAIM_EVENT_UNBOUND", "$.programmableFee.accounting.claimEvent", "Owner-only claims have no exact public event binding.", "Declare the exact claim event and include it in integration.events.");
+
+    const implementationSources = new Set(submission.implementation?.sourcePaths ?? []);
+    const implementationTests = new Set(submission.implementation?.testPaths ?? []);
+    if ((programmableEvidence.sourcePaths?.length ?? 0) === 0) add("blocker", "PROGRAMMABLE_FEE_SOURCE_MISSING", "$.programmableFee.evidence.sourcePaths", "The prototype has no exact platform-fee source binding.", "Bind every source file that calculates, accrues and claims the mandatory fee.");
+    if ((programmableEvidence.testPaths?.length ?? 0) === 0) add("blocker", "PROGRAMMABLE_FEE_TESTS_MISSING", "$.programmableFee.evidence.testPaths", "The prototype has no exact platform-fee test binding.", "Bind formula, four-quadrant, bypass, accounting and owner-only claim tests.");
+    for (const [index, entry] of (programmableEvidence.sourcePaths ?? []).entries()) {
+      validateDeclaredPath(entry, `$.programmableFee.evidence.sourcePaths[${index}]`, "Programmable fee source");
+      if (!implementationSources.has(entry)) add("blocker", "PROGRAMMABLE_FEE_SOURCE_NOT_BOUND", `$.programmableFee.evidence.sourcePaths[${index}]`, "Platform-fee source is outside implementation.sourcePaths.", "Add the exact source path to the implementation manifest.");
+    }
+    for (const [index, entry] of (programmableEvidence.testPaths ?? []).entries()) {
+      validateDeclaredPath(entry, `$.programmableFee.evidence.testPaths[${index}]`, "Programmable fee test");
+      if (!implementationTests.has(entry)) add("blocker", "PROGRAMMABLE_FEE_TEST_NOT_BOUND", `$.programmableFee.evidence.testPaths[${index}]`, "Platform-fee tests are outside implementation.testPaths.", "Add the exact test path to the implementation manifest.");
+    }
+    gate("programmable-fee-formula-and-claim-tests", "prototype", "The prototype must prove the minimum, non-additive split, quote-side basis and owner-only claim path at executable boundaries.");
   }
 
   const customAccounting = objectAt(hook, "customAccounting");

@@ -60,11 +60,28 @@ The project can be a focused hook repository or a larger application that includ
 games, indexers or external dependencies. An unfamiliar mechanic is not rejected merely because it lacks a catalog
 name. Reviewers open an architecture discussion to understand its value flow, authority, trust and failure behavior.
 
-The no-hook path is also open. The official Launchpad profile is the safer default, while a separately pinned
-model-specific token or launcher may apply without inventing a hook. Transparent transfer taxes and automatic liquidity
-must disclose exact bounds, recipients, mutability and authority, value flows, PoolManager received-amount behavior, LP
-custody and exit, provider limitations, and tests. Hidden fees, sell blocks, address lists, wallet or transaction caps,
-cooldowns, and a tax bound that can consume the complete transfer are not eligible for the permissionless path.
+The no-hook path stays open for proposals, including separately pinned tokens, launchers, transparent transfer taxes,
+and automatic liquidity. It is not launch-ready. Before prototype readiness, a simple project implements the standard
+Programmable fee-hook profile and a custom project integrates the policy into its single hook. Exact source, tests, and maintainer review are required. Hidden fees, sell blocks, address
+lists, wallet or transaction caps, cooldowns, and a tax bound that can consume the complete transfer remain ineligible
+for the permissionless path.
+
+### Mandatory Programmable fee
+
+Every new launch application uses Builder `v0.2.0` and declares the root `programmableFee` policy:
+
+- `effective total = max(builder-selected total, 10 bps)`;
+- exactly `10 bps` (`0.10%`) belongs to Programmable and the project receives the remainder;
+- the split is inclusive, so selected `3%` means `0.1% + 2.9%`, never `3.1%`;
+- the basis is actually executed gross quote-side volume for every successful swap of the canonical PoolKey, in both
+  directions and exact-input/exact-output modes;
+- LP fees, transfer taxes, router charges, app payments, and alternative pools are not substitutes; and
+- immutable owner and sole claim authority `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` may claim anytime to itself or
+  an owner-selected destination for that claim. Builders, projects, and administrators cannot mutate or claim it.
+
+Every idea may still be submitted. Missing integration produces an architecture or changes-required review result, not
+an automatic rejection of the idea. The skill and checker do not prove live collection; that requires reviewed source,
+authorized deployment, runtime matching, lifecycle receipts, liability reconciliation, and monitoring.
 
 The target may be any positive JavaScript-safe EVM chain. Known chain ids must use their canonical network slug; an
 unknown chain opens an architecture review instead of an automatic safety rejection. This makes the project eligible to
@@ -340,7 +357,8 @@ Reviewers use this minimum sequence:
 1. Confirm that the pull request is a small beta record and that the public repository, numeric id, commit and tree are
    reachable and consistent.
 2. Confirm that the evidence was produced for the same exact revision using trusted beta tooling.
-3. Read the project summary, value flows, authorities, fees, dependencies, failure behavior and known limitations.
+3. Read the project summary, value flows, authorities, mandatory Programmable fee record, project fees, dependencies,
+   failure behavior and known limitations.
 4. Run any deeper checks against the bound revision in an isolated environment without credentials, signing access or
    repository write permission.
 5. Open an architecture discussion for an unknown mechanic, or request changes with an objective finding and repair
@@ -391,7 +409,7 @@ A draft, open, reviewed, merged or closed application pull request does not mean
 - deployed, launchable, tradable or available;
 - supported, routed or indexed by any provider;
 - endorsed by Uniswap Labs, Uniswap Foundation or another third party; or
-- entitled to fees, revenue, grants or future integration.
+- entitled to project fees, revenue, grants or future integration merely because it was submitted.
 
 Any later candidate selection, contract review, integration, deployment, source verification, runtime verification,
 provider work or public release is a separate process with its own exact evidence.
@@ -412,7 +430,8 @@ public repository. Before that point, describe the beta as upcoming rather than 
 > bring an existing public repository. Use `doctor`, `scaffold`, `check`, `package` and `prepare-pr` to bind one exact
 > public GitHub revision and open a small application pull request. Unknown mechanics enter architecture discussion;
 > objective findings include evidence and a repair path. The project stays in your repository, and GitHub keeps the
-> public review history. Beta review is not an audit, product approval, deployment, provider support or Uniswap
+> public review history. New launch applications declare the fixed 10 bps Programmable canonical-pool volume fee.
+> Beta review is not an audit, product approval, deployment, proof of live fee collection, provider support or Uniswap
 > endorsement.
 
 ### Compact social copy

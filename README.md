@@ -144,6 +144,12 @@ package. `prepare-pr` then resolves the clean pushed revision and generates exac
 [`submissions/`](submissions/), binding the immutable GitHub numeric repository id, full commit, full tree and evidence
 digest.
 
+Every new launch application declares Programmable's mandatory canonical-pool volume fee. The effective total is the
+greater of the builder-selected total and `10 bps`; exactly `10 bps` belongs to Programmable and the project receives
+the remainder. This is inclusive, so a selected `3%` remains `3%` (`0.1% + 2.9%`), not `3.1%`. Simple launches use the
+project-specific implementation of the standard fee-hook profile; custom launches integrate the policy into their single hook. Exact source, tests, and maintainer review are required. A no-hook, router-only, LP-fee,
+or transfer-tax substitute may be proposed but is not launch-ready.
+
 ```text
 doctor -> scaffold -> check -> package -> prepare-pr
 ```

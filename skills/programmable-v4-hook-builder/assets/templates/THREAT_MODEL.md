@@ -28,6 +28,10 @@ authority as its own boundary rather than inventing hook controls. For a model-s
 sell liveness, tax bounds and recipients, requested-versus-received amounts, automatic swaps, reentrancy, MEV, liquidity
 position custody and exit, mutable authorities, and provider incompatibility.
 
+State that this route remains proposal-only and `programmableFee.collection.status` is
+`pending-hook-integration`. Threat-model a project-specific implementation of the standard Programmable fee-hook profile
+or integration into one custom hook; a router, LP fee, transfer tax, or alternative pool is not a launch-ready substitute.
+
 For a taxed v4 token, remember that the token observes the shared PoolManager address, not a trustworthy PoolId or
 swap-versus-liquidity label. Model spoofed classifiers and the tax effect on liquidity adds, removals and alternative
 pools; never describe PoolManager ingress and egress as buy and sell without this limitation.
@@ -45,6 +49,19 @@ When ERC-6909 claims are used, define currency-id derivation, owner, operator, P
 mint, burn, transfer, redemption, dust, and aggregate solvency.
 
 ## Dynamic fees and recipients
+
+For the mandatory Programmable fee, model the canonical-PoolKey binding, executed gross quote-side basis after partial
+fills, all four swap modes, floor and non-additive split, rounding, liability solvency, event reconciliation, and
+alternative-pool/router bypass attempts. The immutable owner and sole claim authority is
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`; model unauthorized builder, project, administrator, recipient, rescue,
+sweep, redirect, stored-recipient mutation, owner mutation, and cross-pool-netting attempts. Preserve the owner's
+ability to claim anytime to itself or an owner-selected destination for that claim.
+Treat the accrued 10 bps as a claimable liability, not an automatic transfer. Model partial claims, repeated claims,
+failed payout destinations, liability decrement ordering, and balance reconciliation.
+
+Model quadrant-dependent before/after return-delta collection and v4 callback skipping on hook-initiated PoolManager
+actions. Forbid same-pool self-swaps or specify and test equivalent internal fee accrual; do not ban unrelated safe
+custom-hook behavior.
 
 When used, record initial fee, initialization, application and update paths, override rule, persistent actor and call
 sites, rate limit, immutable bounds, metric, observation, cadence, manipulation resistance, liquidity-decrease behavior,
@@ -94,6 +111,6 @@ Map each capability to its controller, delay, mutability, user-exit impact, and 
 
 ## Known limitations
 
-State what tests and design cannot guarantee, including unsupported lifecycle actions, assets, routers, swap modes, and
-dependency states. Keep acceptance, product integration, deployment, verification, routing, discovery, and availability
+State what tests and design cannot guarantee, including live fee collection and unsupported lifecycle actions, assets,
+routers, swap modes, and dependency states. Keep acceptance, product integration, deployment, verification, routing, discovery, and availability
 as separate trust decisions. Do not call the model safe or audited.

@@ -1,13 +1,14 @@
 # Programmable compatibility standard
 
-Version: `1.2.0`
+Version: `1.3.0`
 
 This standard defines the information and structural checks required before a Programmable prototype begins. It does
 not approve a model, certify security or predict support from Uniswap routing or third-party indexers.
 
 The launch scope is one launched token and one canonical v4 launch pool, with any application, game, service, indexer,
-or other project surfaces required by the idea. A custom hook is optional. Use the current pinned official Liquidity
-Launchpad path when no confirmed behavior must execute atomically with a pool action. A reusable hook for arbitrary
+or other project surfaces required by the idea. Every launch-ready canonical pool uses one fee-enforcing hook. Use the
+standard Programmable fee-hook profile through project-specific source when no other behavior must execute atomically with a pool action, and integrate
+the fee into the project's single hook when custom behavior is required. Both paths require exact tests and maintainer review. A reusable hook for arbitrary
 existing pools may be built and reviewed but cannot claim platform-launch compatibility until the creation,
 initialization, liquidity, trading, claims, failure, and retirement lifecycle is mapped.
 
@@ -56,8 +57,8 @@ preflight.
 
 ## Progressive preflight
 
-Before machine intake, show the builder a plain-English design card containing the user outcome, currencies, fee type,
-value recipients, mutable powers, dependencies, failure behavior, and the one next unresolved decision. Ask one
+Before machine intake, show the builder a plain-English design card containing the user outcome, currencies, project
+fee choice, fixed Programmable fee, value recipients, mutable powers, dependencies, failure behavior, and the one next unresolved decision. Ask one
 architecture-changing question at a time and keep protocol vocabulary in the technical record unless the builder asks
 for it.
 
@@ -72,8 +73,8 @@ Resolve:
 - The user-visible behavior in one sentence
 - What the token creator configures at launch
 - What traders and liquidity providers experience
-- Why v4 is part of the product and whether a custom hook is actually necessary instead of the official Launchpad,
-  ordinary token, router, or offchain service
+- Why v4 is part of the product and whether a standard-profile implementation is sufficient or custom behavior must be integrated
+  into the same hook
 - Which behavior is part of the token, the hook, the pool, the launcher, and an offchain service
 
 Reject designs whose actual goal is to conceal fees, restrict selling without disclosure, spoof identity, manipulate an
@@ -91,7 +92,7 @@ asset creation
 → first transaction
 → swaps in both directions
 → liquidity changes and donations
-→ fee or reward accounting
+→ mandatory Programmable fee and any project fee or reward accounting
 → claims and payout changes
 → dependency failure
 → retirement or migration
@@ -145,10 +146,11 @@ Permission bits, from highest to lowest:
 | `0x0002` | `afterAddLiquidityReturnDelta` |
 | `0x0001` | `afterRemoveLiquidityReturnDelta` |
 
-When `hook.used` is false, all 14 bits are false, hook-only configuration is neutral, and no hook address is mined. A
-static ordinary v4 pool is valid on that route. `noHookArchitecture.route` must then select either the safer
-`official-launchpad` default or a `model-specific-no-hook` design. The model-specific route cannot borrow an official
-profile identity. It binds its own dependencies and enters architecture review. When `hook.used` is true,
+When `hook.used` is false, all 14 bits are false, hook-only configuration is neutral, and no hook address is mined.
+`noHookArchitecture.route` must select the applicable proposal architecture, but that design cannot be launch-ready:
+keep `programmableFee.collection.status` at `pending-hook-integration` and route it to architecture or changes-required
+review. Before prototype readiness, implement the standard fee-hook profile or integrate the policy into the project's
+single custom hook, with exact source, tests, and maintainer review. When `hook.used` is true,
 `noHookArchitecture` is null, every return-delta bit requires its parent
 callback and the deployed address must match the final permission mask. Any
 compiler, metadata, import, optimizer, constructor, deployer, or creation-code change invalidates a previously mined
@@ -158,6 +160,34 @@ Every callback authenticates the immutable PoolManager. Inside a callback, `msg.
 `sender` argument commonly identifies a router or PositionManager, not the end user. `hookData` is untrusted bytes.
 Record its versioned schema and identity authentication or state that it is unused. Record the exact selector, return
 shape, revert effect, and self-call or nested-action suppression for every enabled callback.
+
+### Mandatory Programmable volume fee
+
+Apply [programmable-fee-policy.md](programmable-fee-policy.md) to every new launch application. On every successful swap
+of the canonical `PoolKey`, charge the executed gross quote-side volume using:
+
+```text
+effective = max(selected total, 1,000 hundredths of a bip)
+Programmable = 1,000 hundredths of a bip = 10 bps = 0.10%
+project = effective - 1,000
+```
+
+The split is non-additive: a selected total of `3%` remains `3%`, allocated `0.1%` to Programmable and `2.9%` to the
+project. LP fees are excluded. Router charges, transfer taxes, app payments, donations, or alternative-pool behavior
+are not substitutes. Bind the root `programmableFee` record to the canonical pool hook, all four swap modes, executed
+amount after partial fills, quote asset, value flow, collection and claim events, and liability keys
+`(poolId,currency,owner)` with no cross-pool netting.
+
+Use `hook.feeMechanism.collectionPath: quadrant-dependent-swap-return-delta`. For each mode, bind a before-swap return
+delta when the quote asset is the specified currency and an after-swap return delta when it is the executed unspecified
+currency. Do not impose a before-only or after-only implementation. Because v4 skips a hook's callback on that hook's
+own PoolManager call, set `programmableFee.collection.selfCallPolicy` to `same-pool-swap-forbidden` or
+`same-pool-swap-fee-enforced-internally`; the second path requires exact source and tests for equivalent accrual.
+
+The immutable owner and sole claim authority is `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. Only that owner may claim,
+at any time, either to itself or to a destination it selects for that claim. Do not store a mutable platform recipient.
+The builder, project, hook administrator, launcher administrator, and other administrators cannot claim, mutate, rescue,
+sweep, net, or redirect the platform liability.
 
 For a dynamic LP fee, additionally lock:
 
@@ -345,11 +375,13 @@ self-assessment, not a badge. Programmable does not convert it into “safe.”
 
 ## Semantic readiness
 
-`PROTOTYPE_READY` may be presented only when both conditions hold:
+`PROTOTYPE_READY` may be presented only when all conditions hold:
 
 1. The deterministic report has no hard or blocking finding.
 2. Independent semantic review confirms that the design card, structured fields, worked numerical examples, value
    conservation, failure behavior, proposal, threat model, and test plan agree.
+3. `programmableFee.collection.status` is `implemented`, the single canonical-pool hook binding is complete, and exact
+   source and tests cover the mandatory fee policy. A pending or substitute integration remains changes-required.
 
 Schema-valid prose is not evidence that an equation is correct or a dependency claim is true.
 Review public UI and application strings as well as documents. Ignore comments and declared test fixtures, but reject

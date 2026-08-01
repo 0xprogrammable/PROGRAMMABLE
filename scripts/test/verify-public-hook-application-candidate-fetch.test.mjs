@@ -107,7 +107,7 @@ test("trusted application validation hydrates only the six closed package blobs"
     expectedCandidateCommit: candidateCommit,
     expectedMergeCommit: mergeCommit,
     resolveSource: exactSourceResolver,
-    resolveEvidence: async () => assert.fail("Actions-only evidence must not invoke the blob evidence resolver")
+    resolveEvidence: exactEvidenceResolver
   });
 
   assert.equal(report.result, "valid-public-application-package");
@@ -487,7 +487,7 @@ test("a fully bound paused-new continuation passes hydration and final verificat
     expectedMergeCommit: mergeCommit,
     pullRequestNumber: PULL_REQUEST_NUMBER,
     resolveSource: exactSourceResolver,
-    resolveEvidence: async () => assert.fail("Actions-only evidence must not invoke blob resolution")
+    resolveEvidence: exactEvidenceResolver
   });
   assert.equal(report.continuationAuthorized, true);
   assert.equal(report.pullRequestNumber, PULL_REQUEST_NUMBER);
@@ -701,6 +701,19 @@ test("Linux candidate Git runner hard-stops compressed-pack-style address-space 
 });
 
 function makePackage() {
+  const submissionPath = "submissions/example-hook/submission.json";
+  const programmableFee = makeProgrammableFee();
+  const submissionBytes = sourceSubmissionBytes(programmableFee);
+  const submissionSha256 = `sha256:${crypto.createHash("sha256").update(submissionBytes).digest("hex")}`;
+  const primary = {
+    ...PRIMARY,
+    sourcePaths: [...new Set([
+      ...PRIMARY.sourcePaths,
+      "src/ProgrammableFeeHook.sol",
+      submissionPath,
+      "test/ProgrammableFeeHook.t.sol"
+    ])].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
+  };
   const files = new Map([
     ["PROPOSAL.md", Buffer.from("# Proposal\nA bounded public application for an exact external GitHub source revision.\n")],
     ["TEST_PLAN.md", Buffer.from("# Test plan\nRun builder-owned unit, fuzz, invariant, static-analysis, and integration evidence.\n")],
@@ -724,17 +737,27 @@ function makePackage() {
     applicationId: "example-hook",
     source: sourceProjection,
     attestation: "builder-declared-untrusted",
-    evidence: [{
-      id: "unit-tests",
-      kind: "unit",
-      status: "passed",
-      scope: "Builder-owned checks for the exact declared source revision.",
-      url: `${PRIMARY.repositoryUri}/actions/runs/123`,
-      sha256: null
-    }]
+    evidence: [
+      {
+        id: "unit-tests",
+        kind: "unit",
+        status: "passed",
+        scope: "Builder-owned checks for the exact declared source revision.",
+        url: `${PRIMARY.repositoryUri}/actions/runs/123`,
+        sha256: null
+      },
+      {
+        id: "zz-programmable-fee-submission",
+        kind: "static-analysis",
+        status: "passed",
+        scope: "Exact source submission used to recompute the mandatory Programmable fee projection.",
+        url: `${PRIMARY.repositoryUri}/blob/${PRIMARY.revisionObjectId}/${submissionPath}`,
+        sha256: submissionSha256
+      }
+    ]
   }));
   files.set("application.json", jsonBytes({
-    schemaVersion: 1,
+    schemaVersion: 2,
     applicationId: "example-hook",
     applicationRevision: 1,
     stage: "proposal",
@@ -747,10 +770,14 @@ function makePackage() {
     },
     source: {
       schemaVersion: "1.0.0",
-      primary: { ...PRIMARY, sourcePaths: [...PRIMARY.sourcePaths], contractPaths: [...PRIMARY.contractPaths], githubActionsRunIds: [...PRIMARY.githubActionsRunIds] },
+      primary: { ...primary, sourcePaths: [...primary.sourcePaths], contractPaths: [...primary.contractPaths], githubActionsRunIds: [...primary.githubActionsRunIds] },
       companions: []
     },
     companionClosure: [],
+    programmableFee: {
+      ...programmableFee,
+      submissionBinding: { path: submissionPath, sha256: submissionSha256 }
+    },
     reviewPackage: reviewRecords(files),
     declarations: {
       publicInformationAcknowledged: true,
@@ -760,6 +787,76 @@ function makePackage() {
     }
   }));
   return files;
+}
+
+function makeProgrammableFee() {
+  return {
+    policyId: "programmable-volume-fee-v1",
+    policyVersion: "1.0.0",
+    poolScope: "canonical-launch-pool-key",
+    rates: {
+      unit: "hundredths-of-bip",
+      selectedHundredthsOfBip: 30000,
+      minimumEffectiveHundredthsOfBip: 1000,
+      effectiveHundredthsOfBip: 30000,
+      platformHundredthsOfBip: 1000,
+      projectHundredthsOfBip: 29000,
+      formula: "effective=max(selected,1000);platform=1000;project=effective-1000",
+      lpFeeExcluded: true
+    },
+    basis: { volume: "gross-quote-side-swap-volume", quoteAsset: "canonical-pool-quote-asset" },
+    ownership: {
+      owner: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      immutable: true,
+      claimAuthority: "owner-only",
+      claimAvailability: "anytime",
+      claimDestinationPolicy: "owner-or-owner-selected-per-claim",
+      storedMutableRecipient: false,
+      builderCanMutate: false,
+      projectCanMutate: false,
+      administratorCanMutate: false
+    },
+    collection: {
+      status: "implemented",
+      integration: "canonical-pool-hook",
+      enforcement: "non-bypassable",
+      hookFeeMechanismBinding: "hook.feeMechanism",
+      supportedSwapModes: [
+        "zeroForOne-exactInput",
+        "zeroForOne-exactOutput",
+        "oneForZero-exactInput",
+        "oneForZero-exactOutput"
+      ],
+      swapModePaths: {
+        zeroForOneExactInput: "after-swap-return-delta",
+        zeroForOneExactOutput: "after-swap-return-delta",
+        oneForZeroExactInput: "after-swap-return-delta",
+        oneForZeroExactOutput: "after-swap-return-delta"
+      },
+      selfCallPolicy: "same-pool-swap-forbidden"
+    },
+    accounting: {
+      accrualMode: "claimable-liability",
+      liabilityKeyDimensions: ["poolId", "currency", "owner"],
+      crossPoolNetting: false,
+      valueFlowId: "programmable-volume-fee",
+      collectionEvent: "ProgrammableFeeAccrued(bytes32,address,uint256)",
+      claimEvent: "ProgrammableFeeClaimed(address,address,uint256)"
+    },
+    evidence: {
+      sourcePaths: ["src/ProgrammableFeeHook.sol"],
+      testPaths: ["test/ProgrammableFeeHook.t.sol"]
+    }
+  };
+}
+
+function sourceSubmissionBytes(programmableFee) {
+  return Buffer.from(`${canonicalJson({
+    model: { id: "example-hook" },
+    programmableFee,
+    schemaVersion: 1,
+    standardVersion: "1.3.0"
+  })}\n`, "utf8");
 }
 
 function reviewRecords(files) {
@@ -1055,7 +1152,8 @@ async function waitForProcessExit(pid) {
   assert.fail(`descendant process ${pid} survived the bounded process-group timeout`);
 }
 
-async function exactSourceResolver() {
+async function exactSourceResolver(source) {
+  const primary = source.primary;
   return {
     schemaVersion: "1.0.0",
     kind: "github-public-source",
@@ -1064,32 +1162,48 @@ async function exactSourceResolver() {
     primary: {
       role: "primary",
       authority: {
-        numericRepositoryId: PRIMARY.numericRepositoryId,
-        revisionObjectId: PRIMARY.revisionObjectId,
-        treeObjectId: PRIMARY.treeObjectId
+        numericRepositoryId: primary.numericRepositoryId,
+        revisionObjectId: primary.revisionObjectId,
+        treeObjectId: primary.treeObjectId
       },
       display: {
-        repositoryUri: PRIMARY.repositoryUri,
+        repositoryUri: primary.repositoryUri,
         owner: "alice",
         repository: "example-hook",
         defaultBranch: "main"
       },
       visibility: "public",
-      sourcePaths: [...PRIMARY.sourcePaths],
-      contractPaths: [...PRIMARY.contractPaths],
+      sourcePaths: [...primary.sourcePaths],
+      contractPaths: [...primary.contractPaths],
       githubActionsEvidence: [{
         runId: "123",
         runAttempt: "1",
         workflowId: "456",
         workflowPath: ".github/workflows/ci.yml",
-        headRevision: PRIMARY.revisionObjectId,
-        headTree: PRIMARY.treeObjectId,
+        headRevision: primary.revisionObjectId,
+        headTree: primary.treeObjectId,
         event: "push",
         status: "completed",
         conclusion: "success",
-        htmlUrl: `${PRIMARY.repositoryUri}/actions/runs/123`
+        htmlUrl: `${primary.repositoryUri}/actions/runs/123`
       }]
     },
     companions: []
   };
+}
+
+async function exactEvidenceResolver({ primary, evidence }) {
+  return evidence.map((record) => {
+    assert.equal(record.id, "zz-programmable-fee-submission");
+    const bytes = sourceSubmissionBytes(makeProgrammableFee());
+    return {
+      id: record.id,
+      path: "submissions/example-hook/submission.json",
+      blobObjectId: crypto.createHash("sha1")
+        .update(Buffer.from(`blob ${bytes.length}\0`, "utf8"))
+        .update(bytes)
+        .digest("hex"),
+      bytes
+    };
+  });
 }

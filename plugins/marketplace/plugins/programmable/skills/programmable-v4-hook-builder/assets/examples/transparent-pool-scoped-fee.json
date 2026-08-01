@@ -1,8 +1,8 @@
 {
   "fixtureVersion": 1,
   "id": "transparent-pool-scoped-fee",
-  "name": "transparent pool-scoped fee reaches structural prototype readiness",
-  "description": "A fixed hook-owned swap charge covers every swap quadrant, settles atomically and records immutable PoolId-scoped beneficiary liabilities without an administrator redirect.",
+  "name": "legacy unspecified-currency beneficiary fee requires Programmable fee redesign",
+  "description": "A transparent legacy hook-owned fee remains changes-required because an afterSwap-only unspecified-currency charge to a launch beneficiary does not prove the mandatory quadrant-dependent gross quote-side fee or immutable Programmable owner claim path.",
   "steps": [
     {
       "id": "fully-specified",
@@ -324,7 +324,7 @@
         ]
       },
       "expected": {
-        "decision": "PROTOTYPE_READY",
+        "decision": "REDESIGN_REQUIRED",
         "hookPermissionMask": "0x0044",
         "risk": {
           "score": 7,
@@ -338,6 +338,7 @@
           ]
         },
         "findingKeys": [
+          "blocker|PROGRAMMABLE_FEE_INTEGRATION_PENDING|$.programmableFee.collection.status",
           "warning|BUILDER_FIELD_PENDING|$.builder.contact",
           "warning|BUILDER_FIELD_PENDING|$.builder.github",
           "warning|BUILDER_FIELD_PENDING|$.builder.licenseDeclaration"
@@ -347,6 +348,7 @@
           "candidate|independent-security-review-one",
           "candidate|independent-specialist-review",
           "candidate|pinned-fork-and-current-head-smoke",
+          "candidate|programmable-fee-architecture-review",
           "candidate|programmable-indexer-integration-review",
           "candidate|programmable-integration-test-review",
           "candidate|programmable-registry-integration-review",
