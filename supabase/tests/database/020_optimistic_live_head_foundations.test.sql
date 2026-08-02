@@ -1,6 +1,6 @@
 begin;
 
-select plan(37);
+select plan(44);
 
 select ok(
   exists (
@@ -189,6 +189,22 @@ select ok(
     'EXECUTE'
   ),
   'only the existing API-reader capability has optimistic read execution'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.list_optimistic_canonical_events_v1(bigint,bigint,bigint,uuid,integer)'::regprocedure
+    ),
+    'head.block_number - 11'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.list_optimistic_canonical_events_v1(bigint,bigint,bigint,uuid,integer)'::regprocedure
+    ),
+    'live_chain.block_number > live_chain.window_start_block_number'
+  ) > 0,
+  'the recursive live reader has a structural twelve-height stop condition'
 );
 
 set local role programmable_projector;
@@ -863,6 +879,290 @@ select is(
     'e2000000-0000-4000-8000-000000000005'::uuid
   ],
   'restored live-chain events include only the replacement ancestor and child'
+);
+
+reset role;
+set local role programmable_projector;
+
+do $bounded_chain$
+declare
+  child_ordinal integer;
+  child_height bigint;
+  child_hash bytea;
+  parent_hash bytea := pg_catalog.decode(
+    pg_catalog.repeat('dd', 32), 'hex'
+  );
+  tip_id uuid := 'a2000000-0000-4000-8000-000000000005';
+  child_id uuid;
+  event_id uuid;
+  status_id uuid;
+begin
+  for child_ordinal in 1..13 loop
+    child_height := 21000001 + child_ordinal;
+    child_hash := pg_catalog.decode(
+      pg_catalog.repeat(
+        pg_catalog.lpad(pg_catalog.to_hex(child_ordinal), 2, '0'),
+        32
+      ),
+      'hex'
+    );
+    child_id := pg_catalog.format(
+      'a5%s-0000-4000-8000-%s',
+      pg_catalog.lpad(child_ordinal::text, 6, '0'),
+      pg_catalog.lpad(child_ordinal::text, 12, '0')
+    )::uuid;
+    event_id := pg_catalog.format(
+      'e5%s-0000-4000-8000-%s',
+      pg_catalog.lpad(child_ordinal::text, 6, '0'),
+      pg_catalog.lpad(child_ordinal::text, 12, '0')
+    )::uuid;
+    status_id := pg_catalog.format(
+      'c5%s-0000-4000-8000-%s',
+      pg_catalog.lpad(child_ordinal::text, 6, '0'),
+      pg_catalog.lpad(child_ordinal::text, 12, '0')
+    )::uuid;
+
+    perform programmable_private.append_optimistic_block_observation_v1(
+      child_id,
+      1,
+      child_height,
+      child_hash,
+      child_hash,
+      parent_hash,
+      parent_hash,
+      pg_catalog.transaction_timestamp() - interval '1 second',
+      pg_catalog.transaction_timestamp() - interval '1 second',
+      '21000000-0000-4000-8000-000000000001',
+      '22000000-0000-4000-8000-000000000002',
+      21000100,
+      21000100,
+      pg_catalog.decode(
+        pg_catalog.repeat(
+          pg_catalog.lpad(
+            pg_catalog.to_hex(child_ordinal + 128), 2, '0'
+          ),
+          32
+        ),
+        'hex'
+      ),
+      pg_catalog.transaction_timestamp()
+    );
+
+    perform programmable_private.append_optimistic_event_row_v1(
+      event_id,
+      child_id,
+      pg_catalog.decode(
+        pg_catalog.repeat(
+          pg_catalog.lpad(
+            pg_catalog.to_hex(child_ordinal + 32), 2, '0'
+          ),
+          32
+        ),
+        'hex'
+      ),
+      0,
+      0,
+      pg_catalog.decode(
+        pg_catalog.repeat(
+          pg_catalog.lpad(
+            pg_catalog.to_hex(child_ordinal + 64), 2, '0'
+          ),
+          20
+        ),
+        'hex'
+      ),
+      pg_catalog.decode(
+        pg_catalog.repeat(
+          pg_catalog.lpad(
+            pg_catalog.to_hex(child_ordinal + 80), 2, '0'
+          ),
+          32
+        ),
+        'hex'
+      ),
+      array[
+        pg_catalog.decode(
+          pg_catalog.repeat(
+            pg_catalog.lpad(
+              pg_catalog.to_hex(child_ordinal + 96), 2, '0'
+            ),
+            32
+          ),
+          'hex'
+        )
+      ],
+      pg_catalog.decode('01', 'hex'),
+      pg_catalog.jsonb_build_object('height', child_height),
+      pg_catalog.decode(
+        pg_catalog.repeat(
+          pg_catalog.lpad(
+            pg_catalog.to_hex(child_ordinal + 112), 2, '0'
+          ),
+          32
+        ),
+        'hex'
+      ),
+      pg_catalog.transaction_timestamp()
+    );
+
+    perform programmable_private.promote_optimistic_block_canonical_v1(
+      child_id,
+      tip_id,
+      status_id,
+      null,
+      pg_catalog.decode(
+        pg_catalog.repeat(
+          pg_catalog.lpad(
+            pg_catalog.to_hex(child_ordinal + 144), 2, '0'
+          ),
+          32
+        ),
+        'hex'
+      ),
+      pg_catalog.transaction_timestamp()
+    );
+
+    tip_id := child_id;
+    parent_hash := child_hash;
+  end loop;
+end
+$bounded_chain$;
+
+reset role;
+set local role programmable_api_reader;
+
+select ok(
+  exists (
+    select 1
+    from programmable_private.get_optimistic_live_head_v1(1) as head
+    where head.optimistic_block_id =
+        'a5000013-0000-4000-8000-000000000013'
+      and head.block_number = 21000014
+  ),
+  'a chain longer than twelve heights retains the exact current head'
+);
+
+select is(
+  (
+    select pg_catalog.format(
+      '%s:%s:%s',
+      pg_catalog.count(*),
+      pg_catalog.min(events.block_number),
+      pg_catalog.max(events.block_number)
+    )
+    from programmable_private.list_optimistic_canonical_events_v1(
+      1, null, null, null, 100
+    ) as events
+  ),
+  '12:21000003:21000014',
+  'the live event reader returns exactly the latest twelve block heights'
+);
+
+select throws_ok(
+  $$
+    select *
+    from programmable_private.list_optimistic_canonical_events_v1(
+      1,
+      21000002,
+      0,
+      'e5000001-0000-4000-8000-000000000001',
+      100
+    )
+  $$,
+  '40001',
+  'optimistic event cursor is outside the live window',
+  'a cursor below the twelve-height window fails closed'
+);
+
+select throws_ok(
+  $$
+    select *
+    from programmable_private.list_optimistic_canonical_events_v1(
+      1,
+      21000015,
+      0,
+      'e5000014-0000-4000-8000-000000000014',
+      100
+    )
+  $$,
+  '40001',
+  'optimistic event cursor is outside the live window',
+  'a cursor above the current head fails closed'
+);
+
+reset role;
+set local role programmable_projector;
+
+select programmable_private.append_optimistic_block_observation_v1(
+  'a6000000-0000-4000-8000-000000000010',
+  1,
+  21000010,
+  pg_catalog.decode(pg_catalog.repeat('f1', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('f1', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('08', 32), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('08', 32), 'hex'),
+  pg_catalog.transaction_timestamp() - interval '1 second',
+  pg_catalog.transaction_timestamp() - interval '1 second',
+  '21000000-0000-4000-8000-000000000001',
+  '22000000-0000-4000-8000-000000000002',
+  21000101,
+  21000101,
+  pg_catalog.decode(pg_catalog.repeat('f2', 32), 'hex'),
+  pg_catalog.transaction_timestamp()
+);
+
+select programmable_private.append_optimistic_event_row_v1(
+  'e6000000-0000-4000-8000-000000000010',
+  'a6000000-0000-4000-8000-000000000010',
+  pg_catalog.decode(pg_catalog.repeat('f3', 32), 'hex'),
+  0,
+  0,
+  pg_catalog.decode(pg_catalog.repeat('f4', 20), 'hex'),
+  pg_catalog.decode(pg_catalog.repeat('f5', 32), 'hex'),
+  array[pg_catalog.decode(pg_catalog.repeat('f6', 32), 'hex')],
+  pg_catalog.decode('02', 'hex'),
+  '{"kind":"bounded-window-reorg"}'::jsonb,
+  pg_catalog.decode(pg_catalog.repeat('f7', 32), 'hex'),
+  pg_catalog.transaction_timestamp()
+);
+
+select is(
+  programmable_private.promote_optimistic_block_canonical_v1(
+    'a6000000-0000-4000-8000-000000000010',
+    'a5000009-0000-4000-8000-000000000009',
+    'c6000000-0000-4000-8000-000000000010',
+    'd6000000-0000-4000-8000-000000000010',
+    pg_catalog.decode(pg_catalog.repeat('f8', 32), 'hex'),
+    pg_catalog.transaction_timestamp()
+  ),
+  'a6000000-0000-4000-8000-000000000010'::uuid,
+  'a reorg inside the bounded window resets the live tip contiguously'
+);
+
+reset role;
+set local role programmable_api_reader;
+
+select ok(
+  exists (
+    select 1
+    from programmable_private.get_optimistic_live_head_v1(1) as head
+    where head.optimistic_block_id =
+        'a6000000-0000-4000-8000-000000000010'
+      and head.block_number = 21000010
+      and head.reorg_generation = 3
+  )
+  and (
+    select pg_catalog.count(*) = 11
+      and pg_catalog.max(events.block_number) = 21000010
+      and pg_catalog.bool_and(
+        events.optimistic_event_id <>
+          'e5000009-0000-4000-8000-000000000009'
+      )
+    from programmable_private.list_optimistic_canonical_events_v1(
+      1, null, null, null, 100
+    ) as events
+  ),
+  'bounded reads preserve reorg continuity and hide stale descendants'
 );
 
 reset role;

@@ -1266,6 +1266,9 @@ stable
 security definer
 set search_path = ''
 as $function$
+declare
+  live_head programmable_private.optimistic_chain_head_current_v1%rowtype;
+  window_start_block_number bigint;
 begin
   perform programmable_private.assert_caller('programmable_api_reader');
   if p_chain_id is null
@@ -1288,11 +1291,41 @@ begin
     raise exception using errcode = '22023', message = 'invalid optimistic event cursor';
   end if;
 
+  select * into live_head
+  from programmable_private.optimistic_chain_head_current_v1 as head
+  where head.chain_id = p_chain_id;
+  if not found then
+    if p_after_block_number is not null then
+      raise exception using
+        errcode = '40001',
+        message = 'optimistic event cursor is outside the live window';
+    end if;
+    return;
+  end if;
+
+  window_start_block_number := greatest(
+    live_head.segment_start_block_number,
+    live_head.block_number - 11
+  );
+  if p_after_block_number is not null
+     and (
+       p_after_block_number < window_start_block_number
+       or p_after_block_number > live_head.block_number
+     )
+  then
+    raise exception using
+      errcode = '40001',
+      message = 'optimistic event cursor is outside the live window';
+  end if;
+
   return query
   with recursive live_chain as (
     select
       head.chain_id,
-      head.segment_start_block_number,
+      greatest(
+        head.segment_start_block_number,
+        head.block_number - 11
+      ) as window_start_block_number,
       block_row.optimistic_block_id,
       block_row.block_number,
       block_row.block_hash,
@@ -1307,7 +1340,7 @@ begin
 
     select
       parent_pointer.chain_id,
-      live_chain.segment_start_block_number,
+      live_chain.window_start_block_number,
       parent_block.optimistic_block_id,
       parent_block.block_number,
       parent_block.block_hash,
@@ -1322,7 +1355,7 @@ begin
       on parent_block.optimistic_block_id =
            parent_pointer.optimistic_block_id
      and parent_block.block_hash = live_chain.parent_hash
-    where live_chain.block_number > live_chain.segment_start_block_number
+    where live_chain.block_number > live_chain.window_start_block_number
   )
   select
     event_row.optimistic_event_id,
@@ -1366,6 +1399,11 @@ begin
   limit p_limit;
 end
 $function$;
+
+comment on function programmable_private.list_optimistic_canonical_events_v1(
+  bigint, bigint, bigint, uuid, integer
+) is
+  'Returns only the contiguous current chain from max(segment start, head - 11) through head. Cursors outside that 12-height live window fail with SQLSTATE 40001.';
 
 revoke all on type programmable_private.optimistic_block_status_v1
 from public, anon, authenticated, service_role,
