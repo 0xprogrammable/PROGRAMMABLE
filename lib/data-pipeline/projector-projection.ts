@@ -94,7 +94,11 @@ export type ReleaseProjectionPlan = Readonly<{
     model: ProjectorRewardModel;
     baseline: ProjectorRewardBaseline;
   }>[];
-  batchKind?: "normal" | "oversized-transaction" | "reward-block";
+  batchKind?:
+    | "normal"
+    | "oversized-transaction"
+    | "oversized-block"
+    | "reward-block";
 }>;
 
 export type VerifiedReleaseProjection = Readonly<{
@@ -225,7 +229,12 @@ function assertPlan(plan: ReleaseProjectionPlan): void {
     plan.entries.length > maximum ||
     !Array.isArray(plan.dynamicSources) ||
     !Array.isArray(plan.knownPools) ||
-    !["normal", "oversized-transaction", "reward-block"].includes(batchKind)
+    ![
+      "normal",
+      "oversized-transaction",
+      "oversized-block",
+      "reward-block",
+    ].includes(batchKind)
   ) {
     throw invalidInput("postgres", "projection-plan");
   }
@@ -241,6 +250,12 @@ function assertPlan(plan: ReleaseProjectionPlan): void {
     new Set(plan.entries.map(({ candidate }) => candidate.blockHash)).size !== 1
   ) {
     throw invalidInput("postgres", "projection-reward-block");
+  }
+  if (
+    batchKind === "oversized-block" &&
+    new Set(plan.entries.map(({ candidate }) => candidate.blockHash)).size !== 1
+  ) {
+    throw invalidInput("postgres", "projection-atomic-block");
   }
   const ids = new Set<string>();
   let previous:
