@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowRight, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
@@ -29,57 +28,16 @@ export default function DocsPage() {
       description="Platform reference and launch-model documentation."
     >
       <section id="overview">
-        <h2>Choose a guide</h2>
-
-        <div className={styles.modelGrid}>
-          <Link className={styles.modelCard} href="/docs#launching">
-            <span className={styles.modelCardHeader}>
-              <strong>Platform</strong>
-            </span>
-            <p>Explore tokens, create a launch and manage your profile.</p>
-            <span className={styles.modelLink}>
-              Read platform docs
-              <ArrowRight aria-hidden="true" size={14} />
-            </span>
-          </Link>
-
-          <Link className={styles.modelCard} href="/docs/models/classic">
-            <span className={styles.modelCardHeader}>
-              <strong>Classic</strong>
-            </span>
-            <p>
-              Set buy and sell fees, choose who receives creator rewards and
-              decide how the Initial Buy is held.
-            </p>
-            <span className={styles.modelLink}>
-              Read Classic
-              <ArrowRight aria-hidden="true" size={14} />
-            </span>
-          </Link>
-
-          <Link
-            className={styles.modelCard}
-            href="/docs/models/custom"
-          >
-            <span className={styles.modelCardHeader}>
-              <strong>Custom</strong>
-            </span>
-            <p>
-              Product boundary and release requirements for custom launch
-              configuration.
-            </p>
-            <span className={styles.modelLink}>
-              Read Custom
-              <ArrowRight aria-hidden="true" size={14} />
-            </span>
-          </Link>
-        </div>
-
+        <h2>Platform</h2>
         <p className={styles.lead}>
           Programmable launches fixed-supply ERC-20 tokens into Uniswap v4
           pools on Ethereum. A launch model defines the pool structure, fee
           path, reward rules and available controls before the wallet submits
           the transaction.
+        </p>
+        <p>
+          Set buy and sell fees in Classic, then route creator rewards to the
+          launch wallet, another wallet or a split of up to five wallets.
         </p>
         <div className={styles.callout}>
           <strong>Classic is available for new launches.</strong>

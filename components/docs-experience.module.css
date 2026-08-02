@@ -46,6 +46,57 @@
   max-width: 650px;
 }
 
+.heroTools {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(280px, 1fr);
+  margin-top: 34px;
+  max-width: 790px;
+}
+
+.guideTabs {
+  align-items: center;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border: 1px solid var(--control-glass-border);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 14px 38px var(--control-glass-shadow-color);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 4px;
+}
+
+.guideTab {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 610;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease;
+}
+
+.guideTab[data-active="true"] {
+  background: color-mix(in srgb, var(--glass-98) 94%, transparent);
+  border-color: var(--panel-border-soft);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 3px 12px var(--control-glass-shadow-color);
+  color: var(--text);
+}
+
 .search {
   align-items: center;
   -webkit-backdrop-filter: var(--control-glass-backdrop);
@@ -59,8 +110,8 @@
   color: var(--muted);
   display: flex;
   gap: 10px;
-  margin: 34px 0 0;
-  max-width: 620px;
+  margin: 0;
+  max-width: none;
   padding: 0 16px;
   position: relative;
   text-align: left;
@@ -90,6 +141,35 @@
 
 .search input::placeholder {
   color: var(--dim);
+}
+
+.searchClear {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+
+.searchShortcut {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface-soft) 74%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 8px;
+  color: var(--dim);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 12px;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
 }
 
 .searchResults {
@@ -349,83 +429,6 @@
   line-height: 1.52;
 }
 
-.modelGrid {
-  border-top: 1px solid var(--border);
-  display: grid;
-  gap: 0;
-  grid-template-columns: minmax(0, 1fr);
-  margin-top: 27px;
-}
-
-.modelGrid + .lead {
-  margin-top: 32px;
-}
-
-.modelCard {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  display: grid;
-  gap: 18px 28px;
-  grid-template-columns: minmax(118px, 0.34fr) minmax(0, 1fr) auto;
-  min-height: 126px;
-  padding: 22px 2px;
-  transition:
-    border-color 160ms ease,
-    box-shadow 180ms ease,
-    transform 180ms var(--ease-out);
-}
-
-.modelCardHeader {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-}
-
-.modelCardHeader strong {
-  font-size: 22px;
-  font-weight: 610;
-  letter-spacing: -0.03em;
-}
-
-.status {
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 680;
-  letter-spacing: 0.04em;
-  padding: 4px 7px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.status[data-status="live"] {
-  background: rgba(25, 118, 77, 0.08);
-  border-color: rgba(25, 118, 77, 0.18);
-  color: var(--success);
-}
-
-.modelCard p {
-  font-size: 14px;
-  line-height: 1.52;
-  margin: 0;
-}
-
-.modelLink {
-  align-items: center;
-  align-self: end;
-  color: var(--text);
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 640;
-  gap: 6px;
-  white-space: nowrap;
-}
-
 .factGrid {
   display: grid;
   gap: 0;
@@ -590,9 +593,15 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .guideTab:not([data-active="true"]):hover,
   .searchResults a:hover,
   .sourceLinks a:hover {
     background: var(--accent-soft);
+  }
+
+  .searchClear:hover {
+    background: var(--surface-soft);
+    color: var(--text);
   }
 
   .navGroup a:hover {
@@ -600,11 +609,6 @@
     color: var(--text);
   }
 
-  .modelCard:hover {
-    background: color-mix(in srgb, var(--surface-soft) 36%, transparent);
-    box-shadow: none;
-    transform: translateX(3px);
-  }
 }
 
 @media (max-width: 900px) {
@@ -672,6 +676,29 @@
     display: none;
   }
 
+  .mobileNavCurrent {
+    align-items: baseline;
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .mobileNavCurrent > span {
+    color: var(--dim);
+    font-size: 11px;
+    font-weight: 680;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .mobileNavCurrent strong {
+    font-size: 13px;
+    font-weight: 640;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .mobileNav[open] summary {
     border-bottom: 1px solid var(--panel-border-soft);
   }
@@ -694,6 +721,10 @@
     padding-top: 78px;
   }
 
+  .hero {
+    padding-top: 32px;
+  }
+
   .sidebar {
     inset-inline: 14px;
   }
@@ -707,8 +738,19 @@
     margin-top: 17px;
   }
 
-  .search {
+  .heroTools {
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
     margin-top: 24px;
+    max-width: none;
+  }
+
+  .guideTabs {
+    width: 100%;
+  }
+
+  .guideTab {
+    padding-inline: 8px;
   }
 
   .search input {
@@ -724,16 +766,8 @@
     padding-top: 38px;
   }
 
-  .modelGrid,
   .factGrid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .modelCard {
-    align-items: start;
-    grid-template-columns: 1fr;
-    min-height: 0;
-    padding-block: 20px;
   }
 
   .fact:nth-child(even),
@@ -829,7 +863,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .modelCard,
+  .guideTab,
   .navGroup a,
   .mobileNav summary svg,
   .sourceLinks a {

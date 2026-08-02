@@ -17,7 +17,7 @@ const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 describe("Docs rail layout stability", () => {
   it("keeps the desktop rail sticky in its own full-height grid column", () => {
     expect(docsCss).toMatch(
-      /\.page\s*\{[^}]*--docs-layout-width:\s*1116px;[^}]*--docs-rail-width:\s*236px;/s,
+      /\.page\s*\{[^}]*--docs-layout-width:\s*1168px;[^}]*--docs-rail-width:\s*210px;/s,
     );
     expect(docsCss).toMatch(
       /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-content-width\)\);/s,

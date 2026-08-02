@@ -112,6 +112,12 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
   const [activeSectionHref, setActiveSectionHref] = useState(overviewHref);
   const activeHref =
     currentPath === "/docs" ? activeSectionHref : currentPath;
+  let activeLabel = "Reference";
+  for (const group of docsNavigation) {
+    for (const item of group.items) {
+      if (item.href === activeHref) activeLabel = item.label;
+    }
+  }
 
   const navigateToDocsTopic = useCallback(
     (itemHref: string) => {
@@ -319,7 +325,10 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
 
       <details className={styles.mobileNav} ref={mobileNavigationRef}>
         <summary>
-          Browse the docs
+          <span className={styles.mobileNavCurrent}>
+            <span>Docs</span>
+            <strong>{activeLabel}</strong>
+          </span>
           <ChevronDown aria-hidden="true" size={17} />
         </summary>
         <nav

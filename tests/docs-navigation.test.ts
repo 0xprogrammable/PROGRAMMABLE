@@ -10,6 +10,7 @@ import {
 import {
   getDocsSearchResults,
   nextDocsSearchIndex,
+  shouldFocusDocsSearch,
 } from "../components/docs-search";
 
 describe("Docs navigation state", () => {
@@ -165,5 +166,35 @@ describe("Docs navigation state", () => {
     expect(nextDocsSearchIndex(-1, 3, "previous")).toBe(2);
     expect(nextDocsSearchIndex(0, 3, "previous")).toBe(2);
     expect(nextDocsSearchIndex(2, 3, "next")).toBe(0);
+  });
+
+  it("focuses search with slash only outside editable controls", () => {
+    expect(
+      shouldFocusDocsSearch({
+        defaultPrevented: false,
+        hasModifier: false,
+        isContentEditable: false,
+        key: "/",
+        targetTagName: "BODY",
+      }),
+    ).toBe(true);
+    expect(
+      shouldFocusDocsSearch({
+        defaultPrevented: false,
+        hasModifier: false,
+        isContentEditable: false,
+        key: "/",
+        targetTagName: "INPUT",
+      }),
+    ).toBe(false);
+    expect(
+      shouldFocusDocsSearch({
+        defaultPrevented: false,
+        hasModifier: true,
+        isContentEditable: false,
+        key: "/",
+        targetTagName: "BODY",
+      }),
+    ).toBe(false);
   });
 });
