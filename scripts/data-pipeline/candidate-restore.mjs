@@ -125,6 +125,8 @@ export const PINNED_PRE_ATTESTATION_SNAPSHOT = Object.freeze({
     "0x5921ceacba6b7d3c636d3571fd7ebe9fad599626d03372836d0e6293e358c597",
   structuralManifestSha256:
     "0x1546ad4cf2312e3143cf8cd57422f4040924521db4531d2ef2b1a9875f662ef8",
+  portableStructuralManifestSha256:
+    "0x0b95ed1e28d2684aa920be5058c7815b604986a611f67d7900c42d181875e80b",
 });
 export const CANDIDATE_PG_RESTRICT_KEY =
   "b3679e8b178535bbc58f9c9c43690a8c7e310ade8bd93360f15004be385b02d2";
@@ -470,6 +472,9 @@ function validateBackupEvidence(value, {
   repositoryCommit,
 } = {}) {
   const evidence = plainObject(value, "database backup evidence");
+  const hasPortableStructuralManifest =
+    Object.hasOwn(evidence, "sourcePortableStructuralManifestSha256") ||
+    Object.hasOwn(evidence, "restoredPortableStructuralManifestSha256");
   if (
     evidence.kind !== "programmable-database-backup-restore-evidence" ||
     evidence.schemaVersion !== 1 ||
@@ -485,8 +490,14 @@ function validateBackupEvidence(value, {
     evidence.restoredManifestSha256 !== evidence.sourceManifestSha256 ||
     (evidence.sourceStructuralManifestSha256 !== undefined &&
       (!SHA256.test(evidence.sourceStructuralManifestSha256) ||
+        !SHA256.test(evidence.restoredStructuralManifestSha256 ?? ""))) ||
+    (hasPortableStructuralManifest
+      ? !SHA256.test(evidence.sourcePortableStructuralManifestSha256 ?? "") ||
+        evidence.restoredPortableStructuralManifestSha256 !==
+          evidence.sourcePortableStructuralManifestSha256
+      : evidence.sourceStructuralManifestSha256 !== undefined &&
         evidence.restoredStructuralManifestSha256 !==
-          evidence.sourceStructuralManifestSha256)) ||
+          evidence.sourceStructuralManifestSha256) ||
     !Number.isSafeInteger(evidence.tableCount) ||
     evidence.tableCount <= 0 ||
     !Number.isSafeInteger(evidence.rowCount) ||
@@ -534,6 +545,12 @@ function backupReference(evidence) {
       : {
           structuralManifestSha256:
             validated.sourceStructuralManifestSha256,
+        }),
+    ...(validated.sourcePortableStructuralManifestSha256 === undefined
+      ? {}
+      : {
+          portableStructuralManifestSha256:
+            validated.sourcePortableStructuralManifestSha256,
         }),
     tableCount: validated.tableCount,
     rowCount: validated.rowCount,
@@ -619,6 +636,14 @@ export function buildCandidateSafetyBackupEvidence(input) {
       input.currentManifest?.structuralManifestSha256
   ) {
     throw new Error("Candidate structure changed after the safety backup");
+  }
+  if (
+    !SHA256.test(backupEvidence.sourcePortableStructuralManifestSha256 ?? "") ||
+    !SHA256.test(input.currentManifest?.portableStructuralManifestSha256 ?? "") ||
+    backupEvidence.sourcePortableStructuralManifestSha256 !==
+      input.currentManifest.portableStructuralManifestSha256
+  ) {
+    throw new Error("Candidate portable structure changed after the safety backup");
   }
   if (
     input.currentManifest?.tableCount !== backupEvidence.tableCount ||
@@ -709,6 +734,7 @@ export function validateCandidateSafetyBackupEvidence(value, {
     !SHA256.test(backup.archiveListSha256 ?? "") ||
     !SHA256.test(backup.manifestSha256 ?? "") ||
     !SHA256.test(backup.structuralManifestSha256 ?? "") ||
+    !SHA256.test(backup.portableStructuralManifestSha256 ?? "") ||
     !Number.isSafeInteger(backup.bytes) ||
     backup.bytes <= 0 ||
     !Number.isSafeInteger(backup.tableCount) ||
@@ -2084,6 +2110,8 @@ export async function createCandidateRestorePlan(input) {
       migrationSourceClosure,
       structuralManifestSha256:
         PINNED_PRE_ATTESTATION_SNAPSHOT.structuralManifestSha256,
+      portableStructuralManifestSha256:
+        PINNED_PRE_ATTESTATION_SNAPSHOT.portableStructuralManifestSha256,
     }),
     safetyBackup: Object.freeze({
       ...safety,
@@ -2099,6 +2127,8 @@ export async function createCandidateRestorePlan(input) {
       manifestSha256: snapshot.manifestSha256,
       structuralManifestSha256:
         PINNED_PRE_ATTESTATION_SNAPSHOT.structuralManifestSha256,
+      portableStructuralManifestSha256:
+        PINNED_PRE_ATTESTATION_SNAPSHOT.portableStructuralManifestSha256,
       tableCount: snapshot.tableCount,
       rowCount: snapshot.rowCount,
       databaseMode: "candidate-only",
@@ -2165,6 +2195,8 @@ export function validateCandidateRestorePlan(value) {
       canonicalJson(PINNED_BASELINE_MIGRATION_SOURCE_CLOSURE) ||
     plan.snapshot?.structuralManifestSha256 !==
       PINNED_PRE_ATTESTATION_SNAPSHOT.structuralManifestSha256 ||
+    plan.snapshot?.portableStructuralManifestSha256 !==
+      PINNED_PRE_ATTESTATION_SNAPSHOT.portableStructuralManifestSha256 ||
     plan.snapshot?.bytes !== PINNED_PRE_ATTESTATION_SNAPSHOT.bytes ||
     canonicalJson(plan.snapshot?.schemas) !== canonicalJson(CANDIDATE_RESTORE_SCHEMAS) ||
     !SHA256.test(plan.safetyBackup?.safetyEvidenceSha256 ?? "") ||
@@ -2172,6 +2204,7 @@ export function validateCandidateRestorePlan(value) {
     !SHA256.test(plan.safetyBackup?.archiveListSha256 ?? "") ||
     !SHA256.test(plan.safetyBackup?.manifestSha256 ?? "") ||
     !SHA256.test(plan.safetyBackup?.structuralManifestSha256 ?? "") ||
+    !SHA256.test(plan.safetyBackup?.portableStructuralManifestSha256 ?? "") ||
     !Number.isSafeInteger(plan.safetyBackup?.bytes) ||
     plan.safetyBackup.bytes <= 0 ||
     canonicalJson(plan.postgresToolchain) !==
@@ -2179,6 +2212,8 @@ export function validateCandidateRestorePlan(value) {
     plan.postRestore?.manifestSha256 !== plan.snapshot.manifestSha256 ||
     plan.postRestore?.structuralManifestSha256 !==
       plan.snapshot.structuralManifestSha256 ||
+    plan.postRestore?.portableStructuralManifestSha256 !==
+      plan.snapshot.portableStructuralManifestSha256 ||
     plan.postRestore?.tableCount !== plan.snapshot.tableCount ||
     plan.postRestore?.rowCount !== plan.snapshot.rowCount ||
     plan.postRestore?.databaseMode !== "candidate-only" ||
@@ -2287,8 +2322,9 @@ function assertPostRestore({ plan, manifest, state }) {
   const fence = assertCandidateFence(state, "fenced");
   if (
     manifest?.manifestSha256 !== plan.postRestore.manifestSha256 ||
-    manifest?.structuralManifestSha256 !==
-      plan.postRestore.structuralManifestSha256 ||
+    !SHA256.test(manifest?.structuralManifestSha256 ?? "") ||
+    manifest?.portableStructuralManifestSha256 !==
+      plan.postRestore.portableStructuralManifestSha256 ||
     manifest?.tableCount !== plan.postRestore.tableCount ||
     manifest?.rowCount !== plan.postRestore.rowCount ||
     fence.databaseMode !== plan.postRestore.databaseMode ||
@@ -2481,6 +2517,8 @@ export async function applyCandidateRestore(input) {
       currentManifest.manifestSha256 === plan.safetyBackup.manifestSha256 &&
       currentManifest.structuralManifestSha256 ===
         plan.safetyBackup.structuralManifestSha256 &&
+      currentManifest.portableStructuralManifestSha256 ===
+        plan.safetyBackup.portableStructuralManifestSha256 &&
       currentManifest.tableCount === plan.safetyBackup.tableCount &&
       currentManifest.rowCount === plan.safetyBackup.rowCount;
     let restoredStateMatches = false;
@@ -2570,6 +2608,8 @@ export async function applyCandidateRestore(input) {
         tableCount: manifest.tableCount,
         rowCount: manifest.rowCount,
         structuralManifestSha256: manifest.structuralManifestSha256,
+        portableStructuralManifestSha256:
+          manifest.portableStructuralManifestSha256,
       }),
       migrationCount: restoredMigrationCount,
       candidateFence: fence,
@@ -2771,6 +2811,8 @@ export async function createCandidateSafetyRecoveryPlan(input) {
       candidateState: safetyEvidence.currentCandidateState,
       manifestSha256: safety.manifestSha256,
       structuralManifestSha256: safety.structuralManifestSha256,
+      portableStructuralManifestSha256:
+        safety.portableStructuralManifestSha256,
       tableCount: safety.tableCount,
       rowCount: safety.rowCount,
     }),
@@ -2811,6 +2853,7 @@ export function validateCandidateSafetyRecoveryPlan(value) {
     !SHA256.test(plan.safetyBackup?.archiveListSha256 ?? "") ||
     !SHA256.test(plan.safetyBackup?.manifestSha256 ?? "") ||
     !SHA256.test(plan.safetyBackup?.structuralManifestSha256 ?? "") ||
+    !SHA256.test(plan.safetyBackup?.portableStructuralManifestSha256 ?? "") ||
     !SHA256.test(plan.safetyBackup?.cleanClosureSha256 ?? "") ||
     !Number.isSafeInteger(plan.safetyBackup?.cleanClosureStatementCount) ||
     plan.safetyBackup.cleanClosureStatementCount < 1 ||
@@ -2822,9 +2865,12 @@ export function validateCandidateSafetyRecoveryPlan(value) {
     plan.safetyBackup.securityClosureStatementCount < 1 ||
     !SHA256.test(plan.postRestore?.manifestSha256 ?? "") ||
     !SHA256.test(plan.postRestore?.structuralManifestSha256 ?? "") ||
+    !SHA256.test(plan.postRestore?.portableStructuralManifestSha256 ?? "") ||
     plan.postRestore.manifestSha256 !== plan.safetyBackup.manifestSha256 ||
     plan.postRestore.structuralManifestSha256 !==
       plan.safetyBackup.structuralManifestSha256 ||
+    plan.postRestore.portableStructuralManifestSha256 !==
+      plan.safetyBackup.portableStructuralManifestSha256 ||
     plan.postRestore.tableCount !== plan.safetyBackup.tableCount ||
     plan.postRestore.rowCount !== plan.safetyBackup.rowCount
   ) {
@@ -3031,8 +3077,9 @@ export async function applyCandidateSafetyRecovery(input) {
           promotedCandidateState(state, plan.currentProductCommit),
         ) === canonicalJson(plan.postRestore.candidateState) &&
         manifest.manifestSha256 === plan.postRestore.manifestSha256 &&
-        manifest.structuralManifestSha256 ===
-          plan.postRestore.structuralManifestSha256 &&
+        SHA256.test(manifest.structuralManifestSha256 ?? "") &&
+        manifest.portableStructuralManifestSha256 ===
+          plan.postRestore.portableStructuralManifestSha256 &&
         manifest.tableCount === plan.postRestore.tableCount &&
         manifest.rowCount === plan.postRestore.rowCount;
     } catch {
@@ -3084,8 +3131,9 @@ export async function applyCandidateSafetyRecovery(input) {
         promotedCandidateState(state, plan.currentProductCommit),
       ) !== canonicalJson(plan.postRestore.candidateState) ||
       manifest.manifestSha256 !== plan.postRestore.manifestSha256 ||
-      manifest.structuralManifestSha256 !==
-        plan.postRestore.structuralManifestSha256 ||
+      !SHA256.test(manifest.structuralManifestSha256 ?? "") ||
+      manifest.portableStructuralManifestSha256 !==
+        plan.postRestore.portableStructuralManifestSha256 ||
       manifest.tableCount !== plan.postRestore.tableCount ||
       manifest.rowCount !== plan.postRestore.rowCount
     ) {
@@ -3186,8 +3234,9 @@ export function validateCandidateRestoreResult(value) {
       PINNED_PRE_ATTESTATION_SNAPSHOT.schemaSqlSha256 ||
     result.snapshot?.manifestSha256 !==
       PINNED_PRE_ATTESTATION_SNAPSHOT.manifestSha256 ||
-    result.snapshot?.structuralManifestSha256 !==
-      PINNED_PRE_ATTESTATION_SNAPSHOT.structuralManifestSha256 ||
+    !SHA256.test(result.snapshot?.structuralManifestSha256 ?? "") ||
+    result.snapshot?.portableStructuralManifestSha256 !==
+      PINNED_PRE_ATTESTATION_SNAPSHOT.portableStructuralManifestSha256 ||
     !Number.isSafeInteger(result.snapshot?.tableCount) ||
     !Number.isSafeInteger(result.snapshot?.rowCount) ||
     !Number.isSafeInteger(result.migrationCount) ||

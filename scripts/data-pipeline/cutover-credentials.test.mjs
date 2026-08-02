@@ -6,6 +6,8 @@ import test from "node:test";
 
 import {
   ROLE_SPECS,
+  canonicalizePostgresAclRows,
+  canonicalizePostgresDefinition,
   captureDatabaseManifest,
   createBackupAndRestoreEvidence,
   provisionLoginRoles,
@@ -421,6 +423,7 @@ function manifest(value = "c") {
     structuralManifestSha256: `0x${value.repeat(63)}${
       value === "f" ? "e" : "f"
     }`,
+    portableStructuralManifestSha256: `0x${"d".repeat(64)}`,
     tableCount: 27,
     rowCount: 265,
   };
@@ -527,6 +530,10 @@ test("captureDatabaseManifest preserves the legacy hash and binds structural cat
     "0x3561c613752680fd9a2faddb412267139e7c9d8d0f1995ed1b243e920c3b508a",
   );
   assert.match(baseline.structuralManifestSha256, /^0x[0-9a-f]{64}$/u);
+  assert.match(
+    baseline.portableStructuralManifestSha256,
+    /^0x[0-9a-f]{64}$/u,
+  );
   assert.equal(baseline.tableCount, 0);
   assert.equal(baseline.rowCount, 0);
 
@@ -556,6 +563,9 @@ test("captureDatabaseManifest preserves the legacy hash and binds structural cat
     "pg_policy",
     "nspacl",
     "relacl",
+    "acldefault",
+    "class.relkind in ('r', 'p', 'v', 'm', 'f')",
+    "class.relkind = 'S'",
     "attacl",
     "proacl",
     "typacl",
@@ -578,6 +588,133 @@ test("captureDatabaseManifest preserves the legacy hash and binds structural cat
     "last_value::text",
   ]) {
     assert.equal(catalogSql.includes(requiredFragment), true, requiredFragment);
+  }
+});
+
+test("portable Postgres definitions flatten only redundant same-boolean grouping", () => {
+  const hosted =
+    "CHECK ((((octet_length(value) >= 1) AND (octet_length(value) <= 192)) AND (value ~ '^[A-Z()]$'::text)))";
+  const isolated =
+    "CHECK (((octet_length(value) >= 1) AND (octet_length(value) <= 192) AND (value ~ '^[A-Z()]$'::text)))";
+  assert.equal(
+    canonicalizePostgresDefinition(hosted),
+    canonicalizePostgresDefinition(isolated),
+  );
+  assert.equal(
+    canonicalizePostgresDefinition(
+      "SELECT 1 HAVING (((count(*) >= 1) AND (count(*) <= 5)))",
+    ),
+    canonicalizePostgresDefinition(
+      "SELECT 1 HAVING ((count(*) >= 1) AND (count(*) <= 5))",
+    ),
+  );
+  assert.equal(
+    canonicalizePostgresDefinition(
+      "SELECT * FROM a JOIN b ON ((((a.id = b.id) AND (a.kind = b.kind))))",
+    ),
+    canonicalizePostgresDefinition(
+      "SELECT * FROM a JOIN b ON ((a.id = b.id) AND (a.kind = b.kind))",
+    ),
+  );
+  assert.equal(
+    canonicalizePostgresDefinition(
+      "CHECK ((((label = 'x AND (y)') AND (body = $tag$(AND)$tag$))))",
+    ),
+    canonicalizePostgresDefinition(
+      "CHECK ((label = 'x AND (y)') AND (body = $tag$(AND)$tag$))",
+    ),
+  );
+  assert.notEqual(
+    canonicalizePostgresDefinition("CHECK (((a OR b) AND c))"),
+    canonicalizePostgresDefinition("CHECK ((a OR (b AND c)))"),
+  );
+  assert.notEqual(
+    canonicalizePostgresDefinition("CHECK ((a BETWEEN b AND c) AND d)"),
+    canonicalizePostgresDefinition("CHECK (a BETWEEN b AND (c AND d))"),
+  );
+  assert.notEqual(
+    canonicalizePostgresDefinition("CHECK (a AND b)"),
+    canonicalizePostgresDefinition("CHECK (a OR b)"),
+  );
+  for (const [left, right] of [
+    ["CHECK (a = 1)", "CHECK (b = 1)"],
+    ["CHECK (a = 1)", "CHECK (a = 2)"],
+    ["CHECK (a::text = '1')", "CHECK (a::integer = 1)"],
+    ["CHECK (a >= 1)", "CHECK (a > 1)"],
+    [
+      "CHECK ((CASE WHEN a THEN b ELSE c END) AND d)",
+      "CHECK ((CASE WHEN a THEN b ELSE e END) AND d)",
+    ],
+  ]) {
+    assert.notEqual(
+      canonicalizePostgresDefinition(left),
+      canonicalizePostgresDefinition(right),
+    );
+  }
+  for (const invalid of [
+    "CHECK ((a AND b)",
+    "CHECK (a AND b))",
+    "CHECK (a = 'unterminated)",
+    "CHECK (a = $tag$unterminated)",
+  ]) {
+    assert.throws(() => canonicalizePostgresDefinition(invalid));
+  }
+});
+
+test("portable Postgres ACLs collapse only database-proven default-equivalent grants", () => {
+  const implicitDefault = [
+    {
+      schema_name: "programmable_private",
+      schema_owner: "programmable_migrator",
+      grants_are_default: true,
+      grants_match_default: true,
+      grant_text: null,
+    },
+  ];
+  const explicitDefault = [
+    {
+      schema_name: "programmable_private",
+      schema_owner: "programmable_migrator",
+      grants_are_default: false,
+      grants_match_default: true,
+      grant_text: "programmable_migrator=UC/programmable_migrator",
+    },
+  ];
+  assert.deepEqual(
+    canonicalizePostgresAclRows(explicitDefault),
+    canonicalizePostgresAclRows(implicitDefault),
+  );
+  assert.equal(
+    canonicalizePostgresAclRows([...explicitDefault, ...explicitDefault]).length,
+    1,
+  );
+
+  for (const drift of [
+    {
+      grant_text: "programmable_api_reader=U/programmable_migrator",
+    },
+    {
+      grant_text: "programmable_api_reader=U*/programmable_migrator",
+    },
+    {
+      grant_text: "programmable_migrator=UC/postgres",
+    },
+    {
+      schema_owner: "postgres",
+      grant_text: "postgres=UC/postgres",
+    },
+    { grant_text: null },
+  ]) {
+    assert.notDeepEqual(
+      canonicalizePostgresAclRows([
+        {
+          ...explicitDefault[0],
+          ...drift,
+          grants_match_default: false,
+        },
+      ]),
+      canonicalizePostgresAclRows(implicitDefault),
+    );
   }
 });
 
@@ -742,6 +879,47 @@ test("createBackupAndRestoreEvidence keeps secrets in child env and proves an is
   for (const caPath of harness.caPaths) {
     await assert.rejects(lstat(caPath), { code: "ENOENT" });
   }
+});
+
+test("createBackupAndRestoreEvidence accepts only portable-equivalent cross-build structure", async (t) => {
+  const fixture = await backupFixture();
+  t.after(() => rm(fixture.directory, { recursive: true, force: true }));
+  const source = {
+    ...manifest(),
+    structuralManifestSha256: `0x${"a".repeat(64)}`,
+    portableStructuralManifestSha256: `0x${"b".repeat(64)}`,
+  };
+  const restored = {
+    ...source,
+    structuralManifestSha256: `0x${"c".repeat(64)}`,
+  };
+  let captures = 0;
+  const harness = backupDependencies(fixture, {
+    captureDatabaseManifest: async () => {
+      captures += 1;
+      return captures < 3 ? source : restored;
+    },
+  });
+  const result = await createBackupAndRestoreEvidence({
+    ...fixture.input,
+    dependencies: harness.dependencies,
+  });
+  assert.equal(
+    result.evidence.sourceStructuralManifestSha256,
+    source.structuralManifestSha256,
+  );
+  assert.equal(
+    result.evidence.restoredStructuralManifestSha256,
+    restored.structuralManifestSha256,
+  );
+  assert.equal(
+    result.evidence.sourcePortableStructuralManifestSha256,
+    source.portableStructuralManifestSha256,
+  );
+  assert.equal(
+    result.evidence.restoredPortableStructuralManifestSha256,
+    source.portableStructuralManifestSha256,
+  );
 });
 
 test("createBackupAndRestoreEvidence records an exact empty target-schema baseline", async (t) => {

@@ -803,6 +803,14 @@ function validateStoredEvidence(value, request) {
     value ?? {},
     "restoredStructuralManifestSha256",
   );
+  const hasSourcePortableStructuralManifest = Object.hasOwn(
+    value ?? {},
+    "sourcePortableStructuralManifestSha256",
+  );
+  const hasRestoredPortableStructuralManifest = Object.hasOwn(
+    value ?? {},
+    "restoredPortableStructuralManifestSha256",
+  );
   if (
     !isPlainRecord(value) ||
     value.kind !== "programmable-database-backup-restore-evidence" ||
@@ -825,8 +833,16 @@ function validateStoredEvidence(value, request) {
     hasSourceStructuralManifest !== hasRestoredStructuralManifest ||
     (hasSourceStructuralManifest &&
       (!SHA256.test(value.sourceStructuralManifestSha256 ?? "") ||
+        !SHA256.test(value.restoredStructuralManifestSha256 ?? ""))) ||
+    hasSourcePortableStructuralManifest !==
+      hasRestoredPortableStructuralManifest ||
+    (hasSourcePortableStructuralManifest
+      ? !SHA256.test(value.sourcePortableStructuralManifestSha256 ?? "") ||
+        value.restoredPortableStructuralManifestSha256 !==
+          value.sourcePortableStructuralManifestSha256
+      : hasSourceStructuralManifest &&
         value.restoredStructuralManifestSha256 !==
-          value.sourceStructuralManifestSha256)) ||
+          value.sourceStructuralManifestSha256) ||
     !Number.isSafeInteger(value.tableCount) ||
     value.tableCount < 0 ||
     !Number.isSafeInteger(value.rowCount) ||
@@ -1032,6 +1048,278 @@ function quoteIdentifier(value) {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
+const BOOLEAN_DEFINITION_WORDS = new Set(["AND", "OR"]);
+const NON_ASSOCIATIVE_BOOLEAN_CONTEXT = new Set([
+  "BETWEEN",
+  "CASE",
+  "ELSE",
+  "END",
+  "FILTER",
+  "ORDER",
+  "OVER",
+  "SELECT",
+  "THEN",
+  "WHEN",
+  "WITHIN",
+]);
+
+function postgresDefinitionTokens(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error("Postgres definition is invalid");
+  }
+  const tokens = [];
+  let offset = 0;
+  const pushQuoted = (quote) => {
+    const start = offset;
+    offset += 1;
+    while (offset < value.length) {
+      if (value[offset] === "\\") {
+        offset += Math.min(2, value.length - offset);
+        continue;
+      }
+      if (value[offset] === quote) {
+        if (value[offset + 1] === quote) {
+          offset += 2;
+          continue;
+        }
+        offset += 1;
+        tokens.push({ kind: "quoted", value: value.slice(start, offset) });
+        return;
+      }
+      offset += 1;
+    }
+    throw new Error("Postgres definition contains an unterminated quote");
+  };
+  while (offset < value.length) {
+    const character = value[offset];
+    if (/\s/u.test(character)) {
+      offset += 1;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      pushQuoted(character);
+      continue;
+    }
+    if (character === "$") {
+      const tag = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/u.exec(
+        value.slice(offset),
+      )?.[0];
+      if (tag) {
+        const end = value.indexOf(tag, offset + tag.length);
+        if (end < 0) {
+          throw new Error("Postgres definition contains an unterminated dollar quote");
+        }
+        tokens.push({
+          kind: "quoted",
+          value: value.slice(offset, end + tag.length),
+        });
+        offset = end + tag.length;
+        continue;
+      }
+    }
+    if (/[A-Za-z_]/u.test(character)) {
+      const start = offset;
+      offset += 1;
+      while (offset < value.length && /[A-Za-z0-9_$]/u.test(value[offset])) {
+        offset += 1;
+      }
+      tokens.push({ kind: "word", value: value.slice(start, offset) });
+      continue;
+    }
+    if (/[0-9]/u.test(character)) {
+      const start = offset;
+      offset += 1;
+      while (offset < value.length && /[0-9A-Fa-f_xX.eE+-]/u.test(value[offset])) {
+        if (
+          ["+", "-"].includes(value[offset]) &&
+          !["e", "E"].includes(value[offset - 1])
+        ) {
+          break;
+        }
+        offset += 1;
+      }
+      tokens.push({ kind: "number", value: value.slice(start, offset) });
+      continue;
+    }
+    if (character === "(" || character === ")") {
+      tokens.push({ kind: "parenthesis", value: character });
+      offset += 1;
+      continue;
+    }
+    if (/[,.;\[\]]/u.test(character)) {
+      tokens.push({ kind: "punctuation", value: character });
+      offset += 1;
+      continue;
+    }
+    if (/[~!@#%^&|`?+*/<>=:-]/u.test(character)) {
+      const start = offset;
+      offset += 1;
+      while (
+        offset < value.length &&
+        /[~!@#%^&|`?+*/<>=:-]/u.test(value[offset])
+      ) {
+        offset += 1;
+      }
+      tokens.push({ kind: "operator", value: value.slice(start, offset) });
+      continue;
+    }
+    tokens.push({ kind: "literal", value: character });
+    offset += 1;
+  }
+  return tokens;
+}
+
+function postgresDefinitionTree(value) {
+  const root = { kind: "group", explicit: false, children: [] };
+  const stack = [root];
+  for (const token of postgresDefinitionTokens(value)) {
+    if (token.kind !== "parenthesis") {
+      stack.at(-1).children.push(token);
+      continue;
+    }
+    if (token.value === "(") {
+      const group = { kind: "group", explicit: true, children: [] };
+      stack.at(-1).children.push(group);
+      stack.push(group);
+      continue;
+    }
+    if (stack.length === 1) {
+      throw new Error("Postgres definition has an unmatched closing parenthesis");
+    }
+    stack.pop();
+  }
+  if (stack.length !== 1) {
+    throw new Error("Postgres definition has an unmatched opening parenthesis");
+  }
+  return root;
+}
+
+function topLevelBooleanKind(group) {
+  const words = group.children
+    .filter(({ kind }) => kind === "word")
+    .map(({ value }) => value.toUpperCase());
+  if (words.some((word) => NON_ASSOCIATIVE_BOOLEAN_CONTEXT.has(word))) {
+    return null;
+  }
+  const operators = new Set(
+    words.filter((word) => BOOLEAN_DEFINITION_WORDS.has(word)),
+  );
+  return operators.size === 1 ? [...operators][0] : null;
+}
+
+function containsUnsafeSingletonSyntax(group) {
+  return group.children.some(
+    (child) =>
+      (child.kind === "punctuation" && child.value === ",") ||
+      (child.kind === "word" &&
+        ["SELECT", "TABLE", "VALUES", "WITH"].includes(
+          child.value.toUpperCase(),
+        )),
+  );
+}
+
+function booleanOperandAt(children, index, operator) {
+  const previous = children[index - 1];
+  const next = children[index + 1];
+  const boundary = (value) =>
+    value === undefined ||
+    (value.kind === "word" && value.value.toUpperCase() === operator);
+  return boundary(previous) && boundary(next);
+}
+
+function normalizePostgresDefinitionGroup(group) {
+  for (const child of group.children) {
+    if (child.kind === "group") normalizePostgresDefinitionGroup(child);
+  }
+  while (
+    group.children.length === 1 &&
+    group.children[0].kind === "group" &&
+    topLevelBooleanKind(group.children[0]) !== null &&
+    !containsUnsafeSingletonSyntax(group.children[0])
+  ) {
+    group.children = group.children[0].children;
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const operator = topLevelBooleanKind(group);
+    if (!operator) break;
+    const normalized = [];
+    for (let index = 0; index < group.children.length; index += 1) {
+      const child = group.children[index];
+      if (
+        child.kind === "group" &&
+        topLevelBooleanKind(child) === operator &&
+        booleanOperandAt(group.children, index, operator)
+      ) {
+        normalized.push(...child.children);
+        changed = true;
+      } else {
+        normalized.push(child);
+      }
+    }
+    group.children = normalized;
+  }
+  return group;
+}
+
+function serializedPostgresDefinitionNode(node) {
+  if (node.kind !== "group") return [node.kind, node.value];
+  return [
+    node.explicit ? "group" : "root",
+    ...node.children.map(serializedPostgresDefinitionNode),
+  ];
+}
+
+export function canonicalizePostgresDefinition(value) {
+  if (value === null) return null;
+  return canonicalJson(
+    serializedPostgresDefinitionNode(
+      normalizePostgresDefinitionGroup(postgresDefinitionTree(value)),
+    ),
+  );
+}
+
+function portableDefinitionRows(rows, fields) {
+  return rows.map((row) => ({
+    ...row,
+    ...Object.fromEntries(
+      fields.map((field) => [
+        field,
+        row[field] === null || row[field] === undefined
+          ? row[field]
+          : canonicalizePostgresDefinition(row[field]),
+      ]),
+    ),
+  }));
+}
+
+function rawAclRows(rows) {
+  return rows.map((row) => {
+    const raw = { ...row };
+    delete raw.grants_match_default;
+    return raw;
+  });
+}
+
+export function canonicalizePostgresAclRows(rows) {
+  const seen = new Set();
+  const canonicalRows = [];
+  for (const captured of rows) {
+    const { grants_match_default: grantsMatchDefault, ...raw } = captured;
+    const row =
+      grantsMatchDefault === true
+        ? { ...raw, grants_are_default: true, grant_text: null }
+        : raw;
+    const key = canonicalJson(row);
+    if (!seen.has(key)) {
+      seen.add(key);
+      canonicalRows.push(row);
+    }
+  }
+  return canonicalRows;
+}
+
 export async function captureDatabaseManifest(
   sql,
   { schemas: requestedSchemas = BACKUP_SCHEMAS } = {},
@@ -1200,6 +1488,9 @@ export async function captureDatabaseManifest(
         namespace.nspname as schema_name,
         pg_catalog.pg_get_userbyid(namespace.nspowner) as schema_owner,
         namespace.nspacl is null as grants_are_default,
+        namespace.nspacl is null or
+          namespace.nspacl = pg_catalog.acldefault('n', namespace.nspowner)
+          as grants_match_default,
         grant_item.grant_text
       from pg_catalog.pg_namespace as namespace
       left join lateral (
@@ -1234,6 +1525,14 @@ export async function captureDatabaseManifest(
           from pg_catalog.unnest(class.reloptions) as option_value
         ), '{}'::text[])::text as relation_options,
         class.relacl is null as grants_are_default,
+        class.relacl is null or
+          case
+            when class.relkind in ('r', 'p', 'v', 'm', 'f') then
+              class.relacl = pg_catalog.acldefault('r', class.relowner)
+            when class.relkind = 'S' then
+              class.relacl = pg_catalog.acldefault('s', class.relowner)
+            else false
+          end as grants_match_default,
         grant_item.grant_text
       from pg_catalog.pg_class as class
       join pg_catalog.pg_namespace as namespace
@@ -1739,8 +2038,8 @@ export async function captureDatabaseManifest(
   const structuralPayload = {
     schemaVersion: 2,
     schemas,
-    schemaSecurity,
-    relationSecurity,
+    schemaSecurity: rawAclRows(schemaSecurity),
+    relationSecurity: rawAclRows(relationSecurity),
     columns,
     functionDefinitions,
     views,
@@ -1755,9 +2054,24 @@ export async function captureDatabaseManifest(
     defaultPrivileges,
     sequences,
   };
+  const portableStructuralPayload = {
+    ...structuralPayload,
+    schemaVersion: 3,
+    schemaSecurity: canonicalizePostgresAclRows(schemaSecurity),
+    relationSecurity: canonicalizePostgresAclRows(relationSecurity),
+    views: portableDefinitionRows(views, ["definition"]),
+    constraints: constraints.map((row) =>
+      row.constraint_kind === "c"
+        ? portableDefinitionRows([row], ["definition"])[0]
+        : row,
+    ),
+  };
   return Object.freeze({
     manifestSha256: sha256(canonicalJson(payload)),
     structuralManifestSha256: sha256(canonicalJson(structuralPayload)),
+    portableStructuralManifestSha256: sha256(
+      canonicalJson(portableStructuralPayload),
+    ),
     tableCount: tables.length,
     rowCount: totalRows,
   });
@@ -1847,6 +2161,16 @@ async function writeEvidence(request, evidence) {
   }
 }
 
+function portableStructuralManifest(manifest) {
+  const value =
+    manifest?.portableStructuralManifestSha256 ??
+    manifest?.structuralManifestSha256;
+  if (!SHA256.test(value ?? "")) {
+    throw new Error("portable database structure manifest is invalid");
+  }
+  return value;
+}
+
 export async function createBackupAndRestoreEvidence(input) {
   const request = validateBackupRequest(input);
   request.sourceDatabaseUrl = input.sourceDatabaseUrl;
@@ -1910,6 +2234,7 @@ export async function createBackupAndRestoreEvidence(input) {
     if (
       !SHA256.test(before?.manifestSha256 ?? "") ||
       !SHA256.test(before?.structuralManifestSha256 ?? "") ||
+      !SHA256.test(portableStructuralManifest(before)) ||
       !Number.isSafeInteger(before?.tableCount) ||
       before.tableCount < 0 ||
       !Number.isSafeInteger(before?.rowCount) ||
@@ -1958,6 +2283,8 @@ export async function createBackupAndRestoreEvidence(input) {
         schemaVersion: 1,
         sourceManifestSha256: before.manifestSha256,
         sourceStructuralManifestSha256: before.structuralManifestSha256,
+        sourcePortableStructuralManifestSha256:
+          portableStructuralManifest(before),
       })}\n`;
       await createPrivateFile(request.backupPath, emptyArtifact);
       backupCreated = true;
@@ -1996,6 +2323,7 @@ export async function createBackupAndRestoreEvidence(input) {
     if (
       after?.manifestSha256 !== before.manifestSha256 ||
       after?.structuralManifestSha256 !== before.structuralManifestSha256 ||
+      portableStructuralManifest(after) !== portableStructuralManifest(before) ||
       after?.tableCount !== before.tableCount ||
       after?.rowCount !== before.rowCount
     ) {
@@ -2061,8 +2389,9 @@ export async function createBackupAndRestoreEvidence(input) {
     const restored = await captureManifest(restoreConnection.sql);
     if (
       restored?.manifestSha256 !== before.manifestSha256 ||
-      restored?.structuralManifestSha256 !==
-        before.structuralManifestSha256 ||
+      !SHA256.test(restored?.structuralManifestSha256 ?? "") ||
+      portableStructuralManifest(restored) !==
+        portableStructuralManifest(before) ||
       restored?.tableCount !== before.tableCount ||
       restored?.rowCount !== before.rowCount
     ) {
@@ -2092,6 +2421,10 @@ export async function createBackupAndRestoreEvidence(input) {
       restoredManifestSha256: restored.manifestSha256,
       sourceStructuralManifestSha256: before.structuralManifestSha256,
       restoredStructuralManifestSha256: restored.structuralManifestSha256,
+      sourcePortableStructuralManifestSha256:
+        portableStructuralManifest(before),
+      restoredPortableStructuralManifestSha256:
+        portableStructuralManifest(restored),
       tableCount: before.tableCount,
       rowCount: before.rowCount,
       postgresVersion,
