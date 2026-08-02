@@ -1742,11 +1742,13 @@ describe("release-scoped projector Postgres commit", () => {
       index: number,
       transactionHash: `0x${string}`,
       transactionIndex: number,
+      candidateBlockHash: `0x${string}` = blockHash,
+      candidateBlockNumber = "25650001",
     ) => ({
-      candidate_id: `1:${blockHash}:${transactionHash}:${index}`,
+      candidate_id: `1:${candidateBlockHash}:${transactionHash}:${index}`,
       provider_deployment_id: IDS[0],
-      block_number: "25650001",
-      block_hash: bytes(blockHash),
+      block_number: candidateBlockNumber,
+      block_hash: bytes(candidateBlockHash),
       transaction_hash: bytes(transactionHash),
       transaction_index: String(transactionIndex),
       block_global_log_index: String(index),
@@ -1766,8 +1768,8 @@ describe("release-scoped projector Postgres commit", () => {
       ...Array.from({ length: 40 }, (_, index) =>
         candidateRow(index, firstTransactionHash, 1)
       ),
-      candidateRow(40, bytes32("a"), 2),
-      candidateRow(41, bytes32("b"), 3),
+      candidateRow(40, bytes32("a"), 2, bytes32("c"), "25650002"),
+      candidateRow(41, bytes32("b"), 3, bytes32("c"), "25650002"),
     ];
     let sequence = 1;
     const store = createPostgresReleaseProjectionStore({
@@ -1809,6 +1811,107 @@ describe("release-scoped projector Postgres commit", () => {
     expect(following?.entries.map(({ candidate }) =>
       candidate.blockGlobalLogIndex
     )).toEqual([40, 41]);
+  });
+
+  it("trims a normal page to a provider block terminal", async () => {
+    const executor = new ReleaseProjectionExecutor();
+    const firstBlockHash = bytes32("c");
+    const secondBlockHash = bytes32("d");
+    const candidateRow = (
+      index: number,
+      blockHash: `0x${string}`,
+      blockNumber: string,
+    ) => ({
+      candidate_id: `1:${blockHash}:${bytes32(String(index % 10))}:${index}`,
+      provider_deployment_id: IDS[0],
+      block_number: blockNumber,
+      block_hash: bytes(blockHash),
+      transaction_hash: bytes(bytes32(String(index % 10))),
+      transaction_index: String(index),
+      block_global_log_index: String(index),
+      source_address: bytes(address("1")),
+      event_signature: bytes(bytes32("f")),
+      event_type: "UnknownEvent",
+      ordered_topics: [bytes(bytes32("f"))],
+      raw_data: Buffer.alloc(0),
+      decoded_payload: {},
+      payload_hash: bytes(bytes32("1")),
+      content_commitment: bytes(bytes32("2")),
+      contract_name: "UnknownContract",
+      status: "pending",
+      attempt_count: "0",
+    });
+    executor.candidateRows = [
+      ...Array.from({ length: 20 }, (_value, index) =>
+        candidateRow(index, firstBlockHash, "25650001")
+      ),
+      ...Array.from({ length: 20 }, (_value, index) =>
+        candidateRow(index + 20, secondBlockHash, "25650002")
+      ),
+    ];
+    const store = createPostgresReleaseProjectionStore({
+      executor,
+      providers: PROVIDERS,
+      rpcEvidenceBindings: RPC_EVIDENCE_BINDINGS,
+      scope: {
+        releaseId: "classic-v2",
+        modelId: "classic",
+        sourceGroup: "core",
+      },
+      runtimeFence: RUNTIME_FENCE,
+      uuid: () => "81500000-0000-4000-8000-000000000001",
+      now: () => new Date("2026-07-31T18:00:00.000Z"),
+    });
+
+    const plan = await store.readProjectionPlan();
+    expect(plan).toMatchObject({ batchKind: "normal" });
+    expect(plan?.entries).toHaveLength(20);
+    expect(new Set(plan?.entries.map(({ candidate }) => candidate.blockHash)))
+      .toEqual(new Set([firstBlockHash]));
+  });
+
+  it("completes an oversized multi-transaction block atomically", async () => {
+    const executor = new ReleaseProjectionExecutor();
+    const blockHash = bytes32("d");
+    executor.candidateRows = Array.from({ length: 40 }, (_value, index) => ({
+      candidate_id: `1:${blockHash}:${bytes32(String(index % 10))}:${index}`,
+      provider_deployment_id: IDS[0],
+      block_number: "25650001",
+      block_hash: bytes(blockHash),
+      transaction_hash: bytes(bytes32(String(index % 10))),
+      transaction_index: String(index),
+      block_global_log_index: String(index),
+      source_address: bytes(address("1")),
+      event_signature: bytes(bytes32("f")),
+      event_type: "UnknownEvent",
+      ordered_topics: [bytes(bytes32("f"))],
+      raw_data: Buffer.alloc(0),
+      decoded_payload: {},
+      payload_hash: bytes(bytes32("1")),
+      content_commitment: bytes(bytes32("2")),
+      contract_name: "UnknownContract",
+      status: "pending",
+      attempt_count: "0",
+    }));
+    const store = createPostgresReleaseProjectionStore({
+      executor,
+      providers: PROVIDERS,
+      rpcEvidenceBindings: RPC_EVIDENCE_BINDINGS,
+      scope: {
+        releaseId: "classic-v2",
+        modelId: "classic",
+        sourceGroup: "core",
+      },
+      runtimeFence: RUNTIME_FENCE,
+      uuid: () => "81600000-0000-4000-8000-000000000001",
+      now: () => new Date("2026-07-31T18:00:00.000Z"),
+    });
+
+    const plan = await store.readProjectionPlan();
+    expect(plan).toMatchObject({ batchKind: "oversized-block" });
+    expect(plan?.entries).toHaveLength(40);
+    expect(new Set(plan?.entries.map(({ candidate }) => candidate.blockHash)))
+      .toEqual(new Set([blockHash]));
   });
 
   it.each([500, 501, 4_096])(

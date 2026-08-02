@@ -4007,72 +4007,12 @@ function parseProjectionCandidateRow(
   });
 }
 
-function transactionAlignedProjectionPage<T extends Readonly<{
-  candidate: StoredProjectionCandidate;
-}>>(rows: readonly T[], maximum: number): readonly T[] {
-  if (rows.length <= maximum) return Object.freeze([...rows]);
-  const boundaryTransaction = rows[maximum]!.candidate.transactionHash;
-  const page = rows.slice(0, maximum);
-  while (
-    page.length > 0 &&
-    page[page.length - 1]!.candidate.transactionHash === boundaryTransaction
-  ) {
-    page.pop();
-  }
-  if (page.length === 0) return projectorValidationFailure();
-  return Object.freeze(page);
-}
-
 const REWARD_DELTA_PROJECTION_KINDS = Object.freeze(new Set([
   "creator-fee-checkpoint",
   "beneficiary-claim",
   "payout-change",
   "reward-configuration-activation",
 ]));
-
-function isolateRewardTransaction<T extends Readonly<{
-  candidate: StoredProjectionCandidate;
-  action: "project" | "ignore";
-}>>(
-  entries: readonly T[],
-  resolutions: ReadonlyMap<string, ProjectionResolution>,
-): readonly T[] {
-  let transactionStart = 0;
-  while (transactionStart < entries.length) {
-    const transactionHash = entries[transactionStart]!.candidate.transactionHash;
-    let transactionEnd = transactionStart + 1;
-    while (
-      transactionEnd < entries.length &&
-      entries[transactionEnd]!.candidate.transactionHash === transactionHash
-    ) {
-      transactionEnd += 1;
-    }
-    const transaction = entries.slice(transactionStart, transactionEnd);
-    const rewardSources = new Set<HexAddress>();
-    for (const entry of transaction) {
-      const resolution = resolutions.get(entry.candidate.candidateId);
-      if (
-        entry.action === "project" &&
-        resolution &&
-        REWARD_DELTA_PROJECTION_KINDS.has(resolution.projectionKind)
-      ) {
-        rewardSources.add(entry.candidate.sourceAddress);
-      }
-    }
-    if (rewardSources.size > 0) {
-      if (transactionStart > 0) {
-        return Object.freeze(entries.slice(0, transactionStart));
-      }
-      // The caller supplies the complete remainder of this exact block when a
-      // reward transaction is first. Keeping every vault and every later
-      // reward occurrence is required because eth_call observes block-end
-      // state, not transaction-intermediate state.
-      return Object.freeze([...entries]);
-    }
-    transactionStart = transactionEnd;
-  }
-  return Object.freeze([...entries]);
-}
 
 function rewardVaultsForProjection<T extends Readonly<{
   candidate: StoredProjectionCandidate;
@@ -4522,51 +4462,80 @@ export function createPostgresReleaseProjectionStore(input: {
           }
         };
 
+        const ingestionProvesBlockTerminal = (
+          candidate: StoredProjectionCandidate,
+        ) => {
+          const cursorBlock = BigInt(ingestionCursor.blockNumber);
+          const candidateBlock = BigInt(candidate.blockNumber);
+          if (cursorBlock > candidateBlock) return true;
+          return cursorBlock === candidateBlock &&
+            ingestionCursor.isBlockBoundary &&
+            ingestionCursor.blockHash === candidate.blockHash;
+        };
+
         let batchKind: NonNullable<ReleaseProjectionPlan["batchKind"]> =
           "normal";
         let entries: readonly (typeof resolvedEntries)[number][];
         const first = resolvedEntries[0]!;
-        const firstTransactionHash = first.candidate.transactionHash;
-        const firstTransactionIsOversized =
-          resolvedEntries.length > PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE &&
-          resolvedEntries[PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE]!.candidate
-              .transactionHash === firstTransactionHash;
-        if (firstTransactionIsOversized) {
-          const completedTransaction = await completePrefix(
-            (entry) =>
-              entry.candidate.transactionHash === firstTransactionHash,
+        const normalLimit = Math.min(
+          PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
+          resolvedEntries.length,
+        );
+        let terminalPrefixLength = 0;
+        for (let index = 0; index < normalLimit; index += 1) {
+          const current = resolvedEntries[index]!;
+          const next = resolvedEntries[index + 1];
+          if (next && next.candidate.blockHash !== current.candidate.blockHash) {
+            terminalPrefixLength = index + 1;
+          }
+        }
+        const normalTerminal = resolvedEntries[normalLimit - 1]!;
+        if (
+          resolvedEntries.length <= PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE &&
+          ingestionProvesBlockTerminal(normalTerminal.candidate)
+        ) {
+          terminalPrefixLength = resolvedEntries.length;
+        }
+
+        if (terminalPrefixLength === 0) {
+          const firstBlockHash = first.candidate.blockHash;
+          const completedBlock = await completePrefix(
+            (entry) => entry.candidate.blockHash === firstBlockHash,
           );
-          if (completedTransaction === null) return null;
-          entries = completedTransaction;
-          batchKind = "oversized-transaction";
-          if (containsRewardProjection(entries, resolutions)) {
-            const rewardBlockHash = first.candidate.blockHash;
-            const completedRewardBlock = await completePrefix(
-              (entry) => entry.candidate.blockHash === rewardBlockHash,
-            );
-            if (completedRewardBlock === null) return null;
-            entries = completedRewardBlock;
-            batchKind = "reward-block";
+          if (completedBlock === null) return null;
+          entries = completedBlock;
+          if (entries.length > PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE) {
+            batchKind = new Set(
+                  entries.map(({ candidate }) => candidate.transactionHash),
+                ).size === 1
+              ? "oversized-transaction"
+              : "oversized-block";
           }
         } else {
-          const page = transactionAlignedProjectionPage(
-            resolvedEntries,
-            PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE,
+          entries = Object.freeze(
+            resolvedEntries.slice(0, terminalPrefixLength),
           );
-          const isolated = isolateRewardTransaction(page, resolutions);
-          if (
-            isolated.length === page.length &&
-            containsRewardProjection(page, resolutions)
-          ) {
-            const rewardBlockHash = first.candidate.blockHash;
+        }
+
+        if (containsRewardProjection(entries, resolutions)) {
+          const rewardEntry = entries.find((entry) =>
+            containsRewardProjection([entry], resolutions)
+          );
+          if (!rewardEntry) return projectorValidationFailure();
+          const rewardBlockHash = rewardEntry.candidate.blockHash;
+          const rewardBlockStart = entries.findIndex(
+            (entry) => entry.candidate.blockHash === rewardBlockHash,
+          );
+          if (rewardBlockStart > 0) {
+            entries = Object.freeze(entries.slice(0, rewardBlockStart));
+            batchKind = "normal";
+          } else {
             const completedRewardBlock = await completePrefix(
               (entry) => entry.candidate.blockHash === rewardBlockHash,
             );
             if (completedRewardBlock === null) return null;
             entries = completedRewardBlock;
             batchKind = "reward-block";
-          } else {
-            entries = isolated;
           }
         }
         if (
