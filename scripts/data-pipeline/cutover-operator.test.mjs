@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -9,6 +11,8 @@ import {
   credentialsFromEnvironment,
   evidenceCommitment,
   parseArguments,
+  reserveRuntimeEnableOutput,
+  runRuntimeEnableWithReservedOutput,
 } from "./cutover-operator.mjs";
 import {
   createEnvioPromotionAttestation,
@@ -17,6 +21,21 @@ import {
 import { canonicalJson, sha256 } from "./hosted-db-operator-core.mjs";
 
 const WORKSPACE = path.resolve(import.meta.dirname, "../..");
+const PLAN_SHA256 = `0x${"a".repeat(64)}`;
+const CONFIRMATION_SHA256 = `0x${"b".repeat(64)}`;
+
+async function runtimeOutputFixture(t) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runtime-enable-output-test-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  return {
+    directory,
+    outputPath: path.join(directory, "runtime-enable.json"),
+  };
+}
+
+async function readJson(filePath) {
+  return JSON.parse(await readFile(filePath, "utf8"));
+}
 
 test("operator parser rejects positional, duplicate and value-less arguments", () => {
   assert.deepEqual(parseArguments(["roles-provision", "--output", "/tmp/result"]), {
@@ -52,6 +71,95 @@ test("credentials are read from five environment-only names", () => {
     reconciler: "d".repeat(32),
     releaseProbe: "e".repeat(32),
   });
+});
+
+test("runtime enable output reservation is private, durable and exactly resumable", async (t) => {
+  const { outputPath } = await runtimeOutputFixture(t);
+  const options = {
+    outputPath,
+    planSha256: PLAN_SHA256,
+    confirmationSha256: CONFIRMATION_SHA256,
+    environment: {},
+  };
+
+  const first = await reserveRuntimeEnableOutput(options);
+  assert.deepEqual(await readJson(outputPath), first.reservation);
+  assert.equal((await stat(outputPath)).mode & 0o777, 0o600);
+
+  const resumed = await reserveRuntimeEnableOutput(options);
+  assert.deepEqual(resumed, first);
+  assert.deepEqual(await readJson(outputPath), first.reservation);
+
+  await assert.rejects(
+    reserveRuntimeEnableOutput({
+      ...options,
+      planSha256: `0x${"c".repeat(64)}`,
+    }),
+    /not resumable/u,
+  );
+  assert.deepEqual(await readJson(outputPath), first.reservation);
+});
+
+test("runtime enable apply failure preserves the pre-mutation reservation", async (t) => {
+  const { outputPath } = await runtimeOutputFixture(t);
+  let applyCalls = 0;
+
+  await assert.rejects(
+    runRuntimeEnableWithReservedOutput({
+      outputPath,
+      planSha256: PLAN_SHA256,
+      confirmationSha256: CONFIRMATION_SHA256,
+      environment: {},
+      apply: async () => {
+        applyCalls += 1;
+        assert.deepEqual(await readJson(outputPath), {
+          kind: "programmable-candidate-runtime-enable-output-reservation",
+          schemaVersion: 1,
+          planSha256: PLAN_SHA256,
+          confirmationSha256: CONFIRMATION_SHA256,
+          status: "in-progress-or-resumable",
+        });
+        throw new Error("simulated runtime enable failure");
+      },
+    }),
+    /simulated runtime enable failure/u,
+  );
+
+  assert.equal(applyCalls, 1);
+  assert.equal((await readJson(outputPath)).status, "in-progress-or-resumable");
+});
+
+test("runtime enable success atomically replaces the reservation without pending output", async (t) => {
+  const { directory, outputPath } = await runtimeOutputFixture(t);
+  const result = {
+    kind: "programmable-candidate-runtime-enable-result",
+    schemaVersion: 1,
+    evidenceSha256: `0x${"d".repeat(64)}`,
+  };
+
+  assert.equal(
+    await runRuntimeEnableWithReservedOutput({
+      outputPath,
+      planSha256: PLAN_SHA256,
+      confirmationSha256: CONFIRMATION_SHA256,
+      environment: {},
+      apply: async () => {
+        assert.equal(
+          (await readJson(outputPath)).status,
+          "in-progress-or-resumable",
+        );
+        return result;
+      },
+    }),
+    result,
+  );
+
+  assert.deepEqual(await readJson(outputPath), result);
+  assert.equal((await stat(outputPath)).mode & 0o777, 0o600);
+  assert.deepEqual(
+    (await readdir(directory)).filter((name) => name.includes(".pending-")),
+    [],
+  );
 });
 
 test("evidence commitment prefers one canonical embedded commitment", () => {

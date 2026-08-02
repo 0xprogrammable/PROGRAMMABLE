@@ -30,7 +30,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "f54859e55f35b99784eebd6cef58a40a5848904be21417249f3bff5bf1c88637",
+        sha256: "f2828a8e0e20ac005511ea9cce5c3e7b349696034a2dbf445268533fbc367b9c",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -92,12 +92,16 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/market-projector-runtime.server.ts",
-        sha256: "ed1c55148d05a47d747616a4bc8250996780be65d053b989d51db21b4519109b",
+        sha256: "5ce3b98d0a373c45b309011b59cc6ec7eeaef54bc112f2b55d32dca433566da0",
       }),
       migrations: Object.freeze([
         Object.freeze({
           path: "supabase/migrations/20260731223000_market_projector_contract.sql",
           sha256: "ea73f4112a53b25e72aa697d3fc0679bf9c6e7f93a496edd167803d6a7f81a24",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260802092800_market_projector_fast_lane.sql",
+          sha256: "70c2719af30e0d3438e3de306376c7fa62d0196be98f81d7bd6b327559c14dc7",
         }),
       ]),
     }),
@@ -111,14 +115,79 @@ const APPROVED_OPERATIONS = Object.freeze({
       secretEnvironment: "PROGRAMMABLE_QUICKNODE_STREAM_SECRET",
       route: Object.freeze({
         path: "app/api/ops/projector-wake/route.ts",
-        sha256: "cdea2e18ebdb545e0f4de7bdd54da181c5cf6fa715e5abe1ac32c0bae66d138b",
+        sha256: "71549b17be233af2be052e1e4f948cbae37d804dc662354c6bfcd234bfdd266a",
       }),
       verifier: Object.freeze({
         path: "lib/data-pipeline/quicknode-stream-wake.server.ts",
-        sha256: "9c452c2ae94b62d31ed2ffdaaf974b1acd4c7a856493ac02013e43f89eb4bc65",
+        sha256: "b28af0bdd6860eb6f55b54ea4093a1ddbf9007667c3193f99061057e477c9153",
       }),
+      canary: Object.freeze({
+        path: "scripts/perf/read-model-projector-wake-canary.mjs",
+        sha256: "5ea9c8704126fe17982515038ed75dd3eb850479a5dc8c7b092e2db076c14900",
+      }),
+      dependencies: Object.freeze([
+        Object.freeze({
+          path: "lib/data-pipeline/quicknode-wake-queue.server.ts",
+          sha256: "a3743900032ff2c7b4f4636d5731d6de1d680e1f49bd0cce2365c448ea1243d0",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/optimistic-wake-runtime.server.ts",
+          sha256: "306a06191e2d6849d8d85f6a1cf79ed027ff3ff482b8e374755935d738fa4307",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/optimistic-block-reader.server.ts",
+          sha256: "983080e347dd9fb90daf5696f096a446f3c119a250669545dcb2208ba639b161",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/optimistic-market-state.server.ts",
+          sha256: "1479af0cb925c87c86d7b30fa20a8cda6bcef326e33f32e04f3e58796a498e67",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/optimistic-live-runtime.server.ts",
+          sha256: "817b4563eb503aa761efc922c264cf1699fd2264160adfd1a5294308750533f6",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/read-model-real-block-sla-capture.server.ts",
+          sha256: "1cadb53abb9783204fc1a2cecc83abdfb1541225d46cea3e52ebc9411769dd32",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/dual-rpc.ts",
+          sha256: "12018866a1452d098d273e6e0f30274a4687f83a4fcba17764e2d88ca8093981",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/rpc-providers.server.ts",
+          sha256: "d6694f99366226a64a07b28ef3646cc05556048bc1ce790f9fbac4929c3ce77c",
+        }),
+        Object.freeze({
+          path: "app/api/ops/read-model-real-block-sla/route.ts",
+          sha256: "367140b12a27068c55f2a5881e27729fbab4d1d9a6187c2148fd29bc4f075946",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260802104211_real_block_sla_runtime_receipts.sql",
+          sha256: "0b9331f2b452084c4544b751ce1fbd41bba7e927ef81d6cddcb258c36f8729dc",
+        }),
+      ]),
     }),
   ]),
+  releaseGates: Object.freeze({
+    authOnlyWakeCanary: Object.freeze({
+      purpose: "hmac-route-authentication-only",
+      satisfiesRealBlockSla: false,
+    }),
+    realBlockSla: Object.freeze({
+      requiredBeforeProductionPromotion: true,
+      activity: "organic-stream-block-no-signing-or-spending",
+      maximumDeliveryToFirstVisibleMs: 10_000,
+      script: Object.freeze({
+        path: "scripts/perf/read-model-real-block-sla-gate.mjs",
+        sha256: "68cb5f77d3891070cba84f6b69f13eabb177016823f9baed6decdf62aa1a0c3a",
+      }),
+      schema: Object.freeze({
+        path: "config/read-model-real-block-sla-db-attestation.schema.json",
+        sha256: "73d78c27c6b8dc311dd50911bd4f1b4c2c44e967fd53aa5b415f566e264b69da",
+      }),
+    }),
+  }),
 });
 
 function readSource(rootDirectory, path, overrides) {
@@ -244,11 +313,18 @@ function eventTriggerIsAuthenticatedAndBound(route, verifier, trigger) {
     trigger?.provider === "quicknode-streams" &&
     trigger?.mode === "wake-only" &&
     trigger?.secretEnvironment === "PROGRAMMABLE_QUICKNODE_STREAM_SECRET" &&
-    route.includes("verifyQuickNodeStreamWake(request)") &&
-    route.includes("after(runWakeCycle)") &&
+    route.includes("await verifyQuickNodeStreamWake(request, {") &&
+    route.includes("enqueueConfiguredQuickNodeWake") &&
+    route.includes("acknowledgeConfiguredQuickNodeWake") &&
+    route.includes("consumeConfiguredRealBlockSlaProviderRetryOnce") &&
+    route.includes("PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE") &&
+    route.includes("processDurableWakeJob") &&
+    route.includes("processNextConfiguredQuickNodeWake") &&
+    route.includes("createConfiguredOptimisticWakeFirstStage") &&
+    route.includes("after(() => runDurableWakeWorker") &&
     route.includes("runConfiguredProjectorCycle()") &&
-    route.includes("runConfiguredMarketProjectorCycle()") &&
-    /export\s+async\s+function\s+POST\s*\(/u.test(route) &&
+    route.includes("runConfiguredMarketProjectorFastLaneCycle()") &&
+    route.includes("export const POST = createProjectorWakePost({") &&
     /status\s*:\s*202\b/u.test(route) &&
     /["']Cache-Control["']\s*:\s*["']no-store["']/u.test(route) &&
     verifier.includes("PROGRAMMABLE_QUICKNODE_STREAM_SECRET") &&
@@ -261,6 +337,122 @@ function eventTriggerIsAuthenticatedAndBound(route, verifier, trigger) {
     verifier.includes("MAXIMUM_ENCODED_BODY_BYTES") &&
     verifier.includes("maxOutputLength: MAXIMUM_DECODED_BODY_BYTES")
   );
+}
+
+function eventTriggerCanaryIsFailClosed(source, trigger) {
+  return (
+    typeof source === "string" &&
+    trigger?.canary?.path ===
+      "scripts/perf/read-model-projector-wake-canary.mjs" &&
+    source.includes(
+      'export const PROJECTOR_WAKE_ROUTE = "/api/ops/projector-wake"',
+    ) &&
+    source.includes('"PROGRAMMABLE_QUICKNODE_STREAM_SECRET"') &&
+    source.includes('createHmac("sha256", secret)') &&
+    source.includes('id: "invalid-signature"') &&
+    source.includes('id: "stale-timestamp"') &&
+    source.includes('id: "valid-delivery"') &&
+    source.includes("status: 401") &&
+    source.includes("status: 202") &&
+    source.includes('"cache-control"') &&
+    source.includes('hostname.endsWith(".vercel.app")') &&
+    !source.includes("NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_STREAM_SECRET")
+  );
+}
+
+function realBlockSlaGateIsFailClosed(source, schema, gate) {
+  const schemaValue = parseJson(schema);
+  return (
+    typeof source === "string" &&
+    gate?.requiredBeforeProductionPromotion === true &&
+    gate?.activity === "organic-stream-block-no-signing-or-spending" &&
+    gate?.maximumDeliveryToFirstVisibleMs === 10_000 &&
+    source.includes("REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS = 10_000") &&
+    source.includes("verifyRealBlockSlaDatabaseAttestation") &&
+    source.includes("DB-authored promotion attestation required") &&
+    source.includes("attestationHmacSha256") &&
+    source.includes("dynamic provider call count") &&
+    source.includes("same-market public surfaces") &&
+    source.includes("API body digest") &&
+    source.includes("real-block SLA latency") &&
+    source.includes("maximumEvidenceAgeMs") &&
+    source.includes('evidence.kind !== "programmable-real-block-sla-db-attestation"') &&
+    source.includes("evidence.schemaVersion !== 2") &&
+    source.includes("initialNonceDigest") &&
+    source.includes("duplicateNonceDigest") &&
+    source.includes("runtime.initialResponseStatus !== 503") &&
+    source.includes("runtime.duplicateResponseStatus !== 202") &&
+    source.includes("metadataProviderCallCountA") &&
+    source.includes("metadataProviderCallCountB") &&
+    schemaValue?.properties?.kind?.const ===
+      "programmable-real-block-sla-db-attestation" &&
+    schemaValue?.properties?.schemaVersion?.const === 2 &&
+    schemaValue?.properties?.runtimeReceipt?.type === "object" &&
+    schemaValue?.properties?.runtimeReceipt?.properties?.initialResponseStatus
+      ?.const === 503 &&
+    schemaValue?.properties?.runtimeReceipt?.properties?.duplicateResponseStatus
+      ?.const === 202 &&
+    schemaValue?.properties?.runtimeReceipt?.properties?.markets?.items
+      ?.properties?.releaseVersion?.enum?.length === 3 &&
+    schemaValue?.properties?.apiObservations?.minItems === 2 &&
+    schemaValue?.properties?.apiObservations?.maxItems === 2 &&
+    schemaValue?.properties?.attestationHmacSha256?.$ref === "#/$defs/bytes32"
+  );
+}
+
+function exactEmptyEnvironmentKey(source, name) {
+  if (typeof source !== "string") return false;
+  const matches = source.match(new RegExp(`^${name}=$`, "gmu")) ?? [];
+  return matches.length === 1 && !source.includes(`NEXT_PUBLIC_${name}`);
+}
+
+function exactFalseEnvironmentKey(source, name) {
+  if (typeof source !== "string") return false;
+  const matches = source.match(new RegExp(`^${name}=false$`, "gmu")) ?? [];
+  return matches.length === 1 && !source.includes(`NEXT_PUBLIC_${name}`);
+}
+
+const EXACT_MANUAL_VERCEL_PROMOTION =
+  'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"';
+const EXACT_REAL_BLOCK_SLA_OUTPUT =
+  "/secure/cutover/real-block-sla-db-attestation.json";
+const MANUAL_PROMOTION_SEQUENCE = Object.freeze([
+  "npm run perf:read-model:real-block-sla-operator --",
+  "npm run perf:read-model:real-block-sla --",
+  "npm run perf:read-model:staged-deployment --",
+  EXACT_MANUAL_VERCEL_PROMOTION,
+  "npm run perf:read-model:post-promotion --",
+]);
+
+function manualPromotionSequenceIsFailClosed(source) {
+  if (typeof source !== "string") return false;
+  let inShellFence = false;
+  const shellCommands = [];
+  for (const sourceLine of source.split(/\r?\n/u)) {
+    const line = sourceLine.trim();
+    if (line === "```sh" || line === "```bash") {
+      inShellFence = true;
+      continue;
+    }
+    if (line.startsWith("```")) {
+      inShellFence = false;
+      continue;
+    }
+    if (inShellFence && line.length > 0) shellCommands.push(line);
+  }
+  let previousIndex = -1;
+  for (const command of MANUAL_PROMOTION_SEQUENCE) {
+    const commandIndex = shellCommands.findIndex(
+      (line, index) => index > previousIndex && line.startsWith(command),
+    );
+    if (commandIndex < 0) return false;
+    previousIndex = commandIndex;
+  }
+  const activePromotionCommands = shellCommands.filter((line) =>
+    /\bvercel\s+promote(?:\s|$)/u.test(line)
+  );
+  return activePromotionCommands.length === 1 &&
+    activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION;
 }
 
 function migrationContract(id, source) {
@@ -320,6 +512,20 @@ function migrationContract(id, source) {
       ) &&
       source.includes("for key share") &&
       /security definer/iu.test(source)
+    );
+  }
+  if (id === "market-projector-fast-lane") {
+    return (
+      source.includes("list_market_projector_fast_lane_v1") &&
+      source.includes("assert_market_projector_fast_lane_v1") &&
+      source.includes("try_lock_market_projector_pool_v1") &&
+      source.includes("projector_checkpoint_current") &&
+      source.includes("market_projector_cursor_current") &&
+      source.includes("chain_event_current_canonical") &&
+      source.includes("market_block_closes") &&
+      source.includes("source_checkpoint_block_hash") &&
+      /security definer/iu.test(source) &&
+      /grant execute[\s\S]*to programmable_reconciler/iu.test(source)
     );
   }
   if (id === "candidate-control-bootstrap") {
@@ -396,6 +602,7 @@ export function evaluateReadModelOperationsSourceContracts(
   const eventTriggers = Array.isArray(operations?.eventTriggers)
     ? operations.eventTriggers
     : [];
+  const releaseGates = operations?.releaseGates;
   const unscheduled = Array.isArray(operations?.unscheduled)
     ? operations.unscheduled
     : [];
@@ -409,8 +616,9 @@ export function evaluateReadModelOperationsSourceContracts(
     operations?.schemaVersion === 1 &&
       exactJson(operations?.legacyIndexer, APPROVED_OPERATIONS.legacyIndexer) &&
       exactJson(workers, APPROVED_OPERATIONS.workers) &&
-      exactJson(eventTriggers, APPROVED_OPERATIONS.eventTriggers),
-    "the manifest exactly binds the reviewed legacy indexer, workers and event trigger",
+      exactJson(eventTriggers, APPROVED_OPERATIONS.eventTriggers) &&
+      exactJson(releaseGates, APPROVED_OPERATIONS.releaseGates),
+    "the manifest exactly binds the reviewed indexers, workers, event trigger and release gates",
   );
   check(
     "ops-cron-exact-set",
@@ -520,12 +728,49 @@ export function evaluateReadModelOperationsSourceContracts(
       !crons?.has(approvedTrigger.path) &&
       sourceBindingMatches(source, eventTrigger?.route, expectedSha256Overrides) &&
       sourceBindingMatches(source, eventTrigger?.verifier, expectedSha256Overrides) &&
+      sourceBindingMatches(source, eventTrigger?.canary, expectedSha256Overrides) &&
+      (eventTrigger?.dependencies ?? []).length ===
+        (approvedTrigger.dependencies ?? []).length &&
+      (approvedTrigger.dependencies ?? []).every((binding, index) =>
+        sourceBindingMatches(
+          source,
+          eventTrigger?.dependencies?.[index],
+          expectedSha256Overrides,
+        ) && exactJson(binding, eventTrigger?.dependencies?.[index])
+      ) &&
       eventTriggerIsAuthenticatedAndBound(
         source(approvedTrigger.route.path),
         source(approvedTrigger.verifier.path),
         eventTrigger,
+      ) &&
+      eventTriggerCanaryIsFailClosed(
+        source(approvedTrigger.canary.path),
+        eventTrigger,
       ),
     "the unscheduled QuickNode webhook is HMAC-authenticated and only wakes the fenced projectors",
+  );
+
+  const approvedRealBlockSla = APPROVED_OPERATIONS.releaseGates.realBlockSla;
+  const realBlockSla = releaseGates?.realBlockSla;
+  check(
+    "ops-real-block-sla-gate-binding",
+    releaseGates?.authOnlyWakeCanary?.satisfiesRealBlockSla === false &&
+      sourceBindingMatches(
+        source,
+        realBlockSla?.script,
+        expectedSha256Overrides,
+      ) &&
+      sourceBindingMatches(
+        source,
+        realBlockSla?.schema,
+        expectedSha256Overrides,
+      ) &&
+      realBlockSlaGateIsFailClosed(
+        source(approvedRealBlockSla.script.path),
+        source(approvedRealBlockSla.schema.path),
+        realBlockSla,
+      ),
+    "auth-only probes stay separate and production promotion requires exact real-block SLA evidence",
   );
 
   check(
@@ -590,10 +835,14 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   check(
     "ops-market-projector-migration",
-    marketWorker?.migrations?.length === 1 &&
+    marketWorker?.migrations?.length === 2 &&
       migrationContract(
         "market-projector",
         source(marketWorker.migrations[0]?.path),
+      ) &&
+      migrationContract(
+        "market-projector-fast-lane",
+        source(marketWorker.migrations[1]?.path),
       ),
     "the market worker is bound to exact lineage, terminal checkpoint and lease SQL",
   );
@@ -601,6 +850,12 @@ export function evaluateReadModelOperationsSourceContracts(
   const deployWorkflow = source(".github/workflows/deploy-production.yml") ?? "";
   const verifyWorkflow = source(".github/workflows/verify.yml") ?? "";
   const packageJson = parseJson(source("package.json"));
+  const deployPolicy = source("scripts/perf/read-model-deploy-policy.mjs") ?? "";
+  const wakeCanary = source(approvedTrigger.canary.path) ?? "";
+  const environmentExample = source(".env.example") ?? "";
+  const realBlockSlaOperator = source(
+    "scripts/perf/read-model-real-block-sla-operator.mjs",
+  ) ?? "";
   const postPromotion = source("scripts/perf/read-model-post-promotion.mjs") ?? "";
   const productionBinding = source(
     "scripts/perf/read-model-production-binding.mjs",
@@ -608,10 +863,98 @@ export function evaluateReadModelOperationsSourceContracts(
   const operationsRunbook = source(
     "docs/operations/read-model-scheduler-cutover.md",
   ) ?? "";
+  const productionCutoverRunbook = source(
+    "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md",
+  ) ?? "";
   check(
     "ops-package-verify-binding",
     packageJson?.scripts?.verify?.includes("npm run perf:read-model:ops-gate") === true,
     "the canonical local verification command runs the operations source contract",
+  );
+  check(
+    "ops-real-block-sla-package-binding",
+    packageJson?.scripts?.["perf:read-model:real-block-sla"] ===
+      `node ${approvedRealBlockSla.script.path}`,
+    "the immutable real-block SLA verifier has one reviewed operator command",
+  );
+  check(
+    "ops-real-block-sla-operator-binding",
+    packageJson?.scripts?.["perf:read-model:real-block-sla-operator"] ===
+      "node scripts/perf/read-model-real-block-sla-operator.mjs" &&
+      realBlockSlaOperator.includes(
+        "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 5 * 60 * 1_000",
+      ) &&
+      realBlockSlaOperator.includes('body: { armId, challenge }') &&
+      realBlockSlaOperator.includes('open(absolutePath, "wx", 0o600)') &&
+      realBlockSlaOperator.includes("verifyRealBlockSlaDatabaseAttestation") &&
+      realBlockSlaOperator.includes("runtime.repositoryCommit !== input.expectedRepositoryCommit") &&
+      realBlockSlaOperator.includes("runtime.deploymentId !== input.deploymentId") &&
+      realBlockSlaOperator.includes("runtime.deploymentOrigin !== input.targetUrl") &&
+      realBlockSlaOperator.includes("runtime.projectId !== input.projectId") &&
+      realBlockSlaOperator.includes("runtime.streamId !== input.streamId") &&
+      realBlockSlaOperator.includes("![0, 409, 503].includes(result.status)") &&
+      !realBlockSlaOperator.includes('"--probe-token"') &&
+      !realBlockSlaOperator.includes('"--automation-bypass-secret"') &&
+      operationsRunbook.includes(
+        "npm run perf:read-model:real-block-sla-operator --",
+      ) &&
+      productionCutoverRunbook.includes(
+        "npm run perf:read-model:real-block-sla-operator --",
+      ) &&
+      operationsRunbook.includes(
+        `--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
+      ) &&
+      productionCutoverRunbook.includes(
+        `--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
+      ) &&
+      operationsRunbook.includes(
+        `--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
+      ) &&
+      productionCutoverRunbook.includes(
+        `--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
+      ),
+    "the operator arms and polls the exact staged deployment before writing one private evidence file",
+  );
+  check(
+    "ops-quicknode-stream-env-contract",
+    exactEmptyEnvironmentKey(
+      environmentExample,
+      approvedTrigger.secretEnvironment,
+    ) &&
+      exactFalseEnvironmentKey(
+        environmentExample,
+        "PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE",
+      ) &&
+      deployPolicy.includes("PROJECTOR_WAKE_ROUTE") &&
+      deployPolicy.includes("QUICKNODE_STREAM_SECRET_ENV_NAME") &&
+      deployPolicy.includes('from "./read-model-projector-wake-canary.mjs"') &&
+      deployPolicy.includes("wake_route=${result.wakeRoute}") &&
+      deployPolicy.includes("wake_canary_required=${result.wakeCanaryRequired}") &&
+      deployPolicy.includes("invalidServerSecretEnvironmentNames"),
+    "the stream secret name is documented without a value and is fail-closed in deploy policy",
+  );
+  const stagedWakeGate = deployWorkflow.indexOf(
+    "Gate exact staged QuickNode wake route",
+  );
+  check(
+    "ops-quicknode-stream-stage-gate",
+    packageJson?.scripts?.["perf:read-model:wake-canary"] ===
+      `node ${approvedTrigger.canary.path}` &&
+      wakeCanary.includes("projectorWakeCanaryArgumentsFrom") &&
+      stagedWakeGate > deployWorkflow.indexOf("Resolve exact staged deployment") &&
+      stagedWakeGate < deployWorkflow.indexOf("Attest exact staged release policy") &&
+      deployWorkflow.includes(
+        "if: steps.read-model-policy.outputs.wake_canary_required == 'true'",
+      ) &&
+      deployWorkflow.includes(
+        "PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}",
+      ) &&
+      deployWorkflow.includes(
+        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+      ) &&
+      deployWorkflow.includes("npm run perf:read-model:wake-canary --") &&
+      deployWorkflow.includes('--target-url "$STAGED_TARGET_URL"'),
+    "an active fast lane must pass the exact unaliased staged wake canary before attestation",
   );
   check(
     "ops-exact-release-dependency",
@@ -640,23 +983,23 @@ export function evaluateReadModelOperationsSourceContracts(
       deployWorkflow.includes(
         "DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
       ) &&
-      deployWorkflow.includes('vercel promote "$DEPLOYMENT_ID"') &&
-      deployWorkflow.includes('--deployment-id "$DEPLOYMENT_ID"') &&
-      deployWorkflow.includes("npm run perf:read-model:post-promotion") &&
-      deployWorkflow.includes("vercel rollback") &&
-      deployWorkflow.indexOf("vercel promote") <
-        deployWorkflow.indexOf("npm run perf:read-model:post-promotion") &&
+      deployWorkflow.includes("Stage-only: no production promotion was attempted.") &&
+      !deployWorkflow.includes("vercel promote") &&
+      !deployWorkflow.includes("vercel rollback") &&
+      operationsRunbook.includes("stage-only and must never call `vercel promote`") &&
+      manualPromotionSequenceIsFailClosed(operationsRunbook) &&
+      manualPromotionSequenceIsFailClosed(productionCutoverRunbook) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
       postPromotion.includes('"/api/ops/health"') &&
       postPromotion.includes('"/api/explore?limit=6&page=1&sort=market-cap"') &&
       postPromotion.includes("verifyLiveCacheAndKeyContracts"),
-    "promotion, production alias verification and rollback bind to the staged deployment",
+    "the workflow is stage-only and both operator runbooks require the exact SLA-gated deployment promotion sequence",
   );
   check(
     "ops-vercel-project-prerequisite",
     /Auto-assign Custom Production\s+Domains/u.test(operationsRunbook) &&
-      operationsRunbook.includes("only the reviewed workflow") &&
+      operationsRunbook.includes("only the reviewed manual") &&
       productionBinding.includes("rejectGitHead") &&
       productionBinding.includes("automatic production-domain assignment"),
     "the external Vercel auto-assignment prerequisite is documented and detected fail-closed",

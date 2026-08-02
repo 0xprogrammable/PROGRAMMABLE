@@ -8,3 +8,24 @@ paths = [
   '''docs/data-pipeline/envio-candidate-7f24e63-baseline-20260801T042058Z\.json''',
   '''tests/data-pipeline/read-model-performance-explore-matrix\.test\.ts''',
 ]
+
+[[allowlists]]
+description = "Typed token-address comparisons are not API credentials"
+condition = "AND"
+regexTarget = "match"
+paths = ['''lib/data-pipeline/optimistic-market-state\.server\.ts''']
+regexes = ['''tokenAddress:\s*HexAddress''']
+
+[[allowlists]]
+description = "Launch quote orientation is not an API credential"
+condition = "AND"
+regexTarget = "match"
+paths = ['''lib/data-pipeline/optimistic-market-state\.server\.ts''']
+regexes = ['''tokenAddress\s*\|\|\s*launch\.quoteIsCurrency0''']
+
+[[allowlists]]
+description = "Candidate restriction key is the public pinned archive SHA-256"
+condition = "AND"
+regexTarget = "match"
+paths = ['''scripts/data-pipeline/candidate-restore\.mjs''']
+regexes = ['''b3679e8b178535bbc58f9c9c43690a8c7e310ade8bd93360f15004be385b02d2''']

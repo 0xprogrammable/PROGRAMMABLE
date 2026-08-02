@@ -153,6 +153,13 @@ function feedRow() {
     releasePointers: pointers,
     safeBlockNumber: "102",
     reconciledAt: "2026-07-31T11:59:30.000Z",
+    ethUsdQuote: {
+      feedAddress: "0x5555555555555555555555555555555555555555",
+      roundId: "42",
+      answer: "350000000000",
+      decimals: 8,
+      updatedAt: "2026-07-31T11:58:50.000Z",
+    },
   };
   const tokens = [token];
   const recordSources = [source];
@@ -222,6 +229,11 @@ describe("indexed GMGN feed reader", () => {
         snapshot: {
           blockNumber: "100",
           blockHash: BLOCK_HASH,
+          ethUsdQuote: {
+            answer: "350000000000",
+            decimals: 8,
+            roundId: "42",
+          },
         },
         tokens: [
           {
@@ -232,6 +244,55 @@ describe("indexed GMGN feed reader", () => {
       },
     });
     expect(result.sourceCommitment).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it("retains canonical market fields needed for full-corpus sorting", async () => {
+    const row = feedRow();
+    row.tokens[0]!.market = {
+      tokenPriceNativeWei: "2000000000000000",
+      marketCapNativeWei: "2000000000000000000",
+      indexedMarketCapNativeWei: "2100000000000000000",
+      indexedMarketCapUsdWad: "7350000000000000000000",
+      indexedValuationBlockNumber: "100",
+      fdvUsdWad: "7350000000000000000000",
+      grossVolumeNativeWei: "3000000000000000000",
+      creatorFeesGeneratedNativeWei: "30000000000000000",
+      launcherFeesGeneratedNativeWei: "3000000000000000",
+      creatorFeesAccruedNativeWei: "20000000000000000",
+      swapCount: 9,
+    };
+    row.payload.data.tokens = row.tokens;
+
+    const result = await readIndexedFeedSnapshotWithModel(
+      readModel([row]).model,
+      NOW,
+    );
+
+    expect(result.model.tokens[0]).toMatchObject({
+      tokenPriceEth: "0.002",
+      tokenPriceEthWei: "2000000000000000",
+      marketCapEth: "2",
+      marketCapEthWei: "2000000000000000000",
+      indexedMarketCapEth: "2.1",
+      indexedMarketCapEthWei: "2100000000000000000",
+      indexedMarketCapUsdWad: "7350000000000000000000",
+      indexedValuationBlockNumber: "100",
+      grossVolumeEth: "3",
+      grossVolumeWei: "3000000000000000000",
+      swapCount: 9,
+    });
+  });
+
+  it("rejects a full-feed market valuation beyond its checkpoint", async () => {
+    const row = feedRow();
+    row.tokens[0]!.market = {
+      indexedValuationBlockNumber: "101",
+    };
+    row.payload.data.tokens = row.tokens;
+
+    await expect(
+      readIndexedFeedSnapshotWithModel(readModel([row]).model, NOW),
+    ).rejects.toThrow("Indexed feed is not ready");
   });
 
   it("fails closed when the aggregate function returns no row", async () => {

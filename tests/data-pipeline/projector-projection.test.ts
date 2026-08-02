@@ -6,13 +6,19 @@ vi.mock("server-only", () => ({}));
 import type {
   CandidateRpcProvider,
   DualRpcCandidateBatchEvidence,
+  verifyEnvioCandidateBatchWithDualRpc,
 } from "../../lib/data-pipeline/dual-rpc";
 import type { EnvioCandidate } from "../../lib/data-pipeline/envio";
 import {
+  commitVerifiedPreparedReleaseProjection,
+  prepareReleaseProjectionRound,
   runReleaseProjectionCycle,
+  verifyPreparedReleaseProjection,
+  type PreparedReleaseProjectionRound,
   type ReleaseProjectionPlan,
   type ReleaseProjectionStore,
 } from "../../lib/data-pipeline/projector-projection";
+import type { VerifiedDynamicSourceLineage } from "../../lib/data-pipeline/projector-identities";
 
 const hash = (digit: string) => `0x${digit.repeat(64)}` as `0x${string}`;
 const address = (digit: string) =>
@@ -52,7 +58,10 @@ function candidate(overrides: Partial<EnvioCandidate> = {}): EnvioCandidate {
   };
 }
 
-function plan(entries: ReleaseProjectionPlan["entries"]): ReleaseProjectionPlan {
+function plan(
+  entries: ReleaseProjectionPlan["entries"],
+  dynamicSources: readonly VerifiedDynamicSourceLineage[] = [],
+): ReleaseProjectionPlan {
   return {
     scope: {
       releaseId: "classic-v2",
@@ -60,7 +69,7 @@ function plan(entries: ReleaseProjectionPlan["entries"]): ReleaseProjectionPlan 
       sourceGroup: "core",
     },
     entries,
-    dynamicSources: [],
+    dynamicSources,
     knownPools: [],
     lease: { generation: "1", expiresAt: "2026-07-31T12:00:00.000Z" },
     checkpoint: {
@@ -92,6 +101,32 @@ const providers = [
   },
 ] as unknown as readonly [CandidateRpcProvider, CandidateRpcProvider];
 
+function dynamicLineage(
+  sourceAddress = "0x4cfe000000000000000000000000000000000001" as const,
+): VerifiedDynamicSourceLineage {
+  return {
+    attestationId: "10000000-0000-4000-8000-000000000001",
+    sourceAddress,
+    contractName: "ClassicV3RewardVault",
+    model: "classic",
+    releaseVersion: "classic-v3",
+    factoryAddress: "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a",
+    factoryContractName: "ClassicV3RewardVaultFactory",
+    factoryCandidateId: `1:${hash("5")}:${hash("6")}:3`,
+    factoryBlockNumber: "25639596",
+    factoryBlockGlobalLogIndex: "3",
+    activationCandidateId: `1:${hash("1")}:${hash("7")}:3`,
+    activationBlockNumber: "25639597",
+    activationBlockHash: hash("1"),
+    activationBlockGlobalLogIndex: "3",
+    expectedExactRuntimeCodeHash: hash("c"),
+    expectedNormalizedRuntimeCodeHash: hash("d"),
+    expectedImmutableReferencesCommitment: hash("e"),
+    expectedRuntimeByteLength: "6",
+    immutableReferences: [{ start: 2, length: 2 }],
+  };
+}
+
 function emptyEvidence(): DualRpcCandidateBatchEvidence {
   return {
     chainId: 1,
@@ -105,6 +140,53 @@ function emptyEvidence(): DualRpcCandidateBatchEvidence {
     candidates: [],
     executionTrace: executionTrace(),
   };
+}
+
+function evidenceFor(
+  candidates: readonly EnvioCandidate[],
+): DualRpcCandidateBatchEvidence {
+  return {
+    ...emptyEvidence(),
+    candidates: candidates.map((value) => ({
+      chainId: 1,
+      candidateId: value.candidateId,
+      sourceAddress: value.sourceAddress,
+      contractName: value.contractName,
+      eventName: value.eventName,
+      sourceKind: "static",
+      model: value.releaseHint.model,
+      releaseVersion: value.releaseHint.releaseVersion,
+      payloadHash: value.payloadHash,
+      rawLogCommitment: hash("c"),
+      providerIdentities: ["alchemy-test", "quicknode-test"],
+      providerVendorGroups: ["alchemy", "quicknode"],
+      providerEndpointCommitments: [hash("7"), hash("9")],
+      providerOriginCommitments: [hash("8"), hash("a")],
+      providerHeads: ["120", "121"],
+      safeBlockNumber: "108",
+      safeBlockHash: hash("b"),
+      candidateBlockNumber: value.blockNumber,
+      candidateBlockHash: value.blockHash,
+      candidateBlockTimestamp: value.blockTimestamp,
+      transactionHash: value.transactionHash,
+      transactionIndex: value.transactionIndex,
+      receiptCommitment: hash("d"),
+      sourceCodeHash: hash("e"),
+      receiptLogOrdinal: value.blockGlobalLogIndex,
+    })),
+    executionTrace: executionTrace(candidates.length),
+  };
+}
+
+function readyProjection(
+  round: PreparedReleaseProjectionRound,
+  index: number,
+) {
+  const entry = round.entries[index];
+  if (!entry || entry.status !== "ready") {
+    throw new Error("Expected prepared release projection");
+  }
+  return entry.projection;
 }
 
 describe("release projection orchestrator", () => {
@@ -142,7 +224,7 @@ describe("release projection orchestrator", () => {
       verifyBatch: async (input) => {
         order.push("rpc");
         expect(input.candidates).toEqual([expected]);
-        return emptyEvidence();
+        return evidenceFor(input.candidates);
       },
       readMetadata: async (input) => {
         order.push("metadata");
@@ -166,6 +248,192 @@ describe("release projection orchestrator", () => {
       checkpointGeneration: "1",
       batchKind: "normal",
     });
+  });
+
+  it("shares fresh Envio and dual-RPC reads across aligned release pages", async () => {
+    const expected = candidate();
+    const order: string[] = [];
+    const readCandidate = vi.fn(async () => structuredClone(expected));
+    const envio = { readCandidate };
+    const verifyBatch = vi.fn<typeof verifyEnvioCandidateBatchWithDualRpc>(
+      async ({ candidates }) => {
+        order.push("rpc");
+        return evidenceFor(candidates);
+      },
+    );
+    const readMetadata = vi.fn(async () => []);
+    const firstCommit = vi.fn(async () => {
+      order.push("commit-1");
+      return { checkpointGeneration: "1" };
+    });
+    const secondCommit = vi.fn(async () => {
+      order.push("commit-2");
+      return { checkpointGeneration: "1" };
+    });
+    const firstStore: ReleaseProjectionStore = {
+      readProjectionPlan: async () => {
+        order.push("read-plan-1-start");
+        await Promise.resolve();
+        order.push("read-plan-1-closed");
+        return plan([
+          { candidate: expected, action: "ignore", attemptCount: "0" },
+        ]);
+      },
+      commitVerifiedProjection: firstCommit,
+    };
+    const secondStore: ReleaseProjectionStore = {
+      // A valid lineage for another address cannot affect this static page and
+      // therefore must not force a second provider verification.
+      readProjectionPlan: async () => {
+        order.push("read-plan-2-start");
+        await Promise.resolve();
+        order.push("read-plan-2-closed");
+        return plan(
+          [{ candidate: expected, action: "ignore", attemptCount: "0" }],
+          [dynamicLineage()],
+        );
+      },
+      commitVerifiedProjection: secondCommit,
+    };
+    const preparedRound = await prepareReleaseProjectionRound({
+      stores: [firstStore, secondStore],
+      envio,
+      providers,
+    });
+
+    const first = await verifyPreparedReleaseProjection({
+      store: firstStore,
+      envio,
+      providers,
+      prepared: readyProjection(preparedRound, 0),
+      sharedVerification: preparedRound.sharedVerification,
+      verifyBatch,
+      readMetadata,
+    });
+    const second = await verifyPreparedReleaseProjection({
+      store: secondStore,
+      envio,
+      providers,
+      prepared: readyProjection(preparedRound, 1),
+      sharedVerification: preparedRound.sharedVerification,
+      verifyBatch,
+      readMetadata,
+    });
+    if (first.status !== "verified" || second.status !== "verified") {
+      throw new Error("Expected verified release projections");
+    }
+    await commitVerifiedPreparedReleaseProjection({
+      store: firstStore,
+      verification: first.verification,
+    });
+    await commitVerifiedPreparedReleaseProjection({
+      store: secondStore,
+      verification: second.verification,
+    });
+
+    expect(readCandidate).toHaveBeenCalledTimes(1);
+    expect(verifyBatch).toHaveBeenCalledTimes(1);
+    expect(firstCommit).toHaveBeenCalledTimes(1);
+    expect(secondCommit).toHaveBeenCalledTimes(1);
+    expect(order).toEqual([
+      "read-plan-1-start",
+      "read-plan-2-start",
+      "read-plan-1-closed",
+      "read-plan-2-closed",
+      "rpc",
+      "commit-1",
+      "commit-2",
+    ]);
+  });
+
+  it("keeps relevant dynamic-source verification contexts separate", async () => {
+    const order: string[] = [];
+    const sourceAddress =
+      "0x4cfe000000000000000000000000000000000001" as const;
+    const expected = candidate({
+      candidateId: `1:${hash("1")}:${hash("2")}:4`,
+      blockNumber: "25639597",
+      sourceAddress,
+      contractName: "ClassicV3RewardVault",
+      eventName: "CreatorFeesCheckpointed",
+      releaseHint: { model: "unresolved", releaseVersion: "unresolved" },
+    });
+    const readCandidate = vi.fn(async () => structuredClone(expected));
+    const envio = { readCandidate };
+    const verifyBatch = vi.fn<typeof verifyEnvioCandidateBatchWithDualRpc>(
+      async ({ candidates }) => {
+        order.push(`rpc-${verifyBatch.mock.calls.length}`);
+        return evidenceFor(candidates);
+      },
+    );
+    const store = (
+      dynamicSources: readonly VerifiedDynamicSourceLineage[],
+      index: number,
+    ): ReleaseProjectionStore => ({
+      readProjectionPlan: async () => {
+        order.push(`read-plan-${index}-start`);
+        await Promise.resolve();
+        order.push(`read-plan-${index}-closed`);
+        return plan(
+          [{ candidate: expected, action: "ignore", attemptCount: "0" }],
+          dynamicSources,
+        );
+      },
+      commitVerifiedProjection: async () => {
+        order.push(`commit-${index}`);
+        return { checkpointGeneration: "1" };
+      },
+    });
+    const stores = [
+      store([], 1),
+      store([dynamicLineage(sourceAddress)], 2),
+    ];
+    const preparedRound = await prepareReleaseProjectionRound({
+      stores,
+      envio,
+      providers,
+    });
+    const verify = (index: number) =>
+      verifyPreparedReleaseProjection({
+        store: stores[index]!,
+        envio,
+        providers,
+        prepared: readyProjection(preparedRound, index),
+        sharedVerification: preparedRound.sharedVerification,
+        verifyBatch,
+        readMetadata: async () => [],
+      });
+
+    const first = await verify(0);
+    const second = await verify(1);
+    if (first.status !== "verified" || second.status !== "verified") {
+      throw new Error("Expected verified release projections");
+    }
+    await commitVerifiedPreparedReleaseProjection({
+      store: stores[0]!,
+      verification: first.verification,
+    });
+    await commitVerifiedPreparedReleaseProjection({
+      store: stores[1]!,
+      verification: second.verification,
+    });
+
+    expect(readCandidate).toHaveBeenCalledTimes(1);
+    expect(verifyBatch).toHaveBeenCalledTimes(2);
+    expect(verifyBatch.mock.calls[0]![0].dynamicSources).toEqual([]);
+    expect(verifyBatch.mock.calls[1]![0].dynamicSources).toEqual([
+      dynamicLineage(sourceAddress),
+    ]);
+    expect(order).toEqual([
+      "read-plan-1-start",
+      "read-plan-2-start",
+      "read-plan-1-closed",
+      "read-plan-2-closed",
+      "rpc-1",
+      "rpc-2",
+      "commit-1",
+      "commit-2",
+    ]);
   });
 
   it("fails closed when the fresh Envio object differs from the stored candidate", async () => {

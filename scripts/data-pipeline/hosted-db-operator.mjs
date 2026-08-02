@@ -190,6 +190,7 @@ async function runDatabaseCommand(command, flags) {
       operation: command,
       planSha256: plan.planSha256,
       target: connection.target,
+      operatorIdentity: connection.operatorIdentity,
       state,
       changed:
         command === "apply" &&
@@ -239,6 +240,7 @@ async function runBootstrapDatabaseCommand(command, flags) {
       operation: command,
       planSha256: plan.planSha256,
       target: connection.target,
+      operatorIdentity: connection.operatorIdentity,
       migrationPlanSha256: migrationPlan.planSha256,
       state,
       changed: state.changed === true,

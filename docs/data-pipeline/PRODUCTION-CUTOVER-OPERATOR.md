@@ -52,6 +52,9 @@ PROGRAMMABLE_RECONCILER_DATABASE_URL
 PROGRAMMABLE_RELEASE_PROBE_DATABASE_URL
 PROGRAMMABLE_CUTOVER_RESTORE_DATABASE_URL
 PROGRAMMABLE_CUTOVER_RESTORE_SSL_CA_PEM
+PROGRAMMABLE_PG_DUMP_BINARY
+PROGRAMMABLE_PG_RESTORE_BINARY
+PROGRAMMABLE_PSQL_BINARY
 PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL
 PROGRAMMABLE_QUICKNODE_MAINNET_RPC_URL
 PROGRAMMABLE_ENVIO_GRAPHQL_TOKEN
@@ -111,6 +114,137 @@ node scripts/data-pipeline/cutover-operator.mjs backup-restore \
 The command rejects source drift during the backup window and accepts the
 archive only when the isolated restore has the exact same manifest.
 
+### Candidate in-place reset to a pre-attestation snapshot
+
+Use this sequence only for the reviewed Candidate project
+`mnnvlrqwhfoppogslsje`. The operator rejects every other project ref, host,
+port, database or TLS posture. It accepts only a direct `postgres` owner
+session or Supabase CLI's exact `cli_login_postgres` JIT role. In JIT mode the
+URL user must equal `session_user`, membership in `postgres` is mandatory, and
+the operator executes and verifies `SET ROLE postgres` before any mutation.
+The selected mode and original session identity are committed into every plan
+and result. Stop the source and market schedulers and wait for both leases to
+drain before the first command.
+
+First take a fresh recovery backup of the currently bound Candidate product.
+This command also restores that backup into the independently provisioned
+empty loopback database and compares its complete manifest. It then fences all
+five Candidate runtime login roles with `NOLOGIN`. The roles deliberately stay
+fenced on success or failure:
+
+```sh
+node scripts/data-pipeline/cutover-operator.mjs candidate-safety-backup \
+  --expected-project-ref mnnvlrqwhfoppogslsje \
+  --current-product-commit <currently-bound-40-character-product-commit> \
+  --operation-id candidate-safety-20260802-a \
+  --restore-isolation-id candidate_safety_20260802 \
+  --backup /secure/cutover/candidate-current-safety.dump \
+  --backup-evidence /secure/cutover/candidate-current-safety-backup.json \
+  --output /secure/cutover/candidate-current-safety.json
+```
+
+Create a deterministic restore plan from the reviewed pre-attestation archive
+and its original backup evidence. The plan hashes the exact bytes and
+`pg_restore --list` output of both the source snapshot and the fresh safety
+backup. It pins the prescribed `88cd707` archive bytes, archive hash, TOC hash,
+legacy manifest and schema-only SQL hash. It also binds all three absolute
+PostgreSQL 17.10 EDB binaries plus the complete adjacent runtime-library
+manifest; no `PATH` fallback receives credentials:
+
+```sh
+node scripts/data-pipeline/cutover-operator.mjs candidate-restore-plan \
+  --expected-project-ref mnnvlrqwhfoppogslsje \
+  --current-product-commit <currently-bound-40-character-product-commit> \
+  --snapshot-repository-commit 88cd7078037910c22fc7e67e0031f7e4ef30e422 \
+  --snapshot-backup /secure/cutover/pre-attestation-88cd707.dump \
+  --snapshot-evidence /secure/cutover/pre-attestation-88cd707.json \
+  --safety-backup /secure/cutover/candidate-current-safety.dump \
+  --safety-backup-evidence /secure/cutover/candidate-current-safety-backup.json \
+  --safety-evidence /secure/cutover/candidate-current-safety.json \
+  --output /secure/cutover/candidate-restore-plan.json
+```
+
+Review the plan and pass its `confirmRestore` value literally. Apply rebuilds
+the plan, rejects a safety backup older than 30 minutes, rechecks the currently
+bound product, drained leases, closed runtime logins and byte-identical current
+manifest, then uses exactly three `--schema` selectors and these immutable
+flags: `--clean --if-exists --exit-on-error --single-transaction --no-owner
+--no-privileges`.
+
+```sh
+node scripts/data-pipeline/cutover-operator.mjs candidate-restore-apply \
+  --expected-project-ref mnnvlrqwhfoppogslsje \
+  --current-product-commit <currently-bound-40-character-product-commit> \
+  --snapshot-repository-commit 88cd7078037910c22fc7e67e0031f7e4ef30e422 \
+  --snapshot-backup /secure/cutover/pre-attestation-88cd707.dump \
+  --snapshot-evidence /secure/cutover/pre-attestation-88cd707.json \
+  --safety-backup /secure/cutover/candidate-current-safety.dump \
+  --safety-backup-evidence /secure/cutover/candidate-current-safety-backup.json \
+  --safety-evidence /secure/cutover/candidate-current-safety.json \
+  --plan /secure/cutover/candidate-restore-plan.json \
+  --confirm-restore <confirmRestore> \
+  --output /secure/cutover/candidate-restore-result.json
+```
+
+Success requires two identical post-restore manifests covering rows, function
+and view definitions, constraints, indexes, triggers, RLS and policies, grants,
+and sequence state. The database must be `candidate-only`, unpromoted and
+unbound, with zero projection publications. Runtime logins remain `NOLOGIN`.
+If a transient post-check fails after `pg_restore` committed, rerun the exact
+same apply command: it recognizes the restored fenced state and resumes only
+the post-checks.
+
+If the restored state is indeterminate or must be rolled back, create and
+review the separate recovery plan. This path is bound to the raw isolated
+restore evidence and can only restore the exact safety archive; it never opens
+runtime logins:
+
+```sh
+node scripts/data-pipeline/cutover-operator.mjs candidate-recovery-plan \
+  --expected-project-ref mnnvlrqwhfoppogslsje \
+  --current-product-commit <currently-bound-40-character-product-commit> \
+  --safety-backup /secure/cutover/candidate-current-safety.dump \
+  --safety-backup-evidence /secure/cutover/candidate-current-safety-backup.json \
+  --safety-evidence /secure/cutover/candidate-current-safety.json \
+  --output /secure/cutover/candidate-recovery-plan.json
+
+node scripts/data-pipeline/cutover-operator.mjs candidate-recovery-apply \
+  --expected-project-ref mnnvlrqwhfoppogslsje \
+  --current-product-commit <currently-bound-40-character-product-commit> \
+  --safety-backup /secure/cutover/candidate-current-safety.dump \
+  --safety-backup-evidence /secure/cutover/candidate-current-safety-backup.json \
+  --safety-evidence /secure/cutover/candidate-current-safety.json \
+  --plan /secure/cutover/candidate-recovery-plan.json \
+  --confirm-recovery <confirmRecovery> \
+  --output /secure/cutover/candidate-recovery-result.json
+```
+
+After a successful pinned restore, apply the reviewed hosted migration plan
+while logins remain fenced. Only when the migration state is exactly current
+may an owner review and execute the explicit runtime-enable pair:
+
+```sh
+node scripts/data-pipeline/cutover-operator.mjs candidate-runtime-enable-plan \
+  --expected-project-ref mnnvlrqwhfoppogslsje \
+  --pooler-host <region>.pooler.supabase.com \
+  --restore-result /secure/cutover/candidate-restore-result.json \
+  --output /secure/cutover/candidate-runtime-enable-plan.json
+
+node scripts/data-pipeline/cutover-operator.mjs candidate-runtime-enable-apply \
+  --expected-project-ref mnnvlrqwhfoppogslsje \
+  --pooler-host <region>.pooler.supabase.com \
+  --restore-result /secure/cutover/candidate-restore-result.json \
+  --plan /secure/cutover/candidate-runtime-enable-plan.json \
+  --confirm-enable <confirmEnable> \
+  --output /secure/cutover/candidate-runtime-enable-result.json
+```
+
+This step checks current migrations and the reviewed structural manifest under
+the shared maintenance locks, rotates all five passwords while roles are still
+`NOLOGIN`, opens the exact roles, and verifies every transaction-pooler login.
+Any failure after opening immediately re-fences and terminates those sessions.
+Never manually relax the login fence after a failed restore or failed enable.
+
 ## 3. Fenced candidate ingestion
 
 Run raw candidate ingestion while the publication fence is still closed:
@@ -140,9 +274,11 @@ It must not depend on promotion values created later in the cutover. Its
 immutable `VERCEL_GIT_COMMIT_SHA` and `VERCEL_DEPLOYMENT_ID` are the runtime
 identity inputs.
 
-Create a release-gate evidence file from the reviewed staged binding and raw
-backfill checks. It must carry one non-zero `evidenceSha256` or
-`releaseEvidenceSha256` commitment.
+Capture creates a release-gate evidence file from the reviewed staged binding
+and raw backfill checks. Its non-zero `evidenceSha256` is the SHA-256 commitment
+to canonical JSON of every manifest field except `evidenceSha256` itself. The
+gate and cutover independently recompute this commitment and reject missing,
+stale or malformed values.
 
 The exact staged deployment may have both projector workers enabled, but it
 must remain unassigned to every production domain and scheduler. Prove its
@@ -299,6 +435,58 @@ node scripts/data-pipeline/cutover-operator.mjs rollback-verify \
   --observation /secure/cutover/rollback-observation.json \
   --output /secure/cutover/rollback-evidence.json
 ```
+
+## 9. SLA-gated exact Vercel promotion
+
+This is the only authorized Vercel production-promotion path. The real-block
+SLA evidence must be captured from the exact staged deployment after the
+Candidate database is product-bound to that same commit and `dpl_...` ID and
+the staged projectors have published a complete Classic launch. The production
+domain must still resolve to the previous deployment. Run the fail-closed SLA
+verifier only after the staged gates above are complete. Then immediately
+reverify the same immutable deployment, promote that exact `dpl_...` ID, and
+run the post-promotion binding checks. Do not replace any command with a
+mutable alias or a second deployment. Set
+`PROGRAMMABLE_QUICKNODE_STREAM_ID` to the exact reviewed provider stream ID.
+
+```sh
+test ! -e /secure/cutover/real-block-sla-db-attestation.json
+npm run perf:read-model:real-block-sla-operator -- \
+  --target-url "$STAGED_TARGET_URL" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --expected-commit "$GITHUB_SHA" \
+  --project-id "$VERCEL_PROJECT_ID" \
+  --stream-id "$PROGRAMMABLE_QUICKNODE_STREAM_ID" \
+  --output /secure/cutover/real-block-sla-db-attestation.json
+
+npm run perf:read-model:real-block-sla -- \
+  --evidence /secure/cutover/real-block-sla-db-attestation.json \
+  --expected-commit "$GITHUB_SHA" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --target-url "$STAGED_TARGET_URL"
+
+test ! -e "$PRE_PROMOTE_BINDING_OUTPUT"
+npm run perf:read-model:staged-deployment -- \
+  --target-url "$STAGED_TARGET_URL" \
+  --github-output "$PRE_PROMOTE_BINDING_OUTPUT"
+grep -Fx "deployment_id=$STAGED_DEPLOYMENT_ID" "$PRE_PROMOTE_BINDING_OUTPUT"
+grep -Fx "target_url=$STAGED_TARGET_URL" "$PRE_PROMOTE_BINDING_OUTPUT"
+
+vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
+
+npm run perf:read-model:post-promotion -- \
+  --target-url "https://programmable.family" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --git-head "$GITHUB_SHA" \
+  --evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"
+```
+
+The operator command obtains its probe token and Vercel automation-bypass
+secret only from the environment. It validates the returned arm UUID, waits no
+longer than five minutes for the first matching organic QuickNode delivery and
+challenge-bound export, and writes the exact path above once with mode `0600`.
+Any existing file, mutable target, response-cache drift, timeout, or mismatch
+in commit, deployment, project or stream blocks the verifier and promotion.
 
 If failure occurs after Vercel promotion, first disable the public-read flags,
 then restore the previous Vercel deployment in addition to the Envio and

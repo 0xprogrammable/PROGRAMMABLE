@@ -61,6 +61,7 @@ const MAXIMUM_POOLS_PER_CYCLE = 4;
 const PROVIDER_CONCURRENCY = 4;
 const MAXIMUM_PENDING_POOLS_PER_SCOPE = 4;
 const DEADLINE_MS = 75_000;
+const FAST_LANE_DEADLINE_MS = 25_000;
 const CLOSE_RESERVE_MS = 5_000;
 const DECIMAL_SCALE = 36;
 const UUID_PATTERN =
@@ -182,6 +183,11 @@ export type MarketCloseAnchor = Readonly<{
   blockGlobalLogIndex: string;
 }>;
 
+export type MarketFastLanePlan = Readonly<{
+  plan: MarketPoolPlan;
+  anchor: MarketCloseAnchor;
+}>;
+
 export type VerifiedChainlinkBlock = Readonly<{
   blockNumber: string;
   blockHash: HexBytes32;
@@ -223,12 +229,14 @@ export type PreparedMarketPage = Readonly<{
   providerCursor: string;
   pageCommitment: HexBytes32;
   isReorg: boolean;
+  fastLane?: boolean;
 }>;
 
 export type MarketProjectorStore = Readonly<{
   tryAcquireLease(): Promise<MarketProjectorLease | null>;
   releaseLease(lease: MarketProjectorLease): Promise<void>;
   loadPlans(): Promise<readonly MarketPoolPlan[]>;
+  loadFastLanePlan(): Promise<MarketFastLanePlan | null>;
   listCloseAnchors(
     input: Readonly<{
       plan: MarketPoolPlan;
@@ -519,6 +527,67 @@ function parsePoolCursor(row: Record<string, unknown>): MarketCursor | null {
   });
 }
 
+function parsePoolPlan(
+  row: Record<string, unknown>,
+  scope?: MarketProjectorScope,
+): MarketPoolPlan {
+  const resolvedScope =
+    scope ??
+    RELEASE_SCOPES.find(
+      (candidate) =>
+        candidate.releaseId === row.release_id &&
+        candidate.modelId === row.model_id &&
+        candidate.sourceGroup === row.source_group,
+    );
+  if (!resolvedScope) throw validationError("postgres", "market-scope");
+  const poolId = byteaBytes32(row.pool_id);
+  return Object.freeze({
+    scope: resolvedScope,
+    epochId: uuid(row.epoch_id),
+    pointerGeneration: integer(row.pointer_generation),
+    sourceCheckpointId: uuid(row.source_checkpoint_id),
+    sourceCheckpointGeneration: integer(row.source_checkpoint_generation),
+    sourceReorgGeneration: integer(row.source_reorg_generation),
+    sourceCheckpointBlockNumber: integer(row.source_checkpoint_block_number),
+    sourceCheckpointBlockHash: byteaBytes32(row.source_checkpoint_block_hash),
+    sourceCheckpointBlockEvidenceId: uuid(
+      row.source_checkpoint_block_evidence_id,
+    ),
+    token: byteaAddress(row.token),
+    poolKey: Object.freeze({
+      poolId,
+      currency0: byteaAddress(row.currency0),
+      currency1: byteaAddress(row.currency1),
+      hooks: byteaAddress(row.hook),
+      fee: Number(integer(row.pool_key_fee)),
+      tickSpacing: Number(integer(row.tick_spacing)),
+      token0Decimals: Number(integer(row.token0_decimals)),
+      token1Decimals: Number(integer(row.token1_decimals)),
+    }),
+    totalSupply: integer(row.total_supply),
+    launchBlockNumber: integer(row.launch_block_number),
+    launchBlockTimestamp: date(row.launch_block_timestamp),
+    cursor: parsePoolCursor(row),
+  });
+}
+
+function parseFastLanePlan(row: Record<string, unknown>): MarketFastLanePlan {
+  return Object.freeze({
+    plan: parsePoolPlan(row),
+    anchor: Object.freeze({
+      occurrenceId: uuid(row.anchor_occurrence_id),
+      logicalEventId: uuid(row.anchor_logical_event_id),
+      blockEvidenceId: uuid(row.anchor_block_evidence_id),
+      blockNumber: integer(row.anchor_block_number),
+      blockHash: byteaBytes32(row.anchor_block_hash),
+      blockTimestamp: date(row.anchor_block_timestamp),
+      transactionHash: byteaBytes32(row.anchor_transaction_hash),
+      transactionIndex: integer(row.anchor_transaction_index),
+      blockGlobalLogIndex: integer(row.anchor_block_global_log_index),
+    }),
+  });
+}
+
 function marketGatewayIdentityFailure(): DataPipelineError {
   return invalidInput("postgres", "market-gateway-membership");
 }
@@ -701,46 +770,23 @@ export function createPostgresMarketProjectorStore(
             ],
           );
           for (const row of rows) {
-            const poolId = byteaBytes32(row.pool_id);
-            plans.push(
-              Object.freeze({
-                scope,
-                epochId: uuid(row.epoch_id),
-                pointerGeneration: integer(row.pointer_generation),
-                sourceCheckpointId: uuid(row.source_checkpoint_id),
-                sourceCheckpointGeneration: integer(
-                  row.source_checkpoint_generation,
-                ),
-                sourceReorgGeneration: integer(row.source_reorg_generation),
-                sourceCheckpointBlockNumber: integer(
-                  row.source_checkpoint_block_number,
-                ),
-                sourceCheckpointBlockHash: byteaBytes32(
-                  row.source_checkpoint_block_hash,
-                ),
-                sourceCheckpointBlockEvidenceId: uuid(
-                  row.source_checkpoint_block_evidence_id,
-                ),
-                token: byteaAddress(row.token),
-                poolKey: Object.freeze({
-                  poolId,
-                  currency0: byteaAddress(row.currency0),
-                  currency1: byteaAddress(row.currency1),
-                  hooks: byteaAddress(row.hook),
-                  fee: Number(integer(row.pool_key_fee)),
-                  tickSpacing: Number(integer(row.tick_spacing)),
-                  token0Decimals: Number(integer(row.token0_decimals)),
-                  token1Decimals: Number(integer(row.token1_decimals)),
-                }),
-                totalSupply: integer(row.total_supply),
-                launchBlockNumber: integer(row.launch_block_number),
-                launchBlockTimestamp: date(row.launch_block_timestamp),
-                cursor: parsePoolCursor(row),
-              }),
-            );
+            plans.push(parsePoolPlan(row, scope));
           }
         }
         return Object.freeze(plans);
+      });
+    },
+
+    async loadFastLanePlan() {
+      return gateway.transaction(async (transaction) => {
+        const rows = await transaction.query(
+          "select * from programmable_private.list_market_projector_fast_lane_v1($1::bigint,$2,$3,$4::integer)",
+          [CHAIN_ID, input.sourceProjectorVersion, marketProjectorVersion, 1],
+        );
+        if (rows.length > 1) {
+          throw validationError("postgres", "market-fast-lane-cardinality");
+        }
+        return rows[0] ? parseFastLanePlan(rows[0]) : null;
       });
     },
 
@@ -803,21 +849,73 @@ export function createPostgresMarketProjectorStore(
     async commit(page) {
       const startedAt = Date.now();
       return gateway.transaction(async (transaction) => {
-        if (!activeLease) {
+        if (!page.fastLane && !activeLease) {
           throw validationError("postgres", "market-lease-missing");
         }
-        const leaseRows = await transaction.query<{ valid: unknown }>(
-          "select programmable_private.assert_market_projector_runtime_lease_v1($1,$2::bigint,$3::bytea) as valid",
-          [
-            activeLease.holderId,
-            activeLease.generation,
-            hexToBytes(activeLease.tokenHash),
-          ],
-        );
-        if (leaseRows.length !== 1 || leaseRows[0]?.valid !== true) {
-          throw validationError("postgres", "market-lease-expired");
+        if (!page.fastLane) {
+          const leaseRows = await transaction.query<{ valid: unknown }>(
+            "select programmable_private.assert_market_projector_runtime_lease_v1($1,$2::bigint,$3::bytea) as valid",
+            [
+              activeLease!.holderId,
+              activeLease!.generation,
+              hexToBytes(activeLease!.tokenHash),
+            ],
+          );
+          if (leaseRows.length !== 1 || leaseRows[0]?.valid !== true) {
+            throw validationError("postgres", "market-lease-expired");
+          }
         }
         const plan = page.plan;
+        const poolLockRows = await transaction.query<{ locked: unknown }>(
+          "select programmable_private.try_lock_market_projector_pool_v1($1::bigint,$2,$3,$4,$5::bytea) as locked",
+          [
+            CHAIN_ID,
+            plan.scope.releaseId,
+            plan.scope.modelId,
+            plan.scope.sourceGroup,
+            hexToBytes(plan.poolKey.poolId),
+          ],
+        );
+        if (poolLockRows.length !== 1 || poolLockRows[0]?.locked !== true) {
+          throw validationError("postgres", "market-pool-busy");
+        }
+        if (page.fastLane) {
+          const cursor = plan.cursor;
+          const anchor = page.closes[0]?.anchor;
+          if (!cursor || page.closes.length !== 1 || !anchor) {
+            throw validationError("postgres", "market-fast-lane-page");
+          }
+          const assertionRows = await transaction.query<{ valid: unknown }>(
+            "select programmable_private.assert_market_projector_fast_lane_v1($1::bigint,$2,$3,$4,$5,$6,$7::bytea,$8::uuid,$9::bigint,$10::uuid,$11::bigint,$12::bigint,$13::numeric,$14::bytea,$15::uuid,$16::uuid,$17::bigint,$18::bigint,$19::uuid,$20::uuid,$21::numeric,$22::bytea) as valid",
+            [
+              CHAIN_ID,
+              plan.scope.releaseId,
+              plan.scope.modelId,
+              plan.scope.sourceGroup,
+              input.sourceProjectorVersion,
+              marketProjectorVersion,
+              hexToBytes(plan.poolKey.poolId),
+              plan.epochId,
+              plan.pointerGeneration,
+              plan.sourceCheckpointId,
+              plan.sourceCheckpointGeneration,
+              plan.sourceReorgGeneration,
+              plan.sourceCheckpointBlockNumber,
+              hexToBytes(plan.sourceCheckpointBlockHash),
+              plan.sourceCheckpointBlockEvidenceId,
+              cursor.id,
+              cursor.cursorGeneration,
+              cursor.reorgGeneration,
+              anchor.occurrenceId,
+              anchor.blockEvidenceId,
+              anchor.blockNumber,
+              hexToBytes(anchor.blockHash),
+            ],
+          );
+          if (assertionRows.length !== 1 || assertionRows[0]?.valid !== true) {
+            throw validationError("postgres", "market-fast-lane-stale");
+          }
+        }
         const pageHex = page.pageCommitment;
         const runId = deterministicUuid("run", plan.epochId, pageHex);
         const reconciliationId = deterministicUuid("reconciliation", runId);
@@ -1163,31 +1261,33 @@ export function createPostgresMarketProjectorStore(
           );
         }
 
-        await transaction.query(
-          "select programmable_private.advance_market_projector_cursor_v1($1::uuid,$2::uuid,$3,$4,$5::bytea,$6::bigint,$7::bigint,$8::bigint,$9::bigint,$10::uuid,$11::bigint,$12::bigint,$13::uuid,$14::numeric,$15::bytea,$16,$17::timestamptz,$18::timestamptz,$19::bytea,$20::timestamptz)",
-          [
-            cursorId,
-            reconciliationId,
-            input.sourceProjectorVersion,
-            marketProjectorVersion,
-            hexToBytes(plan.poolKey.poolId),
-            currentCursorGeneration,
-            nextCursorGeneration,
-            currentReorgGeneration,
-            nextReorgGeneration,
-            plan.sourceCheckpointId,
-            plan.sourceCheckpointGeneration,
-            plan.sourceReorgGeneration,
-            page.targetEvidenceId,
-            page.target.blockNumber,
-            hexToBytes(page.target.blockHash),
-            page.providerCursor,
-            page.nextHourCoverageEnd,
-            page.nextDayCoverageEnd,
-            hexToBytes(pageHex),
-            now,
-          ],
-        );
+        if (!page.fastLane) {
+          await transaction.query(
+            "select programmable_private.advance_market_projector_cursor_v1($1::uuid,$2::uuid,$3,$4,$5::bytea,$6::bigint,$7::bigint,$8::bigint,$9::bigint,$10::uuid,$11::bigint,$12::bigint,$13::uuid,$14::numeric,$15::bytea,$16,$17::timestamptz,$18::timestamptz,$19::bytea,$20::timestamptz)",
+            [
+              cursorId,
+              reconciliationId,
+              input.sourceProjectorVersion,
+              marketProjectorVersion,
+              hexToBytes(plan.poolKey.poolId),
+              currentCursorGeneration,
+              nextCursorGeneration,
+              currentReorgGeneration,
+              nextReorgGeneration,
+              plan.sourceCheckpointId,
+              plan.sourceCheckpointGeneration,
+              plan.sourceReorgGeneration,
+              page.targetEvidenceId,
+              page.target.blockNumber,
+              hexToBytes(page.target.blockHash),
+              page.providerCursor,
+              page.nextHourCoverageEnd,
+              page.nextDayCoverageEnd,
+              hexToBytes(pageHex),
+              now,
+            ],
+          );
+        }
 
         const lagBlocks = (
           BigInt(plan.sourceCheckpointBlockNumber) -
@@ -1199,6 +1299,7 @@ export function createPostgresMarketProjectorStore(
           candleCount: page.candles.length,
           lagBlocks,
           caughtUp,
+          fastLane: page.fastLane === true,
           hourCovered: page.nextHourCoverageEnd?.toISOString() ?? null,
           dayCovered: page.nextDayCoverageEnd?.toISOString() ?? null,
         });
@@ -1676,6 +1777,196 @@ async function preparePoolPage(
   });
 }
 
+async function prepareFastLanePage(
+  input: Readonly<{
+    fastLane: MarketFastLanePlan;
+    analytics: MarketAnalytics;
+    rpc: MarketRpc;
+    graphProviderId: string;
+    deadlineAt: number;
+  }>,
+): Promise<PreparedMarketPage> {
+  const { plan, anchor } = input.fastLane;
+  const cursor = plan.cursor;
+  if (
+    !cursor ||
+    plan.epochId !== cursor.epochId ||
+    plan.pointerGeneration !== cursor.pointerGeneration ||
+    plan.sourceReorgGeneration !== cursor.sourceReorgGeneration ||
+    BigInt(plan.sourceCheckpointGeneration) <
+      BigInt(cursor.sourceCheckpointGeneration) ||
+    BigInt(anchor.blockNumber) < BigInt(cursor.blockNumber) ||
+    BigInt(anchor.blockNumber) > BigInt(plan.sourceCheckpointBlockNumber)
+  ) {
+    throw validationError("postgres", "market-fast-lane-lineage");
+  }
+  assertBeforeDeadline(input.deadlineAt);
+  const targetPromise = input.rpc.readChainlinkBlock({
+    blockNumber: plan.sourceCheckpointBlockNumber,
+    expectedBlockHash: plan.sourceCheckpointBlockHash,
+  });
+  const targetSnapshotPromise = input.analytics.readPoolSnapshot({
+    poolKey: plan.poolKey,
+    block: {
+      number: plan.sourceCheckpointBlockNumber,
+      hash: plan.sourceCheckpointBlockHash,
+    },
+  });
+  const sameBlock = anchor.blockHash === plan.sourceCheckpointBlockHash;
+  const closeGlobalPromise = sameBlock
+    ? targetPromise
+    : input.rpc.readChainlinkBlock({
+        blockNumber: anchor.blockNumber,
+        expectedBlockHash: anchor.blockHash,
+      });
+  const closeSnapshotPromise = sameBlock
+    ? targetSnapshotPromise
+    : input.analytics.readPoolSnapshot({
+        poolKey: plan.poolKey,
+        block: { number: anchor.blockNumber, hash: anchor.blockHash },
+      });
+  const closeHourStart = floorDate(anchor.blockTimestamp, 3_600);
+  const partialHourPromise = input.analytics.readHourSeries({
+    poolKey: plan.poolKey,
+    block: { number: anchor.blockNumber, hash: anchor.blockHash },
+    from: dateSeconds(closeHourStart),
+    toExclusive: dateSeconds(plusSeconds(closeHourStart, 3_600)),
+  });
+  const [
+    target,
+    targetSnapshotResult,
+    closeGlobal,
+    closeSnapshotResult,
+    partialHourResult,
+  ] = await Promise.all([
+    targetPromise,
+    targetSnapshotPromise,
+    closeGlobalPromise,
+    closeSnapshotPromise,
+    partialHourPromise,
+  ]);
+  const targetSnapshot = exactResult(targetSnapshotResult, {
+    number: plan.sourceCheckpointBlockNumber,
+    hash: plan.sourceCheckpointBlockHash,
+  });
+  if (targetSnapshot.tick === null) {
+    throw validationError("uniswap", "missing-fast-lane-tick");
+  }
+  const targetPrices = prices(targetSnapshot, plan.poolKey);
+
+  assertBeforeDeadline(input.deadlineAt);
+  const closeSnapshot = exactResult(closeSnapshotResult, {
+    number: anchor.blockNumber,
+    hash: anchor.blockHash,
+  });
+  if (closeSnapshot.tick === null) {
+    throw validationError("uniswap", "missing-fast-lane-close-tick");
+  }
+  const closePrices = prices(closeSnapshot, plan.poolKey);
+  const partialHour = exactResult(partialHourResult, {
+    number: anchor.blockNumber,
+    hash: anchor.blockHash,
+  });
+  const closeHour = partialHour.find(
+    (item) => item.periodStart === dateSeconds(closeHourStart),
+  );
+  if (!closeHour) {
+    throw validationError("uniswap", "missing-fast-lane-close-fees");
+  }
+  const closes = Object.freeze([
+    Object.freeze({
+      anchor,
+      global: closeGlobal,
+      snapshot: closeSnapshot,
+      token0Price: closePrices.token0Price,
+      token1Price: closePrices.token1Price,
+      feesUsd: closeHour.feesUsd,
+    }),
+  ]);
+  const providerCursor = `head:${target.blockNumber}:${target.blockHash.slice(2, 18)}`;
+  const pageCommitment = commitment("fast-lane-page", {
+    releaseId: plan.scope.releaseId,
+    modelId: plan.scope.modelId,
+    epochId: plan.epochId,
+    pointerGeneration: plan.pointerGeneration,
+    sourceCheckpointId: plan.sourceCheckpointId,
+    sourceCheckpointGeneration: plan.sourceCheckpointGeneration,
+    sourceReorgGeneration: plan.sourceReorgGeneration,
+    cursorId: cursor.id,
+    cursorGeneration: cursor.cursorGeneration,
+    cursorReorgGeneration: cursor.reorgGeneration,
+    poolId: plan.poolKey.poolId,
+    graphProviderId: input.graphProviderId,
+    anchor,
+    target,
+    targetSnapshot,
+    closes,
+  });
+  return Object.freeze({
+    plan,
+    graphProviderId: input.graphProviderId,
+    targetEvidenceId: plan.sourceCheckpointBlockEvidenceId,
+    target,
+    targetSnapshot,
+    targetToken0Price: targetPrices.token0Price,
+    targetToken1Price: targetPrices.token1Price,
+    closes,
+    candles: Object.freeze([]),
+    nextHourCoverageEnd: cursor.hourCoverageEnd,
+    nextDayCoverageEnd: cursor.dayCoverageEnd,
+    providerCursor,
+    pageCommitment,
+    isReorg: false,
+    fastLane: true,
+  });
+}
+
+export async function runMarketProjectorFastLaneCycle(
+  input: Readonly<{
+    store: MarketProjectorStore;
+    analytics: MarketAnalytics;
+    rpc: MarketRpc;
+    graphProvider: Readonly<{
+      redactedIdentity: string;
+      deploymentCommitment: HexBytes32;
+      schemaCommitment: HexBytes32;
+    }>;
+    deadlineMs?: number;
+  }>,
+): Promise<MarketProjectorCycleResult> {
+  const startedAt = Date.now();
+  const deadlineMs = input.deadlineMs ?? FAST_LANE_DEADLINE_MS;
+  if (
+    !Number.isSafeInteger(deadlineMs) ||
+    deadlineMs < CLOSE_RESERVE_MS + 1_000 ||
+    deadlineMs > 30_000
+  ) {
+    throw invalidInput("config", "market-fast-lane-deadline");
+  }
+  const deadlineAt = startedAt + deadlineMs - CLOSE_RESERVE_MS;
+  const graphProviderId = await input.store.resolveGraphProvider(
+    input.graphProvider,
+  );
+  const fastLane = await input.store.loadFastLanePlan();
+  if (!fastLane) {
+    return Object.freeze({
+      status: "idle",
+      lagBlocks: "0",
+      closeCount: 0,
+      candleCount: 0,
+      caughtUp: true,
+    });
+  }
+  const page = await prepareFastLanePage({
+    fastLane,
+    analytics: input.analytics,
+    rpc: input.rpc,
+    graphProviderId,
+    deadlineAt,
+  });
+  return input.store.commit(page);
+}
+
 export async function runMarketProjectorCycle(
   input: Readonly<{
     store: MarketProjectorStore;
@@ -1972,6 +2263,62 @@ export async function runConfiguredMarketProjectorCycle(
     } finally {
       await store.releaseLease(lease);
     }
+  } finally {
+    if (!input.executor) await store.close();
+  }
+}
+
+export async function runConfiguredMarketProjectorFastLaneCycle(
+  input: Readonly<{
+    env?: Environment;
+    fetcher?: DataPipelineFetcher;
+    executor?: PostgresExecutor;
+  }> = {},
+): Promise<MarketProjectorCycleResult> {
+  const env = input.env ?? process.env;
+  const activation = env.PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE;
+  if (activation === undefined || activation === "false") {
+    return Object.freeze({
+      status: "disabled",
+      lagBlocks: "0",
+      closeCount: 0,
+      candleCount: 0,
+      caughtUp: false,
+    });
+  }
+  if (activation !== "true") {
+    throw invalidInput("config", "market-projector-active");
+  }
+  const config = loadMarketProjectorRuntimeConfig(env);
+  const executor =
+    input.executor ??
+    createPostgresExecutor({
+      connectionString: config.databaseUrl,
+      sslCaPem: config.sslCaPem,
+      maxConnections: 1,
+      connectTimeoutMs: 2_000,
+      idleTimeoutMs: 5_000,
+    });
+  const store = createPostgresMarketProjectorStore({
+    executor,
+    sourceProjectorVersion: config.sourceProjectorVersion,
+    rpcProviders: config.rpcProviders,
+  });
+  try {
+    return await runMarketProjectorFastLaneCycle({
+      store,
+      analytics: createUniswapAnalyticsClient({
+        gatewayBaseUrl: GRAPH_GATEWAY,
+        apiKey: config.graphApiKey,
+        fetcher: input.fetcher,
+        limits: { maximumPages: 4, maximumEntities: 500 },
+      }),
+      rpc: createDualRpcMarketReader({
+        endpoints: config.rpcEndpoints,
+        fetcher: input.fetcher,
+      }),
+      graphProvider: config.graphProvider,
+    });
   } finally {
     if (!input.executor) await store.close();
   }

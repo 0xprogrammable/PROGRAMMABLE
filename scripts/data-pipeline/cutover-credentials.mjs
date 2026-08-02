@@ -34,9 +34,15 @@ const ISOLATION_ID = /^[a-z0-9][a-z0-9_-]{7,31}$/u;
 const SHA256 = /^0x[0-9a-f]{64}$/u;
 const PG_TOOL_VERSION = /\b(\d+)\.(?:\d+)(?:\.\d+)?\b/u;
 const RESTORE_DATABASE_PREFIX = "programmable_restore_";
-const BACKUP_SCHEMAS = Object.freeze([
+export const BACKUP_SCHEMAS = Object.freeze([
   "programmable_private",
   "programmable_release_probe_private",
+  "supabase_migrations",
+]);
+export const FINAL_BACKUP_SCHEMAS = Object.freeze([
+  "programmable_private",
+  "programmable_release_probe_private",
+  "programmable_wake_private",
   "supabase_migrations",
 ]);
 const RESTORE_ROLE_NAMES = Object.freeze([
@@ -352,14 +358,19 @@ async function assertDirectOperatorIdentity(sql) {
       current_user::text as current_user,
       current_role::text as current_role,
       pg_catalog.current_database()::text as database_name,
-      pg_catalog.inet_server_port()::integer as server_port
+      pg_catalog.inet_server_port()::integer as server_port,
+      pg_catalog.pg_has_role(
+        session_user, 'postgres', 'member'
+      ) as is_postgres_member
   `);
   if (
-    identity?.session_user !== "postgres" ||
+    !["postgres", "cli_login_postgres"].includes(identity?.session_user) ||
     identity?.current_user !== "postgres" ||
     identity?.current_role !== "postgres" ||
     identity?.database_name !== "postgres" ||
-    Number(identity?.server_port) !== 5432
+    Number(identity?.server_port) !== 5432 ||
+    (identity?.session_user === "cli_login_postgres" &&
+      identity?.is_postgres_member !== true)
   ) {
     throw new Error("direct database operator identity is not approved");
   }
@@ -599,17 +610,34 @@ function decodeUrlComponent(value) {
   }
 }
 
-function parseSourceTarget(databaseUrl, expectedProjectRef) {
+function parseSourceTarget(
+  databaseUrl,
+  expectedProjectRef,
+  allowedSourceUsernames = ["postgres"],
+) {
+  const parsed = new URL(databaseUrl);
+  const username = decodeUrlComponent(parsed.username);
+  if (
+    !Array.isArray(allowedSourceUsernames) ||
+    ![
+      canonicalJson(["postgres"]),
+      canonicalJson(["postgres", "cli_login_postgres"]),
+    ].includes(canonicalJson(allowedSourceUsernames)) ||
+    !allowedSourceUsernames.includes(username)
+  ) {
+    throw new Error("source database operator identity is not approved");
+  }
+  const ownerUrl = new URL(databaseUrl);
+  ownerUrl.username = "postgres";
   const safeTarget = validateDirectSupabaseTarget(
-    databaseUrl,
+    ownerUrl.toString(),
     expectedProjectRef,
   );
-  const parsed = new URL(databaseUrl);
   const password = decodeUrlComponent(parsed.password);
   if (password.length < 1 || /[\u0000-\u001f\u007f]/u.test(password)) {
     throw new Error("source database credential is invalid");
   }
-  return { safeTarget, password, username: "postgres" };
+  return { safeTarget, password, username };
 }
 
 function parseRestoreTarget(databaseUrl, isolationId) {
@@ -707,6 +735,7 @@ function validateBackupRequest(input) {
   const source = parseSourceTarget(
     input.sourceDatabaseUrl,
     input.expectedProjectRef,
+    input.allowedSourceUsernames,
   );
   const restore = parseRestoreTarget(
     input.restoreDatabaseUrl,
@@ -766,6 +795,14 @@ async function fileSha256(filePath) {
 }
 
 function validateStoredEvidence(value, request) {
+  const hasSourceStructuralManifest = Object.hasOwn(
+    value ?? {},
+    "sourceStructuralManifestSha256",
+  );
+  const hasRestoredStructuralManifest = Object.hasOwn(
+    value ?? {},
+    "restoredStructuralManifestSha256",
+  );
   if (
     !isPlainRecord(value) ||
     value.kind !== "programmable-database-backup-restore-evidence" ||
@@ -785,6 +822,11 @@ function validateStoredEvidence(value, request) {
     value.backup.bytes <= 0 ||
     !SHA256.test(value.sourceManifestSha256 ?? "") ||
     value.restoredManifestSha256 !== value.sourceManifestSha256 ||
+    hasSourceStructuralManifest !== hasRestoredStructuralManifest ||
+    (hasSourceStructuralManifest &&
+      (!SHA256.test(value.sourceStructuralManifestSha256 ?? "") ||
+        value.restoredStructuralManifestSha256 !==
+          value.sourceStructuralManifestSha256)) ||
     !Number.isSafeInteger(value.tableCount) ||
     value.tableCount < 0 ||
     !Number.isSafeInteger(value.rowCount) ||
@@ -918,8 +960,21 @@ async function executeSafeCommand({
   env,
   timeoutMs,
   secrets,
+  expectedBinary,
 }) {
   assertCommandContainsNoSecrets(args, secrets);
+  if (expectedBinary !== undefined) {
+    if (typeof binary !== "string" || !path.isAbsolute(binary)) {
+      throw new Error("pinned Postgres tool path must be absolute");
+    }
+    const actual = await fileSha256(binary);
+    if (
+      actual.bytes !== expectedBinary.bytes ||
+      actual.sha256 !== expectedBinary.sha256
+    ) {
+      throw new Error("pinned Postgres tool changed before execution");
+    }
+  }
   try {
     const result = await runner(binary, Object.freeze([...args]), {
       cwd: path.dirname(args.at(-1) ?? process.cwd()),
@@ -977,12 +1032,37 @@ function quoteIdentifier(value) {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-async function captureDatabaseManifest(sql) {
+export async function captureDatabaseManifest(
+  sql,
+  { schemas: requestedSchemas = BACKUP_SCHEMAS } = {},
+) {
+  const schemas = Object.freeze([...requestedSchemas]);
+  if (
+    canonicalJson(schemas) !== canonicalJson(BACKUP_SCHEMAS) &&
+    canonicalJson(schemas) !== canonicalJson(FINAL_BACKUP_SCHEMAS)
+  ) {
+    throw new Error("database manifest schema stage is invalid");
+  }
   // JSON serialization of timestamptz follows the session timezone. Normalize
   // both the hosted source and isolated restore before hashing so identical
   // instants cannot fail verification solely because the hosts use different
   // timezone settings.
   await sql.unsafe("set timezone = 'UTC'").simple();
+  const schemaInventory = await sql.unsafe(
+    `
+      select nspname
+        from pg_catalog.pg_namespace
+       where nspname = any($1::text[])
+       order by nspname
+    `,
+    [FINAL_BACKUP_SCHEMAS],
+  );
+  if (
+    canonicalJson(schemaInventory.map(({ nspname }) => nspname)) !==
+      canonicalJson([...schemas].sort())
+  ) {
+    throw new Error("database manifest schema inventory is not exact");
+  }
   const objects = await sql.unsafe(
     `
       select
@@ -995,7 +1075,7 @@ async function captureDatabaseManifest(sql) {
       where namespace.nspname = any($1::text[])
       order by namespace.nspname, class.relname, class.relkind
     `,
-    [BACKUP_SCHEMAS],
+    [schemas],
   );
   const functions = await sql.unsafe(
     `
@@ -1012,7 +1092,7 @@ async function captureDatabaseManifest(sql) {
       order by namespace.nspname, procedure.proname,
                pg_catalog.pg_get_function_identity_arguments(procedure.oid)
     `,
-    [BACKUP_SCHEMAS],
+    [schemas],
   );
   const types = await sql.unsafe(
     `
@@ -1027,19 +1107,66 @@ async function captureDatabaseManifest(sql) {
         and type.typname not like '\\_%' escape '\\'
       order by namespace.nspname, type.typname
     `,
-    [BACKUP_SCHEMAS],
+    [schemas],
   );
   const tables = objects.filter(({ object_kind: kind }) => ["p", "r"].includes(kind));
+  const [manifestIdentity] = await sql.unsafe(`
+    select current_user::text as current_user,
+           role_record.rolsuper
+      from pg_catalog.pg_roles as role_record
+     where role_record.rolname = current_user
+  `);
+  const restrictedPostgres =
+    manifestIdentity?.current_user === "postgres" &&
+    manifestIdentity?.rolsuper === false;
+  const relationOwners = restrictedPostgres
+    ? await sql.unsafe(
+        `
+          select namespace.nspname as schema_name,
+                 class.relname as relation_name,
+                 pg_catalog.pg_get_userbyid(class.relowner) as relation_owner
+            from pg_catalog.pg_class as class
+            join pg_catalog.pg_namespace as namespace
+              on namespace.oid = class.relnamespace
+           where namespace.nspname = any($1::text[])
+        `,
+        [schemas],
+      )
+    : [];
+  const ownerByRelation = new Map(
+    relationOwners.map((row) => [
+      `${row.schema_name}\0${row.relation_name}`,
+      row.relation_owner,
+    ]),
+  );
+  async function readAsRelationOwner(schemaName, relationName, operation) {
+    if (!restrictedPostgres) return operation();
+    const owner = ownerByRelation.get(`${schemaName}\0${relationName}`);
+    if (!["postgres", "programmable_migrator"].includes(owner)) {
+      throw new Error("database manifest relation owner is invalid");
+    }
+    if (owner === "postgres") return operation();
+    await sql.unsafe("set role programmable_migrator").simple();
+    try {
+      return await operation();
+    } finally {
+      await sql.unsafe("set role postgres").simple();
+    }
+  }
   const tableEvidence = [];
   let totalRows = 0;
   for (const table of tables) {
     const schema = quoteIdentifier(table.schema_name);
     const name = quoteIdentifier(table.object_name);
-    const rows = await sql.unsafe(`
-      select pg_catalog.to_jsonb(row_value)::text as row_json
-      from ${schema}.${name} as row_value
-      order by pg_catalog.to_jsonb(row_value)::text collate "C"
-    `);
+    const rows = await readAsRelationOwner(
+      table.schema_name,
+      table.object_name,
+      () => sql.unsafe(`
+        select pg_catalog.to_jsonb(row_value)::text as row_json
+        from ${schema}.${name} as row_value
+        order by pg_catalog.to_jsonb(row_value)::text collate "C"
+      `),
+    );
     const hash = createHash("sha256");
     for (const row of rows) {
       const value = row?.row_json;
@@ -1061,14 +1188,576 @@ async function captureDatabaseManifest(sql) {
     });
   }
   const payload = {
-    schemas: BACKUP_SCHEMAS,
+    schemas,
     objects,
     functions,
     types,
     tables: tableEvidence,
   };
+  const schemaSecurity = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        pg_catalog.pg_get_userbyid(namespace.nspowner) as schema_owner,
+        namespace.nspacl is null as grants_are_default,
+        grant_item.grant_text
+      from pg_catalog.pg_namespace as namespace
+      left join lateral (
+        select acl_item::text as grant_text
+        from pg_catalog.unnest(
+          coalesce(namespace.nspacl, '{}'::aclitem[])
+        ) as acl_item
+        order by acl_item::text collate "C"
+      ) as grant_item on true
+      where namespace.nspname = any($1::text[])
+      order by namespace.nspname,
+               grant_item.grant_text collate "C" nulls first
+    `,
+    [schemas],
+  );
+  const relationSecurity = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        class.relname as relation_name,
+        class.relkind::text as relation_kind,
+        pg_catalog.pg_get_userbyid(class.relowner) as relation_owner,
+        class.relrowsecurity as row_security_enabled,
+        class.relforcerowsecurity as row_security_forced,
+        class.relreplident::text as replica_identity,
+        class.relpersistence::text as persistence,
+        pg_catalog.pg_get_partkeydef(class.oid) as partition_key,
+        pg_catalog.pg_get_expr(class.relpartbound, class.oid, true)
+          as partition_bound,
+        coalesce((
+          select pg_catalog.array_agg(option_value order by option_value collate "C")
+          from pg_catalog.unnest(class.reloptions) as option_value
+        ), '{}'::text[])::text as relation_options,
+        class.relacl is null as grants_are_default,
+        grant_item.grant_text
+      from pg_catalog.pg_class as class
+      join pg_catalog.pg_namespace as namespace
+        on namespace.oid = class.relnamespace
+      left join lateral (
+        select acl_item::text as grant_text
+        from pg_catalog.unnest(
+          coalesce(class.relacl, '{}'::aclitem[])
+        ) as acl_item
+        order by acl_item::text collate "C"
+      ) as grant_item on true
+      where namespace.nspname = any($1::text[])
+      order by namespace.nspname, class.relname, class.relkind,
+               grant_item.grant_text collate "C" nulls first
+    `,
+    [schemas],
+  );
+  const columns = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        class.relname as relation_name,
+        attribute.attnum::integer as ordinal,
+        attribute.attname as column_name,
+        pg_catalog.format_type(attribute.atttypid, attribute.atttypmod)
+          as data_type,
+        attribute.attnotnull as not_null,
+        attribute.attidentity::text as identity_kind,
+        attribute.attgenerated::text as generated_kind,
+        collation_namespace.nspname as collation_schema,
+        collation_record.collname as collation_name,
+        pg_catalog.pg_get_expr(
+          attribute_default.adbin,
+          attribute_default.adrelid,
+          true
+        ) as default_definition,
+        attribute.attacl is null as grants_are_default,
+        grant_item.grant_text
+      from pg_catalog.pg_attribute as attribute
+      join pg_catalog.pg_class as class
+        on class.oid = attribute.attrelid
+      join pg_catalog.pg_namespace as namespace
+        on namespace.oid = class.relnamespace
+      left join pg_catalog.pg_attrdef as attribute_default
+        on attribute_default.adrelid = attribute.attrelid
+       and attribute_default.adnum = attribute.attnum
+      left join pg_catalog.pg_collation as collation_record
+        on collation_record.oid = attribute.attcollation
+       and attribute.attcollation <> 0
+      left join pg_catalog.pg_namespace as collation_namespace
+        on collation_namespace.oid = collation_record.collnamespace
+      left join lateral (
+        select acl_item::text as grant_text
+        from pg_catalog.unnest(
+          coalesce(attribute.attacl, '{}'::aclitem[])
+        ) as acl_item
+        order by acl_item::text collate "C"
+      ) as grant_item on true
+      where namespace.nspname = any($1::text[])
+        and attribute.attnum > 0
+        and not attribute.attisdropped
+      order by namespace.nspname, class.relname, attribute.attnum,
+               grant_item.grant_text collate "C" nulls first
+    `,
+    [schemas],
+  );
+  const functionDefinitions = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        procedure.proname as function_name,
+        procedure.prokind::text as function_kind,
+        pg_catalog.pg_get_function_identity_arguments(procedure.oid)
+          as identity_arguments,
+        pg_catalog.pg_get_function_result(procedure.oid) as result_type,
+        pg_catalog.pg_get_functiondef(procedure.oid) as definition,
+        pg_catalog.pg_get_userbyid(procedure.proowner) as function_owner,
+        procedure.prosecdef as security_definer,
+        procedure.proleakproof as leakproof,
+        procedure.provolatile::text as volatility,
+        procedure.proparallel::text as parallel_safety,
+        coalesce((
+          select pg_catalog.array_agg(setting order by setting collate "C")
+          from pg_catalog.unnest(procedure.proconfig) as setting
+        ), '{}'::text[])::text as configuration,
+        procedure.proacl is null as grants_are_default,
+        grant_item.grant_text
+      from pg_catalog.pg_proc as procedure
+      join pg_catalog.pg_namespace as namespace
+        on namespace.oid = procedure.pronamespace
+      left join lateral (
+        select acl_item::text as grant_text
+        from pg_catalog.unnest(
+          coalesce(procedure.proacl, '{}'::aclitem[])
+        ) as acl_item
+        order by acl_item::text collate "C"
+      ) as grant_item on true
+      where namespace.nspname = any($1::text[])
+        and procedure.prokind in ('f', 'p')
+      order by namespace.nspname, procedure.proname,
+               pg_catalog.pg_get_function_identity_arguments(procedure.oid),
+               grant_item.grant_text collate "C" nulls first
+    `,
+    [schemas],
+  );
+  const views = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        class.relname as view_name,
+        class.relkind::text as view_kind,
+        pg_catalog.pg_get_viewdef(class.oid, false) as definition
+      from pg_catalog.pg_class as class
+      join pg_catalog.pg_namespace as namespace
+        on namespace.oid = class.relnamespace
+      where namespace.nspname = any($1::text[])
+        and class.relkind in ('m', 'v')
+      order by namespace.nspname, class.relname, class.relkind
+    `,
+    [schemas],
+  );
+  const constraints = await sql.unsafe(
+    `
+      select
+        constraint_namespace.nspname as constraint_schema,
+        constraint_record.conname as constraint_name,
+        constraint_record.contype::text as constraint_kind,
+        relation_namespace.nspname as relation_schema,
+        relation.relname as relation_name,
+        type_namespace.nspname as type_schema,
+        type.typname as type_name,
+        referenced_namespace.nspname as referenced_schema,
+        referenced_relation.relname as referenced_relation,
+        constraint_record.condeferrable as deferrable,
+        constraint_record.condeferred as initially_deferred,
+        constraint_record.convalidated as validated,
+        constraint_record.connoinherit as no_inherit,
+        pg_catalog.pg_get_constraintdef(constraint_record.oid, true)
+          as definition
+      from pg_catalog.pg_constraint as constraint_record
+      join pg_catalog.pg_namespace as constraint_namespace
+        on constraint_namespace.oid = constraint_record.connamespace
+      left join pg_catalog.pg_class as relation
+        on relation.oid = constraint_record.conrelid
+      left join pg_catalog.pg_namespace as relation_namespace
+        on relation_namespace.oid = relation.relnamespace
+      left join pg_catalog.pg_type as type
+        on type.oid = constraint_record.contypid
+      left join pg_catalog.pg_namespace as type_namespace
+        on type_namespace.oid = type.typnamespace
+      left join pg_catalog.pg_class as referenced_relation
+        on referenced_relation.oid = constraint_record.confrelid
+      left join pg_catalog.pg_namespace as referenced_namespace
+        on referenced_namespace.oid = referenced_relation.relnamespace
+      where constraint_namespace.nspname = any($1::text[])
+         or relation_namespace.nspname = any($1::text[])
+         or type_namespace.nspname = any($1::text[])
+      order by constraint_namespace.nspname, constraint_record.conname,
+               relation_namespace.nspname nulls first,
+               relation.relname nulls first,
+               type_namespace.nspname nulls first,
+               type.typname nulls first
+    `,
+    [schemas],
+  );
+  const indexes = await sql.unsafe(
+    `
+      select
+        table_namespace.nspname as table_schema,
+        table_class.relname as table_name,
+        index_namespace.nspname as index_schema,
+        index_class.relname as index_name,
+        index_record.indisunique as is_unique,
+        index_record.indisprimary as is_primary,
+        index_record.indisexclusion as is_exclusion,
+        index_record.indimmediate as is_immediate,
+        index_record.indisclustered as is_clustered,
+        index_record.indisvalid as is_valid,
+        index_record.indisready as is_ready,
+        index_record.indislive as is_live,
+        index_record.indisreplident as is_replica_identity,
+        index_record.indnullsnotdistinct as nulls_not_distinct,
+        pg_catalog.pg_get_indexdef(index_record.indexrelid, 0, true)
+          as definition,
+        coalesce((
+          select pg_catalog.array_agg(option_value order by option_value collate "C")
+          from pg_catalog.unnest(index_class.reloptions) as option_value
+        ), '{}'::text[])::text as index_options
+      from pg_catalog.pg_index as index_record
+      join pg_catalog.pg_class as table_class
+        on table_class.oid = index_record.indrelid
+      join pg_catalog.pg_namespace as table_namespace
+        on table_namespace.oid = table_class.relnamespace
+      join pg_catalog.pg_class as index_class
+        on index_class.oid = index_record.indexrelid
+      join pg_catalog.pg_namespace as index_namespace
+        on index_namespace.oid = index_class.relnamespace
+      where table_namespace.nspname = any($1::text[])
+      order by table_namespace.nspname, table_class.relname,
+               index_namespace.nspname, index_class.relname
+    `,
+    [schemas],
+  );
+  const triggers = await sql.unsafe(
+    `
+      select
+        relation_namespace.nspname as relation_schema,
+        relation.relname as relation_name,
+        trigger_record.tgname as trigger_name,
+        trigger_record.tgenabled::text as enabled,
+        procedure_namespace.nspname as function_schema,
+        procedure.proname as function_name,
+        pg_catalog.pg_get_function_identity_arguments(procedure.oid)
+          as function_identity_arguments,
+        pg_catalog.pg_get_triggerdef(trigger_record.oid, true) as definition
+      from pg_catalog.pg_trigger as trigger_record
+      join pg_catalog.pg_class as relation
+        on relation.oid = trigger_record.tgrelid
+      join pg_catalog.pg_namespace as relation_namespace
+        on relation_namespace.oid = relation.relnamespace
+      join pg_catalog.pg_proc as procedure
+        on procedure.oid = trigger_record.tgfoid
+      join pg_catalog.pg_namespace as procedure_namespace
+        on procedure_namespace.oid = procedure.pronamespace
+      where relation_namespace.nspname = any($1::text[])
+        and not trigger_record.tgisinternal
+      order by relation_namespace.nspname, relation.relname,
+               trigger_record.tgname
+    `,
+    [schemas],
+  );
+  const policies = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        class.relname as relation_name,
+        policy.polname as policy_name,
+        policy.polcmd::text as command,
+        policy.polpermissive as permissive,
+        pg_catalog.array_to_string(array(
+          select case
+            when role_oid = 0 then 'PUBLIC'
+            else pg_catalog.pg_get_userbyid(role_oid)
+          end
+          from pg_catalog.unnest(policy.polroles) as role_oid
+          order by case
+            when role_oid = 0 then 'PUBLIC'
+            else pg_catalog.pg_get_userbyid(role_oid)
+          end collate "C"
+        ), E'\\n') as roles,
+        pg_catalog.pg_get_expr(policy.polqual, policy.polrelid, true)
+          as using_expression,
+        pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid, true)
+          as check_expression
+      from pg_catalog.pg_policy as policy
+      join pg_catalog.pg_class as class
+        on class.oid = policy.polrelid
+      join pg_catalog.pg_namespace as namespace
+        on namespace.oid = class.relnamespace
+      where namespace.nspname = any($1::text[])
+      order by namespace.nspname, class.relname, policy.polname
+    `,
+    [schemas],
+  );
+  const typeGrants = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        type.typname as type_name,
+        type.typtype::text as type_kind,
+        pg_catalog.pg_get_userbyid(type.typowner) as type_owner,
+        type.typacl is null as grants_are_default,
+        grant_item.grant_text
+      from pg_catalog.pg_type as type
+      join pg_catalog.pg_namespace as namespace
+        on namespace.oid = type.typnamespace
+      left join lateral (
+        select acl_item::text as grant_text
+        from pg_catalog.unnest(
+          coalesce(type.typacl, '{}'::aclitem[])
+        ) as acl_item
+        order by acl_item::text collate "C"
+      ) as grant_item on true
+      where namespace.nspname = any($1::text[])
+        and type.typname not like '\\_%' escape '\\'
+      order by namespace.nspname, type.typname,
+               grant_item.grant_text collate "C" nulls first
+    `,
+    [schemas],
+  );
+  const enumDefinitions = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        type.typname as type_name,
+        row_number() over (
+          partition by type.oid
+          order by enum_record.enumsortorder,
+                   enum_record.enumlabel collate "C"
+        )::integer as enum_ordinal,
+        enum_record.enumlabel::text as enum_label
+      from pg_catalog.pg_type as type
+      join pg_catalog.pg_namespace as namespace
+        on namespace.oid = type.typnamespace
+      join pg_catalog.pg_enum as enum_record
+        on enum_record.enumtypid = type.oid
+      where namespace.nspname = any($1::text[])
+        and type.typtype = 'e'
+      order by namespace.nspname, type.typname,
+               enum_record.enumsortorder,
+               enum_record.enumlabel collate "C"
+    `,
+    [schemas],
+  );
+  const domainDefinitions = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        type.typname as type_name,
+        base_namespace.nspname as base_type_schema,
+        base_type.typname as base_type_name,
+        type.typtypmod::integer as base_type_modifier,
+        type.typndims::integer as array_dimensions,
+        type.typnotnull as not_null,
+        coalesce(
+          pg_catalog.pg_get_expr(type.typdefaultbin, 0, true),
+          type.typdefault
+        ) as default_definition,
+        collation_namespace.nspname as collation_schema,
+        collation_record.collname as collation_name
+      from pg_catalog.pg_type as type
+      join pg_catalog.pg_namespace as namespace
+        on namespace.oid = type.typnamespace
+      join pg_catalog.pg_type as base_type
+        on base_type.oid = type.typbasetype
+      join pg_catalog.pg_namespace as base_namespace
+        on base_namespace.oid = base_type.typnamespace
+      left join pg_catalog.pg_collation as collation_record
+        on collation_record.oid = type.typcollation
+       and type.typcollation <> 0
+      left join pg_catalog.pg_namespace as collation_namespace
+        on collation_namespace.oid = collation_record.collnamespace
+      where namespace.nspname = any($1::text[])
+        and type.typtype = 'd'
+      order by namespace.nspname, type.typname
+    `,
+    [schemas],
+  );
+  const rangeDefinitions = await sql.unsafe(
+    `
+      select
+        range_namespace.nspname as range_type_schema,
+        range_type.typname as range_type_name,
+        multirange_namespace.nspname as multirange_type_schema,
+        multirange_type.typname as multirange_type_name,
+        subtype_namespace.nspname as subtype_schema,
+        subtype.typname as subtype_name,
+        operator_namespace.nspname as operator_class_schema,
+        operator_class.opcname as operator_class_name,
+        access_method.amname as operator_class_access_method,
+        collation_namespace.nspname as collation_schema,
+        collation_record.collname as collation_name,
+        canonical_namespace.nspname as canonical_function_schema,
+        canonical_function.proname as canonical_function_name,
+        pg_catalog.pg_get_function_identity_arguments(canonical_function.oid)
+          as canonical_function_identity_arguments,
+        subdiff_namespace.nspname as subtype_diff_function_schema,
+        subdiff_function.proname as subtype_diff_function_name,
+        pg_catalog.pg_get_function_identity_arguments(subdiff_function.oid)
+          as subtype_diff_function_identity_arguments
+      from pg_catalog.pg_range as range_record
+      join pg_catalog.pg_type as range_type
+        on range_type.oid = range_record.rngtypid
+      join pg_catalog.pg_namespace as range_namespace
+        on range_namespace.oid = range_type.typnamespace
+      left join pg_catalog.pg_type as multirange_type
+        on multirange_type.oid = range_record.rngmultitypid
+       and range_record.rngmultitypid <> 0
+      left join pg_catalog.pg_namespace as multirange_namespace
+        on multirange_namespace.oid = multirange_type.typnamespace
+      join pg_catalog.pg_type as subtype
+        on subtype.oid = range_record.rngsubtype
+      join pg_catalog.pg_namespace as subtype_namespace
+        on subtype_namespace.oid = subtype.typnamespace
+      join pg_catalog.pg_opclass as operator_class
+        on operator_class.oid = range_record.rngsubopc
+      join pg_catalog.pg_namespace as operator_namespace
+        on operator_namespace.oid = operator_class.opcnamespace
+      join pg_catalog.pg_am as access_method
+        on access_method.oid = operator_class.opcmethod
+      left join pg_catalog.pg_collation as collation_record
+        on collation_record.oid = range_record.rngcollation
+       and range_record.rngcollation <> 0
+      left join pg_catalog.pg_namespace as collation_namespace
+        on collation_namespace.oid = collation_record.collnamespace
+      left join pg_catalog.pg_proc as canonical_function
+        on canonical_function.oid = range_record.rngcanonical
+       and range_record.rngcanonical <> 0
+      left join pg_catalog.pg_namespace as canonical_namespace
+        on canonical_namespace.oid = canonical_function.pronamespace
+      left join pg_catalog.pg_proc as subdiff_function
+        on subdiff_function.oid = range_record.rngsubdiff
+       and range_record.rngsubdiff <> 0
+      left join pg_catalog.pg_namespace as subdiff_namespace
+        on subdiff_namespace.oid = subdiff_function.pronamespace
+      where range_namespace.nspname = any($1::text[])
+      order by range_namespace.nspname, range_type.typname,
+               multirange_namespace.nspname nulls first,
+               multirange_type.typname nulls first
+    `,
+    [schemas],
+  );
+  const defaultPrivileges = await sql.unsafe(
+    `
+      select
+        pg_catalog.pg_get_userbyid(default_acl.defaclrole) as role_name,
+        namespace.nspname as schema_name,
+        default_acl.defaclobjtype::text as object_kind,
+        grant_item.grant_text
+      from pg_catalog.pg_default_acl as default_acl
+      left join pg_catalog.pg_namespace as namespace
+        on namespace.oid = default_acl.defaclnamespace
+      left join lateral (
+        select acl_item::text as grant_text
+        from pg_catalog.unnest(default_acl.defaclacl) as acl_item
+        order by acl_item::text collate "C"
+      ) as grant_item on true
+      where namespace.nspname = any($1::text[])
+         or (
+           default_acl.defaclnamespace = 0
+           and pg_catalog.pg_get_userbyid(default_acl.defaclrole)
+             = 'programmable_migrator'
+         )
+      order by pg_catalog.pg_get_userbyid(default_acl.defaclrole),
+               namespace.nspname, default_acl.defaclobjtype,
+               grant_item.grant_text collate "C" nulls first
+    `,
+    [schemas],
+  );
+  const sequenceDefinitions = await sql.unsafe(
+    `
+      select
+        namespace.nspname as schema_name,
+        class.relname as sequence_name,
+        pg_catalog.format_type(sequence_record.seqtypid, null) as data_type,
+        sequence_record.seqstart::text as start_value,
+        sequence_record.seqincrement::text as increment_by,
+        sequence_record.seqmax::text as maximum_value,
+        sequence_record.seqmin::text as minimum_value,
+        sequence_record.seqcache::text as cache_size,
+        sequence_record.seqcycle as cycles,
+        owner_namespace.nspname as owned_by_schema,
+        owner_relation.relname as owned_by_relation,
+        owner_attribute.attname as owned_by_column
+      from pg_catalog.pg_class as class
+      join pg_catalog.pg_namespace as namespace
+        on namespace.oid = class.relnamespace
+      join pg_catalog.pg_sequence as sequence_record
+        on sequence_record.seqrelid = class.oid
+      left join pg_catalog.pg_depend as dependency
+        on dependency.classid = 'pg_catalog.pg_class'::regclass
+       and dependency.objid = class.oid
+       and dependency.objsubid = 0
+       and dependency.refclassid = 'pg_catalog.pg_class'::regclass
+       and dependency.deptype in ('a', 'i')
+      left join pg_catalog.pg_class as owner_relation
+        on owner_relation.oid = dependency.refobjid
+      left join pg_catalog.pg_namespace as owner_namespace
+        on owner_namespace.oid = owner_relation.relnamespace
+      left join pg_catalog.pg_attribute as owner_attribute
+        on owner_attribute.attrelid = dependency.refobjid
+       and owner_attribute.attnum = dependency.refobjsubid
+      where namespace.nspname = any($1::text[])
+      order by namespace.nspname, class.relname
+    `,
+    [schemas],
+  );
+  const sequences = [];
+  for (const sequence of sequenceDefinitions) {
+    const schema = quoteIdentifier(sequence.schema_name);
+    const name = quoteIdentifier(sequence.sequence_name);
+    const state = await readAsRelationOwner(
+      sequence.schema_name,
+      sequence.sequence_name,
+      () => sql.unsafe(`
+        select last_value::text as last_value, is_called
+        from ${schema}.${name}
+      `),
+    );
+    if (
+      state.length !== 1 ||
+      typeof state[0]?.last_value !== "string" ||
+      typeof state[0]?.is_called !== "boolean"
+    ) {
+      throw new Error("database sequence manifest response is invalid");
+    }
+    sequences.push({
+      ...sequence,
+      lastValue: state[0].last_value,
+      isCalled: state[0].is_called,
+    });
+  }
+  const structuralPayload = {
+    schemaVersion: 2,
+    schemas,
+    schemaSecurity,
+    relationSecurity,
+    columns,
+    functionDefinitions,
+    views,
+    constraints,
+    indexes,
+    triggers,
+    policies,
+    typeGrants,
+    enumDefinitions,
+    domainDefinitions,
+    rangeDefinitions,
+    defaultPrivileges,
+    sequences,
+  };
   return Object.freeze({
     manifestSha256: sha256(canonicalJson(payload)),
+    structuralManifestSha256: sha256(canonicalJson(structuralPayload)),
     tableCount: tables.length,
     rowCount: totalRows,
   });
@@ -1180,6 +1869,22 @@ export async function createBackupAndRestoreEvidence(input) {
   const assertRestoreEmpty =
     dependencies.assertRestoreTargetIsEmpty ?? assertRestoreTargetIsEmpty;
   const now = dependencies.now ?? (() => new Date());
+  const toolCommitments = input.toolCommitments;
+  if (
+    toolCommitments !== undefined &&
+    (!isPlainRecord(toolCommitments) ||
+      canonicalJson(Object.keys(toolCommitments).sort()) !==
+        canonicalJson(["pg_dump", "pg_restore", "psql"]) ||
+      Object.values(toolCommitments).some(
+        (commitment) =>
+          !isPlainRecord(commitment) ||
+          !Number.isSafeInteger(commitment.bytes) ||
+          commitment.bytes < 1 ||
+          !SHA256.test(commitment.sha256 ?? ""),
+      ))
+  ) {
+    throw new Error("Postgres tool commitments are invalid");
+  }
   let sourceConnection;
   let restoreConnection;
   let sourceCa;
@@ -1204,6 +1909,7 @@ export async function createBackupAndRestoreEvidence(input) {
     const before = await captureManifest(sourceConnection.sql);
     if (
       !SHA256.test(before?.manifestSha256 ?? "") ||
+      !SHA256.test(before?.structuralManifestSha256 ?? "") ||
       !Number.isSafeInteger(before?.tableCount) ||
       before.tableCount < 0 ||
       !Number.isSafeInteger(before?.rowCount) ||
@@ -1229,6 +1935,10 @@ export async function createBackupAndRestoreEvidence(input) {
       caPath: restoreCa.filePath,
       applicationName: "programmable-pg-restore-test",
     });
+    if (toolCommitments !== undefined) {
+      delete sourceEnvironment.PATH;
+      delete restoreEnvironment.PATH;
+    }
     const versionResult = await executeSafeCommand({
       runner,
       binary: input.pgDumpBinary ?? "pg_dump",
@@ -1236,6 +1946,7 @@ export async function createBackupAndRestoreEvidence(input) {
       env: sourceEnvironment,
       timeoutMs: 15_000,
       secrets,
+      expectedBinary: toolCommitments?.pg_dump,
     });
     const postgresVersion = pgVersion(versionResult.stdout);
     let backupFormat;
@@ -1246,6 +1957,7 @@ export async function createBackupAndRestoreEvidence(input) {
         kind: backupFormat,
         schemaVersion: 1,
         sourceManifestSha256: before.manifestSha256,
+        sourceStructuralManifestSha256: before.structuralManifestSha256,
       })}\n`;
       await createPrivateFile(request.backupPath, emptyArtifact);
       backupCreated = true;
@@ -1261,8 +1973,9 @@ export async function createBackupAndRestoreEvidence(input) {
         "--format=custom",
         "--compress=6",
         "--serializable-deferrable",
-        "--no-owner",
-        "--no-privileges",
+        ...(request.source.username === "cli_login_postgres"
+          ? ["--role", "postgres"]
+          : []),
         ...BACKUP_SCHEMAS.flatMap((schema) => ["--schema", schema]),
         ...commandTargetArguments(request.source.safeTarget, request.source.username),
         "--file",
@@ -1275,18 +1988,21 @@ export async function createBackupAndRestoreEvidence(input) {
         env: sourceEnvironment,
         timeoutMs: 15 * 60_000,
         secrets,
+        expectedBinary: toolCommitments?.pg_dump,
       });
       await chmod(request.backupPath, 0o600);
     }
     const after = await captureManifest(sourceConnection.sql);
     if (
       after?.manifestSha256 !== before.manifestSha256 ||
+      after?.structuralManifestSha256 !== before.structuralManifestSha256 ||
       after?.tableCount !== before.tableCount ||
       after?.rowCount !== before.rowCount
     ) {
       throw new Error("source database changed during the backup window");
     }
     if (backupFormat === "pg-custom-v1") {
+      const backupBeforeList = await fileSha256(request.backupPath);
       listResult = await executeSafeCommand({
         runner,
         binary: input.pgRestoreBinary ?? "pg_restore",
@@ -1294,7 +2010,12 @@ export async function createBackupAndRestoreEvidence(input) {
         env: sourceEnvironment,
         timeoutMs: 60_000,
         secrets,
+        expectedBinary: toolCommitments?.pg_restore,
       });
+      const backupAfterList = await fileSha256(request.backupPath);
+      if (canonicalJson(backupAfterList) !== canonicalJson(backupBeforeList)) {
+        throw new Error("Postgres backup changed during archive inspection");
+      }
     }
     if (listResult.stdout.byteLength < 1) {
       throw new Error("Postgres backup archive listing is empty");
@@ -1313,28 +2034,35 @@ export async function createBackupAndRestoreEvidence(input) {
           roleBootstrapSql(),
         ],
         env: restoreEnvironment,
-        timeoutMs: 60_000,
-        secrets,
-      });
+          timeoutMs: 60_000,
+          secrets,
+          expectedBinary: toolCommitments?.psql,
+        });
+      const backupBeforeRestore = await fileSha256(request.backupPath);
       await executeSafeCommand({
         runner,
         binary: input.pgRestoreBinary ?? "pg_restore",
         args: [
           "--exit-on-error",
           "--single-transaction",
-          "--no-owner",
-          "--no-privileges",
           ...commandTargetArguments(request.restore.safeTarget, request.restore.username),
           request.backupPath,
         ],
         env: restoreEnvironment,
-        timeoutMs: 15 * 60_000,
-        secrets,
-      });
+          timeoutMs: 15 * 60_000,
+          secrets,
+          expectedBinary: toolCommitments?.pg_restore,
+        });
+      const backupAfterRestore = await fileSha256(request.backupPath);
+      if (canonicalJson(backupAfterRestore) !== canonicalJson(backupBeforeRestore)) {
+        throw new Error("Postgres backup changed during isolated restore");
+      }
     }
     const restored = await captureManifest(restoreConnection.sql);
     if (
       restored?.manifestSha256 !== before.manifestSha256 ||
+      restored?.structuralManifestSha256 !==
+        before.structuralManifestSha256 ||
       restored?.tableCount !== before.tableCount ||
       restored?.rowCount !== before.rowCount
     ) {
@@ -1362,6 +2090,8 @@ export async function createBackupAndRestoreEvidence(input) {
       }),
       sourceManifestSha256: before.manifestSha256,
       restoredManifestSha256: restored.manifestSha256,
+      sourceStructuralManifestSha256: before.structuralManifestSha256,
+      restoredStructuralManifestSha256: restored.structuralManifestSha256,
       tableCount: before.tableCount,
       rowCount: before.rowCount,
       postgresVersion,

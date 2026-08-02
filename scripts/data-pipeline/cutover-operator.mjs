@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   chmod,
   lstat,
   open,
   readFile,
+  rename,
+  unlink,
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +20,16 @@ import {
   provisionLoginRoles,
   verifyPoolerLogins,
 } from "./cutover-credentials.mjs";
+import {
+  applyCandidateRestore,
+  applyCandidateRuntimeEnable,
+  applyCandidateSafetyRecovery,
+  createCandidateRestorePlan,
+  createCandidateRuntimeEnablePlan,
+  createCandidateSafetyRecoveryPlan,
+  createCandidateSafetyBackup,
+  validateCandidateRuntimeEnablePlan,
+} from "./candidate-restore.mjs";
 import {
   attestCandidateDatabasePromotion,
   buildDatabasePromotionInput,
@@ -47,6 +60,7 @@ import { runConfiguredCandidateRawBackfill } from "./cutover-runtime.mjs";
 import {
   assertNoSecretOutput,
   canonicalJson,
+  discoverMigrationPlan,
   safeFailure,
   sha256,
 } from "./hosted-db-operator-core.mjs";
@@ -64,6 +78,13 @@ export const HELP = `Usage:
   node scripts/data-pipeline/cutover-operator.mjs roles-provision --expected-project-ref REF --output FILE
   node scripts/data-pipeline/cutover-operator.mjs roles-verify --expected-project-ref REF --pooler-host HOST --output FILE
   node scripts/data-pipeline/cutover-operator.mjs backup-restore --expected-project-ref REF --operation-id ID --restore-isolation-id ID --backup FILE --evidence FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-safety-backup --expected-project-ref REF --current-product-commit COMMIT --operation-id ID --restore-isolation-id ID --backup FILE --backup-evidence FILE --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-restore-plan --expected-project-ref REF --current-product-commit COMMIT --snapshot-repository-commit COMMIT --snapshot-backup FILE --snapshot-evidence FILE --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-restore-apply --expected-project-ref REF --current-product-commit COMMIT --snapshot-repository-commit COMMIT --snapshot-backup FILE --snapshot-evidence FILE --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --plan FILE --confirm-restore SHA256 --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-recovery-plan --expected-project-ref REF --current-product-commit COMMIT --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-recovery-apply --expected-project-ref REF --current-product-commit COMMIT --safety-backup FILE --safety-backup-evidence FILE --safety-evidence FILE --plan FILE --confirm-recovery SHA256 --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-runtime-enable-plan --expected-project-ref REF --pooler-host HOST --restore-result FILE --output FILE
+  node scripts/data-pipeline/cutover-operator.mjs candidate-runtime-enable-apply --expected-project-ref REF --pooler-host HOST --restore-result FILE --plan FILE --confirm-enable SHA256 --output FILE
   node scripts/data-pipeline/cutover-operator.mjs raw-backfill --expected-project-ref REF --backup-evidence FILE --output FILE [--maximum-cycles N]
   node scripts/data-pipeline/cutover-operator.mjs projector-drain --expected-project-ref REF --target-url URL --deployment-id ID --release-gate FILE --output FILE
   node scripts/data-pipeline/cutover-operator.mjs envio-attest --observation FILE --drain-evidence FILE --output FILE
@@ -171,6 +192,96 @@ async function writePrivateOutput(value, outputPath, environment) {
   }
   await chmod(target, PRIVATE_MODE);
   return target;
+}
+
+async function syncParentDirectory(filePath) {
+  const descriptor = await open(path.dirname(filePath), "r");
+  try {
+    await descriptor.sync();
+  } finally {
+    await descriptor.close();
+  }
+}
+
+export async function reserveRuntimeEnableOutput({
+  outputPath,
+  planSha256,
+  confirmationSha256,
+  environment,
+}) {
+  const target = absoluteExternalPath(outputPath, "output path");
+  const reservation = Object.freeze({
+    kind: "programmable-candidate-runtime-enable-output-reservation",
+    schemaVersion: 1,
+    planSha256,
+    confirmationSha256,
+    status: "in-progress-or-resumable",
+  });
+  assertNoSecretOutput(reservation, secretValues(environment));
+  const serialized = `${JSON.stringify(reservation, null, 2)}\n`;
+  try {
+    const descriptor = await open(target, "wx", PRIVATE_MODE);
+    try {
+      await descriptor.writeFile(serialized, "utf8");
+      await descriptor.sync();
+    } finally {
+      await descriptor.close();
+    }
+    await chmod(target, PRIVATE_MODE);
+    await syncParentDirectory(target);
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    const existing = await readArtifact(target, { privateFile: true });
+    if (canonicalJson(existing) !== canonicalJson(reservation)) {
+      throw new Error("Candidate runtime enable output is not resumable");
+    }
+  }
+  return Object.freeze({ target, reservation });
+}
+
+export async function commitRuntimeEnableOutput({ reservation, value, environment }) {
+  assertNoSecretOutput(value, secretValues(environment));
+  const serialized = `${JSON.stringify(value, null, 2)}\n`;
+  const temporary = `${reservation.target}.pending-${process.pid}-${randomUUID()}`;
+  let created = false;
+  try {
+    const descriptor = await open(temporary, "wx", PRIVATE_MODE);
+    created = true;
+    try {
+      await descriptor.writeFile(serialized, "utf8");
+      await descriptor.sync();
+    } finally {
+      await descriptor.close();
+    }
+    await chmod(temporary, PRIVATE_MODE);
+    await rename(temporary, reservation.target);
+    created = false;
+    await syncParentDirectory(reservation.target);
+  } finally {
+    if (created) await unlink(temporary).catch(() => {});
+  }
+  return reservation.target;
+}
+
+export async function runRuntimeEnableWithReservedOutput({
+  outputPath,
+  planSha256,
+  confirmationSha256,
+  environment,
+  apply,
+}) {
+  if (typeof apply !== "function") {
+    throw new Error("Candidate runtime enable apply callback is invalid");
+  }
+  const reservation = await reserveRuntimeEnableOutput({
+    outputPath,
+    planSha256,
+    confirmationSha256,
+    environment,
+  });
+  const result = await apply();
+  await commitRuntimeEnableOutput({ reservation, value: result, environment });
+  return result;
 }
 
 async function readArtifact(filePath, { privateFile = false } = {}) {
@@ -407,6 +518,256 @@ async function runCommand(command, flags, environment) {
       restoreSslCaPem: environment.PROGRAMMABLE_CUTOVER_RESTORE_SSL_CA_PEM,
       backupPath: absoluteExternalPath(flags.get("--backup"), "backup path"),
       evidencePath: absoluteExternalPath(flags.get("--evidence"), "evidence path"),
+    });
+  }
+  if (command === "candidate-safety-backup") {
+    exactFlags(flags, [
+      "--expected-project-ref",
+      "--current-product-commit",
+      "--operation-id",
+      "--restore-isolation-id",
+      "--backup",
+      "--backup-evidence",
+      "--output",
+    ]);
+    const repositoryCommit = await assertCleanCheckout();
+    const result = await createCandidateSafetyBackup({
+      repositoryCommit,
+      currentProductCommit: flags.get("--current-product-commit"),
+      operationId: flags.get("--operation-id"),
+      expectedProjectRef: flags.get("--expected-project-ref"),
+      databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
+      sslCaPem: environment.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
+      restoreDatabaseUrl: environment.PROGRAMMABLE_CUTOVER_RESTORE_DATABASE_URL,
+      restoreIsolationId: flags.get("--restore-isolation-id"),
+      restoreSslCaPem: environment.PROGRAMMABLE_CUTOVER_RESTORE_SSL_CA_PEM,
+      backupPath: absoluteExternalPath(flags.get("--backup"), "safety backup path"),
+      backupEvidencePath: absoluteExternalPath(
+        flags.get("--backup-evidence"),
+        "safety backup evidence path",
+      ),
+      pgDumpBinary: environment.PROGRAMMABLE_PG_DUMP_BINARY,
+      pgRestoreBinary: environment.PROGRAMMABLE_PG_RESTORE_BINARY,
+      psqlBinary: environment.PROGRAMMABLE_PSQL_BINARY,
+    });
+    await writePrivateOutput(result, flags.get("--output"), environment);
+    return result;
+  }
+  if (command === "candidate-restore-plan" || command === "candidate-restore-apply") {
+    const commonFlags = [
+      "--expected-project-ref",
+      "--current-product-commit",
+      "--snapshot-repository-commit",
+      "--snapshot-backup",
+      "--snapshot-evidence",
+      "--safety-backup",
+      "--safety-backup-evidence",
+      "--safety-evidence",
+      "--output",
+    ];
+    exactFlags(
+      flags,
+      command === "candidate-restore-apply"
+        ? [...commonFlags, "--plan", "--confirm-restore"]
+        : commonFlags,
+    );
+    const repositoryCommit = await assertCleanCheckout();
+    const snapshotBackupPath = absoluteExternalPath(
+      flags.get("--snapshot-backup"),
+      "snapshot backup path",
+    );
+    const safetyBackupPath = absoluteExternalPath(
+      flags.get("--safety-backup"),
+      "safety backup path",
+    );
+    const snapshotEvidence = await readArtifact(
+      flags.get("--snapshot-evidence"),
+      { privateFile: true },
+    );
+    const safetyEvidence = await readArtifact(flags.get("--safety-evidence"), {
+      privateFile: true,
+    });
+    const safetyBackupEvidence = await readArtifact(
+      flags.get("--safety-backup-evidence"),
+      { privateFile: true },
+    );
+    const plan = await createCandidateRestorePlan({
+      repositoryCommit,
+      currentProductCommit: flags.get("--current-product-commit"),
+      expectedProjectRef: flags.get("--expected-project-ref"),
+      databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
+      sslCaPem: environment.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
+      snapshotRepositoryCommit: flags.get("--snapshot-repository-commit"),
+      snapshotBackupPath,
+      snapshotEvidence,
+      safetyBackupPath,
+      safetyEvidence,
+      safetyBackupEvidence,
+      pgDumpBinary: environment.PROGRAMMABLE_PG_DUMP_BINARY,
+      pgRestoreBinary: environment.PROGRAMMABLE_PG_RESTORE_BINARY,
+      psqlBinary: environment.PROGRAMMABLE_PSQL_BINARY,
+      secrets: secretValues(environment),
+    });
+    if (command === "candidate-restore-plan") {
+      await writePrivateOutput(plan, flags.get("--output"), environment);
+      return plan;
+    }
+    const reviewed = await readArtifact(flags.get("--plan"), {
+      privateFile: true,
+    });
+    if (canonicalJson(reviewed) !== canonicalJson(plan)) {
+      throw new Error("Candidate restore plan changed after review");
+    }
+    const result = await applyCandidateRestore({
+      plan,
+      confirmRestore: flags.get("--confirm-restore"),
+      expectedProjectRef: flags.get("--expected-project-ref"),
+      databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
+      sslCaPem: environment.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
+      snapshotBackupPath,
+      safetyBackupPath,
+      safetyEvidence,
+      safetyBackupEvidence,
+      pgDumpBinary: environment.PROGRAMMABLE_PG_DUMP_BINARY,
+      pgRestoreBinary: environment.PROGRAMMABLE_PG_RESTORE_BINARY,
+      psqlBinary: environment.PROGRAMMABLE_PSQL_BINARY,
+    });
+    await writePrivateOutput(result, flags.get("--output"), environment);
+    return result;
+  }
+  if (command === "candidate-recovery-plan" || command === "candidate-recovery-apply") {
+    const commonFlags = [
+      "--expected-project-ref",
+      "--current-product-commit",
+      "--safety-backup",
+      "--safety-backup-evidence",
+      "--safety-evidence",
+      "--output",
+    ];
+    exactFlags(
+      flags,
+      command === "candidate-recovery-apply"
+        ? [...commonFlags, "--plan", "--confirm-recovery"]
+        : commonFlags,
+    );
+    const repositoryCommit = await assertCleanCheckout();
+    const safetyBackupPath = absoluteExternalPath(
+      flags.get("--safety-backup"),
+      "safety backup path",
+    );
+    const safetyEvidence = await readArtifact(flags.get("--safety-evidence"), {
+      privateFile: true,
+    });
+    const safetyBackupEvidence = await readArtifact(
+      flags.get("--safety-backup-evidence"),
+      { privateFile: true },
+    );
+    const plan = await createCandidateSafetyRecoveryPlan({
+      repositoryCommit,
+      currentProductCommit: flags.get("--current-product-commit"),
+      expectedProjectRef: flags.get("--expected-project-ref"),
+      databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
+      sslCaPem: environment.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
+      safetyBackupPath,
+      safetyEvidence,
+      safetyBackupEvidence,
+      pgDumpBinary: environment.PROGRAMMABLE_PG_DUMP_BINARY,
+      pgRestoreBinary: environment.PROGRAMMABLE_PG_RESTORE_BINARY,
+      psqlBinary: environment.PROGRAMMABLE_PSQL_BINARY,
+      secrets: secretValues(environment),
+    });
+    if (command === "candidate-recovery-plan") {
+      await writePrivateOutput(plan, flags.get("--output"), environment);
+      return plan;
+    }
+    const reviewed = await readArtifact(flags.get("--plan"), {
+      privateFile: true,
+    });
+    if (canonicalJson(reviewed) !== canonicalJson(plan)) {
+      throw new Error("Candidate safety recovery plan changed after review");
+    }
+    const result = await applyCandidateSafetyRecovery({
+      plan,
+      confirmRecovery: flags.get("--confirm-recovery"),
+      expectedProjectRef: flags.get("--expected-project-ref"),
+      databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
+      sslCaPem: environment.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
+      safetyBackupPath,
+      safetyEvidence,
+      safetyBackupEvidence,
+      pgDumpBinary: environment.PROGRAMMABLE_PG_DUMP_BINARY,
+      pgRestoreBinary: environment.PROGRAMMABLE_PG_RESTORE_BINARY,
+      psqlBinary: environment.PROGRAMMABLE_PSQL_BINARY,
+    });
+    await writePrivateOutput(result, flags.get("--output"), environment);
+    return result;
+  }
+  if (
+    command === "candidate-runtime-enable-plan" ||
+    command === "candidate-runtime-enable-apply"
+  ) {
+    const commonFlags = [
+      "--expected-project-ref",
+      "--pooler-host",
+      "--restore-result",
+      "--output",
+    ];
+    exactFlags(
+      flags,
+      command === "candidate-runtime-enable-apply"
+        ? [...commonFlags, "--plan", "--confirm-enable"]
+        : commonFlags,
+    );
+    const repositoryCommit = await assertCleanCheckout();
+    const restoreResult = await readArtifact(flags.get("--restore-result"), {
+      privateFile: true,
+    });
+    const migrationPlan = await discoverMigrationPlan({
+      workspace,
+      repositoryCommit,
+    });
+    if (command === "candidate-runtime-enable-plan") {
+      const plan = await createCandidateRuntimeEnablePlan({
+        repositoryCommit,
+        expectedProjectRef: flags.get("--expected-project-ref"),
+        databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
+        sslCaPem: environment.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
+        poolerHost: flags.get("--pooler-host"),
+        restoreResult,
+        migrationPlan,
+      });
+      await writePrivateOutput(plan, flags.get("--output"), environment);
+      return plan;
+    }
+    const plan = validateCandidateRuntimeEnablePlan(
+      await readArtifact(flags.get("--plan"), { privateFile: true }),
+    );
+    if (flags.get("--confirm-enable") !== plan.confirmEnable) {
+      throw new Error("Candidate runtime enable confirmation does not match");
+    }
+    if (
+      plan.operatorCommit !== repositoryCommit ||
+      plan.restoreEvidenceSha256 !== restoreResult.evidenceSha256 ||
+      plan.migrationPlanSha256 !== migrationPlan.planSha256
+    ) {
+      throw new Error("Candidate runtime enable evidence differs from the plan");
+    }
+    return runRuntimeEnableWithReservedOutput({
+      outputPath: flags.get("--output"),
+      planSha256: plan.planSha256,
+      confirmationSha256: flags.get("--confirm-enable"),
+      environment,
+      apply: () => applyCandidateRuntimeEnable({
+        plan,
+        confirmEnable: flags.get("--confirm-enable"),
+        expectedProjectRef: flags.get("--expected-project-ref"),
+        databaseUrl: environment.PROGRAMMABLE_MIGRATOR_DATABASE_URL,
+        sslCaPem: environment.PROGRAMMABLE_POSTGRES_SSL_CA_PEM,
+        poolerHost: flags.get("--pooler-host"),
+        restoreResult,
+        migrationPlan,
+        credentials: credentialsFromEnvironment(environment),
+      }),
     });
   }
   if (command === "raw-backfill") {

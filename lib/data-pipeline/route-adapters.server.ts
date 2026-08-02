@@ -1788,6 +1788,7 @@ export function adaptIndexedChartV2(
       volumeEth: "0",
       range: ready.data.range,
       snapshotBlock: ready.snapshot.blockNumber,
+      snapshotHash: ready.snapshot.blockHash,
     };
   }
 
@@ -1827,6 +1828,7 @@ export function adaptIndexedChartV2(
     ...(volumeUsdWad ? { volumeUsdWad } : {}),
     range: ready.data.range,
     snapshotBlock: ready.snapshot.blockNumber,
+    snapshotHash: ready.snapshot.blockHash,
   };
 }
 

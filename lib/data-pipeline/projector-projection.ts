@@ -8,6 +8,7 @@ import {
   type DualRpcCandidateBatchEvidence,
   type DualRpcRewardSnapshot,
 } from "./dual-rpc";
+import { canonicalAddress } from "./codecs";
 import type { EnvioCandidate } from "./envio";
 import { dataPipelineError, invalidInput, validationError } from "./errors";
 import {
@@ -15,7 +16,10 @@ import {
   type ProjectorFoldResult,
   type ProjectorKnownPool,
 } from "./projector-fold";
-import type { VerifiedDynamicSourceLineage } from "./projector-identities";
+import {
+  canonicalDynamicSourceLineages,
+  type VerifiedDynamicSourceLineage,
+} from "./projector-identities";
 import { projectorOccurrenceUuid } from "./projector-ids";
 import {
   foldProjectorRewardState,
@@ -132,6 +136,48 @@ type ProjectionEnvio = Readonly<{
   readCandidate(candidateId: string): Promise<EnvioCandidate | null>;
 }>;
 
+type ProjectionBatchVerifier = typeof verifyEnvioCandidateBatchWithDualRpc;
+type ProjectionBatchVerificationInput = Parameters<ProjectionBatchVerifier>[0];
+
+/**
+ * Runtime-round-local provider read cache. It is deliberately bound to one
+ * Envio client and one exact provider pair so evidence can never cross a
+ * runtime/provider boundary or survive into a retry round. Release leases,
+ * plans, folds and commits remain separate.
+ */
+export type SharedProjectionVerificationCache = Readonly<{
+  readCandidate(input: {
+    envio: ProjectionEnvio;
+    candidateId: string;
+  }): Promise<EnvioCandidate | null>;
+  verifyBatch(input: {
+    providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+    verifier: ProjectionBatchVerifier;
+    verification: ProjectionBatchVerificationInput;
+  }): Promise<DualRpcCandidateBatchEvidence>;
+}>;
+
+export type PreparedReleaseProjection = Readonly<{
+  store: ReleaseProjectionStore;
+  plan: ReleaseProjectionPlan | null;
+}>;
+
+export type PreparedReleaseProjectionRound = Readonly<{
+  entries: readonly (
+    | Readonly<{
+        status: "ready";
+        projection: PreparedReleaseProjection;
+      }>
+    | Readonly<{
+        status: "failed";
+        store: ReleaseProjectionStore;
+      }>
+  )[];
+  sharedVerification: SharedProjectionVerificationCache;
+}>;
+
+const preparedReleaseProjections = new WeakSet<PreparedReleaseProjection>();
+
 function projectionTimeout() {
   return dataPipelineError({
     dependency: "rpc",
@@ -186,6 +232,141 @@ function canonicalJson(value: unknown): string {
     .sort()
     .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
     .join(",")}}`;
+}
+
+function relevantDynamicSources(input: {
+  candidates: readonly EnvioCandidate[];
+  dynamicSources: readonly VerifiedDynamicSourceLineage[] | undefined;
+}): readonly VerifiedDynamicSourceLineage[] {
+  // Canonicalize the complete plan first. Invalid or duplicate lineages must
+  // still fail closed even when they do not belong to this candidate page.
+  const canonical = canonicalDynamicSourceLineages(input.dynamicSources);
+  const candidateSources = new Set(
+    input.candidates.map(({ sourceAddress }) => canonicalAddress(sourceAddress)),
+  );
+  return Object.freeze(
+    [...canonical.values()]
+      .filter(({ sourceAddress }) => candidateSources.has(sourceAddress))
+      .sort((left, right) =>
+        left.sourceAddress.localeCompare(right.sourceAddress)
+      ),
+  );
+}
+
+function assertEvidenceCoversFreshCandidates(
+  candidates: readonly EnvioCandidate[],
+  evidence: DualRpcCandidateBatchEvidence,
+): void {
+  if (
+    evidence.chainId !== 1 ||
+    evidence.candidates.length !== candidates.length ||
+    evidence.executionTrace.candidateBatchSize !== candidates.length
+  ) {
+    throw validationError("rpc", "projection-shared-evidence-coverage");
+  }
+  for (let index = 0; index < candidates.length; index += 1) {
+    const candidate = candidates[index]!;
+    const verified = evidence.candidates[index];
+    if (
+      !verified ||
+      verified.chainId !== candidate.chainId ||
+      verified.candidateId !== candidate.candidateId ||
+      verified.sourceAddress !== candidate.sourceAddress ||
+      verified.contractName !== candidate.contractName ||
+      verified.eventName !== candidate.eventName ||
+      verified.payloadHash !== candidate.payloadHash ||
+      verified.candidateBlockNumber !== candidate.blockNumber ||
+      verified.candidateBlockHash !== candidate.blockHash ||
+      verified.candidateBlockTimestamp !== candidate.blockTimestamp ||
+      verified.transactionHash !== candidate.transactionHash ||
+      verified.transactionIndex !== candidate.transactionIndex
+    ) {
+      throw validationError("rpc", "projection-shared-evidence-coverage");
+    }
+  }
+}
+
+/**
+ * Shares fresh provider reads only inside one configured projector round.
+ *
+ * Dynamic-source evidence is keyed by the canonical lineages that can affect
+ * the exact page. A lineage for some other source is irrelevant to
+ * `validateCandidateBoundary`; a lineage for a candidate on the page creates
+ * a distinct cache entry, preserving release-specific attestation evidence.
+ */
+function createSharedProjectionVerificationCache(input: {
+  envio: ProjectionEnvio;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+}): SharedProjectionVerificationCache {
+  const candidateReads = new Map<string, EnvioCandidate>();
+  const verifiedBatches = new WeakMap<
+    ProjectionBatchVerifier,
+    Map<string, DualRpcCandidateBatchEvidence>
+  >();
+  const assertBoundDependencies = (
+    envio: ProjectionEnvio,
+    providers: readonly [CandidateRpcProvider, CandidateRpcProvider],
+  ) => {
+    if (
+      envio !== input.envio ||
+      providers[0] !== input.providers[0] ||
+      providers[1] !== input.providers[1]
+    ) {
+      throw invalidInput("config", "projection-verification-cache-binding");
+    }
+  };
+
+  return Object.freeze({
+    async readCandidate({ envio, candidateId }) {
+      assertBoundDependencies(envio, input.providers);
+      const cached = candidateReads.get(candidateId);
+      if (cached) return cached;
+      const fresh = await input.envio.readCandidate(candidateId);
+      // A missing row or failed read is not shared: another release retains
+      // its independent opportunity to obtain a fresh result in this round.
+      if (fresh !== null) candidateReads.set(candidateId, fresh);
+      return fresh;
+    },
+    async verifyBatch({ providers, verifier, verification }) {
+      assertBoundDependencies(input.envio, providers);
+      const dynamicSources = relevantDynamicSources({
+        candidates: verification.candidates,
+        dynamicSources: verification.dynamicSources,
+      });
+      const key = canonicalJson({
+        candidates: verification.candidates,
+        dynamicSources,
+        maximumCandidateCount:
+          verification.maximumCandidateCount ?? null,
+        requireDynamicLineage:
+          verification.requireDynamicLineage === true,
+      });
+      let verifierCache = verifiedBatches.get(verifier);
+      if (!verifierCache) {
+        verifierCache = new Map();
+        verifiedBatches.set(verifier, verifierCache);
+      }
+      const cached = verifierCache.get(key);
+      if (cached) {
+        assertEvidenceCoversFreshCandidates(
+          verification.candidates,
+          cached,
+        );
+        return cached;
+      }
+      const verified = await verifier({
+        ...verification,
+        providers,
+        dynamicSources,
+      });
+      assertEvidenceCoversFreshCandidates(
+        verification.candidates,
+        verified,
+      );
+      verifierCache.set(key, verified);
+      return verified;
+    },
+  });
 }
 
 function exactCandidateMatch(
@@ -301,6 +482,54 @@ function assertPlan(plan: ReleaseProjectionPlan): void {
   }
 }
 
+/**
+ * Reads and closes every participating release-plan transaction before the
+ * shared provider cache exists. `allSettled` prevents one failed plan from
+ * exposing a cache while another plan transaction is still in flight.
+ */
+export async function prepareReleaseProjectionRound(input: {
+  stores: readonly ReleaseProjectionStore[];
+  envio: ProjectionEnvio;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+}): Promise<PreparedReleaseProjectionRound> {
+  if (
+    !Array.isArray(input.stores) ||
+    input.stores.length < 1 ||
+    new Set(input.stores).size !== input.stores.length
+  ) {
+    throw invalidInput("config", "projection-round-stores");
+  }
+  const settled = await Promise.allSettled(
+    input.stores.map(async (store) => {
+      const plan = await store.readProjectionPlan();
+      if (plan !== null) assertPlan(plan);
+      const projection = Object.freeze({ store, plan });
+      preparedReleaseProjections.add(projection);
+      return projection;
+    }),
+  );
+  const entries = Object.freeze(
+    settled.map((result, index) =>
+      result.status === "fulfilled"
+        ? Object.freeze({
+            status: "ready" as const,
+            projection: result.value,
+          })
+        : Object.freeze({
+            status: "failed" as const,
+            store: input.stores[index]!,
+          })
+    ),
+  );
+  // This construction point is intentionally after every plan promise has
+  // settled, which means every successful/failed store transaction has closed.
+  const sharedVerification = createSharedProjectionVerificationCache({
+    envio: input.envio,
+    providers: input.providers,
+  });
+  return Object.freeze({ entries, sharedVerification });
+}
+
 function planRewardVerifications(
   plan: ReleaseProjectionPlan,
 ): readonly Readonly<{
@@ -407,15 +636,35 @@ function projectedRewardEvents(
   );
 }
 
+export type VerifiedPreparedReleaseProjection = Readonly<{
+  store: ReleaseProjectionStore;
+  projection: VerifiedReleaseProjection;
+  summary: Readonly<{
+    releaseId: ProjectorReleaseDatabaseScope["releaseId"];
+    projectedCandidateCount: number;
+    ignoredCandidateCount: number;
+    batchKind:
+      | "normal"
+      | "oversized-transaction"
+      | "oversized-block"
+      | "reward-block";
+  }>;
+}>;
+
+const verifiedPreparedReleaseProjections =
+  new WeakSet<VerifiedPreparedReleaseProjection>();
+
 /**
- * Executes one release-scoped projection cycle. Every Envio/RPC request is
- * made after `readProjectionPlan` has closed its transaction and before
- * `commitVerifiedProjection` opens the final transaction.
+ * Verifies and folds one opaque prepared plan without opening its final commit
+ * transaction. The runtime completes this phase for every participating
+ * release before it starts any release commit.
  */
-export async function runReleaseProjectionCycle(input: {
+export async function verifyPreparedReleaseProjection(input: {
   store: ReleaseProjectionStore;
   envio: ProjectionEnvio;
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  prepared: PreparedReleaseProjection;
+  sharedVerification: SharedProjectionVerificationCache;
   deadlineMs?: number;
   verifyBatch?: typeof verifyEnvioCandidateBatchWithDualRpc;
   readMetadata?: typeof readDualRpcTokenMetadata;
@@ -435,23 +684,33 @@ export async function runReleaseProjectionCycle(input: {
   const readMetadata = input.readMetadata ?? readDualRpcTokenMetadata;
   const readRewardSnapshot =
     input.readRewardSnapshot ?? readDualRpcRewardSnapshot;
+  if (
+    !preparedReleaseProjections.has(input.prepared) ||
+    input.prepared.store !== input.store
+  ) {
+    throw invalidInput("config", "projection-round-preparation");
+  }
   const remaining = () => {
     const value = deadlineMs - (Date.now() - startedAt);
     if (value < 10) throw projectionTimeout();
     return value;
   };
   return withDeadline(deadlineMs, async () => {
-    const plan = await input.store.readProjectionPlan();
+    const plan = input.prepared.plan;
     if (plan === null) {
       return Object.freeze({ status: "idle" as const });
     }
     assertPlan(plan);
+    const sharedVerification = input.sharedVerification;
     const freshCandidates = Object.freeze(
       await Promise.all(
         plan.entries.map(async ({ candidate }) =>
           exactCandidateMatch(
             candidate,
-            await input.envio.readCandidate(candidate.candidateId),
+            await sharedVerification.readCandidate({
+              envio: input.envio,
+              candidateId: candidate.candidateId,
+            }),
           ),
         ),
       ),
@@ -459,22 +718,26 @@ export async function runReleaseProjectionCycle(input: {
     const projectedCandidates = freshCandidates.filter(
       (_candidate, index) => plan.entries[index]!.action === "project",
     );
-    const evidence = await verifyBatch({
-      candidates: freshCandidates,
+    const evidence = await sharedVerification.verifyBatch({
       providers: input.providers,
-      dynamicSources: plan.dynamicSources,
-      // Irrelevant candidates may be dynamic sources from another release.
-      // They still receive fresh dual-RPC placement evidence, while the fold
-      // below separately requires exact attested lineage for projected rows.
-      requireDynamicLineage: false,
-      rpcPolicy: {
-        hardDeadlineMs: remaining(),
-        maxCallsPerProvider: PROJECTOR_PROVIDER_CALL_BUDGET,
+      verifier: verifyBatch,
+      verification: {
+        candidates: freshCandidates,
+        providers: input.providers,
+        dynamicSources: plan.dynamicSources,
+        // Irrelevant candidates may be dynamic sources from another release.
+        // They still receive fresh dual-RPC placement evidence, while the fold
+        // below separately requires exact attested lineage for projected rows.
+        requireDynamicLineage: false,
+        rpcPolicy: {
+          hardDeadlineMs: remaining(),
+          maxCallsPerProvider: PROJECTOR_PROVIDER_CALL_BUDGET,
+        },
+        maximumCandidateCount:
+          (plan.batchKind ?? "normal") === "normal"
+            ? PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
+            : PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
       },
-      maximumCandidateCount:
-        (plan.batchKind ?? "normal") === "normal"
-          ? PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE
-          : PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
     });
     const metadata = await readMetadata({
       tokens: launchMetadataRequests(projectedCandidates),
@@ -568,14 +831,104 @@ export async function runReleaseProjectionCycle(input: {
       rewardSnapshots: Object.freeze(rewardSnapshots),
       rewardEvidence: Object.freeze(rewardEvidence),
     });
-    const committed = await input.store.commitVerifiedProjection(verified);
+    const verification = Object.freeze({
+      store: input.store,
+      projection: verified,
+      summary: Object.freeze({
+        releaseId: plan.scope.releaseId,
+        projectedCandidateCount: projectedCandidates.length,
+        ignoredCandidateCount: verified.ignoredCandidateIds.length,
+        batchKind: plan.batchKind ?? "normal",
+      }),
+    });
+    verifiedPreparedReleaseProjections.add(verification);
+    return Object.freeze({
+      status: "verified" as const,
+      verification,
+    });
+  });
+}
+
+/** Commits one previously verified release after the round-wide verify phase. */
+export async function commitVerifiedPreparedReleaseProjection(input: {
+  store: ReleaseProjectionStore;
+  verification: VerifiedPreparedReleaseProjection;
+  deadlineMs?: number;
+}) {
+  const deadlineMs = input.deadlineMs ?? MAXIMUM_PROJECTION_DEADLINE_MS;
+  if (
+    !Number.isSafeInteger(deadlineMs) ||
+    deadlineMs < 10 ||
+    deadlineMs > MAXIMUM_PROJECTION_DEADLINE_MS ||
+    !verifiedPreparedReleaseProjections.has(input.verification) ||
+    input.verification.store !== input.store
+  ) {
+    throw invalidInput("config", "projection-commit-preparation");
+  }
+  return withDeadline(deadlineMs, async () => {
+    const committed = await input.store.commitVerifiedProjection(
+      input.verification.projection,
+    );
     return Object.freeze({
       status: "committed" as const,
-      releaseId: plan.scope.releaseId,
-      projectedCandidateCount: projectedCandidates.length,
-      ignoredCandidateCount: verified.ignoredCandidateIds.length,
+      ...input.verification.summary,
       checkpointGeneration: committed.checkpointGeneration,
-      batchKind: plan.batchKind ?? "normal",
+    });
+  });
+}
+
+/**
+ * Backward-compatible single-release wrapper. The configured runtime uses the
+ * split verify/commit functions above to preserve the all-plans-first barrier.
+ */
+export async function runReleaseProjectionCycle(input: {
+  store: ReleaseProjectionStore;
+  envio: ProjectionEnvio;
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  deadlineMs?: number;
+  verifyBatch?: typeof verifyEnvioCandidateBatchWithDualRpc;
+  readMetadata?: typeof readDualRpcTokenMetadata;
+  readRewardSnapshot?: typeof readDualRpcRewardSnapshot;
+}) {
+  const deadlineMs = input.deadlineMs ?? MAXIMUM_PROJECTION_DEADLINE_MS;
+  if (
+    !Number.isSafeInteger(deadlineMs) ||
+    deadlineMs < 10 ||
+    deadlineMs > MAXIMUM_PROJECTION_DEADLINE_MS
+  ) {
+    throw invalidInput("config", "projection-deadline");
+  }
+  const startedAt = Date.now();
+  const remaining = () => {
+    const value = deadlineMs - (Date.now() - startedAt);
+    if (value < 10) throw projectionTimeout();
+    return value;
+  };
+  return withDeadline(deadlineMs, async () => {
+    const plan = await input.store.readProjectionPlan();
+    if (plan !== null) assertPlan(plan);
+    const prepared = Object.freeze({ store: input.store, plan });
+    preparedReleaseProjections.add(prepared);
+    const sharedVerification = createSharedProjectionVerificationCache({
+      envio: input.envio,
+      providers: input.providers,
+    });
+    const result = await verifyPreparedReleaseProjection({
+      store: input.store,
+      envio: input.envio,
+      providers: input.providers,
+      prepared,
+      sharedVerification,
+      deadlineMs: remaining(),
+      verifyBatch: input.verifyBatch,
+      readMetadata: input.readMetadata,
+      readRewardSnapshot: input.readRewardSnapshot,
+    });
+    if (result.status === "idle") return result;
+    return commitVerifiedPreparedReleaseProjection({
+      store: input.store,
+      verification: result.verification,
+      deadlineMs: remaining(),
     });
   });
 }

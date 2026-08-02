@@ -2,12 +2,15 @@ import "server-only";
 
 import {
   createPublicClient,
+  encodeFunctionData,
   http,
   numberToHex,
   type Hex,
   type RpcLog,
 } from "viem";
 import { mainnet } from "viem/chains";
+
+import { stateViewReadAbi } from "../onchain/abis";
 
 import type {
   CandidateRpcClassicRewardFactorySnapshot,
@@ -18,7 +21,7 @@ import type {
   CandidateRpcProvider,
   CandidateRpcReceipt,
 } from "./dual-rpc";
-import { invalidInput } from "./errors";
+import { invalidInput, validationError } from "./errors";
 import {
   canonicalProjectorRpcEndpoint,
   projectorRpcDeploymentCommitment,
@@ -376,6 +379,7 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
       return {
         number: block.number,
         hash: block.hash,
+        parentHash: block.parentHash,
         timestamp: block.timestamp,
       };
     },
@@ -391,6 +395,7 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
           return {
             number: block.number,
             hash: block.hash,
+            parentHash: block.parentHash,
             timestamp: block.timestamp,
           };
         }),
@@ -454,6 +459,67 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         })),
       ]);
       return { name, symbol };
+    },
+    async readOptimisticPoolState({
+      stateView,
+      poolId,
+      blockNumber,
+      blockHash,
+      requireCanonical,
+    }) {
+      const exactBlock = { blockHash, requireCanonical } as const;
+      let rpcCallCount = 0;
+      const measuredRpc = <T>(operation: () => Promise<T>) => {
+        rpcCallCount += 1;
+        return rpc(operation);
+      };
+      const [runtimeBytecode, slot0Result, liquidityResult] = await Promise.all([
+        measuredRpc(() => client.request({
+          method: "eth_getCode",
+          params: [stateView, exactBlock],
+        })),
+        measuredRpc(() => client.request({
+          method: "eth_call",
+          params: [
+            {
+              to: stateView,
+              data: encodeFunctionData({
+                abi: stateViewReadAbi,
+                functionName: "getSlot0",
+                args: [poolId],
+              }),
+            },
+            exactBlock,
+          ],
+        })),
+        measuredRpc(() => client.request({
+          method: "eth_call",
+          params: [
+            {
+              to: stateView,
+              data: encodeFunctionData({
+                abi: stateViewReadAbi,
+                functionName: "getLiquidity",
+                args: [poolId],
+              }),
+            },
+            exactBlock,
+          ],
+        })),
+      ]);
+      if (rpcCallCount !== 3) {
+        throw validationError("rpc", "optimistic-pool-rpc-call-count");
+      }
+      return Object.freeze({
+        stateView,
+        poolId,
+        blockNumber: blockNumber.toString(),
+        blockHash,
+        runtimeBytecode,
+        slot0Result,
+        liquidityResult,
+        rpcCallCount,
+      });
     },
     async readRewardSnapshot({
       model,
@@ -729,6 +795,25 @@ export function productionRpcProjectorCommitments(
       schemaCommitment: configuration.schemaCommitment,
     }),
   });
+}
+
+/** Safe, secret-free endpoint evidence derived from the validated URLs. */
+export function productionRpcEndpointEvidence(
+  env: Environment = process.env,
+) {
+  const configuration = productionRpcConfiguration(env);
+  return Object.freeze([
+    Object.freeze({
+      providerId: "alchemy" as const,
+      endpointHost: configuration.alchemy.hostname,
+      endpointUrlCommitment: configuration.alchemyDeploymentCommitment,
+    }),
+    Object.freeze({
+      providerId: "quicknode" as const,
+      endpointHost: configuration.quicknode.hostname,
+      endpointUrlCommitment: configuration.quicknodeDeploymentCommitment,
+    }),
+  ] as const);
 }
 
 /**

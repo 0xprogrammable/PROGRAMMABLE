@@ -4,7 +4,13 @@ import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import {
+  PROJECTOR_WAKE_ROUTE,
+  QUICKNODE_STREAM_SECRET_ENV_NAME,
+} from "./read-model-projector-wake-canary.mjs";
 import { runtimeProductionProviderBindingsFromUrls } from "./read-model-provider-binding.mjs";
+
+export { PROJECTOR_WAKE_ROUTE, QUICKNODE_STREAM_SECRET_ENV_NAME };
 
 export const RELEASE_GATED_FLAG_NAMES = Object.freeze([
   "INDEXED_EXPLORE_LIST_READS_ENABLED",
@@ -25,6 +31,10 @@ const PUBLIC_INDEXED_ROUTE_FLAG_NAMES = Object.freeze(
 export const WORKER_ACTIVATION_FLAG_NAMES = Object.freeze([
   "PROGRAMMABLE_PROJECTOR_ACTIVE",
   "PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE",
+]);
+
+export const REQUIRED_SERVER_SECRET_ENV_NAMES = Object.freeze([
+  QUICKNODE_STREAM_SECRET_ENV_NAME,
 ]);
 
 export const REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES = Object.freeze([
@@ -181,6 +191,27 @@ function validateNonSecretRuntimeEnvironment(contents, expectations) {
   });
 }
 
+function validateWakeTriggerSecret(contents, required) {
+  if (!required) {
+    return Object.freeze({ ready: true, invalidNames: Object.freeze([]) });
+  }
+  const configured = readSelectedDotenvValues(
+    contents,
+    REQUIRED_SERVER_SECRET_ENV_NAMES,
+  );
+  const invalidNames = REQUIRED_SERVER_SECRET_ENV_NAMES.filter((name) => {
+    const value = configured[name];
+    if (typeof value !== "string" || value === "") return true;
+    if (VERCEL_SENSITIVE_PLACEHOLDER.test(value)) return false;
+    const length = Buffer.byteLength(value, "utf8");
+    return length < 32 || length > 1_024;
+  });
+  return Object.freeze({
+    ready: invalidNames.length === 0,
+    invalidNames: Object.freeze(invalidNames),
+  });
+}
+
 export function evaluateReadModelDeployPolicy(
   contents,
   environment = {},
@@ -207,6 +238,13 @@ export function evaluateReadModelDeployPolicy(
   const environmentPreflight = validateNonSecretRuntimeEnvironment(
     contents,
     expectations,
+  );
+  const wakeCanaryRequired = WORKER_ACTIVATION_FLAG_NAMES.some(
+    (name) => workerFlags.values[name],
+  );
+  const secretEnvironmentPreflight = validateWakeTriggerSecret(
+    contents,
+    wakeCanaryRequired,
   );
   const evidenceRequired = nonLegacyFlags.length > 0;
   const invalidCommitments = evidenceRequired
@@ -266,9 +304,16 @@ export function evaluateReadModelDeployPolicy(
     indexedFlags: indexedFlags.values,
     workerActivationFlags: workerFlags.values,
     policyReady:
-      invalidFlagNames.length === 0 && environmentPreflight.ready,
+      invalidFlagNames.length === 0 &&
+      environmentPreflight.ready &&
+      secretEnvironmentPreflight.ready,
     invalidFlagNames,
     invalidNonSecretEnvironmentNames: environmentPreflight.invalidNames,
+    wakeRoute: PROJECTOR_WAKE_ROUTE,
+    wakeCanaryRequired,
+    streamSecretReady: secretEnvironmentPreflight.ready,
+    invalidServerSecretEnvironmentNames:
+      secretEnvironmentPreflight.invalidNames,
     commitmentsReady:
       invalidCommitments.length === 0 && runtimeCommitmentsMatch,
     runtimeProviderBinding,
@@ -541,10 +586,12 @@ function main() {
       [
         ...result.invalidFlagNames,
         ...result.invalidNonSecretEnvironmentNames,
+        ...result.invalidServerSecretEnvironmentNames,
       ].length > 0
         ? `release environment preflight failed: ${[
             ...result.invalidFlagNames,
             ...result.invalidNonSecretEnvironmentNames,
+            ...result.invalidServerSecretEnvironmentNames,
           ].join(", ")}`
         : "release environment preflight failed",
     );
@@ -589,6 +636,8 @@ function main() {
       [
         `mode=${result.mode}`,
         `evidence_required=${result.evidenceRequired}`,
+        `wake_route=${result.wakeRoute}`,
+        `wake_canary_required=${result.wakeCanaryRequired}`,
         ...(attestation
           ? [
               `attestation_path=${resolve(args["attestation-output"])}`,
@@ -613,6 +662,9 @@ function main() {
       policyReady: result.policyReady,
       commitmentsReady: result.commitmentsReady,
       runtimeProviderBinding: result.runtimeProviderBinding,
+      wakeRoute: result.wakeRoute,
+      wakeCanaryRequired: result.wakeCanaryRequired,
+      streamSecretReady: result.streamSecretReady,
       ...(attestation
         ? { attestationSha256: attestation.sha256 }
         : {}),

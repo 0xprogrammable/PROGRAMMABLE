@@ -66,6 +66,8 @@ import { assertProductionDualRpcProviders } from "./rpc-providers.server";
 export type CandidateRpcBlock = {
   number: bigint | null;
   hash: Hex | null;
+  /** Required by head/optimistic readers; legacy finalized readers ignore it. */
+  parentHash?: Hex | null;
   timestamp: bigint;
 };
 
@@ -150,6 +152,19 @@ export type CandidateRpcClient = {
     requireCanonical: true;
   }): Promise<Readonly<{ name: unknown; symbol: unknown }>>;
   /**
+   * Executes the frozen Uniswap v4 StateView code + state reads at one
+   * EIP-1898 block hash. Raw bytes are retained so the optimistic reader can
+   * require byte-for-byte equality across the two independent providers
+   * before ABI decoding either result.
+   */
+  readOptimisticPoolState?(input: {
+    stateView: HexAddress;
+    poolId: HexBytes32;
+    blockNumber: bigint;
+    blockHash: HexBytes32;
+    requireCanonical: true;
+  }): Promise<CandidateRpcOptimisticPoolState>;
+  /**
    * Executes only the frozen reward-vault call shapes at one exact block.
    * The returned call count is verified against the committed formula.
    */
@@ -183,6 +198,17 @@ export type CandidateRpcClient = {
     requests: readonly CandidateRpcLogFilter[];
   }): Promise<readonly (readonly CandidateRpcLog[])[]>;
 };
+
+export type CandidateRpcOptimisticPoolState = Readonly<{
+  stateView: unknown;
+  poolId: unknown;
+  blockNumber: unknown;
+  blockHash: unknown;
+  runtimeBytecode: unknown;
+  slot0Result: unknown;
+  liquidityResult: unknown;
+  rpcCallCount: unknown;
+}>;
 
 export type CandidateRpcRewardSnapshot = Readonly<{
   model: unknown;
@@ -334,6 +360,11 @@ export type DualRpcTokenMetadata = Readonly<{
   blockHash: HexBytes32;
   name: string;
   symbol: string;
+}>;
+
+export type DualRpcTokenMetadataBatch = Readonly<{
+  metadata: readonly DualRpcTokenMetadata[];
+  providerCallCounts: readonly [number, number];
 }>;
 
 export type CandidateRpcProvider = {
@@ -1335,7 +1366,7 @@ function canonicalMetadataText(
  * block. Provider disagreement is an integrity failure, never a preference
  * or a reason to silently use one answer.
  */
-export async function readDualRpcTokenMetadata(input: {
+export async function readDualRpcTokenMetadataWithTrace(input: {
   tokens: readonly Readonly<{
     token: HexAddress;
     blockNumber: string;
@@ -1343,7 +1374,7 @@ export async function readDualRpcTokenMetadata(input: {
   }>[];
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   rpcPolicy?: RpcExecutionPolicyInput;
-}): Promise<readonly DualRpcTokenMetadata[]> {
+}): Promise<DualRpcTokenMetadataBatch> {
   assertProductionDualRpcProviders(input.providers);
   if (!Array.isArray(input.tokens) || input.tokens.length > 16) {
     throw invalidInput("rpc", "erc20-metadata-batch");
@@ -1371,7 +1402,7 @@ export async function readDualRpcTokenMetadata(input: {
     maximum: policy.maxCallsPerProvider,
   }));
   try {
-    return Object.freeze(
+    const metadata = Object.freeze(
       await boundedRpcMap(
         input.tokens,
         policy.maxConcurrency,
@@ -1432,6 +1463,13 @@ export async function readDualRpcTokenMetadata(input: {
         },
       ),
     );
+    return Object.freeze({
+      metadata,
+      providerCallCounts: Object.freeze([
+        providerBudgets[0]!.used,
+        providerBudgets[1]!.used,
+      ] as const),
+    });
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;
     throw dataPipelineError({
@@ -1441,6 +1479,18 @@ export async function readDualRpcTokenMetadata(input: {
       countsTowardCircuit: true,
     });
   }
+}
+
+export async function readDualRpcTokenMetadata(input: {
+  tokens: readonly Readonly<{
+    token: HexAddress;
+    blockNumber: string;
+    blockHash: HexBytes32;
+  }>[];
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  rpcPolicy?: RpcExecutionPolicyInput;
+}): Promise<readonly DualRpcTokenMetadata[]> {
+  return (await readDualRpcTokenMetadataWithTrace(input)).metadata;
 }
 
 function rewardUint(value: unknown, field: string): string {

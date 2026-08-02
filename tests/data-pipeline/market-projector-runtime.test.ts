@@ -12,6 +12,7 @@ import {
   MARKET_GRAPH_QUERY_CONTRACT,
   MARKET_GRAPH_SCHEMA_COMMITMENT,
   runConfiguredMarketProjectorCycle,
+  runMarketProjectorFastLaneCycle,
   runMarketProjectorCycle,
   type MarketAnalytics,
   type MarketCloseAnchor,
@@ -257,6 +258,9 @@ function store(
     })),
     releaseLease: vi.fn(async () => undefined),
     loadPlans: vi.fn(async () => plans),
+    loadFastLanePlan: vi.fn(async () =>
+      plans[0] && anchors[0] ? { plan: plans[0], anchor: anchors[0] } : null,
+    ),
     listCloseAnchors: vi.fn(async () => anchors),
     resolveGraphProvider: vi.fn(
       async () => "77777777-7777-8777-8777-777777777777",
@@ -430,6 +434,67 @@ describe("market projector runtime", () => {
       candleCount: 0,
       caughtUp: true,
     });
+    expect(fixture.value.commit).not.toHaveBeenCalled();
+  });
+
+  it("projects only the newest exact close and checkpoint snapshot on the fast lane", async () => {
+    const latest = anchor(175);
+    const fixture = store([plan()], [latest]);
+    const marketAnalytics = analytics();
+
+    await expect(
+      runMarketProjectorFastLaneCycle({
+        store: fixture.value,
+        analytics: marketAnalytics,
+        rpc: rpc(),
+        graphProvider,
+      }),
+    ).resolves.toMatchObject({
+      status: "caught-up",
+      blockNumber: "200",
+      closeCount: 1,
+      candleCount: 0,
+    });
+
+    expect(fixture.value.loadPlans).not.toHaveBeenCalled();
+    expect(fixture.value.listCloseAnchors).not.toHaveBeenCalled();
+    expect(fixture.committed).toHaveLength(1);
+    expect(fixture.committed[0]).toMatchObject({
+      fastLane: true,
+      target: { blockNumber: "200", blockHash: BLOCK_HASH },
+      targetEvidenceId: plan().sourceCheckpointBlockEvidenceId,
+      isReorg: false,
+      candles: [],
+    });
+    expect(fixture.committed[0]!.closes).toHaveLength(1);
+    expect(fixture.committed[0]!.closes[0]!.anchor).toEqual(latest);
+    expect(marketAnalytics.readHourSeries).toHaveBeenCalledTimes(1);
+    expect(marketAnalytics.readDaySeries).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before providers when the fast-lane cursor lineage is stale", async () => {
+    const stale = plan({
+      pointerGeneration: "2",
+      cursor: cursor({ pointerGeneration: "1" }),
+    });
+    const fixture = store([stale], [anchor(175)]);
+    const marketAnalytics = analytics();
+    const marketRpc = rpc();
+
+    await expect(
+      runMarketProjectorFastLaneCycle({
+        store: fixture.value,
+        analytics: marketAnalytics,
+        rpc: marketRpc,
+        graphProvider,
+      }),
+    ).rejects.toMatchObject({
+      dependency: "postgres",
+      code: "validation_failed",
+    });
+
+    expect(marketRpc.readChainlinkBlock).not.toHaveBeenCalled();
+    expect(marketAnalytics.readPoolSnapshot).not.toHaveBeenCalled();
     expect(fixture.value.commit).not.toHaveBeenCalled();
   });
 
@@ -640,6 +705,12 @@ describe("market projector runtime", () => {
         if (text.includes("assert_market_projector_runtime_lease_v1")) {
           return [{ valid: true }] as unknown as readonly Row[];
         }
+        if (text.includes("try_lock_market_projector_pool_v1")) {
+          return [{ locked: true }] as unknown as readonly Row[];
+        }
+        if (text.includes("assert_market_projector_fast_lane_v1")) {
+          return [{ valid: true }] as unknown as readonly Row[];
+        }
         if (text.includes("release_market_projector_runtime_lease_v1")) {
           return [{ released: true }] as unknown as readonly Row[];
         }
@@ -731,6 +802,51 @@ describe("market projector runtime", () => {
           "select session_user::text as session_user, current_role::text as current_role",
       ),
     ).toHaveLength(3);
+
+    const fastLaneStart = calls.length;
+    const exactAnchor: MarketCloseAnchor = {
+      ...anchor(200),
+      blockEvidenceId: marketPlan.sourceCheckpointBlockEvidenceId,
+      blockHash: marketPlan.sourceCheckpointBlockHash,
+      blockTimestamp: new Date(TARGET_TIME),
+    };
+    await postgresStore.commit({
+      ...page,
+      pageCommitment: `0x${"dd".repeat(32)}`,
+      closes: [
+        {
+          anchor: exactAnchor,
+          global: page.target,
+          snapshot: page.targetSnapshot,
+          token0Price: "1",
+          token1Price: "1",
+          feesUsd: "0.2",
+        },
+      ],
+      candles: [],
+      fastLane: true,
+    });
+    const fastLaneCalls = calls.slice(fastLaneStart);
+    expect(
+      fastLaneCalls.some(({ text }) =>
+        text.includes("assert_market_projector_fast_lane_v1"),
+      ),
+    ).toBe(true);
+    expect(
+      fastLaneCalls.some(({ text }) =>
+        text.includes("assert_market_projector_runtime_lease_v1"),
+      ),
+    ).toBe(false);
+    expect(
+      fastLaneCalls.some(({ text }) =>
+        text.includes("advance_market_projector_cursor_v1"),
+      ),
+    ).toBe(false);
+    expect(
+      fastLaneCalls.some(({ text }) =>
+        text.includes("append_market_block_close_v2"),
+      ),
+    ).toBe(true);
   });
 
   it("rebuilds from launch when the source reorg generation advances", async () => {
