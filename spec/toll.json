@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "release": "toll-v1",
+  "chainId": 4663,
+  "token": {
+    "standard": "UERC20",
+    "decimals": 18,
+    "fixedSupply": "1000000000000000000000000000",
+    "transferTaxBps": 0
+  },
+  "launch": {
+    "minimumInitialBuyWei": "600000000000000",
+    "initialTick": 204200,
+    "tickSpacing": 200,
+    "lpFeePips": 0
+  },
+  "fees": {
+    "buySwapFeeBps": {
+      "minimum": 100,
+      "maximum": 1000,
+      "step": 100
+    },
+    "sellSwapFeeBps": {
+      "tiers": [
+        { "name": "sniper", "threshold": "< 30 minutes", "thresholdSeconds": 1800, "minimum": 100, "maximum": 2500 },
+        { "name": "warm", "threshold": "30min - 4 hours", "thresholdSeconds": 14400, "minimum": 100, "maximum": 2500 },
+        { "name": "holder", "threshold": "4h - 24 hours", "thresholdSeconds": 86400, "minimum": 100, "maximum": 2500 },
+        { "name": "diamond", "threshold": "> 24 hours", "thresholdSeconds": null, "minimum": 100, "maximum": 2500 }
+      ]
+    },
+    "programmableFeeBps": 10,
+    "creatorFeeCalculation": "directionalSwapFeeBps - programmableFeeBps",
+    "maxFeeBps": 2500
+  },
+  "holdTimeTracking": {
+    "method": "weightedAverageEntryTime",
+    "identity": "tx.origin",
+    "sellResetsTimer": false,
+    "transfersTracked": false
+  },
+  "liquidity": {
+    "locked": true,
+    "lockMechanism": "TollPositionForwarder",
+    "timelockBlockNumber": "type(uint256).max",
+    "operator": "0x0000000000000000000000000000000000000000"
+  },
+  "compiler": {
+    "solidity": "0.8.26",
+    "evmVersion": "cancun"
+  }
+}

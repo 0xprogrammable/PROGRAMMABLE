@@ -1,7 +1,7 @@
 {
   "$schema": "./schema/registry.schema.json",
   "schemaVersion": 1,
-  "updatedAt": "2026-07-30",
+  "updatedAt": "2026-08-02",
   "statuses": [
     "design",
     "candidate",
@@ -18,6 +18,14 @@
       "documentation": "models/classic/README.md"
     },
     {
+      "id": "deep",
+      "name": "Deep",
+      "status": "design",
+      "summary": "A proposed launch model that directs the creator fee share into add-only locked liquidity until an immutable target is reached.",
+      "manifest": "models/deep/model.json",
+      "documentation": "models/deep/README.md"
+    },
+    {
       "id": "stock-paired",
       "name": "Stock-Paired",
       "status": "candidate",
@@ -26,12 +34,12 @@
       "documentation": "models/stock-paired/README.md"
     },
     {
-      "id": "deep",
-      "name": "Deep",
-      "status": "design",
-      "summary": "A proposed launch model that directs the creator fee share into add-only locked liquidity until an immutable target is reached.",
-      "manifest": "models/deep/model.json",
-      "documentation": "models/deep/README.md"
+      "id": "toll",
+      "name": "Toll",
+      "status": "candidate",
+      "summary": "Time-weighted dynamic sell fees. Flat buy fee with four-tier sell fee that decays based on hold duration. Sniper, warm, holder and diamond tiers reward patience and penalize flipping.",
+      "manifest": "models/toll/model.json",
+      "documentation": "models/toll/README.md"
     }
   ]
 }

@@ -1,0 +1,64 @@
+{
+  "$schema": "../schema/model.schema.json",
+  "schemaVersion": 1,
+  "id": "toll",
+  "name": "Toll",
+  "status": "candidate",
+  "summary": "Time-weighted dynamic sell fees. Flat buy fee with four-tier sell fee that decays based on hold duration. Sniper, warm, holder and diamond tiers reward patience and penalize flipping.",
+  "documentation": "models/toll/README.md",
+  "currentRelease": null,
+  "releaseManifest": null,
+  "specification": "spec/toll.json",
+  "deployment": null,
+  "security": "models/toll/SECURITY.md",
+  "network": {
+    "name": "Robinhood Chain",
+    "chainId": 4663
+  },
+  "contracts": [
+    {
+      "deploymentKey": "ctoAuthority",
+      "name": "ClassicCtoAuthorityV1",
+      "address": "0x02a81969d7AA9fFc90a84D01D8FAd897c0E843E8"
+    },
+    {
+      "deploymentKey": "rewardVaultFactory",
+      "name": "ClassicRewardVaultFactoryV1",
+      "address": "0xFC208a5fFa0AFeB3eA44B28c166e1cFCF00b465c"
+    },
+    {
+      "deploymentKey": "initialBuyVestingWalletFactory",
+      "name": "ClassicInitialBuyVestingWalletFactoryV1",
+      "address": "0x4eF237505F55dC0e7689FF687E8BF7fc57C34714"
+    },
+    {
+      "deploymentKey": "launchPolicy",
+      "name": "ClassicLaunchPolicyV1",
+      "address": "0x840D60C8f4aC3Fe3aED6C87d4087f2d70595248b"
+    },
+    {
+      "deploymentKey": "tollHook",
+      "name": "TollHookV1",
+      "address": "0x29aA731ef79E1c1c4eE63c67a83B96Cc446820Cc"
+    },
+    {
+      "deploymentKey": "launcher",
+      "name": "TollLaunchV1",
+      "address": "0x53F3A5f85Cd084373f4B5C9d7a633180a6335f86"
+    },
+    {
+      "deploymentKey": "positionForwarderFactory",
+      "name": "TollPositionForwarderFactory",
+      "address": "0x4aaFb8e19d0ae7219EabEE4EC5D5f1887C581eDC"
+    }
+  ],
+  "review": {
+    "independentAudit": false,
+    "publicContest": false
+  },
+  "releaseGates": [
+    "Fuzz and invariant test coverage",
+    "Independent security audit",
+    "Ethereum mainnet deployment"
+  ]
+}
