@@ -1587,6 +1587,65 @@ function partitionClosure(closure, label) {
   });
 }
 
+export function assertRestoreRolePostureEvidence(identity, roles, memberships) {
+  const postgresRole = roles.find(({ rolname }) => rolname === "postgres");
+  const migrator = roles.find(({ rolname }) => rolname === "programmable_migrator");
+  const operatorMemberships = memberships.filter(
+    ({
+      member_role: memberRole,
+      granted_role: grantedRole,
+      grantor_role: grantorRole,
+      inherit_option: inheritOption,
+      set_option: setOption,
+      admin_option: adminOption,
+    }) =>
+      memberRole === "postgres" &&
+      grantedRole === "programmable_migrator" &&
+      grantorRole === "postgres" &&
+      inheritOption === false &&
+      setOption === true &&
+      adminOption === false,
+  );
+  const supabaseMemberships = memberships.filter(
+    ({
+      member_role: memberRole,
+      granted_role: grantedRole,
+      grantor_role: grantorRole,
+      inherit_option: inheritOption,
+      set_option: setOption,
+      admin_option: adminOption,
+    }) =>
+      memberRole === "postgres" &&
+      grantedRole === "programmable_migrator" &&
+      grantorRole === "supabase_admin" &&
+      inheritOption === false &&
+      setOption === false &&
+      adminOption === true,
+  );
+  if (
+    !["postgres", "cli_login_postgres"].includes(identity?.session_user) ||
+    identity?.current_user !== "postgres" ||
+    identity?.current_role !== "postgres" ||
+    identity?.can_set_migrator !== true ||
+    roles.length !== 2 ||
+    postgresRole?.rolsuper !== false ||
+    migrator?.rolsuper !== false ||
+    migrator?.rolinherit !== false ||
+    migrator?.rolcreaterole !== false ||
+    migrator?.rolcreatedb !== false ||
+    migrator?.rolcanlogin !== false ||
+    migrator?.rolreplication !== false ||
+    migrator?.rolbypassrls !== false ||
+    operatorMemberships.length !== 1 ||
+    supabaseMemberships.length !==
+      (identity?.session_user === "cli_login_postgres" ? 1 : 0) ||
+    memberships.length !==
+      operatorMemberships.length + supabaseMemberships.length
+  ) {
+    throw new Error("Candidate restore role posture is not exact");
+  }
+}
+
 async function assertRestoreRolePosture(sql) {
   const [identity] = await sql.unsafe(`
     select session_user::text as session_user,
@@ -1606,6 +1665,7 @@ async function assertRestoreRolePosture(sql) {
   const memberships = await sql.unsafe(`
     select member_role.rolname as member_role,
            granted_role.rolname as granted_role,
+           grantor_role.rolname as grantor_role,
            membership.inherit_option,
            membership.set_option,
            membership.admin_option
@@ -1614,34 +1674,13 @@ async function assertRestoreRolePosture(sql) {
         on member_role.oid = membership.member
       join pg_catalog.pg_roles as granted_role
         on granted_role.oid = membership.roleid
+      join pg_catalog.pg_roles as grantor_role
+        on grantor_role.oid = membership.grantor
      where member_role.rolname = 'postgres'
        and granted_role.rolname = 'programmable_migrator'
+     order by grantor_role.rolname
   `);
-  const postgresRole = roles.find(({ rolname }) => rolname === "postgres");
-  const migrator = roles.find(({ rolname }) => rolname === "programmable_migrator");
-  if (
-    !["postgres", "cli_login_postgres"].includes(identity?.session_user) ||
-    identity?.current_user !== "postgres" ||
-    identity?.current_role !== "postgres" ||
-    identity?.can_set_migrator !== true ||
-    roles.length !== 2 ||
-    postgresRole?.rolsuper !== false ||
-    migrator?.rolsuper !== false ||
-    migrator?.rolinherit !== false ||
-    migrator?.rolcreaterole !== false ||
-    migrator?.rolcreatedb !== false ||
-    migrator?.rolcanlogin !== false ||
-    migrator?.rolreplication !== false ||
-    migrator?.rolbypassrls !== false ||
-    memberships.length !== 1 ||
-    memberships[0]?.member_role !== "postgres" ||
-    memberships[0]?.granted_role !== "programmable_migrator" ||
-    memberships[0]?.inherit_option !== false ||
-    memberships[0]?.set_option !== true ||
-    memberships[0]?.admin_option !== false
-  ) {
-    throw new Error("Candidate restore role posture is not exact");
-  }
+  assertRestoreRolePostureEvidence(identity, roles, memberships);
 }
 
 async function assertRestoreSchemasAbsent(sql) {
