@@ -212,7 +212,7 @@ type ProviderRead = Readonly<{
   liquidityResult: HexData;
 }>;
 
-type DeadlineContext = Readonly<{ deadlineAt: number }>;
+type DeadlineContext = { deadlineAt: number; expired: boolean };
 type RpcCallCounter = { value: number };
 
 function recordRpcCalls(counter: RpcCallCounter, count: unknown): void {
@@ -951,19 +951,23 @@ function timeoutError(): DataPipelineError {
 }
 
 function assertWithinDeadline(context: DeadlineContext): void {
-  if (Date.now() >= context.deadlineAt) throw timeoutError();
+  if (context.expired || Date.now() >= context.deadlineAt) throw timeoutError();
 }
 
-async function withinDeadline<T>(operation: Promise<T>, maximumMs: number) {
+async function withinDeadline<T>(
+  operation: Promise<T>,
+  context: DeadlineContext,
+  maximumMs: number,
+) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       operation,
       new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(
-          () => reject(timeoutError()),
-          maximumMs,
-        );
+        timeout = setTimeout(() => {
+          context.expired = true;
+          reject(timeoutError());
+        }, maximumMs);
       }),
     ]);
   } finally {
@@ -1166,7 +1170,10 @@ export async function readOptimisticMarketState(input: Readonly<{
   const valuation = normalizeValuation(input);
   const evidence = normalizeEvidence(input.evidence, input.providers);
   const maximumMs = deadlineMs(input.hardDeadlineMs);
-  const deadline = Object.freeze({ deadlineAt: Date.now() + maximumMs });
+  const deadline: DeadlineContext = {
+    deadlineAt: Date.now() + maximumMs,
+    expired: false,
+  };
   if (input.newLaunch) {
     if (!isVerifiedDualRpcOptimisticBlock(input.evidence)) {
       throw invalidInput("rpc", "optimistic-new-launch-evidence-origin");
@@ -1183,6 +1190,7 @@ export async function readOptimisticMarketState(input: Readonly<{
         evidence,
         deadline,
       }))) as Promise<[ProviderRead, ProviderRead]>,
+      deadline,
       maximumMs,
     );
     if (
