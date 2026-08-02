@@ -19,6 +19,7 @@ const BLOCK_A = `0x${"33".repeat(32)}` as const;
 const BLOCK_B = `0x${"44".repeat(32)}` as const;
 const TRANSACTION_A = `0x${"55".repeat(32)}` as const;
 const TRANSACTION_B = `0x${"66".repeat(32)}` as const;
+const EVIDENCE_COMMITMENT = `0x${"77".repeat(32)}` as const;
 const TOKEN_A = "0x1111111111111111111111111111111111111111" as const;
 const TOKEN_B = "0x2222222222222222222222222222222222222222" as const;
 const HOOK = "0x3333333333333333333333333333333333333333" as const;
@@ -87,6 +88,7 @@ function launch(input: Partial<OptimisticLaunchRow> = {}): OptimisticLaunchRow {
   const selectedToken = input.token ?? token();
   return {
     kind: "launch",
+    evidenceCommitment: input.evidenceCommitment ?? EVIDENCE_COMMITMENT,
     evidence: input.evidence ?? evidence(selectedToken.launchBlockNumber),
     event: input.event ?? {
       transactionHash: selectedToken.launchTransactionHash!,
@@ -101,6 +103,7 @@ function launch(input: Partial<OptimisticLaunchRow> = {}): OptimisticLaunchRow {
 function market(input: Partial<OptimisticMarketRow> = {}): OptimisticMarketRow {
   return {
     kind: "market",
+    evidenceCommitment: input.evidenceCommitment ?? EVIDENCE_COMMITMENT,
     evidence: input.evidence ?? evidence("101"),
     event: input.event ?? { transactionHash: TRANSACTION_B, logIndex: 8 },
     poolId: input.poolId ?? POOL_A,

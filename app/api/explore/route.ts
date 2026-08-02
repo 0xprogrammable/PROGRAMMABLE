@@ -18,6 +18,9 @@ import {
   preparePublicRouteRequest,
   publicSnapshotCheckpoint,
 } from "../../../lib/data-pipeline/public-route-readiness.server";
+import { CONFIGURED_OPTIMISTIC_PUBLIC_API_READER } from "../../../lib/data-pipeline/optimistic-public-api-reader.server";
+import { overlayExploreCanonicalResponse } from "../../../lib/data-pipeline/optimistic-public-api-overlay.server";
+import { readIndexedFeedSnapshot } from "../indexers/v1/read-indexed-feed.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -72,7 +75,7 @@ export async function GET(request: NextRequest) {
       page: integerQuery(search.get("page"), 1),
       pageSize: integerQuery(search.get("limit"), 6),
     } as const;
-    return await coordinatePublicRouteRead({
+    const canonical = await coordinatePublicRouteRead({
       route: "explore-list",
       scope: PUBLIC_DISCOVERY_ROUTE_SCOPES,
       ...(routeRequest.releaseProbe
@@ -136,6 +139,19 @@ export async function GET(request: NextRequest) {
         };
       },
     });
+    if (routeRequest.releaseProbe) return canonical;
+    try {
+      const source = await CONFIGURED_OPTIMISTIC_PUBLIC_API_READER.read(1);
+      if (!source) return canonical;
+      return await overlayExploreCanonicalResponse({
+        canonical,
+        feed: await readIndexedFeedSnapshot(),
+        source,
+        options,
+      });
+    } catch {
+      return canonical;
+    }
   } catch (error) {
     console.error("Explore onchain read failed", error);
     return NextResponse.json(

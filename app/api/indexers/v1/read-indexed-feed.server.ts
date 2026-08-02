@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { formatUnits } from "viem";
 
 import {
   bytes32FromBytea,
@@ -367,12 +368,36 @@ function parseSnapshot(
     }
   }
 
+  let ethUsdQuote: ExploreSnapshot["ethUsdQuote"];
+  if (input.ethUsdQuote !== undefined && input.ethUsdQuote !== null) {
+    const quote = record(input.ethUsdQuote);
+    const roundId = uintText(quote.roundId);
+    const answer = uintText(quote.answer);
+    const decimals = safeInteger(quote.decimals, 36);
+    const updatedAt = canonicalTimestamp(quote.updatedAt);
+    if (
+      BigInt(roundId) <= 0n ||
+      BigInt(answer) <= 0n ||
+      Date.parse(updatedAt) - Date.parse(capturedAt) > MAX_CLOCK_SKEW_MS
+    ) {
+      return fail();
+    }
+    ethUsdQuote = Object.freeze({
+      feedAddress: address(quote.feedAddress),
+      roundId,
+      answer,
+      decimals,
+      updatedAt,
+    });
+  }
+
   return Object.freeze({
     publicSnapshot: Object.freeze({
       chainId: CHAIN_ID,
       blockNumber,
       blockHash,
       confirmations,
+      ...(ethUsdQuote ? { ethUsdQuote } : {}),
     }),
     capturedAt,
     reconciledAt,
@@ -426,6 +451,7 @@ function parseRawToken(value: unknown): ParsedToken {
       : record(input.metadata);
   const liquidity = record(input.liquidity);
   const fees = record(input.fees);
+  const market = record(input.market);
 
   const token: LauncherToken = {
     id: `${CHAIN_ID}:${address(input.tokenAddress)}`,
@@ -504,10 +530,156 @@ function parseRawToken(value: unknown): ParsedToken {
     token.quoteAssetAddress = address(quote.address);
     token.quoteAssetSymbol = text(quote.symbol, 32);
     token.quoteAssetName = text(quote.name, 128);
-    safeInteger(quote.decimals, 36);
+    const quoteDecimals = safeInteger(quote.decimals, 36);
     token.quoteIsCurrency0 = bool(quote.isCurrency0);
+    const tokenPriceQuoteWad = uintText(quote.tokenPriceQuoteWad);
+    const marketCapQuoteWad = uintText(quote.marketCapQuoteWad);
+    const grossVolumeQuoteRaw = uintText(quote.grossVolumeQuoteRaw);
+    const creatorFeesGeneratedQuoteRaw = uintText(
+      quote.creatorFeesGeneratedQuoteRaw,
+    );
+    const programmableFeesGeneratedQuoteRaw = uintText(
+      quote.programmableFeesGeneratedQuoteRaw,
+    );
+    const creatorFeesAccruedQuoteRaw = uintText(
+      quote.creatorFeesAccruedQuoteRaw,
+    );
+    token.tokenPriceQuoteWad = tokenPriceQuoteWad;
+    token.tokenPriceQuote = formatUnits(BigInt(tokenPriceQuoteWad), 18);
+    token.marketCapQuoteWad = marketCapQuoteWad;
+    token.marketCapQuote = formatUnits(BigInt(marketCapQuoteWad), 18);
+    token.grossVolumeQuoteRaw = grossVolumeQuoteRaw;
+    token.grossVolumeQuote = formatUnits(
+      BigInt(grossVolumeQuoteRaw),
+      quoteDecimals,
+    );
+    token.creatorFeesGeneratedQuoteRaw = creatorFeesGeneratedQuoteRaw;
+    token.creatorFeesGeneratedQuote = formatUnits(
+      BigInt(creatorFeesGeneratedQuoteRaw),
+      quoteDecimals,
+    );
+    token.programmableFeesGeneratedQuoteRaw =
+      programmableFeesGeneratedQuoteRaw;
+    token.programmableFeesGeneratedQuote = formatUnits(
+      BigInt(programmableFeesGeneratedQuoteRaw),
+      quoteDecimals,
+    );
+    token.creatorFeesAccruedQuoteRaw = creatorFeesAccruedQuoteRaw;
+    token.creatorFeesAccruedQuote = formatUnits(
+      BigInt(creatorFeesAccruedQuoteRaw),
+      quoteDecimals,
+    );
   } else if (input.quote !== null && input.quote !== undefined) {
     return fail();
+  }
+
+  const atomicMarketField = (
+    value: unknown,
+  ): Readonly<{ raw: string; formatted: string }> | undefined => {
+    const raw = nullableUint(value);
+    return raw === undefined
+      ? undefined
+      : Object.freeze({ raw, formatted: formatUnits(BigInt(raw), 18) });
+  };
+  const tokenPrice = atomicMarketField(market.tokenPriceNativeWei);
+  const marketCap = atomicMarketField(market.marketCapNativeWei);
+  const indexedMarketCap = atomicMarketField(
+    market.indexedMarketCapNativeWei,
+  );
+  const grossVolume = atomicMarketField(market.grossVolumeNativeWei);
+  const creatorFeesGenerated = atomicMarketField(
+    market.creatorFeesGeneratedNativeWei,
+  );
+  const launcherFeesGenerated = atomicMarketField(
+    market.launcherFeesGeneratedNativeWei,
+  );
+  const creatorFeesAccrued = atomicMarketField(
+    market.creatorFeesAccruedNativeWei,
+  );
+  if (tokenPrice) {
+    token.tokenPriceEthWei = tokenPrice.raw;
+    token.tokenPriceEth = tokenPrice.formatted;
+  }
+  if (marketCap) {
+    token.marketCapEthWei = marketCap.raw;
+    token.marketCapEth = marketCap.formatted;
+  }
+  if (indexedMarketCap) {
+    token.indexedMarketCapEthWei = indexedMarketCap.raw;
+    token.indexedMarketCapEth = indexedMarketCap.formatted;
+  }
+  const indexedMarketCapUsdWad = nullableUint(
+    market.indexedMarketCapUsdWad,
+  );
+  if (indexedMarketCapUsdWad !== undefined) {
+    token.indexedMarketCapUsdWad = indexedMarketCapUsdWad;
+  }
+  const indexedValuationBlockNumber = nullableUint(
+    market.indexedValuationBlockNumber,
+  );
+  if (
+    indexedValuationBlockNumber !== undefined &&
+    BigInt(indexedValuationBlockNumber) > BigInt(source.checkpointBlockNumber)
+  ) {
+    return fail();
+  }
+  if (indexedValuationBlockNumber !== undefined) {
+    token.indexedValuationBlockNumber = indexedValuationBlockNumber;
+  }
+  const fdvUsdWad = nullableUint(market.fdvUsdWad);
+  if (fdvUsdWad !== undefined) token.fdvUsdWad = fdvUsdWad;
+  if (grossVolume) {
+    token.grossVolumeWei = grossVolume.raw;
+    token.grossVolumeEth = grossVolume.formatted;
+  }
+  if (creatorFeesGenerated) {
+    token.creatorFeesGeneratedWei = creatorFeesGenerated.raw;
+    token.creatorFeesGeneratedEth = creatorFeesGenerated.formatted;
+  }
+  if (launcherFeesGenerated) {
+    token.launcherFeesGeneratedWei = launcherFeesGenerated.raw;
+    token.launcherFeesGeneratedEth = launcherFeesGenerated.formatted;
+  }
+  if (creatorFeesAccrued) {
+    token.creatorFeesAccruedWei = creatorFeesAccrued.raw;
+    token.creatorFeesAccruedEth = creatorFeesAccrued.formatted;
+  }
+  if (market.swapCount !== null && market.swapCount !== undefined) {
+    token.swapCount = safeInteger(market.swapCount);
+  }
+
+  if (input.uniswapV4Pool !== null && input.uniswapV4Pool !== undefined) {
+    const pool = record(input.uniswapV4Pool);
+    expectExact(pool.source, "official-uniswap-v4-subgraph");
+    const indexedBlockNumber = uintText(pool.indexedBlockNumber);
+    const indexedBlockHash = bytes32(pool.indexedBlockHash);
+    if (
+      BigInt(indexedBlockNumber) > BigInt(source.checkpointBlockNumber) ||
+      (indexedBlockNumber === source.checkpointBlockNumber &&
+        indexedBlockHash !== source.checkpointBlockHash)
+    ) {
+      return fail();
+    }
+    token.uniswapV4Pool = {
+      source: "official-uniswap-v4-subgraph",
+      indexedBlockNumber,
+      indexedBlockHash,
+      volumeUsdWad: uintText(pool.volumeUsdWad),
+      tvlUsdWad: uintText(pool.tvlUsdWad),
+      transactionCount: uintText(pool.transactionCount),
+      liquidity: uintText(pool.liquidity),
+      sqrtPriceX96: uintText(pool.sqrtPriceX96),
+      ...(pool.tick === undefined
+        ? {}
+        : {
+            tick: (() => {
+              const tick = nullableSignedInteger(pool.tick, 0x7fff_ffff);
+              if (tick === undefined) return fail();
+              return tick;
+            })(),
+          }),
+      feeTierPips: uintText(pool.feeTierPips),
+    };
   }
 
   serializeIndexerToken(token, CHAIN_ID);

@@ -2714,53 +2714,110 @@ export function optimisticOverlayRowsFromSnapshot(input: Readonly<{
 }>): readonly OptimisticOverlayRow[] {
   if (!input.snapshot.head) return Object.freeze([]);
   const rows: OptimisticOverlayRow[] = [];
-  const launchEvents = input.snapshot.events.filter(releaseForLaunchEvent);
-  for (const launchEvent of launchEvents) {
-    const release = releaseForLaunchEvent(launchEvent)!;
-    const transactionEvents = input.snapshot.events.filter(
-      (event) =>
-        event.transactionHash === launchEvent.transactionHash &&
-        event.blockHash === launchEvent.blockHash &&
-        release.sourceContracts.includes(event.normalizedPayload.sourceContractName),
-    );
-    const metadata = launchEvent.normalizedPayload.tokenMetadata;
-    if (
-      !metadata ||
-      metadata.blockHash !== launchEvent.blockHash ||
-      transactionEvents.length === 0
-    ) {
-      continue;
-    }
+  const transactionEvents = new Map<string, OptimisticLiveEvent[]>();
+  for (const event of input.snapshot.events) {
+    const key = `${event.blockHash}:${event.transactionHash}`;
+    const grouped = transactionEvents.get(key);
+    if (grouped) grouped.push(event);
+    else transactionEvents.set(key, [event]);
+  }
+  type Release = NonNullable<ReturnType<typeof releaseForLaunchEvent>>;
+  const launchGroups = new Map<
+    string,
+    { release: Release; events: OptimisticLiveEvent[] }
+  >();
+  for (const event of input.snapshot.events) {
+    const release = releaseForLaunchEvent(event);
+    if (!release) continue;
+    const key = [
+      event.blockHash,
+      event.transactionHash,
+      release.releaseVersion,
+    ].join(":");
+    const grouped = launchGroups.get(key);
+    if (grouped) grouped.events.push(event);
+    else launchGroups.set(key, { release, events: [event] });
+  }
+  for (const group of launchGroups.values()) {
+    const firstLaunch = group.events[0]!;
+    const launchTransactionEvents = (transactionEvents.get(
+      `${firstLaunch.blockHash}:${firstLaunch.transactionHash}`,
+    ) ?? []).filter((event) =>
+      group.release.sourceContracts.includes(
+        event.normalizedPayload.sourceContractName,
+      ));
+    if (launchTransactionEvents.length === 0) continue;
     try {
+      const tokenMetadata: Record<string, { name: string; symbol: string }> = {};
+      let providerEvidence: NormalizedTokenMetadata | null = null;
+      let providerEvidenceIdentity: string | null = null;
+      for (const launchEvent of group.events) {
+        const metadata = launchEvent.normalizedPayload.tokenMetadata;
+        if (!metadata || metadata.blockHash !== launchEvent.blockHash) {
+          throw validationError("postgres", "optimistic-launch-metadata");
+        }
+        const identity = canonicalJson({
+          blockHash: metadata.blockHash,
+          providerIdentities: metadata.providerIdentities,
+          providerVendorGroups: metadata.providerVendorGroups,
+          providerEndpointCommitments: metadata.providerEndpointCommitments,
+          providerOriginCommitments: metadata.providerOriginCommitments,
+        });
+        if (providerEvidenceIdentity && providerEvidenceIdentity !== identity) {
+          throw validationError("postgres", "optimistic-launch-metadata");
+        }
+        providerEvidence ??= metadata;
+        providerEvidenceIdentity ??= identity;
+        tokenMetadata[
+          canonicalAddress(launchEvent.normalizedPayload.arguments.token)
+        ] = { name: metadata.name, symbol: metadata.symbol };
+      }
+      if (!providerEvidence) continue;
       const folded = foldProjectorEvents({
-        events: transactionEvents.map((event, index) =>
-          foldEvent(event, release, input.snapshot, metadata, index)),
-        tokenMetadata: {
-          [canonicalAddress(launchEvent.normalizedPayload.arguments.token)]: {
-            name: metadata.name,
-            symbol: metadata.symbol,
-          },
-        },
+        events: launchTransactionEvents.map((event, index) =>
+          foldEvent(
+            event,
+            group.release,
+            input.snapshot,
+            providerEvidence,
+            index,
+          )),
+        tokenMetadata,
       });
-      const completed = folded.launches.find(
-        (launch) => launch.launchTransactionHash === launchEvent.transactionHash,
+      const completedByToken = new Map(
+        folded.launches.map((launch) => [
+          canonicalAddress(launch.token),
+          launch,
+        ] as const),
       );
-      const evidence = evidenceFor(input.snapshot, launchEvent);
-      if (!completed || !evidence) continue;
-      const token = launchToken(completed, launchEvent);
-      rows.push(Object.freeze({
-        kind: "launch" as const,
-        evidence,
-        event: Object.freeze({
-          transactionHash: launchEvent.transactionHash,
-          logIndex: launchEvent.blockGlobalLogIndex,
-        }),
-        poolId: completed.poolId,
-        tokenAddress: completed.token,
-        token,
-      }));
+      for (const launchEvent of group.events) {
+        const completed = completedByToken.get(canonicalAddress(
+          launchEvent.normalizedPayload.arguments.token,
+        ));
+        const evidence = evidenceFor(input.snapshot, launchEvent);
+        if (
+          !completed ||
+          completed.launchTransactionHash !== launchEvent.transactionHash ||
+          !evidence
+        ) {
+          continue;
+        }
+        const token = launchToken(completed, launchEvent);
+        rows.push(Object.freeze({
+          kind: "launch" as const,
+          evidenceCommitment: launchEvent.payloadCommitment,
+          evidence,
+          event: Object.freeze({
+            transactionHash: launchEvent.transactionHash,
+            logIndex: launchEvent.blockGlobalLogIndex,
+          }),
+          poolId: completed.poolId,
+          tokenAddress: completed.token,
+          token,
+        }));
+      }
     } catch {
-      // A partial launch transaction must never become a public optimistic row.
+      // A partial or internally inconsistent launch group is never public.
     }
   }
   const tokensByPool = new Map<string, HexAddress>();
@@ -2779,30 +2836,34 @@ export function optimisticOverlayRowsFromSnapshot(input: Readonly<{
       .filter((row) => row.kind === "launch")
       .map(({ poolId }) => poolId.toLowerCase()),
   );
+  const latestMarketEvent = new Map<string, OptimisticLiveEvent>();
+  for (const event of input.snapshot.events) {
+    const payload = event.normalizedPayload;
+    const isFeeEvent = [
+      "NativeSwapFeesAccrued",
+      "QuoteSwapFeesAccrued",
+    ].includes(payload.eventName);
+    const isLaunchEvent = [
+      "MemeTokenLaunched",
+      "MemeTokenLaunchedV2",
+      "StockPairedTokenLaunched",
+    ].includes(payload.eventName);
+    if (!isFeeEvent && !isLaunchEvent) continue;
+    try {
+      const poolId = canonicalBytes32(payload.arguments.poolId).toLowerCase();
+      if (isLaunchEvent && !optimisticLaunchPools.has(poolId)) continue;
+      latestMarketEvent.set(
+        `${event.optimisticBlockId}:${event.blockHash}:${poolId}`,
+        event,
+      );
+    } catch {
+      // Malformed pool identities cannot authorize an optimistic market row.
+    }
+  }
   for (const state of input.snapshot.marketStates) {
-    const event = [...input.snapshot.events]
-      .reverse()
-      .find((candidate) => {
-        const payload = candidate.normalizedPayload;
-        const isFeeEvent = [
-          "NativeSwapFeesAccrued",
-          "QuoteSwapFeesAccrued",
-        ].includes(payload.eventName);
-        const isCompleteLaunchEvent =
-          optimisticLaunchPools.has(state.poolId.toLowerCase()) &&
-          [
-            "MemeTokenLaunched",
-            "MemeTokenLaunchedV2",
-            "StockPairedTokenLaunched",
-          ].includes(payload.eventName);
-        return (
-          candidate.optimisticBlockId === state.optimisticBlockId &&
-          candidate.blockNumber === state.blockNumber &&
-          candidate.blockHash === state.blockHash &&
-          (isFeeEvent || isCompleteLaunchEvent) &&
-          canonicalBytes32(payload.arguments.poolId) === state.poolId
-        );
-      });
+    const event = latestMarketEvent.get(
+      `${state.optimisticBlockId}:${state.blockHash}:${state.poolId.toLowerCase()}`,
+    );
     if (!event || state.chainId !== 1 || state.confirmations < 0 || state.confirmations > 11) {
       continue;
     }
@@ -2818,6 +2879,7 @@ export function optimisticOverlayRowsFromSnapshot(input: Readonly<{
     }
     rows.push(Object.freeze({
       kind: "market" as const,
+      evidenceCommitment: state.evidenceCommitment,
       evidence,
       event: Object.freeze({
         transactionHash: event.transactionHash,

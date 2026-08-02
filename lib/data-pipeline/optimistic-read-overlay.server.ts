@@ -64,6 +64,7 @@ export type OptimisticMarketFields = Readonly<{
 }>;
 
 type OptimisticRowBase = Readonly<{
+  evidenceCommitment: Hex;
   evidence: OptimisticOverlayBlockEvidence;
   event: OptimisticOverlayEventIdentity;
   poolId: Hex;
@@ -117,6 +118,7 @@ type ValidatedEvidence = Readonly<{
 }>;
 
 type ValidatedBase = Readonly<{
+  evidenceCommitment: Hex;
   evidence: ValidatedEvidence;
   event: OptimisticOverlayEventIdentity;
   poolId: Hex;
@@ -149,6 +151,15 @@ export type AppliedOptimisticOverlayRow = Readonly<{
   blockNumber: string;
   blockHash: Hex;
   confirmations: number;
+  evidenceCommitment: Hex;
+  optimisticMarketStateId?: string;
+  releaseVersion?:
+    | "classic-v2"
+    | "classic-v3"
+    | "stock-paired-v1"
+    | "stock-paired-v2"
+    | "stock-paired-v3";
+  reorgGeneration?: string;
   poolId: Hex;
   tokenAddress: Hex;
   event: OptimisticOverlayEventIdentity;
@@ -257,10 +268,17 @@ function validateBase(
     return { ok: false, reason: "not-explicitly-eligible" };
   }
   const poolId = canonicalBytes32(row.poolId);
+  const evidenceCommitment = canonicalBytes32(row.evidenceCommitment);
   const tokenAddress = canonicalAddress(row.tokenAddress);
   const transactionHash = canonicalBytes32(row.event.transactionHash);
   const logIndex = finiteInteger(row.event.logIndex, 0, 0xffff_ffff);
-  if (!poolId || !tokenAddress || !transactionHash || logIndex === null) {
+  if (
+    !poolId ||
+    !evidenceCommitment ||
+    !tokenAddress ||
+    !transactionHash ||
+    logIndex === null
+  ) {
     return { ok: false, reason: "invalid-identity" };
   }
 
@@ -306,6 +324,7 @@ function validateBase(
   return {
     ok: true,
     value: Object.freeze({
+      evidenceCommitment,
       evidence: Object.freeze({
         finality,
         chainId,
@@ -636,6 +655,7 @@ function appliedRow(
     blockNumber: row.evidence.blockNumber,
     blockHash: row.evidence.blockHash,
     confirmations: row.evidence.confirmations,
+    evidenceCommitment: row.evidenceCommitment,
     poolId: row.poolId,
     tokenAddress: row.tokenAddress,
     event: row.event,
@@ -820,6 +840,7 @@ export function optimisticOverlayHeaders(
     "x-programmable-overlay-finality": disclosure.finality,
     "x-programmable-overlay-block": newest.blockNumber,
     "x-programmable-overlay-block-hash": newest.blockHash,
+    "x-programmable-overlay-confirmations": String(newest.confirmations),
     "x-programmable-overlay-rows": String(disclosure.applied.length),
   });
 }
