@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Committed Envio evidence contains public Ethereum addresses under creator fields"
+paths = [
+  '''docs/data-pipeline/envio-candidate-7f24e63-audit-20260801T042059Z\.json''',
+  '''docs/data-pipeline/envio-candidate-7f24e63-baseline-20260801T042058Z\.json''',
+  '''tests/data-pipeline/read-model-performance-explore-matrix\.test\.ts''',
+]

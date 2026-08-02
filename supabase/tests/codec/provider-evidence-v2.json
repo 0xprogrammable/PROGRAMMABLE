@@ -1,0 +1,262 @@
+{
+  "format": "programmable-provider-evidence-fixture",
+  "encoding_version": 2,
+  "hash": "ethereum-keccak-256",
+  "domain_prefix_utf8": "programmable:provider-evidence:v2\\u0000",
+  "definition_prefix_utf8": "programmable:provider-evidence-definition:v2\\u0000",
+  "domain_definition_prefix_utf8": "programmable:provider-evidence-domain:v2\\u0000",
+  "integer_encoding": "unsigned fixed-width big-endian",
+  "uuid_encoding": "16 RFC 4122 bytes after removing hyphens",
+  "variable_encoding": "uint32 big-endian byte length followed by exact bytes",
+  "nullable_encoding": "0x00 for null; 0x01 followed by ordinary encoding for present",
+  "array_encoding": "uint32 big-endian count followed by elements in supplied order",
+  "empty_log_coverage_encoding": {
+    "ordered_log_commitments": "empty array",
+    "final_block_global_log_index": "4294967295",
+    "final_candidate_id": "empty-page",
+    "cursor_storage": "persist final block/hash with null log index and candidate id"
+  },
+  "subtype_tags": {
+    "safe_head": 1,
+    "block": 2,
+    "runtime_code": 3,
+    "dynamic_attestation": 4,
+    "log_coverage": 5
+  },
+  "field_schemas": {
+    "safe_head": [
+      ["chain_id", "u64"], ["epoch_id", "uuid16"],
+      ["pointer_generation", "u64"], ["provider_a_id", "uuid16"],
+      ["provider_b_id", "uuid16"], ["reported_chain_id_a", "u64"],
+      ["reported_chain_id_b", "u64"], ["head_a", "u64"],
+      ["head_b", "u64"], ["finality_depth", "u32"],
+      ["safe_block_number", "u64"], ["safe_block_hash_a", "bytes32"],
+      ["safe_block_hash_b", "bytes32"]
+    ],
+    "block": [
+      ["chain_id", "u64"], ["epoch_id", "uuid16"],
+      ["pointer_generation", "u64"], ["observation_id", "uuid16"],
+      ["block_number", "u64"], ["provider_a_block_hash", "bytes32"],
+      ["provider_b_block_hash", "bytes32"]
+    ],
+    "runtime_code": [
+      ["chain_id", "u64"], ["release_id", "varutf8"],
+      ["model_id", "varutf8"], ["source_group", "varutf8"],
+      ["epoch_id", "uuid16"], ["pointer_generation", "u64"],
+      ["source_address", "bytes20"],
+      ["deployment_block_evidence_id", "uuid16"],
+      ["deployment_block_number", "u64"],
+      ["deployment_block_hash", "bytes32"], ["provider_a_id", "uuid16"],
+      ["provider_b_id", "uuid16"], ["runtime_code_hash_a", "bytes32"],
+      ["runtime_code_hash_b", "bytes32"], ["runtime_code_a", "varbytes"],
+      ["runtime_code_b", "varbytes"],
+      ["normalized_runtime_code_hash_a", "bytes32"],
+      ["normalized_runtime_code_hash_b", "bytes32"],
+      ["immutable_references_commitment", "bytes32"],
+      ["immutable_values", "array<varbytes>"],
+      ["immutable_values_commitment", "bytes32"],
+      ["reconstructed_runtime_code", "varbytes"],
+      ["reconstructed_runtime_code_hash", "bytes32"]
+    ],
+    "dynamic_attestation": [
+      ["chain_id", "u64"], ["release_id", "varutf8"],
+      ["model_id", "varutf8"], ["source_group", "varutf8"],
+      ["epoch_id", "uuid16"], ["pointer_generation", "u64"],
+      ["runtime_code_evidence_id", "uuid16"],
+      ["dynamic_source_template_id", "uuid16"],
+      ["parent_factory_occurrence_id", "uuid16"],
+      ["parent_factory_release_binding_id", "uuid16"],
+      ["parent_factory_binding_commitment", "bytes32"],
+      ["deployed_source_address", "bytes20"],
+      ["deployed_source_role", "varutf8"],
+      ["deployment_block_number", "u64"],
+      ["deployed_artifact_creation_code_commitment", "bytes32"],
+      ["expected_immutable_values_commitment", "bytes32"],
+      ["factory_configuration_commitment", "bytes32"],
+      ["constructor_arguments_commitment", "bytes32"],
+      ["local_init_code_hash", "bytes32"], ["runtime_code_hash", "bytes32"],
+      ["abi_event_set_commitment", "bytes32"]
+    ],
+    "log_coverage": [
+      ["chain_id", "u64"], ["epoch_id", "uuid16"],
+      ["pointer_generation", "u64"],
+      ["provider_deployment_id", "uuid16"], ["stream_id", "varutf8"],
+      ["expected_cursor_generation", "u64"],
+      ["next_cursor_generation", "u64"],
+      ["previous_block_number", "u64"],
+      ["previous_block_global_log_index", "optional<u32>"],
+      ["previous_candidate_id", "optional<varutf8>"],
+      ["from_block_number", "u64"], ["to_block_number", "u64"],
+      ["final_block_hash", "bytes32"],
+      ["final_block_global_log_index", "u32"],
+      ["final_candidate_id", "varutf8"],
+      ["safe_head_observation_id", "uuid16"],
+      ["final_block_evidence_id", "uuid16"], ["provider_a_id", "uuid16"],
+      ["provider_b_id", "uuid16"], ["filter_commitment", "bytes32"],
+      ["ordered_log_commitments", "array<bytes32>"],
+      ["page_commitment", "bytes32"]
+    ]
+  },
+  "expected_definition_commitments": {
+    "safe_head": "0x3a26ae9c9220347568e33b5850ac6f605d120e6443f64e9e8b8742ea8a016f52",
+    "block": "0x83948b75a3c05b9d257749f754f09a1b02e658496ba562f36e07bc15be3d7bec",
+    "runtime_code": "0x4c191e91130097832a91025e85c2ff3be2705af0e3ea9abc396f09e7cd9dbbc5",
+    "dynamic_attestation": "0x206e1f89ad459e55e0591de13eb40856dd94ff62923d76034eba5776706e6de9",
+    "log_coverage": "0x4ab7460cb321503613935191917c46872c9e3c9a681b2d4b349b6187f4dc0aec"
+  },
+  "expected_domain_definition_commitment": "0x45b8e9d1bf3ffc2e70b7fd612ec2346aef5e74ae08348b699eb68ce0afbc9483",
+  "vectors": [
+    {
+      "name": "safe_head_full_v2",
+      "subtype": "safe_head",
+      "input": {
+        "chain_id": "1", "epoch_id": "11111111-2222-4333-8444-555555555555",
+        "pointer_generation": "7", "provider_a_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "provider_b_id": "bbbbbbbb-0000-4000-8000-000000000002",
+        "reported_chain_id_a": "1", "reported_chain_id_b": "1",
+        "head_a": "9007199254741000", "head_b": "9007199254741001",
+        "finality_depth": "12", "safe_block_number": "9007199254740988",
+        "safe_block_hash_a": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "safe_block_hash_b": "0x1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a763200010000000000000001111111112222433384445555555555550000000000000007aaaaaaaa000040008000000000000001bbbbbbbb00004000800000000000000200000000000000010000000000000001002000000000000800200000000000090000000c001ffffffffffffc11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+      "expected_keccak256": "0xd1032dcaf7fb2640de21d21a57aee32193d12c4c4d4d52ad2ab1f9d0d42d91be"
+    },
+    {
+      "name": "block_full_v2", "subtype": "block",
+      "input": {
+        "chain_id": "1", "epoch_id": "11111111-2222-4333-8444-555555555555",
+        "pointer_generation": "7", "observation_id": "cccccccc-0000-4000-8000-000000000003",
+        "block_number": "9007199254740988",
+        "provider_a_block_hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "provider_b_block_hash": "0x2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a763200020000000000000001111111112222433384445555555555550000000000000007cccccccc000040008000000000000003001ffffffffffffc22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+      "expected_keccak256": "0xe9654af5bbe8f31ae085253869d46622ad138d579c82b613e30e1eb8ada00e10"
+    },
+    {
+      "name": "runtime_code_byte_complete_v2", "subtype": "runtime_code",
+      "input": {
+        "chain_id": "1", "release_id": "classic-v3", "model_id": "classic-v3",
+        "source_group": "core", "epoch_id": "11111111-2222-4333-8444-555555555555",
+        "pointer_generation": "7", "source_address": "0x3333333333333333333333333333333333333333",
+        "deployment_block_evidence_id": "dddddddd-0000-4000-8000-000000000004",
+        "deployment_block_number": "25639600",
+        "deployment_block_hash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+        "provider_a_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "provider_b_id": "bbbbbbbb-0000-4000-8000-000000000002",
+        "runtime_code_hash_a": "0x5555555555555555555555555555555555555555555555555555555555555555",
+        "runtime_code_hash_b": "0x5555555555555555555555555555555555555555555555555555555555555555",
+        "runtime_code_a": "0x6001600055", "runtime_code_b": "0x6001600055",
+        "normalized_runtime_code_hash_a": "0x6666666666666666666666666666666666666666666666666666666666666666",
+        "normalized_runtime_code_hash_b": "0x6666666666666666666666666666666666666666666666666666666666666666",
+        "immutable_references_commitment": "0x7777777777777777777777777777777777777777777777777777777777777777",
+        "immutable_values": ["0x3333333333333333333333333333333333333333", "0x0001"],
+        "immutable_values_commitment": "0x8888888888888888888888888888888888888888888888888888888888888888",
+        "reconstructed_runtime_code": "0x6001600055",
+        "reconstructed_runtime_code_hash": "0x5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000300000000000000010000000a636c61737369632d76330000000a636c61737369632d763300000004636f72651111111122224333844455555555555500000000000000073333333333333333333333333333333333333333dddddddd0000400080000000000000040000000001873ab04444444444444444444444444444444444444444444444444444444444444444aaaaaaaa000040008000000000000001bbbbbbbb000040008000000000000002555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555550000000560016000550000000560016000556666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666677777777777777777777777777777777777777777777777777777777777777770000000200000014333333333333333333333333333333333333333300000002000188888888888888888888888888888888888888888888888888888888888888880000000560016000555555555555555555555555555555555555555555555555555555555555555555",
+      "expected_keccak256": "0xc3de153bafae8972485e86778076dbe187a4814a30f53e69a283cbeb9819660b"
+    },
+    {
+      "name": "dynamic_attestation_full_v2", "subtype": "dynamic_attestation",
+      "input": {
+        "chain_id": "1", "release_id": "classic-v3", "model_id": "classic-v3",
+        "source_group": "core", "epoch_id": "11111111-2222-4333-8444-555555555555",
+        "pointer_generation": "7", "runtime_code_evidence_id": "eeeeeeee-0000-4000-8000-000000000005",
+        "dynamic_source_template_id": "ffffffff-0000-4000-8000-000000000006",
+        "parent_factory_occurrence_id": "12121212-0000-4000-8000-000000000007",
+        "parent_factory_release_binding_id": "13131313-0000-4000-8000-000000000008",
+        "parent_factory_binding_commitment": "0x9999999999999999999999999999999999999999999999999999999999999999",
+        "deployed_source_address": "0x3333333333333333333333333333333333333333",
+        "deployed_source_role": "reward_vault", "deployment_block_number": "25639600",
+        "deployed_artifact_creation_code_commitment": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "expected_immutable_values_commitment": "0x8888888888888888888888888888888888888888888888888888888888888888",
+        "factory_configuration_commitment": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "constructor_arguments_commitment": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "local_init_code_hash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtime_code_hash": "0x5555555555555555555555555555555555555555555555555555555555555555",
+        "abi_event_set_commitment": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a7632000400000000000000010000000a636c61737369632d76330000000a636c61737369632d763300000004636f7265111111112222433384445555555555550000000000000007eeeeeeee000040008000000000000005ffffffff0000400080000000000000061212121200004000800000000000000713131313000040008000000000000008999999999999999999999999999999999999999999999999999999999999999933333333333333333333333333333333333333330000000c7265776172645f7661756c740000000001873ab0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8888888888888888888888888888888888888888888888888888888888888888bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd5555555555555555555555555555555555555555555555555555555555555555eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "expected_keccak256": "0x7797d11f8db9f299d00ec2e882e3203cf5b669fb578d1020f757a3156c239cf7"
+    },
+    {
+      "name": "log_coverage_genesis_v2", "subtype": "log_coverage",
+      "input": {
+        "chain_id": "1", "epoch_id": "14141414-0000-4000-8000-000000000009",
+        "pointer_generation": "1", "provider_deployment_id": "15151515-0000-4000-8000-000000000010",
+        "stream_id": "canonical-events", "expected_cursor_generation": "0",
+        "next_cursor_generation": "1", "previous_block_number": "25639599",
+        "previous_block_global_log_index": null, "previous_candidate_id": null,
+        "from_block_number": "25639600", "to_block_number": "25639600",
+        "final_block_hash": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "final_block_global_log_index": "4294967295",
+        "final_candidate_id": "1:0xffff:0xdddd:4294967295",
+        "safe_head_observation_id": "16161616-0000-4000-8000-000000000011",
+        "final_block_evidence_id": "17171717-0000-4000-8000-000000000012",
+        "provider_a_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "provider_b_id": "bbbbbbbb-0000-4000-8000-000000000002",
+        "filter_commitment": "0x0101010101010101010101010101010101010101010101010101010101010101",
+        "ordered_log_commitments": [
+          "0x0202020202020202020202020202020202020202020202020202020202020202",
+          "0x0303030303030303030303030303030303030303030303030303030303030303"
+        ],
+        "page_commitment": "0x0404040404040404040404040404040404040404040404040404040404040404"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a763200050000000000000001141414140000400080000000000000090000000000000001151515150000400080000000000000100000001063616e6f6e6963616c2d6576656e7473000000000000000000000000000000010000000001873aaf00000000000001873ab00000000001873ab0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000001a313a3078666666663a3078646464643a343239343936373239351616161600004000800000000000001117171717000040008000000000000012aaaaaaaa000040008000000000000001bbbbbbbb000040008000000000000002010101010101010101010101010101010101010101010101010101010101010100000002020202020202020202020202020202020202020202020202020202020202020203030303030303030303030303030303030303030303030303030303030303030404040404040404040404040404040404040404040404040404040404040404",
+      "expected_keccak256": "0x9819358434f5b8ac5a2d31e6a151387ca54f66b914f7840a56151a9755257c3c"
+    },
+    {
+      "name": "log_coverage_continuation_v2", "subtype": "log_coverage",
+      "input": {
+        "chain_id": "1", "epoch_id": "14141414-0000-4000-8000-000000000009",
+        "pointer_generation": "1", "provider_deployment_id": "15151515-0000-4000-8000-000000000010",
+        "stream_id": "canonical-events", "expected_cursor_generation": "1",
+        "next_cursor_generation": "2", "previous_block_number": "25639600",
+        "previous_block_global_log_index": "4294967294",
+        "previous_candidate_id": "1:0xffff:0xcccc:4294967294",
+        "from_block_number": "25639600", "to_block_number": "25639600",
+        "final_block_hash": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "final_block_global_log_index": "4294967295",
+        "final_candidate_id": "1:0xffff:0xdddd:4294967295",
+        "safe_head_observation_id": "16161616-0000-4000-8000-000000000011",
+        "final_block_evidence_id": "17171717-0000-4000-8000-000000000012",
+        "provider_a_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "provider_b_id": "bbbbbbbb-0000-4000-8000-000000000002",
+        "filter_commitment": "0x0101010101010101010101010101010101010101010101010101010101010101",
+        "ordered_log_commitments": [
+          "0x0303030303030303030303030303030303030303030303030303030303030303"
+        ],
+        "page_commitment": "0x0505050505050505050505050505050505050505050505050505050505050505"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a763200050000000000000001141414140000400080000000000000090000000000000001151515150000400080000000000000100000001063616e6f6e6963616c2d6576656e7473000000000000000100000000000000020000000001873ab001fffffffe010000001a313a3078666666663a3078636363633a343239343936373239340000000001873ab00000000001873ab0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000001a313a3078666666663a3078646464643a343239343936373239351616161600004000800000000000001117171717000040008000000000000012aaaaaaaa000040008000000000000001bbbbbbbb00004000800000000000000201010101010101010101010101010101010101010101010101010101010101010000000103030303030303030303030303030303030303030303030303030303030303030505050505050505050505050505050505050505050505050505050505050505",
+      "expected_keccak256": "0x5b8be97de0c921fc2b7a54698a49d82556f68c32509ee8be2f164da64869f355"
+    },
+    {
+      "name": "log_coverage_empty_page_v2", "subtype": "log_coverage",
+      "input": {
+        "chain_id": "1", "epoch_id": "14141414-0000-4000-8000-000000000009",
+        "pointer_generation": "1", "provider_deployment_id": "15151515-0000-4000-8000-000000000010",
+        "stream_id": "canonical-events", "expected_cursor_generation": "2",
+        "next_cursor_generation": "3", "previous_block_number": "25639600",
+        "previous_block_global_log_index": "4294967295",
+        "previous_candidate_id": "1:0xffff:0xdddd:4294967295",
+        "from_block_number": "25639600", "to_block_number": "25639601",
+        "final_block_hash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "final_block_global_log_index": "4294967295",
+        "final_candidate_id": "empty-page",
+        "safe_head_observation_id": "16161616-0000-4000-8000-000000000011",
+        "final_block_evidence_id": "18181818-0000-4000-8000-000000000013",
+        "provider_a_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "provider_b_id": "bbbbbbbb-0000-4000-8000-000000000002",
+        "filter_commitment": "0x0101010101010101010101010101010101010101010101010101010101010101",
+        "ordered_log_commitments": [],
+        "page_commitment": "0x0606060606060606060606060606060606060606060606060606060606060606"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a70726f76696465722d65766964656e63653a763200050000000000000001141414140000400080000000000000090000000000000001151515150000400080000000000000100000001063616e6f6e6963616c2d6576656e7473000000000000000200000000000000030000000001873ab001ffffffff010000001a313a3078666666663a3078646464643a343239343936373239350000000001873ab00000000001873ab1eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeffffffff0000000a656d7074792d706167651616161600004000800000000000001118181818000040008000000000000013aaaaaaaa000040008000000000000001bbbbbbbb0000400080000000000000020101010101010101010101010101010101010101010101010101010101010101000000000606060606060606060606060606060606060606060606060606060606060606",
+      "expected_keccak256": "0xd1193e46fdc9e62809a99e5e06f28135e515289e9efc38cea1e29a2cee89703e"
+    }
+  ]
+}

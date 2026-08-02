@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+
+vi.mock("server-only", () => ({}));
 
 import { POST } from "../app/api/trade/prepare/route";
 

@@ -149,12 +149,13 @@ describe("Docs navigation state", () => {
     expect(getDocsSearchResults("")).toEqual([]);
   });
 
-  it("keeps hidden models out of search and describes Stock-Paired accurately", () => {
+  it("keeps hidden models out of search and labels Stock-Paired as historical", () => {
     const deepResults = getDocsSearchResults("deep");
     const stockResults = getDocsSearchResults("stock");
 
     expect(deepResults).toEqual([]);
-    expect(stockResults[0]?.description).toContain("restricted");
+    expect(stockResults[0]?.title).toBe("Stock-Paired history");
+    expect(stockResults[0]?.description).toContain("Historical");
   });
 
   it("opens keyboard navigation on the first or last result", () => {

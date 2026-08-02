@@ -15,7 +15,7 @@ the hook, fee disclosure and launch provenance.
 
 ## Launch models
 
-`launch.modelId` is the stable product model, such as `classic`, `deep` or
+`launch.modelId` is the stable product model, such as `classic` or
 `stock-paired`. `launch.modelVersion` identifies the contract release where a
 version is required.
 

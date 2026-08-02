@@ -32,6 +32,7 @@
   "exclude": [
     "node_modules",
     "work",
+    "indexer",
     "contracts/lib",
     "contracts/out",
     "contracts/cache",

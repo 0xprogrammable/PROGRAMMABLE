@@ -1,0 +1,17 @@
+{
+  "name": "@programmable/canonical-fingerprint-reference",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.14.0"
+  },
+  "packageManager": "npm@11.16.0",
+  "scripts": {
+    "test": "node verify-reference-canonical-fingerprint-v1.mjs && node verify-production-canonical-fingerprint-v1.ts && node verify-reference-provider-evidence-v2.mjs && node verify-production-provider-evidence-v2.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.2.0",
+    "canonicalize": "3.0.0"
+  }
+}

@@ -15,6 +15,9 @@
 # vercel
 .vercel
 
+# supabase local CLI state
+/supabase/.temp/
+
 # test and tooling
 /coverage
 /work/
@@ -23,6 +26,7 @@
 /outputs/qa/
 /artifacts/
 /.codex-temp-programmable-readme-gif/
+/.superpowers/
 /.worktrees/
 *.tsbuildinfo
 

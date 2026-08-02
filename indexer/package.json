@@ -1,0 +1,39 @@
+{
+  "name": "@programmable/realtime-indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.32.0",
+  "scripts": {
+    "codegen": "envio codegen",
+    "dev": "envio dev",
+    "start": "envio start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "release:identity": "node scripts/release-candidate.mjs identity",
+    "release:snapshot": "node scripts/release-candidate.mjs snapshot",
+    "release:audit": "node scripts/release-candidate.mjs audit"
+  },
+  "dependencies": {
+    "envio": "3.2.1",
+    "viem": "2.55.10"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "typescript": "6.0.3",
+    "vitest": "4.1.0",
+    "yaml": "2.8.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "0.28.1",
+      "express": "4.22.2",
+      "react-dom": "19.2.5",
+      "viem": "2.55.10"
+    }
+  }
+}

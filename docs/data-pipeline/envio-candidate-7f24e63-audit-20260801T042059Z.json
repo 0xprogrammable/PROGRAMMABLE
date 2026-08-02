@@ -1,0 +1,497 @@
+{
+  "schemaVersion": 2,
+  "kind": "envio-release-inventory",
+  "endpoint": "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
+  "capturedAt": "2026-08-01T04:20:59.886Z",
+  "deployment": {
+    "provider": "envio-cloud",
+    "owner": "0xprogrammable",
+    "project": "programmable-indexer",
+    "mirrorCommit": "7ffd15c2a28c481a2d3632e30b315262c2471b2e",
+    "deploymentLabel": "production-7f24e63",
+    "endpointId": "d7a39a2"
+  },
+  "identity": {
+    "deployment": "production-7f24e63",
+    "sourceCommit": "7f24e6380d5cf17092f5ade7cbad678465e3ef95",
+    "configSha256": "0x378e3a799c762cb31107792c7123f5f90b54b5826884c398995e7465176fe1c2",
+    "schemaSha256": "0xdf3d65e033e96d7ebbe62b6f114b6a30f10c8944e5c6fca6b020c3130bb738c0",
+    "handlerSha256": "0x9f68d05cc8907f1c422cb2584b338ed42375eb4b6033cbec1338d00577267491",
+    "sourceRegistrySha256": "0x55e7a7c7cd0e419a6be0f9c784990f5048b9845e46e329939025c3fab405565a",
+    "eventSetSha256": "0x7481d6fa986d706e46b9834e40574dd84f21be80b041d35e7d47dbfa59d69243",
+    "eventCount": 51
+  },
+  "baseline": {
+    "digest": "0xc826c240381a57295707e138bd49ceddef18abd81e5e19731dffb4a160d8e09f",
+    "deployment": {
+      "provider": "envio-cloud",
+      "host": "indexer.hyperindex.xyz",
+      "endpointId": "f6714ef",
+      "deploymentLabel": "production-1e7c381",
+      "chainId": 1
+    },
+    "anchor": {
+      "progressBlock": "25657578",
+      "bufferBlock": "25657578",
+      "sourceBlock": "25657590",
+      "eventsProcessed": "56002",
+      "stateProgressBlock": "25657571",
+      "stateProgressBlockHash": "0x33fd1bec65993e927529de3ef1b2a86b5e0c256bced4c6da1dfe905153684716",
+      "stateProgressTimestamp": "1785557819",
+      "stateProgressTransactionHash": "0x8912223855db7593efdcf58ea0297efaa48957153dc2acbbf49f73cf7e7943d1",
+      "stateProgressOccurrenceId": "1:0x33fd1bec65993e927529de3ef1b2a86b5e0c256bced4c6da1dfe905153684716:0x8912223855db7593efdcf58ea0297efaa48957153dc2acbbf49f73cf7e7943d1:778"
+    },
+    "inventory": {
+      "count": 265,
+      "perRelease": {
+        "classic-v2": 27,
+        "classic-v3": 186,
+        "stock-paired-v1": 1,
+        "stock-paired-v2": 8,
+        "stock-paired-v3": 43
+      },
+      "sha256": "0x5a388ae00ff52fd63abf45560cdb456cafe883c17249cabce83ca31286104c6d"
+    }
+  },
+  "anchor": {
+    "progressBlock": "25657578",
+    "bufferBlock": "25657578",
+    "sourceBlock": "25657590",
+    "eventsProcessed": "56002",
+    "stateProgressBlock": "25657571",
+    "stateProgressBlockHash": "0x33fd1bec65993e927529de3ef1b2a86b5e0c256bced4c6da1dfe905153684716",
+    "stateProgressTimestamp": "1785557819",
+    "stateProgressTransactionHash": "0x8912223855db7593efdcf58ea0297efaa48957153dc2acbbf49f73cf7e7943d1",
+    "stateProgressOccurrenceId": "1:0x33fd1bec65993e927529de3ef1b2a86b5e0c256bced4c6da1dfe905153684716:0x8912223855db7593efdcf58ea0297efaa48957153dc2acbbf49f73cf7e7943d1:778"
+  },
+  "inventory": {
+    "count": 265,
+    "perRelease": {
+      "classic-v2": 27,
+      "classic-v3": 186,
+      "stock-paired-v1": 1,
+      "stock-paired-v2": 8,
+      "stock-paired-v3": 43
+    },
+    "sha256": "0xa63d33aaee6065a612cd2a318496e9379c20389d3ca8fe0663919d25e6f2ad04"
+  },
+  "authenticatedCoordinatorCreatorRepairs": [
+    {
+      "id": "1:stock-paired-v1:0x5700d903e959f41e091dab41c1e5582cd9400a1193dad48b1f8141b0cc29ac3b",
+      "releaseVersion": "stock-paired-v1",
+      "priorCoordinatorSource": "0xfa5f17389ca28d071781d59750b32c842ab6a54b",
+      "authenticatedCreator": "0x2bb333d48dfaf1596d9036671d2e43168994249e",
+      "launchOccurrenceId": "1:0x8172ac34f638aa3a35728f233f2a380a96d36006e9c6591b4098a7ff4791003f:0x02a71e6e1854143e3e298edb64af7e5486465829a8e7f33078b75a32aa06ed90:316",
+      "coordinatorOccurrenceId": "1:0x8172ac34f638aa3a35728f233f2a380a96d36006e9c6591b4098a7ff4791003f:0x02a71e6e1854143e3e298edb64af7e5486465829a8e7f33078b75a32aa06ed90:321"
+    },
+    {
+      "id": "1:stock-paired-v2:0x2f5dc5c369e5e1f33e664e15c96cf2d33a00bc55f1acf2b14788f14602604cb4",
+      "releaseVersion": "stock-paired-v2",
+      "priorCoordinatorSource": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+      "authenticatedCreator": "0xb38ef2aa4306c8a2ce97d8718aa3dda7a0ba331c",
+      "launchOccurrenceId": "1:0x85cb7872a3a86d009687ff028c645c5d2cbcc447b3d224fdffc2076352f8ef22:0x72a5155df768dbd68c5bc75672872ae94ea3a44f3c18abd819a31b6cd98c3bd5:81",
+      "coordinatorOccurrenceId": "1:0x85cb7872a3a86d009687ff028c645c5d2cbcc447b3d224fdffc2076352f8ef22:0x72a5155df768dbd68c5bc75672872ae94ea3a44f3c18abd819a31b6cd98c3bd5:86"
+    },
+    {
+      "id": "1:stock-paired-v2:0x49e441f535f82be6234dea14f23e52154669b2ca0c8f98747dc95f6a6e099312",
+      "releaseVersion": "stock-paired-v2",
+      "priorCoordinatorSource": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+      "authenticatedCreator": "0x2bb333d48dfaf1596d9036671d2e43168994249e",
+      "launchOccurrenceId": "1:0xa16a0d36cde8f79db93e31e98337c1898e2c6fb7e8b5dbc36d3752a375a60287:0xc45d348083c53afaf79f056f1ea5529e9410ac3faa954a5c8ef7272a6371ec83:948",
+      "coordinatorOccurrenceId": "1:0xa16a0d36cde8f79db93e31e98337c1898e2c6fb7e8b5dbc36d3752a375a60287:0xc45d348083c53afaf79f056f1ea5529e9410ac3faa954a5c8ef7272a6371ec83:953"
+    },
+    {
+      "id": "1:stock-paired-v2:0x4f3a4a1d87d06dafb214d3cdc03b6157abfeeaf9cd3110a5500230fff247b35a",
+      "releaseVersion": "stock-paired-v2",
+      "priorCoordinatorSource": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+      "authenticatedCreator": "0xa8cac4b2d5078b0eee808d5b2bee638784f4ae73",
+      "launchOccurrenceId": "1:0x6ae6b0daa49763f5aa574fef5dff3ed8cd07574f0cfac09afa7692dcdc6ebe6f:0xd49746082b301c1dff6222ffb9e6a08628c3837d111c3cf538bec3ec7b747259:132",
+      "coordinatorOccurrenceId": "1:0x6ae6b0daa49763f5aa574fef5dff3ed8cd07574f0cfac09afa7692dcdc6ebe6f:0xd49746082b301c1dff6222ffb9e6a08628c3837d111c3cf538bec3ec7b747259:137"
+    },
+    {
+      "id": "1:stock-paired-v2:0x653457e36314263c4641240f9c05a57509edc6d9b5358385f96dec1c3a905339",
+      "releaseVersion": "stock-paired-v2",
+      "priorCoordinatorSource": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+      "authenticatedCreator": "0x3fe3fc76538777442787a38256e19aeaf49f65c0",
+      "launchOccurrenceId": "1:0x5066b7abf547d9d256ea2afd267d489144825dd2f7eb51a8a0cf4c5151c08cf9:0xdfe9b68b48a7d8f2a06df9eb2436f573cc04cd94e93bf0655055bc2073147fbc:515",
+      "coordinatorOccurrenceId": "1:0x5066b7abf547d9d256ea2afd267d489144825dd2f7eb51a8a0cf4c5151c08cf9:0xdfe9b68b48a7d8f2a06df9eb2436f573cc04cd94e93bf0655055bc2073147fbc:520"
+    },
+    {
+      "id": "1:stock-paired-v2:0x8f7cf6d844d4aaa85312456b3a3f2b74a9c84e4817acf733196f6c4099eb7e36",
+      "releaseVersion": "stock-paired-v2",
+      "priorCoordinatorSource": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+      "authenticatedCreator": "0xb0095c3e6ac1a4f936df3914e8cc46783b9b5287",
+      "launchOccurrenceId": "1:0x175df0b7427e18e392a039c85f348c74f1c9f2e239479ca60dbc6abfbf4002c4:0x8c26d38ae601fc607e7d9822e09e6019451dff3a470647266a2b1783dc5a2090:352",
+      "coordinatorOccurrenceId": "1:0x175df0b7427e18e392a039c85f348c74f1c9f2e239479ca60dbc6abfbf4002c4:0x8c26d38ae601fc607e7d9822e09e6019451dff3a470647266a2b1783dc5a2090:357"
+    },
+    {
+      "id": "1:stock-paired-v2:0xdb6bcd8648aab014ec3121a9090b4af9b3a46a2bfa81b0ac50c3b6e26ba09e08",
+      "releaseVersion": "stock-paired-v2",
+      "priorCoordinatorSource": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+      "authenticatedCreator": "0xa55d439f9ad4d1e2a043aed538d4c771a3e394bb",
+      "launchOccurrenceId": "1:0x9817c330a494baf1ccd4f07f99a041338e7bc357ea69ceeabc339f45af2cb8b1:0x440a08fb7e00ecd039c2594faf7ce085fd4019803b5b90cd3c2b8aad6cf014a5:327",
+      "coordinatorOccurrenceId": "1:0x9817c330a494baf1ccd4f07f99a041338e7bc357ea69ceeabc339f45af2cb8b1:0x440a08fb7e00ecd039c2594faf7ce085fd4019803b5b90cd3c2b8aad6cf014a5:332"
+    },
+    {
+      "id": "1:stock-paired-v2:0xf03e343145583e84e6c2eb413d19e8b7674dd2a50817ade8212165e0970aaeaa",
+      "releaseVersion": "stock-paired-v2",
+      "priorCoordinatorSource": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+      "authenticatedCreator": "0x5a237f89d1db282e40188a041b142dcde9ebe548",
+      "launchOccurrenceId": "1:0x1e9ec9537c0926f649d131290c828d6810bf2ca6efcf1f583df45a98d092da24:0xd243eb7d5e2591e282829429bcfd4714c19f9adf94de15a496f83388597014a6:674",
+      "coordinatorOccurrenceId": "1:0x1e9ec9537c0926f649d131290c828d6810bf2ca6efcf1f583df45a98d092da24:0xd243eb7d5e2591e282829429bcfd4714c19f9adf94de15a496f83388597014a6:679"
+    },
+    {
+      "id": "1:stock-paired-v2:0xf7081331212fb2d81242ee8afa941d4ef774f8b17260ed109b30712a783080af",
+      "releaseVersion": "stock-paired-v2",
+      "priorCoordinatorSource": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
+      "authenticatedCreator": "0x5094e658f06a90058abdbbd97b09c95856c81534",
+      "launchOccurrenceId": "1:0xc4d1eb4f4fd4f19cbf7ffc182b237ad3349e88c5eeb06bd6ed782b3597e3b773:0xc47e44a3c813b1904a2d00f5f93268a8ddcaf98ca2416d5a5e2cb40aa1e106dc:1007",
+      "coordinatorOccurrenceId": "1:0xc4d1eb4f4fd4f19cbf7ffc182b237ad3349e88c5eeb06bd6ed782b3597e3b773:0xc47e44a3c813b1904a2d00f5f93268a8ddcaf98ca2416d5a5e2cb40aa1e106dc:1012"
+    },
+    {
+      "id": "1:stock-paired-v3:0x0329b08cc21cfd2e61e7c80c21bf69adf05d41b141494592c0e12cd0f06dba6f",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x78667855f74bbe1e64718a97f33a824fab79ff09",
+      "launchOccurrenceId": "1:0x474014ff30cb4b0a06493198548343eef4c67dbece578b7d573479940a9470fa:0x3c91042b70e7804145b57a43d3b1b6b4fda8ebbc64713c1a9b18274dec0838bc:32",
+      "coordinatorOccurrenceId": "1:0x474014ff30cb4b0a06493198548343eef4c67dbece578b7d573479940a9470fa:0x3c91042b70e7804145b57a43d3b1b6b4fda8ebbc64713c1a9b18274dec0838bc:37"
+    },
+    {
+      "id": "1:stock-paired-v3:0x0677820a202c395b72da3f60022cf9e318ad86d2c9680ab3663fd4dab140a8ae",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xdea99a37194a83a0825eb608b9f00c64630fee1c",
+      "launchOccurrenceId": "1:0x3a509c29aaef823668725157cfab95fba31bbd994bc2f5bcfc1050d46eccf6a6:0x8fb609c1511099a99bccbb9a8eb42a54c3c4142e60ef29442f104ca1568d628e:121",
+      "coordinatorOccurrenceId": "1:0x3a509c29aaef823668725157cfab95fba31bbd994bc2f5bcfc1050d46eccf6a6:0x8fb609c1511099a99bccbb9a8eb42a54c3c4142e60ef29442f104ca1568d628e:126"
+    },
+    {
+      "id": "1:stock-paired-v3:0x0e23f2508a69495a00eaff11f8d33d213a054da585df710758fa7d0899c49569",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x70ab92f4dbff5270830e61bf8358a64614a01817",
+      "launchOccurrenceId": "1:0x10fb6c2520d643ad04ec384ff5e022993c3c76d1a601bea67c4f9d000eecaf8e:0xe426631e76642c942205c3708b71daf3dad3b876666ac9d31129ce9c9bb322e6:294",
+      "coordinatorOccurrenceId": "1:0x10fb6c2520d643ad04ec384ff5e022993c3c76d1a601bea67c4f9d000eecaf8e:0xe426631e76642c942205c3708b71daf3dad3b876666ac9d31129ce9c9bb322e6:299"
+    },
+    {
+      "id": "1:stock-paired-v3:0x125293294c7d8add7c30b4082103ef825a8e75a9068a8fcecdd24e0f3a57ed52",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xc6bc971163f3916bcfde1c583524b31cd2c2c1c3",
+      "launchOccurrenceId": "1:0x121e059996726f2017eec251624ab01ea2a30c0bd269ecbda895347371654ac5:0xf01261aae6cb3cbf8a5a9456689f4e9fa8c77a5069e406312f6c362eefee1785:477",
+      "coordinatorOccurrenceId": "1:0x121e059996726f2017eec251624ab01ea2a30c0bd269ecbda895347371654ac5:0xf01261aae6cb3cbf8a5a9456689f4e9fa8c77a5069e406312f6c362eefee1785:482"
+    },
+    {
+      "id": "1:stock-paired-v3:0x156c8836a0e4236f05510e432a2c99272d1681fab982ad7da684220fd85f25f1",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xf3e3ac45ac46ec098fa9f8a812c578cff7d348a1",
+      "launchOccurrenceId": "1:0x9b66a1366edca1cc239748ce4f74e644944ccee5816e04603ceb8d6bad5c5ef8:0x57269c513e6aa1dadcbe8e09a8e24f3364093339cc0ee0aab40ab43c9c4a6403:523",
+      "coordinatorOccurrenceId": "1:0x9b66a1366edca1cc239748ce4f74e644944ccee5816e04603ceb8d6bad5c5ef8:0x57269c513e6aa1dadcbe8e09a8e24f3364093339cc0ee0aab40ab43c9c4a6403:528"
+    },
+    {
+      "id": "1:stock-paired-v3:0x26442d0657af85780239c3fba19674e02bf8f391dce5011ac54fbf3c9ae667d7",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x78667855f74bbe1e64718a97f33a824fab79ff09",
+      "launchOccurrenceId": "1:0xa6d84ea28a2e0acecdc14a68ff8994e979c764b4d39318c743f9a66349370731:0xe1a7a0ee4f46507cb6fd89437dd717663d2a3ebcebcb3b240baad5bafa6d2147:44",
+      "coordinatorOccurrenceId": "1:0xa6d84ea28a2e0acecdc14a68ff8994e979c764b4d39318c743f9a66349370731:0xe1a7a0ee4f46507cb6fd89437dd717663d2a3ebcebcb3b240baad5bafa6d2147:49"
+    },
+    {
+      "id": "1:stock-paired-v3:0x27f49ec995bd6e2449a846a00a378bd6e0dc021f4ac2c3cc7d725c5357eccf77",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x78667855f74bbe1e64718a97f33a824fab79ff09",
+      "launchOccurrenceId": "1:0x7402cd76c3280f4e210576ab71dc08a08cf73d1c326c6526c7690b9274938176:0x2c4af90d1e1d20da9be2c9decb8fffce74e1bbc9fb136d448fb1fce2077b86c9:29",
+      "coordinatorOccurrenceId": "1:0x7402cd76c3280f4e210576ab71dc08a08cf73d1c326c6526c7690b9274938176:0x2c4af90d1e1d20da9be2c9decb8fffce74e1bbc9fb136d448fb1fce2077b86c9:34"
+    },
+    {
+      "id": "1:stock-paired-v3:0x2d056c0b921e087947c29cc65ebb7d3c2eedae0d144271db05380ee1fbb5e703",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x7d21623327f3047aa3b1e71ba226c573c37afcdd",
+      "launchOccurrenceId": "1:0x76d2a01bb0dd0129d30fccf64412b6182e221327725d4db240d6447aa3d2c6bf:0xb5fef54843b095c231dc746f90795069f934e1966e89c41eef6b0f63bb7b1a16:149",
+      "coordinatorOccurrenceId": "1:0x76d2a01bb0dd0129d30fccf64412b6182e221327725d4db240d6447aa3d2c6bf:0xb5fef54843b095c231dc746f90795069f934e1966e89c41eef6b0f63bb7b1a16:154"
+    },
+    {
+      "id": "1:stock-paired-v3:0x2ee3a3d02bfd3286276511c8b814e8118aee4fa0c9c624a158fc738974c5b721",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xfa50de214e13302e01bdf635d5204ff26b84ea60",
+      "launchOccurrenceId": "1:0x333869646bdd5df10a9f5abc434bb722579a0d26baffca69f9320b3293a8fe0a:0xd4a7cd5b0c22cbe4595d9840c23cea7b24202915bf39e7fdbd835f50fac14ae4:1265",
+      "coordinatorOccurrenceId": "1:0x333869646bdd5df10a9f5abc434bb722579a0d26baffca69f9320b3293a8fe0a:0xd4a7cd5b0c22cbe4595d9840c23cea7b24202915bf39e7fdbd835f50fac14ae4:1270"
+    },
+    {
+      "id": "1:stock-paired-v3:0x352df2e41e33728dbda751dfe2752e747dc21580fdade6eaed3f81a78db1c17a",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x4a09dbe91d6b74a44f8bdbcd61459d8d51bee25b",
+      "launchOccurrenceId": "1:0xd3bbe6d051400b72d4a64597abeec532ee017a85babdc5a1fdaf73d907984a3c:0x3521acd3736309d435233b586e080854bfeef9b59730b86a067f311658a42bff:320",
+      "coordinatorOccurrenceId": "1:0xd3bbe6d051400b72d4a64597abeec532ee017a85babdc5a1fdaf73d907984a3c:0x3521acd3736309d435233b586e080854bfeef9b59730b86a067f311658a42bff:325"
+    },
+    {
+      "id": "1:stock-paired-v3:0x356dc81234f3f4c8c5535be0fc2df6aabfebef6808c23d4ae82dbdf8ffcfe316",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x1e3add1956238d739353b5f7949d7b21ef6efcb0",
+      "launchOccurrenceId": "1:0xbe755c8ba25796f80aaef0847c691578db4c0ebc007b16417273888812a8a82b:0x7f6e8c2a03a9102dbb177f90e6a166df3cbb0ca20c210644301856e82c4994a3:29",
+      "coordinatorOccurrenceId": "1:0xbe755c8ba25796f80aaef0847c691578db4c0ebc007b16417273888812a8a82b:0x7f6e8c2a03a9102dbb177f90e6a166df3cbb0ca20c210644301856e82c4994a3:34"
+    },
+    {
+      "id": "1:stock-paired-v3:0x47a4e2f097fa40a211b9b114c958a7efd21ff2baa319b1689cc75a0005cde4bf",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x70ab92f4dbff5270830e61bf8358a64614a01817",
+      "launchOccurrenceId": "1:0x891ea663f66342102582bf10482a465f7efec40f46515c7abb99aba768697e65:0x7fcd975c784b3b705957d7cc897b46ed499e4b74317bc49e9cb2840ad92ac14a:46",
+      "coordinatorOccurrenceId": "1:0x891ea663f66342102582bf10482a465f7efec40f46515c7abb99aba768697e65:0x7fcd975c784b3b705957d7cc897b46ed499e4b74317bc49e9cb2840ad92ac14a:51"
+    },
+    {
+      "id": "1:stock-paired-v3:0x4c9dab0a2ce086adb44efe400bde649f2e9e851ebcf9f7843ce35ea573f6fd3a",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xdea99a37194a83a0825eb608b9f00c64630fee1c",
+      "launchOccurrenceId": "1:0x010a9ff11ec84bd80c6e2ead02ca2e4990c1b75f8779074ca8d6a8f2307bd02f:0x066d1e1e22129e0b30d0f35f47e1cbcfcd367b7fdae8431a31b16cdfe132c514:198",
+      "coordinatorOccurrenceId": "1:0x010a9ff11ec84bd80c6e2ead02ca2e4990c1b75f8779074ca8d6a8f2307bd02f:0x066d1e1e22129e0b30d0f35f47e1cbcfcd367b7fdae8431a31b16cdfe132c514:203"
+    },
+    {
+      "id": "1:stock-paired-v3:0x4ca78fdac94e0059e491f9cd49150bdba20ca1d6b67283062d19668190a40127",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xf3e3ac45ac46ec098fa9f8a812c578cff7d348a1",
+      "launchOccurrenceId": "1:0x8dae32726dbb785f4521e12a76b9d6772c2a734a71a478886cc0deb197c48464:0x480705f1b4a2534833dc56888a8c9f8f1b638260366016a220b58340a66ab133:565",
+      "coordinatorOccurrenceId": "1:0x8dae32726dbb785f4521e12a76b9d6772c2a734a71a478886cc0deb197c48464:0x480705f1b4a2534833dc56888a8c9f8f1b638260366016a220b58340a66ab133:570"
+    },
+    {
+      "id": "1:stock-paired-v3:0x4e159f23625e10606cebe7c7267a77c07fb727ebb551c39f38f66c252a70dcc1",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x793a5e8b8ff431cc2d8ee41e8ec2d9ad70247e60",
+      "launchOccurrenceId": "1:0xa9b35f50fd75862f62e7d01699ff4e428371956a5c5f61c342eed563e2c9c941:0x32950b2eed832c7bcc54fc72f1c263a89035a566f85aee07d53fdc7220f14c55:358",
+      "coordinatorOccurrenceId": "1:0xa9b35f50fd75862f62e7d01699ff4e428371956a5c5f61c342eed563e2c9c941:0x32950b2eed832c7bcc54fc72f1c263a89035a566f85aee07d53fdc7220f14c55:363"
+    },
+    {
+      "id": "1:stock-paired-v3:0x565eee3e69ef553665845451f70b506c4591ac39b91fdfa2dde7b5a6f75d2f84",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xe0e4cba1f6d9aeffe30189c124f39fd3d131093d",
+      "launchOccurrenceId": "1:0x067d3e8f739fdb98163f78333f3cb30f83ae6814fb622877e9ede212e307940e:0xd0df87fb583b413eb656cfd0379ae162fbaf01a344c684b463461bab9d55c004:575",
+      "coordinatorOccurrenceId": "1:0x067d3e8f739fdb98163f78333f3cb30f83ae6814fb622877e9ede212e307940e:0xd0df87fb583b413eb656cfd0379ae162fbaf01a344c684b463461bab9d55c004:580"
+    },
+    {
+      "id": "1:stock-paired-v3:0x5ac643e9d116b7650216029bda6bd494bf81b26acf19cf5554548e12dabf1e1c",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x46fdf1633a42b792b362c2a2e247f606beda6b10",
+      "launchOccurrenceId": "1:0x7317d4688b1e0b84978070ccd0a15438182bc5c22e6c513ba064a5456ef47289:0x804781f3d3b789e8a8b47a85892b2ff1ca4d507a8232594a6e373f280fddbedc:67",
+      "coordinatorOccurrenceId": "1:0x7317d4688b1e0b84978070ccd0a15438182bc5c22e6c513ba064a5456ef47289:0x804781f3d3b789e8a8b47a85892b2ff1ca4d507a8232594a6e373f280fddbedc:72"
+    },
+    {
+      "id": "1:stock-paired-v3:0x6309907bb3942da175ba911450029343e016f4a400c2d2cb14af881a35589a6e",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x66ed6a79e084a99982b6cb861981c98ac7d0d468",
+      "launchOccurrenceId": "1:0xeee1c4f24eb4200199691abfb62e0e36bef0e784bdf177125f83712b040085ca:0xfe1d0d3dd380f3e2506b15c3d302491e23579d057903edd8c99ab4649c62cc6b:450",
+      "coordinatorOccurrenceId": "1:0xeee1c4f24eb4200199691abfb62e0e36bef0e784bdf177125f83712b040085ca:0xfe1d0d3dd380f3e2506b15c3d302491e23579d057903edd8c99ab4649c62cc6b:455"
+    },
+    {
+      "id": "1:stock-paired-v3:0x63883df2fbc586a0d8bbeee123e97e25135d47d4de9a822fddb43fe3d7242365",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x70ab92f4dbff5270830e61bf8358a64614a01817",
+      "launchOccurrenceId": "1:0xb3e610525f9fa81fe2900a4812270065496f31a7e53bab4350f6e9110dbc3b7d:0x2de336e707ee73a72e4461104b8a712e14a87d9eb761971e70306cfffcc11fed:370",
+      "coordinatorOccurrenceId": "1:0xb3e610525f9fa81fe2900a4812270065496f31a7e53bab4350f6e9110dbc3b7d:0x2de336e707ee73a72e4461104b8a712e14a87d9eb761971e70306cfffcc11fed:375"
+    },
+    {
+      "id": "1:stock-paired-v3:0x852d8f5e60a18ef544fcba49595e4ddf57937c3c1319714cbed4476413b425d4",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x856c1a92c879fe90e16a72c3d49fbf4b7402bb8a",
+      "launchOccurrenceId": "1:0x12149525c9d6b5dc90ad12f8514a3c7df463f8321e565b1c6b0e164e1e516a8a:0xef9656a84204becbbff4481e13d2ae688bd77dc1e8db9b1241910cff07559533:591",
+      "coordinatorOccurrenceId": "1:0x12149525c9d6b5dc90ad12f8514a3c7df463f8321e565b1c6b0e164e1e516a8a:0xef9656a84204becbbff4481e13d2ae688bd77dc1e8db9b1241910cff07559533:596"
+    },
+    {
+      "id": "1:stock-paired-v3:0x9028fbb0a68bf629e6db35f21a45a372496fcbdc3fdd1f145470883e820c6d60",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x195efa8b60470d9db33446b28b88e2572407b2e3",
+      "launchOccurrenceId": "1:0x7317d4688b1e0b84978070ccd0a15438182bc5c22e6c513ba064a5456ef47289:0xbfc859a0ba5b79a7a9bdfeadfe69565fca513295cb8226b4aece086db4aa6584:472",
+      "coordinatorOccurrenceId": "1:0x7317d4688b1e0b84978070ccd0a15438182bc5c22e6c513ba064a5456ef47289:0xbfc859a0ba5b79a7a9bdfeadfe69565fca513295cb8226b4aece086db4aa6584:477"
+    },
+    {
+      "id": "1:stock-paired-v3:0x9705591c7060367133cdccf539659d2f21b320e9d2731d4132c1909da6ab9b39",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x5e3cdb002e48c1391138abca7c4bd5f2998d7485",
+      "launchOccurrenceId": "1:0xed5ae2c389827818d3788d09398f73a548502c5f0d3d580fd6c325254c728d0d:0xc4733edff036e2efd6f7c578a12ac258bfecf7d56f285444c9b351d32c0fee16:263",
+      "coordinatorOccurrenceId": "1:0xed5ae2c389827818d3788d09398f73a548502c5f0d3d580fd6c325254c728d0d:0xc4733edff036e2efd6f7c578a12ac258bfecf7d56f285444c9b351d32c0fee16:268"
+    },
+    {
+      "id": "1:stock-paired-v3:0x991b1c6dec03a051e906215bd5ce7f0a9342fb9c5c0e0b07e14d6bc719d6945a",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xb3940904537334e359246e327235e5db25d175e4",
+      "launchOccurrenceId": "1:0x76d2a01bb0dd0129d30fccf64412b6182e221327725d4db240d6447aa3d2c6bf:0xd8559a2fe164dcb17a63a81b45eee21a85d45ee24e2fc1350e3b3dbd5e9469bf:213",
+      "coordinatorOccurrenceId": "1:0x76d2a01bb0dd0129d30fccf64412b6182e221327725d4db240d6447aa3d2c6bf:0xd8559a2fe164dcb17a63a81b45eee21a85d45ee24e2fc1350e3b3dbd5e9469bf:218"
+    },
+    {
+      "id": "1:stock-paired-v3:0x9dcdb5ef3c66f3495c58f36078e32787489c23edfa9f2aa161100232fedbe4dd",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x78667855f74bbe1e64718a97f33a824fab79ff09",
+      "launchOccurrenceId": "1:0x944b988d33908da3a3d2dc623d83d6fab7fdae1edfabe7bb1bb59c1b7cecbabf:0x62b0af876ee6a2b6b96e947036b57f2a2a70ce46d5a29e8a5589b6be87188f2f:182",
+      "coordinatorOccurrenceId": "1:0x944b988d33908da3a3d2dc623d83d6fab7fdae1edfabe7bb1bb59c1b7cecbabf:0x62b0af876ee6a2b6b96e947036b57f2a2a70ce46d5a29e8a5589b6be87188f2f:187"
+    },
+    {
+      "id": "1:stock-paired-v3:0xa12cecc9365e610c28c689e060afda473f8f6c663f7fb6038c810fbba93c8ddc",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xc112fdf5dc4d896a3e93e1ab75ea7fa1e60b407b",
+      "launchOccurrenceId": "1:0xbd8a197b72a542fef88169d23bcd122add9512194cf0f96ea830436f3ea6e919:0x562aa9493ef108261df9dfe9a794ff1ecbfc83d8b2b60108d3f2bd4cbb473c9e:94",
+      "coordinatorOccurrenceId": "1:0xbd8a197b72a542fef88169d23bcd122add9512194cf0f96ea830436f3ea6e919:0x562aa9493ef108261df9dfe9a794ff1ecbfc83d8b2b60108d3f2bd4cbb473c9e:99"
+    },
+    {
+      "id": "1:stock-paired-v3:0xa9563564fc0cd284a0772cfd17e7a9958ed107b885e385def7f8df055ae0166f",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x5cb4a95b28a524e9260ceddd861bb1f2a73fc43a",
+      "launchOccurrenceId": "1:0xe12447b4136dd6478dbf2c3afcb17a595479b67b7dc089167be2466132bb8af9:0x6b250aa99fdc3717785dd5c5b8c882d27a1962487e54b42710234b4c6ced3670:357",
+      "coordinatorOccurrenceId": "1:0xe12447b4136dd6478dbf2c3afcb17a595479b67b7dc089167be2466132bb8af9:0x6b250aa99fdc3717785dd5c5b8c882d27a1962487e54b42710234b4c6ced3670:362"
+    },
+    {
+      "id": "1:stock-paired-v3:0xa9924bf955de80ca5906ce23f0da346623e58f55a21a10280ac5c79c2cdf1712",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x4321dd0a9fcc4ae18202bdf734df40dd959156df",
+      "launchOccurrenceId": "1:0xb372148134e6e2017f79ad04d59e98301e2d22285d63578f9354488ea0d1aee4:0x6297a7d6fb27cd8c1dd6d713fd5c25f63378b748bec074263ef47b90060fdde1:347",
+      "coordinatorOccurrenceId": "1:0xb372148134e6e2017f79ad04d59e98301e2d22285d63578f9354488ea0d1aee4:0x6297a7d6fb27cd8c1dd6d713fd5c25f63378b748bec074263ef47b90060fdde1:352"
+    },
+    {
+      "id": "1:stock-paired-v3:0xaae2328c84cc26ee531ebcefe8d725842908e07d89b17d33cc2d7d705d2d47b6",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x856c1a92c879fe90e16a72c3d49fbf4b7402bb8a",
+      "launchOccurrenceId": "1:0xcfe9f755e0ed2030a8e57d06da534b62ca48e1abdb2f1ad4ab2f5f29d479116e:0xbb4b839550a80136b568c8be530ca1e61fec51ff9b780d85558676ccf2393d07:266",
+      "coordinatorOccurrenceId": "1:0xcfe9f755e0ed2030a8e57d06da534b62ca48e1abdb2f1ad4ab2f5f29d479116e:0xbb4b839550a80136b568c8be530ca1e61fec51ff9b780d85558676ccf2393d07:271"
+    },
+    {
+      "id": "1:stock-paired-v3:0xb36b2ea3dc8e386c919eaae08d44614a82454daea59d833eaab7a4d6e0152947",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x856c1a92c879fe90e16a72c3d49fbf4b7402bb8a",
+      "launchOccurrenceId": "1:0x5515e0ca689db90886f7f68784e2e2564dc0dab175020bb9dfdd3051e6d07149:0x2ab24d4368831fc64bc22f518fb625e321a550bb461137aec2911758eb160af3:312",
+      "coordinatorOccurrenceId": "1:0x5515e0ca689db90886f7f68784e2e2564dc0dab175020bb9dfdd3051e6d07149:0x2ab24d4368831fc64bc22f518fb625e321a550bb461137aec2911758eb160af3:317"
+    },
+    {
+      "id": "1:stock-paired-v3:0xb411f6d0d3f4131a2b4269dbc2b01c0ac586d3c9ba8ee11bf753b60878da024f",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x7d21623327f3047aa3b1e71ba226c573c37afcdd",
+      "launchOccurrenceId": "1:0x380b88e8cde3a26eb57cb27fd541865b89262180a5e1d1fca2d16ade5198db17:0x32e81a5eecc6b42a004062cecd329b366d209d7bb85143adf43fed4112dd797e:358",
+      "coordinatorOccurrenceId": "1:0x380b88e8cde3a26eb57cb27fd541865b89262180a5e1d1fca2d16ade5198db17:0x32e81a5eecc6b42a004062cecd329b366d209d7bb85143adf43fed4112dd797e:363"
+    },
+    {
+      "id": "1:stock-paired-v3:0xb5fc0272b7e574f61e9b4f69fc502ae2a51c640fb0eaba8e3b7be8729bbbb99f",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xd0d18801e55c24793d062989661ef219b8821e25",
+      "launchOccurrenceId": "1:0x6e27661507b76ff66615b88102ecf69e23a94e328b63afd70129ba7116f9580f:0x0d65f767382e5fc4dde403d55037d748da3f3e42aef17a19c34f40b103277852:230",
+      "coordinatorOccurrenceId": "1:0x6e27661507b76ff66615b88102ecf69e23a94e328b63afd70129ba7116f9580f:0x0d65f767382e5fc4dde403d55037d748da3f3e42aef17a19c34f40b103277852:235"
+    },
+    {
+      "id": "1:stock-paired-v3:0xbb7d2e0af0925b41f510005229982a86b327d2fdc6df0ec01521beddef2b54f4",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x70ab92f4dbff5270830e61bf8358a64614a01817",
+      "launchOccurrenceId": "1:0x8f24866db686474ae3ca518ed198b20ea64434654f9afbf0590fd2c62cdd65fa:0x6d183f2ede2bed4d4c9ff850a5737a2934168f6bad2bb8b0ff625cd8fc08b7d8:472",
+      "coordinatorOccurrenceId": "1:0x8f24866db686474ae3ca518ed198b20ea64434654f9afbf0590fd2c62cdd65fa:0x6d183f2ede2bed4d4c9ff850a5737a2934168f6bad2bb8b0ff625cd8fc08b7d8:477"
+    },
+    {
+      "id": "1:stock-paired-v3:0xbfce9d391b98ca42478566735471cee3105eac0bc5f2e98816066191cad0bce4",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x70ab92f4dbff5270830e61bf8358a64614a01817",
+      "launchOccurrenceId": "1:0x83ed4cf100feab4e36e588d0436eb46a4c8e0dcbbdf1a69cb5a42f0b7dcf7e4e:0x2deeefb14f794287849c68f152bd4a32b9f5ff42b97a13ee9a1b1ec8613c8ef0:348",
+      "coordinatorOccurrenceId": "1:0x83ed4cf100feab4e36e588d0436eb46a4c8e0dcbbdf1a69cb5a42f0b7dcf7e4e:0x2deeefb14f794287849c68f152bd4a32b9f5ff42b97a13ee9a1b1ec8613c8ef0:353"
+    },
+    {
+      "id": "1:stock-paired-v3:0xc95aae95148a9f10ed0340a7528246634e926459c09bcadf615aeea21d017e9e",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x2bb333d48dfaf1596d9036671d2e43168994249e",
+      "launchOccurrenceId": "1:0xc027186d70dc796f3add3a1a6d508cb454ac8222e23859fe8692e7ba571e67bd:0xbe52bd2bb71159a1f6ab085cb7c7d5eb4f0583608b8adaf7d62f283be6693b19:921",
+      "coordinatorOccurrenceId": "1:0xc027186d70dc796f3add3a1a6d508cb454ac8222e23859fe8692e7ba571e67bd:0xbe52bd2bb71159a1f6ab085cb7c7d5eb4f0583608b8adaf7d62f283be6693b19:926"
+    },
+    {
+      "id": "1:stock-paired-v3:0xd3bf87a197d72a0beaca1b605f73f15b84db3c754f6b6c25e40ff0b04ba8bc08",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xfa50de214e13302e01bdf635d5204ff26b84ea60",
+      "launchOccurrenceId": "1:0xea35ed5ca4e1d3eff2395cc39bffe1acf7a5e0adc08d2f6a5db62bc658c1a8bf:0xbe41f565ca216725d15c49de8644b857189c1027e6147425e124976826f6ab2b:532",
+      "coordinatorOccurrenceId": "1:0xea35ed5ca4e1d3eff2395cc39bffe1acf7a5e0adc08d2f6a5db62bc658c1a8bf:0xbe41f565ca216725d15c49de8644b857189c1027e6147425e124976826f6ab2b:537"
+    },
+    {
+      "id": "1:stock-paired-v3:0xe317c724a274f7e51c6b330b95a21b3f8d9708dd6c760a3b20816ca26af453b7",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xc112fdf5dc4d896a3e93e1ab75ea7fa1e60b407b",
+      "launchOccurrenceId": "1:0xae2fc5adc70352a091b122311dc3dfe737c9991187c8a07fff53749b59259690:0x92997af2820c02d7f84b8dd6f12049164c788de7bdc5203af0e77b8e2fd011c5:238",
+      "coordinatorOccurrenceId": "1:0xae2fc5adc70352a091b122311dc3dfe737c9991187c8a07fff53749b59259690:0x92997af2820c02d7f84b8dd6f12049164c788de7bdc5203af0e77b8e2fd011c5:243"
+    },
+    {
+      "id": "1:stock-paired-v3:0xe6e9b57719a1cbad4d6ea15c8ddd00bd43036a8c543d52fd546da0c2eee734c5",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x347ffc6db9acc54ac2019795173b9599e8b82bd9",
+      "launchOccurrenceId": "1:0x1a5b3b2a142489e91cfdf92adfef03dc9ea01cf8355181f329f46eb338de2dc7:0x9ae052204f0a22ab7918b481b32e920cfd92efcfcfcbf2d99d1b87c9b0130c26:711",
+      "coordinatorOccurrenceId": "1:0x1a5b3b2a142489e91cfdf92adfef03dc9ea01cf8355181f329f46eb338de2dc7:0x9ae052204f0a22ab7918b481b32e920cfd92efcfcfcbf2d99d1b87c9b0130c26:716"
+    },
+    {
+      "id": "1:stock-paired-v3:0xe800739e29723439475cdf77c4d178980c112582ae36283fe6668cdb030911cf",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x0aeda175d27d2208092a01aab9fbfb2da7d72b32",
+      "launchOccurrenceId": "1:0x2dd642f8805e5a8f020945f4373821c7b3876b9cfc8f2dc1e9d5e2a852d0ede0:0xa95de243bcec62423e9e9347af490af8f796c4a6623719ef4d03f304765ec494:38",
+      "coordinatorOccurrenceId": "1:0x2dd642f8805e5a8f020945f4373821c7b3876b9cfc8f2dc1e9d5e2a852d0ede0:0xa95de243bcec62423e9e9347af490af8f796c4a6623719ef4d03f304765ec494:43"
+    },
+    {
+      "id": "1:stock-paired-v3:0xe86221fdfaa14f1f1e679e65c72f4dc9fa8144818e5822cd6198379f4a2c0cac",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x31d39253587c5d2310c7aea1bb83ffbfa76df8eb",
+      "launchOccurrenceId": "1:0x0bc54b592905e6920102d4f6bba6ce52040c34d215aa981141999b74622994ae:0x05316203467fb7d8fe81b2793a245933a9457e62df2199e8511851738cb38f64:438",
+      "coordinatorOccurrenceId": "1:0x0bc54b592905e6920102d4f6bba6ce52040c34d215aa981141999b74622994ae:0x05316203467fb7d8fe81b2793a245933a9457e62df2199e8511851738cb38f64:443"
+    },
+    {
+      "id": "1:stock-paired-v3:0xea4535bb2ef44a5e00ce2e5d7b562e2c0c573deeb37769f0e8e0b70ed37c97d4",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xb0095c3e6ac1a4f936df3914e8cc46783b9b5287",
+      "launchOccurrenceId": "1:0xade89ae5ea6b8771a8ee1e90b015ecd62e4f197bc910a3047a3a59bc2f2d6c1c:0x442bf8ccce84b6c83d26d6daa001c220eeb4e57bdf908e41287cfaac0f234a64:197",
+      "coordinatorOccurrenceId": "1:0xade89ae5ea6b8771a8ee1e90b015ecd62e4f197bc910a3047a3a59bc2f2d6c1c:0x442bf8ccce84b6c83d26d6daa001c220eeb4e57bdf908e41287cfaac0f234a64:202"
+    },
+    {
+      "id": "1:stock-paired-v3:0xec1235c81b8d4008ab3db4fb3e591438ed9e34313573f2157be46e8ed612e61d",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0xb0095c3e6ac1a4f936df3914e8cc46783b9b5287",
+      "launchOccurrenceId": "1:0x15713a1cc43c53f1a8219f5ad5005d68014583c288c19d77448cfe5aaff7b7b9:0x3c93ba04f33d51512ee3156b93405b5c0ba3100027e23231e9b87043b710633b:234",
+      "coordinatorOccurrenceId": "1:0x15713a1cc43c53f1a8219f5ad5005d68014583c288c19d77448cfe5aaff7b7b9:0x3c93ba04f33d51512ee3156b93405b5c0ba3100027e23231e9b87043b710633b:239"
+    },
+    {
+      "id": "1:stock-paired-v3:0xf0468aace6ee478944fd323c37b94cf62fd0ef1aa0ac2e8cbd9a1b38d14d4b12",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x0aeda175d27d2208092a01aab9fbfb2da7d72b32",
+      "launchOccurrenceId": "1:0x0f4f3548fa9981ee9aa5c90552c6564b7ba9c807786fe8cc926775273d646f34:0xde92436a374181f77ccfd6c9d2723e0527f5050c7a1bfb194b8f85356011131f:29",
+      "coordinatorOccurrenceId": "1:0x0f4f3548fa9981ee9aa5c90552c6564b7ba9c807786fe8cc926775273d646f34:0xde92436a374181f77ccfd6c9d2723e0527f5050c7a1bfb194b8f85356011131f:34"
+    },
+    {
+      "id": "1:stock-paired-v3:0xf0eaf9a4e1e51b32869fe5ac724c434e9d93a28564f0421cc066f396961a3fc2",
+      "releaseVersion": "stock-paired-v3",
+      "priorCoordinatorSource": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
+      "authenticatedCreator": "0x239a9c5b6e5760180341ce77ada4645fabf78d8a",
+      "launchOccurrenceId": "1:0x7da87b204383123192b653c16f47335f5c5e295b6afd0c56cf3d35312f0e3910:0xb26b3b9c6635d80aa6c581685d726394279720b5cf0185a3e4b2b99587ea36a1:337",
+      "coordinatorOccurrenceId": "1:0x7da87b204383123192b653c16f47335f5c5e295b6afd0c56cf3d35312f0e3910:0xb26b3b9c6635d80aa6c581685d726394279720b5cf0185a3e4b2b99587ea36a1:342"
+    }
+  ],
+  "digest": "0x42199d74de38991b95324b937a3765932a612999260371c9d9f9e631da9ded97"
+}

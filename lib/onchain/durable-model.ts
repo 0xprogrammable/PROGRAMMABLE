@@ -166,6 +166,12 @@ export type DurableExploreRead =
       detail: string;
     };
 
+export function selectFreshDurableExploreModel(
+  read: DurableExploreRead,
+): Extract<ExploreReadModel, { status: "ready" }> | null {
+  return read.status === "ready" ? read.envelope.payload.model : null;
+}
+
 function contentHash(payload: unknown) {
   return keccak256(toBytes(JSON.stringify(payload)));
 }

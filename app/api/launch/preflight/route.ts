@@ -114,7 +114,6 @@ import {
   getConfiguredStockPairedLaunchRelease,
   type VerifiedStockPairedRelease,
 } from "@/lib/stock-paired-release";
-import { isStockPairedPublicLaunchEnabled } from "@/lib/stock-paired-access";
 import {
   assessStockPairedRuntimeFdv,
   STOCK_PAIRED_RUNTIME_FDV_PROBE_WEI,
@@ -150,11 +149,6 @@ const selectedStockPairedRelease =
   launchEnvironment === "production"
     ? getConfiguredStockPairedLaunchRelease()
     : null;
-const stockPairedPublicLaunchEnabled =
-  isStockPairedPublicLaunchEnabled(
-    launchEnvironment,
-    selectedStockPairedRelease,
-  );
 
 const client = createPublicClient({
   chain: launchChain,
@@ -343,6 +337,34 @@ function errorResponse(message: string, status = 400) {
         "Cache-Control": "no-store",
       },
     },
+  );
+}
+
+function deepLaunchClosedResponse() {
+  return NextResponse.json(
+    {
+      code: "deep_launches_closed",
+      error: "New Deep launches are not available",
+    },
+    {
+      status: 410,
+      headers: { "Cache-Control": "no-store" },
+    },
+  );
+}
+
+function requestsClosedDeepLaunch(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return false;
+  }
+  const model = (input as Record<string, unknown>).launchModel;
+  if (typeof model !== "string") return false;
+  const normalized = model.trim().toLowerCase();
+  return (
+    normalized === "deep" ||
+    normalized.startsWith("deep-") ||
+    normalized === "liquidity-growth" ||
+    normalized.startsWith("liquidity-growth-")
   );
 }
 
@@ -1410,6 +1432,9 @@ async function prepareClassicV3Launch(
   });
 }
 
+// Retained as historical release evidence. The public route closes Deep before
+// this transaction builder can be reached.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function prepareDeepLaunch(
   account: Address,
   draft: LaunchDraft,
@@ -2462,6 +2487,9 @@ async function findStockPairedCurrency0Salt({
   );
 }
 
+// Retained as release evidence for historical Stock-Paired deployments. No
+// public route calls this transaction builder after new launches were closed.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function prepareStockPairedLaunch(
   account: Address,
   draft: LaunchDraft,
@@ -2709,6 +2737,9 @@ export async function POST(request: NextRequest) {
     }
 
     const record = body as Record<string, unknown>;
+    if (requestsClosedDeepLaunch(record.draft)) {
+      return deepLaunchClosedResponse();
+    }
     if (typeof record.account !== "string" || !isAddress(record.account)) {
       return errorResponse("Connect a valid Ethereum wallet");
     }
@@ -2733,16 +2764,18 @@ export async function POST(request: NextRequest) {
       );
     }
     if (draft.launchModel === "deep") {
-      return await prepareDeepLaunch(account, draft, connectedWalletCheck);
+      return deepLaunchClosedResponse();
     }
     if (draft.launchModel === "stock-paired") {
-      if (!stockPairedPublicLaunchEnabled) {
-        return errorResponse("Stock-Paired is coming soon", 403);
-      }
-      return await prepareStockPairedLaunch(
-        account,
-        draft,
-        connectedWalletCheck,
+      return NextResponse.json(
+        {
+          code: "stock_paired_launches_closed",
+          error: "New Stock-Paired launches are no longer available",
+        },
+        {
+          status: 410,
+          headers: { "Cache-Control": "no-store" },
+        },
       );
     }
     return await prepareMemeLaunch(

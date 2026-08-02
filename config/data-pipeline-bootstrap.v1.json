@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "chainId": 1,
+  "sourceGroup": "core",
+  "catalogVersion": "programmable-mainnet-bootstrap-v1",
+  "createdAt": "2026-08-01T09:00:00.000Z",
+  "releaseBindingPath": "config/data-pipeline-release.v1.json",
+  "dynamicBindingSpecs": {
+    "classic-reward-vault-v1": {
+      "factoryConfigurationField": "configurationHash",
+      "normalizedRuntimeCodeHash": "0x2acc1dab5def24dc4bf08058e78c50387f639eb37b3098a98c9a20c7f8ed2794",
+      "immutableReferencesCommitment": "0x907697f82d7893c5208d35481bff0be82526809b29f52b3e83a1bcda15be583d",
+      "runtimeCodeLength": "6543",
+      "bindings": [
+        { "ordinal": "0", "offset": "362", "length": "32", "source": "constant", "encoding": "address", "value": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90" },
+        { "ordinal": "1", "offset": "510", "length": "32", "source": "factory_event", "encoding": "bytes", "field": "configurationHash" },
+        { "ordinal": "2", "offset": "664", "length": "32", "source": "factory_event", "encoding": "bytes", "field": "poolId" },
+        { "ordinal": "3", "offset": "884", "length": "32", "source": "constant", "encoding": "address", "value": "0x0000000000000000000000009746469cd79fddc5aa7218e7dd51c829ee518c0c" },
+        { "ordinal": "4", "offset": "1092", "length": "32", "source": "constant", "encoding": "address", "value": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90" },
+        { "ordinal": "5", "offset": "1195", "length": "32", "source": "factory_event", "encoding": "address", "field": "feeHook" },
+        { "ordinal": "6", "offset": "1941", "length": "32", "source": "factory_event", "encoding": "bytes", "field": "poolId" },
+        { "ordinal": "7", "offset": "2469", "length": "32", "source": "constant", "encoding": "address", "value": "0x0000000000000000000000009746469cd79fddc5aa7218e7dd51c829ee518c0c" },
+        { "ordinal": "8", "offset": "3048", "length": "32", "source": "factory_event", "encoding": "bytes", "field": "poolId" },
+        { "ordinal": "9", "offset": "3601", "length": "32", "source": "factory_event", "encoding": "bytes", "field": "poolId" },
+        { "ordinal": "10", "offset": "3645", "length": "32", "source": "factory_event", "encoding": "address", "field": "feeHook" },
+        { "ordinal": "11", "offset": "3910", "length": "32", "source": "factory_event", "encoding": "bytes", "field": "poolId" },
+        { "ordinal": "12", "offset": "4012", "length": "32", "source": "factory_event", "encoding": "bytes", "field": "configurationHash" }
+      ]
+    },
+    "quote-asset-fee-split-vault-v1": {
+      "factoryConfigurationField": null,
+      "normalizedRuntimeCodeHash": "0x4bdda3a916596d3643f87f95ec401122586759b29e360891565754b629b2c846",
+      "immutableReferencesCommitment": "0xb7a44c4e10798e9027247e4d5e7ac191d3f7b50b8d81a4746ffbd6a337a42ec0",
+      "runtimeCodeLength": "3352",
+      "bindings": [
+        { "ordinal": "0", "offset": "286", "length": "32", "source": "deferred_allocation_evidence", "encoding": "bytes", "evidenceRole": "configuration_hash" },
+        { "ordinal": "1", "offset": "404", "length": "32", "source": "factory_event", "encoding": "bytes", "field": "poolId" },
+        { "ordinal": "2", "offset": "479", "length": "32", "source": "deferred_allocation_evidence", "encoding": "bytes", "evidenceRole": "beneficiary_count" },
+        { "ordinal": "3", "offset": "610", "length": "32", "source": "constant", "encoding": "address", "value": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90" },
+        { "ordinal": "4", "offset": "712", "length": "32", "source": "factory_event", "encoding": "address", "field": "feeHook" },
+        { "ordinal": "5", "offset": "751", "length": "32", "source": "factory_event", "encoding": "address", "field": "quoteAsset" },
+        { "ordinal": "6", "offset": "1258", "length": "32", "source": "factory_event", "encoding": "address", "field": "quoteAsset" },
+        { "ordinal": "7", "offset": "1411", "length": "32", "source": "factory_event", "encoding": "bytes", "field": "poolId" },
+        { "ordinal": "8", "offset": "1462", "length": "32", "source": "factory_event", "encoding": "address", "field": "feeHook" },
+        { "ordinal": "9", "offset": "1604", "length": "32", "source": "factory_event", "encoding": "address", "field": "quoteAsset" },
+        { "ordinal": "10", "offset": "2018", "length": "32", "source": "factory_event", "encoding": "address", "field": "quoteAsset" },
+        { "ordinal": "11", "offset": "2059", "length": "32", "source": "factory_event", "encoding": "address", "field": "quoteAsset" },
+        { "ordinal": "12", "offset": "2441", "length": "32", "source": "deferred_allocation_evidence", "encoding": "bytes", "evidenceRole": "beneficiary_count" }
+      ]
+    }
+  },
+  "releases": [
+    {
+      "releaseId": "classic-v2",
+      "modelId": "classic",
+      "activation": { "epochNumber": 1, "expectedGeneration": 0, "nextGeneration": 1 },
+      "deploymentManifestPath": "contracts/deployments/mainnet-classic-v2.json",
+      "sources": [
+        { "contractName": "ClassicV2Hook", "sourceRole": "hook", "sourceType": "ethereum_contract", "artifact": "EthCreatorFeeHookV2", "deploymentKey": "feeHook", "recoverySelector": null },
+        { "contractName": "ClassicV2Launcher", "sourceRole": "launcher", "sourceType": "ethereum_contract", "artifact": "MemeLaunchV1", "deploymentKey": "memeLauncher", "recoverySelector": "0x19b3284b" }
+      ],
+      "dynamicSources": [],
+      "launchRequirements": [
+        { "occurrenceRole": "launcher", "eventType": "MemeTokenLaunched", "requiredWhen": "always" }
+      ]
+    },
+    {
+      "releaseId": "classic-v3",
+      "modelId": "classic",
+      "activation": { "epochNumber": 1, "expectedGeneration": 0, "nextGeneration": 1 },
+      "deploymentManifestPath": "contracts/deployments/mainnet-classic-v3.json",
+      "sources": [
+        { "contractName": "ClassicV3RewardVaultFactory", "sourceRole": "vault_factory", "sourceType": "ethereum_contract", "artifact": "ClassicRewardVaultFactoryV1", "deploymentKey": "rewardVaultFactory", "recoverySelector": null },
+        { "contractName": "ClassicV3VestingWalletFactory", "sourceRole": "vesting_factory", "sourceType": "ethereum_contract", "artifact": "ClassicInitialBuyVestingWalletFactoryV1", "deploymentKey": "initialBuyVestingWalletFactory", "recoverySelector": null },
+        { "contractName": "ClassicV3Hook", "sourceRole": "hook", "sourceType": "ethereum_contract", "artifact": "EthCreatorFeeHookV3", "deploymentKey": "feeHook", "recoverySelector": null },
+        { "contractName": "ClassicV3Launcher", "sourceRole": "launcher", "sourceType": "ethereum_contract", "artifact": "MemeLaunchV2", "deploymentKey": "launcher", "recoverySelector": "0xbf388406" }
+      ],
+      "dynamicSources": [
+        {
+          "contractName": "ClassicV3RewardVault",
+          "artifact": "ClassicRewardVaultV1",
+          "parentContractName": "ClassicV3RewardVaultFactory",
+          "parentSourceRole": "vault_factory",
+          "factoryEventType": "ClassicRewardVaultDeployed",
+          "deployedAddressField": "vault",
+          "deployedSourceRole": "reward_vault",
+          "bindingSpec": "classic-reward-vault-v1",
+          "factoryConfigurationField": "configurationHash",
+          "bindingPolicy": "factory-event-and-constants"
+        }
+      ],
+      "launchRequirements": [
+        { "occurrenceRole": "launcher", "eventType": "MemeTokenLaunchedV2", "requiredWhen": "always" },
+        { "occurrenceRole": "vault_factory", "eventType": "ClassicRewardVaultDeployed", "requiredWhen": "reward_vault" },
+        { "occurrenceRole": "vesting_factory", "eventType": "ClassicInitialBuyVestingWalletDeployed", "requiredWhen": "locked_custody" }
+      ]
+    },
+    {
+      "releaseId": "stock-paired-v1",
+      "modelId": "stock-paired",
+      "activation": { "epochNumber": 1, "expectedGeneration": 0, "nextGeneration": 1 },
+      "deploymentManifestPath": "contracts/deployments/mainnet-stock-paired-v1.json",
+      "sources": [
+        { "contractName": "StockV1Launcher", "sourceRole": "launcher", "sourceType": "ethereum_contract", "artifact": "StockPairedLaunchV1", "deploymentKey": "launcher", "recoverySelector": "0x0f6d2003" },
+        { "contractName": "StockV1EthCoordinator", "sourceRole": "coordinator", "sourceType": "ethereum_contract", "artifact": "StockPairedEthLaunchCoordinatorV1", "deploymentKey": "ethLaunchCoordinator", "recoverySelector": "0xdfd98d51" },
+        { "contractName": "StockV1Hook", "sourceRole": "hook", "sourceType": "ethereum_contract", "artifact": "QuoteAssetCreatorFeeHookV1", "deploymentKey": "feeHook", "recoverySelector": null },
+        { "contractName": "StockV1RewardVaultFactory", "sourceRole": "vault_factory", "sourceType": "ethereum_contract", "artifact": "QuoteAssetFeeSplitVaultFactoryV1", "deploymentKey": "feeSplitVaultFactory", "recoverySelector": null }
+      ],
+      "dynamicSources": [
+        {
+          "contractName": "StockV1RewardVault",
+          "artifact": "QuoteAssetFeeSplitVaultV1",
+          "parentContractName": "StockV1RewardVaultFactory",
+          "parentSourceRole": "vault_factory",
+          "factoryEventType": "QuoteAssetFeeSplitVaultDeployed",
+          "deployedAddressField": "vault",
+          "deployedSourceRole": "reward_vault",
+          "bindingSpec": "quote-asset-fee-split-vault-v1",
+          "factoryConfigurationField": null,
+          "bindingPolicy": "factory-event-constants-and-deferred-allocation"
+        }
+      ],
+      "launchRequirements": [
+        { "occurrenceRole": "launcher", "eventType": "StockPairedTokenLaunched", "requiredWhen": "always" },
+        { "occurrenceRole": "vault_factory", "eventType": "QuoteAssetFeeSplitVaultDeployed", "requiredWhen": "reward_vault" },
+        { "occurrenceRole": "coordinator", "eventType": "StockPairedEthTokenLaunched", "requiredWhen": "eth_funded" }
+      ]
+    },
+    {
+      "releaseId": "stock-paired-v2",
+      "modelId": "stock-paired",
+      "activation": { "epochNumber": 1, "expectedGeneration": 0, "nextGeneration": 1 },
+      "deploymentManifestPath": "contracts/deployments/mainnet-stock-paired-v2.json",
+      "sources": [
+        { "contractName": "StockV2Launcher", "sourceRole": "launcher", "sourceType": "ethereum_contract", "artifact": "StockPairedLaunchV1", "deploymentKey": "launcher", "recoverySelector": "0x0f6d2003" },
+        { "contractName": "StockV2EthCoordinator", "sourceRole": "coordinator", "sourceType": "ethereum_contract", "artifact": "StockPairedEthLaunchCoordinatorV1", "deploymentKey": "ethLaunchCoordinator", "recoverySelector": "0xdfd98d51" },
+        { "contractName": "StockV2V3Hook", "sourceRole": "hook", "sourceType": "ethereum_contract", "artifact": "QuoteAssetCreatorFeeHookV1", "deploymentKey": "feeHook", "recoverySelector": null },
+        { "contractName": "StockV2V3RewardVaultFactory", "sourceRole": "vault_factory", "sourceType": "ethereum_contract", "artifact": "QuoteAssetFeeSplitVaultFactoryV1", "deploymentKey": "feeSplitVaultFactory", "recoverySelector": null }
+      ],
+      "dynamicSources": [
+        {
+          "contractName": "StockV2V3RewardVault",
+          "artifact": "QuoteAssetFeeSplitVaultV1",
+          "parentContractName": "StockV2V3RewardVaultFactory",
+          "parentSourceRole": "vault_factory",
+          "factoryEventType": "QuoteAssetFeeSplitVaultDeployed",
+          "deployedAddressField": "vault",
+          "deployedSourceRole": "reward_vault",
+          "bindingSpec": "quote-asset-fee-split-vault-v1",
+          "factoryConfigurationField": null,
+          "bindingPolicy": "factory-event-constants-and-deferred-allocation"
+        }
+      ],
+      "launchRequirements": [
+        { "occurrenceRole": "launcher", "eventType": "StockPairedTokenLaunched", "requiredWhen": "always" },
+        { "occurrenceRole": "vault_factory", "eventType": "QuoteAssetFeeSplitVaultDeployed", "requiredWhen": "reward_vault" },
+        { "occurrenceRole": "coordinator", "eventType": "StockPairedEthTokenLaunched", "requiredWhen": "eth_funded" }
+      ]
+    },
+    {
+      "releaseId": "stock-paired-v3",
+      "modelId": "stock-paired",
+      "activation": { "epochNumber": 1, "expectedGeneration": 0, "nextGeneration": 1 },
+      "deploymentManifestPath": "contracts/deployments/mainnet-stock-paired-v3.json",
+      "sources": [
+        { "contractName": "StockV3Launcher", "sourceRole": "launcher", "sourceType": "ethereum_contract", "artifact": "StockPairedLaunchV3", "deploymentKey": "launcher", "recoverySelector": "0x0f6d2003" },
+        { "contractName": "StockV3EthCoordinator", "sourceRole": "coordinator", "sourceType": "ethereum_contract", "artifact": "StockPairedEthLaunchCoordinatorV3", "deploymentKey": "ethLaunchCoordinator", "recoverySelector": "0xdfd98d51" },
+        { "contractName": "StockV2V3Hook", "sourceRole": "hook", "sourceType": "ethereum_contract", "artifact": "QuoteAssetCreatorFeeHookV1", "deploymentKey": "feeHook", "recoverySelector": null },
+        { "contractName": "StockV2V3RewardVaultFactory", "sourceRole": "vault_factory", "sourceType": "ethereum_contract", "artifact": "QuoteAssetFeeSplitVaultFactoryV1", "deploymentKey": "feeSplitVaultFactory", "recoverySelector": null }
+      ],
+      "dynamicSources": [
+        {
+          "contractName": "StockV2V3RewardVault",
+          "artifact": "QuoteAssetFeeSplitVaultV1",
+          "parentContractName": "StockV2V3RewardVaultFactory",
+          "parentSourceRole": "vault_factory",
+          "factoryEventType": "QuoteAssetFeeSplitVaultDeployed",
+          "deployedAddressField": "vault",
+          "deployedSourceRole": "reward_vault",
+          "bindingSpec": "quote-asset-fee-split-vault-v1",
+          "factoryConfigurationField": null,
+          "bindingPolicy": "factory-event-constants-and-deferred-allocation"
+        }
+      ],
+      "launchRequirements": [
+        { "occurrenceRole": "launcher", "eventType": "StockPairedTokenLaunched", "requiredWhen": "always" },
+        { "occurrenceRole": "vault_factory", "eventType": "QuoteAssetFeeSplitVaultDeployed", "requiredWhen": "reward_vault" },
+        { "occurrenceRole": "coordinator", "eventType": "StockPairedEthTokenLaunched", "requiredWhen": "eth_funded" }
+      ]
+    }
+  ]
+}

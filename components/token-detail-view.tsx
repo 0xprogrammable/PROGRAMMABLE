@@ -22,6 +22,7 @@ import {
   TokenPriceChart,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
+import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { useWallet } from "@/components/wallet-provider";
 import {
@@ -630,7 +631,7 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
   if (metrics.length === 0) return null;
 
   return (
-    <dl className={styles.metrics}>
+    <dl className={styles.metrics} data-count={metrics.length}>
       {metrics.map((metric) => (
         <div className={styles.metric} key={metric.label}>
           <dt>{metric.label}</dt>
@@ -982,32 +983,42 @@ function TokenDetailContent({
             </div>
           </div>
 
-          {token.description?.trim() ? (
-            <p className={styles.description}>{token.description.trim()}</p>
-          ) : null}
+          {token.description?.trim() ||
+          (token.links && token.links.length > 0) ? (
+            <div className={styles.tokenMeta}>
+              {token.description?.trim() ? (
+                <p className={styles.description}>{token.description.trim()}</p>
+              ) : null}
 
-          {token.links && token.links.length > 0 ? (
-            <div className={styles.links} aria-label={`${token.name} links`}>
-              {token.links.map((link) => {
-                const label = getLinkLabel(link.kind);
-                return (
-                  <a
-                    className={`${styles.socialLink} ${
-                      link.kind === "website" ? styles.websiteLink : ""
-                    }`}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`${token.name} on ${label}`}
-                    title={label}
-                    key={`${link.kind}:${link.url}`}
-                  >
-                    <TokenLinkIcon kind={link.kind} />
-                  </a>
-                );
-              })}
+              {token.links && token.links.length > 0 ? (
+                <div
+                  className={styles.links}
+                  aria-label={`${token.name} links`}
+                >
+                  {token.links.map((link) => {
+                    const label = getLinkLabel(link.kind);
+                    return (
+                      <a
+                        className={`${styles.socialLink} ${
+                          link.kind === "website" ? styles.websiteLink : ""
+                        }`}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`${token.name} on ${label}`}
+                        title={label}
+                        key={`${link.kind}:${link.url}`}
+                      >
+                        <TokenLinkIcon kind={link.kind} />
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           ) : null}
+
+          <MetricGrid metrics={metrics} />
 
           <TokenPriceChart
             tokenAddress={token.tokenAddress}
@@ -1017,8 +1028,6 @@ function TokenDetailContent({
             onMarketCapChange={setHoveredMarketCap}
             onVolumeChange={setChartVolume}
           />
-
-          <MetricGrid metrics={metrics} />
 
           {token.launchModel === "deep" &&
           token.growthTargetNativeWei &&
@@ -1176,6 +1185,7 @@ export function TokenDetailView({ address }: { address: string }) {
   const { wallet: activeWallet } = useWallet();
   const normalizedAddress = isAddress(address) ? getAddress(address) : null;
   const [retryKey, setRetryKey] = useState(0);
+  const refreshKey = useLiveDataRefresh({ enabled: normalizedAddress !== null });
   const requestKey = `${normalizedAddress ?? "invalid"}\u0000${retryKey}`;
   const [state, setState] = useState<DetailState>({
     phase: "loading",
@@ -1235,20 +1245,21 @@ export function TokenDetailView({ address }: { address: string }) {
         });
       } catch (error) {
         if (controller.signal.aborted) return;
-        setState({
-          phase: "error",
-          requestKey,
-          message:
-            error instanceof Error
-              ? error.message
-              : "Token data is temporarily unavailable",
-        });
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Token data is temporarily unavailable";
+        setState((current) =>
+          current.phase === "ready" && current.requestKey === requestKey
+            ? current
+            : { phase: "error", requestKey, message },
+        );
       }
     }
 
     void loadToken();
     return () => controller.abort();
-  }, [normalizedAddress, requestKey]);
+  }, [normalizedAddress, refreshKey, requestKey]);
 
   if (!normalizedAddress) {
     return (

@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
+
 const mocks = vi.hoisted(() => {
   const runtimeCodes = {
     "0x01":
@@ -26,6 +28,19 @@ const mocks = vi.hoisted(() => {
     getLogs: vi.fn(async () => []),
   };
   return { client, runtimeCodes };
+});
+
+vi.mock("server-only", () => ({}));
+
+vi.mock("../lib/data-pipeline/action-lookup", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/data-pipeline/action-lookup")>();
+  return {
+    ...actual,
+    lookupActionReward: vi.fn(async () => {
+      throw new actual.ActionLookupError("not-found");
+    }),
+  };
 });
 
 vi.mock("viem", async (importOriginal) => {

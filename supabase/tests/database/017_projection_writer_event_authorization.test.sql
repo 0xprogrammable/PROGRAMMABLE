@@ -1,0 +1,102 @@
+begin;
+
+select plan(7);
+
+select ok(
+  to_regprocedure(
+    'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'
+  ) is not null,
+  'projection event authorization remains at its frozen signature'
+);
+
+select ok(
+  (
+    select procedure.prosecdef
+      and procedure.provolatile = 's'
+      and 'search_path=""' = any(procedure.proconfig)
+    from pg_catalog.pg_proc as procedure
+    where procedure.oid =
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+  ),
+  'projection event authorization is stable, SECURITY DEFINER, and has an empty search path'
+);
+
+select ok(
+  pg_catalog.has_function_privilege(
+    'programmable_projector',
+    'programmable_private.assert_projection_event_allowed(uuid,uuid,text)',
+    'EXECUTE'
+  ),
+  'the projector capability can authorize projection writers'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_catalog.unnest(array[
+      'public', 'anon', 'authenticated', 'service_role',
+      'programmable_reconciler', 'programmable_api_reader',
+      'programmable_profile_binder', 'programmable_profile_recovery',
+      'programmable_profile_writer', 'programmable_maintenance',
+      'programmable_operator'
+    ]) as denied(role_name)
+    where pg_catalog.has_function_privilege(
+      denied.role_name,
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)',
+      'EXECUTE'
+    )
+  ),
+  'browser, reader, profile, maintenance, reconciler, and operator roles remain denied'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'release_launch_completeness_requirements'
+  ) > 0,
+  'launch occurrence roles are authorized by the exact completeness requirement'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'pool-registration'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'fee-disclosure'
+  ) > 0,
+  'pool writers map to their exact semantic event rules'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'reward-vault-deployment'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'initial-buy-custody'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'vesting-wallet-deployment'
+  ) > 0,
+  'reward and custody writers map to their exact semantic event rules'
+);
+
+select * from finish();
+
+rollback;
