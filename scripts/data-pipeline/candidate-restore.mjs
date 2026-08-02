@@ -3355,15 +3355,17 @@ function readExactRuntimeCredentials(value) {
   return values;
 }
 
-async function readRuntimeRolePosture(sql) {
+export async function readRuntimeRolePosture(sql) {
   const names = ROLE_SPECS.flatMap(({ loginRole, capabilityRole }) => [
     loginRole,
     capabilityRole,
   ]);
   const rows = await sql.unsafe(
     `
-      select rolname, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole,
-             rolinherit, rolreplication, rolbypassrls, rolconnlimit, rolconfig,
+      select roles.rolname, roles.rolcanlogin, roles.rolsuper,
+             roles.rolcreatedb, roles.rolcreaterole, roles.rolinherit,
+             roles.rolreplication, roles.rolbypassrls, roles.rolconnlimit,
+             roles.rolconfig,
              auth.rolpassword is not null as has_password
         from pg_catalog.pg_roles as roles
         join pg_catalog.pg_authid as auth on auth.rolname = roles.rolname
