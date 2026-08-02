@@ -13,7 +13,6 @@
   --accent-hover: #394c60;
   --accent-strong: #304256;
   --brand-pink: #657487;
-  --brand-mark-filter: grayscale(1) saturate(0) brightness(0.72) contrast(1.08);
   --accent-ink: #ffffff;
   --accent-wash: rgba(70, 90, 111, 0.12);
   --accent-soft: rgba(70, 90, 111, 0.09);
@@ -79,7 +78,6 @@ html[data-theme="dark"] {
   --accent-hover: #eef1f5;
   --accent-strong: #eef2f6;
   --brand-pink: #c0c8d2;
-  --brand-mark-filter: grayscale(1) saturate(0) brightness(1.5) contrast(0.92);
   --accent-ink: #151a20;
   --accent-wash: rgba(215, 221, 229, 0.14);
   --accent-soft: rgba(215, 221, 229, 0.11);
@@ -392,9 +390,9 @@ html[data-theme="dark"] .app-frame::before {
 
 .theme-toggle {
   align-items: center;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
   color: var(--brand-pink);
   cursor: default;
   display: inline-flex;

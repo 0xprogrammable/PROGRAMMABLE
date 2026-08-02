@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
+import { getExplorePreviewChart } from "@/components/explore-preview-data";
 
 import styles from "./token-price-chart.module.css";
 
@@ -173,6 +174,7 @@ export function TokenPriceChart({
   tokenName,
   totalSupply,
   launchModel,
+  preview = false,
   onMarketCapChange,
   onVolumeChange,
 }: {
@@ -180,6 +182,7 @@ export function TokenPriceChart({
   tokenName: string;
   totalSupply?: string;
   launchModel?: ChartLaunchModel;
+  preview?: boolean;
   onMarketCapChange?: (marketCap: string | null) => void;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
 }) {
@@ -190,7 +193,7 @@ export function TokenPriceChart({
   } | null>(null);
   const [range, setRange] = useState<ChartRange>("all");
   const refreshKey = useLiveDataRefresh({
-    enabled: launchModel !== "stock-paired",
+    enabled: launchModel !== "stock-paired" && !preview,
   });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const activeIndexRef = useRef<number | null>(null);
@@ -204,14 +207,21 @@ export function TokenPriceChart({
   }, []);
   const gradientId = useId().replaceAll(":", "");
   const requestKey = `${tokenAddress.toLowerCase()}:${range}`;
+  const previewPayload = useMemo(
+    () => (preview ? getExplorePreviewChart(tokenAddress, range) : null),
+    [preview, range, tokenAddress],
+  );
   const payload =
-    launchModel === "stock-paired"
+    previewPayload ??
+    (launchModel === "stock-paired"
       ? STOCK_PAIRED_EMPTY_CHART
       : request?.key === requestKey
         ? request.payload
-        : null;
+        : null);
   const failed =
-    launchModel === "stock-paired"
+    preview
+      ? false
+      : launchModel === "stock-paired"
       ? false
       : request?.key === requestKey
         ? request.failed
@@ -219,7 +229,7 @@ export function TokenPriceChart({
   const loading = !payload && !failed;
 
   useEffect(() => {
-    if (launchModel === "stock-paired") {
+    if (launchModel === "stock-paired" || preview) {
       return;
     }
 
@@ -254,6 +264,7 @@ export function TokenPriceChart({
     return () => controller.abort();
   }, [
     launchModel,
+    preview,
     range,
     refreshKey,
     requestKey,

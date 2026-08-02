@@ -213,9 +213,8 @@ code,
 }
 
 .wordmark-logo {
-  filter: var(--brand-mark-filter);
-  height: 25px;
-  width: 25px;
+  height: 34px;
+  width: 34px;
 }
 
 .header-social-link svg {
@@ -268,10 +267,15 @@ code,
 }
 
 .theme-toggle {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: transparent;
+  border-color: transparent;
+  border-radius: 50%;
+  box-shadow: none;
   width: 44px;
 }
 
-.theme-toggle,
 .wallet-button,
 .secondary-button,
 .token-search,
@@ -284,6 +288,12 @@ code,
   box-shadow:
     inset 0 1px 0 var(--control-glass-highlight),
     0 9px 26px var(--control-glass-shadow-color);
+}
+
+.theme-toggle-icons,
+.theme-toggle-icons svg {
+  height: 22px;
+  width: 22px;
 }
 
 .primary-button {
@@ -768,8 +778,8 @@ html[data-theme="dark"] .token-card-art {
   }
 
   .wordmark-logo {
-    height: 22px;
-    width: 22px;
+    height: 28px;
+    width: 28px;
   }
 
   .token-toolbar {

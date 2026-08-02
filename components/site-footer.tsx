@@ -43,10 +43,11 @@ export function SiteFooter() {
           <Link href="/" aria-label="Programmable home">
             <Image
               className={styles.mark}
-              src="/brand/loop/programmable-loop-mark-header.png"
+              src="/brand/loop/programmable-loop-mark-512.png"
               alt=""
-              width={146}
-              height={192}
+              width={512}
+              height={512}
+              sizes="34px"
             />
           </Link>
           <p>Explore and create tokens on Ethereum.</p>

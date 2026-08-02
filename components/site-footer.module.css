@@ -23,7 +23,6 @@
 }
 
 .mark {
-  filter: var(--brand-mark-filter);
   height: 34px;
   object-fit: contain;
   object-position: left center;

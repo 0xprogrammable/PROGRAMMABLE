@@ -12,7 +12,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { type MarketCapMetric } from "@/components/animated-market-cap";
+import {
+  formatMarketCapMetric,
+  type MarketCapMetric,
+} from "@/components/animated-market-cap";
+import { EXPLORE_PREVIEW_TOKENS } from "@/components/explore-preview-data";
+import { useInterfacePreview } from "@/components/interface-preview";
 import { SiteFooter } from "@/components/site-footer";
 import {
   LIVE_DATA_REFRESH_INTERVAL_MS,
@@ -37,6 +42,8 @@ type TokenCard = {
   imageUrl: string;
   usesFallbackImage: boolean;
   tokenAddress: `0x${string}`;
+  marketCap?: MarketCapMetric;
+  model: string;
 };
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -402,17 +409,27 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
       token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress),
     usesFallbackImage: !token.imageUrl?.trim(),
     tokenAddress: token.tokenAddress,
+    marketCap: getMarketCap(token),
+    model:
+      token.launchModel === "adaptive"
+        ? "Adaptive"
+        : token.launchModel === "deep"
+          ? "Deep"
+          : token.launchModel === "stock-paired"
+            ? "Custom"
+            : "Classic",
   }));
 }
 
 export function ExploreView() {
+  const preview = useInterfacePreview();
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sort, setSort] = useState<TokenSort>("market-cap");
   const [currentPage, setCurrentPage] = useState(1);
   const [retryKey, setRetryKey] = useState(0);
-  const refreshKey = useLiveDataRefresh();
+  const refreshKey = useLiveDataRefresh({ enabled: !preview });
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
   const activeExploreContentKey = useRef<string | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
@@ -466,6 +483,8 @@ export function ExploreView() {
   }, []);
 
   useEffect(() => {
+    if (preview) return;
+
     let ignore = false;
     const previousContentKey = activeExploreContentKey.current;
     if (previousContentKey && previousContentKey !== contentKey) {
@@ -512,9 +531,54 @@ export function ExploreView() {
     return () => {
       ignore = true;
     };
-  }, [contentKey, currentPage, debouncedQuery, requestKey, sort]);
+  }, [contentKey, currentPage, debouncedQuery, preview, requestKey, sort]);
 
-  const payload = state.phase === "ready" ? state.payload : null;
+  const previewPayload = useMemo<ExplorePayload>(() => {
+    const searchValue = debouncedQuery.toLowerCase();
+    const filtered = EXPLORE_PREVIEW_TOKENS.filter((token) =>
+      [token.name, token.symbol, token.tokenAddress].some((value) =>
+        value.toLowerCase().includes(searchValue),
+      ),
+    );
+    const ranked = [...filtered].sort((left, right) => {
+      if (sort === "newest" || sort === "oldest") {
+        const delta =
+          new Date(right.launchedAt).getTime() -
+          new Date(left.launchedAt).getTime();
+        return sort === "newest" ? delta : -delta;
+      }
+      const leftMarketCap = BigInt(left.indexedMarketCapUsdWad ?? "0");
+      const rightMarketCap = BigInt(right.indexedMarketCapUsdWad ?? "0");
+      const delta =
+        leftMarketCap === rightMarketCap
+          ? 0
+          : leftMarketCap > rightMarketCap
+            ? -1
+            : 1;
+      return sort === "market-cap" ? delta : -delta;
+    });
+
+    return {
+      status: "ready",
+      tokens: ranked,
+      page: 1,
+      pageSize: TOKENS_PER_PAGE,
+      total: ranked.length,
+      totalPages: ranked.length > 0 ? 1 : 0,
+    };
+  }, [debouncedQuery, sort]);
+
+  const displayState: ExploreState = preview
+    ? {
+        phase: "ready",
+        payload: previewPayload,
+        requestKey,
+        contentKey,
+      }
+    : state;
+
+  const payload =
+    displayState.phase === "ready" ? displayState.payload : null;
   const cards = useMemo(
     () => getTokenCards(payload?.tokens ?? []),
     [payload?.tokens],
@@ -522,16 +586,20 @@ export function ExploreView() {
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
   const paginationItems = getPaginationItems(activePage, pageCount);
-  const busy = state.phase === "loading" || state.requestKey !== requestKey;
+  const busy =
+    !preview &&
+    (displayState.phase === "loading" ||
+      displayState.requestKey !== requestKey);
   const hasPublicTokens =
-    state.phase !== "ready" ||
-    state.payload.total > 0 ||
+    displayState.phase !== "ready" ||
+    displayState.payload.total > 0 ||
     Boolean(debouncedQuery);
 
   function renderTokenState() {
     if (
-      state.phase === "loading" ||
-      (state.phase === "error" && state.requestKey !== requestKey)
+      displayState.phase === "loading" ||
+      (displayState.phase === "error" &&
+        displayState.requestKey !== requestKey)
     ) {
       return (
         <div className="token-empty" role="status">
@@ -540,10 +608,10 @@ export function ExploreView() {
       );
     }
 
-    if (state.phase === "error") {
+    if (displayState.phase === "error") {
       return (
         <div className="token-empty" role="alert">
-          <p>{state.message}</p>
+          <p>{displayState.message}</p>
           <button
             className="text-button"
             type="button"
@@ -555,7 +623,7 @@ export function ExploreView() {
       );
     }
 
-    if (state.payload.status === "not-deployed") {
+    if (displayState.payload.status === "not-deployed") {
       return (
         <div className={`${styles.emptyState} token-empty token-empty-initial`}>
           <div>
@@ -623,7 +691,7 @@ export function ExploreView() {
                     }
                     fill
                     loading={index < 3 ? "eager" : "lazy"}
-                    sizes="(max-width: 700px) calc(100vw - 40px), (max-width: 1040px) 46vw, 390px"
+                    sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1040px) 46vw, 31vw"
                     unoptimized={!canOptimizeTokenImage(imageSource)}
                   />
                 </div>
@@ -643,6 +711,21 @@ export function ExploreView() {
                   >
                     {token.description ?? "No description yet."}
                   </p>
+
+                  <dl className={styles.runnerMeta}>
+                    <div>
+                      <dt>Market cap</dt>
+                      <dd>
+                        {token.marketCap
+                          ? formatMarketCapMetric(token.marketCap)
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>V4 model</dt>
+                      <dd>{token.model}</dd>
+                    </div>
+                  </dl>
                 </div>
               </Link>
             </article>
@@ -656,7 +739,8 @@ export function ExploreView() {
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1>Tokens</h1>
+          <h1>Explore</h1>
+          <p>Tokens built with Uniswap v4 hooks.</p>
         </header>
 
         <section
@@ -664,6 +748,15 @@ export function ExploreView() {
           id="tokens"
           aria-busy={busy}
         >
+          <header className={styles.indexHeading}>
+            <h2>All tokens</h2>
+            {payload ? (
+              <span>
+                {payload.total} {payload.total === 1 ? "project" : "projects"}
+              </span>
+            ) : null}
+          </header>
+
           <div className={styles.runnersIntro}>
             {hasPublicTokens ? (
               <div className="token-section-heading">
@@ -719,9 +812,9 @@ export function ExploreView() {
                     </div>
                   </details>
 
-                  {state.phase === "ready" &&
-                  state.payload.status === "ready" &&
-                  state.payload.total > 0 &&
+                  {displayState.phase === "ready" &&
+                  displayState.payload.status === "ready" &&
+                  displayState.payload.total > 0 &&
                   cards.length > 0 &&
                   pageCount > 1 ? (
                     <nav className="token-pagination" aria-label="Token pages">
@@ -785,7 +878,8 @@ export function ExploreView() {
             ) : null}
           </div>
 
-          {state.phase === "ready" && state.refreshError ? (
+          {displayState.phase === "ready" &&
+          displayState.refreshError ? (
             <div className="token-refresh-warning" role="status">
               <span>Prices may be out of date</span>
               <button
@@ -797,7 +891,7 @@ export function ExploreView() {
             </div>
           ) : null}
 
-          {state.phase === "ready" && busy ? (
+          {displayState.phase === "ready" && busy ? (
             <span className="sr-only" role="status">
               Updating tokens
             </span>

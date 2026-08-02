@@ -221,7 +221,6 @@
 }
 
 .connectMark {
-  filter: var(--brand-mark-filter);
   grid-area: mark;
   height: clamp(132px, 15vw, 188px);
   margin: 0 clamp(18px, 4vw, 54px) 0 0;

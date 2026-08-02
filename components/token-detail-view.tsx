@@ -28,6 +28,11 @@ import {
   TokenPriceChart,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
+import {
+  getExplorePreviewProject,
+  getExplorePreviewToken,
+} from "@/components/explore-preview-data";
+import { useInterfacePreview } from "@/components/interface-preview";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { useWallet } from "@/components/wallet-provider";
@@ -669,6 +674,80 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
   );
 }
 
+function PreviewTokenTrade({ token }: { token: LauncherToken }) {
+  return (
+    <div
+      className={styles.tradeForm}
+      aria-label={`Trade ${token.symbol} preview`}
+    >
+      <header className={styles.tradeHeader}>
+        <h2>Trade ${token.symbol}</h2>
+        <span>Interface preview</span>
+      </header>
+
+      <div className={styles.sideControl} role="group" aria-label="Trade side">
+        <span aria-hidden="true" className={styles.sideIndicator} />
+        <button
+          className={`${styles.sideButton} ${styles.sideButtonSelected}`}
+          type="button"
+          aria-pressed="true"
+          disabled
+        >
+          Buy
+        </button>
+        <button
+          className={styles.sideButton}
+          type="button"
+          aria-pressed="false"
+          disabled
+        >
+          Sell
+        </button>
+      </div>
+
+      <div className={styles.amountCard}>
+        <div className={styles.amountHeader}>
+          <span>You pay</span>
+          <span className={styles.balance}>Wallet disconnected</span>
+        </div>
+        <div className={styles.amountInputRow}>
+          <input
+            className={styles.amountInput}
+            aria-label="You pay"
+            inputMode="decimal"
+            placeholder="0"
+            disabled
+          />
+          <span className={styles.asset}>ETH</span>
+        </div>
+        <div className={styles.amountMeta} aria-hidden="true">
+          <span>&nbsp;</span>
+        </div>
+      </div>
+
+      <dl className={styles.tradeFacts}>
+        <div>
+          <dt>Swap fee</dt>
+          <dd>{formatSwapFee(token.totalSwapFeeBps) ?? "—"}</dd>
+        </div>
+        <div>
+          <dt>Slippage</dt>
+          <dd>1%</dd>
+        </div>
+      </dl>
+
+      <div className={styles.tradeFooter}>
+        <div className={styles.statusMessage} role="status">
+          Local preview · no wallet request or transaction
+        </div>
+        <button className={styles.primaryAction} type="button" disabled>
+          Trading unavailable in preview
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DeepLiquiditySummary({ token }: { token: LauncherToken }) {
   const target = BigInt(token.growthTargetNativeWei ?? "0");
   const added = BigInt(token.totalNativeAddedToLiquidityWei ?? "0");
@@ -719,9 +798,11 @@ function DeepLiquiditySummary({ token }: { token: LauncherToken }) {
 function TokenDetailContent({
   token,
   chainId,
+  preview,
 }: {
   token: LauncherToken;
   chainId: number;
+  preview: boolean;
 }) {
   const { wallet, openWallet, readTradeBalances, sendTransaction } =
     useWallet();
@@ -741,6 +822,9 @@ function TokenDetailContent({
   const creatorAddress = isTokenAddress(token.creatorAddress)
     ? token.creatorAddress
     : null;
+  const previewProject = preview
+    ? getExplorePreviewProject(token.tokenAddress)
+    : undefined;
   const tokenDecimals =
     typeof token.tokenDecimals === "number" &&
     Number.isInteger(token.tokenDecimals) &&
@@ -1059,6 +1143,7 @@ function TokenDetailContent({
             tokenName={token.name}
             totalSupply={token.totalSupply}
             launchModel={token.launchModel}
+            preview={preview}
             onMarketCapChange={setHoveredMarketCap}
             onVolumeChange={setChartVolume}
           />
@@ -1108,7 +1193,9 @@ function TokenDetailContent({
                       {token.name.trim().charAt(0).toUpperCase() || "P"}
                     </span>
                     <div>
-                      <strong>Creator wallet</strong>
+                      <strong>
+                        {previewProject?.teamName ?? "Creator wallet"}
+                      </strong>
                       {explorerBase ? (
                         <a
                           href={`${explorerBase}/address/${creatorAddress}`}
@@ -1124,7 +1211,9 @@ function TokenDetailContent({
                     </div>
                   </div>
                   <p className={styles.projectNote}>
-                    No team profile provided.
+                    {previewProject
+                      ? `${previewProject.contributors} contributors · ${previewProject.teamSummary}`
+                      : "No team profile provided."}
                   </p>
                 </>
               ) : (
@@ -1146,19 +1235,23 @@ function TokenDetailContent({
               <div className={styles.communityBody}>
                 <p>
                   {communityLink
-                    ? `Join the ${token.name} community chat on Telegram.`
+                    ? previewProject
+                      ? `${previewProject.communityMembers.toLocaleString(
+                          "en-US",
+                        )} members · Join the ${token.name} community chat on Telegram.`
+                      : `Join the ${token.name} community chat on Telegram.`
                     : "This project has not connected a community chat."}
                 </p>
                 {communityLink ? (
-                <a
-                  className={styles.communityAction}
-                  href={communityLink.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open chat
-                  <ArrowUpRight aria-hidden="true" size={15} />
-                </a>
+                  <a
+                    className={styles.communityAction}
+                    href={communityLink.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open chat
+                    <ArrowUpRight aria-hidden="true" size={15} />
+                  </a>
                 ) : null}
               </div>
             </section>
@@ -1166,7 +1259,9 @@ function TokenDetailContent({
         </section>
 
         <aside className={styles.tradeShell} aria-label={`${token.name} trade`}>
-          {chainId !== 1 && chainId !== 11_155_111 ? (
+          {preview ? (
+            <PreviewTokenTrade token={token} />
+          ) : chainId !== 1 && chainId !== 11_155_111 ? (
             <div className={styles.submitted} role="status">
               <p>Trading is not supported on this network</p>
             </div>
@@ -1311,9 +1406,16 @@ function TokenDetailContent({
 
 export function TokenDetailView({ address }: { address: string }) {
   const { wallet: activeWallet } = useWallet();
+  const preview = useInterfacePreview();
   const normalizedAddress = isAddress(address) ? getAddress(address) : null;
+  const previewToken =
+    preview && normalizedAddress
+      ? getExplorePreviewToken(normalizedAddress)
+      : undefined;
   const [retryKey, setRetryKey] = useState(0);
-  const refreshKey = useLiveDataRefresh({ enabled: normalizedAddress !== null });
+  const refreshKey = useLiveDataRefresh({
+    enabled: normalizedAddress !== null && !preview,
+  });
   const requestKey = `${normalizedAddress ?? "invalid"}\u0000${retryKey}`;
   const [state, setState] = useState<DetailState>({
     phase: "loading",
@@ -1321,7 +1423,7 @@ export function TokenDetailView({ address }: { address: string }) {
   });
 
   useEffect(() => {
-    if (!normalizedAddress) return;
+    if (!normalizedAddress || preview) return;
 
     const tokenAddress = normalizedAddress;
     const controller = new AbortController();
@@ -1387,11 +1489,32 @@ export function TokenDetailView({ address }: { address: string }) {
 
     void loadToken();
     return () => controller.abort();
-  }, [normalizedAddress, refreshKey, requestKey]);
+  }, [normalizedAddress, preview, refreshKey, requestKey]);
 
   if (!normalizedAddress) {
     return (
-      <TokenDetailMessage message="This is not a valid Ethereum token address" />
+      <TokenDetailMessage
+        message="This is not a valid Ethereum token address"
+      />
+    );
+  }
+
+  if (previewToken) {
+    return (
+      <TokenDetailContent
+        key={`${previewToken.tokenAddress}:preview:${
+          activeWallet?.account.toLowerCase() ?? "disconnected"
+        }`}
+        token={previewToken}
+        chainId={1}
+        preview
+      />
+    );
+  }
+
+  if (preview) {
+    return (
+      <TokenDetailMessage message="This token is not in the preview index" />
     );
   }
 
@@ -1406,6 +1529,7 @@ export function TokenDetailView({ address }: { address: string }) {
         }`}
         token={activeState.token}
         chainId={activeState.chainId}
+        preview={false}
       />
     );
   }

@@ -1870,11 +1870,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         <section className={styles.connectCard}>
           <Image
             className={styles.connectMark}
-            src="/brand/loop/programmable-loop-mark-transparent-v1.png"
+            src="/brand/loop/programmable-loop-mark-512.png"
             alt=""
-            width={96}
-            height={96}
-            sizes="82px"
+            width={512}
+            height={512}
+            sizes="(max-width: 700px) 72px, 188px"
             priority
           />
           <h1>Profile</h1>
