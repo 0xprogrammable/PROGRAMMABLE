@@ -1,4 +1,6 @@
 .page {
+  --docs-link: #075fca;
+  --docs-link-soft: rgba(7, 95, 202, 0.08);
   --docs-content-width: 900px;
   --docs-layout-gap: clamp(34px, 4vw, 58px);
   --docs-layout-width: 1168px;
@@ -11,6 +13,11 @@
     minmax(0, var(--docs-content-width));
   justify-content: center;
   padding: 24px 0 72px;
+}
+
+:global(html[data-theme="dark"]) .page {
+  --docs-link: #78aaff;
+  --docs-link-soft: rgba(120, 170, 255, 0.12);
 }
 
 .hero {
@@ -50,9 +57,29 @@
   align-items: center;
   display: grid;
   gap: 12px;
+  grid-column: 2;
   grid-template-columns: auto minmax(280px, 1fr);
+  isolation: isolate;
   margin-top: 34px;
   max-width: 790px;
+  position: sticky;
+  top: calc(var(--header-height) + 12px);
+  width: 100%;
+  z-index: 43;
+}
+
+.heroTools::before {
+  background: linear-gradient(
+    180deg,
+    var(--body-background) 0%,
+    color-mix(in srgb, var(--body-background) 94%, transparent) 72%,
+    transparent 100%
+  );
+  content: "";
+  inset: -12px -18px -16px;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
 }
 
 .guideTabs {
@@ -82,10 +109,10 @@
   min-height: 44px;
   padding: 0 14px;
   transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    box-shadow 150ms ease,
-    color 150ms ease;
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out),
+    color 150ms var(--ease-out);
 }
 
 .guideTab[data-active="true"] {
@@ -116,9 +143,9 @@
   position: relative;
   text-align: left;
   transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    box-shadow 150ms ease;
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out);
   z-index: 30;
 }
 
@@ -151,10 +178,10 @@
   color: var(--muted);
   display: inline-flex;
   flex: 0 0 auto;
-  height: 32px;
+  height: 40px;
   justify-content: center;
   padding: 0;
-  width: 32px;
+  width: 40px;
 }
 
 .searchShortcut {
@@ -193,7 +220,7 @@
   gap: 2px;
   outline: 0;
   padding: 10px 11px;
-  transition: background-color 140ms ease;
+  transition: background-color 140ms var(--ease-out);
 }
 
 .searchResults a[aria-selected="true"] {
@@ -228,7 +255,7 @@
 .sidebar {
   align-self: start;
   grid-column: 1;
-  grid-row: 1 / span 2;
+  grid-row: 1 / span 3;
   inline-size: var(--docs-rail-width);
   position: sticky;
   top: calc(var(--header-height) + 16px);
@@ -282,8 +309,8 @@
   min-height: 38px;
   padding: 0 10px 0 12px;
   transition:
-    background-color 140ms ease,
-    color 140ms ease;
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out);
 }
 
 .navGroup a[data-active="true"] {
@@ -307,7 +334,7 @@
 }
 
 .content section {
-  scroll-margin-top: calc(var(--header-height) + 24px);
+  scroll-margin-top: 70px;
 }
 
 .content section + section {
@@ -339,6 +366,11 @@
   font-weight: 630;
   letter-spacing: -0.025em;
   line-height: 1.2;
+}
+
+.content h2[tabindex="-1"]:focus,
+.content h3[tabindex="-1"]:focus {
+  outline: none;
 }
 
 .content p {
@@ -512,7 +544,8 @@
   font-weight: 620;
 }
 
-.address {
+.address,
+.externalLinkAddress {
   font-family: var(--font-plex-mono), monospace;
   font-size: 12.5px;
   overflow-wrap: anywhere;
@@ -539,25 +572,83 @@
   margin-top: 22px;
 }
 
-.sourceLinks a {
+.externalLink {
+  color: var(--docs-link);
+  max-width: 100%;
+  outline: 0;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.externalLink:focus-visible {
+  border-radius: 7px;
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.externalLinkIcon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 15px;
+  justify-content: center;
+  transition: transform 140ms var(--ease-out);
+  width: 15px;
+}
+
+.externalLinkIcon svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.externalLinkText {
+  min-width: 0;
+}
+
+.externalLinkInline,
+.externalLinkAddress {
+  align-items: flex-start;
+  display: inline-flex;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.externalLinkInline .externalLinkText,
+.externalLinkAddress .externalLinkText {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--docs-link) 32%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.externalLinkAddress .externalLinkIcon {
+  margin-top: 2px;
+}
+
+.externalLinkChip {
   align-items: center;
   -webkit-backdrop-filter: var(--control-glass-backdrop);
   backdrop-filter: var(--control-glass-backdrop);
-  background: var(--control-glass-background);
-  border: 1px solid var(--control-glass-border);
+  background: color-mix(
+    in srgb,
+    var(--docs-link-soft) 72%,
+    var(--control-glass-background)
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--docs-link) 20%, var(--control-glass-border));
   border-radius: var(--radius-control);
   box-shadow: inset 0 1px 0 var(--control-glass-highlight);
-  color: var(--text-soft);
   display: inline-flex;
   font-size: 12px;
-  font-weight: 610;
-  gap: 6px;
-  min-height: 42px;
-  padding: 0 12px;
+  font-weight: 620;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 13px;
   transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
+    background-color 140ms var(--ease-out),
+    border-color 140ms var(--ease-out),
+    color 140ms var(--ease-out);
 }
 
 .flow {
@@ -594,9 +685,29 @@
 
 @media (hover: hover) and (pointer: fine) {
   .guideTab:not([data-active="true"]):hover,
-  .searchResults a:hover,
-  .sourceLinks a:hover {
+  .searchResults a:hover {
     background: var(--accent-soft);
+  }
+
+  .externalLink:hover .externalLinkText {
+    text-decoration-color: currentColor;
+  }
+
+  .externalLink:hover .externalLinkIcon {
+    transform: translate(1px, -1px);
+  }
+
+  .externalLinkChip:hover {
+    background: color-mix(
+      in srgb,
+      var(--docs-link-soft) 100%,
+      var(--control-glass-background-hover)
+    );
+    border-color: color-mix(
+      in srgb,
+      var(--docs-link) 34%,
+      var(--control-glass-border)
+    );
   }
 
   .searchClear:hover {
@@ -630,9 +741,32 @@
   .sidebar {
     inline-size: auto;
     inset-inline: 24px;
+    isolation: isolate;
     position: fixed;
     top: calc(var(--header-height) + 8px);
     z-index: 44;
+  }
+
+  .sidebar::before {
+    background: linear-gradient(
+      180deg,
+      var(--body-background) 0%,
+      color-mix(in srgb, var(--body-background) 94%, transparent) 72%,
+      transparent 100%
+    );
+    content: "";
+    inset: -8px -6px -14px;
+    pointer-events: none;
+    position: absolute;
+    z-index: -1;
+  }
+
+  .heroTools {
+    position: static;
+  }
+
+  .heroTools::before {
+    display: none;
   }
 
   .desktopNav {
@@ -713,6 +847,10 @@
 
   .content {
     border-radius: 0;
+  }
+
+  .content section {
+    scroll-margin-top: 54px;
   }
 }
 
@@ -866,7 +1004,12 @@
   .guideTab,
   .navGroup a,
   .mobileNav summary svg,
-  .sourceLinks a {
+  .externalLink,
+  .externalLinkIcon {
     transition: none;
+  }
+
+  .externalLink:hover .externalLinkIcon {
+    transform: none;
   }
 }

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calculateDocsReadingOffset,
   docsNavigateEvent,
   isDocsNavigationItemActive,
   normalizeDocsHash,
   pickActiveDocsSection,
   resolveDocsLocationTarget,
 } from "../components/docs-navigation";
+import { getDocsExternalLinkProvider } from "../components/docs-external-link";
 import {
   getDocsSearchResults,
   nextDocsSearchIndex,
@@ -93,6 +95,38 @@ describe("Docs navigation state", () => {
         ],
       }),
     ).toBe("launching");
+  });
+
+  it("places the reading marker below whichever Docs control is fixed", () => {
+    expect(
+      calculateDocsReadingOffset({
+        mobileNavigationHeight: 0,
+        scrollPaddingTop: 88,
+        stickyToolsHeight: 52,
+      }),
+    ).toBe(160);
+    expect(
+      calculateDocsReadingOffset({
+        mobileNavigationHeight: 50,
+        scrollPaddingTop: 84,
+        stickyToolsHeight: 0,
+      }),
+    ).toBe(154);
+  });
+
+  it("assigns recognizable provider icons to documentation links", () => {
+    expect(getDocsExternalLinkProvider("https://github.com/openai/codex")).toBe(
+      "GitHub",
+    );
+    expect(getDocsExternalLinkProvider("https://x.com/0xProgrammable")).toBe(
+      "X",
+    );
+    expect(
+      getDocsExternalLinkProvider("https://etherscan.io/address/0x123"),
+    ).toBe("Etherscan");
+    expect(
+      getDocsExternalLinkProvider("https://docs.uniswap.org/contracts/v4"),
+    ).toBe("Uniswap");
   });
 
   it("selects from cached document positions with an absolute scroll marker", () => {

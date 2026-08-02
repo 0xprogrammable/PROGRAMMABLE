@@ -90,6 +90,27 @@ export function pickActiveDocsSection({
   return activeId;
 }
 
+export function calculateDocsReadingOffset({
+  mobileNavigationHeight,
+  scrollPaddingTop,
+  stickyToolsHeight,
+}: {
+  mobileNavigationHeight: number;
+  scrollPaddingTop: number;
+  stickyToolsHeight: number;
+}): number {
+  const safeHeight = (value: number) =>
+    Number.isFinite(value) && value > 0 ? value : 0;
+  return (
+    safeHeight(scrollPaddingTop) +
+    Math.max(
+      safeHeight(stickyToolsHeight),
+      safeHeight(mobileNavigationHeight),
+    ) +
+    20
+  );
+}
+
 function hasModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
   return (
     event.button !== 0 ||
@@ -166,7 +187,7 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     let scrollFrame = 0;
     let layoutFrame = 0;
     let locationFrame = 0;
-    let headerHeight = 68;
+    let readingMarkerOffset = 108;
     let sectionPositions: SectionPosition[] = [];
 
     const updateFromScroll = () => {
@@ -176,7 +197,7 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
         atPageEnd:
           Math.ceil(scrollY + window.innerHeight) >=
           document.documentElement.scrollHeight - 2,
-        marker: scrollY + headerHeight + 36,
+        marker: scrollY + readingMarkerOffset,
         positions: sectionPositions,
       });
       const nextHref = `/docs#${activeId}`;
@@ -199,8 +220,32 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
           ? [{ id, top: section.getBoundingClientRect().top + scrollY }]
           : [];
       });
-      headerHeight =
+      const documentStyles = window.getComputedStyle(document.documentElement);
+      const measuredScrollPadding = Number.parseFloat(
+        documentStyles.scrollPaddingTop,
+      );
+      const siteHeaderHeight =
         document.querySelector<HTMLElement>(".site-header")?.offsetHeight ?? 68;
+      const docsTools =
+        document.querySelector<HTMLElement>("[data-docs-tools]");
+      const stickyToolsHeight =
+        docsTools && window.getComputedStyle(docsTools).position === "sticky"
+          ? docsTools.offsetHeight
+          : 0;
+      const mobileNavigationSummary =
+        mobileNavigationRef.current?.querySelector<HTMLElement>("summary");
+      const mobileNavigationHeight =
+        mobileNavigationRef.current &&
+        window.getComputedStyle(mobileNavigationRef.current).display !== "none"
+          ? (mobileNavigationSummary?.offsetHeight ?? 0)
+          : 0;
+      readingMarkerOffset = calculateDocsReadingOffset({
+        mobileNavigationHeight,
+        scrollPaddingTop: Number.isFinite(measuredScrollPadding)
+          ? measuredScrollPadding
+          : siteHeaderHeight + 20,
+        stickyToolsHeight,
+      });
       scheduleScrollUpdate();
     };
 

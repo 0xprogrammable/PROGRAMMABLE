@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
 
+import { DocsExternalLink } from "@/components/docs-external-link";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
 
@@ -265,101 +265,85 @@ function ClassicDocs() {
               <tr>
                 <td>Launcher</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${launcher}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {launcher}
-                  </a>
+                  </DocsExternalLink>
                 </td>
               </tr>
               <tr>
                 <td>Fee hook</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${hook}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {hook}
-                  </a>
+                  </DocsExternalLink>
                 </td>
               </tr>
               <tr>
                 <td>Reward vault factory</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${rewardVaultFactory}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {rewardVaultFactory}
-                  </a>
+                  </DocsExternalLink>
                 </td>
               </tr>
               <tr>
                 <td>Initial Buy custody factory</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${initialBuyCustodyFactory}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {initialBuyCustodyFactory}
-                  </a>
+                  </DocsExternalLink>
                 </td>
               </tr>
               <tr>
                 <td>Position recipient factory</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${positionRecipientFactory}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {positionRecipientFactory}
-                  </a>
+                  </DocsExternalLink>
                 </td>
               </tr>
               <tr>
                 <td>CTO authority</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${ctoAuthority}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {ctoAuthority}
-                  </a>
+                  </DocsExternalLink>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div className={styles.sourceLinks}>
-          <a
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/deployments/mainnet-classic-v3.json`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Deployment record
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
+          </DocsExternalLink>
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/security/CLASSIC-V3.md`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Security notes
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
+          </DocsExternalLink>
         </div>
       </section>
     </DocsShell>
@@ -550,70 +534,58 @@ function StockPairedDocs() {
               <tr>
                 <td>Launcher</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${launcher}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {launcher}
-                  </a>
+                  </DocsExternalLink>
                 </td>
               </tr>
               <tr>
                 <td>Fee hook</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${hook}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {hook}
-                  </a>
+                  </DocsExternalLink>
                 </td>
               </tr>
               <tr>
                 <td>ETH launch coordinator</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${coordinator}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {coordinator}
-                  </a>
+                  </DocsExternalLink>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div className={styles.sourceLinks}>
-          <a
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/docs/superpowers/specs/2026-07-29-stock-paired-v1-design.md`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Model specification
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
+          </DocsExternalLink>
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/deployments/mainnet-stock-paired-v1.json`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Deployment record
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
+          </DocsExternalLink>
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${stockPairedEvidenceCommit}/contracts/security/STOCK-PAIRED-V1.md`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Security notes
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
+          </DocsExternalLink>
         </div>
       </section>
     </DocsShell>

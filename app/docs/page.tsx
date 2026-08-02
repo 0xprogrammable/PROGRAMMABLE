@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { ExternalLink } from "lucide-react";
 
+import { DocsExternalLink } from "@/components/docs-external-link";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
 
@@ -176,56 +176,48 @@ export default function DocsPage() {
               <tr>
                 <td>Classic launcher</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${classicLauncher}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {classicLauncher}
-                  </a>
+                  </DocsExternalLink>
                 </td>
                 <td>Creates the token, pool and launch records.</td>
               </tr>
               <tr>
                 <td>Classic fee hook</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${classicHook}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {classicHook}
-                  </a>
+                  </DocsExternalLink>
                 </td>
                 <td>Applies the immutable buy and sell fee settings.</td>
               </tr>
               <tr>
                 <td>Reward vault factory</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${classicRewardVaultFactory}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {classicRewardVaultFactory}
-                  </a>
+                  </DocsExternalLink>
                 </td>
                 <td>Creates the reward vault for each Classic pool.</td>
               </tr>
               <tr>
                 <td>Position recipient factory</td>
                 <td>
-                  <a
-                    className={styles.address}
+                  <DocsExternalLink
                     href={`https://etherscan.io/address/${positionLockFactory}#code`}
-                    target="_blank"
-                    rel="noreferrer"
+                    variant="address"
                   >
                     {positionLockFactory}
-                  </a>
+                  </DocsExternalLink>
                 </td>
                 <td>Permanently holds the launch position.</td>
               </tr>
@@ -252,38 +244,30 @@ export default function DocsPage() {
           release. Local tests and design documents do not make a model live.
         </p>
         <div className={styles.sourceLinks}>
-          <a
+          <DocsExternalLink
             href="https://github.com/0xprogrammable/programmable"
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Source repository
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
+          </DocsExternalLink>
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/deployments/mainnet-classic-v3.json`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Classic release record
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
+          </DocsExternalLink>
+          <DocsExternalLink
             href={`https://github.com/0xprogrammable/programmable/blob/${classicEvidenceCommit}/contracts/security/CLASSIC-V3.md`}
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Classic security notes
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
-          <a
+          </DocsExternalLink>
+          <DocsExternalLink
             href="https://docs.uniswap.org/contracts/v4/overview"
-            target="_blank"
-            rel="noreferrer"
+            variant="chip"
           >
             Uniswap v4 documentation
-            <ExternalLink aria-hidden="true" size={13} />
-          </a>
+          </DocsExternalLink>
         </div>
       </section>
 

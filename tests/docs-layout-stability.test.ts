@@ -23,10 +23,20 @@ describe("Docs rail layout stability", () => {
       /\.page\s*\{[^}]*grid-template-columns:[^}]*var\(--docs-rail-width\)[^}]*minmax\(0,\s*var\(--docs-content-width\)\);/s,
     );
     expect(docsCss).toMatch(
-      /\.sidebar\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1 \/ span 2;[^}]*inline-size:\s*var\(--docs-rail-width\);[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 16px\);/s,
+      /\.sidebar\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1 \/ span 3;[^}]*inline-size:\s*var\(--docs-rail-width\);[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 16px\);/s,
     );
     expect(docsCss).toMatch(
       /\.layout\s*\{[^}]*grid-column:\s*2;/s,
+    );
+  });
+
+  it("keeps the desktop tools available without pinning them on mobile", () => {
+    expect(docsShell).toContain("data-docs-tools");
+    expect(docsCss).toMatch(
+      /\.heroTools\s*\{[^}]*grid-column:\s*2;[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--header-height\) \+ 12px\);/s,
+    );
+    expect(docsCss).toMatch(
+      /@media \(max-width:\s*900px\)[\s\S]*?\.heroTools\s*\{[^}]*position:\s*static;/s,
     );
   });
 
