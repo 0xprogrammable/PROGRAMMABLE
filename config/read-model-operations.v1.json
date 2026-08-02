@@ -96,7 +96,7 @@
         },
         {
           "path": "supabase/migrations/20260802092800_market_projector_fast_lane.sql",
-          "sha256": "f68889174db6870595aecdd9a327e2bf27f72a7c4b9e3328456c8a4ebe301971"
+          "sha256": "70c2719af30e0d3438e3de306376c7fa62d0196be98f81d7bd6b327559c14dc7"
         }
       ]
     }

@@ -263,6 +263,30 @@ describe("read-model operations source contract", () => {
       "ops-real-block-sla-gate-binding",
     );
   });
+
+  it("keeps the staging workflow unable to bypass the manual real-block SLA gate", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const runbookPath = "docs/operations/read-model-scheduler-cutover.md";
+    const unsafeWorkflow = `${readFileSync(resolve(ROOT, workflowPath), "utf8")}
+      - name: Unsafe direct promotion
+        run: vercel promote "$DEPLOYMENT_ID"
+    `;
+    const missingSlaGate = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
+      "npm run perf:read-model:real-block-sla --",
+      "npm run perf:read-model:real-block-sla-skipped --",
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+        [runbookPath]: missingSlaGate,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
 });
 
 function publicFetch(healthStatus = "healthy") {

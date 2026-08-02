@@ -101,7 +101,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "supabase/migrations/20260802092800_market_projector_fast_lane.sql",
-          sha256: "f68889174db6870595aecdd9a327e2bf27f72a7c4b9e3328456c8a4ebe301971",
+          sha256: "70c2719af30e0d3438e3de306376c7fa62d0196be98f81d7bd6b327559c14dc7",
         }),
       ]),
     }),
@@ -896,23 +896,27 @@ export function evaluateReadModelOperationsSourceContracts(
       deployWorkflow.includes(
         "DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}",
       ) &&
-      deployWorkflow.includes('vercel promote "$DEPLOYMENT_ID"') &&
-      deployWorkflow.includes('--deployment-id "$DEPLOYMENT_ID"') &&
-      deployWorkflow.includes("npm run perf:read-model:post-promotion") &&
-      deployWorkflow.includes("vercel rollback") &&
-      deployWorkflow.indexOf("vercel promote") <
-        deployWorkflow.indexOf("npm run perf:read-model:post-promotion") &&
+      deployWorkflow.includes("Stage-only: no production promotion was attempted.") &&
+      !deployWorkflow.includes("vercel promote") &&
+      !deployWorkflow.includes("vercel rollback") &&
+      operationsRunbook.includes("stage-only and must never call `vercel promote`") &&
+      operationsRunbook.indexOf("npm run perf:read-model:real-block-sla --") <
+        operationsRunbook.indexOf("npm run perf:read-model:staged-deployment --") &&
+      operationsRunbook.indexOf("npm run perf:read-model:staged-deployment --") <
+        operationsRunbook.indexOf('vercel promote "$STAGED_DEPLOYMENT_ID"') &&
+      operationsRunbook.indexOf('vercel promote "$STAGED_DEPLOYMENT_ID"') <
+        operationsRunbook.indexOf("npm run perf:read-model:post-promotion --") &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
       postPromotion.includes('"/api/ops/health"') &&
       postPromotion.includes('"/api/explore?limit=6&page=1&sort=market-cap"') &&
       postPromotion.includes("verifyLiveCacheAndKeyContracts"),
-    "promotion, production alias verification and rollback bind to the staged deployment",
+    "the workflow is stage-only and the manual SLA-gated promotion binds the exact deployment",
   );
   check(
     "ops-vercel-project-prerequisite",
     /Auto-assign Custom Production\s+Domains/u.test(operationsRunbook) &&
-      operationsRunbook.includes("only the reviewed workflow") &&
+      operationsRunbook.includes("only the reviewed manual") &&
       productionBinding.includes("rejectGitHead") &&
       productionBinding.includes("automatic production-domain assignment"),
     "the external Vercel auto-assignment prerequisite is documented and detected fail-closed",

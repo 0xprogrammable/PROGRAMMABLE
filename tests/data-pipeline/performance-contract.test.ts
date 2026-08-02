@@ -1280,12 +1280,13 @@ describe("read-model performance contract", () => {
     expect(deployWorkflow).toContain("perf:read-model:capture");
     expect(deployWorkflow).toContain("actions/upload-artifact@");
     expect(deployWorkflow).toContain("npm run perf:read-model:gate");
-    expect(deployWorkflow).toContain("vercel promote");
+    expect(deployWorkflow).toContain(
+      "Stage-only: no production promotion was attempted.",
+    );
+    expect(deployWorkflow).not.toContain("vercel promote");
+    expect(deployWorkflow).not.toContain("vercel rollback");
     expect(deployWorkflow.indexOf("perf:read-model:capture")).toBeLessThan(
       deployWorkflow.indexOf("npm run perf:read-model:gate"),
-    );
-    expect(deployWorkflow.indexOf("npm run perf:read-model:gate")).toBeLessThan(
-      deployWorkflow.indexOf("vercel promote"),
     );
     const captureSource = readFileSync(
       resolve(process.cwd(), "scripts/perf/read-model-capture.mjs"),

@@ -78,9 +78,11 @@ release family.
 
 Before this workflow is enabled, turn off **Auto-assign Custom Production
 Domains** for the Vercel project. Git-connected production pushes must create
-deployments without moving `programmable.family`; only the reviewed workflow
-may promote it. The workflow records the current deployment before staging and
-fails if Vercel has already moved production to the candidate commit.
+deployments without moving `programmable.family`. The reviewed workflow is
+stage-only and must never call `vercel promote`; only the reviewed manual
+operator sequence below may promote after the real-block SLA gate. The workflow
+records the current deployment before staging and fails if Vercel has already
+moved production to the candidate commit.
 
 1. Produce and review the deterministic hosted database plan, then apply and
    verify every ordered `supabase/migrations/*.sql` file at the exact reviewed
@@ -97,7 +99,8 @@ fails if Vercel has already moved production to the candidate commit.
 6. Capture one organic mainnet block through the real stream path and pass the
    real-block SLA gate below. This step performs no signing and spends no funds.
 7. Capture signed staged-deployment evidence and run the normal read-model gate.
-8. Promote the exact staged deployment ID, never a mutable alias.
+8. Reverify and promote the exact staged deployment ID with the reviewed manual
+   commands below, never a mutable alias.
 9. Verify that `programmable.family` resolves to that deployment ID and commit,
    then verify health, populated Explore, the token list, and every indexed
    route using the same release corpus.
@@ -190,6 +193,34 @@ npm run perf:read-model:real-block-sla -- \
   --target-url "$STAGED_TARGET_URL"
 ```
 
+The staging workflow stops here and records the exact deployment ID, URL and
+previous production binding. Only after the command above succeeds, reverify
+the same immutable deployment immediately before the manual promotion, then
+verify the production binding and public routes immediately afterward:
+
+```sh
+test ! -e "$PRE_PROMOTE_BINDING_OUTPUT"
+npm run perf:read-model:staged-deployment -- \
+  --target-url "$STAGED_TARGET_URL" \
+  --github-output "$PRE_PROMOTE_BINDING_OUTPUT"
+grep -Fx "deployment_id=$STAGED_DEPLOYMENT_ID" "$PRE_PROMOTE_BINDING_OUTPUT"
+grep -Fx "target_url=$STAGED_TARGET_URL" "$PRE_PROMOTE_BINDING_OUTPUT"
+
+vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
+
+npm run perf:read-model:post-promotion -- \
+  --target-url "https://programmable.family" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --git-head "$GITHUB_SHA" \
+  --evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"
+```
+
+If the promotion command or post-promotion gate returns an uncertain result,
+first read the live production binding. Roll back only when it resolves to the
+candidate deployment, using the exact previous deployment recorded by the
+staging workflow, then reverify its deployment ID and Git commit. Keep the
+Candidate database and public-read flags fenced throughout that recovery.
+
 `PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN` must also be present in the gate process
 so the exported HMAC can be verified without exposing the secret. The gate CLI
 rejects the legacy caller-assembled evidence format entirely. It fails closed unless delivery-to-first-visible latency is at most ten
@@ -210,5 +241,6 @@ dependencies or incomplete evidence returns `503` with `Cache-Control:
 no-store`. A disabled worker does not open database or RPC connections. Public
 read flags stay on the legacy path until signed release evidence for the exact
 Vercel deployment is accepted. If any post-promotion binding or route check
-fails, the workflow rolls the production domains back to the exact deployment
-captured before staging and verifies that rollback binding.
+fails, the manual operator follows the exact rollback sequence above and in the
+production cutover runbook; the stage-only workflow never mutates production
+domains.

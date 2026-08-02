@@ -392,7 +392,7 @@ describe("read-model production deploy policy", () => {
     expect(PROJECTOR_WAKE_ROUTE).toBe("/api/ops/projector-wake");
   });
 
-  it("smokes the legacy release corpus and reconciles uncertain promotion outcomes", () => {
+  it("smokes the legacy release corpus and stops at a staged candidate", () => {
     const workflow = readFileSync(
       resolve(ROOT, ".github/workflows/deploy-production.yml"),
       "utf8",
@@ -406,22 +406,12 @@ describe("read-model production deploy policy", () => {
     expect(workflow).toContain("/api/explore/token?address=");
     expect(workflow).toContain("/api/explore/profile?account=");
     expect(workflow).toContain("releaseToken.creatorAddress");
+    expect(workflow).toContain("Reverify staged candidate binding");
+    expect(workflow).toContain("Record staged candidate handoff");
     expect(workflow).toContain(
-      "Reverify staged binding immediately before promotion",
+      "Stage-only: no production promotion was attempted.",
     );
-    expect(workflow.indexOf("Reverify staged binding immediately before promotion"))
-      .toBeLessThan(workflow.indexOf("vercel promote"));
-    expect(workflow).toContain("continue-on-error: true");
-    expect(workflow).toContain("Reconcile an unsuccessful promotion attempt");
-    expect(workflow).toContain(
-      'current_deployment_id" = "$CANDIDATE_DEPLOYMENT_ID',
-    );
-    expect(workflow).toContain('vercel rollback "$ROLLBACK_DEPLOYMENT_URL"');
-    expect(workflow).toContain(
-      '--expected-deployment-id "$PREVIOUS_DEPLOYMENT_ID"',
-    );
-    expect(workflow).not.toContain(
-      "failure() && steps.promote.outcome == 'success'",
-    );
+    expect(workflow).not.toContain("vercel promote");
+    expect(workflow).not.toContain("vercel rollback");
   });
 });
