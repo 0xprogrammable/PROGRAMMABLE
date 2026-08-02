@@ -1,6 +1,7 @@
 .pickerPage {
   isolation: isolate;
   justify-content: flex-start;
+  max-width: 1180px;
   padding-top: clamp(54px, 8svh, 92px);
   position: relative;
 }
@@ -192,6 +193,7 @@
 .formPage {
   isolation: isolate;
   min-height: calc(100svh - var(--header-height));
+  padding-top: 8px;
   position: relative;
 }
 
@@ -255,7 +257,7 @@
 .formPage :global(.launch-page-heading) {
   align-items: center;
   max-width: 1000px;
-  min-height: 82px;
+  min-height: 60px;
 }
 
 .formPage :global(.launch-page-heading h1) {
@@ -281,6 +283,7 @@
     0 1px 0 var(--card-shadow),
     0 22px 62px var(--card-shadow-soft);
   max-width: 1000px;
+  margin-top: 0;
 }
 
 .formPage :global(.classic-launch-content) {
@@ -372,8 +375,8 @@
 .formPage :global(.classic-fee-section),
 .formPage :global(.classic-v3-settings) {
   border-color: var(--panel-border-soft);
-  margin-top: 17px;
-  padding-top: 16px;
+  margin-top: 14px;
+  padding-top: 13px;
 }
 
 .formPage :global(.classic-fee-layout) {
@@ -401,8 +404,8 @@
   backdrop-filter: blur(18px);
   background: color-mix(in srgb, var(--glass-90) 82%, transparent);
   border-color: var(--panel-border-soft);
-  min-height: 54px;
-  padding: 2px 28px;
+  min-height: 50px;
+  padding: 0 28px;
 }
 
 .formPage :global(.classic-launch-button) {
@@ -425,7 +428,7 @@
 
 .formPage :global(.classic-v3-settings) {
   grid-template-columns: minmax(0, 1fr);
-  row-gap: 13px;
+  row-gap: 10px;
 }
 
 .formPage :global(.classic-v3-settings > .classic-section-heading),
@@ -481,6 +484,23 @@
     inset 0 1px 0 var(--control-glass-highlight),
     0 4px 12px var(--card-shadow-soft);
   color: var(--accent-strong);
+}
+
+.formPage :global(.classic-v3-fees),
+.formPage :global(.classic-v3-reward-mode),
+.formPage :global(.classic-v3-initial-buy .meme-dev-buy),
+.formPage :global(.classic-v3-custody) {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--panel-border-soft);
+  padding-inline: 0;
+}
+
+.formPage :global(.classic-v3-initial-buy .meme-dev-buy-input button) {
+  border-radius: 12px;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .formPage :global(.deep-preset) {
@@ -552,13 +572,13 @@
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-launch-content),
 .formPage[data-launch-model="deep"] :global(.classic-launch-content) {
-  padding-bottom: 14px;
-  padding-top: 18px;
+  padding-bottom: 10px;
+  padding-top: 14px;
 }
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-token-grid),
 .formPage[data-launch-model="deep"] :global(.classic-token-grid) {
-  grid-template-columns: 136px minmax(0, 1fr);
+  grid-template-columns: 128px minmax(0, 1fr);
   margin-top: 10px;
 }
 
@@ -568,7 +588,7 @@
 .formPage[data-launch-model="deep"]
   :global(.classic-token-section)
   :global(.token-image-upload) {
-  width: 136px;
+  width: 128px;
 }
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-description-field),
@@ -580,7 +600,9 @@
   :global(.classic-description-field textarea),
 .formPage[data-launch-model="deep"]
   :global(.classic-description-field textarea) {
-  min-height: 58px;
+  height: 62px;
+  min-height: 62px;
+  padding-block: 8px;
 }
 
 .formPage[data-launch-model="classic-v3"] :global(.classic-link-fields),

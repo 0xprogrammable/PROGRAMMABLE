@@ -667,10 +667,7 @@ export function ExploreView() {
     }
 
     return (
-      <div
-        className={styles.runnerGrid}
-        key={`${activePage}:${sort}:${debouncedQuery}`}
-      >
+      <div className={styles.runnerGrid}>
         {cards.map((token, index) => {
           const href = `/token/${token.tokenAddress}`;
           const imageSource = getTokenCardImageSource(token.imageUrl);

@@ -9,10 +9,13 @@
   display: grid;
   gap: clamp(36px, 7vw, 116px);
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  margin-inline: auto;
+  max-width: 1180px;
   min-height: clamp(226px, 27svh, 270px);
   padding: clamp(48px, 6svh, 62px) 0 clamp(30px, 4svh, 40px);
   position: relative;
   text-align: left;
+  width: 100%;
 }
 
 .pageHeading::before {
@@ -113,7 +116,6 @@
 }
 
 .runnerCard {
-  animation: token-enter 220ms var(--ease-out) both;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -123,20 +125,6 @@
   transition:
     box-shadow 190ms ease,
     transform 190ms var(--ease-out);
-}
-
-.runnerCard:nth-child(2) {
-  animation-delay: 45ms;
-}
-
-.runnerCard:nth-child(3) {
-  animation-delay: 90ms;
-}
-
-.runnerCard:nth-child(4),
-.runnerCard:nth-child(5),
-.runnerCard:nth-child(6) {
-  animation-delay: 120ms;
 }
 
 .runnerHitArea {
@@ -168,7 +156,7 @@
 
 .runnerImage {
   object-fit: cover;
-  transition: transform 520ms var(--ease-out);
+  transition: transform 200ms var(--ease-out);
 }
 
 .runnerBody {
@@ -302,18 +290,6 @@
     border-color 150ms ease,
     box-shadow 150ms ease,
     transform 150ms var(--ease-out);
-}
-
-@keyframes token-enter {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 8px, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
 }
 
 @media (hover: hover) and (pointer: fine) {

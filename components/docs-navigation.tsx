@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent,
@@ -16,6 +17,11 @@ import styles from "@/components/docs-experience.module.css";
 type SectionPosition = {
   id: string;
   top: number;
+};
+
+export type DocsPageSection = {
+  id: string;
+  label: string;
 };
 
 const overviewHref = "/docs#overview";
@@ -30,6 +36,7 @@ const docsSectionHrefs = (() => {
 })();
 const docsSectionIds = docsSectionHrefs.map((href) => href.slice(6));
 const docsSectionHrefSet = new Set<string>(docsSectionHrefs);
+const emptyDocsPageSections: readonly DocsPageSection[] = [];
 
 export const docsNavigateEvent = "programmable:docs-navigate";
 
@@ -49,6 +56,32 @@ export function resolveDocsLocationTarget(hash: string): {
     href,
     sectionId: href.slice(6),
     shouldScroll: hash.length > 0,
+  };
+}
+
+export function resolveDocsPageLocationTarget({
+  currentPath,
+  hash,
+  sectionIds,
+}: {
+  currentPath: string;
+  hash: string;
+  sectionIds: readonly string[];
+}): {
+  href: string;
+  sectionId: string;
+  shouldScroll: boolean;
+} {
+  if (currentPath === "/docs") return resolveDocsLocationTarget(hash);
+
+  const requestedId = hash.replace(/^#/, "").split("#", 1)[0];
+  const sectionId = sectionIds.includes(requestedId)
+    ? requestedId
+    : (sectionIds[0] ?? "");
+  return {
+    href: sectionId ? `${currentPath}#${sectionId}` : currentPath,
+    sectionId,
+    shouldScroll: hash.length > 0 && sectionId.length > 0,
   };
 }
 
@@ -128,15 +161,46 @@ function focusDocsSection(section: HTMLElement) {
   heading.focus({ preventScroll: true });
 }
 
-export function DocsNavigation({ currentPath }: { currentPath: string }) {
+export function DocsNavigation({
+  currentPath,
+  sections = emptyDocsPageSections,
+}: {
+  currentPath: string;
+  sections?: readonly DocsPageSection[];
+}) {
   const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
-  const [activeSectionHref, setActiveSectionHref] = useState(overviewHref);
+  const trackedSectionIds = useMemo(
+    () =>
+      currentPath === "/docs"
+        ? docsSectionIds
+        : sections.map((section) => section.id),
+    [currentPath, sections],
+  );
+  const trackedSectionIdSet = useMemo(
+    () => new Set(trackedSectionIds),
+    [trackedSectionIds],
+  );
+  const initialSectionHref =
+    currentPath === "/docs"
+      ? overviewHref
+      : trackedSectionIds[0]
+        ? `${currentPath}#${trackedSectionIds[0]}`
+        : currentPath;
+  const [activeSectionHref, setActiveSectionHref] =
+    useState(initialSectionHref);
   const activeHref =
-    currentPath === "/docs" ? activeSectionHref : currentPath;
+    trackedSectionIds.length > 0 ? activeSectionHref : currentPath;
   let activeLabel = "Reference";
   for (const group of docsNavigation) {
     for (const item of group.items) {
-      if (item.href === activeHref) activeLabel = item.label;
+      if (item.href === activeHref || item.href === currentPath) {
+        activeLabel = item.label;
+      }
+    }
+  }
+  for (const section of sections) {
+    if (`${currentPath}#${section.id}` === activeHref) {
+      activeLabel = section.label;
     }
   }
 
@@ -144,7 +208,9 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     (itemHref: string) => {
       const [itemPath, itemHash] = itemHref.split("#");
       const isSamePageTopic =
-        currentPath === "/docs" && itemPath === "/docs" && Boolean(itemHash);
+        itemPath === currentPath &&
+        Boolean(itemHash) &&
+        trackedSectionIdSet.has(itemHash);
       if (!isSamePageTopic) return false;
 
       const section = document.getElementById(itemHash);
@@ -178,11 +244,11 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
       }
       return true;
     },
-    [currentPath],
+    [currentPath, trackedSectionIdSet],
   );
 
   useEffect(() => {
-    if (currentPath !== "/docs") return;
+    if (trackedSectionIds.length === 0) return;
 
     let scrollFrame = 0;
     let layoutFrame = 0;
@@ -200,7 +266,7 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
         marker: scrollY + readingMarkerOffset,
         positions: sectionPositions,
       });
-      const nextHref = `/docs#${activeId}`;
+      const nextHref = `${currentPath}#${activeId}`;
       setActiveSectionHref((currentHref) =>
         currentHref === nextHref ? currentHref : nextHref,
       );
@@ -214,7 +280,7 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     const measureLayout = () => {
       layoutFrame = 0;
       const scrollY = window.scrollY;
-      sectionPositions = docsSectionIds.flatMap((id) => {
+      sectionPositions = trackedSectionIds.flatMap((id) => {
         const section = document.getElementById(id);
         return section
           ? [{ id, top: section.getBoundingClientRect().top + scrollY }]
@@ -255,7 +321,11 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     };
 
     const updateFromLocation = () => {
-      const target = resolveDocsLocationTarget(window.location.hash);
+      const target = resolveDocsPageLocationTarget({
+        currentPath,
+        hash: window.location.hash,
+        sectionIds: trackedSectionIds,
+      });
       const currentHref = window.location.pathname + window.location.hash;
       if (window.location.hash && currentHref !== target.href) {
         window.history.replaceState(window.history.state, "", target.href);
@@ -290,7 +360,7 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
       window.removeEventListener("resize", scheduleLayoutMeasurement);
       window.removeEventListener("scroll", scheduleScrollUpdate);
     };
-  }, [currentPath]);
+  }, [currentPath, trackedSectionIds]);
 
   useEffect(() => {
     const handleDocsNavigationRequest = (event: Event) => {
@@ -313,7 +383,9 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
     if (hasModifiedClick(event)) return;
     const [itemPath, itemHash] = itemHref.split("#");
     const isSamePageTopic =
-      currentPath === "/docs" && itemPath === "/docs" && Boolean(itemHash);
+      itemPath === currentPath &&
+      Boolean(itemHash) &&
+      trackedSectionIdSet.has(itemHash);
 
     if (isSamePageTopic) {
       event.preventDefault();
@@ -324,39 +396,67 @@ export function DocsNavigation({ currentPath }: { currentPath: string }) {
   }
 
   function renderNavigation() {
-    return docsNavigation.map((group) => (
-      <div className={styles.navGroup} key={group.label}>
-        <p className={styles.navLabel}>{group.label}</p>
-        <ul>
-          {group.items.map((item) => {
-            const active = isDocsNavigationItemActive({
-              activeHref,
-              currentPath,
-              itemHref: item.href,
-            });
+    return (
+      <>
+        {sections.length > 0 ? (
+          <div className={`${styles.navGroup} ${styles.contextNavGroup}`}>
+            <p className={styles.navLabel}>On this page</p>
+            <ul>
+              {sections.map((section) => {
+                const href = `${currentPath}#${section.id}`;
+                const active = href === activeHref;
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      data-active={active ? "true" : undefined}
+                      aria-current={active ? "location" : undefined}
+                      onClick={(event) => handleNavigation(event, href)}
+                    >
+                      {section.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
 
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  data-active={active ? "true" : undefined}
-                  aria-current={
-                    active
-                      ? item.href.includes("#")
-                        ? "location"
-                        : "page"
-                      : undefined
-                  }
-                  onClick={(event) => handleNavigation(event, item.href)}
-                >
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    ));
+        {docsNavigation.map((group) => (
+          <div className={styles.navGroup} key={group.label}>
+            <p className={styles.navLabel}>{group.label}</p>
+            <ul>
+              {group.items.map((item) => {
+                const active = isDocsNavigationItemActive({
+                  activeHref,
+                  currentPath,
+                  itemHref: item.href,
+                });
+
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      data-active={active ? "true" : undefined}
+                      aria-current={
+                        active
+                          ? item.href.includes("#")
+                            ? "location"
+                            : "page"
+                          : undefined
+                      }
+                      onClick={(event) => handleNavigation(event, item.href)}
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </>
+    );
   }
 
   return (

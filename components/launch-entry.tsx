@@ -182,7 +182,7 @@ export function LaunchModelPicker({
             aria-hidden="true"
           >
             <Image
-              src="/brand/programmable-token-fallback-02-moon.webp"
+              src="/brand/projects/north-star-v1.webp"
               alt=""
               fill
               loading="eager"

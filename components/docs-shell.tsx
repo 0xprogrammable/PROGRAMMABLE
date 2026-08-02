@@ -2,7 +2,10 @@ import Link from "next/link";
 import { ReactNode } from "react";
 
 import styles from "@/components/docs-experience.module.css";
-import { DocsNavigation } from "@/components/docs-navigation";
+import {
+  DocsNavigation,
+  type DocsPageSection,
+} from "@/components/docs-navigation";
 import { DocsSearch } from "@/components/docs-search";
 
 const docsGuides = [
@@ -15,12 +18,14 @@ export function DocsShell({
   children,
   currentPath,
   description,
+  sections,
   title,
 }: {
   children: ReactNode;
   currentPath: string;
   description: string;
   kicker?: string;
+  sections?: readonly DocsPageSection[];
   title: string;
 }) {
   return (
@@ -51,7 +56,7 @@ export function DocsShell({
       </div>
 
       <aside className={styles.sidebar} data-docs-sidebar>
-        <DocsNavigation currentPath={currentPath} />
+        <DocsNavigation currentPath={currentPath} sections={sections} />
       </aside>
 
       <div className={styles.layout} data-docs-layout>

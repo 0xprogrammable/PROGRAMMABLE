@@ -1227,9 +1227,9 @@ function TokenDetailContent({
               className={`${styles.projectPanel} ${styles.projectPanelWide} ${styles.communityPanel}`}
             >
               <header className={styles.projectPanelHeading}>
-                <h2>Community chat</h2>
+                <h2>Community</h2>
                 <span className={styles.communityStatus}>
-                  {communityLink ? "Connected" : "Not connected"}
+                  {communityLink ? "Telegram" : "Not linked"}
                 </span>
               </header>
               <div className={styles.communityBody}>
@@ -1238,9 +1238,9 @@ function TokenDetailContent({
                     ? previewProject
                       ? `${previewProject.communityMembers.toLocaleString(
                           "en-US",
-                        )} members · Join the ${token.name} community chat on Telegram.`
-                      : `Join the ${token.name} community chat on Telegram.`
-                    : "This project has not connected a community chat."}
+                        )} members · Updates and discussion for ${token.name}.`
+                      : `Updates and discussion for ${token.name} on Telegram.`
+                    : "This project has not linked a community channel."}
                 </p>
                 {communityLink ? (
                   <a
@@ -1249,7 +1249,7 @@ function TokenDetailContent({
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Open chat
+                    Open Telegram
                     <ArrowUpRight aria-hidden="true" size={15} />
                   </a>
                 ) : null}

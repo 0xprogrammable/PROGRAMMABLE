@@ -6,6 +6,7 @@ import {
   isDocsNavigationItemActive,
   normalizeDocsHash,
   pickActiveDocsSection,
+  resolveDocsPageLocationTarget,
   resolveDocsLocationTarget,
 } from "../components/docs-navigation";
 import { getDocsExternalLinkProvider } from "../components/docs-external-link";
@@ -63,6 +64,31 @@ describe("Docs navigation state", () => {
       href: "/docs#overview",
       sectionId: "overview",
       shouldScroll: false,
+    });
+  });
+
+  it("resolves model chapters without falling back to the platform overview", () => {
+    expect(
+      resolveDocsPageLocationTarget({
+        currentPath: "/docs/models/classic",
+        hash: "#fees",
+        sectionIds: ["terms", "fees", "rewards"],
+      }),
+    ).toEqual({
+      href: "/docs/models/classic#fees",
+      sectionId: "fees",
+      shouldScroll: true,
+    });
+    expect(
+      resolveDocsPageLocationTarget({
+        currentPath: "/docs/models/classic",
+        hash: "#unknown",
+        sectionIds: ["terms", "fees", "rewards"],
+      }),
+    ).toEqual({
+      href: "/docs/models/classic#terms",
+      sectionId: "terms",
+      shouldScroll: true,
     });
   });
 

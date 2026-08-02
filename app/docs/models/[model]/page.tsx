@@ -12,6 +12,32 @@ const classicEvidenceCommit =
 const stockPairedEvidenceCommit =
   "ef2bbb51336a20aa2886dad0232f61495e8f2911";
 
+const classicSections = [
+  { id: "terms", label: "Terms" },
+  { id: "fees", label: "Fees" },
+  { id: "rewards", label: "Rewards" },
+  { id: "initial-buy", label: "Initial Buy" },
+  { id: "launch-transaction", label: "Launch transaction" },
+  { id: "starting-point", label: "Starting point" },
+  { id: "boundaries", label: "Boundaries" },
+  { id: "deployment", label: "Deployment" },
+] as const;
+
+const customSections = [
+  { id: "status", label: "Status" },
+  { id: "release-requirements", label: "Release requirements" },
+  { id: "project-presentation", label: "Project presentation" },
+] as const;
+
+const stockPairedSections = [
+  { id: "token-boundary", label: "Token boundary" },
+  { id: "pool-creation", label: "Pool creation" },
+  { id: "quote-rewards", label: "Quote rewards" },
+  { id: "routing", label: "Routing" },
+  { id: "quote-controls", label: "Quote controls" },
+  { id: "deployment", label: "Deployment" },
+] as const;
+
 const modelMetadata: Record<
   ModelSlug,
   { description: string; title: string }
@@ -75,8 +101,9 @@ function ClassicDocs() {
       kicker="Launch model · Live"
       title="Classic"
       description="A fixed-supply Uniswap v4 launch with configurable fees, creator rewards in ETH and permanent one-sided liquidity."
+      sections={classicSections}
     >
-      <section>
+      <section id="terms">
         <h2>Set the terms before the token launches</h2>
         <p className={styles.lead}>
           Classic creates the token, initializes its ETH pool and deposits the
@@ -104,7 +131,7 @@ function ClassicDocs() {
         </div>
       </section>
 
-      <section>
+      <section id="fees">
         <h2>Each direction has its own fixed fee</h2>
         <div className={styles.flow}>
           <div className={styles.flowItem}>
@@ -134,7 +161,7 @@ function ClassicDocs() {
         </div>
       </section>
 
-      <section>
+      <section id="rewards">
         <h2>Choose who receives the ETH</h2>
         <p>
           Rewards can go to the launch wallet, another wallet or a split
@@ -179,7 +206,7 @@ function ClassicDocs() {
         </div>
       </section>
 
-      <section>
+      <section id="initial-buy">
         <h2>Buy at launch, then choose how the tokens are held</h2>
         <p>
           The launch wallet chooses at least 0.0006 ETH for its Initial Buy.
@@ -189,7 +216,7 @@ function ClassicDocs() {
         </p>
       </section>
 
-      <section>
+      <section id="launch-transaction">
         <h2>One confirmation creates the complete launch</h2>
         <ol className={styles.steps}>
           <li>
@@ -222,7 +249,7 @@ function ClassicDocs() {
         </ol>
       </section>
 
-      <section>
+      <section id="starting-point">
         <h2>A deterministic starting point</h2>
         <p>
           The current Classic curve begins at an approximate fully diluted
@@ -233,7 +260,7 @@ function ClassicDocs() {
         </p>
       </section>
 
-      <section>
+      <section id="boundaries">
         <h2>What Classic does not add</h2>
         <ul className={styles.contentList}>
           <li>No minting after launch.</li>
@@ -251,7 +278,7 @@ function ClassicDocs() {
         </ul>
       </section>
 
-      <section>
+      <section id="deployment">
         <h2>Active public deployment</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -356,8 +383,9 @@ function CustomDocs() {
       currentPath="/docs/models/custom"
       title="Custom"
       description="Custom launch configuration is not available in this build."
+      sections={customSections}
     >
-      <section>
+      <section id="status">
         <h2>Status</h2>
         <p className={styles.lead}>
           The Create page reserves a place for Custom, but there is no public
@@ -373,7 +401,7 @@ function CustomDocs() {
         </div>
       </section>
 
-      <section>
+      <section id="release-requirements">
         <h2>What a release must define</h2>
         <ul className={styles.contentList}>
           <li>The allowed token and pool configuration.</li>
@@ -384,7 +412,7 @@ function CustomDocs() {
         </ul>
       </section>
 
-      <section>
+      <section id="project-presentation">
         <h2>Project presentation</h2>
         <p>
           A released Custom token would use the same square artwork, project
@@ -409,8 +437,9 @@ function StockPairedDocs() {
       kicker="Historical launch model"
       title="Stock-Paired"
       description="Existing fixed-supply tokens whose Uniswap v4 pools use a reviewed stock token as the quote asset."
+      sections={stockPairedSections}
     >
-      <section>
+      <section id="token-boundary">
         <h2>The launched token is not a share</h2>
         <p className={styles.lead}>
           Stock-Paired creates a new Programmable token and pairs it with one
@@ -428,7 +457,7 @@ function StockPairedDocs() {
         </div>
       </section>
 
-      <section>
+      <section id="pool-creation">
         <h2>How the existing pools were created</h2>
         <ol className={styles.steps}>
           <li>
@@ -459,7 +488,7 @@ function StockPairedDocs() {
         </ol>
       </section>
 
-      <section>
+      <section id="quote-rewards">
         <h2>Rewards accrue in the quote token</h2>
         <div className={styles.factGrid}>
           <div className={styles.fact}>
@@ -481,7 +510,7 @@ function StockPairedDocs() {
         </div>
       </section>
 
-      <section>
+      <section id="routing">
         <h2>The interface composes the route</h2>
         <p>
           A buy routes ETH into the reviewed stock token and then into the
@@ -499,7 +528,7 @@ function StockPairedDocs() {
         </div>
       </section>
 
-      <section>
+      <section id="quote-controls">
         <h2>The quote asset has its own controls</h2>
         <ul className={styles.contentList}>
           <li>
@@ -520,7 +549,7 @@ function StockPairedDocs() {
         </ul>
       </section>
 
-      <section>
+      <section id="deployment">
         <h2>Historical Mainnet deployment</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>

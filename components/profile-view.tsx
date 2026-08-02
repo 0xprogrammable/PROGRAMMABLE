@@ -1878,7 +1878,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             priority
           />
           <h1>Profile</h1>
-          <p>Connect your wallet to view your tokens.</p>
+          <p>Connect to view your tokens, rewards and project settings.</p>
           <button
             className={styles.connectButton}
             type="button"

@@ -82,7 +82,7 @@ export const EXPLORE_PREVIEW_TOKENS: LauncherToken[] = [
     symbol: "COMMON",
     description:
       "A coordination market for open-source releases and shared infrastructure.",
-    imageUrl: "/brand/programmable-token-fallback-04-mint.webp",
+    imageUrl: "/brand/projects/common-ground-v1.webp",
     launchedAt: "2026-08-02T09:40:00.000Z",
     marketCapUsd: "8400000000000000000000000",
     priceUsd: "8400000000000000",
@@ -98,7 +98,7 @@ export const EXPLORE_PREVIEW_TOKENS: LauncherToken[] = [
     symbol: "DAY",
     description:
       "A community token funding public experiments through programmable fees.",
-    imageUrl: "/brand/programmable-token-fallback-01-dawn.webp",
+    imageUrl: "/brand/projects/daybreak-v1.webp",
     launchedAt: "2026-08-01T18:15:00.000Z",
     marketCapUsd: "6100000000000000000000000",
     priceUsd: "6100000000000000",
@@ -114,7 +114,7 @@ export const EXPLORE_PREVIEW_TOKENS: LauncherToken[] = [
     symbol: "STAR",
     description:
       "A research collective using dynamic fees to build long-term liquidity.",
-    imageUrl: "/brand/programmable-token-fallback-02-moon.webp",
+    imageUrl: "/brand/projects/north-star-v1.webp",
     launchedAt: "2026-08-01T11:05:00.000Z",
     marketCapUsd: "4700000000000000000000000",
     priceUsd: "4700000000000000",
@@ -130,7 +130,7 @@ export const EXPLORE_PREVIEW_TOKENS: LauncherToken[] = [
     symbol: "ATLAS",
     description:
       "A public index for onchain tools, teams and community-owned products.",
-    imageUrl: "/brand/programmable-token-fallback-03-sun.webp",
+    imageUrl: "/brand/projects/open-atlas-v1.webp",
     launchedAt: "2026-07-31T16:30:00.000Z",
     marketCapUsd: "3200000000000000000000000",
     priceUsd: "3200000000000000",
@@ -146,7 +146,7 @@ export const EXPLORE_PREVIEW_TOKENS: LauncherToken[] = [
     symbol: "NIGHT",
     description:
       "An independent publishing network with rewards defined at pool level.",
-    imageUrl: "/brand/programmable-token-fallback-06-dusk.webp",
+    imageUrl: "/brand/projects/after-hours-v1.webp",
     launchedAt: "2026-07-30T21:20:00.000Z",
     marketCapUsd: "1800000000000000000000000",
     priceUsd: "1800000000000000",
@@ -162,7 +162,7 @@ export const EXPLORE_PREVIEW_TOKENS: LauncherToken[] = [
     symbol: "NOTES",
     description:
       "A shared market for open research, prototypes and contributor funding.",
-    imageUrl: "/brand/programmable-token-fallback-05-lavender.webp",
+    imageUrl: "/brand/projects/field-notes-v1.webp",
     launchedAt: "2026-07-29T14:10:00.000Z",
     marketCapUsd: "980000000000000000000000",
     priceUsd: "980000000000000",

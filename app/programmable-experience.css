@@ -165,7 +165,7 @@ html[data-theme="light"] {
 }
 
 .launch-page:has(.classic-launch-sheet) {
-  padding-top: 16px;
+  padding-top: 8px;
 }
 
 .launch-page:has(.classic-launch-sheet) .launch-page-heading {

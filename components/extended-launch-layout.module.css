@@ -1,7 +1,7 @@
 .page {
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: auto;
   scroll-padding-bottom: 96px;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 .sheet {
@@ -115,9 +115,9 @@
 
 @media (min-width: 1021px) {
   :global(.launch-page).page {
-    height: calc(100svh - var(--header-height));
-    overflow-x: hidden;
-    overflow-y: auto;
+    height: auto;
+    min-height: calc(100svh - var(--header-height));
+    overflow: visible;
     padding-bottom: max(32px, env(safe-area-inset-bottom));
   }
 
