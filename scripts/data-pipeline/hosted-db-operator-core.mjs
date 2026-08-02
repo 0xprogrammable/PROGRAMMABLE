@@ -208,7 +208,9 @@ export function validateDirectSupabaseTarget(rawUrl, expectedProjectRef) {
     parsed.hostname !== `db.${expectedProjectRef}.supabase.co` ||
     parsed.port !== "5432" ||
     parsed.pathname !== "/postgres" ||
-    parsed.username !== "postgres" ||
+    !["postgres", "cli_login_postgres"].includes(
+      decodeURIComponent(parsed.username),
+    ) ||
     parsed.password.length < 1 ||
     parsed.hash !== "" ||
     parameters.length !== 1 ||

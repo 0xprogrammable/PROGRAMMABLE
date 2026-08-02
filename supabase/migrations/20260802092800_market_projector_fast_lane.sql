@@ -1,6 +1,8 @@
 -- The stream wake path needs one bounded head projection. Historical cursor
 -- repair and candle coverage remain owned by the scheduled market projector.
 
+set role programmable_migrator;
+
 create index market_block_closes_fast_occurrence_idx
   on programmable_private.market_block_closes (
     chain_id, release_id, model_id, source_group, epoch_id,
@@ -490,3 +492,5 @@ alter function programmable_private.assert_market_projector_fast_lane_v1(
   bigint,text,text,text,text,text,bytea,uuid,bigint,uuid,bigint,bigint,
   numeric,bytea,uuid,uuid,bigint,bigint,uuid,uuid,numeric,bytea
 ) owner to programmable_migrator;
+
+reset role;

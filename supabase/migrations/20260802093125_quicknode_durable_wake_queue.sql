@@ -6,10 +6,13 @@
 -- retryable without holding a database transaction across projector network I/O.
 
 reset role;
+set role postgres;
 
 create schema if not exists programmable_wake_private
   authorization programmable_migrator;
 alter schema programmable_wake_private owner to programmable_migrator;
+
+set role programmable_migrator;
 
 revoke all on schema programmable_wake_private
 from public, anon, authenticated, service_role,
@@ -19,9 +22,6 @@ from public, anon, authenticated, service_role,
   programmable_api_reader_login, programmable_projector_login,
   programmable_reconciler_login,
   programmable_projector_runtime_login;
-
-set role programmable_migrator;
-
 alter default privileges for role programmable_migrator
 in schema programmable_wake_private
   revoke all on tables from public, anon, authenticated, service_role,

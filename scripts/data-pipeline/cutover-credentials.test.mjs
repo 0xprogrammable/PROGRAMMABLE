@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   ROLE_SPECS,
+  captureDatabaseManifest,
   createBackupAndRestoreEvidence,
   provisionLoginRoles,
   verifyPoolerLogins,
@@ -417,10 +418,168 @@ async function backupFixture() {
 function manifest(value = "c") {
   return {
     manifestSha256: `0x${value.repeat(64)}`,
+    structuralManifestSha256: `0x${value.repeat(63)}${
+      value === "f" ? "e" : "f"
+    }`,
     tableCount: 27,
     rowCount: 265,
   };
 }
+
+const STRUCTURAL_QUERY_MATCHERS = Object.freeze([
+  ["schemaSecurity", "as schema_owner"],
+  ["relationSecurity", "as relation_owner"],
+  ["columns", "as ordinal"],
+  ["functionDefinitions", "as function_owner"],
+  ["views", "as view_kind"],
+  ["constraints", "as constraint_kind"],
+  ["indexes", "as index_name"],
+  ["triggers", "as trigger_name"],
+  ["policies", "as policy_name"],
+  ["typeGrants", "as type_owner"],
+  ["enumDefinitions", "as enum_ordinal"],
+  ["domainDefinitions", "as base_type_schema"],
+  ["rangeDefinitions", "as multirange_type_schema"],
+  ["defaultPrivileges", "default_acl.defaclobjtype"],
+]);
+
+function manifestCaptureSql(mutatedCategory, observedQueries = []) {
+  return {
+    unsafe(query) {
+      observedQueries.push(query);
+      if (query.includes("set timezone")) return pending([]);
+      if (
+        query.includes("from pg_catalog.pg_namespace") &&
+        query.includes("where nspname = any")
+      ) {
+        return pending([
+          { nspname: "programmable_private" },
+          { nspname: "programmable_release_probe_private" },
+          { nspname: "supabase_migrations" },
+        ]);
+      }
+      if (query.includes("current_user::text as current_user")) {
+        return pending([{ current_user: "postgres", rolsuper: true }]);
+      }
+      if (query.includes("class.relkind::text as object_kind")) {
+        return pending([]);
+      }
+      if (
+        query.includes("as function_kind") &&
+        !query.includes("pg_get_functiondef")
+      ) {
+        return pending([]);
+      }
+      if (query.includes("as type_kind") && !query.includes("as type_owner")) {
+        return pending([]);
+      }
+      if (query.includes("as sequence_name")) {
+        return pending([
+          {
+            schema_name: "programmable_private",
+            sequence_name: "event_id_seq",
+            data_type: "bigint",
+            start_value: "1",
+            increment_by: "1",
+            maximum_value: "9223372036854775807",
+            minimum_value: "1",
+            cache_size: "1",
+            cycles: false,
+            owned_by_schema: "programmable_private",
+            owned_by_relation: "events",
+            owned_by_column: "id",
+          },
+        ]);
+      }
+      if (query.includes("last_value::text as last_value")) {
+        return pending([
+          {
+            last_value: mutatedCategory === "sequences" ? "43" : "42",
+            is_called: true,
+          },
+        ]);
+      }
+      const match = STRUCTURAL_QUERY_MATCHERS.find(([, marker]) =>
+        query.includes(marker),
+      );
+      if (match) {
+        const [category] = match;
+        return pending([
+          {
+            category,
+            definition:
+              mutatedCategory === category ? "mutated" : "baseline",
+          },
+        ]);
+      }
+      throw new Error(`unexpected manifest query: ${query}`);
+    },
+  };
+}
+
+test("captureDatabaseManifest preserves the legacy hash and binds structural catalog state", async () => {
+  const observedQueries = [];
+  const baseline = await captureDatabaseManifest(
+    manifestCaptureSql(undefined, observedQueries),
+  );
+  assert.equal(
+    baseline.manifestSha256,
+    "0x3561c613752680fd9a2faddb412267139e7c9d8d0f1995ed1b243e920c3b508a",
+  );
+  assert.match(baseline.structuralManifestSha256, /^0x[0-9a-f]{64}$/u);
+  assert.equal(baseline.tableCount, 0);
+  assert.equal(baseline.rowCount, 0);
+
+  for (const category of [
+    ...STRUCTURAL_QUERY_MATCHERS.map(([name]) => name),
+    "sequences",
+  ]) {
+    const changed = await captureDatabaseManifest(
+      manifestCaptureSql(category),
+    );
+    assert.equal(changed.manifestSha256, baseline.manifestSha256, category);
+    assert.notEqual(
+      changed.structuralManifestSha256,
+      baseline.structuralManifestSha256,
+      category,
+    );
+  }
+
+  const catalogSql = observedQueries.join("\n");
+  for (const requiredFragment of [
+    "pg_get_functiondef",
+    "pg_get_viewdef",
+    "pg_get_constraintdef",
+    "pg_get_indexdef",
+    "pg_get_triggerdef",
+    "relrowsecurity",
+    "pg_policy",
+    "nspacl",
+    "relacl",
+    "attacl",
+    "proacl",
+    "typacl",
+    "pg_enum",
+    "enumsortorder",
+    "row_number() over",
+    "typbasetype",
+    "typtypmod",
+    "typdefaultbin",
+    "typnotnull",
+    "pg_range",
+    "rngsubtype",
+    "rngsubopc",
+    "rngcollation",
+    "rngcanonical",
+    "rngsubdiff",
+    "rngmultitypid",
+    "pg_default_acl",
+    "pg_sequence",
+    "last_value::text",
+  ]) {
+    assert.equal(catalogSql.includes(requiredFragment), true, requiredFragment);
+  }
+});
 
 function backupDependencies(fixture, overrides = {}) {
   const calls = [];
@@ -531,6 +690,14 @@ test("createBackupAndRestoreEvidence keeps secrets in child env and proves an is
   assert.equal(result.evidence.restore.database, "programmable_restore_cutover01");
   assert.equal(result.evidence.sourceManifestSha256, manifest().manifestSha256);
   assert.equal(result.evidence.restoredManifestSha256, manifest().manifestSha256);
+  assert.equal(
+    result.evidence.sourceStructuralManifestSha256,
+    manifest().structuralManifestSha256,
+  );
+  assert.equal(
+    result.evidence.restoredStructuralManifestSha256,
+    manifest().structuralManifestSha256,
+  );
   assert.equal(result.evidence.tableCount, 27);
   assert.equal(result.evidence.rowCount, 265);
   assert.equal(result.evidence.backup.format, "pg-custom-v1");
@@ -545,15 +712,18 @@ test("createBackupAndRestoreEvidence keeps secrets in child env and proves an is
     3,
   );
   assert.equal(dump.args.includes("--serializable-deferrable"), true);
-  assert.equal(dump.args.includes("--no-owner"), true);
-  assert.equal(dump.args.includes("--no-privileges"), true);
+  assert.equal(dump.args.includes("--no-owner"), false);
+  assert.equal(dump.args.includes("--no-privileges"), false);
   const restore = harness.calls.find(
     ({ binary, args }) => binary === "pg_restore" && args.includes("--single-transaction"),
   );
   assert.ok(restore);
   assert.equal(restore.args.includes("--exit-on-error"), true);
+  assert.equal(restore.args.includes("--no-owner"), false);
+  assert.equal(restore.args.includes("--no-privileges"), false);
   const psql = harness.calls.find(({ binary }) => binary === "psql");
   assert.ok(psql);
+  assert.ok(harness.calls.indexOf(psql) < harness.calls.indexOf(restore));
   const roleSql = psql.args.at(-1);
   for (const { loginRole, capabilityRole } of ROLE_SPECS) {
     assert.match(roleSql, new RegExp(loginRole, "u"));
@@ -579,6 +749,7 @@ test("createBackupAndRestoreEvidence records an exact empty target-schema baseli
   t.after(() => rm(fixture.directory, { recursive: true, force: true }));
   const emptyManifest = {
     manifestSha256: `0x${"e".repeat(64)}`,
+    structuralManifestSha256: `0x${"f".repeat(64)}`,
     tableCount: 0,
     rowCount: 0,
   };
@@ -638,6 +809,25 @@ test("createBackupAndRestoreEvidence is idempotent only for matching private evi
   assert.deepEqual(second.evidence, first.evidence);
 
   const stored = JSON.parse(await readFile(fixture.input.evidencePath, "utf8"));
+  delete stored.sourceStructuralManifestSha256;
+  delete stored.restoredStructuralManifestSha256;
+  await writeFile(fixture.input.evidencePath, `${JSON.stringify(stored)}\n`, {
+    mode: 0o600,
+  });
+  const legacy = await createBackupAndRestoreEvidence({
+    ...fixture.input,
+    dependencies: {
+      openHostedDatabase: async () => {
+        throw new Error("must not connect");
+      },
+    },
+  });
+  assert.equal(legacy.status, "current");
+  assert.equal(
+    Object.hasOwn(legacy.evidence, "sourceStructuralManifestSha256"),
+    false,
+  );
+
   stored.repositoryCommit = "b".repeat(40);
   await writeFile(fixture.input.evidencePath, `${JSON.stringify(stored)}\n`, {
     mode: 0o600,
@@ -734,6 +924,34 @@ test("createBackupAndRestoreEvidence fails closed on source drift or restore mis
     harness.calls.some(({ binary }) => binary === "psql"),
     false,
   );
+});
+
+test("createBackupAndRestoreEvidence fails closed on structural-only drift", async (t) => {
+  const fixture = await backupFixture();
+  t.after(() => rm(fixture.directory, { recursive: true, force: true }));
+  let captureCount = 0;
+  const harness = backupDependencies(fixture, {
+    captureDatabaseManifest: async () => {
+      captureCount += 1;
+      return {
+        ...manifest("c"),
+        structuralManifestSha256:
+          captureCount === 1 ? `0x${"a".repeat(64)}` : `0x${"b".repeat(64)}`,
+      };
+    },
+  });
+  await assert.rejects(
+    createBackupAndRestoreEvidence({
+      ...fixture.input,
+      dependencies: harness.dependencies,
+    }),
+    /database backup and isolated restore failed/u,
+  );
+  assert.equal(
+    harness.calls.some(({ binary }) => binary === "psql"),
+    false,
+  );
+  await assert.rejects(lstat(fixture.input.backupPath), { code: "ENOENT" });
 });
 
 test("createBackupAndRestoreEvidence requires Postgres 17 tools and a clean target", async (t) => {
