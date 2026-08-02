@@ -958,10 +958,12 @@ function TokenDetailContent({
 
   return (
     <div className={`${styles.page} page-width`}>
-      <Link className={styles.back} href="/">
-        <ArrowLeft aria-hidden="true" size={16} />
-        Explore
-      </Link>
+      <div className={styles.navigationRow}>
+        <Link className={styles.back} href="/">
+          <ArrowLeft aria-hidden="true" size={16} />
+          Explore
+        </Link>
+      </div>
 
       <div className={styles.layout}>
         <section className={styles.overview}>
@@ -984,6 +986,29 @@ function TokenDetailContent({
                 <span className={styles.symbol}>${token.symbol}</span>
               </div>
               <h1 className={styles.name}>{token.name}</h1>
+              {projectLinks.length > 0 ? (
+                <div className={styles.links} aria-label={`${token.name} links`}>
+                  {projectLinks.map((link) => {
+                    const label = getLinkLabel(link.kind);
+                    return (
+                      <a
+                        className={`${styles.socialLink} ${
+                          link.kind === "website" ? styles.websiteLink : ""
+                        }`}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`${token.name} on ${label}`}
+                        key={`${link.kind}:${link.url}`}
+                      >
+                        <TokenLinkIcon kind={link.kind} />
+                        <span>{label}</span>
+                        <ArrowUpRight aria-hidden="true" size={14} />
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : null}
               <div className={styles.addressActions}>
                 <button
                   className={styles.address}
@@ -1070,7 +1095,9 @@ function TokenDetailContent({
               </dl>
             </section>
 
-            <section className={styles.projectPanel}>
+            <section
+              className={`${styles.projectPanel} ${styles.projectPanelWide}`}
+            >
               <header className={styles.projectPanelHeading}>
                 <h2>Team</h2>
               </header>
@@ -1104,37 +1131,6 @@ function TokenDetailContent({
                 <p className={styles.projectEmpty}>
                   No team information provided.
                 </p>
-              )}
-            </section>
-
-            <section className={styles.projectPanel}>
-              <header className={styles.projectPanelHeading}>
-                <h2>Links</h2>
-              </header>
-              {projectLinks.length > 0 ? (
-                <div className={styles.links} aria-label={`${token.name} links`}>
-                  {projectLinks.map((link) => {
-                    const label = getLinkLabel(link.kind);
-                    return (
-                      <a
-                        className={`${styles.socialLink} ${
-                          link.kind === "website" ? styles.websiteLink : ""
-                        }`}
-                        href={link.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={`${token.name} on ${label}`}
-                        key={`${link.kind}:${link.url}`}
-                      >
-                        <TokenLinkIcon kind={link.kind} />
-                        <span>{label}</span>
-                        <ArrowUpRight aria-hidden="true" size={14} />
-                      </a>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className={styles.projectEmpty}>No project links provided.</p>
               )}
             </section>
 

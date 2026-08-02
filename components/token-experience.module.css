@@ -19,22 +19,21 @@
   z-index: -1;
 }
 
+.navigationRow {
+  margin: 0 auto 14px;
+  max-width: 1020px;
+}
+
 .back {
   align-items: center;
-  background: color-mix(in srgb, var(--glass-96) 92%, transparent);
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 13px;
   color: var(--text-soft);
   display: inline-flex;
   font-size: 13px;
   font-weight: 610;
   gap: 7px;
-  margin-bottom: 14px;
-  min-height: 44px;
-  padding: 0 14px;
+  min-height: 36px;
+  padding: 0 2px;
   transition:
-    background-color 160ms ease,
-    border-color 160ms ease,
     color 160ms ease,
     transform 140ms var(--ease-out);
 }
@@ -48,7 +47,6 @@
   max-width: 1020px;
 }
 
-.overview,
 .tradeShell,
 .emptyState {
   backdrop-filter: blur(24px) saturate(1.03);
@@ -60,12 +58,9 @@
 }
 
 .overview {
-  border-radius: 34px;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  overflow: hidden;
-  padding: clamp(24px, 4vw, 42px);
 }
 
 .identity {
@@ -190,23 +185,20 @@
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  margin: 22px 0 0;
+  gap: 18px;
+  margin: 20px 0 0;
 }
 
 .socialLink {
   align-items: center;
-  background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-  border-radius: 14px;
   color: var(--text-soft);
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 650;
-  gap: 8px;
-  min-height: 44px;
+  font-size: 13px;
+  font-weight: 620;
+  gap: 7px;
+  min-height: 34px;
   justify-content: center;
-  padding: 0 12px;
+  padding: 0;
 }
 
 .socialLink svg:first-child {
@@ -219,7 +211,7 @@
 }
 
 .websiteLink {
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface-soft));
+  background: transparent;
 }
 
 .websiteIcon {
@@ -227,21 +219,17 @@
 }
 
 .metrics {
-  background: color-mix(in srgb, var(--border) 84%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  border-radius: 18px;
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   display: grid;
-  gap: 1px;
-  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
-  margin: 18px 0 0;
-  overflow: hidden;
-  padding: 0;
+  gap: clamp(20px, 4vw, 48px);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin: 30px 0 0;
+  padding: 23px 0 25px;
 }
 
 .metric {
-  background: color-mix(in srgb, var(--glass-96) 94%, transparent);
   min-width: 0;
-  padding: 15px 17px 16px;
 }
 
 .metric dt {
@@ -252,11 +240,11 @@
 
 .metric dd {
   color: var(--text);
-  font-size: 19px;
+  font-size: clamp(22px, 2.6vw, 30px);
   font-variant-numeric: tabular-nums;
-  font-weight: 630;
-  letter-spacing: -0.025em;
-  margin: 6px 0 0;
+  font-weight: 590;
+  letter-spacing: -0.035em;
+  margin: 8px 0 0;
   overflow-wrap: anywhere;
 }
 
@@ -322,20 +310,17 @@
 }
 
 .projectInformation {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  display: block;
+  margin-top: 44px;
 }
 
 .projectPanel {
-  background: color-mix(in srgb, var(--surface-tint) 82%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 22px;
+  border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  min-height: 230px;
-  padding: 21px;
+  min-height: 0;
+  padding: 31px 0 32px;
 }
 
 .projectPanelWide {
@@ -465,12 +450,7 @@
 }
 
 .projectEmpty {
-  align-items: center;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex: 1;
-  margin-top: 20px;
-  padding-top: 16px;
+  margin-top: 18px;
 }
 
 .communityAction {
@@ -493,17 +473,15 @@
 }
 
 .communityPanel {
-  min-height: 224px;
+  min-height: 0;
 }
 
 .communityBody {
   align-items: end;
-  border-top: 1px solid var(--border);
   display: grid;
   gap: 24px;
   grid-template-columns: minmax(0, 1fr) auto;
-  margin-top: 22px;
-  padding-top: 24px;
+  margin-top: 20px;
 }
 
 .communityBody p {
@@ -1113,6 +1091,10 @@
   }
 
   .back {
+    min-height: 34px;
+  }
+
+  .navigationRow {
     margin-bottom: 10px;
   }
 
@@ -1120,13 +1102,8 @@
     gap: 12px;
   }
 
-  .overview,
   .tradeShell {
     border-radius: 22px;
-  }
-
-  .overview {
-    padding: 16px;
   }
 
   .identity {
@@ -1175,34 +1152,27 @@
     margin-top: 18px;
   }
 
-  .socialLink {
-    padding-inline: 11px;
-  }
-
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 17px;
+    gap: 24px 18px;
+    margin-top: 26px;
+    padding-block: 20px;
   }
 
   .metric {
-    min-height: 72px;
-    padding: 13px 14px;
+    min-height: 60px;
   }
 
   .metrics[data-count="3"] {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .metrics:not([data-count="3"]) .metric:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .metric dd {
-    font-size: 17px;
+    font-size: clamp(20px, 7vw, 26px);
   }
 
   .projectInformation {
-    grid-template-columns: 1fr;
+    margin-top: 36px;
   }
 
   .projectPanelWide {
@@ -1211,7 +1181,7 @@
 
   .projectPanel {
     min-height: 0;
-    padding: 19px;
+    padding: 26px 0;
   }
 
   .projectFacts {
@@ -1265,7 +1235,6 @@
     font-size: clamp(38px, 12vw, 48px);
   }
 
-  .overview,
   .tradeShell {
     padding: 14px;
   }
@@ -1275,7 +1244,7 @@
   }
 
   .metric {
-    padding-inline: 10px;
+    min-height: 56px;
   }
 
   .metric dt {

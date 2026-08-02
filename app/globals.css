@@ -400,6 +400,13 @@ html[data-theme="dark"] .app-frame::before {
   min-width: 0;
 }
 
+.header-socials {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: 0;
+}
+
 .theme-toggle {
   align-items: center;
   background: var(--surface-raised);

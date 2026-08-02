@@ -103,24 +103,6 @@ export function SiteHeader() {
               priority
             />
           </Link>
-          <a
-            className="header-social-link"
-            href="https://x.com/0xProgrammable"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Programmable on X"
-          >
-            <XBrandIcon />
-          </a>
-          <a
-            className="header-social-link"
-            href="https://github.com/0xprogrammable"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Programmable on GitHub"
-          >
-            <GitHubBrandIcon />
-          </a>
         </div>
 
         <nav className="desktop-nav" aria-label="Primary navigation">
@@ -137,6 +119,26 @@ export function SiteHeader() {
         </nav>
 
         <div className="header-actions">
+          <div className="header-socials">
+            <a
+              className="header-social-link"
+              href="https://x.com/0xProgrammable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on X"
+            >
+              <XBrandIcon />
+            </a>
+            <a
+              className="header-social-link"
+              href="https://github.com/0xprogrammable"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Programmable on GitHub"
+            >
+              <GitHubBrandIcon />
+            </a>
+          </div>
           <ThemeToggle />
           <WalletButton compact />
         </div>
