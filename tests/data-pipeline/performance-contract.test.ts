@@ -17,6 +17,8 @@ import * as deployPolicy from "../../scripts/perf/read-model-deploy-policy.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import * as gateCore from "../../scripts/perf/read-model-gate-core.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
+import * as evidenceCommitment from "../../scripts/perf/read-model-evidence-commitment.mjs";
+// @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import * as liveVerifier from "../../scripts/perf/read-model-live-verifier.mjs";
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import * as providerBinding from "../../scripts/perf/read-model-provider-binding.mjs";
@@ -346,7 +348,7 @@ function createBundle(release = false) {
   for (const key of Object.keys(files) as (keyof typeof files)[]) {
     writeFileSync(join(directory, files[key]), contents[key]);
   }
-  const evidence = {
+  const evidence = evidenceCommitment.commitReadModelReleaseEvidence({
     schemaVersion: 1,
     profileId: profile.profileId,
     evidenceKind: "production-canary",
@@ -366,7 +368,7 @@ function createBundle(release = false) {
         },
       ]),
     ),
-  };
+  });
   const evidencePath = join(
     directory,
     "read-model-release-evidence.v1.json",
@@ -387,6 +389,8 @@ function rewriteDatasetManifest(fixture: ReturnType<typeof createBundle>) {
   fixture.evidence.artifacts.datasetManifest.sha256 = gateCore.sha256Bytes(
     Buffer.from(contents),
   );
+  fixture.evidence.evidenceSha256 =
+    evidenceCommitment.readModelReleaseEvidenceCommitment(fixture.evidence);
   writeFileSync(fixture.evidencePath, `${JSON.stringify(fixture.evidence)}\n`);
 }
 
@@ -399,6 +403,8 @@ function rewriteHttpSamples(
   fixture.evidence.artifacts.httpSamples.sha256 = gateCore.sha256Bytes(
     Buffer.from(contents),
   );
+  fixture.evidence.evidenceSha256 =
+    evidenceCommitment.readModelReleaseEvidenceCommitment(fixture.evidence);
   writeFileSync(fixture.evidencePath, `${JSON.stringify(fixture.evidence)}\n`);
 }
 
@@ -562,6 +568,23 @@ describe("read-model performance contract", () => {
         httpSamples: expect.stringMatching(/^[0-9a-f]{64}$/u),
         rpcTrace: expect.stringMatching(/^[0-9a-f]{64}$/u),
       }),
+    );
+  });
+
+  it("rejects missing and stale release bundle commitments", () => {
+    const missing = createBundle();
+    const uncommitted = structuredClone(missing.evidence);
+    Reflect.deleteProperty(uncommitted, "evidenceSha256");
+    writeFileSync(missing.evidencePath, `${JSON.stringify(uncommitted)}\n`);
+    expect(() => loadBundle(missing.evidencePath)).toThrow(
+      "expected exactly",
+    );
+
+    const stale = createBundle();
+    stale.evidence.target.gitHead = "9".repeat(40);
+    writeFileSync(stale.evidencePath, `${JSON.stringify(stale.evidence)}\n`);
+    expect(() => loadBundle(stale.evidencePath)).toThrow(
+      "commitment is invalid",
     );
   });
 

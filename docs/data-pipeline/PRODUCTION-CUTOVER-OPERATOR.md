@@ -140,9 +140,11 @@ It must not depend on promotion values created later in the cutover. Its
 immutable `VERCEL_GIT_COMMIT_SHA` and `VERCEL_DEPLOYMENT_ID` are the runtime
 identity inputs.
 
-Create a release-gate evidence file from the reviewed staged binding and raw
-backfill checks. It must carry one non-zero `evidenceSha256` or
-`releaseEvidenceSha256` commitment.
+Capture creates a release-gate evidence file from the reviewed staged binding
+and raw backfill checks. Its non-zero `evidenceSha256` is the SHA-256 commitment
+to canonical JSON of every manifest field except `evidenceSha256` itself. The
+gate and cutover independently recompute this commitment and reject missing,
+stale or malformed values.
 
 The exact staged deployment may have both projector workers enabled, but it
 must remain unassigned to every production domain and scheduler. Prove its

@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { assertReadModelReleaseEvidenceCommitment } from
+  "./read-model-evidence-commitment.mjs";
+
 export const ROUTE_NAMES = Object.freeze([
   "exploreList",
   "tokenDetail",
@@ -714,9 +717,11 @@ function parseReleaseEvidence(value) {
       "captureNonce",
       "target",
       "artifacts",
+      "evidenceSha256",
     ],
     "evidence",
   );
+  assertReadModelReleaseEvidenceCommitment(input);
   if (input.schemaVersion !== 1) fail("evidence.schemaVersion", "expected 1");
   string(input.profileId, "evidence.profileId");
   string(input.evidenceKind, "evidence.evidenceKind");
