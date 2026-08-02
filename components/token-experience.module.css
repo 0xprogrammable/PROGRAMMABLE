@@ -90,21 +90,11 @@
   min-width: 0;
 }
 
-.projectKicker {
+.tokenSymbolRow {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 9px;
-}
-
-.projectKicker > span:first-child {
-  color: var(--muted);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.105em;
-  line-height: 1.2;
-  text-transform: uppercase;
 }
 
 .symbol {
@@ -189,8 +179,7 @@
   max-width: 62ch;
 }
 
-.descriptionEmpty,
-.linksEmpty {
+.descriptionEmpty {
   color: var(--muted);
 }
 
@@ -232,12 +221,6 @@
 
 .websiteIcon {
   display: block;
-}
-
-.linksEmpty {
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 0;
 }
 
 .metrics {
@@ -357,23 +340,13 @@
   min-height: 0;
 }
 
-.projectPanelHeading > span {
-  color: var(--muted);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.095em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
 .projectPanelHeading h2 {
   color: var(--text);
   font-size: 24px;
   font-weight: 570;
   letter-spacing: -0.035em;
   line-height: 1.06;
-  margin: 8px 0 0;
+  margin: 0;
 }
 
 .projectFacts {
@@ -1276,10 +1249,6 @@
 
   .metric dd {
     font-size: 16px;
-  }
-
-  .projectKicker > span:first-child {
-    font-size: 9px;
   }
 
   .projectPanelHeading h2 {

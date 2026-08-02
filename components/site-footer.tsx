@@ -9,7 +9,7 @@ import styles from "@/components/site-footer.module.css";
 
 const productLinks = [
   { href: "/", label: "Explore" },
-  { href: "/launch", label: "Launch" },
+  { href: "/launch", label: "Create" },
   { href: "/profile", label: "Profile" },
   { href: "/docs", label: "Docs" },
 ];
@@ -49,10 +49,7 @@ export function SiteFooter() {
               height={192}
             />
           </Link>
-          <p>
-            Discover and launch onchain projects with programmable markets.
-            Product, market and community context stay together in one place.
-          </p>
+          <p>Tokens with programmable markets on Ethereum.</p>
         </section>
 
         <nav className={styles.column} aria-label="Product">

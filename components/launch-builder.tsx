@@ -1167,12 +1167,6 @@ function LaunchBuilderFormView({
   );
   const usesExtendedLayout =
     model === "classic-v3" || model === "deep" || model === "stock-paired";
-  const modelName =
-    model === "deep"
-      ? "Deep"
-      : model === "stock-paired"
-        ? "Stock-Paired"
-        : "Classic";
   const stockPairedLaunchAllowed = stockPairedPublicLaunchEnabled;
   const submittingWalletConnected = Boolean(
     activeSubmission &&
@@ -1374,7 +1368,7 @@ function LaunchBuilderFormView({
         });
         clearSubmissionPhase();
         setSuccessOpen(true);
-        setNotice("Project launched");
+        setNotice("Token created");
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") {
           return;
@@ -1404,10 +1398,10 @@ function LaunchBuilderFormView({
       tokenImageState.status === "waiting" ||
       tokenImageState.status === "uploading"
     ) {
-      return "Wait for the project image to finish uploading";
+      return "Wait for the token image to finish uploading";
     }
     if (tokenImageState.status === "error") {
-      return tokenImageState.message || "Choose the project image again";
+      return tokenImageState.message || "Choose the token image again";
     }
     try {
       if (model === "deep") {
@@ -1429,7 +1423,7 @@ function LaunchBuilderFormView({
     } catch (caught) {
       return caught instanceof Error
         ? caught.message
-        : "Check the project details and try again";
+        : "Check the token details and try again";
     }
   }
 
@@ -1838,13 +1832,13 @@ function LaunchBuilderFormView({
         : submissionPhase === "receipt-unavailable"
           ? "Transaction status unavailable"
           : submissionPhase === "index-unavailable"
-            ? "Project index unavailable"
+            ? "Token index unavailable"
         : submissionPhase === "pending-timeout"
           ? "Transaction still pending"
           : submissionPhase === "index-timeout"
-            ? "Project is being indexed"
+            ? "Token is being indexed"
             : submissionPhase === "indexing"
-              ? "Adding project"
+              ? "Adding token"
               : "Confirming transaction";
   const submissionStatusDetail =
     staleSubmissionNotFound
@@ -1852,26 +1846,26 @@ function LaunchBuilderFormView({
         ? "This transaction has not appeared on the configured Ethereum providers for over 24 hours. You can check once more and discard only this browser record."
         : "Connect the wallet that submitted this launch to resolve its stale browser record."
       : submissionPhase === "reverted"
-        ? "No project was launched. Review the transaction before trying again."
+        ? "No token was created. Review the transaction before trying again."
         : submissionPhase === "receipt-unavailable"
           ? "The network could not confirm this transaction status. Try the same transaction again."
           : submissionPhase === "index-unavailable"
-            ? "The transaction is confirmed, but the project index could not be reached. Try again."
+            ? "The transaction is confirmed, but the token index could not be reached. Try again."
         : submissionPhase === "pending-timeout"
           ? "Check the same transaction again before taking another action."
           : submissionPhase === "index-timeout"
-            ? "The transaction is confirmed. The project record may take a little longer."
+            ? "The transaction is confirmed. The token may take a little longer to appear."
             : "";
   const controlsLockMessage = !pendingRestoreComplete
     ? "Checking this browser for an unfinished launch."
     : launching
-      ? "Project details are locked while the launch transaction is prepared."
+      ? "Token details are locked while the transaction is prepared."
       : unresolvedSubmission
         ? confirmedButUnindexed
-          ? "This transaction is confirmed and its hash remains saved while the project index catches up. You can safely return to the market models."
-          : "Project details are locked to the submitted transaction. Check its status before taking another action."
+          ? "This transaction is confirmed and its hash remains saved while the token index catches up. You can safely go back."
+          : "Token details are locked to the submitted transaction. Check its status before taking another action."
         : hasSubmittedTransaction
-          ? "This completed launch is locked. View the project or return to the market models."
+          ? "This completed launch is locked. View the token or go back."
           : "";
 
   const launchStatus: ReactNode = indexedLaunch ? (
@@ -1978,7 +1972,7 @@ function LaunchBuilderFormView({
               : launchPhase === "confirming"
                 ? "Confirm in wallet"
                 : wallet
-                  ? "Launch project"
+                  ? "Create token"
                   : "Connect wallet"}
     </button>
   );
@@ -2001,8 +1995,7 @@ function LaunchBuilderFormView({
           Back
         </button>
         <div className={`launch-page-title ${launchExperience.formPageTitle}`}>
-          <span className={launchExperience.formModelName}>{modelName}</span>
-          <h1>Create your project</h1>
+          <h1>Create token</h1>
         </div>
       </header>
 
@@ -2035,7 +2028,7 @@ function LaunchBuilderFormView({
             controlsLockMessage ? "launch-controls-lock-status" : undefined
           }
         >
-          <legend className="sr-only">Project launch details</legend>
+          <legend className="sr-only">Token details</legend>
           <TokenStep
             draft={draft}
             setDraft={setEditableDraft}
@@ -2662,12 +2655,12 @@ function TokenStep({
   return (
     <section className="classic-token-section">
       <div className="classic-section-heading">
-        <h2>Project identity</h2>
+        <h2>Token</h2>
       </div>
 
       <div className="classic-token-grid">
         <div className="token-image-field">
-          <span>Project image</span>
+          <span>Token image</span>
           <input
             ref={imageInputRef}
             hidden
@@ -2679,7 +2672,7 @@ function TokenStep({
             className={`token-image-upload${imagePreview ? " has-image" : ""}`}
             type="button"
             aria-label={
-              imagePreview ? "Change project image" : "Choose project image"
+              imagePreview ? "Change token image" : "Choose token image"
             }
             onClick={() => imageInputRef.current?.click()}
           >
@@ -2687,7 +2680,7 @@ function TokenStep({
               <span
                 className="token-image-preview"
                 role="img"
-                aria-label="Project image preview"
+                aria-label="Token image preview"
                 style={{ backgroundImage: `url("${imagePreview}")` }}
               />
             ) : (
@@ -2733,12 +2726,12 @@ function TokenStep({
         <div className="classic-token-main">
           <div className="two-column-fields">
             <label className="field">
-              <span>Project name</span>
+              <span>Token name</span>
               <input
                 value={draft.tokenName}
                 required
                 maxLength={MAX_TOKEN_NAME_CHARACTERS}
-                placeholder="Project name"
+                placeholder="Token name"
                 autoComplete="off"
                 onChange={(event) => {
                   const value = event.target.value.replace(/[\r\n]/g, "");
@@ -2781,7 +2774,7 @@ function TokenStep({
               value={draft.tokenDescription}
               maxLength={MAX_TOKEN_DESCRIPTION_BYTES}
               rows={2}
-              placeholder="Describe the product, purpose and community"
+              placeholder="What is this token for?"
               onChange={(event) => {
                 if (
                   utf8ByteLength(event.target.value) <=
@@ -2804,7 +2797,7 @@ function TokenStep({
                 inputMode="url"
                 value={draft.tokenWebsite}
                 maxLength={MAX_METADATA_URL_BYTES}
-                placeholder="project.com"
+                placeholder="your-site.com"
                 spellCheck={false}
                 autoComplete="url"
                 onBlur={normalizeWebsite}
@@ -2821,7 +2814,7 @@ function TokenStep({
                 inputMode="url"
                 value={draft.tokenX}
                 maxLength={MAX_SOCIAL_URL_BYTES}
-                placeholder="@project or post URL"
+                placeholder="@account or post URL"
                 spellCheck={false}
                 autoComplete="off"
                 onBlur={() => normalizeSocial("x")}
@@ -2838,7 +2831,7 @@ function TokenStep({
                 inputMode="url"
                 value={draft.tokenTelegram}
                 maxLength={MAX_SOCIAL_URL_BYTES}
-                placeholder="@project or t.me/project"
+                placeholder="@group or t.me/group"
                 spellCheck={false}
                 autoComplete="off"
                 onBlur={() => normalizeSocial("telegram")}

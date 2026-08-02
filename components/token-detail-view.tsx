@@ -314,7 +314,7 @@ export function parseDetailPayload(value: unknown): DetailPayload {
 function readApiError(value: unknown) {
   return isRecord(value) && typeof value.error === "string"
     ? value.error
-    : "Project data is temporarily unavailable";
+    : "Token data is temporarily unavailable";
 }
 
 function getFallbackTokenImage(address: string) {
@@ -968,7 +968,7 @@ function TokenDetailContent({
     <div className={`${styles.page} page-width`}>
       <Link className={styles.back} href="/">
         <ArrowLeft aria-hidden="true" size={16} />
-        All projects
+        Explore
       </Link>
 
       <div className={styles.layout}>
@@ -978,7 +978,7 @@ function TokenDetailContent({
               <Image
                 src={imageSource}
                 alt={
-                  token.imageUrl?.trim() ? `${token.name} project artwork` : ""
+                  token.imageUrl?.trim() ? `${token.name} artwork` : ""
                 }
                 fill
                 priority
@@ -988,8 +988,7 @@ function TokenDetailContent({
             </div>
 
             <div className={styles.identityCopy}>
-              <div className={styles.projectKicker}>
-                <span>Programmable project</span>
+              <div className={styles.tokenSymbolRow}>
                 <span className={styles.symbol}>${token.symbol}</span>
               </div>
               <h1 className={styles.name}>{token.name}</h1>
@@ -1034,8 +1033,7 @@ function TokenDetailContent({
                 token.description?.trim() ? "" : ` ${styles.descriptionEmpty}`
               }`}
             >
-              {token.description?.trim() ||
-                "This project has not published a product description yet."}
+              {token.description?.trim() || "No description provided."}
             </p>
 
             {projectLinks.length > 0 ? (
@@ -1060,9 +1058,7 @@ function TokenDetailContent({
                   );
                 })}
               </div>
-            ) : (
-              <p className={styles.linksEmpty}>No verified project links</p>
-            )}
+            ) : null}
           </div>
 
           <MetricGrid metrics={metrics} />
@@ -1088,8 +1084,7 @@ function TokenDetailContent({
               className={`${styles.projectPanel} ${styles.projectPanelWide}`}
             >
               <header className={styles.projectPanelHeading}>
-                <span>Project record</span>
-                <h2>Product and market</h2>
+                <h2>Market</h2>
               </header>
               <dl className={styles.projectFacts}>
                 <div>
@@ -1113,8 +1108,7 @@ function TokenDetailContent({
 
             <section className={styles.projectPanel}>
               <header className={styles.projectPanelHeading}>
-                <span>Team</span>
-                <h2>Who is building</h2>
+                <h2>Team</h2>
               </header>
               {creatorAddress ? (
                 <>
@@ -1139,40 +1133,33 @@ function TokenDetailContent({
                     </div>
                   </div>
                   <p className={styles.projectNote}>
-                    This wallet created the onchain project. No named team
-                    profile has been published.
+                    No team profile provided.
                   </p>
                 </>
               ) : (
                 <p className={styles.projectEmpty}>
-                  Team information has not been published for this project.
+                  No team information provided.
                 </p>
               )}
             </section>
 
             <section className={styles.projectPanel}>
               <header className={styles.projectPanelHeading}>
-                <span>Community</span>
-                <h2>Join the conversation</h2>
+                <h2>Community</h2>
               </header>
               {communityLink ? (
-                <>
-                  <p className={styles.projectNote}>
-                    Continue with the project&rsquo;s published community channel.
-                  </p>
-                  <a
-                    className={styles.communityAction}
-                    href={communityLink.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open community chat
-                    <ArrowUpRight aria-hidden="true" size={15} />
-                  </a>
-                </>
+                <a
+                  className={styles.communityAction}
+                  href={communityLink.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open Telegram
+                  <ArrowUpRight aria-hidden="true" size={15} />
+                </a>
               ) : (
                 <p className={styles.projectEmpty}>
-                  No verified community chat has been published.
+                  No community chat provided.
                 </p>
               )}
               {updatesLink ? (
@@ -1182,7 +1169,7 @@ function TokenDetailContent({
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Follow updates on X
+                  View on X
                   <ArrowUpRight aria-hidden="true" size={13} />
                 </a>
               ) : null}
@@ -1401,7 +1388,7 @@ export function TokenDetailView({ address }: { address: string }) {
         const message =
           error instanceof Error
             ? error.message
-            : "Project data is temporarily unavailable";
+            : "Token data is temporarily unavailable";
         setState((current) =>
           current.phase === "ready" && current.requestKey === requestKey
             ? current
@@ -1437,18 +1424,18 @@ export function TokenDetailView({ address }: { address: string }) {
 
   const message =
     activeState.phase === "loading"
-      ? "Loading project"
+      ? "Loading token"
       : activeState.phase === "not-found"
-        ? "This project is not in the Programmable index yet"
+        ? "This token is not in the Programmable index yet"
         : activeState.phase === "not-deployed"
-          ? "No verified project data is available"
+          ? "No verified token data is available"
           : activeState.message;
 
   return (
     <div className={`${styles.page} page-width`}>
       <Link className={styles.back} href="/">
         <ArrowLeft aria-hidden="true" size={16} />
-        All projects
+        Explore
       </Link>
       <div
         className={styles.emptyState}
@@ -1474,7 +1461,7 @@ function TokenDetailMessage({ message }: { message: string }) {
     <div className={`${styles.page} page-width`}>
       <Link className={styles.back} href="/">
         <ArrowLeft aria-hidden="true" size={16} />
-        All projects
+        Explore
       </Link>
       <div className={styles.emptyState} role="status">
         <p>{message}</p>

@@ -3,7 +3,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  ArrowRight,
   ArrowUpRight,
   Check,
   ChevronDown,
@@ -106,7 +105,6 @@ const TOKENS_PER_PAGE = 10;
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
 export const EXPLORE_REFRESH_INTERVAL_MS = LIVE_DATA_REFRESH_INTERVAL_MS;
-const PROGRAMMABLE_TOKEN_ADDRESS = "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
   "/brand/programmable-token-fallback-01-dawn.webp",
   "/brand/programmable-token-fallback-02-moon.webp",
@@ -660,7 +658,7 @@ export function ExploreView() {
     ) {
       return (
         <div className="token-empty" role="status">
-          <p>Loading projects</p>
+          <p>Loading tokens</p>
         </div>
       );
     }
@@ -684,17 +682,9 @@ export function ExploreView() {
       return (
         <div className={`${styles.emptyState} token-empty token-empty-initial`}>
           <div>
-            <span className={styles.emptyEyebrow}>Verified index</span>
-            <h2>No verified projects yet</h2>
-            <p>
-              Projects appear here only after their launch record is available
-              in the verified index.
-            </p>
+            <h2>Token index unavailable</h2>
+            <p>Explore is not available in this environment.</p>
           </div>
-          <Link className={styles.emptyAction} href="/launch">
-            Start a project
-            <ArrowRight aria-hidden="true" size={16} />
-          </Link>
         </div>
       );
     }
@@ -703,7 +693,7 @@ export function ExploreView() {
       if (debouncedQuery) {
         return (
           <div className="token-empty">
-            <p>No projects match this search</p>
+            <p>No tokens match this search</p>
             <button
               className="text-button"
               type="button"
@@ -721,16 +711,11 @@ export function ExploreView() {
       return (
         <div className={`${styles.emptyState} token-empty token-empty-initial`}>
           <div>
-            <span className={styles.emptyEyebrow}>The first runner</span>
-            <h2>No public projects yet</h2>
-            <p>
-              Verified projects will appear here with their product, market
-              and community details.
-            </p>
+            <h2>No tokens yet</h2>
+            <p>Create the first token.</p>
           </div>
           <Link className={styles.emptyAction} href="/launch">
-            Start a project
-            <ArrowRight aria-hidden="true" size={16} />
+            Create token
           </Link>
         </div>
       );
@@ -751,30 +736,27 @@ export function ExploreView() {
               <Link
                 className={styles.runnerHitArea}
                 href={href}
-                aria-label={`Open ${token.name} project`}
+                aria-label={`View ${token.name}`}
               />
 
               <div className={styles.runnerArt}>
                 <Image
                   className={styles.runnerImage}
                   src={imageSource}
-                  alt={
-                    token.usesFallbackImage ? "" : `${token.name} project artwork`
-                  }
+                  alt={token.usesFallbackImage ? "" : `${token.name} artwork`}
                   fill
                   sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1100px) 42vw, 310px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                 />
                 <div className={styles.runnerArtHeader} aria-hidden="true">
-                  <span>Runner {String(index + 1).padStart(2, "0")}</span>
                   <span>{getLaunchModelLabel(token.launchModel)}</span>
                 </div>
               </div>
 
               <div className={styles.runnerBody}>
                 <header className={styles.runnerHeading}>
-                  <span className={styles.runnerSymbol}>${token.symbol}</span>
                   <h3>{token.name}</h3>
+                  <span className={styles.runnerSymbol}>${token.symbol}</span>
                 </header>
 
                 <p
@@ -782,8 +764,7 @@ export function ExploreView() {
                     token.description ? "" : ` ${styles.runnerDescriptionEmpty}`
                   }`}
                 >
-                  {token.description ??
-                    "Project details have not been published yet."}
+                  {token.description ?? "No description provided."}
                 </p>
 
                 <dl className={styles.runnerFacts}>
@@ -847,7 +828,7 @@ export function ExploreView() {
                   ) : null}
 
                   <span className={styles.runnerOpen} aria-hidden="true">
-                    Open project
+                    View
                     <ArrowUpRight size={15} />
                   </span>
                 </div>
@@ -862,64 +843,9 @@ export function ExploreView() {
   return (
     <>
       <div className={`${styles.page} explore-page page-width`}>
-        <section className={styles.hero}>
-          <div className={styles.heroCopy}>
-            <span className={styles.heroEyebrow}>Programmable projects</span>
-            <h1>
-              Discover what&rsquo;s
-              <span>being built.</span>
-            </h1>
-            <p>
-              Products, markets, people and communities &mdash; together on one
-              clear project page.
-            </p>
-            <div className={styles.heroActions}>
-              <a className={styles.primaryAction} href="#runners">
-                Explore runners
-                <ArrowRight aria-hidden="true" size={17} />
-              </a>
-              <Link className={styles.secondaryAction} href="/launch">
-                Start a project
-              </Link>
-            </div>
-          </div>
-
-          <div className={styles.heroLens} aria-label="Programmable">
-            <span className={styles.lensLabel}>Project layer</span>
-            <Image
-              className={styles.lensLogo}
-              src="/brand/loop/programmable-loop-mark-transparent-v1.png"
-              alt=""
-              width={1254}
-              height={1254}
-              priority
-            />
-            <div className={styles.lensFooter}>
-              <span>Programmable</span>
-              <button
-                type="button"
-                aria-label={
-                  copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                    ? "Programmable contract address copied"
-                    : "Copy Programmable contract address"
-                }
-                title={
-                  copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                    ? "Copied"
-                    : "Copy contract address"
-                }
-                onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
-              >
-                <code>{formatTokenAddress(PROGRAMMABLE_TOKEN_ADDRESS)}</code>
-                {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
-                  <Check aria-hidden="true" size={13} />
-                ) : (
-                  <Copy aria-hidden="true" size={13} />
-                )}
-              </button>
-            </div>
-          </div>
-        </section>
+        <header className={styles.pageHeading}>
+          <h1>Tokens for anything.</h1>
+        </header>
 
         <section
           className={`${styles.runnersSection} token-section`}
@@ -927,132 +853,127 @@ export function ExploreView() {
           aria-busy={busy}
         >
           <div className={styles.runnersIntro}>
-            <div>
-              <span>Runners</span>
-              <h2>Projects in motion.</h2>
-            </div>
-            <p>
-              Explore each product, its market and the people building around
-              it.
-            </p>
-          </div>
+            <h2>Runners</h2>
 
-          {hasPublicTokens ? (
-            <div className="token-section-heading">
-              <h2 className="sr-only">Projects</h2>
-              <div className="token-toolbar">
-                <label className="token-search">
-                  <Search aria-hidden="true" size={17} />
-                  <span className="sr-only">
-                    Search projects by name, ticker or contract address
-                  </span>
-                  <input
-                    value={query}
-                    placeholder="Search projects"
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </label>
-
-                <details className="token-filter" ref={filterRef}>
-                  <summary>
-                    <SlidersHorizontal aria-hidden="true" size={16} />
-                    <span>Filter</span>
-                    <ChevronDown
-                      className="token-filter-chevron"
-                      aria-hidden="true"
-                      size={15}
-                    />
-                  </summary>
-                  <div
-                    className="token-filter-menu"
-                    role="group"
-                    aria-label="Sort projects"
-                  >
-                    {sortOptions.map((option) => (
-                      <button
-                        key={option.id}
-                        className={sort === option.id ? "active" : undefined}
-                        type="button"
-                        aria-pressed={sort === option.id}
-                        onClick={() => {
-                          setSort(option.id);
-                          setCurrentPage(1);
-                          const filter = filterRef.current;
-                          filter?.removeAttribute("open");
-                          filter?.querySelector("summary")?.focus();
-                        }}
-                      >
-                        <span>{option.label}</span>
-                        {sort === option.id ? (
-                          <Check aria-hidden="true" size={15} />
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                </details>
-
-                {state.phase === "ready" &&
-                state.payload.status === "ready" &&
-                state.payload.total > 0 &&
-                cards.length > 0 &&
-                pageCount > 1 ? (
-                  <nav className="token-pagination" aria-label="Project pages">
-                    <button
-                      type="button"
-                      aria-label="Previous project page"
-                      disabled={activePage === 1 || busy}
-                      onClick={() =>
-                        setCurrentPage((page) => Math.max(1, page - 1))
-                      }
-                    >
-                      <ChevronLeft aria-hidden="true" size={15} />
-                    </button>
-
-                    <div className="token-pagination-pages">
-                      {paginationItems.map((item) =>
-                        typeof item === "number" ? (
-                          <button
-                            key={item}
-                            className={
-                              activePage === item ? "active" : undefined
-                            }
-                            type="button"
-                            aria-label={`Project page ${item}`}
-                            aria-current={
-                              activePage === item ? "page" : undefined
-                            }
-                            disabled={busy}
-                            onClick={() => setCurrentPage(item)}
-                          >
-                            {item}
-                          </button>
-                        ) : (
-                          <span key={item} aria-hidden="true">
-                            …
-                          </span>
-                        ),
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      aria-label="Next project page"
-                      disabled={activePage === pageCount || busy}
-                      onClick={() =>
-                        setCurrentPage((page) => Math.min(pageCount, page + 1))
-                      }
-                    >
-                      <ChevronRight aria-hidden="true" size={15} />
-                    </button>
-
-                    <span className="sr-only" aria-live="polite">
-                      Page {activePage} of {pageCount}
+            {hasPublicTokens ? (
+              <div className="token-section-heading">
+                <h2 className="sr-only">Tokens</h2>
+                <div className="token-toolbar">
+                  <label className="token-search">
+                    <Search aria-hidden="true" size={17} />
+                    <span className="sr-only">
+                      Search tokens by name, ticker or contract address
                     </span>
-                  </nav>
-                ) : null}
+                    <input
+                      value={query}
+                      placeholder="Search tokens"
+                      onChange={(event) => setQuery(event.target.value)}
+                    />
+                  </label>
+
+                  <details className="token-filter" ref={filterRef}>
+                    <summary>
+                      <SlidersHorizontal aria-hidden="true" size={16} />
+                      <span>Filter</span>
+                      <ChevronDown
+                        className="token-filter-chevron"
+                        aria-hidden="true"
+                        size={15}
+                      />
+                    </summary>
+                    <div
+                      className="token-filter-menu"
+                      role="group"
+                      aria-label="Sort tokens"
+                    >
+                      {sortOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          className={sort === option.id ? "active" : undefined}
+                          type="button"
+                          aria-pressed={sort === option.id}
+                          onClick={() => {
+                            setSort(option.id);
+                            setCurrentPage(1);
+                            const filter = filterRef.current;
+                            filter?.removeAttribute("open");
+                            filter?.querySelector("summary")?.focus();
+                          }}
+                        >
+                          <span>{option.label}</span>
+                          {sort === option.id ? (
+                            <Check aria-hidden="true" size={15} />
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+
+                  {state.phase === "ready" &&
+                  state.payload.status === "ready" &&
+                  state.payload.total > 0 &&
+                  cards.length > 0 &&
+                  pageCount > 1 ? (
+                    <nav className="token-pagination" aria-label="Token pages">
+                      <button
+                        type="button"
+                        aria-label="Previous token page"
+                        disabled={activePage === 1 || busy}
+                        onClick={() =>
+                          setCurrentPage((page) => Math.max(1, page - 1))
+                        }
+                      >
+                        <ChevronLeft aria-hidden="true" size={15} />
+                      </button>
+
+                      <div className="token-pagination-pages">
+                        {paginationItems.map((item) =>
+                          typeof item === "number" ? (
+                            <button
+                              key={item}
+                              className={
+                                activePage === item ? "active" : undefined
+                              }
+                              type="button"
+                              aria-label={`Token page ${item}`}
+                              aria-current={
+                                activePage === item ? "page" : undefined
+                              }
+                              disabled={busy}
+                              onClick={() => setCurrentPage(item)}
+                            >
+                              {item}
+                            </button>
+                          ) : (
+                            <span key={item} aria-hidden="true">
+                              …
+                            </span>
+                          ),
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        aria-label="Next token page"
+                        disabled={activePage === pageCount || busy}
+                        onClick={() =>
+                          setCurrentPage((page) =>
+                            Math.min(pageCount, page + 1),
+                          )
+                        }
+                      >
+                        <ChevronRight aria-hidden="true" size={15} />
+                      </button>
+
+                      <span className="sr-only" aria-live="polite">
+                        Page {activePage} of {pageCount}
+                      </span>
+                    </nav>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
 
           {state.phase === "ready" && state.refreshError ? (
             <div className="token-refresh-warning" role="status">
@@ -1068,7 +989,7 @@ export function ExploreView() {
 
           {state.phase === "ready" && busy ? (
             <span className="sr-only" role="status">
-              Updating projects
+              Updating tokens
             </span>
           ) : null}
           {renderTokenState()}

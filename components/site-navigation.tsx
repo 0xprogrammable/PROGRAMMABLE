@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BookOpen,
   Compass,
   Moon,
   Plus,
@@ -21,11 +20,14 @@ import { WalletButton } from "@/components/wallet-provider";
 type ColorTheme = "light" | "dark";
 const themeChangeEvent = "programmable:theme-changed";
 
-const navItems = [
+const desktopNavItems = [
   { href: "/", label: "Explore", icon: Compass },
-  { href: "/launch", label: "Launch", icon: Plus },
+  { href: "/launch", label: "Create", icon: Plus },
+];
+
+const mobileNavItems = [
+  ...desktopNavItems,
   { href: "/profile", label: "Profile", icon: UserRound },
-  { href: "/docs", label: "Docs", icon: BookOpen },
 ];
 
 function isCurrent(pathname: string, href: string) {
@@ -122,7 +124,7 @@ export function SiteHeader() {
         </div>
 
         <nav className="desktop-nav" aria-label="Primary navigation">
-          {navItems.map((item) => (
+          {desktopNavItems.map((item) => (
             <Link
               key={item.href}
               className={isCurrent(pathname, item.href) ? "active" : undefined}
@@ -148,7 +150,7 @@ export function MobileNavigation() {
 
   return (
     <nav className="mobile-nav" aria-label="Primary navigation">
-      {navItems.map((item) => {
+      {mobileNavItems.map((item) => {
         const Icon = item.icon;
         const current = isCurrent(pathname, item.href);
         return (
