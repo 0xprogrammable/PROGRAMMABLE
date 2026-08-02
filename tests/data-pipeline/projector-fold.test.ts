@@ -418,7 +418,7 @@ describe("projector semantic fold", () => {
         fundingAmount: "6000000000000000",
         tokenAmount: "1000000",
       },
-      ethFunded: true,
+      ethFunded: false,
     });
     expect(result.launches[0]!.liquidity.initialSqrtPriceX96).toMatch(/^[1-9]\d*$/u);
   });
