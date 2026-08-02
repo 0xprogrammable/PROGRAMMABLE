@@ -18,7 +18,10 @@ export const docsNavigation = [
     label: "Launch models",
     items: [
       { href: "/docs/models/classic", label: "Classic" },
-      { href: "/docs/models/stock-paired", label: "Stock-Paired" },
+      {
+        href: "/docs/models/stock-paired",
+        label: "Stock-Paired history",
+      },
     ],
   },
   {
@@ -61,9 +64,9 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/models/classic",
   },
   {
-    title: "Stock-Paired",
+    title: "Stock-Paired history",
     description:
-      "A restricted model whose pool uses a reviewed stock token.",
+      "Historical pools, quote assets and support for existing tokens.",
     href: "/docs/models/stock-paired",
   },
   {

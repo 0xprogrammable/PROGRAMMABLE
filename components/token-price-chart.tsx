@@ -9,6 +9,8 @@ import {
   useState,
 } from "react";
 
+import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
+
 import styles from "./token-price-chart.module.css";
 
 type ChartPoint = {
@@ -61,6 +63,14 @@ export function getPriceHistoryEmptyMessage(
   return failed
     ? "Price history is temporarily unavailable"
     : "Price history appears after confirmed trades";
+}
+
+export function shouldRenderPriceHistory(input: {
+  loading: boolean;
+  hasChart: boolean;
+  range: ChartRange;
+}) {
+  return input.loading || input.hasChart || input.range !== "all";
 }
 
 const CHART_RANGES: ReadonlyArray<{
@@ -175,6 +185,9 @@ export function TokenPriceChart({
     failed: boolean;
   } | null>(null);
   const [range, setRange] = useState<ChartRange>("all");
+  const refreshKey = useLiveDataRefresh({
+    enabled: launchModel !== "stock-paired",
+  });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const activeIndexRef = useRef<number | null>(null);
   const plotRef = useRef<SVGSVGElement | null>(null);
@@ -199,6 +212,7 @@ export function TokenPriceChart({
       : request?.key === requestKey
         ? request.failed
         : false;
+  const loading = !payload && !failed;
 
   useEffect(() => {
     if (launchModel === "stock-paired") {
@@ -226,15 +240,22 @@ export function TokenPriceChart({
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError")
           return;
-        setRequest({
-          key: requestKey,
-          payload: null,
-          failed: true,
-        });
+        setRequest((current) =>
+          current?.key === requestKey && current.payload
+            ? current
+            : { key: requestKey, payload: null, failed: true },
+        );
       });
 
     return () => controller.abort();
-  }, [launchModel, range, requestKey, setActiveIndexIfChanged, tokenAddress]);
+  }, [
+    launchModel,
+    range,
+    refreshKey,
+    requestKey,
+    setActiveIndexIfChanged,
+    tokenAddress,
+  ]);
 
   const chart = useMemo(() => {
     if (!payload || payload.points.length < 2) return null;
@@ -377,10 +398,20 @@ export function TokenPriceChart({
     }
   }
 
+  if (
+    !shouldRenderPriceHistory({
+      loading,
+      hasChart: Boolean(chart),
+      range,
+    })
+  ) {
+    return null;
+  }
+
   return (
     <section
       className={styles.shell}
-      aria-busy={!payload && !failed}
+      aria-busy={loading}
       aria-label={`${tokenName} price history`}
     >
       <span
@@ -393,11 +424,11 @@ export function TokenPriceChart({
       </span>
       <div className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Price history</p>
+          <p className={styles.eyebrow}>Price</p>
           <p className={styles.value}>
             {chart
               ? formatPrice(activePoint?.value ?? chart.current, chart.unit)
-              : launchModel === "stock-paired"
+              : !loading || launchModel === "stock-paired"
                 ? "Unavailable"
                 : "Onchain"}
           </p>
@@ -429,7 +460,7 @@ export function TokenPriceChart({
         ) : null}
       </div>
 
-      {!payload && !failed ? (
+      {loading ? (
         <div className={styles.placeholder} aria-hidden="true">
           <span className={styles.loadingLine} />
         </div>
@@ -442,6 +473,7 @@ export function TokenPriceChart({
             role="slider"
             tabIndex={0}
             aria-label={`${tokenName} price point`}
+            aria-orientation="horizontal"
             aria-valuemin={0}
             aria-valuemax={chart.points.length - 1}
             aria-valuenow={activeIndex ?? chart.points.length - 1}
@@ -528,8 +560,8 @@ export function TokenPriceChart({
           </svg>
         </div>
       ) : (
-        <div className={styles.placeholder} aria-hidden="true">
-          {emptyMessage}
+        <div className={styles.placeholder}>
+          <p>{emptyMessage}</p>
         </div>
       )}
     </section>

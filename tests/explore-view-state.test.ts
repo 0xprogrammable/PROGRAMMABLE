@@ -25,7 +25,7 @@ afterEach(() => {
 
 describe("Explore refresh state", () => {
   it("refreshes only visible Explore content after the freshness interval", () => {
-    expect(EXPLORE_REFRESH_INTERVAL_MS).toBe(10_000);
+    expect(EXPLORE_REFRESH_INTERVAL_MS).toBe(5_000);
     expect(
       shouldRefreshExplore({
         visibilityState: "hidden",
@@ -37,14 +37,14 @@ describe("Explore refresh state", () => {
       shouldRefreshExplore({
         visibilityState: "visible",
         lastRefreshAt: 5_000,
-        now: 14_999,
+        now: 9_999,
       }),
     ).toBe(false);
     expect(
       shouldRefreshExplore({
         visibilityState: "visible",
         lastRefreshAt: 5_000,
-        now: 15_000,
+        now: 10_000,
       }),
     ).toBe(true);
   });

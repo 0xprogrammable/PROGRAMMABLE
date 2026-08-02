@@ -24,7 +24,7 @@ const modelMetadata: Record<
   "stock-paired": {
     title: "Stock-Paired",
     description:
-      "A restricted model whose Uniswap v4 pool uses a reviewed stock token as its quote asset.",
+      "Historical Uniswap v4 pools that use a reviewed stock token as their quote asset.",
   },
 };
 
@@ -378,9 +378,9 @@ function StockPairedDocs() {
   return (
     <DocsShell
       currentPath="/docs/models/stock-paired"
-      kicker="Launch model · Restricted"
+      kicker="Historical launch model"
       title="Stock-Paired"
-      description="A fixed-supply token whose Uniswap v4 pool uses a reviewed stock token as the quote asset."
+      description="Existing fixed-supply tokens whose Uniswap v4 pools use a reviewed stock token as the quote asset."
     >
       <section>
         <span className={styles.sectionEyebrow}>Product boundary</span>
@@ -392,18 +392,18 @@ function StockPairedDocs() {
           selected stock.
         </p>
         <div className={styles.callout}>
-          <strong>General public access is not enabled.</strong>
+          <strong>New Stock-Paired launches are closed.</strong>
           <p>
-            The current interface exposes this model only to an approved
-            account. Its verified deployment does not make it a public launch
-            option.
+            Existing tokens remain in Explore. Their token pages, trading,
+            profile history and reward claims remain supported, and their
+            deployment records stay public.
           </p>
         </div>
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Launch flow</span>
-        <h2>ETH in, stock-token pool underneath</h2>
+        <span className={styles.sectionEyebrow}>Historical launch design</span>
+        <h2>How the existing pools were created</h2>
         <ol className={styles.steps}>
           <li>
             <strong>Choose a supported quote asset</strong>
@@ -492,15 +492,14 @@ function StockPairedDocs() {
             underlying share.
           </li>
           <li>
-            New launches fail closed when the reviewed quote-token runtime no
-            longer matches.
+            New launch preparation is closed server-side.
           </li>
         </ul>
       </section>
 
       <section>
         <span className={styles.sectionEyebrow}>Contracts</span>
-        <h2>Restricted Mainnet deployment</h2>
+        <h2>Historical Mainnet deployment</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>

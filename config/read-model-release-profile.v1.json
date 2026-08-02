@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "profileId": "read-model-release-v1",
+  "scope": {
+    "models": ["classic", "stock-paired"],
+    "excludedModels": ["adaptive", "deep"]
+  },
+  "evidence": {
+    "maximumAgeSeconds": 1800,
+    "requiredKinds": ["preview", "production-canary"],
+    "requireExactGitHead": true,
+    "requireLiveVercelBinding": true,
+    "requiredArtifactDigests": ["datasetManifest", "httpSamples", "rpcTrace"]
+  },
+  "dataset": {
+    "launches": 264,
+    "chainEvents": 792,
+    "marketSnapshots": 264,
+    "marketCandles": 264,
+    "accounts": 100,
+    "rewardRows": 264
+  },
+  "datasetCoverage": {
+    "minimumEligibleLaunches": 264,
+    "maximumEligibleLaunches": 400,
+    "maximumClassicLookupLaunches": 300,
+    "maximumStockLookupLaunches": 100,
+    "minimumRowsPerLaunch": {
+      "chainEvents": 3,
+      "marketSnapshots": 1,
+      "marketCandles": 1,
+      "rewardRows": 1
+    },
+    "requiredReleaseVersions": [
+      "classic-v2",
+      "classic-v3",
+      "stock-paired-v1",
+      "stock-paired-v2",
+      "stock-paired-v3"
+    ],
+    "minimumClassicLookupLaunches": 32,
+    "minimumStockLookupLaunches": 32,
+    "tokenSampleCount": 264,
+    "accountSampleCount": 100,
+    "classicLaunchSampleCount": 32,
+    "stockLaunchSampleCount": 32,
+    "candidateSampleCount": 32
+  },
+  "load": {
+    "concurrency": 20,
+    "durationSeconds": 60,
+    "minimumCompletedRequests": 1000,
+    "probeTimeoutMs": 30000,
+    "maximumErrorRateBps": 0,
+    "maximumCacheHitRateBps": 0,
+    "minimumDistinctTokenKeys": 264,
+    "minimumDistinctAccountKeys": 100,
+    "minimumDistinctClassicLaunchKeys": 32,
+    "minimumDistinctStockLaunchKeys": 32,
+    "probeCacheControl": "private, no-store",
+    "requiredVercelCacheStatuses": ["MISS", "BYPASS"],
+    "routeMixBps": {
+      "exploreList": 1000,
+      "tokenDetail": 1000,
+      "tokenChart": 1000,
+      "creatorProfile": 1000,
+      "classicProfile": 1000,
+      "stockProfile": 1000,
+      "classicLaunchLookup": 1800,
+      "stockLaunchLookup": 1000,
+      "publicIndexer": 800,
+      "health": 400
+    },
+    "maximumRouteP95Ms": {
+      "exploreList": 750,
+      "tokenDetail": 750,
+      "tokenChart": 1500,
+      "creatorProfile": 750,
+      "classicProfile": 750,
+      "stockProfile": 1500,
+      "classicLaunchLookup": 750,
+      "stockLaunchLookup": 1500,
+      "publicIndexer": 500,
+      "health": 1500
+    },
+    "maximumRouteP99Ms": {
+      "exploreList": 1500,
+      "tokenDetail": 1500,
+      "tokenChart": 2500,
+      "creatorProfile": 1500,
+      "classicProfile": 1500,
+      "stockProfile": 2500,
+      "classicLaunchLookup": 1500,
+      "stockLaunchLookup": 2500,
+      "publicIndexer": 1000,
+      "health": 2500
+    }
+  },
+  "projector": {
+    "hostingDeadlineMs": 90000,
+    "hardDeadlineMs": 75000,
+    "minimumReserveMs": 15000,
+    "smokeCandidateBatchSize": 8,
+    "maximumCandidateBatchSize": 32,
+    "rpc": {
+      "providerCount": 2,
+      "perCallTimeoutMs": 5000,
+      "maxAttemptsPerCall": 3,
+      "baseBackoffMs": 50,
+      "maxConcurrencyPerProvider": 4,
+      "fixedCallsPerProviderPerAttempt": 3,
+      "callsPerCandidatePerProviderPerAttempt": 3,
+      "smokeFirstAttemptCallsPerProvider": 27,
+      "theoreticalWorstCaseCallsPerProvider": 297,
+      "theoreticalWorstCaseDurationMs": 393900,
+      "globalRetryAllowancePerProvider": 29,
+      "maxCallsPerProviderPerRun": 128,
+      "maxAggregateCallsPerRun": 256
+    }
+  },
+  "providerLimits": {
+    "envio": {
+      "planQueriesPerMinute": 1000,
+      "steadyQueriesPerMinute": 500,
+      "burstQueriesPerMinute": 750
+    }
+  },
+  "shadow": {
+    "requiredRoutes": [
+      "exploreList",
+      "tokenDetail",
+      "tokenChart",
+      "creatorProfile",
+      "classicProfile",
+      "stockProfile",
+      "classicLaunchLookup",
+      "stockLaunchLookup"
+    ],
+    "minimumSamples": 880,
+    "maximumP50Ms": 10,
+    "maximumP95Ms": 25,
+    "maximumP99Ms": 50,
+    "maximumLiveComparisonP50Ms": 5000,
+    "maximumLiveComparisonP95Ms": 15000,
+    "maximumLiveComparisonP99Ms": 25000,
+    "maximumParityMismatches": 0,
+    "maximumFallbacks": 0
+  },
+  "cacheContracts": {
+    "exploreList": "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+    "tokenDetail": "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+    "tokenChart": "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+    "creatorProfile": "private, max-age=0, s-maxage=15",
+    "classicProfile": "no-store",
+    "stockProfile": "no-store",
+    "classicLaunchLookup": "no-store",
+    "stockLaunchLookup": "no-store",
+    "publicIndexer": "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+    "tokenList": "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+    "health": "public, max-age=0, s-maxage=30",
+    "accountMutation": "private, no-store",
+    "transactionPreparation": "private, no-store"
+  }
+}

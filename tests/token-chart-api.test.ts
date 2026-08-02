@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
+
 const mocks = vi.hoisted(() => ({
   getPublicOnchainDeployment: vi.fn(),
   isTokenChartRange: vi.fn(),
@@ -76,6 +78,7 @@ describe("token chart API", () => {
       }),
     );
     await expect(response.json()).resolves.toMatchObject({
+      address: token.tokenAddress,
       range: "1h",
       swapCount: 2,
       volumeWei: "1250000000000000000",
@@ -83,7 +86,7 @@ describe("token chart API", () => {
       volumeUsdWad: "4375000000000000000000",
     });
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=15",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
   });
 });

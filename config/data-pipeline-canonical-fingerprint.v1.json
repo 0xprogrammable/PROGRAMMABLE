@@ -1,0 +1,577 @@
+{
+  "format": "programmable-canonical-fingerprint-fixture",
+  "encoding_version": 1,
+  "hash": "ethereum-keccak-256",
+  "integer_encoding": "unsigned fixed-width big-endian",
+  "variable_encoding": "uint32 big-endian byte length followed by exact bytes",
+  "nullable_encoding": "0x00 for null; 0x01 followed by ordinary encoding for present",
+  "array_encoding": "uint32 big-endian count followed by elements in original order",
+  "json_encoding": "RFC 8785 JCS; uint256 values are canonical decimal strings",
+  "field_schemas": {
+    "occurrence": [
+      [
+        "chain_id",
+        "u64"
+      ],
+      [
+        "transaction_hash",
+        "bytes32"
+      ],
+      [
+        "receipt_log_ordinal",
+        "u32"
+      ],
+      [
+        "block_number",
+        "u64"
+      ],
+      [
+        "block_hash",
+        "bytes32"
+      ],
+      [
+        "transaction_index",
+        "u32"
+      ],
+      [
+        "block_global_log_index",
+        "u32"
+      ],
+      [
+        "source_address",
+        "bytes20"
+      ],
+      [
+        "event_signature",
+        "bytes32"
+      ],
+      [
+        "ordered_topics",
+        "array<bytes32>"
+      ],
+      [
+        "raw_data",
+        "varbytes"
+      ],
+      [
+        "decoded_payload",
+        "varutf8<JCS>"
+      ],
+      [
+        "payload_hash",
+        "bytes32"
+      ],
+      [
+        "decoder_version",
+        "varutf8"
+      ],
+      [
+        "abi_event_set_commitment",
+        "bytes32"
+      ],
+      [
+        "release_id",
+        "varutf8"
+      ],
+      [
+        "model_id",
+        "varutf8"
+      ],
+      [
+        "envio_candidate_id",
+        "varutf8"
+      ],
+      [
+        "provider_cursor",
+        "varutf8"
+      ],
+      [
+        "block_timestamp_unix",
+        "u64"
+      ]
+    ],
+    "allocation": [
+      [
+        "chain_id",
+        "u64"
+      ],
+      [
+        "release_id",
+        "varutf8"
+      ],
+      [
+        "model_id",
+        "varutf8"
+      ],
+      [
+        "vault",
+        "bytes20"
+      ],
+      [
+        "factory_transaction_hash",
+        "bytes32"
+      ],
+      [
+        "factory_receipt_log_ordinal",
+        "u32"
+      ],
+      [
+        "factory_block_hash",
+        "bytes32"
+      ],
+      [
+        "creation_block_number",
+        "u64"
+      ],
+      [
+        "creation_transaction_index",
+        "u32"
+      ],
+      [
+        "ordered_beneficiaries",
+        "array<bytes20>"
+      ],
+      [
+        "ordered_shares_bps",
+        "array<u16>"
+      ],
+      [
+        "allocation_hash",
+        "bytes32"
+      ],
+      [
+        "configuration_hash",
+        "bytes32"
+      ],
+      [
+        "active_configuration_hash",
+        "nullable<bytes32>"
+      ],
+      [
+        "artifact_creation_code_commitment",
+        "bytes32"
+      ],
+      [
+        "required_occurrences",
+        "array<bytes32,u32,bytes32,varutf8>"
+      ]
+    ],
+    "evidence": [
+      [
+        "allocation_fingerprint",
+        "bytes32"
+      ],
+      [
+        "recovery_method",
+        "varutf8"
+      ],
+      [
+        "evidence_version",
+        "varutf8"
+      ],
+      [
+        "top_level_destination",
+        "nullable<bytes20>"
+      ],
+      [
+        "method_selector",
+        "nullable<bytes4>"
+      ],
+      [
+        "transaction_input_hash",
+        "nullable<bytes32>"
+      ],
+      [
+        "constructor_arguments_commitment",
+        "bytes32"
+      ],
+      [
+        "local_init_code_hash",
+        "bytes32"
+      ],
+      [
+        "create2_salt",
+        "bytes32"
+      ],
+      [
+        "local_create2_address",
+        "bytes20"
+      ],
+      [
+        "historical_enrichment_status",
+        "varutf8"
+      ],
+      [
+        "getter_block_hash",
+        "nullable<bytes32>"
+      ],
+      [
+        "getter_result_hash_a",
+        "nullable<bytes32>"
+      ],
+      [
+        "getter_result_hash_b",
+        "nullable<bytes32>"
+      ],
+      [
+        "predict_result_hash_a",
+        "nullable<bytes32>"
+      ],
+      [
+        "predict_result_hash_b",
+        "nullable<bytes32>"
+      ],
+      [
+        "predicted_vault_a",
+        "nullable<bytes20>"
+      ],
+      [
+        "predicted_vault_b",
+        "nullable<bytes20>"
+      ],
+      [
+        "selected_rpc_result_hash_a",
+        "bytes32"
+      ],
+      [
+        "selected_rpc_result_hash_b",
+        "bytes32"
+      ],
+      [
+        "selected_rpc_transaction_receipt_hash_a",
+        "nullable<bytes32>"
+      ],
+      [
+        "selected_rpc_transaction_receipt_hash_b",
+        "nullable<bytes32>"
+      ],
+      [
+        "extra_note",
+        "nullable<varutf8>"
+      ],
+      [
+        "required_occurrence_fingerprints",
+        "array<bytes32>"
+      ]
+    ]
+  },
+  "sentinel_vectors": [
+    {
+      "name": "evidence_null_marker",
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a65766964656e63653a76310000",
+      "expected_keccak256": "0x945cecbc3714b84a54cebb706446ed17b531a8e53703a90774a51797989f2f63"
+    },
+    {
+      "name": "evidence_present_empty",
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a65766964656e63653a7631000100000000",
+      "expected_keccak256": "0x080646fe0f81fe8dc11056eec4e4690a9351a30b435968db0571673a18efb934"
+    },
+    {
+      "name": "allocation_order_ab",
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a616c6c6f636174696f6e3a76310000000002111111111111111111111111111111111111111122222222222222222222222222222222222222220000000217700fa0",
+      "expected_keccak256": "0xe9937a36b49028672572c67a28640c69473ebb5dfafed3eb04e33867e177243c"
+    },
+    {
+      "name": "allocation_order_ba",
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a616c6c6f636174696f6e3a7631000000000222222222222222222222222222222222222222221111111111111111111111111111111111111111000000020fa01770",
+      "expected_keccak256": "0xf5a3b18d2b3d8c9ae9a520109fd0f4dac92ff19f1ef55fca8aa91fce98259059"
+    },
+    {
+      "name": "occurrence_two_topics_indexed_only",
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a6f6363757272656e63653a76310000000002aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb00000000",
+      "expected_keccak256": "0x262dc3ea7b1dac050cfca3aa67f6881de42706ea35349b88b7d14e860d64ff74"
+    }
+  ],
+  "vectors": [
+    {
+      "name": "occurrence_all_fields_v1",
+      "domain": "occurrence",
+      "input": {
+        "chain_id": "1",
+        "transaction_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "receipt_log_ordinal": "0",
+        "block_number": "25639596",
+        "block_hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "transaction_index": "3",
+        "block_global_log_index": "7",
+        "source_address": "0x3333333333333333333333333333333333333333",
+        "event_signature": "0x4444444444444444444444444444444444444444444444444444444444444444",
+        "ordered_topics": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ],
+        "raw_data": "0x010203",
+        "decoded_payload": {
+          "amount": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+          "creator": "0x3333333333333333333333333333333333333333",
+          "flags": [
+            true,
+            false
+          ],
+          "nested": {
+            "b": "two",
+            "a": "one"
+          }
+        },
+        "payload_hash": "0x5555555555555555555555555555555555555555555555555555555555555555",
+        "decoder_version": "projector-v1.0.0",
+        "abi_event_set_commitment": "0x6666666666666666666666666666666666666666666666666666666666666666",
+        "release_id": "classic-v3",
+        "model_id": "classic-v3",
+        "envio_candidate_id": "1:22:11:7",
+        "provider_cursor": "25639596:7",
+        "block_timestamp_unix": "1785463200"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a6f6363757272656e63653a76310000000000000000011111111111111111111111111111111111111111111111111111111111111111000000000000000001873aac222222222222222222222222222222222222222222222222222222222222222200000003000000073333333333333333333333333333333333333333444444444444444444444444444444444444444444444444444444444444444400000002aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb00000003010203000000c67b22616d6f756e74223a22313135373932303839323337333136313935343233353730393835303038363837393037383533323639393834363635363430353634303339343537353834303037393133313239363339393335222c2263726561746f72223a22307833333333333333333333333333333333333333333333333333333333333333333333333333333333222c22666c616773223a5b747275652c66616c73655d2c226e6573746564223a7b2261223a226f6e65222c2262223a2274776f227d7d55555555555555555555555555555555555555555555555555555555555555550000001070726f6a6563746f722d76312e302e3066666666666666666666666666666666666666666666666666666666666666660000000a636c61737369632d76330000000a636c61737369632d763300000009313a32323a31313a370000000a32353633393539363a37000000006a6c01a0",
+      "expected_keccak256": "0x6fe25eb0a62ea86736aa134ada719976b6166844b98d83b56d478ae409956955"
+    },
+    {
+      "name": "occurrence_indexed_only_empty_data_v1",
+      "domain": "occurrence",
+      "input": {
+        "chain_id": "1",
+        "transaction_hash": "0x1212121212121212121212121212121212121212121212121212121212121212",
+        "receipt_log_ordinal": "0",
+        "block_number": "25639596",
+        "block_hash": "0x2323232323232323232323232323232323232323232323232323232323232323",
+        "transaction_index": "3",
+        "block_global_log_index": "7",
+        "source_address": "0x3333333333333333333333333333333333333333",
+        "event_signature": "0x4444444444444444444444444444444444444444444444444444444444444444",
+        "ordered_topics": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ],
+        "raw_data": "0x",
+        "decoded_payload": {
+          "amount": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+          "creator": "0x3333333333333333333333333333333333333333",
+          "flags": [
+            true,
+            false
+          ],
+          "nested": {
+            "b": "two",
+            "a": "one"
+          }
+        },
+        "payload_hash": "0x5656565656565656565656565656565656565656565656565656565656565656",
+        "decoder_version": "projector-v1.0.0",
+        "abi_event_set_commitment": "0x6666666666666666666666666666666666666666666666666666666666666666",
+        "release_id": "classic-v3",
+        "model_id": "classic-v3",
+        "envio_candidate_id": "1:23:12:7",
+        "provider_cursor": "25639596:7",
+        "block_timestamp_unix": "1785463200"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a6f6363757272656e63653a76310000000000000000011212121212121212121212121212121212121212121212121212121212121212000000000000000001873aac232323232323232323232323232323232323232323232323232323232323232300000003000000073333333333333333333333333333333333333333444444444444444444444444444444444444444444444444444444444444444400000002aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb00000000000000c67b22616d6f756e74223a22313135373932303839323337333136313935343233353730393835303038363837393037383533323639393834363635363430353634303339343537353834303037393133313239363339393335222c2263726561746f72223a22307833333333333333333333333333333333333333333333333333333333333333333333333333333333222c22666c616773223a5b747275652c66616c73655d2c226e6573746564223a7b2261223a226f6e65222c2262223a2274776f227d7d56565656565656565656565656565656565656565656565656565656565656560000001070726f6a6563746f722d76312e302e3066666666666666666666666666666666666666666666666666666666666666660000000a636c61737369632d76330000000a636c61737369632d763300000009313a32333a31323a370000000a32353633393539363a37000000006a6c01a0",
+      "expected_keccak256": "0xef8ea5dee7777948f98130615b8f4ab9fd1d316e243b6c3a745c88043ef5d2d8"
+    },
+    {
+      "name": "allocation_order_ab_v1",
+      "domain": "allocation",
+      "input": {
+        "chain_id": "1",
+        "release_id": "classic-v3",
+        "model_id": "classic-v3",
+        "vault": "0x7777777777777777777777777777777777777777",
+        "factory_transaction_hash": "0x8888888888888888888888888888888888888888888888888888888888888888",
+        "factory_receipt_log_ordinal": "2",
+        "factory_block_hash": "0x9999999999999999999999999999999999999999999999999999999999999999",
+        "creation_block_number": "25639600",
+        "creation_transaction_index": "4",
+        "ordered_beneficiaries": [
+          "0x1111111111111111111111111111111111111111",
+          "0x2222222222222222222222222222222222222222"
+        ],
+        "ordered_shares_bps": [
+          "6000",
+          "4000"
+        ],
+        "allocation_hash": "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "configuration_hash": "0xa2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+        "active_configuration_hash": "0xa3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3",
+        "artifact_creation_code_commitment": "0xa4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+        "required_occurrences": [
+          {
+            "transaction_hash": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+            "receipt_log_ordinal": "1",
+            "block_hash": "0xa6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6",
+            "role": "launcher"
+          },
+          {
+            "transaction_hash": "0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7",
+            "receipt_log_ordinal": "1",
+            "block_hash": "0xa8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8",
+            "role": "factory"
+          },
+          {
+            "transaction_hash": "0xa9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9",
+            "receipt_log_ordinal": "1",
+            "block_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "role": "hook"
+          }
+        ]
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a616c6c6f636174696f6e3a76310000000000000000010000000a636c61737369632d76330000000a636c61737369632d7633777777777777777777777777777777777777777788888888888888888888888888888888888888888888888888888888888888880000000299999999999999999999999999999999999999999999999999999999999999990000000001873ab00000000400000002111111111111111111111111111111111111111122222222222222222222222222222222222222220000000217700fa0a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a201a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a400000003a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a500000001a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6000000086c61756e63686572a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a700000001a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a800000007666163746f7279a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a900000001aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000004686f6f6b",
+      "expected_keccak256": "0x760efbc9872c2018c892290c30ca097f4b346240b30c766a22c20568bf4d14f0"
+    },
+    {
+      "name": "allocation_order_ba_v1",
+      "domain": "allocation",
+      "input": {
+        "chain_id": "1",
+        "release_id": "classic-v3",
+        "model_id": "classic-v3",
+        "vault": "0x7777777777777777777777777777777777777777",
+        "factory_transaction_hash": "0x8888888888888888888888888888888888888888888888888888888888888888",
+        "factory_receipt_log_ordinal": "2",
+        "factory_block_hash": "0x9999999999999999999999999999999999999999999999999999999999999999",
+        "creation_block_number": "25639600",
+        "creation_transaction_index": "4",
+        "ordered_beneficiaries": [
+          "0x2222222222222222222222222222222222222222",
+          "0x1111111111111111111111111111111111111111"
+        ],
+        "ordered_shares_bps": [
+          "4000",
+          "6000"
+        ],
+        "allocation_hash": "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "configuration_hash": "0xa2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+        "active_configuration_hash": "0xa3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3",
+        "artifact_creation_code_commitment": "0xa4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+        "required_occurrences": [
+          {
+            "transaction_hash": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+            "receipt_log_ordinal": "1",
+            "block_hash": "0xa6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6",
+            "role": "launcher"
+          },
+          {
+            "transaction_hash": "0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7",
+            "receipt_log_ordinal": "1",
+            "block_hash": "0xa8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8",
+            "role": "factory"
+          },
+          {
+            "transaction_hash": "0xa9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9",
+            "receipt_log_ordinal": "1",
+            "block_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "role": "hook"
+          }
+        ]
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a616c6c6f636174696f6e3a76310000000000000000010000000a636c61737369632d76330000000a636c61737369632d7633777777777777777777777777777777777777777788888888888888888888888888888888888888888888888888888888888888880000000299999999999999999999999999999999999999999999999999999999999999990000000001873ab0000000040000000222222222222222222222222222222222222222221111111111111111111111111111111111111111000000020fa01770a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a201a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a400000003a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a500000001a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6000000086c61756e63686572a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a700000001a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a800000007666163746f7279a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a900000001aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000004686f6f6b",
+      "expected_keccak256": "0x1578cf70b13f4382f5b68923f4034573bcaf233970306c835db13c28c746887e"
+    },
+    {
+      "name": "evidence_all_fields_v1",
+      "domain": "evidence",
+      "input": {
+        "allocation_fingerprint": "0x760efbc9872c2018c892290c30ca097f4b346240b30c766a22c20568bf4d14f0",
+        "recovery_method": "launcher_calldata",
+        "evidence_version": "seed-verifier-v1.0.1",
+        "top_level_destination": "0xb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "method_selector": "0xbf388406",
+      "transaction_input_hash": "0xb3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3",
+      "constructor_arguments_commitment": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+      "local_init_code_hash": "0xa4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+      "create2_salt": "0xc2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+      "local_create2_address": "0x7777777777777777777777777777777777777777",
+        "historical_enrichment_status": "matched",
+        "getter_block_hash": "0x9999999999999999999999999999999999999999999999999999999999999999",
+        "getter_result_hash_a": "0xb5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5",
+        "getter_result_hash_b": "0xb5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5",
+        "predict_result_hash_a": "0xb6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6",
+        "predict_result_hash_b": "0xb6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6",
+        "selected_rpc_result_hash_a": "0xb7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7",
+        "selected_rpc_result_hash_b": "0xb7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7",
+        "selected_rpc_transaction_receipt_hash_a": "0xb8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+        "selected_rpc_transaction_receipt_hash_b": "0xb8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+        "extra_note": "complete",
+        "required_occurrence_fingerprints": [
+          "0x5252525252525252525252525252525252525252525252525252525252525252",
+          "0x5454545454545454545454545454545454545454545454545454545454545454",
+          "0x5656565656565656565656565656565656565656565656565656565656565656"
+        ],
+        "predicted_vault_a": "0x7777777777777777777777777777777777777777",
+        "predicted_vault_b": "0x7777777777777777777777777777777777777777"
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a65766964656e63653a763100760efbc9872c2018c892290c30ca097f4b346240b30c766a22c20568bf4d14f0000000116c61756e636865725f63616c6c6461746100000014736565642d76657269666965722d76312e302e3101b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b201bf38840601b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c27777777777777777777777777777777777777777000000076d61746368656401999999999999999999999999999999999999999999999999999999999999999901b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b501b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b501b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b601b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6017777777777777777777777777777777777777777017777777777777777777777777777777777777777b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b701b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b801b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b80100000008636f6d706c65746500000003525252525252525252525252525252525252525252525252525252525252525254545454545454545454545454545454545454545454545454545454545454545656565656565656565656565656565656565656565656565656565656565656",
+      "expected_keccak256": "0xd5eefc2d52e51f7e1b058450f49d5d153f56e1f646233699aa92e5edc15e335e"
+    },
+    {
+      "name": "evidence_null_optional_v1",
+      "domain": "evidence",
+      "input": {
+        "allocation_fingerprint": "0x760efbc9872c2018c892290c30ca097f4b346240b30c766a22c20568bf4d14f0",
+        "recovery_method": "launcher_calldata",
+        "evidence_version": "seed-verifier-v1.0.0",
+        "top_level_destination": "0xb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "method_selector": "0xbf388406",
+      "transaction_input_hash": "0xb3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3",
+      "constructor_arguments_commitment": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+      "local_init_code_hash": "0xa4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+      "create2_salt": "0xc2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+      "local_create2_address": "0x7777777777777777777777777777777777777777",
+        "historical_enrichment_status": "unavailable",
+        "getter_block_hash": null,
+        "getter_result_hash_a": null,
+        "getter_result_hash_b": null,
+        "predict_result_hash_a": null,
+        "predict_result_hash_b": null,
+        "selected_rpc_result_hash_a": "0xb7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7",
+        "selected_rpc_result_hash_b": "0xb7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7",
+        "selected_rpc_transaction_receipt_hash_a": "0xb8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+        "selected_rpc_transaction_receipt_hash_b": "0xb8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+        "extra_note": null,
+        "required_occurrence_fingerprints": [
+          "0x5252525252525252525252525252525252525252525252525252525252525252",
+          "0x5454545454545454545454545454545454545454545454545454545454545454",
+          "0x5656565656565656565656565656565656565656565656565656565656565656"
+        ],
+        "predicted_vault_a": null,
+        "predicted_vault_b": null
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a65766964656e63653a763100760efbc9872c2018c892290c30ca097f4b346240b30c766a22c20568bf4d14f0000000116c61756e636865725f63616c6c6461746100000014736565642d76657269666965722d76312e302e3001b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b201bf38840601b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c277777777777777777777777777777777777777770000000b756e617661696c61626c6500000000000000b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b701b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b801b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b80000000003525252525252525252525252525252525252525252525252525252525252525254545454545454545454545454545454545454545454545454545454545454545656565656565656565656565656565656565656565656565656565656565656",
+      "expected_keccak256": "0x27996b52c56c657c4a8ef3894a50dceb3348f299afc64adcfc0a202f5713b914"
+    },
+    {
+      "name": "evidence_present_empty_v1",
+      "domain": "evidence",
+      "input": {
+        "allocation_fingerprint": "0x760efbc9872c2018c892290c30ca097f4b346240b30c766a22c20568bf4d14f0",
+        "recovery_method": "launcher_calldata",
+        "evidence_version": "seed-verifier-v1.0.0",
+        "top_level_destination": "0xb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "method_selector": "0xbf388406",
+      "transaction_input_hash": "0xb3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3",
+      "constructor_arguments_commitment": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+      "local_init_code_hash": "0xa4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+      "create2_salt": "0xc2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+      "local_create2_address": "0x7777777777777777777777777777777777777777",
+        "historical_enrichment_status": "unavailable",
+        "getter_block_hash": null,
+        "getter_result_hash_a": null,
+        "getter_result_hash_b": null,
+        "predict_result_hash_a": null,
+        "predict_result_hash_b": null,
+        "selected_rpc_result_hash_a": "0xb7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7",
+        "selected_rpc_result_hash_b": "0xb7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7",
+        "selected_rpc_transaction_receipt_hash_a": "0xb8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+        "selected_rpc_transaction_receipt_hash_b": "0xb8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+        "extra_note": "",
+        "required_occurrence_fingerprints": [
+          "0x5252525252525252525252525252525252525252525252525252525252525252",
+          "0x5454545454545454545454545454545454545454545454545454545454545454",
+          "0x5656565656565656565656565656565656565656565656565656565656565656"
+        ],
+        "predicted_vault_a": null,
+        "predicted_vault_b": null
+      },
+      "expected_preimage_hex": "0x70726f6772616d6d61626c653a65766964656e63653a763100760efbc9872c2018c892290c30ca097f4b346240b30c766a22c20568bf4d14f0000000116c61756e636865725f63616c6c6461746100000014736565642d76657269666965722d76312e302e3001b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b201bf38840601b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c277777777777777777777777777777777777777770000000b756e617661696c61626c6500000000000000b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b701b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b801b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8010000000000000003525252525252525252525252525252525252525252525252525252525252525254545454545454545454545454545454545454545454545454545454545454545656565656565656565656565656565656565656565656565656565656565656",
+      "expected_keccak256": "0xbd4b5c41c44f9d85419a04918edb205b72c0a49a794cf43664c9509e803579fa"
+    }
+  ]
+}

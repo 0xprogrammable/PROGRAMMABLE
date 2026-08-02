@@ -158,45 +158,24 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("shows only Classic and Stock-Paired in the public model picker", () => {
+  it("shows only Classic in the public model picker", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
       }),
     );
 
-    expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
+    expect(html.match(/data-launch-model-option=/g)).toHaveLength(1);
     expect(html).toContain('data-launch-model-option="classic"');
-    expect(html).toContain('data-launch-model-option="stock-paired"');
     expect(html).toContain("<strong>Classic</strong>");
-    expect(html).toContain("<strong>Stock-Paired</strong>");
-    expect(html).toContain("Coming soon");
     expect(html).not.toContain("launch-model-classic-details");
-    expect(html).not.toContain("launch-model-stock-details");
-    const stockButton = html.match(
-      /<button[^>]*data-launch-model-option="stock-paired"[^>]*>/,
-    )?.[0];
-    expect(stockButton).toContain("disabled");
+    expect(html).not.toContain('data-launch-model-option="stock-paired"');
+    expect(html).not.toContain("<strong>Stock-Paired</strong>");
     expect(html).not.toContain('data-launch-model-option="deep"');
     expect(html).not.toContain("<strong>Deep</strong>");
     expect(html).not.toMatch(/adaptive/i);
     expect(html).not.toContain("LiquidityGrowth");
     expect(html).not.toContain("Liquidity Growth");
-  });
-
-  it("enables Stock-Paired when the server public-release gate is open", () => {
-    const html = renderToStaticMarkup(
-      createElement(LaunchModelPicker, {
-        onChoose: () => undefined,
-        stockPairedPublicLaunchEnabled: true,
-      }),
-    );
-    const stockButton = html.match(
-      /<button[^>]*data-launch-model-option="stock-paired"[^>]*>/,
-    )?.[0];
-
-    expect(stockButton).not.toContain("disabled");
-    expect(html).toContain(">Launch<");
   });
 
   it("keeps the Deep preset concise while retaining its material limits", () => {
@@ -267,7 +246,7 @@ describe("unreleased launch model gating", () => {
     expect(resolveImplementedLaunchModel("classic")).toBe("classic");
     expect(resolveImplementedLaunchModel("classic-v3")).toBe("classic-v3");
     expect(resolveImplementedLaunchModel("adaptive")).toBeNull();
-    expect(resolveImplementedLaunchModel("deep")).toBe("deep");
+    expect(resolveImplementedLaunchModel("deep")).toBeNull();
     expect(resolveImplementedLaunchModel("liquidity-growth")).toBeNull();
     expect(resolveImplementedLaunchModel("unknown")).toBeNull();
     expect(resolveReservedLaunchModel("deep")).toBeNull();
@@ -387,9 +366,10 @@ describe("unreleased launch model gating", () => {
       });
 
       const result = await POST(request);
-      expect(result.status).toBe(400);
+      expect(result.status).toBe(410);
       await expect(result.json()).resolves.toEqual({
-        error: "Deep is not enabled by a verified release manifest",
+        code: "deep_launches_closed",
+        error: "New Deep launches are not available",
       });
     },
   );
@@ -432,7 +412,7 @@ describe("unreleased launch model gating", () => {
     });
   });
 
-  it("keeps an active Stock-Paired launch bound to Ethereum Mainnet", async () => {
+  it("rejects new Stock-Paired launches with a stable retired-model response", async () => {
     const request = new NextRequest("http://localhost/api/launch/preflight", {
       method: "POST",
       body: JSON.stringify({
@@ -450,15 +430,10 @@ describe("unreleased launch model gating", () => {
     });
 
     const result = await POST(request);
-    expect(result.status).toBe(200);
-    await expect(result.json()).resolves.toMatchObject({
-      status: "blocked",
-      mode: "stock-paired",
-      title: "Switch the wallet to Ethereum",
-      checks: [
-        { id: "token", status: "pass" },
-        { id: "wallet", status: "blocked" },
-      ],
+    expect(result.status).toBe(410);
+    await expect(result.json()).resolves.toEqual({
+      code: "stock_paired_launches_closed",
+      error: "New Stock-Paired launches are no longer available",
     });
   });
 });

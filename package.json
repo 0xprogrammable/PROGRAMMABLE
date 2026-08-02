@@ -2,6 +2,9 @@
   "name": "launcher-v4",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
   "scripts": {
     "dev": "next dev",
     "dev:sepolia": "PROGRAMMABLE_ONCHAIN_NETWORK=rehearsal NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK=rehearsal next dev",
@@ -10,10 +13,12 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "db:test:pglite": "node scripts/run-pglite-db-tests.mjs",
+    "projector:provider-commitments": "node scripts/compute-projector-provider-commitments.mjs",
     "verify:uniswap-launcher-sdk": "node scripts/verify-uniswap-liquidity-launcher-sdk.mjs",
     "brand:favicons": "node scripts/generate-programmable-favicons.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
-    "verify": "npm run verify:uniswap-launcher-sdk && npm run contracts:bootstrap && npm run contracts:build && npm run lint && npm run typecheck && npm run test && npm run build",
+    "verify": "npm run verify:uniswap-launcher-sdk && npm run contracts:bootstrap && npm run contracts:build && npm run lint && npm run typecheck && npm run test && npm run perf:read-model:smoke && npm run perf:read-model:ops-gate && npm run perf:read-model:release-if-present && npm run build",
     "contracts:bootstrap": "cd contracts && ./scripts/bootstrap-deps.sh",
     "contracts:fmt": "cd contracts && forge fmt --check",
     "contracts:lint": "cd contracts && forge lint src script",
@@ -118,7 +123,16 @@
     "contracts:v2:sepolia:test2": "MEME_LAUNCH_FIXTURE_JSON=contracts/release/test2-classic-v2.json node scripts/serve-sepolia-meme-launch.mjs",
     "contracts:sepolia:lifecycle:verify": "node contracts/scripts/verify-sepolia-meme-lifecycle.mjs",
     "release:uniswap-hook:prepare": "node scripts/prepare-uniswap-hook-release.mjs",
-    "release:uniswap-hook:test": "vitest run tests/uniswap-hook-release.test.ts"
+    "release:uniswap-hook:test": "vitest run tests/uniswap-hook-release.test.ts",
+    "perf:read-model:smoke": "node scripts/perf/read-model-smoke.mjs",
+    "perf:read-model:gate": "node scripts/perf/read-model-gate.mjs --require-release-evidence",
+    "perf:read-model:release-if-present": "node scripts/perf/read-model-gate.mjs --require-release-evidence --if-present",
+    "perf:read-model:capture": "node scripts/perf/read-model-capture.mjs",
+    "perf:read-model:deploy-policy": "node scripts/perf/read-model-deploy-policy.mjs",
+    "perf:read-model:staged-deployment": "node scripts/perf/read-model-staged-deployment.mjs",
+    "perf:read-model:ops-gate": "node scripts/perf/read-model-ops-source-contracts.mjs",
+    "perf:read-model:production-binding": "node scripts/perf/read-model-production-binding.mjs",
+    "perf:read-model:post-promotion": "node scripts/perf/read-model-post-promotion.mjs"
   },
   "dependencies": {
     "@privy-io/node": "^0.27.0",
@@ -130,12 +144,14 @@
     "@vercel/blob": "2.6.1",
     "lucide-react": "1.26.0",
     "next": "16.2.11",
+    "postgres": "3.4.7",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "0.0.1",
     "viem": "2.55.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.4",
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",

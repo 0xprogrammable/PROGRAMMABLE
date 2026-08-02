@@ -7,14 +7,15 @@ import {
 } from "../lib/stock-paired-access";
 
 describe("Stock-Paired access", () => {
-  it("binds the reviewed switch to V3 on Ethereum Mainnet only", () => {
+  it("keeps new launches closed for every environment and release", () => {
     const release = {
       internalContractRelease: "stock-paired-v3",
       chainId: 1,
     };
+    expect(STOCK_PAIRED_NEW_LAUNCHES_ENABLED).toBe(false);
     expect(
       isStockPairedPublicLaunchEnabled("production", release),
-    ).toBe(STOCK_PAIRED_NEW_LAUNCHES_ENABLED);
+    ).toBe(false);
     expect(
       isStockPairedPublicLaunchEnabled("rehearsal", release),
     ).toBe(false);
@@ -43,12 +44,12 @@ describe("Stock-Paired access", () => {
     }
   });
 
-  it("never gives an unreviewed wallet privileged access", () => {
+  it("does not retain a privileged launch wallet", () => {
     expect(
       isStockPairedDevAccount(
         "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
       ),
-    ).toBe(STOCK_PAIRED_NEW_LAUNCHES_ENABLED);
+    ).toBe(false);
     expect(
       isStockPairedDevAccount(
         "0x1111111111111111111111111111111111111111",

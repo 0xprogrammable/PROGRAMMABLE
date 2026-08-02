@@ -1,0 +1,2 @@
+-- Local-only deterministic fixtures belong in pgTAP setup transactions.
+-- Production data and credentials must never be added to this file.

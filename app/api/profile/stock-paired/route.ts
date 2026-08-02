@@ -17,8 +17,24 @@ import { mainnet } from "viem/chains";
 import {
   getOnchainDeployment,
   readExploreModel,
+  type ExploreReadModel,
 } from "@/lib/onchain";
+import {
+  ActionLookupError,
+  actionTokenAsExploreModel,
+  lookupActionReward,
+  type ActionRewardLookup,
+} from "@/lib/data-pipeline/action-lookup";
+import { indexedLaunchLookupEnabled } from "@/lib/data-pipeline/route-activation.server";
+import {
+  coordinatePublicRouteRead,
+  PUBLIC_INDEXED_ROUTE_READS,
+  preparePublicRouteRequest,
+  publicSnapshotCheckpoint,
+  STOCK_PAIRED_ROUTE_SCOPES,
+} from "@/lib/data-pipeline/public-route-readiness.server";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
+import { stockPairedActionRpcProviders } from "@/lib/server/action-rpc-quorum.server";
 import {
   StockPairedClaimReceiptError,
   verifyStockPairedClaimReceipt,
@@ -59,36 +75,15 @@ function json(body: unknown, status = 200) {
 }
 
 function rpcEndpoints() {
-  const primary =
-    process.env.ETHEREUM_RPC_URL ??
-    "https://ethereum-rpc.publicnode.com";
-  const secondary =
-    process.env.ETHEREUM_RPC_URL_B ??
-    process.env.ETHEREUM_RPC_URL_SECONDARY ??
-    (primary === "https://ethereum-rpc.publicnode.com"
-      ? "https://rpc.mevblocker.io"
-      : "https://ethereum-rpc.publicnode.com");
-  const endpoints = Array.from(
-    new Set([
-      primary,
-      secondary,
-      "https://ethereum-rpc.publicnode.com",
-      "https://rpc.mevblocker.io",
-      "https://eth.drpc.org",
-    ]),
-  );
-  if (endpoints.length < 2) {
-    throw new Error("Stock-Paired rewards require two independent RPCs");
-  }
-  return endpoints;
+  return stockPairedActionRpcProviders();
 }
 
 function clients() {
-  return rpcEndpoints().map((endpoint) =>
+  return rpcEndpoints().map((provider) =>
     createPublicClient({
       chain: mainnet,
       batch: { multicall: true },
-      transport: http(endpoint, { retryCount: 2, timeout: 12_000 }),
+      transport: http(provider.endpoint, { retryCount: 2, timeout: 12_000 }),
     }),
   );
 }
@@ -510,6 +505,7 @@ async function readRewardsWithClients(
         chainId: 1 as const,
         rewards: [],
       },
+      checkpoint: undefined,
       rpcClients: [] as PublicClient[],
     };
   }
@@ -586,21 +582,165 @@ async function readRewardsWithClients(
       snapshotBlock: snapshotBlock.toString(),
       rewards,
     },
+    checkpoint: publicSnapshotCheckpoint(model.snapshot),
     rpcClients: verifiedClients,
   };
 }
 
-async function readRewards(account: Address, includeEstimates = true) {
-  return (await readRewardsWithClients(account, includeEstimates)).response;
+async function sharedStockActionClients() {
+  const candidates = clients();
+  const heads = await Promise.allSettled(
+    candidates.map((client) => client.getBlockNumber()),
+  );
+  const available = heads.flatMap((result, index) =>
+    result.status === "fulfilled"
+      ? [{ client: candidates[index]!, head: result.value }]
+      : [],
+  );
+  if (available.length < 2) {
+    throw new Error("Stock-Paired actions require two independent RPCs");
+  }
+  const blockNumber = available.reduce(
+    (minimum, candidate) =>
+      candidate.head < minimum ? candidate.head : minimum,
+    available[0]!.head,
+  );
+  const blocks = await Promise.allSettled(
+    available.map(async ({ client }) => ({
+      client,
+      block: await client.getBlock({ blockNumber }),
+    })),
+  );
+  const byHash = new Map<string, PublicClient[]>();
+  for (const result of blocks) {
+    if (result.status !== "fulfilled" || !result.value.block.hash) continue;
+    const hash = result.value.block.hash.toLowerCase();
+    byHash.set(hash, [...(byHash.get(hash) ?? []), result.value.client]);
+  }
+  const agreed = [...byHash.values()]
+    .sort((left, right) => right.length - left.length)[0];
+  if (!agreed || agreed.length < 2) {
+    throw new Error(
+      "Independent RPCs disagree on the Stock-Paired action block",
+    );
+  }
+  return { blockNumber, rpcClients: agreed };
+}
+
+async function readStockActionReward(
+  account: Address,
+  token: LauncherToken,
+): Promise<{
+  reward: NonNullable<Awaited<ReturnType<typeof readVaultReward>>>;
+  rpcClients: PublicClient[];
+}> {
+  if (
+    token.launchModel !== "stock-paired" ||
+    !token.rewardVaultAddress ||
+    !token.quoteAssetAddress
+  ) {
+    throw new Error("The Stock-Paired reward identity is invalid");
+  }
+  const release = getConfiguredStockPairedReleaseByHookAndVersion(
+    token.hookAddress,
+    token.launchModelVersion,
+  );
+  if (!release) {
+    throw new Error("The Stock-Paired release is not configured");
+  }
+  const snapshot = await sharedStockActionClients();
+  const results = await Promise.allSettled(
+    snapshot.rpcClients.map(async (client) => {
+      await Promise.all([
+        assertRuntime(
+          client,
+          release.addresses.feeHook,
+          release.runtimeCodeHashes.feeHook,
+          snapshot.blockNumber,
+          `${release.internalContractRelease} hook`,
+        ),
+        assertRuntime(
+          client,
+          release.addresses.feeSplitVaultFactory,
+          release.runtimeCodeHashes.feeSplitVaultFactory,
+          snapshot.blockNumber,
+          `${release.internalContractRelease} reward-vault factory`,
+        ),
+      ]);
+      const reward = await readVaultReward(
+        client,
+        token,
+        account,
+        snapshot.blockNumber,
+      );
+      if (!reward) {
+        throw new Error("This wallet is not a current reward beneficiary");
+      }
+      return { client, reward };
+    }),
+  );
+  const verified = results.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+  if (verified.length < 2) {
+    throw new Error(
+      "Two independent RPCs could not verify the Stock-Paired reward",
+    );
+  }
+  const fingerprint = JSON.stringify(verified[0]!.reward);
+  if (
+    verified.some(
+      (candidate) => JSON.stringify(candidate.reward) !== fingerprint,
+    )
+  ) {
+    throw new Error("Independent RPCs disagree on Stock-Paired rewards");
+  }
+  return {
+    reward: verified[0]!.reward,
+    rpcClients: verified.map((candidate) => candidate.client),
+  };
 }
 
 export async function GET(request: NextRequest) {
-  const accountInput = request.nextUrl.searchParams.get("account")?.trim();
+  const routeRequest = await preparePublicRouteRequest(
+    request.nextUrl.searchParams,
+    request.headers,
+    "creator-profile",
+  );
+  if (routeRequest.probeFailure) return routeRequest.probeFailure;
+  const search = routeRequest.searchParams;
+  if (
+    [...search.keys()].some((key) => key !== "account") ||
+    search.getAll("account").length !== 1
+  ) {
+    return json({ error: "Unsupported query parameters" }, 400);
+  }
+  const accountInput = search.get("account")?.trim();
   if (!accountInput || !isAddress(accountInput)) {
     return json({ error: "Enter a valid Ethereum account address" }, 400);
   }
   try {
-    return json(await readRewards(getAddress(accountInput)));
+    const account = getAddress(accountInput);
+    return await coordinatePublicRouteRead({
+      route: "creator-profile",
+      scope: STOCK_PAIRED_ROUTE_SCOPES,
+      ...(routeRequest.releaseProbe
+        ? { releaseProbe: routeRequest.releaseProbe }
+        : {}),
+      indexed: (transaction) =>
+        PUBLIC_INDEXED_ROUTE_READS.stockPairedProfile(transaction, {
+          chainId: 1,
+          account,
+        }),
+      async legacy() {
+        const result = await readRewardsWithClients(account);
+        return {
+          source: "rpc" as const,
+          ...(result.checkpoint ? { checkpoint: result.checkpoint } : {}),
+          response: json(result.response),
+        };
+      },
+    });
   } catch (error) {
     console.error(
       "Stock-Paired profile read failed",
@@ -686,22 +826,47 @@ export async function POST(request: NextRequest) {
   try {
     const account = getAddress(input.account);
     const vaultAddress = getAddress(input.vaultAddress);
-    const { response: profile, rpcClients } =
-      await readRewardsWithClients(account, false);
-    if (profile.status !== "ready") {
-      return json({ error: "Stock-Paired rewards are not deployed" }, 409);
+    let registry: ExploreReadModel;
+    if (indexedLaunchLookupEnabled()) {
+      const indexedReward: ActionRewardLookup = await lookupActionReward({
+        chainId: 1,
+        account,
+        vaultAddress,
+      });
+      if (
+        indexedReward.modelVersion !== "stock-paired" ||
+        !indexedReward.releaseVersion.startsWith("stock-paired-") ||
+        indexedReward.token.rewardVaultAddress?.toLowerCase() !==
+          vaultAddress.toLowerCase() ||
+        !indexedReward.quoteAssetAddress
+      ) {
+        throw new Error("The indexed Stock-Paired reward identity is invalid");
+      }
+      registry = actionTokenAsExploreModel(indexedReward.token);
+    } else {
+      registry = await readExploreModel(
+        getOnchainDeployment("production"),
+      );
+      if (registry.status !== "ready") {
+        return json({ error: "Stock-Paired rewards are not deployed" }, 409);
+      }
     }
-    const reward = profile.rewards.find(
+    const token = registry.tokens.find(
       (candidate) =>
-        candidate.vaultAddress.toLowerCase() ===
-        vaultAddress.toLowerCase(),
+        candidate.launchModel === "stock-paired" &&
+        candidate.rewardVaultAddress?.toLowerCase() ===
+          vaultAddress.toLowerCase(),
     );
-    if (!reward) {
+    if (!token) {
       return json(
         { error: "This wallet is not a beneficiary of that reward vault" },
         403,
       );
     }
+    const { reward, rpcClients } = await readStockActionReward(
+      account,
+      token,
+    );
     if (isClaim && BigInt(reward.claimableRaw) === 0n) {
       return json({ error: "No Stock-Paired rewards are claimable" }, 409);
     }
@@ -732,9 +897,6 @@ export async function POST(request: NextRequest) {
         quoteAsset: reward.quoteAsset,
         minimumAmount: amountIn,
       });
-      const registry = await readExploreModel(
-        getOnchainDeployment("production"),
-      );
       const { deployment, verifiedToken } =
         resolveStockPairedTradeDeployment(
           1,
@@ -843,19 +1005,28 @@ export async function POST(request: NextRequest) {
     const simulations = await Promise.allSettled(
       rpcClients.map(async (client) => {
         await client.call(requestForRpc);
-        return client.estimateGas(requestForRpc);
+        const [estimatedGas, gasPrice, balance] = await Promise.all([
+          client.estimateGas(requestForRpc),
+          client.getGasPrice(),
+          client.getBalance({ address: account }),
+        ]);
+        return { estimatedGas, gasPrice, balance };
       }),
     );
     const estimates = simulations.flatMap((result) =>
       result.status === "fulfilled" ? [result.value] : [],
     );
-    if (estimates.length === 0) {
-      throw new Error("No Ethereum RPC could prepare the reward transaction");
+    if (estimates.length < 2) {
+      throw new Error(
+        "Two independent RPCs could not prepare the reward transaction",
+      );
     }
     const gasLimit =
       ((estimates.reduce(
         (largest, candidate) =>
-          candidate > largest ? candidate : largest,
+          candidate.estimatedGas > largest
+            ? candidate.estimatedGas
+            : largest,
         0n,
       ) *
         120n) +
@@ -863,6 +1034,22 @@ export async function POST(request: NextRequest) {
       100n;
     if (gasLimit <= 0n) {
       throw new Error("The reward transaction gas estimate is invalid");
+    }
+    const gasPrice = estimates.reduce(
+      (largest, candidate) =>
+        candidate.gasPrice > largest ? candidate.gasPrice : largest,
+      0n,
+    );
+    const balance = estimates.reduce(
+      (smallest, candidate) =>
+        candidate.balance < smallest ? candidate.balance : smallest,
+      estimates[0]!.balance,
+    );
+    if (gasPrice <= 0n || balance < gasLimit * gasPrice) {
+      return json(
+        { error: "This wallet needs more ETH for the network fee" },
+        409,
+      );
     }
     return json({
       status: "ready",
@@ -883,6 +1070,12 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof ActionLookupError && error.code === "not-found") {
+      return json(
+        { error: "This wallet is not a beneficiary of that reward vault" },
+        403,
+      );
+    }
     if (error instanceof ClassicTradeInputError) {
       return json({ error: error.message }, 400);
     }

@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   formatUnits,
   getAddress,
@@ -53,9 +47,7 @@ export function calculateBuyMaxWei(
   }
 
   const estimatedReserve =
-    (gasPriceWei * BUY_GAS_RESERVE_UNITS *
-      BUY_GAS_RESERVE_MULTIPLIER) /
-    100n;
+    (gasPriceWei * BUY_GAS_RESERVE_UNITS * BUY_GAS_RESERVE_MULTIPLIER) / 100n;
   const reserveWei =
     estimatedReserve > MIN_BUY_GAS_RESERVE_WEI
       ? estimatedReserve
@@ -63,9 +55,7 @@ export function calculateBuyMaxWei(
 
   return {
     amountWei:
-      nativeBalanceWei > reserveWei
-        ? nativeBalanceWei - reserveWei
-        : 0n,
+      nativeBalanceWei > reserveWei ? nativeBalanceWei - reserveWei : 0n,
     reserveWei,
   };
 }
@@ -85,9 +75,7 @@ export function calculateTradeUsdValue(input: {
   }
 
   const amount = Number(input.amount);
-  const tokenUsd = Number(
-    formatUnits(BigInt(input.tokenPriceUsdWad), 18),
-  );
+  const tokenUsd = Number(formatUnits(BigInt(input.tokenPriceUsdWad), 18));
   if (
     !Number.isFinite(amount) ||
     !Number.isFinite(tokenUsd) ||
@@ -100,10 +88,7 @@ export function calculateTradeUsdValue(input: {
   if (input.side === "sell") {
     return amount * tokenUsd;
   }
-  if (
-    !input.tokenPriceEth ||
-    !/^\d+(?:\.\d+)?$/.test(input.tokenPriceEth)
-  ) {
+  if (!input.tokenPriceEth || !/^\d+(?:\.\d+)?$/.test(input.tokenPriceEth)) {
     return null;
   }
 
@@ -130,9 +115,7 @@ export function calculateEthVolumeUsdValue(input: {
 
   const grossVolumeEth = Number(input.grossVolumeEth);
   const tokenPriceEth = Number(input.tokenPriceEth);
-  const tokenPriceUsd = Number(
-    formatUnits(BigInt(input.tokenPriceUsdWad), 18),
-  );
+  const tokenPriceUsd = Number(formatUnits(BigInt(input.tokenPriceUsdWad), 18));
   if (
     !Number.isFinite(grossVolumeEth) ||
     !Number.isFinite(tokenPriceEth) ||
@@ -156,6 +139,12 @@ function formatApproximateUsd(value: number | null) {
     notation: value >= 1_000 ? "compact" : "standard",
     maximumFractionDigits: 2,
   }).format(value)}`;
+}
+
+function formatBasisPoints(value: number) {
+  return `${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(value / 100)}%`;
 }
 
 function formatAmountForInput(value: bigint, decimals: number) {
@@ -209,10 +198,7 @@ export function buildTokenTradeApiRequest(input: {
   ) {
     throw new Error("Token decimals must be between 0 and 255");
   }
-  if (
-    !Number.isSafeInteger(input.nowSeconds) ||
-    input.nowSeconds < 0
-  ) {
+  if (!Number.isSafeInteger(input.nowSeconds) || input.nowSeconds < 0) {
     throw new Error("The current timestamp is invalid");
   }
   if (
@@ -232,10 +218,7 @@ export function buildTokenTradeApiRequest(input: {
 
   let amountIn: bigint;
   try {
-    amountIn = parseUnits(
-      input.amount.trim(),
-      amountDecimals,
-    );
+    amountIn = parseUnits(input.amount.trim(), amountDecimals);
   } catch {
     throw new Error("Enter a valid amount");
   }
@@ -331,8 +314,7 @@ export function TokenTrade({
   const amountInputId = useId();
   const amountErrorId = useId();
   const amountInputRef = useRef<HTMLInputElement>(null);
-  const activeSwapFeeBps =
-    side === "buy" ? buySwapFeeBps : sellSwapFeeBps;
+  const activeSwapFeeBps = side === "buy" ? buySwapFeeBps : sellSwapFeeBps;
   const activeInputAsset = token;
   const activeInputSymbol = side === "buy" ? "ETH" : symbol;
   const activeBalanceState =
@@ -342,9 +324,7 @@ export function TokenTrade({
       ? balanceState
       : null;
   const balances =
-    activeBalanceState?.status === "ready"
-      ? activeBalanceState.balances
-      : null;
+    activeBalanceState?.status === "ready" ? activeBalanceState.balances : null;
   const approximateUsd = formatApproximateUsd(
     calculateTradeUsdValue({
       side,
@@ -355,8 +335,8 @@ export function TokenTrade({
   );
   const displayBalance = balances
     ? side === "buy"
-      ? `${formatWalletBalance(balances.nativeBalanceWei, 18)} ETH`
-      : `${formatWalletBalance(
+      ? `Balance ${formatWalletBalance(balances.nativeBalanceWei, 18)} ETH`
+      : `Balance ${formatWalletBalance(
           balances.tokenBalanceRaw,
           tokenDecimals,
         )} ${activeInputSymbol}`
@@ -364,7 +344,7 @@ export function TokenTrade({
       ? activeBalanceState?.status === "error"
         ? "Balance unavailable"
         : "Loading balance"
-      : "Wallet not connected";
+      : "Connect to view balance";
 
   useEffect(() => {
     if (!owner) return;
@@ -419,10 +399,7 @@ export function TokenTrade({
           throw new Error(`No ${activeInputSymbol} balance is available`);
         }
         setAmount(
-          formatAmountForInput(
-            balances.tokenBalanceRaw,
-            tokenDecimals,
-          ),
+          formatAmountForInput(balances.tokenBalanceRaw, tokenDecimals),
         );
         return;
       }
@@ -572,6 +549,7 @@ export function TokenTrade({
       className={styles.tradeForm}
       onSubmit={prepare}
       aria-label={`Trade ${symbol}`}
+      aria-busy={pending}
     >
       <header className={styles.tradeHeader}>
         <h2>Trade ${symbol}</h2>
@@ -654,6 +632,17 @@ export function TokenTrade({
           <span aria-live="polite">{approximateUsd || "\u00A0"}</span>
         </div>
       </div>
+
+      <dl className={styles.tradeFacts}>
+        <div>
+          <dt>Swap fee</dt>
+          <dd>{formatBasisPoints(activeSwapFeeBps)}</dd>
+        </div>
+        <div>
+          <dt>Slippage</dt>
+          <dd>{formatBasisPoints(slippageBps)}</dd>
+        </div>
+      </dl>
 
       {error ? (
         <p className={styles.error} id={amountErrorId} role="alert">
@@ -740,12 +729,13 @@ export function PreparedTradeReview({
     <div
       className={styles.review}
       aria-label={`Review ${prepared.side}`}
+      aria-busy={pending}
     >
       <h2>{approval ? "Approve token" : `Review ${prepared.side}`}</h2>
       {approval ? (
         <p className={styles.reviewLead}>
-          One approval is required before this trade. The approval is limited
-          to this amount.
+          One approval is required before this trade. The approval is limited to
+          this amount.
         </p>
       ) : null}
       <div className={styles.reviewOutput}>
@@ -761,7 +751,7 @@ export function PreparedTradeReview({
         ) : null}
         <div>
           <dt>{launchModel === "deep" ? "Deep fee" : "Swap fee"}</dt>
-          <dd>{(totalSwapFeeBps / 100).toFixed(2)}%</dd>
+          <dd>{formatBasisPoints(totalSwapFeeBps)}</dd>
         </div>
         {!approval ? (
           <div>
@@ -808,7 +798,7 @@ export function PreparedTradeReview({
           {pending
             ? "Opening wallet"
             : approval
-              ? "Sign approval"
+              ? "Confirm approval"
               : `Confirm ${prepared.side}`}
         </button>
       </div>
@@ -823,10 +813,7 @@ export function calculatePriceImpactPercent(input: {
   tokenDecimals: number;
   tokenPriceEth?: string;
 }) {
-  if (
-    !input.tokenPriceEth ||
-    !/^\d+(?:\.\d+)?$/.test(input.tokenPriceEth)
-  ) {
+  if (!input.tokenPriceEth || !/^\d+(?:\.\d+)?$/.test(input.tokenPriceEth)) {
     return null;
   }
   const spot = Number(input.tokenPriceEth);

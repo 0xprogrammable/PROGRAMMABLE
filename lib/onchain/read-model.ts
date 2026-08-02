@@ -46,7 +46,11 @@ import type {
   ReadyOnchainDeployment,
   VerifiedLaunchRecord,
 } from "./types";
-import { readDurableExploreModel } from "./durable-model";
+import {
+  readDurableExploreModel,
+  selectFreshDurableExploreModel,
+} from "./durable-model";
+import { resolveExploreReadSource } from "./explore-read-source";
 import {
   isClassicV3ExploreReleaseReady,
   mergeClassicV3ExploreModel,
@@ -984,39 +988,14 @@ export async function readExploreModel(
   }
 
   const value = (async () => {
-    if (config.environment === "production") {
-      const durable = await readDurableExploreModel(config);
-      if (
-        durable.status === "ready" ||
-        (durable.status === "unavailable" &&
-          durable.reason === "stale")
-      ) {
-        if (durable.status === "unavailable") {
-          console.warn("Serving the last verified Explore index", {
-            reason: durable.reason,
-            ageSeconds: Math.floor(durable.ageMs / 1_000),
-          });
-        }
-        const model = durable.envelope.payload.model;
-        try {
-          return await enrichExploreModelWithUsd(model, config);
-        } catch (error) {
-          console.error("ETH/USD enrichment failed", error);
-          return model;
-        }
-      }
-      console.warn("Durable Explore index unavailable; using live RPCs", {
-        reason: durable.reason,
-        detail: durable.detail,
-      });
-    }
-    const model = await readReadyRegistryModel(config);
-    try {
-      return await enrichExploreModelWithUsd(model, config);
-    } catch (error) {
-      console.error("ETH/USD enrichment failed", error);
-      return model;
-    }
+    return resolveExploreReadSource(config, {
+      readDurable: readDurableExploreModel,
+      selectFreshDurable: selectFreshDurableExploreModel,
+      readLive: readReadyRegistryModel,
+      enrichWithUsd: enrichExploreModelWithUsd,
+      warn: console.warn,
+      error: console.error,
+    });
   })().catch((error) => {
     if (cachedRead?.value === value) cachedRead = undefined;
     throw error;

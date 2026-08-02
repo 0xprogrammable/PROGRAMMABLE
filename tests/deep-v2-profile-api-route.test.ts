@@ -1,79 +1,26 @@
-import { NextRequest } from "next/server";
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("server-only", () => ({}));
+import { describe, expect, it } from "vitest";
 
 import { GET, POST } from "../app/api/profile/deep/route";
 
-const ACCOUNT = "0x1111111111111111111111111111111111111111";
-const VAULT = "0x2222222222222222222222222222222222222222";
+const expected = {
+  code: "deep_profile_closed",
+  error: "The Deep profile endpoint is not available",
+};
 
-function request(body: Record<string, unknown>) {
-  return new NextRequest("http://localhost/api/profile/deep", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
+describe("closed Deep profile API", () => {
+  it("closes profile reads", async () => {
+    const response = await GET();
 
-describe("Deep profile API release dispatch", () => {
-  it("keeps the Deep V3 creator profile fail-closed before a verified live release", async () => {
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/profile/deep?account=${ACCOUNT}&deepReleaseVersion=deep-full-range-v3`,
-      ),
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      status: "not-deployed",
-      account: "0x1111111111111111111111111111111111111111",
-      chainId: 1,
-      tokens: [],
-    });
+    expect(response.status).toBe(410);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual(expected);
   });
 
-  it("rejects unknown Deep profile release versions", async () => {
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/profile/deep?account=${ACCOUNT}&deepReleaseVersion=deep-full-range-v4`,
-      ),
-    );
+  it("closes reward actions", async () => {
+    const response = await POST();
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "Unsupported Deep release version",
-    });
-  });
-
-  it("fails closed before registry or RPC access when V2 has no reviewed eligible manifest", async () => {
-    const response = await POST(
-      request({
-        action: "claim",
-        deepReleaseVersion: "deep-full-range-v2",
-        account: ACCOUNT,
-        vaultAddress: VAULT,
-        chainId: 1,
-      }),
-    );
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      error: "Deep V2 is not enabled by a verified release",
-    });
-  });
-
-  it("never guesses a release version for a reward action", async () => {
-    const response = await POST(
-      request({
-        action: "claim",
-        account: ACCOUNT,
-        vaultAddress: VAULT,
-        chainId: 1,
-      }),
-    );
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "The reward request is invalid",
-    });
+    expect(response.status).toBe(410);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual(expected);
   });
 });

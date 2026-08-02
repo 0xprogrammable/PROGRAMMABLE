@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { keccak256, toBytes } from "viem";
 
 import {
+  selectFreshDurableExploreModel,
   shouldReplaceDurableSnapshot,
   validateDurableExploreEnvelope,
   type DeepExploreReleaseBinding,
@@ -291,6 +292,34 @@ describe("durable onchain snapshot replacement", () => {
     if (result.status === "unavailable" && result.reason === "stale") {
       expect(result.ageMs).toBeGreaterThanOrEqual(120_000);
     }
+  });
+
+  it("never serves a durable snapshot after its verified freshness window", () => {
+    const freshValue = envelope("programmable-durable-index-v1");
+    const fresh = validateDurableExploreEnvelope(
+      freshValue,
+      deployment,
+      60_000,
+    );
+    expect(selectFreshDurableExploreModel(fresh)).toBe(
+      freshValue.payload.model,
+    );
+
+    const staleValue = envelope("programmable-durable-index-v1");
+    staleValue.payload.generatedAt = new Date(
+      Date.now() - 120_000,
+    ).toISOString();
+    staleValue.contentHash = keccak256(
+      toBytes(JSON.stringify(staleValue.payload)),
+    );
+    const stale = validateDurableExploreEnvelope(
+      staleValue,
+      deployment,
+      60_000,
+    );
+
+    expect(stale).toMatchObject({ status: "unavailable", reason: "stale" });
+    expect(selectFreshDurableExploreModel(stale)).toBeNull();
   });
 });
 

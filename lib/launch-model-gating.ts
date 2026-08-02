@@ -25,7 +25,6 @@ const DEEP_V1_KEEPER_EXECUTOR_RUNTIME_CODE_HASH =
 const implementedLaunchModels = new Set<LaunchModel>([
   "classic",
   "classic-v3",
-  "deep",
   "stock-paired",
 ]);
 

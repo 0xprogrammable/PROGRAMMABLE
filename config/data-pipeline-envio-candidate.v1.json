@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "status": "deployed-synced-audited-not-promoted",
+  "deploymentLabel": "production-7f24e63",
+  "graphqlEndpoint": "https://indexer.hyperindex.xyz/d7a39a2/v1/graphql",
+  "sourceCommit": "7f24e6380d5cf17092f5ade7cbad678465e3ef95",
+  "configSha256": "0x378e3a799c762cb31107792c7123f5f90b54b5826884c398995e7465176fe1c2",
+  "schemaSha256": "0xdf3d65e033e96d7ebbe62b6f114b6a30f10c8944e5c6fca6b020c3130bb738c0",
+  "handlerSha256": "0x9f68d05cc8907f1c422cb2584b338ed42375eb4b6033cbec1338d00577267491",
+  "sourceRegistrySha256": "0x55e7a7c7cd0e419a6be0f9c784990f5048b9845e46e329939025c3fab405565a",
+  "eventSetSha256": "0x7481d6fa986d706e46b9834e40574dd84f21be80b041d35e7d47dbfa59d69243",
+  "eventCount": 51,
+  "redactedIdentity": "envio:production-7f24e63",
+  "deploymentCommitment": "0xa4267153060a4b02b630d81063e0f84bb36f6f637a52ef71fb29c117c5384259",
+  "schemaCommitment": "0x5796791b38f16ba71b7a9a8f9977174c869de663f08c0aa0194e9cc631d93ef1",
+  "audit": {
+    "entityCount": 265,
+    "entityCounts": {
+      "ClassicLaunch": 27,
+      "ClassicPool": 186,
+      "StockLaunch": 1,
+      "StockPool": 8,
+      "Token": 43
+    },
+    "coordinatorRepairCount": 52,
+    "baselineEvidenceSha256": "0x337edaae07f61790dabebfffe2b7b1edb6c5144736386fa0604ebf58c856dfdc",
+    "candidateAuditEvidenceSha256": "0x331a7b8fe6d2fc57b5a2fed322f11b6bce40c7f3c3cef227086e1262934b9a7a"
+  },
+  "policy": {
+    "databaseMode": "candidate-only",
+    "legacyProductionDeploymentRegistered": false,
+    "publicationAllowedBeforePromotion": false,
+    "promotion": "atomic-attestation-required"
+  }
+}

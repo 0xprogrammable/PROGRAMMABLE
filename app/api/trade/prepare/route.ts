@@ -8,6 +8,12 @@ import {
 import { mainnet, sepolia } from "viem/chains";
 
 import {
+  ActionLookupError,
+  actionTokenAsExploreModel,
+  lookupActionTokenByAddress,
+} from "../../../../lib/data-pipeline/action-lookup";
+import { indexedLaunchLookupEnabled } from "../../../../lib/data-pipeline/route-activation.server";
+import {
   getOnchainDeployment,
   readExploreModel,
 } from "../../../../lib/onchain";
@@ -27,6 +33,7 @@ import {
   resolveStockPairedTradeDeployment,
   StockPairedTradeUnavailableError,
 } from "../../../../lib/trade/stock-paired";
+import { tradeActionRpcProviders } from "../../../../lib/server/action-rpc-quorum.server";
 import { safeServerErrorSummary } from "../../../../lib/server/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -97,31 +104,6 @@ function runtimeClient(
   };
 }
 
-function tradeRpcEndpoints(chainId: number) {
-  if (chainId === 1) {
-    const primary =
-      process.env.ETHEREUM_RPC_URL ??
-      "https://ethereum-rpc.publicnode.com";
-    const secondary =
-      process.env.ETHEREUM_RPC_URL_B ??
-      process.env.ETHEREUM_RPC_URL_SECONDARY ??
-      (primary === "https://ethereum-rpc.publicnode.com"
-        ? "https://rpc.mevblocker.io"
-        : "https://ethereum-rpc.publicnode.com");
-    return [primary, secondary] as const;
-  }
-  const primary =
-    process.env.SEPOLIA_RPC_URL ??
-    "https://ethereum-sepolia-rpc.publicnode.com";
-  const secondary =
-    process.env.SEPOLIA_RPC_URL_B ??
-    process.env.SEPOLIA_RPC_URL_SECONDARY ??
-    (primary === "https://ethereum-sepolia-rpc.publicnode.com"
-      ? "https://rpc.sepolia.org"
-      : "https://ethereum-sepolia-rpc.publicnode.com");
-  return [primary, secondary] as const;
-}
-
 function selectConservativeTradeQuote<T extends {
   quote: { amountOut: string };
   transaction: { kind: string };
@@ -168,29 +150,42 @@ export async function POST(request: NextRequest) {
   try {
     const tradeRequest = parseClassicTradeRequest(input);
     getPinnedOfficialTradeStack(tradeRequest.chainId);
-    const registryDeployment = getOnchainDeployment(
-      tradeRequest.chainId === 1 ? "production" : "rehearsal",
+    const actionChainId =
+      tradeRequest.chainId === 1 || tradeRequest.chainId === 11_155_111
+        ? tradeRequest.chainId
+        : (() => {
+            throw new ClassicTradeUnavailableError(
+              `Classic trading is not supported on chain ${tradeRequest.chainId}`,
+            );
+          })();
+    const registry = indexedLaunchLookupEnabled()
+      ? actionTokenAsExploreModel(
+          await lookupActionTokenByAddress({
+            chainId: actionChainId,
+            token: tradeRequest.token,
+          }),
+        )
+      : await readExploreModel(
+          getOnchainDeployment(
+            tradeRequest.chainId === 1 ? "production" : "rehearsal",
+          ),
+        );
+    const indexedToken = registry.tokens.find(
+      (candidate) =>
+        candidate.tokenAddress.toLowerCase() ===
+        tradeRequest.token.toLowerCase(),
     );
-    const registry = await readExploreModel(registryDeployment);
-    const indexedToken =
-      registry.status === "ready"
-        ? registry.tokens.find(
-            (candidate) =>
-              candidate.tokenAddress.toLowerCase() ===
-              tradeRequest.token.toLowerCase(),
-          )
-        : undefined;
     if (indexedToken?.launchModel === "stock-paired") {
       const { deployment } = resolveStockPairedTradeDeployment(
         tradeRequest.chainId,
         registry,
         tradeRequest.token,
       );
-      const endpoints = tradeRpcEndpoints(tradeRequest.chainId);
+      const providers = tradeActionRpcProviders(tradeRequest.chainId);
       const preparations = await Promise.allSettled(
-        endpoints.map((endpoint) =>
+        providers.map((provider) =>
           prepareStockPairedTrade(
-            runtimeClient(tradeRequest.chainId, endpoint),
+            runtimeClient(tradeRequest.chainId, provider.endpoint),
             deployment,
             tradeRequest,
           ),
@@ -224,11 +219,11 @@ export async function POST(request: NextRequest) {
       registry,
       tradeRequest.token,
     );
-    const endpoints = tradeRpcEndpoints(tradeRequest.chainId);
+    const providers = tradeActionRpcProviders(tradeRequest.chainId);
     const preparations = await Promise.allSettled(
-      endpoints.map((endpoint) =>
+      providers.map((provider) =>
         prepareClassicTrade(
-          runtimeClient(tradeRequest.chainId, endpoint),
+          runtimeClient(tradeRequest.chainId, provider.endpoint),
           deployment,
           tradeRequest,
           registry,
@@ -267,6 +262,12 @@ export async function POST(request: NextRequest) {
       error instanceof StockPairedTradeUnavailableError
     ) {
       return json({ error: error.message }, 409);
+    }
+    if (error instanceof ActionLookupError) {
+      return json(
+        { error: "This token is not a verified Programmable launch" },
+        409,
+      );
     }
     console.error(
       "Trade preparation failed",

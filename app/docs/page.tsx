@@ -40,8 +40,9 @@ export default function DocsPage() {
         <div className={styles.callout}>
           <strong>Release status is part of the product.</strong>
           <p>
-            Classic and Stock-Paired are available for public launches on
-            Ethereum Mainnet.
+            Classic is available for new launches on Ethereum Mainnet.
+            Existing Stock-Paired tokens remain supported, but new
+            Stock-Paired launches are closed.
           </p>
         </div>
 
@@ -69,16 +70,14 @@ export default function DocsPage() {
           >
             <span className={styles.modelCardHeader}>
               <strong>Stock-Paired</strong>
-              <span className={styles.status} data-status="live">
-                Live
-              </span>
+              <span className={styles.status}>Historical</span>
             </span>
             <p>
-              Pairs a new token with a reviewed Ondo Global Markets asset
-              instead of ETH.
+              Existing tokens retain their recorded Ondo quote asset, pool,
+              trading route and creator rewards.
             </p>
             <span className={styles.modelLink}>
-              Read Stock-Paired
+              Read Stock-Paired history
               <ArrowRight aria-hidden="true" size={14} />
             </span>
           </Link>

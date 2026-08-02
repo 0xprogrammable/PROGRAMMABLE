@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
+
 import type { ExploreReadModel } from "../lib/onchain/types";
 import type { LauncherToken } from "../lib/tokens";
 
