@@ -3734,8 +3734,11 @@ export async function applyCandidateRuntimeEnable(input) {
     }
     await assertOperatorSession(connection.sql, operatorSession);
     if (!resumedAfterEnable) {
-      await enableRoles(connection.sql, credentials);
+      // The transaction may commit even when the client never receives its
+      // acknowledgement. From this point onward, treat LOGIN/password state as
+      // uncertain until it is verified or explicitly re-fenced.
       runtimeLoginsMayBeEnabled = true;
+      await enableRoles(connection.sql, credentials);
     }
     assertRuntimeRolePosture(await inspectRoles(connection.sql), true);
     await assertOperatorSession(connection.sql, operatorSession);

@@ -1354,6 +1354,65 @@ test("runtime enable re-fences every login if pooler verification fails", async 
   assert.equal(enabled, false);
 });
 
+test("runtime enable commit-ack loss re-fences through a fresh operator session", async (t) => {
+  const files = await fixture(t);
+  const restoreResult = await restoredResult(files);
+  const { plan, migrations } = await createRuntimePlan(files, restoreResult);
+  let enabled = false;
+  let openAttempts = 0;
+  let refenceAttempts = 0;
+  await assert.rejects(
+    applyCandidateRuntimeEnable({
+      plan,
+      confirmEnable: plan.confirmEnable,
+      expectedProjectRef: CANDIDATE_PROJECT_REF,
+      databaseUrl: DATABASE_URL,
+      poolerHost: POOLER_HOST,
+      sslCaPem: CA,
+      credentials: credentials(),
+      restoreResult,
+      migrationPlan: migrations,
+      dependencies: databaseDependencies({
+        openHostedDatabase: async () => {
+          openAttempts += 1;
+          return {
+            sql: { attempt: openAttempts },
+            target: TARGET,
+            operatorIdentity: OPERATOR_IDENTITY,
+          };
+        },
+        inspectCandidateDatabase: async () => restoredState(),
+        inspectMigrationState: async () => ({
+          status: "current",
+          appliedCount: migrations.migrationCount,
+          pending: [],
+        }),
+        captureDatabaseManifest: async () => manifest({ restored: true }),
+        readRuntimeRolePosture: async () => rolePosture(enabled),
+        enableRuntimeRoles: async () => {
+          enabled = true;
+          throw new Error("simulated lost commit acknowledgement");
+        },
+        verifyPoolerLogins: async () => {
+          throw new Error("pooler verification must not run after ack loss");
+        },
+        fenceRuntimeLogins: async () => {
+          refenceAttempts += 1;
+          if (refenceAttempts === 1) {
+            throw new Error("simulated lost original session");
+          }
+          enabled = false;
+          return loginFence();
+        },
+      }),
+    }),
+    /runtime logins were re-fenced and verified/u,
+  );
+  assert.equal(openAttempts, 2);
+  assert.equal(refenceAttempts, 2);
+  assert.equal(enabled, false);
+});
+
 test("runtime enable resumes verification after a durable enable", async (t) => {
   const files = await fixture(t);
   const restoreResult = await restoredResult(files);
@@ -1398,7 +1457,7 @@ test("runtime enable resumes verification after a durable enable", async (t) => 
   assert.equal(rotations, 0);
 });
 
-test("runtime enable reports indeterminate when every re-fence attempt fails", async (t) => {
+test("runtime enable ack loss reports indeterminate when every re-fence attempt fails", async (t) => {
   const files = await fixture(t);
   const restoreResult = await restoredResult(files);
   const { plan, migrations } = await createRuntimePlan(files, restoreResult);
@@ -1426,9 +1485,7 @@ test("runtime enable reports indeterminate when every re-fence attempt fails", a
         readRuntimeRolePosture: async () => rolePosture(enabled),
         enableRuntimeRoles: async () => {
           enabled = true;
-        },
-        verifyPoolerLogins: async () => {
-          throw new Error("simulated pooler failure");
+          throw new Error("simulated lost commit acknowledgement");
         },
         fenceRuntimeLogins: async () => {
           refenceAttempts += 1;
