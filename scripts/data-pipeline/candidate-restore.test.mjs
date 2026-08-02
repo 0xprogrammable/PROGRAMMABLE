@@ -75,6 +75,7 @@ const RESTORE_ROLE_IDENTITY = Object.freeze({
   current_user: "postgres",
   current_role: "postgres",
   can_set_migrator: true,
+  supabase_admin_exists: true,
 });
 const RESTORE_ROLES = Object.freeze([
   Object.freeze({ rolname: "postgres", rolsuper: false }),
@@ -116,10 +117,24 @@ test("restore posture accepts the exact Supabase admin and operator grants", () 
   );
 });
 
-test("restore posture also accepts a standalone postgres operator grant", () => {
+test("restore posture accepts the exact grants for a hosted postgres login", () => {
   assert.doesNotThrow(() =>
     assertRestoreRolePostureEvidence(
       { ...RESTORE_ROLE_IDENTITY, session_user: "postgres" },
+      RESTORE_ROLES,
+      [RESTORE_SUPABASE_MEMBERSHIP, RESTORE_OPERATOR_MEMBERSHIP],
+    ),
+  );
+});
+
+test("restore posture accepts an isolated postgres operator grant", () => {
+  assert.doesNotThrow(() =>
+    assertRestoreRolePostureEvidence(
+      {
+        ...RESTORE_ROLE_IDENTITY,
+        session_user: "postgres",
+        supabase_admin_exists: false,
+      },
       RESTORE_ROLES,
       [RESTORE_OPERATOR_MEMBERSHIP],
     ),
@@ -147,6 +162,15 @@ test("restore posture rejects unknown or duplicated memberships", () => {
       /Candidate restore role posture is not exact/u,
     );
   }
+  assert.throws(
+    () =>
+      assertRestoreRolePostureEvidence(
+        { ...RESTORE_ROLE_IDENTITY, supabase_admin_exists: false },
+        RESTORE_ROLES,
+        [RESTORE_SUPABASE_MEMBERSHIP, RESTORE_OPERATOR_MEMBERSHIP],
+      ),
+    /Candidate restore role posture is not exact/u,
+  );
 });
 
 const PINNED_SNAPSHOT_EVIDENCE = Object.freeze({

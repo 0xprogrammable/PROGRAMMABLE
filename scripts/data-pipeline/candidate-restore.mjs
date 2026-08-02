@@ -1627,6 +1627,7 @@ export function assertRestoreRolePostureEvidence(identity, roles, memberships) {
     identity?.current_user !== "postgres" ||
     identity?.current_role !== "postgres" ||
     identity?.can_set_migrator !== true ||
+    typeof identity?.supabase_admin_exists !== "boolean" ||
     roles.length !== 2 ||
     postgresRole?.rolsuper !== false ||
     migrator?.rolsuper !== false ||
@@ -1638,7 +1639,7 @@ export function assertRestoreRolePostureEvidence(identity, roles, memberships) {
     migrator?.rolbypassrls !== false ||
     operatorMemberships.length !== 1 ||
     supabaseMemberships.length !==
-      (identity?.session_user === "cli_login_postgres" ? 1 : 0) ||
+      (identity?.supabase_admin_exists === true ? 1 : 0) ||
     memberships.length !==
       operatorMemberships.length + supabaseMemberships.length
   ) {
@@ -1653,7 +1654,12 @@ async function assertRestoreRolePosture(sql) {
            current_role::text as current_role,
            pg_catalog.pg_has_role(
              current_user, 'programmable_migrator', 'SET'
-           ) as can_set_migrator
+           ) as can_set_migrator,
+           exists (
+             select 1
+               from pg_catalog.pg_roles
+              where rolname = 'supabase_admin'
+           ) as supabase_admin_exists
   `);
   const roles = await sql.unsafe(`
     select rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
