@@ -17,6 +17,7 @@ import {
   assertCandidateSchemaStage,
   cleanupCandidateSchemas,
   prepareSafetyRestoreClosures,
+  readRuntimeRolePosture,
 } from "./candidate-restore.mjs";
 import {
   BACKUP_SCHEMAS,
@@ -267,6 +268,9 @@ test(
       forward.structuralManifestSha256,
       "0x8073e412ca77ba6a350c11e0421444049fa8fe644d253e2432465ecec69c5f7d",
     );
+    const runtimeRolePosture = await readRuntimeRolePosture(sql);
+    assert.equal(runtimeRolePosture.rows.length, 10);
+    assert.equal(runtimeRolePosture.memberships.length, 5);
 
     const closures = await prepareSafetyRestoreClosures({
       runner: undefined,

@@ -26,6 +26,7 @@ import {
   createCandidateSafetyBackup,
   createCandidateSafetyRecoveryPlan,
   materializeOfficialToolchain,
+  readRuntimeRolePosture,
   validateOfficialToolchain,
   validateCandidateRestoreResult,
   validateCandidateSafetyBackupEvidence,
@@ -62,6 +63,20 @@ const OPERATOR_IDENTITY = Object.freeze({
 const TOOLCHAIN_EVIDENCE = Object.freeze({
   ...OFFICIAL_POSTGRES_17_TOOLCHAIN,
   toolchainSha256: sha256(canonicalJson(OFFICIAL_POSTGRES_17_TOOLCHAIN)),
+});
+
+test("runtime role posture qualifies joined role catalog columns", async () => {
+  const queries = [];
+  const posture = await readRuntimeRolePosture({
+    unsafe: async (query) => {
+      queries.push(query);
+      return [];
+    },
+  });
+  assert.deepEqual(posture, { rows: [], memberships: [] });
+  assert.equal(queries.length, 2);
+  assert.match(queries[0], /select roles\.rolname, roles\.rolcanlogin/u);
+  assert.doesNotMatch(queries[0], /select rolname, rolcanlogin/u);
 });
 const HOSTED_RESTORED_STRUCTURAL_MANIFEST = `0x${"9".repeat(64)}`;
 const RESTORED_PORTABLE_STRUCTURAL_MANIFEST =
