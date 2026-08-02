@@ -127,9 +127,14 @@
 .address,
 .explorerLink {
   align-items: center;
-  background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-  border-radius: 13px;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border: 1px solid var(--control-glass-border);
+  border-radius: var(--radius-control);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 8px 24px var(--control-glass-shadow-color);
   color: var(--text-soft);
   display: inline-flex;
   min-height: 44px;
@@ -455,10 +460,15 @@
 
 .communityAction {
   align-items: center;
-  background: var(--text);
-  border: 1px solid var(--text);
-  border-radius: 14px;
-  color: var(--canvas);
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--accent-glass-background);
+  border: 1px solid var(--accent-glass-border);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
+    0 10px 28px var(--control-glass-shadow-color);
+  color: var(--accent-ink);
   display: inline-flex;
   font-size: 12px;
   font-weight: 650;
@@ -546,9 +556,14 @@
 }
 
 .sideControl {
-  background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
-  border: 1px solid var(--border-strong);
-  border-radius: 16px;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border: 1px solid var(--control-glass-border);
+  border-radius: 22px;
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 9px 26px var(--control-glass-shadow-color);
   display: grid;
   gap: 4px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -561,7 +576,7 @@
 .sideButton {
   background: transparent;
   border: 0;
-  border-radius: 12px;
+  border-radius: 17px;
   color: var(--muted);
   font-size: 14px;
   font-weight: 640;
@@ -575,11 +590,13 @@
 }
 
 .sideIndicator {
-  background: var(--canvas);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  background: var(--control-glass-background-strong);
+  border: 1px solid var(--control-glass-border);
+  border-radius: 17px;
   bottom: 4px;
-  box-shadow: 0 4px 14px var(--card-shadow);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 5px 16px var(--card-shadow);
   left: 4px;
   pointer-events: none;
   position: absolute;
@@ -804,7 +821,9 @@
 .primaryAction,
 .secondaryAction {
   align-items: center;
-  border-radius: 16px;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  border-radius: 20px;
   display: inline-flex;
   font-size: 14px;
   font-weight: 690;
@@ -814,8 +833,11 @@
 }
 
 .primaryAction {
-  background: var(--accent);
-  border: 0;
+  background: var(--accent-glass-background);
+  border: 1px solid var(--accent-glass-border);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
+    0 10px 28px var(--control-glass-shadow-color);
   color: var(--accent-ink);
   width: 100%;
 }
@@ -826,8 +848,11 @@
 }
 
 .secondaryAction {
-  background: var(--surface-soft);
-  border: 1px solid var(--border-strong);
+  background: var(--control-glass-background);
+  border: 1px solid var(--control-glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 8px 24px var(--control-glass-shadow-color);
   color: var(--text);
 }
 

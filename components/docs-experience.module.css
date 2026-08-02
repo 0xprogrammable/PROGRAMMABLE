@@ -49,13 +49,14 @@
 
 .search {
   align-items: center;
-  backdrop-filter: blur(20px);
-  background: var(--glass-94);
-  border: 1px solid var(--control-border);
-  border-radius: 16px;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border: 1px solid var(--control-glass-border);
+  border-radius: 20px;
   box-shadow:
-    0 1px 0 var(--card-shadow),
-    0 15px 38px var(--card-shadow-soft);
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 14px 38px var(--control-glass-shadow-color);
   color: var(--muted);
   display: flex;
   gap: 10px;
@@ -72,7 +73,7 @@
 }
 
 .search:focus-within {
-  background: var(--surface-raised);
+  background: var(--control-glass-background-hover);
   border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent),
@@ -532,9 +533,12 @@
 
 .sourceLinks a {
   align-items: center;
-  background: color-mix(in srgb, var(--glass-90) 94%, transparent);
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 11px;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border: 1px solid var(--control-glass-border);
+  border-radius: var(--radius-control);
+  box-shadow: inset 0 1px 0 var(--control-glass-highlight);
   color: var(--text-soft);
   display: inline-flex;
   font-size: 12px;

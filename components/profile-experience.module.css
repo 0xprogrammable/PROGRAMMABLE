@@ -973,6 +973,36 @@
   padding-inline: 15px;
 }
 
+.editButton,
+.imageAction,
+.editAction,
+.secondaryAction,
+.openToken,
+.retryButton {
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border-color: var(--control-glass-border);
+  border-radius: var(--radius-control);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 8px 24px var(--control-glass-shadow-color);
+}
+
+.connectButton,
+.claimButton,
+.saveAction,
+.emptyAction {
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--accent-glass-background);
+  border-color: var(--accent-glass-border);
+  border-radius: var(--radius-control);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
+    0 10px 28px var(--control-glass-shadow-color);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .tokenRow:hover {
     background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
@@ -1002,7 +1032,7 @@
   .claimButton:not(:disabled):hover,
   .connectButton:hover,
   .emptyAction:hover {
-    background: var(--accent-hover);
+    background: var(--accent-glass-background-hover);
   }
 }
 

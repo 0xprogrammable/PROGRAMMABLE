@@ -6,8 +6,50 @@
 
 :root {
   --page-width: 1320px;
-  --radius-control: 13px;
+  --radius-control: 18px;
+  --radius-control-inner: 15px;
   --radius-panel: 24px;
+  --control-glass-background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--glass-98) 68%, transparent),
+      color-mix(in srgb, var(--glass-82) 52%, transparent)
+    );
+  --control-glass-background-strong:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--glass-98) 84%, transparent),
+      color-mix(in srgb, var(--glass-88) 68%, transparent)
+    );
+  --control-glass-background-hover:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--glass-98) 82%, transparent),
+      color-mix(in srgb, var(--glass-88) 64%, transparent)
+    );
+  --control-glass-border: color-mix(
+    in srgb,
+    var(--control-border) 78%,
+    var(--glass-98) 22%
+  );
+  --control-glass-backdrop: blur(22px) saturate(1.14);
+  --accent-glass-background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 92%, transparent),
+      color-mix(in srgb, var(--accent) 78%, transparent)
+    );
+  --accent-glass-background-hover:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-hover) 94%, transparent),
+      color-mix(in srgb, var(--accent) 84%, transparent)
+    );
+  --accent-glass-border: color-mix(
+    in srgb,
+    var(--accent-strong) 58%,
+    transparent
+  );
   --shadow-resting:
     0 1px 0 rgba(25, 32, 42, 0.035),
     0 14px 36px rgba(25, 32, 42, 0.035);
@@ -32,6 +74,8 @@ html[data-theme="light"] {
   --control-border: rgba(45, 57, 71, 0.17);
   --panel-border: rgba(45, 57, 71, 0.145);
   --panel-border-soft: rgba(45, 57, 71, 0.11);
+  --control-glass-highlight: rgba(255, 255, 255, 0.82);
+  --control-glass-shadow-color: rgba(25, 32, 42, 0.07);
 }
 
 html[data-theme="dark"] {
@@ -48,6 +92,8 @@ html[data-theme="dark"] {
   --control-border: rgba(231, 234, 239, 0.15);
   --panel-border: rgba(231, 234, 239, 0.14);
   --panel-border-soft: rgba(231, 234, 239, 0.105);
+  --control-glass-highlight: rgba(255, 255, 255, 0.1);
+  --control-glass-shadow-color: rgba(0, 0, 0, 0.25);
   --shadow-resting:
     0 1px 0 rgba(255, 255, 255, 0.018),
     0 16px 42px rgba(0, 0, 0, 0.18);
@@ -347,16 +393,20 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .desktop-nav {
-  backdrop-filter: blur(18px);
-  background: color-mix(in srgb, var(--glass-82) 80%, transparent);
-  border: 1px solid var(--header-border);
-  border-radius: 15px;
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border: 1px solid var(--control-glass-border);
+  border-radius: 22px;
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 10px 28px var(--control-glass-shadow-color);
   gap: 2px;
   padding: 3px;
 }
 
 .desktop-nav a {
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   font-size: 14px;
   font-weight: 540;
   min-height: 38px;
@@ -368,10 +418,10 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .desktop-nav a.active {
-  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  background: var(--control-glass-background-strong);
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 7%, transparent),
-    0 2px 8px var(--card-shadow-soft);
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 4px 12px var(--card-shadow-soft);
 }
 
 .theme-toggle,
@@ -385,10 +435,35 @@ html[data-theme="dark"] .atmosphere-particle-six {
   width: 44px;
 }
 
+.theme-toggle,
+.wallet-button,
+.secondary-button,
+.token-search,
+.token-filter summary,
+.token-pagination {
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--control-glass-background);
+  border-color: var(--control-glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 9px 26px var(--control-glass-shadow-color);
+}
+
+.primary-button {
+  -webkit-backdrop-filter: var(--control-glass-backdrop);
+  backdrop-filter: var(--control-glass-backdrop);
+  background: var(--accent-glass-background);
+  border: 1px solid var(--accent-glass-border);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
+    0 10px 28px var(--control-glass-shadow-color);
+}
+
 .wallet-button,
 .primary-button,
 .secondary-button {
-  box-shadow: 0 1px 0 color-mix(in srgb, white 5%, transparent);
+  border-radius: var(--radius-control);
 }
 
 .wallet-menu,
@@ -453,7 +528,7 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .token-search {
-  border-radius: 13px;
+  border-radius: var(--radius-control);
   flex-basis: 252px;
   min-width: 210px;
   padding-inline: 13px;
@@ -469,14 +544,28 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .token-filter summary {
-  border-radius: 13px;
+  border-radius: var(--radius-control);
   font-size: 12.5px;
   padding-inline: 12px;
 }
 
 .token-pagination {
-  border-radius: 13px;
+  border-radius: var(--radius-control);
   padding: 3px;
+}
+
+.token-filter[open] summary,
+.token-search:focus-within {
+  background: var(--control-glass-background-hover);
+  border-color: color-mix(
+    in srgb,
+    var(--accent-strong) 36%,
+    var(--control-glass-border)
+  );
+  box-shadow:
+    inset 0 1px 0 var(--control-glass-highlight),
+    0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent),
+    0 12px 32px var(--control-glass-shadow-color);
 }
 
 .token-pagination > button,
@@ -667,7 +756,24 @@ html[data-theme="dark"] .token-card-art {
   .theme-toggle:hover,
   .wallet-button:hover,
   .token-filter summary:hover {
+    background: var(--control-glass-background-hover);
+    border-color: color-mix(
+      in srgb,
+      var(--accent-strong) 24%,
+      var(--control-glass-border)
+    );
+    box-shadow:
+      inset 0 1px 0 var(--control-glass-highlight),
+      0 12px 32px var(--control-glass-shadow-color);
     transform: translateY(-1px);
+  }
+
+  .primary-button:hover {
+    background: var(--accent-glass-background-hover);
+  }
+
+  .secondary-button:hover {
+    background: var(--control-glass-background-hover);
   }
 
   .token-card:hover,
