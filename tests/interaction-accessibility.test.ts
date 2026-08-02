@@ -63,7 +63,11 @@ describe("interaction accessibility", () => {
 
     expect(source).toContain("startViewTransition");
     expect(source).toContain("event.detail === 0");
+    expect(source).toContain('root.dataset.themeInput = "instant"');
     expect(source).toContain('"(prefers-reduced-motion: reduce)"');
+    expect(css).toContain(
+      'html[data-theme-input="instant"] .theme-toggle-icons svg',
+    );
     expect(css).toContain("@keyframes theme-radial-reveal");
     expect(css).toMatch(
       /theme-radial-reveal 280ms cubic-bezier\(0\.23, 1, 0\.32, 1\)/,
@@ -105,6 +109,14 @@ describe("interaction accessibility", () => {
     expect(css).not.toContain(".app-frame > main,\n.site-header,\n.mobile-nav");
     expect(css).toMatch(
       /\.site-header\s*\{[^}]*position:\s*sticky;[^}]*z-index:\s*50;/s,
+    );
+  });
+
+  it("prioritizes theme and wallet controls when the mobile header is narrow", () => {
+    const css = readFileSync(join(root, "app/globals.css"), "utf8");
+
+    expect(css).toMatch(
+      /@media \(max-width: 360px\)[\s\S]*?\.header-socials\s*\{\s*display:\s*none;/,
     );
   });
 

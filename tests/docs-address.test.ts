@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DocsAddress,
+  getDocsAddressCopyMotion,
   getDocsAddressCopyStatus,
 } from "../components/docs-address";
 
@@ -29,5 +30,10 @@ describe("Docs deployment addresses", () => {
     expect(getDocsAddressCopyStatus("Launcher", "error")).toBe(
       "Could not copy Launcher address",
     );
+  });
+
+  it("keeps keyboard copy feedback instant while pointer feedback may animate", () => {
+    expect(getDocsAddressCopyMotion(0)).toBe("instant");
+    expect(getDocsAddressCopyMotion(1)).toBe("standard");
   });
 });

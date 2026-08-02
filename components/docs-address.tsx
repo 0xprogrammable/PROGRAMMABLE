@@ -1,12 +1,17 @@
 "use client";
 
 import { Check, CircleAlert, Copy } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 
 import { DocsExternalLink } from "@/components/docs-external-link";
 import styles from "@/components/docs-experience.module.css";
 
 type CopyState = "idle" | "copied" | "error";
+type CopyMotion = "standard" | "instant";
+
+export function getDocsAddressCopyMotion(detail: number): CopyMotion {
+  return detail === 0 ? "instant" : "standard";
+}
 
 export function getDocsAddressCopyStatus(
   label: string,
@@ -25,6 +30,7 @@ export function DocsAddress({
   label: string;
 }) {
   const [copyState, setCopyState] = useState<CopyState>("idle");
+  const [copyMotion, setCopyMotion] = useState<CopyMotion>("standard");
   const resetTimerRef = useRef<number | null>(null);
 
   useEffect(
@@ -36,10 +42,12 @@ export function DocsAddress({
     [],
   );
 
-  async function copyAddress() {
+  async function copyAddress(event: MouseEvent<HTMLButtonElement>) {
     if (resetTimerRef.current !== null) {
       window.clearTimeout(resetTimerRef.current);
     }
+
+    setCopyMotion(getDocsAddressCopyMotion(event.detail));
 
     try {
       await navigator.clipboard.writeText(address);
@@ -70,6 +78,7 @@ export function DocsAddress({
       <button
         aria-label={`Copy ${label} address`}
         className={styles.addressCopyButton}
+        data-motion={copyMotion}
         data-state={copyState}
         onClick={copyAddress}
         title={

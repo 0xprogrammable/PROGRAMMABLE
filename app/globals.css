@@ -607,6 +607,10 @@ html[data-theme="dark"] .app-frame::before {
     transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+html[data-theme-input="instant"] .theme-toggle-icons svg {
+  transition: none;
+}
+
 .theme-toggle-moon {
   opacity: 1;
   transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
@@ -5885,6 +5889,10 @@ html[data-theme="dark"] .theme-toggle-sun {
 
   .header-brand {
     gap: 0;
+  }
+
+  .header-socials {
+    display: none;
   }
 
   .launch-model-page {

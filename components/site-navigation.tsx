@@ -28,6 +28,7 @@ type ViewTransitionDocument = Document & {
 const themeChangeEvent = "programmable:theme-changed";
 let themeTransitionSequence = 0;
 let themeFallbackTimer: number | null = null;
+let themeInstantCleanupFrame: number | null = null;
 
 function clearThemeReveal(root: HTMLElement) {
   if (themeFallbackTimer !== null) {
@@ -98,9 +99,25 @@ function ThemeToggle() {
 
     if (event.detail === 0 || reduceMotion) {
       clearThemeReveal(root);
+      if (themeInstantCleanupFrame !== null) {
+        window.cancelAnimationFrame(themeInstantCleanupFrame);
+      }
+      root.dataset.themeInput = "instant";
       commitTheme(nextTheme);
+      themeInstantCleanupFrame = window.requestAnimationFrame(() => {
+        themeInstantCleanupFrame = window.requestAnimationFrame(() => {
+          delete root.dataset.themeInput;
+          themeInstantCleanupFrame = null;
+        });
+      });
       return;
     }
+
+    if (themeInstantCleanupFrame !== null) {
+      window.cancelAnimationFrame(themeInstantCleanupFrame);
+      themeInstantCleanupFrame = null;
+    }
+    delete root.dataset.themeInput;
 
     const toggleBounds = event.currentTarget.getBoundingClientRect();
     const originX = toggleBounds.left + toggleBounds.width / 2;
