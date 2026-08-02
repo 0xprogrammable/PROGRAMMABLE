@@ -12,10 +12,13 @@ import { runtimeProductionProviderBindingsFromUrls } from "../../scripts/perf/re
 const {
   createStagedReleaseAttestation,
   evaluateReadModelDeployPolicy,
+  PROJECTOR_WAKE_ROUTE,
   readReleasePolicyExpectations,
   validateStagedReleaseAttestation,
+  QUICKNODE_STREAM_SECRET_ENV_NAME,
   RELEASE_GATED_FLAG_NAMES,
   REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES,
+  REQUIRED_SERVER_SECRET_ENV_NAMES,
   WORKER_ACTIVATION_FLAG_NAMES,
 } = deployPolicy;
 
@@ -42,6 +45,7 @@ function environmentFile(input: {
   indexed?: Partial<Record<string, string | undefined>>;
   workers?: Partial<Record<string, string | undefined>>;
   nonSecret?: Partial<Record<string, string | undefined>>;
+  serverSecrets?: Partial<Record<string, string | undefined>>;
   includeRuntimeProviders?: boolean;
 } = {}) {
   const values: Record<string, string | undefined> = {
@@ -52,6 +56,9 @@ function environmentFile(input: {
       WORKER_ACTIVATION_FLAG_NAMES.map((name: string) => [name, "false"]),
     ),
     ...EXPECTATIONS,
+    ...Object.fromEntries(
+      REQUIRED_SERVER_SECRET_ENV_NAMES.map((name: string) => [name, ""]),
+    ),
     ...(input.includeRuntimeProviders
       ? {
           PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_URL,
@@ -61,6 +68,7 @@ function environmentFile(input: {
     ...input.indexed,
     ...input.workers,
     ...input.nonSecret,
+    ...input.serverSecrets,
   };
   return Object.entries(values)
     .filter(([, value]) => value !== undefined)
@@ -97,6 +105,9 @@ describe("read-model production deploy policy", () => {
       const policy = evaluateReadModelDeployPolicy(
         environmentFile({
           workers: { [worker]: "true" },
+          serverSecrets: {
+            [QUICKNODE_STREAM_SECRET_ENV_NAME]: "[sensitive]",
+          },
           includeRuntimeProviders: true,
         }),
         COMMITMENTS,
@@ -108,8 +119,55 @@ describe("read-model production deploy policy", () => {
         policyReady: true,
         commitmentsReady: true,
         runtimeProviderBinding: "verified",
+        wakeRoute: "/api/ops/projector-wake",
+        wakeCanaryRequired: true,
+        streamSecretReady: true,
       });
       expect(policy.nonLegacyFlags).toContain(worker);
+    }
+  });
+
+  it("requires a bounded server-only stream secret for an active worker", () => {
+    for (const value of [undefined, "too-short", "x".repeat(1_025)]) {
+      const policy = evaluateReadModelDeployPolicy(
+        environmentFile({
+          workers: { PROGRAMMABLE_PROJECTOR_ACTIVE: "true" },
+          serverSecrets: {
+            [QUICKNODE_STREAM_SECRET_ENV_NAME]: value,
+          },
+          includeRuntimeProviders: true,
+        }),
+        COMMITMENTS,
+        EXPECTATIONS,
+      );
+      expect(policy).toMatchObject({
+        policyReady: false,
+        wakeCanaryRequired: true,
+        streamSecretReady: false,
+        invalidServerSecretEnvironmentNames: [
+          QUICKNODE_STREAM_SECRET_ENV_NAME,
+        ],
+      });
+    }
+
+    for (const value of ["[sensitive]", "x".repeat(32)]) {
+      const policy = evaluateReadModelDeployPolicy(
+        environmentFile({
+          workers: { PROGRAMMABLE_PROJECTOR_ACTIVE: "true" },
+          serverSecrets: {
+            [QUICKNODE_STREAM_SECRET_ENV_NAME]: value,
+          },
+          includeRuntimeProviders: true,
+        }),
+        COMMITMENTS,
+        EXPECTATIONS,
+      );
+      expect(policy).toMatchObject({
+        policyReady: true,
+        wakeCanaryRequired: true,
+        streamSecretReady: true,
+        invalidServerSecretEnvironmentNames: [],
+      });
     }
   });
 
@@ -219,6 +277,9 @@ describe("read-model production deploy policy", () => {
         workers: Object.fromEntries(
           WORKER_ACTIVATION_FLAG_NAMES.map((name: string) => [name, "true"]),
         ),
+        serverSecrets: {
+          [QUICKNODE_STREAM_SECRET_ENV_NAME]: "[sensitive]",
+        },
         includeRuntimeProviders: true,
       }),
       COMMITMENTS,
@@ -319,6 +380,7 @@ describe("read-model production deploy policy", () => {
     for (const name of [
       ...WORKER_ACTIVATION_FLAG_NAMES,
       ...REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES,
+      ...REQUIRED_SERVER_SECRET_ENV_NAMES,
     ]) {
       expect(example.match(new RegExp(`^${name}=`, "gmu"))).toHaveLength(1);
       expect(example).not.toContain(`NEXT_PUBLIC_${name}`);
@@ -326,6 +388,8 @@ describe("read-model production deploy policy", () => {
     for (const [name, value] of Object.entries(EXPECTATIONS)) {
       expect(example).toContain(`${name}=${value}`);
     }
+    expect(example).toContain(`${QUICKNODE_STREAM_SECRET_ENV_NAME}=\n`);
+    expect(PROJECTOR_WAKE_ROUTE).toBe("/api/ops/projector-wake");
   });
 
   it("smokes the legacy release corpus and reconciles uncertain promotion outcomes", () => {

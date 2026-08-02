@@ -117,6 +117,10 @@ const APPROVED_OPERATIONS = Object.freeze({
         path: "lib/data-pipeline/quicknode-stream-wake.server.ts",
         sha256: "9c452c2ae94b62d31ed2ffdaaf974b1acd4c7a856493ac02013e43f89eb4bc65",
       }),
+      canary: Object.freeze({
+        path: "scripts/perf/read-model-projector-wake-canary.mjs",
+        sha256: "5ea9c8704126fe17982515038ed75dd3eb850479a5dc8c7b092e2db076c14900",
+      }),
     }),
   ]),
 });
@@ -261,6 +265,33 @@ function eventTriggerIsAuthenticatedAndBound(route, verifier, trigger) {
     verifier.includes("MAXIMUM_ENCODED_BODY_BYTES") &&
     verifier.includes("maxOutputLength: MAXIMUM_DECODED_BODY_BYTES")
   );
+}
+
+function eventTriggerCanaryIsFailClosed(source, trigger) {
+  return (
+    typeof source === "string" &&
+    trigger?.canary?.path ===
+      "scripts/perf/read-model-projector-wake-canary.mjs" &&
+    source.includes(
+      'export const PROJECTOR_WAKE_ROUTE = "/api/ops/projector-wake"',
+    ) &&
+    source.includes('"PROGRAMMABLE_QUICKNODE_STREAM_SECRET"') &&
+    source.includes('createHmac("sha256", secret)') &&
+    source.includes('id: "invalid-signature"') &&
+    source.includes('id: "stale-timestamp"') &&
+    source.includes('id: "valid-delivery"') &&
+    source.includes("status: 401") &&
+    source.includes("status: 202") &&
+    source.includes('"cache-control"') &&
+    source.includes('hostname.endsWith(".vercel.app")') &&
+    !source.includes("NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_STREAM_SECRET")
+  );
+}
+
+function exactEmptyEnvironmentKey(source, name) {
+  if (typeof source !== "string") return false;
+  const matches = source.match(new RegExp(`^${name}=$`, "gmu")) ?? [];
+  return matches.length === 1 && !source.includes(`NEXT_PUBLIC_${name}`);
 }
 
 function migrationContract(id, source) {
@@ -520,9 +551,14 @@ export function evaluateReadModelOperationsSourceContracts(
       !crons?.has(approvedTrigger.path) &&
       sourceBindingMatches(source, eventTrigger?.route, expectedSha256Overrides) &&
       sourceBindingMatches(source, eventTrigger?.verifier, expectedSha256Overrides) &&
+      sourceBindingMatches(source, eventTrigger?.canary, expectedSha256Overrides) &&
       eventTriggerIsAuthenticatedAndBound(
         source(approvedTrigger.route.path),
         source(approvedTrigger.verifier.path),
+        eventTrigger,
+      ) &&
+      eventTriggerCanaryIsFailClosed(
+        source(approvedTrigger.canary.path),
         eventTrigger,
       ),
     "the unscheduled QuickNode webhook is HMAC-authenticated and only wakes the fenced projectors",
@@ -601,6 +637,9 @@ export function evaluateReadModelOperationsSourceContracts(
   const deployWorkflow = source(".github/workflows/deploy-production.yml") ?? "";
   const verifyWorkflow = source(".github/workflows/verify.yml") ?? "";
   const packageJson = parseJson(source("package.json"));
+  const deployPolicy = source("scripts/perf/read-model-deploy-policy.mjs") ?? "";
+  const wakeCanary = source(approvedTrigger.canary.path) ?? "";
+  const environmentExample = source(".env.example") ?? "";
   const postPromotion = source("scripts/perf/read-model-post-promotion.mjs") ?? "";
   const productionBinding = source(
     "scripts/perf/read-model-production-binding.mjs",
@@ -612,6 +651,43 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-package-verify-binding",
     packageJson?.scripts?.verify?.includes("npm run perf:read-model:ops-gate") === true,
     "the canonical local verification command runs the operations source contract",
+  );
+  check(
+    "ops-quicknode-stream-env-contract",
+    exactEmptyEnvironmentKey(
+      environmentExample,
+      approvedTrigger.secretEnvironment,
+    ) &&
+      deployPolicy.includes("PROJECTOR_WAKE_ROUTE") &&
+      deployPolicy.includes("QUICKNODE_STREAM_SECRET_ENV_NAME") &&
+      deployPolicy.includes('from "./read-model-projector-wake-canary.mjs"') &&
+      deployPolicy.includes("wake_route=${result.wakeRoute}") &&
+      deployPolicy.includes("wake_canary_required=${result.wakeCanaryRequired}") &&
+      deployPolicy.includes("invalidServerSecretEnvironmentNames"),
+    "the stream secret name is documented without a value and is fail-closed in deploy policy",
+  );
+  const stagedWakeGate = deployWorkflow.indexOf(
+    "Gate exact staged QuickNode wake route",
+  );
+  check(
+    "ops-quicknode-stream-stage-gate",
+    packageJson?.scripts?.["perf:read-model:wake-canary"] ===
+      `node ${approvedTrigger.canary.path}` &&
+      wakeCanary.includes("projectorWakeCanaryArgumentsFrom") &&
+      stagedWakeGate > deployWorkflow.indexOf("Resolve exact staged deployment") &&
+      stagedWakeGate < deployWorkflow.indexOf("Attest exact staged release policy") &&
+      deployWorkflow.includes(
+        "if: steps.read-model-policy.outputs.wake_canary_required == 'true'",
+      ) &&
+      deployWorkflow.includes(
+        "PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}",
+      ) &&
+      deployWorkflow.includes(
+        "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}",
+      ) &&
+      deployWorkflow.includes("npm run perf:read-model:wake-canary --") &&
+      deployWorkflow.includes('--target-url "$STAGED_TARGET_URL"'),
+    "an active fast lane must pass the exact unaliased staged wake canary before attestation",
   );
   check(
     "ops-exact-release-dependency",

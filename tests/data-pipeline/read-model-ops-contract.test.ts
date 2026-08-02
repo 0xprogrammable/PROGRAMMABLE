@@ -205,6 +205,43 @@ describe("read-model operations source contract", () => {
       ]),
     );
   });
+
+  it("rejects wake canary, secret schema and staged-gate drift", () => {
+    const canaryPath = resolve(
+      ROOT,
+      "scripts/perf/read-model-projector-wake-canary.mjs",
+    );
+    const workflowPath = resolve(ROOT, ".github/workflows/deploy-production.yml");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        "scripts/perf/read-model-projector-wake-canary.mjs": `${readFileSync(
+          canaryPath,
+          "utf8",
+        )}\n// unreviewed drift\n`,
+        ".env.example": readFileSync(resolve(ROOT, ".env.example"), "utf8")
+          .replace(
+            "PROGRAMMABLE_QUICKNODE_STREAM_SECRET=",
+            "NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_STREAM_SECRET=exposed",
+          ),
+        ".github/workflows/deploy-production.yml": readFileSync(
+          workflowPath,
+          "utf8",
+        ).replace(
+          "Gate exact staged QuickNode wake route",
+          "Skipped staged QuickNode wake route",
+        ),
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
+      expect.arrayContaining([
+        "ops-quicknode-stream-wake-binding",
+        "ops-quicknode-stream-env-contract",
+        "ops-quicknode-stream-stage-gate",
+      ]),
+    );
+  });
 });
 
 function publicFetch(healthStatus = "healthy") {

@@ -33,16 +33,23 @@ Configure the stream only after the exact staged deployment has passed its
 normal release gate:
 
 1. Create a dedicated random secret of 32 to 1,024 UTF-8 bytes. Store it as
-   `PROGRAMMABLE_QUICKNODE_STREAM_SECRET` in the staged Vercel environment and
-   as the QuickNode webhook security token. Never reuse `CRON_SECRET`.
+   `PROGRAMMABLE_QUICKNODE_STREAM_SECRET` in the Vercel Production environment,
+   the protected GitHub Production environment and the QuickNode webhook
+   security-token field. The values must match. Keep the committed
+   `.env.example` value empty, pass the secret only through the environment and
+   never reuse `CRON_SECRET`.
 2. Use the Ethereum mainnet block dataset, one block per batch, sequential
    delivery, reorg correction enabled and the smallest block-only payload the
    stream filter permits. The endpoint accepts JSON and QuickNode gzip bodies,
    but rejects encoded bodies above 64 KiB or decoded bodies above 128 KiB.
 3. Point the test destination at
    `https://<exact-staged-deployment>/api/ops/projector-wake`. Confirm a signed
-   test delivery returns `202` and `Cache-Control: no-store`; invalid,
-   replayed, stale or malformed deliveries must not schedule work.
+   test delivery returns `202` and `Cache-Control: no-store`; invalid, stale or
+   malformed deliveries must not schedule work. Duplicate or replayed valid
+   deliveries can currently return `202`; the singleton database leases make
+   their projector cycles safe. Do not claim persistent nonce replay rejection
+   until a reviewed durable nonce store and an exact second-delivery rejection
+   test exist.
 4. After production promotion and binding checks, move the destination to
    `https://programmable.family/api/ops/projector-wake`, capture the stream ID
    and destination evidence, then verify source and market projector telemetry
@@ -95,6 +102,28 @@ fails if Vercel has already moved production to the candidate commit.
 9. Enable indexed read flags only after every check is green, then activate and
    verify the stream's production destination.
 10. Remove the legacy cron in a later reviewed cutover commit.
+
+When either projector is active, the deploy policy requires the stream-secret
+key in the pulled Vercel environment. A Vercel Sensitive placeholder is enough
+for static preflight because its value is intentionally unavailable there. The
+workflow then runs the following canary against the exact unaliased staged
+deployment before release attestation or promotion:
+
+```sh
+npm run perf:read-model:wake-canary -- \
+  --target-url 'https://<exact-staged-deployment>.vercel.app'
+```
+
+The command reads `PROGRAMMABLE_QUICKNODE_STREAM_SECRET` from its existing
+process environment; there is deliberately no CLI secret argument.
+
+The canary sends, in order, a fresh request with an invalid signature, a
+correctly signed stale request and a fresh valid request. It requires exact
+`401`, `401` and `202` responses, JSON bodies and `Cache-Control: no-store`.
+Its output contains only the target origin, route, payload digest and statuses;
+it never emits the secret, signatures, nonces or payload. A mismatch between
+the protected GitHub secret and the Vercel runtime secret therefore fails the
+stage without disclosing either value.
 
 Source files, migrations, schedules, activation names, workflow ordering and
 post-promotion probes are checked by `npm run perf:read-model:ops-gate`.

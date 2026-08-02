@@ -111,6 +111,10 @@
       "verifier": {
         "path": "lib/data-pipeline/quicknode-stream-wake.server.ts",
         "sha256": "9c452c2ae94b62d31ed2ffdaaf974b1acd4c7a856493ac02013e43f89eb4bc65"
+      },
+      "canary": {
+        "path": "scripts/perf/read-model-projector-wake-canary.mjs",
+        "sha256": "5ea9c8704126fe17982515038ed75dd3eb850479a5dc8c7b092e2db076c14900"
       }
     }
   ],

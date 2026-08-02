@@ -188,6 +188,15 @@ jobs:
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
 
+      - name: Gate exact staged QuickNode wake route
+        if: steps.read-model-policy.outputs.wake_canary_required == 'true'
+        env:
+          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+        run: >-
+          npm run perf:read-model:wake-canary --
+          --target-url "$STAGED_TARGET_URL"
+
       - name: Attest exact staged release policy
         id: release-attestation
         env:
