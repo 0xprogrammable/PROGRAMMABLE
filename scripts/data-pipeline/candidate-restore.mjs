@@ -1587,7 +1587,12 @@ function partitionClosure(closure, label) {
   });
 }
 
-export function assertRestoreRolePostureEvidence(identity, roles, memberships) {
+export function assertRestoreRolePostureEvidence(
+  identity,
+  roles,
+  memberships,
+  { supabaseHosted = true } = {},
+) {
   const postgresRole = roles.find(({ rolname }) => rolname === "postgres");
   const migrator = roles.find(({ rolname }) => rolname === "programmable_migrator");
   const operatorMemberships = memberships.filter(
@@ -1628,6 +1633,8 @@ export function assertRestoreRolePostureEvidence(identity, roles, memberships) {
     identity?.current_role !== "postgres" ||
     identity?.can_set_migrator !== true ||
     typeof identity?.supabase_admin_exists !== "boolean" ||
+    typeof supabaseHosted !== "boolean" ||
+    identity.supabase_admin_exists !== supabaseHosted ||
     roles.length !== 2 ||
     postgresRole?.rolsuper !== false ||
     migrator?.rolsuper !== false ||
@@ -1639,7 +1646,7 @@ export function assertRestoreRolePostureEvidence(identity, roles, memberships) {
     migrator?.rolbypassrls !== false ||
     operatorMemberships.length !== 1 ||
     supabaseMemberships.length !==
-      (identity?.supabase_admin_exists === true ? 1 : 0) ||
+      (supabaseHosted ? 1 : 0) ||
     memberships.length !==
       operatorMemberships.length + supabaseMemberships.length
   ) {
@@ -1647,7 +1654,7 @@ export function assertRestoreRolePostureEvidence(identity, roles, memberships) {
   }
 }
 
-async function assertRestoreRolePosture(sql) {
+async function assertRestoreRolePosture(sql, posture) {
   const [identity] = await sql.unsafe(`
     select session_user::text as session_user,
            current_user::text as current_user,
@@ -1686,7 +1693,7 @@ async function assertRestoreRolePosture(sql) {
        and granted_role.rolname = 'programmable_migrator'
      order by grantor_role.rolname
   `);
-  assertRestoreRolePostureEvidence(identity, roles, memberships);
+  assertRestoreRolePostureEvidence(identity, roles, memberships, posture);
 }
 
 async function assertRestoreSchemasAbsent(sql) {
@@ -1731,9 +1738,9 @@ export async function assertCandidateSchemaStage(sql, expectedSchemas) {
   }
 }
 
-export async function cleanupCandidateSchemas(sql, closure) {
+export async function cleanupCandidateSchemas(sql, closure, posture) {
   const statements = partitionClosure(closure, "Candidate cleanup closure");
-  await assertRestoreRolePosture(sql);
+  await assertRestoreRolePosture(sql, posture);
   await sql.begin(async (transaction) => {
     await transaction.unsafe("set local role programmable_migrator").simple();
     await transaction.unsafe(LATER_ONLY_RESTRICT_CLEANUP_SQL).simple();
@@ -1750,10 +1757,15 @@ export async function cleanupCandidateSchemas(sql, closure) {
     }
   });
   await assertRestoreSchemasAbsent(sql);
-  await assertRestoreRolePosture(sql);
+  await assertRestoreRolePosture(sql, posture);
 }
 
-export async function applyOwnerAndSecurityClosure(sql, owners, security) {
+export async function applyOwnerAndSecurityClosure(
+  sql,
+  owners,
+  security,
+  posture,
+) {
   const ownerLines = owners.sql.trimEnd().split("\n");
   const objectOwners = ownerLines.filter((line) => !line.startsWith("ALTER SCHEMA "));
   const schemaOwners = ownerLines.filter((line) => line.startsWith("ALTER SCHEMA "));
@@ -1761,7 +1773,7 @@ export async function applyOwnerAndSecurityClosure(sql, owners, security) {
     throw new Error("Candidate schema owner closure is incomplete");
   }
   const acl = partitionClosure(security, "Candidate security closure");
-  await assertRestoreRolePosture(sql);
+  await assertRestoreRolePosture(sql, posture);
   await sql.begin(async (transaction) => {
     await transaction.unsafe(`
       grant create on schema programmable_private,
@@ -1774,7 +1786,7 @@ export async function applyOwnerAndSecurityClosure(sql, owners, security) {
     await transaction.unsafe("set local role postgres").simple();
     if (acl.postgresOwned) await transaction.unsafe(acl.postgresOwned).simple();
   });
-  await assertRestoreRolePosture(sql);
+  await assertRestoreRolePosture(sql, posture);
 }
 
 export async function preparePinnedRestoreClosures({

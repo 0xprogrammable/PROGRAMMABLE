@@ -113,6 +113,7 @@ test("restore posture accepts the exact Supabase admin and operator grants", () 
       RESTORE_ROLE_IDENTITY,
       RESTORE_ROLES,
       [RESTORE_SUPABASE_MEMBERSHIP, RESTORE_OPERATOR_MEMBERSHIP],
+      { supabaseHosted: true },
     ),
   );
 });
@@ -123,6 +124,7 @@ test("restore posture accepts the exact grants for a hosted postgres login", () 
       { ...RESTORE_ROLE_IDENTITY, session_user: "postgres" },
       RESTORE_ROLES,
       [RESTORE_SUPABASE_MEMBERSHIP, RESTORE_OPERATOR_MEMBERSHIP],
+      { supabaseHosted: true },
     ),
   );
 });
@@ -137,6 +139,7 @@ test("restore posture accepts an isolated postgres operator grant", () => {
       },
       RESTORE_ROLES,
       [RESTORE_OPERATOR_MEMBERSHIP],
+      { supabaseHosted: false },
     ),
   );
 });
@@ -158,6 +161,7 @@ test("restore posture rejects unknown or duplicated memberships", () => {
           RESTORE_ROLE_IDENTITY,
           RESTORE_ROLES,
           memberships,
+          { supabaseHosted: true },
         ),
       /Candidate restore role posture is not exact/u,
     );
@@ -168,6 +172,7 @@ test("restore posture rejects unknown or duplicated memberships", () => {
         { ...RESTORE_ROLE_IDENTITY, supabase_admin_exists: false },
         RESTORE_ROLES,
         [RESTORE_SUPABASE_MEMBERSHIP, RESTORE_OPERATOR_MEMBERSHIP],
+        { supabaseHosted: false },
       ),
     /Candidate restore role posture is not exact/u,
   );
