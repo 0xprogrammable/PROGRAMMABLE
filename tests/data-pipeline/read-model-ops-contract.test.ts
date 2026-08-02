@@ -283,6 +283,42 @@ describe("read-model operations source contract", () => {
       },
       expectedSha256Overrides: fixtureDigests(),
     });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual([
+      "ops-post-promotion-binding",
+    ]);
+  });
+
+  it("fails when only the scheduler runbook real-block SLA command is missing", () => {
+    const runbookPath = "docs/operations/read-model-scheduler-cutover.md";
+    const missingSlaGate = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
+      "npm run perf:read-model:real-block-sla --",
+      "npm run perf:read-model:real-block-sla-skipped --",
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [runbookPath]: missingSlaGate,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual([
+      "ops-post-promotion-binding",
+    ]);
+  });
+
+  it("rejects an alternative promotion command in the canonical cutover runbook", () => {
+    const runbookPath = "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md";
+    const bypass = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
+      'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"',
+      'npx vercel promote "$UNREVIEWED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"',
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [runbookPath]: bypass,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-post-promotion-binding",
     );

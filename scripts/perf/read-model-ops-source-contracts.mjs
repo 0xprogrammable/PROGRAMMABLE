@@ -412,6 +412,46 @@ function exactFalseEnvironmentKey(source, name) {
   return matches.length === 1 && !source.includes(`NEXT_PUBLIC_${name}`);
 }
 
+const EXACT_MANUAL_VERCEL_PROMOTION =
+  'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"';
+const MANUAL_PROMOTION_SEQUENCE = Object.freeze([
+  "npm run perf:read-model:real-block-sla --",
+  "npm run perf:read-model:staged-deployment --",
+  EXACT_MANUAL_VERCEL_PROMOTION,
+  "npm run perf:read-model:post-promotion --",
+]);
+
+function manualPromotionSequenceIsFailClosed(source) {
+  if (typeof source !== "string") return false;
+  let inShellFence = false;
+  const shellCommands = [];
+  for (const sourceLine of source.split(/\r?\n/u)) {
+    const line = sourceLine.trim();
+    if (line === "```sh" || line === "```bash") {
+      inShellFence = true;
+      continue;
+    }
+    if (line.startsWith("```")) {
+      inShellFence = false;
+      continue;
+    }
+    if (inShellFence && line.length > 0) shellCommands.push(line);
+  }
+  let previousIndex = -1;
+  for (const command of MANUAL_PROMOTION_SEQUENCE) {
+    const commandIndex = shellCommands.findIndex(
+      (line, index) => index > previousIndex && line.startsWith(command),
+    );
+    if (commandIndex < 0) return false;
+    previousIndex = commandIndex;
+  }
+  const activePromotionCommands = shellCommands.filter((line) =>
+    /\bvercel\s+promote(?:\s|$)/u.test(line)
+  );
+  return activePromotionCommands.length === 1 &&
+    activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION;
+}
+
 function migrationContract(id, source) {
   if (typeof source !== "string") return false;
   if (id === "source-projector-lease") {
@@ -817,6 +857,9 @@ export function evaluateReadModelOperationsSourceContracts(
   const operationsRunbook = source(
     "docs/operations/read-model-scheduler-cutover.md",
   ) ?? "";
+  const productionCutoverRunbook = source(
+    "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md",
+  ) ?? "";
   check(
     "ops-package-verify-binding",
     packageJson?.scripts?.verify?.includes("npm run perf:read-model:ops-gate") === true,
@@ -900,18 +943,14 @@ export function evaluateReadModelOperationsSourceContracts(
       !deployWorkflow.includes("vercel promote") &&
       !deployWorkflow.includes("vercel rollback") &&
       operationsRunbook.includes("stage-only and must never call `vercel promote`") &&
-      operationsRunbook.indexOf("npm run perf:read-model:real-block-sla --") <
-        operationsRunbook.indexOf("npm run perf:read-model:staged-deployment --") &&
-      operationsRunbook.indexOf("npm run perf:read-model:staged-deployment --") <
-        operationsRunbook.indexOf('vercel promote "$STAGED_DEPLOYMENT_ID"') &&
-      operationsRunbook.indexOf('vercel promote "$STAGED_DEPLOYMENT_ID"') <
-        operationsRunbook.indexOf("npm run perf:read-model:post-promotion --") &&
+      manualPromotionSequenceIsFailClosed(operationsRunbook) &&
+      manualPromotionSequenceIsFailClosed(productionCutoverRunbook) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
       postPromotion.includes('"/api/ops/health"') &&
       postPromotion.includes('"/api/explore?limit=6&page=1&sort=market-cap"') &&
       postPromotion.includes("verifyLiveCacheAndKeyContracts"),
-    "the workflow is stage-only and the manual SLA-gated promotion binds the exact deployment",
+    "the workflow is stage-only and both operator runbooks require the exact SLA-gated deployment promotion sequence",
   );
   check(
     "ops-vercel-project-prerequisite",

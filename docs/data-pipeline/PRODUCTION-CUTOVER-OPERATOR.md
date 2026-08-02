@@ -436,6 +436,39 @@ node scripts/data-pipeline/cutover-operator.mjs rollback-verify \
   --output /secure/cutover/rollback-evidence.json
 ```
 
+## 9. SLA-gated exact Vercel promotion
+
+This is the only authorized Vercel production-promotion path. The real-block
+SLA evidence must have been captured from the exact staged deployment while
+the Candidate database was still unpromoted. Run its fail-closed verifier only
+after the staged gates above are complete. Then immediately reverify the same
+immutable deployment, promote that exact `dpl_...` ID, and run the
+post-promotion binding checks. Do not replace any command with a mutable alias
+or a second deployment.
+
+```sh
+npm run perf:read-model:real-block-sla -- \
+  --evidence "$REAL_BLOCK_SLA_EVIDENCE_PATH" \
+  --expected-commit "$GITHUB_SHA" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --target-url "$STAGED_TARGET_URL"
+
+test ! -e "$PRE_PROMOTE_BINDING_OUTPUT"
+npm run perf:read-model:staged-deployment -- \
+  --target-url "$STAGED_TARGET_URL" \
+  --github-output "$PRE_PROMOTE_BINDING_OUTPUT"
+grep -Fx "deployment_id=$STAGED_DEPLOYMENT_ID" "$PRE_PROMOTE_BINDING_OUTPUT"
+grep -Fx "target_url=$STAGED_TARGET_URL" "$PRE_PROMOTE_BINDING_OUTPUT"
+
+vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
+
+npm run perf:read-model:post-promotion -- \
+  --target-url "https://programmable.family" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --git-head "$GITHUB_SHA" \
+  --evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"
+```
+
 If failure occurs after Vercel promotion, first disable the public-read flags,
 then restore the previous Vercel deployment in addition to the Envio and
 database rollback. Reopen traffic only after all three exact identities pass.
