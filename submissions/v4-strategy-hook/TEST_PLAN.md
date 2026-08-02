@@ -1,6 +1,6 @@
 # Test plan
 
-## Implemented local tests
+## Implemented prototype evidence
 
 - Constructor configuration, independent buy/sell rates and exact hook permission mask
 - CREATE2 factory address reproduction
@@ -10,45 +10,57 @@
 - Creator-only and Programmable-owner-only claims
 - PoolManager-only callback authentication
 - Oracle-not-ready and maximum-gap reset
+- Atomic target-pool spot manipulation rejection without liability loss
+- Cooldown rejection without liability loss
 - Permissionless exact-input strategy execution and exact dead-address balance increase
 - No stranded purchased target output
-- 1,000-run fee-conservation fuzz test
-- 256-run, depth-64 mixed buy/sell invariants for solvency and immutable configuration
+- Exact callback selectors and decoded return shapes
+- Reentrant Programmable payout recipient rejection
+- Target and canonical PoolId separation
+- 10,000-run fee-conservation fuzz test
+- Three 1,000-run, depth-128 mixed buy/sell invariants with 384,000 handler calls and zero reverts
+- Deterministic keeper threshold, cooldown, observation and idempotency policy tests
+- Event reconstruction, duplicate/overdraw rejection, reorg rollback, solvency and freshness tests
+- Pinned-mainnet full lifecycle suite and separate current-head PoolManager runtime check
+- Slither findings with explicit dispositions and compiler-known-bug review
 - Runtime and initcode size reporting
 
-## Required before candidate review
+## Remaining before candidate approval
 
-- Zero, one, 10 bps, maximum fee and maximum strategy share boundaries
-- Tiny exact-output rounding and overflow-adjacent fee amounts
+- Maximum fee/share and overflow-adjacent rounding boundary expansion
 - Mismatched PoolKey, wrong initializer, initialization replay and target/canonical collision
 - Specified-native partial-fill rejection in both affected quadrants
 - Stale, reset, negative-tick and ring-wrap oracle cases
-- Atomic spot manipulation, sustained manipulation, maximum deviation and price-impact boundaries
-- Cooldown, threshold, repeat execution and zero-work behavior
+- Sustained manipulation, maximum deviation and price-impact boundaries
 - Target pool revert, target hook reentrancy, false/no/malformed-return token, fee-on-transfer and rebasing token
-- Reverting Programmable destination and reentrant ETH recipient
 - Forced ETH/token donation and aggregate claim solvency
-- Event replay to reconstruct liabilities, observations, claims and burns
-- Callback selector/return-length and post-revert state checks
 - Gas ceilings for every callback, claims, oracle write and maximum strategy execution
-- Slither, compiler-known-bug review and source/import/license closure
+- Independent return-delta/accounting, oracle-economic, dependency and security review
+- Maintainer integration review and independent routing-provider approval
 
-## Fork suites
+## Fork suites completed
 
-Two suites remain required and are not claimed complete:
+The final prototype ran two Ethereum mainnet-fork suites without touching the live V4STR pool or using its deployer key:
 
-1. Ethereum mainnet pinned to an explicit block with PoolManager/runtime checks and a separate funded demo pool.
-2. Current-head smoke test for dependency and target-pool compatibility.
+1. The complete 16-entry lifecycle/adversarial suite at block `25,664,100` against official PoolManager
+   `0x000000000004444c5dc75cB358380D2e3dE08A90` and its expected runtime hash.
+2. A current-head smoke check of the same official PoolManager runtime.
 
-Neither suite may touch the live V4STR pool or use the live deployer key. Fork results are simulations, not deployment
-receipts.
+All 17 entries passed. These are simulations and compatibility evidence, not deployment receipts or an audit.
 
 ## Commands
 
 ```bash
 ./scripts/bootstrap-deps.sh
 forge fmt --check
+forge lint --severity high
 forge build --sizes
-forge test --offline -vv
-cd keeper && npm run check
+forge test --offline --no-match-path test/V4StrategyHookFork.t.sol -vv
+FOUNDRY_PROFILE=ci forge test --offline --match-contract V4StrategyHookTest --match-test feeConservation -vv
+FOUNDRY_PROFILE=ci forge test --offline --match-contract '^V4StrategyHookInvariantTest$' --match-test '^invariant_' -vv
+MAINNET_RPC_URL=YOUR_ETHEREUM_RPC_URL forge test --match-path test/V4StrategyHookFork.t.sol --force -vv
+npm --prefix keeper run check
+npm --prefix keeper test
+npm --prefix indexer test
+slither . --exclude-dependencies --filter-paths 'lib|test'
 ```

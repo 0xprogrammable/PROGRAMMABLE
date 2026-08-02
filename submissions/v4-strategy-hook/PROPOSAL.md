@@ -83,18 +83,19 @@ indexer and routing integration.
 - **Builder-stated:** desired V4STR 10/90 strategy/creator project split; target V4 token; existing offchain automation;
   intent to submit to the Hookathon.
 - **Agent-derived:** permission mask, fee equations, claim partitioning, TWAP and settlement architecture.
-- **Evidence-backed locally:** source compilation, 12 unit/lifecycle tests, 1,000-case fee fuzz test, three 256-run
-  mixed-swap invariant properties, runtime/initcode size report, keeper syntax check.
+- **Evidence-backed:** 35 local test entries, 10,000 fee-conservation fuzz cases, 384,000 stateful invariant handler
+  calls, 17 pinned/current-head Ethereum fork entries, exact runtime/initcode sizes, keeper and indexer tests, npm audit,
+  compiler/source closure, and dispositioned Slither output.
 
 ## Semantic consistency statement
 
 The design card, fee examples, value flows, permission mask, Solidity implementation, threat model and implemented test
 names describe the same one-pool immutable architecture. The deterministic `PROTOTYPE_READY` result establishes only
 structural readiness; the high-risk return-delta, oracle and external-liquidity meanings still require independent human
-review and the additional adversarial tests listed in `TEST_PLAN.md`.
+review and the remaining adversarial work listed in `TEST_PLAN.md`.
 
 ## Open decisions and gates
 
 The architecture is frozen for the local prototype. Release remains blocked on independent return-delta/accounting,
-oracle-economic and security review; pinned mainnet fork evidence; runtime/deployment verification; routing-provider
-review; monitoring deployment; and explicit deployment authority. No independent audit has been completed.
+oracle-economic and security review; deployed-hook runtime/configuration verification; routing-provider review;
+production monitoring; and explicit deployment authority. No independent audit has been completed.
