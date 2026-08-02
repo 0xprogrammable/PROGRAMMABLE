@@ -30,7 +30,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "f2828a8e0e20ac005511ea9cce5c3e7b349696034a2dbf445268533fbc367b9c",
+        sha256: "78483bf9b1110b4a97b719c6bb9bf9256285729e6002deb3621a9d1987373010",
       }),
       dependencies: Object.freeze([
         Object.freeze({
