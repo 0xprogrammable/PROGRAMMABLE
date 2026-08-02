@@ -272,6 +272,16 @@ function snapshotFromBundle(bundle: OptimisticPersistenceBundle): OptimisticLive
       observedAt: bundle.observedAt,
       canonicalAt: bundle.observedAt,
     }),
+    blocks: Object.freeze([
+      Object.freeze({
+        optimisticBlockId: bundle.optimisticBlockId,
+        chainId: 1 as const,
+        blockNumber: bundle.blockNumber,
+        blockHash: bundle.blockHash,
+        parentHash: bundle.parentHash,
+        reorgGeneration: "0",
+      }),
+    ]),
     events: Object.freeze(bundle.events.map((event) => Object.freeze({
       optimisticEventId: event.optimisticEventId,
       optimisticBlockId: event.optimisticBlockId,
@@ -430,6 +440,22 @@ function marketDatabaseRow(
     total_provider_call_count_b: 11,
     reorg_generation: "0",
     observed_at: new Date(state.observedAt),
+  };
+}
+
+function liveBlockDatabaseRow(
+  bundle: OptimisticPersistenceBundle,
+  overrides: Readonly<Record<string, unknown>> = {},
+) {
+  return {
+    optimistic_block_id: bundle.optimisticBlockId,
+    chain_id: "1",
+    block_number: bundle.blockNumber,
+    block_hash: Buffer.from(bundle.blockHash.slice(2), "hex"),
+    parent_hash: Buffer.from(bundle.parentHash.slice(2), "hex"),
+    reorg_generation: "0",
+    segment_start_block_number: bundle.blockNumber,
+    ...overrides,
   };
 }
 
@@ -844,6 +870,9 @@ describe("optimistic live runtime", () => {
                 canonical_at: new Date(bundle.observedAt),
               }] as unknown as Row[];
             }
+            if (sql.includes("list_optimistic_live_chain_segment_v1")) {
+              return [liveBlockDatabaseRow(bundle)] as unknown as Row[];
+            }
             if (sql.includes("list_optimistic_canonical_events_v1")) {
               if (listed) return [] as Row[];
               listed = true;
@@ -881,8 +910,124 @@ describe("optimistic live runtime", () => {
     }).snapshot();
 
     expect(snapshot.head?.blockHash).toBe(BLOCK_HASH);
+    expect(snapshot.blocks).toEqual([
+      {
+        optimisticBlockId: bundle.optimisticBlockId,
+        chainId: 1,
+        blockNumber: bundle.blockNumber,
+        blockHash: bundle.blockHash,
+        parentHash: bundle.parentHash,
+        reorgGeneration: "0",
+      },
+    ]);
     expect(snapshot.events).toHaveLength(1);
     expect(snapshot.events[0]?.normalizedPayload.eventName).toBe("PoolRegistered");
+  });
+
+  it("proves every empty height and the preceding checkpoint across the twelve-block ancestry", async () => {
+    const bundle = await verifiedBundle([]);
+    const oldestParentHash = `0x${"fe".repeat(32)}` as Hex;
+    const ancestorHashes = Array.from({ length: 11 }, (_, index) =>
+      `0x${(index + 1).toString(16).padStart(2, "0").repeat(32)}` as Hex);
+    ancestorHashes[10] = bundle.parentHash;
+    const hashes = [...ancestorHashes, bundle.blockHash] as readonly Hex[];
+    const rows = hashes.map((hash, index) => ({
+      optimistic_block_id:
+        `30000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      chain_id: "1",
+      block_number: (BLOCK_NUMBER - 11n + BigInt(index)).toString(),
+      block_hash: Buffer.from(hash.slice(2), "hex"),
+      parent_hash: Buffer.from(
+        (index === 0 ? oldestParentHash : hashes[index - 1]!).slice(2),
+        "hex",
+      ),
+      reorg_generation: "7",
+      segment_start_block_number: (BLOCK_NUMBER - 20n).toString(),
+    }));
+    rows[11] = {
+      ...rows[11]!,
+      optimistic_block_id: bundle.optimisticBlockId,
+    };
+    const executorFor = (
+      blockRows: readonly Record<string, unknown>[],
+    ): PostgresExecutor => ({
+      async transaction(work) {
+        return work({
+          async query<Row extends Record<string, unknown>>(sql: string) {
+            if (sql.includes("session_user::text") && !sql.includes("current_role")) {
+              return [{ session_user: "programmable_api_reader_login" }] as unknown as Row[];
+            }
+            if (sql.includes("current_role::text")) {
+              return [{
+                session_user: "programmable_api_reader_login",
+                current_role: "programmable_api_reader",
+              }] as unknown as Row[];
+            }
+            if (sql.includes("get_optimistic_live_head_v1")) {
+              return [{
+                optimistic_block_id: bundle.optimisticBlockId,
+                chain_id: "1",
+                block_number: bundle.blockNumber,
+                block_hash: Buffer.from(bundle.blockHash.slice(2), "hex"),
+                parent_hash: Buffer.from(bundle.parentHash.slice(2), "hex"),
+                block_timestamp: new Date(bundle.blockTimestamp),
+                provider_a_id: bundle.providerDeploymentIds[0],
+                provider_b_id: bundle.providerDeploymentIds[1],
+                provider_a_head: bundle.providerHeads[0],
+                provider_b_head: bundle.providerHeads[1],
+                reorg_generation: "7",
+                status: "canonical",
+                observed_at: new Date(bundle.observedAt),
+                canonical_at: new Date(bundle.observedAt),
+              }] as unknown as Row[];
+            }
+            if (sql.includes("list_optimistic_live_chain_segment_v1")) {
+              return blockRows as Row[];
+            }
+            return [] as Row[];
+          },
+        });
+      },
+      async close() {},
+    });
+
+    const snapshot = await createOptimisticLiveReader({
+      executor: executorFor(rows),
+      now: () => new Date("2026-08-02T10:00:30.000Z"),
+    }).snapshot();
+
+    expect(snapshot.events).toEqual([]);
+    expect(snapshot.blocks).toHaveLength(12);
+    expect(snapshot.blocks[0]).toMatchObject({
+      blockNumber: (BLOCK_NUMBER - 11n).toString(),
+      parentHash: oldestParentHash,
+      reorgGeneration: "7",
+    });
+    expect({
+      blockNumber: (BigInt(snapshot.blocks[0]!.blockNumber) - 1n).toString(),
+      blockHash: snapshot.blocks[0]!.parentHash,
+    }).toEqual({
+      blockNumber: (BLOCK_NUMBER - 12n).toString(),
+      blockHash: oldestParentHash,
+    });
+
+    await expect(createOptimisticLiveReader({
+      executor: executorFor(rows.slice(1)),
+      now: () => new Date("2026-08-02T10:00:30.000Z"),
+    }).snapshot()).rejects.toMatchObject({
+      code: "validation_failed",
+      safeMetadata: { operation: "optimistic-block-segment-completeness" },
+    });
+    await expect(createOptimisticLiveReader({
+      executor: executorFor(rows.map((row, index) =>
+        index === 6
+          ? { ...row, parent_hash: Buffer.from("ff".repeat(32), "hex") }
+          : row)),
+      now: () => new Date("2026-08-02T10:00:30.000Z"),
+    }).snapshot()).rejects.toMatchObject({
+      code: "validation_failed",
+      safeMetadata: { operation: "optimistic-block-ancestry" },
+    });
   });
 
   it("reconstructs durable market state in a cold reader and rejects tamper or reorg mismatch", async () => {
@@ -929,6 +1074,9 @@ describe("optimistic live runtime", () => {
                   observed_at: new Date(bundle.observedAt),
                   canonical_at: new Date(bundle.observedAt),
                 }] as unknown as Row[];
+              }
+              if (sql.includes("list_optimistic_live_chain_segment_v1")) {
+                return [liveBlockDatabaseRow(bundle)] as unknown as Row[];
               }
               if (sql.includes("list_optimistic_canonical_events_v1")) {
                 if (eventsListed) return [] as Row[];
@@ -1045,6 +1193,7 @@ describe("optimistic live runtime", () => {
               }] as unknown as Row[];
             }
             if (
+              sql.includes("list_optimistic_live_chain_segment_v1") ||
               sql.includes("list_optimistic_canonical_events_v1") ||
               sql.includes("list_optimistic_canonical_market_states_v1")
             ) {
@@ -1066,8 +1215,18 @@ describe("optimistic live runtime", () => {
       now: () => new Date("2026-08-02T09:59:29.000Z"),
     }).snapshot();
 
-    expect(stale).toEqual({ head: null, events: [], marketStates: [] });
-    expect(future).toEqual({ head: null, events: [], marketStates: [] });
+    expect(stale).toEqual({
+      head: null,
+      blocks: [],
+      events: [],
+      marketStates: [],
+    });
+    expect(future).toEqual({
+      head: null,
+      blocks: [],
+      events: [],
+      marketStates: [],
+    });
     expect(listCalls).toBe(0);
   });
 

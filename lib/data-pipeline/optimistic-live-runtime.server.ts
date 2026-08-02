@@ -216,6 +216,15 @@ export type OptimisticLiveHead = Readonly<{
   canonicalAt: string;
 }>;
 
+export type OptimisticLiveBlock = Readonly<{
+  optimisticBlockId: string;
+  chainId: 1;
+  blockNumber: string;
+  blockHash: HexBytes32;
+  parentHash: HexBytes32;
+  reorgGeneration: string;
+}>;
+
 export type OptimisticLiveEvent = Readonly<{
   optimisticEventId: string;
   optimisticBlockId: string;
@@ -237,6 +246,7 @@ export type OptimisticLiveEvent = Readonly<{
 
 export type OptimisticLiveSnapshot = Readonly<{
   head: OptimisticLiveHead | null;
+  blocks: readonly OptimisticLiveBlock[];
   events: readonly OptimisticLiveEvent[];
   marketStates: readonly OptimisticLiveMarketState[];
 }>;
@@ -1670,6 +1680,86 @@ function parseHead(rows: readonly Record<string, unknown>[]): OptimisticLiveHead
   });
 }
 
+function parseLiveBlocks(
+  rows: readonly Record<string, unknown>[],
+  head: OptimisticLiveHead,
+): readonly OptimisticLiveBlock[] {
+  if (rows.length < 1 || rows.length > Number(LIVE_BLOCK_WINDOW)) {
+    throw validationError("postgres", "optimistic-block-segment-bound");
+  }
+  let segmentStartBlockNumber: string | null = null;
+  const blocks = rows.map((row): OptimisticLiveBlock => {
+    if (integerText(row.chain_id, "optimistic-block-chain") !== "1") {
+      throw validationError("postgres", "optimistic-block-chain");
+    }
+    const rowSegmentStart = integerText(
+      row.segment_start_block_number,
+      "optimistic-block-segment-start",
+    );
+    if (
+      segmentStartBlockNumber !== null &&
+      rowSegmentStart !== segmentStartBlockNumber
+    ) {
+      throw validationError("postgres", "optimistic-block-segment-start");
+    }
+    segmentStartBlockNumber = rowSegmentStart;
+    return Object.freeze({
+      optimisticBlockId: exactUuid(
+        row.optimistic_block_id,
+        "optimistic-block-id",
+      ),
+      chainId: 1,
+      blockNumber: integerText(row.block_number, "optimistic-block-number"),
+      blockHash: bytes32FromBytea(row.block_hash),
+      parentHash: bytes32FromBytea(row.parent_hash),
+      reorgGeneration: integerText(
+        row.reorg_generation,
+        "optimistic-block-generation",
+      ),
+    });
+  });
+  const headNumber = BigInt(head.blockNumber);
+  const declaredSegmentStart = BigInt(segmentStartBlockNumber!);
+  const boundedWindowStart = headNumber >= LIVE_BLOCK_WINDOW
+    ? headNumber - (LIVE_BLOCK_WINDOW - 1n)
+    : 0n;
+  const expectedStart = declaredSegmentStart > boundedWindowStart
+    ? declaredSegmentStart
+    : boundedWindowStart;
+  if (
+    declaredSegmentStart > headNumber ||
+    BigInt(blocks[0]!.blockNumber) !== expectedStart ||
+    blocks.length !== Number(headNumber - expectedStart + 1n)
+  ) {
+    throw validationError("postgres", "optimistic-block-segment-completeness");
+  }
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index]!;
+    if (block.reorgGeneration !== head.reorgGeneration) {
+      throw validationError("postgres", "optimistic-block-generation");
+    }
+    if (index > 0) {
+      const parent = blocks[index - 1]!;
+      if (
+        BigInt(block.blockNumber) !== BigInt(parent.blockNumber) + 1n ||
+        block.parentHash !== parent.blockHash
+      ) {
+        throw validationError("postgres", "optimistic-block-ancestry");
+      }
+    }
+  }
+  const last = blocks.at(-1)!;
+  if (
+    last.optimisticBlockId !== head.optimisticBlockId ||
+    last.blockNumber !== head.blockNumber ||
+    last.blockHash !== head.blockHash ||
+    last.parentHash !== head.parentHash
+  ) {
+    throw validationError("postgres", "optimistic-block-head");
+  }
+  return Object.freeze(blocks);
+}
+
 function parseLiveEvent(row: Record<string, unknown>): OptimisticLiveEvent {
   if (integerText(row.chain_id, "optimistic-event-chain") !== "1") {
     throw validationError("postgres", "optimistic-event-chain");
@@ -1929,6 +2019,7 @@ function buildOptimisticLiveReader(input: {
           if (!head) {
             return Object.freeze({
               head: null,
+              blocks: Object.freeze([]),
               events: Object.freeze([]),
               marketStates: Object.freeze([]),
             });
@@ -1946,10 +2037,18 @@ function buildOptimisticLiveReader(input: {
           ) {
             return Object.freeze({
               head: null,
+              blocks: Object.freeze([]),
               events: Object.freeze([]),
               marketStates: Object.freeze([]),
             });
           }
+          const blocks = parseLiveBlocks(
+            await transaction.query<Record<string, unknown>>(
+              "select * from programmable_private.list_optimistic_live_chain_segment_v1($1::bigint)",
+              [String(chainId)],
+            ),
+            head,
+          );
           const events: OptimisticLiveEvent[] = [];
           const headNumber = BigInt(head.blockNumber);
           const firstLiveBlock = headNumber >= LIVE_BLOCK_WINDOW
@@ -2063,6 +2162,7 @@ function buildOptimisticLiveReader(input: {
           } while (marketCursor !== null);
           return Object.freeze({
             head,
+            blocks,
             events: Object.freeze(events),
             marketStates: Object.freeze(marketStates),
           });
@@ -2102,6 +2202,7 @@ export async function readConfiguredOptimisticLiveSnapshot(
   if (!readModel) {
     return Object.freeze({
       head: null,
+      blocks: Object.freeze([]),
       events: Object.freeze([]),
       marketStates: Object.freeze([]),
     });
@@ -2325,6 +2426,16 @@ function snapshotForPersistenceBundle(
       observedAt: bundle.observedAt,
       canonicalAt: bundle.observedAt,
     }),
+    blocks: Object.freeze([
+      Object.freeze({
+        optimisticBlockId: bundle.optimisticBlockId,
+        chainId: 1 as const,
+        blockNumber: bundle.blockNumber,
+        blockHash: bundle.blockHash,
+        parentHash: bundle.parentHash,
+        reorgGeneration: "0",
+      }),
+    ]),
     events: Object.freeze(bundle.events.map((event) => Object.freeze({
       ...event,
       chainId: 1 as const,
