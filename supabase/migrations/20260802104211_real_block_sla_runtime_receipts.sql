@@ -489,6 +489,60 @@ on programmable_wake_private.real_block_sla_provider_retry_consumptions_v1
 for all to programmable_migrator
 using (true) with check (true);
 
+-- The SLA runs after the isolated database has been product-bound and its
+-- staged projectors have published, but before the Vercel production domain
+-- moves. Every later receipt lookup repeats this immutable product binding so
+-- evidence from another build or staged deployment cannot be mixed in.
+create function programmable_wake_private.real_block_sla_promoted_product_is_bound_v1(
+  p_repository_commit text,
+  p_vercel_deployment_id text
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select exists (
+    select 1
+    from programmable_private.candidate_database_control as control
+    where control.singleton
+      and control.database_mode = 'candidate-only'
+      and control.product_commit = p_repository_commit
+      and control.staged_deployment_id = p_vercel_deployment_id
+      and control.promoted_at is not null
+      and pg_catalog.octet_length(
+        control.promotion_attestation_commitment
+      ) = 32
+      and control.promotion_attestation_commitment <>
+        pg_catalog.decode(pg_catalog.repeat('00', 32), 'hex')
+      and pg_catalog.octet_length(
+        control.promotion_baseline_commitment
+      ) = 32
+      and control.promotion_baseline_commitment <>
+        pg_catalog.decode(pg_catalog.repeat('00', 32), 'hex')
+      and pg_catalog.octet_length(
+        control.promotion_parity_commitment
+      ) = 32
+      and control.promotion_parity_commitment <>
+        pg_catalog.decode(pg_catalog.repeat('00', 32), 'hex')
+      and pg_catalog.octet_length(
+        control.promotion_input_commitment
+      ) = 32
+      and control.promotion_input_commitment <>
+        pg_catalog.decode(pg_catalog.repeat('00', 32), 'hex')
+  )
+$function$;
+
+revoke all on function
+  programmable_wake_private.real_block_sla_promoted_product_is_bound_v1(
+    text, text
+  )
+from public, anon, authenticated, service_role,
+  programmable_projector, programmable_reconciler, programmable_api_reader,
+  programmable_projector_runtime, programmable_projector_runtime_login,
+  programmable_api_reader_login, programmable_projector_login;
+
 create function programmable_wake_private.arm_real_block_sla_provider_retry_once_v1(
   p_repository_commit text,
   p_vercel_deployment_id text,
@@ -525,18 +579,22 @@ begin
     raise exception using errcode = '42501', message = 'invalid SLA provider retry arm identity';
   end if;
 
-  if not exists (
-    select 1
-    from programmable_private.candidate_database_control as control
-    where control.singleton
-      and control.database_mode = 'candidate-only'
-      and control.promoted_at is null
-      and control.promotion_attestation_commitment is null
-      and control.promotion_baseline_commitment is null
-      and control.promotion_parity_commitment is null
-      and control.promotion_input_commitment is null
-  ) then
-    raise exception using errcode = '55000', message = 'SLA provider retry requires unpromoted candidate database';
+  if not programmable_wake_private
+    .real_block_sla_promoted_product_is_bound_v1(
+      p_repository_commit, p_vercel_deployment_id
+    )
+     or not exists (
+       select 1
+       from programmable_private.current_launch_projections_v1 as launch
+       where launch.chain_id = 1
+         and launch.model_id = 'classic'
+         and launch.release_id in ('classic-v2', 'classic-v3')
+         and launch.is_complete
+     )
+  then
+    raise exception using
+      errcode = '55000',
+      message = 'SLA provider retry requires its promoted staged product and a published Classic launch';
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(1347571539, 2);
@@ -626,18 +684,14 @@ begin
   if not receipt.enqueued then
     return false;
   end if;
-  if not exists (
-    select 1
-    from programmable_private.candidate_database_control as control
-    where control.singleton
-      and control.database_mode = 'candidate-only'
-      and control.promoted_at is null
-      and control.promotion_attestation_commitment is null
-      and control.promotion_baseline_commitment is null
-      and control.promotion_parity_commitment is null
-      and control.promotion_input_commitment is null
-  ) then
-    raise exception using errcode = '55000', message = 'SLA provider retry requires unpromoted candidate database';
+  if not programmable_wake_private
+    .real_block_sla_promoted_product_is_bound_v1(
+      receipt.repository_commit, receipt.vercel_deployment_id
+    )
+  then
+    raise exception using
+      errcode = '55000',
+      message = 'SLA provider retry requires its promoted staged product';
   end if;
   if receipt.response_status is distinct from 202
      or receipt.response_cache_control is distinct from 'no-store'
@@ -727,6 +781,10 @@ as $function$
       and receipt.response_cache_control = 'no-store'
       and receipt.acknowledged_at is not null
       and receipt.response_status = 503
+      and programmable_wake_private
+        .real_block_sla_promoted_product_is_bound_v1(
+          receipt.repository_commit, receipt.vercel_deployment_id
+        )
       and exists (
         select 1
         from programmable_wake_private.real_block_sla_provider_retry_consumptions_v1 as retry
