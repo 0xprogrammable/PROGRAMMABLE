@@ -127,6 +127,25 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
     }),
   ]),
+  releaseGates: Object.freeze({
+    authOnlyWakeCanary: Object.freeze({
+      purpose: "hmac-route-authentication-only",
+      satisfiesRealBlockSla: false,
+    }),
+    realBlockSla: Object.freeze({
+      requiredBeforeProductionPromotion: true,
+      activity: "organic-stream-block-no-signing-or-spending",
+      maximumDeliveryToFirstVisibleMs: 10_000,
+      script: Object.freeze({
+        path: "scripts/perf/read-model-real-block-sla-gate.mjs",
+        sha256: "df86aa0650f9748771d4dbb4cda82aba0ac792b5edc5fafc1ad63734ec32d18e",
+      }),
+      schema: Object.freeze({
+        path: "config/read-model-real-block-sla-evidence.schema.json",
+        sha256: "997cd03c5b09c219061de0cc36441602edfec78e5708db977eb28cb4466fe2aa",
+      }),
+    }),
+  }),
 });
 
 function readSource(rootDirectory, path, overrides) {
@@ -292,6 +311,40 @@ function eventTriggerCanaryIsFailClosed(source, trigger) {
   );
 }
 
+function realBlockSlaGateIsFailClosed(source, schema, gate) {
+  const schemaValue = parseJson(schema);
+  return (
+    typeof source === "string" &&
+    gate?.requiredBeforeProductionPromotion === true &&
+    gate?.activity === "organic-stream-block-no-signing-or-spending" &&
+    gate?.maximumDeliveryToFirstVisibleMs === 10_000 &&
+    source.includes('"programmable-real-block-sla-evidence"') &&
+    source.includes("REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS = 10_000") &&
+    source.includes('activity.kind !== "organic-stream-block"') &&
+    source.includes("activity.signingPerformed !== false") &&
+    source.includes("activity.spendingPerformed !== false") &&
+    source.includes("persistedAt > queueResponseAt") &&
+    source.includes("duplicate.secondJobCreated !== false") &&
+    source.includes('observation.source !== "dual-rpc-head"') &&
+    source.includes('observation.finality !== "optimistic"') &&
+    source.includes('observedSurfaces.has("explore-token")') &&
+    source.includes('observedSurfaces.has("classic-chart")') &&
+    source.includes("firstVisibleAt !== earliestObservedAt") &&
+    source.includes("allRequiredSurfacesLatency >") &&
+    /count\(observation\.confirmations,[\s\S]{0,120}\b0,\s*11\)/u.test(source) &&
+    source.includes("readModelReleaseEvidenceCommitment") &&
+    source.includes("maximumEvidenceAgeMs") &&
+    schemaValue?.properties?.kind?.const ===
+      "programmable-real-block-sla-evidence" &&
+    schemaValue?.properties?.activity?.properties?.signingPerformed?.const ===
+      false &&
+    schemaValue?.properties?.activity?.properties?.spendingPerformed?.const ===
+      false &&
+    schemaValue?.properties?.sla?.properties
+      ?.maximumDeliveryToFirstVisibleMs?.const === 10_000
+  );
+}
+
 function exactEmptyEnvironmentKey(source, name) {
   if (typeof source !== "string") return false;
   const matches = source.match(new RegExp(`^${name}=$`, "gmu")) ?? [];
@@ -445,6 +498,7 @@ export function evaluateReadModelOperationsSourceContracts(
   const eventTriggers = Array.isArray(operations?.eventTriggers)
     ? operations.eventTriggers
     : [];
+  const releaseGates = operations?.releaseGates;
   const unscheduled = Array.isArray(operations?.unscheduled)
     ? operations.unscheduled
     : [];
@@ -458,8 +512,9 @@ export function evaluateReadModelOperationsSourceContracts(
     operations?.schemaVersion === 1 &&
       exactJson(operations?.legacyIndexer, APPROVED_OPERATIONS.legacyIndexer) &&
       exactJson(workers, APPROVED_OPERATIONS.workers) &&
-      exactJson(eventTriggers, APPROVED_OPERATIONS.eventTriggers),
-    "the manifest exactly binds the reviewed legacy indexer, workers and event trigger",
+      exactJson(eventTriggers, APPROVED_OPERATIONS.eventTriggers) &&
+      exactJson(releaseGates, APPROVED_OPERATIONS.releaseGates),
+    "the manifest exactly binds the reviewed indexers, workers, event trigger and release gates",
   );
   check(
     "ops-cron-exact-set",
@@ -582,6 +637,29 @@ export function evaluateReadModelOperationsSourceContracts(
     "the unscheduled QuickNode webhook is HMAC-authenticated and only wakes the fenced projectors",
   );
 
+  const approvedRealBlockSla = APPROVED_OPERATIONS.releaseGates.realBlockSla;
+  const realBlockSla = releaseGates?.realBlockSla;
+  check(
+    "ops-real-block-sla-gate-binding",
+    releaseGates?.authOnlyWakeCanary?.satisfiesRealBlockSla === false &&
+      sourceBindingMatches(
+        source,
+        realBlockSla?.script,
+        expectedSha256Overrides,
+      ) &&
+      sourceBindingMatches(
+        source,
+        realBlockSla?.schema,
+        expectedSha256Overrides,
+      ) &&
+      realBlockSlaGateIsFailClosed(
+        source(approvedRealBlockSla.script.path),
+        source(approvedRealBlockSla.schema.path),
+        realBlockSla,
+      ),
+    "auth-only probes stay separate and production promotion requires exact real-block SLA evidence",
+  );
+
   check(
     "ops-reconciler-unscheduled",
     unscheduled.length === 1 &&
@@ -673,6 +751,12 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-package-verify-binding",
     packageJson?.scripts?.verify?.includes("npm run perf:read-model:ops-gate") === true,
     "the canonical local verification command runs the operations source contract",
+  );
+  check(
+    "ops-real-block-sla-package-binding",
+    packageJson?.scripts?.["perf:read-model:real-block-sla"] ===
+      `node ${approvedRealBlockSla.script.path}`,
+    "the immutable real-block SLA verifier has one reviewed operator command",
   );
   check(
     "ops-quicknode-stream-env-contract",

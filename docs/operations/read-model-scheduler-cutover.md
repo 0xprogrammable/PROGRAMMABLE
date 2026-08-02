@@ -94,14 +94,16 @@ fails if Vercel has already moved production to the candidate commit.
    checkpoint.
 5. Configure and test the QuickNode stream against the exact staged deployment,
    but keep its production destination disabled.
-6. Capture signed staged-deployment evidence and run the release gate.
-7. Promote the exact staged deployment ID, never a mutable alias.
-8. Verify that `programmable.family` resolves to that deployment ID and commit,
+6. Capture one organic mainnet block through the real stream path and pass the
+   real-block SLA gate below. This step performs no signing and spends no funds.
+7. Capture signed staged-deployment evidence and run the normal read-model gate.
+8. Promote the exact staged deployment ID, never a mutable alias.
+9. Verify that `programmable.family` resolves to that deployment ID and commit,
    then verify health, populated Explore, the token list, and every indexed
    route using the same release corpus.
-9. Enable indexed read flags only after every check is green, then activate and
+10. Enable indexed read flags only after every check is green, then activate and
    verify the stream's production destination.
-10. Remove the legacy cron in a later reviewed cutover commit.
+11. Remove the legacy cron in a later reviewed cutover commit.
 
 When either projector is active, the deploy policy requires the stream-secret
 key in the pulled Vercel environment. A Vercel Sensitive placeholder is enough
@@ -124,6 +126,49 @@ Its output contains only the target origin, route, payload digest and statuses;
 it never emits the secret, signatures, nonces or payload. A mismatch between
 the protected GitHub secret and the Vercel runtime secret therefore fails the
 stage without disclosing either value.
+
+### Real-block SLA promotion gate
+
+The HMAC canary above proves only route authentication. Its synthetic auth-only
+payload cannot satisfy the latency gate and must never be reported as live-data
+evidence. Before production promotion, the reviewed runtime capture bridge must
+write one committed JSON document matching
+`config/read-model-real-block-sla-evidence.schema.json` from an organic Ethereum
+mainnet block. A block without Programmable events is acceptable when at least
+one tracked market state is read and published; no launch, swap, signing or
+spending is required.
+
+The document binds the exact repository commit, unaliased Vercel deployment,
+QuickNode delivery and nonce digest, queue row committed before the `202`
+response, independent Alchemy and QuickNode observations, optimistic database
+block/event/market commitments, and the first no-store API response exposing
+the same block. The API proof is exactly one Classic token-detail response and
+the corresponding Classic chart response for the same token and release; other
+API paths and duplicate URLs are rejected. `firstVisibleAt` must equal the
+earliest recorded observation, and both required surfaces must be visible
+within the ten-second bound. Replaying the same nonce must return the same wake
+ID without creating a second queue job. Raw RPC endpoint URLs, HMAC signatures,
+secrets and payloads are excluded; only endpoint hostnames and one-way URL
+commitments are allowed.
+
+Run the gate immediately after capture because evidence older than ten minutes
+is rejected:
+
+```sh
+npm run perf:read-model:real-block-sla -- \
+  --evidence "$REAL_BLOCK_SLA_EVIDENCE_PATH" \
+  --expected-commit "$GITHUB_SHA" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --target-url "$STAGED_TARGET_URL"
+```
+
+The gate fails closed unless delivery-to-first-visible latency is at most ten
+seconds, both providers agree on the exact block, finality is explicitly
+`optimistic`, confirmations are in `0..11`, every nested commitment matches, and
+the overall evidence commitment is intact. The committed gate validates this
+evidence only; promotion remains blocked until the runtime capture bridge and
+read-only evidence query are bound to the deployed queue, optimistic writer and
+public API.
 
 Source files, migrations, schedules, activation names, workflow ordering and
 post-promotion probes are checked by `npm run perf:read-model:ops-gate`.

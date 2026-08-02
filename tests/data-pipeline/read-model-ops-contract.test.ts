@@ -242,6 +242,27 @@ describe("read-model operations source contract", () => {
       ]),
     );
   });
+
+  it("keeps auth-only probes separate from real-block SLA evidence", () => {
+    const gatePath = "scripts/perf/read-model-real-block-sla-gate.mjs";
+    const driftedGate = readFileSync(resolve(ROOT, gatePath), "utf8").replace(
+      "REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS = 10_000",
+      "REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS = 60_000",
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [gatePath]: driftedGate,
+      },
+      expectedSha256Overrides: {
+        ...fixtureDigests(),
+        [gatePath]: createHash("sha256").update(driftedGate).digest("hex"),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-real-block-sla-gate-binding",
+    );
+  });
 });
 
 function publicFetch(healthStatus = "healthy") {

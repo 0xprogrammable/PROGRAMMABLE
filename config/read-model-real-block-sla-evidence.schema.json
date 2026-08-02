@@ -1,0 +1,355 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://programmable.family/schemas/read-model-real-block-sla-evidence.v1.json",
+  "title": "Programmable real block SLA evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schemaVersion",
+    "repositoryCommit",
+    "capturedAt",
+    "deployment",
+    "activity",
+    "quickNodeDelivery",
+    "queue",
+    "dualRpc",
+    "optimisticDatabase",
+    "api",
+    "sla",
+    "evidenceSha256"
+  ],
+  "properties": {
+    "kind": { "const": "programmable-real-block-sla-evidence" },
+    "schemaVersion": { "const": 1 },
+    "repositoryCommit": { "$ref": "#/$defs/commit" },
+    "capturedAt": { "$ref": "#/$defs/timestamp" },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "url", "projectId", "readyState", "repositoryCommit"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^dpl_[A-Za-z0-9]{20,80}$" },
+        "url": { "type": "string", "format": "uri", "maxLength": 512 },
+        "projectId": { "$ref": "#/$defs/identifier" },
+        "readyState": { "const": "READY" },
+        "repositoryCommit": { "$ref": "#/$defs/commit" }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "signingPerformed", "spendingPerformed"],
+      "properties": {
+        "kind": { "const": "organic-stream-block" },
+        "signingPerformed": { "const": false },
+        "spendingPerformed": { "const": false }
+      }
+    },
+    "quickNodeDelivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deliveryId",
+        "streamId",
+        "nonceDigest",
+        "payloadSha256",
+        "chainId",
+        "blockNumber",
+        "blockHash",
+        "blockTimestamp",
+        "signedAt",
+        "requestReceivedAt"
+      ],
+      "properties": {
+        "deliveryId": { "$ref": "#/$defs/identifier" },
+        "streamId": { "$ref": "#/$defs/identifier" },
+        "nonceDigest": { "$ref": "#/$defs/nonzeroBytes32" },
+        "payloadSha256": { "$ref": "#/$defs/nonzeroBytes32" },
+        "chainId": { "const": 1 },
+        "blockNumber": { "$ref": "#/$defs/uint" },
+        "blockHash": { "$ref": "#/$defs/nonzeroBytes32" },
+        "blockTimestamp": { "$ref": "#/$defs/timestamp" },
+        "signedAt": { "$ref": "#/$defs/timestamp" },
+        "requestReceivedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wakeId",
+        "blockNumber",
+        "nonceDigest",
+        "payloadSha256",
+        "enqueued",
+        "persistedAt",
+        "rowCommitment",
+        "response",
+        "duplicate"
+      ],
+      "properties": {
+        "wakeId": { "$ref": "#/$defs/uint" },
+        "blockNumber": { "$ref": "#/$defs/uint" },
+        "nonceDigest": { "$ref": "#/$defs/nonzeroBytes32" },
+        "payloadSha256": { "$ref": "#/$defs/nonzeroBytes32" },
+        "enqueued": { "const": true },
+        "persistedAt": { "$ref": "#/$defs/timestamp" },
+        "rowCommitment": { "$ref": "#/$defs/nonzeroBytes32" },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "sentAt", "cacheControl"],
+          "properties": {
+            "status": { "const": 202 },
+            "sentAt": { "$ref": "#/$defs/timestamp" },
+            "cacheControl": { "const": "no-store" }
+          }
+        },
+        "duplicate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "receivedAt",
+            "responseStatus",
+            "enqueued",
+            "wakeId",
+            "queueRowCountBefore",
+            "queueRowCountAfter",
+            "secondJobCreated"
+          ],
+          "properties": {
+            "receivedAt": { "$ref": "#/$defs/timestamp" },
+            "responseStatus": { "const": 202 },
+            "enqueued": { "const": false },
+            "wakeId": { "$ref": "#/$defs/uint" },
+            "queueRowCountBefore": { "const": 1 },
+            "queueRowCountAfter": { "const": 1 },
+            "secondJobCreated": { "const": false }
+          }
+        }
+      }
+    },
+    "dualRpc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["block", "alchemy", "quicknode"],
+      "properties": {
+        "block": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "chainId",
+            "blockNumber",
+            "blockHash",
+            "parentHash",
+            "blockTimestamp",
+            "logsCommitment"
+          ],
+          "properties": {
+            "chainId": { "const": 1 },
+            "blockNumber": { "$ref": "#/$defs/uint" },
+            "blockHash": { "$ref": "#/$defs/nonzeroBytes32" },
+            "parentHash": { "$ref": "#/$defs/nonzeroBytes32" },
+            "blockTimestamp": { "$ref": "#/$defs/timestamp" },
+            "logsCommitment": { "$ref": "#/$defs/nonzeroBytes32" }
+          }
+        },
+        "alchemy": { "$ref": "#/$defs/provider" },
+        "quicknode": { "$ref": "#/$defs/provider" }
+      }
+    },
+    "optimisticDatabase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transactionCommittedAt",
+        "chainHead",
+        "blockEvidence",
+        "eventEvidence",
+        "marketEvidence",
+        "bundleEvidenceCommitment"
+      ],
+      "properties": {
+        "transactionCommittedAt": { "$ref": "#/$defs/timestamp" },
+        "chainHead": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chainId", "blockNumber", "blockHash", "generation"],
+          "properties": {
+            "chainId": { "const": 1 },
+            "blockNumber": { "$ref": "#/$defs/uint" },
+            "blockHash": { "$ref": "#/$defs/nonzeroBytes32" },
+            "generation": { "$ref": "#/$defs/uint" }
+          }
+        },
+        "blockEvidence": { "$ref": "#/$defs/databaseEvidence" },
+        "eventEvidence": { "$ref": "#/$defs/countedDatabaseEvidence" },
+        "marketEvidence": {
+          "allOf": [
+            { "$ref": "#/$defs/countedDatabaseEvidence" },
+            {
+              "properties": { "rowCount": { "type": "integer", "minimum": 1 } }
+            }
+          ]
+        },
+        "bundleEvidenceCommitment": { "$ref": "#/$defs/nonzeroBytes32" }
+      }
+    },
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["firstVisibleAt", "observations"],
+      "properties": {
+        "firstVisibleAt": { "$ref": "#/$defs/timestamp" },
+        "observations": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "url",
+              "surface",
+              "tokenAddress",
+              "releaseVersion",
+              "status",
+              "cacheControl",
+              "source",
+              "finality",
+              "chainId",
+              "blockNumber",
+              "blockHash",
+              "confirmations",
+              "marketEvidenceCommitment",
+              "responseSha256",
+              "observedAt"
+            ],
+            "properties": {
+              "url": { "type": "string", "format": "uri", "maxLength": 2048 },
+              "surface": { "enum": ["explore-token", "classic-chart"] },
+              "tokenAddress": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{40}$"
+              },
+              "releaseVersion": { "enum": ["classic-v2", "classic-v3"] },
+              "status": { "const": 200 },
+              "cacheControl": { "const": "no-store" },
+              "source": { "const": "dual-rpc-head" },
+              "finality": { "const": "optimistic" },
+              "chainId": { "const": 1 },
+              "blockNumber": { "$ref": "#/$defs/uint" },
+              "blockHash": { "$ref": "#/$defs/nonzeroBytes32" },
+              "confirmations": { "type": "integer", "minimum": 0, "maximum": 11 },
+              "marketEvidenceCommitment": { "$ref": "#/$defs/nonzeroBytes32" },
+              "responseSha256": { "$ref": "#/$defs/nonzeroBytes32" },
+              "observedAt": { "$ref": "#/$defs/timestamp" }
+            }
+          }
+        }
+      }
+    },
+    "sla": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maximumDeliveryToFirstVisibleMs",
+        "deliveryToFirstVisibleMs",
+        "deliveryToAllRequiredSurfacesVisibleMs"
+      ],
+      "properties": {
+        "maximumDeliveryToFirstVisibleMs": { "const": 10000 },
+        "deliveryToFirstVisibleMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "deliveryToAllRequiredSurfacesVisibleMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    },
+    "evidenceSha256": { "$ref": "#/$defs/nonzeroBytes32" }
+  },
+  "$defs": {
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "nonzeroBytes32": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "uint": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]{0,18})$"
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerId",
+        "providerDeploymentId",
+        "endpointHost",
+        "endpointUrlSha256",
+        "blockEvidenceHead",
+        "marketStateHead",
+        "blockEvidenceCallCount",
+        "marketStateCallCount",
+        "totalCallCount"
+      ],
+      "properties": {
+        "providerId": { "enum": ["alchemy", "quicknode"] },
+        "providerDeploymentId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "endpointHost": { "type": "string", "minLength": 1, "maxLength": 253 },
+        "endpointUrlSha256": { "$ref": "#/$defs/nonzeroBytes32" },
+        "blockEvidenceHead": { "$ref": "#/$defs/providerHead" },
+        "marketStateHead": { "$ref": "#/$defs/providerHead" },
+        "blockEvidenceCallCount": { "const": 4 },
+        "marketStateCallCount": { "const": 7 },
+        "totalCallCount": { "const": 11 }
+      }
+    },
+    "providerHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockNumber", "blockHash", "observedAt"],
+      "properties": {
+        "blockNumber": { "$ref": "#/$defs/uint" },
+        "blockHash": { "$ref": "#/$defs/nonzeroBytes32" },
+        "observedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "databaseEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockNumber", "blockHash", "evidenceCommitment"],
+      "properties": {
+        "blockNumber": { "$ref": "#/$defs/uint" },
+        "blockHash": { "$ref": "#/$defs/nonzeroBytes32" },
+        "evidenceCommitment": { "$ref": "#/$defs/nonzeroBytes32" }
+      }
+    },
+    "countedDatabaseEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockNumber", "blockHash", "rowCount", "evidenceCommitment"],
+      "properties": {
+        "blockNumber": { "$ref": "#/$defs/uint" },
+        "blockHash": { "$ref": "#/$defs/nonzeroBytes32" },
+        "rowCount": { "type": "integer", "minimum": 0 },
+        "evidenceCommitment": { "$ref": "#/$defs/nonzeroBytes32" }
+      }
+    }
+  }
+}

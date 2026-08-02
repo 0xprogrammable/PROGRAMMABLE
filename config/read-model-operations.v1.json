@@ -122,6 +122,25 @@
       }
     }
   ],
+  "releaseGates": {
+    "authOnlyWakeCanary": {
+      "purpose": "hmac-route-authentication-only",
+      "satisfiesRealBlockSla": false
+    },
+    "realBlockSla": {
+      "requiredBeforeProductionPromotion": true,
+      "activity": "organic-stream-block-no-signing-or-spending",
+      "maximumDeliveryToFirstVisibleMs": 10000,
+      "script": {
+        "path": "scripts/perf/read-model-real-block-sla-gate.mjs",
+        "sha256": "df86aa0650f9748771d4dbb4cda82aba0ac792b5edc5fafc1ad63734ec32d18e"
+      },
+      "schema": {
+        "path": "config/read-model-real-block-sla-evidence.schema.json",
+        "sha256": "997cd03c5b09c219061de0cc36441602edfec78e5708db977eb28cb4466fe2aa"
+      }
+    }
+  },
   "unscheduled": [
     {
       "id": "reconciler-preparity",

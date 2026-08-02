@@ -130,6 +130,7 @@
     "perf:read-model:capture": "node scripts/perf/read-model-capture.mjs",
     "perf:read-model:deploy-policy": "node scripts/perf/read-model-deploy-policy.mjs",
     "perf:read-model:wake-canary": "node scripts/perf/read-model-projector-wake-canary.mjs",
+    "perf:read-model:real-block-sla": "node scripts/perf/read-model-real-block-sla-gate.mjs",
     "perf:read-model:staged-deployment": "node scripts/perf/read-model-staged-deployment.mjs",
     "perf:read-model:ops-gate": "node scripts/perf/read-model-ops-source-contracts.mjs",
     "perf:read-model:production-binding": "node scripts/perf/read-model-production-binding.mjs",
