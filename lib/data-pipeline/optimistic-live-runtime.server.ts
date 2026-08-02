@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  decodeAbiParameters,
   decodeEventLog,
   formatUnits,
   keccak256,
@@ -48,6 +49,15 @@ import {
   readOptimisticBlockWithDualRpc,
 } from "./optimistic-block-reader.server";
 import {
+  computeOptimisticMarketStateCommitments,
+  OPTIMISTIC_MAINNET_STATE_VIEW,
+  OPTIMISTIC_MAINNET_STATE_VIEW_RUNTIME_CODE_HASH,
+  OPTIMISTIC_MARKET_STATE_VERSION,
+  readOptimisticMarketState,
+  type OptimisticMarketStateResult,
+  type OptimisticNewLaunchMarketInput,
+} from "./optimistic-market-state.server";
+import {
   mergeOptimisticTokenCorpus,
   selectEligibleOptimisticOverlay,
   type OptimisticMarketFields,
@@ -69,20 +79,35 @@ import {
   type ProjectorCompletedLaunch,
   type ProjectorFoldEvent,
 } from "./projector-fold";
+import { getServerReadModel } from "./read-model.server";
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
+
+export {
+  computeOptimisticMarketStateCommitments,
+  OPTIMISTIC_MAINNET_STATE_VIEW,
+  OPTIMISTIC_MAINNET_STATE_VIEW_RUNTIME_CODE_HASH,
+  OPTIMISTIC_MARKET_STATE_VERSION,
+} from "./optimistic-market-state.server";
 
 const RELEASE_BINDING = getDataPipelineReleaseBinding();
 const MAXIMUM_OPTIMISTIC_CONFIRMATIONS = 11;
 const MAXIMUM_PERSISTED_EVENTS_PER_BLOCK = 500;
+const MAXIMUM_PERSISTED_MARKET_STATES_PER_BLOCK = 100;
 const LIVE_BLOCK_WINDOW = 12n;
 const MAXIMUM_LIVE_EVENTS =
   MAXIMUM_PERSISTED_EVENTS_PER_BLOCK * Number(LIVE_BLOCK_WINDOW);
 const LIVE_EVENT_PAGE_SIZE = 500;
+const MAXIMUM_LIVE_MARKET_STATES =
+  MAXIMUM_PERSISTED_MARKET_STATES_PER_BLOCK * Number(LIVE_BLOCK_WINDOW);
+const LIVE_MARKET_STATE_PAGE_SIZE = 100;
 const MAXIMUM_LIVE_HEAD_AGE_MS = 60_000;
 const MAXIMUM_LIVE_HEAD_CLOCK_SKEW_MS = 30_000;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const NORMALIZED_EVENT_SCHEMA = "programmable-optimistic-event-v1" as const;
+const UINT128_MAX = (1n << 128n) - 1n;
+const UINT160_MAX = (1n << 160n) - 1n;
+const PROTOCOL_FEE_DIRECTION_MASK = 0x0fff;
 
 type JsonValue =
   | null
@@ -149,6 +174,7 @@ export type OptimisticPersistenceBundle = Readonly<{
   evidenceCommitment: HexBytes32;
   observedAt: string;
   events: readonly OptimisticPersistenceEvent[];
+  marketStates: readonly OptimisticPersistenceMarketState[];
 }>;
 
 export type OptimisticPromotionPlan = Readonly<{
@@ -173,6 +199,7 @@ export type OptimisticPersistResult = Readonly<{
   promotionMode: string;
   replayed: boolean;
   eventCount: number;
+  marketStateCount: number;
 }>;
 
 export type OptimisticLiveHead = Readonly<{
@@ -211,22 +238,21 @@ export type OptimisticLiveEvent = Readonly<{
 export type OptimisticLiveSnapshot = Readonly<{
   head: OptimisticLiveHead | null;
   events: readonly OptimisticLiveEvent[];
+  marketStates: readonly OptimisticLiveMarketState[];
 }>;
 
-export type OptimisticMarketStateEvidence = Readonly<{
-  chainId: 1;
-  blockNumber: string;
-  blockHash: HexBytes32;
-  confirmations: number;
-  poolId: HexBytes32;
-  tokenAddress: HexAddress;
-  market: OptimisticMarketFields;
-  providerIdentities: readonly [string, string];
-  providerVendorGroups: readonly [string, string];
-  providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
-  providerOriginCommitments: readonly [HexBytes32, HexBytes32];
-  providerHeads: readonly [string, string];
-}>;
+export type OptimisticMarketStateEvidence = OptimisticMarketStateResult;
+
+export type OptimisticPersistenceMarketState = OptimisticMarketStateEvidence &
+  Readonly<{
+    optimisticMarketStateId: string;
+    optimisticBlockId: string;
+    providerDeploymentIds: readonly [string, string];
+    observedAt: string;
+  }>;
+
+export type OptimisticLiveMarketState = OptimisticPersistenceMarketState &
+  Readonly<{ reorgGeneration: string }>;
 
 type ManifestDescriptor = Readonly<{
   eventName: string;
@@ -290,6 +316,200 @@ function deterministicUuid(domain: string, value: unknown): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+const DECIMAL_MARKET_FIELDS = Object.freeze([
+  "tokenPriceEth",
+  "marketCapEth",
+  "indexedMarketCapEth",
+  "grossVolumeEth",
+  "creatorFeesGeneratedEth",
+  "launcherFeesGeneratedEth",
+  "creatorFeesAccruedEth",
+] as const satisfies readonly (keyof OptimisticMarketFields)[]);
+const UINT_MARKET_FIELDS = Object.freeze([
+  "tokenPriceEthWei",
+  "tokenPriceUsdWad",
+  "marketCapEthWei",
+  "indexedMarketCapEthWei",
+  "indexedMarketCapUsdWad",
+  "indexedValuationBlockNumber",
+  "grossVolumeWei",
+  "creatorFeesGeneratedWei",
+  "launcherFeesGeneratedWei",
+  "creatorFeesAccruedWei",
+  "activeLiquidity",
+] as const satisfies readonly (keyof OptimisticMarketFields)[]);
+const MARKET_FIELD_KEYS = new Set<string>([
+  ...DECIMAL_MARKET_FIELDS,
+  ...UINT_MARKET_FIELDS,
+  "swapCount",
+  "currentTick",
+]);
+const BASE_MARKET_FIELD_KEYS = [
+  "activeLiquidity",
+  "currentTick",
+  "indexedValuationBlockNumber",
+] as const;
+const CLASSIC_MARKET_FIELD_KEYS = [
+  "activeLiquidity",
+  "currentTick",
+  "indexedMarketCapEth",
+  "indexedMarketCapEthWei",
+  "indexedValuationBlockNumber",
+  "marketCapEth",
+  "marketCapEthWei",
+  "tokenPriceEth",
+  "tokenPriceEthWei",
+] as const;
+const NONNEGATIVE_DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d+)?$/u;
+
+function normalizeMarketFields(
+  value: unknown,
+  blockNumber: string,
+): OptimisticMarketFields {
+  if (
+    !isPlainRecord(value) ||
+    Object.keys(value).length === 0 ||
+    Object.keys(value).some((key) => !MARKET_FIELD_KEYS.has(key)) ||
+    ![
+      BASE_MARKET_FIELD_KEYS.join("\0"),
+      CLASSIC_MARKET_FIELD_KEYS.join("\0"),
+    ].includes(Object.keys(value).sort().join("\0"))
+  ) {
+    throw validationError("postgres", "optimistic-market-fields");
+  }
+  const market: Record<string, string | number> = {};
+  for (const field of DECIMAL_MARKET_FIELDS) {
+    const fieldValue = value[field];
+    if (fieldValue === undefined) continue;
+    if (
+      typeof fieldValue !== "string" ||
+      fieldValue.length > 160 ||
+      !NONNEGATIVE_DECIMAL.test(fieldValue)
+    ) {
+      throw validationError("postgres", "optimistic-market-fields");
+    }
+    market[field] = fieldValue;
+  }
+  for (const field of UINT_MARKET_FIELDS) {
+    const fieldValue = value[field];
+    if (fieldValue === undefined) continue;
+    market[field] = integerText(fieldValue, "optimistic-market-fields");
+  }
+  if (value.swapCount !== undefined) {
+    if (
+      typeof value.swapCount !== "number" ||
+      !Number.isSafeInteger(value.swapCount) ||
+      value.swapCount < 0
+    ) {
+      throw validationError("postgres", "optimistic-market-fields");
+    }
+    market.swapCount = value.swapCount;
+  }
+  if (value.currentTick !== undefined) {
+    if (
+      typeof value.currentTick !== "number" ||
+      !Number.isSafeInteger(value.currentTick) ||
+      value.currentTick < -887_272 ||
+      value.currentTick > 887_272
+    ) {
+      throw validationError("postgres", "optimistic-market-fields");
+    }
+    market.currentTick = value.currentTick;
+  }
+  if (market.indexedValuationBlockNumber !== blockNumber) {
+    throw validationError("postgres", "optimistic-market-valuation-block");
+  }
+  return Object.freeze(market as OptimisticMarketFields);
+}
+
+function normalizeOptimisticPoolState(
+  value: unknown,
+): OptimisticMarketStateEvidence["pool"] {
+  if (!isPlainRecord(value)) {
+    throw validationError("postgres", "optimistic-market-pool");
+  }
+  const expectedKeys = [
+    "activeLiquidity",
+    "currentTick",
+    "liquidityResult",
+    "lpFeePips",
+    "protocolFeePips",
+    "slot0Result",
+    "sqrtPriceX96",
+  ];
+  if (
+    Object.keys(value).sort().join("\0") !== expectedKeys.join("\0") ||
+    typeof value.currentTick !== "number" ||
+    !Number.isSafeInteger(value.currentTick) ||
+    value.currentTick < -887_272 ||
+    value.currentTick > 887_272 ||
+    typeof value.protocolFeePips !== "number" ||
+    !Number.isSafeInteger(value.protocolFeePips) ||
+    value.protocolFeePips < 0 ||
+    (value.protocolFeePips & PROTOCOL_FEE_DIRECTION_MASK) > 1_000 ||
+    (value.protocolFeePips >> 12) > 1_000 ||
+    typeof value.lpFeePips !== "number" ||
+    !Number.isSafeInteger(value.lpFeePips) ||
+    value.lpFeePips < 0 ||
+    value.lpFeePips > 1_000_000
+  ) {
+    throw validationError("postgres", "optimistic-market-pool");
+  }
+  const sqrtPriceX96 = BigInt(integerText(
+    value.sqrtPriceX96,
+    "optimistic-market-sqrt-price",
+  ));
+  const activeLiquidity = BigInt(integerText(
+    value.activeLiquidity,
+    "optimistic-market-liquidity",
+  ));
+  if (
+    sqrtPriceX96 <= 0n ||
+    sqrtPriceX96 > UINT160_MAX ||
+    activeLiquidity > UINT128_MAX
+  ) {
+    throw validationError("postgres", "optimistic-market-pool");
+  }
+  const slot0Result = canonicalRawData(value.slot0Result);
+  const liquidityResult = canonicalRawData(value.liquidityResult);
+  try {
+    const [rawSqrtPrice, rawTick, rawProtocolFee, rawLpFee] =
+      decodeAbiParameters(
+        [
+          { type: "uint160" },
+          { type: "int24" },
+          { type: "uint24" },
+          { type: "uint24" },
+        ],
+        slot0Result,
+      );
+    const [rawLiquidity] = decodeAbiParameters(
+      [{ type: "uint128" }],
+      liquidityResult,
+    );
+    if (
+      rawSqrtPrice !== sqrtPriceX96 ||
+      rawTick !== value.currentTick ||
+      rawProtocolFee !== value.protocolFeePips ||
+      rawLpFee !== value.lpFeePips ||
+      rawLiquidity !== activeLiquidity
+    ) {
+      throw new TypeError("pool state decode mismatch");
+    }
+  } catch {
+    throw validationError("postgres", "optimistic-market-pool-decode");
+  }
+  return Object.freeze({
+    sqrtPriceX96: sqrtPriceX96.toString(),
+    currentTick: value.currentTick,
+    activeLiquidity: activeLiquidity.toString(),
+    protocolFeePips: value.protocolFeePips,
+    lpFeePips: value.lpFeePips,
+    slot0Result,
+    liquidityResult,
+  });
+}
+
 function exactUuid(value: unknown, operation: string): string {
   if (typeof value !== "string" || !UUID.test(value)) {
     throw invalidInput("postgres", operation);
@@ -318,6 +538,29 @@ function integerText(value: unknown, operation: string): string {
 function integerNumber(value: unknown, operation: string): number {
   const parsed = BigInt(integerText(value, operation));
   if (parsed > 0xffff_ffffn) throw invalidInput("postgres", operation);
+  return Number(parsed);
+}
+
+function signedIntegerNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  operation: string,
+): number {
+  const parsed = typeof value === "bigint"
+    ? value
+    : typeof value === "number" && Number.isSafeInteger(value)
+      ? BigInt(value)
+      : typeof value === "string" && /^-?(?:0|[1-9]\d*)$/u.test(value)
+        ? BigInt(value)
+        : null;
+  if (
+    parsed === null ||
+    parsed < BigInt(minimum) ||
+    parsed > BigInt(maximum)
+  ) {
+    throw invalidInput("postgres", operation);
+  }
   return Number(parsed);
 }
 
@@ -444,7 +687,201 @@ function validatedProviderBindings(
   return ids as unknown as readonly [string, string];
 }
 
-export async function verifyOptimisticBlockForPersistence(input: Readonly<{
+function exactCallCounts(
+  value: unknown,
+  expected: 4 | 7 | 11,
+): value is readonly [4, 4] | readonly [7, 7] | readonly [11, 11] {
+  return Array.isArray(value) && value.length === 2 &&
+    value[0] === expected && value[1] === expected;
+}
+
+function normalizePersistenceMarketState(
+  bundle: OptimisticPersistenceBundle,
+  value: OptimisticMarketStateEvidence | OptimisticPersistenceMarketState,
+): OptimisticPersistenceMarketState {
+  if (
+    value.version !== OPTIMISTIC_MARKET_STATE_VERSION ||
+    value.finality !== "optimistic" ||
+    value.chainId !== 1 ||
+    value.blockNumber !== bundle.blockNumber ||
+    canonicalBytes32(value.blockHash) !== bundle.blockHash ||
+    !Array.isArray(value.providerIdentities) ||
+    value.providerIdentities.length !== 2 ||
+    value.providerIdentities[0] !== bundle.providerIdentities[0] ||
+    value.providerIdentities[1] !== bundle.providerIdentities[1] ||
+    !Array.isArray(value.providerVendorGroups) ||
+    value.providerVendorGroups.length !== 2 ||
+    value.providerVendorGroups[0] !== "alchemy" ||
+    value.providerVendorGroups[1] !== "quicknode" ||
+    !Array.isArray(value.providerEndpointCommitments) ||
+    value.providerEndpointCommitments.length !== 2 ||
+    !Array.isArray(value.providerOriginCommitments) ||
+    value.providerOriginCommitments.length !== 2 ||
+    canonicalBytes32(value.providerEndpointCommitments[0]) !==
+      bundle.providerEndpointCommitments[0] ||
+    canonicalBytes32(value.providerEndpointCommitments[1]) !==
+      bundle.providerEndpointCommitments[1] ||
+    canonicalBytes32(value.providerOriginCommitments[0]) !==
+      bundle.providerOriginCommitments[0] ||
+    canonicalBytes32(value.providerOriginCommitments[1]) !==
+      bundle.providerOriginCommitments[1] ||
+    !exactCallCounts(value.blockProviderCallCounts, 4) ||
+    !exactCallCounts(value.marketProviderCallCounts, 7) ||
+    !exactCallCounts(value.totalProviderCallCounts, 11) ||
+    !Number.isSafeInteger(value.confirmations) ||
+    value.confirmations < 0 ||
+    value.confirmations > MAXIMUM_OPTIMISTIC_CONFIRMATIONS
+  ) {
+    throw validationError("postgres", "optimistic-market-evidence");
+  }
+  const blockNumber = integerText(value.blockNumber, "optimistic-market-block");
+  const poolId = canonicalBytes32(value.poolId);
+  const tokenAddress = canonicalAddress(value.tokenAddress);
+  const stateView = canonicalAddress(value.stateView);
+  const stateViewRuntimeCodeHash = canonicalBytes32(
+    value.stateViewRuntimeCodeHash,
+  );
+  if (
+    stateView !== OPTIMISTIC_MAINNET_STATE_VIEW ||
+    stateViewRuntimeCodeHash !==
+      OPTIMISTIC_MAINNET_STATE_VIEW_RUNTIME_CODE_HASH
+  ) {
+    throw validationError("postgres", "optimistic-market-state-view");
+  }
+  const providerHeads = value.providerHeads.map((head) =>
+    integerText(head, "optimistic-market-provider-head")) as unknown as readonly [string, string];
+  const lowestHead = BigInt(providerHeads[0]) < BigInt(providerHeads[1])
+    ? BigInt(providerHeads[0])
+    : BigInt(providerHeads[1]);
+  if (
+    BigInt(providerHeads[0]) < BigInt(bundle.providerHeads[0]) ||
+    BigInt(providerHeads[1]) < BigInt(bundle.providerHeads[1]) ||
+    lowestHead < BigInt(blockNumber) ||
+    Number(lowestHead - BigInt(blockNumber)) !== value.confirmations
+  ) {
+    throw validationError("postgres", "optimistic-market-confirmations");
+  }
+  const pool = normalizeOptimisticPoolState(value.pool);
+  const market = normalizeMarketFields(value.market, blockNumber);
+  if (
+    market.currentTick !== pool.currentTick ||
+    market.activeLiquidity !== pool.activeLiquidity
+  ) {
+    throw validationError("postgres", "optimistic-market-pool-fields");
+  }
+  const commitments = computeOptimisticMarketStateCommitments({
+    blockNumber,
+    blockHash: bundle.blockHash,
+    stateView,
+    poolId,
+    tokenAddress,
+    pool,
+    market,
+    providerIdentities: bundle.providerIdentities,
+    providerVendorGroups: bundle.providerVendorGroups,
+    providerEndpointCommitments: bundle.providerEndpointCommitments,
+    providerOriginCommitments: bundle.providerOriginCommitments,
+    providerHeads,
+    confirmations: value.confirmations,
+  });
+  if (
+    canonicalBytes32(value.marketCommitment) !== commitments.marketCommitment ||
+    canonicalBytes32(value.evidenceCommitment) !== commitments.evidenceCommitment
+  ) {
+    throw validationError("postgres", "optimistic-market-commitment");
+  }
+  const optimisticMarketStateId = deterministicUuid(
+    "optimistic-market-state-v1",
+    { chainId: 1, blockHash: bundle.blockHash, poolId },
+  );
+  if (
+    "optimisticMarketStateId" in value &&
+    exactUuid(
+      value.optimisticMarketStateId,
+      "optimistic-market-state-id",
+    ) !== optimisticMarketStateId
+  ) {
+    throw validationError("postgres", "optimistic-market-state-id");
+  }
+  if (
+    "optimisticBlockId" in value &&
+    exactUuid(value.optimisticBlockId, "optimistic-market-block-id") !==
+      bundle.optimisticBlockId
+  ) {
+    throw validationError("postgres", "optimistic-market-block-id");
+  }
+  if (
+    "providerDeploymentIds" in value &&
+    (!Array.isArray(value.providerDeploymentIds) ||
+      value.providerDeploymentIds.length !== 2 ||
+      value.providerDeploymentIds[0] !== bundle.providerDeploymentIds[0] ||
+      value.providerDeploymentIds[1] !== bundle.providerDeploymentIds[1])
+  ) {
+    throw validationError("postgres", "optimistic-market-provider-deployment");
+  }
+  if (
+    "observedAt" in value &&
+    isoTimestamp(value.observedAt, "optimistic-market-observed") !==
+      bundle.observedAt
+  ) {
+    throw validationError("postgres", "optimistic-market-observed");
+  }
+  return Object.freeze({
+    version: OPTIMISTIC_MARKET_STATE_VERSION,
+    finality: "optimistic",
+    chainId: 1,
+    blockNumber,
+    blockHash: bundle.blockHash,
+    confirmations: value.confirmations,
+    poolId,
+    tokenAddress,
+    stateView,
+    stateViewRuntimeCodeHash,
+    market,
+    marketCommitment: commitments.marketCommitment,
+    evidenceCommitment: commitments.evidenceCommitment,
+    pool,
+    providerIdentities: bundle.providerIdentities,
+    providerVendorGroups: bundle.providerVendorGroups,
+    providerEndpointCommitments: bundle.providerEndpointCommitments,
+    providerOriginCommitments: bundle.providerOriginCommitments,
+    providerHeads,
+    blockProviderCallCounts: Object.freeze([4, 4] as const),
+    marketProviderCallCounts: Object.freeze([7, 7] as const),
+    totalProviderCallCounts: Object.freeze([11, 11] as const),
+    optimisticMarketStateId,
+    optimisticBlockId: bundle.optimisticBlockId,
+    providerDeploymentIds: bundle.providerDeploymentIds,
+    observedAt: bundle.observedAt,
+  });
+}
+
+export function attachOptimisticMarketStates(
+  bundle: OptimisticPersistenceBundle,
+  marketStates: readonly OptimisticMarketStateEvidence[],
+): OptimisticPersistenceBundle {
+  if (
+    !Array.isArray(marketStates) ||
+    marketStates.length > MAXIMUM_PERSISTED_MARKET_STATES_PER_BLOCK
+  ) {
+    throw validationError("postgres", "optimistic-market-state-bound");
+  }
+  const normalized = marketStates.map((state) =>
+    normalizePersistenceMarketState(bundle, state));
+  if (new Set(normalized.map(({ poolId }) => poolId)).size !== normalized.length) {
+    throw validationError("postgres", "optimistic-market-state-duplicate");
+  }
+  return Object.freeze({ ...bundle, marketStates: Object.freeze(normalized) });
+}
+
+export type OptimisticMarketStateReader = (
+  input: Readonly<{
+    block: DualRpcOptimisticBlock;
+    bundle: OptimisticPersistenceBundle;
+  }>,
+) => Promise<readonly OptimisticMarketStateEvidence[]>;
+
+async function verifyOptimisticBlockForPersistenceInternal(input: Readonly<{
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   providerDeployments: readonly [
     OptimisticProviderDeploymentBinding,
@@ -453,6 +890,7 @@ export async function verifyOptimisticBlockForPersistence(input: Readonly<{
   hint: QuickNodeBlockHint;
   observedAt?: string;
   hardDeadlineMs?: number;
+  marketStateReader?: OptimisticMarketStateReader;
 }>): Promise<OptimisticPersistenceBundle> {
   const block = await readOptimisticBlockWithDualRpc({
     providers: input.providers,
@@ -564,7 +1002,7 @@ export async function verifyOptimisticBlockForPersistence(input: Readonly<{
       payloadCommitment,
     });
   });
-  return Object.freeze({
+  const bundle: OptimisticPersistenceBundle = Object.freeze({
     optimisticBlockId,
     chainId: 1,
     blockNumber: block.block.number,
@@ -581,7 +1019,24 @@ export async function verifyOptimisticBlockForPersistence(input: Readonly<{
     evidenceCommitment,
     observedAt,
     events: Object.freeze(events),
+    marketStates: Object.freeze([]),
   });
+  if (!input.marketStateReader) return bundle;
+  const marketStates = await input.marketStateReader({ block, bundle });
+  return attachOptimisticMarketStates(bundle, marketStates);
+}
+
+export async function verifyOptimisticBlockForPersistence(input: Readonly<{
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  providerDeployments: readonly [
+    OptimisticProviderDeploymentBinding,
+    OptimisticProviderDeploymentBinding,
+  ];
+  hint: QuickNodeBlockHint;
+  observedAt?: string;
+  hardDeadlineMs?: number;
+}>): Promise<OptimisticPersistenceBundle> {
+  return verifyOptimisticBlockForPersistenceInternal(input);
 }
 
 function validatePersistenceBundle(
@@ -591,6 +1046,8 @@ function validatePersistenceBundle(
     bundle.chainId !== 1 ||
     !Array.isArray(bundle.events) ||
     bundle.events.length > MAXIMUM_PERSISTED_EVENTS_PER_BLOCK ||
+    !Array.isArray(bundle.marketStates) ||
+    bundle.marketStates.length > MAXIMUM_PERSISTED_MARKET_STATES_PER_BLOCK ||
     !Array.isArray(bundle.providerDeploymentIds) ||
     bundle.providerDeploymentIds.length !== 2 ||
     !Array.isArray(bundle.providerHeads) ||
@@ -735,6 +1192,21 @@ function validatePersistenceBundle(
       throw validationError("postgres", "optimistic-event-commitment");
     }
   }
+  const marketStateIds = new Set<string>();
+  const marketStatePools = new Set<string>();
+  for (const marketState of bundle.marketStates) {
+    const normalized = normalizePersistenceMarketState(bundle, marketState);
+    if (
+      normalized.optimisticMarketStateId !==
+        marketState.optimisticMarketStateId ||
+      marketStateIds.has(normalized.optimisticMarketStateId) ||
+      marketStatePools.has(normalized.poolId)
+    ) {
+      throw validationError("postgres", "optimistic-market-state-duplicate");
+    }
+    marketStateIds.add(normalized.optimisticMarketStateId);
+    marketStatePools.add(normalized.poolId);
+  }
   return bundle;
 }
 
@@ -875,6 +1347,64 @@ export function createOptimisticLiveWriter(input: { executor: PostgresExecutor }
             throw validationError("postgres", "optimistic-event-id");
           }
         }
+        for (const state of bundle.marketStates) {
+          const insertedMarketStateId = await oneUuid(
+            transaction,
+            `select programmable_private.append_optimistic_market_state_v1(
+               $1::uuid, $2::uuid, $3::bytea, $4::bytea, $5::bytea,
+               $6::bytea, $7::numeric, $8::integer, $9::numeric,
+               $10::integer, $11::integer, $12::bytea, $13::bytea,
+               $14::bytea, $15::bytea, $16::jsonb, $17::bytea,
+               $18::uuid, $19::uuid, $20::text, $21::text, $22::bytea,
+               $23::bytea, $24::bytea, $25::bytea, $26::bigint,
+               $27::bigint, $28::smallint, $29::smallint, $30::smallint,
+               $31::smallint, $32::smallint, $33::smallint, $34::smallint,
+               $35::bytea, $36::timestamptz
+             ) as optimistic_market_state_id`,
+            [
+              state.optimisticMarketStateId,
+              state.optimisticBlockId,
+              hexToBytes(state.poolId),
+              hexToBytes(state.tokenAddress),
+              hexToBytes(state.stateView),
+              hexToBytes(state.stateViewRuntimeCodeHash),
+              state.pool.sqrtPriceX96,
+              String(state.pool.currentTick),
+              state.pool.activeLiquidity,
+              String(state.pool.protocolFeePips),
+              String(state.pool.lpFeePips),
+              hexToBytes(state.pool.slot0Result),
+              hexToBytes(state.pool.slot0Result),
+              hexToBytes(state.pool.liquidityResult),
+              hexToBytes(state.pool.liquidityResult),
+              postgresJson(state.market),
+              hexToBytes(state.marketCommitment),
+              state.providerDeploymentIds[0],
+              state.providerDeploymentIds[1],
+              state.providerIdentities[0],
+              state.providerIdentities[1],
+              hexToBytes(state.providerEndpointCommitments[0]),
+              hexToBytes(state.providerEndpointCommitments[1]),
+              hexToBytes(state.providerOriginCommitments[0]),
+              hexToBytes(state.providerOriginCommitments[1]),
+              state.providerHeads[0],
+              state.providerHeads[1],
+              String(state.blockProviderCallCounts[0]),
+              String(state.blockProviderCallCounts[1]),
+              String(state.marketProviderCallCounts[0]),
+              String(state.marketProviderCallCounts[1]),
+              String(state.totalProviderCallCounts[0]),
+              String(state.totalProviderCallCounts[1]),
+              String(state.confirmations),
+              hexToBytes(state.evidenceCommitment),
+              new Date(state.observedAt),
+            ],
+            "optimistic_market_state_id",
+          );
+          if (insertedMarketStateId !== state.optimisticMarketStateId) {
+            throw validationError("postgres", "optimistic-market-state-id");
+          }
+        }
         const planRows = await transaction.query<Record<string, unknown>>(
           "select * from programmable_private.get_optimistic_promotion_plan_v1($1::uuid)",
           [bundle.optimisticBlockId],
@@ -937,10 +1467,45 @@ export function createOptimisticLiveWriter(input: { executor: PostgresExecutor }
           promotionMode: plan.mode,
           replayed,
           eventCount: bundle.events.length,
+          marketStateCount: bundle.marketStates.length,
         });
       });
     },
   });
+}
+
+async function ingestOptimisticLiveBlockInternal(input: Readonly<{
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  providerDeployments: readonly [
+    OptimisticProviderDeploymentBinding,
+    OptimisticProviderDeploymentBinding,
+  ];
+  hint: QuickNodeBlockHint;
+  writer: Pick<OptimisticLiveWriter, "persist">;
+  observedAt?: string;
+  hardDeadlineMs?: number;
+  marketStateReader?: OptimisticMarketStateReader;
+}>): Promise<Readonly<{
+  bundle: OptimisticPersistenceBundle;
+  persisted: OptimisticPersistResult;
+}>> {
+  const bundle = await verifyOptimisticBlockForPersistenceInternal({
+    providers: input.providers,
+    providerDeployments: input.providerDeployments,
+    hint: input.hint,
+    ...(input.observedAt === undefined ? {} : { observedAt: input.observedAt }),
+    ...(input.hardDeadlineMs === undefined
+      ? {}
+      : { hardDeadlineMs: input.hardDeadlineMs }),
+    ...(input.marketStateReader === undefined
+      ? {}
+      : { marketStateReader: input.marketStateReader }),
+  });
+  const persisted = await input.writer.persist(bundle);
+  if (persisted.optimisticBlockId !== bundle.optimisticBlockId) {
+    throw validationError("postgres", "optimistic-persisted-block-id");
+  }
+  return Object.freeze({ bundle, persisted });
 }
 
 export async function ingestOptimisticLiveBlock(input: Readonly<{
@@ -957,20 +1522,51 @@ export async function ingestOptimisticLiveBlock(input: Readonly<{
   bundle: OptimisticPersistenceBundle;
   persisted: OptimisticPersistResult;
 }>> {
-  const bundle = await verifyOptimisticBlockForPersistence({
+  return ingestOptimisticLiveBlockInternal(input);
+}
+
+/**
+ * Narrow wake-route integration: one branded dual-RPC block, its derived
+ * market reads, and one atomic database promotion. The caller supplies only a
+ * previously parsed queue hint plus process-configured dependencies.
+ */
+export function createOptimisticFirstStage(input: Readonly<{
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  providerDeployments: readonly [
+    OptimisticProviderDeploymentBinding,
+    OptimisticProviderDeploymentBinding,
+  ];
+  writer: Pick<OptimisticLiveWriter, "persist">;
+  loadCanonicalTokens: () => Promise<readonly LauncherToken[]>;
+  hardDeadlineMs?: number;
+}>) {
+  const marketStateReader = createOptimisticMarketStateReader({
     providers: input.providers,
-    providerDeployments: input.providerDeployments,
-    hint: input.hint,
-    ...(input.observedAt === undefined ? {} : { observedAt: input.observedAt }),
+    loadCanonicalTokens: input.loadCanonicalTokens,
     ...(input.hardDeadlineMs === undefined
       ? {}
       : { hardDeadlineMs: input.hardDeadlineMs }),
   });
-  const persisted = await input.writer.persist(bundle);
-  if (persisted.optimisticBlockId !== bundle.optimisticBlockId) {
-    throw validationError("postgres", "optimistic-persisted-block-id");
-  }
-  return Object.freeze({ bundle, persisted });
+  return Object.freeze({
+    async ingest(job: Readonly<{
+      hint: QuickNodeBlockHint;
+      observedAt?: string;
+    }>) {
+      return ingestOptimisticLiveBlockInternal({
+        providers: input.providers,
+        providerDeployments: input.providerDeployments,
+        hint: job.hint,
+        writer: input.writer,
+        marketStateReader,
+        ...(job.observedAt === undefined
+          ? {}
+          : { observedAt: job.observedAt }),
+        ...(input.hardDeadlineMs === undefined
+          ? {}
+          : { hardDeadlineMs: input.hardDeadlineMs }),
+      });
+    },
+  });
 }
 
 function parseNormalizedPayload(value: unknown): NormalizedOptimisticEventPayload {
@@ -1137,9 +1733,175 @@ function parseLiveEvent(row: Record<string, unknown>): OptimisticLiveEvent {
   return event;
 }
 
-export function createOptimisticLiveReader(input: {
+function postgresSourceIdentifier(value: unknown, operation: string): string {
+  if (
+    typeof value !== "string" ||
+    Buffer.byteLength(value, "utf8") < 1 ||
+    Buffer.byteLength(value, "utf8") > 128 ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    throw validationError("postgres", operation);
+  }
+  return value;
+}
+
+function parseLiveMarketState(
+  row: Record<string, unknown>,
+): OptimisticLiveMarketState {
+  if (integerText(row.chain_id, "optimistic-market-chain") !== "1") {
+    throw validationError("postgres", "optimistic-market-chain");
+  }
+  const blockNumber = integerText(
+    row.block_number,
+    "optimistic-market-block-number",
+  );
+  const blockHash = bytes32FromBytea(row.block_hash);
+  const optimisticBlockId = exactUuid(
+    row.optimistic_block_id,
+    "optimistic-market-block-id",
+  );
+  const providerHeads = Object.freeze([
+    integerText(row.market_provider_a_head, "optimistic-market-provider-head"),
+    integerText(row.market_provider_b_head, "optimistic-market-provider-head"),
+  ] as const);
+  const providerDeploymentIds = Object.freeze([
+    exactUuid(row.provider_a_id, "optimistic-market-provider-id"),
+    exactUuid(row.provider_b_id, "optimistic-market-provider-id"),
+  ] as const);
+  const providerIdentities = Object.freeze([
+    postgresSourceIdentifier(
+      row.provider_a_identity,
+      "optimistic-market-provider-identity",
+    ),
+    postgresSourceIdentifier(
+      row.provider_b_identity,
+      "optimistic-market-provider-identity",
+    ),
+  ] as const);
+  const providerVendorGroups = Object.freeze([
+    postgresSourceIdentifier(
+      row.provider_a_vendor,
+      "optimistic-market-provider-vendor",
+    ),
+    postgresSourceIdentifier(
+      row.provider_b_vendor,
+      "optimistic-market-provider-vendor",
+    ),
+  ] as const);
+  const providerEndpointCommitments = Object.freeze([
+    bytes32FromBytea(row.provider_a_endpoint_commitment),
+    bytes32FromBytea(row.provider_b_endpoint_commitment),
+  ] as const);
+  const providerOriginCommitments = Object.freeze([
+    bytes32FromBytea(row.provider_a_origin_commitment),
+    bytes32FromBytea(row.provider_b_origin_commitment),
+  ] as const);
+  const observedAt = isoTimestamp(
+    row.observed_at,
+    "optimistic-market-observed",
+  );
+  const bundleContext: OptimisticPersistenceBundle = Object.freeze({
+    optimisticBlockId,
+    chainId: 1,
+    blockNumber,
+    blockHash,
+    parentHash: blockHash,
+    blockTimestamp: observedAt,
+    providerDeploymentIds,
+    providerHeads,
+    providerIdentities,
+    providerVendorGroups,
+    providerEndpointCommitments,
+    providerOriginCommitments,
+    confirmations: integerNumber(
+      row.confirmations,
+      "optimistic-market-confirmations",
+    ),
+    evidenceCommitment: bytes32FromBytea(row.evidence_commitment),
+    observedAt,
+    events: Object.freeze([]),
+    marketStates: Object.freeze([]),
+  });
+  const normalized = normalizePersistenceMarketState(bundleContext, {
+    version: row.version as typeof OPTIMISTIC_MARKET_STATE_VERSION,
+    finality: row.finality as "optimistic",
+    chainId: 1,
+    blockNumber,
+    blockHash,
+    confirmations: bundleContext.confirmations,
+    poolId: bytes32FromBytea(row.pool_id),
+    tokenAddress: addressFromBytea(row.token_address),
+    stateView: addressFromBytea(row.state_view_address),
+    stateViewRuntimeCodeHash: bytes32FromBytea(
+      row.state_view_runtime_code_hash,
+    ),
+    market: row.market as OptimisticMarketFields,
+    marketCommitment: bytes32FromBytea(row.market_commitment),
+    evidenceCommitment: bytes32FromBytea(row.evidence_commitment),
+    pool: {
+      sqrtPriceX96: integerText(
+        row.sqrt_price_x96,
+        "optimistic-market-sqrt-price",
+      ),
+      currentTick: signedIntegerNumber(
+        row.current_tick,
+        -887_272,
+        887_272,
+        "optimistic-market-current-tick",
+      ),
+      activeLiquidity: integerText(
+        row.active_liquidity,
+        "optimistic-market-liquidity",
+      ),
+      protocolFeePips: integerNumber(
+        row.protocol_fee_pips,
+        "optimistic-market-protocol-fee",
+      ),
+      lpFeePips: integerNumber(
+        row.lp_fee_pips,
+        "optimistic-market-lp-fee",
+      ),
+      slot0Result: dataFromBytea(row.slot0_result),
+      liquidityResult: dataFromBytea(row.liquidity_result),
+    },
+    providerIdentities,
+    providerVendorGroups,
+    providerEndpointCommitments,
+    providerOriginCommitments,
+    providerHeads,
+    blockProviderCallCounts: Object.freeze([
+      integerNumber(row.block_provider_call_count_a, "optimistic-market-calls"),
+      integerNumber(row.block_provider_call_count_b, "optimistic-market-calls"),
+    ]) as unknown as readonly [4, 4],
+    marketProviderCallCounts: Object.freeze([
+      integerNumber(row.market_provider_call_count_a, "optimistic-market-calls"),
+      integerNumber(row.market_provider_call_count_b, "optimistic-market-calls"),
+    ]) as unknown as readonly [7, 7],
+    totalProviderCallCounts: Object.freeze([
+      integerNumber(row.total_provider_call_count_a, "optimistic-market-calls"),
+      integerNumber(row.total_provider_call_count_b, "optimistic-market-calls"),
+    ]) as unknown as readonly [11, 11],
+    optimisticMarketStateId: exactUuid(
+      row.optimistic_market_state_id,
+      "optimistic-market-state-id",
+    ),
+    optimisticBlockId,
+    providerDeploymentIds,
+    observedAt,
+  });
+  return Object.freeze({
+    ...normalized,
+    reorgGeneration: integerText(
+      row.reorg_generation,
+      "optimistic-market-generation",
+    ),
+  });
+}
+
+function buildOptimisticLiveReader(input: {
   executor: PostgresExecutor;
   now?: () => Date;
+  transactionPrepared: boolean;
 }) {
   const now = input.now ?? (() => new Date());
   return Object.freeze({
@@ -1147,18 +1909,30 @@ export function createOptimisticLiveReader(input: {
       if (chainId !== 1) throw invalidInput("postgres", "optimistic-chain-id");
       try {
         return await input.executor.transaction(async (transaction) => {
-          await transaction.query("set transaction isolation level repeatable read, read only");
-          await establishPostgresApiReaderRole(transaction);
-          await transaction.query("set local statement_timeout = '1000ms'");
-          await transaction.query("set local lock_timeout = '250ms'");
-          await transaction.query("set local idle_in_transaction_session_timeout = '2000ms'");
+          if (!input.transactionPrepared) {
+            await transaction.query(
+              "set transaction isolation level repeatable read, read only",
+            );
+            await establishPostgresApiReaderRole(transaction);
+            await transaction.query("set local statement_timeout = '1000ms'");
+            await transaction.query("set local lock_timeout = '250ms'");
+            await transaction.query(
+              "set local idle_in_transaction_session_timeout = '2000ms'",
+            );
+          }
           const head = parseHead(
             await transaction.query<Record<string, unknown>>(
               "select * from programmable_private.get_optimistic_live_head_v1($1::bigint)",
               [String(chainId)],
             ),
           );
-          if (!head) return Object.freeze({ head: null, events: Object.freeze([]) });
+          if (!head) {
+            return Object.freeze({
+              head: null,
+              events: Object.freeze([]),
+              marketStates: Object.freeze([]),
+            });
+          }
           const nowValue = now();
           const nowMs = nowValue instanceof Date ? nowValue.valueOf() : Number.NaN;
           const observedMs = Date.parse(head.observedAt);
@@ -1170,7 +1944,11 @@ export function createOptimisticLiveReader(input: {
             observedMs - nowMs > MAXIMUM_LIVE_HEAD_CLOCK_SKEW_MS ||
             canonicalMs - nowMs > MAXIMUM_LIVE_HEAD_CLOCK_SKEW_MS
           ) {
-            return Object.freeze({ head: null, events: Object.freeze([]) });
+            return Object.freeze({
+              head: null,
+              events: Object.freeze([]),
+              marketStates: Object.freeze([]),
+            });
           }
           const events: OptimisticLiveEvent[] = [];
           const headNumber = BigInt(head.blockNumber);
@@ -1226,7 +2004,68 @@ export function createOptimisticLiveReader(input: {
             cursor = page.at(-1) ?? null;
             if (page.length < LIVE_EVENT_PAGE_SIZE) break;
           } while (cursor !== null);
-          return Object.freeze({ head, events: Object.freeze(events) });
+          const marketStates: OptimisticLiveMarketState[] = [];
+          let marketCursor: Readonly<{
+            blockNumber: string;
+            poolId: HexBytes32;
+            optimisticMarketStateId: string;
+          }> | null = null;
+          do {
+            const rows: readonly Record<string, unknown>[] =
+              await transaction.query<Record<string, unknown>>(
+              `select * from programmable_private.list_optimistic_canonical_market_states_v1(
+                 $1::bigint, $2::bigint, $3::bytea, $4::uuid, $5::integer
+               )`,
+              [
+                String(chainId),
+                marketCursor?.blockNumber ?? null,
+                marketCursor ? hexToBytes(marketCursor.poolId) : null,
+                marketCursor?.optimisticMarketStateId ?? null,
+                LIVE_MARKET_STATE_PAGE_SIZE,
+              ],
+            );
+            const page: OptimisticLiveMarketState[] =
+              rows.map(parseLiveMarketState);
+            for (const state of page) {
+              const previous = marketStates.at(-1);
+              if (
+                previous &&
+                (BigInt(state.blockNumber) < BigInt(previous.blockNumber) ||
+                  (state.blockNumber === previous.blockNumber &&
+                    (state.poolId < previous.poolId ||
+                      (state.poolId === previous.poolId &&
+                        state.optimisticMarketStateId <=
+                          previous.optimisticMarketStateId))))
+              ) {
+                throw validationError("postgres", "optimistic-market-order");
+              }
+              if (
+                state.reorgGeneration !== head.reorgGeneration ||
+                BigInt(state.blockNumber) < firstLiveBlock ||
+                BigInt(state.blockNumber) > headNumber
+              ) {
+                throw validationError("postgres", "optimistic-market-window");
+              }
+              marketStates.push(state);
+              if (marketStates.length > MAXIMUM_LIVE_MARKET_STATES) {
+                throw validationError("postgres", "optimistic-market-bound");
+              }
+            }
+            const last: OptimisticLiveMarketState | undefined = page.at(-1);
+            marketCursor = last
+              ? Object.freeze({
+                  blockNumber: last.blockNumber,
+                  poolId: last.poolId,
+                  optimisticMarketStateId: last.optimisticMarketStateId,
+                })
+              : null;
+            if (page.length < LIVE_MARKET_STATE_PAGE_SIZE) break;
+          } while (marketCursor !== null);
+          return Object.freeze({
+            head,
+            events: Object.freeze(events),
+            marketStates: Object.freeze(marketStates),
+          });
         });
       } catch (error) {
         if (error instanceof DataPipelineError) throw error;
@@ -1240,6 +2079,41 @@ export function createOptimisticLiveReader(input: {
       }
     },
   });
+}
+
+export function createOptimisticLiveReader(input: {
+  executor: PostgresExecutor;
+  now?: () => Date;
+}) {
+  return buildOptimisticLiveReader({
+    ...input,
+    transactionPrepared: false,
+  });
+}
+
+/**
+ * Uses the process-wide API-reader pool and its already-prepared immutable
+ * transaction. Public routes never parse database URLs or create pools.
+ */
+export async function readConfiguredOptimisticLiveSnapshot(
+  chainId: 1 = 1,
+): Promise<OptimisticLiveSnapshot> {
+  const readModel = await getServerReadModel({ required: true });
+  if (!readModel) {
+    return Object.freeze({
+      head: null,
+      events: Object.freeze([]),
+      marketStates: Object.freeze([]),
+    });
+  }
+  const executor: PostgresExecutor = Object.freeze({
+    transaction: (work) => readModel.repeatableReadSnapshot(work),
+    close: async () => undefined,
+  });
+  return buildOptimisticLiveReader({
+    executor,
+    transactionPrepared: true,
+  }).snapshot(chainId);
 }
 
 function releaseForLaunchEvent(event: OptimisticLiveEvent) {
@@ -1434,6 +2308,229 @@ function launchToken(
   });
 }
 
+function snapshotForPersistenceBundle(
+  bundle: OptimisticPersistenceBundle,
+): OptimisticLiveSnapshot {
+  return Object.freeze({
+    head: Object.freeze({
+      optimisticBlockId: bundle.optimisticBlockId,
+      chainId: 1,
+      blockNumber: bundle.blockNumber,
+      blockHash: bundle.blockHash,
+      parentHash: bundle.parentHash,
+      blockTimestamp: bundle.blockTimestamp,
+      providerDeploymentIds: bundle.providerDeploymentIds,
+      providerHeads: bundle.providerHeads,
+      reorgGeneration: "0",
+      observedAt: bundle.observedAt,
+      canonicalAt: bundle.observedAt,
+    }),
+    events: Object.freeze(bundle.events.map((event) => Object.freeze({
+      ...event,
+      chainId: 1 as const,
+      blockNumber: bundle.blockNumber,
+      blockHash: bundle.blockHash,
+      reorgGeneration: "0",
+      observedAt: bundle.observedAt,
+    }))),
+    marketStates: Object.freeze([]),
+  });
+}
+
+type PlannedOptimisticMarketRead = Readonly<{
+  poolId: HexBytes32;
+  tokenAddress: HexAddress;
+  token?: LauncherToken;
+  newLaunch?: OptimisticNewLaunchMarketInput;
+}>;
+
+function completeNewLaunchMarketPlans(
+  bundle: OptimisticPersistenceBundle,
+): readonly PlannedOptimisticMarketRead[] {
+  const snapshot = snapshotForPersistenceBundle(bundle);
+  const plans = new Map<HexBytes32, PlannedOptimisticMarketRead>();
+  for (const launchEvent of snapshot.events.filter(releaseForLaunchEvent)) {
+    const release = releaseForLaunchEvent(launchEvent)!;
+    const metadata = launchEvent.normalizedPayload.tokenMetadata;
+    if (!metadata || metadata.blockHash !== bundle.blockHash) continue;
+    const transactionEvents = snapshot.events.filter(
+      (event) =>
+        event.transactionHash === launchEvent.transactionHash &&
+        event.blockHash === launchEvent.blockHash &&
+        release.sourceContracts.includes(
+          event.normalizedPayload.sourceContractName,
+        ),
+    );
+    try {
+      const folded = foldProjectorEvents({
+        events: transactionEvents.map((event, index) =>
+          foldEvent(event, release, snapshot, metadata, index)),
+        tokenMetadata: {
+          [canonicalAddress(launchEvent.normalizedPayload.arguments.token)]: {
+            name: metadata.name,
+            symbol: metadata.symbol,
+          },
+        },
+      });
+      const launch = folded.launches.find(
+        (candidate) =>
+          candidate.launchTransactionHash === launchEvent.transactionHash,
+      );
+      if (!launch) continue;
+      const tokenAddress = canonicalAddress(launch.token);
+      const poolId = canonicalBytes32(launch.poolId);
+      const quoteAssetAddress = launch.model === "stock-paired"
+        ? canonicalAddress(
+            launch.pool.currency0 === tokenAddress
+              ? launch.pool.currency1
+              : launch.pool.currency0,
+          )
+        : undefined;
+      const newLaunch: OptimisticNewLaunchMarketInput = Object.freeze({
+        tokenAddress,
+        poolId,
+        totalSupplyRaw: integerText(
+          launch.totalSupply,
+          "optimistic-new-launch-supply",
+        ),
+        tokenDecimals: 18,
+        launchModel: launch.model === "classic"
+          ? "classic"
+          : "stock-paired",
+        poolKey: Object.freeze({
+          currency0: launch.pool.currency0,
+          currency1: launch.pool.currency1,
+          fee: Number(BigInt(launch.pool.poolKeyFee)),
+          tickSpacing: Number(BigInt(launch.pool.tickSpacing)),
+          hooks: launch.pool.hook,
+        }),
+        ...(quoteAssetAddress
+          ? {
+              quoteAssetAddress,
+              quoteAssetDecimals: 18,
+              quoteIsCurrency0:
+                launch.pool.currency0 === quoteAssetAddress,
+            }
+          : {}),
+      });
+      const existing = plans.get(poolId);
+      if (
+        existing &&
+        (existing.tokenAddress !== tokenAddress ||
+          canonicalJson(existing.newLaunch) !== canonicalJson(newLaunch))
+      ) {
+        throw validationError("rpc", "optimistic-market-launch-ambiguity");
+      }
+      plans.set(poolId, Object.freeze({ poolId, tokenAddress, newLaunch }));
+    } catch (error) {
+      if (error instanceof DataPipelineError) throw error;
+      // Incomplete same-transaction groups never become market read plans.
+    }
+  }
+  return Object.freeze([...plans.values()]);
+}
+
+function configuredOptimisticMarketReadPlans(input: Readonly<{
+  bundle: OptimisticPersistenceBundle;
+  canonicalTokens: readonly LauncherToken[];
+}>): readonly PlannedOptimisticMarketRead[] {
+  const plans = new Map<HexBytes32, PlannedOptimisticMarketRead>();
+  const ambiguousPools = new Set<HexBytes32>();
+  for (const token of input.canonicalTokens) {
+    try {
+      const poolId = canonicalBytes32(token.poolId);
+      const tokenAddress = canonicalAddress(token.tokenAddress);
+      const existing = plans.get(poolId);
+      if (existing && existing.tokenAddress !== tokenAddress) {
+        plans.delete(poolId);
+        ambiguousPools.add(poolId);
+      } else if (!ambiguousPools.has(poolId)) {
+        plans.set(poolId, Object.freeze({ poolId, tokenAddress, token }));
+      }
+    } catch {
+      // Malformed canonical rows cannot authorize an optimistic market read.
+    }
+  }
+  const relevantFeePools = new Set<HexBytes32>();
+  for (const event of input.bundle.events) {
+    if (
+      event.normalizedPayload.eventName !== "NativeSwapFeesAccrued" &&
+      event.normalizedPayload.eventName !== "QuoteSwapFeesAccrued"
+    ) {
+      continue;
+    }
+    relevantFeePools.add(canonicalBytes32(
+      event.normalizedPayload.arguments.poolId,
+    ));
+  }
+  for (const poolId of [...plans.keys()]) {
+    if (!relevantFeePools.has(poolId)) plans.delete(poolId);
+  }
+  for (const launchPlan of completeNewLaunchMarketPlans(input.bundle)) {
+    plans.set(launchPlan.poolId, launchPlan);
+  }
+  const selected = [...plans.values()].sort((left, right) =>
+    left.poolId.localeCompare(right.poolId));
+  if (selected.length > MAXIMUM_PERSISTED_MARKET_STATES_PER_BLOCK) {
+    throw validationError("rpc", "optimistic-market-state-bound");
+  }
+  return Object.freeze(selected);
+}
+
+async function readMarketPlansBounded(
+  plans: readonly PlannedOptimisticMarketRead[],
+  read: (plan: PlannedOptimisticMarketRead) => Promise<OptimisticMarketStateEvidence>,
+): Promise<readonly OptimisticMarketStateEvidence[]> {
+  const results = new Array<OptimisticMarketStateEvidence>(plans.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < plans.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await read(plans[index]!);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(4, plans.length) }, worker),
+  );
+  return Object.freeze(results);
+}
+
+/**
+ * Builds the only accepted first-stage market reader. Existing pools must be
+ * present in the full canonical corpus and new pools must complete the same
+ * reviewed launch transaction fold before any StateView call starts.
+ */
+export function createOptimisticMarketStateReader(input: Readonly<{
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  loadCanonicalTokens: () => Promise<readonly LauncherToken[]>;
+  hardDeadlineMs?: number;
+}>): OptimisticMarketStateReader {
+  return async ({ block, bundle }) => {
+    const canonicalTokens = await input.loadCanonicalTokens();
+    if (!Array.isArray(canonicalTokens)) {
+      throw validationError("config", "optimistic-canonical-token-corpus");
+    }
+    const plans = configuredOptimisticMarketReadPlans({
+      bundle,
+      canonicalTokens,
+    });
+    return readMarketPlansBounded(plans, (plan) =>
+      readOptimisticMarketState({
+        providers: input.providers,
+        evidence: block,
+        stateView: OPTIMISTIC_MAINNET_STATE_VIEW,
+        poolId: plan.poolId,
+        tokenAddress: plan.tokenAddress,
+        ...(plan.token ? { token: plan.token } : {}),
+        ...(plan.newLaunch ? { newLaunch: plan.newLaunch } : {}),
+        ...(input.hardDeadlineMs === undefined
+          ? {}
+          : { hardDeadlineMs: input.hardDeadlineMs }),
+      }));
+  };
+}
+
 function evidenceFor(
   snapshot: OptimisticLiveSnapshot,
   event: OptimisticLiveEvent,
@@ -1464,14 +2561,45 @@ function evidenceFor(
   });
 }
 
+function marketEvidenceFor(
+  state: OptimisticLiveMarketState,
+  event: OptimisticLiveEvent,
+) {
+  const lowestHead = BigInt(state.providerHeads[0]) <
+      BigInt(state.providerHeads[1])
+    ? BigInt(state.providerHeads[0])
+    : BigInt(state.providerHeads[1]);
+  const confirmations = lowestHead - BigInt(state.blockNumber);
+  if (
+    event.optimisticBlockId !== state.optimisticBlockId ||
+    event.blockNumber !== state.blockNumber ||
+    event.blockHash !== state.blockHash ||
+    confirmations < 0n ||
+    confirmations > BigInt(MAXIMUM_OPTIMISTIC_CONFIRMATIONS) ||
+    Number(confirmations) !== state.confirmations
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    eligibility: "optimistic",
+    source: "dual-rpc-head",
+    finality: "optimistic",
+    chainId: 1,
+    blockNumber: state.blockNumber,
+    blockHash: state.blockHash,
+    primaryBlockNumber: state.blockNumber,
+    primaryBlockHash: state.blockHash,
+    secondaryBlockNumber: state.blockNumber,
+    secondaryBlockHash: state.blockHash,
+    confirmations: state.confirmations,
+    finalityDepth: 12,
+    observedAt: state.observedAt,
+  });
+}
+
 export function optimisticOverlayRowsFromSnapshot(input: Readonly<{
   snapshot: OptimisticLiveSnapshot;
   canonicalTokens: readonly LauncherToken[];
-  marketStates?: readonly OptimisticMarketStateEvidence[];
-  providerDeployments?: readonly [
-    OptimisticProviderDeploymentBinding,
-    OptimisticProviderDeploymentBinding,
-  ];
 }>): readonly OptimisticOverlayRow[] {
   if (!input.snapshot.head) return Object.freeze([]);
   const rows: OptimisticOverlayRow[] = [];
@@ -1535,49 +2663,45 @@ export function optimisticOverlayRowsFromSnapshot(input: Readonly<{
   for (const row of rows) {
     if (row.kind === "launch") tokensByPool.set(row.poolId.toLowerCase(), row.tokenAddress);
   }
-  for (const state of input.marketStates ?? []) {
-    const providerBindings = input.providerDeployments;
+  const optimisticLaunchPools = new Set(
+    rows
+      .filter((row) => row.kind === "launch")
+      .map(({ poolId }) => poolId.toLowerCase()),
+  );
+  for (const state of input.snapshot.marketStates) {
     const event = [...input.snapshot.events]
       .reverse()
       .find((candidate) => {
         const payload = candidate.normalizedPayload;
+        const isFeeEvent = [
+          "NativeSwapFeesAccrued",
+          "QuoteSwapFeesAccrued",
+        ].includes(payload.eventName);
+        const isCompleteLaunchEvent =
+          optimisticLaunchPools.has(state.poolId.toLowerCase()) &&
+          [
+            "MemeTokenLaunched",
+            "MemeTokenLaunchedV2",
+            "StockPairedTokenLaunched",
+          ].includes(payload.eventName);
         return (
+          candidate.optimisticBlockId === state.optimisticBlockId &&
           candidate.blockNumber === state.blockNumber &&
-          candidate.blockHash === canonicalBytes32(state.blockHash) &&
-          ["NativeSwapFeesAccrued", "QuoteSwapFeesAccrued"].includes(payload.eventName) &&
-          canonicalBytes32(payload.arguments.poolId) === canonicalBytes32(state.poolId)
+          candidate.blockHash === state.blockHash &&
+          (isFeeEvent || isCompleteLaunchEvent) &&
+          canonicalBytes32(payload.arguments.poolId) === state.poolId
         );
       });
     if (!event || state.chainId !== 1 || state.confirmations < 0 || state.confirmations > 11) {
       continue;
     }
     const expectedToken = tokensByPool.get(state.poolId.toLowerCase());
-    const evidence = evidenceFor(input.snapshot, event);
+    const evidence = marketEvidenceFor(state, event);
     if (
       !expectedToken ||
-      !providerBindings ||
-      input.snapshot.head.providerDeploymentIds[0] !==
-        providerBindings[0].providerDeploymentId ||
-      input.snapshot.head.providerDeploymentIds[1] !==
-        providerBindings[1].providerDeploymentId ||
-      state.providerIdentities[0] !== providerBindings[0].providerIdentity ||
-      state.providerIdentities[1] !== providerBindings[1].providerIdentity ||
-      state.providerVendorGroups[0] !== "alchemy" ||
-      state.providerVendorGroups[1] !== "quicknode" ||
-      state.providerEndpointCommitments[0] !==
-        canonicalBytes32(providerBindings[0].endpointCommitment) ||
-      state.providerEndpointCommitments[1] !==
-        canonicalBytes32(providerBindings[1].endpointCommitment) ||
-      state.providerOriginCommitments[0] !==
-        canonicalBytes32(providerBindings[0].originCommitment) ||
-      state.providerOriginCommitments[1] !==
-        canonicalBytes32(providerBindings[1].originCommitment) ||
       expectedToken !== canonicalAddress(state.tokenAddress) ||
       !evidence ||
-      evidence.confirmations !== state.confirmations ||
-      state.market.indexedValuationBlockNumber !== state.blockNumber ||
-      state.providerHeads[0] !== input.snapshot.head.providerHeads[0] ||
-      state.providerHeads[1] !== input.snapshot.head.providerHeads[1]
+      state.market.indexedValuationBlockNumber !== state.blockNumber
     ) {
       continue;
     }
@@ -1599,11 +2723,6 @@ export function optimisticOverlayRowsFromSnapshot(input: Readonly<{
 export function applyOptimisticLiveOverlay(input: Readonly<{
   snapshot: OptimisticLiveSnapshot;
   canonicalTokens: readonly LauncherToken[];
-  marketStates?: readonly OptimisticMarketStateEvidence[];
-  providerDeployments?: readonly [
-    OptimisticProviderDeploymentBinding,
-    OptimisticProviderDeploymentBinding,
-  ];
 }>): OptimisticTokenCorpusResult {
   const overlay = selectEligibleOptimisticOverlay({
     rows: optimisticOverlayRowsFromSnapshot(input),

@@ -15,11 +15,17 @@ import type {
 } from "../../lib/data-pipeline/dual-rpc";
 import { PROGRAMMABLE_EVENT_SIGNATURES } from "../../lib/data-pipeline/event-manifest";
 import {
+  attachOptimisticMarketStates,
+  computeOptimisticMarketStateCommitments,
   createOptimisticLiveReader,
   createOptimisticLiveWriter,
+  OPTIMISTIC_MAINNET_STATE_VIEW,
+  OPTIMISTIC_MAINNET_STATE_VIEW_RUNTIME_CODE_HASH,
+  OPTIMISTIC_MARKET_STATE_VERSION,
   optimisticOverlayRowsFromSnapshot,
   verifyOptimisticBlockForPersistence,
   type OptimisticLiveSnapshot,
+  type OptimisticMarketStateEvidence,
   type OptimisticPersistenceBundle,
   type OptimisticProviderDeploymentBinding,
 } from "../../lib/data-pipeline/optimistic-live-runtime.server";
@@ -284,7 +290,147 @@ function snapshotFromBundle(bundle: OptimisticPersistenceBundle): OptimisticLive
       reorgGeneration: "0",
       observedAt: bundle.observedAt,
     }))),
+    marketStates: Object.freeze(bundle.marketStates.map((state) =>
+      Object.freeze({ ...state, reorgGeneration: "0" }))),
   });
+}
+
+function marketStateEvidence(
+  bundle: OptimisticPersistenceBundle,
+  providerHeads: readonly [string, string] = bundle.providerHeads,
+): OptimisticMarketStateEvidence {
+  const lowestHead = BigInt(providerHeads[0]) < BigInt(providerHeads[1])
+    ? BigInt(providerHeads[0])
+    : BigInt(providerHeads[1]);
+  const pool = Object.freeze({
+    sqrtPriceX96: (1n << 96n).toString(),
+    currentTick: 25,
+    activeLiquidity: "1000000",
+    protocolFeePips: 0,
+    lpFeePips: 0,
+    slot0Result: encodeAbiParameters(
+      [
+        { type: "uint160" },
+        { type: "int24" },
+        { type: "uint24" },
+        { type: "uint24" },
+      ],
+      [1n << 96n, 25, 0, 0],
+    ),
+    liquidityResult: encodeAbiParameters(
+      [{ type: "uint128" }],
+      [1_000_000n],
+    ),
+  });
+  const market = Object.freeze({
+    indexedValuationBlockNumber: bundle.blockNumber,
+    currentTick: 25,
+    activeLiquidity: "1000000",
+  });
+  const confirmations = Number(lowestHead - BigInt(bundle.blockNumber));
+  const commitments = computeOptimisticMarketStateCommitments({
+    blockNumber: bundle.blockNumber,
+    blockHash: bundle.blockHash,
+    stateView: OPTIMISTIC_MAINNET_STATE_VIEW,
+    poolId: POOL_ID,
+    tokenAddress: TOKEN,
+    pool,
+    market,
+    providerIdentities: bundle.providerIdentities,
+    providerVendorGroups: bundle.providerVendorGroups,
+    providerEndpointCommitments: bundle.providerEndpointCommitments,
+    providerOriginCommitments: bundle.providerOriginCommitments,
+    providerHeads,
+    confirmations,
+  });
+  return Object.freeze({
+    version: OPTIMISTIC_MARKET_STATE_VERSION,
+    finality: "optimistic",
+    chainId: 1,
+    blockNumber: bundle.blockNumber,
+    blockHash: bundle.blockHash,
+    confirmations,
+    poolId: POOL_ID,
+    tokenAddress: TOKEN,
+    stateView: OPTIMISTIC_MAINNET_STATE_VIEW,
+    stateViewRuntimeCodeHash: OPTIMISTIC_MAINNET_STATE_VIEW_RUNTIME_CODE_HASH,
+    market,
+    ...commitments,
+    pool,
+    providerIdentities: bundle.providerIdentities,
+    providerVendorGroups: bundle.providerVendorGroups,
+    providerEndpointCommitments: bundle.providerEndpointCommitments,
+    providerOriginCommitments: bundle.providerOriginCommitments,
+    providerHeads,
+    blockProviderCallCounts: [4, 4] as const,
+    marketProviderCallCounts: [7, 7] as const,
+    totalProviderCallCounts: [11, 11] as const,
+  });
+}
+
+function marketDatabaseRow(
+  bundle: OptimisticPersistenceBundle,
+  state = bundle.marketStates[0]!,
+) {
+  return {
+    optimistic_market_state_id: state.optimisticMarketStateId,
+    optimistic_block_id: state.optimisticBlockId,
+    version: state.version,
+    finality: state.finality,
+    chain_id: "1",
+    block_number: state.blockNumber,
+    block_hash: Buffer.from(state.blockHash.slice(2), "hex"),
+    confirmations: String(state.confirmations),
+    pool_id: Buffer.from(state.poolId.slice(2), "hex"),
+    token_address: Buffer.from(state.tokenAddress.slice(2), "hex"),
+    state_view_address: Buffer.from(state.stateView.slice(2), "hex"),
+    state_view_runtime_code_hash: Buffer.from(
+      state.stateViewRuntimeCodeHash.slice(2),
+      "hex",
+    ),
+    sqrt_price_x96: state.pool.sqrtPriceX96,
+    current_tick: state.pool.currentTick,
+    active_liquidity: state.pool.activeLiquidity,
+    protocol_fee_pips: state.pool.protocolFeePips,
+    lp_fee_pips: state.pool.lpFeePips,
+    slot0_result: Buffer.from(state.pool.slot0Result.slice(2), "hex"),
+    liquidity_result: Buffer.from(state.pool.liquidityResult.slice(2), "hex"),
+    market: state.market,
+    market_commitment: Buffer.from(state.marketCommitment.slice(2), "hex"),
+    evidence_commitment: Buffer.from(state.evidenceCommitment.slice(2), "hex"),
+    provider_a_id: state.providerDeploymentIds[0],
+    provider_b_id: state.providerDeploymentIds[1],
+    provider_a_identity: state.providerIdentities[0],
+    provider_b_identity: state.providerIdentities[1],
+    provider_a_vendor: state.providerVendorGroups[0],
+    provider_b_vendor: state.providerVendorGroups[1],
+    provider_a_endpoint_commitment: Buffer.from(
+      state.providerEndpointCommitments[0].slice(2),
+      "hex",
+    ),
+    provider_b_endpoint_commitment: Buffer.from(
+      state.providerEndpointCommitments[1].slice(2),
+      "hex",
+    ),
+    provider_a_origin_commitment: Buffer.from(
+      state.providerOriginCommitments[0].slice(2),
+      "hex",
+    ),
+    provider_b_origin_commitment: Buffer.from(
+      state.providerOriginCommitments[1].slice(2),
+      "hex",
+    ),
+    market_provider_a_head: state.providerHeads[0],
+    market_provider_b_head: state.providerHeads[1],
+    block_provider_call_count_a: 4,
+    block_provider_call_count_b: 4,
+    market_provider_call_count_a: 7,
+    market_provider_call_count_b: 7,
+    total_provider_call_count_a: 11,
+    total_provider_call_count_b: 11,
+    reorg_generation: "0",
+    observed_at: new Date(state.observedAt),
+  };
 }
 
 describe("optimistic live runtime", () => {
@@ -384,6 +530,7 @@ describe("optimistic live runtime", () => {
       promotionMode: "bootstrap",
       replayed: false,
       eventCount: 5,
+      marketStateCount: 0,
     });
     const blockIndex = calls.findIndex((call) =>
       call.includes("append_optimistic_block_observation_v1"));
@@ -397,6 +544,139 @@ describe("optimistic live runtime", () => {
     expect(blockIndex).toBeLessThan(eventIndexes[0]!);
     expect(Math.max(...eventIndexes)).toBeLessThan(planIndex);
     expect(planIndex).toBeLessThan(promoteIndex);
+  });
+
+  it("appends durable market evidence in the same transaction before promotion", async () => {
+    const base = await verifiedBundle([feeAccrualLog()]);
+    const laterHeads = [
+      (BLOCK_NUMBER + 2n).toString(),
+      (BLOCK_NUMBER + 3n).toString(),
+    ] as const;
+    const bundle = attachOptimisticMarketStates(base, [
+      marketStateEvidence(base, laterHeads),
+    ]);
+    const calls: Array<{ sql: string; values: readonly PostgresParameter[] }> = [];
+    const executor: PostgresExecutor = {
+      async transaction(work) {
+        return work({
+          async query<Row extends Record<string, unknown>>(
+            sql: string,
+            values: readonly PostgresParameter[] = [],
+          ) {
+            calls.push({ sql: sql.replace(/\s+/gu, " ").trim(), values });
+            if (sql.includes("session_user::text") && !sql.includes("current_role")) {
+              return [{ session_user: "programmable_projector_login" }] as unknown as Row[];
+            }
+            if (sql.includes("current_role::text")) {
+              return [{
+                session_user: "programmable_projector_login",
+                current_role: "programmable_projector",
+              }] as unknown as Row[];
+            }
+            if (sql.includes("append_optimistic_block_observation_v1")) {
+              return [{ optimistic_block_id: bundle.optimisticBlockId }] as unknown as Row[];
+            }
+            if (sql.includes("append_optimistic_event_row_v1")) {
+              return [{ optimistic_event_id: bundle.events[0]!.optimisticEventId }] as unknown as Row[];
+            }
+            if (sql.includes("append_optimistic_market_state_v1")) {
+              return [{
+                optimistic_market_state_id:
+                  bundle.marketStates[0]!.optimisticMarketStateId,
+              }] as unknown as Row[];
+            }
+            if (sql.includes("get_optimistic_promotion_plan_v1")) {
+              return [{
+                mode: "bootstrap",
+                can_promote: true,
+                expected_current_block_id: null,
+                orphan_required: false,
+                requires_rebootstrap: false,
+                target_height_current_block_id: null,
+                chain_tip_block_id: null,
+                chain_tip_block_number: null,
+                segment_start_block_number: null,
+                reorg_generation: null,
+                canonical_status_id: null,
+                orphan_status_id: null,
+                stored_decision_commitment: null,
+                stored_decided_at: null,
+              }] as unknown as Row[];
+            }
+            if (sql.includes("promote_optimistic_block_canonical_v1")) {
+              return [{ optimistic_block_id: bundle.optimisticBlockId }] as unknown as Row[];
+            }
+            return [] as Row[];
+          },
+        });
+      },
+      async close() {},
+    };
+
+    const result = await createOptimisticLiveWriter({ executor }).persist(bundle);
+    const indexOf = (operation: string) =>
+      calls.findIndex(({ sql }) => sql.includes(operation));
+    const marketCall = calls.find(({ sql }) =>
+      sql.includes("append_optimistic_market_state_v1"))!;
+
+    expect(result.marketStateCount).toBe(1);
+    expect(indexOf("append_optimistic_block_observation_v1"))
+      .toBeLessThan(indexOf("append_optimistic_event_row_v1"));
+    expect(indexOf("append_optimistic_event_row_v1"))
+      .toBeLessThan(indexOf("append_optimistic_market_state_v1"));
+    expect(indexOf("append_optimistic_market_state_v1"))
+      .toBeLessThan(indexOf("get_optimistic_promotion_plan_v1"));
+    expect(indexOf("get_optimistic_promotion_plan_v1"))
+      .toBeLessThan(indexOf("promote_optimistic_block_canonical_v1"));
+    expect(marketCall.values[25]).toBe(laterHeads[0]);
+    expect(marketCall.values[26]).toBe(laterHeads[1]);
+    expect(marketCall.values[33]).toBe("2");
+  });
+
+  it("aborts before planning or promotion when the atomic market append fails", async () => {
+    const base = await verifiedBundle([feeAccrualLog()]);
+    const bundle = attachOptimisticMarketStates(base, [
+      marketStateEvidence(base),
+    ]);
+    let planned = false;
+    let promoted = false;
+    const executor: PostgresExecutor = {
+      async transaction(work) {
+        return work({
+          async query<Row extends Record<string, unknown>>(sql: string) {
+            if (sql.includes("session_user::text") && !sql.includes("current_role")) {
+              return [{ session_user: "programmable_projector_login" }] as unknown as Row[];
+            }
+            if (sql.includes("current_role::text")) {
+              return [{
+                session_user: "programmable_projector_login",
+                current_role: "programmable_projector",
+              }] as unknown as Row[];
+            }
+            if (sql.includes("append_optimistic_block_observation_v1")) {
+              return [{ optimistic_block_id: bundle.optimisticBlockId }] as unknown as Row[];
+            }
+            if (sql.includes("append_optimistic_event_row_v1")) {
+              return [{ optimistic_event_id: bundle.events[0]!.optimisticEventId }] as unknown as Row[];
+            }
+            if (sql.includes("append_optimistic_market_state_v1")) {
+              throw new Error("market append failed");
+            }
+            if (sql.includes("get_optimistic_promotion_plan_v1")) planned = true;
+            if (sql.includes("promote_optimistic_block_canonical_v1")) promoted = true;
+            return [] as Row[];
+          },
+        });
+      },
+      async close() {},
+    };
+
+    await expect(createOptimisticLiveWriter({ executor }).persist(bundle))
+      .rejects.toMatchObject({
+        name: "ProjectorDatabaseError",
+      });
+    expect(planned).toBe(false);
+    expect(promoted).toBe(false);
   });
 
   it("advances the verified live chain for an empty manifest-log block", async () => {
@@ -481,6 +761,53 @@ describe("optimistic live runtime", () => {
     expect(transactionOpened).toBe(false);
   });
 
+  it("rejects tampered market commitments and regressed market heads before the transaction", async () => {
+    const base = await verifiedBundle([feeAccrualLog()], BLOCK_NUMBER + 1n);
+    const bundle = attachOptimisticMarketStates(base, [
+      marketStateEvidence(base, [
+        (BLOCK_NUMBER + 2n).toString(),
+        (BLOCK_NUMBER + 2n).toString(),
+      ]),
+    ]);
+    let transactionCount = 0;
+    const executor: PostgresExecutor = {
+      async transaction() {
+        transactionCount += 1;
+        throw new Error("must not run");
+      },
+      async close() {},
+    };
+    const state = bundle.marketStates[0]!;
+    const tamperedCommitment = {
+      ...bundle,
+      marketStates: [{
+        ...state,
+        market: { ...state.market, activeLiquidity: "999" },
+      }],
+    };
+    const regressedHeads = {
+      ...bundle,
+      marketStates: [{
+        ...state,
+        providerHeads: [BLOCK_NUMBER.toString(), BLOCK_NUMBER.toString()] as const,
+      }],
+    };
+
+    await expect(createOptimisticLiveWriter({ executor }).persist(
+      tamperedCommitment,
+    )).rejects.toMatchObject({
+      name: "DataPipelineError",
+      code: "validation_failed",
+    });
+    await expect(createOptimisticLiveWriter({ executor }).persist(
+      regressedHeads,
+    )).rejects.toMatchObject({
+      name: "DataPipelineError",
+      code: "validation_failed",
+    });
+    expect(transactionCount).toBe(0);
+  });
+
   it("reads and revalidates bounded live rows through only API-reader RPCs", async () => {
     const bundle = await verifiedBundle([
       completeClassicLaunchLogs()[0]!,
@@ -558,6 +885,131 @@ describe("optimistic live runtime", () => {
     expect(snapshot.events[0]?.normalizedPayload.eventName).toBe("PoolRegistered");
   });
 
+  it("reconstructs durable market state in a cold reader and rejects tamper or reorg mismatch", async () => {
+    const base = await verifiedBundle([feeAccrualLog()]);
+    const bundle = attachOptimisticMarketStates(base, [
+      marketStateEvidence(base, [
+        (BLOCK_NUMBER + 2n).toString(),
+        (BLOCK_NUMBER + 3n).toString(),
+      ]),
+    ]);
+    const stateRow = marketDatabaseRow(bundle);
+    const executorFor = (
+      mutate?: (row: ReturnType<typeof marketDatabaseRow>) => Record<string, unknown>,
+    ): PostgresExecutor => {
+      let eventsListed = false;
+      let marketsListed = false;
+      return {
+        async transaction(work) {
+          return work({
+            async query<Row extends Record<string, unknown>>(sql: string) {
+              if (sql.includes("session_user::text") && !sql.includes("current_role")) {
+                return [{ session_user: "programmable_api_reader_login" }] as unknown as Row[];
+              }
+              if (sql.includes("current_role::text")) {
+                return [{
+                  session_user: "programmable_api_reader_login",
+                  current_role: "programmable_api_reader",
+                }] as unknown as Row[];
+              }
+              if (sql.includes("get_optimistic_live_head_v1")) {
+                return [{
+                  optimistic_block_id: bundle.optimisticBlockId,
+                  chain_id: "1",
+                  block_number: bundle.blockNumber,
+                  block_hash: Buffer.from(bundle.blockHash.slice(2), "hex"),
+                  parent_hash: Buffer.from(bundle.parentHash.slice(2), "hex"),
+                  block_timestamp: new Date(bundle.blockTimestamp),
+                  provider_a_id: bundle.providerDeploymentIds[0],
+                  provider_b_id: bundle.providerDeploymentIds[1],
+                  provider_a_head: bundle.providerHeads[0],
+                  provider_b_head: bundle.providerHeads[1],
+                  reorg_generation: "0",
+                  status: "canonical",
+                  observed_at: new Date(bundle.observedAt),
+                  canonical_at: new Date(bundle.observedAt),
+                }] as unknown as Row[];
+              }
+              if (sql.includes("list_optimistic_canonical_events_v1")) {
+                if (eventsListed) return [] as Row[];
+                eventsListed = true;
+                const event = bundle.events[0]!;
+                return [{
+                  optimistic_event_id: event.optimisticEventId,
+                  optimistic_block_id: event.optimisticBlockId,
+                  chain_id: "1",
+                  block_number: bundle.blockNumber,
+                  block_hash: Buffer.from(bundle.blockHash.slice(2), "hex"),
+                  transaction_hash: Buffer.from(event.transactionHash.slice(2), "hex"),
+                  transaction_index: String(event.transactionIndex),
+                  block_global_log_index: String(event.blockGlobalLogIndex),
+                  source_address: Buffer.from(event.sourceAddress.slice(2), "hex"),
+                  event_signature: Buffer.from(event.eventSignature.slice(2), "hex"),
+                  ordered_topics: event.orderedTopics.map((topic) =>
+                    Buffer.from(topic.slice(2), "hex")),
+                  raw_data: Buffer.from(event.rawData.slice(2), "hex"),
+                  normalized_payload: event.normalizedPayload,
+                  payload_commitment: Buffer.from(event.payloadCommitment.slice(2), "hex"),
+                  reorg_generation: "0",
+                  observed_at: new Date(bundle.observedAt),
+                }] as unknown as Row[];
+              }
+              if (sql.includes("list_optimistic_canonical_market_states_v1")) {
+                if (marketsListed) return [] as Row[];
+                marketsListed = true;
+                return [mutate ? mutate({ ...stateRow }) : stateRow] as unknown as Row[];
+              }
+              return [] as Row[];
+            },
+          });
+        },
+        async close() {},
+      };
+    };
+
+    const coldSnapshot = await createOptimisticLiveReader({
+      executor: executorFor(),
+      now: () => new Date("2026-08-02T10:00:30.000Z"),
+    }).snapshot();
+
+    expect(coldSnapshot.marketStates).toHaveLength(1);
+    expect(coldSnapshot.marketStates[0]).toMatchObject({
+      confirmations: 2,
+      providerHeads: [
+        (BLOCK_NUMBER + 2n).toString(),
+        (BLOCK_NUMBER + 3n).toString(),
+      ],
+      market: {
+        indexedValuationBlockNumber: BLOCK_NUMBER.toString(),
+        currentTick: 25,
+        activeLiquidity: "1000000",
+      },
+    });
+    expect(coldSnapshot.head?.providerHeads).toEqual([
+      BLOCK_NUMBER.toString(),
+      BLOCK_NUMBER.toString(),
+    ]);
+
+    await expect(createOptimisticLiveReader({
+      executor: executorFor((row) => ({
+        ...row,
+        market: { ...row.market, activeLiquidity: "999" },
+      })),
+      now: () => new Date("2026-08-02T10:00:30.000Z"),
+    }).snapshot()).rejects.toMatchObject({
+      name: "DataPipelineError",
+      code: "validation_failed",
+    });
+    await expect(createOptimisticLiveReader({
+      executor: executorFor((row) => ({ ...row, reorg_generation: "1" })),
+      now: () => new Date("2026-08-02T10:00:30.000Z"),
+    }).snapshot()).rejects.toMatchObject({
+      name: "DataPipelineError",
+      code: "validation_failed",
+      safeMetadata: { operation: "optimistic-market-window" },
+    });
+  });
+
   it("drops stale or implausibly future live heads before reading event rows", async () => {
     const bundle = await verifiedBundle([completeClassicLaunchLogs()[0]!]);
     let listCalls = 0;
@@ -592,7 +1044,10 @@ describe("optimistic live runtime", () => {
                 canonical_at: new Date(bundle.observedAt),
               }] as unknown as Row[];
             }
-            if (sql.includes("list_optimistic_canonical_events_v1")) {
+            if (
+              sql.includes("list_optimistic_canonical_events_v1") ||
+              sql.includes("list_optimistic_canonical_market_states_v1")
+            ) {
               listCalls += 1;
             }
             return [] as Row[];
@@ -611,13 +1066,16 @@ describe("optimistic live runtime", () => {
       now: () => new Date("2026-08-02T09:59:29.000Z"),
     }).snapshot();
 
-    expect(stale).toEqual({ head: null, events: [] });
-    expect(future).toEqual({ head: null, events: [] });
+    expect(stale).toEqual({ head: null, events: [], marketStates: [] });
+    expect(future).toEqual({ head: null, events: [], marketStates: [] });
     expect(listCalls).toBe(0);
   });
 
   it("replays the database-stored canonical decision and refuses non-promotable reorg plans", async () => {
-    const bundle = await verifiedBundle([completeClassicLaunchLogs()[0]!]);
+    const replayBase = await verifiedBundle([feeAccrualLog()]);
+    const bundle = attachOptimisticMarketStates(replayBase, [
+      marketStateEvidence(replayBase),
+    ]);
     const canonicalStatusId = "aaaaaaaa-aaaa-5aaa-8aaa-aaaaaaaaaaaa";
     const storedDecision = Buffer.from("ef".repeat(32), "hex");
     const storedDecidedAt = new Date("2026-08-02T09:59:59.000Z");
@@ -643,6 +1101,12 @@ describe("optimistic live runtime", () => {
             }
             if (sql.includes("append_optimistic_event_row_v1")) {
               return [{ optimistic_event_id: bundle.events[0]!.optimisticEventId }] as unknown as Row[];
+            }
+            if (sql.includes("append_optimistic_market_state_v1")) {
+              return [{
+                optimistic_market_state_id:
+                  bundle.marketStates[0]!.optimisticMarketStateId,
+              }] as unknown as Row[];
             }
             if (sql.includes("get_optimistic_promotion_plan_v1")) {
               return [{
@@ -727,8 +1191,11 @@ describe("optimistic live runtime", () => {
     expect(incompleteRows).toEqual([]);
   });
 
-  it("binds market state to a live fee event, known pool and the exact provider pair", async () => {
-    const bundle = await verifiedBundle([feeAccrualLog()]);
+  it("uses only snapshot-persisted market state bound to a live fee event and known pool", async () => {
+    const baseBundle = await verifiedBundle([feeAccrualLog()]);
+    const bundle = attachOptimisticMarketStates(baseBundle, [
+      marketStateEvidence(baseBundle),
+    ]);
     const snapshot = snapshotFromBundle(bundle);
     const canonicalToken: LauncherToken = {
       id: TOKEN,
@@ -745,39 +1212,13 @@ describe("optimistic live runtime", () => {
       totalSwapFeeBps: 100,
       liquidityPath: "meme",
     };
-    const state = {
-      chainId: 1 as const,
-      blockNumber: bundle.blockNumber,
-      blockHash: bundle.blockHash,
-      confirmations: 0,
-      poolId: POOL_ID,
-      tokenAddress: TOKEN,
-      market: {
-        indexedValuationBlockNumber: bundle.blockNumber,
-        currentTick: 25,
-        activeLiquidity: "1000000",
-      },
-      providerIdentities: bundle.providerIdentities,
-      providerVendorGroups: bundle.providerVendorGroups,
-      providerEndpointCommitments: bundle.providerEndpointCommitments,
-      providerOriginCommitments: bundle.providerOriginCommitments,
-      providerHeads: bundle.providerHeads,
-    };
-
     const rows = optimisticOverlayRowsFromSnapshot({
       snapshot,
       canonicalTokens: [canonicalToken],
-      marketStates: [state],
-      providerDeployments: PROVIDER_DEPLOYMENTS,
     });
-    const wrongProviderRows = optimisticOverlayRowsFromSnapshot({
-      snapshot,
+    const noDurableStateRows = optimisticOverlayRowsFromSnapshot({
+      snapshot: Object.freeze({ ...snapshot, marketStates: Object.freeze([]) }),
       canonicalTokens: [canonicalToken],
-      marketStates: [{
-        ...state,
-        providerIdentities: ["untrusted", state.providerIdentities[1]],
-      }],
-      providerDeployments: PROVIDER_DEPLOYMENTS,
     });
 
     expect(rows).toHaveLength(1);
@@ -791,6 +1232,6 @@ describe("optimistic live runtime", () => {
         activeLiquidity: "1000000",
       },
     });
-    expect(wrongProviderRows).toEqual([]);
+    expect(noDurableStateRows).toEqual([]);
   });
 });
