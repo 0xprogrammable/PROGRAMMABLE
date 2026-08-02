@@ -277,7 +277,9 @@ test(
       environment: Object.freeze({ LANG: "C", LC_ALL: "C" }),
       secrets: [],
     });
-    await cleanupCandidateSchemas(sql, closures.cleanup);
+    await cleanupCandidateSchemas(sql, closures.cleanup, {
+      supabaseHosted: false,
+    });
     await runTool(config.pgRestore, [
       ...CANDIDATE_SAFETY_RECOVERY_FLAGS,
       "--host",
@@ -294,6 +296,7 @@ test(
       sql,
       closures.owners,
       closures.security,
+      { supabaseHosted: false },
     );
     await assertCandidateSchemaStage(sql, CANDIDATE_RESTORE_SCHEMAS);
     const recovered = await captureDatabaseManifest(sql);

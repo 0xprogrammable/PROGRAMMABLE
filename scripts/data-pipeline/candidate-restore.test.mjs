@@ -19,6 +19,7 @@ import {
   applyCandidateRestore,
   applyCandidateRuntimeEnable,
   applyCandidateSafetyRecovery,
+  assertRestoreRolePostureEvidence,
   buildCandidateSafetyBackupEvidence,
   createCandidateRestorePlan,
   createCandidateRuntimeEnablePlan,
@@ -68,6 +69,114 @@ const RESTORED_PORTABLE_STRUCTURAL_MANIFEST =
 const SAFETY_MANIFEST = `0x${"e".repeat(64)}`;
 const SAFETY_STRUCTURAL_MANIFEST = `0x${"f".repeat(64)}`;
 const SAFETY_PORTABLE_STRUCTURAL_MANIFEST = `0x${"d".repeat(64)}`;
+
+const RESTORE_ROLE_IDENTITY = Object.freeze({
+  session_user: "cli_login_postgres",
+  current_user: "postgres",
+  current_role: "postgres",
+  can_set_migrator: true,
+  supabase_admin_exists: true,
+});
+const RESTORE_ROLES = Object.freeze([
+  Object.freeze({ rolname: "postgres", rolsuper: false }),
+  Object.freeze({
+    rolname: "programmable_migrator",
+    rolsuper: false,
+    rolinherit: false,
+    rolcreaterole: false,
+    rolcreatedb: false,
+    rolcanlogin: false,
+    rolreplication: false,
+    rolbypassrls: false,
+  }),
+]);
+const RESTORE_OPERATOR_MEMBERSHIP = Object.freeze({
+  member_role: "postgres",
+  granted_role: "programmable_migrator",
+  grantor_role: "postgres",
+  inherit_option: false,
+  set_option: true,
+  admin_option: false,
+});
+const RESTORE_SUPABASE_MEMBERSHIP = Object.freeze({
+  member_role: "postgres",
+  granted_role: "programmable_migrator",
+  grantor_role: "supabase_admin",
+  inherit_option: false,
+  set_option: false,
+  admin_option: true,
+});
+
+test("restore posture accepts the exact Supabase admin and operator grants", () => {
+  assert.doesNotThrow(() =>
+    assertRestoreRolePostureEvidence(
+      RESTORE_ROLE_IDENTITY,
+      RESTORE_ROLES,
+      [RESTORE_SUPABASE_MEMBERSHIP, RESTORE_OPERATOR_MEMBERSHIP],
+      { supabaseHosted: true },
+    ),
+  );
+});
+
+test("restore posture accepts the exact grants for a hosted postgres login", () => {
+  assert.doesNotThrow(() =>
+    assertRestoreRolePostureEvidence(
+      { ...RESTORE_ROLE_IDENTITY, session_user: "postgres" },
+      RESTORE_ROLES,
+      [RESTORE_SUPABASE_MEMBERSHIP, RESTORE_OPERATOR_MEMBERSHIP],
+      { supabaseHosted: true },
+    ),
+  );
+});
+
+test("restore posture accepts an isolated postgres operator grant", () => {
+  assert.doesNotThrow(() =>
+    assertRestoreRolePostureEvidence(
+      {
+        ...RESTORE_ROLE_IDENTITY,
+        session_user: "postgres",
+        supabase_admin_exists: false,
+      },
+      RESTORE_ROLES,
+      [RESTORE_OPERATOR_MEMBERSHIP],
+      { supabaseHosted: false },
+    ),
+  );
+});
+
+test("restore posture rejects unknown or duplicated memberships", () => {
+  const invalid = Object.freeze({
+    ...RESTORE_SUPABASE_MEMBERSHIP,
+    grantor_role: "unknown_admin",
+  });
+  for (const memberships of [
+    [RESTORE_SUPABASE_MEMBERSHIP],
+    [RESTORE_OPERATOR_MEMBERSHIP],
+    [RESTORE_OPERATOR_MEMBERSHIP, RESTORE_OPERATOR_MEMBERSHIP],
+    [RESTORE_OPERATOR_MEMBERSHIP, invalid],
+  ]) {
+    assert.throws(
+      () =>
+        assertRestoreRolePostureEvidence(
+          RESTORE_ROLE_IDENTITY,
+          RESTORE_ROLES,
+          memberships,
+          { supabaseHosted: true },
+        ),
+      /Candidate restore role posture is not exact/u,
+    );
+  }
+  assert.throws(
+    () =>
+      assertRestoreRolePostureEvidence(
+        { ...RESTORE_ROLE_IDENTITY, supabase_admin_exists: false },
+        RESTORE_ROLES,
+        [RESTORE_SUPABASE_MEMBERSHIP, RESTORE_OPERATOR_MEMBERSHIP],
+        { supabaseHosted: false },
+      ),
+    /Candidate restore role posture is not exact/u,
+  );
+});
 
 const PINNED_SNAPSHOT_EVIDENCE = Object.freeze({
   kind: "programmable-database-backup-restore-evidence",
