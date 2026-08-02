@@ -39,6 +39,7 @@ const MAXIMUM_LOG_DATA_BYTES = 16 * 1_024;
 const MAXIMUM_OPTIMISTIC_CONFIRMATIONS = 0xffff_ffffn;
 const DEFAULT_HARD_DEADLINE_MS = 8_000;
 const MAXIMUM_HARD_DEADLINE_MS = 8_000;
+const VERIFIED_OPTIMISTIC_BLOCKS = new WeakSet<object>();
 
 export type QuickNodeBlockHint = Readonly<{
   chainId: 1;
@@ -81,6 +82,21 @@ export type DualRpcOptimisticBlock = Readonly<{
   confirmations: number;
   providerCallCounts: readonly [4, 4];
 }>;
+
+/**
+ * True only for the exact in-memory result returned by
+ * `readOptimisticBlockWithDualRpc`. Clones and deserialized payloads
+ * deliberately lose this proof-of-origin marker.
+ */
+export function isVerifiedDualRpcOptimisticBlock(
+  value: unknown,
+): value is DualRpcOptimisticBlock {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    VERIFIED_OPTIMISTIC_BLOCKS.has(value)
+  );
+}
 
 type ActiveManifestSource = Readonly<{
   contractName: string;
@@ -604,7 +620,7 @@ export async function readOptimisticBlockWithDualRpc(input: Readonly<{
     if (confirmations > MAXIMUM_OPTIMISTIC_CONFIRMATIONS) {
       throw validationError("rpc", "optimistic-confirmations-range");
     }
-    return Object.freeze({
+    const verified = Object.freeze({
       finality: "optimistic" as const,
       chainId: 1 as const,
       block: results[0]!.header,
@@ -621,6 +637,8 @@ export async function readOptimisticBlockWithDualRpc(input: Readonly<{
       confirmations: Number(confirmations),
       providerCallCounts: [4, 4] as const,
     });
+    VERIFIED_OPTIMISTIC_BLOCKS.add(verified);
+    return verified;
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;
     throw dataPipelineError({

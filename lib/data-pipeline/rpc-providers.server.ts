@@ -2,12 +2,15 @@ import "server-only";
 
 import {
   createPublicClient,
+  encodeFunctionData,
   http,
   numberToHex,
   type Hex,
   type RpcLog,
 } from "viem";
 import { mainnet } from "viem/chains";
+
+import { stateViewReadAbi } from "../onchain/abis";
 
 import type {
   CandidateRpcClassicRewardFactorySnapshot,
@@ -456,6 +459,59 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         })),
       ]);
       return { name, symbol };
+    },
+    async readOptimisticPoolState({
+      stateView,
+      poolId,
+      blockNumber,
+      blockHash,
+      requireCanonical,
+    }) {
+      const exactBlock = { blockHash, requireCanonical } as const;
+      const [runtimeBytecode, slot0Result, liquidityResult] = await Promise.all([
+        rpc(() => client.request({
+          method: "eth_getCode",
+          params: [stateView, exactBlock],
+        })),
+        rpc(() => client.request({
+          method: "eth_call",
+          params: [
+            {
+              to: stateView,
+              data: encodeFunctionData({
+                abi: stateViewReadAbi,
+                functionName: "getSlot0",
+                args: [poolId],
+              }),
+            },
+            exactBlock,
+          ],
+        })),
+        rpc(() => client.request({
+          method: "eth_call",
+          params: [
+            {
+              to: stateView,
+              data: encodeFunctionData({
+                abi: stateViewReadAbi,
+                functionName: "getLiquidity",
+                args: [poolId],
+              }),
+            },
+            exactBlock,
+          ],
+        })),
+      ]);
+      return Object.freeze({
+        stateView,
+        poolId,
+        blockNumber: blockNumber.toString(),
+        blockHash,
+        runtimeBytecode,
+        slot0Result,
+        liquidityResult,
+        rpcCallCount: 3,
+      });
     },
     async readRewardSnapshot({
       model,

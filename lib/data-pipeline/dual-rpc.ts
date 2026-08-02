@@ -152,6 +152,19 @@ export type CandidateRpcClient = {
     requireCanonical: true;
   }): Promise<Readonly<{ name: unknown; symbol: unknown }>>;
   /**
+   * Executes the frozen Uniswap v4 StateView code + state reads at one
+   * EIP-1898 block hash. Raw bytes are retained so the optimistic reader can
+   * require byte-for-byte equality across the two independent providers
+   * before ABI decoding either result.
+   */
+  readOptimisticPoolState?(input: {
+    stateView: HexAddress;
+    poolId: HexBytes32;
+    blockNumber: bigint;
+    blockHash: HexBytes32;
+    requireCanonical: true;
+  }): Promise<CandidateRpcOptimisticPoolState>;
+  /**
    * Executes only the frozen reward-vault call shapes at one exact block.
    * The returned call count is verified against the committed formula.
    */
@@ -185,6 +198,17 @@ export type CandidateRpcClient = {
     requests: readonly CandidateRpcLogFilter[];
   }): Promise<readonly (readonly CandidateRpcLog[])[]>;
 };
+
+export type CandidateRpcOptimisticPoolState = Readonly<{
+  stateView: unknown;
+  poolId: unknown;
+  blockNumber: unknown;
+  blockHash: unknown;
+  runtimeBytecode: unknown;
+  slot0Result: unknown;
+  liquidityResult: unknown;
+  rpcCallCount: unknown;
+}>;
 
 export type CandidateRpcRewardSnapshot = Readonly<{
   model: unknown;
