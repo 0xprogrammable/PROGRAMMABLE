@@ -13,6 +13,11 @@ import {
   validateDirectSupabaseTarget,
   validateMigrationPlan,
 } from "./hosted-db-operator-core.mjs";
+import {
+  applyPendingMigrations,
+  closeHostedDatabase,
+  openHostedDatabase,
+} from "./hosted-db-postgres.mjs";
 
 const COMMIT = "a".repeat(40);
 const HASH = `0x${"1".repeat(64)}`;
@@ -97,6 +102,21 @@ test("direct target validation accepts only the expected 5432 endpoint", () => {
     sslMode: "verify-full",
   });
   assert.doesNotMatch(JSON.stringify(target), /private/u);
+  assert.deepEqual(
+    validateDirectSupabaseTarget(
+      `postgresql://cli_login_postgres:private@db.${projectRef}.supabase.co:5432/postgres?sslmode=verify-full`,
+      projectRef,
+    ),
+    target,
+  );
+  assert.throws(
+    () =>
+      validateDirectSupabaseTarget(
+        `postgresql://cli_login_postgres_2:private@db.${projectRef}.supabase.co:5432/postgres?sslmode=verify-full`,
+        projectRef,
+      ),
+    /direct Supabase endpoint/u,
+  );
   assert.throws(
     () =>
       validateDirectSupabaseTarget(
@@ -231,4 +251,281 @@ test("secret guard and safe failures do not echo credentials", () => {
   const postgresError = new Error("postgres://user:secret@example");
   postgresError.code = "42P01";
   assert.equal(safeFailure(postgresError), "operator failed (42P01)");
+});
+
+function pending(value) {
+  const result = Promise.resolve(value);
+  result.simple = () => result;
+  return result;
+}
+
+function fakeOpenClient({ backendPid = 731, reconnectOnRoleChange = false } = {}) {
+  const sessionUser = "cli_login_postgres";
+  let currentRole = sessionUser;
+  let ended = false;
+  const sql = {
+    unsafe(statement) {
+      if (statement.trim() === "set role postgres") {
+        currentRole = "postgres";
+        if (reconnectOnRoleChange) backendPid += 1;
+        return pending([]);
+      }
+      if (statement.includes("current_database()")) {
+        return pending([{
+          backend_pid: backendPid,
+          session_user: sessionUser,
+          current_user: sessionUser,
+          current_role: currentRole,
+          database_name: "postgres",
+          server_port: 5432,
+          server_version_num: "170010",
+          is_postgres_member: true,
+        }]);
+      }
+      return pending([{
+        backend_pid: backendPid,
+        session_user: sessionUser,
+        current_user: currentRole,
+        current_role: currentRole,
+      }]);
+    },
+    async end() {
+      ended = true;
+    },
+  };
+  return { sql, ended: () => ended };
+}
+
+test("hosted database opening pins one non-expiring backend session", async () => {
+  const projectRef = "abcdefghijklmnopqrst";
+  const client = fakeOpenClient();
+  let options;
+  const connection = await openHostedDatabase(
+    {
+      databaseUrl:
+        `postgresql://cli_login_postgres:private@db.${projectRef}.supabase.co:5432/postgres?sslmode=verify-full`,
+      expectedProjectRef: projectRef,
+      sslCaPem:
+        `-----BEGIN CERTIFICATE-----\n${"A".repeat(80)}\n-----END CERTIFICATE-----`,
+    },
+    {
+      postgresFactory(input) {
+        options = input;
+        return client.sql;
+      },
+    },
+  );
+  assert.equal(options.max, 1);
+  assert.equal(options.idle_timeout, 0);
+  assert.equal(options.max_lifetime, null);
+  assert.deepEqual(connection.sessionIdentity, {
+    backendPid: 731,
+    sessionUser: "cli_login_postgres",
+    currentRole: "postgres",
+  });
+  await closeHostedDatabase(connection.sql);
+  assert.equal(client.ended(), true);
+});
+
+test("hosted database opening rejects a reconnect while assuming the JIT role", async () => {
+  const projectRef = "abcdefghijklmnopqrst";
+  const client = fakeOpenClient({ reconnectOnRoleChange: true });
+  await assert.rejects(
+    openHostedDatabase(
+      {
+        databaseUrl:
+          `postgresql://cli_login_postgres:private@db.${projectRef}.supabase.co:5432/postgres?sslmode=verify-full`,
+        expectedProjectRef: projectRef,
+        sslCaPem:
+          `-----BEGIN CERTIFICATE-----\n${"A".repeat(80)}\n-----END CERTIFICATE-----`,
+      },
+      { postgresFactory: () => client.sql },
+    ),
+    /effective role is not postgres/u,
+  );
+  assert.equal(client.ended(), true);
+});
+
+function fakeMigrationClient({ reconnectAfterMigration = false } = {}) {
+  const sessionUser = "cli_login_postgres";
+  let backendPid = 811;
+  let currentRole = "postgres";
+  let lockHeld = false;
+  let migrationTransactions = 0;
+  const historyRows = [];
+  const evidenceRows = [];
+  const mutations = [];
+
+  const identity = (extra = {}) => ({
+    backend_pid: backendPid,
+    session_user: sessionUser,
+    current_role: currentRole,
+    ...extra,
+  });
+
+  function unsafe(statement) {
+    const normalized = statement.trim();
+    if (normalized.includes("pg_try_advisory_lock")) {
+      lockHeld = true;
+      mutations.push(`lock:${backendPid}:${currentRole}`);
+      return pending([identity({ acquired: true })]);
+    }
+    if (normalized.includes("pg_advisory_unlock")) {
+      const released = lockHeld && backendPid === 811 && currentRole === "postgres";
+      lockHeld = false;
+      mutations.push(`unlock:${backendPid}:${currentRole}:${released}`);
+      return pending([identity({ released })]);
+    }
+    if (normalized.includes("to_regclass")) {
+      return pending([{
+        history_table: "supabase_migrations.schema_migrations",
+        evidence_table:
+          "supabase_migrations.programmable_migration_evidence",
+      }]);
+    }
+    if (normalized.includes("select version, coalesce(name")) {
+      return pending(historyRows.map((row) => ({ ...row })));
+    }
+    if (normalized.includes("select version, name, file_name")) {
+      return pending(evidenceRows.map((row) => ({ ...row })));
+    }
+    if (normalized === "reset all; set role postgres") {
+      mutations.push("reset-and-set-role");
+      currentRole = "postgres";
+      return pending([]);
+    }
+    if (normalized === "set role postgres") {
+      mutations.push("set-role-postgres");
+      currentRole = "postgres";
+      return pending([]);
+    }
+    if (normalized.includes("set local lock_timeout")) {
+      mutations.push("set-timeouts");
+      return pending([]);
+    }
+    if (normalized.includes("create schema if not exists supabase_migrations")) {
+      mutations.push("history-ddl");
+      return pending([]);
+    }
+    if (normalized.includes("select migration_")) {
+      mutations.push(normalized.match(/select (migration_\w+)/u)?.[1]);
+      currentRole = sessionUser;
+      return pending([]);
+    }
+    if (normalized.includes("pg_backend_pid")) {
+      mutations.push(`assert:${backendPid}:${currentRole}`);
+      return pending([identity()]);
+    }
+    throw new Error(`unexpected fake SQL: ${normalized.slice(0, 80)}`);
+  }
+
+  function transaction(strings, ...values) {
+    const statement = strings.join("?");
+    if (statement.includes("programmable_migration_evidence")) {
+      evidenceRows.push({
+        version: values[0],
+        name: values[1],
+        file_name: values[2],
+        ordinal: values[3],
+        file_sha256: values[4],
+        plan_sha256: values[5],
+        repository_commit: values[6],
+      });
+      mutations.push(`evidence:${values[0]}`);
+    } else if (statement.includes("schema_migrations")) {
+      historyRows.push({ version: values[0], name: values[1], statements: values[2] });
+      mutations.push(`history:${values[0]}`);
+    } else {
+      throw new Error("unexpected fake tagged SQL");
+    }
+    return Promise.resolve([]);
+  }
+  transaction.unsafe = unsafe;
+  transaction.array = (value) => value;
+
+  const sql = Object.assign(
+    (...args) => transaction(...args),
+    {
+      unsafe,
+      array: transaction.array,
+      async begin(callback) {
+        const evidenceBefore = evidenceRows.length;
+        const result = await callback(transaction);
+        if (evidenceRows.length > evidenceBefore) {
+          migrationTransactions += 1;
+          if (reconnectAfterMigration && migrationTransactions === 1) {
+            backendPid += 1;
+            currentRole = sessionUser;
+            lockHeld = false;
+          }
+        }
+        return result;
+      },
+    },
+  );
+  return { sql, mutations, historyRows, evidenceRows };
+}
+
+test("migration apply keeps the advisory lock on one exact backend", async (t) => {
+  const { workspace } = await fixture({
+    "20260731000100_first.sql":
+      "set role programmable_migrator; select migration_one(); reset role;\n",
+  });
+  t.after(() => rm(workspace, { recursive: true, force: true }));
+  const plan = await discoverMigrationPlan({ workspace, repositoryCommit: COMMIT });
+  const client = fakeMigrationClient();
+  const result = await applyPendingMigrations({
+    sql: client.sql,
+    workspace,
+    plan,
+    sessionIdentity: {
+      backendPid: 811,
+      sessionUser: "cli_login_postgres",
+      currentRole: "postgres",
+    },
+  });
+  assert.deepEqual(result.appliedThisRun, ["20260731000100"]);
+  assert.equal(result.status, "current");
+  assert.equal(client.historyRows.length, 1);
+  assert.equal(client.evidenceRows.length, 1);
+  const resetIndex = client.mutations.indexOf("reset-and-set-role");
+  assert.match(client.mutations[resetIndex - 1], /^assert:811:postgres$/u);
+  const postMigrationIndex = client.mutations.indexOf(
+    "assert:811:cli_login_postgres",
+  );
+  assert.ok(postMigrationIndex > resetIndex);
+  assert.equal(client.mutations[postMigrationIndex + 1], "set-role-postgres");
+  assert.equal(client.mutations.at(-1), "unlock:811:postgres:true");
+});
+
+test("migration apply fails closed after a backend reconnect", async (t) => {
+  const { workspace } = await fixture({
+    "20260731000100_first.sql":
+      "set role programmable_migrator; select migration_one(); reset role;\n",
+    "20260731000200_second.sql":
+      "set role programmable_migrator; select migration_two(); reset role;\n",
+  });
+  t.after(() => rm(workspace, { recursive: true, force: true }));
+  const plan = await discoverMigrationPlan({ workspace, repositoryCommit: COMMIT });
+  const client = fakeMigrationClient({ reconnectAfterMigration: true });
+  await assert.rejects(
+    applyPendingMigrations({
+      sql: client.sql,
+      workspace,
+      plan,
+      sessionIdentity: {
+        backendPid: 811,
+        sessionUser: "cli_login_postgres",
+        currentRole: "postgres",
+      },
+    }),
+    /session changed unexpectedly/u,
+  );
+  assert.equal(client.historyRows.length, 1);
+  assert.equal(client.evidenceRows.length, 1);
+  assert.equal(client.mutations.includes("migration_two"), false);
+  assert.equal(
+    client.mutations.at(-1),
+    "unlock:812:cli_login_postgres:false",
+  );
 });

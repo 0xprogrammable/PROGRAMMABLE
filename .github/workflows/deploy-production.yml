@@ -1,4 +1,4 @@
-name: Deploy Production
+name: Stage Production Candidate
 
 on:
   push:
@@ -98,7 +98,7 @@ jobs:
           echo "sha=$verified_sha" >> "$GITHUB_OUTPUT"
 
   deploy:
-    name: Deploy programmable.family
+    name: Stage programmable.family candidate
     needs: release-gate
     if: >-
       github.repository == '0xprogrammable/programmable' &&
@@ -187,6 +187,15 @@ jobs:
           npm run perf:read-model:staged-deployment --
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Gate exact staged QuickNode wake route
+        if: steps.read-model-policy.outputs.wake_canary_required == 'true'
+        env:
+          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+        run: >-
+          npm run perf:read-model:wake-canary --
+          --target-url "$STAGED_TARGET_URL"
 
       - name: Attest exact staged release policy
         id: release-attestation
@@ -386,13 +395,13 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npm run perf:read-model:gate
 
-      - name: Reverify staged binding immediately before promotion
+      - name: Reverify staged candidate binding
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           EXPECTED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
         run: |
-          binding_output="$RUNNER_TEMP/pre-promote-staged-binding"
+          binding_output="$RUNNER_TEMP/final-staged-binding"
           test ! -e "$binding_output"
           npm run perf:read-model:staged-deployment -- \
             --target-url "$STAGED_TARGET_URL" \
@@ -400,111 +409,23 @@ jobs:
           grep -Fx "deployment_id=$EXPECTED_DEPLOYMENT_ID" "$binding_output"
           grep -Fx "target_url=$STAGED_TARGET_URL" "$binding_output"
 
-      - name: Promote verified staged deployment
-        id: promote
-        continue-on-error: true
+      - name: Record staged candidate handoff
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
-        run: vercel promote "$DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
-
-      - name: Verify promoted production routes
-        id: post-promotion
-        if: steps.promote.outcome == 'success'
-        env:
-          EVIDENCE_REQUIRED: ${{ steps.read-model-policy.outputs.evidence_required }}
-          EVIDENCE_PATH: ${{ steps.read-model-capture.outputs.evidence_path }}
-          DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          if [ "$EVIDENCE_REQUIRED" = "true" ]; then
-            npm run perf:read-model:post-promotion -- \
-              --target-url "https://programmable.family" \
-              --deployment-id "$DEPLOYMENT_ID" \
-              --git-head "$GITHUB_SHA" \
-              --evidence "$EVIDENCE_PATH"
-          else
-            npm run perf:read-model:post-promotion -- \
-              --target-url "https://programmable.family" \
-              --deployment-id "$DEPLOYMENT_ID" \
-              --git-head "$GITHUB_SHA"
-          fi
-
-      - name: Reconcile an unsuccessful promotion attempt
-        if: >-
-          always() &&
-          steps.promote.outcome != 'skipped' &&
-          (steps.promote.outcome != 'success' ||
-          steps.post-promotion.outcome != 'success')
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          CANDIDATE_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
-          ROLLBACK_DEPLOYMENT_URL: ${{ steps.production-before.outputs.deployment_url }}
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
         run: |
-          observed_previous=false
-          for attempt in $(seq 1 12); do
-            binding_output="$RUNNER_TEMP/production-after-promote-$attempt"
-            if npm run perf:read-model:production-binding -- \
-              --target-url "https://programmable.family" \
-              --github-output "$binding_output"; then
-              current_deployment_id="$(sed -n 's/^deployment_id=//p' "$binding_output")"
-              if [ "$current_deployment_id" = "$CANDIDATE_DEPLOYMENT_ID" ]; then
-                if ! vercel rollback "$ROLLBACK_DEPLOYMENT_URL" \
-                  --yes --timeout 60s --token="$VERCEL_TOKEN"; then
-                  echo "Rollback command returned an uncertain result; verifying the live binding" >&2
-                fi
-                rollback_verified=false
-                for rollback_attempt in $(seq 1 12); do
-                  rollback_output="$RUNNER_TEMP/verified-rollback-binding-$rollback_attempt"
-                  if npm run perf:read-model:production-binding -- \
-                    --target-url "https://programmable.family" \
-                    --expected-deployment-id "$PREVIOUS_DEPLOYMENT_ID" \
-                    --expected-git-head "$PREVIOUS_GIT_HEAD" \
-                    --github-output "$rollback_output"; then
-                    rollback_verified=true
-                    break
-                  fi
-                  sleep 5
-                done
-                test "$rollback_verified" = "true"
-                exit 0
-              fi
-              if [ "$current_deployment_id" = "$PREVIOUS_DEPLOYMENT_ID" ]; then
-                observed_previous=true
-              else
-                echo "Production resolved to an unexpected deployment" >&2
-                exit 1
-              fi
-            fi
-            sleep 5
-          done
-          test "$observed_previous" = "true"
-          final_output="$RUNNER_TEMP/verified-previous-production-binding"
-          npm run perf:read-model:production-binding -- \
-            --target-url "https://programmable.family" \
-            --expected-deployment-id "$PREVIOUS_DEPLOYMENT_ID" \
-            --expected-git-head "$PREVIOUS_GIT_HEAD" \
-            --github-output "$final_output"
-
-      - name: Fail an unsuccessful promotion attempt
-        if: >-
-          always() &&
-          steps.promote.outcome != 'skipped' &&
-          (steps.promote.outcome != 'success' ||
-          steps.post-promotion.outcome != 'success')
-        run: exit 1
-
-      - name: Record deployment
-        env:
-          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
-        run: |
           {
-            echo "## Production deployment"
+            echo "## Staged production candidate"
             echo
             echo "- Commit: \`$GITHUB_SHA\`"
-            echo "- Deployment: $DEPLOYMENT_URL"
-            echo "- Domain: https://programmable.family"
+            echo "- Deployment ID: \`$DEPLOYMENT_ID\`"
+            echo "- Target: $STAGED_TARGET_URL"
+            echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
+            echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
             echo "- Read model: ${{ steps.read-model-policy.outputs.mode }}"
+            echo
+            echo "Stage-only: no production promotion was attempted."
+            echo "The manual operator must next capture and verify the DB-authored real-block SLA attestation, reverify this exact staged binding, promote this exact deployment ID, and run the post-promotion binding gate."
           } >> "$GITHUB_STEP_SUMMARY"

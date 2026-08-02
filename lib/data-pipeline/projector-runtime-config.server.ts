@@ -16,7 +16,11 @@ import {
   type ProjectorReleaseDatabaseScope,
 } from "./postgres-projector";
 import { runProjectorCycle } from "./projector";
-import { runReleaseProjectionCycle } from "./projector-projection";
+import {
+  commitVerifiedPreparedReleaseProjection,
+  prepareReleaseProjectionRound,
+  verifyPreparedReleaseProjection,
+} from "./projector-projection";
 import { createProjectorRuntimeLeaseController } from "./projector-runtime-lease.server";
 import {
   PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP,
@@ -291,7 +295,9 @@ export type ProjectorRuntimeDependencies = Readonly<{
   createStore: typeof createPostgresProjectorStore;
   createReleaseStore: typeof createPostgresReleaseProjectionStore;
   runCycle: typeof runProjectorCycle;
-  runReleaseCycle: typeof runReleaseProjectionCycle;
+  prepareReleaseRound: typeof prepareReleaseProjectionRound;
+  verifyReleaseProjection: typeof verifyPreparedReleaseProjection;
+  commitReleaseProjection: typeof commitVerifiedPreparedReleaseProjection;
   assertCandidateDatabase: typeof assertCandidateDatabaseBootstrapState;
   assertPromotedDatabase: typeof assertCandidateDatabasePromotedState;
   loadConfig?: typeof loadProjectorRuntimeConfig;
@@ -306,7 +312,9 @@ const DEFAULT_DEPENDENCIES: ProjectorRuntimeDependencies = Object.freeze({
   createStore: createPostgresProjectorStore,
   createReleaseStore: createPostgresReleaseProjectionStore,
   runCycle: runProjectorCycle,
-  runReleaseCycle: runReleaseProjectionCycle,
+  prepareReleaseRound: prepareReleaseProjectionRound,
+  verifyReleaseProjection: verifyPreparedReleaseProjection,
+  commitReleaseProjection: commitVerifiedPreparedReleaseProjection,
   assertCandidateDatabase: assertCandidateDatabaseBootstrapState,
   assertPromotedDatabase: assertCandidateDatabasePromotedState,
 });
@@ -589,6 +597,60 @@ export async function runConfiguredProjectorCycle(
         break;
       }
 
+      const participatingReleases = releaseStores.filter(
+        (_binding, index) => !projectionStates[index]!.processedAtomicGroup,
+      );
+      let preparedRound: Awaited<
+        ReturnType<typeof prepareReleaseProjectionRound>
+      > | null = null;
+      if (participatingReleases.length > 0) {
+        if (operationDeadline(operationsRemaining) === null) {
+          stoppedForDeadline = true;
+          break;
+        }
+        try {
+          preparedRound = await dependencies.prepareReleaseRound({
+            stores: participatingReleases.map(({ store }) => store),
+            envio,
+            providers,
+          });
+          if (
+            preparedRound.entries.length !== participatingReleases.length ||
+            preparedRound.entries.some((entry, index) => {
+              const expectedStore = participatingReleases[index]!.store;
+              return entry.status === "ready"
+                ? entry.projection.store !== expectedStore
+                : entry.store !== expectedStore;
+            })
+          ) {
+            return invalidRuntimeConfig();
+          }
+        } catch {
+          for (const binding of participatingReleases) {
+            const index = releaseStores.indexOf(binding);
+            projectionStates[index]!.failed = true;
+            operationsRemaining -= 1;
+          }
+          completedRounds += 1;
+          terminalSweepComplete = false;
+          break;
+        }
+      }
+      const preparedByStore = new Map(
+        preparedRound?.entries.map((entry) => [
+          entry.status === "ready" ? entry.projection.store : entry.store,
+          entry,
+        ]) ?? [],
+      );
+      const verifiedByStore = new Map<
+        (typeof releaseStores)[number]["store"],
+        Awaited<ReturnType<typeof verifyPreparedReleaseProjection>> & {
+          status: "verified";
+        }
+      >();
+
+      // Phase 1: finish every participating provider verification/fold before
+      // any release is allowed to enter its final commit transaction.
       for (let index = 0; index < releaseStores.length; index += 1) {
         const binding = releaseStores[index]!;
         const state = projectionStates[index]!;
@@ -599,29 +661,66 @@ export async function runConfiguredProjectorCycle(
           operationsRemaining -= 1;
           continue;
         }
+        const prepared = preparedByStore.get(binding.store);
+        if (!prepared || prepared.status === "failed" || !preparedRound) {
+          state.failed = true;
+          operationsRemaining -= 1;
+          continue;
+        }
         const deadline = operationDeadline(operationsRemaining);
         if (deadline === null) {
           stoppedForDeadline = true;
           break;
         }
         try {
-          const result = await dependencies.runReleaseCycle({
+          const result = await dependencies.verifyReleaseProjection({
             store: binding.store,
             envio,
             providers,
+            prepared: prepared.projection,
+            sharedVerification: preparedRound.sharedVerification,
+            deadlineMs: deadline,
+          });
+          if (result.status === "verified") {
+            verifiedByStore.set(binding.store, result);
+            // This verification operation becomes one pending commit, so the
+            // fair-share operation count intentionally stays unchanged.
+            continue;
+          }
+          state.pageCount += 1;
+          idleProjectionCount += 1;
+        } catch {
+          state.failed = true;
+        }
+        operationsRemaining -= 1;
+      }
+
+      if (stoppedForDeadline) break;
+
+      // Phase 2: all plan reads and all provider verification work are now
+      // complete. Commits remain independent and re-check lease/CAS state.
+      for (let index = 0; index < releaseStores.length; index += 1) {
+        const binding = releaseStores[index]!;
+        const state = projectionStates[index]!;
+        const verified = verifiedByStore.get(binding.store);
+        if (!verified) continue;
+        const deadline = operationDeadline(operationsRemaining);
+        if (deadline === null) {
+          stoppedForDeadline = true;
+          break;
+        }
+        try {
+          const result = await dependencies.commitReleaseProjection({
+            store: binding.store,
+            verification: verified.verification,
             deadlineMs: deadline,
           });
           const projectedCandidateCount =
-            result.status === "committed"
-              ? result.projectedCandidateCount
-              : 0;
+            result.projectedCandidateCount;
           const ignoredCandidateCount =
-            result.status === "committed"
-              ? result.ignoredCandidateCount
-              : 0;
+            result.ignoredCandidateCount;
           const maximumResultCount =
-            result.status === "committed" &&
-              (result.batchKind ?? "normal") !== "normal"
+            (result.batchKind ?? "normal") !== "normal"
               ? PROJECTOR_MAXIMUM_CANDIDATES_PER_ATOMIC_GROUP
               : PROJECTOR_MAXIMUM_CANDIDATES_PER_PAGE;
           if (
@@ -635,17 +734,13 @@ export async function runConfiguredProjectorCycle(
             return invalidRuntimeConfig();
           }
           state.pageCount += 1;
-          if (result.status === "committed") {
-            state.committed = true;
-            state.projectedCandidateCount += result.projectedCandidateCount;
-            state.ignoredCandidateCount += result.ignoredCandidateCount;
-            state.checkpointGeneration = result.checkpointGeneration;
-            state.processedAtomicGroup =
-              (result.batchKind ?? "normal") !== "normal";
-            madeProgress = true;
-          } else {
-            idleProjectionCount += 1;
-          }
+          state.committed = true;
+          state.projectedCandidateCount += result.projectedCandidateCount;
+          state.ignoredCandidateCount += result.ignoredCandidateCount;
+          state.checkpointGeneration = result.checkpointGeneration;
+          state.processedAtomicGroup =
+            (result.batchKind ?? "normal") !== "normal";
+          madeProgress = true;
         } catch {
           state.failed = true;
         }

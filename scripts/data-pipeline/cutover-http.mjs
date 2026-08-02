@@ -7,6 +7,8 @@ import {
   deploymentCommit,
   fetchVercelDeployment,
 } from "../perf/read-model-live-verifier.mjs";
+import { assertReadModelReleaseEvidenceCommitment } from
+  "../perf/read-model-evidence-commitment.mjs";
 
 const execute = promisify(execFile);
 const MAXIMUM_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -291,7 +293,8 @@ export async function captureAndGateStagedReadModel(input) {
   const captureResult = lastJsonLine(capture.stdout, "read-model capture");
   if (
     captureResult?.mode !== "capture" ||
-    typeof captureResult.evidencePath !== "string"
+    typeof captureResult.evidencePath !== "string" ||
+    typeof captureResult.evidenceSha256 !== "string"
   ) {
     throw new Error("read-model capture did not produce evidence");
   }
@@ -322,9 +325,14 @@ export async function captureAndGateStagedReadModel(input) {
     throw new Error("read-model gate rejected staged evidence");
   }
   const evidence = JSON.parse(await readFile(captureResult.evidencePath, "utf8"));
-  const commitment = evidence?.evidenceSha256 ?? evidence?.releaseEvidenceSha256;
-  if (typeof commitment !== "string" || !/^0x[0-9a-f]{64}$/u.test(commitment)) {
-    throw new Error("read-model evidence commitment is missing");
+  const commitment = assertReadModelReleaseEvidenceCommitment(evidence);
+  if (
+    captureResult.evidenceSha256 !== commitment ||
+    gateResult.evidenceSha256 !== commitment
+  ) {
+    throw new Error(
+      "read-model evidence commitment differs across capture and gate",
+    );
   }
   return Object.freeze({
     status: "accepted",

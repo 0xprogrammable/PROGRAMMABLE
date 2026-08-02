@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://programmable.family/schemas/read-model-real-block-sla-db-attestation.v2.json",
+  "title": "Programmable DB-authored real-block SLA attestation v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schemaVersion",
+    "exportId",
+    "challengeSha256",
+    "exportedAt",
+    "runtimeReceipt",
+    "apiObservations",
+    "receiptSha256",
+    "challenge",
+    "attestationHmacSha256"
+  ],
+  "properties": {
+    "kind": { "const": "programmable-real-block-sla-db-attestation" },
+    "schemaVersion": { "const": 2 },
+    "exportId": { "$ref": "#/$defs/uuid" },
+    "challengeSha256": { "$ref": "#/$defs/bytes32" },
+    "exportedAt": { "$ref": "#/$defs/timestamp" },
+    "runtimeReceipt": {
+      "type": "object",
+      "required": [
+        "initialNonceDigest",
+        "duplicateNonceDigest",
+        "initialResponseStatus",
+        "duplicateResponseStatus",
+        "markets"
+      ],
+      "properties": {
+        "initialNonceDigest": { "$ref": "#/$defs/bytes32" },
+        "duplicateNonceDigest": { "$ref": "#/$defs/bytes32" },
+        "initialResponseStatus": { "const": 503 },
+        "duplicateResponseStatus": { "const": 202 },
+        "markets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["optimisticMarketStateId", "releaseVersion"],
+            "properties": {
+              "optimisticMarketStateId": { "$ref": "#/$defs/uuid" },
+              "releaseVersion": { "enum": [null, "classic-v2", "classic-v3"] }
+            }
+          }
+        }
+      }
+    },
+    "apiObservations": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "apiObservationId",
+          "surface",
+          "optimisticMarketStateId",
+          "releaseVersion",
+          "reorgGeneration",
+          "requestUrl",
+          "responseStatus",
+          "cacheControl",
+          "responseBodySha256",
+          "responseBodySize",
+          "observedAt"
+        ],
+        "properties": {
+          "apiObservationId": { "$ref": "#/$defs/uuid" },
+          "surface": { "enum": ["explore-token", "classic-chart"] },
+          "optimisticMarketStateId": { "$ref": "#/$defs/uuid" },
+          "releaseVersion": { "enum": ["classic-v2", "classic-v3"] },
+          "reorgGeneration": { "$ref": "#/$defs/uint" },
+          "requestUrl": { "type": "string", "format": "uri", "maxLength": 512 },
+          "responseStatus": { "const": 200 },
+          "cacheControl": { "const": "no-store" },
+          "responseBodySha256": { "$ref": "#/$defs/bytes32" },
+          "responseBodySize": { "type": "integer", "minimum": 2, "maximum": 1048576 },
+          "observedAt": { "$ref": "#/$defs/timestamp" }
+        }
+      }
+    },
+    "receiptSha256": { "$ref": "#/$defs/bytes32" },
+    "challenge": { "$ref": "#/$defs/bytes32" },
+    "attestationHmacSha256": { "$ref": "#/$defs/bytes32" }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "bytes32": { "type": "string", "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$" },
+    "uint": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,18})$" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

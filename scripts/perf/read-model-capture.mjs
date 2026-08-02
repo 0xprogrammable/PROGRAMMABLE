@@ -16,6 +16,10 @@ import {
   ROUTE_NAMES,
   sha256Bytes,
 } from "./read-model-gate-core.mjs";
+import {
+  commitReadModelReleaseEvidence,
+  sha256Canonical,
+} from "./read-model-evidence-commitment.mjs";
 import { buildReadModelReleaseProbe } from "./read-model-release-probe.mjs";
 
 const RUNTIME_CAPTURE_PATH = "/api/ops/read-model-performance-capture";
@@ -55,29 +59,7 @@ const REQUIRED_RELEASE_VERSIONS = Object.freeze([
   "stock-paired-v3",
 ]);
 
-function canonicalJson(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
-  }
-  if (value !== null && typeof value === "object") {
-    return `{${Object.keys(value)
-      .sort()
-      .map(
-        (key) =>
-          `${JSON.stringify(key)}:${canonicalJson(value[key])}`,
-      )
-      .join(",")}}`;
-  }
-  const encoded = JSON.stringify(value);
-  if (encoded === undefined) {
-    throw new Error("explore matrix contains a non-JSON value");
-  }
-  return encoded;
-}
-
-export function sha256Canonical(value) {
-  return sha256Bytes(Buffer.from(canonicalJson(value), "utf8"));
-}
+export { sha256Canonical };
 
 export function normalizeExploreMatrixQuery(value) {
   if (typeof value !== "string") {
@@ -1394,7 +1376,7 @@ export async function main(argv = process.argv.slice(2)) {
     file,
     sha256: sha256Bytes(readFileSync(resolve(outputDirectory, file))),
   });
-  const evidence = {
+  const evidence = commitReadModelReleaseEvidence({
     schemaVersion: 1,
     profileId: profile.profileId,
     evidenceKind: args.kind,
@@ -1410,7 +1392,7 @@ export async function main(argv = process.argv.slice(2)) {
       httpSamples: artifactDescriptor(samplesFile),
       rpcTrace: artifactDescriptor(rpcTraceFile),
     },
-  };
+  });
   const evidencePath = resolve(
     outputDirectory,
     "read-model-release-evidence.v1.json",
@@ -1433,6 +1415,7 @@ export async function main(argv = process.argv.slice(2)) {
       mode: "capture",
       releaseEvidenceAccepted: false,
       evidencePath,
+      evidenceSha256: evidence.evidenceSha256,
       sampleCount: samples.length,
       exploreMatrixPageCount: exploreMatrix.pages.length,
       artifacts: Object.fromEntries(

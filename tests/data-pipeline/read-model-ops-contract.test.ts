@@ -205,6 +205,153 @@ describe("read-model operations source contract", () => {
       ]),
     );
   });
+
+  it("rejects wake canary, secret schema and staged-gate drift", () => {
+    const canaryPath = resolve(
+      ROOT,
+      "scripts/perf/read-model-projector-wake-canary.mjs",
+    );
+    const workflowPath = resolve(ROOT, ".github/workflows/deploy-production.yml");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        "scripts/perf/read-model-projector-wake-canary.mjs": `${readFileSync(
+          canaryPath,
+          "utf8",
+        )}\n// unreviewed drift\n`,
+        ".env.example": readFileSync(resolve(ROOT, ".env.example"), "utf8")
+          .replace(
+            "PROGRAMMABLE_QUICKNODE_STREAM_SECRET=",
+            "NEXT_PUBLIC_PROGRAMMABLE_QUICKNODE_STREAM_SECRET=exposed",
+          ),
+        ".github/workflows/deploy-production.yml": readFileSync(
+          workflowPath,
+          "utf8",
+        ).replace(
+          "Gate exact staged QuickNode wake route",
+          "Skipped staged QuickNode wake route",
+        ),
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
+      expect.arrayContaining([
+        "ops-quicknode-stream-wake-binding",
+        "ops-quicknode-stream-env-contract",
+        "ops-quicknode-stream-stage-gate",
+      ]),
+    );
+  });
+
+  it("keeps auth-only probes separate from real-block SLA evidence", () => {
+    const gatePath = "scripts/perf/read-model-real-block-sla-gate.mjs";
+    const driftedGate = readFileSync(resolve(ROOT, gatePath), "utf8").replace(
+      "REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS = 10_000",
+      "REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS = 60_000",
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [gatePath]: driftedGate,
+      },
+      expectedSha256Overrides: {
+        ...fixtureDigests(),
+        [gatePath]: createHash("sha256").update(driftedGate).digest("hex"),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-real-block-sla-gate-binding",
+    );
+  });
+
+  it("binds the bounded exclusive real-block SLA operator before promotion", () => {
+    const operatorPath = "scripts/perf/read-model-real-block-sla-operator.mjs";
+    const runbookPath = "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md";
+    const unboundedOperator = readFileSync(resolve(ROOT, operatorPath), "utf8")
+      .replace(
+        "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 5 * 60 * 1_000",
+        "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 10 * 60 * 1_000",
+      );
+    const bypassedRunbook = readFileSync(resolve(ROOT, runbookPath), "utf8")
+      .replace(
+        "npm run perf:read-model:real-block-sla-operator --",
+        "npm run perf:read-model:real-block-sla-operator-skipped --",
+      );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [operatorPath]: unboundedOperator,
+        [runbookPath]: bypassedRunbook,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
+      expect.arrayContaining([
+        "ops-real-block-sla-operator-binding",
+        "ops-post-promotion-binding",
+      ]),
+    );
+  });
+
+  it("keeps the staging workflow unable to bypass the manual real-block SLA gate", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const runbookPath = "docs/operations/read-model-scheduler-cutover.md";
+    const unsafeWorkflow = `${readFileSync(resolve(ROOT, workflowPath), "utf8")}
+      - name: Unsafe direct promotion
+        run: vercel promote "$DEPLOYMENT_ID"
+    `;
+    const missingSlaGate = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
+      "npm run perf:read-model:real-block-sla --",
+      "npm run perf:read-model:real-block-sla-skipped --",
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+        [runbookPath]: missingSlaGate,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual([
+      "ops-post-promotion-binding",
+    ]);
+  });
+
+  it("fails when only the scheduler runbook real-block SLA command is missing", () => {
+    const runbookPath = "docs/operations/read-model-scheduler-cutover.md";
+    const missingSlaGate = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
+      "npm run perf:read-model:real-block-sla --",
+      "npm run perf:read-model:real-block-sla-skipped --",
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [runbookPath]: missingSlaGate,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual([
+      "ops-post-promotion-binding",
+    ]);
+  });
+
+  it("rejects an alternative promotion command in the canonical cutover runbook", () => {
+    const runbookPath = "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md";
+    const bypass = readFileSync(resolve(ROOT, runbookPath), "utf8").replace(
+      'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"',
+      'npx vercel promote "$UNREVIEWED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"',
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [runbookPath]: bypass,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
 });
 
 function publicFetch(healthStatus = "healthy") {

@@ -1057,6 +1057,7 @@ export async function main(argv = process.argv.slice(2)) {
       mode: "release",
       status: failures.length === 0 ? "accepted" : "rejected",
       releaseEvidenceAccepted: failures.length === 0,
+      evidenceSha256: bundle.evidence.evidenceSha256,
       checks: [
         {
           id: "workflow-target-binding",

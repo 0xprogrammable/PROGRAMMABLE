@@ -733,6 +733,7 @@ describe("indexed chart adapter v2", () => {
       volumeUsdWad: "345678901234567890123456789012",
       range: "1d",
       snapshotBlock: snapshot.blockNumber,
+      snapshotHash: snapshot.blockHash,
     });
   });
 
@@ -761,6 +762,7 @@ describe("indexed chart adapter v2", () => {
         volumeEth: "0",
         range: "all",
         snapshotBlock: snapshot.blockNumber,
+        snapshotHash: snapshot.blockHash,
       });
     },
   );
