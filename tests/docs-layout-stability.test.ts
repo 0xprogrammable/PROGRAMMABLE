@@ -12,6 +12,11 @@ const docsShell = readFileSync(
   join(root, "components/docs-shell.tsx"),
   "utf8",
 );
+const docsNavigation = readFileSync(
+  join(root, "components/docs-navigation.tsx"),
+  "utf8",
+);
+const docsPage = readFileSync(join(root, "app/docs/page.tsx"), "utf8");
 const interfaceCss = readFileSync(join(root, "app/interface.css"), "utf8");
 
 describe("Docs rail layout stability", () => {
@@ -61,5 +66,13 @@ describe("Docs rail layout stability", () => {
     expect(docsShell.indexOf("data-docs-hero")).toBeLessThan(
       docsShell.indexOf("data-docs-sidebar"),
     );
+  });
+
+  it("uses the same current-page chapter rail for every guide", () => {
+    expect(docsPage).toContain("sections={platformSections}");
+    expect(docsNavigation).toContain(
+      '<p className={styles.navLabel}>On this page</p>',
+    );
+    expect(docsNavigation).toContain("group.items.every(");
   });
 });

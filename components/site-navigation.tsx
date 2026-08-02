@@ -11,7 +11,7 @@ import {
   Sun,
   UserRound,
 } from "lucide-react";
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type MouseEvent } from "react";
 import {
   GitHubBrandIcon,
   XBrandIcon,
@@ -19,7 +19,26 @@ import {
 import { WalletButton } from "@/components/wallet-provider";
 
 type ColorTheme = "light" | "dark";
+type ThemeViewTransition = {
+  finished: Promise<void>;
+};
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => ThemeViewTransition;
+};
 const themeChangeEvent = "programmable:theme-changed";
+let themeTransitionSequence = 0;
+let themeFallbackTimer: number | null = null;
+
+function clearThemeReveal(root: HTMLElement) {
+  if (themeFallbackTimer !== null) {
+    window.clearTimeout(themeFallbackTimer);
+    themeFallbackTimer = null;
+  }
+  delete root.dataset.themeTransition;
+  root.style.removeProperty("--theme-reveal-x");
+  root.style.removeProperty("--theme-reveal-y");
+  root.style.removeProperty("--theme-reveal-radius");
+}
 
 const desktopNavItems = [
   { href: "/", label: "Explore", icon: Compass },
@@ -54,10 +73,10 @@ function ThemeToggle() {
     getServerThemeSnapshot,
   );
 
-  function toggleTheme() {
-    const nextTheme: ColorTheme = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = nextTheme;
-    document.documentElement.style.colorScheme = nextTheme;
+  function commitTheme(nextTheme: ColorTheme) {
+    const root = document.documentElement;
+    root.dataset.theme = nextTheme;
+    root.style.colorScheme = nextTheme;
 
     try {
       window.localStorage.setItem("programmable-theme", nextTheme);
@@ -66,6 +85,70 @@ function ThemeToggle() {
     }
 
     window.dispatchEvent(new Event(themeChangeEvent));
+  }
+
+  function toggleTheme(event: MouseEvent<HTMLButtonElement>) {
+    const nextTheme: ColorTheme = theme === "dark" ? "light" : "dark";
+    const viewTransitionDocument = document as ViewTransitionDocument;
+    const root = document.documentElement;
+    const transitionSequence = ++themeTransitionSequence;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    if (event.detail === 0 || reduceMotion) {
+      clearThemeReveal(root);
+      commitTheme(nextTheme);
+      return;
+    }
+
+    const toggleBounds = event.currentTarget.getBoundingClientRect();
+    const originX = toggleBounds.left + toggleBounds.width / 2;
+    const originY = toggleBounds.top + toggleBounds.height / 2;
+    const radius = Math.hypot(
+      Math.max(originX, window.innerWidth - originX),
+      Math.max(originY, window.innerHeight - originY),
+    );
+    root.style.setProperty("--theme-reveal-x", `${originX}px`);
+    root.style.setProperty("--theme-reveal-y", `${originY}px`);
+    root.style.setProperty("--theme-reveal-radius", `${radius}px`);
+
+    const runFallbackReveal = () => {
+      root.dataset.themeTransition = `fallback-${nextTheme}`;
+      root.getBoundingClientRect();
+      commitTheme(nextTheme);
+      themeFallbackTimer = window.setTimeout(() => {
+        if (transitionSequence === themeTransitionSequence) {
+          clearThemeReveal(root);
+        }
+      }, 300);
+    };
+
+    if (!viewTransitionDocument.startViewTransition) {
+      runFallbackReveal();
+      return;
+    }
+
+    root.dataset.themeTransition = "radial";
+
+    try {
+      const transition = viewTransitionDocument.startViewTransition(() => {
+        commitTheme(nextTheme);
+      });
+
+      const finishReveal = () => {
+        if (transitionSequence === themeTransitionSequence) {
+          clearThemeReveal(root);
+        }
+      };
+      void transition.finished.then(finishReveal, finishReveal);
+    } catch {
+      clearThemeReveal(root);
+      root.style.setProperty("--theme-reveal-x", `${originX}px`);
+      root.style.setProperty("--theme-reveal-y", `${originY}px`);
+      root.style.setProperty("--theme-reveal-radius", `${radius}px`);
+      runFallbackReveal();
+    }
   }
 
   return (

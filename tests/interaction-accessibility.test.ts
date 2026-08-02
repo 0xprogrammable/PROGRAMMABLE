@@ -54,6 +54,22 @@ describe("interaction accessibility", () => {
     expect(source).not.toContain('aria-pressed={theme === "dark"}');
   });
 
+  it("reveals pointer-triggered theme changes from the toggle without forcing motion", () => {
+    const source = readFileSync(
+      join(root, "components/site-navigation.tsx"),
+      "utf8",
+    );
+    const css = readFileSync(join(root, "app/globals.css"), "utf8");
+
+    expect(source).toContain("startViewTransition");
+    expect(source).toContain("event.detail === 0");
+    expect(source).toContain('"(prefers-reduced-motion: reduce)"');
+    expect(css).toContain("@keyframes theme-radial-reveal");
+    expect(css).toMatch(
+      /theme-radial-reveal 280ms cubic-bezier\(0\.23, 1, 0\.32, 1\)/,
+    );
+  });
+
   it("exposes the wallet actions as a native, labelled disclosure", () => {
     const source = readFileSync(
       join(root, "components/wallet-provider.tsx"),

@@ -577,6 +577,16 @@ export function DocsNavigation({
   }
 
   function renderNavigation() {
+    const navigationGroups = docsNavigation.filter(
+      (group) =>
+        !(
+          sections.length > 0 &&
+          group.items.every(
+            (item) => item.href.split("#")[0] === currentPath,
+          )
+        ),
+    );
+
     return (
       <>
         {sections.length > 0 ? (
@@ -620,7 +630,7 @@ export function DocsNavigation({
           </div>
         ) : null}
 
-        {docsNavigation.map((group) => (
+        {navigationGroups.map((group) => (
           <div className={styles.navGroup} key={group.label}>
             <p className={styles.navLabel}>{group.label}</p>
             <ul>

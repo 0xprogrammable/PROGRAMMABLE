@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { DocsAddress } from "@/components/docs-address";
 import { DocsExternalLink } from "@/components/docs-external-link";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
@@ -292,67 +293,46 @@ function ClassicDocs() {
               <tr>
                 <td>Launcher</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${launcher}#code`}
-                    variant="address"
-                  >
-                    {launcher}
-                  </DocsExternalLink>
+                  <DocsAddress address={launcher} label="Launcher" />
                 </td>
               </tr>
               <tr>
                 <td>Fee hook</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${hook}#code`}
-                    variant="address"
-                  >
-                    {hook}
-                  </DocsExternalLink>
+                  <DocsAddress address={hook} label="Fee hook" />
                 </td>
               </tr>
               <tr>
                 <td>Reward vault factory</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${rewardVaultFactory}#code`}
-                    variant="address"
-                  >
-                    {rewardVaultFactory}
-                  </DocsExternalLink>
+                  <DocsAddress
+                    address={rewardVaultFactory}
+                    label="Reward vault factory"
+                  />
                 </td>
               </tr>
               <tr>
                 <td>Initial Buy custody factory</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${initialBuyCustodyFactory}#code`}
-                    variant="address"
-                  >
-                    {initialBuyCustodyFactory}
-                  </DocsExternalLink>
+                  <DocsAddress
+                    address={initialBuyCustodyFactory}
+                    label="Initial Buy custody factory"
+                  />
                 </td>
               </tr>
               <tr>
                 <td>Position recipient factory</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${positionRecipientFactory}#code`}
-                    variant="address"
-                  >
-                    {positionRecipientFactory}
-                  </DocsExternalLink>
+                  <DocsAddress
+                    address={positionRecipientFactory}
+                    label="Position recipient factory"
+                  />
                 </td>
               </tr>
               <tr>
                 <td>CTO authority</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${ctoAuthority}#code`}
-                    variant="address"
-                  >
-                    {ctoAuthority}
-                  </DocsExternalLink>
+                  <DocsAddress address={ctoAuthority} label="CTO authority" />
                 </td>
               </tr>
             </tbody>
@@ -564,34 +544,22 @@ function StockPairedDocs() {
               <tr>
                 <td>Launcher</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${launcher}#code`}
-                    variant="address"
-                  >
-                    {launcher}
-                  </DocsExternalLink>
+                  <DocsAddress address={launcher} label="Launcher" />
                 </td>
               </tr>
               <tr>
                 <td>Fee hook</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${hook}#code`}
-                    variant="address"
-                  >
-                    {hook}
-                  </DocsExternalLink>
+                  <DocsAddress address={hook} label="Fee hook" />
                 </td>
               </tr>
               <tr>
                 <td>ETH launch coordinator</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${coordinator}#code`}
-                    variant="address"
-                  >
-                    {coordinator}
-                  </DocsExternalLink>
+                  <DocsAddress
+                    address={coordinator}
+                    label="ETH launch coordinator"
+                  />
                 </td>
               </tr>
             </tbody>

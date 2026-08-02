@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { DocsAddress } from "@/components/docs-address";
 import { DocsExternalLink } from "@/components/docs-external-link";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
@@ -20,12 +21,25 @@ const classicRewardVaultFactory =
 const positionLockFactory =
   "0x291a9ff1059d225d02B1659430804486404dB507";
 
+const platformSections = [
+  { id: "overview", label: "Overview" },
+  { id: "launching", label: "Launch flow" },
+  { id: "trading", label: "Trading and pricing" },
+  { id: "rewards", label: "Creator rewards" },
+  { id: "network", label: "Network" },
+  { id: "contracts", label: "Contracts" },
+  { id: "metadata", label: "Token metadata" },
+  { id: "releases", label: "Release evidence" },
+  { id: "risks", label: "Risks" },
+] as const;
+
 export default function DocsPage() {
   return (
     <DocsShell
       currentPath="/docs"
       title="Docs"
       description="Platform reference and launch-model documentation."
+      sections={platformSections}
     >
       <section id="overview">
         <h2>Platform</h2>
@@ -179,48 +193,37 @@ export default function DocsPage() {
               <tr>
                 <td>Classic launcher</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${classicLauncher}#code`}
-                    variant="address"
-                  >
-                    {classicLauncher}
-                  </DocsExternalLink>
+                  <DocsAddress
+                    address={classicLauncher}
+                    label="Classic launcher"
+                  />
                 </td>
                 <td>Creates the token, pool and launch records.</td>
               </tr>
               <tr>
                 <td>Classic fee hook</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${classicHook}#code`}
-                    variant="address"
-                  >
-                    {classicHook}
-                  </DocsExternalLink>
+                  <DocsAddress address={classicHook} label="Classic fee hook" />
                 </td>
                 <td>Applies the immutable buy and sell fee settings.</td>
               </tr>
               <tr>
                 <td>Reward vault factory</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${classicRewardVaultFactory}#code`}
-                    variant="address"
-                  >
-                    {classicRewardVaultFactory}
-                  </DocsExternalLink>
+                  <DocsAddress
+                    address={classicRewardVaultFactory}
+                    label="Reward vault factory"
+                  />
                 </td>
                 <td>Creates the reward vault for each Classic pool.</td>
               </tr>
               <tr>
                 <td>Position recipient factory</td>
                 <td>
-                  <DocsExternalLink
-                    href={`https://etherscan.io/address/${positionLockFactory}#code`}
-                    variant="address"
-                  >
-                    {positionLockFactory}
-                  </DocsExternalLink>
+                  <DocsAddress
+                    address={positionLockFactory}
+                    label="Position recipient factory"
+                  />
                 </td>
                 <td>Permanently holds the launch position.</td>
               </tr>
