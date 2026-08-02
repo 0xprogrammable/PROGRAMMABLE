@@ -13,6 +13,7 @@
   --accent-hover: #394c60;
   --accent-strong: #304256;
   --brand-pink: #657487;
+  --brand-mark-filter: grayscale(1) saturate(0) brightness(0.72) contrast(1.08);
   --accent-ink: #ffffff;
   --accent-wash: rgba(70, 90, 111, 0.12);
   --accent-soft: rgba(70, 90, 111, 0.09);
@@ -78,6 +79,7 @@ html[data-theme="dark"] {
   --accent-hover: #eef1f5;
   --accent-strong: #eef2f6;
   --brand-pink: #c0c8d2;
+  --brand-mark-filter: grayscale(1) saturate(0) brightness(1.5) contrast(0.92);
   --accent-ink: #151a20;
   --accent-wash: rgba(215, 221, 229, 0.14);
   --accent-soft: rgba(215, 221, 229, 0.11);
@@ -254,16 +256,7 @@ textarea {
 }
 
 .app-frame::before {
-  background-image:
-    radial-gradient(
-      circle at 74% 6%,
-      rgba(149, 162, 178, 0.13),
-      transparent 34%
-    ),
-    linear-gradient(180deg, #fbfcfd 0%, var(--body-background) 62%);
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-size: cover;
+  background: var(--body-background);
   content: "";
   inset: var(--header-height) 0 0;
   pointer-events: none;
@@ -273,11 +266,8 @@ textarea {
 }
 
 .app-frame::after {
-  background-image: none;
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-size: cover;
   content: "";
+  display: none;
   inset: var(--header-height) 0 0;
   opacity: 0;
   pointer-events: none;
@@ -287,19 +277,12 @@ textarea {
 }
 
 html[data-theme="dark"] .app-frame::after {
-  background-image:
-    radial-gradient(
-      circle at 74% 6%,
-      rgba(151, 164, 180, 0.09),
-      transparent 36%
-    ),
-    linear-gradient(180deg, #10151b 0%, var(--body-background) 68%);
-  opacity: 1;
+  display: none;
 }
 
 html[data-theme="dark"] .app-frame::before {
-  background-image: none;
-  opacity: 0;
+  background: var(--body-background);
+  opacity: 1;
 }
 
 .app-frame > main {

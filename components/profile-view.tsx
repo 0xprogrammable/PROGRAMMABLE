@@ -1875,6 +1875,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             width={96}
             height={96}
             sizes="82px"
+            priority
           />
           <h1>Profile</h1>
           <p>Connect your wallet to view your tokens.</p>

@@ -152,117 +152,6 @@ code,
   transform: translateY(0);
 }
 
-.site-atmosphere {
-  inset: var(--header-height) 0 0;
-  overflow: clip;
-  pointer-events: none;
-  position: fixed;
-  z-index: 0;
-}
-
-.atmosphere-glow {
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--accent) 9%, transparent) 0%,
-    transparent 68%
-  );
-  height: min(48vw, 660px);
-  left: 50%;
-  opacity: 0.56;
-  position: absolute;
-  top: -30%;
-  transform: translateX(-50%);
-  width: min(60vw, 820px);
-}
-
-.atmosphere-particle {
-  display: block;
-  left: var(--particle-x);
-  opacity: var(--particle-opacity);
-  position: absolute;
-  top: var(--particle-y);
-}
-
-html[data-theme="light"] .atmosphere-particle {
-  background: color-mix(in srgb, var(--accent) 28%, white);
-  border-radius: 72% 28% 66% 34%;
-  box-shadow: 0 8px 22px rgba(142, 72, 112, 0.08);
-  height: calc(var(--particle-size) * 0.58);
-  transform: rotate(var(--particle-rotation));
-  width: var(--particle-size);
-}
-
-html[data-theme="dark"] .atmosphere-particle {
-  background: #fff8fd;
-  border-radius: 50%;
-  box-shadow: 0 0 10px rgba(241, 172, 211, 0.38);
-  height: var(--particle-size);
-  width: var(--particle-size);
-}
-
-.atmosphere-particle-one {
-  --particle-opacity: 0.22;
-  --particle-rotation: 18deg;
-  --particle-size: 7px;
-  --particle-x: 13%;
-  --particle-y: 18%;
-}
-
-.atmosphere-particle-two {
-  --particle-opacity: 0.18;
-  --particle-rotation: -27deg;
-  --particle-size: 5px;
-  --particle-x: 27%;
-  --particle-y: 34%;
-}
-
-.atmosphere-particle-three {
-  --particle-opacity: 0.26;
-  --particle-rotation: 39deg;
-  --particle-size: 6px;
-  --particle-x: 44%;
-  --particle-y: 11%;
-}
-
-.atmosphere-particle-four {
-  --particle-opacity: 0.2;
-  --particle-rotation: -12deg;
-  --particle-size: 8px;
-  --particle-x: 63%;
-  --particle-y: 25%;
-}
-
-.atmosphere-particle-five {
-  --particle-opacity: 0.25;
-  --particle-rotation: 62deg;
-  --particle-size: 5px;
-  --particle-x: 78%;
-  --particle-y: 14%;
-}
-
-.atmosphere-particle-six {
-  --particle-opacity: 0.18;
-  --particle-rotation: -41deg;
-  --particle-size: 7px;
-  --particle-x: 88%;
-  --particle-y: 39%;
-}
-
-html[data-theme="dark"] .atmosphere-particle-one,
-html[data-theme="dark"] .atmosphere-particle-four {
-  --particle-size: 2px;
-}
-
-html[data-theme="dark"] .atmosphere-particle-two,
-html[data-theme="dark"] .atmosphere-particle-five {
-  --particle-size: 1px;
-}
-
-html[data-theme="dark"] .atmosphere-particle-three,
-html[data-theme="dark"] .atmosphere-particle-six {
-  --particle-size: 1.5px;
-}
-
 .app-frame > main,
 .mobile-nav {
   position: relative;
@@ -301,60 +190,6 @@ html[data-theme="dark"] .atmosphere-particle-six {
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  html[data-theme="light"] .atmosphere-particle {
-    animation: paper-petal-settle 2.2s var(--ease-out) both;
-  }
-
-  html[data-theme="dark"] .atmosphere-particle {
-    animation: night-star-settle 2.6s ease-out both;
-  }
-
-  .atmosphere-particle-two,
-  .atmosphere-particle-five {
-    animation-delay: 120ms !important;
-  }
-
-  .atmosphere-particle-three,
-  .atmosphere-particle-six {
-    animation-delay: 240ms !important;
-  }
-}
-
-@keyframes paper-petal-settle {
-  0% {
-    opacity: 0;
-    transform: translate3d(-8px, -12px, 0) rotate(-18deg);
-  }
-
-  58% {
-    opacity: calc(var(--particle-opacity) * 1.3);
-  }
-
-  100% {
-    opacity: var(--particle-opacity);
-    transform: translate3d(0, 0, 0) rotate(var(--particle-rotation));
-  }
-}
-
-@keyframes night-star-settle {
-  0%,
-  28% {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-
-  58% {
-    opacity: calc(var(--particle-opacity) * 1.65);
-    transform: scale(1.3);
-  }
-
-  100% {
-    opacity: var(--particle-opacity);
-    transform: scale(1);
-  }
-}
-
 /* Header */
 
 .site-header {
@@ -378,6 +213,7 @@ html[data-theme="dark"] .atmosphere-particle-six {
 }
 
 .wordmark-logo {
+  filter: var(--brand-mark-filter);
   height: 25px;
   width: 25px;
 }
@@ -835,12 +671,6 @@ html[data-theme="dark"] .token-card-art {
 }
 
 @media (max-width: 700px) {
-  .site-atmosphere .atmosphere-particle-four,
-  .site-atmosphere .atmosphere-particle-five,
-  .site-atmosphere .atmosphere-particle-six {
-    display: none;
-  }
-
   .page-width {
     width: calc(100% - 28px);
   }
@@ -1011,7 +841,4 @@ html[data-theme="dark"] .token-card-art {
     animation: none;
   }
 
-  .atmosphere-particle {
-    animation: none;
-  }
 }

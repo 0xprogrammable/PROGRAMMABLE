@@ -5,60 +5,43 @@
 }
 
 .pageHeading {
-  align-items: center;
-  background: color-mix(in srgb, var(--canvas) 97%, var(--surface-soft));
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  align-items: end;
   display: flex;
-  isolation: isolate;
-  justify-content: center;
-  min-height: clamp(210px, 28svh, 290px);
-  padding: clamp(44px, 7svh, 72px) 0;
+  justify-content: flex-start;
+  min-height: clamp(166px, 22svh, 224px);
+  padding: clamp(52px, 8svh, 82px) 0 30px;
   position: relative;
-  text-align: center;
+  text-align: left;
 }
 
 .pageHeading::before {
-  background: inherit;
-  content: "";
-  inset: 0 auto 0 50%;
-  position: absolute;
-  transform: translateX(-50%);
-  width: 100vw;
-  z-index: -1;
+  content: none;
 }
 
 .pageHeading h1 {
   color: var(--text);
-  font-size: clamp(58px, 7.4vw, 104px);
-  font-weight: 535;
-  letter-spacing: -0.067em;
-  line-height: 0.92;
+  font-size: clamp(58px, 6.2vw, 88px);
+  font-weight: 555;
+  letter-spacing: -0.062em;
+  line-height: 0.9;
   margin: 0;
 }
 
 .runnersSection {
-  isolation: isolate;
-  padding: clamp(34px, 4.5vw, 58px) 0 40px;
+  padding: 12px 0 52px;
   position: relative;
 }
 
 .runnersSection::before {
-  background: color-mix(in srgb, var(--surface) 93%, var(--canvas));
-  content: "";
-  inset-block: 0;
-  left: 50%;
-  pointer-events: none;
-  position: absolute;
-  transform: translateX(-50%);
-  width: 100vw;
-  z-index: -1;
+  content: none;
 }
 
 .runnersIntro {
   display: flex;
   justify-content: center;
-  margin: 0 auto clamp(26px, 3.5vw, 42px);
+  margin: 0 auto 22px;
   max-width: 840px;
+  width: 100%;
 }
 
 .runnersIntro :global(.token-section-heading) {
@@ -80,9 +63,10 @@
 
 .runnerGrid {
   display: grid;
-  gap: clamp(15px, 1.8vw, 24px);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0 0 32px;
+  gap: clamp(34px, 4.8vw, 68px) clamp(20px, 2.8vw, 38px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 auto 42px;
+  max-width: 1040px;
   transition: opacity 120ms ease-out;
 }
 
@@ -92,15 +76,12 @@
 
 .runnerCard {
   animation: token-enter 220ms var(--ease-out) both;
-  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 26px;
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 58%, transparent),
-    0 12px 34px var(--card-shadow-soft);
-  content-visibility: auto;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   transition:
     border-color 170ms ease,
     box-shadow 190ms ease,
@@ -112,16 +93,20 @@
   display: block;
   height: 100%;
   outline: 0;
-  padding: 8px;
+  padding: 0;
 }
 
 .runnerArt {
   aspect-ratio: 1;
   background: var(--surface-soft);
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: 19px;
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 26px;
+  box-shadow: 0 1px 0 color-mix(in srgb, white 36%, transparent);
   overflow: hidden;
   position: relative;
+  transition:
+    border-color 180ms ease,
+    box-shadow 220ms ease;
 }
 
 .runnerImage {
@@ -131,7 +116,7 @@
 
 .runnerBody {
   min-width: 0;
-  padding: 18px 12px 16px;
+  padding: 19px 2px 0;
 }
 
 .runnerHeading {
@@ -144,10 +129,10 @@
 
 .runnerHeading h3 {
   color: var(--text);
-  font-size: clamp(24px, 2.3vw, 32px);
-  font-weight: 570;
-  letter-spacing: -0.045em;
-  line-height: 1;
+  font-size: clamp(28px, 2.8vw, 38px);
+  font-weight: 555;
+  letter-spacing: -0.05em;
+  line-height: 0.98;
   margin: 0;
   min-width: 0;
   overflow: hidden;
@@ -168,10 +153,10 @@
 .runnerDescription {
   color: var(--text-soft);
   display: -webkit-box;
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 11px 0 0;
-  min-height: 39px;
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 13px 0 0;
+  min-height: 43px;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -183,10 +168,10 @@
 
 .emptyState {
   align-items: end;
-  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 28px;
-  box-shadow: 0 18px 48px var(--card-shadow-soft);
+  background: transparent;
+  border-block: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
   display: grid;
   gap: 36px;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -247,11 +232,12 @@
 
 @media (hover: hover) and (pointer: fine) {
   .runnerCard:hover {
+    transform: translate3d(0, -2px, 0);
+  }
+
+  .runnerCard:hover .runnerArt {
     border-color: var(--border-strong);
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 62%, transparent),
-      0 24px 55px var(--hover-shadow);
-    transform: translate3d(0, -3px, 0);
+    box-shadow: 0 24px 56px var(--hover-shadow);
   }
 
   .runnerCard:hover .runnerImage {
@@ -265,7 +251,9 @@
 }
 
 .runnerHitArea:focus-visible {
-  box-shadow: inset 0 0 0 3px var(--focus);
+  border-radius: 26px;
+  outline: 2px solid var(--focus);
+  outline-offset: 5px;
 }
 
 .emptyAction:focus-visible {
@@ -279,9 +267,7 @@
 
 :global(html[data-theme="dark"]) .runnerCard,
 :global(html[data-theme="dark"]) .emptyState {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.035),
-    0 16px 44px var(--card-shadow-soft);
+  box-shadow: none;
 }
 
 @media (max-width: 1040px) {
@@ -292,8 +278,8 @@
 
 @media (max-width: 700px) {
   .pageHeading {
-    min-height: 174px;
-    padding: 40px 0 34px;
+    min-height: 152px;
+    padding: 44px 0 24px;
   }
 
   .pageHeading h1 {
@@ -301,7 +287,7 @@
   }
 
   .runnersSection {
-    padding-top: 28px;
+    padding-top: 10px;
   }
 
   .runnersIntro {
@@ -323,20 +309,20 @@
   }
 
   .runnerGrid {
-    gap: 14px;
+    gap: 38px;
     grid-template-columns: 1fr;
   }
 
   .runnerCard {
-    border-radius: 25px;
+    border-radius: 0;
   }
 
   .runnerArt {
-    border-radius: 18px;
+    border-radius: 22px;
   }
 
   .runnerBody {
-    padding: 17px 11px 15px;
+    padding: 17px 2px 0;
   }
 
   .runnerHeading h3 {
@@ -345,7 +331,7 @@
 
   .emptyState {
     align-items: start;
-    border-radius: 24px;
+    border-radius: 0;
     grid-template-columns: 1fr;
     min-height: 0;
     padding: 30px 24px;
@@ -358,11 +344,11 @@
   }
 
   .runnerHitArea {
-    padding: 6px;
+    padding: 0;
   }
 
   .runnerCard {
-    border-radius: 22px;
+    border-radius: 0;
   }
 }
 

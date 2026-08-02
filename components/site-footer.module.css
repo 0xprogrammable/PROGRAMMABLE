@@ -1,26 +1,19 @@
 .footer {
-  margin-bottom: 34px;
-  margin-top: 54px;
+  margin-bottom: 30px;
+  margin-top: 68px;
 }
 
 .surface {
-  backdrop-filter: blur(24px) saturate(1.08);
-  background:
-    linear-gradient(
-      140deg,
-      color-mix(in srgb, var(--glass-96) 98%, transparent),
-      color-mix(in srgb, var(--surface-tint) 92%, transparent)
-    );
-  border: 1px solid var(--panel-border-soft);
-  border-radius: 26px;
-  box-shadow:
-    0 1px 0 var(--card-shadow),
-    0 22px 62px var(--card-shadow-soft);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
   display: grid;
   gap: 0 44px;
   grid-template-columns: minmax(230px, 1.3fr) 0.7fr 0.8fr minmax(260px, 1.25fr);
-  overflow: hidden;
-  padding: 34px 36px 0;
+  overflow: visible;
+  padding: 34px 0 0;
 }
 
 .brand {
@@ -30,6 +23,7 @@
 }
 
 .mark {
+  filter: var(--brand-mark-filter);
   height: 34px;
   object-fit: contain;
   object-position: left center;
@@ -157,10 +151,10 @@
   }
 
   .surface {
-    border-radius: 22px;
+    border-radius: 0;
     gap: 28px 22px;
     grid-template-columns: 1fr 1fr;
-    padding: 27px 24px 0;
+    padding: 27px 0 0;
   }
 
   .brand,
@@ -181,7 +175,7 @@
   .surface {
     gap: 24px 18px;
     grid-template-columns: 1fr 1fr;
-    padding-inline: 18px;
+    padding-inline: 0;
   }
 
   .brand,

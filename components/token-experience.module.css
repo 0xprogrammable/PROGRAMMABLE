@@ -1,27 +1,19 @@
 .page {
   isolation: isolate;
   min-height: calc(100svh - var(--header-height));
-  max-width: 1120px;
+  max-width: 1200px;
   padding-bottom: 46px;
   padding-top: 18px;
   position: relative;
 }
 
 .page::before {
-  background: color-mix(in srgb, var(--canvas) 96%, var(--surface-soft));
-  content: "";
-  inset-block: 0;
-  left: 50%;
-  pointer-events: none;
-  position: absolute;
-  transform: translateX(-50%);
-  width: 100vw;
-  z-index: -1;
+  content: none;
 }
 
 .navigationRow {
   margin: 0 auto 14px;
-  max-width: 1020px;
+  max-width: 1100px;
 }
 
 .back {
@@ -44,10 +36,9 @@
   gap: 16px;
   grid-template-columns: minmax(0, 1fr);
   margin: 0 auto;
-  max-width: 1020px;
+  max-width: 1100px;
 }
 
-.tradeShell,
 .emptyState {
   backdrop-filter: blur(24px) saturate(1.03);
   background: color-mix(in srgb, var(--glass-96) 92%, transparent);
@@ -398,12 +389,7 @@
 
 .creatorMark {
   align-items: center;
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--glass-98) 90%, transparent),
-      color-mix(in srgb, var(--accent) 11%, var(--surface-soft))
-    );
+  background: var(--surface-soft);
   border: 1px solid var(--border-strong);
   border-radius: 16px;
   color: var(--text);
@@ -512,16 +498,22 @@
 
 .tradeShell {
   align-self: stretch;
-  border-radius: 30px;
+  background: transparent;
+  border-block: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
   display: flex;
+  margin-top: 28px;
   min-width: 0;
-  padding: 24px;
+  padding: 32px 2px;
   position: static;
   width: 100%;
 }
 
 .tradeShell > * {
   flex: 1;
+  margin-inline: auto;
+  max-width: 640px;
   width: 100%;
 }
 
@@ -1128,7 +1120,7 @@
   }
 
   .tradeShell {
-    border-radius: 22px;
+    border-radius: 0;
   }
 
   .identity {
@@ -1235,7 +1227,7 @@
 
   .tradeShell {
     max-width: none;
-    padding: 20px;
+    padding: 26px 2px;
   }
 
   .tradeForm,
@@ -1261,7 +1253,7 @@
   }
 
   .tradeShell {
-    padding: 14px;
+    padding: 24px 2px;
   }
 
   .metrics[data-count="3"] {
