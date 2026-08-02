@@ -11,6 +11,7 @@ import {
   ProjectorDatabaseError,
   classifyProjectorSqlState,
   createProjectorDatabaseGateway,
+  projectionProviderBindingCommitmentV1,
 } from "../../lib/data-pipeline/postgres-projector";
 
 type RecordedQuery = {
@@ -152,5 +153,36 @@ describe("projector SQLSTATE policy", () => {
       disposition: "retry-serialization",
       retryable: true,
     });
+  });
+});
+
+describe("projection provider binding commitment", () => {
+  it("matches PostgreSQL uuid, integer, timestamp and SHA-256 encoding", () => {
+    expect(projectionProviderBindingCommitmentV1({
+      publicationId: "11111111-1111-4111-8111-111111111111",
+      runId: "22222222-2222-4222-8222-222222222222",
+      promotionMode: "exact_incremental",
+      executionEvidenceId: "33333333-3333-4333-8333-333333333333",
+      executionFingerprint: `0x${"11".repeat(32)}`,
+      rewardEvidence: [{
+        evidenceId: "44444444-4444-4444-8444-444444444444",
+        fingerprint: `0x${"22".repeat(32)}`,
+      }],
+      boundAt: "2026-08-02T00:10:50.427Z",
+    })).toBe(
+      "0xee251437622bcfd0f66145fb4c6893a42a7bb4a572001fb409279cae2cdefd84",
+    );
+  });
+
+  it("rejects malformed runtime inputs before building a commitment", () => {
+    expect(() => projectionProviderBindingCommitmentV1({
+      publicationId: "not-a-uuid",
+      runId: "22222222-2222-4222-8222-222222222222",
+      promotionMode: "exact_incremental",
+      executionEvidenceId: "33333333-3333-4333-8333-333333333333",
+      executionFingerprint: `0x${"11".repeat(32)}`,
+      rewardEvidence: [],
+      boundAt: "2026-08-02T00:10:50.427Z",
+    })).toThrow(ProjectorDatabaseError);
   });
 });

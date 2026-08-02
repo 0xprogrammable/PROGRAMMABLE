@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { concat, encodeAbiParameters, keccak256, toBytes } from "viem";
 
@@ -446,6 +446,56 @@ function exactUuid(value: unknown): string {
     return projectorValidationFailure();
   }
   return value;
+}
+
+function uuidBytes(value: unknown): Buffer {
+  return Buffer.from(exactUuid(value).replaceAll("-", ""), "hex");
+}
+
+export function projectionProviderBindingCommitmentV1(input: Readonly<{
+  publicationId: string;
+  runId: string;
+  promotionMode: "exact_incremental";
+  executionEvidenceId: string;
+  executionFingerprint: HexBytes32;
+  rewardEvidence: readonly Readonly<{
+    evidenceId: string;
+    fingerprint: HexBytes32;
+  }>[];
+  boundAt: string;
+}>): HexBytes32 {
+  if (input.promotionMode !== "exact_incremental") {
+    return projectorValidationFailure();
+  }
+  const boundAtMillis = Date.parse(input.boundAt);
+  if (!Number.isSafeInteger(boundAtMillis) || boundAtMillis < 0) {
+    return projectorValidationFailure();
+  }
+  const mode = Buffer.from(input.promotionMode, "utf8");
+  const modeLength = Buffer.alloc(4);
+  modeLength.writeInt32BE(mode.length);
+  const rewardCount = Buffer.alloc(4);
+  rewardCount.writeInt32BE(input.rewardEvidence.length);
+  const timestamp = Buffer.alloc(8);
+  timestamp.writeBigInt64BE(BigInt(boundAtMillis));
+  const bytes32 = (value: HexBytes32) =>
+    Buffer.from(canonicalBytes32(value).slice(2), "hex");
+  const preimage = Buffer.concat([
+    Buffer.from("programmable:projection-provider-binding:v1\0", "utf8"),
+    uuidBytes(input.publicationId),
+    uuidBytes(input.runId),
+    modeLength,
+    mode,
+    uuidBytes(input.executionEvidenceId),
+    bytes32(input.executionFingerprint),
+    rewardCount,
+    ...input.rewardEvidence.flatMap((evidence) => [
+      uuidBytes(evidence.evidenceId),
+      bytes32(evidence.fingerprint),
+    ]),
+    timestamp,
+  ]);
+  return `0x${createHash("sha256").update(preimage).digest("hex")}` as HexBytes32;
 }
 
 function integerText(value: unknown): string {
@@ -7414,28 +7464,19 @@ async function commitPostgresVerifiedProjection(input: {
       "projection-provider-binding",
       privatePlan.runId,
     );
-    const rewardSnapshotEvidenceIds = [...rewardProviderEvidence]
-      .sort((left, right) => left.vault.localeCompare(right.vault))
+    const orderedRewardProviderEvidence = [...rewardProviderEvidence]
+      .sort((left, right) => left.vault.localeCompare(right.vault));
+    const rewardSnapshotEvidenceIds = orderedRewardProviderEvidence
       .map(({ evidenceId }) => evidenceId);
-    const providerBindingRows = await transaction.query<{
-      commitment: unknown;
-    }>(
-      "select programmable_private.projection_provider_binding_commitment_v1($1::uuid, $2::uuid, $3, $4::uuid, $5::uuid[], $6::timestamptz) as commitment",
-      [
-        publicationId,
-        privatePlan.runId,
-        promotionMode,
-        executionEvidenceId,
-        rewardSnapshotEvidenceIds,
-        verifiedAt,
-      ],
-    );
-    if (providerBindingRows.length !== 1) {
-      return projectorValidationFailure();
-    }
-    const providerBindingCommitment = databaseBytes32(
-      providerBindingRows[0]!.commitment,
-    );
+    const providerBindingCommitment = projectionProviderBindingCommitmentV1({
+      publicationId,
+      runId: privatePlan.runId,
+      promotionMode,
+      executionEvidenceId,
+      executionFingerprint: executionEvidence.contentFingerprint,
+      rewardEvidence: orderedRewardProviderEvidence,
+      boundAt: verifiedAt,
+    });
     const resultCommitment = keccak256(
       toBytes(
         JSON.stringify([

@@ -1721,9 +1721,6 @@ class ReleaseProjectionExecutor implements PostgresExecutor {
             changed_at: "2026-07-31T18:00:00.000Z",
           }] as unknown as Row[];
         }
-        if (text.includes("projection_provider_binding_commitment_v1")) {
-          return [{ commitment: bytes(bytes32("b")) }] as unknown as Row[];
-        }
         if (text.includes("promote_projection_run_v3")) {
           return [{ id: values[1] }] as unknown as Row[];
         }
@@ -2639,15 +2636,18 @@ describe("release-scoped projector Postgres commit", () => {
     expect(appended?.values[14]).toEqual([48, 49]);
     expect(appended?.values[17]).toEqual([104, 10]);
     expect(appended?.values[18]).toEqual([104, 10]);
-    const binding = executor.queries.find(({ text }) =>
-      text.includes("projection_provider_binding_commitment_v1")
-    );
-    expect(binding?.values[2]).toBe("exact_incremental");
+    expect(
+      executor.queries.some(({ text }) =>
+        text.includes("projection_provider_binding_commitment_v1")
+      ),
+    ).toBe(false);
     const promotion = executor.queries.at(-1)!;
     expect(promotion.text).toContain("promote_projection_run_v3");
     expect(promotion.values).toHaveLength(28);
     expect(promotion.values[0]).toBe("exact_incremental");
     expect(promotion.values[24]).toHaveLength(1);
+    expect(promotion.values[26]).toBeInstanceOf(Uint8Array);
+    expect((promotion.values[26] as Uint8Array).byteLength).toBe(32);
     expect(
       executor.queries.some(({ text }) =>
         text.includes("promote_projection_run_v2")
