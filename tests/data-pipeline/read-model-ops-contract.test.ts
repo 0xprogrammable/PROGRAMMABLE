@@ -160,6 +160,24 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("binds the exact GitHub commit into the staged deployment runtime", () => {
+    const workflowPath = ".github/workflows/deploy-production.yml";
+    const unsafeWorkflow = readFileSync(
+      resolve(ROOT, workflowPath),
+      "utf8",
+    ).replace('--env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"', "");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: unsafeWorkflow,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-exact-release-dependency",
+    );
+  });
+
   it("rejects comment-only controls and jointly drifted manifests", () => {
     const operations = JSON.parse(
       readFileSync(resolve(ROOT, "config/read-model-operations.v1.json"), "utf8"),

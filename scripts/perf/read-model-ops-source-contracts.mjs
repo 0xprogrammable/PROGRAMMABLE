@@ -965,6 +965,9 @@ export function evaluateReadModelOperationsSourceContracts(
       deployWorkflow.includes("npm run contracts:official-deployments") &&
       deployWorkflow.includes("npm run contracts:slither") &&
       deployWorkflow.includes("npm run audit:prod") &&
+      deployWorkflow.includes(
+        '--meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"',
+      ) &&
       deployWorkflow.indexOf("npm run perf:read-model:ops-gate") <
         deployWorkflow.indexOf("vercel build --prod"),
     "production staging reproduces the complete exact-commit release gate",
