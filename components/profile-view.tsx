@@ -2899,7 +2899,7 @@ function ProfilePortfolioRow({
           <span className={styles.tokenArt}>
             <Image
               src={tokenImageSource}
-              alt={`${token.name} token image`}
+              alt={`${token.name} project artwork`}
               fill
               sizes="58px"
               unoptimized={!canOptimizeTokenImage(tokenImageSource)}

@@ -50,8 +50,8 @@ export function SiteFooter() {
             />
           </Link>
           <p>
-            Launch and explore fixed-supply tokens whose behavior is defined by
-            Uniswap v4 hooks. Your connected wallet submits every transaction.
+            Discover and launch onchain projects with programmable markets.
+            Product, market and community context stay together in one place.
           </p>
         </section>
 

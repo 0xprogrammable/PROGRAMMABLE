@@ -1,0 +1,856 @@
+.page {
+  height: auto;
+  min-height: calc(100svh - var(--header-height));
+  overflow: visible;
+  padding-bottom: 0;
+}
+
+.hero {
+  align-items: center;
+  background: transparent;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  display: grid;
+  gap: clamp(38px, 6vw, 92px);
+  grid-template-columns: minmax(0, 1.08fr) minmax(350px, 0.72fr);
+  isolation: isolate;
+  min-height: clamp(440px, 54svh, 500px);
+  padding: clamp(42px, 5.5svh, 58px) 0 clamp(50px, 7svh, 68px);
+  position: relative;
+}
+
+.hero::before {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--accent) 8%, transparent) 0,
+    transparent 68%
+  );
+  content: "";
+  height: 440px;
+  left: 54%;
+  opacity: 0.54;
+  pointer-events: none;
+  position: absolute;
+  top: 4%;
+  width: 440px;
+  z-index: -1;
+}
+
+.hero::after {
+  background: color-mix(in srgb, var(--canvas) 97%, var(--surface-soft));
+  content: "";
+  inset-block: 0;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  width: 100vw;
+  z-index: -2;
+}
+
+.heroCopy {
+  max-width: 760px;
+  position: relative;
+  z-index: 1;
+}
+
+.heroEyebrow,
+.emptyEyebrow,
+.runnersIntro > div > span,
+.lensLabel {
+  color: var(--muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.heroCopy h1 {
+  color: var(--text);
+  font-size: clamp(58px, 6.8vw, 102px);
+  font-weight: 545;
+  letter-spacing: -0.065em;
+  line-height: 0.88;
+  margin: 22px 0 0;
+  max-width: 9.2ch;
+}
+
+.heroCopy h1 span {
+  color: var(--text-soft);
+  display: block;
+  font-weight: 470;
+}
+
+.heroCopy > p {
+  color: var(--text-soft);
+  font-size: clamp(18px, 1.6vw, 22px);
+  letter-spacing: -0.023em;
+  line-height: 1.42;
+  margin: 28px 0 0;
+  max-width: 47ch;
+}
+
+.heroActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 34px;
+}
+
+.primaryAction,
+.secondaryAction,
+.emptyAction {
+  align-items: center;
+  border-radius: 15px;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 650;
+  gap: 9px;
+  justify-content: center;
+  min-height: 50px;
+  padding: 0 19px;
+  position: relative;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease,
+    transform 150ms var(--ease-out);
+  z-index: 1;
+}
+
+.primaryAction {
+  background: var(--text);
+  border: 1px solid var(--text);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--text) 13%, transparent);
+  color: var(--canvas);
+}
+
+.secondaryAction {
+  backdrop-filter: blur(18px) saturate(1.04);
+  background: color-mix(in srgb, var(--glass-82) 86%, transparent);
+  border: 1px solid var(--border-strong);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 48%, transparent),
+    0 12px 30px var(--card-shadow-soft);
+  color: var(--text);
+}
+
+.heroLens {
+  align-items: center;
+  backdrop-filter: blur(28px) saturate(1.02);
+  background:
+    linear-gradient(
+      148deg,
+      color-mix(in srgb, var(--glass-98) 92%, transparent) 0%,
+      color-mix(in srgb, var(--glass-76) 76%, transparent) 52%,
+      color-mix(in srgb, var(--surface-soft) 88%, transparent) 100%
+    ),
+    url("/brand/programmable-floral-background-3000.webp") 52% 53% / 980px
+      auto no-repeat,
+    var(--surface-raised);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 90%, white 10%);
+  border-radius: 38px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 74%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--text) 4%, transparent),
+    0 30px 80px color-mix(in srgb, var(--text) 9%, transparent);
+  display: flex;
+  justify-content: center;
+  min-height: 350px;
+  overflow: hidden;
+  position: relative;
+}
+
+.heroLens::before,
+.heroLens::after {
+  border: 1px solid color-mix(in srgb, var(--border-strong) 56%, transparent);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+  position: absolute;
+}
+
+.heroLens::before {
+  height: 258px;
+  width: 258px;
+}
+
+.heroLens::after {
+  height: 188px;
+  opacity: 0.7;
+  width: 188px;
+}
+
+.lensLabel {
+  left: 24px;
+  position: absolute;
+  top: 23px;
+}
+
+.lensLogo {
+  filter: drop-shadow(0 18px 32px rgba(129, 62, 100, 0.11));
+  height: 178px;
+  object-fit: contain;
+  position: relative;
+  width: 178px;
+  z-index: 1;
+}
+
+.lensFooter {
+  align-items: center;
+  bottom: 17px;
+  display: flex;
+  gap: 12px;
+  inset-inline: 18px;
+  justify-content: space-between;
+  position: absolute;
+  z-index: 2;
+}
+
+.lensFooter > span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.lensFooter button {
+  align-items: center;
+  background: color-mix(in srgb, var(--glass-90) 84%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  color: var(--text-soft);
+  display: inline-flex;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 140ms var(--ease-out);
+}
+
+.lensFooter code,
+.runnerAddress code {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.runnersSection {
+  isolation: isolate;
+  padding: clamp(48px, 6vw, 72px) 0 34px;
+  position: relative;
+}
+
+.runnersSection::before {
+  background: color-mix(in srgb, var(--surface) 94%, var(--canvas));
+  content: "";
+  inset-block: 0;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  width: 100vw;
+  z-index: -1;
+}
+
+.runnersIntro {
+  align-items: end;
+  display: grid;
+  gap: 34px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.52fr);
+  margin-bottom: 30px;
+}
+
+.runnersIntro h2 {
+  color: var(--text);
+  font-size: clamp(42px, 5vw, 72px);
+  font-weight: 535;
+  letter-spacing: -0.057em;
+  line-height: 0.96;
+  margin: 12px 0 0;
+}
+
+.runnersIntro > p {
+  color: var(--text-soft);
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 0 4px;
+  max-width: 40ch;
+}
+
+.runnerGrid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 18px 0 30px;
+  transition: opacity 120ms ease-out;
+}
+
+:global(.token-section[aria-busy="true"]) .runnerGrid {
+  opacity: 0.58;
+}
+
+.runnerCard {
+  animation: runner-enter 200ms var(--ease-out) both;
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 30px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 58%, transparent),
+    var(--shadow-resting);
+  content-visibility: auto;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.84fr) minmax(0, 1.16fr);
+  min-height: 354px;
+  overflow: hidden;
+  position: relative;
+  transition:
+    border-color 160ms ease,
+    box-shadow 180ms ease,
+    transform 180ms var(--ease-out);
+}
+
+.runnerHitArea {
+  border-radius: inherit;
+  inset: 0;
+  position: absolute;
+  z-index: 1;
+}
+
+.runnerArt {
+  background: var(--surface-soft);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 76%, transparent);
+  border-radius: 23px;
+  margin: 9px;
+  overflow: hidden;
+  position: relative;
+}
+
+.runnerArt::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #0e0f12 18%, transparent),
+    transparent 26%,
+    transparent 74%,
+    color-mix(in srgb, #0e0f12 16%, transparent)
+  );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.runnerImage {
+  object-fit: cover;
+  transition: transform 500ms var(--ease-out);
+}
+
+.runnerArtHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  inset: 14px 14px auto;
+  justify-content: space-between;
+  position: absolute;
+  z-index: 1;
+}
+
+.runnerArtHeader span {
+  backdrop-filter: blur(14px);
+  background: rgba(252, 252, 252, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 999px;
+  color: #2b292b;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  line-height: 1;
+  padding: 8px 9px;
+  text-transform: uppercase;
+}
+
+.runnerBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 30px 26px 22px 18px;
+}
+
+.runnerHeading {
+  min-width: 0;
+}
+
+.runnerSymbol {
+  color: var(--accent-strong);
+  display: block;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.runnerHeading h3 {
+  color: var(--text);
+  font-size: clamp(31px, 3vw, 42px);
+  font-weight: 550;
+  letter-spacing: -0.048em;
+  line-height: 0.98;
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.runnerDescription {
+  color: var(--text-soft);
+  display: -webkit-box;
+  font-size: 14px;
+  line-height: 1.52;
+  margin: 18px 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.runnerDescriptionEmpty {
+  color: var(--muted);
+}
+
+.runnerFacts {
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: auto 0 0;
+  padding: 0;
+}
+
+.runnerFacts > div {
+  min-width: 0;
+  padding: 13px 10px 13px 0;
+}
+
+.runnerFacts > div + div {
+  border-left: 1px solid var(--border);
+  padding-left: 14px;
+}
+
+.runnerFacts dt {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.045em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.runnerFacts dd {
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 6px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runnerFooter {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  min-height: 44px;
+  padding-top: 11px;
+}
+
+.runnerAddress {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  color: var(--muted);
+  display: inline-flex;
+  gap: 7px;
+  min-height: 36px;
+  flex: 1 1 72px;
+  max-width: 102px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 4px;
+  position: relative;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 140ms var(--ease-out);
+  z-index: 2;
+}
+
+.runnerAddress code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runnerAddress svg {
+  flex: none;
+}
+
+.runnerLinks {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  position: relative;
+  z-index: 2;
+}
+
+.runnerLinks :global(.token-social-link) {
+  background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  height: 36px;
+  width: 36px;
+}
+
+.runnerLinks :global(.token-social-link svg) {
+  height: 14px;
+  width: 14px;
+}
+
+.runnerOpen {
+  align-items: center;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 5px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.emptyState {
+  align-items: end;
+  background: color-mix(in srgb, var(--surface-raised) 90%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 30px;
+  box-shadow: var(--shadow-resting);
+  display: grid;
+  gap: 36px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 18px 0 30px;
+  min-height: 260px;
+  padding: clamp(30px, 5vw, 58px);
+  text-align: left;
+  width: 100%;
+}
+
+.emptyState h2 {
+  color: var(--text);
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 540;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin: 14px 0 0;
+  word-spacing: 0.08em;
+}
+
+.emptyState p {
+  color: var(--text-soft);
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 16px 0 0;
+  max-width: 54ch;
+}
+
+.emptyAction {
+  background: color-mix(in srgb, var(--glass-88) 88%, transparent);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+@keyframes runner-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .primaryAction:hover,
+  .secondaryAction:hover,
+  .emptyAction:hover,
+  .lensFooter button:hover {
+    transform: translate3d(0, -2px, 0);
+  }
+
+  .secondaryAction:hover,
+  .emptyAction:hover,
+  .lensFooter button:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-floating);
+  }
+
+  .runnerCard:hover {
+    border-color: var(--border-strong);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 62%, transparent),
+      var(--shadow-floating);
+    transform: translate3d(0, -4px, 0);
+  }
+
+  .runnerCard:hover .runnerImage {
+    transform: scale(1.025);
+  }
+
+  .runnerAddress:hover {
+    background: var(--surface-soft);
+    color: var(--text);
+  }
+}
+
+.primaryAction:focus-visible,
+.secondaryAction:focus-visible,
+.emptyAction:focus-visible,
+.lensFooter button:focus-visible,
+.runnerAddress:focus-visible,
+.runnerHitArea:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.runnerHitArea:focus-visible {
+  outline-offset: -4px;
+}
+
+.primaryAction:active,
+.secondaryAction:active,
+.emptyAction:active,
+.lensFooter button:active,
+.runnerAddress:active {
+  transform: scale(0.97);
+}
+
+:global(html[data-theme="dark"]) .heroLens,
+:global(html[data-theme="dark"]) .runnerCard,
+:global(html[data-theme="dark"]) .emptyState {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    var(--shadow-resting);
+}
+
+:global(html[data-theme="dark"]) .primaryAction {
+  background: #f1edf0;
+  border-color: #f1edf0;
+  color: #171316;
+}
+
+:global(html[data-theme="dark"]) .secondaryAction,
+:global(html[data-theme="dark"]) .emptyAction,
+:global(html[data-theme="dark"]) .lensFooter button {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+@media (max-width: 1120px) {
+  .runnerGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .runnerCard {
+    grid-template-columns: minmax(250px, 0.74fr) minmax(0, 1.26fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 54px;
+  }
+
+  .heroCopy h1 {
+    max-width: 10ch;
+  }
+
+  .heroLens {
+    min-height: 330px;
+  }
+
+  .runnersIntro {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 700px) {
+  .hero {
+    gap: 42px;
+    min-height: 0;
+    padding: 42px 0 58px;
+  }
+
+  .hero::before {
+    height: 320px;
+    left: 24%;
+    top: 42%;
+    width: 320px;
+  }
+
+  .heroCopy h1 {
+    font-size: clamp(50px, 16vw, 72px);
+    margin-top: 18px;
+  }
+
+  .heroCopy > p {
+    font-size: 17px;
+    margin-top: 22px;
+  }
+
+  .heroActions {
+    margin-top: 26px;
+  }
+
+  .heroLens {
+    border-radius: 28px;
+    min-height: 286px;
+  }
+
+  .heroLens::before {
+    height: 226px;
+    width: 226px;
+  }
+
+  .heroLens::after {
+    height: 162px;
+    width: 162px;
+  }
+
+  .lensLogo {
+    height: 158px;
+    width: 158px;
+  }
+
+  .lensFooter {
+    bottom: 12px;
+    inset-inline: 13px;
+  }
+
+  .runnersSection {
+    padding-top: 50px;
+  }
+
+  .runnersIntro {
+    margin-bottom: 22px;
+  }
+
+  .runnersIntro h2 {
+    font-size: clamp(42px, 13vw, 58px);
+  }
+
+  .runnerGrid {
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .runnerCard {
+    border-radius: 24px;
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .runnerArt {
+    aspect-ratio: 16 / 10;
+    border-radius: 18px;
+    margin: 7px;
+  }
+
+  .runnerBody {
+    min-height: 300px;
+    padding: 24px 19px 16px;
+  }
+
+  .runnerHeading h3 {
+    font-size: clamp(34px, 10vw, 44px);
+  }
+
+  .emptyState {
+    align-items: start;
+    border-radius: 24px;
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding: 30px 24px;
+  }
+}
+
+@media (max-width: 470px) {
+  .heroActions {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .primaryAction,
+  .secondaryAction {
+    width: 100%;
+  }
+
+  .lensFooter > span {
+    display: none;
+  }
+
+  .lensFooter button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .runnerFooter {
+    flex-wrap: wrap;
+  }
+
+  .runnerOpen {
+    flex-basis: 100%;
+    justify-content: flex-end;
+    margin-top: 2px;
+  }
+}
+
+@media (max-width: 360px) {
+  .heroCopy h1 {
+    font-size: 47px;
+  }
+
+  .runnerFacts {
+    grid-template-columns: 1fr;
+  }
+
+  .runnerFacts > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runnerCard {
+    animation: none;
+  }
+
+  .primaryAction,
+  .secondaryAction,
+  .emptyAction,
+  .lensFooter button,
+  .runnerAddress,
+  .runnerCard,
+  .runnerImage {
+    transition-duration: 1ms;
+  }
+}

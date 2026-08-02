@@ -2,7 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Check, Copy, ExternalLink } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Check,
+  Copy,
+  ExternalLink,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatUnits,
@@ -308,7 +314,7 @@ export function parseDetailPayload(value: unknown): DetailPayload {
 function readApiError(value: unknown) {
   return isRecord(value) && typeof value.error === "string"
     ? value.error
-    : "Token data is temporarily unavailable";
+    : "Project data is temporarily unavailable";
 }
 
 function getFallbackTokenImage(address: string) {
@@ -597,6 +603,34 @@ function getLinkLabel(kind: TokenLinkKind) {
   return "X";
 }
 
+function getLaunchModelLabel(model: LauncherToken["launchModel"]) {
+  if (model === "adaptive") return "Adaptive market";
+  if (model === "deep") return "Deep liquidity";
+  if (model === "stock-paired") return "Stock-paired market";
+  return "Classic market";
+}
+
+function getNetworkLabel(chainId: number) {
+  if (chainId === 1) return "Ethereum";
+  if (chainId === 11_155_111) return "Sepolia";
+  return `Chain ${chainId}`;
+}
+
+function formatProjectDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Published onchain";
+
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatProjectAddress(address: `0x${string}`) {
+  return `${address.slice(0, 8)}…${address.slice(-6)}`;
+}
+
 function XBrandIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -709,6 +743,12 @@ function TokenDetailContent({
   const imageUrl =
     token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress);
   const imageSource = getTokenCardImageSource(imageUrl);
+  const projectLinks = token.links ?? [];
+  const communityLink = projectLinks.find((link) => link.kind === "telegram");
+  const updatesLink = projectLinks.find((link) => link.kind === "x");
+  const creatorAddress = isTokenAddress(token.creatorAddress)
+    ? token.creatorAddress
+    : null;
   const tokenDecimals =
     typeof token.tokenDecimals === "number" &&
     Number.isInteger(token.tokenDecimals) &&
@@ -928,7 +968,7 @@ function TokenDetailContent({
     <div className={`${styles.page} page-width`}>
       <Link className={styles.back} href="/">
         <ArrowLeft aria-hidden="true" size={16} />
-        Explore
+        All projects
       </Link>
 
       <div className={styles.layout}>
@@ -937,7 +977,9 @@ function TokenDetailContent({
             <div className={styles.image}>
               <Image
                 src={imageSource}
-                alt={token.imageUrl?.trim() ? `${token.name} token image` : ""}
+                alt={
+                  token.imageUrl?.trim() ? `${token.name} project artwork` : ""
+                }
                 fill
                 priority
                 sizes="(max-width: 800px) 100vw, 420px"
@@ -946,7 +988,10 @@ function TokenDetailContent({
             </div>
 
             <div className={styles.identityCopy}>
-              <span className={styles.symbol}>${token.symbol}</span>
+              <div className={styles.projectKicker}>
+                <span>Programmable project</span>
+                <span className={styles.symbol}>${token.symbol}</span>
+              </div>
               <h1 className={styles.name}>{token.name}</h1>
               <div className={styles.addressActions}>
                 <button
@@ -983,40 +1028,42 @@ function TokenDetailContent({
             </div>
           </div>
 
-          {token.description?.trim() ||
-          (token.links && token.links.length > 0) ? (
-            <div className={styles.tokenMeta}>
-              {token.description?.trim() ? (
-                <p className={styles.description}>{token.description.trim()}</p>
-              ) : null}
+          <div className={styles.tokenMeta}>
+            <p
+              className={`${styles.description}${
+                token.description?.trim() ? "" : ` ${styles.descriptionEmpty}`
+              }`}
+            >
+              {token.description?.trim() ||
+                "This project has not published a product description yet."}
+            </p>
 
-              {token.links && token.links.length > 0 ? (
-                <div
-                  className={styles.links}
-                  aria-label={`${token.name} links`}
-                >
-                  {token.links.map((link) => {
-                    const label = getLinkLabel(link.kind);
-                    return (
-                      <a
-                        className={`${styles.socialLink} ${
-                          link.kind === "website" ? styles.websiteLink : ""
-                        }`}
-                        href={link.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={`${token.name} on ${label}`}
-                        title={label}
-                        key={`${link.kind}:${link.url}`}
-                      >
-                        <TokenLinkIcon kind={link.kind} />
-                      </a>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+            {projectLinks.length > 0 ? (
+              <div className={styles.links} aria-label={`${token.name} links`}>
+                {projectLinks.map((link) => {
+                  const label = getLinkLabel(link.kind);
+                  return (
+                    <a
+                      className={`${styles.socialLink} ${
+                        link.kind === "website" ? styles.websiteLink : ""
+                      }`}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`${token.name} on ${label}`}
+                      key={`${link.kind}:${link.url}`}
+                    >
+                      <TokenLinkIcon kind={link.kind} />
+                      <span>{label}</span>
+                      <ArrowUpRight aria-hidden="true" size={14} />
+                    </a>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className={styles.linksEmpty}>No verified project links</p>
+            )}
+          </div>
 
           <MetricGrid metrics={metrics} />
 
@@ -1035,6 +1082,112 @@ function TokenDetailContent({
           token.tokenReserveRaw ? (
             <DeepLiquiditySummary token={token} />
           ) : null}
+
+          <div className={styles.projectInformation}>
+            <section
+              className={`${styles.projectPanel} ${styles.projectPanelWide}`}
+            >
+              <header className={styles.projectPanelHeading}>
+                <span>Project record</span>
+                <h2>Product and market</h2>
+              </header>
+              <dl className={styles.projectFacts}>
+                <div>
+                  <dt>Market model</dt>
+                  <dd>{getLaunchModelLabel(token.launchModel)}</dd>
+                </div>
+                <div>
+                  <dt>Network</dt>
+                  <dd>{getNetworkLabel(chainId)}</dd>
+                </div>
+                <div>
+                  <dt>Published</dt>
+                  <dd>{formatProjectDate(token.launchedAt)}</dd>
+                </div>
+                <div>
+                  <dt>Quote asset</dt>
+                  <dd>{token.quoteAssetSymbol ?? "ETH"}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className={styles.projectPanel}>
+              <header className={styles.projectPanelHeading}>
+                <span>Team</span>
+                <h2>Who is building</h2>
+              </header>
+              {creatorAddress ? (
+                <>
+                  <div className={styles.creatorRecord}>
+                    <span className={styles.creatorMark} aria-hidden="true">
+                      {token.name.trim().charAt(0).toUpperCase() || "P"}
+                    </span>
+                    <div>
+                      <strong>Creator wallet</strong>
+                      {explorerBase ? (
+                        <a
+                          href={`${explorerBase}/address/${creatorAddress}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <code>{formatProjectAddress(creatorAddress)}</code>
+                          <ArrowUpRight aria-hidden="true" size={13} />
+                        </a>
+                      ) : (
+                        <code>{formatProjectAddress(creatorAddress)}</code>
+                      )}
+                    </div>
+                  </div>
+                  <p className={styles.projectNote}>
+                    This wallet created the onchain project. No named team
+                    profile has been published.
+                  </p>
+                </>
+              ) : (
+                <p className={styles.projectEmpty}>
+                  Team information has not been published for this project.
+                </p>
+              )}
+            </section>
+
+            <section className={styles.projectPanel}>
+              <header className={styles.projectPanelHeading}>
+                <span>Community</span>
+                <h2>Join the conversation</h2>
+              </header>
+              {communityLink ? (
+                <>
+                  <p className={styles.projectNote}>
+                    Continue with the project&rsquo;s published community channel.
+                  </p>
+                  <a
+                    className={styles.communityAction}
+                    href={communityLink.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open community chat
+                    <ArrowUpRight aria-hidden="true" size={15} />
+                  </a>
+                </>
+              ) : (
+                <p className={styles.projectEmpty}>
+                  No verified community chat has been published.
+                </p>
+              )}
+              {updatesLink ? (
+                <a
+                  className={styles.communitySecondary}
+                  href={updatesLink.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Follow updates on X
+                  <ArrowUpRight aria-hidden="true" size={13} />
+                </a>
+              ) : null}
+            </section>
+          </div>
         </section>
 
         <aside className={styles.tradeShell} aria-label={`${token.name} trade`}>
@@ -1248,7 +1401,7 @@ export function TokenDetailView({ address }: { address: string }) {
         const message =
           error instanceof Error
             ? error.message
-            : "Token data is temporarily unavailable";
+            : "Project data is temporarily unavailable";
         setState((current) =>
           current.phase === "ready" && current.requestKey === requestKey
             ? current
@@ -1284,18 +1437,18 @@ export function TokenDetailView({ address }: { address: string }) {
 
   const message =
     activeState.phase === "loading"
-      ? "Loading token"
+      ? "Loading project"
       : activeState.phase === "not-found"
-        ? "This token is not in the Programmable launch index yet"
+        ? "This project is not in the Programmable index yet"
         : activeState.phase === "not-deployed"
-          ? "No verified launch data is available"
+          ? "No verified project data is available"
           : activeState.message;
 
   return (
     <div className={`${styles.page} page-width`}>
       <Link className={styles.back} href="/">
         <ArrowLeft aria-hidden="true" size={16} />
-        Explore
+        All projects
       </Link>
       <div
         className={styles.emptyState}
@@ -1321,7 +1474,7 @@ function TokenDetailMessage({ message }: { message: string }) {
     <div className={`${styles.page} page-width`}>
       <Link className={styles.back} href="/">
         <ArrowLeft aria-hidden="true" size={16} />
-        Explore
+        All projects
       </Link>
       <div className={styles.emptyState} role="status">
         <p>{message}</p>

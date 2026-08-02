@@ -1,6 +1,21 @@
 .pickerPage {
+  isolation: isolate;
   justify-content: flex-start;
   padding-top: clamp(38px, 6svh, 68px);
+  position: relative;
+}
+
+.pickerPage::before,
+.formPage::before {
+  background: color-mix(in srgb, var(--canvas) 96%, var(--surface-soft));
+  content: "";
+  inset-block: 0;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  width: 100vw;
+  z-index: -1;
 }
 
 .pickerHeading {
@@ -12,6 +27,14 @@
   font-weight: 580;
   letter-spacing: -0.052em;
   line-height: 0.98;
+}
+
+.pickerHeading p {
+  color: var(--text-soft);
+  font-size: 17px;
+  line-height: 1.5;
+  margin: 18px 0 0;
+  max-width: 48ch;
 }
 
 .modelGrid {
@@ -153,7 +176,9 @@
 }
 
 .formPage {
+  isolation: isolate;
   min-height: calc(100svh - var(--header-height));
+  position: relative;
 }
 
 .formLoadingPage {
@@ -652,6 +677,10 @@
 }
 
 @media (max-width: 760px) {
+  .pickerPage {
+    min-height: calc(100svh - var(--header-height) - 68px);
+  }
+
   .pickerPage {
     padding-bottom: 104px;
     padding-top: 28px;

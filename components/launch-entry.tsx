@@ -42,7 +42,7 @@ function LaunchFormLoading({ onBack }: { onBack: () => void }) {
         </button>
         <div className={`launch-page-title ${launchExperience.formPageTitle}`}>
           <span className={launchExperience.formModelName}>Launch</span>
-          <h1>Create your token</h1>
+          <h1>Create your project</h1>
         </div>
       </header>
       <div
@@ -112,7 +112,10 @@ export function LaunchModelPicker({
       <header
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
-        <h1>Choose a launch model</h1>
+        <h1>Start a project</h1>
+        <p>
+          Choose the market structure that fits how your project should grow.
+        </p>
       </header>
 
       <div className={`launch-model-grid ${launchExperience.modelGrid}`}>
@@ -148,7 +151,7 @@ export function LaunchModelPicker({
             <span
               className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
-              <strong>Classic</strong>
+              <strong>Classic market</strong>
               {!classicV3LaunchAvailable ? (
                 <small data-status="pending">Unavailable</small>
               ) : null}
@@ -157,14 +160,14 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-classic-description"
             >
-              Fixed swap fees with creator rewards paid in ETH. A familiar
-              token launch on Uniswap v4.
+              A fixed-supply project market on Uniswap v4 with transparent
+              swap fees and creator rewards paid in ETH.
             </span>
             {classicV3LaunchAvailable ? (
               <span
                 className={`launch-model-action ${launchExperience.modelAction}`}
               >
-                Launch
+                Build project
                 <ArrowRight aria-hidden="true" size={16} />
               </span>
             ) : null}

@@ -3,6 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  ArrowRight,
+  ArrowUpRight,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -17,7 +19,6 @@ import {
   AnimatedMarketCap,
   type MarketCapMetric,
 } from "@/components/animated-market-cap";
-import { ScrambleText } from "@/components/scramble-text";
 import { SiteFooter } from "@/components/site-footer";
 import {
   LIVE_DATA_REFRESH_INTERVAL_MS,
@@ -34,6 +35,7 @@ import {
   type TokenLink,
   type TokenLinkKind,
 } from "@/lib/tokens";
+import styles from "./explore-experience.module.css";
 
 type TokenCard = {
   id: string;
@@ -45,6 +47,8 @@ type TokenCard = {
   links: TokenLink[];
   tokenAddress: `0x${string}`;
   marketCap?: MarketCapMetric;
+  launchModel?: LauncherToken["launchModel"];
+  launchedAt: string;
 };
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -417,7 +421,27 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     links: token.links ?? [],
     tokenAddress: token.tokenAddress,
     marketCap: getMarketCap(token),
+    launchModel: token.launchModel,
+    launchedAt: token.launchedAt,
   }));
+}
+
+function getLaunchModelLabel(model: LauncherToken["launchModel"]) {
+  if (model === "adaptive") return "Adaptive market";
+  if (model === "deep") return "Deep liquidity";
+  if (model === "stock-paired") return "Stock-paired";
+  return "Classic market";
+}
+
+function formatLaunchDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Published onchain";
+
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 }
 
 function getLinkLabel(kind: TokenLinkKind) {
@@ -636,7 +660,7 @@ export function ExploreView() {
     ) {
       return (
         <div className="token-empty" role="status">
-          <p>Loading tokens</p>
+          <p>Loading projects</p>
         </div>
       );
     }
@@ -658,8 +682,19 @@ export function ExploreView() {
 
     if (state.payload.status === "not-deployed") {
       return (
-        <div className="token-empty">
-          <p>No verified tokens yet</p>
+        <div className={`${styles.emptyState} token-empty token-empty-initial`}>
+          <div>
+            <span className={styles.emptyEyebrow}>Verified index</span>
+            <h2>No verified projects yet</h2>
+            <p>
+              Projects appear here only after their launch record is available
+              in the verified index.
+            </p>
+          </div>
+          <Link className={styles.emptyAction} href="/launch">
+            Start a project
+            <ArrowRight aria-hidden="true" size={16} />
+          </Link>
         </div>
       );
     }
@@ -668,7 +703,7 @@ export function ExploreView() {
       if (debouncedQuery) {
         return (
           <div className="token-empty">
-            <p>No tokens match this search</p>
+            <p>No projects match this search</p>
             <button
               className="text-button"
               type="button"
@@ -684,13 +719,18 @@ export function ExploreView() {
       }
 
       return (
-        <div className="token-empty token-empty-initial">
+        <div className={`${styles.emptyState} token-empty token-empty-initial`}>
           <div>
-            <h2>No public tokens yet</h2>
-            <p>The first public launch will appear here.</p>
+            <span className={styles.emptyEyebrow}>The first runner</span>
+            <h2>No public projects yet</h2>
+            <p>
+              Verified projects will appear here with their product, market
+              and community details.
+            </p>
           </div>
-          <Link className="text-button" href="/launch">
-            Launch a token
+          <Link className={styles.emptyAction} href="/launch">
+            Start a project
+            <ArrowRight aria-hidden="true" size={16} />
           </Link>
         </div>
       );
@@ -698,7 +738,7 @@ export function ExploreView() {
 
     return (
       <div
-        className="token-card-grid"
+        className={styles.runnerGrid}
         key={`${activePage}:${sort}:${debouncedQuery}`}
       >
         {cards.map((token, index) => {
@@ -707,64 +747,69 @@ export function ExploreView() {
           const imageSource = getTokenCardImageSource(token.imageUrl);
 
           return (
-            <article className="token-card" key={token.id}>
+            <article className={styles.runnerCard} key={token.id}>
               <Link
-                className="token-card-hit-area"
+                className={styles.runnerHitArea}
                 href={href}
-                aria-label={`View ${token.name}`}
+                aria-label={`Open ${token.name} project`}
               />
 
-              <span className="token-card-art">
+              <div className={styles.runnerArt}>
                 <Image
-                  className="token-card-image"
+                  className={styles.runnerImage}
                   src={imageSource}
                   alt={
-                    token.usesFallbackImage ? "" : `${token.name} token image`
+                    token.usesFallbackImage ? "" : `${token.name} project artwork`
                   }
                   fill
-                  sizes="(max-width: 360px) 260px, (max-width: 800px) 46vw, 214px"
+                  sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1100px) 42vw, 310px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
                 />
-              </span>
+                <div className={styles.runnerArtHeader} aria-hidden="true">
+                  <span>Runner {String(index + 1).padStart(2, "0")}</span>
+                  <span>{getLaunchModelLabel(token.launchModel)}</span>
+                </div>
+              </div>
 
-              <div className="token-card-body">
-                <header className="token-card-heading">
-                  <span className="token-card-title">
-                    <h3>{token.name}</h3>
-                    <span>${token.symbol}</span>
-                  </span>
+              <div className={styles.runnerBody}>
+                <header className={styles.runnerHeading}>
+                  <span className={styles.runnerSymbol}>${token.symbol}</span>
+                  <h3>{token.name}</h3>
                 </header>
 
-                {token.description ? (
-                  <span className="token-card-description">
-                    {token.description}
-                  </span>
-                ) : (
-                  <span
-                    className="token-card-description token-card-description-empty"
-                    aria-hidden="true"
-                  />
-                )}
+                <p
+                  className={`${styles.runnerDescription}${
+                    token.description ? "" : ` ${styles.runnerDescriptionEmpty}`
+                  }`}
+                >
+                  {token.description ??
+                    "Project details have not been published yet."}
+                </p>
 
-                {token.marketCap ? (
-                  <span className="token-card-market-cap">
-                    <AnimatedMarketCap
-                      delay={index * 18}
-                      metric={token.marketCap}
-                      replayKey={`${activePage}:${sort}:${debouncedQuery}`}
-                    />
-                    <span>MC</span>
-                  </span>
-                ) : (
-                  <span
-                    className="token-card-market-cap token-card-market-cap-empty"
-                    aria-hidden="true"
-                  />
-                )}
+                <dl className={styles.runnerFacts}>
+                  <div>
+                    <dt>Market cap</dt>
+                    <dd>
+                      {token.marketCap ? (
+                        <AnimatedMarketCap
+                          delay={index * 18}
+                          metric={token.marketCap}
+                          replayKey={`${activePage}:${sort}:${debouncedQuery}`}
+                        />
+                      ) : (
+                        "—"
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Launched</dt>
+                    <dd>{formatLaunchDate(token.launchedAt)}</dd>
+                  </div>
+                </dl>
 
-                <div className="token-card-footer">
+                <div className={styles.runnerFooter}>
                   <button
-                    className="token-address"
+                    className={styles.runnerAddress}
                     type="button"
                     aria-label={
                       copied
@@ -788,7 +833,7 @@ export function ExploreView() {
 
                   {token.links.length > 0 ? (
                     <div
-                      className="token-social-links"
+                      className={styles.runnerLinks}
                       aria-label={`${token.name} links`}
                     >
                       {token.links.map((link) => (
@@ -800,6 +845,11 @@ export function ExploreView() {
                       ))}
                     </div>
                   ) : null}
+
+                  <span className={styles.runnerOpen} aria-hidden="true">
+                    Open project
+                    <ArrowUpRight size={15} />
+                  </span>
                 </div>
               </div>
             </article>
@@ -811,62 +861,94 @@ export function ExploreView() {
 
   return (
     <>
-      <div className="explore-page page-width">
-        <section className="explore-intro">
-          <h1 className="explore-brand-heading">
-            <span className="sr-only">Programmable</span>
+      <div className={`${styles.page} explore-page page-width`}>
+        <section className={styles.hero}>
+          <div className={styles.heroCopy}>
+            <span className={styles.heroEyebrow}>Programmable projects</span>
+            <h1>
+              Discover what&rsquo;s
+              <span>being built.</span>
+            </h1>
+            <p>
+              Products, markets, people and communities &mdash; together on one
+              clear project page.
+            </p>
+            <div className={styles.heroActions}>
+              <a className={styles.primaryAction} href="#runners">
+                Explore runners
+                <ArrowRight aria-hidden="true" size={17} />
+              </a>
+              <Link className={styles.secondaryAction} href="/launch">
+                Start a project
+              </Link>
+            </div>
+          </div>
+
+          <div className={styles.heroLens} aria-label="Programmable">
+            <span className={styles.lensLabel}>Project layer</span>
             <Image
-              className="explore-brand-logo"
+              className={styles.lensLogo}
               src="/brand/loop/programmable-loop-mark-transparent-v1.png"
               alt=""
               width={1254}
               height={1254}
               priority
             />
-          </h1>
-          <p>
-            <ScrambleText
-              text="Launch tokens that work the way you imagine"
-              duration={640}
-            />
-          </p>
-          <button
-            className="explore-token-address"
-            type="button"
-            aria-label={
-              copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                ? "Programmable contract address copied"
-                : "Copy Programmable contract address"
-            }
-            title={
-              copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
-                ? "Copied"
-                : "Copy contract address"
-            }
-            onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
-          >
-            <code>{PROGRAMMABLE_TOKEN_ADDRESS}</code>
-            {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
-              <Check aria-hidden="true" size={13} />
-            ) : (
-              <Copy aria-hidden="true" size={13} />
-            )}
-          </button>
+            <div className={styles.lensFooter}>
+              <span>Programmable</span>
+              <button
+                type="button"
+                aria-label={
+                  copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
+                    ? "Programmable contract address copied"
+                    : "Copy Programmable contract address"
+                }
+                title={
+                  copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS
+                    ? "Copied"
+                    : "Copy contract address"
+                }
+                onClick={() => copyAddress(PROGRAMMABLE_TOKEN_ADDRESS)}
+              >
+                <code>{formatTokenAddress(PROGRAMMABLE_TOKEN_ADDRESS)}</code>
+                {copiedAddress === PROGRAMMABLE_TOKEN_ADDRESS ? (
+                  <Check aria-hidden="true" size={13} />
+                ) : (
+                  <Copy aria-hidden="true" size={13} />
+                )}
+              </button>
+            </div>
+          </div>
         </section>
 
-        <section className="token-section" id="tokens" aria-busy={busy}>
+        <section
+          className={`${styles.runnersSection} token-section`}
+          id="runners"
+          aria-busy={busy}
+        >
+          <div className={styles.runnersIntro}>
+            <div>
+              <span>Runners</span>
+              <h2>Projects in motion.</h2>
+            </div>
+            <p>
+              Explore each product, its market and the people building around
+              it.
+            </p>
+          </div>
+
           {hasPublicTokens ? (
             <div className="token-section-heading">
-              <h2 className="sr-only">Tokens</h2>
+              <h2 className="sr-only">Projects</h2>
               <div className="token-toolbar">
                 <label className="token-search">
                   <Search aria-hidden="true" size={17} />
                   <span className="sr-only">
-                    Search tokens by name, ticker or contract address
+                    Search projects by name, ticker or contract address
                   </span>
                   <input
                     value={query}
-                    placeholder="Search tokens"
+                    placeholder="Search projects"
                     onChange={(event) => setQuery(event.target.value)}
                   />
                 </label>
@@ -884,7 +966,7 @@ export function ExploreView() {
                   <div
                     className="token-filter-menu"
                     role="group"
-                    aria-label="Sort tokens"
+                    aria-label="Sort projects"
                   >
                     {sortOptions.map((option) => (
                       <button
@@ -912,11 +994,12 @@ export function ExploreView() {
                 {state.phase === "ready" &&
                 state.payload.status === "ready" &&
                 state.payload.total > 0 &&
-                cards.length > 0 ? (
-                  <nav className="token-pagination" aria-label="Token pages">
+                cards.length > 0 &&
+                pageCount > 1 ? (
+                  <nav className="token-pagination" aria-label="Project pages">
                     <button
                       type="button"
-                      aria-label="Previous token page"
+                      aria-label="Previous project page"
                       disabled={activePage === 1 || busy}
                       onClick={() =>
                         setCurrentPage((page) => Math.max(1, page - 1))
@@ -934,7 +1017,7 @@ export function ExploreView() {
                               activePage === item ? "active" : undefined
                             }
                             type="button"
-                            aria-label={`Token page ${item}`}
+                            aria-label={`Project page ${item}`}
                             aria-current={
                               activePage === item ? "page" : undefined
                             }
@@ -953,7 +1036,7 @@ export function ExploreView() {
 
                     <button
                       type="button"
-                      aria-label="Next token page"
+                      aria-label="Next project page"
                       disabled={activePage === pageCount || busy}
                       onClick={() =>
                         setCurrentPage((page) => Math.min(pageCount, page + 1))
@@ -985,7 +1068,7 @@ export function ExploreView() {
 
           {state.phase === "ready" && busy ? (
             <span className="sr-only" role="status">
-              Updating tokens
+              Updating projects
             </span>
           ) : null}
           {renderTokenState()}
