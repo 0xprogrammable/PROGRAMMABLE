@@ -127,7 +127,7 @@ export const PINNED_PRE_ATTESTATION_SNAPSHOT = Object.freeze({
     "0x1546ad4cf2312e3143cf8cd57422f4040924521db4531d2ef2b1a9875f662ef8",
 });
 export const CANDIDATE_PG_RESTRICT_KEY =
-  "b3679e8b178535bbc58f9c9c43690a8c7e310ade8bd93360f15004be385b02d2"; // gitleaks:allow -- public archive SHA-256
+  "b3679e8b178535bbc58f9c9c43690a8c7e310ade8bd93360f15004be385b02d2";
 export const OFFICIAL_POSTGRES_17_TOOLCHAIN = Object.freeze({
   version: "PostgreSQL 17.10",
   distribution: "edb-postgresql-17.10-2-osx-universal",

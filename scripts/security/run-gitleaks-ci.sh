@@ -8,6 +8,7 @@ readonly gitleaks_sha256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca
 readonly gitleaks_url="https://github.com/gitleaks/gitleaks/releases/download/v${gitleaks_version}/${gitleaks_archive}"
 readonly workspace="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}"
 readonly temp_root="${RUNNER_TEMP:-/tmp}"
+readonly config_path="$workspace/.gitleaks.toml"
 scan_dir="$(mktemp -d "${temp_root%/}/programmable-gitleaks.XXXXXX")"
 
 cleanup() {
@@ -42,6 +43,7 @@ if [[ -n "$base_sha" ]]; then
 fi
 
 "$scan_dir/gitleaks" git "$workspace" \
+  --config "$config_path" \
   --log-opts "$log_opts" \
   --redact=100 \
   --no-banner

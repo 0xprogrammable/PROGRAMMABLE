@@ -322,7 +322,7 @@ function normalizeKnownToken(
   inputTokenAddress: HexAddress,
 ): NormalizedValuation {
   let poolId: HexBytes32;
-  let tokenAddress: HexAddress; // gitleaks:allow -- a type annotation, not a credential
+  let tokenAddress: HexAddress;
   try {
     poolId = canonicalBytes32(token.poolId);
     tokenAddress = canonicalAddress(token.tokenAddress);
@@ -376,7 +376,7 @@ function normalizeKnownToken(
     throw invalidInput("uniswap", "optimistic-stock-orientation");
   }
   if (
-    quoteAssetAddress === tokenAddress || // gitleaks:allow -- address comparison, not a credential
+    quoteAssetAddress === tokenAddress ||
     token.quoteIsCurrency0 !== (BigInt(quoteAssetAddress) < BigInt(tokenAddress))
   ) {
     throw invalidInput("uniswap", "optimistic-stock-orientation");
@@ -401,7 +401,7 @@ function normalizeNewLaunch(
   inputTokenAddress: HexAddress,
 ): NormalizedValuation {
   let poolId: HexBytes32;
-  let tokenAddress: HexAddress; // gitleaks:allow -- a type annotation, not a credential
+  let tokenAddress: HexAddress;
   try {
     poolId = canonicalBytes32(launch.poolId);
     tokenAddress = canonicalAddress(launch.tokenAddress);
@@ -468,7 +468,7 @@ function normalizeNewLaunch(
     !validDecimals(launch.quoteAssetDecimals) ||
     typeof launch.quoteIsCurrency0 !== "boolean" ||
     quoteAssetAddress === tokenAddress ||
-    launch.quoteIsCurrency0 !== (BigInt(quoteAssetAddress) < BigInt(tokenAddress)) || // gitleaks:allow -- address comparison
+    launch.quoteIsCurrency0 !== (BigInt(quoteAssetAddress) < BigInt(tokenAddress)) ||
     poolKey.currency0 !== (launch.quoteIsCurrency0 ? quoteAssetAddress : tokenAddress) ||
     poolKey.currency1 !== (launch.quoteIsCurrency0 ? tokenAddress : quoteAssetAddress)
   ) {
