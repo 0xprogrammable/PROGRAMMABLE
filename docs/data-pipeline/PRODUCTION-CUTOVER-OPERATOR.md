@@ -439,12 +439,14 @@ node scripts/data-pipeline/cutover-operator.mjs rollback-verify \
 ## 9. SLA-gated exact Vercel promotion
 
 This is the only authorized Vercel production-promotion path. The real-block
-SLA evidence must have been captured from the exact staged deployment while
-the Candidate database was still unpromoted. Run its fail-closed verifier only
-after the staged gates above are complete. Then immediately reverify the same
-immutable deployment, promote that exact `dpl_...` ID, and run the
-post-promotion binding checks. Do not replace any command with a mutable alias
-or a second deployment.
+SLA evidence must be captured from the exact staged deployment after the
+Candidate database is product-bound to that same commit and `dpl_...` ID and
+the staged projectors have published a complete Classic launch. The production
+domain must still resolve to the previous deployment. Run the fail-closed SLA
+verifier only after the staged gates above are complete. Then immediately
+reverify the same immutable deployment, promote that exact `dpl_...` ID, and
+run the post-promotion binding checks. Do not replace any command with a
+mutable alias or a second deployment.
 
 ```sh
 npm run perf:read-model:real-block-sla -- \

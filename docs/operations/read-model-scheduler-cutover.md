@@ -90,23 +90,26 @@ moved production to the candidate commit.
    inputs; it is not the complete migration inventory. Follow
    `docs/data-pipeline/HOSTED-DATABASE-OPERATOR.md` and keep bootstrap separate.
 2. Backfill Envio and Postgres at an exact, recorded checkpoint.
-3. Enable the source projector and prove it catches up without partial-block
+3. Product-bind the Candidate database to the exact staged commit and
+   deployment ID using the reviewed database-promotion operator. This opens
+   the internal publication fence but does not move the production domain.
+4. Enable the source projector and prove it catches up without partial-block
    publication.
-4. Enable the market projector and prove its market lineage at the same source
+5. Enable the market projector and prove its market lineage at the same source
    checkpoint.
-5. Configure and test the QuickNode stream against the exact staged deployment,
+6. Configure and test the QuickNode stream against the exact staged deployment,
    but keep its production destination disabled.
-6. Capture one organic mainnet block through the real stream path and pass the
+7. Capture one organic mainnet block through the real stream path and pass the
    real-block SLA gate below. This step performs no signing and spends no funds.
-7. Capture signed staged-deployment evidence and run the normal read-model gate.
-8. Reverify and promote the exact staged deployment ID with the reviewed manual
+8. Capture signed staged-deployment evidence and run the normal read-model gate.
+9. Reverify and promote the exact staged deployment ID with the reviewed manual
    commands below, never a mutable alias.
-9. Verify that `programmable.family` resolves to that deployment ID and commit,
+10. Verify that `programmable.family` resolves to that deployment ID and commit,
    then verify health, populated Explore, the token list, and every indexed
    route using the same release corpus.
-10. Enable indexed read flags only after every check is green, then activate and
+11. Enable indexed read flags only after every check is green, then activate and
    verify the stream's production destination.
-11. Remove the legacy cron in a later reviewed cutover commit.
+12. Remove the legacy cron in a later reviewed cutover commit.
 
 When either projector is active, the deploy policy requires the stream-secret
 key in the pulled Vercel environment. A Vercel Sensitive placeholder is enough
@@ -162,8 +165,11 @@ QuickNode must be configured to retry a non-2xx webhook response after roughly
 one second. On the exact `vercel deploy --prebuilt --prod --skip-domain`
 candidate only, set
 `PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true`. Leave it false in
-normal builds. While the Candidate database is still explicitly unpromoted,
-arm one five-minute, single-use probe against the exact unaliased deployment:
+normal builds. After the Candidate database is product-bound to this exact
+staged commit and deployment ID, and the staged projectors have published a
+complete Classic launch, arm one five-minute, single-use probe against the
+exact unaliased deployment while the production domain still points to the
+previous release:
 
 ```sh
 curl --fail-with-body --request PUT \
