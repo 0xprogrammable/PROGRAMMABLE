@@ -36,6 +36,7 @@ const MAXIMUM_METADATA_KEYS = 32;
 const MAXIMUM_BLOCK_KEYS = 64;
 const MAXIMUM_OPTIMISTIC_LOGS = 4_096;
 const MAXIMUM_LOG_DATA_BYTES = 16 * 1_024;
+const MAXIMUM_OPTIMISTIC_CONFIRMATIONS = 0xffff_ffffn;
 const DEFAULT_HARD_DEADLINE_MS = 8_000;
 const MAXIMUM_HARD_DEADLINE_MS = 8_000;
 
@@ -76,7 +77,9 @@ export type DualRpcOptimisticBlock = Readonly<{
   providerVendorGroups: readonly [string, string];
   providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
   providerOriginCommitments: readonly [HexBytes32, HexBytes32];
-  providerCallCounts: readonly [3, 3];
+  providerHeads: readonly [string, string];
+  confirmations: number;
+  providerCallCounts: readonly [4, 4];
 }>;
 
 type ActiveManifestSource = Readonly<{
@@ -86,6 +89,7 @@ type ActiveManifestSource = Readonly<{
 }>;
 
 type CanonicalProviderResult = Readonly<{
+  head: bigint;
   header: DualRpcOptimisticBlock["block"];
   logs: readonly OptimisticManifestLog[];
 }>;
@@ -484,7 +488,10 @@ function sameProviderResult(
   first: CanonicalProviderResult,
   second: CanonicalProviderResult,
 ): boolean {
-  return JSON.stringify(first) === JSON.stringify(second);
+  return (
+    JSON.stringify([first.header, first.logs]) ===
+    JSON.stringify([second.header, second.logs])
+  );
 }
 
 function deadlineMs(value: unknown): number {
@@ -531,9 +538,9 @@ async function withinDeadline<T>(
 
 /**
  * Reads one hinted block from two independent production RPC providers. It
- * performs exactly three calls per provider (chain, header, exact-block logs),
- * accepts only manifest-bound logs and returns no result unless both normalized
- * headers and complete log sets are byte-for-byte equal.
+ * performs exactly four calls per provider (chain, head, header, exact-block
+ * logs), accepts only manifest-bound logs and returns no result unless both
+ * normalized headers and complete log sets are byte-for-byte equal.
  */
 export async function readOptimisticBlockWithDualRpc(input: Readonly<{
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
@@ -554,8 +561,9 @@ export async function readOptimisticBlockWithDualRpc(input: Readonly<{
           if (!getLogs) {
             throw invalidInput("rpc", "optimistic-get-logs");
           }
-          const [chainId, block, logs] = await Promise.all([
+          const [chainId, head, block, logs] = await Promise.all([
             client.getChainId(),
+            client.getBlockNumber(),
             client.getBlock({ blockNumber }),
             getLogs({
               addresses: filter.addresses,
@@ -567,8 +575,12 @@ export async function readOptimisticBlockWithDualRpc(input: Readonly<{
           if (chainId !== RELEASE_BINDING.chainId) {
             throw validationError("rpc", "optimistic-chain-id");
           }
+          if (typeof head !== "bigint" || head < blockNumber) {
+            throw validationError("rpc", "optimistic-head-before-block");
+          }
           const header = canonicalHeader(block, blockNumber);
           return Object.freeze({
+            head,
             header,
             logs: canonicalLogs({
               logs,
@@ -584,6 +596,14 @@ export async function readOptimisticBlockWithDualRpc(input: Readonly<{
     if (!sameProviderResult(results[0]!, results[1]!)) {
       throw validationError("rpc", "optimistic-provider-mismatch");
     }
+    const lowestHead =
+      results[0]!.head < results[1]!.head
+        ? results[0]!.head
+        : results[1]!.head;
+    const confirmations = lowestHead - blockNumber;
+    if (confirmations > MAXIMUM_OPTIMISTIC_CONFIRMATIONS) {
+      throw validationError("rpc", "optimistic-confirmations-range");
+    }
     return Object.freeze({
       finality: "optimistic" as const,
       chainId: 1 as const,
@@ -594,7 +614,12 @@ export async function readOptimisticBlockWithDualRpc(input: Readonly<{
       providerVendorGroups: pair.vendorGroups,
       providerEndpointCommitments: pair.endpointCommitments,
       providerOriginCommitments: pair.originCommitments,
-      providerCallCounts: [3, 3] as const,
+      providerHeads: [
+        results[0]!.head.toString(),
+        results[1]!.head.toString(),
+      ] as const,
+      confirmations: Number(confirmations),
+      providerCallCounts: [4, 4] as const,
     });
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;

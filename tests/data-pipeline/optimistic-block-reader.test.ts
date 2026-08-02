@@ -115,6 +115,7 @@ function candidateLog(
 type ProviderFixture = Readonly<{
   provider: CandidateRpcProvider;
   getChainId: ReturnType<typeof vi.fn>;
+  getBlockNumber: ReturnType<typeof vi.fn>;
   getBlock: ReturnType<typeof vi.fn>;
   getLogs: ReturnType<typeof vi.fn>;
 }>;
@@ -123,6 +124,7 @@ function providerFixture(
   vendor: "alchemy" | "quicknode",
   overrides: Readonly<{
     chainId?: number;
+    head?: bigint;
     block?: CandidateRpcBlock;
     logs?: readonly CandidateRpcLog[];
     identity?: string;
@@ -131,10 +133,12 @@ function providerFixture(
 ): ProviderFixture {
   const marker = vendor === "alchemy" ? "a" : "b";
   const getChainId = vi.fn(async () => overrides.chainId ?? 1);
+  const getBlockNumber = vi.fn(async () => overrides.head ?? BLOCK_NUMBER);
   const getBlock = vi.fn(async () => overrides.block ?? candidateBlock());
   const getLogs = vi.fn(async () => overrides.logs ?? [candidateLog()]);
   const client = {
     getChainId,
+    getBlockNumber,
     getBlock,
     getLogs,
   } as unknown as CandidateRpcProvider["client"];
@@ -147,6 +151,7 @@ function providerFixture(
       client,
     },
     getChainId,
+    getBlockNumber,
     getBlock,
     getLogs,
   };
@@ -261,7 +266,9 @@ describe("dual-RPC optimistic block reader", () => {
       },
       providerIdentities: ["alchemy-mainnet", "quicknode-mainnet"],
       providerVendorGroups: ["alchemy", "quicknode"],
-      providerCallCounts: [3, 3],
+      providerHeads: [BLOCK_NUMBER.toString(), BLOCK_NUMBER.toString()],
+      confirmations: 0,
+      providerCallCounts: [4, 4],
     });
     expect(result.block.hash).not.toBe(PAYLOAD_ONLY_HASH);
     expect(result.logs).toEqual([
@@ -280,6 +287,7 @@ describe("dual-RPC optimistic block reader", () => {
     expect(result.filter.topic0).toContain(TOPIC0);
     for (const fixture of [pair.first, pair.second]) {
       expect(fixture.getChainId).toHaveBeenCalledTimes(1);
+      expect(fixture.getBlockNumber).toHaveBeenCalledTimes(1);
       expect(fixture.getBlock).toHaveBeenCalledWith({
         blockNumber: BLOCK_NUMBER,
       });
@@ -307,10 +315,12 @@ describe("dual-RPC optimistic block reader", () => {
       topics: [topic0],
     });
     const first = providerFixture("alchemy", {
+      head: blockNumber,
       block: candidateBlock({ number: blockNumber, hash }),
       logs: [log],
     });
     const second = providerFixture("quicknode", {
+      head: blockNumber,
       block: candidateBlock({ number: blockNumber, hash }),
       logs: [log],
     });
@@ -362,6 +372,46 @@ describe("dual-RPC optimistic block reader", () => {
         hint: parseQuickNodeBlockHint(quickNodePayload()),
       }),
     ).rejects.toEqual(validationError("optimistic-chain-id"));
+  });
+
+  it("returns both verified heads and confirmations from the lower head", async () => {
+    const first = providerFixture("alchemy", { head: BLOCK_NUMBER + 5n });
+    const second = providerFixture("quicknode", { head: BLOCK_NUMBER + 3n });
+
+    const result = await readOptimisticBlockWithDualRpc({
+      providers: [first.provider, second.provider],
+      hint: parseQuickNodeBlockHint(quickNodePayload()),
+    });
+
+    expect(result.providerHeads).toEqual([
+      (BLOCK_NUMBER + 5n).toString(),
+      (BLOCK_NUMBER + 3n).toString(),
+    ]);
+    expect(result.confirmations).toBe(3);
+  });
+
+  it("rejects a provider head behind the hinted block", async () => {
+    const pair = providerPair({ head: BLOCK_NUMBER - 1n });
+
+    await expect(
+      readOptimisticBlockWithDualRpc({
+        providers: pair.providers,
+        hint: parseQuickNodeBlockHint(quickNodePayload()),
+      }),
+    ).rejects.toEqual(validationError("optimistic-head-before-block"));
+  });
+
+  it("rejects confirmations outside the bounded uint32 range", async () => {
+    const excessiveHead = BLOCK_NUMBER + 0x1_0000_0000n;
+    const first = providerFixture("alchemy", { head: excessiveHead });
+    const second = providerFixture("quicknode", { head: excessiveHead });
+
+    await expect(
+      readOptimisticBlockWithDualRpc({
+        providers: [first.provider, second.provider],
+        hint: parseQuickNodeBlockHint(quickNodePayload()),
+      }),
+    ).rejects.toEqual(validationError("optimistic-confirmations-range"));
   });
 
   it("rejects unequal provider log sets", async () => {
