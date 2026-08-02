@@ -17,6 +17,7 @@ import { PROGRAMMABLE_EVENT_SIGNATURES } from "../../lib/data-pipeline/event-man
 import {
   attachOptimisticMarketStates,
   computeOptimisticMarketStateCommitments,
+  configuredOptimisticMarketReadPlans,
   createOptimisticLiveReader,
   createOptimisticLiveWriter,
   OPTIMISTIC_MAINNET_STATE_VIEW,
@@ -223,6 +224,14 @@ function provider(
         parentHash: PARENT_HASH,
         timestamp: 1_722_687_488n,
       })),
+      getBlocks: vi.fn(async ({ blockNumbers }: { blockNumbers: readonly bigint[] }) => blockNumbers.map((number) => ({
+        number,
+        hash: number === BLOCK_NUMBER
+          ? BLOCK_HASH
+          : (`0x${"a".repeat(64)}` as const),
+        parentHash: PARENT_HASH,
+        timestamp: 1_722_687_488n,
+      }))),
       getLogs: vi.fn(async () => logs),
       readErc20Metadata: vi.fn(async () => ({
         name: "Programmable Test",
@@ -244,6 +253,33 @@ async function verifiedBundle(
     provider("alchemy", logs, head),
     provider("quicknode", logs, head),
   ] as const;
+  return verifyOptimisticBlockForPersistence({
+    providers,
+    providerDeployments: PROVIDER_DEPLOYMENTS,
+    hint: {
+      chainId: 1,
+      blockNumber: BLOCK_NUMBER.toString(),
+      streamId: "programmable-mainnet-head",
+      reorgedBlockNumbers: [],
+    },
+    observedAt: "2026-08-02T10:00:00.000Z",
+  });
+}
+
+async function metadataRetryBundle(): Promise<OptimisticPersistenceBundle> {
+  const logs = completeClassicLaunchLogs();
+  const providers = [
+    provider("alchemy", logs),
+    provider("quicknode", logs),
+  ] as const;
+  for (const { client } of providers) {
+    vi.mocked(client.readErc20Metadata!)
+      .mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue({
+        name: "Programmable Test",
+        symbol: "PRG",
+      });
+  }
   return verifyOptimisticBlockForPersistence({
     providers,
     providerDeployments: PROVIDER_DEPLOYMENTS,
@@ -338,6 +374,12 @@ function marketStateEvidence(
     activeLiquidity: "1000000",
   });
   const confirmations = Number(lowestHead - BigInt(bundle.blockNumber));
+  const blockProviderCallCounts = bundle.providerCallCounts;
+  const marketProviderCallCounts = [7, 7] as const;
+  const totalProviderCallCounts = [
+    blockProviderCallCounts[0] + marketProviderCallCounts[0],
+    blockProviderCallCounts[1] + marketProviderCallCounts[1],
+  ] as const;
   const commitments = computeOptimisticMarketStateCommitments({
     blockNumber: bundle.blockNumber,
     blockHash: bundle.blockHash,
@@ -351,6 +393,9 @@ function marketStateEvidence(
     providerEndpointCommitments: bundle.providerEndpointCommitments,
     providerOriginCommitments: bundle.providerOriginCommitments,
     providerHeads,
+    blockProviderCallCounts,
+    marketProviderCallCounts,
+    totalProviderCallCounts,
     confirmations,
   });
   return Object.freeze({
@@ -372,9 +417,9 @@ function marketStateEvidence(
     providerEndpointCommitments: bundle.providerEndpointCommitments,
     providerOriginCommitments: bundle.providerOriginCommitments,
     providerHeads,
-    blockProviderCallCounts: [4, 4] as const,
-    marketProviderCallCounts: [7, 7] as const,
-    totalProviderCallCounts: [11, 11] as const,
+    blockProviderCallCounts,
+    marketProviderCallCounts,
+    totalProviderCallCounts,
   });
 }
 
@@ -460,6 +505,14 @@ function liveBlockDatabaseRow(
 }
 
 describe("optimistic live runtime", () => {
+  it("keeps block evidence idempotent across receipt observation clocks", async () => {
+    const first = await verifiedBundle();
+    const second = await verifiedBundle();
+
+    expect(second.evidenceCommitment).toBe(first.evidenceCommitment);
+    expect(second.logsCommitment).toBe(first.logsCommitment);
+  });
+
   it("normalizes exact dual-RPC logs and keeps deterministic physical identities", async () => {
     const first = await verifiedBundle();
     const second = await verifiedBundle();
@@ -484,6 +537,91 @@ describe("optimistic live runtime", () => {
       symbol: "PRG",
       blockHash: BLOCK_HASH,
     });
+  });
+
+  it("persists the measured four-call metadata retry for one launch token", async () => {
+    const bundle = await metadataRetryBundle();
+    let eventIndex = 0;
+    const executor: PostgresExecutor = {
+      async transaction(work) {
+        return work({
+          async query<Row extends Record<string, unknown>>(sql: string) {
+            if (sql.includes("session_user::text") && !sql.includes("current_role")) {
+              return [{ session_user: "programmable_projector_login" }] as unknown as Row[];
+            }
+            if (sql.includes("current_role::text")) {
+              return [{
+                session_user: "programmable_projector_login",
+                current_role: "programmable_projector",
+              }] as unknown as Row[];
+            }
+            if (sql.includes("append_optimistic_block_observation_v1")) {
+              return [{ optimistic_block_id: bundle.optimisticBlockId }] as unknown as Row[];
+            }
+            if (sql.includes("append_optimistic_event_row_v1")) {
+              const event = bundle.events[eventIndex++]!;
+              return [{ optimistic_event_id: event.optimisticEventId }] as unknown as Row[];
+            }
+            if (sql.includes("get_optimistic_promotion_plan_v1")) {
+              return [{
+                mode: "bootstrap",
+                can_promote: true,
+                expected_current_block_id: null,
+                orphan_required: false,
+                requires_rebootstrap: false,
+                target_height_current_block_id: null,
+                chain_tip_block_id: null,
+                chain_tip_block_number: null,
+                segment_start_block_number: null,
+                reorg_generation: null,
+                canonical_status_id: null,
+                orphan_status_id: null,
+                stored_decision_commitment: null,
+                stored_decided_at: null,
+              }] as unknown as Row[];
+            }
+            if (sql.includes("promote_optimistic_block_canonical_v1")) {
+              return [{ optimistic_block_id: bundle.optimisticBlockId }] as unknown as Row[];
+            }
+            return [] as Row[];
+          },
+        });
+      },
+      async close() {},
+    };
+
+    expect(bundle.metadataProviderCallCounts).toEqual([4, 4]);
+    await expect(createOptimisticLiveWriter({ executor }).persist(bundle))
+      .resolves.toMatchObject({ eventCount: 5, replayed: false });
+  });
+
+  it("rejects odd, over-budget, and zero-token metadata call telemetry", async () => {
+    const launchBundle = await metadataRetryBundle();
+    const emptyBundle = await verifiedBundle([]);
+    let transactionOpened = false;
+    const executor: PostgresExecutor = {
+      async transaction() {
+        transactionOpened = true;
+        throw new Error("must not run");
+      },
+      async close() {},
+    };
+    const invalid = [
+      { ...launchBundle, metadataProviderCallCounts: [3, 4] as const },
+      { ...launchBundle, metadataProviderCallCounts: [8, 4] as const },
+      { ...emptyBundle, metadataProviderCallCounts: [2, 0] as const },
+    ];
+
+    for (const bundle of invalid) {
+      await expect(createOptimisticLiveWriter({ executor }).persist(bundle))
+        .rejects.toMatchObject({
+          name: "DataPipelineError",
+          dependency: "postgres",
+          code: "validation_failed",
+          safeMetadata: { operation: "optimistic-metadata-call-count" },
+        });
+    }
+    expect(transactionOpened).toBe(false);
   });
 
   it("refuses blocks outside the explicit zero-to-eleven confirmation window", async () => {
@@ -605,7 +743,7 @@ describe("optimistic live runtime", () => {
             if (sql.includes("append_optimistic_event_row_v1")) {
               return [{ optimistic_event_id: bundle.events[0]!.optimisticEventId }] as unknown as Row[];
             }
-            if (sql.includes("append_optimistic_market_state_v1")) {
+            if (sql.includes("append_optimistic_market_state_v2")) {
               return [{
                 optimistic_market_state_id:
                   bundle.marketStates[0]!.optimisticMarketStateId,
@@ -643,14 +781,14 @@ describe("optimistic live runtime", () => {
     const indexOf = (operation: string) =>
       calls.findIndex(({ sql }) => sql.includes(operation));
     const marketCall = calls.find(({ sql }) =>
-      sql.includes("append_optimistic_market_state_v1"))!;
+      sql.includes("append_optimistic_market_state_v2"))!;
 
     expect(result.marketStateCount).toBe(1);
     expect(indexOf("append_optimistic_block_observation_v1"))
       .toBeLessThan(indexOf("append_optimistic_event_row_v1"));
     expect(indexOf("append_optimistic_event_row_v1"))
-      .toBeLessThan(indexOf("append_optimistic_market_state_v1"));
-    expect(indexOf("append_optimistic_market_state_v1"))
+      .toBeLessThan(indexOf("append_optimistic_market_state_v2"));
+    expect(indexOf("append_optimistic_market_state_v2"))
       .toBeLessThan(indexOf("get_optimistic_promotion_plan_v1"));
     expect(indexOf("get_optimistic_promotion_plan_v1"))
       .toBeLessThan(indexOf("promote_optimistic_block_canonical_v1"));
@@ -685,7 +823,7 @@ describe("optimistic live runtime", () => {
             if (sql.includes("append_optimistic_event_row_v1")) {
               return [{ optimistic_event_id: bundle.events[0]!.optimisticEventId }] as unknown as Row[];
             }
-            if (sql.includes("append_optimistic_market_state_v1")) {
+            if (sql.includes("append_optimistic_market_state_v2")) {
               throw new Error("market append failed");
             }
             if (sql.includes("get_optimistic_promotion_plan_v1")) planned = true;
@@ -1261,7 +1399,7 @@ describe("optimistic live runtime", () => {
             if (sql.includes("append_optimistic_event_row_v1")) {
               return [{ optimistic_event_id: bundle.events[0]!.optimisticEventId }] as unknown as Row[];
             }
-            if (sql.includes("append_optimistic_market_state_v1")) {
+            if (sql.includes("append_optimistic_market_state_v2")) {
               return [{
                 optimistic_market_state_id:
                   bundle.marketStates[0]!.optimisticMarketStateId,
@@ -1392,5 +1530,77 @@ describe("optimistic live runtime", () => {
       },
     });
     expect(noDurableStateRows).toEqual([]);
+  });
+
+  it("keeps a Classic SLA sentinel when the organic market plan is stock-only", async () => {
+    const bundle = await verifiedBundle([feeAccrualLog()]);
+    const base = {
+      id: TOKEN,
+      name: "Programmable Test",
+      symbol: "PRG",
+      tokenAddress: TOKEN,
+      hookAddress: HOOK.address,
+      poolId: POOL_ID,
+      launchBlockNumber: (BLOCK_NUMBER - 100n).toString(),
+      launchTransactionHash: `0x${"99".repeat(32)}` as const,
+      launchTransactionIndex: 1,
+      launchLogIndex: 1,
+      launchedAt: "2026-08-02T09:00:00.000Z",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme" as const,
+    } satisfies LauncherToken;
+    const classicPool = `0x${"aa".repeat(32)}` as const;
+    const classicToken = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
+    const plans = configuredOptimisticMarketReadPlans({
+      bundle,
+      canonicalTokens: [
+        { ...base, launchModel: "stock-paired" },
+        {
+          ...base,
+          id: classicToken,
+          tokenAddress: classicToken,
+          poolId: classicPool,
+          launchModel: "classic",
+        },
+      ],
+      ensureTrackedMarket: true,
+    });
+
+    expect(plans.map(({ tokenAddress }) => tokenAddress)).toEqual([
+      TOKEN,
+      classicToken,
+    ]);
+  });
+
+  it("adds a canonical Classic SLA sentinel beside a brand-new Classic launch", async () => {
+    const bundle = await verifiedBundle();
+    const classicPool = `0x${"cc".repeat(32)}` as const;
+    const classicToken = "0xdddddddddddddddddddddddddddddddddddddddd" as const;
+    const canonicalClassic = {
+      id: classicToken,
+      name: "Canonical Classic",
+      symbol: "CC",
+      tokenAddress: classicToken,
+      hookAddress: HOOK.address,
+      poolId: classicPool,
+      launchBlockNumber: (BLOCK_NUMBER - 100n).toString(),
+      launchTransactionHash: `0x${"99".repeat(32)}` as const,
+      launchTransactionIndex: 1,
+      launchLogIndex: 1,
+      launchedAt: "2026-08-02T09:00:00.000Z",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme" as const,
+      launchModel: "classic" as const,
+    } satisfies LauncherToken;
+
+    const plans = configuredOptimisticMarketReadPlans({
+      bundle,
+      canonicalTokens: [canonicalClassic],
+      ensureTrackedMarket: true,
+    });
+
+    expect(plans).toHaveLength(2);
+    expect(plans.some(({ token }) => token?.tokenAddress === classicToken)).toBe(true);
+    expect(plans.some(({ newLaunch }) => newLaunch?.tokenAddress === TOKEN)).toBe(true);
   });
 });

@@ -362,6 +362,11 @@ export type DualRpcTokenMetadata = Readonly<{
   symbol: string;
 }>;
 
+export type DualRpcTokenMetadataBatch = Readonly<{
+  metadata: readonly DualRpcTokenMetadata[];
+  providerCallCounts: readonly [number, number];
+}>;
+
 export type CandidateRpcProvider = {
   identity: string;
   vendorGroup: string;
@@ -1361,7 +1366,7 @@ function canonicalMetadataText(
  * block. Provider disagreement is an integrity failure, never a preference
  * or a reason to silently use one answer.
  */
-export async function readDualRpcTokenMetadata(input: {
+export async function readDualRpcTokenMetadataWithTrace(input: {
   tokens: readonly Readonly<{
     token: HexAddress;
     blockNumber: string;
@@ -1369,7 +1374,7 @@ export async function readDualRpcTokenMetadata(input: {
   }>[];
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   rpcPolicy?: RpcExecutionPolicyInput;
-}): Promise<readonly DualRpcTokenMetadata[]> {
+}): Promise<DualRpcTokenMetadataBatch> {
   assertProductionDualRpcProviders(input.providers);
   if (!Array.isArray(input.tokens) || input.tokens.length > 16) {
     throw invalidInput("rpc", "erc20-metadata-batch");
@@ -1397,7 +1402,7 @@ export async function readDualRpcTokenMetadata(input: {
     maximum: policy.maxCallsPerProvider,
   }));
   try {
-    return Object.freeze(
+    const metadata = Object.freeze(
       await boundedRpcMap(
         input.tokens,
         policy.maxConcurrency,
@@ -1458,6 +1463,13 @@ export async function readDualRpcTokenMetadata(input: {
         },
       ),
     );
+    return Object.freeze({
+      metadata,
+      providerCallCounts: Object.freeze([
+        providerBudgets[0]!.used,
+        providerBudgets[1]!.used,
+      ] as const),
+    });
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;
     throw dataPipelineError({
@@ -1467,6 +1479,18 @@ export async function readDualRpcTokenMetadata(input: {
       countsTowardCircuit: true,
     });
   }
+}
+
+export async function readDualRpcTokenMetadata(input: {
+  tokens: readonly Readonly<{
+    token: HexAddress;
+    blockNumber: string;
+    blockHash: HexBytes32;
+  }>[];
+  providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
+  rpcPolicy?: RpcExecutionPolicyInput;
+}): Promise<readonly DualRpcTokenMetadata[]> {
+  return (await readDualRpcTokenMetadataWithTrace(input)).metadata;
 }
 
 function rewardUint(value: unknown, field: string): string {

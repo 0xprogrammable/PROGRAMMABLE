@@ -30,7 +30,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "f54859e55f35b99784eebd6cef58a40a5848904be21417249f3bff5bf1c88637",
+        sha256: "f2828a8e0e20ac005511ea9cce5c3e7b349696034a2dbf445268533fbc367b9c",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -115,16 +115,58 @@ const APPROVED_OPERATIONS = Object.freeze({
       secretEnvironment: "PROGRAMMABLE_QUICKNODE_STREAM_SECRET",
       route: Object.freeze({
         path: "app/api/ops/projector-wake/route.ts",
-        sha256: "e7f3365df64827ca73cbee65fb18d496f55c0061885beed6fc34dd6f36ca55c8",
+        sha256: "71549b17be233af2be052e1e4f948cbae37d804dc662354c6bfcd234bfdd266a",
       }),
       verifier: Object.freeze({
         path: "lib/data-pipeline/quicknode-stream-wake.server.ts",
-        sha256: "9c452c2ae94b62d31ed2ffdaaf974b1acd4c7a856493ac02013e43f89eb4bc65",
+        sha256: "b28af0bdd6860eb6f55b54ea4093a1ddbf9007667c3193f99061057e477c9153",
       }),
       canary: Object.freeze({
         path: "scripts/perf/read-model-projector-wake-canary.mjs",
         sha256: "5ea9c8704126fe17982515038ed75dd3eb850479a5dc8c7b092e2db076c14900",
       }),
+      dependencies: Object.freeze([
+        Object.freeze({
+          path: "lib/data-pipeline/quicknode-wake-queue.server.ts",
+          sha256: "a3743900032ff2c7b4f4636d5731d6de1d680e1f49bd0cce2365c448ea1243d0",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/optimistic-wake-runtime.server.ts",
+          sha256: "306a06191e2d6849d8d85f6a1cf79ed027ff3ff482b8e374755935d738fa4307",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/optimistic-block-reader.server.ts",
+          sha256: "983080e347dd9fb90daf5696f096a446f3c119a250669545dcb2208ba639b161",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/optimistic-market-state.server.ts",
+          sha256: "1479af0cb925c87c86d7b30fa20a8cda6bcef326e33f32e04f3e58796a498e67",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/optimistic-live-runtime.server.ts",
+          sha256: "817b4563eb503aa761efc922c264cf1699fd2264160adfd1a5294308750533f6",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/read-model-real-block-sla-capture.server.ts",
+          sha256: "6e91e4a71f50fe0b0f512f44becac13b5326aa1567efbce883dad6ef592bb6f0",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/dual-rpc.ts",
+          sha256: "12018866a1452d098d273e6e0f30274a4687f83a4fcba17764e2d88ca8093981",
+        }),
+        Object.freeze({
+          path: "lib/data-pipeline/rpc-providers.server.ts",
+          sha256: "d6694f99366226a64a07b28ef3646cc05556048bc1ce790f9fbac4929c3ce77c",
+        }),
+        Object.freeze({
+          path: "app/api/ops/read-model-real-block-sla/route.ts",
+          sha256: "5c975d526c9be984e55ac69df903c3328aa4edc75684b5ead6bab378c1992fd1",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260802104211_real_block_sla_runtime_receipts.sql",
+          sha256: "f2abe7c14690f8e1bac43eba56ed88b73685e1ef2e4a70ecb8a633a121f5d838",
+        }),
+      ]),
     }),
   ]),
   releaseGates: Object.freeze({
@@ -138,11 +180,11 @@ const APPROVED_OPERATIONS = Object.freeze({
       maximumDeliveryToFirstVisibleMs: 10_000,
       script: Object.freeze({
         path: "scripts/perf/read-model-real-block-sla-gate.mjs",
-        sha256: "df86aa0650f9748771d4dbb4cda82aba0ac792b5edc5fafc1ad63734ec32d18e",
+        sha256: "68cb5f77d3891070cba84f6b69f13eabb177016823f9baed6decdf62aa1a0c3a",
       }),
       schema: Object.freeze({
-        path: "config/read-model-real-block-sla-evidence.schema.json",
-        sha256: "997cd03c5b09c219061de0cc36441602edfec78e5708db977eb28cb4466fe2aa",
+        path: "config/read-model-real-block-sla-db-attestation.schema.json",
+        sha256: "73d78c27c6b8dc311dd50911bd4f1b4c2c44e967fd53aa5b415f566e264b69da",
       }),
     }),
   }),
@@ -271,11 +313,18 @@ function eventTriggerIsAuthenticatedAndBound(route, verifier, trigger) {
     trigger?.provider === "quicknode-streams" &&
     trigger?.mode === "wake-only" &&
     trigger?.secretEnvironment === "PROGRAMMABLE_QUICKNODE_STREAM_SECRET" &&
-    route.includes("verifyQuickNodeStreamWake(request)") &&
-    route.includes("after(runWakeCycle)") &&
+    route.includes("await verifyQuickNodeStreamWake(request, {") &&
+    route.includes("enqueueConfiguredQuickNodeWake") &&
+    route.includes("acknowledgeConfiguredQuickNodeWake") &&
+    route.includes("consumeConfiguredRealBlockSlaProviderRetryOnce") &&
+    route.includes("PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE") &&
+    route.includes("processDurableWakeJob") &&
+    route.includes("processNextConfiguredQuickNodeWake") &&
+    route.includes("createConfiguredOptimisticWakeFirstStage") &&
+    route.includes("after(() => runDurableWakeWorker") &&
     route.includes("runConfiguredProjectorCycle()") &&
     route.includes("runConfiguredMarketProjectorFastLaneCycle()") &&
-    /export\s+async\s+function\s+POST\s*\(/u.test(route) &&
+    route.includes("export const POST = createProjectorWakePost({") &&
     /status\s*:\s*202\b/u.test(route) &&
     /["']Cache-Control["']\s*:\s*["']no-store["']/u.test(route) &&
     verifier.includes("PROGRAMMABLE_QUICKNODE_STREAM_SECRET") &&
@@ -318,36 +367,48 @@ function realBlockSlaGateIsFailClosed(source, schema, gate) {
     gate?.requiredBeforeProductionPromotion === true &&
     gate?.activity === "organic-stream-block-no-signing-or-spending" &&
     gate?.maximumDeliveryToFirstVisibleMs === 10_000 &&
-    source.includes('"programmable-real-block-sla-evidence"') &&
     source.includes("REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS = 10_000") &&
-    source.includes('activity.kind !== "organic-stream-block"') &&
-    source.includes("activity.signingPerformed !== false") &&
-    source.includes("activity.spendingPerformed !== false") &&
-    source.includes("persistedAt > queueResponseAt") &&
-    source.includes("duplicate.secondJobCreated !== false") &&
-    source.includes('observation.source !== "dual-rpc-head"') &&
-    source.includes('observation.finality !== "optimistic"') &&
-    source.includes('observedSurfaces.has("explore-token")') &&
-    source.includes('observedSurfaces.has("classic-chart")') &&
-    source.includes("firstVisibleAt !== earliestObservedAt") &&
-    source.includes("allRequiredSurfacesLatency >") &&
-    /count\(observation\.confirmations,[\s\S]{0,120}\b0,\s*11\)/u.test(source) &&
-    source.includes("readModelReleaseEvidenceCommitment") &&
+    source.includes("verifyRealBlockSlaDatabaseAttestation") &&
+    source.includes("DB-authored promotion attestation required") &&
+    source.includes("attestationHmacSha256") &&
+    source.includes("dynamic provider call count") &&
+    source.includes("same-market public surfaces") &&
+    source.includes("API body digest") &&
+    source.includes("real-block SLA latency") &&
     source.includes("maximumEvidenceAgeMs") &&
+    source.includes('evidence.kind !== "programmable-real-block-sla-db-attestation"') &&
+    source.includes("evidence.schemaVersion !== 2") &&
+    source.includes("initialNonceDigest") &&
+    source.includes("duplicateNonceDigest") &&
+    source.includes("runtime.initialResponseStatus !== 503") &&
+    source.includes("runtime.duplicateResponseStatus !== 202") &&
+    source.includes("metadataProviderCallCountA") &&
+    source.includes("metadataProviderCallCountB") &&
     schemaValue?.properties?.kind?.const ===
-      "programmable-real-block-sla-evidence" &&
-    schemaValue?.properties?.activity?.properties?.signingPerformed?.const ===
-      false &&
-    schemaValue?.properties?.activity?.properties?.spendingPerformed?.const ===
-      false &&
-    schemaValue?.properties?.sla?.properties
-      ?.maximumDeliveryToFirstVisibleMs?.const === 10_000
+      "programmable-real-block-sla-db-attestation" &&
+    schemaValue?.properties?.schemaVersion?.const === 2 &&
+    schemaValue?.properties?.runtimeReceipt?.type === "object" &&
+    schemaValue?.properties?.runtimeReceipt?.properties?.initialResponseStatus
+      ?.const === 503 &&
+    schemaValue?.properties?.runtimeReceipt?.properties?.duplicateResponseStatus
+      ?.const === 202 &&
+    schemaValue?.properties?.runtimeReceipt?.properties?.markets?.items
+      ?.properties?.releaseVersion?.enum?.length === 3 &&
+    schemaValue?.properties?.apiObservations?.minItems === 2 &&
+    schemaValue?.properties?.apiObservations?.maxItems === 2 &&
+    schemaValue?.properties?.attestationHmacSha256?.$ref === "#/$defs/bytes32"
   );
 }
 
 function exactEmptyEnvironmentKey(source, name) {
   if (typeof source !== "string") return false;
   const matches = source.match(new RegExp(`^${name}=$`, "gmu")) ?? [];
+  return matches.length === 1 && !source.includes(`NEXT_PUBLIC_${name}`);
+}
+
+function exactFalseEnvironmentKey(source, name) {
+  if (typeof source !== "string") return false;
+  const matches = source.match(new RegExp(`^${name}=false$`, "gmu")) ?? [];
   return matches.length === 1 && !source.includes(`NEXT_PUBLIC_${name}`);
 }
 
@@ -625,6 +686,15 @@ export function evaluateReadModelOperationsSourceContracts(
       sourceBindingMatches(source, eventTrigger?.route, expectedSha256Overrides) &&
       sourceBindingMatches(source, eventTrigger?.verifier, expectedSha256Overrides) &&
       sourceBindingMatches(source, eventTrigger?.canary, expectedSha256Overrides) &&
+      (eventTrigger?.dependencies ?? []).length ===
+        (approvedTrigger.dependencies ?? []).length &&
+      (approvedTrigger.dependencies ?? []).every((binding, index) =>
+        sourceBindingMatches(
+          source,
+          eventTrigger?.dependencies?.[index],
+          expectedSha256Overrides,
+        ) && exactJson(binding, eventTrigger?.dependencies?.[index])
+      ) &&
       eventTriggerIsAuthenticatedAndBound(
         source(approvedTrigger.route.path),
         source(approvedTrigger.verifier.path),
@@ -764,6 +834,10 @@ export function evaluateReadModelOperationsSourceContracts(
       environmentExample,
       approvedTrigger.secretEnvironment,
     ) &&
+      exactFalseEnvironmentKey(
+        environmentExample,
+        "PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE",
+      ) &&
       deployPolicy.includes("PROJECTOR_WAKE_ROUTE") &&
       deployPolicy.includes("QUICKNODE_STREAM_SECRET_ENV_NAME") &&
       deployPolicy.includes('from "./read-model-projector-wake-canary.mjs"') &&

@@ -132,24 +132,52 @@ stage without disclosing either value.
 The HMAC canary above proves only route authentication. Its synthetic auth-only
 payload cannot satisfy the latency gate and must never be reported as live-data
 evidence. Before production promotion, the reviewed runtime capture bridge must
-write one committed JSON document matching
-`config/read-model-real-block-sla-evidence.schema.json` from an organic Ethereum
+write one DB-authored, challenge-bound JSON document matching
+`config/read-model-real-block-sla-db-attestation.schema.json` from an organic Ethereum
 mainnet block. A block without Programmable events is acceptable when at least
 one tracked market state is read and published; no launch, swap, signing or
 spending is required.
 
-The document binds the exact repository commit, unaliased Vercel deployment,
-QuickNode delivery and nonce digest, queue row committed before the `202`
-response, independent Alchemy and QuickNode observations, optimistic database
+The wake worker captures both public surfaces immediately after the optimistic
+bundle receipt and before canonical catch-up. The later protected operator POST
+only creates a one-time challenge-bound export; it never re-fetches or replaces
+the original DB-timestamped observations. The document binds the exact repository commit, unaliased Vercel deployment,
+QuickNode delivery and nonce digest, queue row committed before the deliberately
+staged `503`, the provider's authentic retry and its final `202`, independent Alchemy and QuickNode observations, optimistic database
 block/event/market commitments, and the first no-store API response exposing
 the same block. The API proof is exactly one Classic token-detail response and
 the corresponding Classic chart response for the same token and release; other
 API paths and duplicate URLs are rejected. `firstVisibleAt` must equal the
 earliest recorded observation, and both required surfaces must be visible
-within the ten-second bound. Replaying the same nonce must return the same wake
-ID without creating a second queue job. Raw RPC endpoint URLs, HMAC signatures,
+within the ten-second bound. The retry may carry a different nonce; the exact
+stream, block hint, payload commitment and deployment must still resolve to the
+same wake ID without creating a second queue job. Raw RPC endpoint URLs, HMAC signatures,
 secrets and payloads are excluded; only endpoint hostnames and one-way URL
 commitments are allowed.
+
+QuickNode must be configured to retry a non-2xx webhook response after roughly
+one second. On the exact `vercel deploy --prebuilt --prod --skip-domain`
+candidate only, set
+`PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true`. Leave it false in
+normal builds. While the Candidate database is still explicitly unpromoted,
+arm one five-minute, single-use probe against the exact unaliased deployment:
+
+```sh
+curl --fail-with-body --request PUT \
+  --header 'content-type: application/json' \
+  --header 'x-programmable-performance-probe: 1' \
+  --header "x-programmable-performance-probe-token: $PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN" \
+  --data '{"action":"arm-provider-retry","streamId":"<configured-stream-id>"}' \
+  "$STAGED_TARGET_URL/api/ops/read-model-real-block-sla"
+```
+
+The first matching organic delivery is durably queued, finalized in the
+database as `503`, and processed even though the HTTP response asks QuickNode
+to retry. The authentic second HTTP delivery is stored as its own receipt,
+deduplicated to the existing wake, and returns `202`. An expired or unmatched
+arm produces no forced failure. A production/custom-domain request can never
+consume the probe. After this capture, reset the flag to `false` for subsequent
+builds; do not arm another probe during or after production promotion.
 
 Run the gate immediately after capture because evidence older than ten minutes
 is rejected:
@@ -162,7 +190,9 @@ npm run perf:read-model:real-block-sla -- \
   --target-url "$STAGED_TARGET_URL"
 ```
 
-The gate fails closed unless delivery-to-first-visible latency is at most ten
+`PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN` must also be present in the gate process
+so the exported HMAC can be verified without exposing the secret. The gate CLI
+rejects the legacy caller-assembled evidence format entirely. It fails closed unless delivery-to-first-visible latency is at most ten
 seconds, both providers agree on the exact block, finality is explicitly
 `optimistic`, confirmations are in `0..11`, every nested commitment matches, and
 the overall evidence commitment is intact. The committed gate validates this

@@ -32,6 +32,8 @@ import type {
 const RUNTIME_LOGIN_ROLE = "programmable_projector_runtime_login";
 const RUNTIME_CAPABILITY_ROLE = "programmable_projector_runtime";
 const RETRY_DELAY_MS = 2_000;
+const MAXIMUM_SLA_RETRY_WAIT_MS = 2_000;
+const MAXIMUM_SLA_DRAIN_ATTEMPTS = 4;
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
 const CONFIGURED_QUEUE = Symbol.for(
   "programmable.data-pipeline.quicknode-wake-queue.v1",
@@ -44,13 +46,36 @@ type QueueRegistry = {
 
 export type QuickNodeWakeEnqueueResult = Readonly<{
   wakeId: string;
+  deliveryReceiptId: string;
   blockNumberHint: string;
   enqueued: boolean;
   state: "pending" | "processing" | "completed";
+  requestReceivedAt: string;
+  databaseReceivedAt: string;
+  persistedAt: string;
+  payloadSha256: HexBytes32;
+  queueRowCountBefore: 0 | 1;
+  queueRowCountAfter: 1;
+}>;
+
+export type QuickNodeWakeDeploymentBinding = Readonly<{
+  repositoryCommit: string;
+  deploymentId: string;
+  deploymentOrigin: string;
+  projectId: string;
+}>;
+
+export type QuickNodeWakeAcknowledgement = Readonly<{
+  deliveryReceiptId: string;
+  wakeId: string;
+  status: 202;
+  cacheControl: "no-store";
+  acknowledgedAt: string;
 }>;
 
 export type QuickNodeWakeClaim = Readonly<{
   wakeId: string;
+  deliveryReceiptId: string | null;
   blockNumberHint: string;
   hint: QuickNodeStreamBlockHint;
   payload: string;
@@ -61,16 +86,32 @@ export type QuickNodeWakeClaim = Readonly<{
   leaseTokenDigest: HexBytes32;
 }>;
 
+export type QuickNodeWakeRetrySchedule = Readonly<{
+  availableAt: string;
+  deadlineAt: string;
+}>;
+
 export type DurableWakeJobPorts = Readonly<{
   firstStage(job: QuickNodeWakeClaim): Promise<void>;
   canonicalCatchUp(job: QuickNodeWakeClaim): Promise<void>;
 }>;
 
 export type QuickNodeWakeQueue = Readonly<{
-  enqueue(wake: QuickNodeStreamWake): Promise<QuickNodeWakeEnqueueResult>;
+  enqueue(
+    wake: QuickNodeStreamWake,
+    deployment: QuickNodeWakeDeploymentBinding,
+  ): Promise<QuickNodeWakeEnqueueResult>;
+  acknowledge(
+    receipt: QuickNodeWakeEnqueueResult,
+  ): Promise<QuickNodeWakeAcknowledgement>;
+  consumeRealBlockSlaProviderRetryOnce(
+    deliveryReceiptId: string,
+    wakeId: string,
+  ): Promise<boolean>;
   claim(): Promise<QuickNodeWakeClaim | null>;
   complete(claim: QuickNodeWakeClaim): Promise<boolean>;
   retry(claim: QuickNodeWakeClaim, delayMs?: number): Promise<boolean>;
+  retrySchedule(wakeId: string): Promise<QuickNodeWakeRetrySchedule | null>;
   close(): Promise<void>;
 }>;
 
@@ -123,6 +164,29 @@ function attemptCount(value: unknown): number {
     return invalidQueue();
   }
   return parsed;
+}
+
+function binaryCount(value: unknown): 0 | 1 {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if ((parsed !== 0 && parsed !== 1) || !Number.isSafeInteger(parsed)) {
+    return invalidQueue();
+  }
+  return parsed;
+}
+
+function deploymentBinding(
+  value: QuickNodeWakeDeploymentBinding,
+): QuickNodeWakeDeploymentBinding {
+  if (
+    !/^[0-9a-f]{40}$/u.test(value.repositoryCommit) ||
+    value.repositoryCommit === "0".repeat(40) ||
+    !/^dpl_[A-Za-z0-9]{20,128}$/u.test(value.deploymentId) ||
+    !/^https:\/\/[a-z0-9.-]+\.vercel\.app$/u.test(value.deploymentOrigin) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(value.projectId)
+  ) {
+    return invalidQueue();
+  }
+  return Object.freeze({ ...value });
 }
 
 function issuedAt(timestampSeconds: string): Date {
@@ -272,12 +336,15 @@ export function createQuickNodeWakeQueue(input: Readonly<{
   return Object.freeze({
     async enqueue(
       wake: QuickNodeStreamWake,
+      deploymentValue: QuickNodeWakeDeploymentBinding,
     ): Promise<QuickNodeWakeEnqueueResult> {
       if (wake.kind !== "work") return invalidQueue();
       const nonceDigest = canonicalBytes32(wake.nonceDigest);
       const serializedHint = hintText(wake.hint);
       const blockNumberHint = serializedHint.hint.blockNumber;
       const signedAt = issuedAt(wake.timestamp);
+      const requestReceivedAt = timestamp(wake.requestReceivedAt);
+      const deployment = deploymentBinding(deploymentValue);
       const payload = payloadText(wake.payload);
       if (Buffer.byteLength(payload, "utf8") !== wake.payloadBytes) {
         return invalidQueue();
@@ -294,8 +361,18 @@ export function createQuickNodeWakeQueue(input: Readonly<{
           enqueued: unknown;
           block_number_hint: unknown;
           job_state: unknown;
+          delivery_receipt_id: unknown;
+          handler_received_at: unknown;
+          database_received_at: unknown;
+          job_persisted_at: unknown;
+          queue_row_count_before: unknown;
+          queue_row_count_after: unknown;
         }>(
-          "select * from programmable_wake_private.enqueue_quicknode_wake_v1($1::bytea, $2::bigint, $3::text, $4::timestamptz, $5::text, $6::bytea)",
+          `select * from programmable_wake_private.enqueue_quicknode_wake_v2(
+             $1::bytea, $2::bigint, $3::text, $4::timestamptz, $5::text,
+             $6::bytea, $7::timestamptz, $8::text, $9::text, $10::text,
+             $11::text, $12::text
+           )`,
           [
             hexToBytes(nonceDigest),
             blockNumberHint,
@@ -303,6 +380,12 @@ export function createQuickNodeWakeQueue(input: Readonly<{
             signedAt,
             payload,
             payloadDigest,
+            new Date(requestReceivedAt),
+            serializedHint.hint.streamId,
+            deployment.repositoryCommit,
+            deployment.deploymentId,
+            deployment.deploymentOrigin,
+            deployment.projectId,
           ],
         );
         const row = rows[0];
@@ -327,10 +410,85 @@ export function createQuickNodeWakeQueue(input: Readonly<{
         }
         return Object.freeze({
           wakeId: positiveIdentifier(row.wake_id),
+          deliveryReceiptId: positiveIdentifier(row.delivery_receipt_id),
           blockNumberHint: identifier(row.block_number_hint),
           enqueued: row.enqueued,
           state: row.job_state,
+          requestReceivedAt: timestamp(row.handler_received_at),
+          databaseReceivedAt: timestamp(row.database_received_at),
+          persistedAt: timestamp(row.job_persisted_at),
+          payloadSha256: canonicalBytes32(
+            `0x${Buffer.from(payloadDigest).toString("hex")}`,
+          ),
+          queueRowCountBefore: binaryCount(
+            row.queue_row_count_before,
+          ),
+          queueRowCountAfter: (() => {
+            if (
+              binaryCount(
+                row.queue_row_count_after,
+              ) !== 1
+            ) return invalidQueue();
+            return 1 as const;
+          })(),
         });
+      });
+    },
+
+    async acknowledge(
+      receipt: QuickNodeWakeEnqueueResult,
+    ): Promise<QuickNodeWakeAcknowledgement> {
+      return execute(async (transaction) => {
+        const rows = await transaction.query<{
+          delivery_receipt_id: unknown;
+          wake_id: unknown;
+          response_status: unknown;
+          response_cache_control: unknown;
+          acknowledged_at: unknown;
+        }>(
+          "select * from programmable_wake_private.acknowledge_quicknode_wake_v2($1::bigint, $2::bigint)",
+          [
+            positiveIdentifier(receipt.deliveryReceiptId),
+            positiveIdentifier(receipt.wakeId),
+          ],
+        );
+        const row = rows[0];
+        if (
+          rows.length !== 1 ||
+          positiveIdentifier(row?.delivery_receipt_id) !==
+            receipt.deliveryReceiptId ||
+          positiveIdentifier(row.wake_id) !== receipt.wakeId ||
+          Number(row.response_status) !== 202 ||
+          row.response_cache_control !== "no-store"
+        ) {
+          return invalidQueue();
+        }
+        return Object.freeze({
+          deliveryReceiptId: receipt.deliveryReceiptId,
+          wakeId: receipt.wakeId,
+          status: 202 as const,
+          cacheControl: "no-store" as const,
+          acknowledgedAt: timestamp(row.acknowledged_at),
+        });
+      });
+    },
+
+    async consumeRealBlockSlaProviderRetryOnce(
+      deliveryReceiptId: string,
+      wakeId: string,
+    ): Promise<boolean> {
+      return execute(async (transaction) => {
+        const rows = await transaction.query<{ consumed: unknown }>(
+          "select programmable_wake_private.consume_real_block_sla_provider_retry_once_v1($1::bigint, $2::bigint) as consumed",
+          [
+            positiveIdentifier(deliveryReceiptId),
+            positiveIdentifier(wakeId),
+          ],
+        );
+        if (rows.length !== 1 || typeof rows[0]?.consumed !== "boolean") {
+          return invalidQueue();
+        }
+        return rows[0].consumed;
       });
     },
 
@@ -362,8 +520,19 @@ export function createQuickNodeWakeQueue(input: Readonly<{
         if (storedHint.hint.blockNumber !== identifier(row.block_number_hint)) {
           return invalidQueue();
         }
+        const wakeId = positiveIdentifier(row.wake_id);
+        const receiptRows = await transaction.query<{ delivery_receipt_id: unknown }>(
+          "select programmable_wake_private.get_real_block_sla_delivery_receipt_v1($1::bigint) as delivery_receipt_id",
+          [wakeId],
+        );
+        if (receiptRows.length !== 1) return invalidQueue();
+        const rawDeliveryReceiptId = receiptRows[0]?.delivery_receipt_id;
+        const deliveryReceiptId = rawDeliveryReceiptId === null
+          ? null
+          : positiveIdentifier(rawDeliveryReceiptId);
         return Object.freeze({
-          wakeId: positiveIdentifier(row.wake_id),
+          wakeId,
+          deliveryReceiptId,
           blockNumberHint: storedHint.hint.blockNumber,
           hint: storedHint.hint,
           payload: payloadText(row.payload),
@@ -423,6 +592,26 @@ export function createQuickNodeWakeQueue(input: Readonly<{
       });
     },
 
+    async retrySchedule(wakeId: string): Promise<QuickNodeWakeRetrySchedule | null> {
+      return execute(async (transaction) => {
+        const rows = await transaction.query<{
+          available_at: unknown;
+          deadline_at: unknown;
+        }>(
+          "select * from programmable_wake_private.get_real_block_sla_retry_schedule_v1($1::bigint)",
+          [positiveIdentifier(wakeId)],
+        );
+        if (rows.length === 0) return null;
+        if (rows.length !== 1) return invalidQueue();
+        const availableAt = timestamp(rows[0]?.available_at);
+        const deadlineAt = timestamp(rows[0]?.deadline_at);
+        if (new Date(availableAt).valueOf() >= new Date(deadlineAt).valueOf()) {
+          return invalidQueue();
+        }
+        return Object.freeze({ availableAt, deadlineAt });
+      });
+    },
+
     close: () => input.executor.close(),
   });
 }
@@ -475,27 +664,95 @@ async function getConfiguredQueue(): Promise<QuickNodeWakeQueue> {
 
 export async function enqueueConfiguredQuickNodeWake(
   wake: QuickNodeStreamWake,
+  deployment: QuickNodeWakeDeploymentBinding,
 ): Promise<QuickNodeWakeEnqueueResult> {
-  return (await getConfiguredQueue()).enqueue(wake);
+  return (await getConfiguredQueue()).enqueue(wake, deployment);
+}
+
+export async function acknowledgeConfiguredQuickNodeWake(
+  receipt: QuickNodeWakeEnqueueResult,
+): Promise<QuickNodeWakeAcknowledgement> {
+  return (await getConfiguredQueue()).acknowledge(receipt);
+}
+
+export async function consumeConfiguredRealBlockSlaProviderRetryOnce(
+  receipt: Pick<QuickNodeWakeEnqueueResult, "deliveryReceiptId" | "wakeId">,
+): Promise<boolean> {
+  return (await getConfiguredQueue()).consumeRealBlockSlaProviderRetryOnce(
+    receipt.deliveryReceiptId,
+    receipt.wakeId,
+  );
+}
+
+type QuickNodeWakeDrainClock = Readonly<{
+  now(): number;
+  sleep(delayMs: number): Promise<void>;
+}>;
+
+const SYSTEM_DRAIN_CLOCK: QuickNodeWakeDrainClock = Object.freeze({
+  now: () => Date.now(),
+  sleep: (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+});
+
+export async function drainQuickNodeWakeQueue(
+  queue: Pick<
+    QuickNodeWakeQueue,
+    "claim" | "complete" | "retry" | "retrySchedule"
+  >,
+  work: (claim: QuickNodeWakeClaim) => Promise<void>,
+  clock: QuickNodeWakeDrainClock = SYSTEM_DRAIN_CLOCK,
+): Promise<"idle" | "completed" | "retry-scheduled"> {
+  let slaAttemptCount = 0;
+  let slaDeadlineAt: number | null = null;
+  while (true) {
+    if (slaDeadlineAt !== null && clock.now() >= slaDeadlineAt) {
+      return "retry-scheduled";
+    }
+    const claim = await queue.claim();
+    if (claim === null) return "idle";
+    try {
+      await work(claim);
+      if (!(await queue.complete(claim))) {
+        throw validationError("postgres", "quicknode-wake-completion-fence");
+      }
+      return "completed";
+    } catch (error) {
+      const retried = await queue.retry(claim).catch(() => false);
+      if (!retried) throw error;
+      if (
+        claim.deliveryReceiptId === null ||
+        ++slaAttemptCount >= MAXIMUM_SLA_DRAIN_ATTEMPTS
+      ) return "retry-scheduled";
+      const schedule = await queue.retrySchedule(claim.wakeId);
+      if (schedule === null) return "retry-scheduled";
+      const now = clock.now();
+      const availableAt = new Date(schedule.availableAt).valueOf();
+      const deadlineAt = new Date(schedule.deadlineAt).valueOf();
+      const waitMs = Math.max(0, availableAt - now);
+      const paddedWaitMs = Math.min(
+        MAXIMUM_SLA_RETRY_WAIT_MS,
+        waitMs + 25,
+      );
+      if (
+        !Number.isSafeInteger(now) ||
+        !Number.isSafeInteger(availableAt) ||
+        !Number.isSafeInteger(deadlineAt) ||
+        availableAt >= deadlineAt ||
+        now >= deadlineAt ||
+        waitMs > MAXIMUM_SLA_RETRY_WAIT_MS ||
+        availableAt + 25 >= deadlineAt ||
+        paddedWaitMs >= deadlineAt - now
+      ) return "retry-scheduled";
+      slaDeadlineAt = deadlineAt;
+      await clock.sleep(paddedWaitMs);
+    }
+  }
 }
 
 export async function processNextConfiguredQuickNodeWake(
   work: (claim: QuickNodeWakeClaim) => Promise<void>,
 ): Promise<"idle" | "completed" | "retry-scheduled"> {
-  const queue = await getConfiguredQueue();
-  const claim = await queue.claim();
-  if (claim === null) return "idle";
-  try {
-    await work(claim);
-    if (!(await queue.complete(claim))) {
-      throw validationError("postgres", "quicknode-wake-completion-fence");
-    }
-    return "completed";
-  } catch (error) {
-    const retried = await queue.retry(claim).catch(() => false);
-    if (!retried) throw error;
-    return "retry-scheduled";
-  }
+  return drainQuickNodeWakeQueue(await getConfiguredQueue(), work);
 }
 
 /** Test isolation only. Production lifecycle is process-owned. */

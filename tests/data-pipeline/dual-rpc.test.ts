@@ -34,6 +34,7 @@ vi.mock(
 import {
   readDualRpcSafeHead,
   readDualRpcTokenMetadata,
+  readDualRpcTokenMetadataWithTrace,
   verifyEnvioCandidateBatchWithDualRpc,
   verifyEnvioCandidateWithDualRpc,
   type CandidateRpcClient,
@@ -1294,6 +1295,42 @@ describe("dual-RPC Envio candidate verification", () => {
       blockHash: BLOCK_HASH,
       requireCanonical: true,
     });
+  });
+
+  it("reports both metadata eth_calls for a successful physical retry", async () => {
+    const first = client();
+    const second = client();
+    first.readErc20Metadata = vi
+      .fn<() => Promise<{ name: string; symbol: string }>>()
+      .mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue({ name: "Token", symbol: "TKN" });
+    second.readErc20Metadata = vi
+      .fn<() => Promise<{ name: string; symbol: string }>>()
+      .mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue({ name: "Token", symbol: "TKN" });
+
+    const result = await readDualRpcTokenMetadataWithTrace({
+      tokens: [{
+        token: SOURCE,
+        blockNumber: CANDIDATE_BLOCK.toString(),
+        blockHash: BLOCK_HASH,
+      }],
+      providers: [
+        provider("alchemy-mainnet", first),
+        provider("quicknode-mainnet", second),
+      ],
+      rpcPolicy: {
+        maxAttempts: 2,
+        baseBackoffMs: 0,
+        maxCallsPerProvider: 4,
+        sleep: async () => undefined,
+      },
+    });
+
+    expect(result.metadata).toHaveLength(1);
+    expect(result.providerCallCounts).toEqual([4, 4]);
+    expect(first.readErc20Metadata).toHaveBeenCalledTimes(2);
+    expect(second.readErc20Metadata).toHaveBeenCalledTimes(2);
   });
 
   it("rejects a forged candidate envelope or an unpinned runtime", async () => {

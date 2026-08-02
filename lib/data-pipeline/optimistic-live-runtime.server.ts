@@ -27,7 +27,7 @@ import {
   type HexData,
 } from "./codecs";
 import {
-  readDualRpcTokenMetadata,
+  readDualRpcTokenMetadataWithTrace,
   type CandidateRpcProvider,
 } from "./dual-rpc";
 import type { EnvioCandidate } from "./envio";
@@ -170,8 +170,12 @@ export type OptimisticPersistenceBundle = Readonly<{
   providerVendorGroups: readonly [string, string];
   providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
   providerOriginCommitments: readonly [HexBytes32, HexBytes32];
+  providerCallCounts: readonly [number, number];
+  metadataProviderCallCounts: readonly [number, number];
   confirmations: number;
   evidenceCommitment: HexBytes32;
+  logsCommitment?: HexBytes32;
+  providerHeadObservations?: DualRpcOptimisticBlock["providerHeadObservations"];
   observedAt: string;
   events: readonly OptimisticPersistenceEvent[];
   marketStates: readonly OptimisticPersistenceMarketState[];
@@ -697,12 +701,76 @@ function validatedProviderBindings(
   return ids as unknown as readonly [string, string];
 }
 
-function exactCallCounts(
+function exactCallCountPair(
   value: unknown,
-  expected: 4 | 7 | 11,
-): value is readonly [4, 4] | readonly [7, 7] | readonly [11, 11] {
-  return Array.isArray(value) && value.length === 2 &&
-    value[0] === expected && value[1] === expected;
+  minimum: number,
+  maximum: number,
+): value is readonly [number, number] {
+  return Array.isArray(value) && value.length === 2 && value.every(
+    (count) => Number.isSafeInteger(count) && count >= minimum && count <= maximum,
+  );
+}
+
+function exactMetadataProviderCallCount(
+  value: number,
+  tokenCount: number,
+): boolean {
+  if (tokenCount === 0) return value === 0;
+  return Number.isSafeInteger(value) &&
+    value % 2 === 0 &&
+    value >= tokenCount * 2 &&
+    value <= tokenCount * 6;
+}
+
+function exactBlockTelemetry(
+  bundle: OptimisticPersistenceBundle,
+): Readonly<{
+  logsCommitment: HexBytes32;
+  providerHeadObservations: NonNullable<
+    OptimisticPersistenceBundle["providerHeadObservations"]
+  >;
+  providerCallCounts: readonly [number, number];
+}> {
+  if (
+    !bundle.logsCommitment ||
+    !bundle.providerHeadObservations ||
+    bundle.providerHeadObservations.length !== 2 ||
+    !exactCallCountPair(bundle.providerCallCounts, 4, 5)
+  ) {
+    throw validationError("postgres", "optimistic-block-telemetry");
+  }
+  const target = BigInt(bundle.blockNumber);
+  const observations = bundle.providerHeadObservations;
+  for (const [index, observation] of observations.entries()) {
+    const head = BigInt(integerText(
+      observation.blockNumber,
+      "optimistic-block-provider-head",
+    ));
+    if (
+      observation.blockNumber !== bundle.providerHeads[index] ||
+      canonicalBytes32(observation.blockHash) !== observation.blockHash ||
+      isoTimestamp(
+          observation.observedAt,
+          "optimistic-block-provider-head-observed",
+        ) !== observation.observedAt ||
+      head < target ||
+      bundle.providerCallCounts[index] !== (head === target ? 4 : 5) ||
+      (head === target && observation.blockHash !== bundle.blockHash)
+    ) {
+      throw validationError("postgres", "optimistic-block-telemetry");
+    }
+  }
+  if (
+    observations[0].blockNumber === observations[1].blockNumber &&
+    observations[0].blockHash !== observations[1].blockHash
+  ) {
+    throw validationError("postgres", "optimistic-block-head-consensus");
+  }
+  return Object.freeze({
+    logsCommitment: canonicalBytes32(bundle.logsCommitment),
+    providerHeadObservations: observations,
+    providerCallCounts: bundle.providerCallCounts,
+  });
 }
 
 function normalizePersistenceMarketState(
@@ -735,9 +803,9 @@ function normalizePersistenceMarketState(
       bundle.providerOriginCommitments[0] ||
     canonicalBytes32(value.providerOriginCommitments[1]) !==
       bundle.providerOriginCommitments[1] ||
-    !exactCallCounts(value.blockProviderCallCounts, 4) ||
-    !exactCallCounts(value.marketProviderCallCounts, 7) ||
-    !exactCallCounts(value.totalProviderCallCounts, 11) ||
+    !exactCallCountPair(value.blockProviderCallCounts, 4, 5) ||
+    !exactCallCountPair(value.marketProviderCallCounts, 7, 8) ||
+    !exactCallCountPair(value.totalProviderCallCounts, 11, 0x7fff) ||
     !Number.isSafeInteger(value.confirmations) ||
     value.confirmations < 0 ||
     value.confirmations > MAXIMUM_OPTIMISTIC_CONFIRMATIONS
@@ -760,6 +828,51 @@ function normalizePersistenceMarketState(
   }
   const providerHeads = value.providerHeads.map((head) =>
     integerText(head, "optimistic-market-provider-head")) as unknown as readonly [string, string];
+  const providerHeadObservations = value.providerHeadObservations;
+  if (providerHeadObservations !== undefined) {
+    if (!Array.isArray(providerHeadObservations) || providerHeadObservations.length !== 2) {
+      throw validationError("postgres", "optimistic-market-head-observation");
+    }
+    for (const [index, observation] of providerHeadObservations.entries()) {
+      if (
+        integerText(observation.blockNumber, "optimistic-market-provider-head") !==
+          providerHeads[index] ||
+        canonicalBytes32(observation.blockHash) !== observation.blockHash ||
+        isoTimestamp(
+            observation.observedAt,
+            "optimistic-market-provider-head-observed",
+          ) !== observation.observedAt ||
+        value.marketProviderCallCounts[index] !==
+          (BigInt(providerHeads[index]!) === BigInt(blockNumber) ? 7 : 8)
+      ) {
+        throw validationError("postgres", "optimistic-market-head-observation");
+      }
+      if (
+        BigInt(providerHeads[index]!) === BigInt(blockNumber) &&
+        observation.blockHash !== bundle.blockHash
+      ) {
+        throw validationError("postgres", "optimistic-market-head-observation");
+      }
+    }
+    if (
+      providerHeads[0] === providerHeads[1] &&
+      providerHeadObservations[0].blockHash !== providerHeadObservations[1].blockHash
+    ) {
+      throw validationError("postgres", "optimistic-market-head-consensus");
+    }
+    if (bundle.providerHeadObservations) {
+      for (const blockObservation of bundle.providerHeadObservations) {
+        for (const marketObservation of providerHeadObservations) {
+          if (
+            blockObservation.blockNumber === marketObservation.blockNumber &&
+            blockObservation.blockHash !== marketObservation.blockHash
+          ) {
+            throw validationError("postgres", "optimistic-market-head-consensus");
+          }
+        }
+      }
+    }
+  }
   const lowestHead = BigInt(providerHeads[0]) < BigInt(providerHeads[1])
     ? BigInt(providerHeads[0])
     : BigInt(providerHeads[1]);
@@ -768,6 +881,8 @@ function normalizePersistenceMarketState(
     BigInt(providerHeads[1]) < BigInt(bundle.providerHeads[1]) ||
     lowestHead < BigInt(blockNumber) ||
     Number(lowestHead - BigInt(blockNumber)) !== value.confirmations
+    || value.blockProviderCallCounts[0] !== bundle.providerCallCounts[0]
+    || value.blockProviderCallCounts[1] !== bundle.providerCallCounts[1]
   ) {
     throw validationError("postgres", "optimistic-market-confirmations");
   }
@@ -792,6 +907,12 @@ function normalizePersistenceMarketState(
     providerEndpointCommitments: bundle.providerEndpointCommitments,
     providerOriginCommitments: bundle.providerOriginCommitments,
     providerHeads,
+    ...(providerHeadObservations === undefined
+      ? {}
+      : { providerHeadObservations }),
+    blockProviderCallCounts: value.blockProviderCallCounts,
+    marketProviderCallCounts: value.marketProviderCallCounts,
+    totalProviderCallCounts: value.totalProviderCallCounts,
     confirmations: value.confirmations,
   });
   if (
@@ -856,9 +977,21 @@ function normalizePersistenceMarketState(
     providerEndpointCommitments: bundle.providerEndpointCommitments,
     providerOriginCommitments: bundle.providerOriginCommitments,
     providerHeads,
-    blockProviderCallCounts: Object.freeze([4, 4] as const),
-    marketProviderCallCounts: Object.freeze([7, 7] as const),
-    totalProviderCallCounts: Object.freeze([11, 11] as const),
+    ...(providerHeadObservations === undefined
+      ? {}
+      : { providerHeadObservations: Object.freeze(providerHeadObservations) }),
+    blockProviderCallCounts: Object.freeze([
+      value.blockProviderCallCounts[0],
+      value.blockProviderCallCounts[1],
+    ] as const),
+    marketProviderCallCounts: Object.freeze([
+      value.marketProviderCallCounts[0],
+      value.marketProviderCallCounts[1],
+    ] as const),
+    totalProviderCallCounts: Object.freeze([
+      value.totalProviderCallCounts[0],
+      value.totalProviderCallCounts[1],
+    ] as const),
     optimisticMarketStateId,
     optimisticBlockId: bundle.optimisticBlockId,
     providerDeploymentIds: bundle.providerDeploymentIds,
@@ -876,8 +1009,32 @@ export function attachOptimisticMarketStates(
   ) {
     throw validationError("postgres", "optimistic-market-state-bound");
   }
-  const normalized = marketStates.map((state) =>
-    normalizePersistenceMarketState(bundle, state));
+  const aggregateProviderCalls = Object.freeze([
+    bundle.providerCallCounts[0] + bundle.metadataProviderCallCounts[0] + marketStates.reduce(
+      (sum, state) => sum + state.marketProviderCallCounts[0],
+      0,
+    ),
+    bundle.providerCallCounts[1] + bundle.metadataProviderCallCounts[1] + marketStates.reduce(
+      (sum, state) => sum + state.marketProviderCallCounts[1],
+      0,
+    ),
+  ] as const);
+  const normalized = marketStates.map((state) => {
+    const counts = Object.freeze({
+      ...state,
+      blockProviderCallCounts: bundle.providerCallCounts,
+      totalProviderCallCounts: aggregateProviderCalls,
+    });
+    const commitments = computeOptimisticMarketStateCommitments({
+      ...counts,
+      providerHeadObservations: counts.providerHeadObservations,
+    });
+    return normalizePersistenceMarketState(bundle, Object.freeze({
+      ...counts,
+      marketCommitment: commitments.marketCommitment,
+      evidenceCommitment: commitments.evidenceCommitment,
+    }));
+  });
   if (new Set(normalized.map(({ poolId }) => poolId)).size !== normalized.length) {
     throw validationError("postgres", "optimistic-market-state-duplicate");
   }
@@ -934,15 +1091,16 @@ async function verifyOptimisticBlockForPersistenceInternal(input: Readonly<{
   if (launchTokens.length > 16) {
     throw validationError("rpc", "optimistic-launch-count");
   }
-  const metadataByToken = new Map(
-    (await readDualRpcTokenMetadata({
+  const metadataBatch = await readDualRpcTokenMetadataWithTrace({
       providers: input.providers,
       tokens: launchTokens.map((token) => ({
         token,
         blockNumber: block.block.number,
         blockHash: block.block.hash,
       })),
-    })).map((metadata) => [
+    });
+  const metadataByToken = new Map(
+    metadataBatch.metadata.map((metadata) => [
       metadata.token,
       Object.freeze({
         name: metadata.name,
@@ -974,7 +1132,13 @@ async function verifyOptimisticBlockForPersistenceInternal(input: Readonly<{
     providerVendorGroups: block.providerVendorGroups,
     providerEndpointCommitments: block.providerEndpointCommitments,
     providerOriginCommitments: block.providerOriginCommitments,
+    providerCallCounts: block.providerCallCounts,
+    metadataProviderCallCounts: metadataBatch.providerCallCounts,
     providerHeads: block.providerHeads,
+    providerHeadObservations: block.providerHeadObservations.map(
+      ({ blockNumber, blockHash }) => ({ blockNumber, blockHash }),
+    ),
+    logsCommitment: block.logsCommitment,
   });
   const events = block.logs.map((log, index): OptimisticPersistenceEvent => {
     const normalizedPayload = normalized[index]!;
@@ -1025,8 +1189,12 @@ async function verifyOptimisticBlockForPersistenceInternal(input: Readonly<{
     providerVendorGroups: block.providerVendorGroups,
     providerEndpointCommitments: block.providerEndpointCommitments,
     providerOriginCommitments: block.providerOriginCommitments,
+    providerCallCounts: block.providerCallCounts,
+    metadataProviderCallCounts: metadataBatch.providerCallCounts,
     confirmations: block.confirmations,
     evidenceCommitment,
+    logsCommitment: block.logsCommitment,
+    providerHeadObservations: block.providerHeadObservations,
     observedAt,
     events: Object.freeze(events),
     marketStates: Object.freeze([]),
@@ -1076,6 +1244,7 @@ function validatePersistenceBundle(
     bundle.providerEndpointCommitments.length !== 2 ||
     !Array.isArray(bundle.providerOriginCommitments) ||
     bundle.providerOriginCommitments.length !== 2 ||
+    !exactCallCountPair(bundle.metadataProviderCallCounts, 0, 96) ||
     !Number.isSafeInteger(bundle.confirmations) ||
     bundle.confirmations < 0 ||
     bundle.confirmations > MAXIMUM_OPTIMISTIC_CONFIRMATIONS
@@ -1121,6 +1290,22 @@ function validatePersistenceBundle(
   ) {
     throw validationError("postgres", "optimistic-persistence-bundle");
   }
+  const metadataCount = bundle.events.filter(
+    ({ normalizedPayload }) => normalizedPayload.tokenMetadata !== undefined,
+  ).length;
+  if (
+    !exactMetadataProviderCallCount(
+      bundle.metadataProviderCallCounts[0],
+      metadataCount,
+    ) ||
+    !exactMetadataProviderCallCount(
+      bundle.metadataProviderCallCounts[1],
+      metadataCount,
+    )
+  ) {
+    throw validationError("postgres", "optimistic-metadata-call-count");
+  }
+  const telemetry = exactBlockTelemetry(bundle);
   const expectedEvidence = commitment("optimistic-block-evidence-v1", {
     chainId: 1,
     block: {
@@ -1136,6 +1321,15 @@ function validatePersistenceBundle(
     providerEndpointCommitments,
     providerOriginCommitments,
     providerHeads,
+    providerHeadObservations: telemetry.providerHeadObservations.map(
+      ({ blockNumber: headNumber, blockHash: headHash }) => ({
+        blockNumber: headNumber,
+        blockHash: headHash,
+      }),
+    ),
+    providerCallCounts: telemetry.providerCallCounts,
+    metadataProviderCallCounts: bundle.metadataProviderCallCounts,
+    logsCommitment: telemetry.logsCommitment,
   });
   if (expectedEvidence !== canonicalBytes32(bundle.evidenceCommitment)) {
     throw validationError("postgres", "optimistic-block-commitment");
@@ -1360,7 +1554,7 @@ export function createOptimisticLiveWriter(input: { executor: PostgresExecutor }
         for (const state of bundle.marketStates) {
           const insertedMarketStateId = await oneUuid(
             transaction,
-            `select programmable_private.append_optimistic_market_state_v1(
+            `select programmable_private.append_optimistic_market_state_v2(
                $1::uuid, $2::uuid, $3::bytea, $4::bytea, $5::bytea,
                $6::bytea, $7::numeric, $8::integer, $9::numeric,
                $10::integer, $11::integer, $12::bytea, $13::bytea,
@@ -1549,6 +1743,7 @@ export function createOptimisticFirstStage(input: Readonly<{
   writer: Pick<OptimisticLiveWriter, "persist">;
   loadCanonicalTokens: () => Promise<readonly LauncherToken[]>;
   hardDeadlineMs?: number;
+  ensureTrackedMarket?: boolean;
 }>) {
   const marketStateReader = createOptimisticMarketStateReader({
     providers: input.providers,
@@ -1556,6 +1751,9 @@ export function createOptimisticFirstStage(input: Readonly<{
     ...(input.hardDeadlineMs === undefined
       ? {}
       : { hardDeadlineMs: input.hardDeadlineMs }),
+    ...(input.ensureTrackedMarket === undefined
+      ? {}
+      : { ensureTrackedMarket: input.ensureTrackedMarket }),
   });
   return Object.freeze({
     async ingest(job: Readonly<{
@@ -1903,6 +2101,14 @@ function parseLiveMarketState(
     providerVendorGroups,
     providerEndpointCommitments,
     providerOriginCommitments,
+    providerCallCounts: Object.freeze([
+      integerNumber(row.block_provider_call_count_a, "optimistic-market-calls"),
+      integerNumber(row.block_provider_call_count_b, "optimistic-market-calls"),
+    ] as const),
+    // The live-state projection predates the SLA bundle receipt. Its persisted
+    // aggregate counts are validated on the state below; metadata phase counts
+    // are only needed while assembling a new persistence bundle.
+    metadataProviderCallCounts: Object.freeze([0, 0] as const),
     confirmations: integerNumber(
       row.confirmations,
       "optimistic-market-confirmations",
@@ -1962,15 +2168,15 @@ function parseLiveMarketState(
     blockProviderCallCounts: Object.freeze([
       integerNumber(row.block_provider_call_count_a, "optimistic-market-calls"),
       integerNumber(row.block_provider_call_count_b, "optimistic-market-calls"),
-    ]) as unknown as readonly [4, 4],
+    ] as const),
     marketProviderCallCounts: Object.freeze([
       integerNumber(row.market_provider_call_count_a, "optimistic-market-calls"),
       integerNumber(row.market_provider_call_count_b, "optimistic-market-calls"),
-    ]) as unknown as readonly [7, 7],
+    ] as const),
     totalProviderCallCounts: Object.freeze([
       integerNumber(row.total_provider_call_count_a, "optimistic-market-calls"),
       integerNumber(row.total_provider_call_count_b, "optimistic-market-calls"),
-    ]) as unknown as readonly [11, 11],
+    ] as const),
     optimisticMarketStateId: exactUuid(
       row.optimistic_market_state_id,
       "optimistic-market-state-id",
@@ -2541,9 +2747,10 @@ function completeNewLaunchMarketPlans(
   return Object.freeze([...plans.values()]);
 }
 
-function configuredOptimisticMarketReadPlans(input: Readonly<{
+export function configuredOptimisticMarketReadPlans(input: Readonly<{
   bundle: OptimisticPersistenceBundle;
   canonicalTokens: readonly LauncherToken[];
+  ensureTrackedMarket?: boolean;
 }>): readonly PlannedOptimisticMarketRead[] {
   const plans = new Map<HexBytes32, PlannedOptimisticMarketRead>();
   const ambiguousPools = new Set<HexBytes32>();
@@ -2579,6 +2786,22 @@ function configuredOptimisticMarketReadPlans(input: Readonly<{
   }
   for (const launchPlan of completeNewLaunchMarketPlans(input.bundle)) {
     plans.set(launchPlan.poolId, launchPlan);
+  }
+  const hasClassicPlan = [...plans.values()].some(
+    (plan) => plan.token?.launchModel === "classic",
+  );
+  if (!hasClassicPlan && input.ensureTrackedMarket) {
+    const sentinel = [...input.canonicalTokens]
+      .filter((token) => token.launchModel === "classic")
+      .sort((left, right) => left.poolId.localeCompare(right.poolId))[0];
+    if (sentinel) {
+      const poolId = canonicalBytes32(sentinel.poolId);
+      plans.set(poolId, Object.freeze({
+        poolId,
+        tokenAddress: canonicalAddress(sentinel.tokenAddress),
+        token: sentinel,
+      }));
+    }
   }
   const selected = [...plans.values()].sort((left, right) =>
     left.poolId.localeCompare(right.poolId));
@@ -2616,6 +2839,7 @@ export function createOptimisticMarketStateReader(input: Readonly<{
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
   loadCanonicalTokens: () => Promise<readonly LauncherToken[]>;
   hardDeadlineMs?: number;
+  ensureTrackedMarket?: boolean;
 }>): OptimisticMarketStateReader {
   return async ({ block, bundle }) => {
     const canonicalTokens = await input.loadCanonicalTokens();
@@ -2625,6 +2849,9 @@ export function createOptimisticMarketStateReader(input: Readonly<{
     const plans = configuredOptimisticMarketReadPlans({
       bundle,
       canonicalTokens,
+      ...(input.ensureTrackedMarket === undefined
+        ? {}
+        : { ensureTrackedMarket: input.ensureTrackedMarket }),
     });
     return readMarketPlansBounded(plans, (plan) =>
       readOptimisticMarketState({

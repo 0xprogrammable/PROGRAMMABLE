@@ -1,5 +1,7 @@
 import "server-only";
 
+import { keccak256, toBytes } from "viem";
+
 import {
   canonicalAddress,
   canonicalBytes32,
@@ -60,6 +62,12 @@ export type OptimisticManifestLog = Readonly<{
   data: HexData;
 }>;
 
+export type OptimisticProviderHeadObservation = Readonly<{
+  blockNumber: string;
+  blockHash: HexBytes32;
+  observedAt: string;
+}>;
+
 export type DualRpcOptimisticBlock = Readonly<{
   finality: "optimistic";
   chainId: 1;
@@ -79,8 +87,13 @@ export type DualRpcOptimisticBlock = Readonly<{
   providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
   providerOriginCommitments: readonly [HexBytes32, HexBytes32];
   providerHeads: readonly [string, string];
+  providerHeadObservations: readonly [
+    OptimisticProviderHeadObservation,
+    OptimisticProviderHeadObservation,
+  ];
+  logsCommitment: HexBytes32;
   confirmations: number;
-  providerCallCounts: readonly [4, 4];
+  providerCallCounts: readonly [number, number];
 }>;
 
 /**
@@ -106,9 +119,15 @@ type ActiveManifestSource = Readonly<{
 
 type CanonicalProviderResult = Readonly<{
   head: bigint;
+  headObservation: OptimisticProviderHeadObservation;
   header: DualRpcOptimisticBlock["block"];
   logs: readonly OptimisticManifestLog[];
+  rpcCallCount: number;
 }>;
+
+function monotonicTimestamp(): string {
+  return new Date(performance.timeOrigin + performance.now()).toISOString();
+}
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return (
@@ -506,8 +525,47 @@ function sameProviderResult(
 ): boolean {
   return (
     JSON.stringify([first.header, first.logs]) ===
-    JSON.stringify([second.header, second.logs])
+      JSON.stringify([second.header, second.logs]) &&
+    (first.head !== second.head ||
+      first.headObservation.blockHash === second.headObservation.blockHash)
   );
+}
+
+async function exactTargetAndHeadHeaders(input: Readonly<{
+  client: CandidateRpcProvider["client"];
+  blockNumber: bigint;
+  head: bigint;
+  recordRpcMethodsInitiated: (count: number) => void;
+}>): Promise<Readonly<{
+  target: DualRpcOptimisticBlock["block"];
+  head: DualRpcOptimisticBlock["block"];
+  observedAt: string;
+}>> {
+  const blockNumbers = input.head === input.blockNumber
+    ? [input.blockNumber]
+    : [input.blockNumber, input.head];
+  let headers: readonly CandidateRpcBlock[];
+  if (input.client.getBlocks) {
+    input.recordRpcMethodsInitiated(blockNumbers.length);
+    headers = await input.client.getBlocks({ blockNumbers });
+  } else if (input.head === input.blockNumber) {
+    input.recordRpcMethodsInitiated(1);
+    headers = [await input.client.getBlock({ blockNumber: input.blockNumber })];
+  } else {
+    throw invalidInput("rpc", "optimistic-head-header-port");
+  }
+  if (headers.length !== blockNumbers.length) {
+    throw validationError("rpc", "optimistic-head-header-count");
+  }
+  const target = canonicalHeader(headers[0], input.blockNumber);
+  const head = input.head === input.blockNumber
+    ? target
+    : canonicalHeader(headers[1], input.head);
+  return Object.freeze({
+    target,
+    head,
+    observedAt: monotonicTimestamp(),
+  });
 }
 
 function deadlineMs(value: unknown): number {
@@ -554,9 +612,11 @@ async function withinDeadline<T>(
 
 /**
  * Reads one hinted block from two independent production RPC providers. It
- * performs exactly four calls per provider (chain, head, header, exact-block
- * logs), accepts only manifest-bound logs and returns no result unless both
- * normalized headers and complete log sets are byte-for-byte equal.
+ * performs exactly four calls per provider when the target is the head and
+ * five when the provider head is later (chain, head, one call per requested
+ * header, exact-block logs), accepts only manifest-bound logs and returns no
+ * result unless both normalized target headers and complete log sets are
+ * byte-for-byte equal. Equal head numbers must also resolve to the same hash.
  */
 export async function readOptimisticBlockWithDualRpc(input: Readonly<{
   providers: readonly [CandidateRpcProvider, CandidateRpcProvider];
@@ -577,16 +637,17 @@ export async function readOptimisticBlockWithDualRpc(input: Readonly<{
           if (!getLogs) {
             throw invalidInput("rpc", "optimistic-get-logs");
           }
-          const [chainId, head, block, logs] = await Promise.all([
-            client.getChainId(),
-            client.getBlockNumber(),
-            client.getBlock({ blockNumber }),
-            getLogs({
-              addresses: filter.addresses,
-              topic0: filter.topic0,
-              fromBlock: blockNumber,
-              toBlock: blockNumber,
-            }),
+          let rpcCallCount = 0;
+          const recordRpcMethodsInitiated = (count: number): void => {
+            rpcCallCount += count;
+          };
+          recordRpcMethodsInitiated(1);
+          const chainIdRequest = client.getChainId();
+          recordRpcMethodsInitiated(1);
+          const headRequest = client.getBlockNumber();
+          const [chainId, head] = await Promise.all([
+            chainIdRequest,
+            headRequest,
           ]);
           if (chainId !== RELEASE_BINDING.chainId) {
             throw validationError("rpc", "optimistic-chain-id");
@@ -594,16 +655,42 @@ export async function readOptimisticBlockWithDualRpc(input: Readonly<{
           if (typeof head !== "bigint" || head < blockNumber) {
             throw validationError("rpc", "optimistic-head-before-block");
           }
-          const header = canonicalHeader(block, blockNumber);
+          const headersRequest = exactTargetAndHeadHeaders({
+            client,
+            blockNumber,
+            head,
+            recordRpcMethodsInitiated,
+          });
+          recordRpcMethodsInitiated(1);
+          const logsRequest = getLogs({
+            addresses: filter.addresses,
+            topic0: filter.topic0,
+            fromBlock: blockNumber,
+            toBlock: blockNumber,
+          });
+          const [headers, logs] = await Promise.all([
+            headersRequest,
+            logsRequest,
+          ]);
+          const expectedRpcCallCount = head === blockNumber ? 4 : 5;
+          if (rpcCallCount !== expectedRpcCallCount) {
+            throw validationError("rpc", "optimistic-provider-call-count");
+          }
           return Object.freeze({
             head,
-            header,
+            headObservation: Object.freeze({
+              blockNumber: headers.head.number,
+              blockHash: headers.head.hash,
+              observedAt: headers.observedAt,
+            }),
+            header: headers.target,
             logs: canonicalLogs({
               logs,
               blockNumber,
-              blockHash: header.hash,
+              blockHash: headers.target.hash,
               sources,
             }),
+            rpcCallCount,
           });
         }),
       ),
@@ -634,8 +721,16 @@ export async function readOptimisticBlockWithDualRpc(input: Readonly<{
         results[0]!.head.toString(),
         results[1]!.head.toString(),
       ] as const,
+      providerHeadObservations: [
+        results[0]!.headObservation,
+        results[1]!.headObservation,
+      ] as const,
+      logsCommitment: keccak256(toBytes(JSON.stringify(results[0]!.logs))),
       confirmations: Number(confirmations),
-      providerCallCounts: [4, 4] as const,
+      providerCallCounts: [
+        results[0]!.rpcCallCount,
+        results[1]!.rpcCallCount,
+      ] as const,
     });
     VERIFIED_OPTIMISTIC_BLOCKS.add(verified);
     return verified;

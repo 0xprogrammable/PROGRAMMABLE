@@ -115,6 +115,7 @@ function providerFixture(
     headers?: readonly CandidateRpcBlock[];
     chainId?: number;
     head?: bigint;
+    headHash?: Hex;
     logs?: readonly CandidateRpcLog[];
   }> = {},
 ): ProviderFixture {
@@ -128,6 +129,15 @@ function providerFixture(
   const getBlockNumber = vi.fn(async () =>
     input.head ?? BLOCK_NUMBER + (vendor === "alchemy" ? 5n : 3n)
   );
+  const getBlocks = vi.fn(async ({ blockNumbers }: { blockNumbers: readonly bigint[] }) => {
+    const target = await getBlock();
+    return blockNumbers.map((number) => number === BLOCK_NUMBER
+      ? target
+      : block({
+        number,
+        hash: input.headHash ?? `0x${marker.repeat(64)}`,
+      }));
+  });
   const getLogs = vi.fn(async () => input.logs ?? []);
   const readOptimisticPoolState = vi.fn(async (
     request: Parameters<NonNullable<
@@ -151,6 +161,7 @@ function providerFixture(
         getChainId,
         getBlockNumber,
         getBlock,
+        getBlocks,
         getLogs,
         readOptimisticPoolState,
       } as unknown as CandidateRpcProvider["client"],
@@ -170,18 +181,22 @@ function providerPair(input: Readonly<{
   secondHeaders?: readonly CandidateRpcBlock[];
   firstHead?: bigint;
   secondHead?: bigint;
+  firstHeadHash?: Hex;
+  secondHeadHash?: Hex;
   logs?: readonly CandidateRpcLog[];
 }> = {}) {
   const first = providerFixture("alchemy", {
     state: input.firstState,
     headers: input.firstHeaders,
     head: input.firstHead,
+    headHash: input.firstHeadHash,
     logs: input.logs,
   });
   const second = providerFixture("quicknode", {
     state: input.secondState,
     headers: input.secondHeaders,
     head: input.secondHead,
+    headHash: input.secondHeadHash,
     logs: input.logs,
   });
   return {
@@ -195,7 +210,23 @@ function evidence(
   pair: ReturnType<typeof providerPair>,
   confirmations = 3,
   logs: readonly OptimisticManifestLog[] = [],
+  providerHeadNumbers: readonly [bigint, bigint] = [
+    BLOCK_NUMBER + 5n,
+    BLOCK_NUMBER + BigInt(confirmations),
+  ],
+  providerHeadHashes: readonly [Hex, Hex] = [
+    providerHeadNumbers[0] === BLOCK_NUMBER
+      ? BLOCK_HASH
+      : `0x${"a".repeat(64)}`,
+    providerHeadNumbers[1] === BLOCK_NUMBER
+      ? BLOCK_HASH
+      : (providerHeadNumbers[1] === providerHeadNumbers[0]
+        ? `0x${"a".repeat(64)}`
+        : `0x${"b".repeat(64)}`),
+  ],
 ): DualRpcOptimisticBlock {
+  const providerCallCounts = providerHeadNumbers.map((head) =>
+    head === BLOCK_NUMBER ? 4 : 5) as [number, number];
   return {
     finality: "optimistic",
     chainId: 1,
@@ -224,11 +255,24 @@ function evidence(
       pair.second.provider.endpointOriginCommitment,
     ],
     providerHeads: [
-      (BLOCK_NUMBER + 5n).toString(),
-      (BLOCK_NUMBER + BigInt(confirmations)).toString(),
+      providerHeadNumbers[0].toString(),
+      providerHeadNumbers[1].toString(),
     ],
+    providerHeadObservations: [
+      {
+        blockNumber: providerHeadNumbers[0].toString(),
+        blockHash: providerHeadHashes[0],
+        observedAt: "2026-08-02T12:00:00.001Z",
+      },
+      {
+        blockNumber: providerHeadNumbers[1].toString(),
+        blockHash: providerHeadHashes[1],
+        observedAt: "2026-08-02T12:00:00.002Z",
+      },
+    ],
+    logsCommitment: `0x${"93".repeat(32)}`,
     confirmations,
-    providerCallCounts: [4, 4],
+    providerCallCounts,
   };
 }
 
@@ -398,9 +442,9 @@ describe("optimistic dual-RPC market state", () => {
         (BLOCK_NUMBER + 5n).toString(),
         (BLOCK_NUMBER + 3n).toString(),
       ],
-      blockProviderCallCounts: [4, 4],
-      marketProviderCallCounts: [7, 7],
-      totalProviderCallCounts: [11, 11],
+      blockProviderCallCounts: [5, 5],
+      marketProviderCallCounts: [8, 8],
+      totalProviderCallCounts: [13, 13],
       stateView: STATE_VIEW,
       stateViewRuntimeCodeHash:
         "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878",
@@ -451,11 +495,62 @@ describe("optimistic dual-RPC market state", () => {
       providerEndpointCommitments: result.providerEndpointCommitments,
       providerOriginCommitments: result.providerOriginCommitments,
       providerHeads: result.providerHeads,
+      providerHeadObservations: result.providerHeadObservations,
+      blockProviderCallCounts: result.blockProviderCallCounts,
+      marketProviderCallCounts: result.marketProviderCallCounts,
+      totalProviderCallCounts: result.totalProviderCallCounts,
       confirmations: result.confirmations,
     })).toEqual({
       marketCommitment: result.marketCommitment,
       evidenceCommitment: result.evidenceCommitment,
     });
+    const alteredTelemetry = computeOptimisticMarketStateCommitments({
+      blockNumber: result.blockNumber,
+      blockHash: result.blockHash,
+      stateView: result.stateView,
+      poolId: result.poolId,
+      tokenAddress: result.tokenAddress,
+      pool: result.pool,
+      market: result.market,
+      providerIdentities: result.providerIdentities,
+      providerVendorGroups: result.providerVendorGroups,
+      providerEndpointCommitments: result.providerEndpointCommitments,
+      providerOriginCommitments: result.providerOriginCommitments,
+      providerHeads: result.providerHeads,
+      providerHeadObservations: result.providerHeadObservations,
+      blockProviderCallCounts: result.blockProviderCallCounts,
+      marketProviderCallCounts: result.marketProviderCallCounts,
+      totalProviderCallCounts: [
+        result.totalProviderCallCounts[0] + 1,
+        result.totalProviderCallCounts[1],
+      ],
+      confirmations: result.confirmations,
+    });
+    expect(alteredTelemetry.marketCommitment).toBe(result.marketCommitment);
+    expect(alteredTelemetry.evidenceCommitment).not.toBe(
+      result.evidenceCommitment,
+    );
+    const withoutHeadObservations = computeOptimisticMarketStateCommitments({
+      blockNumber: result.blockNumber,
+      blockHash: result.blockHash,
+      stateView: result.stateView,
+      poolId: result.poolId,
+      tokenAddress: result.tokenAddress,
+      pool: result.pool,
+      market: result.market,
+      providerIdentities: result.providerIdentities,
+      providerVendorGroups: result.providerVendorGroups,
+      providerEndpointCommitments: result.providerEndpointCommitments,
+      providerOriginCommitments: result.providerOriginCommitments,
+      providerHeads: result.providerHeads,
+      blockProviderCallCounts: result.blockProviderCallCounts,
+      marketProviderCallCounts: result.marketProviderCallCounts,
+      totalProviderCallCounts: result.totalProviderCallCounts,
+      confirmations: result.confirmations,
+    });
+    expect(withoutHeadObservations.evidenceCommitment).toBe(
+      result.evidenceCommitment,
+    );
   });
 
   it("fails closed on unequal provider return bytes", async () => {
@@ -467,6 +562,151 @@ describe("optimistic dual-RPC market state", () => {
     await expect(readClassic(pair)).rejects.toEqual(expect.objectContaining({
       code: "validation_failed",
       safeMetadata: { operation: "optimistic-market-provider-mismatch" },
+    }));
+  });
+
+  it("measures 7 market calls at target and 8 calls at a later head", async () => {
+    const pair = providerPair({
+      firstHead: BLOCK_NUMBER,
+      secondHead: BLOCK_NUMBER + 3n,
+    });
+
+    const result = await readOptimisticMarketState({
+      providers: pair.providers,
+      evidence: evidence(
+        pair,
+        0,
+        [],
+        [BLOCK_NUMBER, BLOCK_NUMBER + 3n],
+      ),
+      stateView: STATE_VIEW,
+      poolId: POOL_ID,
+      tokenAddress: TOKEN,
+      token: token(),
+    });
+
+    expect(result.blockProviderCallCounts).toEqual([4, 5]);
+    expect(result.marketProviderCallCounts).toEqual([7, 8]);
+    expect(result.totalProviderCallCounts).toEqual([11, 13]);
+  });
+
+  it("keeps exact-target reads at 4 block and 7 market calls", async () => {
+    const pair = providerPair({
+      firstHead: BLOCK_NUMBER,
+      secondHead: BLOCK_NUMBER,
+    });
+
+    const result = await readOptimisticMarketState({
+      providers: pair.providers,
+      evidence: evidence(pair, 0, [], [BLOCK_NUMBER, BLOCK_NUMBER]),
+      stateView: STATE_VIEW,
+      poolId: POOL_ID,
+      tokenAddress: TOKEN,
+      token: token(),
+    });
+
+    expect(result.blockProviderCallCounts).toEqual([4, 4]);
+    expect(result.marketProviderCallCounts).toEqual([7, 7]);
+    expect(result.totalProviderCallCounts).toEqual([11, 11]);
+  });
+
+  it("fails closed when the measured physical StateView calls exceed 7/8", async () => {
+    const pair = providerPair();
+    pair.first.readOptimisticPoolState.mockImplementation(async (request) => ({
+      stateView: request.stateView,
+      poolId: request.poolId,
+      blockNumber: request.blockNumber.toString(),
+      blockHash: request.blockHash,
+      ...rawState(),
+      rpcCallCount: 4,
+    }));
+
+    await expect(readClassic(pair)).rejects.toEqual(expect.objectContaining({
+      code: "validation_failed",
+      safeMetadata: { operation: "optimistic-market-call-counts" },
+    }));
+  });
+
+  it("fails closed when equal market head heights have different hashes", async () => {
+    const sharedHead = BLOCK_NUMBER + 3n;
+    const pair = providerPair({
+      firstHead: sharedHead,
+      secondHead: sharedHead,
+    });
+
+    await expect(readOptimisticMarketState({
+      providers: pair.providers,
+      evidence: evidence(pair, 3, [], [sharedHead, sharedHead]),
+      stateView: STATE_VIEW,
+      poolId: POOL_ID,
+      tokenAddress: TOKEN,
+      token: token(),
+    })).rejects.toEqual(expect.objectContaining({
+      code: "validation_failed",
+      safeMetadata: {
+        operation: "optimistic-market-provider-head-mismatch",
+      },
+    }));
+  });
+
+  it.each([
+    {
+      name: "Block A to Market A",
+      blockHeads: [BLOCK_NUMBER + 2n, BLOCK_NUMBER + 1n] as const,
+      marketHeads: [BLOCK_NUMBER + 2n, BLOCK_NUMBER + 4n] as const,
+    },
+    {
+      name: "Block B to Market B",
+      blockHeads: [BLOCK_NUMBER + 1n, BLOCK_NUMBER + 2n] as const,
+      marketHeads: [BLOCK_NUMBER + 4n, BLOCK_NUMBER + 2n] as const,
+    },
+    {
+      name: "Block A to Market B",
+      blockHeads: [BLOCK_NUMBER + 3n, BLOCK_NUMBER + 1n] as const,
+      marketHeads: [BLOCK_NUMBER + 4n, BLOCK_NUMBER + 3n] as const,
+    },
+    {
+      name: "Block B to Market A",
+      blockHeads: [BLOCK_NUMBER + 1n, BLOCK_NUMBER + 3n] as const,
+      marketHeads: [BLOCK_NUMBER + 3n, BLOCK_NUMBER + 4n] as const,
+    },
+  ])("rejects a same-height hash conflict from $name", async ({
+    blockHeads,
+    marketHeads,
+  }) => {
+    const marketHashes = [
+      `0x${"a".repeat(64)}`,
+      `0x${"b".repeat(64)}`,
+    ] as const;
+    const pair = providerPair({
+      firstHead: marketHeads[0],
+      secondHead: marketHeads[1],
+      firstHeadHash: marketHashes[0],
+      secondHeadHash: marketHashes[1],
+    });
+    const forgedBlockHashes = [
+      `0x${"f".repeat(64)}`,
+      `0x${"e".repeat(64)}`,
+    ] as const;
+
+    await expect(readOptimisticMarketState({
+      providers: pair.providers,
+      evidence: evidence(
+        pair,
+        1,
+        [],
+        blockHeads,
+        forgedBlockHashes,
+      ),
+      stateView: STATE_VIEW,
+      poolId: POOL_ID,
+      tokenAddress: TOKEN,
+      token: token(),
+    })).rejects.toEqual(expect.objectContaining({
+      code: "validation_failed",
+      safeMetadata: {
+        operation: "optimistic-market-provider-head-mismatch",
+      },
     }));
   });
 

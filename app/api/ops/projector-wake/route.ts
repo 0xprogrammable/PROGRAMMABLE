@@ -2,15 +2,20 @@ import { after, NextRequest, NextResponse } from "next/server";
 
 import {
   QuickNodeStreamWakeError,
+  parseQuickNodeBlockHint,
   verifyQuickNodeStreamWake,
   type QuickNodeStreamBlockHintParser,
 } from "../../../../lib/data-pipeline/quicknode-stream-wake.server";
 import {
   enqueueConfiguredQuickNodeWake,
+  acknowledgeConfiguredQuickNodeWake,
+  consumeConfiguredRealBlockSlaProviderRetryOnce,
   processDurableWakeJob,
   processNextConfiguredQuickNodeWake,
   type DurableWakeJobPorts,
 } from "../../../../lib/data-pipeline/quicknode-wake-queue.server";
+import { loadVercelWakeDeploymentBinding } from "../../../../lib/data-pipeline/read-model-real-block-sla-capture.server";
+import { createConfiguredOptimisticWakeFirstStage } from "../../../../lib/data-pipeline/optimistic-wake-runtime.server";
 import { runConfiguredProjectorCycle } from "../../../../lib/data-pipeline/projector-runtime-config.server";
 import {
   runConfiguredMarketProjectorFastLaneCycle,
@@ -22,6 +27,25 @@ export const maxDuration = 180;
 export const runtime = "nodejs";
 
 const NO_STORE_HEADERS = Object.freeze({ "Cache-Control": "no-store" });
+const FORCE_PROVIDER_RETRY_ONCE_ENV =
+  "PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE";
+
+function shouldForceProviderRetryOnce(
+  request: NextRequest,
+  env: Readonly<Record<string, string | undefined>>,
+): boolean {
+  if (env[FORCE_PROVIDER_RETRY_ONCE_ENV] !== "true") return false;
+  const deploymentHost = env.VERCEL_URL;
+  if (
+    typeof deploymentHost !== "string" ||
+    !/^[a-z0-9](?:[a-z0-9-]{0,62}\.)+vercel\.app$/u.test(deploymentHost)
+  ) {
+    return false;
+  }
+  const expectedOrigin = `https://${deploymentHost}`;
+  return request.nextUrl.origin === expectedOrigin &&
+    request.headers.get("host") === deploymentHost;
+}
 
 function resultStatus(value: unknown): string {
   return value !== null &&
@@ -86,6 +110,12 @@ async function runDurableWakeWorker(
 export function createProjectorWakePost(input: Readonly<{
   parseBlockHint: QuickNodeStreamBlockHintParser;
   firstStage: DurableWakeJobPorts["firstStage"];
+  loadDeployment?: typeof loadVercelWakeDeploymentBinding;
+  enqueue?: typeof enqueueConfiguredQuickNodeWake;
+  acknowledge?: typeof acknowledgeConfiguredQuickNodeWake;
+  consumeProviderRetryOnce?:
+    typeof consumeConfiguredRealBlockSlaProviderRetryOnce;
+  env?: Readonly<Record<string, string | undefined>>;
 }>) {
   return async function projectorWakePost(request: NextRequest) {
     let wake: Awaited<ReturnType<typeof verifyQuickNodeStreamWake>>;
@@ -117,8 +147,13 @@ export function createProjectorWakePost(input: Readonly<{
       );
     }
 
+    let receipt: Awaited<ReturnType<typeof enqueueConfiguredQuickNodeWake>>;
     try {
-      await enqueueConfiguredQuickNodeWake(wake);
+      receipt = await (input.enqueue ?? enqueueConfiguredQuickNodeWake)(
+        wake,
+        (input.loadDeployment ?? loadVercelWakeDeploymentBinding)(),
+      );
+      await (input.acknowledge ?? acknowledgeConfiguredQuickNodeWake)(receipt);
     } catch {
       console.error("Programmable stream wake could not be durably scheduled");
       return NextResponse.json(
@@ -127,7 +162,33 @@ export function createProjectorWakePost(input: Readonly<{
       );
     }
 
+    let forceProviderRetry = false;
+    if (shouldForceProviderRetryOnce(request, input.env ?? process.env)) {
+      try {
+        const consumed = await (
+          input.consumeProviderRetryOnce ??
+            consumeConfiguredRealBlockSlaProviderRetryOnce
+        )(receipt);
+        forceProviderRetry = receipt.enqueued && consumed;
+      } catch {
+        console.error(
+          "Programmable real-block provider retry probe could not be recorded",
+        );
+        after(() => runDurableWakeWorker(input.firstStage));
+        return NextResponse.json(
+          { accepted: true },
+          { status: 202, headers: NO_STORE_HEADERS },
+        );
+      }
+    }
+
     after(() => runDurableWakeWorker(input.firstStage));
+    if (forceProviderRetry) {
+      return NextResponse.json(
+        { error: "Wake trigger unavailable" },
+        { status: 503, headers: NO_STORE_HEADERS },
+      );
+    }
     return NextResponse.json(
       { accepted: true },
       { status: 202, headers: NO_STORE_HEADERS },
@@ -135,17 +196,7 @@ export function createProjectorWakePost(input: Readonly<{
   };
 }
 
-function unconfiguredFirstStage(): Promise<never> {
-  return Promise.reject(new Error("optimistic wake first stage unavailable"));
-}
-
-function unconfiguredBlockHintParser(): never {
-  throw new QuickNodeStreamWakeError(503);
-}
-
-// Integration replaces both fail-closed ports with the reviewed optimistic
-// parser/bridge. The auth-only release canary remains usable before cutover.
 export const POST = createProjectorWakePost({
-  parseBlockHint: unconfiguredBlockHintParser,
-  firstStage: unconfiguredFirstStage,
+  parseBlockHint: parseQuickNodeBlockHint,
+  firstStage: createConfiguredOptimisticWakeFirstStage(),
 });

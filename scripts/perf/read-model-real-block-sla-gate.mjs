@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -87,6 +87,18 @@ function count(value, label, minimum = 0, maximum = 1_000_000) {
     fail(label);
   }
   return value;
+}
+
+function metadataProviderCallCount(value, tokenCount, label) {
+  const result = count(value, label, 0, tokenCount * 6);
+  if (
+    tokenCount === 0
+      ? result !== 0
+      : result < tokenCount * 2 || result % 2 !== 0
+  ) {
+    fail(label);
+  }
+  return result;
 }
 
 function timestamp(value, label) {
@@ -783,6 +795,314 @@ export function verifyRealBlockSlaEvidence(evidenceValue, input) {
   });
 }
 
+function sameHex(left, right, label) {
+  if (
+    typeof left !== "string" || typeof right !== "string" ||
+    !/^0x[0-9a-f]{64}$/u.test(left) || !/^0x[0-9a-f]{64}$/u.test(right) ||
+    !timingSafeEqual(Buffer.from(left.slice(2), "hex"), Buffer.from(right.slice(2), "hex"))
+  ) fail(label);
+}
+
+/** Verifies the DB-authored, challenge-bound v2 capture export. */
+export function verifyRealBlockSlaDatabaseAttestation(value, input) {
+  const expected = normalizedExpected(input);
+  const evidence = exactObject(value, "database attestation", [
+    "kind", "schemaVersion", "exportId", "challengeSha256", "exportedAt", "runtimeReceipt",
+    "apiObservations", "receiptSha256", "challenge", "attestationHmacSha256",
+  ]);
+  if (
+    evidence.kind !== "programmable-real-block-sla-db-attestation" ||
+    evidence.schemaVersion !== 2
+  ) fail("database attestation version");
+  pattern(evidence.exportId, "export receipt", UUID);
+  pattern(evidence.challenge, "export challenge", NONZERO_BYTES32);
+  const challengeSha = `0x${createHash("sha256").update(evidence.challenge, "utf8").digest("hex")}`;
+  sameHex(evidence.challengeSha256, challengeSha, "challenge receipt");
+  bytes32(evidence.receiptSha256, "DB receipt hash");
+  bytes32(evidence.attestationHmacSha256, "attestation HMAC");
+  const secret = input.probeToken ?? process.env.PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN;
+  if (typeof secret !== "string" || Buffer.byteLength(secret, "utf8") < 32) {
+    fail("attestation verifier secret");
+  }
+  const unsigned = Object.fromEntries(Object.entries(evidence).filter(
+    ([key]) => key !== "challenge" && key !== "attestationHmacSha256",
+  ));
+  const expectedHmac = `0x${createHmac("sha256", secret)
+    .update(`${canonicalJson(unsigned)}:${evidence.challenge}`, "utf8").digest("hex")}`;
+  sameHex(evidence.attestationHmacSha256, expectedHmac, "attestation HMAC");
+  const exportedAt = timestampMs(evidence.exportedAt, "DB export timestamp");
+  if (
+    exportedAt < expected.nowMs - expected.maximumEvidenceAgeMs ||
+    exportedAt > expected.nowMs + MAXIMUM_FUTURE_SKEW_MS
+  ) fail("DB export freshness");
+
+  const runtime = exactObject(evidence.runtimeReceipt, "runtime receipt", [
+    "deliveryReceiptId", "wakeId", "initialNonceDigest", "duplicateNonceDigest",
+    "streamId", "payloadSha256",
+    "signedAt", "requestReceivedAt", "databaseReceivedAt", "jobPersistedAt",
+    "acknowledgedAt", "duplicateReceivedAt", "duplicateAcknowledgedAt",
+    "initialResponseStatus", "duplicateResponseStatus",
+    "repositoryCommit", "deploymentId", "deploymentOrigin", "projectId",
+    "blockNumber", "blockHash", "parentHash", "blockTimestamp",
+    "blockEvidenceCommitment", "logsCommitment", "providerADeploymentId",
+    "providerBDeploymentId", "providerAEndpointHost", "providerBEndpointHost",
+    "providerAEndpointUrlSha256", "providerBEndpointUrlSha256",
+    "blockProviderAHead", "blockProviderAHeadHash", "blockProviderAObservedAt",
+    "blockProviderBHead", "blockProviderBHeadHash", "blockProviderBObservedAt",
+    "blockProviderCallCountA", "blockProviderCallCountB", "eventRowCount",
+    "metadataTokenCount", "metadataProviderCallCountA",
+    "metadataProviderCallCountB", "marketRowCount", "reorgGeneration", "bundleVisibleAt",
+    "events", "markets",
+  ]);
+  if (
+    runtime.repositoryCommit !== expected.repositoryCommit ||
+    runtime.deploymentId !== expected.deploymentId ||
+    exactOrigin(runtime.deploymentOrigin, "runtime deployment origin") !== expected.targetOrigin
+  ) fail("runtime deployment binding");
+  identifier(runtime.projectId, "runtime project");
+  uint(runtime.deliveryReceiptId, "delivery receipt ID");
+  uint(runtime.wakeId, "wake ID");
+  bytes32(runtime.initialNonceDigest, "initial nonce digest");
+  bytes32(runtime.duplicateNonceDigest, "duplicate nonce digest");
+  bytes32(runtime.payloadSha256, "payload digest");
+  identifier(runtime.streamId, "stream ID");
+  timestamp(runtime.signedAt, "provider signed timestamp");
+  const requestReceivedAt = timestampMs(
+    runtime.requestReceivedAt,
+    "handler delivery receipt",
+  );
+  const receivedAt = timestampMs(runtime.databaseReceivedAt, "DB delivery receipt");
+  const persistedAt = timestampMs(runtime.jobPersistedAt, "DB queue persistence");
+  const eligibleAt = timestampMs(runtime.acknowledgedAt, "DB 202 eligibility");
+  const duplicateAt = timestampMs(runtime.duplicateReceivedAt, "DB duplicate receipt");
+  const duplicateEligibleAt = timestampMs(
+    runtime.duplicateAcknowledgedAt,
+    "DB duplicate 202 eligibility",
+  );
+  if (
+    requestReceivedAt !== receivedAt ||
+    persistedAt > eligibleAt || receivedAt > persistedAt ||
+    duplicateAt < eligibleAt || duplicateEligibleAt < duplicateAt ||
+    duplicateEligibleAt > receivedAt + REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS ||
+    runtime.initialResponseStatus !== 503 ||
+    runtime.duplicateResponseStatus !== 202
+  ) fail("durable queue ordering");
+  const visibleAt = timestampMs(runtime.bundleVisibleAt, "DB bundle visibility");
+  if (visibleAt < eligibleAt) fail("DB visibility ordering");
+  const targetBlock = BigInt(uint(runtime.blockNumber, "runtime block"));
+  const targetHash = bytes32(runtime.blockHash, "runtime block hash");
+  bytes32(runtime.parentHash, "runtime parent hash");
+  timestamp(runtime.blockTimestamp, "runtime block timestamp");
+  bytes32(runtime.blockEvidenceCommitment, "runtime block evidence");
+  bytes32(runtime.logsCommitment, "runtime logs commitment");
+  pattern(runtime.providerADeploymentId, "Alchemy deployment", UUID);
+  pattern(runtime.providerBDeploymentId, "QuickNode deployment", UUID);
+  if (runtime.providerADeploymentId === runtime.providerBDeploymentId) {
+    fail("provider deployment independence");
+  }
+  bytes32(runtime.providerAEndpointUrlSha256, "Alchemy endpoint receipt");
+  bytes32(runtime.providerBEndpointUrlSha256, "QuickNode endpoint receipt");
+  const providerAHost = pattern(
+    runtime.providerAEndpointHost,
+    "Alchemy endpoint host",
+    SAFE_HOST,
+  );
+  const providerBHost = pattern(
+    runtime.providerBEndpointHost,
+    "QuickNode endpoint host",
+    SAFE_HOST,
+  );
+  if (
+    (providerAHost !== "alchemy.com" && !providerAHost.endsWith(".alchemy.com")) ||
+    (providerBHost !== "quicknode.com" &&
+      !providerBHost.endsWith(".quicknode.com") &&
+      providerBHost !== "quiknode.pro" &&
+      !providerBHost.endsWith(".quiknode.pro")) ||
+    providerAHost === providerBHost ||
+    runtime.providerAEndpointUrlSha256 === runtime.providerBEndpointUrlSha256
+  ) fail("provider endpoint independence");
+  uint(runtime.reorgGeneration, "runtime reorg generation");
+
+  const runtimeHead = (provider, phase, numberValue, hashValue, observedValue) => {
+    const number = BigInt(uint(numberValue, `${provider} ${phase} head`));
+    const hash = bytes32(hashValue, `${provider} ${phase} head hash`);
+    const observedAt = timestampMs(observedValue, `${provider} ${phase} observed at`);
+    if (
+      number < targetBlock || number > targetBlock + 11n ||
+      (number === targetBlock && hash !== targetHash) ||
+      observedAt < receivedAt || observedAt > visibleAt
+    ) fail(`${provider} ${phase} head telemetry`);
+    return { hash, number, observedAt };
+  };
+  const sameHeightHash = (left, right, label) => {
+    if (left.number === right.number && left.hash !== right.hash) fail(label);
+  };
+  const blockHeadA = runtimeHead(
+    "Alchemy", "block", runtime.blockProviderAHead,
+    runtime.blockProviderAHeadHash, runtime.blockProviderAObservedAt,
+  );
+  const blockHeadB = runtimeHead(
+    "QuickNode", "block", runtime.blockProviderBHead,
+    runtime.blockProviderBHeadHash, runtime.blockProviderBObservedAt,
+  );
+  sameHeightHash(blockHeadA, blockHeadB, "same-height block head agreement");
+  const blockCallsA = count(runtime.blockProviderCallCountA, "Alchemy block calls");
+  const blockCallsB = count(runtime.blockProviderCallCountB, "QuickNode block calls");
+  if (
+    blockCallsA !== (blockHeadA.number === targetBlock ? 4 : 5) ||
+    blockCallsB !== (blockHeadB.number === targetBlock ? 4 : 5)
+  ) fail("block provider call count");
+  const eventCount = count(runtime.eventRowCount, "event row count");
+  const metadataCount = count(runtime.metadataTokenCount, "metadata token count", 0, 16);
+  const metadataCallsA = metadataProviderCallCount(
+    runtime.metadataProviderCallCountA,
+    metadataCount,
+    "Alchemy metadata calls",
+  );
+  const metadataCallsB = metadataProviderCallCount(
+    runtime.metadataProviderCallCountB,
+    metadataCount,
+    "QuickNode metadata calls",
+  );
+  const marketCount = count(runtime.marketRowCount, "market row count", 1, 100);
+  if (!Array.isArray(runtime.events) || runtime.events.length !== eventCount ||
+      !Array.isArray(runtime.markets) || runtime.markets.length !== marketCount) {
+    fail("runtime row receipts");
+  }
+  for (const event of runtime.events) {
+    const row = exactObject(event, "event receipt", [
+      "optimisticEventId", "payloadCommitment",
+    ]);
+    pattern(row.optimisticEventId, "optimistic event", UUID);
+    bytes32(row.payloadCommitment, "event payload commitment");
+  }
+  const marketRows = [];
+  let marketCallsA = 0;
+  let marketCallsB = 0;
+  for (const market of runtime.markets) {
+    const row = exactObject(market, "market receipt", [
+      "optimisticMarketStateId", "poolId", "tokenAddress", "releaseVersion",
+      "evidenceCommitment",
+      "marketCommitment", "confirmations", "marketProviderAHead",
+      "marketProviderAHeadHash", "marketProviderAObservedAt", "marketProviderBHead",
+      "marketProviderBHeadHash", "marketProviderBObservedAt",
+      "marketProviderCallCountA", "marketProviderCallCountB",
+      "totalProviderCallCountA", "totalProviderCallCountB",
+    ]);
+    pattern(row.optimisticMarketStateId, "market state", UUID);
+    bytes32(row.poolId, "market pool");
+    pattern(row.tokenAddress, "market token", ADDRESS);
+    if (
+      row.releaseVersion !== null &&
+      row.releaseVersion !== "classic-v2" &&
+      row.releaseVersion !== "classic-v3"
+    ) {
+      fail("market release");
+    }
+    bytes32(row.evidenceCommitment, "market evidence");
+    bytes32(row.marketCommitment, "market commitment");
+    const confirmations = count(row.confirmations, "market confirmations", 0, 11);
+    const headA = runtimeHead(
+      "Alchemy", "market", row.marketProviderAHead,
+      row.marketProviderAHeadHash, row.marketProviderAObservedAt,
+    );
+    const headB = runtimeHead(
+      "QuickNode", "market", row.marketProviderBHead,
+      row.marketProviderBHeadHash, row.marketProviderBObservedAt,
+    );
+    if (
+      headA.number < blockHeadA.number || headB.number < blockHeadB.number ||
+      headA.observedAt < blockHeadA.observedAt ||
+      headB.observedAt < blockHeadB.observedAt
+    ) fail("market head ordering");
+    sameHeightHash(headA, headB, "same-height market head agreement");
+    sameHeightHash(blockHeadA, headA, "same-provider Alchemy head agreement");
+    sameHeightHash(blockHeadB, headB, "same-provider QuickNode head agreement");
+    sameHeightHash(blockHeadA, headB, "same-height cross-provider head agreement");
+    sameHeightHash(blockHeadB, headA, "same-height cross-provider head agreement");
+    if (
+      confirmations !== Number(
+        (headA.number < headB.number ? headA.number : headB.number) - targetBlock,
+      )
+    ) fail("market confirmation count");
+    const callsA = count(row.marketProviderCallCountA, "Alchemy market calls");
+    const callsB = count(row.marketProviderCallCountB, "QuickNode market calls");
+    if (
+      callsA !== (headA.number === targetBlock ? 7 : 8) ||
+      callsB !== (headB.number === targetBlock ? 7 : 8)
+    ) fail("dynamic provider call count");
+    marketCallsA += callsA;
+    marketCallsB += callsB;
+    marketRows.push(row);
+  }
+  const totalCallsA = blockCallsA + metadataCallsA + marketCallsA;
+  const totalCallsB = blockCallsB + metadataCallsB + marketCallsB;
+  for (const row of marketRows) {
+    if (
+      count(row.totalProviderCallCountA, "Alchemy total calls") !== totalCallsA ||
+      count(row.totalProviderCallCountB, "QuickNode total calls") !== totalCallsB
+    ) fail("aggregate provider call count");
+  }
+
+  if (!Array.isArray(evidence.apiObservations) || evidence.apiObservations.length !== 2) {
+    fail("API observation receipts");
+  }
+  const surfaces = new Set();
+  const stateIds = new Set();
+  const releases = new Set();
+  const generations = new Set();
+  const observationTimes = [];
+  for (const observationValue of evidence.apiObservations) {
+    const observation = object(observationValue, "API observation receipt");
+    pattern(observation.apiObservationId, "API observation ID", UUID);
+    if (observation.surface !== "explore-token" && observation.surface !== "classic-chart") {
+      fail("API surface");
+    }
+    surfaces.add(observation.surface);
+    stateIds.add(pattern(observation.optimisticMarketStateId, "API market state", UUID));
+    if (observation.releaseVersion !== "classic-v2" && observation.releaseVersion !== "classic-v3") {
+      fail("API release");
+    }
+    releases.add(observation.releaseVersion);
+    generations.add(uint(observation.reorgGeneration, "API reorg generation"));
+    if (observation.responseStatus !== 200 || observation.cacheControl !== "no-store") {
+      fail("API no-store receipt");
+    }
+    bytes32(observation.responseBodySha256, "API body digest");
+    count(observation.responseBodySize, "API body size", 2, MAXIMUM_EVIDENCE_BYTES);
+    const observedAt = timestampMs(observation.observedAt, "API DB observation");
+    if (observedAt < visibleAt || observedAt > exportedAt) fail("API observation ordering");
+    observationTimes.push(observedAt);
+  }
+  const observedStateId = [...stateIds][0];
+  const observedRelease = [...releases][0];
+  const boundMarket = marketRows.find(
+    (market) => market.optimisticMarketStateId === observedStateId,
+  );
+  if (
+    surfaces.size !== 2 || stateIds.size !== 1 || releases.size !== 1 ||
+    generations.size !== 1 || boundMarket?.releaseVersion !== observedRelease
+  ) fail("same-market public surfaces");
+  const firstLatency = Math.min(...observationTimes) - receivedAt;
+  const allLatency = Math.max(...observationTimes) - receivedAt;
+  if (firstLatency < 0 || firstLatency > REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS ||
+      allLatency < firstLatency || allLatency > REAL_BLOCK_SLA_MAXIMUM_LATENCY_MS) {
+    fail("real-block SLA latency");
+  }
+  return Object.freeze({
+    ok: true,
+    repositoryCommit: runtime.repositoryCommit,
+    deploymentId: runtime.deploymentId,
+    targetOrigin: runtime.deploymentOrigin,
+    blockNumber: runtime.blockNumber,
+    blockHash: runtime.blockHash,
+    deliveryToFirstVisibleMs: firstLatency,
+    deliveryToAllRequiredSurfacesVisibleMs: allLatency,
+    evidenceSha256: evidence.receiptSha256,
+    databaseAttested: true,
+  });
+}
+
 export function realBlockSlaGateArgumentsFrom(argv) {
   const values = new Map();
   for (let index = 0; index < argv.length; index += 2) {
@@ -836,7 +1156,10 @@ export async function readRealBlockSlaEvidence(path) {
 async function main() {
   const args = realBlockSlaGateArgumentsFrom(process.argv.slice(2));
   const evidence = await readRealBlockSlaEvidence(args.evidencePath);
-  const result = verifyRealBlockSlaEvidence(evidence, args);
+  if (!evidence?.runtimeReceipt) {
+    fail("DB-authored promotion attestation required");
+  }
+  const result = verifyRealBlockSlaDatabaseAttestation(evidence, args);
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 

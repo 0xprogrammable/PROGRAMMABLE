@@ -21,7 +21,7 @@ import type {
   CandidateRpcProvider,
   CandidateRpcReceipt,
 } from "./dual-rpc";
-import { invalidInput } from "./errors";
+import { invalidInput, validationError } from "./errors";
 import {
   canonicalProjectorRpcEndpoint,
   projectorRpcDeploymentCommitment,
@@ -468,12 +468,17 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
       requireCanonical,
     }) {
       const exactBlock = { blockHash, requireCanonical } as const;
+      let rpcCallCount = 0;
+      const measuredRpc = <T>(operation: () => Promise<T>) => {
+        rpcCallCount += 1;
+        return rpc(operation);
+      };
       const [runtimeBytecode, slot0Result, liquidityResult] = await Promise.all([
-        rpc(() => client.request({
+        measuredRpc(() => client.request({
           method: "eth_getCode",
           params: [stateView, exactBlock],
         })),
-        rpc(() => client.request({
+        measuredRpc(() => client.request({
           method: "eth_call",
           params: [
             {
@@ -487,7 +492,7 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
             exactBlock,
           ],
         })),
-        rpc(() => client.request({
+        measuredRpc(() => client.request({
           method: "eth_call",
           params: [
             {
@@ -502,6 +507,9 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
           ],
         })),
       ]);
+      if (rpcCallCount !== 3) {
+        throw validationError("rpc", "optimistic-pool-rpc-call-count");
+      }
       return Object.freeze({
         stateView,
         poolId,
@@ -510,7 +518,7 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
         runtimeBytecode,
         slot0Result,
         liquidityResult,
-        rpcCallCount: 3,
+        rpcCallCount,
       });
     },
     async readRewardSnapshot({
@@ -787,6 +795,25 @@ export function productionRpcProjectorCommitments(
       schemaCommitment: configuration.schemaCommitment,
     }),
   });
+}
+
+/** Safe, secret-free endpoint evidence derived from the validated URLs. */
+export function productionRpcEndpointEvidence(
+  env: Environment = process.env,
+) {
+  const configuration = productionRpcConfiguration(env);
+  return Object.freeze([
+    Object.freeze({
+      providerId: "alchemy" as const,
+      endpointHost: configuration.alchemy.hostname,
+      endpointUrlCommitment: configuration.alchemyDeploymentCommitment,
+    }),
+    Object.freeze({
+      providerId: "quicknode" as const,
+      endpointHost: configuration.quicknode.hostname,
+      endpointUrlCommitment: configuration.quicknodeDeploymentCommitment,
+    }),
+  ] as const);
 }
 
 /**

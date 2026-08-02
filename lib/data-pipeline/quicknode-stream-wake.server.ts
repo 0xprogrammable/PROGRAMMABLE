@@ -17,6 +17,7 @@ export type QuickNodeStreamWake = Readonly<{
   kind: "work";
   nonceDigest: `0x${string}`;
   timestamp: string;
+  requestReceivedAt: string;
   hint: QuickNodeStreamBlockHint;
   payload: string;
   payloadBytes: number;
@@ -42,6 +43,37 @@ export type QuickNodeStreamBlockHint = Readonly<{
 export type QuickNodeStreamBlockHintParser = (
   value: unknown,
 ) => QuickNodeStreamBlockHint;
+
+/** Strict payload contract emitted by the reviewed QuickNode Stream transform. */
+export function parseQuickNodeBlockHint(value: unknown): QuickNodeStreamBlockHint {
+  if (
+    value === null || typeof value !== "object" || Array.isArray(value) ||
+    Object.keys(value).sort().join(",") !==
+      "blockNumber,chainId,reorgedBlockNumbers,streamId" ||
+    Reflect.get(value, "chainId") !== 1 ||
+    typeof Reflect.get(value, "blockNumber") !== "string" ||
+    !/^(?:0|[1-9][0-9]{0,18})$/u.test(Reflect.get(value, "blockNumber") as string) ||
+    typeof Reflect.get(value, "streamId") !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u.test(Reflect.get(value, "streamId") as string) ||
+    !Array.isArray(Reflect.get(value, "reorgedBlockNumbers"))
+  ) {
+    throw new QuickNodeStreamWakeError(400);
+  }
+  const reorged = Reflect.get(value, "reorgedBlockNumbers") as unknown[];
+  if (
+    reorged.length > 64 ||
+    reorged.some((block) => typeof block !== "string" || !/^(?:0|[1-9][0-9]{0,18})$/u.test(block)) ||
+    new Set(reorged).size !== reorged.length
+  ) {
+    throw new QuickNodeStreamWakeError(400);
+  }
+  return Object.freeze({
+    chainId: 1,
+    blockNumber: Reflect.get(value, "blockNumber") as string,
+    streamId: Reflect.get(value, "streamId") as string,
+    reorgedBlockNumbers: Object.freeze(reorged as string[]),
+  });
+}
 
 export class QuickNodeStreamWakeError extends Error {
   readonly status: 400 | 401 | 413 | 503;
@@ -225,11 +257,14 @@ export async function verifyQuickNodeStreamWake(
     parseBlockHint?: QuickNodeStreamBlockHintParser;
   }> = {},
 ): Promise<VerifiedQuickNodeStreamWake> {
+  const requestReceivedAtMs = input.nowMs ??
+    performance.timeOrigin + performance.now();
+  const requestReceivedAt = new Date(requestReceivedAtMs).toISOString();
   const secret = configuredSecret(input.env ?? process.env);
   const nonce = exactHeader(request, "x-qn-nonce", 256);
   const timestamp = exactHeader(request, "x-qn-timestamp", 32);
   const signature = exactHeader(request, "x-qn-signature", 128);
-  assertFreshTimestamp(timestamp, input.nowMs ?? Date.now());
+  assertFreshTimestamp(timestamp, requestReceivedAtMs);
   if (!HEX_SIGNATURE.test(signature)) {
     throw new QuickNodeStreamWakeError(401);
   }
@@ -286,6 +321,7 @@ export async function verifyQuickNodeStreamWake(
     kind: "work" as const,
     nonceDigest: `0x${createHash("sha256").update(nonce, "utf8").digest("hex")}`,
     timestamp,
+    requestReceivedAt,
     hint,
     payload,
     payloadBytes: Buffer.byteLength(payload, "utf8"),

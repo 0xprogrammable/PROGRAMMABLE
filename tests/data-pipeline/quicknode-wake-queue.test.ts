@@ -28,9 +28,16 @@ const WAKE: QuickNodeStreamWake = Object.freeze({
   kind: "work",
   nonceDigest: NONCE_DIGEST,
   timestamp: "1785662400",
+  requestReceivedAt: "2026-08-02T12:00:00.000Z",
   hint: HINT,
   payload: PAYLOAD,
   payloadBytes: Buffer.byteLength(PAYLOAD, "utf8"),
+});
+const DEPLOYMENT = Object.freeze({
+  repositoryCommit: "a".repeat(40),
+  deploymentId: "dpl_0123456789abcdefghij",
+  deploymentOrigin: "https://programmable-stage.vercel.app",
+  projectId: "prj_programmable",
 });
 
 class WakeExecutor implements PostgresExecutor {
@@ -44,6 +51,9 @@ class WakeExecutor implements PostgresExecutor {
   enqueueNew = true;
   claimGeneration = 1;
   claimed = true;
+  providerRetryConsumed = true;
+  slaDeliveryReceiptId: string | null = "19";
+  retryScheduleAvailable = true;
 
   async transaction<T>(
     work: (transaction: PostgresTransaction) => Promise<T>,
@@ -64,7 +74,7 @@ class WakeExecutor implements PostgresExecutor {
             configured_role: "programmable_projector_runtime",
           }] as unknown as Row[];
         }
-        if (text.includes("enqueue_quicknode_wake_v1")) {
+        if (text.includes("enqueue_quicknode_wake_v2")) {
           return [{
             accepted: this.enqueueAccepted,
             wake_id: this.enqueueAccepted ? "7" : null,
@@ -73,6 +83,12 @@ class WakeExecutor implements PostgresExecutor {
             job_state: this.enqueueAccepted
               ? this.enqueueNew ? "pending" : "processing"
               : "capacity",
+            delivery_receipt_id: this.enqueueAccepted ? "19" : null,
+            handler_received_at: "2026-08-02T12:00:00.001Z",
+            database_received_at: "2026-08-02T12:00:00.001Z",
+            job_persisted_at: "2026-08-02T12:00:00.001Z",
+            queue_row_count_before: this.enqueueNew ? 0 : 1,
+            queue_row_count_after: 1,
           }] as unknown as Row[];
         }
         if (text.includes("claim_quicknode_wake_v1")) {
@@ -87,11 +103,26 @@ class WakeExecutor implements PostgresExecutor {
             attempt_count: this.claimGeneration,
           }] as unknown as Row[];
         }
+        if (text.includes("get_real_block_sla_delivery_receipt_v1")) {
+          return [{
+            delivery_receipt_id: this.slaDeliveryReceiptId,
+          }] as unknown as Row[];
+        }
+        if (text.includes("consume_real_block_sla_provider_retry_once_v1")) {
+          return [{ consumed: this.providerRetryConsumed }] as unknown as Row[];
+        }
         if (text.includes("complete_quicknode_wake_v1")) {
           return [{ completed: true }] as unknown as Row[];
         }
         if (text.includes("retry_quicknode_wake_v1")) {
           return [{ retried: true }] as unknown as Row[];
+        }
+        if (text.includes("get_real_block_sla_retry_schedule_v1")) {
+          if (!this.retryScheduleAvailable) return [] as unknown as Row[];
+          return [{
+            available_at: "2026-08-02T12:00:02.000Z",
+            deadline_at: "2026-08-02T12:00:10.001Z",
+          }] as unknown as Row[];
         }
         return [] as unknown as Row[];
       },
@@ -111,11 +142,18 @@ describe("QuickNode durable wake queue runtime", () => {
   it("persists the signed marker before returning an enqueue result", async () => {
     const executor = new WakeExecutor();
 
-    await expect(queue(executor).enqueue(WAKE)).resolves.toEqual({
+    await expect(queue(executor).enqueue(WAKE, DEPLOYMENT)).resolves.toEqual({
       wakeId: "7",
+      deliveryReceiptId: "19",
       blockNumberHint: "291",
       enqueued: true,
       state: "pending",
+      requestReceivedAt: "2026-08-02T12:00:00.001Z",
+      databaseReceivedAt: "2026-08-02T12:00:00.001Z",
+      persistedAt: "2026-08-02T12:00:00.001Z",
+      payloadSha256: expect.stringMatching(/^0x[0-9a-f]{64}$/u),
+      queueRowCountBefore: 0,
+      queueRowCountAfter: 1,
     });
     expect(
       executor.queries.filter(({ text }) =>
@@ -123,7 +161,7 @@ describe("QuickNode durable wake queue runtime", () => {
       ),
     ).toHaveLength(1);
     const enqueue = executor.queries.find(({ text }) =>
-      text.includes("enqueue_quicknode_wake_v1")
+      text.includes("enqueue_quicknode_wake_v2")
     );
     expect(enqueue?.values.slice(0, 2)).toEqual([
       expect.any(Uint8Array),
@@ -138,18 +176,36 @@ describe("QuickNode durable wake queue runtime", () => {
     const executor = new WakeExecutor();
     executor.enqueueNew = false;
 
-    await expect(queue(executor).enqueue(WAKE)).resolves.toMatchObject({
+    await expect(queue(executor).enqueue(WAKE, DEPLOYMENT)).resolves.toMatchObject({
       wakeId: "7",
       enqueued: false,
       state: "processing",
     });
   });
 
+  it("consumes the DB-authored provider retry probe with exact receipt and wake IDs", async () => {
+    const executor = new WakeExecutor();
+    const wakeQueue = queue(executor);
+
+    await expect(
+      wakeQueue.consumeRealBlockSlaProviderRetryOnce("19", "7"),
+    ).resolves.toBe(true);
+    const consume = executor.queries.find(({ text }) =>
+      text.includes("consume_real_block_sla_provider_retry_once_v1")
+    );
+    expect(consume?.values).toEqual(["19", "7"]);
+
+    executor.providerRetryConsumed = false;
+    await expect(
+      wakeQueue.consumeRealBlockSlaProviderRetryOnce("20", "7"),
+    ).resolves.toBe(false);
+  });
+
   it("fails closed at hard capacity so the provider can retry", async () => {
     const executor = new WakeExecutor();
     executor.enqueueAccepted = false;
 
-    await expect(queue(executor).enqueue(WAKE)).rejects.toMatchObject({
+    await expect(queue(executor).enqueue(WAKE, DEPLOYMENT)).rejects.toMatchObject({
       dependency: "postgres",
       code: "dependency_unavailable",
       retryable: true,
@@ -163,6 +219,7 @@ describe("QuickNode durable wake queue runtime", () => {
     const claim = await wakeQueue.claim();
     expect(claim).toMatchObject({
       wakeId: "7",
+      deliveryReceiptId: "19",
       leaseGeneration: "1",
       attemptCount: 1,
       workerId: "quicknode-wake-00000000-0000-4000-8000-000000000001",
@@ -172,6 +229,32 @@ describe("QuickNode durable wake queue runtime", () => {
     });
     await expect(wakeQueue.retry(claim!, 2_000)).resolves.toBe(true);
     await expect(wakeQueue.complete(claim!)).resolves.toBe(true);
+  });
+
+  it("reads the DB-bounded SLA retry schedule for the exact wake", async () => {
+    const executor = new WakeExecutor();
+    const wakeQueue = queue(executor);
+
+    await expect(wakeQueue.retrySchedule("7")).resolves.toEqual({
+      availableAt: "2026-08-02T12:00:02.000Z",
+      deadlineAt: "2026-08-02T12:00:10.001Z",
+    });
+    const schedule = executor.queries.find(({ text }) =>
+      text.includes("get_real_block_sla_retry_schedule_v1"));
+    expect(schedule?.values).toEqual(["7"]);
+
+    executor.retryScheduleAvailable = false;
+    await expect(wakeQueue.retrySchedule("7")).resolves.toBeNull();
+  });
+
+  it("claims normal wake work without enabling the SLA-only capture path", async () => {
+    const executor = new WakeExecutor();
+    executor.slaDeliveryReceiptId = null;
+
+    await expect(queue(executor).claim()).resolves.toMatchObject({
+      wakeId: "7",
+      deliveryReceiptId: null,
+    });
   });
 
   it("can accept a higher-generation claim after a crashed worker lease", async () => {
@@ -193,13 +276,13 @@ describe("QuickNode durable wake queue runtime", () => {
     const executor = new WakeExecutor();
     executor.sessionUser = "programmable_projector_login";
 
-    await expect(queue(executor).enqueue(WAKE)).rejects.toMatchObject({
+    await expect(queue(executor).enqueue(WAKE, DEPLOYMENT)).rejects.toMatchObject({
       dependency: "postgres",
       code: "validation_failed",
     });
     expect(
       executor.queries.some(({ text }) =>
-        text.includes("enqueue_quicknode_wake_v1")
+        text.includes("enqueue_quicknode_wake_v2")
       ),
     ).toBe(false);
   });

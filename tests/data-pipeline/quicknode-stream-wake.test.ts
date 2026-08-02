@@ -82,6 +82,7 @@ describe("QuickNode stream wake verification", () => {
       kind: "work",
       nonceDigest: `0x${createHash("sha256").update(NONCE).digest("hex")}`,
       timestamp: TIMESTAMP,
+      requestReceivedAt: new Date(NOW_MS).toISOString(),
       hint: HINT,
       payload,
       payloadBytes: Buffer.byteLength(payload),

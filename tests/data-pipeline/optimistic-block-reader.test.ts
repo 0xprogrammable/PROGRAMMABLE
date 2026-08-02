@@ -117,6 +117,7 @@ type ProviderFixture = Readonly<{
   getChainId: ReturnType<typeof vi.fn>;
   getBlockNumber: ReturnType<typeof vi.fn>;
   getBlock: ReturnType<typeof vi.fn>;
+  getBlocks: ReturnType<typeof vi.fn>;
   getLogs: ReturnType<typeof vi.fn>;
 }>;
 
@@ -126,6 +127,7 @@ function providerFixture(
     chainId?: number;
     head?: bigint;
     block?: CandidateRpcBlock;
+    headBlock?: CandidateRpcBlock;
     logs?: readonly CandidateRpcLog[];
     identity?: string;
     vendorGroup?: string;
@@ -134,12 +136,30 @@ function providerFixture(
   const marker = vendor === "alchemy" ? "a" : "b";
   const getChainId = vi.fn(async () => overrides.chainId ?? 1);
   const getBlockNumber = vi.fn(async () => overrides.head ?? BLOCK_NUMBER);
-  const getBlock = vi.fn(async () => overrides.block ?? candidateBlock());
+  const getBlock = vi.fn(async (request?: unknown) => {
+    void request;
+    return overrides.block ?? candidateBlock();
+  });
+  const getBlocks = vi.fn(
+    async ({ blockNumbers }: { blockNumbers: readonly bigint[] }) =>
+      Promise.all(
+        blockNumbers.map(async (number, index) =>
+          index === 0
+            ? getBlock({ blockNumber: number })
+            : (overrides.headBlock ??
+              candidateBlock({
+                number,
+                hash: `0x${marker.repeat(64)}`,
+              })),
+        ),
+      ),
+  );
   const getLogs = vi.fn(async () => overrides.logs ?? [candidateLog()]);
   const client = {
     getChainId,
     getBlockNumber,
     getBlock,
+    getBlocks,
     getLogs,
   } as unknown as CandidateRpcProvider["client"];
   return {
@@ -153,6 +173,7 @@ function providerFixture(
     getChainId,
     getBlockNumber,
     getBlock,
+    getBlocks,
     getLogs,
   };
 }
@@ -288,6 +309,10 @@ describe("dual-RPC optimistic block reader", () => {
     for (const fixture of [pair.first, pair.second]) {
       expect(fixture.getChainId).toHaveBeenCalledTimes(1);
       expect(fixture.getBlockNumber).toHaveBeenCalledTimes(1);
+      expect(fixture.getBlocks).toHaveBeenCalledTimes(1);
+      expect(fixture.getBlocks).toHaveBeenCalledWith({
+        blockNumbers: [BLOCK_NUMBER],
+      });
       expect(fixture.getBlock).toHaveBeenCalledWith({
         blockNumber: BLOCK_NUMBER,
       });
@@ -388,6 +413,47 @@ describe("dual-RPC optimistic block reader", () => {
       (BLOCK_NUMBER + 3n).toString(),
     ]);
     expect(result.confirmations).toBe(3);
+    expect(result.providerCallCounts).toEqual([5, 5]);
+    expect(first.getBlocks).toHaveBeenCalledWith({
+      blockNumbers: [BLOCK_NUMBER, BLOCK_NUMBER + 5n],
+    });
+    expect(second.getBlocks).toHaveBeenCalledWith({
+      blockNumbers: [BLOCK_NUMBER, BLOCK_NUMBER + 3n],
+    });
+  });
+
+  it("accepts an equal later head only when both providers return its hash", async () => {
+    const head = BLOCK_NUMBER + 2n;
+    const headBlock = candidateBlock({
+      number: head,
+      hash: `0x${"88".repeat(32)}`,
+    });
+    const first = providerFixture("alchemy", { head, headBlock });
+    const second = providerFixture("quicknode", { head, headBlock });
+
+    const result = await readOptimisticBlockWithDualRpc({
+      providers: [first.provider, second.provider],
+      hint: parseQuickNodeBlockHint(quickNodePayload()),
+    });
+
+    expect(result.providerHeadObservations.map(({ blockHash }) => blockHash)).toEqual([
+      headBlock.hash,
+      headBlock.hash,
+    ]);
+    expect(result.providerCallCounts).toEqual([5, 5]);
+  });
+
+  it("rejects different hashes for the same reported provider head", async () => {
+    const head = BLOCK_NUMBER + 2n;
+    const first = providerFixture("alchemy", { head });
+    const second = providerFixture("quicknode", { head });
+
+    await expect(
+      readOptimisticBlockWithDualRpc({
+        providers: [first.provider, second.provider],
+        hint: parseQuickNodeBlockHint(quickNodePayload()),
+      }),
+    ).rejects.toEqual(validationError("optimistic-provider-mismatch"));
   });
 
   it("rejects a provider head behind the hinted block", async () => {
@@ -403,8 +469,18 @@ describe("dual-RPC optimistic block reader", () => {
 
   it("rejects confirmations outside the bounded uint32 range", async () => {
     const excessiveHead = BLOCK_NUMBER + 0x1_0000_0000n;
-    const first = providerFixture("alchemy", { head: excessiveHead });
-    const second = providerFixture("quicknode", { head: excessiveHead });
+    const headBlock = candidateBlock({
+      number: excessiveHead,
+      hash: `0x${"88".repeat(32)}`,
+    });
+    const first = providerFixture("alchemy", {
+      head: excessiveHead,
+      headBlock,
+    });
+    const second = providerFixture("quicknode", {
+      head: excessiveHead,
+      headBlock,
+    });
 
     await expect(
       readOptimisticBlockWithDualRpc({

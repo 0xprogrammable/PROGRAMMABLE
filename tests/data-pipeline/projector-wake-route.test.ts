@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
     retryable: false,
   })),
   enqueue: vi.fn(),
+  acknowledge: vi.fn(),
+  consumeProviderRetryOnce: vi.fn(),
   processNext: vi.fn(),
 }));
 
@@ -45,6 +47,9 @@ vi.mock(
     return {
       ...actual,
       enqueueConfiguredQuickNodeWake: mocks.enqueue,
+      acknowledgeConfiguredQuickNodeWake: mocks.acknowledge,
+      consumeConfiguredRealBlockSlaProviderRetryOnce:
+        mocks.consumeProviderRetryOnce,
       processNextConfiguredQuickNodeWake: mocks.processNext,
     };
   },
@@ -65,6 +70,7 @@ const HINT = Object.freeze({
 const PAYLOAD = Object.freeze({ block: { number: "0x123" } });
 const CLAIM = Object.freeze({
   wakeId: "1",
+  deliveryReceiptId: "19",
   blockNumberHint: "291",
   hint: HINT,
   payload: JSON.stringify(PAYLOAD),
@@ -79,6 +85,15 @@ function configuredPost() {
   return createProjectorWakePost({
     parseBlockHint: mocks.parseBlockHint,
     firstStage: mocks.firstStage,
+    loadDeployment: () => ({
+      repositoryCommit: "a".repeat(40),
+      deploymentId: "dpl_0123456789abcdefghij",
+      deploymentOrigin: "https://programmable-stage.vercel.app",
+      projectId: "prj_programmable",
+    }),
+    enqueue: mocks.enqueue,
+    acknowledge: mocks.acknowledge,
+    consumeProviderRetryOnce: mocks.consumeProviderRetryOnce,
   });
 }
 
@@ -86,6 +101,7 @@ function request(
   input: Readonly<{
     signature?: string;
     payload?: (timestamp: string) => unknown;
+    origin?: string;
   }> = {},
 ) {
   const timestamp = String(Math.floor(Date.now() / 1_000));
@@ -98,12 +114,14 @@ function request(
       .update(timestamp)
       .update(payload)
       .digest("hex");
+  const origin = input.origin ?? "https://programmable.family";
   return new NextRequest(
-    "https://programmable.family/api/ops/projector-wake",
+    `${origin}/api/ops/projector-wake`,
     {
       method: "POST",
       headers: {
         "content-type": "application/json",
+        host: new URL(origin).host,
         "x-qn-nonce": nonce,
         "x-qn-timestamp": timestamp,
         "x-qn-signature": signature,
@@ -123,10 +141,19 @@ describe("projector stream wake route", () => {
     mocks.parseBlockHint.mockReturnValue(HINT);
     mocks.enqueue.mockResolvedValue({
       wakeId: "1",
+      deliveryReceiptId: "19",
       blockNumberHint: "291",
       enqueued: true,
       state: "pending",
     });
+    mocks.acknowledge.mockResolvedValue({
+      deliveryReceiptId: "19",
+      wakeId: "1",
+      status: 202,
+      cacheControl: "no-store",
+      acknowledgedAt: "2026-08-02T12:00:00.010Z",
+    });
+    mocks.consumeProviderRetryOnce.mockResolvedValue(false);
     mocks.processNext.mockImplementation(
       async (work: (claim: typeof CLAIM) => Promise<void>) => {
         try {
@@ -155,6 +182,13 @@ describe("projector stream wake route", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({ accepted: true });
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+    expect(mocks.acknowledge).toHaveBeenCalledTimes(1);
+    expect(mocks.enqueue.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.acknowledge.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.acknowledge.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.after.mock.invocationCallOrder[0]!,
+    );
     expect(mocks.enqueue.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.after.mock.invocationCallOrder[0]!,
     );
@@ -171,6 +205,100 @@ describe("projector stream wake route", () => {
     expect(mocks.source.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.market.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it("returns one authentic 503 after the staged delivery is durable and still schedules its worker", async () => {
+    let backgroundTask: (() => Promise<void>) | undefined;
+    mocks.after.mockImplementation((task: () => Promise<void>) => {
+      backgroundTask = task;
+    });
+    mocks.consumeProviderRetryOnce.mockResolvedValue(true);
+    vi.stubEnv("PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE", "true");
+    vi.stubEnv("VERCEL_URL", "programmable-candidate-abc.vercel.app");
+
+    const response = await configuredPost()(request({
+      origin: "https://programmable-candidate-abc.vercel.app",
+    }));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+    expect(mocks.acknowledge).toHaveBeenCalledTimes(1);
+    expect(mocks.consumeProviderRetryOnce).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryReceiptId: "19", wakeId: "1" }),
+    );
+    expect(mocks.acknowledge.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.consumeProviderRetryOnce.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.consumeProviderRetryOnce.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.after.mock.invocationCallOrder[0]!,
+    );
+    await backgroundTask?.();
+    expect(mocks.firstStage).toHaveBeenCalledWith(CLAIM);
+  });
+
+  it("returns 202 for the authentic duplicate after the single-use probe was consumed", async () => {
+    vi.stubEnv("PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE", "true");
+    vi.stubEnv("VERCEL_URL", "programmable-candidate-abc.vercel.app");
+    mocks.enqueue.mockResolvedValue({
+      wakeId: "1",
+      deliveryReceiptId: "20",
+      blockNumberHint: "291",
+      enqueued: false,
+      state: "pending",
+    });
+
+    const response = await configuredPost()(request({
+      origin: "https://programmable-candidate-abc.vercel.app",
+    }));
+
+    expect(response.status).toBe(202);
+    expect(mocks.acknowledge).toHaveBeenCalledTimes(1);
+    expect(mocks.consumeProviderRetryOnce).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryReceiptId: "20", wakeId: "1" }),
+    );
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the provider retry probe off by default", async () => {
+    vi.stubEnv("VERCEL_URL", "programmable-candidate-abc.vercel.app");
+
+    const response = await configuredPost()(request({
+      origin: "https://programmable-candidate-abc.vercel.app",
+    }));
+
+    expect(response.status).toBe(202);
+    expect(mocks.consumeProviderRetryOnce).not.toHaveBeenCalled();
+  });
+
+  it("never forces the retry through an aliased production origin", async () => {
+    vi.stubEnv("PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE", "true");
+    vi.stubEnv("VERCEL_URL", "programmable-candidate-abc.vercel.app");
+    mocks.consumeProviderRetryOnce.mockResolvedValue(true);
+
+    const response = await configuredPost()(request());
+
+    expect(response.status).toBe(202);
+    expect(mocks.consumeProviderRetryOnce).not.toHaveBeenCalled();
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the acknowledged delivery truthful when the optional retry probe cannot be consumed", async () => {
+    vi.stubEnv("PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE", "true");
+    vi.stubEnv("VERCEL_URL", "programmable-candidate-abc.vercel.app");
+    mocks.consumeProviderRetryOnce.mockRejectedValue(
+      new Error("probe unavailable"),
+    );
+
+    const response = await configuredPost()(request({
+      origin: "https://programmable-candidate-abc.vercel.app",
+    }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ accepted: true });
+    expect(mocks.acknowledge).toHaveBeenCalledTimes(1);
+    expect(mocks.consumeProviderRetryOnce).toHaveBeenCalledTimes(1);
+    expect(mocks.after).toHaveBeenCalledTimes(1);
   });
 
   it("does not schedule work for an invalid signature", async () => {

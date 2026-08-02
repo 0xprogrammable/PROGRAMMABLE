@@ -47,12 +47,14 @@ import {
   isVerifiedDualRpcOptimisticBlock,
   type DualRpcOptimisticBlock,
   type OptimisticManifestLog,
+  type OptimisticProviderHeadObservation,
 } from "./optimistic-block-reader.server";
 import type { OptimisticMarketFields } from "./optimistic-read-overlay.server";
 import { getDataPipelineReleaseBinding } from "./release-binding.server";
 import { assertProductionDualRpcProviders } from "./rpc-providers.server";
 
 const ZERO_ADDRESS = `0x${"00".repeat(20)}` as HexAddress;
+const ZERO_BYTES32 = `0x${"00".repeat(32)}` as HexBytes32;
 export const OPTIMISTIC_MARKET_STATE_VERSION =
   "optimistic-market-state-v1" as const;
 export const OPTIMISTIC_MAINNET_STATE_VIEW =
@@ -167,9 +169,13 @@ export type OptimisticMarketStateResult = Readonly<{
   providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
   providerOriginCommitments: readonly [HexBytes32, HexBytes32];
   providerHeads: readonly [string, string];
-  blockProviderCallCounts: readonly [4, 4];
-  marketProviderCallCounts: readonly [7, 7];
-  totalProviderCallCounts: readonly [11, 11];
+  providerHeadObservations?: readonly [
+    OptimisticProviderHeadObservation,
+    OptimisticProviderHeadObservation,
+  ];
+  blockProviderCallCounts: readonly [number, number];
+  marketProviderCallCounts: readonly [number, number];
+  totalProviderCallCounts: readonly [number, number];
 }>;
 
 type NormalizedValuation = Readonly<{
@@ -190,16 +196,36 @@ type CanonicalEvidence = Readonly<{
   parentHash: HexBytes32;
   timestamp: bigint;
   providerHeads: readonly [bigint, bigint];
+  providerHeadObservations: readonly [
+    OptimisticProviderHeadObservation,
+    OptimisticProviderHeadObservation,
+  ];
+  blockProviderCallCounts: readonly [number, number];
 }>;
 
 type ProviderRead = Readonly<{
   head: bigint;
+  headObservation: OptimisticProviderHeadObservation;
+  rpcCallCount: number;
   runtimeBytecode: HexData;
   slot0Result: HexData;
   liquidityResult: HexData;
 }>;
 
 type DeadlineContext = Readonly<{ deadlineAt: number }>;
+type RpcCallCounter = { value: number };
+
+function recordRpcCalls(counter: RpcCallCounter, count: unknown): void {
+  if (
+    typeof count !== "number" ||
+    !Number.isSafeInteger(count) ||
+    count < 1 ||
+    !Number.isSafeInteger(counter.value + count)
+  ) {
+    throw validationError("rpc", "optimistic-market-call-counts");
+  }
+  counter.value += count;
+}
 
 function validDecimals(value: unknown): value is number {
   return (
@@ -234,6 +260,46 @@ function exactPair<T>(
   expected: readonly [T, T],
 ): boolean {
   return actual[0] === expected[0] && actual[1] === expected[1];
+}
+
+function canonicalHeadObservation(
+  value: unknown,
+  expectedHead: bigint,
+): OptimisticProviderHeadObservation {
+  if (typeof value !== "object" || value === null) {
+    throw validationError("rpc", "optimistic-market-head-observation");
+  }
+  const candidate = value as Record<string, unknown>;
+  let blockNumber: string;
+  let blockHash: HexBytes32;
+  try {
+    blockNumber = parseNonnegativeIntegerText(candidate.blockNumber, 20);
+    blockHash = canonicalBytes32(candidate.blockHash);
+  } catch {
+    throw validationError("rpc", "optimistic-market-head-observation");
+  }
+  if (
+    BigInt(blockNumber) !== expectedHead ||
+    blockHash === ZERO_BYTES32 ||
+    typeof candidate.observedAt !== "string" ||
+    !Number.isFinite(Date.parse(candidate.observedAt)) ||
+    new Date(candidate.observedAt).toISOString() !== candidate.observedAt
+  ) {
+    throw validationError("rpc", "optimistic-market-head-observation");
+  }
+  return Object.freeze({
+    blockNumber,
+    blockHash,
+    observedAt: candidate.observedAt,
+  });
+}
+
+function sameHeightHasSameHash(
+  first: OptimisticProviderHeadObservation,
+  second: OptimisticProviderHeadObservation,
+): boolean {
+  return first.blockNumber !== second.blockNumber ||
+    first.blockHash === second.blockHash;
 }
 
 function normalizedPoolKey(value: OfficialV4PoolKey): OfficialV4PoolKey {
@@ -586,7 +652,6 @@ function normalizeEvidence(
     !Number.isSafeInteger(evidence.confirmations) ||
     evidence.confirmations < 0 ||
     evidence.confirmations >= OPTIMISTIC_CONFIRMATION_LIMIT ||
-    !exactPair(evidence.providerCallCounts, [4, 4]) ||
     !exactPair(evidence.providerIdentities, [
       providers[0].identity,
       providers[1].identity,
@@ -627,6 +692,32 @@ function normalizeEvidence(
       decimalBigInt(head, "optimistic-provider-head", 20)
     ) as [bigint, bigint];
     if (
+      !Array.isArray(evidence.providerHeadObservations) ||
+      evidence.providerHeadObservations.length !== 2
+    ) {
+      throw validationError("rpc", "optimistic-market-head-observation");
+    }
+    const providerHeadObservations = Object.freeze([
+      canonicalHeadObservation(evidence.providerHeadObservations[0], heads[0]),
+      canonicalHeadObservation(evidence.providerHeadObservations[1], heads[1]),
+    ] as const);
+    if (!sameHeightHasSameHash(
+      providerHeadObservations[0],
+      providerHeadObservations[1],
+    )) {
+      throw validationError("rpc", "optimistic-market-provider-head-mismatch");
+    }
+    const blockProviderCallCounts = evidence.providerCallCounts as unknown;
+    if (
+      !Array.isArray(blockProviderCallCounts) ||
+      blockProviderCallCounts.length !== 2 ||
+      blockProviderCallCounts.some((count, providerIndex) =>
+        !Number.isSafeInteger(count) ||
+        count !== (heads[providerIndex] === blockNumber ? 4 : 5))
+    ) {
+      throw validationError("rpc", "optimistic-market-block-call-counts");
+    }
+    if (
       heads[0] < blockNumber ||
       heads[1] < blockNumber ||
       Number((heads[0] < heads[1] ? heads[0] : heads[1]) - blockNumber) !==
@@ -641,6 +732,11 @@ function normalizeEvidence(
       parentHash,
       timestamp,
       providerHeads: Object.freeze([heads[0], heads[1]] as const),
+      providerHeadObservations,
+      blockProviderCallCounts: Object.freeze([
+        blockProviderCallCounts[0] as number,
+        blockProviderCallCounts[1] as number,
+      ] as const),
     });
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;
@@ -677,6 +773,8 @@ function canonicalProviderState(
     poolId: HexBytes32;
     evidence: CanonicalEvidence;
     head: bigint;
+    headObservation: OptimisticProviderHeadObservation;
+    rpcCallCount: number;
   }>,
 ): ProviderRead {
   let stateView: HexAddress;
@@ -711,9 +809,66 @@ function canonicalProviderState(
   }
   return Object.freeze({
     head: input.head,
+    headObservation: input.headObservation,
+    rpcCallCount: input.rpcCallCount,
     runtimeBytecode,
     slot0Result,
     liquidityResult,
+  });
+}
+
+function monotonicTimestamp(): string {
+  return new Date(performance.timeOrigin + performance.now()).toISOString();
+}
+
+async function exactMarketHeaders(input: Readonly<{
+  provider: CandidateRpcProvider;
+  evidence: CanonicalEvidence;
+  head: bigint;
+  rpcCallCounter: RpcCallCounter;
+}>): Promise<Readonly<{
+  target: CandidateRpcBlock;
+  headObservation: OptimisticProviderHeadObservation;
+}>> {
+  const blockNumbers = input.head === input.evidence.blockNumber
+    ? [input.evidence.blockNumber]
+    : [input.evidence.blockNumber, input.head];
+  let headers: readonly CandidateRpcBlock[];
+  if (input.provider.client.getBlocks) {
+    recordRpcCalls(input.rpcCallCounter, blockNumbers.length);
+    headers = await input.provider.client.getBlocks({ blockNumbers });
+  } else if (input.head === input.evidence.blockNumber) {
+    recordRpcCalls(input.rpcCallCounter, 1);
+    headers = [await input.provider.client.getBlock({
+      blockNumber: input.evidence.blockNumber,
+    })];
+  } else {
+    throw invalidInput("rpc", "optimistic-market-head-header-port");
+  }
+  if (headers.length !== blockNumbers.length) {
+    throw validationError("rpc", "optimistic-market-head-header-count");
+  }
+  const target = headers[0]!;
+  assertHeader(target, input.evidence);
+  const headHeader = input.head === input.evidence.blockNumber
+    ? target
+    : headers[1]!;
+  let headHash: HexBytes32;
+  try {
+    headHash = canonicalBytes32(headHeader.hash);
+  } catch {
+    throw validationError("rpc", "optimistic-market-head-header");
+  }
+  if (headHeader.number !== input.head || headHash === ZERO_BYTES32) {
+    throw validationError("rpc", "optimistic-market-head-header");
+  }
+  return Object.freeze({
+    target,
+    headObservation: Object.freeze({
+      blockNumber: input.head.toString(),
+      blockHash: headHash,
+      observedAt: monotonicTimestamp(),
+    }),
   });
 }
 
@@ -726,19 +881,24 @@ async function readProviderState(input: Readonly<{
 }>): Promise<ProviderRead> {
   const readState = input.provider.client.readOptimisticPoolState;
   if (!readState) throw invalidInput("rpc", "optimistic-market-state-port");
+  const rpcCallCounter: RpcCallCounter = { value: 0 };
 
   assertWithinDeadline(input.deadline);
-  const [chainId, head, before] = await Promise.all([
-    input.provider.client.getChainId(),
-    input.provider.client.getBlockNumber(),
-    input.provider.client.getBlock({
-      blockNumber: input.evidence.blockNumber,
-    }),
-  ]);
+  recordRpcCalls(rpcCallCounter, 1);
+  const chainIdPromise = input.provider.client.getChainId();
+  recordRpcCalls(rpcCallCounter, 1);
+  const headPromise = input.provider.client.getBlockNumber();
+  const [chainId, head] = await Promise.all([chainIdPromise, headPromise]);
   if (chainId !== 1 || typeof head !== "bigint" || head < input.evidence.blockNumber) {
     throw validationError("rpc", "optimistic-market-head");
   }
-  assertHeader(before, input.evidence);
+  const before = await exactMarketHeaders({
+    provider: input.provider,
+    evidence: input.evidence,
+    head,
+    rpcCallCounter,
+  });
+  assertHeader(before.target, input.evidence);
   assertWithinDeadline(input.deadline);
   const raw = await readState({
     stateView: input.stateView,
@@ -747,13 +907,24 @@ async function readProviderState(input: Readonly<{
     blockHash: input.evidence.blockHash,
     requireCanonical: true,
   });
+  recordRpcCalls(rpcCallCounter, raw.rpcCallCount);
   assertWithinDeadline(input.deadline);
+  recordRpcCalls(rpcCallCounter, 1);
   const after = await input.provider.client.getBlock({
     blockNumber: input.evidence.blockNumber,
   });
   assertHeader(after, input.evidence);
   assertWithinDeadline(input.deadline);
-  return canonicalProviderState(raw, { ...input, head });
+  const expectedRpcCallCount = head === input.evidence.blockNumber ? 7 : 8;
+  if (rpcCallCounter.value !== expectedRpcCallCount) {
+    throw validationError("rpc", "optimistic-market-call-counts");
+  }
+  return canonicalProviderState(raw, {
+    ...input,
+    head,
+    headObservation: before.headObservation,
+    rpcCallCount: rpcCallCounter.value,
+  });
 }
 
 function deadlineMs(value: unknown): number {
@@ -926,6 +1097,13 @@ export function computeOptimisticMarketStateCommitments(input: Readonly<{
   providerEndpointCommitments: readonly [HexBytes32, HexBytes32];
   providerOriginCommitments: readonly [HexBytes32, HexBytes32];
   providerHeads: readonly [string, string];
+  providerHeadObservations?: readonly [
+    OptimisticProviderHeadObservation,
+    OptimisticProviderHeadObservation,
+  ];
+  blockProviderCallCounts: readonly [number, number];
+  marketProviderCallCounts: readonly [number, number];
+  totalProviderCallCounts: readonly [number, number];
   confirmations: number;
 }>): Readonly<{
   marketCommitment: HexBytes32;
@@ -952,9 +1130,9 @@ export function computeOptimisticMarketStateCommitments(input: Readonly<{
     providerEndpointCommitments: input.providerEndpointCommitments,
     providerOriginCommitments: input.providerOriginCommitments,
     providerHeads: input.providerHeads,
-    blockProviderCallCounts: [4, 4],
-    marketProviderCallCounts: [7, 7],
-    totalProviderCallCounts: [11, 11],
+    blockProviderCallCounts: input.blockProviderCallCounts,
+    marketProviderCallCounts: input.marketProviderCallCounts,
+    totalProviderCallCounts: input.totalProviderCallCounts,
     confirmations: input.confirmations,
   })));
   return Object.freeze({ marketCommitment, evidenceCommitment });
@@ -1032,10 +1210,43 @@ export async function readOptimisticMarketState(input: Readonly<{
     ) {
       throw validationError("rpc", "optimistic-market-confirmations");
     }
+    if (
+      reads[0].head === reads[1].head &&
+      reads[0].headObservation.blockHash !==
+        reads[1].headObservation.blockHash
+    ) {
+      throw validationError("rpc", "optimistic-market-provider-head-mismatch");
+    }
+    for (const blockObservation of evidence.providerHeadObservations) {
+      for (const marketObservation of [
+        reads[0].headObservation,
+        reads[1].headObservation,
+      ]) {
+        if (!sameHeightHasSameHash(blockObservation, marketObservation)) {
+          throw validationError(
+            "rpc",
+            "optimistic-market-provider-head-mismatch",
+          );
+        }
+      }
+    }
     const providerHeads = [
       reads[0].head.toString(),
       reads[1].head.toString(),
     ] as const;
+    const providerHeadObservations = Object.freeze([
+      reads[0].headObservation,
+      reads[1].headObservation,
+    ] as const);
+    const blockProviderCallCounts = evidence.blockProviderCallCounts;
+    const marketProviderCallCounts = Object.freeze([
+      reads[0].rpcCallCount,
+      reads[1].rpcCallCount,
+    ] as const);
+    const totalProviderCallCounts = Object.freeze([
+      blockProviderCallCounts[0] + marketProviderCallCounts[0],
+      blockProviderCallCounts[1] + marketProviderCallCounts[1],
+    ] as const);
     const commitments = computeOptimisticMarketStateCommitments({
       blockNumber: evidence.blockNumberText,
       blockHash: evidence.blockHash,
@@ -1050,6 +1261,10 @@ export async function readOptimisticMarketState(input: Readonly<{
         input.evidence.providerEndpointCommitments,
       providerOriginCommitments: input.evidence.providerOriginCommitments,
       providerHeads,
+      providerHeadObservations,
+      blockProviderCallCounts,
+      marketProviderCallCounts,
+      totalProviderCallCounts,
       confirmations: Number(confirmations),
     });
     return Object.freeze({
@@ -1073,9 +1288,10 @@ export async function readOptimisticMarketState(input: Readonly<{
         input.evidence.providerEndpointCommitments,
       providerOriginCommitments: input.evidence.providerOriginCommitments,
       providerHeads,
-      blockProviderCallCounts: [4, 4] as const,
-      marketProviderCallCounts: [7, 7] as const,
-      totalProviderCallCounts: [11, 11] as const,
+      providerHeadObservations,
+      blockProviderCallCounts,
+      marketProviderCallCounts,
+      totalProviderCallCounts,
     });
   } catch (error) {
     if (error instanceof DataPipelineError) throw error;
