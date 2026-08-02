@@ -60,4 +60,30 @@ describe("interaction state regressions", () => {
     expect(detailSource).toContain('<p className="toast" role="alert">');
     expect(exploreSource).not.toContain("Copy contract address");
   });
+
+  it("keeps Explore project-first and removes the repeated footer slogan", () => {
+    const exploreSource = readFileSync(
+      join(root, "components/explore-view.tsx"),
+      "utf8",
+    );
+    const footerSource = readFileSync(
+      join(root, "components/site-footer.tsx"),
+      "utf8",
+    );
+    const exploreStyles = readFileSync(
+      join(root, "components/explore-experience.module.css"),
+      "utf8",
+    );
+
+    expect(exploreSource).not.toContain("All tokens");
+    expect(exploreSource).not.toContain("V4 model");
+    expect(exploreSource).not.toContain("<dt>Market cap</dt>");
+    expect(exploreSource).not.toContain("runnerMeta");
+    expect(footerSource).not.toContain(
+      "Launch tokens that work the way you imagine.",
+    );
+    expect(exploreStyles).toMatch(
+      /\.page\s*\{[^}]*display:\s*block;[^}]*height:\s*auto;[^}]*overflow:\s*visible;/s,
+    );
+  });
 });

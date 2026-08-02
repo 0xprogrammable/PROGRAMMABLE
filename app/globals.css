@@ -1,3 +1,93 @@
+@property --body-background {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f7f8fa;
+}
+
+@property --surface {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f3f5f7;
+}
+
+@property --surface-raised {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+
+@property --surface-soft {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #eceff2;
+}
+
+@property --border {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e0e4e8;
+}
+
+@property --border-strong {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #c7cdd4;
+}
+
+@property --text {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #15191f;
+}
+
+@property --text-soft {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #454d57;
+}
+
+@property --muted {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #68727e;
+}
+
+@property --dim {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #75808c;
+}
+
+@property --header-background {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgba(255, 255, 255, 0.86);
+}
+
+@property --header-border {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgba(207, 213, 220, 0.72);
+}
+
+@property --brand-pink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #657487;
+}
+
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #465a6f;
+}
+
+@property --accent-strong {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #304256;
+}
+
 :root {
   --canvas: #f9fafb;
   --surface: #f3f5f7;
@@ -133,6 +223,24 @@ html {
   color-scheme: light;
   min-width: 320px;
   scroll-padding-top: calc(var(--header-height) + 20px);
+  transition-duration: 220ms;
+  transition-property:
+    --body-background,
+    --surface,
+    --surface-raised,
+    --surface-soft,
+    --border,
+    --border-strong,
+    --text,
+    --text-soft,
+    --muted,
+    --dim,
+    --header-background,
+    --header-border,
+    --brand-pink,
+    --accent,
+    --accent-strong;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html[data-theme="dark"] {
@@ -153,9 +261,6 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition:
-    background-color 180ms ease,
-    color 180ms ease;
 }
 
 button,
@@ -422,29 +527,30 @@ html[data-theme="dark"] .app-frame::before {
   left: 0;
   position: absolute;
   top: 0;
+  transform-origin: center;
   transition:
-    opacity 170ms ease,
-    transform 190ms var(--ease-out);
+    opacity 160ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .theme-toggle-moon {
   opacity: 1;
-  transform: rotate(0deg) scale(1);
+  transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
 }
 
 .theme-toggle-sun {
   opacity: 0;
-  transform: rotate(-28deg) scale(0.82);
+  transform: translate3d(0, 3px, 0) rotate(-42deg) scale(0.72);
 }
 
-html[data-theme="dark"] .theme-toggle-moon {
+.theme-toggle[data-theme="dark"] .theme-toggle-moon {
   opacity: 0;
-  transform: rotate(24deg) scale(0.82);
+  transform: translate3d(0, -3px, 0) rotate(38deg) scale(0.72);
 }
 
-html[data-theme="dark"] .theme-toggle-sun {
+.theme-toggle[data-theme="dark"] .theme-toggle-sun {
   opacity: 1;
-  transform: rotate(0deg) scale(1);
+  transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
 }
 
 .desktop-nav {

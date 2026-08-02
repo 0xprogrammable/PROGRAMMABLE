@@ -18,7 +18,7 @@ export const docsNavigation = [
     label: "Launch models",
     items: [
       { href: "/docs/models/classic", label: "Classic" },
-      { href: "/docs/models/custom", label: "Custom" },
+      { href: "/docs/models/custom", label: "Custom Hook" },
     ],
   },
   {
@@ -61,7 +61,7 @@ export const docsSearchItems: DocsSearchItem[] = [
     href: "/docs/models/classic",
   },
   {
-    title: "Custom",
+    title: "Custom Hook",
     description:
       "Product boundary and release requirements for custom launches.",
     href: "/docs/models/custom",

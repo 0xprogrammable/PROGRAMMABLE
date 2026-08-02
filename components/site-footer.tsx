@@ -50,7 +50,6 @@ export function SiteFooter() {
               sizes="34px"
             />
           </Link>
-          <p>Launch tokens that work the way you imagine.</p>
         </section>
 
         <nav className={styles.column} aria-label="Product">

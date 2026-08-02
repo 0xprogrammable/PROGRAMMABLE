@@ -169,8 +169,12 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain('data-launch-model-option="classic"');
     expect(html).toContain("<strong>Classic</strong>");
     expect(html).toContain('data-launch-model-option="custom"');
-    expect(html).toContain('id="launch-model-custom-title">Custom</strong>');
-    expect(html).toContain("Custom launch configuration is not available");
+    expect(html).toContain(
+      'id="launch-model-custom-title">Custom Hook</strong>',
+    );
+    expect(html).toContain(
+      "Custom Hook configuration is not available",
+    );
     expect(html).not.toContain("launch-model-classic-details");
     expect(html).not.toContain('data-launch-model-option="stock-paired"');
     expect(html).not.toContain("<strong>Stock-Paired</strong>");

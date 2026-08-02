@@ -1,19 +1,18 @@
 .footer {
   margin-bottom: 30px;
-  margin-top: 68px;
+  margin-top: 56px;
 }
 
 .surface {
   background: transparent;
   border: 0;
-  border-top: 1px solid var(--border);
   border-radius: 0;
   box-shadow: none;
   display: grid;
   gap: 0 44px;
-  grid-template-columns: minmax(230px, 1.3fr) 0.7fr 0.8fr minmax(260px, 1.25fr);
+  grid-template-columns: minmax(120px, 0.65fr) 0.7fr 0.8fr minmax(300px, 1.45fr);
   overflow: visible;
-  padding: 34px 0;
+  padding: 38px 0 34px;
 }
 
 .brand {
@@ -29,10 +28,9 @@
   width: 34px;
 }
 
-.brand p,
 .risk p {
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.58;
   max-width: 310px;
 }
@@ -64,7 +62,7 @@
   border-radius: 8px;
   color: var(--text-soft);
   display: inline-flex;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 560;
   min-height: 31px;
   transition:
@@ -127,13 +125,12 @@
 @media (max-width: 980px) {
   .surface {
     gap: 30px 36px;
-    grid-template-columns: minmax(240px, 1.2fr) 0.8fr 0.8fr;
+    grid-template-columns: minmax(150px, 0.8fr) 0.8fr 0.8fr;
   }
 
   .risk {
-    border-top: 1px solid var(--panel-border-soft);
     grid-column: 1 / -1;
-    padding-top: 24px;
+    padding-top: 10px;
   }
 
   .risk p {
@@ -144,7 +141,7 @@
 @media (max-width: 680px) {
   .footer {
     margin-bottom: 92px;
-    margin-top: 34px;
+    margin-top: 48px;
   }
 
   .surface {
@@ -157,10 +154,6 @@
   .brand,
   .risk {
     grid-column: 1 / -1;
-  }
-
-  .brand p {
-    max-width: 430px;
   }
 
   .riskMeta {

@@ -75,6 +75,7 @@ function ThemeToggle() {
       aria-label={
         theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
       }
+      data-theme={theme}
       title={theme === "dark" ? "Light mode" : "Dark mode"}
       onClick={toggleTheme}
     >

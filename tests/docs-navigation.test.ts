@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   calculateDocsReadingOffset,
   docsNavigateEvent,
+  easeDocsScroll,
+  getDocsScrollDuration,
   isDocsNavigationItemActive,
   normalizeDocsHash,
   pickActiveDocsSection,
@@ -140,6 +142,15 @@ describe("Docs navigation state", () => {
     ).toBe(154);
   });
 
+  it("keeps topic scrolling short, smooth and distance-aware", () => {
+    expect(getDocsScrollDuration(0)).toBe(180);
+    expect(getDocsScrollDuration(800)).toBe(230);
+    expect(getDocsScrollDuration(10_000)).toBe(280);
+    expect(easeDocsScroll(0)).toBe(0);
+    expect(easeDocsScroll(0.5)).toBe(0.5);
+    expect(easeDocsScroll(1)).toBe(1);
+  });
+
   it("assigns recognizable provider icons to documentation links", () => {
     expect(getDocsExternalLinkProvider("https://github.com/openai/codex")).toBe(
       "GitHub",
@@ -210,14 +221,14 @@ describe("Docs navigation state", () => {
     expect(getDocsSearchResults("")).toEqual([]);
   });
 
-  it("keeps hidden models out of search and exposes Custom documentation", () => {
+  it("keeps hidden models out of search and exposes Custom Hook documentation", () => {
     const deepResults = getDocsSearchResults("deep");
     const stockResults = getDocsSearchResults("stock");
     const customResults = getDocsSearchResults("custom");
 
     expect(deepResults).toEqual([]);
     expect(stockResults).toEqual([]);
-    expect(customResults[0]?.title).toBe("Custom");
+    expect(customResults[0]?.title).toBe("Custom Hook");
     expect(customResults[0]?.description).toContain("release requirements");
   });
 

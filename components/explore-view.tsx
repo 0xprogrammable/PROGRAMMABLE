@@ -12,10 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  formatMarketCapMetric,
-  type MarketCapMetric,
-} from "@/components/animated-market-cap";
+import { type MarketCapMetric } from "@/components/animated-market-cap";
 import { EXPLORE_PREVIEW_TOKENS } from "@/components/explore-preview-data";
 import { useInterfacePreview } from "@/components/interface-preview";
 import { SiteFooter } from "@/components/site-footer";
@@ -42,8 +39,6 @@ type TokenCard = {
   imageUrl: string;
   usesFallbackImage: boolean;
   tokenAddress: `0x${string}`;
-  marketCap?: MarketCapMetric;
-  model: string;
 };
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -409,15 +404,6 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
       token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress),
     usesFallbackImage: !token.imageUrl?.trim(),
     tokenAddress: token.tokenAddress,
-    marketCap: getMarketCap(token),
-    model:
-      token.launchModel === "adaptive"
-        ? "Adaptive"
-        : token.launchModel === "deep"
-          ? "Deep"
-          : token.launchModel === "stock-paired"
-            ? "Custom"
-            : "Classic",
   }));
 }
 
@@ -708,21 +694,6 @@ export function ExploreView() {
                   >
                     {token.description ?? "No description yet."}
                   </p>
-
-                  <dl className={styles.runnerMeta}>
-                    <div>
-                      <dt>Market cap</dt>
-                      <dd>
-                        {token.marketCap
-                          ? formatMarketCapMetric(token.marketCap)
-                          : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>V4 model</dt>
-                      <dd>{token.model}</dd>
-                    </div>
-                  </dl>
                 </div>
               </Link>
             </article>
@@ -745,15 +716,6 @@ export function ExploreView() {
           id="tokens"
           aria-busy={busy}
         >
-          <header className={styles.indexHeading}>
-            <h2>All tokens</h2>
-            {payload ? (
-              <span>
-                {payload.total} {payload.total === 1 ? "project" : "projects"}
-              </span>
-            ) : null}
-          </header>
-
           <div className={styles.runnersIntro}>
             {hasPublicTokens ? (
               <div className="token-section-heading">

@@ -48,7 +48,7 @@ const modelMetadata: Record<
       "Configure buy and sell fees, creator rewards and Initial Buy custody for a fixed-supply Uniswap v4 token.",
   },
   custom: {
-    title: "Custom",
+    title: "Custom Hook",
     description:
       "Product boundary and release requirements for custom launch configuration.",
   },
@@ -381,22 +381,23 @@ function CustomDocs() {
   return (
     <DocsShell
       currentPath="/docs/models/custom"
-      title="Custom"
-      description="Custom launch configuration is not available in this build."
+      title="Custom Hook"
+      description="Custom Hook configuration is not available in this build."
       sections={customSections}
     >
       <section id="status">
         <h2>Status</h2>
         <p className={styles.lead}>
-          The Create page reserves a place for Custom, but there is no public
-          transaction path for it. The interface does not prepare, simulate or
-          submit a Custom launch.
+          The Create page reserves a place for Custom Hook, but there is no
+          public transaction path for it. The interface does not prepare,
+          simulate or submit a Custom Hook launch.
         </p>
         <div className={styles.callout}>
-          <strong>Custom is not live.</strong>
+          <strong>Custom Hook is not live.</strong>
           <p>
-            A Custom option becomes actionable only after its configuration,
-            contracts and release evidence are defined and verified.
+            A Custom Hook option becomes actionable only after its
+            configuration, contracts and release evidence are defined and
+            verified.
           </p>
         </div>
       </section>
@@ -415,10 +416,10 @@ function CustomDocs() {
       <section id="project-presentation">
         <h2>Project presentation</h2>
         <p>
-          A released Custom token would use the same square artwork, project
-          description, links, dedicated token page and community surface as
-          other tokens. Those presentation fields do not make an unreleased
-          transaction path available.
+          A released Custom Hook token would use the same square artwork,
+          project description, links, dedicated token page and community
+          surface as other tokens. Those presentation fields do not make an
+          unreleased transaction path available.
         </p>
       </section>
     </DocsShell>

@@ -11,7 +11,7 @@ import { DocsSearch } from "@/components/docs-search";
 const docsGuides = [
   { href: "/docs", label: "Platform" },
   { href: "/docs/models/classic", label: "Classic" },
-  { href: "/docs/models/custom", label: "Custom" },
+  { href: "/docs/models/custom", label: "Custom Hook" },
 ] as const;
 
 export function DocsShell({

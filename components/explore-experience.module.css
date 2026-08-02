@@ -1,4 +1,6 @@
 .page {
+  display: block;
+  height: auto;
   min-height: calc(100svh - var(--header-height));
   overflow: visible;
   padding-bottom: 0;
@@ -43,7 +45,7 @@
 }
 
 .runnersSection {
-  padding: 24px 0 64px;
+  padding: 4px 0 88px;
   position: relative;
 }
 
@@ -51,36 +53,10 @@
   content: none;
 }
 
-.indexHeading {
-  align-items: baseline;
-  display: flex;
-  justify-content: space-between;
-  margin: 0 auto 20px;
-  max-width: 1180px;
-  width: 100%;
-}
-
-.indexHeading h2 {
-  color: var(--text);
-  font-size: clamp(26px, 2.4vw, 34px);
-  font-weight: 585;
-  letter-spacing: -0.028em;
-  line-height: 1.06;
-  margin: 0;
-}
-
-.indexHeading span {
-  color: var(--muted);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.035em;
-}
-
 .runnersIntro {
   display: flex;
   justify-content: center;
-  margin: 0 auto 30px;
+  margin: 0 auto 34px;
   max-width: 900px;
   width: 100%;
 }
@@ -104,9 +80,9 @@
 
 .runnerGrid {
   display: grid;
-  gap: clamp(48px, 5vw, 72px) clamp(18px, 2.2vw, 30px);
+  gap: clamp(52px, 5vw, 76px) clamp(20px, 2.4vw, 32px);
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0 auto 46px;
+  margin: 0 auto;
   max-width: 1180px;
   transition: opacity 120ms ease-out;
 }
@@ -189,19 +165,20 @@
   color: var(--muted);
   flex: none;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
-  letter-spacing: 0.04em;
-  line-height: 1.2;
+  letter-spacing: 0.025em;
+  line-height: 1.3;
 }
 
 .runnerDescription {
   color: var(--text-soft);
   display: -webkit-box;
-  font-size: 14px;
-  line-height: 1.55;
-  margin: 13px 0 0;
-  min-height: 43px;
+  font-size: 16px;
+  letter-spacing: -0.004em;
+  line-height: 1.56;
+  margin: 12px 0 0;
+  min-height: 50px;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -209,35 +186,6 @@
 
 .runnerDescriptionEmpty {
   color: var(--muted);
-}
-
-.runnerMeta {
-  border-top: 1px solid var(--border);
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 18px 0 0;
-  padding: 14px 0 0;
-}
-
-.runnerMeta div {
-  display: grid;
-  gap: 4px;
-}
-
-.runnerMeta dt {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.runnerMeta dd {
-  color: var(--text);
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.3;
-  margin: 0;
 }
 
 .emptyState {
@@ -362,11 +310,7 @@
   }
 
   .runnersSection {
-    padding-top: 20px;
-  }
-
-  .indexHeading {
-    margin-bottom: 18px;
+    padding: 0 0 72px;
   }
 
   .runnersIntro {
@@ -388,7 +332,7 @@
   }
 
   .runnerGrid {
-    gap: 48px;
+    gap: 56px;
     grid-template-columns: 1fr;
   }
 
@@ -406,6 +350,14 @@
 
   .runnerHeading h3 {
     font-size: clamp(27px, 8vw, 34px);
+  }
+
+  .runnerSymbol {
+    font-size: 13px;
+  }
+
+  .runnerDescription {
+    font-size: 16px;
   }
 
   .emptyState {

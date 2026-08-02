@@ -150,6 +150,18 @@ export function calculateDocsReadingOffset({
   );
 }
 
+export function easeDocsScroll(progress: number): number {
+  const value = Math.min(1, Math.max(0, progress));
+  return value < 0.5
+    ? 4 * value * value * value
+    : 1 - Math.pow(-2 * value + 2, 3) / 2;
+}
+
+export function getDocsScrollDuration(distance: number): number {
+  const safeDistance = Number.isFinite(distance) ? Math.abs(distance) : 0;
+  return Math.round(180 + (Math.min(safeDistance, 1600) / 1600) * 100);
+}
+
 function hasModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
   return (
     event.button !== 0 ||
@@ -167,10 +179,8 @@ function focusDocsSection(section: HTMLElement) {
   heading.focus({ preventScroll: true });
 }
 
-function getDocsScrollBehavior(): ScrollBehavior {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ? "auto"
-    : "smooth";
+function shouldAnimateDocsScroll() {
+  return !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 function getDocsScrollOffset(
@@ -204,17 +214,16 @@ function getDocsScrollOffset(
   });
 }
 
-function scrollToDocsSection(
+function getDocsSectionTop(
   section: HTMLElement,
   mobileNavigation: HTMLDetailsElement | null,
-  behavior: ScrollBehavior,
 ) {
-  const top =
+  return Math.max(
+    0,
     section.getBoundingClientRect().top +
-    window.scrollY -
-    getDocsScrollOffset(mobileNavigation);
-  window.scrollTo({ behavior, top: Math.max(0, top) });
-  focusDocsSection(section);
+      window.scrollY -
+      getDocsScrollOffset(mobileNavigation),
+  );
 }
 
 export function DocsNavigation({
@@ -227,6 +236,7 @@ export function DocsNavigation({
   const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
   const desktopNavigationRef = useRef<HTMLElement>(null);
   const locationInitializedRef = useRef(false);
+  const scrollAnimationFrameRef = useRef<number | null>(null);
   const [chapterIndicator, setChapterIndicator] =
     useState<ChapterIndicator | null>(null);
   const trackedSectionIds = useMemo(
@@ -264,8 +274,81 @@ export function DocsNavigation({
     }
   }
 
+  const cancelDocsScroll = useCallback(() => {
+    if (scrollAnimationFrameRef.current === null) return;
+    window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+    scrollAnimationFrameRef.current = null;
+  }, []);
+
+  const scrollToDocsSection = useCallback(
+    (
+      section: HTMLElement,
+      animate: boolean,
+      onComplete?: () => void,
+    ) => {
+      cancelDocsScroll();
+      const targetY = getDocsSectionTop(
+        section,
+        mobileNavigationRef.current,
+      );
+      const startY = window.scrollY;
+      const distance = targetY - startY;
+
+      const complete = () => {
+        scrollAnimationFrameRef.current = null;
+        focusDocsSection(section);
+        onComplete?.();
+      };
+
+      if (!animate || Math.abs(distance) < 2) {
+        window.scrollTo({ behavior: "auto", top: targetY });
+        complete();
+        return;
+      }
+
+      const duration = getDocsScrollDuration(distance);
+      const startedAt = window.performance.now();
+      const update = (now: number) => {
+        const progress = Math.min(1, (now - startedAt) / duration);
+        window.scrollTo({
+          behavior: "auto",
+          top: startY + distance * easeDocsScroll(progress),
+        });
+
+        if (progress < 1) {
+          scrollAnimationFrameRef.current = window.requestAnimationFrame(update);
+          return;
+        }
+        complete();
+      };
+
+      scrollAnimationFrameRef.current = window.requestAnimationFrame(update);
+    },
+    [cancelDocsScroll],
+  );
+
+  useEffect(() => {
+    const cancelOnUserIntent = () => cancelDocsScroll();
+    window.addEventListener("wheel", cancelOnUserIntent, { passive: true });
+    window.addEventListener("touchstart", cancelOnUserIntent, {
+      passive: true,
+    });
+    window.addEventListener("pointerdown", cancelOnUserIntent, {
+      passive: true,
+    });
+    window.addEventListener("keydown", cancelOnUserIntent);
+
+    return () => {
+      cancelDocsScroll();
+      window.removeEventListener("wheel", cancelOnUserIntent);
+      window.removeEventListener("touchstart", cancelOnUserIntent);
+      window.removeEventListener("pointerdown", cancelOnUserIntent);
+      window.removeEventListener("keydown", cancelOnUserIntent);
+    };
+  }, [cancelDocsScroll]);
+
   const navigateToDocsTopic = useCallback(
-    (itemHref: string) => {
+    (itemHref: string, animate = true) => {
       const [itemPath, itemHash] = itemHref.split("#");
       const isSamePageTopic =
         itemPath === currentPath &&
@@ -279,8 +362,6 @@ export function DocsNavigation({
       if (window.location.pathname + window.location.hash !== itemHref) {
         window.history.pushState(null, "", itemHref);
       }
-      setActiveSectionHref(itemHref);
-
       const mobileNavigationWasOpen =
         mobileNavigationRef.current?.open === true;
       if (mobileNavigationRef.current) {
@@ -290,8 +371,8 @@ export function DocsNavigation({
       const scrollToSection = () => {
         scrollToDocsSection(
           section,
-          mobileNavigationRef.current,
-          getDocsScrollBehavior(),
+          animate && shouldAnimateDocsScroll(),
+          () => setActiveSectionHref(itemHref),
         );
       };
 
@@ -302,7 +383,7 @@ export function DocsNavigation({
       }
       return true;
     },
-    [currentPath, trackedSectionIdSet],
+    [currentPath, scrollToDocsSection, trackedSectionIdSet],
   );
 
   const measureChapterIndicator = useCallback(() => {
@@ -423,24 +504,23 @@ export function DocsNavigation({
       if (window.location.hash && currentHref !== target.href) {
         window.history.replaceState(window.history.state, "", target.href);
       }
-      setActiveSectionHref(target.href);
       const section = document.getElementById(target.sectionId);
       if (section && target.shouldScroll) {
-        const behavior = locationInitializedRef.current
-          ? getDocsScrollBehavior()
-          : "auto";
+        const animate =
+          locationInitializedRef.current && shouldAnimateDocsScroll();
         locationInitializedRef.current = true;
         if (locationFrame) window.cancelAnimationFrame(locationFrame);
         locationFrame = window.requestAnimationFrame(() => {
           locationFrame = 0;
           scrollToDocsSection(
             section,
-            mobileNavigationRef.current,
-            behavior,
+            animate,
+            () => setActiveSectionHref(target.href),
           );
           scheduleLayoutMeasurement();
         });
       } else {
+        setActiveSectionHref(target.href);
         locationInitializedRef.current = true;
         scheduleLayoutMeasurement();
       }
@@ -461,7 +541,7 @@ export function DocsNavigation({
       window.removeEventListener("resize", scheduleLayoutMeasurement);
       window.removeEventListener("scroll", scheduleScrollUpdate);
     };
-  }, [currentPath, trackedSectionIds]);
+  }, [currentPath, scrollToDocsSection, trackedSectionIds]);
 
   useEffect(() => {
     const handleDocsNavigationRequest = (event: Event) => {
@@ -490,7 +570,7 @@ export function DocsNavigation({
 
     if (isSamePageTopic) {
       event.preventDefault();
-      navigateToDocsTopic(itemHref);
+      navigateToDocsTopic(itemHref, event.detail > 0);
     } else if (mobileNavigationRef.current?.open) {
       mobileNavigationRef.current.open = false;
     }

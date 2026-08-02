@@ -41,7 +41,10 @@ export default function DocsPage() {
         </p>
         <div className={styles.callout}>
           <strong>Classic is available for new launches.</strong>
-          <p>Custom is documented as a product boundary but is not available in this build.</p>
+          <p>
+            Custom Hook is documented as a product boundary but is not
+            available in this build.
+          </p>
         </div>
       </section>
 

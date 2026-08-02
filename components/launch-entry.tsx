@@ -196,14 +196,14 @@ export function LaunchModelPicker({
             <span
               className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
-              <strong id="launch-model-custom-title">Custom</strong>
+              <strong id="launch-model-custom-title">Custom Hook</strong>
               <small data-status="pending">In development</small>
             </span>
             <span
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-custom-description"
             >
-              Custom launch configuration is not available in this build.
+              Custom Hook configuration is not available in this build.
             </span>
             <span
               className={`launch-model-action ${launchExperience.modelAction} ${launchExperience.customStatus}`}
