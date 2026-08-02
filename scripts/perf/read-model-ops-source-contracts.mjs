@@ -414,7 +414,10 @@ function exactFalseEnvironmentKey(source, name) {
 
 const EXACT_MANUAL_VERCEL_PROMOTION =
   'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"';
+const EXACT_REAL_BLOCK_SLA_OUTPUT =
+  "/secure/cutover/real-block-sla-db-attestation.json";
 const MANUAL_PROMOTION_SEQUENCE = Object.freeze([
+  "npm run perf:read-model:real-block-sla-operator --",
   "npm run perf:read-model:real-block-sla --",
   "npm run perf:read-model:staged-deployment --",
   EXACT_MANUAL_VERCEL_PROMOTION,
@@ -850,6 +853,9 @@ export function evaluateReadModelOperationsSourceContracts(
   const deployPolicy = source("scripts/perf/read-model-deploy-policy.mjs") ?? "";
   const wakeCanary = source(approvedTrigger.canary.path) ?? "";
   const environmentExample = source(".env.example") ?? "";
+  const realBlockSlaOperator = source(
+    "scripts/perf/read-model-real-block-sla-operator.mjs",
+  ) ?? "";
   const postPromotion = source("scripts/perf/read-model-post-promotion.mjs") ?? "";
   const productionBinding = source(
     "scripts/perf/read-model-production-binding.mjs",
@@ -870,6 +876,44 @@ export function evaluateReadModelOperationsSourceContracts(
     packageJson?.scripts?.["perf:read-model:real-block-sla"] ===
       `node ${approvedRealBlockSla.script.path}`,
     "the immutable real-block SLA verifier has one reviewed operator command",
+  );
+  check(
+    "ops-real-block-sla-operator-binding",
+    packageJson?.scripts?.["perf:read-model:real-block-sla-operator"] ===
+      "node scripts/perf/read-model-real-block-sla-operator.mjs" &&
+      realBlockSlaOperator.includes(
+        "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 5 * 60 * 1_000",
+      ) &&
+      realBlockSlaOperator.includes('body: { armId, challenge }') &&
+      realBlockSlaOperator.includes('open(absolutePath, "wx", 0o600)') &&
+      realBlockSlaOperator.includes("verifyRealBlockSlaDatabaseAttestation") &&
+      realBlockSlaOperator.includes("runtime.repositoryCommit !== input.expectedRepositoryCommit") &&
+      realBlockSlaOperator.includes("runtime.deploymentId !== input.deploymentId") &&
+      realBlockSlaOperator.includes("runtime.deploymentOrigin !== input.targetUrl") &&
+      realBlockSlaOperator.includes("runtime.projectId !== input.projectId") &&
+      realBlockSlaOperator.includes("runtime.streamId !== input.streamId") &&
+      realBlockSlaOperator.includes("![0, 409, 503].includes(result.status)") &&
+      !realBlockSlaOperator.includes('"--probe-token"') &&
+      !realBlockSlaOperator.includes('"--automation-bypass-secret"') &&
+      operationsRunbook.includes(
+        "npm run perf:read-model:real-block-sla-operator --",
+      ) &&
+      productionCutoverRunbook.includes(
+        "npm run perf:read-model:real-block-sla-operator --",
+      ) &&
+      operationsRunbook.includes(
+        `--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
+      ) &&
+      productionCutoverRunbook.includes(
+        `--output ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
+      ) &&
+      operationsRunbook.includes(
+        `--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
+      ) &&
+      productionCutoverRunbook.includes(
+        `--evidence ${EXACT_REAL_BLOCK_SLA_OUTPUT}`,
+      ),
+    "the operator arms and polls the exact staged deployment before writing one private evidence file",
   );
   check(
     "ops-quicknode-stream-env-contract",

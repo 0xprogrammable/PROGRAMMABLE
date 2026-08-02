@@ -446,11 +446,21 @@ domain must still resolve to the previous deployment. Run the fail-closed SLA
 verifier only after the staged gates above are complete. Then immediately
 reverify the same immutable deployment, promote that exact `dpl_...` ID, and
 run the post-promotion binding checks. Do not replace any command with a
-mutable alias or a second deployment.
+mutable alias or a second deployment. Set
+`PROGRAMMABLE_QUICKNODE_STREAM_ID` to the exact reviewed provider stream ID.
 
 ```sh
+test ! -e /secure/cutover/real-block-sla-db-attestation.json
+npm run perf:read-model:real-block-sla-operator -- \
+  --target-url "$STAGED_TARGET_URL" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --expected-commit "$GITHUB_SHA" \
+  --project-id "$VERCEL_PROJECT_ID" \
+  --stream-id "$PROGRAMMABLE_QUICKNODE_STREAM_ID" \
+  --output /secure/cutover/real-block-sla-db-attestation.json
+
 npm run perf:read-model:real-block-sla -- \
-  --evidence "$REAL_BLOCK_SLA_EVIDENCE_PATH" \
+  --evidence /secure/cutover/real-block-sla-db-attestation.json \
   --expected-commit "$GITHUB_SHA" \
   --deployment-id "$STAGED_DEPLOYMENT_ID" \
   --target-url "$STAGED_TARGET_URL"
@@ -470,6 +480,13 @@ npm run perf:read-model:post-promotion -- \
   --git-head "$GITHUB_SHA" \
   --evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"
 ```
+
+The operator command obtains its probe token and Vercel automation-bypass
+secret only from the environment. It validates the returned arm UUID, waits no
+longer than five minutes for the first matching organic QuickNode delivery and
+challenge-bound export, and writes the exact path above once with mode `0600`.
+Any existing file, mutable target, response-cache drift, timeout, or mismatch
+in commit, deployment, project or stream blocks the verifier and promotion.
 
 If failure occurs after Vercel promotion, first disable the public-read flags,
 then restore the previous Vercel deployment in addition to the Envio and

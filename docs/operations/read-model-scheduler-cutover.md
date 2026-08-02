@@ -169,15 +169,18 @@ normal builds. After the Candidate database is product-bound to this exact
 staged commit and deployment ID, and the staged projectors have published a
 complete Classic launch, arm one five-minute, single-use probe against the
 exact unaliased deployment while the production domain still points to the
-previous release:
+previous release. Set `PROGRAMMABLE_QUICKNODE_STREAM_ID` to the exact provider
+stream ID recorded during step 6:
 
 ```sh
-curl --fail-with-body --request PUT \
-  --header 'content-type: application/json' \
-  --header 'x-programmable-performance-probe: 1' \
-  --header "x-programmable-performance-probe-token: $PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN" \
-  --data '{"action":"arm-provider-retry","streamId":"<configured-stream-id>"}' \
-  "$STAGED_TARGET_URL/api/ops/read-model-real-block-sla"
+test ! -e /secure/cutover/real-block-sla-db-attestation.json
+npm run perf:read-model:real-block-sla-operator -- \
+  --target-url "$STAGED_TARGET_URL" \
+  --deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --expected-commit "$GITHUB_SHA" \
+  --project-id "$VERCEL_PROJECT_ID" \
+  --stream-id "$PROGRAMMABLE_QUICKNODE_STREAM_ID" \
+  --output /secure/cutover/real-block-sla-db-attestation.json
 ```
 
 The first matching organic delivery is durably queued, finalized in the
@@ -187,13 +190,19 @@ deduplicated to the existing wake, and returns `202`. An expired or unmatched
 arm produces no forced failure. A production/custom-domain request can never
 consume the probe. After this capture, reset the flag to `false` for subsequent
 builds; do not arm another probe during or after production promotion.
+The operator reads `PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN` and
+`VERCEL_AUTOMATION_BYPASS_SECRET` only from its environment, never from command
+arguments. It validates the returned arm UUID, polls only the exact unaliased
+deployment for at most five minutes, and accepts only the exact commit,
+deployment, project and stream binding. The evidence path is created once with
+mode `0600`; an existing path blocks the release and is never overwritten.
 
 Run the gate immediately after capture because evidence older than ten minutes
 is rejected:
 
 ```sh
 npm run perf:read-model:real-block-sla -- \
-  --evidence "$REAL_BLOCK_SLA_EVIDENCE_PATH" \
+  --evidence /secure/cutover/real-block-sla-db-attestation.json \
   --expected-commit "$GITHUB_SHA" \
   --deployment-id "$STAGED_DEPLOYMENT_ID" \
   --target-url "$STAGED_TARGET_URL"

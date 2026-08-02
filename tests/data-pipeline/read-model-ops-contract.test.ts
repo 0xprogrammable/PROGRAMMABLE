@@ -264,6 +264,35 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("binds the bounded exclusive real-block SLA operator before promotion", () => {
+    const operatorPath = "scripts/perf/read-model-real-block-sla-operator.mjs";
+    const runbookPath = "docs/data-pipeline/PRODUCTION-CUTOVER-OPERATOR.md";
+    const unboundedOperator = readFileSync(resolve(ROOT, operatorPath), "utf8")
+      .replace(
+        "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 5 * 60 * 1_000",
+        "REAL_BLOCK_SLA_OPERATOR_MAXIMUM_WAIT_MS = 10 * 60 * 1_000",
+      );
+    const bypassedRunbook = readFileSync(resolve(ROOT, runbookPath), "utf8")
+      .replace(
+        "npm run perf:read-model:real-block-sla-operator --",
+        "npm run perf:read-model:real-block-sla-operator-skipped --",
+      );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [operatorPath]: unboundedOperator,
+        [runbookPath]: bypassedRunbook,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toEqual(
+      expect.arrayContaining([
+        "ops-real-block-sla-operator-binding",
+        "ops-post-promotion-binding",
+      ]),
+    );
+  });
+
   it("keeps the staging workflow unable to bypass the manual real-block SLA gate", () => {
     const workflowPath = ".github/workflows/deploy-production.yml";
     const runbookPath = "docs/operations/read-model-scheduler-cutover.md";
