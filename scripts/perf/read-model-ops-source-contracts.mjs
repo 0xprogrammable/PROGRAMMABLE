@@ -148,7 +148,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/data-pipeline/read-model-real-block-sla-capture.server.ts",
-          sha256: "6e91e4a71f50fe0b0f512f44becac13b5326aa1567efbce883dad6ef592bb6f0",
+          sha256: "1cadb53abb9783204fc1a2cecc83abdfb1541225d46cea3e52ebc9411769dd32",
         }),
         Object.freeze({
           path: "lib/data-pipeline/dual-rpc.ts",
@@ -160,7 +160,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "app/api/ops/read-model-real-block-sla/route.ts",
-          sha256: "5c975d526c9be984e55ac69df903c3328aa4edc75684b5ead6bab378c1992fd1",
+          sha256: "367140b12a27068c55f2a5881e27729fbab4d1d9a6187c2148fd29bc4f075946",
         }),
         Object.freeze({
           path: "supabase/migrations/20260802104211_real_block_sla_runtime_receipts.sql",
