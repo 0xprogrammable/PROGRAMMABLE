@@ -66,6 +66,8 @@ import { assertProductionDualRpcProviders } from "./rpc-providers.server";
 export type CandidateRpcBlock = {
   number: bigint | null;
   hash: Hex | null;
+  /** Required by head/optimistic readers; legacy finalized readers ignore it. */
+  parentHash?: Hex | null;
   timestamp: bigint;
 };
 

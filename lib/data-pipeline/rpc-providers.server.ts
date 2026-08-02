@@ -376,6 +376,7 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
       return {
         number: block.number,
         hash: block.hash,
+        parentHash: block.parentHash,
         timestamp: block.timestamp,
       };
     },
@@ -391,6 +392,7 @@ function candidateRpcClient(endpoint: string): CandidateRpcClient {
           return {
             number: block.number,
             hash: block.hash,
+            parentHash: block.parentHash,
             timestamp: block.timestamp,
           };
         }),
