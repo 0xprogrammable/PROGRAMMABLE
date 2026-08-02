@@ -102,6 +102,23 @@ const APPROVED_OPERATIONS = Object.freeze({
       ]),
     }),
   ]),
+  eventTriggers: Object.freeze([
+    Object.freeze({
+      id: "quicknode-stream-projector-wake",
+      path: "/api/ops/projector-wake",
+      provider: "quicknode-streams",
+      mode: "wake-only",
+      secretEnvironment: "PROGRAMMABLE_QUICKNODE_STREAM_SECRET",
+      route: Object.freeze({
+        path: "app/api/ops/projector-wake/route.ts",
+        sha256: "cdea2e18ebdb545e0f4de7bdd54da181c5cf6fa715e5abe1ac32c0bae66d138b",
+      }),
+      verifier: Object.freeze({
+        path: "lib/data-pipeline/quicknode-stream-wake.server.ts",
+        sha256: "9c452c2ae94b62d31ed2ffdaaf974b1acd4c7a856493ac02013e43f89eb4bc65",
+      }),
+    }),
+  ]),
 });
 
 function readSource(rootDirectory, path, overrides) {
@@ -217,6 +234,32 @@ function activationIsExplicitAndSafe(source, environmentName) {
     /===\s*undefined/u.test(source) &&
     /status\s*:\s*["']disabled["']|return\s+["']disabled["']/u.test(source) &&
     /invalidRuntimeConfig|invalidInput|throw\s+/u.test(source)
+  );
+}
+
+function eventTriggerIsAuthenticatedAndBound(route, verifier, trigger) {
+  return (
+    typeof route === "string" &&
+    typeof verifier === "string" &&
+    trigger?.provider === "quicknode-streams" &&
+    trigger?.mode === "wake-only" &&
+    trigger?.secretEnvironment === "PROGRAMMABLE_QUICKNODE_STREAM_SECRET" &&
+    route.includes("verifyQuickNodeStreamWake(request)") &&
+    route.includes("after(runWakeCycle)") &&
+    route.includes("runConfiguredProjectorCycle()") &&
+    route.includes("runConfiguredMarketProjectorCycle()") &&
+    /export\s+async\s+function\s+POST\s*\(/u.test(route) &&
+    /status\s*:\s*202\b/u.test(route) &&
+    /["']Cache-Control["']\s*:\s*["']no-store["']/u.test(route) &&
+    verifier.includes("PROGRAMMABLE_QUICKNODE_STREAM_SECRET") &&
+    verifier.includes('exactHeader(request, "x-qn-nonce"') &&
+    verifier.includes('exactHeader(request, "x-qn-timestamp"') &&
+    verifier.includes('exactHeader(request, "x-qn-signature"') &&
+    verifier.includes('createHmac("sha256", secret)') &&
+    verifier.includes("timingSafeEqual(provided, expected)") &&
+    verifier.includes("MAXIMUM_TIMESTAMP_AGE_SECONDS") &&
+    verifier.includes("MAXIMUM_ENCODED_BODY_BYTES") &&
+    verifier.includes("maxOutputLength: MAXIMUM_DECODED_BODY_BYTES")
   );
 }
 
@@ -350,6 +393,9 @@ export function evaluateReadModelOperationsSourceContracts(
   const vercel = parseJson(source("vercel.json"));
   const crons = exactCronMap(vercel);
   const workers = Array.isArray(operations?.workers) ? operations.workers : [];
+  const eventTriggers = Array.isArray(operations?.eventTriggers)
+    ? operations.eventTriggers
+    : [];
   const unscheduled = Array.isArray(operations?.unscheduled)
     ? operations.unscheduled
     : [];
@@ -362,8 +408,9 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-config-schema",
     operations?.schemaVersion === 1 &&
       exactJson(operations?.legacyIndexer, APPROVED_OPERATIONS.legacyIndexer) &&
-      exactJson(workers, APPROVED_OPERATIONS.workers),
-    "the manifest exactly binds the reviewed legacy indexer and both workers",
+      exactJson(workers, APPROVED_OPERATIONS.workers) &&
+      exactJson(eventTriggers, APPROVED_OPERATIONS.eventTriggers),
+    "the manifest exactly binds the reviewed legacy indexer, workers and event trigger",
   );
   check(
     "ops-cron-exact-set",
@@ -463,6 +510,23 @@ export function evaluateReadModelOperationsSourceContracts(
       `${approvedWorker.id} executes through its singleton lease and checkpoint binding`,
     );
   }
+
+  const approvedTrigger = APPROVED_OPERATIONS.eventTriggers[0];
+  const eventTrigger = eventTriggers.find(({ id }) => id === approvedTrigger.id);
+  check(
+    "ops-quicknode-stream-wake-binding",
+    eventTriggers.length === 1 &&
+      eventTrigger?.path === approvedTrigger.path &&
+      !crons?.has(approvedTrigger.path) &&
+      sourceBindingMatches(source, eventTrigger?.route, expectedSha256Overrides) &&
+      sourceBindingMatches(source, eventTrigger?.verifier, expectedSha256Overrides) &&
+      eventTriggerIsAuthenticatedAndBound(
+        source(approvedTrigger.route.path),
+        source(approvedTrigger.verifier.path),
+        eventTrigger,
+      ),
+    "the unscheduled QuickNode webhook is HMAC-authenticated and only wakes the fenced projectors",
+  );
 
   check(
     "ops-reconciler-unscheduled",

@@ -97,6 +97,23 @@
       ]
     }
   ],
+  "eventTriggers": [
+    {
+      "id": "quicknode-stream-projector-wake",
+      "path": "/api/ops/projector-wake",
+      "provider": "quicknode-streams",
+      "mode": "wake-only",
+      "secretEnvironment": "PROGRAMMABLE_QUICKNODE_STREAM_SECRET",
+      "route": {
+        "path": "app/api/ops/projector-wake/route.ts",
+        "sha256": "cdea2e18ebdb545e0f4de7bdd54da181c5cf6fa715e5abe1ac32c0bae66d138b"
+      },
+      "verifier": {
+        "path": "lib/data-pipeline/quicknode-stream-wake.server.ts",
+        "sha256": "9c452c2ae94b62d31ed2ffdaaf974b1acd4c7a856493ac02013e43f89eb4bc65"
+      }
+    }
+  ],
   "unscheduled": [
     {
       "id": "reconciler-preparity",

@@ -10,7 +10,7 @@ import { invalidInput } from "./errors";
 export const CACHE_POLICIES = Object.freeze({
   public: Object.freeze({
     visibility: "public" as const,
-    cacheControl: "public, s-maxage=15, stale-while-revalidate=30",
+    cacheControl: "public, s-maxage=2, stale-while-revalidate=2",
   }),
   private: Object.freeze({
     visibility: "private" as const,

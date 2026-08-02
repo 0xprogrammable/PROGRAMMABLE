@@ -113,18 +113,18 @@ const REQUIRED_RELEASE_VERSIONS = Object.freeze([
 
 const EXPECTED_CACHE_CONTRACTS = Object.freeze({
   exploreList:
-    "public, max-age=0, s-maxage=10, stale-while-revalidate=10",
+    "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
   tokenDetail:
-    "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+    "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
   tokenChart:
-    "public, max-age=0, s-maxage=15, stale-while-revalidate=15",
+    "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
   creatorProfile: "private, max-age=0, s-maxage=15",
   classicProfile: "no-store",
   stockProfile: "no-store",
   classicLaunchLookup: "no-store",
   stockLaunchLookup: "no-store",
   publicIndexer:
-    "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+    "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
   tokenList:
     "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
   health: "public, max-age=0, s-maxage=30",

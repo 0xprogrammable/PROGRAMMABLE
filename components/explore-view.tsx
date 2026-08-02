@@ -19,6 +19,11 @@ import {
 } from "@/components/animated-market-cap";
 import { ScrambleText } from "@/components/scramble-text";
 import { SiteFooter } from "@/components/site-footer";
+import {
+  LIVE_DATA_REFRESH_INTERVAL_MS,
+  shouldRefreshLiveData,
+  useLiveDataRefresh,
+} from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import {
   canOptimizeTokenImage,
@@ -96,7 +101,7 @@ type PaginationItem = number | "start-gap" | "end-gap";
 const TOKENS_PER_PAGE = 10;
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
-export const EXPLORE_REFRESH_INTERVAL_MS = 10_000;
+export const EXPLORE_REFRESH_INTERVAL_MS = LIVE_DATA_REFRESH_INTERVAL_MS;
 const PROGRAMMABLE_TOKEN_ADDRESS = "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const fallbackTokenImages = [
   "/brand/programmable-token-fallback-01-dawn.webp",
@@ -118,10 +123,10 @@ export function shouldRefreshExplore(input: {
   lastRefreshAt: number;
   now: number;
 }) {
-  return (
-    input.visibilityState === "visible" &&
-    input.now - input.lastRefreshAt >= EXPLORE_REFRESH_INTERVAL_MS
-  );
+  return shouldRefreshLiveData({
+    ...input,
+    intervalMs: EXPLORE_REFRESH_INTERVAL_MS,
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -485,11 +490,10 @@ export function ExploreView() {
   const [copiedAddress, setCopiedAddress] = useState("");
   const [copyError, setCopyError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const refreshKey = useLiveDataRefresh();
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
   const copyResetTimer = useRef<number | null>(null);
   const activeExploreContentKey = useRef<string | null>(null);
-  const lastExploreRefreshAt = useRef(0);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const contentKey = `${debouncedQuery}\u0000${sort}\u0000${currentPage}`;
   const requestKey = `${contentKey}\u0000${retryKey}\u0000${refreshKey}`;
@@ -516,37 +520,6 @@ export function ExploreView() {
 
     return () => window.clearTimeout(timer);
   }, [debouncedQuery, normalizedQuery]);
-
-  useEffect(() => {
-    lastExploreRefreshAt.current = Date.now();
-
-    function refreshIfDue() {
-      const now = Date.now();
-      if (
-        !shouldRefreshExplore({
-          visibilityState: document.visibilityState,
-          lastRefreshAt: lastExploreRefreshAt.current,
-          now,
-        })
-      )
-        return;
-      lastExploreRefreshAt.current = now;
-      setRefreshKey((value) => value + 1);
-    }
-
-    const interval = window.setInterval(
-      refreshIfDue,
-      EXPLORE_REFRESH_INTERVAL_MS,
-    );
-    document.addEventListener("visibilitychange", refreshIfDue);
-    window.addEventListener("focus", refreshIfDue);
-
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", refreshIfDue);
-      window.removeEventListener("focus", refreshIfDue);
-    };
-  }, []);
 
   useEffect(() => {
     function closeFilter(event: PointerEvent | KeyboardEvent) {

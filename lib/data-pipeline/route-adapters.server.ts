@@ -34,15 +34,15 @@ export type IndexedPublicRouteSurface =
 const CACHE_HEADERS = Object.freeze({
   explore: Object.freeze({
     "Cache-Control":
-      "public, max-age=0, s-maxage=10, stale-while-revalidate=10",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
   }),
   token: Object.freeze({
     "Cache-Control":
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
   }),
   chart: Object.freeze({
     "Cache-Control":
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=15",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
   }),
   profile: Object.freeze({
     "Cache-Control": "private, max-age=0, s-maxage=15",

@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 const LEGACY_PUBLIC_HEADERS = Object.freeze({
   "Access-Control-Allow-Origin": "*",
   "Cache-Control":
-    "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+    "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
 });
 
 export async function GET(request: Request) {

@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
               headers: {
                 "Cache-Control":
                   model.status === "ready"
-                    ? "public, max-age=0, s-maxage=15, stale-while-revalidate=30"
+                    ? "public, max-age=0, s-maxage=2, stale-while-revalidate=2"
                     : "public, max-age=0, s-maxage=60",
               },
             },

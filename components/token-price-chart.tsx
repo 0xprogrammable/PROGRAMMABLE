@@ -9,6 +9,8 @@ import {
   useState,
 } from "react";
 
+import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
+
 import styles from "./token-price-chart.module.css";
 
 type ChartPoint = {
@@ -183,6 +185,9 @@ export function TokenPriceChart({
     failed: boolean;
   } | null>(null);
   const [range, setRange] = useState<ChartRange>("all");
+  const refreshKey = useLiveDataRefresh({
+    enabled: launchModel !== "stock-paired",
+  });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const activeIndexRef = useRef<number | null>(null);
   const plotRef = useRef<SVGSVGElement | null>(null);
@@ -235,15 +240,22 @@ export function TokenPriceChart({
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError")
           return;
-        setRequest({
-          key: requestKey,
-          payload: null,
-          failed: true,
-        });
+        setRequest((current) =>
+          current?.key === requestKey && current.payload
+            ? current
+            : { key: requestKey, payload: null, failed: true },
+        );
       });
 
     return () => controller.abort();
-  }, [launchModel, range, requestKey, setActiveIndexIfChanged, tokenAddress]);
+  }, [
+    launchModel,
+    range,
+    refreshKey,
+    requestKey,
+    setActiveIndexIfChanged,
+    tokenAddress,
+  ]);
 
   const chart = useMemo(() => {
     if (!payload || payload.points.length < 2) return null;

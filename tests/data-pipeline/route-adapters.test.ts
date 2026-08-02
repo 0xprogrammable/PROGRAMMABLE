@@ -370,15 +370,15 @@ describe("indexed route cache policy", () => {
   it("uses short shared cache windows only for public immutable snapshots", () => {
     expect(indexedRouteCacheHeaders("explore-list")).toEqual({
       "Cache-Control":
-        "public, max-age=0, s-maxage=10, stale-while-revalidate=10",
+        "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     });
     expect(indexedRouteCacheHeaders("token-detail")).toEqual({
       "Cache-Control":
-        "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+        "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     });
     expect(indexedRouteCacheHeaders("token-chart")).toEqual({
       "Cache-Control":
-        "public, max-age=0, s-maxage=15, stale-while-revalidate=15",
+        "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     });
     expect(indexedRouteCacheHeaders("creator-profile")).toEqual({
       "Cache-Control": "private, max-age=0, s-maxage=15",

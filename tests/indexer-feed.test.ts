@@ -550,7 +550,7 @@ describe("public indexer fee disclosure", () => {
 
     expect(response.status).toBe(404);
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
     expect(response.headers.get("x-programmable-read-source")).toBe(
       "indexed",

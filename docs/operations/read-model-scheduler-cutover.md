@@ -11,6 +11,7 @@ during backfill and parity checks.
 | Legacy index | `/api/ops/index-v2` | Every five minutes | Retained until indexed reads are promoted |
 | Source projector | `/api/ops/projector` | Every minute | `PROGRAMMABLE_PROJECTOR_ACTIVE=true` |
 | Market projector | `/api/ops/market-projector` | Every minute | `PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE=true` |
+| QuickNode stream wake | `POST /api/ops/projector-wake` | Every delivered block | `PROGRAMMABLE_QUICKNODE_STREAM_SECRET` configured |
 
 Each projector has its own singleton execution guard. A second invocation
 returns busy instead of overlapping an unfinished run. The market projector
@@ -19,6 +20,40 @@ state. Both routes require Vercel's `CRON_SECRET` bearer token. Missing or exact
 `false` activation values are harmless disabled runs. Exact `true` is the only
 active value. Any other non-empty value is a configuration error and must fail
 closed.
+
+The QuickNode stream is an authenticated latency trigger, not a third source of
+truth. Its payload never enters the read model. A valid delivery returns `202`
+immediately and uses Next.js background work to run the existing source
+projector followed by the market projector. Envio remains the event source;
+the independent Alchemy and QuickNode RPC reads, atomic publication fences and
+singleton database leases remain mandatory. Duplicate deliveries are safe, and
+the per-minute crons remain the watchdog if a webhook is delayed or lost.
+
+Configure the stream only after the exact staged deployment has passed its
+normal release gate:
+
+1. Create a dedicated random secret of 32 to 1,024 UTF-8 bytes. Store it as
+   `PROGRAMMABLE_QUICKNODE_STREAM_SECRET` in the staged Vercel environment and
+   as the QuickNode webhook security token. Never reuse `CRON_SECRET`.
+2. Use the Ethereum mainnet block dataset, one block per batch, sequential
+   delivery, reorg correction enabled and the smallest block-only payload the
+   stream filter permits. The endpoint accepts JSON and QuickNode gzip bodies,
+   but rejects encoded bodies above 64 KiB or decoded bodies above 128 KiB.
+3. Point the test destination at
+   `https://<exact-staged-deployment>/api/ops/projector-wake`. Confirm a signed
+   test delivery returns `202` and `Cache-Control: no-store`; invalid,
+   replayed, stale or malformed deliveries must not schedule work.
+4. After production promotion and binding checks, move the destination to
+   `https://programmable.family/api/ops/projector-wake`, capture the stream ID
+   and destination evidence, then verify source and market projector telemetry
+   for at least two delivered blocks. Disable the stream on repeated `401`,
+   `413` or `5xx` responses; the minute crons keep the read model progressing.
+
+Visible Explore, token detail and price-chart clients refresh every five
+seconds while the tab is visible and on focus. Ready public read-model
+responses use a two-second CDN freshness window. This removes the scheduler and
+cache minute-scale delay; it does not promise sub-second chain finality or hide
+Envio, RPC, reorg or database latency.
 
 `/api/ops/index-v2` is the only legacy writer route. The former
 `/api/ops/index` alias is permanently closed and is not scheduled.
@@ -50,13 +85,16 @@ fails if Vercel has already moved production to the candidate commit.
    publication.
 4. Enable the market projector and prove its market lineage at the same source
    checkpoint.
-5. Capture signed staged-deployment evidence and run the release gate.
-6. Promote the exact staged deployment ID, never a mutable alias.
-7. Verify that `programmable.family` resolves to that deployment ID and commit,
+5. Configure and test the QuickNode stream against the exact staged deployment,
+   but keep its production destination disabled.
+6. Capture signed staged-deployment evidence and run the release gate.
+7. Promote the exact staged deployment ID, never a mutable alias.
+8. Verify that `programmable.family` resolves to that deployment ID and commit,
    then verify health, populated Explore, the token list, and every indexed
    route using the same release corpus.
-8. Enable indexed read flags only after every check is green.
-9. Remove the legacy cron in a later reviewed cutover commit.
+9. Enable indexed read flags only after every check is green, then activate and
+   verify the stream's production destination.
+10. Remove the legacy cron in a later reviewed cutover commit.
 
 Source files, migrations, schedules, activation names, workflow ordering and
 post-promotion probes are checked by `npm run perf:read-model:ops-gate`.

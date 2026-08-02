@@ -23,7 +23,7 @@ const EXPOSED_PROVENANCE_HEADERS = [
 ] as const;
 
 export const INDEXER_READY_CACHE_CONTROL =
-  "public, max-age=0, s-maxage=15, stale-while-revalidate=30";
+  "public, max-age=0, s-maxage=2, stale-while-revalidate=2";
 
 const BYTES32 = /^0x[0-9a-f]{64}$/;
 const RELEASE_VERSION = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

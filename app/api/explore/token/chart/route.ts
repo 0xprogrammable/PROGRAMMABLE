@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
             {
               headers: {
                 "Cache-Control":
-                  "public, max-age=0, s-maxage=15, stale-while-revalidate=15",
+                  "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
               },
             },
           ),

@@ -86,7 +86,7 @@ describe("token chart API", () => {
       volumeUsdWad: "4375000000000000000000",
     });
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=15, stale-while-revalidate=15",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
   });
 });

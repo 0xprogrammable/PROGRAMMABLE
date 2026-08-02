@@ -80,7 +80,7 @@ describe("Explore API query boundary", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, max-age=0, s-maxage=10, stale-while-revalidate=10",
+      "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );
   });
 });

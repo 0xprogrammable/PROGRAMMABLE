@@ -22,6 +22,7 @@ import {
   TokenPriceChart,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
+import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { useWallet } from "@/components/wallet-provider";
 import {
@@ -1184,6 +1185,7 @@ export function TokenDetailView({ address }: { address: string }) {
   const { wallet: activeWallet } = useWallet();
   const normalizedAddress = isAddress(address) ? getAddress(address) : null;
   const [retryKey, setRetryKey] = useState(0);
+  const refreshKey = useLiveDataRefresh({ enabled: normalizedAddress !== null });
   const requestKey = `${normalizedAddress ?? "invalid"}\u0000${retryKey}`;
   const [state, setState] = useState<DetailState>({
     phase: "loading",
@@ -1243,20 +1245,21 @@ export function TokenDetailView({ address }: { address: string }) {
         });
       } catch (error) {
         if (controller.signal.aborted) return;
-        setState({
-          phase: "error",
-          requestKey,
-          message:
-            error instanceof Error
-              ? error.message
-              : "Token data is temporarily unavailable",
-        });
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Token data is temporarily unavailable";
+        setState((current) =>
+          current.phase === "ready" && current.requestKey === requestKey
+            ? current
+            : { phase: "error", requestKey, message },
+        );
       }
     }
 
     void loadToken();
     return () => controller.abort();
-  }, [normalizedAddress, requestKey]);
+  }, [normalizedAddress, refreshKey, requestKey]);
 
   if (!normalizedAddress) {
     return (

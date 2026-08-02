@@ -153,7 +153,7 @@ describe("Postgres public route snapshot adapters", () => {
         }),
         headers: {
           "Cache-Control":
-            "public, max-age=0, s-maxage=10, stale-while-revalidate=10",
+            "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
         },
       },
     });
