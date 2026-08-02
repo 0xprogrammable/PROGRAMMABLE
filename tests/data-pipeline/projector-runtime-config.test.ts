@@ -111,6 +111,40 @@ function candidateCanonicalBinding() {
   }).releaseBinding;
 }
 
+function mockPrepareReleaseRound() {
+  return vi.fn(async ({ stores }: { stores: readonly object[] }) => ({
+    entries: stores.map((store) => ({
+      status: "ready" as const,
+      projection: { store, plan: null },
+    })),
+    sharedVerification: Object.freeze({}),
+  }));
+}
+
+function mockProjectionPhases<Input>(
+  runReleaseCycle: (input: Input) => Promise<unknown>,
+) {
+  const completed = new WeakMap<object, Record<string, unknown>>();
+  return {
+    verifyReleaseProjection: vi.fn(async (input: Input) => {
+      const result = await runReleaseCycle(input) as Record<string, unknown>;
+      if (result.status === "idle") {
+        return { status: "idle" as const };
+      }
+      const verification = Object.freeze({});
+      completed.set(verification, result);
+      return { status: "verified" as const, verification };
+    }),
+    commitReleaseProjection: vi.fn(async ({ verification }: {
+      verification: object;
+    }) => {
+      const result = completed.get(verification);
+      if (!result) throw new Error("Missing prepared test projection");
+      return result;
+    }),
+  };
+}
+
 describe("configured projector runtime", () => {
   it("keeps the runtime disabled by default without opening dependencies", async () => {
     const createExecutor = vi.fn();
@@ -458,7 +492,12 @@ describe("configured projector runtime", () => {
     const envio = {};
     const ingestionStore = {};
     const createReleaseStore = vi.fn(({ scope }) => ({ scope }));
-    const runReleaseCycle = vi.fn(async () => ({ status: "idle" as const }));
+    const runReleaseCycle = vi.fn(async (input: {
+      sharedVerification?: unknown;
+    }) => {
+      void input;
+      return { status: "idle" as const };
+    });
     const runCycle = vi
       .fn()
       .mockResolvedValueOnce({
@@ -489,6 +528,8 @@ describe("configured projector runtime", () => {
       createStore: vi.fn(() => ingestionStore),
       createReleaseStore,
       runCycle,
+      prepareReleaseRound: mockPrepareReleaseRound(),
+      ...mockProjectionPhases(runReleaseCycle),
       runReleaseCycle,
     } as never;
 
@@ -535,6 +576,23 @@ describe("configured projector runtime", () => {
     );
     expect(createReleaseStore).toHaveBeenCalledTimes(10);
     expect(runReleaseCycle).toHaveBeenCalledTimes(10);
+    const firstRuntimeCache = runReleaseCycle.mock.calls[0]![0]
+      .sharedVerification;
+    const secondRuntimeCache = runReleaseCycle.mock.calls[5]![0]
+      .sharedVerification;
+    expect(firstRuntimeCache).toBeDefined();
+    expect(secondRuntimeCache).toBeDefined();
+    expect(secondRuntimeCache).not.toBe(firstRuntimeCache);
+    expect(
+      runReleaseCycle.mock.calls
+        .slice(0, 5)
+        .every(([call]) => call.sharedVerification === firstRuntimeCache),
+    ).toBe(true);
+    expect(
+      runReleaseCycle.mock.calls
+        .slice(5)
+        .every(([call]) => call.sharedVerification === secondRuntimeCache),
+    ).toBe(true);
     expect(runReleaseCycle).toHaveBeenCalledWith(
       expect.objectContaining({
         envio,
@@ -761,7 +819,10 @@ describe("configured projector runtime", () => {
         candidateCount: 0,
         snapshotBlock: "25650010",
       });
-    const runReleaseCycle = vi.fn(async ({ store }) => {
+    const runReleaseCycle = vi.fn(async ({ store }: {
+      store: { scope: { releaseId: string } };
+      sharedVerification?: unknown;
+    }) => {
       const releaseId = (store as { scope: { releaseId: string } }).scope.releaseId;
       const call = (releaseCalls.get(releaseId) ?? 0) + 1;
       releaseCalls.set(releaseId, call);
@@ -805,6 +866,8 @@ describe("configured projector runtime", () => {
       createStore: vi.fn(() => ingestionStore),
       createReleaseStore: vi.fn(({ scope }) => ({ scope })),
       runCycle,
+      prepareReleaseRound: mockPrepareReleaseRound(),
+      ...mockProjectionPhases(runReleaseCycle),
       runReleaseCycle,
     } as never;
 
@@ -850,6 +913,19 @@ describe("configured projector runtime", () => {
 
     expect(runCycle).toHaveBeenCalledTimes(3);
     expect(runReleaseCycle).toHaveBeenCalledTimes(15);
+    const roundCaches = [0, 5, 10].map(
+      (offset) => runReleaseCycle.mock.calls[offset]![0].sharedVerification,
+    );
+    expect(new Set(roundCaches).size).toBe(3);
+    for (let round = 0; round < 3; round += 1) {
+      expect(
+        runReleaseCycle.mock.calls
+          .slice(round * 5, round * 5 + 5)
+          .every(
+            ([call]) => call.sharedVerification === roundCaches[round],
+          ),
+      ).toBe(true);
+    }
     expect([...releaseCalls.values()]).toEqual([3, 3, 3, 3, 3]);
     expect(close).toHaveBeenCalledTimes(2);
   });
@@ -900,6 +976,8 @@ describe("configured projector runtime", () => {
       createStore: vi.fn(() => ({})),
       createReleaseStore: vi.fn(({ scope }) => ({ scope })),
       runCycle,
+      prepareReleaseRound: mockPrepareReleaseRound(),
+      ...mockProjectionPhases(runReleaseCycle),
       runReleaseCycle,
     } as never;
 
@@ -1007,6 +1085,8 @@ describe("configured projector runtime", () => {
       createStore: vi.fn(() => ({})),
       createReleaseStore: vi.fn(({ scope }) => ({ scope })),
       runCycle,
+      prepareReleaseRound: mockPrepareReleaseRound(),
+      ...mockProjectionPhases(runReleaseCycle),
       runReleaseCycle,
     } as never;
 
