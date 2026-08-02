@@ -287,7 +287,8 @@ from (values
   ('91400000-0000-0000-0000-000000000019'::uuid, 'reward_configuration_activation', 'reward_vault', 'CtoRewardConfigurationActivated', decode(repeat('40', 32), 'hex')),
   ('91400000-0000-0000-0000-000000000020'::uuid, 'reward_vault', 'reward_vault', 'BeneficiaryFeesClaimed', decode(repeat('31', 32), 'hex')),
   ('91400000-0000-0000-0000-000000000021'::uuid, 'claim', 'reward_vault', 'BeneficiaryFeesClaimed', decode(repeat('32', 32), 'hex')),
-  ('91400000-0000-0000-0000-000000000022'::uuid, 'reward_vault', 'reward_vault', 'PayoutWalletChanged', decode(repeat('33', 32), 'hex'))
+  ('91400000-0000-0000-0000-000000000022'::uuid, 'reward_vault', 'reward_vault', 'PayoutWalletChanged', decode(repeat('33', 32), 'hex')),
+  ('91400000-0000-0000-0000-000000000023'::uuid, 'launch_liquidity', 'launcher', 'MemeLiquidityConfiguredV2', decode(repeat('34', 32), 'hex'))
 ) as rule(rule_id, projection_kind, source_role, event_type, commitment);
 select programmable_private.append_release_launch_requirement(
   requirement_id, '91000000-0000-0000-0000-000000000001', ordinal,
@@ -576,6 +577,51 @@ select programmable_private.resolve_envio_candidate(
   '2026-07-31T03:01:09.097Z'
 );
 select programmable_private.append_envio_candidate(
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('aa', 32), 'hex'), decode(repeat('a4', 32), 'hex'), 13
+  ),
+  '93000000-0000-0000-0000-000000000001',
+  25639599, decode(repeat('aa', 32), 'hex'), decode(repeat('a4', 32), 'hex'),
+  4, 13, decode(repeat('31', 20), 'hex'), decode(repeat('43', 32), 'hex'),
+  'MemeLiquidityConfiguredV2', array[decode(repeat('43', 32), 'hex')],
+  decode('0104', 'hex'),
+  '{"token":"0x7171717171717171717171717171717171717171","totalSupply":"1000000000000000000000000","tokenLiquidityAmount":"999999999999999999999999","lockedTokenDust":"1","initialTick":"0","tickLower":"-887220","tickUpper":"0","lpFeePips":"3000","launchHash":"0x7474747474747474747474747474747474747474747474747474747474747474"}'::jsonb,
+  decode(repeat('44', 32), 'hex'),
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('aa', 32), 'hex'), decode(repeat('a4', 32), 'hex'), 13
+  ),
+  '92000000-0000-0000-0000-000000000003',
+  decode(repeat('45', 32), 'hex'), '2026-07-31T03:01:09.098Z'
+);
+select programmable_private.append_release_neutral_envio_candidate(
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('aa', 32), 'hex'), decode(repeat('a4', 32), 'hex'), 13
+  ),
+  '910c0000-0000-0000-0000-000000000001',
+  25639599, decode(repeat('aa', 32), 'hex'), decode(repeat('a4', 32), 'hex'),
+  4, 13, decode(repeat('31', 20), 'hex'), decode(repeat('43', 32), 'hex'),
+  'MemeLiquidityConfiguredV2', array[decode(repeat('43', 32), 'hex')],
+  decode('0104', 'hex'),
+  '{"token":"0x7171717171717171717171717171717171717171","totalSupply":"1000000000000000000000000","tokenLiquidityAmount":"999999999999999999999999","lockedTokenDust":"1","initialTick":"0","tickLower":"-887220","tickUpper":"0","lpFeePips":"3000","launchHash":"0x7474747474747474747474747474747474747474747474747474747474747474"}'::jsonb,
+  decode(repeat('44', 32), 'hex'),
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('aa', 32), 'hex'), decode(repeat('a4', 32), 'hex'), 13
+  ),
+  '92000000-0000-0000-0000-000000000003',
+  decode(repeat('45', 32), 'hex'), '2026-07-31T03:01:09.0985Z',
+  'canonical-events', 'ClassicV3Launcher'
+);
+select programmable_private.resolve_envio_candidate(
+  '91220000-0000-0000-0000-000000000013',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('aa', 32), 'hex'), decode(repeat('a4', 32), 'hex'), 13
+  ),
+  '91100000-0000-0000-0000-000000000001', null,
+  decode(repeat('51', 32), 'hex'), decode(repeat('46', 32), 'hex'),
+  '2026-07-31T03:01:09.099Z'
+);
+select programmable_private.append_envio_candidate(
   programmable_private.derive_envio_candidate_id(1, decode(repeat('aa', 32), 'hex'), decode(repeat('b1', 32), 'hex'), 16),
   '93000000-0000-0000-0000-000000000001',
   25639599,
@@ -648,6 +694,20 @@ select programmable_private.append_chain_event_occurrence(
   1::smallint,
   decode('70726f6772616d6d61626c653a6f6363757272656e63653a76310053', 'hex'),
   decode(repeat('56', 32), 'hex'), '2026-07-31T03:01:12Z'
+);
+select programmable_private.append_chain_event_occurrence(
+  '96000000-0000-0000-0000-000000000008',
+  '96100000-0000-0000-0000-000000000008',
+  '93000000-0000-0000-0000-000000000001',
+  programmable_private.derive_envio_candidate_id(
+    1, decode(repeat('aa', 32), 'hex'), decode(repeat('a4', 32), 'hex'), 13
+  ),
+  1, '2026-07-31T02:58:24.500Z', 'decoder-v1',
+  decode(repeat('51', 32), 'hex'),
+  '95000000-0000-0000-0000-000000000599',
+  1::smallint,
+  decode('70726f6772616d6d61626c653a6f6363757272656e63653a76310075', 'hex'),
+  decode(repeat('47', 32), 'hex'), '2026-07-31T03:01:12.500Z'
 );
 select programmable_private.append_chain_event_occurrence(
   '96000000-0000-0000-0000-000000000001',
@@ -756,7 +816,7 @@ select throws_ok(
       999999999999999999999999, 1,
       79228162514264337593543950336,
       0, 0, 887220,
-      '96100000-0000-0000-0000-000000000004',
+      '96100000-0000-0000-0000-000000000008',
       decode(repeat('6e', 32), 'hex'),
       '2026-07-31T03:02:02.440Z'
     )
@@ -772,7 +832,7 @@ select programmable_private.stage_launch_position_liquidity_v1(
   999999999999999999999999, 1,
   79228162514264337593543950336,
   0, -887220, 0,
-  '96100000-0000-0000-0000-000000000004',
+  '96100000-0000-0000-0000-000000000008',
   decode(repeat('6f', 32), 'hex'),
   '2026-07-31T03:02:02.450Z'
 );
@@ -797,12 +857,14 @@ select programmable_private.promote_projection_run(
     '96100000-0000-0000-0000-000000000004'::uuid,
     '96100000-0000-0000-0000-000000000005'::uuid,
     '96100000-0000-0000-0000-000000000006'::uuid,
-    '96100000-0000-0000-0000-000000000007'::uuid
+    '96100000-0000-0000-0000-000000000007'::uuid,
+    '96100000-0000-0000-0000-000000000008'::uuid
   ],
   array[]::uuid[], array[]::uuid[],
   array[
     '91220000-0000-0000-0000-000000000010'::uuid,
-    '91220000-0000-0000-0000-000000000011'::uuid
+    '91220000-0000-0000-0000-000000000011'::uuid,
+    '91220000-0000-0000-0000-000000000013'::uuid
   ],
   array['explore-list']::text[],
   decode(repeat('75', 32), 'hex'), '2026-07-31T03:02:03Z'
@@ -4298,7 +4360,7 @@ select ok(
   (
     select pg_catalog.jsonb_array_length(source_bindings) = 5
        and pg_catalog.jsonb_array_length(dynamic_source_templates) = 2
-       and pg_catalog.jsonb_array_length(projection_event_rules) = 22
+       and pg_catalog.jsonb_array_length(projection_event_rules) = 23
        and pg_catalog.jsonb_array_length(
          launch_completeness_requirements
        ) = 4
