@@ -30,7 +30,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/projector-runtime-config.server.ts",
-        sha256: "f2828a8e0e20ac005511ea9cce5c3e7b349696034a2dbf445268533fbc367b9c",
+        sha256: "78483bf9b1110b4a97b719c6bb9bf9256285729e6002deb3621a9d1987373010",
       }),
       dependencies: Object.freeze([
         Object.freeze({
@@ -140,7 +140,7 @@ const APPROVED_OPERATIONS = Object.freeze({
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-market-state.server.ts",
-          sha256: "1479af0cb925c87c86d7b30fa20a8cda6bcef326e33f32e04f3e58796a498e67",
+          sha256: "88e55d7311c40ada819820c665fbe54247eb605373b5028346889e247dc790e3",
         }),
         Object.freeze({
           path: "lib/data-pipeline/optimistic-live-runtime.server.ts",

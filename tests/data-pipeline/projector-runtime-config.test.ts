@@ -930,6 +930,113 @@ describe("configured projector runtime", () => {
     expect(close).toHaveBeenCalledTimes(2);
   });
 
+  it("defers a late release round before opening projection runs", async () => {
+    let now = 0;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const close = vi.fn(async () => undefined);
+    const executor = { close };
+    let ingestionCall = 0;
+    const runCycle = vi.fn(async () => {
+      ingestionCall += 1;
+      if (ingestionCall < 3) now += 5_000;
+      else now = 65_000;
+      return {
+        status: "committed" as const,
+        candidateCount: 32,
+        snapshotBlock: String(25_650_000 + ingestionCall),
+        generation: String(ingestionCall),
+      };
+    });
+    const releaseCalls = new Map<string, number>();
+    const runReleaseCycle = vi.fn(async ({ store }) => {
+      const releaseId = (store as { scope: { releaseId: string } }).scope
+        .releaseId;
+      const call = (releaseCalls.get(releaseId) ?? 0) + 1;
+      releaseCalls.set(releaseId, call);
+      return {
+        status: "committed" as const,
+        projectedCandidateCount: 32,
+        ignoredCandidateCount: 0,
+        checkpointGeneration: String(call),
+      };
+    });
+    const prepareReleaseRound = mockPrepareReleaseRound();
+    const dependencies = {
+      createExecutor: vi.fn(() => executor),
+      assertPromotedDatabase: vi.fn(async () => undefined),
+      createLeaseController: vi.fn(() => ({
+        tryAcquire: vi.fn(async () => ({
+          status: "acquired",
+          fence: {
+            holderId: "projector-runtime-test",
+            generation: "1",
+            tokenHash: bytes32("a"),
+          },
+          acquiredAt: "2026-07-31T18:00:00.000Z",
+          expiresAt: "2026-07-31T18:01:25.000Z",
+        })),
+        release: vi.fn(async () => true),
+      })),
+      createProviders: vi.fn(() => RUNTIME_PROVIDERS),
+      assertProviders: vi.fn(),
+      createEnvio: vi.fn(() => ({})),
+      createStore: vi.fn(() => ({})),
+      createReleaseStore: vi.fn(({ scope }) => ({ scope })),
+      runCycle,
+      prepareReleaseRound,
+      ...mockProjectionPhases(runReleaseCycle),
+      runReleaseCycle,
+    } as never;
+
+    try {
+      await expect(runConfiguredProjectorCycle({
+        env: environment(),
+        dependencies,
+      })).resolves.toEqual({
+        ok: true,
+        ingestion: {
+          status: "committed",
+          candidateCount: 96,
+          pageCount: 3,
+          snapshotBlock: "25650003",
+          generation: "3",
+        },
+        projections: [
+          "classic-v2",
+          "classic-v3",
+          "stock-paired-v1",
+          "stock-paired-v2",
+          "stock-paired-v3",
+        ].map((releaseId) => ({
+          releaseId,
+          status: "committed",
+          projectedCandidateCount: 64,
+          ignoredCandidateCount: 0,
+          pageCount: 2,
+          checkpointGeneration: "2",
+        })),
+        readiness: {
+          status: "progressed",
+          activationReady: false,
+          lagging: true,
+          terminalSweepComplete: false,
+          stoppedForDeadline: true,
+          completedRounds: 3,
+          snapshotBlock: "25650003",
+        },
+        deadlineMs: 75_000,
+      });
+    } finally {
+      dateNow.mockRestore();
+    }
+
+    expect(runCycle).toHaveBeenCalledTimes(3);
+    expect(prepareReleaseRound).toHaveBeenCalledTimes(2);
+    expect(runReleaseCycle).toHaveBeenCalledTimes(10);
+    expect([...releaseCalls.values()]).toEqual([2, 2, 2, 2, 2]);
+    expect(close).toHaveBeenCalledTimes(2);
+  });
+
   it("does not report an atomic-group release as terminally swept", async () => {
     const close = vi.fn(async () => undefined);
     const executor = { close };

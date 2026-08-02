@@ -604,8 +604,14 @@ export async function runConfiguredProjectorCycle(
         ReturnType<typeof prepareReleaseProjectionRound>
       > | null = null;
       if (participatingReleases.length > 0) {
-        if (operationDeadline(operationsRemaining) === null) {
+        if (
+          operationDeadline(operationsRemaining) !==
+            RELEASE_PROJECTION_DEADLINE_MS
+        ) {
           stoppedForDeadline = true;
+          completedRounds += 1;
+          if (madeProgress) madeAnyProgress = true;
+          terminalSweepComplete = false;
           break;
         }
         try {
