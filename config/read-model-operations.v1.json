@@ -159,7 +159,7 @@
         },
         {
           "path": "supabase/migrations/20260802104211_real_block_sla_runtime_receipts.sql",
-          "sha256": "c0eb517f53e1d84e04ca03a1b603daef59f3525021b37a9ede77e7c50e129188"
+          "sha256": "0b9331f2b452084c4544b751ce1fbd41bba7e927ef81d6cddcb258c36f8729dc"
         }
       ]
     }

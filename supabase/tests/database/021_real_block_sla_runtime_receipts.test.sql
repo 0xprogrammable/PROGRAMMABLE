@@ -1,6 +1,6 @@
 begin;
 
-select plan(45);
+select plan(47);
 
 select is(
   (
@@ -79,6 +79,7 @@ select ok(
         'record_real_block_sla_api_observation_v1',
         'record_real_block_sla_api_observation_pair_v1',
         'get_real_block_sla_capture_target_v1',
+        'get_real_block_sla_capture_target_for_arm_v1',
         'get_real_block_sla_capture_stage_v1',
         'get_real_block_sla_retry_schedule_v1', 'create_real_block_sla_export_v1'
       )
@@ -150,6 +151,14 @@ select ok(
   ) and pg_catalog.has_function_privilege(
     'programmable_projector_runtime',
     'programmable_wake_private.get_real_block_sla_capture_stage_v1(bigint)',
+    'EXECUTE'
+  ) and pg_catalog.has_function_privilege(
+    'programmable_projector_runtime',
+    'programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1(uuid)',
+    'EXECUTE'
+  ) and not pg_catalog.has_function_privilege(
+    'public',
+    'programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1(uuid)',
     'EXECUTE'
   ) and pg_catalog.has_function_privilege(
     'programmable_projector_runtime',
@@ -460,6 +469,87 @@ as $function$
   )
 $function$;
 
+create function pg_temp.sla_projection_execution_evidence_v1()
+returns table (
+  execution_trace jsonb,
+  trace_commitment bytea,
+  canonical_preimage bytea,
+  content_fingerprint bytea
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  trace jsonb := pg_catalog.jsonb_build_object(
+    'startedAtMs', 1775000000000,
+    'completedAtMs', 1775000000005,
+    'candidateBatchSize', 1,
+    'hardDeadlineMs', 75000,
+    'maxCallsPerProvider', 128,
+    'elapsedMs', 5,
+    'providerCallCounts', pg_catalog.jsonb_build_array(1, 1),
+    'calls', pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object(
+        'providerIdentity', 'alchemy-mainnet-' || pg_catalog.repeat('31', 16),
+        'providerVendorGroup', 'alchemy',
+        'providerEndpointCommitment', '0x' || pg_catalog.repeat('33', 32),
+        'providerOriginCommitment', '0x' || pg_catalog.repeat('34', 32),
+        'operation', 'getBlock', 'attempt', 1,
+        'startedOffsetMs', 0, 'durationMs', 1, 'outcome', 'success'
+      ),
+      pg_catalog.jsonb_build_object(
+        'providerIdentity', 'quicknode-mainnet-' || pg_catalog.repeat('41', 16),
+        'providerVendorGroup', 'quicknode',
+        'providerEndpointCommitment', '0x' || pg_catalog.repeat('43', 32),
+        'providerOriginCommitment', '0x' || pg_catalog.repeat('44', 32),
+        'operation', 'getBlock', 'attempt', 1,
+        'startedOffsetMs', 1, 'durationMs', 1, 'outcome', 'success'
+      )
+    )
+  );
+  trace_hash bytea;
+  evidence_preimage bytea;
+begin
+  trace_hash := programmable_private.projection_execution_trace_commitment_v1(trace);
+  evidence_preimage := programmable_private.projection_execution_evidence_preimage_v1(
+    1, 'classic-v2', 'classic', 'core',
+    '78000000-0000-4000-8000-000000000008', 1,
+    '7b000000-0000-4000-8000-00000000000b',
+    '78900000-0000-4000-8000-000000000001',
+    '78900000-0000-4000-8000-000000000002',
+    'alchemy-mainnet-' || pg_catalog.repeat('31', 16),
+    'quicknode-mainnet-' || pg_catalog.repeat('41', 16),
+    'alchemy', 'quicknode',
+    pg_catalog.decode(pg_catalog.repeat('33', 32), 'hex'),
+    pg_catalog.decode(pg_catalog.repeat('43', 32), 'hex'),
+    pg_catalog.decode(pg_catalog.repeat('34', 32), 'hex'),
+    pg_catalog.decode(pg_catalog.repeat('44', 32), 'hex'),
+    1, 1, 1, 75000, 128, 5, trace_hash
+  );
+  return query select trace, trace_hash, evidence_preimage,
+    pg_catalog.sha256(evidence_preimage);
+end
+$function$;
+
+create function pg_temp.sla_provider_binding_commitment_v1()
+returns bytea
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select programmable_private.projection_provider_binding_commitment_v1(
+    '7c000000-0000-4000-8000-00000000000c',
+    '7b000000-0000-4000-8000-00000000000b',
+    'exact_incremental',
+    '7f000000-0000-4000-8000-00000000000f',
+    array[]::uuid[],
+    '2026-08-02T12:00:03.300Z'
+  )
+$function$;
+
 set role programmable_projector;
 
 select programmable_private.register_provider_deployment(
@@ -534,12 +624,6 @@ reset session authorization;
 -- Build one reachable Classic publication through the same epoch, occurrence,
 -- staging and publication APIs used by a real promoted Candidate. This is
 -- deliberately longer than the former impossible replication-trigger bypass.
-set role programmable_migrator;
-grant execute on function programmable_private.promote_projection_run(
-  uuid, uuid, uuid, uuid, text, bigint, bytea,
-  bigint, bigint, bigint, uuid, uuid, numeric, bytea, numeric,
-  text, uuid[], uuid[], uuid[], uuid[], text[], bytea, timestamptz
-) to programmable_projector;
 set role programmable_projector;
 
 select programmable_private.create_release_epoch(
@@ -733,7 +817,25 @@ select programmable_private.stage_launch_projection_conditions(
   '77000000-0000-4000-8000-000000000007', false,
   '2026-08-02T12:00:03.200Z'
 );
-select programmable_private.promote_projection_run(
+select programmable_private.append_projection_provider_execution_evidence_v1(
+  '7f000000-0000-4000-8000-00000000000f',
+  '7b000000-0000-4000-8000-00000000000b',
+  '78500000-0000-4000-8000-000000000001',
+  array[
+    'd08b62a6-74fb-5e0a-a698-dc6877150db4'::uuid,
+    '78900000-0000-4000-8000-000000000001'::uuid,
+    '78900000-0000-4000-8000-000000000002'::uuid
+  ],
+  evidence.execution_trace,
+  evidence.trace_commitment,
+  3::smallint,
+  evidence.canonical_preimage,
+  evidence.content_fingerprint,
+  '2026-08-02T12:00:03.250Z'
+)
+from pg_temp.sla_projection_execution_evidence_v1() as evidence;
+select programmable_private.promote_projection_run_v3(
+  'exact_incremental',
   '7c000000-0000-4000-8000-00000000000c',
   '7d000000-0000-4000-8000-00000000000d',
   '7e000000-0000-4000-8000-00000000000e',
@@ -750,7 +852,12 @@ select programmable_private.promote_projection_run(
   array[]::uuid[], array[]::uuid[],
   array['78700000-0000-4000-8000-000000000001'::uuid],
   array['explore-list']::text[],
-  decode(repeat('7b', 32), 'hex'), '2026-08-02T12:00:03.300Z'
+  decode(repeat('7b', 32), 'hex'),
+  '7f000000-0000-4000-8000-00000000000f',
+  array[]::uuid[],
+  '7f100000-0000-4000-8000-000000000001',
+  pg_temp.sla_provider_binding_commitment_v1(),
+  '2026-08-02T12:00:03.300Z'
 );
 
 reset role;
@@ -758,11 +865,15 @@ set session authorization programmable_projector_runtime_login;
 set role programmable_projector_runtime;
 
 select ok(
-  programmable_wake_private.arm_real_block_sla_provider_retry_once_v1(
-    pg_catalog.repeat('a', 40), 'dpl_12345678901234567890',
-    'https://programmable-main.vercel.app', 'prj_programmable_main',
-    'stream-mainnet'
-  ) is not null,
+  pg_catalog.set_config(
+    'programmable.test_main_arm_id',
+    programmable_wake_private.arm_real_block_sla_provider_retry_once_v1(
+      pg_catalog.repeat('a', 40), 'dpl_12345678901234567890',
+      'https://programmable-main.vercel.app', 'prj_programmable_main',
+      'stream-mainnet'
+    )::text,
+    true
+  ) <> '',
   'the exact product-bound promoted Candidate and published stream can be armed once'
 );
 
@@ -867,6 +978,22 @@ select is(
   programmable_wake_private.get_real_block_sla_delivery_receipt_v1(1),
   null::bigint,
   'a normal initial 202 is not SLA-capture eligible before arm consumption'
+);
+
+select ok(
+  not exists (
+    select 1
+    from programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1(
+      pg_catalog.current_setting('programmable.test_main_arm_id')::uuid
+    )
+  )
+  and not exists (
+    select 1
+    from programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1(
+      '00000000-0000-4000-8000-000000000099'
+    )
+  ),
+  'an unconsumed or unknown arm cannot disclose a delivery receipt'
 );
 
 select is(
@@ -1130,6 +1257,17 @@ select is(
   ),
   'needs-capture',
   'the complete atomic receipt group advances the DB stage to needs-capture'
+);
+
+select is(
+  (
+    select target.delivery_receipt_id
+    from programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1(
+      pg_catalog.current_setting('programmable.test_main_arm_id')::uuid
+    ) as target
+  ),
+  1::bigint,
+  'the consumed arm resolves only its product-bound capture-ready initial receipt'
 );
 
 select throws_ok(

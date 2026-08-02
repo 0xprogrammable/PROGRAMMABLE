@@ -51,6 +51,7 @@ export type RealBlockSlaCaptureStageState =
 export type RealBlockSlaCaptureStore = Readonly<{
   stageState(deliveryReceiptId: string): Promise<RealBlockSlaCaptureStageState>;
   target(deliveryReceiptId: string): Promise<RealBlockSlaCaptureTarget>;
+  targetForArm(armId: string): Promise<RealBlockSlaCaptureTarget>;
   recordPair(input: Readonly<{
     target: RealBlockSlaCaptureTarget;
     token: Readonly<{
@@ -256,6 +257,28 @@ export function createRealBlockSlaCaptureStore(input: Readonly<{
         const row = rows[0];
         if (rows.length !== 1 || !row) return fail();
         return captureTarget(receiptId, row);
+      });
+    },
+
+    async targetForArm(armId) {
+      const exactArmId = exactUuid(armId);
+      return transaction(async (database) => {
+        const rows = await database.query<{
+          delivery_receipt_id: unknown;
+          optimistic_market_state_id: unknown;
+          token_address: unknown;
+          deployment_origin: unknown;
+          repository_commit: unknown;
+          deployment_id: unknown;
+          project_id: unknown;
+          database_received_at: unknown;
+        }>(
+          "select * from programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1($1::uuid)",
+          [exactArmId],
+        );
+        const row = rows[0];
+        if (rows.length !== 1 || !row) return fail();
+        return captureTarget(positiveIdentifier(row.delivery_receipt_id), row);
       });
     },
 
@@ -569,7 +592,7 @@ export async function captureRealBlockSlaPublicObservations(input: Readonly<{
 
 /** Export-only operator path; it never performs or replaces observations. */
 export async function captureRealBlockSla(input: Readonly<{
-  deliveryReceiptId: string;
+  armId: string;
   challenge: string;
   env?: Environment;
   store?: RealBlockSlaCaptureStore;
@@ -580,7 +603,7 @@ export async function captureRealBlockSla(input: Readonly<{
   const store = input.store ?? createConfiguredRealBlockSlaCaptureStore(env);
   const ownsStore = input.store === undefined;
   try {
-    const target = await store.target(input.deliveryReceiptId);
+    const target = await store.targetForArm(exactUuid(input.armId));
     assertDeployment(target, expectedDeployment);
     const challengeSha256 = `0x${createHash("sha256")
       .update(input.challenge, "utf8").digest("hex")}` as HexBytes32;

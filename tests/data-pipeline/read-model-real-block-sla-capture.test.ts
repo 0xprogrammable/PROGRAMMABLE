@@ -75,6 +75,18 @@ function store(): RealBlockSlaCaptureStore & {
         projectId: ENV.VERCEL_PROJECT_ID,
       },
     })),
+    targetForArm: vi.fn(async () => ({
+      deliveryReceiptId: "19",
+      databaseReceivedAt: new Date(Date.now() - 100).toISOString(),
+      optimisticMarketStateId: STATE_ID,
+      tokenAddress: TOKEN,
+      deployment: {
+        repositoryCommit: ENV.VERCEL_GIT_COMMIT_SHA,
+        deploymentId: ENV.VERCEL_DEPLOYMENT_ID,
+        deploymentOrigin: `https://${ENV.VERCEL_URL}`,
+        projectId: ENV.VERCEL_PROJECT_ID,
+      },
+    })),
     recordPair: vi.fn(async () => undefined),
     export: vi.fn(async () => ({
       kind: "programmable-real-block-sla-db-attestation",
@@ -182,6 +194,47 @@ describe("real-block SLA capture", () => {
     ]);
   });
 
+  it("resolves only the consumed database receipt bound to an exact arm", async () => {
+    const query = vi.fn(async (text: string) => {
+      if (text === "select session_user::text as session_user") {
+        return [{ session_user: "programmable_projector_runtime_login" }];
+      }
+      if (text.includes("current_role::text as current_role")) {
+        return [{
+          session_user: "programmable_projector_runtime_login",
+          current_role: "programmable_projector_runtime",
+        }];
+      }
+      if (text.includes("get_real_block_sla_capture_target_for_arm_v1")) {
+        return [{
+          delivery_receipt_id: "19",
+          optimistic_market_state_id: STATE_ID,
+          token_address: Buffer.from(TOKEN.slice(2), "hex"),
+          deployment_origin: `https://${ENV.VERCEL_URL}`,
+          repository_commit: ENV.VERCEL_GIT_COMMIT_SHA,
+          deployment_id: ENV.VERCEL_DEPLOYMENT_ID,
+          project_id: ENV.VERCEL_PROJECT_ID,
+          database_received_at: "2026-08-02T10:00:00.000Z",
+        }];
+      }
+      return [];
+    });
+    const executor: PostgresExecutor = {
+      async transaction<T>(work: (transaction: PostgresTransaction) => Promise<T>) {
+        return work({ query: query as PostgresTransaction["query"] });
+      },
+      close: vi.fn(async () => undefined),
+    };
+    const armId = "00000000-0000-4000-8000-000000000019";
+
+    await expect(createRealBlockSlaCaptureStore({ executor }).targetForArm(armId))
+      .resolves.toMatchObject({ deliveryReceiptId: "19" });
+    expect(query).toHaveBeenCalledWith(
+      "select * from programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1($1::uuid)",
+      [armId],
+    );
+  });
+
   it("captures exact bounded Token and Chart bytes and returns challenge-bound evidence", async () => {
     const database = store();
     const fetcher = vi.fn(async (url: string | URL | Request) =>
@@ -217,7 +270,7 @@ describe("real-block SLA capture", () => {
     });
     expect(database.export).not.toHaveBeenCalled();
     const result = await captureRealBlockSla({
-      deliveryReceiptId: "19",
+      armId: "00000000-0000-4000-8000-000000000019",
       challenge: `0x${"55".repeat(32)}`,
       env: ENV,
       store: database,

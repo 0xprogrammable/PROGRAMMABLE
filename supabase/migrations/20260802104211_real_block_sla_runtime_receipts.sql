@@ -2211,6 +2211,73 @@ begin
 end
 $function$;
 
+-- The operator receives only the opaque one-shot arm identifier. Resolution to
+-- the consumed initial delivery remains inside the database and repeats every
+-- immutable deployment/product binding before any evidence can be exported.
+create function programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1(
+  p_arm_id uuid
+)
+returns table (
+  delivery_receipt_id bigint,
+  optimistic_market_state_id uuid,
+  token_address bytea,
+  deployment_origin text,
+  repository_commit text,
+  deployment_id text,
+  project_id text,
+  database_received_at timestamptz,
+  capture_complete boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  active_role text := pg_catalog.current_setting('role', true);
+begin
+  if session_user::text <> 'programmable_projector_runtime_login'
+     or active_role is distinct from 'programmable_projector_runtime'
+     or p_arm_id is null
+  then
+    raise exception using errcode = '42501', message = 'invalid SLA capture arm identity';
+  end if;
+  return query
+  select arm.consumed_delivery_receipt_id,
+         target.optimistic_market_state_id,
+         target.token_address,
+         target.deployment_origin,
+         target.repository_commit,
+         target.deployment_id,
+         target.project_id,
+         target.database_received_at,
+         target.capture_complete
+  from programmable_wake_private.real_block_sla_provider_retry_arms_v1 as arm
+  join programmable_wake_private.real_block_sla_provider_retry_consumptions_v1 as consumption
+    on consumption.arm_id = arm.arm_id
+   and consumption.delivery_receipt_id = arm.consumed_delivery_receipt_id
+   and consumption.wake_id = arm.consumed_wake_id
+   and consumption.repository_commit = arm.repository_commit
+   and consumption.vercel_deployment_id = arm.vercel_deployment_id
+   and consumption.vercel_origin = arm.vercel_origin
+   and consumption.vercel_project_id = arm.vercel_project_id
+  cross join lateral programmable_wake_private.get_real_block_sla_capture_target_v1(
+    arm.consumed_delivery_receipt_id
+  ) as target
+  where arm.arm_id = p_arm_id
+    and arm.state = 'consumed'
+    and arm.consumed_delivery_receipt_id is not null
+    and programmable_wake_private.real_block_sla_promoted_product_is_bound_v1(
+      arm.repository_commit, arm.vercel_deployment_id
+    )
+    and target.repository_commit = arm.repository_commit
+    and target.deployment_id = arm.vercel_deployment_id
+    and target.deployment_origin = arm.vercel_origin
+    and target.project_id = arm.vercel_project_id
+  limit 1;
+end
+$function$;
+
 -- One DB-authored state machine prevents runtime code from inferring readiness
 -- from nullable columns or from a partially written receipt group.
 create function programmable_wake_private.get_real_block_sla_capture_stage_v1(
@@ -2457,6 +2524,7 @@ revoke all on function
     bigint, uuid, smallint, text, bytea, smallint, text, bytea
   ),
   programmable_wake_private.get_real_block_sla_capture_target_v1(bigint),
+  programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1(uuid),
   programmable_wake_private.get_real_block_sla_capture_stage_v1(bigint),
   programmable_wake_private.get_real_block_sla_delivery_receipt_v1(bigint),
   programmable_wake_private.get_real_block_sla_retry_schedule_v1(bigint),
@@ -2470,6 +2538,7 @@ grant execute on function
     bigint, uuid, smallint, text, bytea, smallint, text, bytea
   ),
   programmable_wake_private.get_real_block_sla_capture_target_v1(bigint),
+  programmable_wake_private.get_real_block_sla_capture_target_for_arm_v1(uuid),
   programmable_wake_private.get_real_block_sla_capture_stage_v1(bigint),
   programmable_wake_private.get_real_block_sla_delivery_receipt_v1(bigint),
   programmable_wake_private.get_real_block_sla_retry_schedule_v1(bigint),

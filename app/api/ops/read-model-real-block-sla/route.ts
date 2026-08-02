@@ -70,9 +70,11 @@ export async function POST(request: NextRequest) {
   }
   if (
     body === null || typeof body !== "object" || Array.isArray(body) ||
-    Object.keys(body).sort().join(",") !== "challenge,deliveryReceiptId" ||
-    typeof Reflect.get(body, "deliveryReceiptId") !== "string" ||
-    !/^[1-9][0-9]{0,18}$/u.test(Reflect.get(body, "deliveryReceiptId") as string) ||
+    Object.keys(body).sort().join(",") !== "armId,challenge" ||
+    typeof Reflect.get(body, "armId") !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+      Reflect.get(body, "armId") as string,
+    ) ||
     typeof Reflect.get(body, "challenge") !== "string" ||
     !/^0x(?!0{64}$)[0-9a-f]{64}$/u.test(Reflect.get(body, "challenge") as string)
   ) {
@@ -80,7 +82,7 @@ export async function POST(request: NextRequest) {
   }
   try {
     const evidence = await captureRealBlockSla({
-      deliveryReceiptId: Reflect.get(body, "deliveryReceiptId") as string,
+      armId: Reflect.get(body, "armId") as string,
       challenge: Reflect.get(body, "challenge") as string,
     });
     return response(evidence, 200);

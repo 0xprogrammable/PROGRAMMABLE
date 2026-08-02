@@ -12,7 +12,7 @@ import { POST, PUT } from "../../app/api/ops/read-model-real-block-sla/route";
 
 const SECRET = "performance-probe-secret-at-least-32-bytes";
 const body = JSON.stringify({
-  deliveryReceiptId: "19",
+  armId: "00000000-0000-4000-8000-000000000019",
   challenge: `0x${"55".repeat(32)}`,
 });
 
@@ -62,7 +62,7 @@ describe("real-block SLA private capture route", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({ exportId: "receipt" });
     expect(mocks.capture).toHaveBeenCalledWith({
-      deliveryReceiptId: "19",
+      armId: "00000000-0000-4000-8000-000000000019",
       challenge: `0x${"55".repeat(32)}`,
     });
   });
