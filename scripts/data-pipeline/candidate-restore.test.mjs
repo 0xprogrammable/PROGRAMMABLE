@@ -62,10 +62,12 @@ const TOOLCHAIN_EVIDENCE = Object.freeze({
   ...OFFICIAL_POSTGRES_17_TOOLCHAIN,
   toolchainSha256: sha256(canonicalJson(OFFICIAL_POSTGRES_17_TOOLCHAIN)),
 });
-const RESTORED_STRUCTURAL_MANIFEST =
-  PINNED_PRE_ATTESTATION_SNAPSHOT.structuralManifestSha256;
+const HOSTED_RESTORED_STRUCTURAL_MANIFEST = `0x${"9".repeat(64)}`;
+const RESTORED_PORTABLE_STRUCTURAL_MANIFEST =
+  PINNED_PRE_ATTESTATION_SNAPSHOT.portableStructuralManifestSha256;
 const SAFETY_MANIFEST = `0x${"e".repeat(64)}`;
 const SAFETY_STRUCTURAL_MANIFEST = `0x${"f".repeat(64)}`;
+const SAFETY_PORTABLE_STRUCTURAL_MANIFEST = `0x${"d".repeat(64)}`;
 
 const PINNED_SNAPSHOT_EVIDENCE = Object.freeze({
   kind: "programmable-database-backup-restore-evidence",
@@ -161,13 +163,17 @@ function manifest({ restored = false } = {}) {
   return restored
     ? {
         manifestSha256: PINNED_PRE_ATTESTATION_SNAPSHOT.manifestSha256,
-        structuralManifestSha256: RESTORED_STRUCTURAL_MANIFEST,
+        structuralManifestSha256: HOSTED_RESTORED_STRUCTURAL_MANIFEST,
+        portableStructuralManifestSha256:
+          RESTORED_PORTABLE_STRUCTURAL_MANIFEST,
         tableCount: PINNED_SNAPSHOT_EVIDENCE.tableCount,
         rowCount: PINNED_SNAPSHOT_EVIDENCE.rowCount,
       }
     : {
         manifestSha256: SAFETY_MANIFEST,
         structuralManifestSha256: SAFETY_STRUCTURAL_MANIFEST,
+        portableStructuralManifestSha256:
+          SAFETY_PORTABLE_STRUCTURAL_MANIFEST,
         tableCount: 121,
         rowCount: 147_999,
       };
@@ -199,6 +205,10 @@ function rawSafetyEvidence(archive) {
     restoredManifestSha256: current.manifestSha256,
     sourceStructuralManifestSha256: current.structuralManifestSha256,
     restoredStructuralManifestSha256: current.structuralManifestSha256,
+    sourcePortableStructuralManifestSha256:
+      current.portableStructuralManifestSha256,
+    restoredPortableStructuralManifestSha256:
+      current.portableStructuralManifestSha256,
     tableCount: current.tableCount,
     rowCount: current.rowCount,
     postgresVersion: "PostgreSQL 17.10",
@@ -543,6 +553,8 @@ test("pinned pre-attestation evidence is exact and rejects every mutation", () =
       "0x5921ceacba6b7d3c636d3571fd7ebe9fad599626d03372836d0e6293e358c597",
     structuralManifestSha256:
       "0x1546ad4cf2312e3143cf8cd57422f4040924521db4531d2ef2b1a9875f662ef8",
+    portableStructuralManifestSha256:
+      "0x0b95ed1e28d2684aa920be5058c7815b604986a611f67d7900c42d181875e80b",
   });
   assert.equal(PINNED_BASELINE_MIGRATION_SOURCE_CLOSURE.length, 29);
   assert.deepEqual(
@@ -607,6 +619,14 @@ test("restore plan binds CA, raw safety evidence, three tools, schemas and flags
   assert.equal(
     plan.safetyBackup.structuralManifestSha256,
     SAFETY_STRUCTURAL_MANIFEST,
+  );
+  assert.equal(
+    plan.safetyBackup.portableStructuralManifestSha256,
+    SAFETY_PORTABLE_STRUCTURAL_MANIFEST,
+  );
+  assert.equal(
+    plan.postRestore.portableStructuralManifestSha256,
+    RESTORED_PORTABLE_STRUCTURAL_MANIFEST,
   );
   assert.deepEqual(plan.postgresToolchain, TOOLCHAIN_EVIDENCE);
   assert.deepEqual(plan.restore.schemas, CANDIDATE_RESTORE_SCHEMAS);
@@ -852,12 +872,31 @@ test("safety backup binds structural manifest, CA and exact official toolchain",
     SAFETY_STRUCTURAL_MANIFEST,
   );
   assert.equal(
+    evidence.backup.portableStructuralManifestSha256,
+    SAFETY_PORTABLE_STRUCTURAL_MANIFEST,
+  );
+  assert.equal(
     validateCandidateSafetyBackupEvidence(evidence, {
       operatorCommit: OPERATOR_COMMIT,
       currentProductCommit: CURRENT_PRODUCT_COMMIT,
       now: new Date("2026-08-02T09:10:00.000Z"),
     }),
     evidence,
+  );
+  const withoutPortable = structuredClone(files.safetyRawEvidence);
+  delete withoutPortable.sourcePortableStructuralManifestSha256;
+  delete withoutPortable.restoredPortableStructuralManifestSha256;
+  assert.throws(
+    () => buildSafetyEvidence(withoutPortable),
+    /portable structure/u,
+  );
+  const driftedPortable = structuredClone(files.safetyRawEvidence);
+  driftedPortable.sourcePortableStructuralManifestSha256 = `0x${"7".repeat(64)}`;
+  driftedPortable.restoredPortableStructuralManifestSha256 =
+    driftedPortable.sourcePortableStructuralManifestSha256;
+  assert.throws(
+    () => buildSafetyEvidence(driftedPortable),
+    /portable structure/u,
   );
 });
 
@@ -906,7 +945,14 @@ test("restore apply resumes postchecks without replaying pg_restore", async (t) 
   });
   assert.equal(result.executionMode, "resumed-post-restore-verification");
   assert.equal(result.runtimeLoginFence.remainsFenced, true);
-  assert.equal(result.snapshot.structuralManifestSha256, RESTORED_STRUCTURAL_MANIFEST);
+  assert.equal(
+    result.snapshot.structuralManifestSha256,
+    HOSTED_RESTORED_STRUCTURAL_MANIFEST,
+  );
+  assert.equal(
+    result.snapshot.portableStructuralManifestSha256,
+    RESTORED_PORTABLE_STRUCTURAL_MANIFEST,
+  );
   assert.equal(validateCandidateRestoreResult(result), result);
   assert.equal(stateReads, 2);
   assert.equal(manifestReads, 3);
@@ -1045,6 +1091,10 @@ test("safety recovery plan binds raw evidence, CA, tools and immutable restore s
     sha256(canonicalJson(files.safetyRawEvidence)),
   );
   assert.equal(plan.postRestore.structuralManifestSha256, SAFETY_STRUCTURAL_MANIFEST);
+  assert.equal(
+    plan.postRestore.portableStructuralManifestSha256,
+    SAFETY_PORTABLE_STRUCTURAL_MANIFEST,
+  );
   assert.deepEqual(plan.postgresToolchain, TOOLCHAIN_EVIDENCE);
   assert.deepEqual(plan.restore.schemas, CANDIDATE_RESTORE_SCHEMAS);
   assert.deepEqual(plan.restore.flags, CANDIDATE_SAFETY_RECOVERY_FLAGS);
@@ -1095,7 +1145,10 @@ test("safety recovery apply is idempotent and never opens runtime logins", async
           fences += 1;
           return loginFence();
         },
-        captureDatabaseManifest: async () => manifest(),
+        captureDatabaseManifest: async () => ({
+          ...manifest(),
+          structuralManifestSha256: `0x${"8".repeat(64)}`,
+        }),
       }, { recovery: true }),
       validateOfficialToolchain: toolchainDependency(files),
       fileCommitment: commitmentDependency(files),
@@ -1105,6 +1158,11 @@ test("safety recovery apply is idempotent and never opens runtime logins", async
     },
   });
   assert.equal(result.executionMode, "already-recovered");
+  assert.equal(result.manifest.structuralManifestSha256, `0x${"8".repeat(64)}`);
+  assert.equal(
+    result.manifest.portableStructuralManifestSha256,
+    SAFETY_PORTABLE_STRUCTURAL_MANIFEST,
+  );
   assert.equal(result.runtimeLoginFence.remainsFenced, true);
   assert.equal(fences, 1);
   assert.match(result.evidenceSha256, /^0x[0-9a-f]{64}$/u);
