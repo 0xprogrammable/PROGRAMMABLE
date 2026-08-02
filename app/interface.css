@@ -9,45 +9,45 @@
   --radius-control: 13px;
   --radius-panel: 24px;
   --shadow-resting:
-    0 1px 0 rgba(48, 29, 42, 0.035),
-    0 14px 36px rgba(48, 29, 42, 0.035);
+    0 1px 0 rgba(25, 32, 42, 0.035),
+    0 14px 36px rgba(25, 32, 42, 0.035);
   --shadow-floating:
-    0 1px 0 rgba(48, 29, 42, 0.045),
-    0 22px 58px rgba(48, 29, 42, 0.085);
+    0 1px 0 rgba(25, 32, 42, 0.045),
+    0 22px 58px rgba(25, 32, 42, 0.09);
 }
 
 html[data-theme="light"] {
-  --canvas: #fffdfc;
-  --surface: #fcfafb;
+  --canvas: #f9fafb;
+  --surface: #f3f5f7;
   --surface-raised: #ffffff;
-  --surface-soft: #f7f3f6;
-  --border: rgba(77, 56, 70, 0.105);
-  --border-strong: rgba(77, 56, 70, 0.18);
-  --text: #181316;
-  --text-soft: #494147;
-  --muted: #70666d;
-  --dim: #746a70;
-  --header-background: rgba(255, 253, 253, 0.84);
-  --header-border: rgba(87, 62, 78, 0.1);
-  --control-border: rgba(86, 64, 78, 0.16);
-  --panel-border: rgba(86, 64, 78, 0.14);
-  --panel-border-soft: rgba(86, 64, 78, 0.105);
+  --surface-soft: #eceff2;
+  --border: rgba(45, 57, 71, 0.11);
+  --border-strong: rgba(45, 57, 71, 0.2);
+  --text: #15191f;
+  --text-soft: #454d57;
+  --muted: #68727e;
+  --dim: #75808c;
+  --header-background: rgba(249, 250, 251, 0.86);
+  --header-border: rgba(45, 57, 71, 0.11);
+  --control-border: rgba(45, 57, 71, 0.17);
+  --panel-border: rgba(45, 57, 71, 0.145);
+  --panel-border-soft: rgba(45, 57, 71, 0.11);
 }
 
 html[data-theme="dark"] {
-  --canvas: #09111f;
-  --surface: #111a2a;
-  --surface-raised: #172235;
-  --surface-soft: #1a2639;
-  --text: #fbf7fa;
-  --text-soft: #ddd5dc;
-  --muted: #b8aeb8;
-  --dim: #9f96a1;
-  --header-background: rgba(8, 15, 28, 0.82);
-  --header-border: rgba(231, 233, 243, 0.105);
-  --control-border: rgba(231, 233, 243, 0.15);
-  --panel-border: rgba(231, 233, 243, 0.14);
-  --panel-border-soft: rgba(231, 233, 243, 0.105);
+  --canvas: #0f1318;
+  --surface: #151a20;
+  --surface-raised: #1b2129;
+  --surface-soft: #222a33;
+  --text: #f5f7f9;
+  --text-soft: #d2d7de;
+  --muted: #aab2bd;
+  --dim: #919ba7;
+  --header-background: rgba(15, 19, 24, 0.86);
+  --header-border: rgba(231, 234, 239, 0.11);
+  --control-border: rgba(231, 234, 239, 0.15);
+  --panel-border: rgba(231, 234, 239, 0.14);
+  --panel-border-soft: rgba(231, 234, 239, 0.105);
   --shadow-resting:
     0 1px 0 rgba(255, 255, 255, 0.018),
     0 16px 42px rgba(0, 0, 0, 0.18);

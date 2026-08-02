@@ -25,34 +25,27 @@ export default function DocsPage() {
   return (
     <DocsShell
       currentPath="/docs"
-      title="Launch models, clearly explained"
-      description="Understand the pool, fees, rewards and trust boundaries before you sign."
+      title="Docs"
+      description="Platform reference and launch-model documentation."
     >
       <section id="overview">
-        <span className={styles.sectionEyebrow}>Overview</span>
-        <h2>Start with the model</h2>
-        <p className={styles.lead}>
-          Programmable launches fixed-supply ERC-20 tokens into Uniswap v4
-          pools on Ethereum. The selected model fixes the pool structure, fee
-          path, reward rules and available controls before the wallet submits
-          the launch.
-        </p>
-        <div className={styles.callout}>
-          <strong>Release status is part of the product.</strong>
-          <p>
-            Classic is available for new launches on Ethereum Mainnet.
-            Existing Stock-Paired tokens remain supported, but new
-            Stock-Paired launches are closed.
-          </p>
-        </div>
+        <h2>Choose a guide</h2>
 
         <div className={styles.modelGrid}>
+          <Link className={styles.modelCard} href="/docs#launching">
+            <span className={styles.modelCardHeader}>
+              <strong>Platform</strong>
+            </span>
+            <p>Explore tokens, create a launch and manage your profile.</p>
+            <span className={styles.modelLink}>
+              Read platform docs
+              <ArrowRight aria-hidden="true" size={14} />
+            </span>
+          </Link>
+
           <Link className={styles.modelCard} href="/docs/models/classic">
             <span className={styles.modelCardHeader}>
               <strong>Classic</strong>
-              <span className={styles.status} data-status="live">
-                Live
-              </span>
             </span>
             <p>
               Set buy and sell fees, choose who receives creator rewards and
@@ -66,26 +59,35 @@ export default function DocsPage() {
 
           <Link
             className={styles.modelCard}
-            href="/docs/models/stock-paired"
+            href="/docs/models/custom"
           >
             <span className={styles.modelCardHeader}>
-              <strong>Stock-Paired</strong>
-              <span className={styles.status}>Historical</span>
+              <strong>Custom</strong>
             </span>
             <p>
-              Existing tokens retain their recorded Ondo quote asset, pool,
-              trading route and creator rewards.
+              Product boundary and release requirements for custom launch
+              configuration.
             </p>
             <span className={styles.modelLink}>
-              Read Stock-Paired history
+              Read Custom
               <ArrowRight aria-hidden="true" size={14} />
             </span>
           </Link>
         </div>
+
+        <p className={styles.lead}>
+          Programmable launches fixed-supply ERC-20 tokens into Uniswap v4
+          pools on Ethereum. A launch model defines the pool structure, fee
+          path, reward rules and available controls before the wallet submits
+          the transaction.
+        </p>
+        <div className={styles.callout}>
+          <strong>Classic is available for new launches.</strong>
+          <p>Custom is documented as a product boundary but is not available in this build.</p>
+        </div>
       </section>
 
       <section id="launching">
-        <span className={styles.sectionEyebrow}>Launch flow</span>
         <h2>From setup to a confirmed transaction</h2>
         <ol className={styles.steps}>
           <li>
@@ -126,7 +128,6 @@ export default function DocsPage() {
       </section>
 
       <section id="trading">
-        <span className={styles.sectionEyebrow}>Trading and pricing</span>
         <h2>The recorded pool is the source of truth</h2>
         <p>
           Explore and token pages read the pool recorded by the verified launch
@@ -155,7 +156,6 @@ export default function DocsPage() {
       </section>
 
       <section id="rewards">
-        <span className={styles.sectionEyebrow}>Creator rewards</span>
         <h2>Rewards follow the launch terms</h2>
         <p>
           Classic rewards accrue in ETH. A launch can assign them to the launch
@@ -169,10 +169,6 @@ export default function DocsPage() {
           and split percentages after checkpointing rewards already accrued
           under the current configuration.
         </p>
-        <p>
-          Stock-Paired rewards accrue in its selected quote token. Profile
-          shows the claims available to the connected wallet.
-        </p>
         <div className={styles.callout}>
           <strong>Claiming cannot change the launch economics.</strong>
           <p>
@@ -183,7 +179,6 @@ export default function DocsPage() {
       </section>
 
       <section id="network">
-        <span className={styles.sectionEyebrow}>Network</span>
         <h2>Ethereum Mainnet</h2>
         <p>
           Public launches use Ethereum Mainnet and the official Uniswap v4
@@ -204,7 +199,6 @@ export default function DocsPage() {
       </section>
 
       <section id="contracts">
-        <span className={styles.sectionEyebrow}>Contracts</span>
         <h2>Active Classic deployment</h2>
         <p>
           These are the primary contracts behind the public Classic launcher.
@@ -283,7 +277,6 @@ export default function DocsPage() {
       </section>
 
       <section id="metadata">
-        <span className={styles.sectionEyebrow}>Token metadata</span>
         <h2>Project details are public</h2>
         <p>
           Token metadata can include a description, image, website, X link and
@@ -294,7 +287,6 @@ export default function DocsPage() {
       </section>
 
       <section id="releases">
-        <span className={styles.sectionEyebrow}>Release evidence</span>
         <h2>Source and deployment must match</h2>
         <p>
           A model reaches the public launcher only when its deployment record,
@@ -338,7 +330,6 @@ export default function DocsPage() {
       </section>
 
       <section id="risks">
-        <span className={styles.sectionEyebrow}>Risks</span>
         <h2>What Programmable cannot guarantee</h2>
         <ul className={styles.contentList}>
           <li>

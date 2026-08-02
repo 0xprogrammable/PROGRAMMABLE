@@ -30,10 +30,10 @@
 }
 
 .modelGrid {
-  gap: 18px;
-  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: clamp(28px, 4svh, 42px);
-  max-width: 720px;
+  max-width: 1080px;
 }
 
 .modelCard {
@@ -44,7 +44,7 @@
     0 1px 0 var(--card-shadow),
     0 20px 52px var(--card-shadow-soft);
   isolation: isolate;
-  min-height: 394px;
+  min-height: 500px;
   overflow: clip;
   transition:
     border-color 180ms ease,
@@ -54,7 +54,7 @@
 
 .modelArt {
   background: var(--surface-soft);
-  height: 218px;
+  height: 292px;
   isolation: isolate;
 }
 
@@ -77,8 +77,25 @@
 }
 
 .modelBody {
-  min-height: 176px;
+  min-height: 208px;
   padding: 24px 26px 20px;
+}
+
+.customCard {
+  cursor: default;
+}
+
+.customCard:active {
+  transform: none;
+}
+
+.customArt img {
+  filter: grayscale(0.28) saturate(0.72) contrast(0.94);
+  object-fit: cover;
+}
+
+.customStatus {
+  color: var(--muted);
 }
 
 .modelHeading {
@@ -165,6 +182,10 @@
 
 .modelCard[data-launch-model-available="false"] .modelArt img {
   filter: saturate(0.78) contrast(0.92);
+}
+
+.customCard[data-launch-model-available="false"] .customArt img {
+  filter: grayscale(1) contrast(0.9) brightness(1.03);
 }
 
 .formPage {
@@ -572,7 +593,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .modelCard:not(:disabled):hover {
+  .modelCard[data-launch-model-available="true"]:hover {
     border-color: color-mix(in srgb, var(--accent) 30%, var(--panel-border));
     box-shadow:
       0 1px 0 var(--card-shadow),
@@ -580,11 +601,11 @@
     transform: translateY(-3px);
   }
 
-  .modelCard:not(:disabled):hover .modelArt img {
+  .modelCard[data-launch-model-available="true"]:hover .modelArt img {
     transform: scale(1.014);
   }
 
-  .modelCard:not(:disabled):hover .modelAction svg {
+  .modelCard[data-launch-model-available="true"]:hover .modelAction svg {
     transform: translateX(3px);
   }
 
@@ -598,7 +619,7 @@
   }
 }
 
-.modelCard:not(:disabled):active {
+.modelCard[data-launch-model-available="true"]:active {
   transform: scale(0.992);
 }
 

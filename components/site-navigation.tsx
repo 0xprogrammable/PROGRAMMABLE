@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BookOpen,
   Compass,
   Moon,
   Plus,
@@ -23,12 +24,11 @@ const themeChangeEvent = "programmable:theme-changed";
 const desktopNavItems = [
   { href: "/", label: "Explore", icon: Compass },
   { href: "/launch", label: "Create", icon: Plus },
-];
-
-const mobileNavItems = [
-  ...desktopNavItems,
+  { href: "/docs", label: "Docs", icon: BookOpen },
   { href: "/profile", label: "Profile", icon: UserRound },
 ];
+
+const mobileNavItems = desktopNavItems;
 
 function isCurrent(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname.startsWith(href);

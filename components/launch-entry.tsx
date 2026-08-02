@@ -147,7 +147,7 @@ export function LaunchModelPicker({
             <span
               className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
-              <strong>Token</strong>
+              <strong>Classic</strong>
               {!classicV3LaunchAvailable ? (
                 <small data-status="pending">Unavailable</small>
               ) : null}
@@ -156,7 +156,8 @@ export function LaunchModelPicker({
               className={`launch-model-description ${launchExperience.modelDescription}`}
               id="launch-model-classic-description"
             >
-              Fixed supply on Uniswap v4. Creator rewards are paid in ETH.
+              Fixed supply, permanent one-sided liquidity and configurable
+              creator rewards.
             </span>
             {classicV3LaunchAvailable ? (
               <span
@@ -169,6 +170,48 @@ export function LaunchModelPicker({
           </span>
         </button>
 
+        <article
+          className={`launch-model-card ${launchExperience.modelCard} ${launchExperience.customCard}`}
+          data-launch-model-option="custom"
+          data-launch-model-available="false"
+          aria-labelledby="launch-model-custom-title"
+          aria-describedby="launch-model-custom-description"
+        >
+          <span
+            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
+            aria-hidden="true"
+          >
+            <Image
+              src="/brand/programmable-token-fallback-02-moon.webp"
+              alt=""
+              fill
+              loading="eager"
+              sizes="(max-width: 520px) calc(100vw - 28px), (max-width: 800px) calc(100vw - 48px), 500px"
+            />
+          </span>
+
+          <span
+            className={`launch-model-card-body ${launchExperience.modelBody}`}
+          >
+            <span
+              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
+            >
+              <strong id="launch-model-custom-title">Custom</strong>
+              <small data-status="pending">In development</small>
+            </span>
+            <span
+              className={`launch-model-description ${launchExperience.modelDescription}`}
+              id="launch-model-custom-description"
+            >
+              Custom launch configuration is not available in this build.
+            </span>
+            <span
+              className={`launch-model-action ${launchExperience.modelAction} ${launchExperience.customStatus}`}
+            >
+              Not available
+            </span>
+          </span>
+        </article>
       </div>
     </div>
   );

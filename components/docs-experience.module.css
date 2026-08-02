@@ -34,7 +34,7 @@
   font-weight: 560;
   letter-spacing: -0.052em;
   line-height: 1;
-  margin-top: 14px;
+  margin-top: 0;
   text-wrap: balance;
 }
 
@@ -364,6 +364,10 @@
   gap: 13px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 27px;
+}
+
+.modelGrid + .lead {
+  margin-top: 32px;
 }
 
 .modelCard {

@@ -46,14 +46,18 @@ describe("interaction state regressions", () => {
     );
   });
 
-  it("shows visible feedback when address copying fails", () => {
-    for (const file of [
-      "components/explore-view.tsx",
-      "components/token-detail-view.tsx",
-    ]) {
-      const source = readFileSync(join(root, file), "utf8");
-      expect(source).toContain('setCopyError("Could not copy address")');
-      expect(source).toContain('<p className="toast" role="alert">');
-    }
+  it("shows visible feedback when the detail-page address copy fails", () => {
+    const detailSource = readFileSync(
+      join(root, "components/token-detail-view.tsx"),
+      "utf8",
+    );
+    const exploreSource = readFileSync(
+      join(root, "components/explore-view.tsx"),
+      "utf8",
+    );
+
+    expect(detailSource).toContain('setCopyError("Could not copy address")');
+    expect(detailSource).toContain('<p className="toast" role="alert">');
+    expect(exploreSource).not.toContain("Copy contract address");
   });
 });

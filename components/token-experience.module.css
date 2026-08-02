@@ -1,7 +1,7 @@
 .page {
   isolation: isolate;
   min-height: calc(100svh - var(--header-height));
-  max-width: 1280px;
+  max-width: 1120px;
   padding-bottom: 46px;
   padding-top: 18px;
   position: relative;
@@ -43,7 +43,9 @@
   align-items: stretch;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 390px);
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 auto;
+  max-width: 1020px;
 }
 
 .overview,
@@ -63,21 +65,21 @@
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
-  padding: 32px;
+  padding: clamp(24px, 4vw, 42px);
 }
 
 .identity {
-  align-items: center;
+  align-items: start;
   display: grid;
-  gap: 28px;
-  grid-template-columns: 158px minmax(0, 1fr);
+  gap: clamp(30px, 5vw, 54px);
+  grid-template-columns: minmax(320px, 0.98fr) minmax(0, 1.02fr);
 }
 
 .image {
   aspect-ratio: 1;
   background: var(--surface-soft);
   border: 1px solid var(--panel-border-soft);
-  border-radius: 28px;
+  border-radius: 30px;
   overflow: hidden;
   position: relative;
 }
@@ -88,6 +90,7 @@
 
 .identityCopy {
   min-width: 0;
+  padding: clamp(14px, 4vw, 42px) 0 0;
 }
 
 .tokenSymbolRow {
@@ -175,7 +178,7 @@
   font-size: 16px;
   letter-spacing: -0.012em;
   line-height: 1.58;
-  margin: 0;
+  margin: 28px 0 0;
   max-width: 62ch;
 }
 
@@ -188,7 +191,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
-  margin: 0;
+  margin: 22px 0 0;
 }
 
 .socialLink {
@@ -230,7 +233,7 @@
   display: grid;
   gap: 1px;
   grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
-  margin: 22px 0 0;
+  margin: 18px 0 0;
   overflow: hidden;
   padding: 0;
 }
@@ -349,9 +352,22 @@
   margin: 0;
 }
 
+.projectPanelHeading {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.communityStatus {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 640;
+}
+
 .projectFacts {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 20px 0 0;
 }
 
@@ -468,12 +484,34 @@
   font-weight: 650;
   gap: 7px;
   justify-content: center;
-  margin-top: auto;
+  margin-top: 0;
   min-height: 46px;
   padding: 0 14px;
   transition:
     filter 150ms ease,
     transform 140ms var(--ease-out);
+}
+
+.communityPanel {
+  min-height: 224px;
+}
+
+.communityBody {
+  align-items: end;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 22px;
+  padding-top: 24px;
+}
+
+.communityBody p {
+  color: var(--text-soft);
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 50ch;
 }
 
 .communitySecondary {
@@ -490,8 +528,7 @@
   display: flex;
   min-width: 0;
   padding: 24px;
-  position: sticky;
-  top: calc(var(--header-height) + 18px);
+  position: static;
   width: 100%;
 }
 
@@ -1094,12 +1131,16 @@
 
   .identity {
     align-items: start;
-    gap: 14px;
-    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 24px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .image {
-    border-radius: 18px;
+    border-radius: 20px;
+  }
+
+  .identityCopy {
+    padding: 0 2px;
   }
 
   .symbol {
@@ -1107,10 +1148,10 @@
   }
 
   .name {
-    font-size: clamp(29px, 9.2vw, 38px);
-    letter-spacing: -0.035em;
-    line-height: 1;
-    margin-top: 5px;
+    font-size: clamp(42px, 13vw, 62px);
+    letter-spacing: -0.05em;
+    line-height: 0.95;
+    margin-top: 8px;
   }
 
   .addressActions {
@@ -1125,19 +1166,13 @@
     font-size: 12px;
   }
 
-  .tokenMeta {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 11px;
-    margin-top: 17px;
-  }
-
   .description {
     font-size: 14px;
+    margin-top: 22px;
   }
 
   .links {
-    margin: 0;
+    margin-top: 18px;
   }
 
   .socialLink {
@@ -1195,7 +1230,12 @@
   }
 
   .communityAction {
-    margin-top: 22px;
+    width: 100%;
+  }
+
+  .communityBody {
+    align-items: stretch;
+    grid-template-columns: 1fr;
   }
 
   .tradeShell {
@@ -1221,13 +1261,8 @@
 }
 
 @media (max-width: 430px) {
-  .identity {
-    gap: 12px;
-    grid-template-columns: 78px minmax(0, 1fr);
-  }
-
   .name {
-    font-size: clamp(27px, 8.5vw, 32px);
+    font-size: clamp(38px, 12vw, 48px);
   }
 
   .overview,
@@ -1266,8 +1301,8 @@
 
 @media (max-width: 360px) {
   .name {
-    font-size: clamp(24px, 7.8vw, 27px);
-    letter-spacing: -0.04em;
+    font-size: 37px;
+    letter-spacing: -0.05em;
   }
 
   .balance {

@@ -70,7 +70,11 @@ export function shouldRenderPriceHistory(input: {
   hasChart: boolean;
   range: ChartRange;
 }) {
-  return input.loading || input.hasChart || input.range !== "all";
+  return (
+    input.loading ||
+    input.hasChart ||
+    CHART_RANGES.some(({ value }) => value === input.range)
+  );
 }
 
 const CHART_RANGES: ReadonlyArray<{

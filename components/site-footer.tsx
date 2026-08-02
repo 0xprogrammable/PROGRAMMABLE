@@ -49,7 +49,7 @@ export function SiteFooter() {
               height={192}
             />
           </Link>
-          <p>Tokens with programmable markets on Ethereum.</p>
+          <p>Explore and create tokens on Ethereum.</p>
         </section>
 
         <nav className={styles.column} aria-label="Product">

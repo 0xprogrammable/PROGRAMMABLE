@@ -218,7 +218,7 @@
 }
 
 .connectMark {
-  filter: drop-shadow(0 14px 30px rgba(142, 68, 109, 0.1));
+  filter: drop-shadow(0 14px 30px rgba(38, 48, 60, 0.1));
   height: 78px;
   margin-block-end: 22px;
   object-fit: contain;
@@ -337,30 +337,6 @@
   font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;
-}
-
-.rewardDistribution {
-  background: color-mix(in srgb, var(--surface-soft) 82%, transparent);
-  border-radius: 999px;
-  display: flex;
-  gap: 2px;
-  grid-column: 1 / -1;
-  height: 4px;
-  overflow: hidden;
-  width: 100%;
-}
-
-.rewardDistribution span {
-  background: var(--accent);
-  min-width: 4px;
-}
-
-.rewardDistribution span:nth-child(3n + 2) {
-  background: color-mix(in srgb, var(--accent) 72%, #c9a8ee);
-}
-
-.rewardDistribution span:nth-child(3n + 3) {
-  background: color-mix(in srgb, var(--accent) 64%, #efc074);
 }
 
 .sourceWarning {

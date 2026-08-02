@@ -137,14 +137,14 @@ describe("interaction accessibility", () => {
     );
   });
 
-  it("keeps range controls available after selecting an empty chart window", () => {
+  it("keeps the chart surface available without price history", () => {
     expect(
       shouldRenderPriceHistory({
         loading: false,
         hasChart: false,
         range: "all",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldRenderPriceHistory({
         loading: false,

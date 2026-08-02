@@ -8,7 +8,6 @@ export function DocsShell({
   children,
   currentPath,
   description,
-  kicker = "Programmable docs",
   title,
 }: {
   children: ReactNode;
@@ -20,7 +19,6 @@ export function DocsShell({
   return (
     <div className={`${styles.page} page-width`} data-docs-shell>
       <header className={styles.hero} data-docs-hero>
-        <span className={styles.kicker}>{kicker}</span>
         <h1>{title}</h1>
         <p>{description}</p>
         <DocsSearch />

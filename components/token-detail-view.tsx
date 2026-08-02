@@ -603,13 +603,6 @@ function getLinkLabel(kind: TokenLinkKind) {
   return "X";
 }
 
-function getLaunchModelLabel(model: LauncherToken["launchModel"]) {
-  if (model === "adaptive") return "Adaptive market";
-  if (model === "deep") return "Deep liquidity";
-  if (model === "stock-paired") return "Stock-paired market";
-  return "Classic market";
-}
-
 function getNetworkLabel(chainId: number) {
   if (chainId === 1) return "Ethereum";
   if (chainId === 11_155_111) return "Sepolia";
@@ -745,7 +738,6 @@ function TokenDetailContent({
   const imageSource = getTokenCardImageSource(imageUrl);
   const projectLinks = token.links ?? [];
   const communityLink = projectLinks.find((link) => link.kind === "telegram");
-  const updatesLink = projectLinks.find((link) => link.kind === "x");
   const creatorAddress = isTokenAddress(token.creatorAddress)
     ? token.creatorAddress
     : null;
@@ -1024,44 +1016,18 @@ function TokenDetailContent({
                   </a>
                 ) : null}
               </div>
+
+              <p
+                className={`${styles.description}${
+                  token.description?.trim()
+                    ? ""
+                    : ` ${styles.descriptionEmpty}`
+                }`}
+              >
+                {token.description?.trim() || "No description provided."}
+              </p>
             </div>
           </div>
-
-          <div className={styles.tokenMeta}>
-            <p
-              className={`${styles.description}${
-                token.description?.trim() ? "" : ` ${styles.descriptionEmpty}`
-              }`}
-            >
-              {token.description?.trim() || "No description provided."}
-            </p>
-
-            {projectLinks.length > 0 ? (
-              <div className={styles.links} aria-label={`${token.name} links`}>
-                {projectLinks.map((link) => {
-                  const label = getLinkLabel(link.kind);
-                  return (
-                    <a
-                      className={`${styles.socialLink} ${
-                        link.kind === "website" ? styles.websiteLink : ""
-                      }`}
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`${token.name} on ${label}`}
-                      key={`${link.kind}:${link.url}`}
-                    >
-                      <TokenLinkIcon kind={link.kind} />
-                      <span>{label}</span>
-                      <ArrowUpRight aria-hidden="true" size={14} />
-                    </a>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-
-          <MetricGrid metrics={metrics} />
 
           <TokenPriceChart
             tokenAddress={token.tokenAddress}
@@ -1071,6 +1037,8 @@ function TokenDetailContent({
             onMarketCapChange={setHoveredMarketCap}
             onVolumeChange={setChartVolume}
           />
+
+          <MetricGrid metrics={metrics} />
 
           {token.launchModel === "deep" &&
           token.growthTargetNativeWei &&
@@ -1084,13 +1052,9 @@ function TokenDetailContent({
               className={`${styles.projectPanel} ${styles.projectPanelWide}`}
             >
               <header className={styles.projectPanelHeading}>
-                <h2>Market</h2>
+                <h2>Token details</h2>
               </header>
               <dl className={styles.projectFacts}>
-                <div>
-                  <dt>Market model</dt>
-                  <dd>{getLaunchModelLabel(token.launchModel)}</dd>
-                </div>
                 <div>
                   <dt>Network</dt>
                   <dd>{getNetworkLabel(chainId)}</dd>
@@ -1145,34 +1109,62 @@ function TokenDetailContent({
 
             <section className={styles.projectPanel}>
               <header className={styles.projectPanelHeading}>
-                <h2>Community</h2>
+                <h2>Links</h2>
               </header>
-              {communityLink ? (
+              {projectLinks.length > 0 ? (
+                <div className={styles.links} aria-label={`${token.name} links`}>
+                  {projectLinks.map((link) => {
+                    const label = getLinkLabel(link.kind);
+                    return (
+                      <a
+                        className={`${styles.socialLink} ${
+                          link.kind === "website" ? styles.websiteLink : ""
+                        }`}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`${token.name} on ${label}`}
+                        key={`${link.kind}:${link.url}`}
+                      >
+                        <TokenLinkIcon kind={link.kind} />
+                        <span>{label}</span>
+                        <ArrowUpRight aria-hidden="true" size={14} />
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className={styles.projectEmpty}>No project links provided.</p>
+              )}
+            </section>
+
+            <section
+              className={`${styles.projectPanel} ${styles.projectPanelWide} ${styles.communityPanel}`}
+            >
+              <header className={styles.projectPanelHeading}>
+                <h2>Community chat</h2>
+                <span className={styles.communityStatus}>
+                  {communityLink ? "Connected" : "Not connected"}
+                </span>
+              </header>
+              <div className={styles.communityBody}>
+                <p>
+                  {communityLink
+                    ? `Join the ${token.name} community chat on Telegram.`
+                    : "This project has not connected a community chat."}
+                </p>
+                {communityLink ? (
                 <a
                   className={styles.communityAction}
                   href={communityLink.url}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Open Telegram
+                  Open chat
                   <ArrowUpRight aria-hidden="true" size={15} />
                 </a>
-              ) : (
-                <p className={styles.projectEmpty}>
-                  No community chat provided.
-                </p>
-              )}
-              {updatesLink ? (
-                <a
-                  className={styles.communitySecondary}
-                  href={updatesLink.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View on X
-                  <ArrowUpRight aria-hidden="true" size={13} />
-                </a>
-              ) : null}
+                ) : null}
+              </div>
             </section>
           </div>
         </section>

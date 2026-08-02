@@ -2687,7 +2687,7 @@ function TokenStep({
               <span className="token-image-placeholder">
                 <ImagePlus aria-hidden="true" size={21} />
                 <strong>Choose image</strong>
-                <small>Square preview</small>
+                <small>Cropped to 1:1 · 1000 × 1000</small>
               </span>
             )}
           </button>

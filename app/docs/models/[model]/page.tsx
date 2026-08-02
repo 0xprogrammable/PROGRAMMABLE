@@ -5,7 +5,7 @@ import { ExternalLink } from "lucide-react";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
 
-type ModelSlug = "classic" | "stock-paired";
+type ModelSlug = "classic" | "custom" | "stock-paired";
 
 const classicEvidenceCommit =
   "1fb9558af4f0248de75d5c7983f80036e32f47cb";
@@ -20,6 +20,11 @@ const modelMetadata: Record<
     title: "Classic",
     description:
       "Configure buy and sell fees, creator rewards and Initial Buy custody for a fixed-supply Uniswap v4 token.",
+  },
+  custom: {
+    title: "Custom",
+    description:
+      "Product boundary and release requirements for custom launch configuration.",
   },
   "stock-paired": {
     title: "Stock-Paired",
@@ -72,7 +77,6 @@ function ClassicDocs() {
       description="A fixed-supply Uniswap v4 launch with configurable fees, creator rewards in ETH and permanent one-sided liquidity."
     >
       <section>
-        <span className={styles.sectionEyebrow}>Model overview</span>
         <h2>Set the terms before the token launches</h2>
         <p className={styles.lead}>
           Classic creates the token, initializes its ETH pool and deposits the
@@ -101,7 +105,6 @@ function ClassicDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Fee path</span>
         <h2>Each direction has its own fixed fee</h2>
         <div className={styles.flow}>
           <div className={styles.flowItem}>
@@ -132,7 +135,6 @@ function ClassicDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Creator rewards</span>
         <h2>Choose who receives the ETH</h2>
         <p>
           Rewards can go to the launch wallet, another wallet or a split
@@ -178,7 +180,6 @@ function ClassicDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Initial Buy</span>
         <h2>Buy at launch, then choose how the tokens are held</h2>
         <p>
           The launch wallet chooses at least 0.0006 ETH for its Initial Buy.
@@ -189,7 +190,6 @@ function ClassicDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Launch transaction</span>
         <h2>One confirmation creates the complete launch</h2>
         <ol className={styles.steps}>
           <li>
@@ -223,7 +223,6 @@ function ClassicDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Opening price</span>
         <h2>A deterministic starting point</h2>
         <p>
           The current Classic curve begins at an approximate fully diluted
@@ -235,7 +234,6 @@ function ClassicDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Boundaries</span>
         <h2>What Classic does not add</h2>
         <ul className={styles.contentList}>
           <li>No minting after launch.</li>
@@ -254,7 +252,6 @@ function ClassicDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Contracts</span>
         <h2>Active public deployment</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -369,6 +366,53 @@ function ClassicDocs() {
   );
 }
 
+function CustomDocs() {
+  return (
+    <DocsShell
+      currentPath="/docs/models/custom"
+      title="Custom"
+      description="Custom launch configuration is not available in this build."
+    >
+      <section>
+        <h2>Status</h2>
+        <p className={styles.lead}>
+          The Create page reserves a place for Custom, but there is no public
+          transaction path for it. The interface does not prepare, simulate or
+          submit a Custom launch.
+        </p>
+        <div className={styles.callout}>
+          <strong>Custom is not live.</strong>
+          <p>
+            A Custom option becomes actionable only after its configuration,
+            contracts and release evidence are defined and verified.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>What a release must define</h2>
+        <ul className={styles.contentList}>
+          <li>The allowed token and pool configuration.</li>
+          <li>The fee path, reward recipients and mutable controls.</li>
+          <li>Liquidity custody and every withdrawal path.</li>
+          <li>Transaction preparation, simulation and wallet validation.</li>
+          <li>Deployment records, runtime verification and supported network.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Project presentation</h2>
+        <p>
+          A released Custom token would use the same square artwork, project
+          description, links, dedicated token page and community surface as
+          other tokens. Those presentation fields do not make an unreleased
+          transaction path available.
+        </p>
+      </section>
+    </DocsShell>
+  );
+}
+
 function StockPairedDocs() {
   const launcher = "0x195750f33caD5eF2DF857a53226B421297A1e79e";
   const hook = "0x7773D183fe7B60d4F1885047fa42b815a62Fe0Cc";
@@ -383,7 +427,6 @@ function StockPairedDocs() {
       description="Existing fixed-supply tokens whose Uniswap v4 pools use a reviewed stock token as the quote asset."
     >
       <section>
-        <span className={styles.sectionEyebrow}>Product boundary</span>
         <h2>The launched token is not a share</h2>
         <p className={styles.lead}>
           Stock-Paired creates a new Programmable token and pairs it with one
@@ -402,7 +445,6 @@ function StockPairedDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Historical launch design</span>
         <h2>How the existing pools were created</h2>
         <ol className={styles.steps}>
           <li>
@@ -434,7 +476,6 @@ function StockPairedDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Economics</span>
         <h2>Rewards accrue in the quote token</h2>
         <div className={styles.factGrid}>
           <div className={styles.fact}>
@@ -457,7 +498,6 @@ function StockPairedDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Trading</span>
         <h2>The interface composes the route</h2>
         <p>
           A buy routes ETH into the reviewed stock token and then into the
@@ -476,7 +516,6 @@ function StockPairedDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Issuer assumptions</span>
         <h2>The quote asset has its own controls</h2>
         <ul className={styles.contentList}>
           <li>
@@ -498,7 +537,6 @@ function StockPairedDocs() {
       </section>
 
       <section>
-        <span className={styles.sectionEyebrow}>Contracts</span>
         <h2>Historical Mainnet deployment</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -591,5 +629,6 @@ export default async function ModelDocsPage({
   if (!isModelSlug(model)) notFound();
 
   if (model === "classic") return <ClassicDocs />;
+  if (model === "custom") return <CustomDocs />;
   return <StockPairedDocs />;
 }

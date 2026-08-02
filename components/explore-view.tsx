@@ -3,28 +3,22 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  ArrowUpRight,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Copy,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  AnimatedMarketCap,
-  type MarketCapMetric,
-} from "@/components/animated-market-cap";
+import { type MarketCapMetric } from "@/components/animated-market-cap";
 import { SiteFooter } from "@/components/site-footer";
 import {
   LIVE_DATA_REFRESH_INTERVAL_MS,
   shouldRefreshLiveData,
   useLiveDataRefresh,
 } from "@/components/use-live-data-refresh";
-import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -32,7 +26,6 @@ import {
 import {
   type LauncherToken,
   type TokenLink,
-  type TokenLinkKind,
 } from "@/lib/tokens";
 import styles from "./explore-experience.module.css";
 
@@ -43,11 +36,7 @@ type TokenCard = {
   description?: string;
   imageUrl: string;
   usesFallbackImage: boolean;
-  links: TokenLink[];
   tokenAddress: `0x${string}`;
-  marketCap?: MarketCapMetric;
-  launchModel?: LauncherToken["launchModel"];
-  launchedAt: string;
 };
 
 type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
@@ -369,10 +358,6 @@ export function getMarketCap(
   return { kind: "eth", value };
 }
 
-function formatTokenAddress(address: `0x${string}`) {
-  return `${address.slice(0, 8)}…${address.slice(-6)}`;
-}
-
 function getPaginationItems(
   currentPage: number,
   pageCount: number,
@@ -416,91 +401,8 @@ function getTokenCards(tokens: LauncherToken[]): TokenCard[] {
     imageUrl:
       token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress),
     usesFallbackImage: !token.imageUrl?.trim(),
-    links: token.links ?? [],
     tokenAddress: token.tokenAddress,
-    marketCap: getMarketCap(token),
-    launchModel: token.launchModel,
-    launchedAt: token.launchedAt,
   }));
-}
-
-function getLaunchModelLabel(model: LauncherToken["launchModel"]) {
-  if (model === "adaptive") return "Adaptive market";
-  if (model === "deep") return "Deep liquidity";
-  if (model === "stock-paired") return "Stock-paired";
-  return "Classic market";
-}
-
-function formatLaunchDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Published onchain";
-
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-}
-
-function getLinkLabel(kind: TokenLinkKind) {
-  if (kind === "website") return "Website";
-  if (kind === "telegram") return "Telegram";
-  return "X";
-}
-
-function XBrandIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        fill="currentColor"
-        d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.451-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"
-      />
-    </svg>
-  );
-}
-
-function TelegramBrandIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        fill="currentColor"
-        d="M22.8 3.2 19.5 20.1c-.25 1.2-.91 1.5-1.85.94l-5.03-3.71-2.43 2.34c-.27.27-.5.5-1.02.5l.36-5.13 9.34-8.44c.41-.36-.09-.56-.63-.2L6.7 13.67l-4.98-1.56c-1.08-.34-1.1-1.08.23-1.6L21.36 3c.9-.33 1.69.2 1.44 1.2Z"
-      />
-    </svg>
-  );
-}
-
-function TokenLinkIcon({ kind }: { kind: TokenLinkKind }) {
-  if (kind === "website") {
-    return <WebsiteLinkIcon className="token-website-link-icon" />;
-  }
-  if (kind === "telegram") return <TelegramBrandIcon />;
-  return <XBrandIcon />;
-}
-
-function TokenSocialLink({
-  link,
-  tokenName,
-}: {
-  link: TokenLink;
-  tokenName: string;
-}) {
-  const label = getLinkLabel(link.kind);
-
-  return (
-    <a
-      className={`token-social-link${
-        link.kind === "website" ? " token-social-link-website" : ""
-      }`}
-      href={link.url}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={`${tokenName} on ${label}`}
-      title={label}
-    >
-      <TokenLinkIcon kind={link.kind} />
-    </a>
-  );
 }
 
 export function ExploreView() {
@@ -509,12 +411,9 @@ export function ExploreView() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sort, setSort] = useState<TokenSort>("market-cap");
   const [currentPage, setCurrentPage] = useState(1);
-  const [copiedAddress, setCopiedAddress] = useState("");
-  const [copyError, setCopyError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
   const refreshKey = useLiveDataRefresh();
   const [state, setState] = useState<ExploreState>({ phase: "loading" });
-  const copyResetTimer = useRef<number | null>(null);
   const activeExploreContentKey = useRef<string | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const contentKey = `${debouncedQuery}\u0000${sort}\u0000${currentPage}`;
@@ -522,9 +421,6 @@ export function ExploreView() {
 
   useEffect(
     () => () => {
-      if (copyResetTimer.current !== null) {
-        window.clearTimeout(copyResetTimer.current);
-      }
       if (activeExploreContentKey.current) {
         abortExplorePayload(activeExploreContentKey.current);
       }
@@ -632,25 +528,6 @@ export function ExploreView() {
     state.payload.total > 0 ||
     Boolean(debouncedQuery);
 
-  async function copyAddress(address: string) {
-    if (copyResetTimer.current !== null) {
-      window.clearTimeout(copyResetTimer.current);
-    }
-    setCopyError("");
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopiedAddress(address);
-      copyResetTimer.current = window.setTimeout(
-        () => setCopiedAddress(""),
-        1600,
-      );
-    } catch {
-      setCopiedAddress("");
-      setCopyError("Could not copy address");
-      copyResetTimer.current = window.setTimeout(() => setCopyError(""), 2400);
-    }
-  }
-
   function renderTokenState() {
     if (
       state.phase === "loading" ||
@@ -727,7 +604,6 @@ export function ExploreView() {
         key={`${activePage}:${sort}:${debouncedQuery}`}
       >
         {cards.map((token, index) => {
-          const copied = copiedAddress === token.tokenAddress;
           const href = `/token/${token.tokenAddress}`;
           const imageSource = getTokenCardImageSource(token.imageUrl);
 
@@ -736,103 +612,39 @@ export function ExploreView() {
               <Link
                 className={styles.runnerHitArea}
                 href={href}
-                aria-label={`View ${token.name}`}
-              />
-
-              <div className={styles.runnerArt}>
-                <Image
-                  className={styles.runnerImage}
-                  src={imageSource}
-                  alt={token.usesFallbackImage ? "" : `${token.name} artwork`}
-                  fill
-                  sizes="(max-width: 700px) calc(100vw - 28px), (max-width: 1100px) 42vw, 310px"
-                  unoptimized={!canOptimizeTokenImage(imageSource)}
-                />
-                <div className={styles.runnerArtHeader} aria-hidden="true">
-                  <span>{getLaunchModelLabel(token.launchModel)}</span>
+                aria-label={`Open ${token.name}`}
+              >
+                <div className={styles.runnerArt}>
+                  <Image
+                    className={styles.runnerImage}
+                    src={imageSource}
+                    alt={
+                      token.usesFallbackImage ? "" : `${token.name} artwork`
+                    }
+                    fill
+                    loading={index < 3 ? "eager" : "lazy"}
+                    sizes="(max-width: 700px) calc(100vw - 40px), (max-width: 1040px) 46vw, 390px"
+                    unoptimized={!canOptimizeTokenImage(imageSource)}
+                  />
                 </div>
-              </div>
 
-              <div className={styles.runnerBody}>
-                <header className={styles.runnerHeading}>
-                  <h3>{token.name}</h3>
-                  <span className={styles.runnerSymbol}>${token.symbol}</span>
-                </header>
+                <div className={styles.runnerBody}>
+                  <header className={styles.runnerHeading}>
+                    <h3>{token.name}</h3>
+                    <span className={styles.runnerSymbol}>${token.symbol}</span>
+                  </header>
 
-                <p
-                  className={`${styles.runnerDescription}${
-                    token.description ? "" : ` ${styles.runnerDescriptionEmpty}`
-                  }`}
-                >
-                  {token.description ?? "No description provided."}
-                </p>
-
-                <dl className={styles.runnerFacts}>
-                  <div>
-                    <dt>Market cap</dt>
-                    <dd>
-                      {token.marketCap ? (
-                        <AnimatedMarketCap
-                          delay={index * 18}
-                          metric={token.marketCap}
-                          replayKey={`${activePage}:${sort}:${debouncedQuery}`}
-                        />
-                      ) : (
-                        "—"
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Launched</dt>
-                    <dd>{formatLaunchDate(token.launchedAt)}</dd>
-                  </div>
-                </dl>
-
-                <div className={styles.runnerFooter}>
-                  <button
-                    className={styles.runnerAddress}
-                    type="button"
-                    aria-label={
-                      copied
-                        ? `${token.name} contract address copied`
-                        : `Copy ${token.name} contract address`
-                    }
-                    title={
-                      copied
-                        ? "Copied"
-                        : `${token.tokenAddress} · Copy contract address`
-                    }
-                    onClick={() => copyAddress(token.tokenAddress)}
+                  <p
+                    className={`${styles.runnerDescription}${
+                      token.description
+                        ? ""
+                        : ` ${styles.runnerDescriptionEmpty}`
+                    }`}
                   >
-                    <code>{formatTokenAddress(token.tokenAddress)}</code>
-                    {copied ? (
-                      <Check aria-hidden="true" size={12} />
-                    ) : (
-                      <Copy aria-hidden="true" size={12} />
-                    )}
-                  </button>
-
-                  {token.links.length > 0 ? (
-                    <div
-                      className={styles.runnerLinks}
-                      aria-label={`${token.name} links`}
-                    >
-                      {token.links.map((link) => (
-                        <TokenSocialLink
-                          key={`${link.kind}:${link.url}`}
-                          link={link}
-                          tokenName={token.name}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <span className={styles.runnerOpen} aria-hidden="true">
-                    View
-                    <ArrowUpRight size={15} />
-                  </span>
+                    {token.description ?? "No description yet."}
+                  </p>
                 </div>
-              </div>
+              </Link>
             </article>
           );
         })}
@@ -844,17 +656,15 @@ export function ExploreView() {
     <>
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <h1>Tokens for anything.</h1>
+          <h1>Tokens</h1>
         </header>
 
         <section
           className={`${styles.runnersSection} token-section`}
-          id="runners"
+          id="tokens"
           aria-busy={busy}
         >
           <div className={styles.runnersIntro}>
-            <h2>Runners</h2>
-
             {hasPublicTokens ? (
               <div className="token-section-heading">
                 <h2 className="sr-only">Tokens</h2>
@@ -996,13 +806,6 @@ export function ExploreView() {
         </section>
       </div>
       <SiteFooter />
-      {copyError ? (
-        <div className="toast-region" aria-live="assertive" aria-atomic="true">
-          <p className="toast" role="alert">
-            {copyError}
-          </p>
-        </div>
-      ) : null}
     </>
   );
 }
