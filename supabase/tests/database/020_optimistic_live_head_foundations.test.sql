@@ -20,6 +20,7 @@ select is(
     from pg_catalog.pg_class as class
     where class.oid = any (array[
       'programmable_private.optimistic_block_observations_v1'::regclass,
+      'programmable_private.optimistic_market_state_rows_v1'::regclass,
       'programmable_private.optimistic_event_rows_v1'::regclass,
       'programmable_private.optimistic_block_status_history_v1'::regclass,
       'programmable_private.optimistic_block_current_canonical_v1'::regclass,
@@ -32,7 +33,7 @@ select is(
         where rolname = 'programmable_migrator'
       )
   ),
-  5::bigint,
+  6::bigint,
   'all optimistic control-plane tables are migrator-owned with forced RLS'
 );
 
@@ -42,6 +43,7 @@ select is(
     from pg_catalog.pg_policy as policy
     where policy.polrelid = any (array[
       'programmable_private.optimistic_block_observations_v1'::regclass,
+      'programmable_private.optimistic_market_state_rows_v1'::regclass,
       'programmable_private.optimistic_event_rows_v1'::regclass,
       'programmable_private.optimistic_block_status_history_v1'::regclass,
       'programmable_private.optimistic_block_current_canonical_v1'::regclass,
@@ -55,7 +57,7 @@ select is(
         )
       ]::oid[]
   ),
-  5::bigint,
+  6::bigint,
   'every optimistic table has exactly the migrator capability policy'
 );
 
@@ -72,6 +74,7 @@ select ok(
     ]) as checked_role(role_name)
     cross join pg_catalog.unnest(array[
       'programmable_private.optimistic_block_observations_v1',
+      'programmable_private.optimistic_market_state_rows_v1',
       'programmable_private.optimistic_event_rows_v1',
       'programmable_private.optimistic_block_status_history_v1',
       'programmable_private.optimistic_block_current_canonical_v1',
