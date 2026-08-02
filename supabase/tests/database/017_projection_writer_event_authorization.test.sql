@@ -1,6 +1,6 @@
 begin;
 
-select plan(7);
+select plan(10);
 
 select ok(
   to_regprocedure(
@@ -95,6 +95,72 @@ select ok(
     'vesting-wallet-deployment'
   ) > 0,
   'reward and custody writers map to their exact semantic event rules'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'creator-hook-claim'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'launcher-hook-claim'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'creator-fee-checkpoint'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.assert_projection_event_allowed(uuid,uuid,text)'::regprocedure
+    ),
+    'reward-configuration-activation'
+  ) > 0,
+  'typed fact writers map their SQL names to reviewed semantic event kinds'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.event_fact_context(uuid,uuid,text)'::regprocedure
+    ),
+    'verification_run_id = p_run_id'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.event_fact_context(uuid,uuid,text)'::regprocedure
+    ),
+    'chain_event_current_canonical'
+  ) > 0,
+  'typed facts accept exact same-run verification or an existing canonical source'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run(uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure
+    ),
+    'creator_hook_claim_facts'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run(uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,timestamp with time zone)'::regprocedure
+    ),
+    'candidate_disposition'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'programmable_private.promote_projection_run_v3(text,uuid,uuid,uuid,uuid,text,bigint,bytea,bigint,bigint,bigint,uuid,uuid,numeric,bytea,numeric,text,uuid[],uuid[],uuid[],uuid[],text[],bytea,uuid,uuid[],uuid,bytea,timestamp with time zone)'::regprocedure
+    ),
+    'cardinality(p_occurrence_ids)'
+  ) > 0,
+  'occurrence-only pages retain typed facts, dispositions, and canonical sources'
 );
 
 select * from finish();

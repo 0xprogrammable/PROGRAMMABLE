@@ -1736,7 +1736,7 @@ function completeLaunch(input: {
       sourceCandidateId: pending.initialBuy.sourceCandidateId,
     }),
     custody,
-    ethFunded: pending.model === "classic" || pending.coordinator !== undefined,
+    ethFunded: pending.coordinator !== undefined,
     occurrenceRoles: Object.freeze(occurrenceRoles.map((item) => Object.freeze(item))),
   });
 }
