@@ -1,6 +1,9 @@
 -- Bind internal projection writers to the semantic event rule that authorizes
 -- their source occurrence. Writer table names and event semantic names are
 -- deliberately separate domains.
+
+set role programmable_migrator;
+
 create or replace function programmable_private.assert_projection_event_allowed(
   p_run_id uuid,
   p_occurrence_id uuid,
@@ -127,3 +130,5 @@ revoke all on function programmable_private.assert_projection_event_allowed(
 grant execute on function programmable_private.assert_projection_event_allowed(
   uuid, uuid, text
 ) to programmable_projector;
+
+reset role;
