@@ -1,5 +1,4 @@
 .shell {
-  border-bottom: 1px solid var(--border);
   border-top: 1px solid var(--border);
   margin-top: 48px;
   min-height: 282px;
@@ -84,7 +83,6 @@
 }
 
 .plot {
-  cursor: crosshair;
   display: block;
   height: 194px;
   margin-top: 9px;
@@ -95,12 +93,6 @@
 
 .plot svg {
   overflow: visible;
-}
-
-.plot svg:focus-visible {
-  border-radius: 12px;
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
 }
 
 .grid {
@@ -122,20 +114,6 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2.45;
-  vector-effect: non-scaling-stroke;
-}
-
-.guide {
-  stroke: color-mix(in srgb, var(--text) 20%, transparent);
-  stroke-dasharray: 3 5;
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-.point {
-  fill: var(--surface-raised);
-  stroke: var(--accent);
-  stroke-width: 2.2;
   vector-effect: non-scaling-stroke;
 }
 

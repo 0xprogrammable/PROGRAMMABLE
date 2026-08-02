@@ -50,7 +50,7 @@ export function SiteFooter() {
               sizes="34px"
             />
           </Link>
-          <p>Explore and create tokens on Ethereum.</p>
+          <p>Launch tokens that work the way you imagine.</p>
         </section>
 
         <nav className={styles.column} aria-label="Product">
@@ -88,29 +88,28 @@ export function SiteFooter() {
             or lose all value. Programmable does not provide financial advice
             or guarantee a token&apos;s quality.
           </p>
-        </section>
-
-        <div className={styles.bottom}>
-          <span>© 2026 Programmable</span>
-          <div className={styles.socials}>
-            <a
-              href="https://x.com/0xProgrammable"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Programmable on X"
-            >
-              <XBrandIcon />
-            </a>
-            <a
-              href="https://github.com/0xprogrammable"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Programmable on GitHub"
-            >
-              <GitHubBrandIcon />
-            </a>
+          <div className={styles.riskMeta}>
+            <span>© 2026 Programmable</span>
+            <div className={styles.socials}>
+              <a
+                href="https://x.com/0xProgrammable"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Programmable on X"
+              >
+                <XBrandIcon />
+              </a>
+              <a
+                href="https://github.com/0xprogrammable"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Programmable on GitHub"
+              >
+                <GitHubBrandIcon />
+              </a>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     </footer>
   );

@@ -25,20 +25,20 @@
 .pageHeading h1 {
   color: var(--text);
   font-size: clamp(82px, 9.2vw, 132px);
-  font-weight: 548;
-  letter-spacing: -0.07em;
-  line-height: 0.82;
+  font-weight: 575;
+  letter-spacing: -0.035em;
+  line-height: 0.88;
   margin: 0;
 }
 
 .pageHeading p {
   color: var(--text-soft);
-  font-size: clamp(24px, 2.45vw, 34px);
-  font-weight: 520;
-  letter-spacing: -0.042em;
-  line-height: 1.08;
+  font-size: clamp(25px, 2.5vw, 35px);
+  font-weight: 535;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
   margin: 0 0 0.04em;
-  max-width: 17ch;
+  max-width: 21ch;
   text-wrap: balance;
 }
 
@@ -63,9 +63,9 @@
 .indexHeading h2 {
   color: var(--text);
   font-size: clamp(26px, 2.4vw, 34px);
-  font-weight: 555;
-  letter-spacing: -0.046em;
-  line-height: 1;
+  font-weight: 585;
+  letter-spacing: -0.028em;
+  line-height: 1.06;
   margin: 0;
 }
 
@@ -175,9 +175,9 @@
 .runnerHeading h3 {
   color: var(--text);
   font-size: clamp(25px, 2.25vw, 32px);
-  font-weight: 555;
-  letter-spacing: -0.05em;
-  line-height: 0.98;
+  font-weight: 585;
+  letter-spacing: -0.032em;
+  line-height: 1.03;
   margin: 0;
   min-width: 0;
   overflow: hidden;

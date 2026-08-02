@@ -3,7 +3,6 @@ import { extname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  getChartPointIndex,
   getPriceHistoryEmptyMessage,
   shouldRenderPriceHistory,
 } from "../components/token-price-chart";
@@ -19,6 +18,21 @@ function collectCssFiles(directory: string): string[] {
 }
 
 describe("interaction accessibility", () => {
+  it("keeps the token chart informational instead of showing a crosshair", () => {
+    const chartCss = readFileSync(
+      join(root, "components/token-price-chart.module.css"),
+      "utf8",
+    );
+    const chartSource = readFileSync(
+      join(root, "components/token-price-chart.tsx"),
+      "utf8",
+    );
+
+    expect(chartCss).not.toContain("cursor: crosshair");
+    expect(chartSource).not.toContain("onPointerMove");
+    expect(chartSource).not.toContain("role=\"slider\"");
+  });
+
   it("keeps the default arrow cursor policy across app controls", () => {
     const css = [
       ...collectCssFiles(join(root, "app")),
@@ -91,41 +105,6 @@ describe("interaction accessibility", () => {
     expect(source).not.toContain(
       'classicV3LaunchAvailable ? "classic-v3" : "classic"',
     );
-  });
-
-  it("maps chart pointer coordinates to a bounded point index", () => {
-    expect(
-      getChartPointIndex({
-        clientX: 100,
-        left: 100,
-        width: 400,
-        pointCount: 5,
-      }),
-    ).toBe(0);
-    expect(
-      getChartPointIndex({
-        clientX: 300,
-        left: 100,
-        width: 400,
-        pointCount: 5,
-      }),
-    ).toBe(2);
-    expect(
-      getChartPointIndex({
-        clientX: 900,
-        left: 100,
-        width: 400,
-        pointCount: 5,
-      }),
-    ).toBe(4);
-    expect(
-      getChartPointIndex({
-        clientX: 100,
-        left: 100,
-        width: 0,
-        pointCount: 5,
-      }),
-    ).toBeNull();
   });
 
   it("does not promise unsupported Stock-Paired chart history", () => {

@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -17,6 +18,11 @@ import styles from "@/components/docs-experience.module.css";
 type SectionPosition = {
   id: string;
   top: number;
+};
+
+type ChapterIndicator = {
+  height: number;
+  offset: number;
 };
 
 export type DocsPageSection = {
@@ -161,6 +167,56 @@ function focusDocsSection(section: HTMLElement) {
   heading.focus({ preventScroll: true });
 }
 
+function getDocsScrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
+}
+
+function getDocsScrollOffset(
+  mobileNavigation: HTMLDetailsElement | null,
+): number {
+  const documentStyles = window.getComputedStyle(document.documentElement);
+  const measuredScrollPadding = Number.parseFloat(
+    documentStyles.scrollPaddingTop,
+  );
+  const siteHeaderHeight =
+    document.querySelector<HTMLElement>(".site-header")?.offsetHeight ?? 68;
+  const docsTools = document.querySelector<HTMLElement>("[data-docs-tools]");
+  const stickyToolsHeight =
+    docsTools && window.getComputedStyle(docsTools).position === "sticky"
+      ? docsTools.offsetHeight
+      : 0;
+  const mobileNavigationSummary =
+    mobileNavigation?.querySelector<HTMLElement>("summary");
+  const mobileNavigationHeight =
+    mobileNavigation &&
+    window.getComputedStyle(mobileNavigation).display !== "none"
+      ? (mobileNavigationSummary?.offsetHeight ?? 0)
+      : 0;
+
+  return calculateDocsReadingOffset({
+    mobileNavigationHeight,
+    scrollPaddingTop: Number.isFinite(measuredScrollPadding)
+      ? measuredScrollPadding
+      : siteHeaderHeight + 20,
+    stickyToolsHeight,
+  });
+}
+
+function scrollToDocsSection(
+  section: HTMLElement,
+  mobileNavigation: HTMLDetailsElement | null,
+  behavior: ScrollBehavior,
+) {
+  const top =
+    section.getBoundingClientRect().top +
+    window.scrollY -
+    getDocsScrollOffset(mobileNavigation);
+  window.scrollTo({ behavior, top: Math.max(0, top) });
+  focusDocsSection(section);
+}
+
 export function DocsNavigation({
   currentPath,
   sections = emptyDocsPageSections,
@@ -169,6 +225,10 @@ export function DocsNavigation({
   sections?: readonly DocsPageSection[];
 }) {
   const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
+  const desktopNavigationRef = useRef<HTMLElement>(null);
+  const locationInitializedRef = useRef(false);
+  const [chapterIndicator, setChapterIndicator] =
+    useState<ChapterIndicator | null>(null);
   const trackedSectionIds = useMemo(
     () =>
       currentPath === "/docs"
@@ -228,13 +288,11 @@ export function DocsNavigation({
       }
 
       const scrollToSection = () => {
-        section.scrollIntoView({
-          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-            ? "auto"
-            : "smooth",
-          block: "start",
-        });
-        focusDocsSection(section);
+        scrollToDocsSection(
+          section,
+          mobileNavigationRef.current,
+          getDocsScrollBehavior(),
+        );
       };
 
       if (mobileNavigationWasOpen) {
@@ -246,6 +304,41 @@ export function DocsNavigation({
     },
     [currentPath, trackedSectionIdSet],
   );
+
+  const measureChapterIndicator = useCallback(() => {
+    const navigation = desktopNavigationRef.current;
+    const activeLink = navigation?.querySelector<HTMLElement>(
+      "[data-docs-context-link][data-active='true']",
+    );
+    const group = activeLink?.closest<HTMLElement>(
+      "[data-docs-context-group]",
+    );
+    if (!activeLink || !group) {
+      setChapterIndicator(null);
+      return;
+    }
+
+    const linkRect = activeLink.getBoundingClientRect();
+    const groupRect = group.getBoundingClientRect();
+    const nextIndicator = {
+      height: linkRect.height,
+      offset: linkRect.top - groupRect.top,
+    };
+    setChapterIndicator((current) =>
+      current &&
+      Math.abs(current.height - nextIndicator.height) < 0.5 &&
+      Math.abs(current.offset - nextIndicator.offset) < 0.5
+        ? current
+        : nextIndicator,
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    measureChapterIndicator();
+    window.addEventListener("resize", measureChapterIndicator);
+    return () =>
+      window.removeEventListener("resize", measureChapterIndicator);
+  }, [activeHref, measureChapterIndicator, sections.length]);
 
   useEffect(() => {
     if (trackedSectionIds.length === 0) return;
@@ -311,7 +404,7 @@ export function DocsNavigation({
           ? measuredScrollPadding
           : siteHeaderHeight + 20,
         stickyToolsHeight,
-      });
+      }) + 2;
       scheduleScrollUpdate();
     };
 
@@ -333,14 +426,22 @@ export function DocsNavigation({
       setActiveSectionHref(target.href);
       const section = document.getElementById(target.sectionId);
       if (section && target.shouldScroll) {
+        const behavior = locationInitializedRef.current
+          ? getDocsScrollBehavior()
+          : "auto";
+        locationInitializedRef.current = true;
         if (locationFrame) window.cancelAnimationFrame(locationFrame);
         locationFrame = window.requestAnimationFrame(() => {
           locationFrame = 0;
-          section.scrollIntoView({ behavior: "auto", block: "start" });
-          focusDocsSection(section);
+          scrollToDocsSection(
+            section,
+            mobileNavigationRef.current,
+            behavior,
+          );
           scheduleLayoutMeasurement();
         });
       } else {
+        locationInitializedRef.current = true;
         scheduleLayoutMeasurement();
       }
     };
@@ -399,7 +500,23 @@ export function DocsNavigation({
     return (
       <>
         {sections.length > 0 ? (
-          <div className={`${styles.navGroup} ${styles.contextNavGroup}`}>
+          <div
+            className={`${styles.navGroup} ${styles.contextNavGroup}`}
+            data-docs-context-group
+          >
+            <span
+              aria-hidden="true"
+              className={styles.chapterIndicator}
+              data-visible={chapterIndicator ? "true" : undefined}
+              style={
+                chapterIndicator
+                  ? {
+                      height: `${chapterIndicator.height}px`,
+                      transform: `translate3d(0, ${chapterIndicator.offset}px, 0)`,
+                    }
+                  : undefined
+              }
+            />
             <p className={styles.navLabel}>On this page</p>
             <ul>
               {sections.map((section) => {
@@ -409,6 +526,7 @@ export function DocsNavigation({
                   <li key={href}>
                     <Link
                       href={href}
+                      data-docs-context-link
                       data-active={active ? "true" : undefined}
                       aria-current={active ? "location" : undefined}
                       onClick={(event) => handleNavigation(event, href)}
@@ -464,6 +582,7 @@ export function DocsNavigation({
       <nav
         className={styles.desktopNav}
         aria-label="Documentation navigation"
+        ref={desktopNavigationRef}
       >
         {renderNavigation()}
       </nav>

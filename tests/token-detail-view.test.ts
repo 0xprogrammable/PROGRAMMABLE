@@ -132,7 +132,7 @@ describe("token detail metrics", () => {
     expect(buildTokenDetailMetrics(enriched)).toEqual([
       { label: "Market cap", value: "$168.56K" },
       { label: "Volume", value: "$1.2M" },
-      { label: "Liquidity", value: "$98.8K" },
+      { label: "Liquidity now", value: "$98.8K" },
       { label: "Swap fee", value: "1%" },
     ]);
   });

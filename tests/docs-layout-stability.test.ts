@@ -55,6 +55,9 @@ describe("Docs rail layout stability", () => {
     );
     expect(docsShell).toContain("data-docs-sidebar");
     expect(docsShell).toContain("data-docs-content");
+    expect(docsShell.indexOf("data-docs-tools")).toBeLessThan(
+      docsShell.indexOf("data-docs-hero"),
+    );
     expect(docsShell.indexOf("data-docs-hero")).toBeLessThan(
       docsShell.indexOf("data-docs-sidebar"),
     );

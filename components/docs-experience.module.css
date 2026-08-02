@@ -22,9 +22,10 @@
 
 .hero {
   grid-column: 2;
+  grid-row: 2;
   margin: 0;
   max-width: var(--docs-content-width);
-  padding-top: clamp(44px, 7svh, 76px);
+  padding-top: clamp(42px, 6svh, 62px);
   text-align: left;
 }
 
@@ -38,9 +39,9 @@
 
 .hero h1 {
   font-size: clamp(58px, 6.3vw, 86px);
-  font-weight: 555;
-  letter-spacing: -0.062em;
-  line-height: 0.92;
+  font-weight: 580;
+  letter-spacing: -0.035em;
+  line-height: 0.96;
   margin-top: 0;
   text-wrap: balance;
 }
@@ -58,10 +59,11 @@
   display: grid;
   gap: 12px;
   grid-column: 2;
-  grid-template-columns: auto minmax(280px, 1fr);
+  grid-row: 1;
+  grid-template-columns: 330px minmax(280px, 1fr);
   isolation: isolate;
-  margin-top: 34px;
-  max-width: 790px;
+  margin-top: clamp(30px, 5svh, 48px);
+  max-width: 900px;
   position: sticky;
   top: calc(var(--header-height) + 12px);
   width: 100%;
@@ -95,6 +97,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 4px;
+  width: 330px;
 }
 
 .guideTab {
@@ -247,6 +250,7 @@
   align-items: start;
   display: block;
   grid-column: 2;
+  grid-row: 3;
   margin-top: 64px;
   max-width: var(--docs-content-width);
   width: 100%;
@@ -285,6 +289,27 @@
 .contextNavGroup {
   border-bottom: 1px solid var(--border);
   padding-bottom: 18px;
+  position: relative;
+}
+
+.chapterIndicator {
+  background: var(--accent-strong);
+  border-radius: 999px;
+  inline-size: 2px;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translate3d(0, 0, 0);
+  transition:
+    height 180ms var(--ease-out),
+    opacity 120ms ease,
+    transform 240ms cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+.chapterIndicator[data-visible="true"] {
+  opacity: 1;
 }
 
 .navLabel {
@@ -320,8 +345,11 @@
 
 .navGroup a[data-active="true"] {
   background: transparent;
-  box-shadow: inset 2px 0 0 var(--accent-strong);
   color: var(--text);
+}
+
+.navGroup:not(.contextNavGroup) a[data-active="true"] {
+  box-shadow: inset 2px 0 0 var(--accent-strong);
 }
 
 .mobileNav {
@@ -360,16 +388,16 @@
 
 .content h2 {
   font-size: clamp(29px, 3.4vw, 39px);
-  font-weight: 590;
-  letter-spacing: -0.04em;
+  font-weight: 610;
+  letter-spacing: -0.028em;
   line-height: 1.06;
   text-wrap: balance;
 }
 
 .content h3 {
   font-size: 19px;
-  font-weight: 630;
-  letter-spacing: -0.025em;
+  font-weight: 640;
+  letter-spacing: -0.015em;
   line-height: 1.2;
 }
 
@@ -768,6 +796,10 @@
 
   .heroTools {
     position: static;
+  }
+
+  .chapterIndicator {
+    display: none;
   }
 
   .heroTools::before {

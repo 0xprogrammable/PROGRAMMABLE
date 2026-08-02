@@ -20,7 +20,7 @@ const plexMono = IBM_Plex_Mono({
 
 const siteUrl = new URL("https://programmable.family");
 const siteDescription =
-  "Explore and create tokens with programmable markets";
+  "Launch tokens that work the way you imagine.";
 const socialImageUrl = new URL(
   "/og/programmable-loop-og-1200x630.png",
   siteUrl,

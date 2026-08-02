@@ -90,21 +90,25 @@
   color: var(--accent-strong);
   display: inline-flex;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.075em;
-  line-height: 1.15;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
 }
 
 .name {
   color: var(--text);
-  font-size: clamp(48px, 5.2vw, 72px);
-  font-weight: 545;
-  letter-spacing: -0.058em;
-  line-height: 0.92;
+  font-size: clamp(46px, 4.7vw, 64px);
+  font-weight: 580;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
   margin-top: 12px;
-  overflow-wrap: anywhere;
-  word-spacing: 0.07em;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+.name[data-single-line="true"] {
+  white-space: nowrap;
 }
 
 .addressActions {
@@ -133,7 +137,7 @@
 
 .address {
   gap: 9px;
-  max-width: min(100%, 450px);
+  max-width: 100%;
   min-width: 0;
   padding: 0 12px;
 }
@@ -181,29 +185,24 @@
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 18px;
+  gap: 6px;
   margin: 20px 0 0;
 }
 
 .socialLink {
   align-items: center;
+  border-radius: 50%;
   color: var(--text-soft);
   display: inline-flex;
-  font-size: 13px;
-  font-weight: 620;
-  gap: 7px;
-  min-height: 44px;
+  height: 48px;
   justify-content: center;
   padding: 0;
+  width: 48px;
 }
 
 .socialLink svg:first-child {
-  height: 16px;
-  width: 16px;
-}
-
-.socialLink svg:last-child {
-  color: var(--muted);
+  height: 21px;
+  width: 21px;
 }
 
 .websiteLink {
@@ -216,7 +215,6 @@
 
 .metrics {
   border-bottom: 1px solid var(--border);
-  border-top: 1px solid var(--border);
   display: grid;
   gap: clamp(20px, 4vw, 48px);
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -230,7 +228,7 @@
 
 .metric dt {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.2;
 }
 
@@ -238,8 +236,8 @@
   color: var(--text);
   font-size: clamp(22px, 2.6vw, 30px);
   font-variant-numeric: tabular-nums;
-  font-weight: 590;
-  letter-spacing: -0.035em;
+  font-weight: 610;
+  letter-spacing: -0.022em;
   margin: 8px 0 0;
   overflow-wrap: anywhere;
 }
@@ -306,7 +304,6 @@
 }
 
 .projectInformation {
-  border-top: 1px solid var(--border);
   display: block;
   margin-top: 44px;
 }
@@ -499,7 +496,7 @@
 .tradeShell {
   align-self: stretch;
   background: transparent;
-  border-block: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   border-radius: 0;
   box-shadow: none;
   display: flex;
@@ -771,6 +768,49 @@
 .tradeFacts dd {
   font-size: 12px;
   line-height: 1.25;
+}
+
+.slippageControl {
+  align-items: center;
+  background: var(--control-glass-background);
+  border: 1px solid var(--control-glass-border);
+  border-radius: 13px;
+  display: inline-flex;
+  min-height: 38px;
+  overflow: hidden;
+  padding: 0 9px;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.slippageControl:focus-within {
+  border-color: color-mix(in srgb, var(--focus) 58%, var(--control-glass-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 11%, transparent);
+}
+
+.slippageControlInvalid {
+  border-color: color-mix(in srgb, var(--danger) 54%, var(--control-glass-border));
+}
+
+.slippageControl input {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  min-width: 0;
+  outline: 0;
+  padding: 0;
+  text-align: end;
+  width: 46px;
+}
+
+.slippageControl > span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 3px;
 }
 
 .tradeFacts dt {
@@ -1138,13 +1178,13 @@
   }
 
   .symbol {
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .name {
-    font-size: clamp(42px, 13vw, 62px);
-    letter-spacing: -0.05em;
-    line-height: 0.95;
+    font-size: clamp(39px, 11.2vw, 54px);
+    letter-spacing: -0.026em;
+    line-height: 1;
     margin-top: 8px;
   }
 
@@ -1153,7 +1193,7 @@
   }
 
   .address {
-    max-width: calc(100% - 51px);
+    max-width: 100%;
   }
 
   .address code {
@@ -1185,7 +1225,7 @@
   }
 
   .metric dd {
-    font-size: clamp(20px, 7vw, 26px);
+    font-size: clamp(20px, 6vw, 26px);
   }
 
   .projectInformation {
@@ -1241,6 +1281,10 @@
     padding-top: 18px;
   }
 
+  .slippageControl input {
+    font-size: 16px;
+  }
+
   .reviewActions {
     grid-template-columns: 1fr;
     margin-top: 8px;
@@ -1257,7 +1301,11 @@
   }
 
   .metrics[data-count="3"] {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metrics[data-count="3"] .metric:last-child {
+    grid-column: 1 / -1;
   }
 
   .metric {
@@ -1269,7 +1317,7 @@
   }
 
   .metric dd {
-    font-size: 16px;
+    font-size: 19px;
   }
 
   .projectPanelHeading h2 {
@@ -1288,11 +1336,18 @@
 @media (max-width: 360px) {
   .name {
     font-size: 37px;
-    letter-spacing: -0.05em;
+    letter-spacing: -0.025em;
   }
 
   .balance {
     max-width: 112px;
+  }
+}
+
+@media (max-width: 350px) {
+  .name {
+    font-size: 36px;
+    letter-spacing: -0.02em;
   }
 }
 

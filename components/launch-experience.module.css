@@ -19,9 +19,9 @@
 
 .pickerHeading h1 {
   font-size: clamp(60px, 7vw, 96px);
-  font-weight: 555;
-  letter-spacing: -0.062em;
-  line-height: 0.9;
+  font-weight: 580;
+  letter-spacing: -0.035em;
+  line-height: 0.94;
 }
 
 .modelGrid {
@@ -106,8 +106,8 @@
 
 .modelHeading strong {
   font-size: clamp(28px, 3vw, 38px);
-  font-weight: 575;
-  letter-spacing: -0.047em;
+  font-weight: 595;
+  letter-spacing: -0.03em;
 }
 
 .modelHeading small {

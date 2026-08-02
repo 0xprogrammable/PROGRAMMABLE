@@ -76,8 +76,8 @@
 
 .nameRow h1 {
   font-size: clamp(30px, 3vw, 37px);
-  font-weight: 590;
-  letter-spacing: -0.045em;
+  font-weight: 610;
+  letter-spacing: -0.028em;
   line-height: 1.06;
   overflow: hidden;
   padding-block-end: 0.05em;
@@ -233,7 +233,7 @@
   font-size: clamp(62px, 7.5vw, 98px);
   font-weight: 555;
   grid-area: title;
-  letter-spacing: -0.062em;
+  letter-spacing: -0.042em;
   line-height: 0.9;
 }
 

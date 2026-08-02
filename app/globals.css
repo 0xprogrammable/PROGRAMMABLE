@@ -144,12 +144,15 @@ body {
   color: var(--text);
   cursor: default;
   font-family: var(--font-instrument), Arial, sans-serif;
+  font-kerning: normal;
+  font-optical-sizing: auto;
   font-size: 16px;
   line-height: 1.5;
   margin: 0;
   overflow-x: clip;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition:
     background-color 180ms ease,
     color 180ms ease;

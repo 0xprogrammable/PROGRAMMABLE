@@ -737,7 +737,7 @@ export function ExploreView() {
       <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
           <h1>Explore</h1>
-          <p>Tokens built with Uniswap v4 hooks.</p>
+          <p>Launch tokens that work the way you imagine.</p>
         </header>
 
         <section

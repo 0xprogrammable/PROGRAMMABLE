@@ -30,11 +30,6 @@ export function DocsShell({
 }) {
   return (
     <div className={`${styles.page} page-width`} data-docs-shell>
-      <header className={styles.hero} data-docs-hero>
-        <h1>{title}</h1>
-        <p>{description}</p>
-      </header>
-
       <div className={styles.heroTools} data-docs-tools>
         <nav className={styles.guideTabs} aria-label="Documentation guides">
           {docsGuides.map((guide) => {
@@ -54,6 +49,11 @@ export function DocsShell({
         </nav>
         <DocsSearch />
       </div>
+
+      <header className={styles.hero} data-docs-hero>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </header>
 
       <aside className={styles.sidebar} data-docs-sidebar>
         <DocsNavigation currentPath={currentPath} sections={sections} />

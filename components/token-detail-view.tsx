@@ -28,6 +28,7 @@ import {
   TokenPriceChart,
   type TokenChartVolume,
 } from "@/components/token-price-chart";
+import { TokenCommunityChat } from "@/components/token-community-chat";
 import {
   getExplorePreviewProject,
   getExplorePreviewToken,
@@ -544,7 +545,7 @@ export function buildTokenDetailMetrics(
         : null),
     officialLiquidityUsd !== null
       ? {
-          label: "Liquidity",
+          label: "Liquidity now",
           value: officialLiquidityUsd,
         }
       : null,
@@ -675,6 +676,8 @@ function MetricGrid({ metrics }: { metrics: TokenMetric[] }) {
 }
 
 function PreviewTokenTrade({ token }: { token: LauncherToken }) {
+  const [slippagePercent, setSlippagePercent] = useState("1");
+
   return (
     <div
       className={styles.tradeForm}
@@ -731,8 +734,23 @@ function PreviewTokenTrade({ token }: { token: LauncherToken }) {
           <dd>{formatSwapFee(token.totalSwapFeeBps) ?? "—"}</dd>
         </div>
         <div>
-          <dt>Slippage</dt>
-          <dd>1%</dd>
+          <dt>
+            <label htmlFor={`preview-slippage-${token.id}`}>Slippage</label>
+          </dt>
+          <dd>
+            <span className={styles.slippageControl}>
+              <input
+                id={`preview-slippage-${token.id}`}
+                aria-label="Slippage tolerance"
+                autoComplete="off"
+                inputMode="decimal"
+                maxLength={5}
+                value={slippagePercent}
+                onChange={(event) => setSlippagePercent(event.target.value)}
+              />
+              <span aria-hidden="true">%</span>
+            </span>
+          </dd>
         </div>
       </dl>
 
@@ -808,7 +826,6 @@ function TokenDetailContent({
     useWallet();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
-  const [hoveredMarketCap, setHoveredMarketCap] = useState<string | null>(null);
   const [chartVolume, setChartVolume] = useState<TokenChartVolume | null>(null);
   const [tradeFlow, setTradeFlow] = useState<TradeFlow>({
     phase: "form",
@@ -818,7 +835,6 @@ function TokenDetailContent({
     token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress);
   const imageSource = getTokenCardImageSource(imageUrl);
   const projectLinks = token.links ?? [];
-  const communityLink = projectLinks.find((link) => link.kind === "telegram");
   const creatorAddress = isTokenAddress(token.creatorAddress)
     ? token.creatorAddress
     : null;
@@ -845,10 +861,10 @@ function TokenDetailContent({
   const metrics = useMemo(() => {
     return buildTokenDetailMetrics(
       token,
-      hoveredMarketCap,
+      null,
       buildChartVolumeMetric(chartVolume),
     );
-  }, [chartVolume, hoveredMarketCap, token]);
+  }, [chartVolume, token]);
 
   const explorerBase =
     chainId === 1
@@ -1069,7 +1085,15 @@ function TokenDetailContent({
               <div className={styles.tokenSymbolRow}>
                 <span className={styles.symbol}>${token.symbol}</span>
               </div>
-              <h1 className={styles.name}>{token.name}</h1>
+              <h1
+                className={styles.name}
+                data-single-line={
+                  token.name.trim().length <= 22 ? "true" : undefined
+                }
+                title={token.name}
+              >
+                {token.name}
+              </h1>
               {projectLinks.length > 0 ? (
                 <div className={styles.links} aria-label={`${token.name} links`}>
                   {projectLinks.map((link) => {
@@ -1083,11 +1107,10 @@ function TokenDetailContent({
                         target="_blank"
                         rel="noreferrer"
                         aria-label={`${token.name} on ${label}`}
+                        title={label}
                         key={`${link.kind}:${link.url}`}
                       >
                         <TokenLinkIcon kind={link.kind} />
-                        <span>{label}</span>
-                        <ArrowUpRight aria-hidden="true" size={14} />
                       </a>
                     );
                   })}
@@ -1112,18 +1135,6 @@ function TokenDetailContent({
                     <Copy aria-hidden="true" size={14} />
                   )}
                 </button>
-                {explorerBase ? (
-                  <a
-                    className={styles.explorerLink}
-                    href={`${explorerBase}/token/${token.tokenAddress}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`View ${token.name} on Etherscan`}
-                    title="View on Etherscan"
-                  >
-                    <ExternalLink aria-hidden="true" size={15} />
-                  </a>
-                ) : null}
               </div>
 
               <p
@@ -1141,10 +1152,8 @@ function TokenDetailContent({
           <TokenPriceChart
             tokenAddress={token.tokenAddress}
             tokenName={token.name}
-            totalSupply={token.totalSupply}
             launchModel={token.launchModel}
             preview={preview}
-            onMarketCapChange={setHoveredMarketCap}
             onVolumeChange={setChartVolume}
           />
 
@@ -1223,38 +1232,12 @@ function TokenDetailContent({
               )}
             </section>
 
-            <section
-              className={`${styles.projectPanel} ${styles.projectPanelWide} ${styles.communityPanel}`}
-            >
-              <header className={styles.projectPanelHeading}>
-                <h2>Community</h2>
-                <span className={styles.communityStatus}>
-                  {communityLink ? "Telegram" : "Not linked"}
-                </span>
-              </header>
-              <div className={styles.communityBody}>
-                <p>
-                  {communityLink
-                    ? previewProject
-                      ? `${previewProject.communityMembers.toLocaleString(
-                          "en-US",
-                        )} members · Updates and discussion for ${token.name}.`
-                      : `Updates and discussion for ${token.name} on Telegram.`
-                    : "This project has not linked a community channel."}
-                </p>
-                {communityLink ? (
-                  <a
-                    className={styles.communityAction}
-                    href={communityLink.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open Telegram
-                    <ArrowUpRight aria-hidden="true" size={15} />
-                  </a>
-                ) : null}
-              </div>
-            </section>
+            <TokenCommunityChat
+              memberCount={previewProject?.communityMembers}
+              preview={preview}
+              tokenAddress={token.tokenAddress}
+              tokenName={token.name}
+            />
           </div>
         </section>
 
