@@ -92,12 +92,16 @@ const APPROVED_OPERATIONS = Object.freeze({
       }),
       runtime: Object.freeze({
         path: "lib/data-pipeline/market-projector-runtime.server.ts",
-        sha256: "ed1c55148d05a47d747616a4bc8250996780be65d053b989d51db21b4519109b",
+        sha256: "5ce3b98d0a373c45b309011b59cc6ec7eeaef54bc112f2b55d32dca433566da0",
       }),
       migrations: Object.freeze([
         Object.freeze({
           path: "supabase/migrations/20260731223000_market_projector_contract.sql",
           sha256: "ea73f4112a53b25e72aa697d3fc0679bf9c6e7f93a496edd167803d6a7f81a24",
+        }),
+        Object.freeze({
+          path: "supabase/migrations/20260802092800_market_projector_fast_lane.sql",
+          sha256: "f68889174db6870595aecdd9a327e2bf27f72a7c4b9e3328456c8a4ebe301971",
         }),
       ]),
     }),
@@ -111,7 +115,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       secretEnvironment: "PROGRAMMABLE_QUICKNODE_STREAM_SECRET",
       route: Object.freeze({
         path: "app/api/ops/projector-wake/route.ts",
-        sha256: "cdea2e18ebdb545e0f4de7bdd54da181c5cf6fa715e5abe1ac32c0bae66d138b",
+        sha256: "e7f3365df64827ca73cbee65fb18d496f55c0061885beed6fc34dd6f36ca55c8",
       }),
       verifier: Object.freeze({
         path: "lib/data-pipeline/quicknode-stream-wake.server.ts",
@@ -251,7 +255,7 @@ function eventTriggerIsAuthenticatedAndBound(route, verifier, trigger) {
     route.includes("verifyQuickNodeStreamWake(request)") &&
     route.includes("after(runWakeCycle)") &&
     route.includes("runConfiguredProjectorCycle()") &&
-    route.includes("runConfiguredMarketProjectorCycle()") &&
+    route.includes("runConfiguredMarketProjectorFastLaneCycle()") &&
     /export\s+async\s+function\s+POST\s*\(/u.test(route) &&
     /status\s*:\s*202\b/u.test(route) &&
     /["']Cache-Control["']\s*:\s*["']no-store["']/u.test(route) &&
@@ -351,6 +355,20 @@ function migrationContract(id, source) {
       ) &&
       source.includes("for key share") &&
       /security definer/iu.test(source)
+    );
+  }
+  if (id === "market-projector-fast-lane") {
+    return (
+      source.includes("list_market_projector_fast_lane_v1") &&
+      source.includes("assert_market_projector_fast_lane_v1") &&
+      source.includes("try_lock_market_projector_pool_v1") &&
+      source.includes("projector_checkpoint_current") &&
+      source.includes("market_projector_cursor_current") &&
+      source.includes("chain_event_current_canonical") &&
+      source.includes("market_block_closes") &&
+      source.includes("source_checkpoint_block_hash") &&
+      /security definer/iu.test(source) &&
+      /grant execute[\s\S]*to programmable_reconciler/iu.test(source)
     );
   }
   if (id === "candidate-control-bootstrap") {
@@ -626,10 +644,14 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   check(
     "ops-market-projector-migration",
-    marketWorker?.migrations?.length === 1 &&
+    marketWorker?.migrations?.length === 2 &&
       migrationContract(
         "market-projector",
         source(marketWorker.migrations[0]?.path),
+      ) &&
+      migrationContract(
+        "market-projector-fast-lane",
+        source(marketWorker.migrations[1]?.path),
       ),
     "the market worker is bound to exact lineage, terminal checkpoint and lease SQL",
   );

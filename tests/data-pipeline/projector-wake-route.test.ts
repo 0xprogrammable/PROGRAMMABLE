@@ -28,7 +28,7 @@ vi.mock("../../lib/data-pipeline/projector-runtime-config.server", () => ({
 }));
 
 vi.mock("../../lib/data-pipeline/market-projector-runtime.server", () => ({
-  runConfiguredMarketProjectorCycle: mocks.market,
+  runConfiguredMarketProjectorFastLaneCycle: mocks.market,
   safeMarketProjectorError: mocks.safeMarketError,
 }));
 
@@ -74,7 +74,7 @@ describe("projector stream wake route", () => {
     vi.unstubAllEnvs();
   });
 
-  it("acknowledges a valid webhook before scheduling sequential projectors", async () => {
+  it("acknowledges a valid webhook before scheduling source then the head fast lane", async () => {
     let backgroundTask: (() => Promise<void>) | undefined;
     mocks.after.mockImplementation((task: () => Promise<void>) => {
       backgroundTask = task;
@@ -113,7 +113,7 @@ describe("projector stream wake route", () => {
     expect(mocks.after).not.toHaveBeenCalled();
   });
 
-  it("still runs the market catch-up when the source cycle fails", async () => {
+  it("still runs the market fast lane when the source cycle fails", async () => {
     let backgroundTask: (() => Promise<void>) | undefined;
     mocks.after.mockImplementation((task: () => Promise<void>) => {
       backgroundTask = task;

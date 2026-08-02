@@ -6,7 +6,7 @@ import {
 } from "../../../../lib/data-pipeline/quicknode-stream-wake.server";
 import { runConfiguredProjectorCycle } from "../../../../lib/data-pipeline/projector-runtime-config.server";
 import {
-  runConfiguredMarketProjectorCycle,
+  runConfiguredMarketProjectorFastLaneCycle,
   safeMarketProjectorError,
 } from "../../../../lib/data-pipeline/market-projector-runtime.server";
 
@@ -41,13 +41,13 @@ async function runWakeCycle() {
 
   const marketStartedAt = Date.now();
   try {
-    const market = await runConfiguredMarketProjectorCycle();
-    console.info("Programmable stream-woken market projector completed", {
+    const market = await runConfiguredMarketProjectorFastLaneCycle();
+    console.info("Programmable stream-woken market fast lane completed", {
       status: resultStatus(market),
       durationMs: Date.now() - marketStartedAt,
     });
   } catch (error) {
-    console.error("Programmable stream-woken market projector failed", {
+    console.error("Programmable stream-woken market fast lane failed", {
       ...safeMarketProjectorError(error),
       durationMs: Date.now() - marketStartedAt,
     });
