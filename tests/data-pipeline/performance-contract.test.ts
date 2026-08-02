@@ -1277,6 +1277,9 @@ describe("read-model performance contract", () => {
       "utf8",
     );
     expect(deployWorkflow).toContain("--prod --skip-domain");
+    expect(deployWorkflow).toContain(
+      '--env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"',
+    );
     expect(deployWorkflow).toContain("perf:read-model:capture");
     expect(deployWorkflow).toContain("actions/upload-artifact@");
     expect(deployWorkflow).toContain("npm run perf:read-model:gate");
