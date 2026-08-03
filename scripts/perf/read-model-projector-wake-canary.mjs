@@ -5,6 +5,8 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 export const PROJECTOR_WAKE_ROUTE = "/api/ops/projector-wake";
 export const QUICKNODE_STREAM_SECRET_ENV_NAME =
   "PROGRAMMABLE_QUICKNODE_STREAM_SECRET";
+export const VERCEL_AUTOMATION_BYPASS_SECRET_ENV_NAME =
+  "VERCEL_AUTOMATION_BYPASS_SECRET";
 
 const MINIMUM_SECRET_BYTES = 32;
 const MAXIMUM_SECRET_BYTES = 1_024;
@@ -49,11 +51,34 @@ function configuredSecret(environment) {
   return secret;
 }
 
+function configuredAutomationBypassSecret(environment) {
+  const secret = environment[VERCEL_AUTOMATION_BYPASS_SECRET_ENV_NAME];
+  const length = typeof secret === "string"
+    ? Buffer.byteLength(secret, "utf8")
+    : 0;
+  if (
+    typeof secret !== "string" ||
+    length < MINIMUM_SECRET_BYTES ||
+    length > 512 ||
+    /[\r\n]/u.test(secret)
+  ) {
+    throw new Error("wake canary automation bypass is unavailable or invalid");
+  }
+  return secret;
+}
+
 function mutateSignature(signature) {
   return `${signature[0] === "0" ? "1" : "0"}${signature.slice(1)}`;
 }
 
-function signedHeaders({ body, nonce, secret, timestamp, valid }) {
+function signedHeaders({
+  automationBypassSecret,
+  body,
+  nonce,
+  secret,
+  timestamp,
+  valid,
+}) {
   const signature = createHmac("sha256", secret)
     .update(nonce, "utf8")
     .update(timestamp, "utf8")
@@ -65,6 +90,7 @@ function signedHeaders({ body, nonce, secret, timestamp, valid }) {
     "x-qn-nonce": nonce,
     "x-qn-timestamp": timestamp,
     "x-qn-signature": valid ? signature : mutateSignature(signature),
+    "x-vercel-protection-bypass": automationBypassSecret,
   });
 }
 
@@ -102,7 +128,9 @@ async function expectJsonResponse(response, expectation) {
 
 export async function runProjectorWakeCanary(input) {
   const targetOrigin = exactStagedOrigin(input.targetUrl);
-  const secret = configuredSecret(input.environment ?? process.env);
+  const environment = input.environment ?? process.env;
+  const secret = configuredSecret(environment);
+  const automationBypassSecret = configuredAutomationBypassSecret(environment);
   const fetchImpl = input.fetchImpl ?? fetch;
   const nowMs = input.nowMs ?? Date.now();
   if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
@@ -169,6 +197,7 @@ export async function runProjectorWakeCanary(input) {
         redirect: "error",
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: signedHeaders({
+          automationBypassSecret,
           body,
           nonce,
           secret,
