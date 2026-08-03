@@ -951,7 +951,9 @@ export async function readLiveExploreModel(
   try {
     return await enrichExploreModelWithUsd(resolvedModel, config);
   } catch (error) {
-    console.error("ETH/USD enrichment failed", error);
+    console.error("ETH/USD enrichment failed", {
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
     return resolvedModel;
   }
 }

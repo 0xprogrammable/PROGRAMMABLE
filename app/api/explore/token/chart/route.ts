@@ -2,35 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 
 import {
-  getPublicOnchainDeployment,
-  readExploreModel,
-} from "../../../../../lib/onchain";
+  getAlchemyOnchainDeployment,
+  readAlchemyExploreModel,
+  safeAlchemyError,
+} from "../../../../../lib/alchemy/explore.server";
 import {
   isTokenChartRange,
   readTokenChartSeries,
 } from "../../../../../lib/onchain/chart";
-import {
-  coordinatePublicRouteRead,
-  PUBLIC_INDEXED_ROUTE_READS,
-  PUBLIC_DISCOVERY_ROUTE_SCOPES,
-  preparePublicRouteRequest,
-  publicSnapshotCheckpoint,
-} from "../../../../../lib/data-pipeline/public-route-readiness.server";
-import { CONFIGURED_OPTIMISTIC_PUBLIC_API_READER } from "../../../../../lib/data-pipeline/optimistic-public-api-reader.server";
-import { overlayClassicChartCanonicalResponse } from "../../../../../lib/data-pipeline/optimistic-public-api-overlay.server";
-import { readIndexedFeedSnapshot } from "../../../indexers/v1/read-indexed-feed.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const routeRequest = await preparePublicRouteRequest(
-    request.nextUrl.searchParams,
-    request.headers,
-    "explore-chart",
-  );
-  if (routeRequest.probeFailure) return routeRequest.probeFailure;
-  const search = routeRequest.searchParams;
+  const search = request.nextUrl.searchParams;
   if (
     [...search.keys()].some(
       (key) => key !== "address" && key !== "range",
@@ -61,105 +46,79 @@ export async function GET(request: NextRequest) {
 
   try {
     const address = getAddress(input);
-    const canonical = await coordinatePublicRouteRead({
-      route: "explore-chart",
-      scope: PUBLIC_DISCOVERY_ROUTE_SCOPES,
-      ...(routeRequest.releaseProbe
-        ? { releaseProbe: routeRequest.releaseProbe }
-        : {}),
-      indexed: (transaction) =>
-        PUBLIC_INDEXED_ROUTE_READS.tokenChart(transaction, {
-          chainId: 1,
+    const deployment = getAlchemyOnchainDeployment();
+    const model = await readAlchemyExploreModel();
+    if (deployment.status !== "ready" || model.status !== "ready") {
+      return NextResponse.json(
+        {
+          status: "not-deployed",
           address,
-          range: requestedRange,
-        }),
-      async legacy() {
-        const deployment = getPublicOnchainDeployment();
-        const model = await readExploreModel(deployment);
-        if (deployment.status !== "ready" || model.status !== "ready") {
-          return {
-            source: "rpc" as const,
-            response: NextResponse.json(
-              {
-                status: "not-deployed",
-                address,
-                points: [],
-                swapCount: 0,
-                volumeWei: "0",
-                volumeEth: "0",
-              },
-              {
-                headers: {
-                  "Cache-Control": "public, max-age=0, s-maxage=60",
-                },
-              },
-            ),
-          };
-        }
+          points: [],
+          swapCount: 0,
+          volumeWei: "0",
+          volumeEth: "0",
+        },
+        {
+          headers: {
+            "Cache-Control": "public, max-age=0, s-maxage=60",
+            "X-Programmable-Read-Source": "rpc",
+            "X-Programmable-Rpc-Provider": "alchemy",
+          },
+        },
+      );
+    }
 
-        const token = model.tokens.find(
-          (candidate) =>
-            candidate.tokenAddress.toLowerCase() === address.toLowerCase(),
-        );
-        if (!token) {
-          return {
-            source: "rpc" as const,
-            checkpoint: publicSnapshotCheckpoint(model.snapshot),
-            response: NextResponse.json(
-              {
-                error: "Token not found",
-                snapshotBlock: model.snapshot.blockNumber,
-                snapshotHash: model.snapshot.blockHash,
-              },
-              { status: 404, headers: { "Cache-Control": "no-store" } },
-            ),
-          };
-        }
+    const token = model.tokens.find(
+      (candidate) =>
+        candidate.tokenAddress.toLowerCase() === address.toLowerCase(),
+    );
+    if (!token) {
+      return NextResponse.json(
+        {
+          error: "Token not found",
+          snapshotBlock: model.snapshot.blockNumber,
+          snapshotHash: model.snapshot.blockHash,
+        },
+        {
+          status: 404,
+          headers: {
+            "Cache-Control": "no-store",
+            "X-Programmable-Read-Source": "rpc",
+            "X-Programmable-Rpc-Provider": "alchemy",
+          },
+        },
+      );
+    }
 
-        const series = await readTokenChartSeries({
-          deployment,
-          token,
-          snapshotBlock: BigInt(model.snapshot.blockNumber),
-          ethUsdQuote: model.snapshot.ethUsdQuote,
-          range: requestedRange,
-        });
-        return {
-          source: "rpc" as const,
-          checkpoint: publicSnapshotCheckpoint(model.snapshot),
-          response: NextResponse.json(
-            {
-              ...series,
-              address,
-              range: requestedRange,
-              snapshotBlock: model.snapshot.blockNumber,
-              snapshotHash: model.snapshot.blockHash,
-            },
-            {
-              headers: {
-                "Cache-Control":
-                  "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
-              },
-            },
-          ),
-        };
-      },
+    const series = await readTokenChartSeries({
+      deployment,
+      token,
+      snapshotBlock: BigInt(model.snapshot.blockNumber),
+      ethUsdQuote: model.snapshot.ethUsdQuote,
+      range: requestedRange,
     });
-    if (routeRequest.releaseProbe) return canonical;
-    try {
-      const source = await CONFIGURED_OPTIMISTIC_PUBLIC_API_READER.read(1);
-      if (!source) return canonical;
-      return await overlayClassicChartCanonicalResponse({
-        canonical,
-        feed: await readIndexedFeedSnapshot(),
-        source,
+    return NextResponse.json(
+      {
+        ...series,
         address,
         range: requestedRange,
-      });
-    } catch {
-      return canonical;
-    }
+        snapshotBlock: model.snapshot.blockNumber,
+        snapshotHash: model.snapshot.blockHash,
+      },
+      {
+        headers: {
+          "Cache-Control":
+            "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
+          "X-Programmable-Read-Source": "rpc",
+          "X-Programmable-Rpc-Provider": "alchemy",
+        },
+      },
+    );
   } catch (error) {
-    console.error("Token chart onchain read failed", error);
+    console.error(
+      "Alchemy token chart read failed",
+      safeAlchemyError(error),
+    );
     return NextResponse.json(
       { error: "Onchain chart data is temporarily unavailable" },
       { status: 503, headers: { "Cache-Control": "no-store" } },

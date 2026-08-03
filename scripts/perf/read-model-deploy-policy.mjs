@@ -72,6 +72,10 @@ const RUNTIME_RPC_URL_NAMES = Object.freeze([
   "ETHEREUM_RPC_URL",
   "ETHEREUM_RPC_URL_B",
 ]);
+const ALCHEMY_MAINNET_RPC_URL_ENV_NAME =
+  "PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL";
+const ALCHEMY_MAINNET_RPC_HOST = "eth-mainnet.g.alchemy.com";
+const ALCHEMY_MAINNET_RPC_PATH = /^\/v2\/[A-Za-z0-9_-]{8,256}$/u;
 const VERCEL_SENSITIVE_PLACEHOLDER = /^\[[A-Za-z]{1,32}\]$/u;
 
 function decodeDotenvValue(value, name) {
@@ -269,6 +273,54 @@ function validateWakeTriggerSecret(contents, required) {
   });
 }
 
+function validateAlchemyOnlyRuntimeEnvironment(contents, required) {
+  if (!required) {
+    return Object.freeze({
+      ready: true,
+      binding: "not-required",
+      invalidNames: Object.freeze([]),
+    });
+  }
+  const configured = readSelectedDotenvValues(contents, [
+    ALCHEMY_MAINNET_RPC_URL_ENV_NAME,
+  ]);
+  const value = configured[ALCHEMY_MAINNET_RPC_URL_ENV_NAME];
+  if (VERCEL_SENSITIVE_PLACEHOLDER.test(value ?? "")) {
+    return Object.freeze({
+      ready: true,
+      binding: "deferred-stage",
+      invalidNames: Object.freeze([]),
+    });
+  }
+  try {
+    const endpoint = new URL(value);
+    if (
+      endpoint.protocol !== "https:" ||
+      endpoint.hostname !== ALCHEMY_MAINNET_RPC_HOST ||
+      endpoint.port !== "" ||
+      endpoint.username !== "" ||
+      endpoint.password !== "" ||
+      endpoint.search !== "" ||
+      endpoint.hash !== "" ||
+      !ALCHEMY_MAINNET_RPC_PATH.test(endpoint.pathname) ||
+      endpoint.pathname.slice("/v2/".length) === "docs-demo"
+    ) {
+      throw new Error("invalid Alchemy endpoint");
+    }
+    return Object.freeze({
+      ready: true,
+      binding: "verified",
+      invalidNames: Object.freeze([]),
+    });
+  } catch {
+    return Object.freeze({
+      ready: false,
+      binding: "unverified",
+      invalidNames: Object.freeze([ALCHEMY_MAINNET_RPC_URL_ENV_NAME]),
+    });
+  }
+}
+
 export function evaluateReadModelDeployPolicy(
   contents,
   environment = {},
@@ -292,9 +344,14 @@ export function evaluateReadModelDeployPolicy(
     ...indexedFlags.invalidNames,
     ...workerFlags.invalidNames,
   ]);
+  const evidenceRequired = nonLegacyFlags.length > 0;
   const environmentPreflight = validateNonSecretRuntimeEnvironment(
     contents,
-    expectations,
+    evidenceRequired ? expectations : undefined,
+  );
+  const alchemyEnvironmentPreflight = validateAlchemyOnlyRuntimeEnvironment(
+    contents,
+    !evidenceRequired,
   );
   const wakeCanaryRequired = WORKER_ACTIVATION_FLAG_NAMES.some(
     (name) => workerFlags.values[name],
@@ -303,14 +360,15 @@ export function evaluateReadModelDeployPolicy(
     contents,
     wakeCanaryRequired,
   );
-  const evidenceRequired = nonLegacyFlags.length > 0;
   const invalidCommitments = evidenceRequired
     ? COMMITMENT_NAMES.filter(
         (name) => !HEX_BYTES32.test(environment[name] ?? ""),
       )
     : [];
   let runtimeCommitmentsMatch = !evidenceRequired;
-  let runtimeProviderBinding = evidenceRequired ? "unverified" : "not-required";
+  let runtimeProviderBinding = evidenceRequired
+    ? "unverified"
+    : alchemyEnvironmentPreflight.binding;
   if (evidenceRequired && invalidCommitments.length === 0) {
     try {
       const runtimeEnvironment = readSelectedDotenvValues(
@@ -355,7 +413,7 @@ export function evaluateReadModelDeployPolicy(
     }
   }
   return Object.freeze({
-    mode: evidenceRequired ? "indexed-or-shadow" : "legacy-only",
+    mode: evidenceRequired ? "indexed-or-shadow" : "alchemy-only",
     evidenceRequired,
     nonLegacyFlags,
     indexedFlags: indexedFlags.values,
@@ -363,9 +421,12 @@ export function evaluateReadModelDeployPolicy(
     policyReady:
       invalidFlagNames.length === 0 &&
       environmentPreflight.ready &&
+      alchemyEnvironmentPreflight.ready &&
       secretEnvironmentPreflight.ready,
     invalidFlagNames,
     invalidNonSecretEnvironmentNames: environmentPreflight.invalidNames,
+    invalidAlchemyRuntimeEnvironmentNames:
+      alchemyEnvironmentPreflight.invalidNames,
     wakeRoute: PROJECTOR_WAKE_ROUTE,
     wakeCanaryRequired,
     streamSecretReady: secretEnvironmentPreflight.ready,
@@ -499,7 +560,7 @@ export function validateStagedReleaseAttestation(value, expectations = {}) {
   const nonLegacy =
     Object.values(indexedFlags).some(Boolean) ||
     Object.values(workerActivationFlags).some(Boolean);
-  const expectedMode = nonLegacy ? "indexed-or-shadow" : "legacy-only";
+  const expectedMode = nonLegacy ? "indexed-or-shadow" : "alchemy-only";
   if (attestation.policyMode !== expectedMode) {
     throw new Error("staged release attestation mode is invalid");
   }
@@ -653,11 +714,13 @@ function main() {
       [
         ...result.invalidFlagNames,
         ...result.invalidNonSecretEnvironmentNames,
+        ...result.invalidAlchemyRuntimeEnvironmentNames,
         ...result.invalidServerSecretEnvironmentNames,
       ].length > 0
         ? `release environment preflight failed: ${[
             ...result.invalidFlagNames,
             ...result.invalidNonSecretEnvironmentNames,
+            ...result.invalidAlchemyRuntimeEnvironmentNames,
             ...result.invalidServerSecretEnvironmentNames,
           ].join(", ")}`
         : "release environment preflight failed",

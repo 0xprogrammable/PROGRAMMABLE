@@ -4,24 +4,19 @@ import { NextResponse } from "next/server";
 import {
   buildIndexerFeed,
   findIndexerToken,
-  getPublicOnchainDeployment,
-  readExploreModel,
-} from "../../../../../lib/onchain";
-import { indexedPublicIndexerFeedEnabled } from "../../../../../lib/data-pipeline/route-activation.server";
-import { readIndexedFeedSnapshot } from "../read-indexed-feed.server";
+} from "../../../../../lib/onchain/indexer-feed";
 import {
-  indexedFeedHeaders,
-  INDEXER_NO_STORE_HEADERS,
+  getAlchemyOnchainDeployment,
+  readAlchemyExploreModel,
+  safeAlchemyError,
+} from "../../../../../lib/alchemy/explore.server";
+import {
+  alchemyFeedHeaders,
+  ALCHEMY_NO_STORE_HEADERS,
 } from "../response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const LEGACY_PUBLIC_HEADERS = Object.freeze({
-  "Access-Control-Allow-Origin": "*",
-  "Cache-Control":
-    "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
-});
 
 export async function GET(request: Request) {
   const address = new URL(request.url).searchParams.get("address");
@@ -31,51 +26,19 @@ export async function GET(request: Request) {
       { error: "Invalid token address" },
       {
         status: 400,
-        headers: INDEXER_NO_STORE_HEADERS,
+        headers: ALCHEMY_NO_STORE_HEADERS,
       },
     );
   }
 
   try {
-    if (!indexedPublicIndexerFeedEnabled()) {
-      const deployment = getPublicOnchainDeployment();
-      const model = await readExploreModel(deployment);
-      if (address) {
-        const token = findIndexerToken(
-          model,
-          deployment.chainId,
-          getAddress(address),
-        );
-        if (!token) {
-          return NextResponse.json(
-            { error: "Programmable token not found" },
-            { status: 404, headers: LEGACY_PUBLIC_HEADERS },
-          );
-        }
-        return NextResponse.json(token, {
-          headers: LEGACY_PUBLIC_HEADERS,
-        });
-      }
-      return NextResponse.json(
-        buildIndexerFeed(model, deployment.chainId),
-        {
-          headers: {
-            ...LEGACY_PUBLIC_HEADERS,
-            "Cache-Control":
-              model.status === "ready"
-                ? LEGACY_PUBLIC_HEADERS["Cache-Control"]
-                : "public, max-age=0, s-maxage=60",
-          },
-        },
-      );
-    }
-
-    const snapshot = await readIndexedFeedSnapshot();
+    const deployment = getAlchemyOnchainDeployment();
+    const model = await readAlchemyExploreModel();
 
     if (address) {
       const token = findIndexerToken(
-        snapshot.model,
-        snapshot.chainId,
+        model,
+        deployment.chainId,
         getAddress(address),
       );
 
@@ -84,28 +47,35 @@ export async function GET(request: Request) {
           { error: "Programmable token not found" },
           {
             status: 404,
-            headers: indexedFeedHeaders(snapshot),
+            headers: alchemyFeedHeaders(),
           },
         );
       }
 
       return NextResponse.json(token, {
-        headers: indexedFeedHeaders(snapshot),
+        headers: alchemyFeedHeaders(),
       });
     }
 
-    const feed = buildIndexerFeed(snapshot.model, snapshot.chainId);
+    const feed = buildIndexerFeed(model, deployment.chainId);
 
     return NextResponse.json(feed, {
-      headers: indexedFeedHeaders(snapshot),
+      headers: alchemyFeedHeaders(
+        model.status === "ready"
+          ? undefined
+          : "public, max-age=0, s-maxage=60",
+      ),
     });
   } catch (error) {
-    console.error("Public indexer feed failed", error);
+    console.error(
+      "Public Alchemy feed failed",
+      safeAlchemyError(error),
+    );
     return NextResponse.json(
       { error: "Indexer data is temporarily unavailable" },
       {
         status: 503,
-        headers: INDEXER_NO_STORE_HEADERS,
+        headers: ALCHEMY_NO_STORE_HEADERS,
       },
     );
   }

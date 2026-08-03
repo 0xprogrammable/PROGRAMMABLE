@@ -122,6 +122,19 @@ export function filterAndSortTokens(
   });
 }
 
+export function visibleExploreTokens(model: ExploreReadModel) {
+  return model.snapshot?.chainId === 1
+    ? model.tokens.filter((token) => {
+        const launchBlock = token.launchBlockNumber;
+        return (
+          typeof launchBlock === "string" &&
+          /^\d+$/u.test(launchBlock) &&
+          BigInt(launchBlock) >= MAINNET_PUBLIC_EXPLORE_START_BLOCK
+        );
+      })
+    : model.tokens;
+}
+
 function positiveInteger(value: number, fallback: number, maximum: number) {
   if (!Number.isSafeInteger(value) || value < 1) return fallback;
   return Math.min(value, maximum);
@@ -149,17 +162,7 @@ export function paginateExplore(
     1,
     Number.MAX_SAFE_INTEGER,
   );
-  const visibleTokens =
-    model.snapshot?.chainId === 1
-      ? model.tokens.filter((token) => {
-          const launchBlock = token.launchBlockNumber;
-          return (
-            typeof launchBlock === "string" &&
-            /^\d+$/.test(launchBlock) &&
-            BigInt(launchBlock) >= MAINNET_PUBLIC_EXPLORE_START_BLOCK
-          );
-        })
-      : model.tokens;
+  const visibleTokens = visibleExploreTokens(model);
   const sorted = filterAndSortTokens(
     visibleTokens,
     query,
