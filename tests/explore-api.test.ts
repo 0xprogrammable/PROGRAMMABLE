@@ -34,6 +34,7 @@ describe("Explore API query boundary", () => {
     "page=1&page=2",
     "q=token&q=other",
     "sort=newest&extra=1",
+    "socials=maybe",
   ])(
     "rejects non-canonical query shapes before any secret-backed enrichment: %s",
     async (query) => {
@@ -75,10 +76,16 @@ describe("Explore API query boundary", () => {
     mocks.enrichExplorePageWithOfficialV4Subgraph.mockResolvedValue(page);
 
     const response = await GET(
-      new NextRequest("http://localhost/api/explore?page=1&limit=10"),
+      new NextRequest(
+        "http://localhost/api/explore?page=1&limit=10&socials=yes",
+      ),
     );
 
     expect(response.status).toBe(200);
+    expect(mocks.paginateExplore).toHaveBeenCalledWith(
+      model,
+      expect.objectContaining({ socials: "yes" }),
+    );
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, s-maxage=2, stale-while-revalidate=2",
     );

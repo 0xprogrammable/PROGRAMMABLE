@@ -56,7 +56,7 @@ describe("interaction state regressions", () => {
     expect(exploreSource).not.toContain("Copy contract address");
   });
 
-  it("keeps Explore project-first and removes the repeated footer slogan", () => {
+  it("keeps Explore project-first with compact market metadata", () => {
     const exploreSource = readFileSync(
       join(root, "components/explore-view.tsx"),
       "utf8",
@@ -73,7 +73,13 @@ describe("interaction state regressions", () => {
     expect(exploreSource).not.toContain("All tokens");
     expect(exploreSource).not.toContain("V4 model");
     expect(exploreSource).not.toContain("<dt>Market cap</dt>");
-    expect(exploreSource).not.toContain("runnerMeta");
+    expect(exploreSource).toContain("runnerMeta");
+    expect(exploreSource).toContain("runnerMarketCap");
+    expect(exploreSource).not.toContain("No description yet.");
+    expect(exploreSource).not.toContain('{ id: "all", label: "Any" }');
+    expect(exploreSource).toMatch(
+      /tokenLinkOrder[\s\S]*?website:\s*0,[\s\S]*?x:\s*1,[\s\S]*?telegram:\s*2,/,
+    );
     expect(footerSource).not.toContain(
       "Launch tokens that work the way you imagine.",
     );

@@ -7,6 +7,7 @@ import {
   getExplorePaginationItems,
   getMarketCap,
   loadExplorePayload,
+  paginateTokensBySocialPresence,
   preserveExplorePayloadOnRefreshFailure,
   shouldRefreshExplore,
   tokenHasSocialLinks,
@@ -95,6 +96,51 @@ describe("Explore refresh state", () => {
         (token) => token.id,
       ),
     ).toEqual(["1:test"]);
+  });
+
+  it("filters the complete result set before creating nine-token pages", () => {
+    const tokens = Array.from({ length: 22 }, (_, index) => ({
+      id: `1:${index}`,
+      name: `Token ${index}`,
+      symbol: `T${index}`,
+      tokenAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+      hookAddress: "0x2222222222222222222222222222222222222222",
+      poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+      launchedAt: "2026-07-29T00:00:00.000Z",
+      totalSwapFeeBps: 100,
+      liquidityPath: "meme" as const,
+      ...(index % 2 === 0
+        ? {
+            links: [
+              { kind: "x" as const, url: `https://x.com/token${index}` },
+            ],
+          }
+        : {}),
+    })) satisfies LauncherToken[];
+
+    expect(paginateTokensBySocialPresence(tokens, "yes", 1)).toMatchObject({
+      page: 1,
+      pageSize: 9,
+      total: 11,
+      totalPages: 2,
+      tokens: expect.arrayContaining([
+        expect.objectContaining({ id: "1:0" }),
+        expect.objectContaining({ id: "1:16" }),
+      ]),
+    });
+    expect(
+      paginateTokensBySocialPresence(tokens, "yes", 2).tokens.map(
+        (token) => token.id,
+      ),
+    ).toEqual(["1:18", "1:20"]);
+    expect(paginateTokensBySocialPresence(tokens, "no", 1)).toMatchObject({
+      total: 11,
+      totalPages: 2,
+      tokens: expect.arrayContaining([
+        expect.objectContaining({ id: "1:1" }),
+        expect.objectContaining({ id: "1:17" }),
+      ]),
+    });
   });
 
   it("refreshes only visible Explore content after the freshness interval", () => {

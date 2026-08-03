@@ -83,6 +83,59 @@ describe("Explore query", () => {
     ]);
   });
 
+  it("filters social presence before counting and paginating", () => {
+    const socialTokens = [
+      {
+        ...tokens[0],
+        links: [{ kind: "website" as const, url: "https://example.com" }],
+      },
+      {
+        ...tokens[1],
+        links: [{ kind: "x" as const, url: "https://x.com/example" }],
+      },
+      {
+        ...tokens[2],
+        links: [
+          { kind: "telegram" as const, url: "https://t.me/example" },
+        ],
+      },
+    ];
+    const model: ExploreReadModel = {
+      status: "ready",
+      tokens: socialTokens,
+      snapshot: {
+        chainId: 11_155_111,
+        blockNumber: "100",
+        blockHash: `0x${"44".repeat(32)}`,
+        confirmations: 12,
+      },
+      creatorClaims: [],
+      launcherFeesAccruedWei: "0",
+      launcherFeesAccruedEth: "0",
+    };
+
+    expect(
+      paginateExplore(model, {
+        page: 1,
+        pageSize: 1,
+        sort: "newest",
+        socials: "yes",
+      }),
+    ).toMatchObject({
+      total: 2,
+      totalPages: 2,
+      tokens: [expect.objectContaining({ tokenAddress: tokens[1].tokenAddress })],
+    });
+    expect(
+      paginateExplore(model, {
+        page: 1,
+        pageSize: 9,
+        sort: "newest",
+        socials: "no",
+      }).tokens.map((entry) => entry.tokenAddress),
+    ).toEqual([tokens[0].tokenAddress]);
+  });
+
   it("sorts by the fresher indexed market cap when it is available", () => {
     const refreshed = [
       {
